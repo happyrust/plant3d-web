@@ -8,6 +8,8 @@ type ToolsApi = {
   statusText: Ref<string>;
   flyToAnnotation: (id: string) => void;
   removeAnnotation: (id: string) => void;
+  highlightAnnotationTarget?: (refno: string) => void;
+  highlightAnnotationTargets?: (refnos: string[]) => void;
   flyToCloudAnnotation?: (id: string) => void;
   flyToRectAnnotation?: (id: string) => void;
   flyToObbAnnotation?: (id: string) => void;
@@ -199,6 +201,11 @@ const showObbEditDialog = ref(false);
 const pendingObbTitle = ref('');
 const pendingObbDescription = ref('');
 
+// 文字批注创建后弹窗编辑
+const showTextEditDialog = ref(false);
+const pendingTextTitle = ref('');
+const pendingTextDescription = ref('');
+
 watch(() => store.pendingObbEditId.value, (id) => {
   if (id) {
     const rec = store.obbAnnotations.value.find((a) => a.id === id);
@@ -206,6 +213,17 @@ watch(() => store.pendingObbEditId.value, (id) => {
       pendingObbTitle.value = rec.title;
       pendingObbDescription.value = rec.description;
       showObbEditDialog.value = true;
+    }
+  }
+});
+
+watch(() => store.pendingTextAnnotationEditId.value, (id) => {
+  if (id) {
+    const rec = store.annotations.value.find((a) => a.id === id);
+    if (rec) {
+      pendingTextTitle.value = rec.title;
+      pendingTextDescription.value = rec.description;
+      showTextEditDialog.value = true;
     }
   }
 });
@@ -226,10 +244,82 @@ function cancelObbEdit() {
   showObbEditDialog.value = false;
   store.pendingObbEditId.value = null;
 }
+
+function confirmTextEdit() {
+  const id = store.pendingTextAnnotationEditId.value;
+  if (id) {
+    store.updateAnnotation(id, {
+      title: pendingTextTitle.value,
+      description: pendingTextDescription.value,
+    });
+  }
+  showTextEditDialog.value = false;
+  store.pendingTextAnnotationEditId.value = null;
+}
+
+function cancelTextEdit() {
+  showTextEditDialog.value = false;
+  store.pendingTextAnnotationEditId.value = null;
+}
+
+function highlightTextRefno(refno: string) {
+  if (props.tools.highlightAnnotationTarget) {
+    props.tools.highlightAnnotationTarget(refno);
+  }
+}
+
+function highlightCloudRefnos(refnos: string[]) {
+  if (props.tools.highlightAnnotationTargets && refnos.length > 0) {
+    props.tools.highlightAnnotationTargets(refnos);
+  }
+}
+
+function highlightObbRefnos(refnos: string[]) {
+  if (props.tools.highlightAnnotationTargets && refnos.length > 0) {
+    props.tools.highlightAnnotationTargets(refnos);
+  }
+}
 </script>
 
 <template>
   <div class="flex flex-col gap-3">
+    <!-- 文字批注创建后编辑弹窗 -->
+    <div v-if="showTextEditDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="w-80 rounded-lg border border-border bg-background p-4 shadow-xl">
+        <div class="text-base font-semibold">编辑文字批注</div>
+        <div class="mt-1 text-xs text-muted-foreground">图钉已创建，请输入批注信息</div>
+
+        <div class="mt-4 flex flex-col gap-3">
+          <div>
+            <label class="text-xs text-muted-foreground">标题</label>
+            <input v-model="pendingTextTitle"
+              class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              placeholder="输入批注标题" @keyup.enter="confirmTextEdit" />
+          </div>
+
+          <div>
+            <label class="text-xs text-muted-foreground">描述</label>
+            <textarea v-model="pendingTextDescription"
+              class="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="输入批注描述（可选）" />
+          </div>
+        </div>
+
+        <div class="mt-4 flex justify-end gap-2">
+          <button type="button"
+            class="h-9 rounded-md border border-input bg-background px-4 text-sm hover:bg-muted"
+            @click="cancelTextEdit">
+            取消
+          </button>
+          <button type="button"
+            class="h-9 rounded-md bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
+            @click="confirmTextEdit">
+            确定
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- OBB 创建后编辑弹窗 -->
     <div v-if="showObbEditDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div class="w-80 rounded-lg border border-border bg-background p-4 shadow-xl">
@@ -349,6 +439,12 @@ function cancelObbEdit() {
               class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
               @click.stop="flyText(a.id)">
               定位
+            </button>
+
+            <button v-if="a.refno" type="button"
+              class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+              @click.stop="highlightTextRefno(a.refno)">
+              高亮
             </button>
 
             <button type="button"

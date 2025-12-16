@@ -49,6 +49,7 @@ export type AnnotationRecord = {
   title: string;
   description: string;
   createdAt: number;
+  refno?: string; // 关联的对象参考号
 };
 
 export type Obb = {
@@ -77,15 +78,18 @@ export type ObbAnnotationRecord = {
   title: string;
   description: string;
   createdAt: number;
+  refnos?: string[]; // 关联的对象参考号列表
 };
 
 export type CloudAnnotationRecord = {
   id: string;
-  points: MeasurementPoint[];
+  objectIds: string[];
+  anchorWorldPos: Vec3;
   visible: boolean;
   title: string;
   description: string;
   createdAt: number;
+  refnos?: string[]; // 关联的对象参考号列表
 };
 
 export type RectAnnotationRecord = {
@@ -216,6 +220,7 @@ const activeRectAnnotationId = ref<string | null>(null);
 const pickedQueryCenter = ref<PickedQueryCenter | null>(null);
 
 const pendingObbEditId = ref<string | null>(null);
+const pendingTextAnnotationEditId = ref<string | null>(null);
 
 watch(
   () => ({
@@ -267,6 +272,7 @@ function clearMeasurements() {
 function addAnnotation(rec: AnnotationRecord) {
   annotations.value = [...annotations.value, rec];
   activeAnnotationId.value = rec.id;
+  pendingTextAnnotationEditId.value = rec.id;
 }
 
 function updateAnnotation(id: string, patch: Partial<AnnotationRecord>) {
@@ -292,7 +298,7 @@ function clearAnnotations() {
 function addObbAnnotation(rec: ObbAnnotationRecord) {
   obbAnnotations.value = [...obbAnnotations.value, rec];
   activeObbAnnotationId.value = rec.id;
-  pendingObbEditId.value = rec.id;
+  // 不再自动弹出编辑框，用户点击图钉后再编辑
 }
 
 function updateObbAnnotation(id: string, patch: Partial<ObbAnnotationRecord>) {
@@ -437,6 +443,7 @@ export function useToolStore() {
     activeCloudAnnotationId,
     activeRectAnnotationId,
     pendingObbEditId,
+    pendingTextAnnotationEditId,
 
     measurements,
     annotations,

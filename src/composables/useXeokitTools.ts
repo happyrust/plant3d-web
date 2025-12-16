@@ -22,6 +22,7 @@ import {
   useToolStore,
   type AngleMeasurementRecord,
   type AnnotationRecord,
+  type CloudAnnotationRecord,
   type DistanceMeasurementRecord,
   type MeasurementPoint,
   type Obb,
@@ -32,6 +33,9 @@ import {
 type PickRecordLike = {
   entity?: { id?: string };
   worldPos?: number[];
+  worldNormal?: number[];
+  primIndex?: number;
+  bary?: number[];
 };
 
 type XeokitAnnotationLike = {
@@ -461,11 +465,7 @@ export function useXeokitTools(
       return;
     }
 
-    void selection.loadProperties(refno);
-
-    if (dockPanelExists('properties')) {
-      dockActivatePanelIfExists('properties');
-    }
+    selection.setSelectedRefno(refno);
   }
 
   function configureSelectionMaterial(viewer: Viewer) {
@@ -583,15 +583,18 @@ export function useXeokitTools(
     }
     if (!annotationsPlugin.value) {
       const labelHTML = [
-        '<div style="max-width:260px;padding:8px 10px;border-radius:8px;background:rgba(20,20,20,0.85);color:#fff;box-shadow:0 8px 18px rgba(0,0,0,0.35);">',
+        '<div style="position:absolute;max-width:260px;padding:8px 10px;border-radius:8px;background:rgba(20,20,20,0.85);color:#fff;box-shadow:0 8px 18px rgba(0,0,0,0.35);">',
         '  <div style="font-weight:700;line-height:1.2;">{{title}}</div>',
         '  <div style="margin-top:4px;font-size:12px;opacity:0.95;white-space:pre-wrap;">{{description}}</div>',
         '</div>',
       ].join('');
 
       const markerHTML = [
-        '<div style="width:20px;height:20px;border-radius:999px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;box-shadow:0 6px 14px rgba(0,0,0,0.35);">',
-        '{{glyph}}',
+        '<div style="position:absolute;display:flex;flex-direction:column;align-items:center;transform:translate(-50%, -100%);">',
+        '  <div style="width:28px;height:28px;border-radius:50% 50% 50% 0;background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.4);">',
+        '    <span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700;">{{glyph}}</span>',
+        '  </div>',
+        '  <div style="width:3px;height:8px;background:linear-gradient(to bottom,#991b1b,#7f1d1d);margin-top:-2px;border-radius:0 0 2px 2px;"></div>',
         '</div>',
       ].join('');
 
@@ -629,6 +632,7 @@ export function useXeokitTools(
   let overlayPointerDown: ((e: PointerEvent) => void) | null = null;
   let overlayPointerMove: ((e: PointerEvent) => void) | null = null;
   let overlayPointerUp: ((e: PointerEvent) => void) | null = null;
+  let obbMarqueeBox: HTMLDivElement | null = null;
   let suppressNextClick = false;
 
   function destroyObbSceneObjects() {
@@ -693,15 +697,34 @@ export function useXeokitTools(
 
       const getCanvasPos = (e: PointerEvent): [number, number] => {
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        return [x * scaleX, y * scaleY];
+        return [e.clientX - rect.left, e.clientY - rect.top];
+      };
+
+      const ensureMarqueeBox = () => {
+        if (obbMarqueeBox && obbMarqueeBox.parentElement !== overlay) {
+          obbMarqueeBox.remove();
+          obbMarqueeBox = null;
+        }
+        if (!obbMarqueeBox) {
+          obbMarqueeBox = document.createElement('div');
+          obbMarqueeBox.style.position = 'absolute';
+          obbMarqueeBox.style.left = '0px';
+          obbMarqueeBox.style.top = '0px';
+          obbMarqueeBox.style.width = '0px';
+          obbMarqueeBox.style.height = '0px';
+          obbMarqueeBox.style.display = 'none';
+          obbMarqueeBox.style.boxSizing = 'border-box';
+          obbMarqueeBox.style.border = '2px dashed #333';
+          obbMarqueeBox.style.background = 'rgba(0,0,0,0.06)';
+          obbMarqueeBox.style.pointerEvents = 'none';
+          overlay.appendChild(obbMarqueeBox);
+        }
+        return obbMarqueeBox;
       };
 
       canvasPointerDown = (e: PointerEvent) => {
-        if (store.toolMode.value !== 'annotation_obb') return;
+        const mode = store.toolMode.value;
+        if (mode !== 'annotation_obb' && mode !== 'annotation_cloud') return;
         if (e.button !== 0) return;
         if (!ready.value) return;
 
@@ -709,7 +732,8 @@ export function useXeokitTools(
         if (!marqueePicker.value) return;
 
         dragging = true;
-        start = getCanvasPos(e);
+        const startPos = getCanvasPos(e);
+        start = startPos;
         lastPicked = [];
         suppressNextClick = true;
 
@@ -728,9 +752,28 @@ export function useXeokitTools(
         } catch {
           // ignore
         }
-        marqueePicker.value.setMarqueeCorner1(start);
-        marqueePicker.value.setMarqueeCorner2(start);
-        marqueePicker.value.setMarqueeVisible(true);
+        marqueePicker.value.setMarqueeCorner1(startPos);
+        marqueePicker.value.setMarqueeCorner2(startPos);
+        marqueePicker.value.setMarqueeVisible(false);
+
+        const box = ensureMarqueeBox();
+        box.style.display = 'block';
+        // 云线模式使用红色波浪边框
+        if (mode === 'annotation_cloud') {
+          box.style.border = '3px solid #dc2626';
+          box.style.borderRadius = '8px';
+          box.style.background = 'rgba(220, 38, 38, 0.08)';
+          box.style.boxShadow = '0 0 0 2px rgba(220, 38, 38, 0.3), inset 0 0 8px rgba(220, 38, 38, 0.1)';
+        } else {
+          box.style.border = '2px dashed #333';
+          box.style.borderRadius = '0';
+          box.style.background = 'rgba(0,0,0,0.06)';
+          box.style.boxShadow = 'none';
+        }
+        box.style.left = `${startPos[0]}px`;
+        box.style.top = `${startPos[1]}px`;
+        box.style.width = '0px';
+        box.style.height = '0px';
       };
 
       canvasPointerMove = (e: PointerEvent) => {
@@ -746,11 +789,38 @@ export function useXeokitTools(
         } else {
           marqueePicker.value.setPickMode(MarqueePicker.PICK_MODE_INSIDE);
         }
+
+        const box = ensureMarqueeBox();
+        box.style.display = 'block';
+        const isCloud = store.toolMode.value === 'annotation_cloud';
+        if (isCloud) {
+          box.style.border = '3px solid #dc2626';
+          box.style.borderRadius = '8px';
+          box.style.background = 'rgba(220, 38, 38, 0.08)';
+          box.style.boxShadow = '0 0 0 2px rgba(220, 38, 38, 0.3), inset 0 0 8px rgba(220, 38, 38, 0.1)';
+        } else {
+          box.style.border = dx >= 0 ? '2px dashed #333' : '2px solid #333';
+          box.style.borderRadius = '0';
+          box.style.background = 'rgba(0,0,0,0.06)';
+          box.style.boxShadow = 'none';
+        }
+        const left = Math.min(start[0], cur[0]);
+        const top = Math.min(start[1], cur[1]);
+        const width = Math.abs(cur[0] - start[0]);
+        const height = Math.abs(cur[1] - start[1]);
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        box.style.width = `${width}px`;
+        box.style.height = `${height}px`;
       };
 
       canvasPointerUp = (e: PointerEvent) => {
         if (!dragging) return;
         dragging = false;
+
+        if (obbMarqueeBox) {
+          obbMarqueeBox.style.display = 'none';
+        }
         const picker = marqueePicker.value;
         const startPos = start;
         start = null;
@@ -760,6 +830,14 @@ export function useXeokitTools(
             const picked = picker.pick() || [];
             const additive = e.ctrlKey || e.metaKey;
             lastPicked = additive ? Array.from(new Set([...lastPicked, ...picked])) : picked;
+
+            // 高亮被框选的模型
+            if (!additive) {
+              clearSceneSelection(viewer);
+            }
+            if (lastPicked.length > 0) {
+              viewer.scene.setObjectsSelected(lastPicked, true);
+            }
 
             if (lastPicked.length > 0) {
               const points: Vec3[] = [];
@@ -1011,9 +1089,18 @@ export function useXeokitTools(
       overlayPointerMove = null;
       overlayPointerUp = null;
     }
+
+    if (obbMarqueeBox) {
+      obbMarqueeBox.remove();
+      obbMarqueeBox = null;
+    }
   }
 
   function disposePlugins() {
+    if (obbMarqueeBox) {
+      obbMarqueeBox.remove();
+      obbMarqueeBox = null;
+    }
     try {
       distanceMouseControl.value?.destroy();
     } catch {
@@ -1074,17 +1161,22 @@ export function useXeokitTools(
   }
 
   function pickSurface(viewer: Viewer, canvasPos: number[]): MeasurementPoint | null {
-    const pickRecord = viewer.scene.pick({
-      canvasPos,
-      pickSurface: true,
-    }) as unknown as PickRecordLike | null;
-
+    const pickRecord = pickSurfaceRecord(viewer, canvasPos);
     if (!pickRecord) return null;
     const worldPos = vec3From(pickRecord.worldPos);
     const entityId = pickRecord.entity?.id ? String(pickRecord.entity.id) : null;
 
     if (!worldPos || !entityId) return null;
     return { entityId, worldPos };
+  }
+
+  function pickSurfaceRecord(viewer: Viewer, canvasPos: number[]): PickRecordLike | null {
+    const pickRecord = viewer.scene.pick({
+      canvasPos,
+      pickSurface: true,
+    }) as unknown as PickRecordLike | null;
+
+    return pickRecord;
   }
 
   function createDistanceMeasurement(viewer: Viewer, origin: MeasurementPoint, target: MeasurementPoint, visible: boolean): DistanceMeasurementRecord | null {
@@ -1155,19 +1247,24 @@ export function useXeokitTools(
     };
   }
 
-  function createAnnotation(viewer: Viewer, point: MeasurementPoint): AnnotationRecord | null {
+  function createAnnotation(viewer: Viewer, pickRecord: PickRecordLike): AnnotationRecord | null {
     const plugin = annotationsPlugin.value;
     if (!plugin) return null;
+
+    const entityId = pickRecord.entity?.id ? String(pickRecord.entity.id) : null;
+    const worldPos = vec3From(pickRecord.worldPos);
+    if (!entityId || !worldPos) return null;
 
     const id = nowId('anno');
     const n = store.annotations.value.length + 1;
 
-    const entity = viewer.scene.objects[point.entityId] || undefined;
+    // 获取关联的 refno
+    const refno = resolveRefnoFromSceneId(viewer, entityId);
 
+    // 使用 pickRecord 参数让 xeokit 自动处理位置和表面偏移
     const params: Parameters<AnnotationsPlugin['createAnnotation']>[0] = {
       id,
-      entity,
-      worldPos: point.worldPos,
+      pickResult: pickRecord as unknown as Parameters<AnnotationsPlugin['createAnnotation']>[0]['pickResult'],
       occludable: true,
       markerShown: true,
       labelShown: true,
@@ -1182,13 +1279,14 @@ export function useXeokitTools(
 
     return {
       id,
-      entityId: point.entityId,
-      worldPos: point.worldPos,
+      entityId,
+      worldPos,
       visible: true,
       glyph: `A${n}`,
       title: `批注 ${n}`,
       description: '',
       createdAt: Date.now(),
+      refno: refno || undefined,
     };
   }
 
@@ -1387,23 +1485,66 @@ export function useXeokitTools(
       }
 
       const existingLabel = anAnnotations[labelId];
-      const labelHTML = [
-        '<div data-obb-id="{{obbId}}" style="max-width:260px;padding:8px 10px;border-radius:8px;background:rgba(20,20,20,0.85);color:#fff;box-shadow:0 8px 18px rgba(0,0,0,0.35);cursor:grab;">',
+      // 判断是否已编辑（title 不是默认值）
+      const isEdited = !o.title.startsWith('OBB 批注 ');
+      const labelHTML = isEdited ? [
+        '<div data-obb-id="{{obbId}}" style="position:absolute;max-width:260px;padding:8px 10px;border-radius:8px;background:rgba(20,20,20,0.85);color:#fff;box-shadow:0 8px 18px rgba(0,0,0,0.35);cursor:pointer;">',
         '  <div style="font-weight:700;line-height:1.2;">{{title}}</div>',
         '  <div style="margin-top:4px;font-size:12px;opacity:0.95;white-space:pre-wrap;">{{description}}</div>',
         '</div>',
+      ].join('') : '<div style="display:none;"></div>';
+      // 图钉样式的 marker
+      const markerHTML = [
+        '<div data-obb-id="{{obbId}}" style="position:absolute;display:flex;flex-direction:column;align-items:center;transform:translateY(-50%);cursor:pointer;">',
+        '  <div style="width:28px;height:28px;border-radius:50% 50% 50% 0;background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.4);">',
+        '    <span style="transform:rotate(45deg);color:#fff;font-size:14px;">📌</span>',
+        '  </div>',
+        '  <div style="width:3px;height:8px;background:linear-gradient(to bottom,#92400e,#78350f);margin-top:-2px;border-radius:0 0 2px 2px;"></div>',
+        '</div>',
       ].join('');
-      const markerHTML = '<div style="width:1px;height:1px;opacity:0;"></div>';
       const labelWorldPos = o.labelWorldPos;
 
       if (existingLabel) {
-        existingLabel.setValues?.({ obbId: o.id, title: o.title, description: o.description });
-        existingLabel.setMarkerShown?.(o.visible);
-        existingLabel.setLabelShown?.(o.visible);
-        try {
-          existingLabel.worldPos = labelWorldPos;
-        } catch {
-          // ignore
+        // 检查是否需要切换样式（从图钉变成标签卡片或反之）
+        const wasEdited = (existingLabel as unknown as { _obbIsEdited?: boolean })._obbIsEdited;
+        if (wasEdited !== isEdited) {
+          // 样式需要变化，销毁旧标签重新创建
+          try {
+            (existingLabel as unknown as { destroy?: () => void }).destroy?.();
+          } catch {
+            // ignore
+          }
+          try {
+            const params: Parameters<AnnotationsPlugin['createAnnotation']>[0] = {
+              id: labelId,
+              occludable: true,
+              markerShown: o.visible,
+              labelShown: isEdited && o.visible,
+              markerHTML,
+              labelHTML,
+              worldPos: labelWorldPos,
+              values: {
+                obbId: o.id,
+                title: o.title,
+                description: o.description,
+              },
+            };
+            const newLabel = annotationsPlugin.value?.createAnnotation(params);
+            if (newLabel) {
+              (newLabel as unknown as { _obbIsEdited: boolean })._obbIsEdited = isEdited;
+            }
+          } catch {
+            // ignore
+          }
+        } else {
+          existingLabel.setValues?.({ obbId: o.id, title: o.title, description: o.description });
+          existingLabel.setMarkerShown?.(o.visible);
+          existingLabel.setLabelShown?.(isEdited && o.visible);
+          try {
+            existingLabel.worldPos = labelWorldPos;
+          } catch {
+            // ignore
+          }
         }
       } else {
         try {
@@ -1411,7 +1552,7 @@ export function useXeokitTools(
             id: labelId,
             occludable: true,
             markerShown: o.visible,
-            labelShown: o.visible,
+            labelShown: isEdited && o.visible,
             markerHTML,
             labelHTML,
             worldPos: labelWorldPos,
@@ -1421,7 +1562,10 @@ export function useXeokitTools(
               description: o.description,
             },
           };
-          annotationsPlugin.value?.createAnnotation(params);
+          const newLabel = annotationsPlugin.value?.createAnnotation(params);
+          if (newLabel) {
+            (newLabel as unknown as { _obbIsEdited: boolean })._obbIsEdited = isEdited;
+          }
         } catch {
           // ignore
         }
@@ -1525,6 +1669,8 @@ export function useXeokitTools(
       if (pickedId && pickedId.startsWith('obb_pick_')) {
         const obbId = pickedId.replace(/^obb_pick_/, '');
         store.activeObbAnnotationId.value = obbId;
+        // 点击图钉触发编辑弹窗
+        store.pendingObbEditId.value = obbId;
         return;
       }
     } catch {
@@ -1578,10 +1724,11 @@ export function useXeokitTools(
       return;
     }
 
-    const p = pickSurface(viewer, canvasPos);
-    if (!p) return;
+    // 批注模式：使用完整的 pickRecord 让 xeokit 正确处理位置
+    const pickRecord = pickSurfaceRecord(viewer, canvasPos);
+    if (!pickRecord) return;
 
-    const created = createAnnotation(viewer, p);
+    const created = createAnnotation(viewer, pickRecord);
     if (created) {
       store.addAnnotation(created);
     }
@@ -1706,6 +1853,73 @@ export function useXeokitTools(
 
     obbLabels.delete(id);
     store.removeObbAnnotation(id);
+  }
+
+  function highlightAnnotationTarget(refno: string) {
+    const viewer = viewerRef.value;
+    if (!viewer) return;
+
+    // 清除当前选择
+    clearSceneSelection(viewer);
+    
+    // 高亮指定对象
+    if (viewer.scene.objects[refno]) {
+      viewer.scene.setObjectsSelected([refno], true);
+      
+      // 飞行到对象位置
+      const object = viewer.scene.objects[refno];
+      if (object?.aabb) {
+        const aabb = object.aabb as unknown as number[];
+        if (aabb.length >= 6) {
+          viewer.cameraFlight.flyTo({
+            aabb: [aabb[0], aabb[1], aabb[2], aabb[3], aabb[4], aabb[5]],
+            fit: true,
+            duration: 0.8
+          } as unknown as Record<string, unknown>);
+        }
+      }
+    }
+  }
+
+  function highlightAnnotationTargets(refnos: string[]) {
+    const viewer = viewerRef.value;
+    if (!viewer) return;
+
+    // 清除当前选择
+    clearSceneSelection(viewer);
+    
+    // 过滤出存在的对象
+    const existingIds = refnos.filter(refno => viewer.scene.objects[refno]);
+    
+    if (existingIds.length > 0) {
+      viewer.scene.setObjectsSelected(existingIds, true);
+      
+      // 计算所有对象的包围盒并飞行
+      const allCorners: Vec3[] = [];
+      existingIds.forEach(refno => {
+        const object = viewer.scene.objects[refno];
+        if (object?.aabb) {
+          const aabb = object.aabb as unknown as number[];
+          if (aabb.length >= 6) {
+            allCorners.push(
+              [aabb[0]!, aabb[1]!, aabb[2]!],
+              [aabb[3]!, aabb[4]!, aabb[5]!]
+            );
+          }
+        }
+      });
+      
+      if (allCorners.length > 0) {
+        const combinedAabb = aabbFromPoints(allCorners);
+        if (combinedAabb) {
+          viewer.cameraFlight.flyTo({
+            aabb: combinedAabb,
+            fit: true,
+            duration: 0.8
+          } as unknown as Record<string, unknown>);
+        }
+      }
+    }
   }
 
   function clearAllInScene() {
@@ -1860,6 +2074,9 @@ export function useXeokitTools(
     removeMeasurement,
     removeAnnotation,
     removeObbAnnotation,
+
+    highlightAnnotationTarget,
+    highlightAnnotationTargets,
 
     clearAllInScene,
   };
