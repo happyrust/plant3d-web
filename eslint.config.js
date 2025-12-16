@@ -66,6 +66,7 @@ export default tseslint.config(
       }
     },
     rules: {
+      'no-undef': 'off',
       'indent': [
         'error',
         2,

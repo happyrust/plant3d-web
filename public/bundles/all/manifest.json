@@ -1,0 +1,80 @@
+{
+  "files": {
+    "geometry_assets": {
+      "L1": {
+        "bytes": 1116708,
+        "mesh_files_found": 269,
+        "mesh_files_missing": 0,
+        "path": "geometry_L1.glb",
+        "sha256": "8b01e2c2068f84c22bc81cdac88208638b0c199185a3caa75f8dc4257db7b7ff"
+      },
+      "L2": {
+        "bytes": 1121636,
+        "mesh_files_found": 269,
+        "mesh_files_missing": 0,
+        "path": "geometry_L2.glb",
+        "sha256": "6301ab957e9e8359f51dede130b7b0f96893d529520efc320ad896e82fffbbc6"
+      },
+      "L3": {
+        "bytes": 1480980,
+        "mesh_files_found": 269,
+        "mesh_files_missing": 0,
+        "path": "geometry_L3.glb",
+        "sha256": "c504237b2e548a6f0bde6eafeac9f4d041c420fc7a361abe0b4748403595fa0d"
+      }
+    },
+    "geometry_manifest": {
+      "bytes": 331928,
+      "path": "geometry_manifest.json",
+      "sha256": "b924fdc7545a3fd2eeae5fd82fbdcc2d224a0b47ad4fb33e88c4a4e463be16ec"
+    },
+    "instance_manifest": {
+      "bytes": 55507169,
+      "path": "instances.json",
+      "sha256": "2bb153e11475e8d364f220ad3e54f1c4473dbbb418376e2a9e0798f3e06ff548"
+    }
+  },
+  "generated_at": "2025-12-04T05:31:50.203Z",
+  "lod_profiles": [
+    {
+      "asset_key": "L1",
+      "default_material": "pbrStandard",
+      "level": 1,
+      "max_position_error": 0.0,
+      "priority": 0,
+      "target_triangles": 0
+    },
+    {
+      "asset_key": "L2",
+      "default_material": "litLambert",
+      "level": 2,
+      "max_position_error": 0.0,
+      "priority": 1,
+      "target_triangles": 0
+    },
+    {
+      "asset_key": "L3",
+      "default_material": "flatColor",
+      "level": 3,
+      "max_position_error": 0.0,
+      "priority": 2,
+      "target_triangles": 0
+    }
+  ],
+  "stats": {
+    "component_instances": 41294,
+    "descendant_count": 0,
+    "export_duration_ms": 0,
+    "refno_count": 23222,
+    "total_instances": 48031,
+    "tubing_instances": 6737,
+    "unique_geometries": 282
+  },
+  "unit_conversion": {
+    "factor": 1.0,
+    "precision": 6,
+    "source_unit": "m",
+    "target_unit": "m"
+  },
+  "version": "1.1.0"
+}
