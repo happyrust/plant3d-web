@@ -1,0 +1,9 @@
+[
+  {
+    "id": "ams-model",
+    "name": "AMS 项目",
+    "description": "AMS 系统模型",
+    "path": "ams-model",
+    "default": true
+  }
+]

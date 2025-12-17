@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { shallowRef, watch } from 'vue';
+
+import type { Viewer } from '@xeokit/xeokit-sdk';
 
 import ModelTreePanel from '@/components/model-tree/ModelTreePanel.vue';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -13,7 +15,15 @@ defineProps<{
 }>();
 
 const ctx = useViewerContext();
-const viewer = computed(() => ctx.viewerRef.value);
+const viewer = shallowRef<Viewer | null>(null);
+
+watch(
+  () => ctx.viewerRef.value,
+  (v) => {
+    viewer.value = v;
+  },
+  { immediate: true }
+);
 </script>
 
 <template>

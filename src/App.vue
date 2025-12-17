@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 
 import DockLayout from '@/components/DockLayout.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
+import UserAvatar from '@/components/user/UserAvatar.vue';
 
 const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
 
@@ -25,7 +26,12 @@ const extensionHeight = computed(() => {
       :extension-height="extensionHeight"
     >
       <template #extension>
-        <RibbonBar ref="ribbonBarRef" />
+        <div class="flex items-center w-full">
+          <RibbonBar ref="ribbonBarRef" class="flex-1" />
+          <div class="px-2">
+            <UserAvatar />
+          </div>
+        </div>
       </template>
     </v-app-bar>
 

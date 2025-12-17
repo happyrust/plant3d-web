@@ -10,6 +10,8 @@ export type ToolMode =
   | 'annotation_obb'
   | 'pick_query_center';
 
+export type AttributeDisplayMode = 'all' | 'general' | 'component' | 'uda';
+
 export type Vec3 = [number, number, number];
 
 export type MeasurementKind = 'distance' | 'angle';
@@ -128,9 +130,9 @@ type PersistedStateV3 = {
   rectAnnotations: RectAnnotationRecord[];
 };
 
-const STORAGE_KEY_V1 = 'vue-xeokit-tools-v1';
-const STORAGE_KEY_V2 = 'vue-xeokit-tools-v2';
-const STORAGE_KEY_V3 = 'vue-xeokit-tools-v3';
+const STORAGE_KEY_V1 = 'plant3d-web-tools-v1';
+const STORAGE_KEY_V2 = 'plant3d-web-tools-v2';
+const STORAGE_KEY_V3 = 'plant3d-web-tools-v3';
 
 function normalizeV1(parsed: PersistedStateV1): PersistedStateV3 {
   return {
@@ -209,8 +211,12 @@ const obbAnnotations = ref<ObbAnnotationRecord[]>(persisted.obbAnnotations);
 const cloudAnnotations = ref<CloudAnnotationRecord[]>(persisted.cloudAnnotations);
 const rectAnnotations = ref<RectAnnotationRecord[]>(persisted.rectAnnotations);
 
-const activeTab = ref<'tree' | 'measurement' | 'annotation' | 'obb_annotation' | 'manager'>('tree');
+const activeTab = ref<'tree' | 'measurement' | 'annotation' | 'obb_annotation' | 'manager' | 'properties'>('tree');
 const toolMode = ref<ToolMode>('none');
+
+// Attribute display state
+const attributeDisplayMode = ref<AttributeDisplayMode>('all');
+const compareMode = ref<boolean>(false);
 
 const activeAnnotationId = ref<string | null>(null);
 const activeObbAnnotationId = ref<string | null>(null);
@@ -251,6 +257,14 @@ watch(
 
 function setToolMode(mode: ToolMode) {
   toolMode.value = mode;
+}
+
+function setAttributeDisplayMode(mode: AttributeDisplayMode) {
+  attributeDisplayMode.value = mode;
+}
+
+function setCompareMode(enabled: boolean) {
+  compareMode.value = enabled;
 }
 
 function addMeasurement(rec: MeasurementRecord) {
@@ -459,6 +473,12 @@ export function useToolStore() {
     allItems,
 
     setToolMode,
+    
+    // Attribute display functions
+    attributeDisplayMode,
+    compareMode,
+    setAttributeDisplayMode,
+    setCompareMode,
 
     addMeasurement,
     updateMeasurementVisible,

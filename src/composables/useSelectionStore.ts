@@ -46,6 +46,15 @@ function clearSelection() {
   propertiesData.value = null;
 }
 
+function setSelectedRefno(refno: string | null) {
+  if (refno === selectedRefno.value) return;
+  loadSeq++;
+  selectedRefno.value = refno;
+  propertiesLoading.value = false;
+  propertiesError.value = null;
+  propertiesData.value = null;
+}
+
 export function useSelectionStore() {
   return {
     selectedRefno,
@@ -54,5 +63,6 @@ export function useSelectionStore() {
     propertiesData,
     loadProperties,
     clearSelection,
+    setSelectedRefno,
   };
 }

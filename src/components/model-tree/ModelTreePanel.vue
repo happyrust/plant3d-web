@@ -6,7 +6,6 @@ import { Viewer } from '@xeokit/xeokit-sdk';
 import { Filter, Plus, Search, X } from 'lucide-vue-next';
 
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
-import { dockActivatePanelIfExists, dockPanelExists } from '@/composables/useDockApi';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
@@ -21,9 +20,12 @@ const activeTree = ref<'pdms' | 'room'>('pdms');
 const pdmsViewerRef = shallowRef<Viewer | null>(props.viewer);
 const roomViewerRef = shallowRef<Viewer | null>(null);
 
+console.log('[ModelTreePanel] initial props.viewer:', props.viewer ? 'exists' : 'null');
+
 watch(
   () => [props.viewer, activeTree.value] as const,
   ([v, t]) => {
+    console.log('[ModelTreePanel] watch triggered, viewer:', v ? 'exists' : 'null', 'activeTree:', t);
     pdmsViewerRef.value = t === 'pdms' ? v : null;
     roomViewerRef.value = t === 'room' ? v : null;
   },
@@ -143,11 +145,7 @@ function handleSelectionChanged(selected: Set<string>) {
   const only = Array.from(selected)[0];
   if (!only || !isRefnoLike(only)) return;
 
-  void selection.loadProperties(only);
-
-  if (dockPanelExists('properties')) {
-    dockActivatePanelIfExists('properties');
-  }
+  selection.setSelectedRefno(only);
 }
 
 function flyTo(id: string) {
@@ -256,14 +254,22 @@ watch(
 watch(
   () => flatRows.value.length,
   (count) => {
+    console.log('[ModelTreePanel] flatRows.length changed:', count);
     rowVirtualizer.value.setOptions({
       ...rowVirtualizer.value.options,
       count,
     });
-  }
+    // 强制重新计算虚拟行
+    console.log('[ModelTreePanel] virtualRows after setOptions:', rowVirtualizer.value.getVirtualItems());
+  },
+  { immediate: true }
 );
 
-const virtualRows = computed(() => rowVirtualizer.value.getVirtualItems());
+const virtualRows = computed(() => {
+  const items = rowVirtualizer.value.getVirtualItems();
+  console.log('[ModelTreePanel] virtualRows computed:', items.length, 'items');
+  return items;
+});
 const totalSize = computed(() => rowVirtualizer.value.getTotalSize());
 
 function closeContextMenu() {
@@ -272,8 +278,32 @@ function closeContextMenu() {
 }
 
 function openContextMenu(nodeId: string, ev: MouseEvent) {
+  ev.preventDefault();
+  ev.stopPropagation();
   contextNodeId.value = nodeId;
-  contextMenuPos.value = { x: ev.clientX, y: ev.clientY };
+  
+  // 计算菜单位置，考虑视口边界
+  const menuWidth = 176; // w-44 = 11rem = 176px
+  const menuHeight = 200; // 预估高度
+  
+  let x = ev.clientX;
+  let y = ev.clientY;
+  
+  // 检查右边界
+  if (x + menuWidth > window.innerWidth) {
+    x = window.innerWidth - menuWidth - 8;
+  }
+  
+  // 检查下边界
+  if (y + menuHeight > window.innerHeight) {
+    y = window.innerHeight - menuHeight - 8;
+  }
+  
+  // 确保不超出左上边界
+  x = Math.max(8, x);
+  y = Math.max(8, y);
+  
+  contextMenuPos.value = { x, y };
   contextMenuOpen.value = true;
 }
 
@@ -542,9 +572,8 @@ function hideNode() {
 
           <!-- 添加自定义类型 -->
           <div v-if="!isRoomTree" class="mt-2 flex items-center gap-1 border-t border-border pt-2">
-            <input class="h-7 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+            <input v-model="customTypeInput" class="h-7 flex-1 rounded-md border border-input bg-background px-2 text-sm"
               placeholder="添加自定义类型"
-              v-model="customTypeInput"
               @keydown.enter="addCustomType" />
             <button type="button"
               class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -576,7 +605,10 @@ function hideNode() {
             @context="openContextMenu" />
         </div>
       </div>
-
+    </div>
+    
+    <!-- 右键菜单 - 使用 Teleport 渲染到 body -->
+    <Teleport to="body">
       <div v-if="contextMenuOpen"
         data-model-tree-context-menu="true"
         :class="cn('fixed z-[9999] w-44 rounded-md border border-border bg-background p-1 shadow-md')"
@@ -608,6 +640,6 @@ function hideNode() {
           隐藏
         </button>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>

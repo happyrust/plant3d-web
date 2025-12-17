@@ -1,6 +1,6 @@
-# vue-xeokit
+# plant3d-web
 
-Example with vue3, vuetify, typescript and xeokit-sdk
+Example with vue3, vuetify, typescript and xeokit-sdk for Plant 3D visualization
 
 ## Recommended IDE Setup
 

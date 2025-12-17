@@ -1,5 +1,6 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 
+import type { LazyEntityManager } from '@/aios-prepack-bundle-loader';
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { Viewer } from '@xeokit/xeokit-sdk';
 
@@ -90,7 +91,9 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
   function rebuildInitialChecks() {
     const next = new Map<string, CheckState>();
     for (const id of Object.keys(nodesById.value)) {
-      next.set(id, 'checked');
+      // lazyEntities 默认不预加载实体，因此树节点初始应为未显示状态。
+      // 这里采用 unchecked 表示“默认隐藏/未加载”。
+      next.set(id, 'unchecked');
     }
     checkStateById.value = next;
   }
@@ -130,13 +133,22 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
     const filterActive = hasText || hasType;
 
     const matchMemo = new Map<string, boolean>();
+    const matchVisiting = new Set<string>();
 
     const subtreeMatches = (id: string): boolean => {
       const cached = matchMemo.get(id);
       if (cached !== undefined) return cached;
 
+      // 防环：如果树数据出现循环引用，直接短路为 false，避免递归爆栈。
+      if (matchVisiting.has(id)) {
+        matchMemo.set(id, false);
+        return false;
+      }
+      matchVisiting.add(id);
+
       const node = nodes[id];
       if (!node) {
+        matchVisiting.delete(id);
         matchMemo.set(id, false);
         return false;
       }
@@ -152,6 +164,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
       }
 
       matchMemo.set(id, ok);
+      matchVisiting.delete(id);
       return ok;
     };
 
@@ -161,7 +174,14 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
       return typeof cnt === 'number' && cnt > 0;
     };
 
+    const visited = new Set<string>();
+    const MAX_DEPTH = 256;
+
     const build = (id: string, depth: number) => {
+      if (depth > MAX_DEPTH) return;
+      if (visited.has(id)) return;
+      visited.add(id);
+
       const node = nodes[id];
       if (!node) return;
 
@@ -208,7 +228,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
       const nextNodes: Record<string, TreeNode> = { ...nodesById.value };
       const nextChildrenCount = new Map(childrenCountById.value);
 
-      const parentCheck = checkStateById.value.get(parentId) || 'checked';
+      const parentCheck = checkStateById.value.get(parentId) || 'unchecked';
       const inheritState: CheckState = parentCheck === 'unchecked' ? 'unchecked' : 'checked';
 
       const childrenIds: string[] = [];
@@ -386,7 +406,28 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
         throw new Error(resp.error_message || 'subtree-refnos api failed');
       }
 
+      // 调试日志：检查懒加载问题
+      if (import.meta.env.DEV) {
+        console.log('[pdms-tree] getObjectIdsForSubtree:', {
+          id,
+          totalRefnos: resp.refnos.length,
+          sceneObjectIds: Object.keys(viewer.scene.objects || {}).length,
+          firstRefnos: resp.refnos.slice(0, 5),
+          firstSceneIds: Object.keys(viewer.scene.objects || {}).slice(0, 5)
+        });
+      }
+
+      // lazyEntities 模式下不在这里做“自动创建所有实体”，否则会破坏“默认模型不加载”的约束。
+      // 仅返回当前已存在于 scene 的对象（传统模式/已加载对象）。
       const filtered = resp.refnos.filter((oid) => !!viewer.scene.objects[oid]);
+
+      if (import.meta.env.DEV) {
+        console.log('[pdms-tree] After filtering:', {
+          filteredCount: filtered.length,
+          missingCount: resp.refnos.length - filtered.length
+        });
+      }
+
       subtreeObjectIdsCache.value.set(id, filtered);
       return filtered;
     })();
@@ -461,17 +502,246 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
     const viewer = viewerRef.value;
     if (!viewer) return;
 
-    let objectIds: string[] = [];
-    try {
-      objectIds = await getObjectIdsForSubtree(id);
-    } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn('[pdms-tree] getObjectIdsForSubtree failed', e);
-      }
-    }
+    // 检查是否有懒加载管理器
+    const lazyEntityManager = (() => {
+      const sceneAny = viewer.scene as unknown as {
+        __aiosLazyEntityManagers?: Record<string, LazyEntityManager>;
+        __aiosActiveLazyModelId?: string;
+      };
+      const managers = sceneAny.__aiosLazyEntityManagers;
+      if (!managers) return undefined;
 
-    if (objectIds.length > 0) {
-      viewer.scene.setObjectsVisible(objectIds, visible);
+      const activeId = sceneAny.__aiosActiveLazyModelId;
+      if (activeId && managers[activeId]) return managers[activeId];
+
+      // 回退：尝试从已注册的 manager 中找到包含该 id 的
+      for (const k of Object.keys(managers)) {
+        const m = managers[k];
+        if (m?.hasRefno(id)) return m;
+      }
+
+      return undefined;
+    })();
+    
+    if (lazyEntityManager) {
+      const node = nodesById.value[id];
+      // BRAN/HANG：显示/隐藏时直接连带子树（descendants），而不是仅操作单个节点。
+      // 这里使用后端 subtree-refnos 接口确保即使子节点未在树中展开加载也能被显示/隐藏。
+      if (node && (node.type === 'BRAN' || node.type === 'HANG')) {
+        const prevState = checkStateById.value.get(id) || 'unchecked';
+        const shouldFly = visible && prevState === 'unchecked';
+        try {
+          const resp = await e3dGetSubtreeRefnos(id, {
+            includeSelf: true,
+            maxDepth: SUBTREE_MAX_DEPTH,
+            limit: SUBTREE_LIMIT,
+          });
+
+          if (!resp.success) {
+            throw new Error(resp.error_message || 'subtree-refnos api failed');
+          }
+
+          const renderables = resp.refnos.filter((r) => lazyEntityManager.hasRefno(r));
+          const count = lazyEntityManager.setVisibility(renderables, visible);
+
+          if (shouldFly && renderables.length > 0) {
+            const mergeAabb = (
+              a: [number, number, number, number, number, number] | null,
+              b: [number, number, number, number, number, number] | null
+            ): [number, number, number, number, number, number] | null => {
+              if (!a) return b;
+              if (!b) return a;
+              return [
+                Math.min(a[0], b[0]),
+                Math.min(a[1], b[1]),
+                Math.min(a[2], b[2]),
+                Math.max(a[3], b[3]),
+                Math.max(a[4], b[4]),
+                Math.max(a[5], b[5]),
+              ];
+            };
+
+            let aabbAll: [number, number, number, number, number, number] | null = null;
+            const chunkSize = 2000;
+            for (let i = 0; i < renderables.length; i += chunkSize) {
+              const chunk = renderables.slice(i, i + chunkSize);
+              try {
+                const aabb = viewer.scene.getAABB(chunk);
+                if (aabb && aabb.length === 6 && Array.from(aabb).every((v) => Number.isFinite(v))) {
+                  const arr = aabb as [number, number, number, number, number, number];
+                  const [xmin, ymin, zmin, xmax, ymax, zmax] = arr;
+                  if (xmin <= xmax && ymin <= ymax && zmin <= zmax) {
+                    aabbAll = mergeAabb(aabbAll, arr);
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            if (aabbAll) {
+              const [xmin, ymin, zmin, xmax, ymax, zmax] = aabbAll;
+              const dx = xmax - xmin;
+              const dy = ymax - ymin;
+              const dz = zmax - zmin;
+              const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (diag > 0 && Number.isFinite(diag)) {
+                try {
+                  const near = Math.max(0.1, diag / 1000);
+                  const far = Math.max(10000, diag * 10);
+                  viewer.scene.camera.perspective.near = near;
+                  viewer.scene.camera.perspective.far = far;
+                } catch {
+                  // ignore
+                }
+              }
+              try {
+                viewer.cameraFlight.flyTo({ aabb: aabbAll, fit: true, duration: 1.0 });
+              } catch {
+                // ignore
+              }
+            }
+          }
+
+          if (import.meta.env.DEV) {
+            console.log('[pdms-tree] lazy BRAN/HANG setVisible subtree:', {
+              id,
+              type: node.type,
+              visible,
+              totalRefnos: resp.refnos.length,
+              renderableRefnos: renderables.length,
+              affected: count,
+            });
+          }
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn('[pdms-tree] lazy BRAN/HANG setVisible subtree failed', {
+              id,
+              visible,
+              err: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+
+        setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
+        recomputeParents(id);
+        return;
+      }
+
+      // lazyEntities 模式下：优先直接命中当前节点；否则沿 owner(parentId) 链向上找可渲染实体。
+      // 约束：只检查一层 parent，并且仅当 parent 为 EQUI 时才回退。
+
+      const resolveRenderableRefno = (startId: string): string | null => {
+        if (lazyEntityManager.hasRefno(startId)) return startId;
+
+        const nodes = nodesById.value;
+        const node = nodes[startId];
+        const parentId = node?.parentId ?? null;
+        if (!parentId) return null;
+
+        const parent = nodes[parentId];
+        if (!parent) return null;
+
+        if (parent.type !== 'EQUI') return null;
+        if (!lazyEntityManager.hasRefno(parentId)) return null;
+
+        return parentId;
+      };
+
+      const target = resolveRenderableRefno(id);
+
+      if (import.meta.env.DEV) {
+        console.log('[pdms-tree] lazy setVisible resolve:', {
+          id,
+          visible,
+          resolved: target,
+          idHasGeo: lazyEntityManager.hasRefno(id),
+        });
+      }
+
+      if (target) {
+        // 显示：需要创建 entity+mesh
+        // 隐藏：如果未创建则无需处理
+        const before = lazyEntityManager.debugEntity(target);
+        if (import.meta.env.DEV) {
+          console.log('[pdms-tree] lazy entity debug (before):', before);
+        }
+
+        const ok = visible ? lazyEntityManager.showEntity(target) : lazyEntityManager.hideEntity(target);
+        if (import.meta.env.DEV) {
+          console.log('[pdms-tree] lazy show/hide result:', {
+            target,
+            ok,
+            created: lazyEntityManager.isEntityCreated(target),
+            visible: lazyEntityManager.isEntityVisible(target),
+          });
+        }
+
+        const after = lazyEntityManager.debugEntity(target);
+        if (import.meta.env.DEV) {
+          console.log('[pdms-tree] lazy entity debug (after):', after);
+        }
+
+        if (import.meta.env.DEV) {
+          try {
+            const aabb = viewer.scene.getAABB([target]);
+            if (aabb && aabb.length === 6) {
+              const [xmin, ymin, zmin, xmax, ymax, zmax] = aabb as [number, number, number, number, number, number];
+              const dx = xmax - xmin;
+              const dy = ymax - ymin;
+              const dz = zmax - zmin;
+              const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              console.log('[pdms-tree] target aabb:', { target, aabb: Array.from(aabb), diag });
+            } else {
+              console.log('[pdms-tree] target aabb not available:', { target, aabb });
+            }
+          } catch (e) {
+            console.log('[pdms-tree] target aabb error:', { target, err: e instanceof Error ? e.message : String(e) });
+          }
+        }
+
+        if (visible && ok) {
+          try {
+            const aabb = viewer.scene.getAABB([target]);
+            if (aabb && aabb.length === 6 && Array.from(aabb).every((v) => Number.isFinite(v))) {
+              const [xmin, ymin, zmin, xmax, ymax, zmax] = aabb as [number, number, number, number, number, number];
+              if (xmin <= xmax && ymin <= ymax && zmin <= zmax) {
+                const dx = xmax - xmin;
+                const dy = ymax - ymin;
+                const dz = zmax - zmin;
+                const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (diag > 0 && Number.isFinite(diag)) {
+                  try {
+                    const near = Math.max(0.1, diag / 1000);
+                    const far = Math.max(10000, diag * 10);
+                    viewer.scene.camera.perspective.near = near;
+                    viewer.scene.camera.perspective.far = far;
+                  } catch {
+                    // ignore
+                  }
+                }
+              }
+            }
+            viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 1.0 });
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } else {
+      // 传统方式：获取对象ID并设置可见性
+      let objectIds: string[] = [];
+      try {
+        objectIds = await getObjectIdsForSubtree(id);
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn('[pdms-tree] getObjectIdsForSubtree failed', e);
+        }
+      }
+
+      if (objectIds.length > 0) {
+        viewer.scene.setObjectsVisible(objectIds, visible);
+      }
     }
 
     setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
@@ -582,7 +852,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
   }
 
   function getCheckState(id: string): CheckState {
-    return checkStateById.value.get(id) || 'checked';
+    return checkStateById.value.get(id) || 'unchecked';
   }
 
   async function ensureNodeAttached(parentId: string, childId: string) {
@@ -712,22 +982,29 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
   }
 
   async function initTree(seq: number) {
+    console.log('[pdms-tree] initTree called, seq:', seq);
     try {
       const resp = await e3dGetWorldRoot();
+      console.log('[pdms-tree] e3dGetWorldRoot response:', resp);
       if (!resp.success || !resp.node) {
         throw new Error(resp.error_message || 'world-root api failed');
       }
 
-      if (seq !== initSeq) return;
+      if (seq !== initSeq) {
+        console.log('[pdms-tree] seq mismatch, aborting. seq:', seq, 'initSeq:', initSeq);
+        return;
+      }
 
       clearInitRetry();
 
       const root = dtoToTreeNode(resp.node, null);
+      console.log('[pdms-tree] root node created:', root);
 
       nodesById.value = {
         [root.id]: root,
       };
       rootIds.value = [root.id];
+      console.log('[pdms-tree] rootIds set:', rootIds.value);
 
       const nextChildrenCount = new Map<string, number | null>();
       if (resp.node.children_count !== undefined) {
@@ -756,6 +1033,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
   watch(
     () => viewerRef.value,
     (viewer) => {
+      console.log('[pdms-tree] watch triggered, viewer:', viewer ? 'exists' : 'null');
       initSeq++;
       const seq = initSeq;
 
@@ -766,6 +1044,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
         return;
       }
 
+      console.log('[pdms-tree] starting initTree, seq:', seq);
       resetAllState();
       void initTree(seq);
     },

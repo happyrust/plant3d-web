@@ -6,10 +6,11 @@ import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 import { setDockApi } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
+import { useUserStore } from '@/composables/useUserStore';
 import { onCommand } from '@/ribbon/commandBus';
 
-const LAYOUT_STORAGE_KEY = 'vue-xeokit-dock-layout-v2';
-const LAYOUT_MIGRATION_PROPERTIES_KEY = 'vue-xeokit-dock-layout-v2-migrated-properties';
+const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v2';
+const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v2-migrated-properties';
 const popoutUrl = `${import.meta.env.BASE_URL}popout.html`;
 
 type DockviewGroupLike = {
@@ -40,6 +41,7 @@ const api = ref<DockApi | null>(null);
 
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
+const userStore = useUserStore();
 
 let offCommand: (() => void) | null = null;
 
@@ -237,20 +239,55 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'initiateReview') {
+    return dockApi.addPanel({
+      id: 'initiateReview',
+      component: 'InitiateReviewPanel',
+      title: '发起提资',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
+  if (panelId === 'reviewerTasks') {
+    return dockApi.addPanel({
+      id: 'reviewerTasks',
+      component: 'ReviewerTaskListPanel',
+      title: '待审核任务',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
 }
 
 function togglePanel(panelId: string) {
   const dockApi = api.value;
-  if (!dockApi) return;
+  if (!dockApi) {
+    console.warn('[DockLayout] togglePanel: dockApi is null');
+    return;
+  }
 
+  console.log(`[DockLayout] togglePanel: ${panelId}`);
   const panel = dockApi.getPanel(panelId);
   if (panel) {
+    console.log(`[DockLayout] Panel ${panelId} exists, closing it`);
     panel.api.close();
     return;
   }
 
+  console.log(`[DockLayout] Creating panel ${panelId}`);
   const created = ensurePanel(panelId);
-  created?.api.setActive();
+  if (created) {
+    console.log(`[DockLayout] Panel ${panelId} created, setting active`);
+    created.api.setActive();
+  } else {
+    console.error(`[DockLayout] Failed to create panel ${panelId}`);
+  }
 }
 
 function resetLayout() {
@@ -268,6 +305,7 @@ function popoutActiveGroup() {
 }
 
 function handleRibbonCommand(commandId: string) {
+  console.log('[DockLayout] handleRibbonCommand:', commandId);
   switch (commandId) {
     case 'panel.tree':
       togglePanel('modelTree');
@@ -307,7 +345,17 @@ function handleRibbonCommand(commandId: string) {
 
     // review commands
     case 'review.start':
-      reviewStore.toggleReviewMode();
+      // 根据用户角色打开不同的面板
+      if (userStore.isDesigner.value) {
+        // 设计人员：打开发起提资面板
+        togglePanel('initiateReview');
+      } else if (userStore.isReviewer.value) {
+        // 审核人员：打开待审核任务列表
+        togglePanel('reviewerTasks');
+      } else {
+        // 默认行为：切换校审模式
+        reviewStore.toggleReviewMode();
+      }
       return;
     case 'review.confirm':
       if (

@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Crosshair, Eye, EyeOff, Filter, MousePointer
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { cn } from '@/lib/utils';
+import { SiteSpecValue, getSpecValueName } from '@/types/spec';
 
 type RefNode = {
   id: string;
@@ -206,6 +207,7 @@ function handleQuery() {
     // Query using xeokit scene objects
     const objects = viewer.scene.objects;
     const groups: Record<string, RefNode[]> = {};
+    const metaByRefno = (viewer.scene as unknown as { __aiosMetaByRefno?: Record<string, { category: string; name: string; specValue?: SiteSpecValue }> }).__aiosMetaByRefno || {};
 
     for (const id of Object.keys(objects)) {
       const entity = objects[id];
@@ -218,15 +220,16 @@ function handleQuery() {
         aabb[4] >= miny && aabb[1] <= maxy &&
         aabb[5] >= minz && aabb[2] <= maxz
       ) {
-        // Extract noun from entity id (format: "refno" or similar)
-        const noun = extractNounFromId(id);
-        const discName = getDisciplineName(noun);
+        // Get spec_value from metadata
+        const meta = metaByRefno[id];
+        const specValue = meta?.specValue ?? SiteSpecValue.Unknown;
+        const specName = getSpecValueName(specValue);
 
-        if (!groups[discName]) {
-          groups[discName] = [];
+        if (!groups[specName]) {
+          groups[specName] = [];
         }
 
-        groups[discName].push({
+        groups[specName].push({
           id: `node_${id}`,
           name: id,
           visible: entity.visible !== false,
@@ -282,19 +285,12 @@ function extractNounFromId(id: string): string {
           <div class="flex items-center justify-between">
             <label class="text-xs text-muted-foreground">中心点 (x,y,z)</label>
             <div class="flex items-center gap-2">
-              <button
-                type="button"
-                class="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
-                :disabled="store.toolMode.value === 'pick_query_center'"
-                @click="startPick">
+              <button type="button" class="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50" :disabled="store.toolMode.value === 'pick_query_center'" @click="startPick">
                 <MousePointerClick class="h-3 w-3" />
                 <span>{{ store.toolMode.value === 'pick_query_center' ? '点击模型...' : '拾取' }}</span>
               </button>
               <span class="text-muted-foreground/50">|</span>
-              <button
-                type="button"
-                class="flex items-center gap-1 text-xs text-primary hover:underline"
-                @click="useSelection">
+              <button type="button" class="flex items-center gap-1 text-xs text-primary hover:underline" @click="useSelection">
                 <Crosshair class="h-3 w-3" />
                 <span>使用选中</span>
               </button>

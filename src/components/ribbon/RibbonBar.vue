@@ -37,6 +37,7 @@ onUnmounted(() => {
 });
 
 function onClickCommand(commandId: string) {
+  console.log('[RibbonBar] onClickCommand:', commandId);
   emitCommand(commandId);
 }
 

@@ -7,7 +7,7 @@ import vuetify from 'vite-plugin-vuetify';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/vue-xeokit/',
+  base: '/plant3d-web/',
   plugins: [
     vue({
       template: { transformAssetUrls: false }
@@ -47,4 +47,4 @@ export default defineConfig({
     }
   },
 });
-//vue-xeokit/
+//plant3d-web/

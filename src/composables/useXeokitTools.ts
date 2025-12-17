@@ -634,6 +634,8 @@ export function useXeokitTools(
   let overlayPointerUp: ((e: PointerEvent) => void) | null = null;
   let obbMarqueeBox: HTMLDivElement | null = null;
   let suppressNextClick = false;
+  let obbEditPopup: HTMLDivElement | null = null;
+  let obbEditPopupId: string | null = null;
 
   function destroyObbSceneObjects() {
     for (const obj of obbWireframes.values()) {
@@ -725,8 +727,14 @@ export function useXeokitTools(
       canvasPointerDown = (e: PointerEvent) => {
         const mode = store.toolMode.value;
         if (mode !== 'annotation_obb' && mode !== 'annotation_cloud') return;
-        if (e.button !== 0) return;
+        // 允许左键和右键事件，左键用于拖拽创建批注，右键用于相机旋转
+        if (e.button !== 0 && e.button !== 2) return;
         if (!ready.value) return;
+
+        // 右键事件不处理拖拽逻辑，直接返回让相机控制处理
+        if (e.button === 2) {
+          return;
+        }
 
         ensureMarqueeSystems(viewer);
         if (!marqueePicker.value) return;
@@ -916,6 +924,8 @@ export function useXeokitTools(
         obbId: string;
         screenZ: number;
         offset: [number, number];
+        downPos: [number, number];
+        moved: boolean;
       } | null = null;
 
       const getCanvasPos = (e: PointerEvent): [number, number] => {
@@ -926,8 +936,141 @@ export function useXeokitTools(
       const findObbId = (target: EventTarget | null): string | null => {
         const el = target instanceof Element ? target.closest('[data-obb-id]') : null;
         if (!el) return null;
+        if (target instanceof Element && target.closest('[data-obb-edit-popup]')) return null;
         const v = el.getAttribute('data-obb-id');
         return v ? String(v) : null;
+      };
+
+      const hideObbEditPopup = () => {
+        if (obbEditPopup) {
+          try {
+            obbEditPopup.remove();
+          } catch {
+            // ignore
+          }
+        }
+        obbEditPopup = null;
+        obbEditPopupId = null;
+      };
+
+      const showObbEditPopup = (obbId: string) => {
+        const viewer = viewerRef.value;
+        if (!viewer) return;
+        const rec = store.obbAnnotations.value.find((r) => r.id === obbId);
+        if (!rec) return;
+
+        const labelAnnoId = `obb_label_${obbId}`;
+        const anno = (annotationsPlugin.value?.annotations || ({} as Record<string, unknown>))[labelAnnoId] as XeokitAnnotationLike | undefined;
+        const annoWorldPos = anno?.worldPos ? vec3From(anno.worldPos) : null;
+        if (!annoWorldPos) return;
+
+        if (obbEditPopupId && obbEditPopupId !== obbId) {
+          hideObbEditPopup();
+        }
+
+        if (!obbEditPopup) {
+          const el = document.createElement('div');
+          el.setAttribute('data-obb-edit-popup', '1');
+          el.style.position = 'absolute';
+          el.style.zIndex = '2200';
+          el.style.minWidth = '260px';
+          el.style.maxWidth = '320px';
+          el.style.padding = '10px';
+          el.style.borderRadius = '10px';
+          el.style.border = '1px solid rgba(0,0,0,0.15)';
+          el.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,245,245,0.98) 100%)';
+          el.style.boxShadow = '0 10px 22px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.5) inset';
+          el.style.backdropFilter = 'blur(6px)';
+          el.style.pointerEvents = 'auto';
+
+          const title = document.createElement('input');
+          title.type = 'text';
+          title.style.width = '100%';
+          title.style.boxSizing = 'border-box';
+          title.style.padding = '6px 8px';
+          title.style.border = '1px solid rgba(0,0,0,0.18)';
+          title.style.borderRadius = '8px';
+          title.style.outline = 'none';
+          title.style.fontSize = '13px';
+          title.style.fontWeight = '600';
+
+          const desc = document.createElement('textarea');
+          desc.rows = 4;
+          desc.style.width = '100%';
+          desc.style.boxSizing = 'border-box';
+          desc.style.marginTop = '8px';
+          desc.style.padding = '6px 8px';
+          desc.style.border = '1px solid rgba(0,0,0,0.18)';
+          desc.style.borderRadius = '8px';
+          desc.style.outline = 'none';
+          desc.style.fontSize = '12px';
+          desc.style.resize = 'vertical';
+
+          const btnRow = document.createElement('div');
+          btnRow.style.display = 'flex';
+          btnRow.style.gap = '8px';
+          btnRow.style.justifyContent = 'flex-end';
+          btnRow.style.marginTop = '10px';
+
+          const cancel = document.createElement('button');
+          cancel.type = 'button';
+          cancel.textContent = '取消';
+          cancel.style.padding = '6px 10px';
+          cancel.style.borderRadius = '8px';
+          cancel.style.border = '1px solid rgba(0,0,0,0.15)';
+          cancel.style.background = 'rgba(255,255,255,0.9)';
+          cancel.style.cursor = 'pointer';
+
+          const save = document.createElement('button');
+          save.type = 'button';
+          save.textContent = '保存';
+          save.style.padding = '6px 10px';
+          save.style.borderRadius = '8px';
+          save.style.border = '1px solid rgba(0,0,0,0.18)';
+          save.style.background = 'linear-gradient(135deg,#f59e0b 0%,#d97706 100%)';
+          save.style.color = '#fff';
+          save.style.cursor = 'pointer';
+
+          btnRow.appendChild(cancel);
+          btnRow.appendChild(save);
+          el.appendChild(title);
+          el.appendChild(desc);
+          el.appendChild(btnRow);
+
+          cancel.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            hideObbEditPopup();
+          });
+          save.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            if (obbEditPopupId) {
+              store.updateObbAnnotation(obbEditPopupId, {
+                title: title.value || 'OBB 批注',
+                description: desc.value || '',
+              });
+            }
+            hideObbEditPopup();
+          });
+          el.addEventListener('pointerdown', (ev) => {
+            ev.stopPropagation();
+          });
+
+          overlay.appendChild(el);
+          obbEditPopup = el;
+
+          (obbEditPopup as unknown as { _titleInput?: HTMLInputElement })._titleInput = title;
+          (obbEditPopup as unknown as { _descInput?: HTMLTextAreaElement })._descInput = desc;
+        }
+
+        obbEditPopupId = obbId;
+        const titleInput = (obbEditPopup as unknown as { _titleInput?: HTMLInputElement })._titleInput;
+        const descInput = (obbEditPopup as unknown as { _descInput?: HTMLTextAreaElement })._descInput;
+        if (titleInput) titleInput.value = rec.title || 'OBB 批注';
+        if (descInput) descInput.value = rec.description || '';
+
+        const p = cameraProjectWorldPos(viewer.scene.camera, annoWorldPos);
+        obbEditPopup.style.left = `${Math.round(p[0] + 16)}px`;
+        obbEditPopup.style.top = `${Math.round(p[1] - 10)}px`;
       };
 
       let rafId: number | null = null;
@@ -976,7 +1119,12 @@ export function useXeokitTools(
 
       overlayPointerDown = (e: PointerEvent) => {
         const obbId = findObbId(e.target);
-        if (!obbId) return;
+        if (!obbId) {
+          if (obbEditPopup && !(e.target instanceof Element && e.target.closest('[data-obb-edit-popup]'))) {
+            hideObbEditPopup();
+          }
+          return;
+        }
         const viewer = viewerRef.value;
         if (!viewer) return;
 
@@ -993,7 +1141,7 @@ export function useXeokitTools(
         const markerCanvasPos = cameraProjectWorldPos(viewer.scene.camera, annoWorldPos);
         const offset: [number, number] = [canvasPos[0] - markerCanvasPos[0], canvasPos[1] - markerCanvasPos[1]];
         const screenZ = worldPosToScreenZ(viewer.scene.camera.viewMatrix, viewer.scene.camera.projMatrix, annoWorldPos);
-        draggingLabel = { obbId, screenZ, offset };
+        draggingLabel = { obbId, screenZ, offset, downPos: canvasPos, moved: false };
         try {
           viewer.scene.input.setEnabled(false);
         } catch {
@@ -1011,12 +1159,18 @@ export function useXeokitTools(
         const viewer = viewerRef.value;
         if (!viewer) return;
 
-        const { obbId, screenZ, offset } = draggingLabel;
+        const { obbId, screenZ, offset, downPos } = draggingLabel;
         const labelAnnoId = `obb_label_${obbId}`;
         const anno = (annotationsPlugin.value?.annotations || ({} as Record<string, unknown>))[labelAnnoId] as XeokitAnnotationLike | undefined;
         if (!anno) return;
 
         const canvasPos = getCanvasPos(e);
+        const dx = canvasPos[0] - downPos[0];
+        const dy = canvasPos[1] - downPos[1];
+        if (!draggingLabel.moved && Math.hypot(dx, dy) < 4) {
+          return;
+        }
+        draggingLabel.moved = true;
         const targetCanvasPos: [number, number] = [canvasPos[0] - offset[0], canvasPos[1] - offset[1]];
         const wp = viewer.scene.camera.project.unproject(
           targetCanvasPos,
@@ -1034,7 +1188,7 @@ export function useXeokitTools(
       overlayPointerUp = (e: PointerEvent) => {
         if (!draggingLabel) return;
         const viewer = viewerRef.value;
-        const { obbId } = draggingLabel;
+        const { obbId, moved } = draggingLabel;
         draggingLabel = null;
         if (viewer) {
           try {
@@ -1049,6 +1203,11 @@ export function useXeokitTools(
           // ignore
         }
         suppressNextClick = true;
+
+        if (!moved) {
+          showObbEditPopup(obbId);
+          return;
+        }
 
         const labelAnnoId = `obb_label_${obbId}`;
         const anno = (annotationsPlugin.value?.annotations || ({} as Record<string, unknown>))[labelAnnoId] as XeokitAnnotationLike | undefined;
@@ -1398,6 +1557,8 @@ export function useXeokitTools(
       obbLabels.set(o.id, labelId);
       annotationIds.add(labelId);
 
+      const isActive = store.activeObbAnnotationId.value === o.id;
+
       const positions: number[] = [];
       for (const c of corners) {
         positions.push(c[0], c[1], c[2]);
@@ -1485,14 +1646,16 @@ export function useXeokitTools(
       }
 
       const existingLabel = anAnnotations[labelId];
-      // 判断是否已编辑（title 不是默认值）
-      const isEdited = !o.title.startsWith('OBB 批注 ');
-      const labelHTML = isEdited ? [
-        '<div data-obb-id="{{obbId}}" style="position:absolute;max-width:260px;padding:8px 10px;border-radius:8px;background:rgba(20,20,20,0.85);color:#fff;box-shadow:0 8px 18px rgba(0,0,0,0.35);cursor:pointer;">',
-        '  <div style="font-weight:700;line-height:1.2;">{{title}}</div>',
-        '  <div style="margin-top:4px;font-size:12px;opacity:0.95;white-space:pre-wrap;">{{description}}</div>',
+      const labelHTML = [
+        '<div data-obb-id="{{obbId}}" style="position:absolute;max-width:320px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.25);background:linear-gradient(180deg, rgba(30,30,30,0.92) 0%, rgba(12,12,12,0.88) 100%);color:#fff;box-shadow:0 12px 24px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.06) inset;backdrop-filter:blur(6px);cursor:pointer;">',
+        '  <div style="font-weight:700;line-height:1.2;display:flex;align-items:center;gap:8px;">',
+        '    <span style="display:inline-flex;width:18px;height:18px;border-radius:6px;background:rgba(245,158,11,0.22);align-items:center;justify-content:center;">📌</span>',
+        '    <span style="flex:1;min-width:0;">{{title}}</span>',
+        '  </div>',
+        '  <div style="margin-top:6px;font-size:12px;opacity:0.95;white-space:pre-wrap;">{{description}}</div>',
+        '  <div style="margin-top:6px;font-size:11px;opacity:0.72;">点击编辑，拖拽移动</div>',
         '</div>',
-      ].join('') : '<div style="display:none;"></div>';
+      ].join('');
       // 图钉样式的 marker
       const markerHTML = [
         '<div data-obb-id="{{obbId}}" style="position:absolute;display:flex;flex-direction:column;align-items:center;transform:translateY(-50%);cursor:pointer;">',
@@ -1504,11 +1667,15 @@ export function useXeokitTools(
       ].join('');
       const labelWorldPos = o.labelWorldPos;
 
+      const labelValues = {
+        obbId: o.id,
+        title: o.title || 'OBB 批注',
+        description: o.description ? o.description : '点击图钉添加文字描述…',
+      };
+
       if (existingLabel) {
-        // 检查是否需要切换样式（从图钉变成标签卡片或反之）
-        const wasEdited = (existingLabel as unknown as { _obbIsEdited?: boolean })._obbIsEdited;
-        if (wasEdited !== isEdited) {
-          // 样式需要变化，销毁旧标签重新创建
+        const isV2 = (existingLabel as unknown as { _obbOverlayV2?: boolean })._obbOverlayV2 === true;
+        if (!isV2) {
           try {
             (existingLabel as unknown as { destroy?: () => void }).destroy?.();
           } catch {
@@ -1517,29 +1684,25 @@ export function useXeokitTools(
           try {
             const params: Parameters<AnnotationsPlugin['createAnnotation']>[0] = {
               id: labelId,
-              occludable: true,
+              occludable: false,
               markerShown: o.visible,
-              labelShown: isEdited && o.visible,
+              labelShown: isActive && o.visible,
               markerHTML,
               labelHTML,
               worldPos: labelWorldPos,
-              values: {
-                obbId: o.id,
-                title: o.title,
-                description: o.description,
-              },
+              values: labelValues,
             };
             const newLabel = annotationsPlugin.value?.createAnnotation(params);
             if (newLabel) {
-              (newLabel as unknown as { _obbIsEdited: boolean })._obbIsEdited = isEdited;
+              (newLabel as unknown as { _obbOverlayV2?: boolean })._obbOverlayV2 = true;
             }
           } catch {
             // ignore
           }
         } else {
-          existingLabel.setValues?.({ obbId: o.id, title: o.title, description: o.description });
+          existingLabel.setValues?.(labelValues);
           existingLabel.setMarkerShown?.(o.visible);
-          existingLabel.setLabelShown?.(isEdited && o.visible);
+          existingLabel.setLabelShown?.(isActive && o.visible);
           try {
             existingLabel.worldPos = labelWorldPos;
           } catch {
@@ -1550,21 +1713,17 @@ export function useXeokitTools(
         try {
           const params: Parameters<AnnotationsPlugin['createAnnotation']>[0] = {
             id: labelId,
-            occludable: true,
+            occludable: false,
             markerShown: o.visible,
-            labelShown: isEdited && o.visible,
+            labelShown: isActive && o.visible,
             markerHTML,
             labelHTML,
             worldPos: labelWorldPos,
-            values: {
-              obbId: o.id,
-              title: o.title,
-              description: o.description,
-            },
+            values: labelValues,
           };
           const newLabel = annotationsPlugin.value?.createAnnotation(params);
           if (newLabel) {
-            (newLabel as unknown as { _obbIsEdited: boolean })._obbIsEdited = isEdited;
+            (newLabel as unknown as { _obbOverlayV2?: boolean })._obbOverlayV2 = true;
           }
         } catch {
           // ignore
@@ -1669,8 +1828,6 @@ export function useXeokitTools(
       if (pickedId && pickedId.startsWith('obb_pick_')) {
         const obbId = pickedId.replace(/^obb_pick_/, '');
         store.activeObbAnnotationId.value = obbId;
-        // 点击图钉触发编辑弹窗
-        store.pendingObbEditId.value = obbId;
         return;
       }
     } catch {

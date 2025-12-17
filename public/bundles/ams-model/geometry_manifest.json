@@ -1,0 +1,417 @@
+{
+  "coordinate_system": {
+    "handedness": "right",
+    "up_axis": "Y"
+  },
+  "generated_at": "2025-12-17T04:48:36.645Z",
+  "geometries": [
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "1",
+      "geo_index": 0,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 0,
+          "node_index": 0,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "DAMP",
+        "PCOM",
+        "TRNS",
+        "TUBING"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "11410374621945182006",
+      "geo_index": 1,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 1,
+          "node_index": 1,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "13784485036371221813",
+      "geo_index": 2,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 2,
+          "node_index": 2,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "13834156306942369436",
+      "geo_index": 3,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 3,
+          "node_index": 3,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "14092856918922709467",
+      "geo_index": 4,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 4,
+          "node_index": 4,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "14495807282667665406",
+      "geo_index": 5,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 5,
+          "node_index": 5,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "16444015976972105680",
+      "geo_index": 6,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 6,
+          "node_index": 6,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "16647471094972426624",
+      "geo_index": 7,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 7,
+          "node_index": 7,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "16725426677457471836",
+      "geo_index": 8,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 8,
+          "node_index": 8,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "2",
+      "geo_index": 9,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 9,
+          "node_index": 9,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND",
+        "DAMP",
+        "PCOM",
+        "STRT",
+        "TRNS",
+        "TUBING"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "2113151291695518004",
+      "geo_index": 10,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 10,
+          "node_index": 10,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "2418555014540467240",
+      "geo_index": 11,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 11,
+          "node_index": 11,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "3717979278563639460",
+      "geo_index": 12,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 12,
+          "node_index": 12,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "4035789885260259528",
+      "geo_index": 13,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 13,
+          "node_index": 13,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "5117879822803547465",
+      "geo_index": 14,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 14,
+          "node_index": 14,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "7216962272687543851",
+      "geo_index": 15,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 15,
+          "node_index": 15,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "7247043287491236601",
+      "geo_index": 16,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 16,
+          "node_index": 16,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "8576274853064945762",
+      "geo_index": 17,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 17,
+          "node_index": 17,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "BEND"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    },
+    {
+      "bounding_box": null,
+      "bounding_sphere": null,
+      "geo_hash": "9390368505467261507",
+      "geo_index": 18,
+      "lods": [
+        {
+          "asset_key": "L1",
+          "error_metric": 0.0,
+          "level": 1,
+          "mesh_index": 18,
+          "node_index": 18,
+          "triangle_count": 0
+        }
+      ],
+      "nouns": [
+        "TRNS"
+      ],
+      "triangle_count": 0,
+      "vertex_count": 0
+    }
+  ],
+  "version": 1
+}

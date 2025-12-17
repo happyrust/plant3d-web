@@ -52,6 +52,30 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         ],
       },
       {
+        id: 'view.attributes',
+        label: '属性显示',
+        items: [
+          {
+            kind: 'stack',
+            id: 'view.attributes.display',
+            items: [
+              { kind: 'button', id: 'view.attr.all', label: '全部属性', icon: 'list', commandId: 'view.attr.all' },
+              { kind: 'button', id: 'view.attr.general', label: '通用属性', icon: 'file_text', commandId: 'view.attr.general' },
+              { kind: 'button', id: 'view.attr.component', label: '元件属性', icon: 'component', commandId: 'view.attr.component' },
+              { kind: 'button', id: 'view.attr.uda', label: 'UDA属性', icon: 'tag', commandId: 'view.attr.uda' },
+            ],
+          },
+          {
+            kind: 'stack',
+            id: 'view.attributes.compare',
+            items: [
+              { kind: 'button', id: 'view.attr.normal', label: '完整显示', icon: 'eye', commandId: 'view.attr.normal' },
+              { kind: 'button', id: 'view.attr.diff', label: '差异对比', icon: 'compare', commandId: 'view.attr.diff' },
+            ],
+          },
+        ],
+      },
+      {
         id: 'view.layout',
         label: '布局',
         items: [

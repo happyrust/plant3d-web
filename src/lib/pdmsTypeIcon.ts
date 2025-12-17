@@ -25,6 +25,10 @@ for (const [path, url] of Object.entries(iconModules)) {
 const ALIASES: Record<string, string> = {
   WORL: 'WORD',
   WORLD: 'WORD',
+  // 房间树特殊映射
+  ROOM: 'SITE',  // 房间节点使用 SITE 图标（建筑图标）
+  ROOM_ROOT: 'SITE',  // 房间根节点使用 SITE 图标
+  ROOM_GROUP: 'ZONE',  // 房间分组使用 ZONE 图标（区域图标）
 };
 
 /**

@@ -7,6 +7,7 @@ import type {
   ObbAnnotationRecord,
   RectAnnotationRecord,
 } from './useToolStore';
+import type { ReviewTask } from '@/types/auth';
 
 export type ConfirmedRecord = {
   id: string;
@@ -26,7 +27,7 @@ type ReviewPersistedState = {
   confirmedRecords: ConfirmedRecord[];
 };
 
-const STORAGE_KEY = 'vue-xeokit-review-v1';
+const STORAGE_KEY = 'plant3d-web-review-v1';
 
 function loadPersisted(): ReviewPersistedState {
   if (typeof localStorage === 'undefined') {
@@ -56,6 +57,7 @@ const persisted = loadPersisted();
 
 const reviewMode = ref<boolean>(persisted.reviewMode);
 const confirmedRecords = ref<ConfirmedRecord[]>(persisted.confirmedRecords);
+const currentTask = ref<ReviewTask | null>(null);
 
 watch(
   () => ({
@@ -104,6 +106,18 @@ function clearConfirmedRecords() {
   confirmedRecords.value = [];
 }
 
+function setCurrentTask(task: ReviewTask | null) {
+  currentTask.value = task;
+  if (task) {
+    // 设置为审核模式
+    reviewMode.value = true;
+  }
+}
+
+function clearCurrentTask() {
+  currentTask.value = null;
+}
+
 function exportReviewData(): string {
   const payload = {
     exportedAt: new Date().toISOString(),
@@ -138,6 +152,7 @@ export function useReviewStore() {
   return {
     reviewMode,
     confirmedRecords,
+    currentTask,
 
     confirmedRecordCount,
     totalConfirmedAnnotations,
@@ -150,5 +165,7 @@ export function useReviewStore() {
     removeConfirmedRecord,
     clearConfirmedRecords,
     exportReviewData,
+    setCurrentTask,
+    clearCurrentTask,
   };
 }

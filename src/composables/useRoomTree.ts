@@ -631,7 +631,9 @@ export function useRoomTree(
 
   async function initTree(seq: number) {
     try {
+      console.log('[room-tree] initTree: calling roomTreeGetRoot API...');
       const resp = await roomTreeGetRoot();
+      console.log('[room-tree] initTree: API response:', resp);
       if (!resp.success || !resp.node) {
         throw new Error(resp.error_message || 'room-tree root api failed');
       }
@@ -672,13 +674,17 @@ export function useRoomTree(
       initSeq++;
       const seq = initSeq;
 
+      console.log('[room-tree] watch triggered, viewer:', viewer ? 'exists' : 'null', 'enabled:', en);
+
       clearInitRetry();
 
       if (!viewer || !en) {
+        console.log('[room-tree] skipping init: viewer or enabled is falsy');
         resetAllState();
         return;
       }
 
+      console.log('[room-tree] calling initTree, seq:', seq);
       resetAllState();
       void initTree(seq);
     },
