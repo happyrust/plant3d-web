@@ -1085,6 +1085,22 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
     sceneModel.finalize();
   }
 
+  // DEBUG: 自动显示测试 refno（用于验证 V2 格式加载）
+  if (options.lazyEntities && lazyData.size > 0) {
+    const testRefno = '24381_46955';
+    if (lazyEntityManager.hasRefno(testRefno)) {
+      log('auto-showing test refno', { refno: testRefno });
+      lazyEntityManager.showEntity(testRefno);
+    } else {
+      // 如果没有特定 refno，显示第一个可用的
+      const firstRefno = lazyEntityManager.getAllRefnos()[0];
+      if (firstRefno) {
+        log('auto-showing first refno', { refno: firstRefno });
+        lazyEntityManager.showEntity(firstRefno);
+      }
+    }
+  }
+
   const sceneModelAabb = (sceneModel as unknown as { aabb?: number[] }).aabb;
   log('finalize done', {
     sceneModelAabb: sceneModelAabb ? Array.from(sceneModelAabb) : null,
