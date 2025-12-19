@@ -1,5 +1,19 @@
 // 用户认证和角色管理类型定义
 
+// 批注意见/评论类型 - 用于多角色意见管理
+export type AnnotationComment = {
+  id: string;
+  annotationId: string;          // 关联的批注ID
+  annotationType: 'text' | 'cloud' | 'rect' | 'obb';  // 批注类型
+  authorId: string;              // 作者用户ID
+  authorName: string;            // 作者姓名
+  authorRole: UserRole;          // 作者角色
+  content: string;               // 意见内容
+  replyToId?: string;            // 回复的评论ID（用于回复功能）
+  createdAt: number;
+  updatedAt?: number;
+};
+
 export enum UserRole {
   ADMIN = 'admin', // 系统管理员
   MANAGER = 'manager', // 项目管理员

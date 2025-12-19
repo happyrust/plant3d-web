@@ -7,7 +7,10 @@ import { ArrowUpRight, Cloud, RectangleHorizontal, Trash2, X } from 'lucide-vue-
 import type { ModelProject } from '@/composables/useModelProjects';
 
 import { loadAiosPrepackBundle } from '@/aios-prepack-bundle-loader';
+import { pdmsGetPtset } from '@/api/genModelPdmsAttrApi';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
+import PtsetPanel from '@/components/tools/PtsetPanel.vue';
+import { usePtsetVisualization } from '@/composables/usePtsetVisualization';
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitTools } from '@/composables/useXeokitTools';
@@ -45,7 +48,7 @@ type XeokitStatsSnapshot = {
   };
 };
 
-const showStats = ref(isDev);
+const showStats = ref(false);
 const statsSnapshot = ref<XeokitStatsSnapshot | null>(null);
 const runtimeSnapshot = ref<{
   sceneObjectsCount: number;
@@ -293,6 +296,75 @@ function maybeAutoDebug(v: Viewer, reason: string) {
 
 const store = useToolStore();
 const tools = useXeokitTools(viewer, overlayContainer, store);
+const ptsetVis = usePtsetVisualization(viewer, overlayContainer);
+
+
+// 解析 URL 调试参数
+function getDebugParams() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    refno: params.get('debug_refno'),
+    ptset: params.get('debug_ptset'),
+  };
+}
+
+// 处理 debug_ptset 参数
+async function handleDebugPtset() {
+  const debugParams = getDebugParams();
+  if (!debugParams.ptset || !viewer.value) return;
+
+  const ptsetRefno = debugParams.ptset;
+
+  try {
+    const response = await pdmsGetPtset(ptsetRefno);
+
+    if (response.success && response.ptset.length > 0) {
+      ptsetVis.renderPtset(ptsetRefno, response);
+      ptsetVis.flyToPtset();
+      showPtsetPanel.value = true;
+    } else {
+      const errorMsg = response.error_message || '未找到点集数据';
+      console.warn('[ViewerPanel] debug_ptset:', errorMsg);
+    }
+  } catch (error) {
+    console.error('[ViewerPanel] Failed to load ptset:', error);
+  }
+}
+
+// Ptset 面板状态
+const showPtsetPanel = ref(false);
+
+function handlePtsetPanelClose() {
+  ptsetVis.clearAll();
+  showPtsetPanel.value = false;
+}
+
+// 监听来自模型树右键菜单的 ptset 请求
+watch(
+  () => store.ptsetVisualizationRequest.value,
+  async (request) => {
+    if (!request || !viewer.value) return;
+
+    const ptsetRefno = request.refno;
+
+    try {
+      const response = await pdmsGetPtset(ptsetRefno);
+
+      if (response.success && response.ptset.length > 0) {
+        ptsetVis.renderPtset(ptsetRefno, response);
+        ptsetVis.flyToPtset();
+        showPtsetPanel.value = true;
+      } else {
+        const errorMsg = response.error_message || '未找到点集数据';
+        console.warn('[ViewerPanel] ptset request:', errorMsg);
+      }
+    } catch (error) {
+      console.error('[ViewerPanel] Failed to load ptset:', error);
+    } finally {
+      store.clearPtsetVisualizationRequest();
+    }
+  }
+);
 
 const showAnnotationToolbar = computed(() => {
   const mode = store.toolMode.value;
@@ -343,7 +415,7 @@ function applyWhiteBackground() {
   if (!viewer.value) return;
   (viewer.value.scene as unknown as { clearEachPass?: boolean }).clearEachPass = true;
   const gl = (viewer.value.scene as unknown as { canvas?: { gl?: WebGLRenderingContext } }).canvas?.gl;
-  gl?.clearColor?.(1, 1, 1, 1);
+  gl?.clearColor?.(0.96, 0.97, 0.98, 1);
   gl?.clear?.(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
 
@@ -391,8 +463,18 @@ onMounted(() => {
 
   viewer.value = new Viewer({
     canvasElement: mainCanvas.value,
-    transparent: true,
+    transparent: false,
   });
+
+  try {
+    const edgeMat = viewer.value.scene.edgeMaterial;
+    edgeMat.edges = true;
+    edgeMat.edgeColor = [0.15, 0.18, 0.22];
+    edgeMat.edgeAlpha = 0.35;
+    edgeMat.edgeWidth = 1;
+  } catch {
+    // ignore
+  }
 
   // 设置为 Z-up 坐标系（CAD/BIM 标准）
   viewer.value.scene.camera.worldAxis = [
@@ -501,6 +583,8 @@ onMounted(() => {
             if (viewer.value) {
               maybeAutoDebug(viewer.value, 'defaultProject');
             }
+            // 处理 debug_ptset 参数
+            setTimeout(() => handleDebugPtset(), 500);
           })
           .catch((err) => {
             console.error(err);
@@ -523,6 +607,8 @@ onMounted(() => {
             if (viewer.value) {
               maybeAutoDebug(viewer.value, 'fallbackAmsModel');
             }
+            // 处理 debug_ptset 参数
+            setTimeout(() => handleDebugPtset(), 500);
           })
           .catch((err) => {
             console.error(err);
@@ -586,6 +672,7 @@ watch(
     <div v-if="isDev" style="position: absolute; top: 8px; right: 8px; z-index: 2000; pointer-events: auto;">
       <button type="button" class="pointer-events-auto rounded-md border border-white/20 bg-black/70 px-2 py-1 text-xs text-white" @click.stop="showStats = !showStats">{{ showStats ? 'Hide Stats' : 'Show Stats' }}</button>
     </div>
+
 
     <div v-if="isDev && showStats" class="pointer-events-auto" style="position: absolute; top: 40px; right: 8px; z-index: 2000; width: 260px; background: rgba(0,0,0,0.70); color: #fff; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px; font-size: 12px; line-height: 1.4;">
       <div style="font-weight: 600; margin-bottom: 6px;">xeokit stats</div>
@@ -659,5 +746,28 @@ watch(
     </div>
     <canvas ref="cubeCanvas" class="navCube" />
     <ReviewConfirmation />
+
+    <!-- Ptset 面板 -->
+    <div
+      v-if="showPtsetPanel || ptsetVis.currentRefno.value"
+      class="pointer-events-auto absolute bottom-16 right-3 z-[950] max-h-[60vh] w-72 overflow-hidden rounded-lg border border-border bg-background/95 shadow-lg backdrop-blur"
+      @pointerdown.stop
+      @wheel.stop
+    >
+      <PtsetPanel
+        :refno="ptsetVis.currentRefno.value"
+        :response="ptsetVis.currentResponse.value"
+        :is-visible="ptsetVis.isVisible.value"
+        :show-crosses="ptsetVis.showCrosses.value"
+        :show-labels="ptsetVis.showLabels.value"
+        :show-arrows="ptsetVis.showArrows.value"
+        @close="handlePtsetPanelClose"
+        @toggle-visible="ptsetVis.setVisible"
+        @toggle-crosses="ptsetVis.setCrossesVisible"
+        @toggle-labels="ptsetVis.setLabelsVisible"
+        @toggle-arrows="ptsetVis.setArrowsVisible"
+        @fly-to="ptsetVis.flyToPtset"
+      />
+    </div>
   </div>
 </template>

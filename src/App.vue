@@ -1,21 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 
 import DockLayout from '@/components/DockLayout.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 
-const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
-
-const isCollapsed = computed(() => {
-  const exposed = ribbonBarRef.value as unknown as { collapsed?: { value: boolean } | boolean } | null;
-  const c = exposed?.collapsed;
-  return typeof c === 'boolean' ? c : (c?.value ?? false);
-});
-
-const extensionHeight = computed(() => {
-  return isCollapsed.value ? 32 : 128;
-});
+// 固定高度，不再随展开缩放
+const extensionHeight = 32;
 </script>
 
 <template>
@@ -27,7 +18,7 @@ const extensionHeight = computed(() => {
     >
       <template #extension>
         <div class="flex items-center w-full">
-          <RibbonBar ref="ribbonBarRef" class="flex-1" />
+          <RibbonBar class="flex-1" />
           <div class="px-2">
             <UserAvatar />
           </div>

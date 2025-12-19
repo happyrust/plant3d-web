@@ -92,6 +92,7 @@ type InstanceEntry = {
   zone_name_index?: number | null;
   lod_mask: number;
   uniforms: Record<string, unknown> | null;
+  refno_transform?: number[];  // 构件的世界变换矩阵（V2 格式）
 };
 
 // V2 格式的几何体实例（在 component.instances 中）
@@ -147,6 +148,21 @@ type InstanceManifest = {
   ungrouped?: ComponentInstances[];
 };
 
+function normalizeRgbaMaybe(rgba: number[]): [number, number, number, number] {
+  const r = Number(rgba[0] ?? 1);
+  const g = Number(rgba[1] ?? 1);
+  const b = Number(rgba[2] ?? 1);
+  const a = Number(rgba[3] ?? 1);
+  if (![r, g, b, a].every((v) => Number.isFinite(v))) {
+    return [1, 1, 1, 1];
+  }
+  const max = Math.max(r, g, b, a);
+  if (max > 1.0) {
+    return [r / 255, g / 255, b / 255, a / 255];
+  }
+  return [r, g, b, a];
+}
+
 export type LoadAiosPrepackOptions = {
   baseUrl: string;
   modelId?: string;
@@ -177,6 +193,7 @@ export type LazyEntityData = {
   category: string;
   name: string;
   specValue?: SiteSpecValue;
+  refnoTransform?: number[];  // 构件的世界变换矩阵（用于 ptset 坐标变换）
 };
 
 export type LazyEntityDebugInfo = {
@@ -237,6 +254,11 @@ export class LazyEntityManager {
 
   hasRefno(refno: string): boolean {
     return this.lazyData.has(refno);
+  }
+
+  /** 获取 refno 对应的世界变换矩阵（用于 ptset 坐标变换） */
+  getRefnoTransform(refno: string): number[] | undefined {
+    return this.lazyData.get(refno)?.refnoTransform;
   }
 
   getDebugStats(): {
@@ -588,7 +610,8 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
             name: componentName,
             noun: componentNoun,
             spec_value: componentSpecValue,
-          }
+          },
+          refno_transform: component.refno_transform,  // 保存原始的 refno_transform
         };
         out.push({ category, instance: entry });
       }
@@ -981,8 +1004,9 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
 
     const colorIndex = instance.color_index;
     const rgba = (Number.isFinite(colorIndex) && colorIndex >= 0 && colorIndex < colors.length) ? colors[colorIndex] : null;
-    const rgb = rgba ? [rgba[0], rgba[1], rgba[2]] : [1, 1, 1];
-    const opacity = rgba ? (rgba[3] ?? 1) : 1;
+    const normalized = rgba ? normalizeRgbaMaybe(rgba) : null;
+    const rgb = normalized ? [normalized[0], normalized[1], normalized[2]] : [0.85, 0.85, 0.85];
+    const opacity = normalized ? (normalized[3] ?? 1) : 1;
 
     // 构建实例数据
     const instanceData: InstanceData = {
@@ -1004,6 +1028,7 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
         category: ownerNoun || category,
         name: displayName,
         specValue: specValue as SiteSpecValue,
+        refnoTransform: instance.refno_transform,  // 存储 refno_transform 用于 ptset 变换
       });
     } else {
       lazyData.get(refno)!.instances.push(instanceData);

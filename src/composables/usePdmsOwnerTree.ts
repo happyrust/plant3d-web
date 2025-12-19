@@ -8,6 +8,7 @@ import {
   e3dGetAncestors,
   e3dGetChildren,
   e3dSearch,
+  e3dGetVisibleInsts,
   e3dGetSubtreeRefnos,
   e3dGetWorldRoot,
   type TreeNodeDto,
@@ -525,6 +526,30 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
     
     if (lazyEntityManager) {
       const node = nodesById.value[id];
+
+      const hasChild = (nodeId: string, n?: TreeNode): boolean => {
+        const node = n ?? nodesById.value[nodeId];
+        if (!node) return false;
+        if (node.childrenIds.length > 0) return true;
+        const cnt = childrenCountById.value.get(nodeId);
+        return typeof cnt === 'number' && cnt > 0;
+      };
+
+      // 叶子节点：直接显示/隐藏自身即可
+      if (node && !hasChild(id, node)) {
+        if (lazyEntityManager.hasRefno(id)) {
+          if (visible) {
+            lazyEntityManager.showEntity(id);
+          } else {
+            lazyEntityManager.hideEntity(id);
+          }
+        }
+
+        setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
+        recomputeParents(id);
+        return;
+      }
+
       // BRAN/HANG：显示/隐藏时直接连带子树（descendants），而不是仅操作单个节点。
       // 这里使用后端 subtree-refnos 接口确保即使子节点未在树中展开加载也能被显示/隐藏。
       if (node && (node.type === 'BRAN' || node.type === 'HANG')) {
@@ -616,6 +641,42 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
         } catch (e) {
           if (import.meta.env.DEV) {
             console.warn('[pdms-tree] lazy BRAN/HANG setVisible subtree failed', {
+              id,
+              visible,
+              err: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+
+        setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
+        recomputeParents(id);
+        return;
+      }
+
+      // 非叶子且不是 BRAN/EQUI：通过后端 visible-insts 获取“可见实体 refno 集合”，再批量显示/隐藏。
+      // 说明：visible-insts 返回的 refnos 可能包含 BRAN/HANG/几何实例等，前端只对 lazyData 中存在的实体生效。
+      if (node && node.type !== 'BRAN' && node.type !== 'EQUI') {
+        try {
+          const resp = await e3dGetVisibleInsts(id);
+          if (!resp.success) {
+            throw new Error(resp.error_message || 'visible-insts api failed');
+          }
+
+          const renderables = resp.refnos.filter((r) => lazyEntityManager.hasRefno(r));
+          lazyEntityManager.setVisibility(renderables, visible);
+
+          if (import.meta.env.DEV) {
+            console.log('[pdms-tree] lazy visible-insts setVisible:', {
+              id,
+              type: node.type,
+              visible,
+              totalRefnos: resp.refnos.length,
+              renderableRefnos: renderables.length,
+            });
+          }
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn('[pdms-tree] lazy visible-insts setVisible failed', {
               id,
               visible,
               err: e instanceof Error ? e.message : String(e),

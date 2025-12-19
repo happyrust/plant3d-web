@@ -1,5 +1,7 @@
 import { computed, ref, watch } from 'vue';
 
+import type { AnnotationComment } from '@/types/auth';
+
 export type ToolMode =
   | 'none'
   | 'measure_distance'
@@ -52,6 +54,7 @@ export type AnnotationRecord = {
   description: string;
   createdAt: number;
   refno?: string; // 关联的对象参考号
+  comments?: AnnotationComment[]; // 多角色意见列表
 };
 
 export type Obb = {
@@ -81,6 +84,7 @@ export type ObbAnnotationRecord = {
   description: string;
   createdAt: number;
   refnos?: string[]; // 关联的对象参考号列表
+  comments?: AnnotationComment[]; // 多角色意见列表
 };
 
 export type CloudAnnotationRecord = {
@@ -92,6 +96,7 @@ export type CloudAnnotationRecord = {
   description: string;
   createdAt: number;
   refnos?: string[]; // 关联的对象参考号列表
+  comments?: AnnotationComment[]; // 多角色意见列表
 };
 
 export type RectAnnotationRecord = {
@@ -101,11 +106,18 @@ export type RectAnnotationRecord = {
   title: string;
   description: string;
   createdAt: number;
+  comments?: AnnotationComment[]; // 多角色意见列表
 };
 
 export type PickedQueryCenter = {
   entityId: string;
   worldPos: Vec3;
+};
+
+// Ptset 可视化请求（用于跨组件通信）
+export type PtsetVisualizationRequest = {
+  refno: string;
+  timestamp: number;
 };
 
 type PersistedStateV1 = {
@@ -224,6 +236,9 @@ const activeCloudAnnotationId = ref<string | null>(null);
 const activeRectAnnotationId = ref<string | null>(null);
 
 const pickedQueryCenter = ref<PickedQueryCenter | null>(null);
+
+// Ptset 可视化请求
+const ptsetVisualizationRequest = ref<PtsetVisualizationRequest | null>(null);
 
 const pendingObbEditId = ref<string | null>(null);
 const pendingTextAnnotationEditId = ref<string | null>(null);
@@ -394,6 +409,175 @@ function clearAll() {
   toolMode.value = 'none';
 }
 
+// ==================== 评论/意见管理函数 ====================
+
+export type AnnotationType = 'text' | 'cloud' | 'rect' | 'obb';
+
+/**
+ * 为批注添加评论/意见
+ */
+function addCommentToAnnotation(
+  annotationType: AnnotationType,
+  annotationId: string,
+  comment: Omit<AnnotationComment, 'id' | 'annotationId' | 'annotationType' | 'createdAt'>
+): AnnotationComment | null {
+  const newComment: AnnotationComment = {
+    id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    annotationId,
+    annotationType,
+    ...comment,
+    createdAt: Date.now(),
+  };
+
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return null;
+      const comments = annotation.comments || [];
+      updateAnnotation(annotationId, { comments: [...comments, newComment] });
+      break;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return null;
+      const comments = annotation.comments || [];
+      updateCloudAnnotation(annotationId, { comments: [...comments, newComment] });
+      break;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return null;
+      const comments = annotation.comments || [];
+      updateRectAnnotation(annotationId, { comments: [...comments, newComment] });
+      break;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return null;
+      const comments = annotation.comments || [];
+      updateObbAnnotation(annotationId, { comments: [...comments, newComment] });
+      break;
+    }
+  }
+
+  return newComment;
+}
+
+/**
+ * 更新批注中的某条评论
+ */
+function updateAnnotationComment(
+  annotationType: AnnotationType,
+  annotationId: string,
+  commentId: string,
+  patch: Partial<Pick<AnnotationComment, 'content' | 'updatedAt'>>
+): boolean {
+  const updateComments = (comments: AnnotationComment[] | undefined): AnnotationComment[] | undefined => {
+    if (!comments) return undefined;
+    return comments.map((c) =>
+      c.id === commentId ? { ...c, ...patch, updatedAt: Date.now() } : c
+    );
+  };
+
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, { comments: updateComments(annotation.comments) });
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, { comments: updateComments(annotation.comments) });
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, { comments: updateComments(annotation.comments) });
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, { comments: updateComments(annotation.comments) });
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 删除批注中的某条评论
+ */
+function removeAnnotationComment(
+  annotationType: AnnotationType,
+  annotationId: string,
+  commentId: string
+): boolean {
+  const filterComments = (comments: AnnotationComment[] | undefined): AnnotationComment[] | undefined => {
+    if (!comments) return undefined;
+    return comments.filter((c) => c.id !== commentId);
+  };
+
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, { comments: filterComments(annotation.comments) });
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, { comments: filterComments(annotation.comments) });
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, { comments: filterComments(annotation.comments) });
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, { comments: filterComments(annotation.comments) });
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 获取批注的所有评论
+ */
+function getAnnotationComments(
+  annotationType: AnnotationType,
+  annotationId: string
+): AnnotationComment[] {
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      return annotation?.comments || [];
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      return annotation?.comments || [];
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      return annotation?.comments || [];
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      return annotation?.comments || [];
+    }
+  }
+  return [];
+}
+
 function exportJSON(): string {
   const payload: PersistedStateV3 = {
     version: 3,
@@ -511,12 +695,27 @@ export function useToolStore() {
 
     clearAll,
 
+    // 评论/意见管理
+    addCommentToAnnotation,
+    updateAnnotationComment,
+    removeAnnotationComment,
+    getAnnotationComments,
+
     exportJSON,
     importJSON,
 
     pickedQueryCenter,
     setPickedQueryCenter: (val: PickedQueryCenter | null) => {
       pickedQueryCenter.value = val;
+    },
+
+    // Ptset 可视化
+    ptsetVisualizationRequest,
+    requestPtsetVisualization: (refno: string) => {
+      ptsetVisualizationRequest.value = { refno, timestamp: Date.now() };
+    },
+    clearPtsetVisualizationRequest: () => {
+      ptsetVisualizationRequest.value = null;
     },
   };
 }

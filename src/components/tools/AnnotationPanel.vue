@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 
-import { useToolStore } from '@/composables/useToolStore';
+import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
+import { useUserStore } from '@/composables/useUserStore';
+import { type AnnotationComment, getRoleDisplayName, UserRole } from '@/types/auth';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -23,6 +25,7 @@ const props = defineProps<{
 }>();
 
 const store = useToolStore();
+const userStore = useUserStore();
 
 const sortedText = computed(() => {
   return [...store.annotations.value].sort((a, b) => b.createdAt - a.createdAt);
@@ -278,6 +281,155 @@ function highlightObbRefnos(refnos: string[]) {
   if (props.tools.highlightAnnotationTargets && refnos.length > 0) {
     props.tools.highlightAnnotationTargets(refnos);
   }
+}
+
+// ==================== 评论/意见管理 ====================
+
+const newCommentContent = ref('');
+const replyToCommentId = ref<string | null>(null);
+const editingCommentId = ref<string | null>(null);
+const editingCommentContent = ref('');
+
+// 获取当前选中批注的类型
+const activeAnnotationType = computed<AnnotationType | null>(() => {
+  if (activeText.value) return 'text';
+  if (activeCloud.value) return 'cloud';
+  if (activeRect.value) return 'rect';
+  if (activeObb.value) return 'obb';
+  return null;
+});
+
+// 获取当前选中批注的评论列表
+const activeComments = computed<AnnotationComment[]>(() => {
+  if (!activeAny.value || !activeAnnotationType.value) return [];
+  return store.getAnnotationComments(activeAnnotationType.value, activeAny.value.id);
+});
+
+// 按角色分组的评论
+const commentsByRole = computed(() => {
+  const groups: Record<string, AnnotationComment[]> = {};
+
+  for (const comment of activeComments.value) {
+    const roleKey = comment.authorRole;
+    if (!groups[roleKey]) {
+      groups[roleKey] = [];
+    }
+    groups[roleKey].push(comment);
+  }
+
+  // 按时间排序每个分组
+  for (const key of Object.keys(groups)) {
+    groups[key].sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  return groups;
+});
+
+// 获取角色对应的颜色类
+function getRoleColorClass(role: UserRole): string {
+  switch (role) {
+    case UserRole.DESIGNER:
+      return 'bg-blue-100 text-blue-700 border-blue-200';
+    case UserRole.REVIEWER:
+      return 'bg-orange-100 text-orange-700 border-orange-200';
+    case UserRole.PROOFREADER:
+      return 'bg-green-100 text-green-700 border-green-200';
+    case UserRole.MANAGER:
+      return 'bg-purple-100 text-purple-700 border-purple-200';
+    case UserRole.ADMIN:
+      return 'bg-red-100 text-red-700 border-red-200';
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-200';
+  }
+}
+
+// 添加评论
+function addComment() {
+  if (!newCommentContent.value.trim()) return;
+  if (!activeAny.value || !activeAnnotationType.value) return;
+
+  const user = userStore.currentUser.value;
+  if (!user) return;
+
+  store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, {
+    authorId: user.id,
+    authorName: user.name,
+    authorRole: user.role,
+    content: newCommentContent.value.trim(),
+    replyToId: replyToCommentId.value || undefined,
+  });
+
+  newCommentContent.value = '';
+  replyToCommentId.value = null;
+}
+
+// 开始编辑评论
+function startEditComment(comment: AnnotationComment) {
+  editingCommentId.value = comment.id;
+  editingCommentContent.value = comment.content;
+}
+
+// 保存编辑的评论
+function saveEditComment() {
+  if (!editingCommentId.value || !editingCommentContent.value.trim()) return;
+  if (!activeAny.value || !activeAnnotationType.value) return;
+
+  store.updateAnnotationComment(
+    activeAnnotationType.value,
+    activeAny.value.id,
+    editingCommentId.value,
+    { content: editingCommentContent.value.trim() }
+  );
+
+  editingCommentId.value = null;
+  editingCommentContent.value = '';
+}
+
+// 取消编辑
+function cancelEditComment() {
+  editingCommentId.value = null;
+  editingCommentContent.value = '';
+}
+
+// 删除评论
+function deleteComment(commentId: string) {
+  if (!activeAny.value || !activeAnnotationType.value) return;
+  store.removeAnnotationComment(activeAnnotationType.value, activeAny.value.id, commentId);
+}
+
+// 设置回复目标
+function setReplyTo(comment: AnnotationComment) {
+  replyToCommentId.value = comment.id;
+}
+
+// 取消回复
+function cancelReply() {
+  replyToCommentId.value = null;
+}
+
+// 获取被回复的评论
+function getReplyToComment(replyToId: string | undefined): AnnotationComment | null {
+  if (!replyToId) return null;
+  return activeComments.value.find(c => c.id === replyToId) || null;
+}
+
+// 判断当前用户是否可以编辑/删除某条评论
+function canEditComment(comment: AnnotationComment): boolean {
+  const user = userStore.currentUser.value;
+  if (!user) return false;
+  // 只有作者本人或管理员可以编辑
+  return comment.authorId === user.id || user.role === UserRole.ADMIN;
+}
+
+// 格式化时间
+function formatCommentTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 </script>
 
@@ -642,6 +794,137 @@ function highlightObbRefnos(refnos: string[]) {
           @input="updateDescription(($event.target as HTMLTextAreaElement).value)" />
 
         <div class="text-xs text-muted-foreground">修改会自动同步到场景与本地存储。</div>
+      </div>
+    </div>
+
+    <!-- 意见/评论卡片 -->
+    <div class="rounded-md border border-border bg-background p-3">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-semibold">意见管理</div>
+        <div v-if="activeComments.length > 0" class="text-xs text-muted-foreground">
+          共 {{ activeComments.length }} 条
+        </div>
+      </div>
+
+      <div v-if="!activeAny" class="mt-2 text-sm text-muted-foreground">
+        选择一个批注后可查看和添加意见。
+      </div>
+
+      <div v-else class="mt-2 flex flex-col gap-3">
+        <!-- 按角色分组显示评论 -->
+        <template v-if="Object.keys(commentsByRole).length > 0">
+          <div v-for="(comments, role) in commentsByRole" :key="role" class="rounded-md border p-2"
+            :class="getRoleColorClass(role as UserRole)">
+            <div class="mb-2 text-xs font-semibold">
+              {{ getRoleDisplayName(role as UserRole) }}意见 ({{ comments.length }})
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <div v-for="comment in comments" :key="comment.id"
+                class="rounded bg-white/80 p-2 text-sm dark:bg-black/20">
+                <!-- 回复引用 -->
+                <div v-if="comment.replyToId" class="mb-1 border-l-2 border-gray-300 pl-2 text-xs text-muted-foreground">
+                  <template v-if="getReplyToComment(comment.replyToId)">
+                    回复 {{ getReplyToComment(comment.replyToId)?.authorName }}:
+                    "{{ getReplyToComment(comment.replyToId)?.content.slice(0, 30) }}{{ (getReplyToComment(comment.replyToId)?.content.length || 0) > 30 ? '...' : '' }}"
+                  </template>
+                </div>
+
+                <!-- 评论内容（编辑模式） -->
+                <div v-if="editingCommentId === comment.id" class="flex flex-col gap-2">
+                  <textarea v-model="editingCommentContent"
+                    class="min-h-16 w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                    @keyup.enter.ctrl="saveEditComment" />
+                  <div class="flex gap-2">
+                    <button type="button"
+                      class="h-7 rounded bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90"
+                      @click="saveEditComment">
+                      保存
+                    </button>
+                    <button type="button"
+                      class="h-7 rounded border border-input px-2 text-xs hover:bg-muted"
+                      @click="cancelEditComment">
+                      取消
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 评论内容（显示模式） -->
+                <template v-else>
+                  <div class="whitespace-pre-wrap break-words">{{ comment.content }}</div>
+
+                  <div class="mt-1 flex items-center justify-between">
+                    <div class="text-xs text-muted-foreground">
+                      {{ comment.authorName }} · {{ formatCommentTime(comment.createdAt) }}
+                      <span v-if="comment.updatedAt" class="ml-1">(已编辑)</span>
+                    </div>
+
+                    <div class="flex gap-1">
+                      <button type="button"
+                        class="h-6 rounded px-1.5 text-xs text-blue-600 hover:bg-blue-50"
+                        @click="setReplyTo(comment)">
+                        回复
+                      </button>
+                      <template v-if="canEditComment(comment)">
+                        <button type="button"
+                          class="h-6 rounded px-1.5 text-xs hover:bg-muted"
+                          @click="startEditComment(comment)">
+                          编辑
+                        </button>
+                        <button type="button"
+                          class="h-6 rounded px-1.5 text-xs text-destructive hover:bg-red-50"
+                          @click="deleteComment(comment.id)">
+                          删除
+                        </button>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-else class="text-sm text-muted-foreground">
+          暂无意见，点击下方添加。
+        </div>
+
+        <!-- 添加意见 -->
+        <div class="rounded-md border border-dashed border-border p-2">
+          <div class="mb-2 flex items-center gap-2">
+            <span class="text-xs font-medium">添加意见</span>
+            <span v-if="userStore.currentUser.value"
+              class="rounded px-1.5 py-0.5 text-xs"
+              :class="getRoleColorClass(userStore.currentUser.value.role)">
+              {{ getRoleDisplayName(userStore.currentUser.value.role) }}
+            </span>
+          </div>
+
+          <!-- 回复提示 -->
+          <div v-if="replyToCommentId" class="mb-2 flex items-center gap-2 rounded bg-muted/50 px-2 py-1 text-xs">
+            <span class="text-muted-foreground">
+              回复 {{ getReplyToComment(replyToCommentId)?.authorName }}
+            </span>
+            <button type="button" class="ml-auto text-muted-foreground hover:text-foreground" @click="cancelReply">
+              ×
+            </button>
+          </div>
+
+          <textarea v-model="newCommentContent"
+            class="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            placeholder="输入您的意见..."
+            @keyup.enter.ctrl="addComment" />
+
+          <div class="mt-2 flex items-center justify-between">
+            <span class="text-xs text-muted-foreground">Ctrl+Enter 快捷提交</span>
+            <button type="button"
+              class="h-8 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              :disabled="!newCommentContent.trim() || !userStore.currentUser.value"
+              @click="addComment">
+              提交意见
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

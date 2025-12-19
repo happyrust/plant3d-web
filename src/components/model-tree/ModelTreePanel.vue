@@ -6,9 +6,11 @@ import { Viewer } from '@xeokit/xeokit-sdk';
 import { Filter, Plus, Search, X } from 'lucide-vue-next';
 
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
+import { useModelGeneration } from '@/composables/useModelGeneration';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
+import { useToolStore } from '@/composables/useToolStore';
 import { cn } from '@/lib/utils';
 
 const props = defineProps<{
@@ -36,6 +38,7 @@ const pdmsTree = usePdmsOwnerTree(pdmsViewerRef);
 const roomTree = useRoomTree(roomViewerRef);
 
 const selection = useSelectionStore();
+const toolStore = useToolStore();
 
 const isRoomTree = computed(() => activeTree.value === 'room');
 
@@ -118,7 +121,41 @@ function getCheckState(id: string) {
   return isRoomTree.value ? roomTree.getCheckState(id) : pdmsTree.getCheckState(id);
 }
 
-function setVisible(id: string, visible: boolean) {
+// Initialize model generation composable
+let modelGeneration: ReturnType<typeof useModelGeneration> | null = null;
+
+watch(
+  () => props.viewer,
+  (viewer) => {
+    if (viewer && !modelGeneration) {
+      modelGeneration = useModelGeneration({ viewer });
+    }
+  },
+  { immediate: true }
+);
+
+async function setVisible(id: string, visible: boolean) {
+  // Only auto-generate for PDMS tree and when trying to show (visible = true)
+  if (!isRoomTree.value && visible && isRefnoLike(id) && modelGeneration) {
+    // Check if refno exists in cache
+    const exists = modelGeneration.checkRefnoExists(id);
+    
+    if (!exists) {
+      console.log(`[ModelTreePanel] refno ${id} not found in cache, triggering generation`);
+      
+      // Trigger auto-generation
+      const success = await modelGeneration.generateAndLoadModel(id);
+      
+      if (!success) {
+        console.error(`[ModelTreePanel] Failed to generate model for refno ${id}`);
+        // Still proceed to call setVisible to show any partially loaded data
+      } else {
+        console.log(`[ModelTreePanel] Successfully generated and loaded model for refno ${id}`);
+      }
+    }
+  }
+  
+  // Call the original setVisible logic
   if (isRoomTree.value) {
     roomTree.setVisible(id, visible);
   } else {
@@ -436,6 +473,15 @@ function hideNode() {
   setVisible(contextNodeId.value, false);
   closeContextMenu();
 }
+
+function showPtset() {
+  if (!contextNodeId.value) return;
+  // 只有 refno 格式的节点才能显示点集
+  if (isRefnoLike(contextNodeId.value)) {
+    toolStore.requestPtsetVisualization(contextNodeId.value);
+  }
+  closeContextMenu();
+}
 </script>
 
 <template>
@@ -638,6 +684,12 @@ function hideNode() {
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           @click="hideNode">
           隐藏
+        </button>
+        <div class="my-1 h-px bg-border" />
+        <button type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          @click="showPtset">
+          显示点集
         </button>
       </div>
     </Teleport>

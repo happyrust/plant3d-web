@@ -33,6 +33,13 @@ export type SubtreeRefnosResponse = {
   error_message?: string | null;
 };
 
+export type VisibleInstsResponse = {
+  success: boolean;
+  refno: string;
+  refnos: string[];
+  error_message?: string | null;
+};
+
 export type SearchRequest = {
   keyword: string;
   nouns?: string[];
@@ -108,6 +115,10 @@ export async function e3dGetSubtreeRefnos(
     url.searchParams.set('limit', String(params.limit));
   }
   return await fetchJson<SubtreeRefnosResponse>(`${url.pathname}${url.search}`);
+}
+
+export async function e3dGetVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
+  return await fetchJson<VisibleInstsResponse>(`/api/e3d/visible-insts/${encodeURIComponent(refno)}`);
 }
 
 export async function e3dSearch(req: SearchRequest): Promise<SearchResponse> {

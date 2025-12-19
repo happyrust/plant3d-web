@@ -5,16 +5,29 @@ import { NavCubePlugin, Viewer } from '@xeokit/xeokit-sdk';
 
 import { loadAiosPrepackBundle } from '../aios-prepack-bundle-loader';
 
+import { pdmsGetPtset } from '@/api/genModelPdmsAttrApi';
 import ModelProjectSelector from '@/components/model-project/ModelProjectSelector.vue';
 import ModelTreePanel from '@/components/model-tree/ModelTreePanel.vue';
 import AnnotationPanel from '@/components/tools/AnnotationPanel.vue';
 import MeasurementPanel from '@/components/tools/MeasurementPanel.vue';
 import ToolManagerPanel from '@/components/tools/ToolManagerPanel.vue';
 import { useModelProjects } from '@/composables/useModelProjects';
+import { usePtsetVisualization } from '@/composables/usePtsetVisualization';
 import { useToolStore } from '@/composables/useToolStore';
 import { useXeokitTools } from '@/composables/useXeokitTools';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
+
+// 解析 URL 调试参数
+function getDebugParams() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    // debug_refno: 模型加载完成后自动选中并飞行到指定元件
+    refno: params.get('debug_refno'),
+    // debug_ptset: 模型加载完成后自动显示指定元件的点集
+    ptset: params.get('debug_ptset'),
+  };
+}
 
 const mainCanvas = ref<HTMLCanvasElement>();
 const cubeCanvas = ref<HTMLCanvasElement>();
@@ -45,22 +58,54 @@ let statsTimer: number | null = null;
 const store = useToolStore();
 const tools = useXeokitTools(viewer, overlayContainer, store);
 const modelProjects = useModelProjects();
+const ptsetVis = usePtsetVisualization(viewer, overlayContainer);
 
 let offRibbonCommand: (() => void) | null = null;
 let offModelProjectChange: (() => void) | null = null;
 let currentModel: unknown | null = null;
 
+// 监听 ptset 可视化请求
+watch(
+  () => store.ptsetVisualizationRequest.value,
+  async (request) => {
+    if (!request) return;
+
+    try {
+      emitToast({ message: `正在加载点集数据: ${request.refno}` });
+      const response = await pdmsGetPtset(request.refno);
+
+      if (response.success && response.ptset.length > 0) {
+        ptsetVis.renderPtset(request.refno, response);
+        ptsetVis.flyToPtset();
+        emitToast({ message: `已显示 ${response.ptset.length} 个连接点` });
+      } else {
+        const errorMsg = response.error_message || '未找到点集数据';
+        emitToast({ message: errorMsg });
+        console.warn('[ptset]', errorMsg);
+      }
+    } catch (error) {
+      console.error('[ptset] Failed to load ptset:', error);
+      emitToast({ message: '加载点集数据失败' });
+    } finally {
+      store.clearPtsetVisualizationRequest();
+    }
+  }
+);
+
 // 加载模型
 async function loadModel(bundleUrl: string) {
   if (!viewer.value || !bundleUrl) return;
-  
+
   try {
     // 清理当前模型
     if (currentModel) {
       viewer.value.scene.clear();
       currentModel = null;
     }
-    
+
+    // 清除 ptset 可视化
+    ptsetVis.clearAll();
+
     // 加载新模型
     currentModel = await loadAiosPrepackBundle(viewer.value, {
       baseUrl: bundleUrl,
@@ -70,10 +115,53 @@ async function loadModel(bundleUrl: string) {
       debug: true,
       lazyEntities: true,
     });
-    
+
     emitToast({
       message: '模型加载成功'
     });
+
+    // 处理调试参数
+    const debugParams = getDebugParams();
+
+    // 如果有 debug_refno 参数，自动选中并飞行到该元件
+    if (debugParams.refno && viewer.value) {
+      const refno = debugParams.refno;
+      const entity = viewer.value.scene.objects[refno];
+      if (entity) {
+        // 选中元件
+        entity.selected = true;
+        // 飞行到元件
+        viewer.value.cameraFlight.flyTo({ aabb: entity.aabb, duration: 0.8 });
+        emitToast({ message: `已定位到元件: ${refno}` });
+      } else {
+        console.warn(`[debug] 未找到元件: ${refno}`);
+      }
+    }
+
+    // 如果有 debug_ptset 参数，自动显示点集
+    if (debugParams.ptset) {
+      const ptsetRefno = debugParams.ptset;
+      // 延迟执行以确保模型完全加载
+      setTimeout(async () => {
+        try {
+          emitToast({ message: `正在加载点集数据: ${ptsetRefno}` });
+          const response = await pdmsGetPtset(ptsetRefno);
+
+          if (response.success && response.ptset.length > 0) {
+            ptsetVis.renderPtset(ptsetRefno, response);
+            ptsetVis.flyToPtset();
+            emitToast({ message: `已显示 ${response.ptset.length} 个连接点` });
+          } else {
+            const errorMsg = response.error_message || '未找到点集数据';
+            emitToast({ message: errorMsg });
+            console.warn('[debug ptset]', errorMsg);
+          }
+        } catch (error) {
+          console.error('[debug ptset] Failed to load ptset:', error);
+          emitToast({ message: '加载点集数据失败' });
+        }
+      }, 500);
+    }
   } catch (error) {
     console.error('Failed to load model:', error);
     emitToast({
@@ -119,6 +207,7 @@ function handleRibbonCommand(commandId: string) {
 
     case 'tools.clear_all':
       store.clearAll();
+      ptsetVis.clearAll();
       return;
       
     // Attribute display commands
@@ -158,8 +247,18 @@ onMounted(() => {
 
   viewer.value = new Viewer({
     canvasElement: mainCanvas.value!,
-    transparent: true,
+    transparent: false,
   });
+
+  try {
+    const edgeMat = viewer.value.scene.edgeMaterial;
+    edgeMat.edges = true;
+    edgeMat.edgeColor = [0.15, 0.18, 0.22];
+    edgeMat.edgeAlpha = 0.35;
+    edgeMat.edgeWidth = 1;
+  } catch {
+    // ignore
+  }
 
   // 设置为 Z-up 坐标系（CAD/BIM 标准）
   viewer.value.scene.camera.worldAxis = [
@@ -242,17 +341,8 @@ onMounted(() => {
     });
   }
 
-  // 原始的加载代码作为后备
-  loadAiosPrepackBundle(viewer.value, {
-    baseUrl: `${import.meta.env.BASE_URL}bundles/all/`,
-    modelId: 'all',
-    lodAssetKey: 'L1',
-    edges: true,
-    debug: true,
-    lazyEntities: true,
-  }).catch((err) => {
-    console.error(err);
-  });
+  // 注意：后备加载代码已移除，因为它会与正常的模型加载流程冲突
+  // 模型加载通过 modelProjects.currentBundleUrl 或 modelProjectChanged 事件触发
 });
 
 onUnmounted(() => {

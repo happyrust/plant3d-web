@@ -45,6 +45,16 @@ function resolveIcon(name?: string) {
   if (!name) return null;
   return ribbonIcons[name as RibbonIconName] ?? null;
 }
+function onTabClick(tabId: string) {
+  if (activeTabId.value === tabId) {
+    // 点击当前选中的标签，切换折叠状态
+    collapsed.value = !collapsed.value;
+  } else {
+    // 切换到新标签，并展开
+    activeTabId.value = tabId;
+    collapsed.value = false;
+  }
+}
 </script>
 
 <template>
@@ -56,7 +66,7 @@ function resolveIcon(name?: string) {
         type="button"
         class="ribbon-tab-btn"
         :class="{ 'ribbon-tab-btn--active': tab.id === activeTabId }"
-        @click="activeTabId = tab.id">
+        @click="onTabClick(tab.id)">
         {{ tab.label }}
       </button>
       <!-- Spacer to push collapse button to the right -->
@@ -196,6 +206,17 @@ function resolveIcon(name?: string) {
   overflow-x: auto;
   background-color: hsl(var(--background));
   border-top: 1px solid hsl(var(--border));
+  
+  /* Absolute Positioning */
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  
+  /* Visuals for overlay */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .ribbon-content-panel::-webkit-scrollbar {

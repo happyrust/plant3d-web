@@ -210,6 +210,28 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
     ],
   },
   {
+    id: 'task',
+    label: '任务',
+    groups: [
+      {
+        id: 'task.create',
+        label: '新建任务',
+        items: [
+          { kind: 'button', id: 'task.dataParsing', label: '数据解析', icon: 'database', commandId: 'task.createDataParsing' },
+          { kind: 'button', id: 'task.modelGen', label: '模型生成', icon: 'cube', commandId: 'task.createModelGeneration' },
+          { kind: 'button', id: 'task.modelExport', label: '导出模型', icon: 'download', commandId: 'task.createModelExport' },
+        ],
+      },
+      {
+        id: 'task.monitor',
+        label: '监控',
+        items: [
+          { kind: 'button', id: 'task.monitor', label: '任务监控', icon: 'monitor', commandId: 'panel.taskMonitor' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'help',
     label: '帮助',
     groups: [

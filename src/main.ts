@@ -14,6 +14,9 @@ import PropertiesPanelDock from '@/components/dock_panels/PropertiesPanelDock.vu
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
 import ReviewPanelDock from '@/components/dock_panels/ReviewPanelDock.vue';
 import InitiateReviewPanelDock from '@/components/dock_panels/InitiateReviewPanelDock.vue';
+import TaskMonitorPanelDock from '@/components/dock_panels/TaskMonitorPanelDock.vue';
+import TaskCreationPanelDock from '@/components/dock_panels/TaskCreationPanelDock.vue';
+import ModelExportPanelDock from '@/components/dock_panels/ModelExportPanelDock.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
 import vuetify from '@/plugins/vuetify';
 
@@ -30,5 +33,8 @@ app.component('ModelQueryPanel', ModelQueryPanelDock);
 app.component('ReviewPanel', ReviewPanelDock);
 app.component('InitiateReviewPanel', InitiateReviewPanelDock);
 app.component('ReviewerTaskListPanel', ReviewerTaskListPanelDock);
+app.component('TaskMonitorPanel', TaskMonitorPanelDock);
+app.component('TaskCreationPanel', TaskCreationPanelDock);
+app.component('ModelExportPanel', ModelExportPanelDock);
 
 app.use(vuetify).mount('#app');

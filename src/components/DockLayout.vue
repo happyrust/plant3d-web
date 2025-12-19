@@ -7,6 +7,7 @@ import { setDockApi } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { onCommand } from '@/ribbon/commandBus';
 
 const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v2';
@@ -42,6 +43,7 @@ const api = ref<DockApi | null>(null);
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
+const taskCreationStore = useTaskCreationStore();
 
 let offCommand: (() => void) | null = null;
 
@@ -263,6 +265,42 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'taskMonitor') {
+    return dockApi.addPanel({
+      id: 'taskMonitor',
+      component: 'TaskMonitorPanel',
+      title: '任务监控',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
+  if (panelId === 'taskCreation') {
+    return dockApi.addPanel({
+      id: 'taskCreation',
+      component: 'TaskCreationPanel',
+      title: '创建任务',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
+  if (panelId === 'modelExport') {
+    return dockApi.addPanel({
+      id: 'modelExport',
+      component: 'ModelExportPanel',
+      title: '导出模型',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
 }
 
 function togglePanel(panelId: string) {
@@ -330,6 +368,25 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.review':
       togglePanel('review');
+      return;
+    case 'panel.taskMonitor':
+      togglePanel('taskMonitor');
+      return;
+    case 'panel.taskCreation':
+      togglePanel('taskCreation');
+      return;
+
+    // task creation with preset type
+    case 'task.createDataParsing':
+      taskCreationStore.setPresetType('DataParsing');
+      togglePanel('taskCreation');
+      return;
+    case 'task.createModelGeneration':
+      taskCreationStore.setPresetType('ModelGeneration');
+      togglePanel('taskCreation');
+      return;
+    case 'task.createModelExport':
+      togglePanel('modelExport');
       return;
 
     // layout commands
