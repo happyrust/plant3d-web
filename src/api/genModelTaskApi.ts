@@ -327,14 +327,15 @@ function normalizeTaskType(type: unknown): Task['type'] {
   const typeStr = String(type || 'DataParsing');
   // 映射后端类型到前端类型
   const typeMap: Record<string, Task['type']> = {
-    'DataParsingWizard': 'DataParsing',
-    'DataParsing': 'DataParsing',
-    'ModelGeneration': 'ModelGeneration',
-    'SpatialTreeGeneration': 'ModelGeneration',
-    'FullSync': 'DataParsing',
-    'IncrementalSync': 'DataParsing',
+    'DataParsingWizard': 'DataParsingWizard',
+    'DataParsing': 'DataParsingWizard',
+    'ModelGeneration': 'DataGeneration',
+    'DataGeneration': 'DataGeneration',
+    'SpatialTreeGeneration': 'DataGeneration',
+    'FullSync': 'DataParsingWizard',
+    'IncrementalSync': 'DataParsingWizard',
   };
-  return typeMap[typeStr] || 'DataParsing';
+  return typeMap[typeStr] || 'DataParsingWizard';
 }
 
 /**

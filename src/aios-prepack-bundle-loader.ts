@@ -266,7 +266,7 @@ export class LazyEntityManager {
     createdEntityCount: number;
     meshCfgCount: number;
     geometryCount: number;
-    } {
+  } {
     const model = this.sceneModel as unknown as { _meshes?: Record<string, unknown>; _geometries?: Record<string, unknown> };
     const meshCfgCount = model._meshes ? Object.keys(model._meshes).length : 0;
     const geometryCount = model._geometries ? Object.keys(model._geometries).length : 0;
@@ -422,8 +422,8 @@ export class LazyEntityManager {
         matrix: inst.matrix,
         color: inst.color,
         opacity: inst.opacity,
-        metallic: 0,
-        roughness: 1
+        metallic: 0.1,
+        roughness: 0.4
       } as unknown as Parameters<SceneModel['createMesh']>[0]);
 
       // 注意：xeokit createMesh 失败通常返回 false，不一定抛异常
@@ -707,9 +707,9 @@ type GltfMeshLike = {
 type GltfNodeMeshRefLike =
   | number
   | {
-      index?: number;
-      id?: number;
-    };
+    index?: number;
+    id?: number;
+  };
 
 type GltfNodeLike = {
   mesh?: GltfNodeMeshRefLike;
@@ -1005,7 +1005,10 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
     const colorIndex = instance.color_index;
     const rgba = (Number.isFinite(colorIndex) && colorIndex >= 0 && colorIndex < colors.length) ? colors[colorIndex] : null;
     const normalized = rgba ? normalizeRgbaMaybe(rgba) : null;
-    const rgb = normalized ? [normalized[0], normalized[1], normalized[2]] : [0.85, 0.85, 0.85];
+    const isBran = (ownerNoun === 'BRAN' || category === 'BRAN');
+    const rgb = isBran
+      ? [0.2, 0.45, 0.85] // Blue for BRAN
+      : (normalized ? [normalized[0], normalized[1], normalized[2]] : [0.85, 0.85, 0.85]);
     const opacity = normalized ? (normalized[3] ?? 1) : 1;
 
     // 构建实例数据

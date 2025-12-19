@@ -49,6 +49,25 @@
       </div>
     </div>
 
+    <!-- 统计信息 -->
+    <div v-if="task.metadata?.stats" class="card-stats">
+      <div class="stats-title">生成结果统计:</div>
+      <div class="stats-chips">
+        <v-chip size="x-small" color="primary" variant="flat" class="mr-1 mb-1">
+          总数: {{ task.metadata.stats.total_generated }}
+        </v-chip>
+        <v-chip
+          v-for="(count, noun) in task.metadata.stats.noun_counts"
+          :key="noun"
+          size="x-small"
+          variant="tonal"
+          class="mr-1 mb-1"
+        >
+          {{ noun }}: {{ count }}
+        </v-chip>
+      </div>
+    </div>
+
     <!-- 错误信息 -->
     <div v-if="task.error" class="card-error">
       <v-icon size="14" color="error">mdi-alert-circle</v-icon>
@@ -273,6 +292,24 @@ function formatTime(isoString: string): string {
     gap: 4px;
     font-size: 11px;
     color: rgba(var(--v-theme-on-surface), 0.6);
+  }
+}
+
+.card-stats {
+  margin-bottom: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
+
+  .stats-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(var(--v-theme-on-surface), 0.8);
+    margin-bottom: 4px;
+  }
+
+  .stats-chips {
+    display: flex;
+    flex-wrap: wrap;
   }
 }
 

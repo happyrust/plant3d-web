@@ -100,7 +100,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
   const formData = reactive<TaskCreationFormData>({
     // 基础信息
     name: '',
-    type: 'DataParsing',
+    type: 'DataParsingWizard',
     priority: 'normal',
     description: '',
 
@@ -127,32 +127,68 @@ export function useTaskCreation(): UseTaskCreationReturn {
   const isCurrentStepValid = computed(() => {
     // 步骤1需要特殊处理：名称必须可用
     if (currentStep.value === 1) {
-      return validateStep(1) && nameAvailable.value === true;
+      return checkStepValid(1) && nameAvailable.value === true;
     }
-    return validateStep(currentStep.value);
+    return checkStepValid(currentStep.value);
   });
 
   /** 是否可以提交 */
   const canSubmit = computed(() => {
     return (
       currentStep.value === 3 &&
-      validateStep(1) &&
-      validateStep(2) &&
-      validateStep(3) &&
+      checkStepValid(1) &&
+      checkStepValid(2) &&
+      checkStepValid(3) &&
       nameAvailable.value === true
     );
   });
 
-  // ============ 验证函数 ============
+  /**
+   * 纯函数检查步骤是否有效（不修改 errors，用于 computed）
+   */
+  function checkStepValid(step: number): boolean {
+    if (step === 1) {
+      if (!formData.name.trim() || formData.name.length < 2 || formData.name.length > 100) {
+        return false;
+      }
+      if (!formData.type) {
+        return false;
+      }
+    }
+
+    if (step === 2) {
+      if (formData.type === 'DataParsingWizard') {
+        if (formData.parseMode === 'dbnum' && (!formData.dbnum.trim() || isNaN(Number(formData.dbnum)))) {
+          return false;
+        }
+        if (formData.parseMode === 'refno' && !formData.refno.trim()) {
+          return false;
+        }
+      }
+
+      if (formData.type === 'DataGeneration') {
+        if (!formData.generateModels && !formData.generateMesh && !formData.generateSpatialTree) {
+          return false;
+        }
+        if (formData.meshTolRatio <= 0 || formData.meshTolRatio > 1) {
+          return false;
+        }
+        if (formData.maxConcurrent < 1 || formData.maxConcurrent > 16) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
 
   /**
-   * 验证指定步骤
+   * 验证指定步骤（会修改 errors，用于按钮点击时的验证）
    */
   function validateStep(step: number): boolean {
     const newErrors: ValidationErrors = {};
 
     if (step === 1) {
-      // 步骤1：基础信息验证
       if (!formData.name.trim()) {
         newErrors.name = '请输入任务名称';
       } else if (formData.name.length < 2) {
@@ -160,58 +196,46 @@ export function useTaskCreation(): UseTaskCreationReturn {
       } else if (formData.name.length > 100) {
         newErrors.name = '任务名称不能超过100个字符';
       }
-      // 注意：nameAvailable 的检查由 isCurrentStepValid 和 nextStep 处理
-      // 避免在这里产生循环依赖或不同步问题
-
       if (!formData.type) {
         newErrors.type = '请选择任务类型';
       }
     }
 
     if (step === 2) {
-      // 步骤2：参数配置验证
-      if (formData.type === 'DataParsing') {
+      if (formData.type === 'DataParsingWizard') {
         if (formData.parseMode === 'dbnum' && !formData.dbnum.trim()) {
           newErrors.dbnum = '请输入数据库编号';
         } else if (formData.parseMode === 'dbnum' && isNaN(Number(formData.dbnum))) {
           newErrors.dbnum = '数据库编号必须是数字';
         }
-
         if (formData.parseMode === 'refno' && !formData.refno.trim()) {
           newErrors.refno = '请输入参考号';
         }
       }
 
-      if (formData.type === 'ModelGeneration') {
+      if (formData.type === 'DataGeneration') {
         if (!formData.generateModels && !formData.generateMesh && !formData.generateSpatialTree) {
           newErrors.generateModels = '请至少选择一项生成内容';
         }
-
         if (formData.meshTolRatio <= 0 || formData.meshTolRatio > 1) {
           newErrors.meshTolRatio = '网格容差比例必须在 0-1 之间';
         }
-
         if (formData.maxConcurrent < 1 || formData.maxConcurrent > 16) {
           newErrors.maxConcurrent = '并发数必须在 1-16 之间';
         }
       }
     }
 
-    // 步骤3：预览确认，无需额外验证
-
-    // 更新错误状态 (只更新当前步骤相关的错误)
-    // 只有当实际上有错误时才合并，避免清除其他字段的非空错误
+    // 更新错误状态
     if (Object.keys(newErrors).length > 0) {
       errors.value = { ...errors.value, ...newErrors };
     }
-    // 如果某个字段在 newErrors 中不存在，但之前有错误，且现在通过了验证，应该清除
     if (step === 1) {
       if (!newErrors.name && errors.value.name && errors.value.name !== '任务名称已存在') delete errors.value.name;
       if (!newErrors.type && errors.value.type) delete errors.value.type;
     }
-    // 简化的逻辑：
-    const stepErrors = Object.keys(newErrors);
-    return stepErrors.length === 0;
+
+    return Object.keys(newErrors).length === 0;
   }
 
   /**
@@ -323,7 +347,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
       parameters: {} as TaskCreationRequest['parameters'],
     };
 
-    if (formData.type === 'DataParsing') {
+    if (formData.type === 'DataParsingWizard') {
       const parseParams: ParseTaskParameters = {
         parseMode: formData.parseMode,
       };
@@ -334,7 +358,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
         parseParams.refno = formData.refno.trim();
       }
       request.parameters = parseParams;
-    } else if (formData.type === 'ModelGeneration') {
+    } else if (formData.type === 'DataGeneration') {
       const modelParams: ModelGenParameters = {
         generateModels: formData.generateModels,
         generateMesh: formData.generateMesh,
@@ -395,7 +419,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
 
     // 重置表单数据
     formData.name = '';
-    formData.type = 'DataParsing';
+    formData.type = 'DataParsingWizard';
     formData.priority = 'normal';
     formData.description = '';
     formData.parseMode = 'all';
@@ -415,7 +439,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
    */
   function applyPresetType(): void {
     const presetType = taskCreationStore.consumePresetType();
-    if (presetType && (presetType === 'DataParsing' || presetType === 'ModelGeneration')) {
+    if (presetType) {
       formData.type = presetType;
     }
   }

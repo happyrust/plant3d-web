@@ -170,10 +170,14 @@ export function useTaskMonitor(options: UseTaskMonitorOptions = {}): UseTaskMoni
         taskGetSystemMetrics(),
       ]);
 
-      if (taskResponse.success) {
+      // 后端可能返回 {tasks:[], total:N} 或 {success:true, tasks:[]}
+      // 检查是否有 tasks 数组
+      if (taskResponse.tasks && Array.isArray(taskResponse.tasks)) {
         tasks.value = taskResponse.tasks.map((t) => normalizeTask(t as unknown as Record<string, unknown>));
-      } else {
+      } else if (taskResponse.success === false) {
         throw new Error(taskResponse.error_message || '获取任务列表失败');
+      } else {
+        throw new Error('获取任务列表失败：响应格式错误');
       }
 
       if (metricsResponse.success && metricsResponse.metrics) {

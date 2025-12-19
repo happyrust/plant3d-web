@@ -7,8 +7,8 @@
 
 /** 任务类型 */
 export type TaskType =
-  | 'DataParsing'        // 数据解析任务
-  | 'ModelGeneration'    // 模型生成任务
+  | 'DataParsingWizard'  // 数据解析任务 (原 DataParsing)
+  | 'DataGeneration'     // 模型生成任务 (原 ModelGeneration)
   | 'ModelExport';       // 导出模型任务
 
 /**
@@ -77,6 +77,7 @@ export type Task = {
   parameters?: TaskParameters;
   result?: TaskResult;
   error?: string;
+  metadata?: Record<string, any>;
 };
 
 /** 任务执行结果 */
@@ -181,8 +182,8 @@ export type WebSocketMessage = {
 /** 获取任务类型显示名称 */
 export function getTaskTypeDisplayName(type: TaskType): string {
   const typeNames: Record<TaskType, string> = {
-    DataParsing: '数据解析',
-    ModelGeneration: '模型生成',
+    DataParsingWizard: '数据解析',
+    DataGeneration: '模型生成',
     ModelExport: '导出模型',
   };
   return typeNames[type] || type;

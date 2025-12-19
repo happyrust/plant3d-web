@@ -60,7 +60,7 @@
         <div class="form-group">
           <label class="form-label required">任务类型</label>
           <v-radio-group v-model="formData.type" inline :error-messages="errors.type">
-            <v-radio label="数据解析" value="DataParsing">
+            <v-radio label="数据解析" value="DataParsingWizard">
               <template #label>
                 <div class="radio-label">
                   <v-icon size="18" class="mr-1">mdi-database-search</v-icon>
@@ -68,7 +68,7 @@
                 </div>
               </template>
             </v-radio>
-            <v-radio label="模型生成" value="ModelGeneration">
+            <v-radio label="模型生成" value="DataGeneration">
               <template #label>
                 <div class="radio-label">
                   <v-icon size="18" class="mr-1">mdi-cube-outline</v-icon>
@@ -107,7 +107,7 @@
       <!-- 步骤 2: 参数配置 -->
       <div v-show="currentStep === 2" class="step-content">
         <!-- 数据解析参数 -->
-        <template v-if="formData.type === 'DataParsing'">
+        <template v-if="formData.type === 'DataParsingWizard'">
           <div class="form-group">
             <label class="form-label required">解析模式</label>
             <v-radio-group v-model="formData.parseMode">
@@ -163,7 +163,7 @@
         </template>
 
         <!-- 模型生成参数 -->
-        <template v-if="formData.type === 'ModelGeneration'">
+        <template v-if="formData.type === 'DataGeneration'">
           <div class="form-group">
             <label class="form-label required">生成内容</label>
             <div class="checkbox-group">
@@ -251,7 +251,7 @@
           <div class="preview-item">
             <span class="preview-label">任务类型</span>
             <span class="preview-value">
-              {{ formData.type === 'DataParsing' ? '数据解析' : '模型生成' }}
+              {{ formData.type === 'DataParsingWizard' ? '数据解析' : '模型生成' }}
             </span>
           </div>
           <div class="preview-item">
@@ -268,7 +268,7 @@
 
         <div class="preview-section">
           <h4 class="preview-title">任务参数</h4>
-          <template v-if="formData.type === 'DataParsing'">
+          <template v-if="formData.type === 'DataParsingWizard'">
             <div class="preview-item">
               <span class="preview-label">解析模式</span>
               <span class="preview-value">{{ parseModeLabels[formData.parseMode] }}</span>
@@ -282,7 +282,7 @@
               <span class="preview-value">{{ formData.refno }}</span>
             </div>
           </template>
-          <template v-if="formData.type === 'ModelGeneration'">
+          <template v-if="formData.type === 'DataGeneration'">
             <div class="preview-item">
               <span class="preview-label">生成内容</span>
               <span class="preview-value">{{ generateContentText }}</span>
@@ -636,5 +636,8 @@ function handleCreateAnother() {
   align-items: center;
   padding: 12px 16px;
   border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  flex-shrink: 0; /* 防止被压缩 */
+  background: rgb(var(--v-theme-surface)); /* 防止透明 */
+  z-index: 10;
 }
 </style>

@@ -378,11 +378,11 @@ function handleRibbonCommand(commandId: string) {
 
     // task creation with preset type
     case 'task.createDataParsing':
-      taskCreationStore.setPresetType('DataParsing');
+      taskCreationStore.setPresetType('DataParsingWizard');
       togglePanel('taskCreation');
       return;
     case 'task.createModelGeneration':
-      taskCreationStore.setPresetType('ModelGeneration');
+      taskCreationStore.setPresetType('DataGeneration');
       togglePanel('taskCreation');
       return;
     case 'task.createModelExport':

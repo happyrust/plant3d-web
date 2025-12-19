@@ -248,14 +248,27 @@ onMounted(() => {
   viewer.value = new Viewer({
     canvasElement: mainCanvas.value!,
     transparent: false,
+    saoEnabled: true, // Enable SAO
   });
 
   try {
     const edgeMat = viewer.value.scene.edgeMaterial;
     edgeMat.edges = true;
-    edgeMat.edgeColor = [0.15, 0.18, 0.22];
-    edgeMat.edgeAlpha = 0.35;
+    edgeMat.edgeColor = [0.0, 0.0, 0.0]; // Black edges
+    edgeMat.edgeAlpha = 0.1; // Subtler edges
     edgeMat.edgeWidth = 1;
+
+    // Configure SAO
+    const sao = viewer.value.scene.sao;
+    sao.enabled = true;
+    sao.intensity = 0.25;
+    sao.bias = 0.5;
+    sao.scale = 1000.0;
+    sao.minResolution = 0.0;
+    sao.kernelRadius = 100;
+    sao.maxOcclusion = 0.02;
+    sao.blur = true;
+    sao.numSamples = 10;
   } catch {
     // ignore
   }
