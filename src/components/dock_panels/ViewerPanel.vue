@@ -291,8 +291,9 @@ function maybeAutoDebug(v: Viewer, reason: string) {
     }
 
     autoDebugRefno(v, cfg.refno, reason);
-  }, 50);
+  }, 300); // Increased from 50ms to 300ms to allow lazy entities to be created
 }
+
 
 const store = useToolStore();
 const tools = useXeokitTools(viewer, overlayContainer, store);
@@ -305,6 +306,7 @@ function getDebugParams() {
   return {
     refno: params.get('debug_refno'),
     ptset: params.get('debug_ptset'),
+    bundleUrl: params.get('debug_bundle_url'),
   };
 }
 
@@ -562,6 +564,36 @@ onMounted(() => {
   window.addEventListener('modelProjectChanged', handleProjectChange as EventListener);
   
   // 尝试加载默认项目
+  const debugParams = getDebugParams();
+  if (debugParams.bundleUrl) {
+    if (viewer.value) {
+      // 使用用户指定的 bundleUrl,不要覆盖它
+      const effectiveBundleUrl = debugParams.bundleUrl;
+
+      console.log('Using debug params:', { debugParams, effectiveBundleUrl });
+
+      loadAiosPrepackBundle(viewer.value, {
+        baseUrl: effectiveBundleUrl,
+        modelId: 'model',
+        lodAssetKey: 'L1',
+        edges: true,
+        debug: true,
+        lazyEntities: true,
+        refnos: debugParams.refno || undefined,
+      })
+      .then(() => {
+        applyWhiteBackground();
+        if (viewer.value) {
+          maybeAutoDebug(viewer.value, 'debugParams');
+        }
+        // 处理 debug_ptset 参数
+        setTimeout(() => handleDebugPtset(), 500);
+      })
+      .catch((err) => {
+        console.error('Failed to load model from debug params:', err);
+      });
+    }
+  } else {
   fetch(`${import.meta.env.BASE_URL}bundles/projects.json`)
     .then(response => {
       if (!response.ok) throw new Error('Failed to load projects');
@@ -591,6 +623,7 @@ onMounted(() => {
           });
       }
     })
+
     .catch(() => {
       // Fallback to ams-model
       if (viewer.value) {
@@ -615,6 +648,7 @@ onMounted(() => {
           });
       }
     });
+  }
 
   if (containerRef.value) {
     resizeObserver = new ResizeObserver(() => {

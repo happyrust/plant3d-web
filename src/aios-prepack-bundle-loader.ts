@@ -42,6 +42,46 @@ type InstancedBundleManifest = {
   };
 };
 
+/**
+ * V1.0 Multi-GLB (Hash-based) Manifest Types
+ * Matches export_instanced_bundle.rs output
+ */
+
+type HashLodLevelInfo = {
+  level: string;
+  geometry_url: string;
+  distance: number;
+};
+
+type HashArchetypeInfo = {
+  id: string; // geo_hash
+  noun: string;
+  material: string;
+  lod_levels: HashLodLevelInfo[];
+  instances_url: string;
+  instance_count: number;
+};
+
+type HashInstancedManifest = {
+  version: string; // "1.0"
+  export_time: string;
+  total_archetypes: number;
+  total_instances: number;
+  archetypes: HashArchetypeInfo[];
+};
+
+type HashInstanceInfo = {
+  refno: string;
+  matrix: number[];
+  color?: [number, number, number];
+  name?: string;
+};
+
+type HashInstancesData = {
+  geo_hash: string;
+  instances: HashInstanceInfo[];
+};
+
 type GeometryLodEntry = {
   level: number;
   asset_key: string;
@@ -170,6 +210,7 @@ export type LoadAiosPrepackOptions = {
   edges?: boolean;
   debug?: boolean;
   lazyEntities?: boolean; // 按需创建实体，默认 false
+  refnos?: string; // 如果存在，则从 API 加载实例数据，忽略 manifest.json
 };
 
 export type EntityMeta = {
@@ -216,19 +257,30 @@ export class LazyEntityManager {
   private createdEntities: Set<string>;
   private edges: boolean;
   private geometryCfgById?: Map<string, Parameters<SceneModel['createGeometry']>[0]>;
+  private archetypes?: Map<string, HashArchetypeInfo>;
+  private baseUrl?: string;
+  private lodAssetKey?: string;
   private preFinalizedOnce: boolean;
 
   constructor(
     sceneModel: SceneModel,
     lazyData: Map<string, LazyEntityData>,
     edges: boolean,
-    geometryCfgById?: Map<string, Parameters<SceneModel['createGeometry']>[0]>,
+    options?: {
+      geometryCfgById?: Map<string, Parameters<SceneModel['createGeometry']>[0]>;
+      archetypes?: Map<string, HashArchetypeInfo>;
+      baseUrl?: string;
+      lodAssetKey?: string;
+    }
   ) {
     this.sceneModel = sceneModel;
     this.lazyData = lazyData;
     this.createdEntities = new Set();
     this.edges = edges;
-    this.geometryCfgById = geometryCfgById;
+    this.geometryCfgById = options?.geometryCfgById;
+    this.archetypes = options?.archetypes;
+    this.baseUrl = options?.baseUrl;
+    this.lodAssetKey = options?.lodAssetKey || 'L1';
     this.preFinalizedOnce = false;
   }
 
@@ -288,16 +340,66 @@ export class LazyEntityManager {
     return !!model._meshes?.[meshId];
   }
 
-  private ensureGeometry(geometryId: string): boolean {
+  private async ensureGeometry(geometryId: string): Promise<boolean> {
     if (this.hasGeometry(geometryId)) return true;
+
+    // Try classic local config first
     const cfg = this.geometryCfgById?.get(geometryId);
-    if (!cfg) return false;
-    try {
-      this.sceneModel.createGeometry(cfg);
-    } catch {
-      return false;
+    if (cfg) {
+      try {
+        this.sceneModel.createGeometry(cfg);
+        return true;
+      } catch {
+        return false;
+      }
     }
-    return this.hasGeometry(geometryId);
+
+    // Try archetype fetch (V1.0 Multi-GLB)
+    if (this.archetypes && this.baseUrl) {
+      // geometryId format: "g:HASH"
+      const geoHash = geometryId.startsWith('g:') ? geometryId.substring(2) : geometryId;
+      const archetype = this.archetypes.get(geoHash);
+      if (archetype) {
+        try {
+          const lod = archetype.lod_levels.find(l => l.level === this.lodAssetKey) || archetype.lod_levels[0];
+          if (!lod) return false;
+
+          const url = joinUrl(this.baseUrl, lod.geometry_url);
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
+          const arrayBuffer = await response.arrayBuffer();
+
+          const gltfData = (await parse(arrayBuffer, GLTFLoader, {
+            gltf: { postProcess: true }
+          })) as unknown as GLTFPostprocessed;
+
+          const primitivesMap = extractMeshPrimitivesByIndex(gltfData);
+          const nodeMeshMap = extractNodeMeshIndexByNodeIndex(gltfData);
+
+          // Get the first available mesh primitive
+          let primitive: MeshPrimitive | undefined;
+          for (const meshIndex of nodeMeshMap.values()) {
+            primitive = primitivesMap.get(meshIndex);
+            if (primitive) break;
+          }
+
+          if (primitive) {
+            this.sceneModel.createGeometry({
+              id: geometryId,
+              primitive: 'triangles',
+              positions: primitive.positions as number[],
+              normals: primitive.normals as number[],
+              indices: primitive.indices as number[]
+            } as any);
+            return true;
+          }
+        } catch (err) {
+          console.error(`[LazyEntityManager] Failed to fetch/parse geometry ${geometryId}:`, err);
+        }
+      }
+    }
+
+    return false;
   }
 
   debugEntity(refno: string): LazyEntityDebugInfo {
@@ -375,7 +477,7 @@ export class LazyEntityManager {
   }
 
   /** 创建并显示实体 */
-  showEntity(refno: string): boolean {
+  async showEntity(refno: string): Promise<boolean> {
     const sceneAny = (this.sceneModel as unknown as {
       scene?: {
         objects?: Record<string, { visible?: boolean }>;
@@ -411,7 +513,7 @@ export class LazyEntityManager {
         continue;
       }
 
-      if (!this.ensureGeometry(inst.geometryId)) {
+      if (!(await this.ensureGeometry(inst.geometryId))) {
         continue;
       }
 
@@ -478,16 +580,16 @@ export class LazyEntityManager {
   }
 
   /** 批量显示实体 */
-  showEntities(refnos: string[]): number {
+  async showEntities(refnos: string[]): Promise<number> {
     let count = 0;
     for (const refno of refnos) {
-      if (this.showEntity(refno)) count++;
+      if (await this.showEntity(refno)) count++;
     }
     return count;
   }
 
   /** 显示所有实体 */
-  showAllEntities(): number {
+  async showAllEntities(): Promise<number> {
     return this.showEntities(this.getAllRefnos());
   }
 
@@ -501,10 +603,10 @@ export class LazyEntityManager {
   }
 
   /** 批量设置可见性 */
-  setVisibility(refnos: string[], visible: boolean): number {
+  async setVisibility(refnos: string[], visible: boolean): Promise<number> {
     let count = 0;
     for (const refno of refnos) {
-      if (visible ? this.showEntity(refno) : this.hideEntity(refno)) count++;
+      if (visible ? await this.showEntity(refno) : this.hideEntity(refno)) count++;
     }
     return count;
   }
@@ -567,6 +669,12 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
 
   if (isV2Instances(manifest)) {
     // V2 格式处理：需要计算 matrix = refno_transform × geo_transform
+    console.log('[flattenInstances] V2 format detected', {
+      bran_groups: manifest.bran_groups?.length || 0,
+      equi_groups: manifest.equi_groups?.length || 0,
+      ungrouped: manifest.ungrouped?.length || 0
+    });
+
     const pushComponentInstances = (category: string, ownerNoun: string, ownerRefno: string | undefined, component: ComponentInstances): void => {
       const refnoTransform = component.refno_transform || IDENTITY_MATRIX;
       const componentColorIndex = component.color_index ?? 0;
@@ -575,6 +683,14 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
       const componentRefno = component.refno;
       const componentNoun = component.noun || '';
       const componentName = component.name;
+
+      console.log('[flattenInstances] Processing component', {
+        category,
+        refno: componentRefno,
+        noun: componentNoun,
+        name: componentName,
+        instances: component.instances?.length || 0
+      });
 
       for (const inst of component.instances) {
         let matrix: number[];
@@ -646,6 +762,7 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
 
     for (const group of manifest.bran_groups || []) {
       const ownerRefno = group.refno;
+      console.log('[flattenInstances] Processing BRAN group', { ownerRefno, children: group.children?.length || 0 });
       for (const component of group.children || []) {
         pushComponentInstances('BRAN', 'BRAN', ownerRefno, component);
       }
@@ -663,6 +780,7 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
       pushComponentInstances('UNGROUPED', '', undefined, component);
     }
 
+    console.log('[flattenInstances] V2 processing complete', { totalInstances: out.length });
     return out;
   }
 
@@ -827,22 +945,222 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
     existing.destroy?.();
   }
 
+  // Ensure baseUrl ends with slash
+  const assetBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+  // API Based Loading
+  if (options.refnos) {
+    log('using API source for refnos:', options.refnos);
+    // Use /api proxy. Assume request originates from same host/port as dev server or configured proxy.
+    // In DEV mode, bypass vite proxy to avoid 404s/HTML responses if proxy config is flaky
+    const apiUrl = import.meta.env.DEV
+      ? `http://localhost:8080/api/instances?refnos=${encodeURIComponent(options.refnos)}`
+      : `/api/instances?refnos=${encodeURIComponent(options.refnos)}`;
+
+    log('fetch API', apiUrl);
+    const resp = await fetch(apiUrl);
+    if (!resp.ok) {
+      throw new Error(`Failed to load instances from API: ${resp.status} ${resp.statusText}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const responseData = await resp.json() as any;
+
+    const hashManifest: HashInstancedManifest = {
+      version: "1.0",
+      export_time: new Date().toISOString(),
+      total_archetypes: responseData.archetypes.length,
+      total_instances: 0,
+      archetypes: responseData.archetypes
+    };
+
+    const sceneModel = new SceneModel(viewer.scene, {
+      id: modelId,
+      isModel: true
+    } as unknown as Record<string, unknown>);
+
+    const archetypesMap = new Map<string, HashArchetypeInfo>();
+    const lazyData = new Map<string, LazyEntityData>();
+    let meshCounter = 0;
+
+    for (const archetype of hashManifest.archetypes) {
+      // Fix geometry URL to include LOD directory
+      if (archetype.lod_levels) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        archetype.lod_levels = archetype.lod_levels.map((l: any) => ({
+          ...l,
+          geometry_url: l.geometry_url.startsWith('lod_') ? l.geometry_url : `lod_${l.level}/${l.geometry_url}`
+        }));
+      }
+      archetypesMap.set(archetype.id, archetype);
+    }
+
+    // Process instances_data from API
+    // responseData.instances_data is array of { geo_hash: string, instances: HashInstanceInfo[] }
+    if (Array.isArray(responseData.instances_data)) {
+      for (const group of responseData.instances_data) {
+        const geoHash = group.geo_hash;
+        const archetype = archetypesMap.get(geoHash);
+        if (!archetype) {
+          warn(`Archetype not found for geo_hash: ${geoHash}`);
+          continue;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const inst of (group.instances as any[])) {
+          const refno = inst.refno;
+          const geometryId = `g:${geoHash}`; // Match geometryId format in ensureGeometry
+          const meshId = `m:${meshCounter++}`;
+
+          const instanceData: InstanceData = {
+            meshId,
+            geometryId,
+            matrix: inst.matrix,
+            color: inst.color || [0.85, 0.85, 0.85],
+            opacity: 1.0
+          };
+
+          if (!lazyData.has(refno)) {
+            lazyData.set(refno, {
+              refno,
+              instances: [instanceData],
+              category: archetype.noun,
+              name: inst.name || refno
+            });
+          } else {
+            lazyData.get(refno)!.instances.push(instanceData);
+          }
+        }
+      }
+    }
+
+    const lazyEntityManager = new LazyEntityManager(sceneModel, lazyData, options.edges === true, {
+      archetypes: archetypesMap,
+      baseUrl: assetBaseUrl, // Use passed baseUrl for GLB assets
+      lodAssetKey: options.lodAssetKey
+    });
+
+    log('API bundle initialized', { refnos: lazyData.size, archetypes: archetypesMap.size });
+
+    // Registry managers
+    try {
+      const sceneAny = viewer.scene as unknown as {
+        __aiosLazyEntityManagers?: Record<string, LazyEntityManager>;
+        __aiosActiveLazyModelId?: string;
+      };
+      const modelKey = options.modelId || 'model';
+      sceneAny.__aiosLazyEntityManagers ??= {};
+      sceneAny.__aiosLazyEntityManagers[modelKey] = lazyEntityManager;
+      sceneAny.__aiosActiveLazyModelId = modelKey;
+    } catch { void 0; }
+
+    return { sceneModel, lazyEntityManager };
+  }
+
   const manifestUrl = joinUrl(baseUrl, 'manifest.json');
   log('fetch', manifestUrl);
   const manifestResp = await fetch(manifestUrl);
   if (!manifestResp.ok) {
     throw new Error(`Failed to load manifest.json: ${manifestResp.status} ${manifestResp.statusText}`);
   }
-  const manifest = await manifestResp.json() as InstancedBundleManifest;
-  log('manifest ok', { version: manifest.version, files: Object.keys(manifest.files.geometry_assets || {}) });
+  const manifest = await manifestResp.json() as InstancedBundleManifest | HashInstancedManifest;
 
-  const lodAssetKey = chooseLodAssetKey(manifest, options.lodAssetKey);
-  const lodAsset = manifest.files.geometry_assets[lodAssetKey];
+  // Detect V1.0 Hash-based Multi-GLB Bundle
+  const isHashBundle = manifest.version === '1.0' && 'archetypes' in manifest;
+
+  if (isHashBundle) {
+    log('detected V1.0 hash bundle');
+    const hashManifest = manifest as HashInstancedManifest;
+
+    const sceneModel = new SceneModel(viewer.scene, {
+      id: modelId,
+      isModel: true
+    } as unknown as Record<string, unknown>);
+
+    const archetypesMap = new Map<string, HashArchetypeInfo>();
+    const lazyData = new Map<string, LazyEntityData>();
+    const meshIdToRefno: Record<string, string> = {};
+    let meshCounter = 0;
+
+    for (const archetype of hashManifest.archetypes) {
+      archetypesMap.set(archetype.id, archetype);
+    }
+
+    // Since instances are in separate JSONs, we might need a way to pre-populate lazyData base on refnos
+    // or lazyData should also be more lazy.
+    // For now, let's load all instances.json to build the refno -> geometry mapping.
+    // In a production scenario, we might want a global index.json.
+    log('fetching all instance manifests to build index...');
+    await Promise.all(hashManifest.archetypes.map(async (archetype) => {
+      try {
+        const instUrl = joinUrl(baseUrl, archetype.instances_url);
+        const resp = await fetch(instUrl);
+        if (!resp.ok) return;
+        const data = await resp.json() as HashInstancesData;
+
+        for (const inst of data.instances) {
+          const refno = inst.refno;
+          const geometryId = `g:${archetype.id}`;
+          const meshId = `m:${meshCounter++}`;
+          meshIdToRefno[meshId] = refno;
+
+          const instanceData: InstanceData = {
+            meshId,
+            geometryId,
+            matrix: inst.matrix,
+            color: inst.color || [0.85, 0.85, 0.85],
+            opacity: 1.0
+          };
+
+          if (!lazyData.has(refno)) {
+            lazyData.set(refno, {
+              refno,
+              instances: [instanceData],
+              category: archetype.noun,
+              name: inst.name || refno
+            });
+          } else {
+            lazyData.get(refno)!.instances.push(instanceData);
+          }
+        }
+      } catch (err) {
+        warn(`failed to fetch instances for ${archetype.id}`, err);
+      }
+    }));
+
+    const lazyEntityManager = new LazyEntityManager(sceneModel, lazyData, options.edges === true, {
+      archetypes: archetypesMap,
+      baseUrl,
+      lodAssetKey: options.lodAssetKey
+    });
+
+    log('hash bundle initialized', { refnos: lazyData.size, archetypes: archetypesMap.size });
+
+    // Registry managers
+    try {
+      const sceneAny = viewer.scene as unknown as {
+        __aiosLazyEntityManagers?: Record<string, LazyEntityManager>;
+        __aiosActiveLazyModelId?: string;
+      };
+      const modelKey = options.modelId || 'model';
+      sceneAny.__aiosLazyEntityManagers ??= {};
+      sceneAny.__aiosLazyEntityManagers[modelKey] = lazyEntityManager;
+      sceneAny.__aiosActiveLazyModelId = modelKey;
+    } catch { void 0; }
+
+    return { sceneModel, lazyEntityManager };
+  }
+
+  // Fallback to classic bundle logic
+  const classicManifest = manifest as InstancedBundleManifest;
+  log('manifest ok', { version: classicManifest.version, files: Object.keys(classicManifest.files?.geometry_assets || {}) });
+
+  const lodAssetKey = chooseLodAssetKey(classicManifest, options.lodAssetKey);
+  const lodAsset = classicManifest.files.geometry_assets[lodAssetKey];
   if (!lodAsset) {
     throw new Error(`LOD asset not found: ${lodAssetKey}`);
   }
 
-  const geometryManifestUrl = joinUrl(baseUrl, manifest.files.geometry_manifest.path);
+  const geometryManifestUrl = joinUrl(baseUrl, classicManifest.files.geometry_manifest.path);
   log('fetch', geometryManifestUrl);
   const geometryManifestResp = await fetch(geometryManifestUrl);
   if (!geometryManifestResp.ok) {
@@ -851,7 +1169,7 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
   const geometryManifest = await geometryManifestResp.json() as GeometryManifest;
   log('geometry_manifest ok', { geometries: geometryManifest.geometries.length });
 
-  const instanceManifestUrl = joinUrl(baseUrl, manifest.files.instance_manifest.path);
+  const instanceManifestUrl = joinUrl(baseUrl, classicManifest.files.instance_manifest.path);
   log('fetch', instanceManifestUrl);
   const instanceManifestResp = await fetch(instanceManifestUrl);
   if (!instanceManifestResp.ok) {
@@ -868,7 +1186,7 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
   }
   const glbBuffer = await glbResp.arrayBuffer();
   log('glb bytes', glbBuffer.byteLength);
-  const gltfParsed = await parse(glbBuffer, GLTFLoader, {}) as unknown as GLTFWithBuffers;
+  const gltfParsed = (await parse(glbBuffer, GLTFLoader, {})) as unknown as GLTFWithBuffers;
   const gltfData = postProcessGLTF(gltfParsed);
 
   const meshPrims = extractMeshPrimitivesByIndex(gltfData);
@@ -987,7 +1305,25 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
     const specValue = inst.spec_value ?? 0;
 
     const refno = (ownerNoun === 'EQUI' && ownerRefno) ? ownerRefno : refnoRaw;
-    if (!refno) continue;
+
+    // Debug: Log first few instances with details
+    if (meshCounter < 5) {
+      console.log(`[loadAiosPrepack] Processing instance #${meshCounter}`, {
+        category,
+        refno,
+        refnoRaw,
+        ownerNoun,
+        ownerRefno,
+        geo_hash: instance.geo_hash,
+        hasUniforms: !!uniforms,
+        uniformsRefno: uniforms?.refno
+      });
+    }
+
+    if (!refno) {
+      console.warn('[loadAiosPrepack] Skipping instance without refno', { category, uniforms });
+      continue;
+    }
 
     const geo = geoByHash.get(instance.geo_hash);
     if (!geo) continue;
@@ -1056,8 +1392,13 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
     }
   }
 
-  // 创建 LazyEntityManager
-  const lazyEntityManager = new LazyEntityManager(sceneModel, lazyData, options.edges === true, geometryCfgById);
+  // Create LazyEntityManager
+  const lazyEntityManager = new LazyEntityManager(sceneModel, lazyData, options.edges === true, {
+    geometryCfgById,
+    archetypes: undefined, // Archetypes not used in classic mode
+    baseUrl,
+    lodAssetKey
+  });
 
   // 根据 lazyEntities 选项决定是否立即创建实体
   if (!options.lazyEntities) {
@@ -1114,20 +1455,6 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
   }
 
   // DEBUG: 自动显示测试 refno（用于验证 V2 格式加载）
-  if (options.lazyEntities && lazyData.size > 0) {
-    const testRefno = '24381_46955';
-    if (lazyEntityManager.hasRefno(testRefno)) {
-      log('auto-showing test refno', { refno: testRefno });
-      lazyEntityManager.showEntity(testRefno);
-    } else {
-      // 如果没有特定 refno，显示第一个可用的
-      const firstRefno = lazyEntityManager.getAllRefnos()[0];
-      if (firstRefno) {
-        log('auto-showing first refno', { refno: firstRefno });
-        lazyEntityManager.showEntity(firstRefno);
-      }
-    }
-  }
 
   const sceneModelAabb = (sceneModel as unknown as { aabb?: number[] }).aabb;
   log('finalize done', {
