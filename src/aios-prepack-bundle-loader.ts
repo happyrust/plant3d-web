@@ -291,11 +291,14 @@ export class LazyEntityManager {
     try {
       const m = this.sceneModel as unknown as { preFinalize?: () => boolean };
       if (typeof m.preFinalize === 'function') {
-        m.preFinalize();
+        const result = m.preFinalize();
+        console.log('[ensurePreFinalized] preFinalize called, result:', result);
         this.preFinalizedOnce = true;
+      } else {
+        console.warn('[ensurePreFinalized] preFinalize method not found on SceneModel');
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error('[ensurePreFinalized] Error calling preFinalize:', e);
     }
   }
 
@@ -369,30 +372,170 @@ export class LazyEntityManager {
           if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
           const arrayBuffer = await response.arrayBuffer();
 
-          const gltfData = (await parse(arrayBuffer, GLTFLoader, {
-            gltf: { postProcess: true }
-          })) as unknown as GLTFPostprocessed;
+          // Parse GLB - note: gltf.postProcess option is not recognized in @loaders.gl v4+
+          // We need to manually handle the raw gltf data
+          const gltfRaw = await parse(arrayBuffer, GLTFLoader);
 
-          const primitivesMap = extractMeshPrimitivesByIndex(gltfData);
-          const nodeMeshMap = extractNodeMeshIndexByNodeIndex(gltfData);
+          // The raw data has json property with mesh/node definitions
+          const gltfAny = gltfRaw as unknown as {
+            json?: {
+              meshes?: Array<{ primitives?: Array<{ attributes?: Record<string, number>; indices?: number }> }>;
+              nodes?: Array<{ mesh?: number }>;
+              accessors?: Array<{ bufferView?: number; componentType?: number; count?: number; type?: string }>;
+              bufferViews?: Array<{ buffer?: number; byteOffset?: number; byteLength?: number }>;
+            };
+            buffers?: Array<{ arrayBuffer?: ArrayBuffer }>;
+          };
 
-          // Get the first available mesh primitive
-          let primitive: MeshPrimitive | undefined;
-          for (const meshIndex of nodeMeshMap.values()) {
-            primitive = primitivesMap.get(meshIndex);
-            if (primitive) break;
+          console.log('[ensureGeometry] gltfData keys:', Object.keys(gltfAny));
+
+          const json = gltfAny.json;
+          if (!json?.meshes || json.meshes.length === 0) {
+            console.error('[ensureGeometry] No meshes in GLB json');
+            return false;
           }
 
-          if (primitive) {
-            this.sceneModel.createGeometry({
-              id: geometryId,
-              primitive: 'triangles',
-              positions: primitive.positions as number[],
-              normals: primitive.normals as number[],
-              indices: primitive.indices as number[]
-            } as any);
-            return true;
+          console.log('[ensureGeometry] Found meshes:', json.meshes.length, 'nodes:', json.nodes?.length);
+
+          // Get the first mesh primitive
+          const mesh = json.meshes[0];
+          const primitive = mesh?.primitives?.[0];
+          if (!primitive?.attributes) {
+            console.error('[ensureGeometry] No primitive or attributes found');
+            return false;
           }
+
+          // Get buffer data - @loaders.gl stores buffer in different formats
+          const buffers = gltfAny.buffers;
+          console.log('[ensureGeometry] Buffers structure:', buffers?.map((b: { arrayBuffer?: ArrayBuffer }) => ({
+            hasArrayBuffer: !!b.arrayBuffer,
+            byteLength: b.arrayBuffer?.byteLength
+          })));
+
+          const buffer = buffers?.[0]?.arrayBuffer;
+          if (!buffer) {
+            console.error('[ensureGeometry] No buffer data');
+            return false;
+          }
+
+          console.log('[ensureGeometry] Buffer byteLength:', buffer.byteLength);
+
+          // Debug: Check if buffer starts with 'glTF' magic (would indicate wrong buffer)
+          const first4Bytes = new Uint8Array(buffer, 0, 4);
+          const magicString = String.fromCharCode(...first4Bytes);
+          console.log('[ensureGeometry] Buffer first 4 bytes as string:', JSON.stringify(magicString));
+          console.log('[ensureGeometry] Buffer first 12 bytes as hex:', Array.from(new Uint8Array(buffer, 0, 12)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
+          // Check if this is the whole GLB file instead of just the BIN chunk
+          // @loaders.gl may return the whole GLB in buffers[0].arrayBuffer
+          let effectiveBuffer = buffer;
+          if (magicString === 'glTF') {
+            console.warn('[ensureGeometry] Buffer is the whole GLB file, extracting BIN chunk...');
+            const dv = new DataView(buffer);
+            // GLB structure: 12-byte header + (JSON chunk header + JSON data) + (BIN chunk header + BIN data)
+            const jsonChunkLen = dv.getUint32(12, true);
+            // JSON chunk header is at offset 12, JSON data starts at 20
+            // BIN chunk starts after JSON chunk (with padding to 4-byte boundary)
+            const jsonPaddedLen = jsonChunkLen + ((4 - (jsonChunkLen % 4)) % 4);
+            const binChunkStart = 12 + 8 + jsonPaddedLen; // 12 header + 8 JSON chunk header + padded JSON
+            const binChunkLen = dv.getUint32(binChunkStart, true);
+            const binDataStart = binChunkStart + 8; // Skip BIN chunk header (4 bytes length + 4 bytes type)
+
+            console.log('[ensureGeometry] Extracting BIN chunk:', {
+              jsonChunkLen, jsonPaddedLen, binChunkStart, binChunkLen, binDataStart
+            });
+
+            // Extract the actual BIN data as the effective buffer
+            effectiveBuffer = buffer.slice(binDataStart, binDataStart + binChunkLen);
+            console.log('[ensureGeometry] Extracted BIN chunk length:', effectiveBuffer.byteLength);
+          }
+
+          console.log('[ensureGeometry] BufferViews:', json.bufferViews?.map((bv: Record<string, unknown>) => ({ offset: bv.byteOffset, length: bv.byteLength })));
+          console.log('[ensureGeometry] Accessors:', json.accessors?.map((a: Record<string, unknown>) => ({
+            bv: a.bufferView,
+            offset: a.byteOffset,
+            type: a.type,
+            count: a.count,
+            compType: a.componentType
+          })));
+
+          // Helper to extract accessor data - using slice to avoid alignment issues
+          const getAccessorData = (accessorIndex: number | undefined): Float32Array | Uint32Array | null => {
+            if (accessorIndex === undefined || !json.accessors || !json.bufferViews) return null;
+            const accessor = json.accessors[accessorIndex];
+            if (!accessor) return null;
+            const bufferView = json.bufferViews[accessor.bufferView ?? 0];
+            if (!bufferView) return null;
+
+            // Total offset = bufferView offset + accessor offset
+            const bufferViewOffset = bufferView.byteOffset ?? 0;
+            const accessorOffset = (accessor as { byteOffset?: number }).byteOffset ?? 0;
+            const totalOffset = bufferViewOffset + accessorOffset;
+            const byteLength = bufferView.byteLength ?? 0;
+
+            console.log(`[ensureGeometry] Accessor ${accessorIndex}: totalOffset=${totalOffset}, byteLength=${byteLength}`);
+
+            // Create a copy to avoid alignment issues with DataView
+            const slice = effectiveBuffer.slice(totalOffset, totalOffset + byteLength);
+
+            // Component type 5126 = FLOAT (for positions/normals), 5125 = UNSIGNED_INT (for indices)
+            if (accessor.componentType === 5126) {
+              return new Float32Array(slice);
+            } else if (accessor.componentType === 5125) {
+              return new Uint32Array(slice);
+            }
+            return null;
+          };
+
+          const positions = getAccessorData(primitive.attributes.POSITION);
+          const normals = getAccessorData(primitive.attributes.NORMAL);
+          const indices = getAccessorData(primitive.indices);
+
+          console.log('[ensureGeometry] Extracted data:', {
+            positions: positions?.length,
+            normals: normals?.length,
+            indices: indices?.length
+          });
+
+          if (!positions || positions.length === 0) {
+            console.error('[ensureGeometry] Failed to extract position data');
+            return false;
+          }
+
+          // Debug: Check for invalid values and compute bounds
+          let minX = Infinity, minY = Infinity, minZ = Infinity;
+          let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+          let hasNaN = false, hasInf = false;
+
+          for (let i = 0; i < positions.length; i += 3) {
+            const x = positions[i], y = positions[i + 1], z = positions[i + 2];
+            if (isNaN(x) || isNaN(y) || isNaN(z)) hasNaN = true;
+            if (!isFinite(x) || !isFinite(y) || !isFinite(z)) hasInf = true;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (z < minZ) minZ = z;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+            if (z > maxZ) maxZ = z;
+          }
+
+          console.log('[ensureGeometry] Position analysis:', JSON.stringify({
+            sample: [positions[0], positions[1], positions[2]],
+            bounds: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
+            hasNaN, hasInf
+          }));
+
+          // Create geometry  
+          this.sceneModel.createGeometry({
+            id: geometryId,
+            primitive: 'triangles',
+            positions: Array.from(positions),
+            normals: normals ? Array.from(normals) : undefined,
+            indices: indices ? Array.from(indices) : undefined
+          } as any);
+
+          console.log('[ensureGeometry] Geometry created successfully for', geometryId);
+          return true;
         } catch (err) {
           console.error(`[LazyEntityManager] Failed to fetch/parse geometry ${geometryId}:`, err);
         }
@@ -530,6 +673,7 @@ export class LazyEntityManager {
 
       // 注意：xeokit createMesh 失败通常返回 false，不一定抛异常
       if (!created) {
+        console.warn('[showEntity] createMesh returned false for', inst.meshId);
         continue;
       }
       // createMesh 成功后，mesh cfg 会注册到 SceneModel._meshes（而不是 scene.meshes）
@@ -549,6 +693,14 @@ export class LazyEntityManager {
       visible: true,
       edges: this.edges
     } as unknown as Parameters<SceneModel['createEntity']>[0]);
+
+    console.log('[showEntity] createEntity result:', {
+      refno,
+      meshIds: meshIds.length,
+      created: !!ent,
+      entityVisible: (ent as any)?.visible
+    });
+
     if (!ent) return false;
 
     this.ensurePreFinalized();
@@ -839,7 +991,9 @@ function getGltfNodes(gltfData: GLTFPostprocessed): unknown[] {
 }
 
 function extractMeshPrimitivesByIndex(gltfData: GLTFPostprocessed): Map<number, MeshPrimitive> {
-  const meshes = (gltfData.meshes || []) as unknown as GltfMeshLike[];
+  // @loaders.gl may put meshes in gltfData.meshes or gltfData.json?.meshes
+  const root = gltfData as unknown as { meshes?: GltfMeshLike[]; json?: { meshes?: GltfMeshLike[] } };
+  const meshes = (root.meshes || root.json?.meshes || []) as GltfMeshLike[];
   const map = new Map<number, MeshPrimitive>();
 
   for (let meshIndex = 0; meshIndex < meshes.length; meshIndex++) {
