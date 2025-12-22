@@ -34,21 +34,52 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
     label: '视图',
     groups: [
       {
-        id: 'view.panels',
-        label: '面板',
+        id: 'view.panel.tree',
+        label: '模型树',
         items: [
-          {
-            kind: 'stack',
-            id: 'view.panels.stack',
-            items: [
-              { kind: 'button', id: 'panel.tree', label: '模型树', icon: 'tree', commandId: 'panel.tree' },
-              { kind: 'button', id: 'panel.query', label: '模型查询', icon: 'search', commandId: 'panel.query' },
-              { kind: 'button', id: 'panel.measurement', label: '测量', icon: 'ruler', commandId: 'panel.measurement' },
-              { kind: 'button', id: 'panel.annotation', label: '批注', icon: 'note', commandId: 'panel.annotation' },
-              { kind: 'button', id: 'panel.manager', label: '管理', icon: 'settings', commandId: 'panel.manager' },
-              { kind: 'button', id: 'panel.properties', label: '属性', icon: 'info', commandId: 'panel.properties' },
-            ],
-          },
+          { kind: 'button', id: 'panel.tree', label: '模型树', icon: 'tree', commandId: 'panel.tree' },
+        ],
+      },
+      {
+        id: 'view.panel.query',
+        label: '模型查询',
+        items: [
+          { kind: 'button', id: 'panel.query', label: '模型查询', icon: 'search', commandId: 'panel.query' },
+        ],
+      },
+      {
+        id: 'view.panel.measurement',
+        label: '测量',
+        items: [
+          { kind: 'button', id: 'panel.measurement', label: '测量', icon: 'ruler', commandId: 'panel.measurement' },
+        ],
+      },
+      {
+        id: 'view.panel.annotation',
+        label: '批注',
+        items: [
+          { kind: 'button', id: 'panel.annotation', label: '批注', icon: 'note', commandId: 'panel.annotation' },
+        ],
+      },
+      {
+        id: 'view.panel.manager',
+        label: '管理',
+        items: [
+          { kind: 'button', id: 'panel.manager', label: '管理', icon: 'settings', commandId: 'panel.manager' },
+        ],
+      },
+      {
+        id: 'view.panel.properties',
+        label: '属性',
+        items: [
+          { kind: 'button', id: 'panel.properties', label: '属性', icon: 'info', commandId: 'panel.properties' },
+        ],
+      },
+      {
+        id: 'view.panel.console',
+        label: '控制台',
+        items: [
+          { kind: 'button', id: 'panel.console', label: '控制台', icon: 'console', commandId: 'panel.console' },
         ],
       },
       {
@@ -109,6 +140,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         label: '创建',
         items: [
           { kind: 'button', id: 'measurement.distance', label: '距离', icon: 'ruler', commandId: 'measurement.distance' },
+          { kind: 'button', id: 'measurement.point_to_mesh', label: '点到面', icon: 'ruler_combined', commandId: 'measurement.point_to_mesh' },
           { kind: 'button', id: 'measurement.angle', label: '角度', icon: 'ruler', commandId: 'measurement.angle' },
         ],
       },

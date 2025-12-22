@@ -6,6 +6,7 @@ export type ToolMode =
   | 'none'
   | 'measure_distance'
   | 'measure_angle'
+  | 'measure_point_to_object'
   | 'annotation'
   | 'annotation_cloud'
   | 'annotation_rect'
@@ -66,12 +67,12 @@ export type Obb = {
 
 export type ObbAnnotationAnchor =
   | {
-      kind: 'top_center';
-    }
+    kind: 'top_center';
+  }
   | {
-      kind: 'corner';
-      cornerIndex: number;
-    };
+    kind: 'corner';
+    cornerIndex: number;
+  };
 
 export type ObbAnnotationRecord = {
   id: string;
@@ -657,7 +658,7 @@ export function useToolStore() {
     allItems,
 
     setToolMode,
-    
+
     // Attribute display functions
     attributeDisplayMode,
     compareMode,

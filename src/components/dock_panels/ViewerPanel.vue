@@ -14,6 +14,10 @@ import { usePtsetVisualization } from '@/composables/usePtsetVisualization';
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitTools } from '@/composables/useXeokitTools';
+import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
+import { onCommand } from '@/ribbon/commandBus';
+import { emitToast } from '@/ribbon/toastBus';
+import { dockActivatePanelIfExists } from '@/composables/useDockApi';
 
 const props = defineProps<{
   params: {
@@ -63,6 +67,28 @@ const runtimeSnapshot = ref<{
   };
 } | null>(null);
 let statsTimer: number | null = null;
+let offRibbonCommand: (() => void) | null = null;
+
+function handleRibbonCommand(commandId: string) {
+  switch (commandId) {
+    case 'measurement.distance':
+      store.setToolMode('measure_distance');
+      return;
+    case 'measurement.angle':
+      store.setToolMode('measure_angle');
+      return;
+    case 'measurement.point_to_mesh':
+      // Ensure panel is active if needed, but tool mode is key
+      store.setToolMode('measure_point_to_object');
+      return;
+    case 'measurement.clear':
+      store.clearMeasurements();
+      return;
+    case 'annotation.create':
+       store.setToolMode('annotation');
+       return;
+  }
+}
 
 type LazyEntityManagerLike = {
   hasRefno?: (refno: string) => boolean;
@@ -307,6 +333,7 @@ function getDebugParams() {
     refno: params.get('debug_refno'),
     ptset: params.get('debug_ptset'),
     bundleUrl: params.get('debug_bundle_url'),
+    autoLocateRefno: params.get('auto_locate_refno'), // 新增：自动定位并显示的 refno
   };
 }
 
@@ -332,6 +359,24 @@ async function handleDebugPtset() {
     console.error('[ViewerPanel] Failed to load ptset:', error);
   }
 }
+
+// 处理 auto_locate_refno 参数
+function handleAutoLocateRefno() {
+  const debugParams = getDebugParams();
+  if (!debugParams.autoLocateRefno) return;
+
+  console.log('[ViewerPanel] auto_locate_refno detected:', debugParams.autoLocateRefno);
+
+  // 延迟执行，确保模型树已加载
+  setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent('autoLocateRefno', {
+        detail: { refno: debugParams.autoLocateRefno }
+      })
+    );
+  }, 1000); // 给模型树足够时间初始化
+}
+
 
 // Ptset 面板状态
 const showPtsetPanel = ref(false);
@@ -461,6 +506,10 @@ const handleProjectChange = (event: CustomEvent) => {
 };
 
 onMounted(() => {
+  if (!offRibbonCommand) {
+    offRibbonCommand = onCommand(handleRibbonCommand);
+  }
+
   if (!mainCanvas.value) return;
 
   viewer.value = new Viewer({
@@ -588,6 +637,8 @@ onMounted(() => {
         }
         // 处理 debug_ptset 参数
         setTimeout(() => handleDebugPtset(), 500);
+        // 处理 auto_locate_refno 参数
+        handleAutoLocateRefno();
       })
       .catch((err) => {
         console.error('Failed to load model from debug params:', err);
@@ -617,6 +668,8 @@ onMounted(() => {
             }
             // 处理 debug_ptset 参数
             setTimeout(() => handleDebugPtset(), 500);
+            // 处理 auto_locate_refno 参数
+            handleAutoLocateRefno();
           })
           .catch((err) => {
             console.error(err);
@@ -642,6 +695,8 @@ onMounted(() => {
             }
             // 处理 debug_ptset 参数
             setTimeout(() => handleDebugPtset(), 500);
+            // 处理 auto_locate_refno 参数
+            handleAutoLocateRefno();
           })
           .catch((err) => {
             console.error(err);
@@ -664,6 +719,10 @@ onUnmounted(() => {
   if (statsTimer !== null) {
     window.clearInterval(statsTimer);
     statsTimer = null;
+  }
+  if (offRibbonCommand) {
+    offRibbonCommand();
+    offRibbonCommand = null;
   }
   if (resizeObserver) {
     resizeObserver.disconnect();
@@ -702,6 +761,11 @@ watch(
   <div ref="containerRef" class="viewer-panel-container">
     <canvas ref="mainCanvas" class="viewer" />
     <div ref="overlayContainer" class="xeokitOverlay" />
+    
+    <MeasurementWizard
+      v-if="store.toolMode.value === 'measure_point_to_object'"
+      :status-text="tools.statusText.value"
+    />
 
     <div v-if="isDev" style="position: absolute; top: 8px; right: 8px; z-index: 2000; pointer-events: auto;">
       <button type="button" class="pointer-events-auto rounded-md border border-white/20 bg-black/70 px-2 py-1 text-xs text-white" @click.stop="showStats = !showStats">{{ showStats ? 'Hide Stats' : 'Show Stats' }}</button>

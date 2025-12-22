@@ -14,9 +14,11 @@
   "dependencies": {
     "@tanstack/vue-virtual": "^3.13.12",
     "@xeokit/xeokit-sdk": "^2.6.100",
+    "apache-arrow": "^21.1.0",
     "clsx": "^2.1.1",
     "dockview-vue": "^4.11.0",
     "lucide-vue-next": "^0.535.0",
+    "parquet-wasm": "^0.7.1",
     "tailwind-merge": "^3.3.1",
     "vue": "^3.5.24",
     "vuetify": "^3.11.2"

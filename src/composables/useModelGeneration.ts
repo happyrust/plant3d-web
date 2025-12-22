@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import type { Ref } from 'vue';
 import { useWebSocket } from './useWebSocket';
 import { loadAiosPrepackBundle } from '@/aios-prepack-bundle-loader';
+import { loadParquetToXeokit } from './useParquetModelLoader';
 import type { Viewer } from '@xeokit/xeokit-sdk';
 
 export interface ModelGenerationOptions {
@@ -28,6 +29,7 @@ export interface ModelGenerationState {
  */
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
     generateAndLoadModel: (refno: string) => Promise<boolean>;
+    showModelByRefno: (refno: string) => Promise<boolean>;
     checkRefnoExists: (refno: string) => boolean;
 } {
     const { viewer } = options;
@@ -191,35 +193,26 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             }
 
             bundleUrl.value = wsResult;
-            statusMessage.value = '加载模型...';
+            statusMessage.value = '加载 Parquet 模型...';
             progress.value = 85;
 
-            // 5. Load bundle using loadAiosPrepackBundle
-            const baseUrl = `http://localhost:8080${wsResult}`;
+            console.log(`[ModelGeneration] Loading Parquet for dbno: ${db_num}`);
 
-            console.log(`[ModelGeneration] Loading bundle from: ${baseUrl}`);
-
-            await loadAiosPrepackBundle(viewer, {
-                baseUrl,
-                modelId: `generated_${taskId}`,
-                lodAssetKey: 'L1',
-                edges: true,
-                lazyEntities: true,
+            const loadResult = await loadParquetToXeokit(viewer, db_num, {
+                debug: true,
+                modelId: `generated_${taskId}`
             });
 
-            statusMessage.value = '显示模型...';
+            console.log(`[ModelGeneration] Parquet loaded, instances: ${loadResult.instanceCount}`);
+
+            statusMessage.value = '显示模型 (Flying to)...';
             progress.value = 95;
 
-            // 6. Show the entity
-            const sceneAny = viewer.scene as any;
-            const managers = sceneAny.__aiosLazyEntityManagers;
-            const activeId = sceneAny.__aiosActiveLazyModelId;
-            const mgr = activeId ? managers[activeId] : undefined;
-
-            if (mgr?.showEntity) {
-                const shown = mgr.showEntity(refno);
-                if (!shown) {
-                    console.warn(`[ModelGeneration] Failed to show entity ${refno} after loading`);
+            // Fly to model
+            if (loadResult.sceneModel) {
+                const aabb = (loadResult.sceneModel as any).aabb;
+                if (aabb) {
+                    viewer.cameraFlight.flyTo({ aabb, duration: 1.0 });
                 }
             }
 
@@ -240,6 +233,89 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
     }
 
+    /**
+     * Show model directly without creating a task (for on-demand display)
+     */
+    async function showModelByRefno(refno: string): Promise<boolean> {
+        isGenerating.value = true;
+        error.value = null;
+        progress.value = 0;
+        statusMessage.value = '正在生成模型...';
+
+        try {
+            const response = await fetch('http://localhost:8080/api/model/show-by-refno', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    refnos: [refno],
+                    // 不再传递 db_num，后端自动从 SPdmsElement 查询
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`API 调用失败: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.message || '生成失败');
+            }
+
+            // 从后端返回的 metadata 中获取 dbno
+            const dbno = result.metadata?.dbno;
+            if (!dbno) {
+                throw new Error('后端未返回 dbno');
+            }
+
+            // 获取后端返回的 parquet 文件列表
+            const parquetFiles = result.parquet_files || result.metadata?.parquet_files;
+
+            statusMessage.value = '加载 Parquet 模型...';
+            progress.value = 50;
+
+            console.log(`[ModelGeneration] Loading Parquet for dbno: ${dbno}, files:`, parquetFiles);
+
+            const loadResult = await loadParquetToXeokit(viewer, dbno, {
+                debug: true,
+                modelId: `parquet_${dbno}`,
+                parquetFiles: parquetFiles  // 使用后端返回的文件列表
+            });
+
+            console.log(`[ModelGeneration] Parquet loaded, instances: ${loadResult.instanceCount}`);
+
+            statusMessage.value = '显示模型 (Flying to)...';
+            progress.value = 90;
+
+            // Fly to model
+            if (loadResult.sceneModel) {
+                const aabb = (loadResult.sceneModel as any).aabb;
+                if (aabb) {
+                    viewer.cameraFlight.flyTo({ aabb, duration: 1.0 });
+                }
+            }
+
+            // Parquet 加载器会自动创建 Entity，不需要手动 showEntity (非 lazy 模式)
+
+            progress.value = 100;
+            statusMessage.value = '完成';
+
+            return true;
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            console.error('[ModelGeneration] Error:', errorMsg, err);
+            error.value = errorMsg;
+            statusMessage.value = `错误: ${errorMsg}`;
+            return false;
+        } finally {
+            setTimeout(() => {
+                isGenerating.value = false;
+            }, 1000);
+        }
+    }
+
     return {
         isGenerating,
         progress,
@@ -247,6 +323,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         error,
         bundleUrl,
         generateAndLoadModel,
+        showModelByRefno,
         checkRefnoExists,
     };
 }
@@ -255,9 +332,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
  * Extract db_num from refno format like "17496_266204"
  */
 function extractDbNumFromRefno(refno: string): number | null {
-    const parts = refno.split('_');
+    // Support separators: underscore (_), slash (/), or even comma (,)
+    const parts = refno.split(/[_/,]/);
     if (parts.length >= 2) {
-        const dbNum = parseInt(parts[0], 10);
+        const val = parts[0];
+        if (!val) return null;
+        const dbNum = parseInt(val, 10);
         if (!isNaN(dbNum)) {
             return dbNum;
         }

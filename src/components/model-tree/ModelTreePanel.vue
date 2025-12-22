@@ -5,12 +5,14 @@ import { useVirtualizer } from '@tanstack/vue-virtual';
 import { Viewer } from '@xeokit/xeokit-sdk';
 import { Filter, Plus, Search, X } from 'lucide-vue-next';
 
+import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
+import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { cn } from '@/lib/utils';
 
 const props = defineProps<{
@@ -36,6 +38,10 @@ watch(
 
 const pdmsTree = usePdmsOwnerTree(pdmsViewerRef);
 const roomTree = useRoomTree(roomViewerRef);
+
+// Register the global tree instance for console commands
+setModelTreeInstance(pdmsTree);
+
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();
@@ -122,13 +128,13 @@ function getCheckState(id: string) {
 }
 
 // Initialize model generation composable
-let modelGeneration: ReturnType<typeof useModelGeneration> | null = null;
+const modelGenerationState = shallowRef<ReturnType<typeof useModelGeneration> | null>(null);
 
 watch(
   () => props.viewer,
   (viewer) => {
-    if (viewer && !modelGeneration) {
-      modelGeneration = useModelGeneration({ viewer });
+    if (viewer && !modelGenerationState.value) {
+      modelGenerationState.value = useModelGeneration({ viewer });
     }
   },
   { immediate: true }
@@ -136,22 +142,32 @@ watch(
 
 async function setVisible(id: string, visible: boolean) {
   // Only auto-generate for PDMS tree and when trying to show (visible = true)
-  if (!isRoomTree.value && visible && isRefnoLike(id) && modelGeneration) {
-    // Check if refno exists in cache
-    const exists = modelGeneration.checkRefnoExists(id);
-    
-    if (!exists) {
-      console.log(`[ModelTreePanel] refno ${id} not found in cache, triggering generation`);
+  const shouldTryGenerate = !isRoomTree.value && visible && modelGenerationState.value;
+  
+  if (shouldTryGenerate) {
+    // Check if it looks like a refno (123/456 or 123_456)
+    // If it's a refno, we try to auto-generate if missing
+    if (isRefnoLike(id)) {
+      // Check if refno exists in cache
+      const exists = modelGenerationState.value!.checkRefnoExists(id);
       
-      // Trigger auto-generation
-      const success = await modelGeneration.generateAndLoadModel(id);
-      
-      if (!success) {
-        console.error(`[ModelTreePanel] Failed to generate model for refno ${id}`);
-        // Still proceed to call setVisible to show any partially loaded data
-      } else {
-        console.log(`[ModelTreePanel] Successfully generated and loaded model for refno ${id}`);
+      console.log(`[ModelTreePanel] setVisible ${id}: exists=${exists}`);
+
+      if (!exists) {
+        console.log(`[ModelTreePanel] refno ${id} not found in cache, triggering direct generation (no task creation)`);
+        
+        // Use showModelByRefno (direct generation without task)
+        const success = await modelGenerationState.value!.showModelByRefno(id);
+        
+        if (!success) {
+          console.error(`[ModelTreePanel] Failed to show model for refno ${id}`);
+          // Still proceed to call setVisible to show any partially loaded data
+        } else {
+          console.log(`[ModelTreePanel] Successfully generated and loaded model for refno ${id}`);
+        }
       }
+    } else {
+      console.log(`[ModelTreePanel] setVisible ${id}: ignored for generation (not refno-like)`);
     }
   }
   
@@ -159,7 +175,7 @@ async function setVisible(id: string, visible: boolean) {
   if (isRoomTree.value) {
     roomTree.setVisible(id, visible);
   } else {
-    void pdmsTree.setVisible(id, visible);
+    await pdmsTree.setVisible(id, visible);
   }
 }
 
@@ -174,7 +190,8 @@ function selectByRowIndex(index: number, ev: MouseEvent) {
 }
 
 function isRefnoLike(id: string): boolean {
-  return /^\d+[_/]\d+(,\d+)?$/.test(id);
+  // Support 123_456, 123/456, 123,456
+  return /^\d+[_\/,]\d+/.test(id);
 }
 
 function handleSelectionChanged(selected: Set<string>) {
@@ -357,10 +374,63 @@ function onGlobalMouseDown(ev: MouseEvent) {
 
 onMounted(() => {
   window.addEventListener('mousedown', onGlobalMouseDown);
+  
+  // 监听自动定位事件 (from ViewerPanel via auto_locate_refno URL param)
+  const handleAutoLocate = async (event: Event) => {
+    const customEvent = event as CustomEvent<{ refno: string }>;
+    const refno = customEvent.detail?.refno;
+    
+    if (!refno) return;
+    
+    console.log('[ModelTreePanel] autoLocateRefno event received:', refno);
+    
+    try {
+      // 1. 先在树中定位
+      if (isRoomTree.value) {
+        await roomTree.focusNodeById(refno);
+      } else {
+        await pdmsTree.focusNodeById(refno);
+      }
+      
+      console.log('[ModelTreePanel] Node located in tree:', refno);
+      
+      // 2. 然后调用 show-by-refno 加载模型
+      if (!isRoomTree.value && isRefnoLike(refno) && modelGenerationState.value) {
+        const exists = modelGenerationState.value.checkRefnoExists(refno);
+        
+        if (!exists) {
+          console.log('[ModelTreePanel] Auto-loading model for:', refno);
+          const success = await modelGenerationState.value.showModelByRefno(refno);
+          
+          if (success) {
+            console.log('[ModelTreePanel] Auto-load successful:', refno);
+          } else {
+            console.error('[ModelTreePanel] Auto-load failed:', refno);
+          }
+        } else {
+          console.log('[ModelTreePanel] Model already loaded:', refno);
+        }
+      }
+    } catch (error) {
+      console.error('[ModelTreePanel] Auto-locate error:', error);
+    }
+  };
+  
+  window.addEventListener('autoLocateRefno', handleAutoLocate);
+  
+  // 清理函数将在 onUnmounted 中处理
+  (window as any).__autoLocateHandler = handleAutoLocate;
 });
 
 onUnmounted(() => {
   window.removeEventListener('mousedown', onGlobalMouseDown);
+  
+  // 清理自动定位事件监听器
+  const handler = (window as any).__autoLocateHandler;
+  if (handler) {
+    window.removeEventListener('autoLocateRefno', handler);
+    delete (window as any).__autoLocateHandler;
+  }
 });
 
 const typesButtonLabel = computed(() => {
@@ -482,6 +552,19 @@ function showPtset() {
   }
   closeContextMenu();
 }
+
+function onSearchEnter(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+
+  // 如果输入的是 RefNo 格式，直接尝试定位，无需等待搜索结果
+  if (isRefnoLike(trimmed)) {
+    console.log(`[ModelTreePanel] Enter pressed with RefNo-like input: ${trimmed}, triggering direct focus`);
+    onPickSearchItem(trimmed);
+    // 可选：关闭搜索框
+    searchPopoverOpen.value = false;
+  }
+}
 </script>
 
 <template>
@@ -542,7 +625,8 @@ function showPtset() {
           <input class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             placeholder="按名称搜索"
             :value="filterText"
-            @input="setFilter(($event.target as HTMLInputElement).value)" />
+            @input="setFilter(($event.target as HTMLInputElement).value)"
+            @keydown.enter="onSearchEnter(($event.target as HTMLInputElement).value)" />
 
           <div v-if="searchLoading || searchError || (searchItems && searchItems.length > 0)" class="mt-2">
             <div v-if="searchLoading" class="text-sm text-muted-foreground">搜索中...</div>
@@ -693,5 +777,15 @@ function showPtset() {
         </button>
       </div>
     </Teleport>
+
+    <!-- Model Generation Progress Modal -->
+    <ModelGenerationProgressModal 
+      v-if="modelGenerationState"
+      :open="modelGenerationState.isGenerating.value"
+      :progress="modelGenerationState.progress.value"
+      :status="modelGenerationState.statusMessage.value"
+      :error="modelGenerationState.error.value"
+      @close="modelGenerationState.isGenerating.value = false"
+    />
   </div>
 </template>

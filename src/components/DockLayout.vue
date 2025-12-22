@@ -73,6 +73,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'measurement');
   closePanelIfExists(dockApi, 'modelTree');
   closePanelIfExists(dockApi, 'viewer');
+  closePanelIfExists(dockApi, 'console');
 
   const viewerPanel = dockApi.addPanel({
     id: 'viewer',
@@ -131,6 +132,15 @@ function createDefaultLayout(dockApi: DockApi) {
   const rightGroup = dockApi.getPanel('measurement')?.group;
   if (leftGroup) leftGroup.api.setSize({ width: 350 });
   if (rightGroup) rightGroup.api.setSize({ width: 350 });
+  
+  dockApi.addPanel({
+    id: 'console',
+    component: 'ConsolePanel',
+    title: '控制台',
+    position: { referencePanel: viewerPanel, direction: 'below' },
+  });
+  const bottomGroup = dockApi.getPanel('console')?.group;
+  if (bottomGroup) bottomGroup.api.setSize({ height: 200 });
 
   console.log('[DockLayout] Default layout created');
 }
@@ -301,6 +311,16 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'console') {
+    return dockApi.addPanel({
+      id: 'console',
+      component: 'ConsolePanel',
+      title: '控制台',
+      position: viewerPanel
+        ? { referencePanel: viewerPanel, direction: 'below' }
+        : undefined,
+    });
+  }
 }
 
 function togglePanel(panelId: string) {
@@ -368,6 +388,12 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.review':
       togglePanel('review');
+      return;
+    case 'panel.monitor':
+      togglePanel('taskMonitor');
+      return;
+    case 'panel.console':
+      togglePanel('console');
       return;
     case 'panel.taskMonitor':
       togglePanel('taskMonitor');

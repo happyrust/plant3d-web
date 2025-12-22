@@ -33,6 +33,7 @@ import {
   Undo2,
   Wrench,
   GitCompare,
+  Terminal,
 } from 'lucide-vue-next';
 
 export const ribbonIcons = {
@@ -44,6 +45,7 @@ export const ribbonIcons = {
   clipboard_check: ClipboardCheck,
   clipboard_list: ClipboardList,
   compare: GitCompare,
+  console: Terminal,
   cube: Box,
   database: Database,
   download: Download,
@@ -61,6 +63,7 @@ export const ribbonIcons = {
   plus: Plus,
   redo: Redo2,
   ruler: Ruler,
+  ruler_combined: Ruler,
   search: Search,
   settings: Settings,
   question: ShieldQuestion,

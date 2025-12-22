@@ -667,8 +667,8 @@ export class LazyEntityManager {
         matrix: inst.matrix,
         color: inst.color,
         opacity: inst.opacity,
-        metallic: 0.1,
-        roughness: 0.4
+        metallic: 0,
+        roughness: 1
       } as unknown as Parameters<SceneModel['createMesh']>[0]);
 
       // 注意：xeokit createMesh 失败通常返回 false，不一定抛异常
@@ -1392,6 +1392,10 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
       primitive: 'triangles',
       positions: prim.positions as unknown as number[],
     };
+
+    if (prim.normals && (prim.normals as ArrayLike<number>).length > 0) {
+      cfg.normals = prim.normals as unknown as number[];
+    }
 
     if (prim.indices && (prim.indices as ArrayLike<number>).length > 0) {
       cfg.indices = prim.indices as unknown as number[];

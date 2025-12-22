@@ -364,15 +364,15 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
     if (!t) return false;
     if (NOUN_TYPES.includes(t as NounType)) return false;
     if (customTypes.value.has(t)) return false;
-    
+
     const newCustom = new Set(customTypes.value);
     newCustom.add(t);
     customTypes.value = newCustom;
-    
+
     const newSelected = new Set(selectedTypes.value);
     newSelected.add(t);
     selectedTypes.value = newSelected;
-    
+
     return true;
   }
 
@@ -380,7 +380,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
     const newCustom = new Set(customTypes.value);
     newCustom.delete(type);
     customTypes.value = newCustom;
-    
+
     const newSelected = new Set(selectedTypes.value);
     newSelected.delete(type);
     selectedTypes.value = newSelected;
@@ -523,7 +523,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
 
       return undefined;
     })();
-    
+
     if (lazyEntityManager) {
       const node = nodesById.value[id];
 
@@ -567,7 +567,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
           }
 
           const renderables = resp.refnos.filter((r) => lazyEntityManager.hasRefno(r));
-          const count = lazyEntityManager.setVisibility(renderables, visible);
+          const count = await lazyEntityManager.setVisibility(renderables, visible);
 
           if (shouldFly && renderables.length > 0) {
             const mergeAabb = (
@@ -663,7 +663,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
           }
 
           const renderables = resp.refnos.filter((r) => lazyEntityManager.hasRefno(r));
-          lazyEntityManager.setVisibility(renderables, visible);
+          await lazyEntityManager.setVisibility(renderables, visible);
 
           if (import.meta.env.DEV) {
             console.log('[pdms-tree] lazy visible-insts setVisible:', {
@@ -728,7 +728,7 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
           console.log('[pdms-tree] lazy entity debug (before):', before);
         }
 
-        const ok = visible ? lazyEntityManager.showEntity(target) : lazyEntityManager.hideEntity(target);
+        const ok = visible ? await lazyEntityManager.showEntity(target) : lazyEntityManager.hideEntity(target);
         if (import.meta.env.DEV) {
           console.log('[pdms-tree] lazy show/hide result:', {
             target,

@@ -10,6 +10,7 @@ import ModelProjectSelector from '@/components/model-project/ModelProjectSelecto
 import ModelTreePanel from '@/components/model-tree/ModelTreePanel.vue';
 import AnnotationPanel from '@/components/tools/AnnotationPanel.vue';
 import MeasurementPanel from '@/components/tools/MeasurementPanel.vue';
+import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ToolManagerPanel from '@/components/tools/ToolManagerPanel.vue';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { usePtsetVisualization } from '@/composables/usePtsetVisualization';
@@ -24,6 +25,8 @@ function getDebugParams() {
   return {
     // debug_refno: 模型加载完成后自动选中并飞行到指定元件
     refno: params.get('debug_refno'),
+    // debug_bundle_url: 指定加载特定位置的模型包
+    bundleUrl: params.get('debug_bundle_url'),
     // debug_ptset: 模型加载完成后自动显示指定元件的点集
     ptset: params.get('debug_ptset'),
   };
@@ -93,7 +96,7 @@ watch(
 );
 
 // 加载模型
-async function loadModel(bundleUrl: string) {
+async function loadModel(bundleUrl: string, refno?: string) {
   if (!viewer.value || !bundleUrl) return;
 
   try {
@@ -106,14 +109,20 @@ async function loadModel(bundleUrl: string) {
     // 清除 ptset 可视化
     ptsetVis.clearAll();
 
+    // 如果有 refno，说明是 API 加载模式，强制使用 /files/meshes 作为 baseUrl
+    // 并且传递 refnos 给 loader 以忽略 manifest.json
+    const isApiMode = !!refno;
+    const effectiveBundleUrl = isApiMode ? '/files/meshes/' : bundleUrl;
+
     // 加载新模型
     currentModel = await loadAiosPrepackBundle(viewer.value, {
-      baseUrl: bundleUrl,
+      baseUrl: effectiveBundleUrl,
       modelId: 'model',
       lodAssetKey: 'L1',
       edges: true,
       debug: true,
       lazyEntities: true,
+      refnos: refno,
     });
 
     emitToast({
@@ -126,6 +135,12 @@ async function loadModel(bundleUrl: string) {
     // 如果有 debug_refno 参数，自动选中并飞行到该元件
     if (debugParams.refno && viewer.value) {
       const refno = debugParams.refno;
+      
+      // 尝试通过 lazyManager 显示（如果是 lazy 模式，此时 entity 可能还没创建）
+      if (currentModel.lazyEntityManager) {
+        await currentModel.lazyEntityManager.showEntity(refno);
+      }
+
       const entity = viewer.value.scene.objects[refno];
       if (entity) {
         // 选中元件
@@ -192,6 +207,10 @@ function handleRibbonCommand(commandId: string) {
     case 'measurement.angle':
       store.activeTab.value = 'measurement';
       store.setToolMode('measure_angle');
+      return;
+    case 'measurement.point_to_mesh':
+      store.activeTab.value = 'measurement';
+      store.setToolMode('measure_point_to_object');
       return;
     case 'measurement.clear':
       store.clearMeasurements();
@@ -342,7 +361,10 @@ onMounted(() => {
   };
 
   // 加载初始模型
-  if (modelProjects.currentBundleUrl.value) {
+  const debugParams = getDebugParams();
+  if (debugParams.bundleUrl) {
+    loadModel(debugParams.bundleUrl, debugParams.refno || undefined);
+  } else if (modelProjects.currentBundleUrl.value) {
     loadModel(`${import.meta.env.BASE_URL}${modelProjects.currentBundleUrl.value.slice(1)}`);
   } else {
     // 等待项目加载完成后再加载模型
@@ -412,6 +434,12 @@ onUnmounted(() => {
     <canvas ref="mainCanvas" class="viewer" />
     <div ref="overlayContainer" class="xeokitOverlay" />
     <canvas ref="cubeCanvas" class="navCube" />
+
+    <MeasurementWizard
+      v-if="store.toolMode.value === 'measure_point_to_object'"
+      :status-text="tools.statusText.value"
+      style="color: red" 
+    />
 
     <div v-if="import.meta.env.DEV" style="position: absolute; top: 8px; right: 8px; z-index: 10;">
       <button type="button" style="font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.25); background: rgba(0,0,0,0.65); color: white; cursor: pointer;" @click="showStats = !showStats">{{ showStats ? 'Hide Stats' : 'Show Stats' }}</button>

@@ -530,6 +530,43 @@ export function useModelTree(viewerRef: { value: Viewer | null }) {
     return checkStateById.value.get(id) || 'checked';
   }
 
+  /**
+   * Expand ancestors and select a node in the tree
+   * @param refno - The refno to expand and select
+   */
+  async function expandToRefno(refno: string) {
+    // Check if node already exists in tree
+    const existingNode = nodesById.value[refno];
+    if (existingNode) {
+      // Expand all ancestors
+      const ancestorIds: string[] = [];
+      let currentId: string | null = refno;
+      while (currentId) {
+        const node: TreeNode | undefined = nodesById.value[currentId];
+        if (!node) break;
+        if (node.parentId) {
+          ancestorIds.push(node.parentId);
+        }
+        currentId = node.parentId;
+      }
+
+      // Expand all ancestors
+      const newExpanded = new Set(expandedIds.value);
+      for (const ancestorId of ancestorIds) {
+        newExpanded.add(ancestorId);
+      }
+      expandedIds.value = newExpanded;
+
+      // Select the node
+      selectedIds.value = new Set([refno]);
+      syncSceneSelection();
+      flyTo(refno);
+      return true;
+    }
+
+    return false;
+  }
+
   return {
     nodesById,
     rootIds,
@@ -555,6 +592,7 @@ export function useModelTree(viewerRef: { value: Viewer | null }) {
 
     flyTo,
     isolateXray,
-    clearXray
+    clearXray,
+    expandToRefno
   };
 }

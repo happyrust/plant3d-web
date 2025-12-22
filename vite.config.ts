@@ -22,6 +22,10 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      '/files': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
   resolve: {
@@ -29,6 +33,11 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  // 配置 parquet-wasm WASM 加载
+  optimizeDeps: {
+    exclude: ['parquet-wasm'],
+  },
+  assetsInclude: ['**/*.wasm'],
   build: {
     // Rollup Options
     // https://vitejs.dev/config/build-options.html#build-rollupoptions
