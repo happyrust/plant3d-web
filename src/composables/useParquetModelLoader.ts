@@ -19,6 +19,151 @@ async function getParquetWasm() {
     return parquetWasm
 }
 
+/** GLB 几何体数据 */
+interface GLBGeometry {
+    positions: number[]
+    indices: number[]
+    normals?: number[]
+}
+
+/**
+ * 解析 GLB 文件，提取几何体数据
+ * GLB 是 glTF 2.0 的二进制封装格式
+ */
+async function parseGLBGeometry(glbData: ArrayBuffer): Promise<GLBGeometry | null> {
+    try {
+        const dataView = new DataView(glbData)
+
+        // GLB Header (12 bytes)
+        const magic = dataView.getUint32(0, true)
+        if (magic !== 0x46546C67) { // 'glTF'
+            console.warn('[parseGLBGeometry] Invalid GLB magic number')
+            return null
+        }
+
+        // const version = dataView.getUint32(4, true)
+        // const length = dataView.getUint32(8, true)
+
+        // Chunk 0: JSON
+        const jsonChunkLength = dataView.getUint32(12, true)
+        const jsonChunkType = dataView.getUint32(16, true)
+        if (jsonChunkType !== 0x4E4F534A) { // 'JSON'
+            console.warn('[parseGLBGeometry] First chunk is not JSON')
+            return null
+        }
+
+        const jsonBytes = new Uint8Array(glbData, 20, jsonChunkLength)
+        const jsonString = new TextDecoder().decode(jsonBytes)
+        const gltf = JSON.parse(jsonString)
+
+        // Chunk 1: Binary buffer
+        const binChunkOffset = 20 + jsonChunkLength
+        const binChunkLength = dataView.getUint32(binChunkOffset, true)
+        // const binChunkType = dataView.getUint32(binChunkOffset + 4, true)
+        const binBuffer = glbData.slice(binChunkOffset + 8, binChunkOffset + 8 + binChunkLength)
+
+        // 获取第一个 mesh 的第一个 primitive
+        const mesh = gltf.meshes?.[0]
+        const primitive = mesh?.primitives?.[0]
+        if (!primitive) {
+            console.warn('[parseGLBGeometry] No mesh primitive found')
+            return null
+        }
+
+        // 提取顶点位置
+        const positionAccessorIndex = primitive.attributes?.POSITION
+        if (positionAccessorIndex === undefined) {
+            console.warn('[parseGLBGeometry] No POSITION attribute')
+            return null
+        }
+
+        const positions = extractAccessorData(gltf, binBuffer, positionAccessorIndex)
+
+        // 提取索引
+        let indices: number[] = []
+        if (primitive.indices !== undefined) {
+            indices = extractAccessorData(gltf, binBuffer, primitive.indices)
+        }
+
+        // 提取法线（可选）
+        let normals: number[] | undefined
+        const normalAccessorIndex = primitive.attributes?.NORMAL
+        if (normalAccessorIndex !== undefined) {
+            normals = extractAccessorData(gltf, binBuffer, normalAccessorIndex)
+        }
+
+        return { positions, indices, normals }
+    } catch (e) {
+        console.error('[parseGLBGeometry] Failed to parse GLB:', e)
+        return null
+    }
+}
+
+/**
+ * 从 glTF accessor 提取数据
+ */
+function extractAccessorData(gltf: Record<string, unknown>, binBuffer: ArrayBuffer, accessorIndex: number): number[] {
+    const accessors = gltf.accessors as Array<{ bufferView: number; componentType: number; count: number; type: string; byteOffset?: number }>
+    const bufferViews = gltf.bufferViews as Array<{ buffer: number; byteOffset: number; byteLength: number; byteStride?: number }>
+
+    const accessor = accessors[accessorIndex]
+    if (!accessor) return []
+
+    const bufferView = bufferViews[accessor.bufferView]
+    if (!bufferView) return []
+
+    const byteOffset = (bufferView.byteOffset || 0) + (accessor.byteOffset || 0)
+    const componentType = accessor.componentType
+    const count = accessor.count
+    const type = accessor.type
+
+    // 计算每个元素的组件数
+    const componentCount: Record<string, number> = {
+        'SCALAR': 1,
+        'VEC2': 2,
+        'VEC3': 3,
+        'VEC4': 4,
+        'MAT2': 4,
+        'MAT3': 9,
+        'MAT4': 16,
+    }
+    const numComponents = componentCount[type] || 1
+    const totalComponents = count * numComponents
+
+    // 根据 componentType 读取数据
+    const dataView = new DataView(binBuffer, byteOffset)
+    const result: number[] = []
+
+    for (let i = 0; i < totalComponents; i++) {
+        let value: number
+        switch (componentType) {
+            case 5120: // BYTE
+                value = dataView.getInt8(i)
+                break
+            case 5121: // UNSIGNED_BYTE
+                value = dataView.getUint8(i)
+                break
+            case 5122: // SHORT
+                value = dataView.getInt16(i * 2, true)
+                break
+            case 5123: // UNSIGNED_SHORT
+                value = dataView.getUint16(i * 2, true)
+                break
+            case 5125: // UNSIGNED_INT
+                value = dataView.getUint32(i * 4, true)
+                break
+            case 5126: // FLOAT
+                value = dataView.getFloat32(i * 4, true)
+                break
+            default:
+                value = 0
+        }
+        result.push(value)
+    }
+
+    return result
+}
+
 /** 实例数据行 */
 export interface InstanceRow {
     refno: string
@@ -332,7 +477,7 @@ export async function loadParquetToXeokit(
         const geometryId = `g:${geoHash}`
 
         // 对于 TUBI，使用简单的圆柱体几何体
-        // TODO: 从 GLB 文件加载实际几何体
+        // 对于其他元素，使用简单的盒子几何体作为占位
         const isTubi = instances[0]?.is_tubi ?? false
 
         if (isTubi) {
@@ -370,6 +515,68 @@ export async function loadParquetToXeokit(
                 positions,
                 indices,
             } as unknown as Parameters<SceneModel['createGeometry']>[0])
+        } else {
+            // 尝试从后端加载 GLB 几何体
+            const glbUrl = `/files/meshes/lod_L1/${geoHash}_L1.glb`
+            let geometryLoaded = false
+
+            try {
+                const response = await fetch(glbUrl)
+                if (response.ok) {
+                    const glbData = await response.arrayBuffer()
+                    const geometry = await parseGLBGeometry(glbData)
+
+                    if (geometry) {
+                        sceneModel.createGeometry({
+                            id: geometryId,
+                            primitive: 'triangles',
+                            positions: geometry.positions,
+                            indices: geometry.indices,
+                            normals: geometry.normals,
+                        } as unknown as Parameters<SceneModel['createGeometry']>[0])
+
+                        geometryLoaded = true
+                        log('Loaded GLB geometry for:', geoHash)
+                    }
+                }
+            } catch (e) {
+                log('Failed to load GLB for:', geoHash, e)
+            }
+
+            // Fallback: 创建简单的单位盒子几何体作为占位符
+            if (!geometryLoaded) {
+                const positions = [
+                    // front face
+                    -0.5, -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5, 0.5, -0.5, 0.5, 0.5,
+                    // back face
+                    -0.5, -0.5, -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5, -0.5, -0.5,
+                    // top face
+                    -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, -0.5,
+                    // bottom face
+                    -0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, -0.5, 0.5, -0.5, -0.5, 0.5,
+                    // right face
+                    0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5, 0.5, -0.5, 0.5,
+                    // left face
+                    -0.5, -0.5, -0.5, -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5, -0.5,
+                ]
+                const indices = [
+                    0, 1, 2, 0, 2, 3,     // front
+                    4, 5, 6, 4, 6, 7,     // back
+                    8, 9, 10, 8, 10, 11,  // top
+                    12, 13, 14, 12, 14, 15, // bottom
+                    16, 17, 18, 16, 18, 19, // right
+                    20, 21, 22, 20, 22, 23, // left
+                ]
+
+                sceneModel.createGeometry({
+                    id: geometryId,
+                    primitive: 'triangles',
+                    positions,
+                    indices,
+                } as unknown as Parameters<SceneModel['createGeometry']>[0])
+
+                log('Created placeholder box geometry for:', geoHash)
+            }
         }
 
         // 为每个实例创建 mesh

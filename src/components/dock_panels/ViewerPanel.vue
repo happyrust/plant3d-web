@@ -7,6 +7,7 @@ import { ArrowUpRight, Cloud, RectangleHorizontal, Trash2, X } from 'lucide-vue-
 import type { ModelProject } from '@/composables/useModelProjects';
 
 import { loadAiosPrepackBundle } from '@/aios-prepack-bundle-loader';
+import { loadParquetToXeokit } from '@/composables/useParquetModelLoader';
 import { pdmsGetPtset } from '@/api/genModelPdmsAttrApi';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import PtsetPanel from '@/components/tools/PtsetPanel.vue';
@@ -377,6 +378,90 @@ function handleAutoLocateRefno() {
   }, 1000); // 给模型树足够时间初始化
 }
 
+// ========== 增量 Parquet 加载 ==========
+
+/** 当前加载的 dbno */
+const currentDbno = ref<number | null>(null);
+
+/**
+ * 调用后端 API 生成/获取模型，然后加载 Parquet 数据到 viewer
+ */
+async function showModelByRefnos(refnos: string[], regenModel = false): Promise<boolean> {
+  if (!viewer.value) {
+    console.error('[ViewerPanel] Viewer not initialized');
+    return false;
+  }
+
+  console.log('[ViewerPanel] showModelByRefnos:', { refnos, regenModel });
+
+  try {
+    // 1. 调用后端 API 生成模型
+    const response = await fetch('/api/model/show-by-refno', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refnos, regen_model: regenModel }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    console.log('[ViewerPanel] API response:', result);
+
+    if (!result.success) {
+      throw new Error(result.message || 'API returned failure');
+    }
+
+    // 2. 获取 dbno 和 parquet_files
+    const dbno = result.metadata?.dbno;
+    if (!dbno) {
+      console.warn('[ViewerPanel] No dbno in response, cannot load Parquet');
+      return false;
+    }
+
+    // 3. 加载 Parquet 数据到 xeokit
+    if (result.parquet_files && result.parquet_files.length > 0) {
+      console.log('[ViewerPanel] Loading Parquet files:', result.parquet_files);
+      
+      await loadParquetToXeokit(viewer.value, dbno, {
+        modelId: `parquet-${dbno}`,
+        parquetFiles: result.parquet_files,
+        debug: true,
+      });
+
+      currentDbno.value = dbno;
+      console.log('[ViewerPanel] Parquet loaded successfully');
+      return true;
+    } else {
+      console.log('[ViewerPanel] No parquet files in response, model may already exist');
+      // 尝试从现有数据加载
+      const files = await fetch(`/api/model/${dbno}/files`).then(r => r.ok ? r.json() : []);
+      if (files && files.length > 0) {
+        await loadParquetToXeokit(viewer.value, dbno, {
+          modelId: `parquet-${dbno}`,
+          parquetFiles: files,
+          debug: true,
+        });
+        currentDbno.value = dbno;
+        return true;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[ViewerPanel] Failed to load model:', error);
+    emitToast({ type: 'error', message: `加载模型失败: ${error instanceof Error ? error.message : String(error)}` });
+    return false;
+  }
+}
+
+// 监听按需加载事件（从模型树或控制台触发）
+function handleShowModelByRefnos(event: CustomEvent<{ refnos: string[]; regenModel?: boolean }>) {
+  const { refnos, regenModel = false } = event.detail;
+  showModelByRefnos(refnos, regenModel);
+}
+
 
 // Ptset 面板状态
 const showPtsetPanel = ref(false);
@@ -645,64 +730,29 @@ onMounted(() => {
       });
     }
   } else {
-  fetch(`${import.meta.env.BASE_URL}bundles/projects.json`)
-    .then(response => {
-      if (!response.ok) throw new Error('Failed to load projects');
-      return response.json();
-    })
-    .then((projects: ModelProject[]) => {
-      const defaultProject = projects.find(p => p.default) || projects[0];
-      if (defaultProject && viewer.value) {
-        loadAiosPrepackBundle(viewer.value, {
-          baseUrl: `${import.meta.env.BASE_URL}bundles/${defaultProject.path}/`,
-          modelId: 'model',
-          lodAssetKey: 'L1',
-          edges: true,
-          debug: true,
-          lazyEntities: true,
-        })
-          .then(() => {
-            applyWhiteBackground();
-            if (viewer.value) {
-              maybeAutoDebug(viewer.value, 'defaultProject');
-            }
-            // 处理 debug_ptset 参数
-            setTimeout(() => handleDebugPtset(), 500);
-            // 处理 auto_locate_refno 参数
-            handleAutoLocateRefno();
-          })
-          .catch((err) => {
-            console.error(err);
-          });
-      }
-    })
-
-    .catch(() => {
-      // Fallback to ams-model
-      if (viewer.value) {
-        loadAiosPrepackBundle(viewer.value, {
-          baseUrl: `${import.meta.env.BASE_URL}bundles/ams-model/`,
-          modelId: 'model',
-          lodAssetKey: 'L1',
-          edges: true,
-          debug: true,
-          lazyEntities: true,
-        })
-          .then(() => {
-            applyWhiteBackground();
-            if (viewer.value) {
-              maybeAutoDebug(viewer.value, 'fallbackAmsModel');
-            }
-            // 处理 debug_ptset 参数
-            setTimeout(() => handleDebugPtset(), 500);
-            // 处理 auto_locate_refno 参数
-            handleAutoLocateRefno();
-          })
-          .catch((err) => {
-            console.error(err);
-          });
-      }
-    });
+    // ========== 增量 Parquet 模式 ==========
+    // 不再尝试加载静态 bundle，改为按需加载
+    console.log('[ViewerPanel] 增量 Parquet 模式：等待用户选择 refno 后按需加载');
+    
+    // 注册按需加载事件监听器
+    window.addEventListener('showModelByRefnos', handleShowModelByRefnos as EventListener);
+    
+    // 应用白色背景（即使没有模型）
+    applyWhiteBackground();
+    
+    // 处理 URL 参数中的 debug_refno（自动加载指定的 refno）
+    const debugParams = getDebugParams();
+    if (debugParams.refno && viewer.value) {
+      console.log('[ViewerPanel] 检测到 debug_refno，自动加载:', debugParams.refno);
+      setTimeout(() => {
+        showModelByRefnos([debugParams.refno!], false);
+      }, 500);
+    }
+    
+    // 处理 debug_ptset 参数
+    setTimeout(() => handleDebugPtset(), 500);
+    // 处理 auto_locate_refno 参数
+    handleAutoLocateRefno();
   }
 
   if (containerRef.value) {
@@ -729,6 +779,7 @@ onUnmounted(() => {
     resizeObserver = null;
   }
   window.removeEventListener('modelProjectChanged', handleProjectChange as EventListener);
+  window.removeEventListener('showModelByRefnos', handleShowModelByRefnos as EventListener);
   if (viewer.value !== null) {
     viewer.value.destroy();
   }
