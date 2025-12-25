@@ -12,17 +12,22 @@ import ModelQueryPanelDock from '@/components/dock_panels/ModelQueryPanelDock.vu
 import ModelTreePanelDock from '@/components/dock_panels/ModelTreePanelDock.vue';
 import PropertiesPanelDock from '@/components/dock_panels/PropertiesPanelDock.vue';
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
+import DesignerTaskListPanelDock from '@/components/dock_panels/DesignerTaskListPanelDock.vue';
+import ResubmissionTaskListPanelDock from '@/components/dock_panels/ResubmissionTaskListPanelDock.vue';
 import ReviewPanelDock from '@/components/dock_panels/ReviewPanelDock.vue';
 import InitiateReviewPanelDock from '@/components/dock_panels/InitiateReviewPanelDock.vue';
 import TaskMonitorPanelDock from '@/components/dock_panels/TaskMonitorPanelDock.vue';
 import TaskCreationPanelDock from '@/components/dock_panels/TaskCreationPanelDock.vue';
 import ModelExportPanelDock from '@/components/dock_panels/ModelExportPanelDock.vue';
 import ConsolePanelDock from '@/components/dock_panels/ConsolePanelDock.vue';
+import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDock.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
+import { VueQueryPlugin } from '@tanstack/vue-query';
 import vuetify from '@/plugins/vuetify';
 
 const app = createApp(App);
 
+app.use(VueQueryPlugin);
 app.component('ViewerPanel', ViewerPanel);
 app.component('ModelTreePanel', ModelTreePanelDock);
 app.component('MeasurementPanel', MeasurementPanelDock);
@@ -34,9 +39,12 @@ app.component('ModelQueryPanel', ModelQueryPanelDock);
 app.component('ReviewPanel', ReviewPanelDock);
 app.component('InitiateReviewPanel', InitiateReviewPanelDock);
 app.component('ReviewerTaskListPanel', ReviewerTaskListPanelDock);
+app.component('DesignerTaskListPanel', DesignerTaskListPanelDock);
+app.component('ResubmissionTaskListPanel', ResubmissionTaskListPanelDock);
 app.component('TaskMonitorPanel', TaskMonitorPanelDock);
 app.component('TaskCreationPanel', TaskCreationPanelDock);
 app.component('ModelExportPanel', ModelExportPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
+app.component('ParquetDebugPanel', ParquetDebugPanelDock);
 
 app.use(vuetify).mount('#app');

@@ -12,16 +12,8 @@ import { cn } from '@/lib/utils';
 const sel = useSelectionStore();
 const toolStore = useToolStore();
 
-// 当 selectedRefno 变化时，自动加载属性（如果还没加载过）
-watch(
-  () => sel.selectedRefno.value,
-  (refno) => {
-    if (refno && !sel.propertiesData.value && !sel.propertiesLoading.value) {
-      void sel.loadProperties(refno);
-    }
-  },
-  { immediate: true }
-);
+// useQuery 会在 selectedRefno.value 变化时自动触发，
+// 且具备缓存机制，因此无需手动 watch 调用 loadProperties。
 
 const searchQuery = ref('');
 const editingKey = ref<string | null>(null);

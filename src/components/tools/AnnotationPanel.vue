@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 
+import { LayoutGrid, List } from 'lucide-vue-next';
+
+import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { type AnnotationComment, getRoleDisplayName, UserRole } from '@/types/auth';
@@ -120,10 +123,30 @@ function toggleObbVisible(id: string, current: boolean) {
 }
 
 function flyText(id: string) {
+  // 找到批注记录，获取关联的 refno
+  const annotation = store.annotations.value.find((a) => a.id === id);
+  if (annotation?.refno) {
+    // 触发模型显示事件，确保关联的模型已加载
+    window.dispatchEvent(
+      new CustomEvent('showModelByRefnos', {
+        detail: { refnos: [annotation.refno], regenModel: false }
+      })
+    );
+  }
   props.tools.flyToAnnotation(id);
 }
 
 function flyCloud(id: string) {
+  // 找到批注记录，获取关联的 refnos
+  const annotation = store.cloudAnnotations.value.find((a) => a.id === id);
+  if (annotation?.refnos && annotation.refnos.length > 0) {
+    // 触发模型显示事件，确保关联的模型已加载
+    window.dispatchEvent(
+      new CustomEvent('showModelByRefnos', {
+        detail: { refnos: annotation.refnos, regenModel: false }
+      })
+    );
+  }
   props.tools.flyToCloudAnnotation?.(id);
 }
 
@@ -132,6 +155,19 @@ function flyRect(id: string) {
 }
 
 function flyObb(id: string) {
+  // 找到批注记录，获取关联的 refnos 或 objectIds
+  const annotation = store.obbAnnotations.value.find((a) => a.id === id);
+  const refnosToShow = annotation?.refnos && annotation.refnos.length > 0
+    ? annotation.refnos
+    : annotation?.objectIds || [];
+  if (refnosToShow.length > 0) {
+    // 触发模型显示事件，确保关联的模型已加载
+    window.dispatchEvent(
+      new CustomEvent('showModelByRefnos', {
+        detail: { refnos: refnosToShow, regenModel: false }
+      })
+    );
+  }
   props.tools.flyToObbAnnotation?.(id);
 }
 
@@ -289,6 +325,9 @@ const newCommentContent = ref('');
 const replyToCommentId = ref<string | null>(null);
 const editingCommentId = ref<string | null>(null);
 const editingCommentContent = ref('');
+
+// 意见视图模式：list = 列表视图, columns = 三栏视图
+const commentsViewMode = ref<'list' | 'columns'>('columns');
 
 // 获取当前选中批注的类型
 const activeAnnotationType = computed<AnnotationType | null>(() => {
@@ -800,9 +839,32 @@ function formatCommentTime(timestamp: number): string {
     <!-- 意见/评论卡片 -->
     <div class="rounded-md border border-border bg-background p-3">
       <div class="flex items-center justify-between">
-        <div class="text-sm font-semibold">意见管理</div>
-        <div v-if="activeComments.length > 0" class="text-xs text-muted-foreground">
-          共 {{ activeComments.length }} 条
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-semibold">意见管理</span>
+          <span v-if="activeComments.length > 0" class="text-xs text-muted-foreground">
+            ({{ activeComments.length }} 条)
+          </span>
+        </div>
+        <!-- 视图切换按钮 -->
+        <div class="flex items-center gap-1 rounded-md border border-input p-0.5">
+          <button
+            type="button"
+            class="flex h-6 w-6 items-center justify-center rounded"
+            :class="commentsViewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
+            title="列表视图"
+            @click="commentsViewMode = 'list'"
+          >
+            <List class="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            class="flex h-6 w-6 items-center justify-center rounded"
+            :class="commentsViewMode === 'columns' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
+            title="三栏视图"
+            @click="commentsViewMode = 'columns'"
+          >
+            <LayoutGrid class="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
 
@@ -810,6 +872,15 @@ function formatCommentTime(timestamp: number): string {
         选择一个批注后可查看和添加意见。
       </div>
 
+      <!-- 三栏视图 -->
+      <div v-else-if="commentsViewMode === 'columns'" class="mt-3">
+        <ReviewCommentsPanel
+          :annotation-type="activeAnnotationType"
+          :annotation-id="activeAny?.id || null"
+        />
+      </div>
+
+      <!-- 列表视图 (原有逻辑) -->
       <div v-else class="mt-2 flex flex-col gap-3">
         <!-- 按角色分组显示评论 -->
         <template v-if="Object.keys(commentsByRole).length > 0">

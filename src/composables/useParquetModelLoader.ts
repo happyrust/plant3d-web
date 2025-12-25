@@ -2,21 +2,31 @@
  * Parquet 模型加载器
  * 
  * 从服务器加载 Parquet 格式的模型实例数据，并转换为 xeokit SceneModel。
- * 使用 parquet-wasm 进行高效的 Parquet 数据解析。
+ * 使用 DuckDB-WASM 进行高效的 Parquet 数据解析 (支持 LargeList 类型)。
  */
 
 import { ref } from 'vue'
+import type * as duckdb from '@duckdb/duckdb-wasm'
 
-// parquet-wasm 懒加载
-let parquetWasm: typeof import('parquet-wasm') | null = null
+// DuckDB 实例单例
+let duckDbInstance: duckdb.AsyncDuckDB | null = null
 
-async function getParquetWasm() {
-    if (!parquetWasm) {
-        parquetWasm = await import('parquet-wasm')
-        // 初始化 WASM
-        await parquetWasm.default()
+/**
+ * 4x4 矩阵乘法 (列主序，符合 glTF/OpenGL 格式)
+ * result = a × b
+ */
+function multiplyMat4(a: Float32Array, b: Float32Array): number[] {
+    const result: number[] = new Array(16)
+    for (let col = 0; col < 4; col++) {
+        for (let row = 0; row < 4; row++) {
+            let sum = 0
+            for (let k = 0; k < 4; k++) {
+                sum += a[k * 4 + row] * b[col * 4 + k]
+            }
+            result[col * 4 + row] = sum
+        }
     }
-    return parquetWasm
+    return result
 }
 
 /** GLB 几何体数据 */
@@ -164,15 +174,33 @@ function extractAccessorData(gltf: Record<string, unknown>, binBuffer: ArrayBuff
     return result
 }
 
-/** 实例数据行 */
+/** 实例数据行 (扁平化格式，每行对应一个几何体) */
 export interface InstanceRow {
     refno: string
     noun: string
     geo_hash: string
+    geo_trans_id: string     // 几何体局部变换 ID (e.g. {refno}_geo_{index})
+    inst_trans_id: string    // 实例世界变换 ID (e.g. {refno}_world)
     is_tubi: boolean
     owner_refno: string | null
-    // transform 存储为 t0-t15 列
-    transform: Float32Array
+}
+
+interface ParquetGeoItem {
+    geo_hash: string
+    geo_trans_id: string
+}
+
+/** Parquet 原始行数据 (List<Struct> 格式，与后端 schema 一致) */
+interface ParquetRawRow {
+    refno: string
+    noun: string
+    spec_value?: bigint | null
+    color_index?: number
+    is_tubi: boolean
+    owner_refno: string | null
+    geo_items?: ParquetGeoItem[]
+    geo_hashes?: string[]
+    geo_trans_ids?: string[]
 }
 
 /** Parquet 文件信息 */
@@ -223,12 +251,12 @@ export function useParquetModelLoader(options: ParquetLoaderOptions = {}) {
         // URL 格式修正：文件直接在 database_models 目录下
         return files.map(filename => ({
             filename,
-            url: `${baseUrl}/${filename}`,
+            url: `${baseUrl}/${dbno}/${filename}`,
         }))
     }
 
     /**
-     * 加载单个 Parquet 文件并解析为实例数据
+     * 加载单个 Parquet 文件并解析为实例数据 (使用 DuckDB-WASM)
      */
     async function loadParquetFile(url: string): Promise<InstanceRow[]> {
         const response = await fetch(url)
@@ -239,48 +267,88 @@ export function useParquetModelLoader(options: ParquetLoaderOptions = {}) {
         const buffer = await response.arrayBuffer()
         const uint8Array = new Uint8Array(buffer)
 
-        // 使用 parquet-wasm 读取 Parquet 文件
-        const pq = await getParquetWasm()
-        const arrowTable = pq.readParquet(uint8Array)
+        // 使用 DuckDB-WASM 读取 Parquet (支持 LargeList 类型)
+        const duckdb = await import('@duckdb/duckdb-wasm')
 
-        // 转换为 Arrow Table 以便读取数据
-        const { tableFromIPC } = await import('apache-arrow')
-        const table = tableFromIPC(arrowTable.intoIPCStream())
-
-        const rows: InstanceRow[] = []
-        const numRows = table.numRows
-
-        // 获取列
-        const refnoCol = table.getChild('refno')
-        const nounCol = table.getChild('noun')
-        const geoHashCol = table.getChild('geo_hash')
-        const isTubiCol = table.getChild('is_tubi')
-        const ownerRefnoCol = table.getChild('owner_refno')
-
-        // transform 列 (t0-t15)
-        const tCols: any[] = []
-        for (let i = 0; i < 16; i++) {
-            tCols.push(table.getChild(`t${i}`))
+        // 获取或创建 DuckDB 实例
+        if (!duckDbInstance) {
+            const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles()
+            const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES)
+            const worker_url = URL.createObjectURL(
+                new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+            )
+            const worker = new Worker(worker_url)
+            const logger = new duckdb.ConsoleLogger()
+            duckDbInstance = new duckdb.AsyncDuckDB(logger, worker)
+            await duckDbInstance.instantiate(bundle.mainModule, bundle.pthreadWorker)
+            URL.revokeObjectURL(worker_url)
         }
 
-        for (let i = 0; i < numRows; i++) {
-            const transform = new Float32Array(16)
-            for (let j = 0; j < 16; j++) {
-                const col = tCols[j]
-                transform[j] = col ? (col.get(i) ?? (j % 5 === 0 ? 1 : 0)) : (j % 5 === 0 ? 1 : 0)
+        // 创建临时连接
+        const conn = await duckDbInstance.connect()
+
+        try {
+            // 注册文件到 DuckDB 虚拟文件系统
+            const filename = url.split('/').pop() || 'temp.parquet'
+            await duckDbInstance.registerFileBuffer(filename, uint8Array)
+
+            let result: duckdb.QueryResult
+            try {
+                // 新格式: geo_items (List<Struct>)
+                result = await conn.query(`
+                    SELECT 
+                        i.refno,
+                        i.noun,
+                        item.geo_hash as geo_hash,
+                        item.geo_trans_id as geo_trans_id,
+                        i.inst_trans_id,
+                        i.is_tubi,
+                        i.owner_refno
+                    FROM parquet_scan('${filename}') AS i,
+                        UNNEST(i.geo_items) AS item(geo_hash, geo_trans_id)
+                `)
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e)
+                if (!msg.includes('geo_items')) {
+                    throw e
+                }
+                // 旧格式回退: geo_hashes + geo_trans_ids
+                result = await conn.query(`
+                    SELECT 
+                        i.refno,
+                        i.noun,
+                        item.geo_hash as geo_hash,
+                        item.geo_trans_id as geo_trans_id,
+                        i.inst_trans_id,
+                        i.is_tubi,
+                        i.owner_refno
+                    FROM parquet_scan('${filename}') AS i,
+                        UNNEST(list_zip(i.geo_hashes, i.geo_trans_ids)) AS item(geo_hash, geo_trans_id)
+                `)
             }
 
-            rows.push({
-                refno: refnoCol?.get(i) ?? '',
-                noun: nounCol?.get(i) ?? '',
-                geo_hash: geoHashCol?.get(i) ?? '',
-                is_tubi: isTubiCol?.get(i) ?? false,
-                owner_refno: ownerRefnoCol?.get(i) ?? null,
-                transform,
-            })
-        }
+            const rows: InstanceRow[] = []
+            const resultArray = result.toArray()
 
-        return rows
+            for (const row of resultArray) {
+                rows.push({
+                    refno: row.refno ?? '',
+                    noun: row.noun ?? '',
+                    geo_hash: row.geo_hash ?? '',
+                    geo_trans_id: row.geo_trans_id ?? '',
+                    inst_trans_id: row.inst_trans_id ?? '',
+                    is_tubi: row.is_tubi ?? false,
+                    owner_refno: row.owner_refno ?? null,
+                })
+            }
+
+            // 清理临时文件
+            await duckDbInstance.dropFile(filename)
+
+            return rows
+        } finally {
+            await conn.close()
+        }
     }
 
     /**
@@ -347,9 +415,11 @@ export function useParquetModelLoader(options: ParquetLoaderOptions = {}) {
      */
     function deduplicateRows(rows: InstanceRow[]): InstanceRow[] {
         const map = new Map<string, InstanceRow>()
-        // 后加载的文件优先（增量文件是最新的）
+        // 使用 refno + geo_trans_id 作为唯一键去重
+        // 后加载的文件优先（增量文件是最新的覆盖）
         for (const row of rows) {
-            map.set(row.refno, row)
+            const key = `${row.refno}::${row.geo_trans_id}`
+            map.set(key, row)
         }
         return Array.from(map.values())
     }
@@ -419,15 +489,76 @@ export async function loadParquetToXeokit(
 
     log('Loading Parquet for dbno:', dbno)
 
-    // 1. 加载 Parquet 数据
+    // 1. 加载 Transforms 数据 (矩阵映射) - 使用 DuckDB-WASM
+    const transformMap = new Map<string, Float32Array>()
+    try {
+        const transResponse = await fetch(`/api/model/${dbno}/files?type=transforms`)
+        const transFiles: string[] = transResponse.ok ? await transResponse.json() : []
+        const baseUrl = '/files/output/database_models'
+
+        // 初始化 DuckDB (如果尚未初始化)
+        const duckdb = await import('@duckdb/duckdb-wasm')
+        if (!duckDbInstance) {
+            const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles()
+            const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES)
+            const worker_url = URL.createObjectURL(
+                new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+            )
+            const worker = new Worker(worker_url)
+            const duckLogger = new duckdb.ConsoleLogger()
+            duckDbInstance = new duckdb.AsyncDuckDB(duckLogger, worker)
+            await duckDbInstance.instantiate(bundle.mainModule, bundle.pthreadWorker)
+            URL.revokeObjectURL(worker_url)
+        }
+
+        const conn = await duckDbInstance.connect()
+        try {
+            for (const filename of transFiles) {
+                const url = `${baseUrl}/${dbno}/${filename}`
+                log('Loading transform file:', url)
+                const response = await fetch(url)
+                if (!response.ok) continue
+
+                const buffer = await response.arrayBuffer()
+                const uint8Array = new Uint8Array(buffer)
+
+                await duckDbInstance.registerFileBuffer(filename, uint8Array)
+
+                const result = await conn.query(`
+                    SELECT trans_id, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15
+                    FROM parquet_scan('${filename}')
+                `)
+
+                for (const row of result.toArray()) {
+                    const transId = row.trans_id
+                    if (!transId) continue
+
+                    const matrix = new Float32Array(16)
+                    for (let j = 0; j < 16; j++) {
+                        matrix[j] = row[`t${j}`] ?? (j % 5 === 0 ? 1 : 0)
+                    }
+                    transformMap.set(transId, matrix)
+                }
+
+                await duckDbInstance.dropFile(filename)
+            }
+        } finally {
+            await conn.close()
+        }
+        log('Loaded transforms:', transformMap.size)
+    } catch (e) {
+        log('Failed to load transforms:', e)
+    }
+
+    // 2. 加载 Instances 数据
     let rows: InstanceRow[] = []
 
     if (options.parquetFiles && options.parquetFiles.length > 0) {
         // 直接使用传入的文件列表
         const baseUrl = '/files/output/database_models'
         for (const filename of options.parquetFiles) {
-            const url = `${baseUrl}/${filename}`
-            log('Loading file:', url)
+            const url = `${baseUrl}/${dbno}/${filename}`
+            log('Loading instance file:', url)
             try {
                 const fileRows = await loader.loadParquetFile(url)
                 rows.push(...fileRows)
@@ -450,7 +581,7 @@ export async function loadParquetToXeokit(
         throw new Error(`No Parquet data found for dbno ${dbno}`)
     }
 
-    // 2. 创建 SceneModel
+    // 3. 创建 SceneModel
     const { SceneModel: SceneModelClass } = await import('@xeokit/xeokit-sdk')
 
     // 检查并销毁已存在的模型
@@ -465,11 +596,11 @@ export async function loadParquetToXeokit(
         isModel: true,
     } as unknown as Record<string, unknown>)
 
-    // 3. 按 geo_hash 分组
+    // 4. 按 geo_hash 分组
     const groups = loader.groupByGeoHash(rows)
     log('Geometry groups:', groups.size)
 
-    // 4. 为每个 geo_hash 创建几何体和实例
+    // 5. 为每个 geo_hash 创建几何体和实例
     let meshCounter = 0
     const meshIdsByRefno = new Map<string, string[]>()
 
@@ -584,8 +715,21 @@ export async function loadParquetToXeokit(
             const meshId = `m:${meshCounter++}`
             const refno = inst.refno
 
-            // 将 Float32Array 转换为 number[]
-            const matrix = Array.from(inst.transform)
+            // 从 transformMap 获取世界变换和局部变换，运行时组合
+            const worldMatrix = transformMap.get(inst.inst_trans_id)
+            const geoMatrix = transformMap.get(inst.geo_trans_id)
+
+            // 组合变换: world × local
+            let matrix: number[]
+            if (worldMatrix && geoMatrix) {
+                matrix = multiplyMat4(worldMatrix, geoMatrix)
+            } else if (worldMatrix) {
+                matrix = Array.from(worldMatrix)
+            } else if (geoMatrix) {
+                matrix = Array.from(geoMatrix)
+            } else {
+                matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+            }
 
             sceneModel.createMesh({
                 id: meshId,
@@ -619,6 +763,9 @@ export async function loadParquetToXeokit(
     // 6. Finalize
     sceneModel.finalize()
 
+    // 等待一个 tick，确保 AABB 被正确计算
+    await new Promise(resolve => setTimeout(resolve, 100))
+
     // 7. 触发事件
     viewer.scene.fire('modelLoaded', modelId)
 
@@ -626,4 +773,3 @@ export async function loadParquetToXeokit(
 
     return { sceneModel, instanceCount: rows.length }
 }
-

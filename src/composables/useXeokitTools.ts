@@ -757,7 +757,7 @@ export function useXeokitTools(
       ].join('');
 
       const markerHTML = [
-        '<div style="position:absolute;display:flex;flex-direction:column;align-items:center;transform:translate(-50%, -100%);">',
+        '<div style="position:absolute;display:flex;flex-direction:column;align-items:center;transform:translate(-50%, -100%);cursor:pointer;">',
         '  <div style="width:28px;height:28px;border-radius:50% 50% 50% 0;background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.4);">',
         '    <span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700;">{{glyph}}</span>',
         '  </div>',
@@ -775,6 +775,50 @@ export function useXeokitTools(
           description: '',
         },
       } as ConstructorParameters<typeof AnnotationsPlugin>[1]);
+
+      // 文字批注图钉点击事件：单击选中，双击编辑
+      let lastMarkerClickTime = 0;
+      let lastMarkerClickId: string | null = null;
+
+      annotationsPlugin.value.on('markerClicked', (annotation: { id?: string }) => {
+        console.log('[AnnotationClick] markerClicked event fired', annotation);
+        const id = annotation.id;
+        if (!id) {
+          console.log('[AnnotationClick] No id in annotation, returning');
+          return;
+        }
+
+        // 只处理文字批注（ID 以 anno_xxx 格式，不是 obb_label_ 开头的）
+        if (id.startsWith('obb_label_')) {
+          console.log('[AnnotationClick] OBB label clicked, skipping');
+          return;
+        }
+
+        const now = Date.now();
+        const isDoubleClick = lastMarkerClickId === id && (now - lastMarkerClickTime) < 300;
+        console.log('[AnnotationClick] id:', id, 'isDoubleClick:', isDoubleClick);
+
+        if (isDoubleClick) {
+          // 双击 -> 弹出编辑框
+          console.log('[AnnotationClick] Double click -> opening edit dialog');
+          store.pendingTextAnnotationEditId.value = id;
+          lastMarkerClickTime = 0;
+          lastMarkerClickId = null;
+        } else {
+          // 单击 -> 选中批注
+          console.log('[AnnotationClick] Single click -> selecting annotation');
+          store.activeAnnotationId.value = id;
+          store.activeCloudAnnotationId.value = null;
+          store.activeRectAnnotationId.value = null;
+          store.activeObbAnnotationId.value = null;
+          lastMarkerClickTime = now;
+          lastMarkerClickId = id;
+        }
+
+        // 阻止事件继续传播引发创建新批注
+        suppressNextClick = true;
+        console.log('[AnnotationClick] suppressNextClick set to true');
+      });
     }
   }
 
@@ -1095,6 +1139,10 @@ export function useXeokitTools(
         moved: boolean;
       } | null = null;
 
+      // 双击检测变量
+      let lastClickTime = 0;
+      let lastClickObbId: string | null = null;
+
       const getCanvasPos = (e: PointerEvent): [number, number] => {
         const rect = canvas.getBoundingClientRect();
         return [e.clientX - rect.left, e.clientY - rect.top];
@@ -1372,7 +1420,20 @@ export function useXeokitTools(
         suppressNextClick = true;
 
         if (!moved) {
-          showObbEditPopup(obbId);
+          // 双击检测：300ms 内对同一图钉的两次点击才会弹出编辑框
+          const now = Date.now();
+          const isDoubleClick = lastClickObbId === obbId && (now - lastClickTime) < 300;
+
+          if (isDoubleClick) {
+            // 双击 -> 弹出编辑框
+            showObbEditPopup(obbId);
+            lastClickTime = 0;
+            lastClickObbId = null;
+          } else {
+            // 单击 -> 仅选中，记录时间用于双击检测
+            lastClickTime = now;
+            lastClickObbId = obbId;
+          }
           return;
         }
 
@@ -2278,6 +2339,13 @@ export function useXeokitTools(
     const viewer = viewerRef.value;
     if (!viewer) return;
 
+    // 触发模型显示事件，确保关联的模型已加载
+    window.dispatchEvent(
+      new CustomEvent('showModelByRefnos', {
+        detail: { refnos: [refno], regenModel: false }
+      })
+    );
+
     // 清除当前选择
     clearSceneSelection(viewer);
 
@@ -2303,6 +2371,15 @@ export function useXeokitTools(
   function highlightAnnotationTargets(refnos: string[]) {
     const viewer = viewerRef.value;
     if (!viewer) return;
+
+    // 触发模型显示事件，确保关联的模型已加载
+    if (refnos.length > 0) {
+      window.dispatchEvent(
+        new CustomEvent('showModelByRefnos', {
+          detail: { refnos, regenModel: false }
+        })
+      );
+    }
 
     // 清除当前选择
     clearSceneSelection(viewer);

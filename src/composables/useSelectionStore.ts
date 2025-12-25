@@ -1,61 +1,52 @@
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useQuery } from '@tanstack/vue-query';
 
-import { pdmsGetUiAttr, type PdmsUiAttrResponse } from '@/api/genModelPdmsAttrApi';
+import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 
 const selectedRefno = ref<string | null>(null);
 
-const propertiesLoading = ref(false);
-const propertiesError = ref<string | null>(null);
-const propertiesData = ref<PdmsUiAttrResponse['attrs'] | null>(null);
-
-let loadSeq = 0;
-
-async function loadProperties(refno: string) {
-  const seq = ++loadSeq;
-  selectedRefno.value = refno;
-  propertiesLoading.value = true;
-  propertiesError.value = null;
-
-  try {
-    const resp = await pdmsGetUiAttr(refno);
-    if (seq !== loadSeq) return;
-
-    if (!resp.success) {
-      propertiesData.value = null;
-      propertiesError.value = resp.error_message || '属性查询失败';
-      return;
-    }
-
-    propertiesData.value = resp.attrs || {};
-  } catch (e) {
-    if (seq !== loadSeq) return;
-    propertiesData.value = null;
-    propertiesError.value = e instanceof Error ? e.message : String(e);
-  } finally {
-    if (seq === loadSeq) {
-      propertiesLoading.value = false;
-    }
-  }
-}
-
-function clearSelection() {
-  loadSeq++;
-  selectedRefno.value = null;
-  propertiesLoading.value = false;
-  propertiesError.value = null;
-  propertiesData.value = null;
-}
-
-function setSelectedRefno(refno: string | null) {
-  if (refno === selectedRefno.value) return;
-  loadSeq++;
-  selectedRefno.value = refno;
-  propertiesLoading.value = false;
-  propertiesError.value = null;
-  propertiesData.value = null;
+function usePdmsUiAttrQuery(refno: string | null) {
+  return useQuery({
+    queryKey: ['pdms', 'ui-attr', refno],
+    queryFn: () => pdmsGetUiAttr(refno!),
+    enabled: computed(() => !!refno),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
+  });
 }
 
 export function useSelectionStore() {
+  const {
+    data,
+    isLoading: propertiesLoading,
+    error,
+    isError,
+  } = usePdmsUiAttrQuery(selectedRefno.value);
+
+  // 当外部逻辑（如 loadProperties）修改 selectedRefno 时，我们需要确保 query 能感知到。
+  // 注意：在 store 模式下，selectedRefno 是全局单例。
+
+  // 暴露给外界的响应式属性
+  const propertiesData = computed(() => (data.value?.success ? data.value.attrs : null));
+  const propertiesError = computed(() => {
+    if (isError.value) return error.value instanceof Error ? error.value.message : String(error.value);
+    if (data.value && !data.value.success) return data.value.error_message || '属性查询失败';
+    return null;
+  });
+
+  async function loadProperties(refno: string) {
+    selectedRefno.value = refno;
+  }
+
+  function clearSelection() {
+    selectedRefno.value = null;
+  }
+
+  function setSelectedRefno(refno: string | null) {
+    if (refno === selectedRefno.value) return;
+    selectedRefno.value = refno;
+  }
+
   return {
     selectedRefno,
     propertiesLoading,

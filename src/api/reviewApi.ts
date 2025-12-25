@@ -259,6 +259,22 @@ export async function reviewTaskCancel(
   );
 }
 
+// ============ 外部校审集成 API ============
+
+export async function reviewGetEmbedUrl(projectId: string, userId: string): Promise<{ url: string }> {
+  return await fetchJson<{ url: string }>('/api/review/embed-url', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, user_id: userId }),
+  });
+}
+
+export async function reviewPreloadCache(projectId: string, initiator: string): Promise<{ success: boolean; message: string }> {
+  return await fetchJson<{ success: boolean; message: string }>('/api/review/preload-cache', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, initiator }),
+  });
+}
+
 // ============ 确认记录 API ============
 
 /**
@@ -416,6 +432,65 @@ export async function reviewAttachmentUpload(
   }
 
   return (await resp.json()) as { success: boolean; attachment?: ReviewAttachment; error_message?: string };
+}
+
+/**
+ * 上传附件（支持进度回调）
+ * POST /api/review/attachments
+ * @param taskId 任务ID（可选，创建任务前上传时为空）
+ * @param file 要上传的文件
+ * @param onProgress 进度回调函数，参数为 0-100 的百分比
+ */
+export function reviewAttachmentUploadWithProgress(
+  taskId: string | null,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ success: boolean; attachment?: ReviewAttachment; error_message?: string }> {
+  return new Promise((resolve, reject) => {
+    const base = getBaseUrl().replace(/\/$/, '');
+    const formData = new FormData();
+    formData.append('file', file);
+    if (taskId) {
+      formData.append('taskId', taskId);
+    }
+
+    const xhr = new XMLHttpRequest();
+
+    // 进度事件
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        onProgress(percent);
+      }
+    };
+
+    // 完成事件
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+        } catch {
+          reject(new Error('Invalid JSON response'));
+        }
+      } else {
+        reject(new Error(`Upload failed: HTTP ${xhr.status} ${xhr.statusText}`));
+      }
+    };
+
+    // 错误事件
+    xhr.onerror = () => {
+      reject(new Error('Network error during upload'));
+    };
+
+    // 中止事件
+    xhr.onabort = () => {
+      reject(new Error('Upload aborted'));
+    };
+
+    xhr.open('POST', `${base}/api/review/attachments`);
+    xhr.send(formData);
+  });
 }
 
 /**

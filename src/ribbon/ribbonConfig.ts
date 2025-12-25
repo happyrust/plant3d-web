@@ -203,6 +203,9 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         label: '面板',
         items: [
           { kind: 'button', id: 'panel.review', label: '校审面板', icon: 'clipboard_list', commandId: 'panel.review' },
+          { kind: 'button', id: 'panel.reviewerTasks', label: '待审核', icon: 'clipboard_check', commandId: 'panel.reviewerTasks' },
+          { kind: 'button', id: 'panel.resubmissionTasks', label: '复审任务', icon: 'redo', commandId: 'panel.resubmissionTasks' },
+          { kind: 'button', id: 'panel.myTasks', label: '我的提资', icon: 'file_text', commandId: 'panel.myTasks' },
         ],
       },
       {
@@ -236,7 +239,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         id: 'debug.basic',
         label: '调试',
         items: [
-          { kind: 'button', id: 'debug.placeholder', label: '未实现', icon: 'bug', commandId: 'debug.placeholder' },
+          { kind: 'button', id: 'debug.parquetSql', label: 'Parquet SQL', icon: 'database', commandId: 'panel.parquetDebug' },
         ],
       },
     ],

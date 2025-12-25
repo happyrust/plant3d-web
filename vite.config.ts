@@ -7,7 +7,7 @@ import vuetify from 'vite-plugin-vuetify';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/plant3d-web/',
+  base: '/',
   plugins: [
     vue({
       template: { transformAssetUrls: false }

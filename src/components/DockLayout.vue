@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 
 import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 
@@ -9,6 +9,19 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { onCommand } from '@/ribbon/commandBus';
+
+// 检测 URL 参数（用于 iframe 嵌入模式）
+const embedModeParams = computed(() => {
+  const urlParams = new URLSearchParams(window.location.search);
+  return {
+    formId: urlParams.get('form_id'),
+    userToken: urlParams.get('user_token'),
+    userId: urlParams.get('user_id'),
+    projectId: urlParams.get('project_id'),
+    isEmbedMode: !!urlParams.get('form_id'),
+  };
+});
+
 
 const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v2';
 const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v2-migrated-properties';
@@ -275,6 +288,30 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'myTasks') {
+    return dockApi.addPanel({
+      id: 'myTasks',
+      component: 'DesignerTaskListPanel',
+      title: '我的提资',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
+  if (panelId === 'resubmissionTasks') {
+    return dockApi.addPanel({
+      id: 'resubmissionTasks',
+      component: 'ResubmissionTaskListPanel',
+      title: '复审任务',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'taskMonitor') {
     return dockApi.addPanel({
       id: 'taskMonitor',
@@ -316,6 +353,16 @@ function ensurePanel(panelId: string) {
       id: 'console',
       component: 'ConsolePanel',
       title: '控制台',
+      position: viewerPanel
+        ? { referencePanel: viewerPanel, direction: 'below' }
+        : undefined,
+    });
+  }
+  if (panelId === 'parquetDebug') {
+    return dockApi.addPanel({
+      id: 'parquetDebug',
+      component: 'ParquetDebugPanel',
+      title: 'Parquet SQL',
       position: viewerPanel
         ? { referencePanel: viewerPanel, direction: 'below' }
         : undefined,
@@ -389,6 +436,15 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.review':
       togglePanel('review');
       return;
+    case 'panel.myTasks':
+      togglePanel('myTasks');
+      return;
+    case 'panel.reviewerTasks':
+      togglePanel('reviewerTasks');
+      return;
+    case 'panel.resubmissionTasks':
+      togglePanel('resubmissionTasks');
+      return;
     case 'panel.monitor':
       togglePanel('taskMonitor');
       return;
@@ -400,6 +456,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.taskCreation':
       togglePanel('taskCreation');
+      return;
+    case 'panel.parquetDebug':
+      togglePanel('parquetDebug');
       return;
 
     // task creation with preset type
@@ -540,8 +599,34 @@ function onReady(event: DockviewReadyEvent) {
   migratePropertiesPanelOnce();
 
   setTimeout(() => {
-    activatePanel('modelTree');
-    activatePanel('viewer');
+    // 检测是否为嵌入模式（三维校审）
+    if (embedModeParams.value.isEmbedMode) {
+      console.log('[DockLayout] 📋 嵌入模式检测到:', embedModeParams.value);
+      
+      // 存储嵌入模式参数供其他组件使用
+      sessionStorage.setItem('embed_mode_params', JSON.stringify(embedModeParams.value));
+      
+      // 根据用户角色打开相应面板
+      if (userStore.isDesigner.value) {
+        // 设计人员：自动打开发起提资面板
+        console.log('[DockLayout] 设计人员模式 - 打开发起提资面板');
+        const panel = ensurePanel('initiateReview');
+        if (panel) {
+          panel.api.setActive();
+        }
+      } else if (userStore.isReviewer.value) {
+        // 审核人员：打开校审面板
+        console.log('[DockLayout] 审核人员模式 - 打开校审面板');
+        const panel = ensurePanel('review');
+        if (panel) {
+          panel.api.setActive();
+        }
+      }
+    } else {
+      // 正常模式
+      activatePanel('modelTree');
+      activatePanel('viewer');
+    }
   }, 0);
 }
 

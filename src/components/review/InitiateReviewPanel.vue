@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
-import { AlertCircle, ArrowRight, Calendar, FileText, Plus, Users, X } from 'lucide-vue-next';
+import { AlertCircle, ArrowRight, Calendar, FileText, Link, Paperclip, Plus, Users, X } from 'lucide-vue-next';
 
 import { useUserStore } from '@/composables/useUserStore';
 import type { ReviewComponent } from '@/types/auth';
 import { getRoleDisplayName } from '@/types/auth';
+import FileUploadSection from './FileUploadSection.vue';
+import type { UploadedFile } from './FileUploadSection.vue';
+import AssociatedFilesList from './AssociatedFilesList.vue';
+import ExternalReviewViewer from './ExternalReviewViewer.vue';
 
 const userStore = useUserStore();
 
@@ -17,12 +21,60 @@ const dueDate = ref('');
 const selectedComponents = ref<ReviewComponent[]>([
   { id: 'comp-001', name: '/1RCV0244', refNo: '24383_75021', type: '管道组件' },
 ]);
+const uploadedFiles = ref<UploadedFile[]>([]);
+const showExternalReview = ref(false);
 
 const isSubmitting = ref(false);
 const notification = ref<{ type: 'success' | 'error' | null; message: string; details?: string }>({
   type: null,
   message: '',
   details: '',
+});
+
+// 嵌入模式参数
+const embedModeParams = ref<{
+  formId: string | null;
+  userToken: string | null;
+  userId: string | null;
+  projectId: string | null;
+  isEmbedMode: boolean;
+}>({
+  formId: null,
+  userToken: null,
+  userId: null,
+  projectId: null,
+  isEmbedMode: false,
+});
+
+// 在组件挂载时读取嵌入模式参数
+onMounted(() => {
+  const storedParams = sessionStorage.getItem('embed_mode_params');
+  if (storedParams) {
+    try {
+      embedModeParams.value = JSON.parse(storedParams);
+      console.log('[InitiateReviewPanel] 嵌入模式参数:', embedModeParams.value);
+    } catch (e) {
+      console.warn('[InitiateReviewPanel] 无法解析嵌入模式参数');
+    }
+  }
+});
+
+// 表单 ID（从嵌入模式获取或生成新的）
+const formId = computed(() => {
+  return embedModeParams.value.formId || 'FORM-' + Date.now().toString(16).toUpperCase();
+});
+
+const currentProjectId = computed(() => {
+  // 优先使用嵌入模式的 projectId
+  if (embedModeParams.value.projectId) {
+    return embedModeParams.value.projectId;
+  }
+  // Try to extract project from first component name (e.g. /1RCV0244/...)
+  if (selectedComponents.value.length > 0) {
+    const parts = selectedComponents.value[0].name.split('/');
+    if (parts.length > 1) return parts[1];
+  }
+  return 'demo-project';
 });
 
 const availableReviewers = computed(() => userStore.availableReviewers.value);
@@ -87,6 +139,7 @@ async function handleSubmit() {
     selectedComponents.value = [
       { id: 'comp-001', name: '/1RCV0244', refNo: '24383_75021', type: '管道组件' },
     ];
+    uploadedFiles.value = [];
   } catch (error) {
     notification.value = {
       type: 'error',
@@ -105,9 +158,27 @@ function clearNotification() {
 
 <template>
   <div class="p-4 space-y-4 overflow-auto h-full">
-    <div class="border-b pb-3">
-      <h3 class="text-lg font-semibold">创建提资单</h3>
-      <p class="text-sm text-gray-500 mt-1">选择模型构件并指定审核人员</p>
+    <div class="border-b pb-3 flex justify-between items-start">
+      <div>
+        <h3 class="text-lg font-semibold">创建提资单</h3>
+        <p class="text-sm text-gray-500 mt-1">选择模型构件并指定审核人员</p>
+        <!-- 嵌入模式显示 form_id -->
+        <div v-if="embedModeParams.isEmbedMode" class="mt-2 flex items-center gap-2">
+          <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+            📋 表单 ID: {{ formId }}
+          </span>
+          <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+            🏭 项目: {{ currentProjectId }}
+          </span>
+        </div>
+      </div>
+      <button
+        class="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+        @click="showExternalReview = true"
+      >
+        <Link class="h-4 w-4" />
+        三维校审
+      </button>
     </div>
 
     <!-- 模型构件选择 -->
@@ -165,6 +236,32 @@ function clearNotification() {
         placeholder="输入提资单描述（可选）"
         class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
       />
+    </div>
+
+    <!-- 附件文件上传 -->
+    <div class="space-y-2">
+      <label class="text-sm font-medium flex items-center gap-1">
+        <Paperclip class="h-4 w-4" />
+        附件文件
+      </label>
+      <FileUploadSection
+        v-model="uploadedFiles"
+        :max-files="10"
+        :max-size="50"
+        accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
+      />
+      <p class="text-xs text-gray-500">
+              支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB
+      </p>
+    </div>
+
+    <!-- 自动关联文件 -->
+    <div class="space-y-2">
+      <label class="text-sm font-medium flex items-center gap-1">
+        <Link class="h-4 w-4" />
+        自动关联文件
+      </label>
+      <AssociatedFilesList />
     </div>
 
     <!-- 审核人员和优先级 -->
@@ -254,5 +351,11 @@ function clearNotification() {
       <AlertCircle class="h-4 w-4" />
       <span>请填写必填字段：{{ missingFields.join('、') }}</span>
     </div>
+
+    <!-- 外部校审浏览器 -->
+    <ExternalReviewViewer
+      v-model="showExternalReview"
+      :project-id="currentProjectId"
+    />
   </div>
 </template>

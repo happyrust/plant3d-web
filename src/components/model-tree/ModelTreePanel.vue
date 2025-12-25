@@ -13,6 +13,7 @@ import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { cn } from '@/lib/utils';
 
 const props = defineProps<{
@@ -553,6 +554,18 @@ function showPtset() {
   closeContextMenu();
 }
 
+function viewProperties() {
+  if (!contextNodeId.value) return;
+  // 只有 refno 格式的节点才能查看属性
+  if (isRefnoLike(contextNodeId.value)) {
+    // 设置选中的 refno，触发属性面板加载
+    selection.setSelectedRefno(contextNodeId.value);
+    // 确保属性面板存在并激活
+    ensurePanelAndActivate('properties');
+  }
+  closeContextMenu();
+}
+
 function onSearchEnter(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return;
@@ -774,6 +787,11 @@ function onSearchEnter(value: string) {
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           @click="showPtset">
           显示点集
+        </button>
+        <button type="button"
+          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          @click="viewProperties">
+          查看属性
         </button>
       </div>
     </Teleport>

@@ -153,8 +153,10 @@ registerCommand('help', () => {
     addLog('info', '');
     addLog('info', 'Query commands (Q):');
     addLog('info', '  q <attr>          - Query attribute of selected element');
-    addLog('info', '  q pos / q wpos    - Query world position');
-    addLog('info', '  q ori / q wori    - Query world orientation');
+    addLog('info', '  q wpos            - Query world position');
+    addLog('info', '  q wori            - Query world orientation');
+    addLog('info', '  q pos             - Query local position');
+    addLog('info', '  q ori             - Query local orientation');
     addLog('info', '  q pos wrt owner   - Query position relative to owner');
     addLog('info', '  q ori wrt owner   - Query orientation relative to owner');
     addLog('info', '  q ref / q refno   - Query reference number');

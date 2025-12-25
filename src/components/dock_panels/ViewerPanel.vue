@@ -424,7 +424,7 @@ async function showModelByRefnos(refnos: string[], regenModel = false): Promise<
     if (result.parquet_files && result.parquet_files.length > 0) {
       console.log('[ViewerPanel] Loading Parquet files:', result.parquet_files);
       
-      await loadParquetToXeokit(viewer.value, dbno, {
+      const { sceneModel } = await loadParquetToXeokit(viewer.value, dbno, {
         modelId: `parquet-${dbno}`,
         parquetFiles: result.parquet_files,
         debug: true,
@@ -432,18 +432,32 @@ async function showModelByRefnos(refnos: string[], regenModel = false): Promise<
 
       currentDbno.value = dbno;
       console.log('[ViewerPanel] Parquet loaded successfully');
+      
+      // 自动聚焦飞行到加载的模型
+      if (sceneModel && viewer.value) {
+        console.log('[ViewerPanel] Flying to loaded model');
+        viewer.value.cameraFlight.flyTo({ aabb: sceneModel.aabb, duration: 1.0 });
+      }
+      
       return true;
     } else {
       console.log('[ViewerPanel] No parquet files in response, model may already exist');
       // 尝试从现有数据加载
       const files = await fetch(`/api/model/${dbno}/files`).then(r => r.ok ? r.json() : []);
       if (files && files.length > 0) {
-        await loadParquetToXeokit(viewer.value, dbno, {
+        const { sceneModel } = await loadParquetToXeokit(viewer.value, dbno, {
           modelId: `parquet-${dbno}`,
           parquetFiles: files,
           debug: true,
         });
         currentDbno.value = dbno;
+        
+        // 自动聚焦飞行到加载的模型
+        if (sceneModel && viewer.value) {
+          console.log('[ViewerPanel] Flying to loaded model');
+          viewer.value.cameraFlight.flyTo({ aabb: sceneModel.aabb, duration: 1.0 });
+        }
+        
         return true;
       }
     }

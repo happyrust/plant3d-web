@@ -118,8 +118,8 @@ export function usePdmsConsoleCommands() {
             };
 
             // Handle Q WPOS / Q POS WRT /* - 查询世界坐标位置
-            if (cmd === 'WPOS' || cmd === 'POS WRT /*' || cmd === 'POS') {
-                const pos = getAttr('POS') ?? getAttr('WPOS') ?? getAttr('POSITION');
+            if (cmd === 'WPOS' || cmd === 'POS WRT /*') {
+                const pos = getAttr('WPOS') ?? getAttr('POS');
                 if (pos !== undefined) {
                     const formatted = formatVec3(pos);
                     store.addLog('output', `Position (World): ${formatted}`);
@@ -132,20 +132,44 @@ export function usePdmsConsoleCommands() {
                         // @ts-ignore
                         store.addLog('output', `Position (World): ${formatPos(object.position)}`);
                     } else {
-                        store.addLog('info', 'Position attribute not found');
+                        store.addLog('info', 'World position not available');
                     }
                 }
                 return;
             }
 
+            // Handle Q POS - 查询本地坐标位置
+            if (cmd === 'POS') {
+                const pos = getAttr('POS') ?? getAttr('POSITION');
+                if (pos !== undefined) {
+                    const formatted = formatVec3(pos);
+                    store.addLog('output', `Position (Local): ${formatted}`);
+                } else {
+                    store.addLog('info', 'Local position not available');
+                }
+                return;
+            }
+
             // Handle Q WORI / Q ORI WRT /* - 查询世界坐标方位
-            if (cmd === 'WORI' || cmd === 'ORI WRT /*' || cmd === 'ORI') {
-                const ori = getAttr('ORI') ?? getAttr('WORI') ?? getAttr('ORIENTATION');
+            if (cmd === 'WORI' || cmd === 'ORI WRT /*') {
+                const ori = getAttr('WORI') ?? getAttr('ORI');
                 if (ori !== undefined) {
                     const formatted = formatVec3(ori);
                     store.addLog('output', `Orientation (World): ${formatted}`);
                 } else {
-                    store.addLog('info', 'Orientation attribute not found');
+                    store.addLog('info', 'World orientation not available');
+                }
+                return;
+            }
+
+            // Handle Q ORI - 查询本地坐标方位
+            if (cmd === 'ORI') {
+                const ori = getAttr('ORI') ?? getAttr('ORIENTATION');
+                if (ori !== undefined) {
+                    const formatted = formatVec3(ori);
+                    store.addLog('output', `Orientation (Local): ${formatted}`);
+                } else {
+                    store.addLog('info', 'Local orientation not available');
                 }
                 return;
             }
@@ -213,11 +237,14 @@ export function usePdmsConsoleCommands() {
 
     // = <Refno> (Go to Refno)
     store.registerCommand('=', async (args: string[]) => {
-        const refno = args[0];
+        let refno = args[0];
         if (!refno) {
             store.addLog('error', 'Usage: = <refno>');
             return;
         }
+
+        // 将斜线格式转换为下划线格式（例如 17496/272482 -> 17496_272482）
+        refno = refno.replace(/\//g, '_');
 
         const tree = getModelTreeInstance();
         if (!tree) {
@@ -232,7 +259,7 @@ export function usePdmsConsoleCommands() {
                 syncSceneSelection: true,
                 clearSearch: true
             });
-            store.addLog('output', `Navigated to: ${refno}`);
+            store.addLog('output', `CE set to: ${refno}`);
         } catch (e) {
             store.addLog('error', `Navigation failed: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -270,7 +297,7 @@ export function usePdmsConsoleCommands() {
                             syncSceneSelection: true,
                             clearSearch: true
                         });
-                        store.addLog('output', `Navigated to: ${match.name}`);
+                        store.addLog('output', `CE set to: ${match.name} (${refno})`);
                     } catch (e) {
                         store.addLog('error', `Navigation failed: ${e instanceof Error ? e.message : String(e)}`);
                     }
