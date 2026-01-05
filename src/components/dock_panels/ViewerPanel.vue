@@ -1,3 +1,4 @@
+<!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 

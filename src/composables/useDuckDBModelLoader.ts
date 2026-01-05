@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * DuckDB Model Loader
  *

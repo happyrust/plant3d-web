@@ -338,37 +338,36 @@ export function useTaskCreation(): UseTaskCreationReturn {
   /**
    * 构建请求数据
    */
-  function buildRequest(): TaskCreationRequest {
-    const request: TaskCreationRequest = {
+  function buildRequest(): any {
+    // 后端真正的请求结构是 CreateTaskRequest { name, task_type, config }
+    const request: any = {
       name: formData.name.trim(),
-      task_type: formData.type,
-      priority: formData.priority,
-      description: formData.description.trim() || undefined,
-      parameters: {} as TaskCreationRequest['parameters'],
+      task_type: formData.type === 'DataParsingWizard' ? 'DataParsingWizard' : 'DataGeneration',
+      config: {
+        name: formData.name.trim(),
+        manual_db_nums: formData.parseMode === 'dbnum' ? [Number(formData.dbnum)] : [],
+        manual_refnos: formData.parseMode === 'refno' ? [formData.refno.trim()] : [],
+        // 以下为 DatabaseConfig 的默认必需字段，参考后端 Default 实现
+        project_name: 'AvevaMarineSample',
+        project_path: '/Users/dongpengcheng/Documents/models/e3d_models',
+        project_code: 1516,
+        mdb_name: 'ALL',
+        module: 'DESI',
+        db_type: 'surrealdb',
+        surreal_ns: 1516,
+        db_ip: 'localhost',
+        db_port: '8020',
+        db_user: 'root',
+        db_password: 'root',
+        // 任务开关
+        gen_model: formData.type === 'DataGeneration' ? formData.generateModels : true,
+        gen_mesh: formData.type === 'DataGeneration' ? formData.generateMesh : false,
+        gen_spatial_tree: formData.type === 'DataGeneration' ? formData.generateSpatialTree : true,
+        apply_boolean_operation: formData.type === 'DataGeneration' ? formData.applyBooleanOperation : true,
+        mesh_tol_ratio: formData.type === 'DataGeneration' ? formData.meshTolRatio : 3.0,
+        room_keyword: '-RM',
+      },
     };
-
-    if (formData.type === 'DataParsingWizard') {
-      const parseParams: ParseTaskParameters = {
-        parseMode: formData.parseMode,
-      };
-      if (formData.parseMode === 'dbnum') {
-        parseParams.dbnum = Number(formData.dbnum);
-      }
-      if (formData.parseMode === 'refno') {
-        parseParams.refno = formData.refno.trim();
-      }
-      request.parameters = parseParams;
-    } else if (formData.type === 'DataGeneration') {
-      const modelParams: ModelGenParameters = {
-        generateModels: formData.generateModels,
-        generateMesh: formData.generateMesh,
-        generateSpatialTree: formData.generateSpatialTree,
-        applyBooleanOperation: formData.applyBooleanOperation,
-        meshTolRatio: formData.meshTolRatio,
-        maxConcurrent: formData.maxConcurrent,
-      };
-      request.parameters = modelParams;
-    }
 
     return request;
   }

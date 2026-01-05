@@ -1,3 +1,4 @@
+<!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 

@@ -1,9 +1,9 @@
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import type { Ref } from 'vue';
-import { useWebSocket } from './useWebSocket';
-import { loadAiosPrepackBundle } from '@/aios-prepack-bundle-loader';
 import { loadParquetToXeokit } from './useParquetModelLoader';
 import type { Viewer } from '@xeokit/xeokit-sdk';
+import { getBaseUrl, getTaskProgressWebSocketUrl } from '@/api/genModelTaskApi';
+import { useModelSettingsStore } from './useModelSettingsStore';
 
 export interface ModelGenerationOptions {
     db_num?: number;
@@ -33,6 +33,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     checkRefnoExists: (refno: string) => boolean;
 } {
     const { viewer } = options;
+    const apiBase = getBaseUrl().replace(/\/$/, '');
 
     const isGenerating = ref(false);
     const progress = ref(0);
@@ -94,7 +95,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             statusMessage.value = '调用生成 API...';
 
             // 3. Call generation API
-            const response = await fetch('http://localhost:8080/api/model/generate-by-refno', {
+            const response = await fetch(buildApiUrl('/api/model/generate-by-refno', apiBase), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -124,23 +125,30 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             progress.value = 10;
 
             // 4. Subscribe to WebSocket progress
-            const wsUrl = `ws://localhost:8080/ws/progress/${taskId}`;
+            const wsUrl = getTaskProgressWebSocketUrl(taskId);
 
-            const wsResult = await new Promise<string | null>((resolve, reject) => {
+            const wsResult = await new Promise<{
+                bundleUrl: string | null;
+                dbno: number | null;
+                parquetFiles: string[] | null;
+                metadata?: Record<string, unknown>;
+            }>((resolve, reject) => {
                 const ws = new WebSocket(wsUrl);
                 let progressTimeout: ReturnType<typeof setTimeout>;
+                let settled = false;
 
-                const cleanup = () => {
+                const finish = (fn: () => void) => {
+                    if (settled) return;
+                    settled = true;
                     clearTimeout(progressTimeout);
                     ws.close();
+                    fn();
                 };
 
                 ws.onopen = () => {
                     console.log(`[ModelGeneration] WebSocket connected: ${wsUrl}`);
-                    // Set timeout for task completion (5 minutes)
                     progressTimeout = setTimeout(() => {
-                        cleanup();
-                        reject(new Error('生成超时（5 分钟）'));
+                        finish(() => reject(new Error('生成超时（5 分钟）')));
                     }, 5 * 60 * 1000);
                 };
 
@@ -154,19 +162,26 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
                             statusMessage.value = data.progress.current_step || '生成中...';
                         }
 
-                        // Check for completion
                         if (data.status === 'completed' || data.task?.status === 'completed') {
-                            cleanup();
+                            const metadata = data.task?.metadata || data.metadata || {};
+                            const bundle_url = (metadata as Record<string, unknown>)?.['bundle_url'] as string | undefined
+                                || (metadata as Record<string, unknown>)?.['bundleUrl'] as string | undefined;
+                            const dbno = (metadata as Record<string, unknown>)?.['dbno'] as number | undefined
+                                || (metadata as Record<string, unknown>)?.['db_num'] as number | undefined;
+                            const parquetFiles = (metadata as Record<string, unknown>)?.['parquet_files'] as string[] | undefined
+                                || (metadata as Record<string, unknown>)?.['parquetFiles'] as string[] | undefined;
 
-                            // Extract bundle_url from metadata
-                            const metadata = data.task?.metadata || data.metadata;
-                            const bundle_url = metadata?.bundle_url;
-
-                            console.log(`[ModelGeneration] Task completed, bundle_url:`, bundle_url);
-                            resolve(bundle_url || null);
+                            finish(() => {
+                                console.log(`[ModelGeneration] Task completed, bundle_url:`, bundle_url);
+                                resolve({
+                                    bundleUrl: bundle_url || null,
+                                    dbno: dbno ?? null,
+                                    parquetFiles: parquetFiles ?? null,
+                                    metadata,
+                                });
+                            });
                         } else if (data.status === 'failed' || data.task?.status === 'failed') {
-                            cleanup();
-                            reject(new Error(data.error || data.task?.error || '生成失败'));
+                            finish(() => reject(new Error(data.error || data.task?.error || '生成失败')));
                         }
                     } catch (err) {
                         console.error('[ModelGeneration] Failed to parse WebSocket message:', err);
@@ -175,32 +190,36 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
                 ws.onerror = (event) => {
                     console.error('[ModelGeneration] WebSocket error:', event);
-                    cleanup();
-                    reject(new Error('WebSocket 连接错误'));
+                    finish(() => reject(new Error('WebSocket 连接错误')));
                 };
 
                 ws.onclose = (event) => {
                     console.log('[ModelGeneration] WebSocket closed:', event.code, event.reason);
-                    if (!event.wasClean) {
-                        cleanup();
-                        reject(new Error(`WebSocket 异常关闭: ${event.reason || event.code}`));
+                    if (!event.wasClean && !settled) {
+                        finish(() => reject(new Error(`WebSocket 异常关闭: ${event.reason || event.code}`)));
                     }
                 };
             });
 
             if (!wsResult) {
-                throw new Error('任务完成但未返回 bundle_url');
+                throw new Error('任务完成但未返回结果');
             }
 
-            bundleUrl.value = wsResult;
+            bundleUrl.value = resolveResourceUrl(wsResult.bundleUrl, apiBase);
             statusMessage.value = '加载 Parquet 模型...';
             progress.value = 85;
 
-            console.log(`[ModelGeneration] Loading Parquet for dbno: ${db_num}`);
+            const effectiveDbno = wsResult.dbno ?? db_num;
+            if (!effectiveDbno) {
+                throw new Error('后端未返回 dbno');
+            }
 
-            const loadResult = await loadParquetToXeokit(viewer, db_num, {
-                debug: true,
-                modelId: `generated_${taskId}`
+            console.log(`[ModelGeneration] Loading Parquet for dbno: ${effectiveDbno}`);
+
+            const loadResult = await loadParquetToXeokit(viewer, effectiveDbno, {
+                debug: false,
+                modelId: `generated_${taskId}`,
+                parquetFiles: wsResult.parquetFiles || undefined,
             });
 
             console.log(`[ModelGeneration] Parquet loaded, instances: ${loadResult.instanceCount}`);
@@ -242,14 +261,23 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         progress.value = 0;
         statusMessage.value = '正在生成模型...';
 
+        // 获取设置
+        const { isRegenModelEnabled } = useModelSettingsStore();
+        const regenModel = isRegenModelEnabled.value;
+
+        if (regenModel) {
+            console.log('[ModelGeneration] regen_model 已启用，将强制重新生成模型');
+        }
+
         try {
-            const response = await fetch('http://localhost:8080/api/model/show-by-refno', {
+            const response = await fetch(buildApiUrl('/api/model/show-by-refno', apiBase), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     refnos: [refno],
+                    regen_model: regenModel,
                     // 不再传递 db_num，后端自动从 SPdmsElement 查询
                 }),
             });
@@ -279,7 +307,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             console.log(`[ModelGeneration] Loading Parquet for dbno: ${dbno}, files:`, parquetFiles);
 
             const loadResult = await loadParquetToXeokit(viewer, dbno, {
-                debug: true,
+                debug: false,
                 modelId: `parquet_${dbno}`,
                 parquetFiles: parquetFiles  // 使用后端返回的文件列表
             });
@@ -343,4 +371,27 @@ function extractDbNumFromRefno(refno: string): number | null {
         }
     }
     return null;
+}
+
+/**
+ * 构建完整 API URL，复用统一的基址配置
+ */
+function buildApiUrl(path: string, base: string): string {
+    if (/^https?:\/\//.test(path)) return path;
+    const cleanBase = base.replace(/\/$/, '');
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${cleanBase}${cleanPath}`;
+}
+
+/**
+ * 处理后端返回的 bundle_url（可能为相对路径）
+ */
+function resolveResourceUrl(url: string | null, base: string): string | null {
+    if (!url) return null;
+    if (/^(https?:)?\/\//.test(url)) {
+        return url;
+    }
+    const cleanBase = base.replace(/\/$/, '');
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    return `${cleanBase}${cleanUrl}`;
 }

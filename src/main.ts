@@ -21,6 +21,7 @@ import TaskCreationPanelDock from '@/components/dock_panels/TaskCreationPanelDoc
 import ModelExportPanelDock from '@/components/dock_panels/ModelExportPanelDock.vue';
 import ConsolePanelDock from '@/components/dock_panels/ConsolePanelDock.vue';
 import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDock.vue';
+import RoomStatusPanelDock from '@/components/dock_panels/RoomStatusPanelDock.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
 import { VueQueryPlugin } from '@tanstack/vue-query';
 import vuetify from '@/plugins/vuetify';
@@ -46,5 +47,6 @@ app.component('TaskCreationPanel', TaskCreationPanelDock);
 app.component('ModelExportPanel', ModelExportPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('ParquetDebugPanel', ParquetDebugPanelDock);
+app.component('RoomStatusPanel', RoomStatusPanelDock);
 
 app.use(vuetify).mount('#app');

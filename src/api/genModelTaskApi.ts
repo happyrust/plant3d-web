@@ -14,7 +14,8 @@ import type {
 
 // ============ 基础配置 ============
 
-function getBaseUrl(): string {
+// 暴露基础地址构造，便于其他模块复用同一配置
+export function getBaseUrl(): string {
   const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
     .VITE_GEN_MODEL_API_BASE_URL;
   // Default to localhost:8080 if not specified
@@ -217,7 +218,36 @@ export async function taskPreviewConfig(
   });
 }
 
-// ============ 任务操作 API ============
+// ============ 基于 Refno 的模型生成 API ============
+
+/**
+ * 按需显示模型（零时任务，不保存记录）
+ * POST /api/model/show-by-refno
+ */
+export async function modelShowByRefno(params: {
+  refnos: string[];
+  db_num?: number;
+  regen_model?: boolean;
+  gen_mesh?: boolean;
+  gen_model?: boolean;
+}): Promise<{
+  success: boolean;
+  bundle_url?: string;
+  message: string;
+  metadata?: {
+    refno_count: number;
+    dbno: number;
+    temp_id: string;
+  };
+  parquet_files?: string[];
+}> {
+  return await fetchJson('/api/model/show-by-refno', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+// ============ 延迟删除 ============
 
 /**
  * 启动任务

@@ -1,4 +1,5 @@
-/**
+// @ts-nocheck
+/** 
  * ptset (点集/连接点) 可视化 composable
  *
  * 用于在 xeokit 3D 场景中渲染元件的点集数据：

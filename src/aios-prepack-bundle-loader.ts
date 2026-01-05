@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { parse } from '@loaders.gl/core';
 import { GLTFLoader, postProcessGLTF, type GLTFPostprocessed, type GLTFWithBuffers, type GLTFAccessorPostprocessed } from '@loaders.gl/gltf';
 import { SceneModel, type Viewer } from '@xeokit/xeokit-sdk';

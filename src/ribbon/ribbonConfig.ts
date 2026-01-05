@@ -184,6 +184,14 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'space_calc.range_query', label: '范围查询', icon: 'search', commandId: 'panel.query' },
         ],
       },
+      {
+        id: 'space_calc.room',
+        label: '房间计算',
+        items: [
+          { kind: 'button', id: 'space_calc.room_compute', label: '构建房间关系', icon: 'home', commandId: 'room.compute' },
+          { kind: 'button', id: 'space_calc.room_status', label: '计算状态', icon: 'activity', commandId: 'panel.roomStatus' },
+        ],
+      },
     ],
   },
   {

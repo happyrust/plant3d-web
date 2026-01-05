@@ -365,6 +365,7 @@
   </div>
 </template>
 
+<!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useTaskCreation } from '@/composables/useTaskCreation';

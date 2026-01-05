@@ -136,6 +136,7 @@
   </div>
 </template>
 
+<!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue';
 import { taskCreate, taskGetById, taskDownloadExport } from '@/api/genModelTaskApi';

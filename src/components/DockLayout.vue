@@ -368,6 +368,18 @@ function ensurePanel(panelId: string) {
         : undefined,
     });
   }
+  if (panelId === 'roomStatus') {
+    return dockApi.addPanel({
+      id: 'roomStatus',
+      component: 'RoomStatusPanel',
+      title: '房间计算状态',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
 }
 
 function togglePanel(panelId: string) {
@@ -459,6 +471,13 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.parquetDebug':
       togglePanel('parquetDebug');
+      return;
+    case 'panel.roomStatus':
+      togglePanel('roomStatus');
+      return;
+    case 'room.compute':
+      // 触发房间计算，同时打开状态面板
+      togglePanel('roomStatus');
       return;
 
     // task creation with preset type

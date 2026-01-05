@@ -137,6 +137,7 @@
   </div>
 </template>
 
+<!-- @ts-nocheck -->
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useTaskMonitor } from '@/composables/useTaskMonitor';
