@@ -6,8 +6,9 @@
  */
 
 import { ref, computed } from 'vue'
-import type { Viewer, SceneModel } from '@xeokit/xeokit-sdk'
+import type { Viewer } from '@xeokit/xeokit-sdk'
 import { loadSurrealToXeokit, type SurrealLoadOptions, type SurrealLoadResult } from './useSurrealModelLoader'
+import { getBaseUrl } from '@/api/genModelTaskApi'
 
 // ========================
 // 类型定义
@@ -24,6 +25,8 @@ export interface StreamGenerateEvent {
     batchIndex?: number
     batchCount?: number
     generatedRefnos?: string[]
+    skippedRefnos?: string[]
+    warning?: string
     progress?: number
     totalGenerated?: number
     totalSkipped?: number
@@ -38,6 +41,7 @@ export interface StreamGenerateRequest {
     forceRegenerate?: boolean
     batchSize?: number
     maxDepth?: number
+    applyBoolean?: boolean
 }
 
 /** 流式生成状态 */
@@ -64,6 +68,8 @@ export interface StreamGenerateOptions extends SurrealLoadOptions {
     batchSize?: number
     /** 最大展开深度 */
     maxDepth?: number
+    /** 是否执行布尔运算（孔洞/负实体结果） */
+    applyBoolean?: boolean
     /** 批次完成回调 */
     onBatchComplete?: (refnos: string[], batchIndex: number) => void
     /** 进度更新回调 */
@@ -107,11 +113,12 @@ export function useStreamGenerate() {
         options: StreamGenerateOptions = {}
     ): Promise<SurrealLoadResult | null> {
         const {
-            apiBaseUrl = 'http://localhost:8080',
+            apiBaseUrl = getBaseUrl(),
             expandChildren = true,
             forceRegenerate = false,
             batchSize = 50,
-            maxDepth = 10,
+            maxDepth = 0,
+            applyBoolean,
             onBatchComplete,
             onProgress,
             onError,
@@ -131,6 +138,9 @@ export function useStreamGenerate() {
         }
 
         try {
+            const abortController = new AbortController()
+            currentAbortController = abortController
+
             // 1. 创建 SSE 连接
             const response = await fetch(`${apiBaseUrl}/api/model/stream-generate`, {
                 method: 'POST',
@@ -138,12 +148,14 @@ export function useStreamGenerate() {
                     'Content-Type': 'application/json',
                     Accept: 'text/event-stream',
                 },
+                signal: abortController.signal,
                 body: JSON.stringify({
                     refnos,
                     expandChildren,
                     forceRegenerate,
                     batchSize,
                     maxDepth,
+                    applyBoolean: applyBoolean ?? !!loadOptions.enableHoles,
                 } as StreamGenerateRequest),
             })
 
@@ -158,10 +170,13 @@ export function useStreamGenerate() {
 
             const decoder = new TextDecoder()
             let buffer = ''
-            let allGeneratedRefnos: string[] = []
-            let sceneModel: SceneModel | null = null
+            const loadedSet = new Set<string>()
+            const loadedBatches: string[][] = []
+            // 收集所有待加载的 refnos，SSE 结束后统一加载
+            const allRefnosToLoad: string[] = []
+            let shouldStop = false
 
-            // 2. 处理 SSE 事件
+            // 2. 处理 SSE 事件（只收集数据，不立即加载）
             while (true) {
                 const { done, value } = await reader.read()
                 if (done) break
@@ -178,48 +193,66 @@ export function useStreamGenerate() {
                         if (jsonStr) {
                             try {
                                 const event: StreamGenerateEvent = JSON.parse(jsonStr)
-                                await handleStreamEvent(
+                                const batchToLoad = await handleStreamEvent(
                                     event,
-                                    viewer,
-                                    loadOptions,
-                                    allGeneratedRefnos,
+                                    loadedSet,
+                                    loadedBatches,
                                     onBatchComplete,
                                     onProgress,
                                     onError
                                 )
+                                if (event.type === 'finished' || event.type === 'error') {
+                                    shouldStop = true
+                                    break
+                                }
+                                // 收集 refnos，不立即加载
+                                if (batchToLoad && batchToLoad.length > 0) {
+                                    allRefnosToLoad.push(...batchToLoad)
+                                }
                             } catch (e) {
                                 console.warn('[StreamGenerate] Failed to parse event:', jsonStr, e)
                             }
                         }
                     }
                 }
+                if (shouldStop) {
+                    try {
+                        await reader.cancel()
+                    } catch {
+                        // ignore
+                    }
+                    break
+                }
             }
 
-            // 3. 加载所有生成的模型
-            if (allGeneratedRefnos.length > 0 || state.value.skippedCount > 0) {
-                // 使用所有原始 refnos 加载（包括跳过的已存在的）
-                const refnosSet = new Set([...refnos, ...allGeneratedRefnos])
-                const refnosToLoad = Array.from(refnosSet)
-                console.log('[StreamGenerate] Loading final model with', refnosToLoad.length, 'refnos')
-
-                const result = await loadSurrealToXeokit(viewer, refnosToLoad, {
+            // 3. SSE 结束后，统一加载所有 refnos（只调用一次 finalize）
+            let loadResult: SurrealLoadResult | null = null
+            if (allRefnosToLoad.length > 0) {
+                onProgress?.(90, `正在渲染 ${allRefnosToLoad.length} 个构件...`)
+                const modelId = loadOptions.modelId || `stream-generated-${Date.now()}`
+                loadResult = await loadSurrealToXeokit(viewer, allRefnosToLoad, {
                     ...loadOptions,
-                    modelId: loadOptions.modelId || 'stream-generated',
+                    modelId,
                 })
-
-                state.value.isLoading = false
-                state.value.progress = 100
-                return result
             }
 
             state.value.isLoading = false
-            return null
+            state.value.progress = 100
+            currentAbortController = null
+            return loadResult
         } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                state.value.isLoading = false
+                currentAbortController = null
+                return null
+            }
             const errorMsg = error instanceof Error ? error.message : String(error)
             state.value.errors.push(errorMsg)
             state.value.isLoading = false
             onError?.(errorMsg)
             throw error
+        } finally {
+            currentAbortController = null
         }
     }
 
@@ -228,18 +261,17 @@ export function useStreamGenerate() {
      */
     async function handleStreamEvent(
         event: StreamGenerateEvent,
-        viewer: Viewer,
-        loadOptions: SurrealLoadOptions,
-        allGeneratedRefnos: string[],
+        loadedSet: Set<string>,
+        loadedBatches: string[][],
         onBatchComplete?: (refnos: string[], batchIndex: number) => void,
         onProgress?: (progress: number, message: string) => void,
         onError?: (error: string) => void
-    ) {
+    ): Promise<string[] | null> {
         switch (event.type) {
             case 'started':
                 console.log('[StreamGenerate] Started:', event.message)
                 onProgress?.(0, event.message || '开始处理')
-                break
+                return null
 
             case 'expandComplete':
                 console.log(
@@ -252,7 +284,7 @@ export function useStreamGenerate() {
                 )
                 state.value.skippedCount = event.skippedCount || 0
                 onProgress?.(5, `展开完成: ${event.expandedCount} 个节点`)
-                break
+                return null
 
             case 'batchComplete':
                 console.log(
@@ -266,25 +298,58 @@ export function useStreamGenerate() {
                 state.value.currentBatch = (event.batchIndex || 0) + 1
                 state.value.totalBatches = event.batchCount || 0
                 state.value.progress = event.progress || 0
+                if (event.warning) {
+                    state.value.errors.push(event.warning)
+                    onError?.(event.warning)
+                }
 
-                if (event.generatedRefnos) {
-                    allGeneratedRefnos.push(...event.generatedRefnos)
-                    state.value.loadedRefnos.push(...event.generatedRefnos)
+                const ready = [
+                    ...(event.skippedRefnos || []),
+                    ...(event.generatedRefnos || []),
+                ]
+                const uniqueToLoad: string[] = []
+                for (const r of ready) {
+                    if (!loadedSet.has(r)) {
+                        loadedSet.add(r)
+                        uniqueToLoad.push(r)
+                    }
+                }
+
+                if (event.generatedRefnos && event.generatedRefnos.length > 0) {
                     state.value.generatedCount += event.generatedRefnos.length
                     onBatchComplete?.(event.generatedRefnos, event.batchIndex || 0)
                 }
+                if (uniqueToLoad.length > 0) {
+                    state.value.loadedRefnos.push(...uniqueToLoad)
+                }
+                loadedBatches.push(uniqueToLoad)
 
                 onProgress?.(
                     event.progress || 0,
                     `批次 ${(event.batchIndex || 0) + 1}/${event.batchCount} 完成`
                 )
-                break
+                return uniqueToLoad
 
             case 'batchFailed':
                 console.error('[StreamGenerate] Batch', event.batchIndex, 'failed:', event.error)
                 state.value.errors.push(event.error || '批次生成失败')
                 onError?.(event.error || '批次生成失败')
-                break
+                // 即使生成失败，也尝试加载 skipped（如果后端提供）
+                if (event.skippedRefnos && event.skippedRefnos.length > 0) {
+                    const uniqueToLoad: string[] = []
+                    for (const r of event.skippedRefnos) {
+                        if (!loadedSet.has(r)) {
+                            loadedSet.add(r)
+                            uniqueToLoad.push(r)
+                        }
+                    }
+                    loadedBatches.push(uniqueToLoad)
+                    if (uniqueToLoad.length > 0) {
+                        state.value.loadedRefnos.push(...uniqueToLoad)
+                    }
+                    return uniqueToLoad
+                }
+                return null
 
             case 'finished':
                 console.log(
@@ -298,22 +363,26 @@ export function useStreamGenerate() {
                 )
                 state.value.progress = 100
                 onProgress?.(100, `完成: ${event.totalGenerated} 个生成, ${event.totalSkipped} 个跳过`)
-                break
+                return null
 
             case 'error':
                 console.error('[StreamGenerate] Error:', event.message)
                 state.value.errors.push(event.message || '未知错误')
                 onError?.(event.message || '未知错误')
-                break
+                return null
         }
+        return null
     }
+
+    let currentAbortController: AbortController | null = null
 
     /**
      * 取消当前加载
      */
     function cancel() {
+        currentAbortController?.abort()
+        currentAbortController = null
         state.value.isLoading = false
-        // TODO: 实现 AbortController 支持
     }
 
     /**

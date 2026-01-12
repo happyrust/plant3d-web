@@ -148,34 +148,27 @@ watch(
 async function setVisible(id: string, visible: boolean) {
   // Only auto-generate for PDMS tree and when trying to show (visible = true)
   const shouldTryGenerate = !isRoomTree.value && visible && modelGenerationState.value;
-  
+
   if (shouldTryGenerate) {
     // Check if it looks like a refno (123/456 or 123_456)
     // If it's a refno, we try to auto-generate if missing
     if (isRefnoLike(id)) {
       // Check if refno exists in cache
       const exists = modelGenerationState.value!.checkRefnoExists(id);
-      
-      console.log(`[ModelTreePanel] setVisible ${id}: exists=${exists}`);
 
       if (!exists) {
-        console.log(`[ModelTreePanel] refno ${id} not found in cache, triggering direct generation (no task creation)`);
-        
         // Use showModelByRefno (direct generation without task)
         const success = await modelGenerationState.value!.showModelByRefno(id);
-        
-        if (!success) {
-          console.error(`[ModelTreePanel] Failed to show model for refno ${id}`);
-          // Still proceed to call setVisible to show any partially loaded data
-        } else {
-          console.log(`[ModelTreePanel] Successfully generated and loaded model for refno ${id}`);
+
+        if (success) {
+          // 模型已加载成功，SurrealModelLoader 创建的模型默认可见，无需再调用 tree.setVisible
+          return;
         }
+        // 失败时继续调用 setVisible 显示部分加载的数据
       }
-    } else {
-      console.log(`[ModelTreePanel] setVisible ${id}: ignored for generation (not refno-like)`);
     }
   }
-  
+
   // Call the original setVisible logic
   if (isRoomTree.value) {
     roomTree.setVisible(id, visible);
@@ -829,6 +822,9 @@ function onSearchEnter(value: string) {
       :progress="modelGenerationState.progress.value"
       :status="modelGenerationState.statusMessage.value"
       :error="modelGenerationState.error.value"
+      :total-count="modelGenerationState.totalCount.value"
+      :current-index="modelGenerationState.currentIndex.value"
+      :current-refno="modelGenerationState.currentRefno.value"
       @close="modelGenerationState.isGenerating.value = false"
     />
   </div>
