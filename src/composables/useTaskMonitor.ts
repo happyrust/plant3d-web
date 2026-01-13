@@ -2,7 +2,7 @@
 // 基于后端 Rust/Axum 实现
 // 注意：后端不支持 pause/resume 功能
 
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, type ComputedRef, type Ref } from 'vue';
 import type { Task, SystemMetrics, WebSocketMessage } from '@/types/task';
 import {
   taskGetList,
@@ -27,24 +27,24 @@ export type UseTaskMonitorOptions = {
 
 export type UseTaskMonitorReturn = {
   /** 任务列表 */
-  tasks: ReturnType<typeof ref<Task[]>>;
+  tasks: Ref<Task[]>;
   /** 系统指标 */
-  systemMetrics: ReturnType<typeof ref<SystemMetrics | null>>;
+  systemMetrics: Ref<SystemMetrics | null>;
   /** 是否正在加载 */
-  loading: ReturnType<typeof ref<boolean>>;
+  loading: Ref<boolean>;
   /** 错误信息 */
-  error: ReturnType<typeof ref<string | null>>;
+  error: Ref<string | null>;
   /** WebSocket 连接状态 */
-  isWsConnected: ReturnType<typeof ref<boolean>>;
+  isWsConnected: Ref<boolean>;
   /** 最后更新时间 */
-  lastUpdateTime: ReturnType<typeof ref<string | null>>;
+  lastUpdateTime: Ref<string | null>;
 
   /** 按状态分组的任务 */
-  tasksByStatus: ReturnType<typeof computed<Record<Task['status'], Task[]>>>;
+  tasksByStatus: ComputedRef<Record<Task['status'], Task[]>>;
   /** 运行中的任务数 */
-  runningTaskCount: ReturnType<typeof computed<number>>;
+  runningTaskCount: ComputedRef<number>;
   /** 等待中的任务数 */
-  pendingTaskCount: ReturnType<typeof computed<number>>;
+  pendingTaskCount: ComputedRef<number>;
 
   /** 刷新数据 */
   refresh: () => Promise<void>;

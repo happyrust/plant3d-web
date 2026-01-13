@@ -152,10 +152,28 @@ function formatCoord(pt: [number, number, number]): string {
   return `(${pt[0].toFixed(1)}, ${pt[1].toFixed(1)}, ${pt[2].toFixed(1)})`;
 }
 
+export type UsePtsetVisualizationReturn = {
+  visualObjects: Ref<Map<string, PtsetVisualObject>>;
+  isVisible: Ref<boolean>;
+  currentRefno: Ref<string | null>;
+  currentResponse: Ref<PtsetResponse | null>;
+  showCrosses: Ref<boolean>;
+  showLabels: Ref<boolean>;
+  showArrows: Ref<boolean>;
+  renderPtset: (refno: string, response: PtsetResponse) => void;
+  clearAll: () => void;
+  setVisible: (visible: boolean) => void;
+  setCrossesVisible: (visible: boolean) => void;
+  setLabelsVisible: (visible: boolean) => void;
+  setArrowsVisible: (visible: boolean) => void;
+  flyToPtset: () => void;
+  updateLabelPositions: () => void;
+};
+
 export function usePtsetVisualization(
   viewerRef: Ref<Viewer | null>,
   labelContainerRef: Ref<HTMLElement | null>
-) {
+): UsePtsetVisualizationReturn {
   const visualObjects = ref<Map<string, PtsetVisualObject>>(new Map());
   const isVisible = ref(false);
   const currentRefno = ref<string | null>(null);

@@ -283,13 +283,13 @@ async function handleSubmit() {
   submitError.value = '';
 
   try {
-    const response = await taskCreate({
-      name: `导出模型 - ${formData.value.refno}`,
-      type: 'ModelExport',
-      priority: formData.value.priority,
-      parameters: {
-        refno: formData.value.refno,
-        regenModel: formData.value.regenModel,
+	    const response = await taskCreate({
+	      name: `导出模型 - ${formData.value.refno}`,
+	      task_type: 'ModelExport',
+	      priority: formData.value.priority,
+	      parameters: {
+	        refno: formData.value.refno,
+	        regenModel: formData.value.regenModel,
         exportObj: formData.value.exportObj,
       },
     });

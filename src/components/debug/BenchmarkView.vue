@@ -70,18 +70,18 @@ async function runBenchmark() {
     const batchSize = 100;
     
     // Sync PE
-    appendLog(`  -> Syncing PE...`);
-    for (let i = 0; i < pes.length; i += batchSize) {
-      const batch = pes.slice(i, i + batchSize);
-      await Promise.all(batch.map(p => local.create(p.id, p)));
-    }
+	    appendLog(`  -> Syncing PE...`);
+	    for (let i = 0; i < pes.length; i += batchSize) {
+	      const batch = pes.slice(i, i + batchSize);
+	      await Promise.all(batch.map(p => local.create(p.id).content(p)));
+	    }
 
     // Sync InstRelate
-    appendLog(`  -> Syncing InstRelate...`);
-    for (let i = 0; i < insts.length; i += batchSize) {
-      const batch = insts.slice(i, i + batchSize);
-      await Promise.all(batch.map(ins => local.create(ins.id, ins)));
-    }
+	    appendLog(`  -> Syncing InstRelate...`);
+	    for (let i = 0; i < insts.length; i += batchSize) {
+	      const batch = insts.slice(i, i + batchSize);
+	      await Promise.all(batch.map(ins => local.create(ins.id).content(ins)));
+	    }
 
     const endTimeSync = performance.now();
     const syncDuration = (endTimeSync - startTimeSync) / 1000;

@@ -158,16 +158,29 @@ export function useSceneTreeLoader() {
 
             console.log(`[SceneTreeLoader] SurrealDB returned ${rows.length} nodes`)
 
-            return rows.map((row: Record<string, unknown>) => ({
-                id: row.refno ?? row.id ?? '',
-                parent: row.parent ?? null,
-                name: String(row.name ?? ''),
-                has_geo: Boolean(row.has_geo),
-                is_leaf: Boolean(row.is_leaf),
-                generated: Boolean(row.generated),
-                dbno: Number(row.dbno ?? dbno),
-                geo_type: row.geo_type ? String(row.geo_type) : null,
-            }))
+            return rows.map((row: Record<string, unknown>) => {
+                const idRaw = row.refno ?? row.id
+                const parentRaw = row.parent
+                const id: number | string =
+                    typeof idRaw === 'number' || typeof idRaw === 'string' ? idRaw : String(idRaw ?? '')
+                const parent: number | string | null =
+                    parentRaw == null
+                        ? null
+                        : (typeof parentRaw === 'number' || typeof parentRaw === 'string'
+                              ? parentRaw
+                              : String(parentRaw))
+
+                return {
+                    id,
+                    parent,
+                    name: String(row.name ?? ''),
+                    has_geo: Boolean(row.has_geo),
+                    is_leaf: Boolean(row.is_leaf),
+                    generated: Boolean(row.generated),
+                    dbno: Number(row.dbno ?? dbno),
+                    geo_type: row.geo_type ? String(row.geo_type) : null,
+                }
+            })
 
         } catch (error) {
             console.warn('[SceneTreeLoader] SurrealDB error:', error)
@@ -396,4 +409,3 @@ export function useSceneTreeLoader() {
         clear,
     }
 }
-

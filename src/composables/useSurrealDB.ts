@@ -201,7 +201,8 @@ export function useSurrealDB() {
         if (!globalDb) {
             throw new Error('[SurrealDB] Not connected')
         }
-        return await globalDb.version()
+        const info = await globalDb.version()
+        return info?.version ?? String(info)
     }
 
     return {

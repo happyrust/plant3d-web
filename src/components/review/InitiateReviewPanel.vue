@@ -65,15 +65,17 @@ const formId = computed(() => {
   return embedModeParams.value.isEmbedMode ? embedModeParams.value.formId : null;
 });
 
-const currentProjectId = computed(() => {
+const currentProjectId = computed<string>(() => {
   // 优先使用嵌入模式的 projectId
   if (embedModeParams.value.projectId) {
     return embedModeParams.value.projectId;
   }
   // Try to extract project from first component name (e.g. /1RCV0244/...)
   if (selectedComponents.value.length > 0) {
-    const parts = selectedComponents.value[0].name.split('/');
-    if (parts.length > 1) return parts[1];
+    const first = selectedComponents.value[0];
+    const parts = first?.name?.split('/') ?? [];
+    const project = parts.length > 1 ? parts[1] : undefined;
+    if (project) return project;
   }
   return 'demo-project';
 });

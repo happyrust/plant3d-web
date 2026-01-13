@@ -124,11 +124,11 @@ async function executeCommand(cmd: string) {
         commandName = '/';
         const arg = trimmed.substring(1).trim();
         if (arg) args.push(arg);
-    } else {
-        const parts = trimmed.split(/\s+/); // Split by whitespace
-        commandName = parts[0].toLowerCase();
-        args = parts.slice(1);
-    }
+	    } else {
+	        const parts = trimmed.split(/\s+/); // Split by whitespace
+	        commandName = (parts[0] ?? '').toLowerCase();
+	        args = parts.slice(1);
+	    }
 
     const handler = commands.get(commandName);
 

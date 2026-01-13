@@ -74,14 +74,14 @@ async function runBenchmark() {
             // We use CREATE to ensure they are written. 
             // In Surreal, CREATE with ID will fail if exists, but we deleted them above.
             // Alternatively use RELATE or UPSERT if available
-            await Promise.all(batch.map(p => local.create(p.id, p)));
+            await Promise.all(batch.map(p => local.create(p.id).content(p)));
         }
 
         // Sync InstRelate
         console.log(`  -> Syncing InstRelate...`);
         for (let i = 0; i < insts.length; i += batchSize) {
             const batch = insts.slice(i, i + batchSize);
-            await Promise.all(batch.map(ins => local.create(ins.id, ins)));
+            await Promise.all(batch.map(ins => local.create(ins.id).content(ins)));
         }
 
         const endTimeSync = performance.now();

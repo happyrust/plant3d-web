@@ -14,9 +14,9 @@
         </v-chip>
       </div>
       <div class="task-type">
-        <v-icon size="14" class="mr-1">
-          {{ task.type === 'DataParsing' ? 'mdi-database-search' : 'mdi-cube-outline' }}
-        </v-icon>
+	        <v-icon size="14" class="mr-1">
+	          {{ task.type === 'DataParsingWizard' ? 'mdi-database-search' : 'mdi-cube-outline' }}
+	        </v-icon>
         {{ typeDisplay }}
       </div>
     </div>

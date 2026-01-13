@@ -65,7 +65,12 @@ const ptsetVis = usePtsetVisualization(viewer, overlayContainer);
 
 let offRibbonCommand: (() => void) | null = null;
 let offModelProjectChange: (() => void) | null = null;
-let currentModel: unknown | null = null;
+type LoadedModelLike = {
+  lazyEntityManager?: {
+    showEntity: (refno: string) => Promise<void> | void;
+  };
+};
+let currentModel: LoadedModelLike | null = null;
 
 // 监听 ptset 可视化请求
 watch(
@@ -115,7 +120,7 @@ async function loadModel(bundleUrl: string, refno?: string) {
     const effectiveBundleUrl = isApiMode ? '/files/meshes/' : bundleUrl;
 
     // 加载新模型
-    currentModel = await loadAiosPrepackBundle(viewer.value, {
+    currentModel = (await loadAiosPrepackBundle(viewer.value, {
       baseUrl: effectiveBundleUrl,
       modelId: 'model',
       lodAssetKey: 'L1',
@@ -123,7 +128,7 @@ async function loadModel(bundleUrl: string, refno?: string) {
       debug: true,
       lazyEntities: true,
       refnos: refno,
-    });
+    })) as unknown as LoadedModelLike;
 
     emitToast({
       message: '模型加载成功'
@@ -137,7 +142,7 @@ async function loadModel(bundleUrl: string, refno?: string) {
       const refno = debugParams.refno;
       
       // 尝试通过 lazyManager 显示（如果是 lazy 模式，此时 entity 可能还没创建）
-      if (currentModel.lazyEntityManager) {
+      if (currentModel?.lazyEntityManager) {
         await currentModel.lazyEntityManager.showEntity(refno);
       }
 
@@ -285,7 +290,7 @@ onMounted(() => {
     sao.scale = 1000.0;
     sao.minResolution = 0.0;
     sao.kernelRadius = 100;
-    sao.maxOcclusion = 0.02;
+    (sao as unknown as { maxOcclusion?: number }).maxOcclusion = 0.02;
     sao.blur = true;
     sao.numSamples = 10;
   } catch {

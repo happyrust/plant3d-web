@@ -1,5 +1,5 @@
 // 任务创建 composable
-import { ref, computed, reactive, onMounted } from 'vue';
+import { ref, computed, reactive, onMounted, type Ref } from 'vue';
 import type {
   TaskType,
   TaskPriority,
@@ -38,24 +38,24 @@ export type ValidationErrors = Partial<Record<keyof TaskCreationFormData, string
 
 export type UseTaskCreationReturn = {
   /** 当前步骤 (1-3) */
-  currentStep: ReturnType<typeof ref<number>>;
+  currentStep: Ref<number>;
   /** 表单数据 */
   formData: TaskCreationFormData;
   /** 验证错误 */
-  errors: ReturnType<typeof ref<ValidationErrors>>;
+  errors: Ref<ValidationErrors>;
   /** 是否正在加载 */
-  loading: ReturnType<typeof ref<boolean>>;
+  loading: Ref<boolean>;
   /** 是否正在验证名称 */
-  validatingName: ReturnType<typeof ref<boolean>>;
+  validatingName: Ref<boolean>;
   /** 名称是否可用 */
-  nameAvailable: ReturnType<typeof ref<boolean | null>>;
+  nameAvailable: Ref<boolean | null>;
   /** 提交错误 */
-  submitError: ReturnType<typeof ref<string | null>>;
+  submitError: Ref<string | null>;
   /** 提交成功的任务 ID */
-  createdTaskId: ReturnType<typeof ref<string | null>>;
+  createdTaskId: Ref<string | null>;
 
   /** 是否正在处理步骤切换 */
-  stepProcessing: ReturnType<typeof ref<boolean>>;
+  stepProcessing: Ref<boolean>;
 
   /** 当前步骤是否有效 */
   isCurrentStepValid: import('vue').ComputedRef<boolean>;

@@ -423,8 +423,8 @@ export function useSceneTreeModelTree(viewerRef: { value: Viewer | null }) {
         let cur: string | null = id
 
         while (cur) {
-            const node = nodes[cur]
-            const parentId = node?.parentId
+            const node: TreeNode | undefined = nodes[cur]
+            const parentId: string | null | undefined = node?.parentId
             if (!parentId) break
 
             const parent = nodes[parentId]
@@ -600,14 +600,14 @@ export function useSceneTreeModelTree(viewerRef: { value: Viewer | null }) {
      * 展开到指定 refno
      */
     async function expandToRefno(refno: string): Promise<boolean> {
-        const node = nodesById.value[refno]
+        const node: TreeNode | undefined = nodesById.value[refno]
         if (!node) return false
 
         // 收集所有祖先节点
         const ancestorIds: string[] = []
         let currentId: string | null = refno
         while (currentId) {
-            const n = nodesById.value[currentId]
+            const n: TreeNode | undefined = nodesById.value[currentId]
             if (!n) break
             if (n.parentId) {
                 ancestorIds.push(n.parentId)

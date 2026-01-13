@@ -117,7 +117,7 @@ function extractRefno(recordId: string | { id?: string } | unknown): string {
         // 处理 "pe:⟨17496_123456⟩" 或 "inst_relate:⟨17496_123456⟩"
         const match = recordId.match(/[⟨<]([^⟩>]+)[⟩>]/)
         if (match) {
-            return match[1]
+            return match[1] ?? recordId
         }
         // 处理 "table:id" 格式
         const colonIdx = recordId.indexOf(':')
@@ -136,9 +136,9 @@ function extractRefno(recordId: string | { id?: string } | unknown): string {
  * 4x4 变换矩阵合成 (从 平移、旋转、缩放)
  */
 function composeMat4(
-    translation: number[],
-    rotation: number[],
-    scale: number[]
+    translation: [number, number, number],
+    rotation: [number, number, number, number],
+    scale: [number, number, number]
 ): TransformMatrix {
     const [x, y, z] = translation
     const [qx, qy, qz, qw] = rotation
@@ -157,7 +157,7 @@ function composeMat4(
     const wy = qw * y2
     const wz = qw * z2
 
-    const out = new Array(16)
+    const out = new Array<number>(16)
 
     out[0] = (1 - (yy + zz)) * sx
     out[1] = (xy + wz) * sx
@@ -179,7 +179,7 @@ function composeMat4(
     out[14] = z
     out[15] = 1
 
-    return out
+    return out as TransformMatrix
 }
 
 /**
@@ -200,10 +200,13 @@ function parseTransform(trans: unknown): TransformMatrix {
     if (typeof trans === 'object' && trans !== null) {
         const obj = trans as Record<string, unknown>
         if (Array.isArray(obj.rotation) && Array.isArray(obj.scale) && Array.isArray(obj.translation)) {
+            const t = obj.translation as unknown[]
+            const r = obj.rotation as unknown[]
+            const s = obj.scale as unknown[]
             return composeMat4(
-                obj.translation as number[],
-                obj.rotation as number[],
-                obj.scale as number[]
+                [Number(t[0] ?? 0), Number(t[1] ?? 0), Number(t[2] ?? 0)],
+                [Number(r[0] ?? 0), Number(r[1] ?? 0), Number(r[2] ?? 0), Number(r[3] ?? 1)],
+                [Number(s[0] ?? 1), Number(s[1] ?? 1), Number(s[2] ?? 1)]
             )
         }
     }

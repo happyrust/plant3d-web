@@ -359,7 +359,10 @@ const commentsByRole = computed(() => {
 
   // 按时间排序每个分组
   for (const key of Object.keys(groups)) {
-    groups[key].sort((a, b) => a.createdAt - b.createdAt);
+    const list = groups[key];
+    if (list) {
+      list.sort((a, b) => a.createdAt - b.createdAt);
+    }
   }
 
   return groups;
