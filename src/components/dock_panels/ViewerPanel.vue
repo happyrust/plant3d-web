@@ -18,6 +18,7 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitTools } from '@/composables/useXeokitTools';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
+import { useModelGeneration } from '@/composables/useModelGeneration';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { dockActivatePanelIfExists } from '@/composables/useDockApi';
@@ -71,6 +72,8 @@ const runtimeSnapshot = ref<{
 } | null>(null);
 let statsTimer: number | null = null;
 let offRibbonCommand: (() => void) | null = null;
+
+const modelGenerationState = shallowRef<ReturnType<typeof useModelGeneration> | null>(null);
 
 function handleRibbonCommand(commandId: string) {
   switch (commandId) {
@@ -383,7 +386,7 @@ function handleAutoLocateRefno() {
 // ========== 模型加载模式 ==========
 
 /** 使用 SurrealDB 直接查询模式（true）还是 Parquet 模式（false）*/
-const useSurrealMode = ref(true);
+// 默认：使用 dbno 的 instances_{dbno}.json + visible-insts 来显示模型（不再走 Surreal/Parquet 加载）
 
 /** 当前加载的 dbno */
 const currentDbno = ref<number | null>(null);
@@ -391,138 +394,27 @@ const currentDbno = ref<number | null>(null);
 /**
  * 使用 SurrealDB 直接查询并显示模型
  */
-async function showModelByRefnosSurreal(refnos: string[]): Promise<boolean> {
+async function showModelByRefnos(refnos: string[]): Promise<boolean> {
   if (!viewer.value) {
     console.error('[ViewerPanel] Viewer not initialized');
     return false;
   }
-
-  console.log('[ViewerPanel] showModelByRefnosSurreal:', { refnos });
-
-  try {
-    // 走后端 SSE：边生成边加载（Surreal 直连用于加载显示）
-    const result = await streamGenerateToXeokit(viewer.value, refnos, {
-      debug: true,
-      enableHoles: true,
-      onError: (msg) => {
-        emitToast({ type: 'error', message: `流式生成失败: ${msg}` });
-      },
-    });
-
-    if (result?.sceneModel && viewer.value) {
-      viewer.value.cameraFlight.flyTo({ aabb: result.sceneModel.aabb, duration: 1.0 });
-    }
-
-    return true;
-  } catch (error) {
-    console.error('[ViewerPanel] Failed to load model via SurrealDB:', error);
-    emitToast({ type: 'error', message: `SurrealDB 加载模型失败: ${error instanceof Error ? error.message : String(error)}` });
-    return false;
-  }
-}
-
-/**
- * 使用 Parquet 方式加载模型（原有逻辑）
- */
-async function showModelByRefnosParquet(refnos: string[], regenModel = false): Promise<boolean> {
-  if (!viewer.value) {
-    console.error('[ViewerPanel] Viewer not initialized');
-    return false;
+  if (!modelGenerationState.value) {
+    modelGenerationState.value = useModelGeneration({ viewer: viewer.value });
   }
 
-  console.log('[ViewerPanel] showModelByRefnosParquet:', { refnos, regenModel });
-
-  try {
-    // 1. 调用后端 API 生成模型
-    const response = await fetch('/api/model/show-by-refno', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refnos, regen_model: regenModel }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    console.log('[ViewerPanel] API response:', result);
-
-    if (!result.success) {
-      throw new Error(result.message || 'API returned failure');
-    }
-
-    // 2. 获取 dbno 和 parquet_files
-    const dbno = result.metadata?.dbno;
-    if (!dbno) {
-      console.warn('[ViewerPanel] No dbno in response, cannot load Parquet');
-      return false;
-    }
-
-    // 3. 加载 Parquet 数据到 xeokit
-    if (result.parquet_files && result.parquet_files.length > 0) {
-      console.log('[ViewerPanel] Loading Parquet files:', result.parquet_files);
-      
-      const { sceneModel } = await loadParquetToXeokit(viewer.value, dbno, {
-        modelId: `parquet-${dbno}`,
-        parquetFiles: result.parquet_files,
-        debug: true,
-      });
-
-      currentDbno.value = dbno;
-      console.log('[ViewerPanel] Parquet loaded successfully');
-      
-      // 自动聚焦飞行到加载的模型
-      if (sceneModel && viewer.value) {
-        console.log('[ViewerPanel] Flying to loaded model');
-        viewer.value.cameraFlight.flyTo({ aabb: sceneModel.aabb, duration: 1.0 });
-      }
-      
-      return true;
-    } else {
-      console.log('[ViewerPanel] No parquet files in response, model may already exist');
-      // 尝试从现有数据加载
-      const files = await fetch(`/api/model/${dbno}/files`).then(r => r.ok ? r.json() : []);
-      if (files && files.length > 0) {
-        const { sceneModel } = await loadParquetToXeokit(viewer.value, dbno, {
-          modelId: `parquet-${dbno}`,
-          parquetFiles: files,
-          debug: true,
-        });
-        currentDbno.value = dbno;
-        
-        // 自动聚焦飞行到加载的模型
-        if (sceneModel && viewer.value) {
-          console.log('[ViewerPanel] Flying to loaded model');
-          viewer.value.cameraFlight.flyTo({ aabb: sceneModel.aabb, duration: 1.0 });
-        }
-        
-        return true;
-      }
-    }
-
-    return true;
-  } catch (error) {
-    console.error('[ViewerPanel] Failed to load model:', error);
-    emitToast({ type: 'error', message: `加载模型失败: ${error instanceof Error ? error.message : String(error)}` });
-    return false;
+  let okAll = true;
+  for (const refno of refnos) {
+    const ok = await modelGenerationState.value.showModelByRefno(refno);
+    okAll = okAll && ok;
   }
-}
-
-/**
- * 根据当前模式选择加载方式
- */
-async function showModelByRefnos(refnos: string[], regenModel = false): Promise<boolean> {
-  if (useSurrealMode.value) {
-    return showModelByRefnosSurreal(refnos);
-  } else {
-    return showModelByRefnosParquet(refnos, regenModel);
-  }
+  return okAll;
 }
 
 // 监听按需加载事件（从模型树或控制台触发）
 function handleShowModelByRefnos(event: CustomEvent<{ refnos: string[]; regenModel?: boolean }>) {
-  const { refnos, regenModel = false } = event.detail;
-  showModelByRefnos(refnos, regenModel);
+  const { refnos } = event.detail;
+  showModelByRefnos(refnos);
 }
 
 
@@ -810,13 +702,13 @@ onMounted(() => {
     applyWhiteBackground();
     
     // 处理 URL 参数中的 debug_refno（自动加载指定的 refno）
-    const debugParams = getDebugParams();
-    if (debugParams.refno && viewer.value) {
-      console.log('[ViewerPanel] 检测到 debug_refno，自动加载:', debugParams.refno);
-      setTimeout(() => {
-        showModelByRefnos([debugParams.refno!], false);
-      }, 500);
-    }
+	    const debugParams = getDebugParams();
+	    if (debugParams.refno && viewer.value) {
+	      console.log('[ViewerPanel] 检测到 debug_refno，自动加载:', debugParams.refno);
+	      setTimeout(() => {
+	        showModelByRefnos([debugParams.refno!]);
+	      }, 500);
+	    }
     
     // 处理 debug_ptset 参数
     setTimeout(() => handleDebugPtset(), 500);

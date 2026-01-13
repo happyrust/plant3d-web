@@ -123,7 +123,7 @@ type NameEntry = {
   value: string;
 };
 
-type InstanceEntry = {
+export type InstanceEntry = {
   geo_hash: string;
   matrix: number[];
   geo_index: number;
@@ -177,7 +177,7 @@ type HierarchyGroup = {
   }[];
 };
 
-type InstanceManifest = {
+export type InstanceManifest = {
   version?: number;
   generated_at: string;
   colors?: number[][];
@@ -188,6 +188,23 @@ type InstanceManifest = {
   equi_groups?: HierarchyGroup[];
   ungrouped?: ComponentInstances[];
 };
+
+export function buildInstanceIndexByRefno(
+  manifest: InstanceManifest,
+  refnoFilter?: Set<string>
+): Map<string, InstanceEntry[]> {
+  const index = new Map<string, InstanceEntry[]>();
+  const flat = flattenInstances(manifest);
+  for (const { instance } of flat) {
+    const refno = String(instance.uniforms?.refno ?? '');
+    if (!refno) continue;
+    if (refnoFilter && !refnoFilter.has(refno)) continue;
+    const list = index.get(refno) || [];
+    list.push(instance);
+    index.set(refno, list);
+  }
+  return index;
+}
 
 function normalizeRgbaMaybe(rgba: number[]): [number, number, number, number] {
   const r = Number(rgba[0] ?? 1);
@@ -833,10 +850,11 @@ const IDENTITY_MATRIX = [
 
 function flattenInstances(manifest: InstanceManifest): { category: string; instance: InstanceEntry }[] {
   const out: { category: string; instance: InstanceEntry }[] = [];
+  const DEBUG_FLATTEN = false;
 
   if (isV2Instances(manifest)) {
     // V2 格式处理：需要计算 matrix = refno_transform × geo_transform
-    console.log('[flattenInstances] V2 format detected', {
+    if (DEBUG_FLATTEN) console.log('[flattenInstances] V2 format detected', {
       bran_groups: manifest.bran_groups?.length || 0,
       equi_groups: manifest.equi_groups?.length || 0,
       ungrouped: manifest.ungrouped?.length || 0
@@ -851,7 +869,7 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
       const componentNoun = component.noun || '';
       const componentName = component.name;
 
-      console.log('[flattenInstances] Processing component', {
+      if (DEBUG_FLATTEN) console.log('[flattenInstances] Processing component', {
         category,
         refno: componentRefno,
         noun: componentNoun,
@@ -929,7 +947,7 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
 
     for (const group of manifest.bran_groups || []) {
       const ownerRefno = group.refno;
-      console.log('[flattenInstances] Processing BRAN group', { ownerRefno, children: group.children?.length || 0 });
+      if (DEBUG_FLATTEN) console.log('[flattenInstances] Processing BRAN group', { ownerRefno, children: group.children?.length || 0 });
       for (const component of group.children || []) {
         pushComponentInstances('BRAN', 'BRAN', ownerRefno, component);
       }
@@ -947,7 +965,7 @@ function flattenInstances(manifest: InstanceManifest): { category: string; insta
       pushComponentInstances('UNGROUPED', '', undefined, component);
     }
 
-    console.log('[flattenInstances] V2 processing complete', { totalInstances: out.length });
+    if (DEBUG_FLATTEN) console.log('[flattenInstances] V2 processing complete', { totalInstances: out.length });
     return out;
   }
 

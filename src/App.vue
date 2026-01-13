@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 
 import DockLayout from '@/components/DockLayout.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
@@ -14,6 +15,7 @@ const showBenchmark = urlParams.get('benchmark') === 'true';
 
 <template>
   <v-app class="h-screen">
+    <ConfirmDialog />
     <v-app-bar
       class="ribbon-app-bar"
       :height="0"

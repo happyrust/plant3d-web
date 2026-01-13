@@ -8,6 +8,7 @@
 import { ref, shallowRef } from 'vue'
 import type { Viewer, SceneModel } from '@xeokit/xeokit-sdk'
 import type * as duckdb from '@duckdb/duckdb-wasm'
+import { parseGlbGeometry as parseGLBGeometry } from '@/utils/parseGlbGeometry'
 
 // DuckDB 实例单例
 let duckDbInstance: duckdb.AsyncDuckDB | null = null
@@ -67,7 +68,7 @@ function multiplyMat4(a: Float32Array, b: Float32Array): number[] {
         for (let row = 0; row < 4; row++) {
             let sum = 0
             for (let k = 0; k < 4; k++) {
-                sum += a[k * 4 + row] * b[col * 4 + k]
+                sum += (a[k * 4 + row] ?? 0) * (b[col * 4 + k] ?? 0)
             }
             result[col * 4 + row] = sum
         }
@@ -75,69 +76,7 @@ function multiplyMat4(a: Float32Array, b: Float32Array): number[] {
     return result
 }
 
-/**
- * 解析 GLB 几何体
- */
-async function parseGLBGeometry(glbData: ArrayBuffer): Promise<{
-    positions: number[]
-    indices: number[]
-    normals?: number[]
-} | null> {
-    try {
-        const dataView = new DataView(glbData)
-        const magic = dataView.getUint32(0, true)
-        if (magic !== 0x46546C67) return null
-
-        const jsonChunkLength = dataView.getUint32(12, true)
-        const jsonBytes = new Uint8Array(glbData, 20, jsonChunkLength)
-        const gltf = JSON.parse(new TextDecoder().decode(jsonBytes))
-
-        const binChunkOffset = 20 + jsonChunkLength
-        const binChunkLength = dataView.getUint32(binChunkOffset, true)
-        const binBuffer = glbData.slice(binChunkOffset + 8, binChunkOffset + 8 + binChunkLength)
-
-        const mesh = gltf.meshes?.[0]
-        const primitive = mesh?.primitives?.[0]
-        if (!primitive) return null
-
-        const extractData = (accessorIndex: number): number[] => {
-            const accessor = gltf.accessors[accessorIndex]
-            if (!accessor) return []
-            const bufferView = gltf.bufferViews[accessor.bufferView]
-            if (!bufferView) return []
-
-            const byteOffset = (bufferView.byteOffset || 0) + (accessor.byteOffset || 0)
-            const componentCount: Record<string, number> = {
-                'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4,
-            }
-            const numComponents = componentCount[accessor.type] || 1
-            const totalComponents = accessor.count * numComponents
-
-            const view = new DataView(binBuffer, byteOffset)
-            const result: number[] = []
-
-            for (let i = 0; i < totalComponents; i++) {
-                switch (accessor.componentType) {
-                    case 5123: result.push(view.getUint16(i * 2, true)); break
-                    case 5125: result.push(view.getUint32(i * 4, true)); break
-                    case 5126: result.push(view.getFloat32(i * 4, true)); break
-                    default: result.push(0)
-                }
-            }
-            return result
-        }
-
-        const positions = extractData(primitive.attributes?.POSITION)
-        const indices = primitive.indices !== undefined ? extractData(primitive.indices) : []
-        const normals = primitive.attributes?.NORMAL !== undefined
-            ? extractData(primitive.attributes.NORMAL)
-            : undefined
-
-        return { positions, indices, normals }
-    } catch {
-        return null
-    }
-}
+// parseGLBGeometry moved to src/utils/parseGlbGeometry.ts
 
 /**
  * 节点几何加载器
