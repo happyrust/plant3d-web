@@ -36,6 +36,10 @@ export interface ModelHashInst {
     geo_hash: string
     /** 局部变换矩阵 */
     transform?: TransformMatrix
+    /** 颜色 [r, g, b, a] 0-255 */
+    color?: number[]
+    /** 材质 ID */
+    material_id?: string
     /** 是否为管道直段 */
     is_tubi: boolean
     /** 是否为单位 mesh */
@@ -286,7 +290,11 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
         const instRelateKeys = refnos.map(r => toInstRelateKey(r)).join(',')
 
         // 布尔运算结果子查询
-        const boolMeshExpr = "(SELECT mesh_id FROM inst_relate_bool WHERE refno = in AND status = 'Success' LIMIT 1)[0]"
+        // 这里不能用子查询 WHERE refno = in / in.in 去“关联外层记录”（Surreal 的子查询上下文不是这样传递的）。
+        // 采用约定：inst_relate_bool 的 id 固定为 inst_relate_bool:⟨refno⟩，直接通过 type::record 构造记录引用。
+        // 只有 status='Success' 时才返回 mesh_id，否则为 NONE。
+        const boolMeshExpr =
+            "IF type::record('inst_relate_bool', record::id(in.id)).status = 'Success' THEN type::record('inst_relate_bool', record::id(in.id)).mesh_id ELSE none END"
 
         // 构建查询 SQL (移植自 aios-core/src/rs_surreal/inst.rs)
         const sql = enableHoles ? `
@@ -295,7 +303,7 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
                 record::id(in.owner ?? in) as owner,
                 generic,
                 world_trans.d as world_trans,
-                (SELECT value out.d FROM in->inst_relate_aabb LIMIT 1)[0] as world_aabb,
+                (SELECT value out.d FROM ->inst_relate_aabb LIMIT 1)[0] as world_aabb,
                 (SELECT value out.pts.*.d FROM out->geo_relate WHERE visible && out.meshed && out.pts != none LIMIT 1)[0] as pts,
                 IF ${boolMeshExpr} != none THEN
                     [{ "transform": world_trans.d, "geo_hash": ${boolMeshExpr}, "is_tubi": false, "unit_flag": false }]
@@ -303,6 +311,8 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
                     (SELECT 
                         trans.d as transform, 
                         record::id(out) as geo_hash, 
+                        color,
+                        material_id,
                         false as is_tubi, 
                         out.unit_flag ?? false as unit_flag 
                      FROM out->geo_relate 
@@ -322,11 +332,13 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
                 record::id(in.owner ?? in) as owner,
                 generic,
                 world_trans.d as world_trans,
-                (SELECT value out.d FROM in->inst_relate_aabb LIMIT 1)[0] as world_aabb,
+                (SELECT value out.d FROM ->inst_relate_aabb LIMIT 1)[0] as world_aabb,
                 (SELECT value out.pts.*.d FROM out->geo_relate WHERE visible && out.meshed && out.pts != none LIMIT 1)[0] as pts,
                 (SELECT 
                     trans.d as transform, 
                     record::id(out) as geo_hash, 
+                    color,
+                    material_id,
                     false as is_tubi, 
                     out.unit_flag ?? false as unit_flag 
                  FROM out->geo_relate 
@@ -385,6 +397,8 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
             return {
                 geo_hash: extractRefno(obj.geo_hash),
                 transform: parseTransform(obj.transform),
+                color: Array.isArray(obj.color) ? obj.color as number[] : undefined,
+                material_id: obj.material_id ? String(obj.material_id) : undefined,
                 is_tubi: Boolean(obj.is_tubi),
                 unit_flag: Boolean(obj.unit_flag),
             }

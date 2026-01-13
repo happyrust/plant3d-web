@@ -63,13 +63,22 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const sceneAny = viewer.scene as any;
         const managers = sceneAny.__aiosLazyEntityManagers;
 
-        if (!managers) return false;
+        if (managers) {
+            const activeId = sceneAny.__aiosActiveLazyModelId;
+            const activeMgr = activeId ? managers[activeId] : undefined;
 
-        const activeId = sceneAny.__aiosActiveLazyModelId;
-        const mgr = activeId ? managers[activeId] : undefined;
+            // 1) 优先用 active manager
+            if (activeMgr?.hasRefno && activeMgr.hasRefno(refno)) {
+                return true;
+            }
 
-        if (mgr?.hasRefno) {
-            return mgr.hasRefno(refno);
+            // 2) 回退：遍历所有 manager
+            for (const k of Object.keys(managers)) {
+                const m = managers[k];
+                if (m?.hasRefno?.(refno)) {
+                    return true;
+                }
+            }
         }
 
         // Fallback: check if entity exists in scene

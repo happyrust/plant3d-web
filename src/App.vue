@@ -7,6 +7,9 @@ import UserAvatar from '@/components/user/UserAvatar.vue';
 
 // 固定高度，不再随展开缩放
 const extensionHeight = 32;
+
+const urlParams = new URLSearchParams(window.location.search);
+const showBenchmark = urlParams.get('benchmark') === 'true';
 </script>
 
 <template>
@@ -26,8 +29,13 @@ const extensionHeight = 32;
       </template>
     </v-app-bar>
 
-    <v-main class="flex-1 min-h-0 d-flex flex-column">
-      <DockLayout />
+    <v-main class="flex-1 min-h-0 d-flex flex-row">
+      <div v-if="showBenchmark" style="width: 400px; border-right: 1px solid #333; overflow: hidden;">
+        <BenchmarkView />
+      </div>
+      <div class="flex-1 min-h-0">
+        <DockLayout />
+      </div>
     </v-main>
   </v-app>
 </template>

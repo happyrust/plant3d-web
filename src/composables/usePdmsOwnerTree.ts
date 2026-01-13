@@ -4,6 +4,10 @@ import type { LazyEntityManager } from '@/aios-prepack-bundle-loader';
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { Viewer } from '@xeokit/xeokit-sdk';
 
+import { showRefnoViaSurreal } from './useSurrealModelLoader';
+import { streamGenerateToXeokit } from './useStreamGenerate';
+import { useSiteNodeTree } from './useSiteNodeTree';
+
 import {
   e3dGetAncestors,
   e3dGetChildren,
@@ -35,6 +39,7 @@ function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
 export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
   const nodesById = shallowRef<Record<string, TreeNode>>({});
   const rootIds = ref<string[]>([]);
+  const siteNodeTree = useSiteNodeTree(viewerRef);
 
   const expandedIds = ref<Set<string>>(new Set());
   const selectedIds = ref<Set<string>>(new Set());
@@ -60,6 +65,39 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
 
   const SUBTREE_MAX_DEPTH = 256;
   const SUBTREE_LIMIT = 200_000;
+
+  /**
+   * 每次显隐前同步 SITE 的 xeokit Node 层级（进入 scene.objects，但用前缀避免与几何 refno 冲突）
+   *
+   * 说明：ancestors API 返回的是 refno 链，不含 noun；当前后端返回顺序为“叶子 → ... → WORL”。
+   * - 如果包含 WORL(rootIds[0])，则 SITE 通常是倒数第 2 个
+   * - 如果不包含 WORL，则最后一个通常就是 SITE
+   */
+  async function ensureSiteSceneTreeLoaded(refno: string): Promise<void> {
+    const viewer = viewerRef.value;
+    if (!viewer) return;
+
+    try {
+      const resp = await e3dGetAncestors(refno);
+      if (!resp.success) return;
+
+      const ancestors = resp.refnos || [];
+      if (ancestors.length === 0) return;
+
+      const worldRootId = rootIds.value[0] || null;
+      const last = ancestors[ancestors.length - 1] || null;
+
+      const siteRefno =
+        worldRootId && last === worldRootId
+          ? (ancestors[ancestors.length - 2] || null)
+          : last;
+      if (!siteRefno) return;
+
+      await siteNodeTree.loadSiteNodes(siteRefno);
+    } catch {
+      // ignore
+    }
+  }
 
   function clearCaches() {
     subtreeObjectIdsCache.value.clear();
@@ -503,6 +541,9 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
     const viewer = viewerRef.value;
     if (!viewer) return;
 
+    // 你的约束：每次显示/隐藏前都先同步整个 SITE scene tree
+    await ensureSiteSceneTreeLoaded(id);
+
     // 检查是否有懒加载管理器
     const lazyEntityManager = (() => {
       const sceneAny = viewer.scene as unknown as {
@@ -513,18 +554,29 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
       if (!managers) return undefined;
 
       const activeId = sceneAny.__aiosActiveLazyModelId;
-      if (activeId && managers[activeId]) return managers[activeId];
-
-      // 回退：尝试从已注册的 manager 中找到包含该 id 的
-      for (const k of Object.keys(managers)) {
-        const m = managers[k];
-        if (m?.hasRefno(id)) return m;
+      let mgr: LazyEntityManager | undefined = activeId ? managers[activeId] : undefined;
+      if (mgr?.hasRefno && !mgr.hasRefno(id)) {
+        mgr = undefined;
       }
+      if (!mgr) {
+        // 回退：从已注册的 manager 中找到包含该 id 的
+        for (const k of Object.keys(managers)) {
+          const m = managers[k];
+          if (m?.hasRefno?.(id)) {
+            mgr = m;
+            break;
+          }
+        }
+      }
+      if (mgr) return mgr;
 
       return undefined;
     })();
 
-    if (lazyEntityManager) {
+    const isSurrealManager =
+      !!lazyEntityManager && (lazyEntityManager as unknown as { __aiosManagerKind?: string }).__aiosManagerKind === 'surreal';
+
+    if (lazyEntityManager && !isSurrealManager) {
       const node = nodesById.value[id];
 
       const hasChild = (nodeId: string, n?: TreeNode): boolean => {
@@ -790,18 +842,111 @@ export function usePdmsOwnerTree(viewerRef: { value: Viewer | null }) {
         }
       }
     } else {
-      // 传统方式：获取对象ID并设置可见性
-      let objectIds: string[] = [];
+      // Surreal 模式/无 lazy manager：使用 scene API 显隐
+      // 你的目标：如果检查到模型未生成（scene 中不存在），则先触发后端生成并同步到前端
+
+      const node = nodesById.value[id];
+      const hasChild = (nodeId: string, n?: TreeNode): boolean => {
+        const node = n ?? nodesById.value[nodeId];
+        if (!node) return false;
+        if (node.childrenIds.length > 0) return true;
+        const cnt = childrenCountById.value.get(nodeId);
+        return typeof cnt === 'number' && cnt > 0;
+      };
+
+      const resolveTargetRefnos = async (): Promise<string[]> => {
+        // 叶子节点：只处理自身
+        if (node && !hasChild(id, node)) return [id];
+
+        // BRAN/HANG：优先走 subtree-refnos，确保未展开的子节点也纳入
+        if (node && (node.type === 'BRAN' || node.type === 'HANG')) {
+          const resp = await e3dGetSubtreeRefnos(id, {
+            includeSelf: true,
+            maxDepth: SUBTREE_MAX_DEPTH,
+            limit: SUBTREE_LIMIT,
+          });
+          if (!resp.success) {
+            throw new Error(resp.error_message || 'subtree-refnos api failed');
+          }
+          return resp.refnos || [];
+        }
+
+        // 其他非叶子节点：走 visible-insts，获取“可见实体 refno 集合”
+        const resp = await e3dGetVisibleInsts(id);
+        if (!resp.success) {
+          throw new Error(resp.error_message || 'visible-insts api failed');
+        }
+        return resp.refnos || [];
+      };
+
+      let targetRefnos: string[] = [];
       try {
-        objectIds = await getObjectIdsForSubtree(id);
+        targetRefnos = await resolveTargetRefnos();
       } catch (e) {
         if (import.meta.env.DEV) {
-          console.warn('[pdms-tree] getObjectIdsForSubtree failed', e);
+          console.warn('[pdms-tree] resolveTargetRefnos failed', {
+            id,
+            visible,
+            err: e instanceof Error ? e.message : String(e),
+          });
+        }
+        targetRefnos = [];
+      }
+
+      // 只对“几何对象 refno”生效（SITE Node 已使用前缀，不会命中这里）
+      if (visible) {
+        // 检查缺失模型：当前 scene 中不存在的 refno
+        const missing = targetRefnos.filter((r) => !viewer.scene.objects[r]);
+
+        if (missing.length > 0) {
+          try {
+            // 避免一次性提交超大数组导致请求体过大：缺失太多时退化为“从当前节点展开生成”
+            if (missing.length <= 2000) {
+              await streamGenerateToXeokit(viewer, missing, {
+                expandChildren: false,
+                batchSize: 50,
+              });
+            } else {
+              await streamGenerateToXeokit(viewer, [id], {
+                expandChildren: true,
+                batchSize: 50,
+                maxDepth: SUBTREE_MAX_DEPTH,
+              });
+            }
+
+            clearCaches();
+          } catch (e) {
+            if (import.meta.env.DEV) {
+              console.warn('[pdms-tree] streamGenerateToXeokit failed', {
+                id,
+                missingCount: missing.length,
+                err: e instanceof Error ? e.message : String(e),
+              });
+            }
+          }
         }
       }
 
-      if (objectIds.length > 0) {
-        viewer.scene.setObjectsVisible(objectIds, visible);
+      // 重新计算（生成后可能新增）
+      const objectIds = targetRefnos.filter((r) => !!viewer.scene.objects[r]);
+
+      // 兜底：如果 targetRefnos 为空，尝试只操作自身（并兼容旧逻辑）
+      const finalIds = objectIds.length > 0 ? objectIds : (viewer.scene.objects[id] ? [id] : []);
+
+      // 旧逻辑兼容：如果需要显示但仍为空，尝试直接加载单个 refno（不走生成）
+      if (visible && finalIds.length === 0) {
+        try {
+          await showRefnoViaSurreal(viewer, id);
+        } catch {
+          // ignore
+        }
+        if (viewer.scene.objects[id]) {
+          finalIds.push(id);
+        }
+      }
+
+      if (finalIds.length > 0) {
+        viewer.scene.setObjectsVisible(finalIds, visible);
       }
     }
 

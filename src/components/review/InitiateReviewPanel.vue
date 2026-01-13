@@ -60,9 +60,9 @@ onMounted(() => {
   }
 });
 
-// 表单 ID（从嵌入模式获取或生成新的）
+// 表单 ID：仅在嵌入模式展示/透传；正常模式由后端生成
 const formId = computed(() => {
-  return embedModeParams.value.formId || 'FORM-' + Date.now().toString(16).toUpperCase();
+  return embedModeParams.value.isEmbedMode ? embedModeParams.value.formId : null;
 });
 
 const currentProjectId = computed(() => {
@@ -113,11 +113,13 @@ async function handleSubmit() {
   isSubmitting.value = true;
 
   try {
-    const task = userStore.createReviewTask({
+    const task = await userStore.createReviewTask({
       title: packageName.value,
       description: description.value || `模型数据包：${packageName.value}`,
       modelName: packageName.value,
       reviewerId: reviewerId.value,
+      // 外部已创建单据时统一复用 formId；否则走正常创建逻辑（后端生成）
+      formId: embedModeParams.value.isEmbedMode ? (embedModeParams.value.formId || undefined) : undefined,
       priority: priority.value,
       components: [...selectedComponents.value],
       dueDate: dueDate.value ? new Date(dueDate.value).getTime() : undefined,
@@ -166,7 +168,7 @@ function clearNotification() {
         <!-- 嵌入模式显示 form_id -->
         <div v-if="embedModeParams.isEmbedMode" class="mt-2 flex items-center gap-2">
           <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-            📋 表单 ID: {{ formId }}
+            📋 表单 ID: {{ formId || '（由后端生成）' }}
           </span>
           <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
             🏭 项目: {{ currentProjectId }}

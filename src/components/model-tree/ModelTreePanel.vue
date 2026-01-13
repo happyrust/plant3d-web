@@ -161,7 +161,9 @@ async function setVisible(id: string, visible: boolean) {
         const success = await modelGenerationState.value!.showModelByRefno(id);
 
         if (success) {
-          // 模型已加载成功，SurrealModelLoader 创建的模型默认可见，无需再调用 tree.setVisible
+          // 模型已加载成功：同步树的勾选状态（eye 图标）并确保可见。
+          // 这样后续点击 eye 只会切换 visible，不会再次触发 show-by-refno。
+          await pdmsTree.setVisible(id, true);
           return;
         }
         // 失败时继续调用 setVisible 显示部分加载的数据
@@ -402,6 +404,7 @@ onMounted(() => {
           
           if (success) {
             console.log('[ModelTreePanel] Auto-load successful:', refno);
+            await pdmsTree.setVisible(refno, true);
           } else {
             console.error('[ModelTreePanel] Auto-load failed:', refno);
           }

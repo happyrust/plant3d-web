@@ -9,6 +9,7 @@ import type { ModelProject } from '@/composables/useModelProjects';
 
 import { loadAiosPrepackBundle } from '@/aios-prepack-bundle-loader';
 import { loadParquetToXeokit } from '@/composables/useParquetModelLoader';
+import { streamGenerateToXeokit } from '@/composables/useStreamGenerate';
 import { pdmsGetPtset } from '@/api/genModelPdmsAttrApi';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import PtsetPanel from '@/components/tools/PtsetPanel.vue';
@@ -379,21 +380,57 @@ function handleAutoLocateRefno() {
   }, 1000); // 给模型树足够时间初始化
 }
 
-// ========== 增量 Parquet 加载 ==========
+// ========== 模型加载模式 ==========
+
+/** 使用 SurrealDB 直接查询模式（true）还是 Parquet 模式（false）*/
+const useSurrealMode = ref(true);
 
 /** 当前加载的 dbno */
 const currentDbno = ref<number | null>(null);
 
 /**
- * 调用后端 API 生成/获取模型，然后加载 Parquet 数据到 viewer
+ * 使用 SurrealDB 直接查询并显示模型
  */
-async function showModelByRefnos(refnos: string[], regenModel = false): Promise<boolean> {
+async function showModelByRefnosSurreal(refnos: string[]): Promise<boolean> {
   if (!viewer.value) {
     console.error('[ViewerPanel] Viewer not initialized');
     return false;
   }
 
-  console.log('[ViewerPanel] showModelByRefnos:', { refnos, regenModel });
+  console.log('[ViewerPanel] showModelByRefnosSurreal:', { refnos });
+
+  try {
+    // 走后端 SSE：边生成边加载（Surreal 直连用于加载显示）
+    const result = await streamGenerateToXeokit(viewer.value, refnos, {
+      debug: true,
+      enableHoles: true,
+      onError: (msg) => {
+        emitToast({ type: 'error', message: `流式生成失败: ${msg}` });
+      },
+    });
+
+    if (result?.sceneModel && viewer.value) {
+      viewer.value.cameraFlight.flyTo({ aabb: result.sceneModel.aabb, duration: 1.0 });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[ViewerPanel] Failed to load model via SurrealDB:', error);
+    emitToast({ type: 'error', message: `SurrealDB 加载模型失败: ${error instanceof Error ? error.message : String(error)}` });
+    return false;
+  }
+}
+
+/**
+ * 使用 Parquet 方式加载模型（原有逻辑）
+ */
+async function showModelByRefnosParquet(refnos: string[], regenModel = false): Promise<boolean> {
+  if (!viewer.value) {
+    console.error('[ViewerPanel] Viewer not initialized');
+    return false;
+  }
+
+  console.log('[ViewerPanel] showModelByRefnosParquet:', { refnos, regenModel });
 
   try {
     // 1. 调用后端 API 生成模型
@@ -468,6 +505,17 @@ async function showModelByRefnos(refnos: string[], regenModel = false): Promise<
     console.error('[ViewerPanel] Failed to load model:', error);
     emitToast({ type: 'error', message: `加载模型失败: ${error instanceof Error ? error.message : String(error)}` });
     return false;
+  }
+}
+
+/**
+ * 根据当前模式选择加载方式
+ */
+async function showModelByRefnos(refnos: string[], regenModel = false): Promise<boolean> {
+  if (useSurrealMode.value) {
+    return showModelByRefnosSurreal(refnos);
+  } else {
+    return showModelByRefnosParquet(refnos, regenModel);
   }
 }
 
@@ -562,7 +610,7 @@ function applyWhiteBackground() {
   if (!viewer.value) return;
   (viewer.value.scene as unknown as { clearEachPass?: boolean }).clearEachPass = true;
   const gl = (viewer.value.scene as unknown as { canvas?: { gl?: WebGLRenderingContext } }).canvas?.gl;
-  gl?.clearColor?.(0.96, 0.97, 0.98, 1);
+  gl?.clearColor?.(0.90, 0.91, 0.92, 1);
   gl?.clear?.(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
 
@@ -575,8 +623,14 @@ function handleResize() {
     const canvas = sceneAny.canvas?.canvas;
     if (!canvas) return;
     const rect = containerRef.value.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const cssWidth = Math.max(1, rect.width);
+    const cssHeight = Math.max(1, rect.height);
+
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
+    canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
+    canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
     sceneAny.glRedraw?.();
   }
 }

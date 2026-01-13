@@ -127,3 +127,43 @@ export async function e3dSearch(req: SearchRequest): Promise<SearchResponse> {
     body: JSON.stringify(req),
   });
 }
+
+// ========================
+// Site Nodes API (xeokit Node 层级)
+// ========================
+
+/** AABB 包围盒 */
+export interface NodeAabb {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+/** Site Node 数据 */
+export interface SiteNodeData {
+  refno: string;
+  parent: string | null;
+  noun: string;
+  name?: string;
+  aabb: NodeAabb | null;
+  has_geo: boolean;
+}
+
+/** Site Nodes API 响应 */
+export interface SiteNodesResponse {
+  success: boolean;
+  nodes: SiteNodeData[];
+  total: number;
+  error_message?: string;
+}
+
+/**
+ * 获取指定 SITE 的 Node 层级数据
+ * 用于前端构建 xeokit Node 层级拓扑
+ *
+ * @param siteRefno SITE 节点的 refno
+ */
+export async function e3dGetSiteNodes(siteRefno: string): Promise<SiteNodesResponse> {
+  return await fetchJson<SiteNodesResponse>(
+    `/api/e3d/site-nodes/${encodeURIComponent(siteRefno)}`
+  );
+}

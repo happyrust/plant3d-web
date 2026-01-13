@@ -53,8 +53,31 @@ export type ReviewAttachment = {
   uploadedAt: number;
 };
 
+// 工作流节点类型
+export type WorkflowNode = 'sj' | 'jd' | 'sh' | 'pz';
+
+// 工作流步骤
+export type WorkflowStep = {
+  node: WorkflowNode;
+  action: 'submit' | 'return' | 'approve' | 'reject';
+  operatorId: string;
+  operatorName: string;
+  comment?: string;
+  timestamp: number;
+};
+
+// 工作流节点显示名称
+export const WORKFLOW_NODE_NAMES: Record<WorkflowNode, string> = {
+  sj: '编制',
+  jd: '校对',
+  sh: '审核',
+  pz: '批准',
+};
+
 export type ReviewTask = {
   id: string;
+  /** 三维校审/外部系统对齐用的单据号（后端返回 formId） */
+  formId?: string;
   title: string;
   description: string;
   modelName: string;
@@ -70,6 +93,10 @@ export type ReviewTask = {
   createdAt: number;
   updatedAt: number;
   dueDate?: number;
+  // 多级审批流程字段
+  currentNode?: WorkflowNode;
+  workflowHistory?: WorkflowStep[];
+  returnReason?: string;
 };
 
 export type ReviewComponent = {
@@ -88,6 +115,38 @@ export function hasRole(user: User | null, role: UserRole): boolean {
 export function hasAnyRole(user: User | null, roles: UserRole[]): boolean {
   if (!user) return false;
   return roles.includes(user.role);
+}
+
+// ============================================================================
+// 角色映射 (前后端转换)
+// ============================================================================
+
+// 后端角色代码映射
+// sj: 设计（编）, jd: 校对（校）, sh: 审核（审）, pz: 批准, admin: 管理员
+export const backendRoleMapping: Record<string, UserRole> = {
+  'sj': UserRole.DESIGNER,
+  'jd': UserRole.PROOFREADER,
+  'sh': UserRole.REVIEWER,
+  'pz': UserRole.MANAGER,  // 批准节点更接近“项目负责人/项目管理员”
+  'admin': UserRole.ADMIN,
+};
+
+// 转换后端角色代码到前端 UserRole
+export function fromBackendRole(backendRole: string): UserRole {
+  return backendRoleMapping[backendRole.toLowerCase()] || UserRole.VIEWER;
+}
+
+// 转换前端 UserRole 到后端角色代码
+export function toBackendRole(role: UserRole): string {
+  const mapping: Partial<Record<UserRole, string>> = {
+    [UserRole.DESIGNER]: 'sj',
+    [UserRole.PROOFREADER]: 'jd',
+    [UserRole.REVIEWER]: 'sh',
+    [UserRole.MANAGER]: 'pz',
+    [UserRole.ADMIN]: 'admin',
+    // 注意：pz 通常是由特定的审批逻辑确定的，如果是导出当前用户的后端代码，映射到对应的缩写
+  };
+  return mapping[role] || 'viewer';
 }
 
 // 是否为设计人员

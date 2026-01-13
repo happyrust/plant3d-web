@@ -17,6 +17,7 @@
 深层次的架构设计和数据流文档，是 LLM 检索映射。
 
 - [`ptset-visualization-system.md`](architecture/ptset-visualization-system.md) - Ptset 可视化系统的完整架构、核心组件和执行流程
+- [`review-system-enhancement.md`](architecture/review-system-enhancement.md) - 编校审系统增强架构，包含多级审批、JWT认证、附件管理、数据同步和辅助数据接入
 
 ## Reference - 参考资料
 

@@ -204,6 +204,20 @@ function normalizeRgbaMaybe(rgba: number[]): [number, number, number, number] {
   return [r, g, b, a];
 }
 
+function normalizeRgbMaybe(rgb: number[]): [number, number, number] {
+  const r = Number(rgb[0] ?? 1);
+  const g = Number(rgb[1] ?? 1);
+  const b = Number(rgb[2] ?? 1);
+  if (![r, g, b].every((v) => Number.isFinite(v))) {
+    return [1, 1, 1];
+  }
+  const max = Math.max(r, g, b);
+  if (max > 1.0) {
+    return [r / 255, g / 255, b / 255];
+  }
+  return [r, g, b];
+}
+
 export type LoadAiosPrepackOptions = {
   baseUrl: string;
   modelId?: string;
@@ -666,7 +680,7 @@ export class LazyEntityManager {
         geometryId: inst.geometryId,
         primitive: 'triangles',
         matrix: inst.matrix,
-        color: inst.color,
+        color: normalizeRgbMaybe(inst.color),
         opacity: inst.opacity,
         metallic: 0,
         roughness: 1
@@ -1170,7 +1184,7 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
             meshId,
             geometryId,
             matrix: inst.matrix,
-            color: inst.color || [0.85, 0.85, 0.85],
+            color: normalizeRgbMaybe(inst.color || [0.75, 0.75, 0.78]),
             opacity: 1.0
           };
 
@@ -1262,7 +1276,7 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
             meshId,
             geometryId,
             matrix: inst.matrix,
-            color: inst.color || [0.85, 0.85, 0.85],
+            color: normalizeRgbMaybe(inst.color || [0.75, 0.75, 0.78]),
             opacity: 1.0
           };
 
@@ -1539,7 +1553,7 @@ export async function loadAiosPrepackBundle(viewer: Viewer, options: LoadAiosPre
         geometryId,
         primitive: 'triangles',
         matrix: instance.matrix,
-        color: rgb,
+        color: normalizeRgbMaybe(rgb),
         opacity,
         metallic: 0,
         roughness: 1

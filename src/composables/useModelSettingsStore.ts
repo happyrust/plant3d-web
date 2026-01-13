@@ -7,7 +7,7 @@ import { ref, computed } from 'vue';
 
 // 全局状态
 const debugMode = ref(import.meta.env.DEV); // 开发环境默认开启
-const regenModelEnabled = ref(import.meta.env.DEV); // 调试模式下默认开启
+const regenModelEnabled = ref(false); // 默认关闭，即使在开发环境下也是如此
 
 export function useModelSettingsStore() {
     /**

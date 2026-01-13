@@ -22,6 +22,7 @@ import ModelExportPanelDock from '@/components/dock_panels/ModelExportPanelDock.
 import ConsolePanelDock from '@/components/dock_panels/ConsolePanelDock.vue';
 import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDock.vue';
 import RoomStatusPanelDock from '@/components/dock_panels/RoomStatusPanelDock.vue';
+import BenchmarkView from '@/components/debug/BenchmarkView.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
 import { VueQueryPlugin } from '@tanstack/vue-query';
 import vuetify from '@/plugins/vuetify';
@@ -48,5 +49,6 @@ app.component('ModelExportPanel', ModelExportPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('ParquetDebugPanel', ParquetDebugPanelDock);
 app.component('RoomStatusPanel', RoomStatusPanelDock);
+app.component('BenchmarkView', BenchmarkView);
 
 app.use(vuetify).mount('#app');

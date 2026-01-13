@@ -16,7 +16,14 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
-import type { ReviewAttachment } from '@/types/auth';
+import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
+import { WORKFLOW_NODE_NAMES } from '@/types/auth';
+import {
+  reviewGetAuxData,
+  reviewGetCollisionData,
+  reviewSyncExport,
+  reviewSyncImport,
+} from '@/api/reviewApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
@@ -68,6 +75,194 @@ const isFilteringByTask = ref(false);
 // 审核操作相关
 const showRejectDialog = ref(false);
 const rejectComment = ref('');
+
+// ============ 同步（后端） ============
+
+const syncExporting = ref(false);
+const syncImporting = ref(false);
+const syncOverwrite = ref(false);
+
+async function exportFromServer() {
+  if (syncExporting.value) return;
+  syncExporting.value = true;
+  try {
+    const resp = await reviewSyncExport({
+      includeAttachments: true,
+      includeComments: true,
+      includeRecords: true,
+    });
+    if (!resp.success) throw new Error(resp.error_message || '导出失败');
+    const json = JSON.stringify(resp, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `review-sync-export-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } finally {
+    syncExporting.value = false;
+  }
+}
+
+async function importFromFile(event: Event) {
+  if (syncImporting.value) return;
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  syncImporting.value = true;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text) as unknown;
+    const tasks = (parsed as { tasks?: unknown }).tasks;
+    if (!Array.isArray(tasks)) throw new Error('导入文件格式不正确：缺少 tasks 数组');
+
+    const resp = await reviewSyncImport({
+      tasks: tasks as ReviewTask[],
+      overwrite: syncOverwrite.value,
+    });
+    if (!resp.success) throw new Error(resp.error_message || '导入失败');
+    await userStore.loadReviewTasks();
+  } finally {
+    syncImporting.value = false;
+    input.value = '';
+  }
+}
+
+// ============ 辅助数据（碰撞/外部辅助） ============
+
+const collisionRefno = ref('');
+const collisionLoading = ref(false);
+const collisionError = ref<string | null>(null);
+const collisionData = ref<Awaited<ReturnType<typeof reviewGetCollisionData>> | null>(null);
+
+async function queryCollision() {
+  collisionLoading.value = true;
+  collisionError.value = null;
+  try {
+    collisionData.value = await reviewGetCollisionData({
+      refno: collisionRefno.value.trim() || undefined,
+      limit: 100,
+      offset: 0,
+    });
+  } catch (e) {
+    collisionError.value = e instanceof Error ? e.message : '查询失败';
+  } finally {
+    collisionLoading.value = false;
+  }
+}
+
+const AUX_UCODE_KEY = 'review_aux_ucode';
+const AUX_UKEY_KEY = 'review_aux_ukey';
+const auxUCode = ref(localStorage.getItem(AUX_UCODE_KEY) || '');
+const auxUKey = ref(localStorage.getItem(AUX_UKEY_KEY) || '');
+watch(auxUCode, (v) => localStorage.setItem(AUX_UCODE_KEY, v));
+watch(auxUKey, (v) => localStorage.setItem(AUX_UKEY_KEY, v));
+
+const auxProjectId = ref('');
+const auxMajor = ref('general');
+const auxFormId = ref('');
+const auxLoading = ref(false);
+const auxError = ref<string | null>(null);
+const auxData = ref<Awaited<ReturnType<typeof reviewGetAuxData>> | null>(null);
+
+async function fetchAuxDataForCurrentTask() {
+  if (!currentTask.value) return;
+  auxLoading.value = true;
+  auxError.value = null;
+  try {
+    const requesterId = userStore.currentUser.value?.id || 'guest';
+    const formId = auxFormId.value.trim() || currentTask.value.id;
+    const projectId = auxProjectId.value.trim() || 'default';
+    const refnos = currentTask.value.components.map((c) => c.refNo).filter(Boolean);
+    auxData.value = await reviewGetAuxData(
+      {
+        project_id: projectId,
+        model_refnos: refnos,
+        major: auxMajor.value.trim() || 'general',
+        requester_id: requesterId,
+        page: 1,
+        page_size: 100,
+        form_id: formId,
+        new_search: true,
+      },
+      { uCode: auxUCode.value.trim(), uKey: auxUKey.value.trim() }
+    );
+  } catch (e) {
+    auxData.value = null;
+    auxError.value = e instanceof Error ? e.message : '请求失败';
+  } finally {
+    auxLoading.value = false;
+  }
+}
+
+const workflowLoading = ref(false);
+const workflowError = ref<string | null>(null);
+const workflow = ref<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>> | null>(null);
+
+function getWorkflowActionLabel(action: string): string {
+  switch (action) {
+    case 'submit':
+      return '提交';
+    case 'return':
+      return '驳回';
+    case 'approve':
+      return '批准';
+    case 'reject':
+      return '拒绝';
+    default:
+      return action;
+  }
+}
+
+async function loadWorkflow(taskId: string) {
+  workflowLoading.value = true;
+  workflowError.value = null;
+  try {
+    const resp = await userStore.getTaskWorkflowHistory(taskId);
+    if (!resp.success) {
+      workflow.value = null;
+      workflowError.value = resp.error_message || '获取工作流失败';
+      return;
+    }
+    workflow.value = resp;
+  } catch (e) {
+    workflow.value = null;
+    workflowError.value = e instanceof Error ? e.message : '获取工作流失败';
+  } finally {
+    workflowLoading.value = false;
+  }
+}
+
+async function refreshCurrentTask(taskId: string) {
+  await userStore.loadReviewTasks();
+  const updated = userStore.reviewTasks.value.find((t) => t.id === taskId);
+  if (updated) {
+    await reviewStore.setCurrentTask(updated);
+  }
+}
+
+async function handleSubmitToNextNode() {
+  if (!currentTask.value) return;
+  const comment = window.prompt('提交备注（可选）', '') || undefined;
+  await userStore.submitTaskToNextNode(currentTask.value.id, comment);
+  await refreshCurrentTask(currentTask.value.id);
+  await loadWorkflow(currentTask.value.id);
+}
+
+async function handleReturnToNode() {
+  if (!currentTask.value) return;
+  const targetNode = (window.prompt('请输入驳回目标节点（sj/jd/sh）', 'sj') || '').trim() as WorkflowNode;
+  if (!['sj', 'jd', 'sh'].includes(targetNode)) return;
+  const reason = (window.prompt('请输入驳回原因（必填）', '') || '').trim();
+  if (!reason) return;
+  await userStore.returnTaskToNode(currentTask.value.id, targetNode, reason);
+  await refreshCurrentTask(currentTask.value.id);
+  await loadWorkflow(currentTask.value.id);
+}
 
 // 根据任务过滤模型显示
 function filterModelByTask() {
@@ -134,6 +329,13 @@ watch(currentTask, (newTask) => {
   } else {
     // 清除任务时清除过滤
     clearModelFilter();
+  }
+
+  if (newTask) {
+    loadWorkflow(newTask.id);
+  } else {
+    workflow.value = null;
+    workflowError.value = null;
   }
 });
 
@@ -281,6 +483,48 @@ onUnmounted(() => {
         <div class="text-xs text-muted-foreground">
           发起人: {{ currentTask.requesterName }} | 
           构件数: {{ currentTask.components.length }}
+        </div>
+        <div class="mt-2 rounded-md bg-muted/50 p-2 text-xs">
+          <div class="flex items-center justify-between">
+            <div class="text-muted-foreground">
+              当前节点:
+              <span class="font-medium text-foreground">
+                {{ WORKFLOW_NODE_NAMES[(currentTask.currentNode || 'sj') as WorkflowNode] }}
+              </span>
+            </div>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
+                :disabled="workflowLoading"
+                @click="handleSubmitToNextNode"
+              >
+                提交到下一节点
+              </button>
+              <button
+                type="button"
+                class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
+                :disabled="workflowLoading"
+                @click="handleReturnToNode"
+              >
+                驳回到指定节点
+              </button>
+            </div>
+          </div>
+          <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
+          <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
+          <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
+            <div
+              v-for="(step, idx) in workflow.history"
+              :key="idx"
+              class="flex items-center justify-between text-muted-foreground"
+            >
+              <span>
+                {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
+              </span>
+              <span>{{ formatDate(step.timestamp) }}</span>
+            </div>
+          </div>
         </div>
         <div class="flex gap-2 mt-2">
           <button
@@ -471,6 +715,98 @@ onUnmounted(() => {
           <Trash2 class="h-3.5 w-3.5" />
           清空
         </button>
+      </div>
+    </div>
+
+    <!-- 后端数据同步 -->
+    <div class="rounded-md border border-border bg-background p-3">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-semibold">数据同步（后端）</div>
+        <label class="flex items-center gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" v-model="syncOverwrite" />
+          导入覆盖
+        </label>
+      </div>
+      <div class="mt-2 flex gap-2">
+        <button
+          type="button"
+          class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50"
+          :disabled="syncExporting"
+          @click="exportFromServer"
+        >
+          <Download class="h-3.5 w-3.5" />
+          导出(后端)
+        </button>
+        <label
+          class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50 cursor-pointer"
+          :class="{ 'opacity-50 pointer-events-none': syncImporting }"
+        >
+          <FileText class="h-3.5 w-3.5" />
+          导入(后端)
+          <input type="file" accept="application/json" class="hidden" @change="importFromFile" />
+        </label>
+      </div>
+      <div class="mt-2 text-xs text-muted-foreground">
+        说明：导出/导入走 `/api/review/sync/export|import`，用于跨环境迁移校审数据。
+      </div>
+    </div>
+
+    <!-- 辅助校审数据 -->
+    <div class="rounded-md border border-border bg-background p-3">
+      <div class="text-sm font-semibold">辅助校审数据</div>
+      <div class="mt-2 space-y-3">
+        <div class="rounded-md bg-muted/30 p-2">
+          <div class="text-xs font-medium">碰撞数据查询</div>
+          <div class="mt-2 flex gap-2">
+            <input
+              v-model="collisionRefno"
+              type="text"
+              placeholder="RefNo（可选）"
+              class="h-8 flex-1 rounded-md border px-2 text-xs"
+            />
+            <button
+              type="button"
+              class="h-8 rounded-md border px-3 text-xs hover:bg-muted disabled:opacity-50"
+              :disabled="collisionLoading"
+              @click="queryCollision"
+            >
+              查询
+            </button>
+          </div>
+          <div v-if="collisionLoading" class="mt-2 text-xs text-muted-foreground">查询中...</div>
+          <div v-else-if="collisionError" class="mt-2 text-xs text-red-600">{{ collisionError }}</div>
+          <div v-else-if="collisionData" class="mt-2 text-xs text-muted-foreground">
+            命中 {{ collisionData.total }} 条
+          </div>
+        </div>
+
+        <div class="rounded-md bg-muted/30 p-2">
+          <div class="text-xs font-medium">外部辅助数据（aux-data）</div>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <input v-model="auxProjectId" type="text" placeholder="project_id（可选）" class="h-8 rounded-md border px-2 text-xs" />
+            <input v-model="auxFormId" type="text" placeholder="form_id（可选）" class="h-8 rounded-md border px-2 text-xs" />
+            <input v-model="auxMajor" type="text" placeholder="major（默认 general）" class="h-8 rounded-md border px-2 text-xs" />
+            <div class="flex gap-2">
+              <input v-model="auxUCode" type="text" placeholder="UCode" class="h-8 flex-1 rounded-md border px-2 text-xs" />
+              <input v-model="auxUKey" type="text" placeholder="UKey" class="h-8 flex-1 rounded-md border px-2 text-xs" />
+            </div>
+          </div>
+          <div class="mt-2 flex gap-2">
+            <button
+              type="button"
+              class="h-8 flex-1 rounded-md border px-3 text-xs hover:bg-muted disabled:opacity-50"
+              :disabled="!currentTask || auxLoading"
+              @click="fetchAuxDataForCurrentTask"
+            >
+              获取当前任务辅助数据
+            </button>
+          </div>
+          <div v-if="auxLoading" class="mt-2 text-xs text-muted-foreground">请求中...</div>
+          <div v-else-if="auxError" class="mt-2 text-xs text-red-600">{{ auxError }}</div>
+          <div v-else-if="auxData" class="mt-2 text-xs text-muted-foreground">
+            返回 collision: {{ auxData.data.collision.length }} 条，total={{ auxData.total }}
+          </div>
+        </div>
       </div>
     </div>
 

@@ -1,0 +1,4 @@
+#V2
+SELECT * FROM inst_relate_bool:`17496_106028`;
+LET $refs = ["17496_142306","17496_142305","17496_125330","17496_106029","17496_106030","17496_106028"]; 
+RETURN array::map($refs, |$r| { refno: $r, ngmr_cnt: (SELECT count() AS c FROM ngmr_relate WHERE out = type::record('pe', $r) GROUP ALL)[0].c ?? 0, bool_status: type::record('inst_relate_bool', $r).status });

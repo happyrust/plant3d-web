@@ -28,6 +28,7 @@ const statusFilter = ref<string>('all');
 const priorityFilter = ref<string>('all');
 const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
+const submittingTaskId = ref<string | null>(null);
 
 // 当前用户发起的任务
 const tasks = computed(() => userStore.myInitiatedTasks.value);
@@ -89,6 +90,17 @@ function formatDate(timestamp: number): string {
 
 function handleViewTask(task: ReviewTask) {
   selectedTask.value = task;
+}
+
+async function handleSubmitToNext(task: ReviewTask) {
+  if (submittingTaskId.value) return;
+  submittingTaskId.value = task.id;
+  try {
+    await userStore.submitTaskToNextNode(task.id, '提交到下一节点');
+    await userStore.loadReviewTasks();
+  } finally {
+    submittingTaskId.value = null;
+  }
 }
 
 function closeTaskDetail() {
@@ -237,6 +249,14 @@ function getStatusIconClass(status: ReviewTask['status']) {
               </div>
             </div>
             <div class="flex flex-col gap-2 ml-4">
+              <button
+                v-if="task.status === 'draft'"
+                class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                :disabled="!!submittingTaskId"
+                @click.stop="handleSubmitToNext(task)"
+              >
+                提交
+              </button>
               <button class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1" 
                 @click.stop="handleViewTask(task)">
                 <Eye class="h-4 w-4" />

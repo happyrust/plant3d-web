@@ -4,6 +4,8 @@ import {
   type ReviewComponent,
   type ReviewTask,
   type User,
+  type WorkflowNode,
+  type WorkflowStep,
   UserRole,
   UserStatus,
 } from '@/types/auth';
@@ -17,6 +19,10 @@ import {
   reviewTaskApprove,
   reviewTaskReject,
   reviewTaskCancel,
+  reviewTaskSubmitToNext,
+  reviewTaskReturn,
+  reviewTaskGetWorkflow,
+  type WorkflowHistoryResponse,
   userGetList,
   userGetCurrent,
   userGetReviewers,
@@ -37,6 +43,28 @@ const STORAGE_KEY_V1 = 'plant3d-web-user-v1';
 
 // 配置：是否使用后端 API
 const USE_BACKEND = ref(true);
+
+const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
+
+function getNextWorkflowNode(node?: WorkflowNode): WorkflowNode | null {
+  const current = node ?? 'sj';
+  const idx = WORKFLOW_NODE_ORDER.indexOf(current);
+  if (idx < 0) return 'jd';
+  const next = WORKFLOW_NODE_ORDER[idx + 1];
+  return next ?? null;
+}
+
+function statusFromNode(node: WorkflowNode): ReviewTask['status'] {
+  switch (node) {
+    case 'sj':
+      return 'draft';
+    case 'jd':
+      return 'submitted';
+    case 'sh':
+    case 'pz':
+      return 'in_review';
+  }
+}
 
 // 模拟用户数据（后端不可用时使用）
 const mockUsers: User[] = [
@@ -376,6 +404,7 @@ async function createReviewTask(data: {
   priority: ReviewTask['priority'];
   components: ReviewComponent[];
   dueDate?: number;
+  formId?: string;
 }): Promise<ReviewTask> {
   const user = currentUser.value;
   if (!user) throw new Error('No user logged in');
@@ -389,6 +418,7 @@ async function createReviewTask(data: {
         description: data.description,
         modelName: data.modelName,
         reviewerId: data.reviewerId,
+        formId: data.formId,
         priority: data.priority,
         components: data.components,
         dueDate: data.dueDate,
@@ -417,10 +447,11 @@ async function createReviewTask(data: {
 
   const task: ReviewTask = {
     id: `task-${Date.now()}`,
+    formId: data.formId,
     title: data.title,
     description: data.description,
     modelName: data.modelName,
-    status: 'submitted',
+    status: 'draft',
     priority: data.priority,
     requesterId: user.id,
     requesterName: user.name,
@@ -430,6 +461,8 @@ async function createReviewTask(data: {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     dueDate: data.dueDate,
+    currentNode: 'sj',
+    workflowHistory: [],
   };
 
   reviewTasks.value = [...reviewTasks.value, task];
@@ -499,6 +532,131 @@ async function updateTaskStatus(
     ...reviewTasks.value.slice(index + 1),
   ];
   console.log(`[useUserStore] Updated task ${taskId} status to: ${status}`);
+}
+
+async function submitTaskToNextNode(taskId: string, comment?: string): Promise<void> {
+  if (USE_BACKEND.value) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const response = await reviewTaskSubmitToNext(taskId, comment);
+      if (!response.success) {
+        throw new Error(response.error_message || '提交到下一节点失败');
+      }
+      await loadReviewTasks();
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '提交到下一节点失败';
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+    return;
+  }
+
+  const idx = reviewTasks.value.findIndex((t) => t.id === taskId);
+  const task = idx >= 0 ? reviewTasks.value[idx] : null;
+  if (!task) return;
+
+  const fromNode = task.currentNode ?? 'sj';
+  const nextNode = getNextWorkflowNode(fromNode);
+  if (!nextNode) return;
+
+  const operatorId = currentUser.value?.id || 'local';
+  const operatorName = currentUser.value?.name || '本地用户';
+
+  const step: WorkflowStep = {
+    node: fromNode,
+    action: 'submit',
+    operatorId,
+    operatorName,
+    comment,
+    timestamp: Date.now(),
+  };
+
+  const updated: ReviewTask = {
+    ...task,
+    status: statusFromNode(nextNode),
+    currentNode: nextNode,
+    workflowHistory: [...(task.workflowHistory || []), step],
+    returnReason: undefined,
+    updatedAt: Date.now(),
+  };
+
+  reviewTasks.value = [
+    ...reviewTasks.value.slice(0, idx),
+    updated,
+    ...reviewTasks.value.slice(idx + 1),
+  ];
+}
+
+async function returnTaskToNode(taskId: string, targetNode: WorkflowNode, reason: string): Promise<void> {
+  if (USE_BACKEND.value) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const response = await reviewTaskReturn(taskId, targetNode, reason);
+      if (!response.success) {
+        throw new Error(response.error_message || '驳回失败');
+      }
+      await loadReviewTasks();
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '驳回失败';
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+    return;
+  }
+
+  const idx = reviewTasks.value.findIndex((t) => t.id === taskId);
+  const task = idx >= 0 ? reviewTasks.value[idx] : null;
+  if (!task) return;
+
+  const fromNode = task.currentNode ?? 'sj';
+  const operatorId = currentUser.value?.id || 'local';
+  const operatorName = currentUser.value?.name || '本地用户';
+
+  const step: WorkflowStep = {
+    node: fromNode,
+    action: 'return',
+    operatorId,
+    operatorName,
+    comment: reason,
+    timestamp: Date.now(),
+  };
+
+  const updated: ReviewTask = {
+    ...task,
+    status: statusFromNode(targetNode),
+    currentNode: targetNode,
+    workflowHistory: [...(task.workflowHistory || []), step],
+    returnReason: reason,
+    updatedAt: Date.now(),
+  };
+
+  reviewTasks.value = [
+    ...reviewTasks.value.slice(0, idx),
+    updated,
+    ...reviewTasks.value.slice(idx + 1),
+  ];
+}
+
+async function getTaskWorkflowHistory(taskId: string): Promise<WorkflowHistoryResponse> {
+  if (USE_BACKEND.value) {
+    return await reviewTaskGetWorkflow(taskId);
+  }
+
+  const task = reviewTasks.value.find((t) => t.id === taskId);
+  const currentNode = task?.currentNode ?? 'sj';
+  const currentNodeName =
+    currentNode === 'sj' ? '编制' : currentNode === 'jd' ? '校对' : currentNode === 'sh' ? '审核' : '批准';
+
+  return {
+    success: true,
+    currentNode,
+    currentNodeName,
+    history: (task?.workflowHistory || []) as unknown as WorkflowHistoryResponse['history'],
+  };
 }
 
 async function deleteTask(taskId: string): Promise<void> {
@@ -690,6 +848,9 @@ export function useUserStore() {
     loadReviewTasks,
     createReviewTask,
     updateTaskStatus,
+    submitTaskToNextNode,
+    returnTaskToNode,
+    getTaskWorkflowHistory,
     deleteTask,
     getTask,
 

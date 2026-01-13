@@ -5,6 +5,9 @@ import { defineConfig } from 'vite';
 
 import vuetify from 'vite-plugin-vuetify';
 
+const backendPort = process.env.VITE_BACKEND_PORT || '8080';
+const backendTarget = `http://localhost:${backendPort}`;
+
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/',
@@ -19,11 +22,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/files': {
-        target: 'http://localhost:8080',
+        target: backendTarget,
         changeOrigin: true,
       },
     },

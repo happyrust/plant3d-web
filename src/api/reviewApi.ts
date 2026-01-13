@@ -17,16 +17,47 @@ function getBaseUrl(): string {
   return (envBase && envBase.trim()) || 'http://localhost:8080';
 }
 
+// Token 存储 key
+const TOKEN_STORAGE_KEY = 'review_auth_token';
+
+/**
+ * 获取存储的 JWT Token
+ */
+export function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+/**
+ * 设置 JWT Token
+ */
+export function setAuthToken(token: string): void {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+/**
+ * 清除 JWT Token
+ */
+export function clearAuthToken(): void {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const base = getBaseUrl().replace(/\/$/, '');
   const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
 
+  // 自动添加 Authorization Header（如果有 token）
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> || {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const resp = await fetch(url, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
+    headers,
   });
 
   if (!resp.ok) {
@@ -44,6 +75,8 @@ export type ReviewTaskCreateRequest = {
   description?: string;
   modelName: string;
   reviewerId: string;
+  /** 外部已创建单据时传入，后端会沿用；不传则由后端生成 */
+  formId?: string;
   priority: ReviewTask['priority'];
   components: ReviewComponent[];
   dueDate?: number;
@@ -112,6 +145,22 @@ export type ReviewHistoryItem = {
 export type ReviewHistoryResponse = {
   success: boolean;
   history: ReviewHistoryItem[];
+  error_message?: string;
+};
+
+// 工作流历史响应类型
+export type WorkflowHistoryResponse = {
+  success: boolean;
+  currentNode: string;
+  currentNodeName: string;
+  history: Array<{
+    node: string;
+    action: string;
+    operatorId: string;
+    operatorName: string;
+    comment?: string;
+    timestamp: number;
+  }>;
   error_message?: string;
 };
 
@@ -256,6 +305,55 @@ export async function reviewTaskCancel(
       method: 'POST',
       body: JSON.stringify({ reason }),
     }
+  );
+}
+
+// ============ 多级审批流程 API ============
+
+/**
+ * 提交到下一节点
+ * POST /api/review/tasks/{taskId}/submit
+ */
+export async function reviewTaskSubmitToNext(
+  taskId: string,
+  comment?: string
+): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/submit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+/**
+ * 驳回到指定节点
+ * POST /api/review/tasks/{taskId}/return
+ */
+export async function reviewTaskReturn(
+  taskId: string,
+  targetNode: string,
+  reason: string
+): Promise<ReviewActionResponse> {
+  return await fetchJson<ReviewActionResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/return`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ targetNode, reason }),
+    }
+  );
+}
+
+/**
+ * 获取工作流历史
+ * GET /api/review/tasks/{taskId}/workflow
+ */
+export async function reviewTaskGetWorkflow(
+  taskId: string
+): Promise<WorkflowHistoryResponse> {
+  return await fetchJson<WorkflowHistoryResponse>(
+    `/api/review/tasks/${encodeURIComponent(taskId)}/workflow`
   );
 }
 
@@ -421,9 +519,11 @@ export async function reviewAttachmentUpload(
   formData.append('file', file);
   formData.append('taskId', taskId);
 
+  const token = getAuthToken();
   const resp = await fetch(`${base}/api/review/attachments`, {
     method: 'POST',
     body: formData,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
 
   if (!resp.ok) {
@@ -455,6 +555,7 @@ export function reviewAttachmentUploadWithProgress(
     }
 
     const xhr = new XMLHttpRequest();
+    const token = getAuthToken();
 
     // 进度事件
     xhr.upload.onprogress = (event) => {
@@ -489,6 +590,9 @@ export function reviewAttachmentUploadWithProgress(
     };
 
     xhr.open('POST', `${base}/api/review/attachments`);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
     xhr.send(formData);
   });
 }
@@ -543,6 +647,7 @@ export function getReviewUserWebSocketUrl(userId: string): string {
 export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
   return {
     id: String(raw.id || ''),
+    formId: raw.formId ? String(raw.formId) : (raw.form_id ? String(raw.form_id) : undefined),
     title: String(raw.title || ''),
     description: String(raw.description || ''),
     modelName: String(raw.model_name || raw.modelName || ''),
@@ -558,7 +663,23 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
     createdAt: normalizeTimestamp(raw.created_at || raw.createdAt) || Date.now(),
     updatedAt: normalizeTimestamp(raw.updated_at || raw.updatedAt) || Date.now(),
     dueDate: raw.due_date ? normalizeTimestamp(raw.due_date) : undefined,
+    // 多级审批流程字段
+    currentNode: normalizeWorkflowNode(raw.current_node || raw.currentNode),
+    workflowHistory: Array.isArray(raw.workflow_history || raw.workflowHistory)
+      ? (raw.workflow_history || raw.workflowHistory) as ReviewTask['workflowHistory']
+      : undefined,
+    returnReason: raw.return_reason || raw.returnReason
+      ? String(raw.return_reason || raw.returnReason)
+      : undefined,
   };
+}
+
+function normalizeWorkflowNode(node: unknown): ReviewTask['currentNode'] {
+  const nodeStr = String(node || 'sj').toLowerCase();
+  const validNodes = ['sj', 'jd', 'sh', 'pz'];
+  return validNodes.includes(nodeStr)
+    ? (nodeStr as ReviewTask['currentNode'])
+    : 'sj';
 }
 
 function normalizeReviewStatus(status: unknown): ReviewTask['status'] {
@@ -591,4 +712,273 @@ function normalizeTimestamp(value: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+// ============ 认证 API ============
+
+export type TokenRequest = {
+  projectId: string;
+  userId: string;
+  formId?: string;
+  role?: string;
+};
+
+export type TokenResponse = {
+  code: number;
+  message: string;
+  data?: {
+    token: string;
+    expiresAt: number;
+    formId: string;
+  };
+};
+
+export type VerifyResponse = {
+  code: number;
+  message: string;
+  data?: {
+    valid: boolean;
+    claims?: {
+      projectId: string;
+      userId: string;
+      formId: string;
+      role?: string;
+      exp: number;
+      iat: number;
+    };
+    error?: string;
+  };
+};
+
+/**
+ * 获取 JWT Token
+ * POST /api/auth/token
+ */
+export async function authGetToken(request: TokenRequest): Promise<TokenResponse> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/auth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: request.projectId,
+      user_id: request.userId,
+      form_id: request.formId,
+      role: request.role,
+    }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+  }
+
+  const data = await resp.json() as TokenResponse;
+
+  // 自动保存 token
+  if (data.code === 0 && data.data?.token) {
+    setAuthToken(data.data.token);
+  }
+
+  return data;
+}
+
+/**
+ * 验证 JWT Token
+ * POST /api/auth/verify
+ */
+export async function authVerifyToken(token?: string): Promise<VerifyResponse> {
+  const tokenToVerify = token || getAuthToken();
+  if (!tokenToVerify) {
+    return {
+      code: -1,
+      message: 'No token provided',
+      data: { valid: false, error: 'No token' },
+    };
+  }
+
+  const base = getBaseUrl().replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: tokenToVerify }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+  }
+
+  return (await resp.json()) as VerifyResponse;
+}
+
+/**
+ * 登录并获取 Token（便捷方法）
+ */
+export async function login(
+  projectId: string,
+  userId: string,
+  role?: string
+): Promise<boolean> {
+  try {
+    const resp = await authGetToken({ projectId, userId, role });
+    return resp.code === 0 && !!resp.data?.token;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 登出（清除 Token）
+ */
+export function logout(): void {
+  clearAuthToken();
+}
+
+/**
+ * 检查是否已登录
+ */
+export function isLoggedIn(): boolean {
+  return !!getAuthToken();
+}
+
+// ============ 同步 API ============
+
+export type ExportRequest = {
+  taskIds?: string[];
+  includeAttachments?: boolean;
+  includeComments?: boolean;
+  includeRecords?: boolean;
+};
+
+export type ExportResponse = {
+  success: boolean;
+  tasks: ReviewTask[];
+  comments?: unknown[];
+  records?: unknown[];
+  error_message?: string;
+};
+
+export type ImportRequest = {
+  tasks: ReviewTask[];
+  overwrite?: boolean;
+};
+
+export type ImportResponse = {
+  success: boolean;
+  importedCount: number;
+  skippedCount: number;
+  error_message?: string;
+};
+
+/**
+ * 导出校审数据
+ * POST /api/review/sync/export
+ */
+export async function reviewSyncExport(
+  request: ExportRequest = {}
+): Promise<ExportResponse> {
+  return await fetchJson<ExportResponse>('/api/review/sync/export', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+/**
+ * 导入校审数据
+ * POST /api/review/sync/import
+ */
+export async function reviewSyncImport(
+  request: ImportRequest
+): Promise<ImportResponse> {
+  return await fetchJson<ImportResponse>('/api/review/sync/import', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+// ============ 辅助校审数据 API ============
+
+export type CollisionQueryParams = {
+  project_id?: string;
+  refno?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type CollisionItem = {
+  ObjectOneLoc: string;
+  ObjectOne: string;
+  ObjectTowLoc: string;
+  ObjectTow: string;
+  ErrorMsg: string;
+  ObjectOneMajor: string;
+  ObjectTwoMajor: string;
+  CheckUsr: string;
+  CheckDate: string;
+  UpUsr?: string;
+  UpTime?: string;
+  ErrorStatus: string;
+};
+
+export type CollisionDataResponse = {
+  success: boolean;
+  data: CollisionItem[];
+  total: number;
+  error_message?: string;
+};
+
+/**
+ * 查询碰撞数据
+ * GET /api/review/collision-data
+ */
+export async function reviewGetCollisionData(params: CollisionQueryParams = {}): Promise<CollisionDataResponse> {
+  const search = new URLSearchParams();
+  if (params.project_id) search.set('project_id', params.project_id);
+  if (params.refno) search.set('refno', params.refno);
+  if (params.limit != null) search.set('limit', String(params.limit));
+  if (params.offset != null) search.set('offset', String(params.offset));
+  const qs = search.toString();
+  const path = qs ? `/api/review/collision-data?${qs}` : '/api/review/collision-data';
+  return await fetchJson<CollisionDataResponse>(path, { method: 'GET' });
+}
+
+export type AuxDataRequest = {
+  project_id: string;
+  model_refnos: string[];
+  major: string;
+  requester_id: string;
+  page: number;
+  page_size: number;
+  form_id: string;
+  new_search?: boolean;
+};
+
+export type AuxDataResponse = {
+  code: number;
+  message: string;
+  page: number;
+  page_size: number;
+  total: number;
+  data: {
+    collision: CollisionItem[];
+    quality: unknown[];
+    otverification: unknown[];
+    rules: unknown[];
+  };
+};
+
+/**
+ * 获取辅助校审数据（当前后端使用 UCode/UKey Header 做简单鉴权）
+ * POST /api/review/aux-data
+ */
+export async function reviewGetAuxData(
+  request: AuxDataRequest,
+  auth: { uCode: string; uKey: string }
+): Promise<AuxDataResponse> {
+  return await fetchJson<AuxDataResponse>('/api/review/aux-data', {
+    method: 'POST',
+    headers: {
+      UCode: auth.uCode,
+      UKey: auth.uKey,
+    },
+    body: JSON.stringify(request),
+  });
 }

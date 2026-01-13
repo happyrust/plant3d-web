@@ -55,12 +55,26 @@ function multiplyMat4(a: number[], b: number[]): number[] {
         for (let row = 0; row < 4; row++) {
             let sum = 0
             for (let k = 0; k < 4; k++) {
-                sum += a[k * 4 + row] * b[col * 4 + k]
+                sum += (a[k * 4 + row] ?? 0) * (b[col * 4 + k] ?? 0)
             }
             result[col * 4 + row] = sum
         }
     }
     return result
+}
+
+function normalizeRgbMaybe(rgb: number[]): [number, number, number] {
+    const r = Number(rgb[0] ?? 1)
+    const g = Number(rgb[1] ?? 1)
+    const b = Number(rgb[2] ?? 1)
+    if (![r, g, b].every((v) => Number.isFinite(v))) {
+        return [1, 1, 1]
+    }
+    const max = Math.max(r, g, b)
+    if (max > 1.0) {
+        return [r / 255, g / 255, b / 255]
+    }
+    return [r, g, b]
 }
 
 /**
@@ -209,6 +223,104 @@ function extractAccessorData(
     return result
 }
 
+type AiosSceneWithManagers = {
+    __aiosLazyEntityManagers?: Record<string, unknown>
+    __aiosActiveLazyModelId?: string
+}
+
+type SurrealEntityManager = {
+    id: string
+    __aiosManagerKind: 'surreal'
+    hasRefno: (refno: string) => boolean
+    showEntity: (refno: string) => boolean | Promise<boolean>
+    hideEntity: (refno: string) => boolean
+    setVisibility: (refnos: string[], visible: boolean) => Promise<number>
+    debugEntity: (refno: string) => unknown
+    isEntityCreated: (refno: string) => boolean
+    isEntityVisible: (refno: string) => boolean
+    getAllRefnos: () => string[]
+    getDebugStats: () => {
+        lazyRefnoCount: number
+        createdEntityCount: number
+        meshCfgCount: number
+        geometryCount: number
+    }
+}
+
+function registerSurrealEntityManager(
+    viewer: Viewer,
+    modelKey: string,
+    refnoToMeshIds: Map<string, string[]>,
+    debug: boolean
+) {
+    const log = (...args: unknown[]) => debug && console.log('[Surreal→Xeokit]', ...args)
+
+    const hasRefno = (refno: string) => refnoToMeshIds.has(refno)
+
+    const showEntity = async (refno: string): Promise<boolean> => {
+        const obj = viewer.scene.objects?.[refno] as unknown as { visible?: boolean } | undefined
+        if (!obj) return false
+        obj.visible = true
+        return true
+    }
+
+    const hideEntity = (refno: string): boolean => {
+        const obj = viewer.scene.objects?.[refno] as unknown as { visible?: boolean } | undefined
+        if (!obj) return true
+        obj.visible = false
+        return true
+    }
+
+    const manager: SurrealEntityManager = {
+        id: modelKey,
+        __aiosManagerKind: 'surreal',
+        hasRefno,
+        showEntity,
+        hideEntity,
+        setVisibility: async (refnos: string[], visible: boolean) => {
+            let count = 0
+            for (const refno of refnos) {
+                const ok = visible ? await showEntity(refno) : hideEntity(refno)
+                if (ok) count++
+            }
+            return count
+        },
+        debugEntity: (refno: string) => {
+            const obj = viewer.scene.objects?.[refno] as unknown as { visible?: boolean } | undefined
+            return {
+                refno,
+                hasRefno: hasRefno(refno),
+                entityPresent: !!obj,
+                visible: !!obj && obj.visible !== false,
+            }
+        },
+        isEntityCreated: (refno: string) => !!viewer.scene.objects?.[refno],
+        isEntityVisible: (refno: string) => {
+            const obj = viewer.scene.objects?.[refno] as unknown as { visible?: boolean } | undefined
+            return !!obj && obj.visible !== false
+        },
+        getAllRefnos: () => Array.from(refnoToMeshIds.keys()),
+        getDebugStats: () => ({
+            lazyRefnoCount: refnoToMeshIds.size,
+            createdEntityCount: Array.from(refnoToMeshIds.keys()).filter((r) => !!viewer.scene.objects?.[r]).length,
+            meshCfgCount: 0,
+            geometryCount: 0,
+        }),
+    }
+
+    try {
+        const sceneAny = viewer.scene as unknown as AiosSceneWithManagers
+        sceneAny.__aiosLazyEntityManagers ??= {}
+        sceneAny.__aiosLazyEntityManagers[modelKey] = manager
+        if (!sceneAny.__aiosActiveLazyModelId) {
+            sceneAny.__aiosActiveLazyModelId = modelKey
+        }
+        log('Registered __aiosLazyEntityManagers:', { modelKey, refnos: refnoToMeshIds.size })
+    } catch {
+        // ignore
+    }
+}
+
 // ========================
 // 主加载函数
 // ========================
@@ -256,8 +368,8 @@ export async function loadSurrealToXeokit(
     // 2. 查询几何实例
     // 重要：使用原始实例而非 Vue 代理，避免私有字段访问问题
     const rawDb = getRawDbInstance()
-    const dbRef = ref(rawDb)
-    const { queryInsts } = useSurrealModelQuery(dbRef)
+    const dbRef = ref(rawDb) as unknown as ReturnType<typeof ref>
+    const { queryInsts } = useSurrealModelQuery(dbRef as unknown as Parameters<typeof useSurrealModelQuery>[0])
 
     log('Querying geometry instances...')
     const geomInsts = await queryInsts(refnos, enableHoles)
@@ -391,10 +503,16 @@ export async function loadSurrealToXeokit(
                 matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
             }
 
-            // 根据类型设置颜色
-            const isTubi = meshInst.is_tubi
-            const color = isTubi ? [0.2, 0.45, 0.85] : [0.85, 0.85, 0.85]
+            // 获取颜色 (优先使用后端返回的颜色，否则使用默认规则)
+            let color: number[]
+            if (meshInst.color && meshInst.color.length >= 3) {
+                color = Array.from(normalizeRgbMaybe(meshInst.color))
+            } else {
+                const isTubi = meshInst.is_tubi
+                color = isTubi ? [0.2, 0.45, 0.85] : [0.75, 0.75, 0.78]
+            }
 
+            // 使用 PBR 材质
             sceneModel.createMesh({
                 id: meshId,
                 geometryId,
@@ -402,8 +520,9 @@ export async function loadSurrealToXeokit(
                 matrix,
                 color,
                 opacity: 1.0,
-                metallic: 0,
-                roughness: 1,
+                // PBR 属性
+                metallic: 0.0,
+                roughness: 1.0,
             } as unknown as Parameters<SceneModel['createMesh']>[0])
 
             meshIds.push(meshId)
@@ -428,6 +547,9 @@ export async function loadSurrealToXeokit(
 
     // 等待一个 tick，确保 AABB 被正确计算
     await new Promise(resolve => setTimeout(resolve, 100))
+
+    // 让 PDMS 树能识别 Surreal loader 创建的模型，避免走“传统方式”分支
+    registerSurrealEntityManager(viewer, modelId, refnoToMeshIds, debug)
 
     // 8. 触发事件
     viewer.scene.fire('modelLoaded', modelId)
