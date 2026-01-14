@@ -174,8 +174,10 @@ function computeFlyToPositionFromBox(box: Box3): { position: Vector3; target: Ve
 
 export function usePtsetVisualizationThree(
   dtxViewerRef: Ref<DtxViewer | null>,
-  labelContainerRef: Ref<HTMLElement | null>
+  labelContainerRef: Ref<HTMLElement | null>,
+  options: { requestRender?: (() => void) | null } = {}
 ): UsePtsetVisualizationThreeReturn {
+  const requestRender = options.requestRender ?? null
   const visualObjects = ref<Map<string, PtsetVisualObject>>(new Map())
   const isVisible = ref(false)
   const currentRefno = ref<string | null>(null)
@@ -218,6 +220,7 @@ export function usePtsetVisualizationThree(
     for (const child of [...group.children]) {
       group.remove(child)
     }
+    requestRender?.()
   }
 
   function applyVisibility() {
@@ -361,26 +364,31 @@ export function usePtsetVisualizationThree(
     isVisible.value = true
     applyVisibility()
     updateLabelPositions()
+    requestRender?.()
   }
 
   function setVisible(visible: boolean) {
     isVisible.value = visible
     applyVisibility()
+    requestRender?.()
   }
 
   function setCrossesVisible(visible: boolean) {
     showCrosses.value = visible
     applyVisibility()
+    requestRender?.()
   }
 
   function setLabelsVisible(visible: boolean) {
     showLabels.value = visible
     applyVisibility()
+    requestRender?.()
   }
 
   function setArrowsVisible(visible: boolean) {
     showArrows.value = visible
     applyVisibility()
+    requestRender?.()
   }
 
   function flyToPtset() {
@@ -428,4 +436,3 @@ export function usePtsetVisualizationThree(
     updateLabelPositions,
   }
 }
-

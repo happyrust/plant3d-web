@@ -49,10 +49,12 @@ export class DtxCompatScene {
 
   private _dtxLayer: DTXLayer
   private _selection: DTXSelectionController | null
+  private _onDirty: (() => void) | null
 
-  constructor(options: { dtxLayer: DTXLayer; selection?: DTXSelectionController | null }) {
+  constructor(options: { dtxLayer: DTXLayer; selection?: DTXSelectionController | null; onDirty?: (() => void) | null }) {
     this._dtxLayer = options.dtxLayer
     this._selection = options.selection ?? null
+    this._onDirty = options.onDirty ?? null
   }
 
   get objectIds(): string[] {
@@ -117,6 +119,7 @@ export class DtxCompatScene {
         this._dtxLayer.setObjectVisible(objectId, visible)
       }
     }
+    this._onDirty?.()
   }
 
   setObjectsSelected(refnos: string[], selected: boolean): void {
@@ -136,6 +139,7 @@ export class DtxCompatScene {
         this._selection.deselect(objectIds)
       }
     }
+    this._onDirty?.()
   }
 
   /**
@@ -181,6 +185,7 @@ export class DtxCompatScene {
       delete this.objects[id]
     }
     this._selection?.clearSelection()
+    this._onDirty?.()
   }
 }
 
@@ -190,18 +195,29 @@ export class DtxCompatViewer {
   readonly __dtxSelection: DTXSelectionController | null
 
   readonly scene: DtxCompatScene
+  readonly requestRender: (() => void) | null
 
   readonly cameraFlight: {
     flyTo: (options: { aabb?: Aabb6 | number[] | null; duration?: number; fit?: boolean }) => void
     jumpTo: (options: { aabb?: Aabb6 | number[] | null }) => void
   }
 
-  constructor(options: { dtxViewer: DtxViewer; dtxLayer: DTXLayer; selection?: DTXSelectionController | null }) {
+  constructor(options: {
+    dtxViewer: DtxViewer
+    dtxLayer: DTXLayer
+    selection?: DTXSelectionController | null
+    requestRender?: (() => void) | null
+  }) {
     this.__dtxViewer = options.dtxViewer
     this.__dtxLayer = options.dtxLayer
     this.__dtxSelection = options.selection ?? null
+    this.requestRender = options.requestRender ?? null
 
-    this.scene = new DtxCompatScene({ dtxLayer: this.__dtxLayer, selection: this.__dtxSelection })
+    this.scene = new DtxCompatScene({
+      dtxLayer: this.__dtxLayer,
+      selection: this.__dtxSelection,
+      onDirty: this.requestRender,
+    })
 
     const flyToImpl = (aabbInput: Aabb6 | number[] | null | undefined, durationSeconds?: number) => {
       if (!aabbInput) return

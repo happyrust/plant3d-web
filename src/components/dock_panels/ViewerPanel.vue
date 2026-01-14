@@ -1,7 +1,7 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
-import { Vector2 } from 'three';
+import { Vector2, Vector3 } from 'three';
 import { ArrowUpRight, Cloud, RectangleHorizontal, Trash2, X } from 'lucide-vue-next';
 
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
@@ -49,33 +49,42 @@ const ptsetVisRef = shallowRef<ReturnType<typeof usePtsetVisualizationThree> | n
 const modelGenerationRef = shallowRef<ReturnType<typeof useModelGeneration> | null>(null);
 
 let attachedToScene = false;
+let shaderPrecompiled = false;
+let continuousRender = false;
 let rafId: number | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
+let offControlsChange: (() => void) | null = null;
 
 function handleRibbonCommand(commandId: string) {
   switch (commandId) {
     case 'measurement.distance':
       store.setToolMode('measure_distance');
+      requestRender();
       return;
     case 'measurement.angle':
       store.setToolMode('measure_angle');
+      requestRender();
       return;
     case 'measurement.point_to_mesh':
       store.setToolMode('measure_point_to_object');
+      requestRender();
       return;
     case 'measurement.clear':
       store.clearMeasurements();
+      requestRender();
       return;
     case 'annotation.create':
       store.setToolMode('annotation');
+      requestRender();
       return;
     case 'tools.clear_all':
       store.clearAll();
       ptsetVisRef.value?.clearAll();
+      requestRender();
       return;
   }
 }
@@ -88,6 +97,17 @@ function ensureLayerAttached() {
   if (!dtxLayer.getStats().compiled) return;
   dtxLayer.addToScene(dtxViewer.scene);
   attachedToScene = true;
+
+  if (!shaderPrecompiled) {
+    try {
+      dtxViewer.renderer.compile(dtxViewer.scene, dtxViewer.camera);
+      shaderPrecompiled = true;
+    } catch (e) {
+      console.warn('[ViewerPanel] shader 预编译失败，将在首帧渲染时自动编译', e);
+    }
+  }
+
+  requestRender();
 }
 
 function parseRefnoFromObjectId(objectId: string): string | null {
@@ -119,6 +139,7 @@ function attachPicking() {
 
     if (!hit) {
       selectionStore.clearSelection();
+      requestRender();
       return;
     }
 
@@ -128,6 +149,7 @@ function attachPicking() {
     selectionStore.setSelectedRefno(refno);
     compat.scene.ensureRefnos([refno]);
     compat.scene.setObjectsSelected([refno], true);
+    requestRender();
   };
 
   canvas.addEventListener('pointerup', onClick);
@@ -145,10 +167,22 @@ function attachToolsInput() {
   const tools = toolsRef.value;
   if (!canvas || !tools) return;
 
-  const onDown = (e: PointerEvent) => tools.onCanvasPointerDown(canvas, e);
-  const onMove = (e: PointerEvent) => tools.onCanvasPointerMove(canvas, e);
-  const onUp = (e: PointerEvent) => tools.onCanvasPointerUp(canvas, e);
-  const onCancel = (e: PointerEvent) => tools.onCanvasPointerCancel(canvas, e);
+  const onDown = (e: PointerEvent) => {
+    tools.onCanvasPointerDown(canvas, e);
+    requestRender();
+  };
+  const onMove = (e: PointerEvent) => {
+    tools.onCanvasPointerMove(canvas, e);
+    requestRender();
+  };
+  const onUp = (e: PointerEvent) => {
+    tools.onCanvasPointerUp(canvas, e);
+    requestRender();
+  };
+  const onCancel = (e: PointerEvent) => {
+    tools.onCanvasPointerCancel(canvas, e);
+    requestRender();
+  };
 
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
@@ -174,30 +208,68 @@ function handleResize() {
   if (!el || !dtxViewer) return;
   const rect = el.getBoundingClientRect();
   dtxViewer.setSize(rect.width, rect.height);
+  selectionControllerRef.value?.resize(rect.width, rect.height);
+  requestRender();
 }
 
-function startRenderLoop() {
-  const tick = () => {
-    rafId = window.requestAnimationFrame(tick);
+let needsRender = true;
+let isRendering = false;
+const tmpCameraPos = new Vector3();
+const tmpCameraTarget = new Vector3();
+const CAMERA_EPS_SQ = 1e-12;
 
+function scheduleFrame() {
+  if (rafId !== null) return;
+  rafId = window.requestAnimationFrame(() => {
+    rafId = null;
+    renderFrame();
+  });
+}
+
+function requestRender() {
+  needsRender = true;
+  scheduleFrame();
+}
+
+function renderFrame() {
+  if (isRendering) return;
+  isRendering = true;
+  try {
     const dtxViewer = dtxViewerRef.value;
     const dtxLayer = dtxLayerRef.value;
     if (!dtxViewer || !dtxLayer) return;
 
+    // 计算相机是否变化（支持 enableDamping / flyTo / resize 后的按需刷新）
+    tmpCameraPos.copy(dtxViewer.camera.position);
+    tmpCameraTarget.copy(dtxViewer.controls.target);
     dtxViewer.controls.update();
+    const posDeltaSq = tmpCameraPos.distanceToSquared(dtxViewer.camera.position);
+    const targetDeltaSq = tmpCameraTarget.distanceToSquared(dtxViewer.controls.target);
+    const cameraChanged = posDeltaSq > CAMERA_EPS_SQ || targetDeltaSq > CAMERA_EPS_SQ;
+
+    if (!needsRender && !cameraChanged && !continuousRender) return;
+
+    ensureLayerAttached();
     dtxLayer.update(dtxViewer.camera);
-    dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+
+    const selection = selectionControllerRef.value;
+    if (selection?.hasOutline() && selection.hasOutlinedObjects()) {
+      selection.renderOutline();
+    } else {
+      dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+    }
+
     toolsRef.value?.updateOverlayPositions();
     ptsetVisRef.value?.updateLabelPositions();
-  };
 
-  rafId = window.requestAnimationFrame(tick);
-}
+    needsRender = false;
 
-function stopRenderLoop() {
-  if (rafId === null) return;
-  window.cancelAnimationFrame(rafId);
-  rafId = null;
+    if (continuousRender || cameraChanged || needsRender) {
+      scheduleFrame();
+    }
+  } finally {
+    isRendering = false;
+  }
 }
 
 const showAnnotationToolbar = computed(() => {
@@ -246,6 +318,16 @@ onMounted(() => {
   if (!canvas || !container) return;
 
   initError.value = null;
+  needsRender = true;
+  attachedToScene = false;
+  shaderPrecompiled = false;
+  continuousRender = false;
+  try {
+    // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
+    continuousRender = isDev && localStorage.getItem('dtx_continuous_render') === '1';
+  } catch {
+    // ignore
+  }
 
   let dtxViewer: DtxViewer;
   try {
@@ -268,17 +350,23 @@ onMounted(() => {
     camera: dtxViewer.camera,
     renderer: dtxViewer.renderer,
     container: canvas,
-    enableOutline: false,
+    enableOutline: true,
   });
   selectionControllerRef.value = selectionController;
 
-  const compat = new DtxCompatViewer({ dtxViewer, dtxLayer, selection: selectionController });
+  const compat = new DtxCompatViewer({
+    dtxViewer,
+    dtxLayer,
+    selection: selectionController,
+    requestRender,
+  });
   // 让 useModelGeneration 能识别 DTX 后端
   (compat as any).__dtxLayer = dtxLayer;
   (compat as any).__dtxAfterInstancesLoaded = (_dbno: number, loadedRefnos: string[]) => {
     compat.scene.ensureRefnos(loadedRefnos);
     ensureLayerAttached();
     selectionController.refreshSpatialIndex();
+    requestRender();
   };
   compatViewerRef.value = compat;
   modelGenerationRef.value = useModelGeneration({ viewer: compat });
@@ -295,10 +383,11 @@ onMounted(() => {
     overlayContainerRef: overlayContainer,
     store,
     compatViewerRef,
+    requestRender,
   });
   toolsRef.value = tools;
 
-  const ptsetVis = usePtsetVisualizationThree(dtxViewerRef, overlayContainer);
+  const ptsetVis = usePtsetVisualizationThree(dtxViewerRef, overlayContainer, { requestRender });
   ptsetVisRef.value = ptsetVis;
   viewerContext.ptsetVis.value = ptsetVis as any;
 
@@ -306,6 +395,22 @@ onMounted(() => {
   viewerContext.overlayContainerRef.value = overlayContainer.value;
   viewerContext.store.value = store;
   viewerContext.tools.value = tools as any;
+
+  const onControlsChange = () => {
+    if (isRendering) {
+      needsRender = true;
+      return;
+    }
+    requestRender();
+  };
+  dtxViewer.controls.addEventListener('change', onControlsChange);
+  offControlsChange = () => dtxViewer.controls.removeEventListener('change', onControlsChange);
+
+  selectionController.on('selectionChanged', () => requestRender());
+  selectionController.on('flyTo', (ev: any) => {
+    if (!ev?.position || !ev?.target) return;
+    dtxViewer.flyTo(ev.position, ev.target, { duration: ev.duration });
+  });
 
   // 兼容：批注/脚本会 dispatch showModelByRefnos，Viewer 侧统一接住并按需加载
   let showModelQueue: Promise<void> = Promise.resolve();
@@ -329,6 +434,9 @@ onMounted(() => {
       })
       .catch((e) => {
         console.warn('[ViewerPanel] showModelByRefnos failed', e);
+      })
+      .finally(() => {
+        requestRender();
       });
   };
   window.addEventListener('showModelByRefnos', handleShowModelByRefnos);
@@ -346,6 +454,7 @@ onMounted(() => {
           ptsetVis.renderPtset(request.refno, response);
           ptsetVis.flyToPtset();
           emitToast({ message: `已显示 ${response.ptset.length} 个连接点` });
+          requestRender();
         } else {
           const errorMsg = response.error_message || '未找到点集数据';
           emitToast({ message: errorMsg });
@@ -369,13 +478,19 @@ onMounted(() => {
 
   attachPicking();
   attachToolsInput();
-  startRenderLoop();
+  requestRender();
 });
 
 onUnmounted(() => {
-  stopRenderLoop();
+  if (rafId !== null) {
+    window.cancelAnimationFrame(rafId);
+    rafId = null;
+  }
   detachPicking();
   detachToolsInput();
+
+  offControlsChange?.();
+  offControlsChange = null;
 
   offShowModelByRefnos?.();
   offShowModelByRefnos = null;

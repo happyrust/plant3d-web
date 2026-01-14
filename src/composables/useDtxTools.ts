@@ -321,8 +321,10 @@ export function useDtxTools(options: {
   overlayContainerRef: Ref<HTMLElement | null>
   store: ReturnType<typeof useToolStore>
   compatViewerRef: Ref<DtxCompatViewer | null>
+  requestRender?: (() => void) | null
 }) {
   const { dtxViewerRef, dtxLayerRef, selectionRef, overlayContainerRef, store, compatViewerRef } = options
+  const requestRender = options.requestRender ?? null
 
   const selectionStore = useSelectionStore()
 
@@ -690,6 +692,7 @@ export function useDtxTools(options: {
     }
 
     updateOverlayPositions()
+    requestRender?.()
   }
 
   function updateOverlayPositions() {
