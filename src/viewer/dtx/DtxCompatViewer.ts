@@ -91,11 +91,12 @@ export class DtxCompatScene {
 
   private _computeRefnoAabb(refno: string): Aabb6 | null {
     const box = new Box3()
+    const tmp = new Box3()
     let hasAny = false
 
     const objectIds = this._getDtxObjectIds(refno)
     for (const objectId of objectIds) {
-      const b = this._dtxLayer.getObjectBoundingBox(objectId)
+      const b = this._dtxLayer.getObjectBoundingBoxInto(objectId, tmp)
       if (!b || b.isEmpty()) continue
       box.union(b)
       hasAny = true
@@ -153,12 +154,13 @@ export class DtxCompatScene {
 
   getAABB(refnos: string[]): Aabb6 | null {
     const box = new Box3()
+    const tmp = new Box3()
     let hasAny = false
 
     for (const refno of refnos) {
       const objectIds = this._getDtxObjectIds(refno)
       for (const objectId of objectIds) {
-        const b = this._dtxLayer.getObjectBoundingBox(objectId)
+        const b = this._dtxLayer.getObjectBoundingBoxInto(objectId, tmp)
         if (!b || b.isEmpty()) continue
         box.union(b)
         hasAny = true

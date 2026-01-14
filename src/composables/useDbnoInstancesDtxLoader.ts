@@ -12,6 +12,7 @@ type LoaderOptions = {
 type DbnoRuntimeCache = {
   loadedRefnos: Set<string>
   loadedGeoHash: Set<string>
+  loadingGeoHash: Map<string, Promise<void>>
   objectCounter: number
   refnoToObjectIds: Map<string, string[]>
   objectIdToRefno: Map<string, string>
@@ -26,6 +27,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
   const created: DbnoRuntimeCache = {
     loadedRefnos: new Set(),
     loadedGeoHash: new Set(),
+    loadingGeoHash: new Map(),
     objectCounter: 0,
     refnoToObjectIds: new Map(),
     objectIdToRefno: new Map(),
@@ -75,36 +77,76 @@ async function ensureGeometryForGeoHash(
 ): Promise<void> {
   const cache = getCache(dbno)
   if (cache.loadedGeoHash.has(geoHash)) return
+  const pending = cache.loadingGeoHash.get(geoHash)
+  if (pending) {
+    await pending
+    return
+  }
 
-  const glbUrl = `/files/meshes/lod_${lodAssetKey}/${geoHash}_${lodAssetKey}.glb`
-  let geometry: BufferGeometry | null = null
+  const task = (async () => {
+    const glbUrl = `/files/meshes/lod_${lodAssetKey}/${geoHash}_${lodAssetKey}.glb`
+    let geometry: BufferGeometry | null = null
 
-  try {
-    const resp = await fetch(glbUrl)
-    if (resp.ok) {
-      const glbData = await resp.arrayBuffer()
-      const parsed = await parseGlbGeometry(glbData)
-      if (parsed) {
-        const g = new BufferGeometry()
-        g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3))
-        if (parsed.normals && parsed.normals.length > 0) {
-          g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3))
+    try {
+      const resp = await fetch(glbUrl)
+      if (resp.ok) {
+        const glbData = await resp.arrayBuffer()
+        const parsed = await parseGlbGeometry(glbData)
+        if (parsed) {
+          const g = new BufferGeometry()
+          g.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3))
+          if (parsed.normals && parsed.normals.length > 0) {
+            g.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3))
+          }
+          g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1))
+          g.computeBoundingBox()
+          geometry = g
         }
-        g.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1))
-        g.computeBoundingBox()
-        geometry = g
       }
+    } catch (e) {
+      if (debug) console.warn('[dtx][instances-json] load glb failed', { geoHash, glbUrl, e })
     }
-  } catch (e) {
-    if (debug) console.warn('[dtx][instances-json] load glb failed', { geoHash, glbUrl, e })
-  }
 
-  if (!geometry) {
-    geometry = createFallbackBoxGeometry()
-  }
+    if (!geometry) {
+      geometry = createFallbackBoxGeometry()
+    }
 
-  dtxLayer.addGeometry(geoHash, geometry)
-  cache.loadedGeoHash.add(geoHash)
+    dtxLayer.addGeometry(geoHash, geometry)
+    cache.loadedGeoHash.add(geoHash)
+  })()
+
+  cache.loadingGeoHash.set(geoHash, task)
+  try {
+    await task
+  } finally {
+    cache.loadingGeoHash.delete(geoHash)
+  }
+}
+
+async function ensureGeometriesForGeoHashes(
+  dtxLayer: DTXLayer,
+  dbno: number,
+  geoHashes: string[],
+  lodAssetKey: string,
+  debug: boolean,
+  options: { concurrency?: number } = {}
+): Promise<void> {
+  const cache = getCache(dbno)
+  const unique = Array.from(new Set(geoHashes)).filter((h) => !!h && !cache.loadedGeoHash.has(h))
+  if (unique.length === 0) return
+
+  const queue = unique.slice()
+  const concurrency = Math.max(1, Math.min(options.concurrency ?? 8, queue.length))
+
+  const workers = Array.from({ length: concurrency }, async () => {
+    while (queue.length > 0) {
+      const geoHash = queue.pop()
+      if (!geoHash) continue
+      await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug)
+    }
+  })
+
+  await Promise.all(workers)
 }
 
 export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[] {
@@ -152,6 +194,17 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
   let loadedObjects = 0
 
+  // 预取本次需要的所有几何体（并发 + 去重），避免在实例循环中串行 await
+  const neededGeoHashes = new Set<string>()
+  for (const refno of toLoad) {
+    const insts = index.get(refno) || []
+    for (const inst of insts) {
+      const geoHash = String((inst as any).geo_hash || '')
+      if (geoHash) neededGeoHashes.add(geoHash)
+    }
+  }
+  await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, { concurrency: 8 })
+
   for (const refno of toLoad) {
     const insts = index.get(refno) || []
     if (insts.length === 0) {
@@ -164,8 +217,6 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     for (const inst of insts) {
       const geoHash = String((inst as any).geo_hash || '')
       if (!geoHash) continue
-
-      await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug)
 
       const objectId = `o:${refno}:${cache.objectCounter++}`
       const matrix = new Matrix4().fromArray((inst as any).matrix || [])

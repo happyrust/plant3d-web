@@ -276,30 +276,16 @@ function filterModelByTask() {
   }
   
   // 只显示任务相关的构件
-  const taskRefNos = currentTask.value.components.map(comp => comp.refNo);
-  const visibleObjectIds: string[] = [];
-  
-  // 遍历所有对象，找出匹配的构件
-  for (const objectId of allObjectIds || []) {
-    const object = viewer.scene.objects[objectId];
-    if (object && 'metaObject' in object && object.metaObject) {
-      const metaObject = object.metaObject as { properties?: Record<string, unknown> };
-      const refNo = metaObject.properties?.RefNo || 
-                    metaObject.properties?.refno;
-      if (refNo && taskRefNos.includes(String(refNo))) {
-        visibleObjectIds.push(objectId);
-      }
+  const taskRefNos = currentTask.value.components
+    .map(comp => String(comp.refNo || '').replace(/\//g, '_'))
+    .filter(Boolean);
+
+  if (taskRefNos.length > 0) {
+    viewer.scene.setObjectsVisible(taskRefNos, true);
+    const aabb = viewer.scene.getAABB(taskRefNos);
+    if (aabb) {
+      viewer.cameraFlight.flyTo({ aabb, duration: 1, fit: true });
     }
-  }
-  
-  // 显示匹配的构件
-  if (visibleObjectIds.length > 0) {
-    viewer.scene.setObjectsVisible(visibleObjectIds, true);
-    // 飞行到查看这些构件
-    viewer.cameraFlight.flyTo({
-      aabb: viewer.scene.getAABB(visibleObjectIds),
-      duration: 1
-    });
   }
   
   isFilteringByTask.value = true;

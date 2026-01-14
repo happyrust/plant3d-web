@@ -219,8 +219,9 @@ export class DTXSelectionController extends EventEmitter {
     const { select = true, flyTo = true, duration = 1000 } = options
 
     const bbox = new Box3()
+    const tmpBox = new Box3()
     for (const objectId of objectIds) {
-      const objBbox = this._dtxLayer.getObjectBoundingBox(objectId)
+      const objBbox = this._dtxLayer.getObjectBoundingBoxInto(objectId, tmpBox)
       if (objBbox) bbox.union(objBbox)
     }
     if (bbox.isEmpty()) return false
@@ -259,4 +260,3 @@ export class DTXSelectionController extends EventEmitter {
     this.removeAllListeners()
   }
 }
-

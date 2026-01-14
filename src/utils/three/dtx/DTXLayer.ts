@@ -1497,8 +1497,16 @@ export class DTXLayer {
    * 获取对象包围盒
    */
   getObjectBoundingBox(objectId: string): Box3 | null {
+    return this.getObjectBoundingBoxInto(objectId, new Box3());
+  }
+
+  /**
+   * 获取对象包围盒（写入到 target，避免大量 Box3 分配）
+   */
+  getObjectBoundingBoxInto(objectId: string, target: Box3): Box3 | null {
     const obj = this._objects.get(objectId);
-    return obj ? obj.boundingBox.clone().applyMatrix4(this._globalModelMatrix) : null;
+    if (!obj) return null;
+    return target.copy(obj.boundingBox).applyMatrix4(this._globalModelMatrix);
   }
 
   /**
