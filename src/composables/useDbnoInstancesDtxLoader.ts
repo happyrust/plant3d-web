@@ -1,4 +1,4 @@
-import { buildInstanceIndexByRefno, type InstanceManifest } from '@/aios-prepack-bundle-loader'
+import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
 import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader'
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry'
 import { DTXLayer } from '@/utils/three/dtx'
@@ -206,4 +206,3 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     sceneBoundingBox: dtxLayer.getBoundingBox(),
   }
 }
-

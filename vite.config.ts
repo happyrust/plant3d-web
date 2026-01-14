@@ -51,9 +51,6 @@ export default defineConfig({
             'vue',
             'vuetify'
           ],
-          xeokit: [
-            '@xeokit/xeokit-sdk',
-          ],
         }
       },
     }

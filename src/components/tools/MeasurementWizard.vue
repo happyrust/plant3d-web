@@ -1,23 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useToolStore } from '@/composables/useToolStore';
-import { useXeokitTools } from '@/composables/useXeokitTools';
 
 const store = useToolStore();
-// We assume useXeokitTools is available or can be injected/imported correctly.
-// Since useXeokitTools usually requires viewerRef, here we might just need to rely on store
-// or we need to pass the status via props or store.
-// Alternatively, we can inspect the status text from the store if we expose it there, 
-// but looking at existing code, statusText is in useXeokitTools.
-// For the wizard, we mainly need the step information. 
-// We can infer the step from `pointToRefnoStart` presence, but `pointToRefnoStart` is local to useXeokitTools.
-// However, the `statusText` in `useXeokitTools` already describes the step.
-// Let's pass the status text as a prop or rely on a store state if we had one.
-//
-// To make it self-contained without prop drilling too much, let's assume the parent 
-// passes the current status text or we use a store value. 
-// But looking at the requirement: "Floating wizard".
-// Let's create a component that shows the current instruction and a cancel button.
 
 const props = defineProps<{
   statusText: string;

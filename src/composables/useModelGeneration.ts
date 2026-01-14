@@ -1,6 +1,5 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
-import type { Viewer } from '@xeokit/xeokit-sdk'
 
 import { e3dGetVisibleInsts } from '@/api/genModelE3dApi'
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore'
@@ -10,12 +9,11 @@ import {
   triggerSubtreeGenerateSse,
   waitForDbnoInstancesFile,
 } from '@/composables/useDbnoInstancesJsonLoader'
-import { loadDbnoInstancesForVisibleRefnos as loadDbnoInstancesForVisibleRefnosXeokit } from '@/composables/useDbnoInstancesJsonLoader'
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader'
 
 export interface ModelGenerationOptions {
   db_num?: number
-  viewer: Viewer
+  viewer: unknown
 }
 
 export interface ModelGenerationState {
@@ -57,7 +55,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   function checkRefnoExists(refno: string): boolean {
     if (loadedRoots.has(refno)) return true
-    return !!viewer.scene.objects[refno]
+    const v = viewer as any
+    return !!v?.scene?.objects?.[refno]
   }
 
   async function showModelByRefno(refno: string): Promise<boolean> {
@@ -155,19 +154,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
       }
       const dtxLayer = anyViewer.__dtxLayer as any
-      if (dtxLayer) {
-        await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, visibleRefnos, {
-          lodAssetKey: 'L1',
-          debug: false,
-        })
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, visibleRefnos)
-      } else {
-        await loadDbnoInstancesForVisibleRefnosXeokit(viewer, dbno, visibleRefnos, {
-          modelId: `instances-${dbno}`,
-          lodAssetKey: 'L1',
-          debug: false,
-        })
-      }
+      if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型')
+
+      await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, visibleRefnos, {
+        lodAssetKey: 'L1',
+        debug: false,
+      })
+      anyViewer.__dtxAfterInstancesLoaded?.(dbno, visibleRefnos)
 
       loadedRoots.add(refno)
       statusMessage.value = '加载完成'

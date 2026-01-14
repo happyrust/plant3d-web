@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import { useVirtualizer } from '@tanstack/vue-virtual';
-import { Viewer } from '@xeokit/xeokit-sdk';
+import type { Viewer } from '@xeokit/xeokit-sdk';
 import { Filter, Plus, Search, X } from 'lucide-vue-next';
 
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';

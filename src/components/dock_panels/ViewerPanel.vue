@@ -35,6 +35,8 @@ const store = useToolStore();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
 
+const initError = ref<string | null>(null);
+
 const isDev = import.meta.env.DEV;
 
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
@@ -240,7 +242,17 @@ onMounted(() => {
   const container = containerRef.value;
   if (!canvas || !container) return;
 
-  const dtxViewer = new DtxViewer({ canvas, background: 0xe5e7eb, debug: isDev });
+  initError.value = null;
+
+  let dtxViewer: DtxViewer;
+  try {
+    dtxViewer = new DtxViewer({ canvas, background: 0xe5e7eb, debug: isDev });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    initError.value = msg;
+    emitToast({ message: msg });
+    return;
+  }
   dtxViewerRef.value = dtxViewer;
 
   const dtxLayer = new DTXLayer({ renderer: dtxViewer.renderer, debug: isDev });
@@ -266,6 +278,11 @@ onMounted(() => {
     selectionController.refreshSpatialIndex();
   };
   compatViewerRef.value = compat;
+
+  if (isDev) {
+    (window as any).__xeokitViewer = compat;
+    (window as any).__dtxViewer = dtxViewer;
+  }
 
   const tools = useDtxTools({
     dtxViewerRef,
@@ -374,6 +391,14 @@ onUnmounted(() => {
   dtxViewerRef.value = null;
 
   compatViewerRef.value = null;
+  if (isDev) {
+    try {
+      delete (window as any).__xeokitViewer;
+      delete (window as any).__dtxViewer;
+    } catch {
+      // ignore
+    }
+  }
   viewerContext.viewerRef.value = null;
   viewerContext.overlayContainerRef.value = null;
   viewerContext.tools.value = null;
@@ -385,6 +410,17 @@ onUnmounted(() => {
   <div ref="containerRef" class="viewer-panel-container">
     <canvas ref="mainCanvas" class="viewer" />
     <div ref="overlayContainer" class="xeokitOverlay" />
+
+    <div
+      v-if="initError"
+      class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur"
+      style="z-index: 950;"
+    >
+      <div class="max-w-[520px] rounded-lg border border-border bg-background p-4 text-sm shadow">
+        <div class="font-medium text-destructive">3D Viewer 初始化失败</div>
+        <div class="mt-2 text-muted-foreground">{{ initError }}</div>
+      </div>
+    </div>
 
     <MeasurementWizard
       v-if="store.toolMode.value === 'measure_point_to_object' && toolsRef"
