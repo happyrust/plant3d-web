@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { shallowRef, watch } from 'vue';
 
-import type { Viewer } from '@xeokit/xeokit-sdk';
+import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import ModelTreePanel from '@/components/model-tree/ModelTreePanel.vue';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -15,7 +15,7 @@ defineProps<{
 }>();
 
 const ctx = useViewerContext();
-const viewer = shallowRef<Viewer | null>(null);
+const viewer = shallowRef<DtxCompatViewer | null>(null);
 
 watch(
   () => ctx.viewerRef.value,

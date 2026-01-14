@@ -2,13 +2,13 @@ import { shallowRef, type ShallowRef } from 'vue';
 
 import type { useToolStore } from './useToolStore';
 import type { UsePtsetVisualizationThreeReturn } from './usePtsetVisualizationThree';
-import type { useXeokitTools } from './useXeokitTools';
-import type { Viewer } from '@xeokit/xeokit-sdk';
+import type { useDtxTools } from './useDtxTools';
+import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 export type ViewerContext = {
-  viewerRef: ShallowRef<Viewer | null>;
+  viewerRef: ShallowRef<DtxCompatViewer | null>;
   overlayContainerRef: ShallowRef<HTMLElement | null>;
-  tools: ShallowRef<ReturnType<typeof useXeokitTools> | null>;
+  tools: ShallowRef<ReturnType<typeof useDtxTools> | null>;
   store: ShallowRef<ReturnType<typeof useToolStore> | null>;
   ptsetVis: ShallowRef<UsePtsetVisualizationThreeReturn | null>;
 };

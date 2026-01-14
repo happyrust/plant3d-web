@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
-import type { Viewer } from '@xeokit/xeokit-sdk';
+import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import {
   roomTreeGetAncestors,
@@ -26,7 +26,7 @@ function isRoomObjectId(id: string) {
 }
 
 export function useRoomTree(
-  viewerRef: { value: Viewer | null },
+  viewerRef: { value: DtxCompatViewer | null },
   enabledRef?: { value: boolean },
 ) {
   const nodesById = shallowRef<Record<string, TreeNode>>({});
@@ -408,7 +408,7 @@ export function useRoomTree(
     recomputeParents(id);
   }
 
-  function clearSelectionInScene(viewer: Viewer) {
+  function clearSelectionInScene(viewer: DtxCompatViewer) {
     const selectedObjectIds = viewer.scene.selectedObjectIds;
     if (selectedObjectIds && selectedObjectIds.length > 0) {
       viewer.scene.setObjectsSelected(selectedObjectIds, false);

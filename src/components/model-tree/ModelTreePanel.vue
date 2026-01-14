@@ -2,8 +2,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import { useVirtualizer } from '@tanstack/vue-virtual';
-import type { Viewer } from '@xeokit/xeokit-sdk';
 import { Filter, Plus, Search, X } from 'lucide-vue-next';
+import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
@@ -17,13 +17,13 @@ import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { cn } from '@/lib/utils';
 
 const props = defineProps<{
-  viewer: Viewer | null;
+  viewer: DtxCompatViewer | null;
 }>();
 
 const activeTree = ref<'pdms' | 'room'>('pdms');
 
-const pdmsViewerRef = shallowRef<Viewer | null>(props.viewer);
-const roomViewerRef = shallowRef<Viewer | null>(null);
+const pdmsViewerRef = shallowRef<DtxCompatViewer | null>(props.viewer);
+const roomViewerRef = shallowRef<DtxCompatViewer | null>(null);
 
 console.log('[ModelTreePanel] initial props.viewer:', props.viewer ? 'exists' : 'null');
 

@@ -120,13 +120,7 @@ function getDisciplineName(noun: string): string {
 function setViewerVisibility(ids: string[], visible: boolean) {
   const viewer = ctx.viewerRef.value;
   if (!viewer) return;
-  const scene = viewer.scene;
-  ids.forEach((id) => {
-    const obj = scene.objects[id];
-    if (obj) {
-      obj.visible = visible;
-    }
-  });
+  viewer.scene.setObjectsVisible(ids, visible);
 }
 
 function toggleDisciplineExpand(node: DisciplineNode) {
@@ -258,21 +252,6 @@ function handleQuery() {
   }
 }
 
-function extractNounFromId(id: string): string {
-  // Try to extract noun from entity metadata or use default
-  const viewer = ctx.viewerRef.value;
-  if (viewer) {
-    const entity = viewer.scene.objects[id];
-    if (entity) {
-      // Check if entity has metaObject with type info
-      const metaObject = viewer.metaScene?.metaObjects?.[id];
-      if (metaObject?.type) {
-        return metaObject.type;
-      }
-    }
-  }
-  return 'UNKNOWN';
-}
 </script>
 
 <template>

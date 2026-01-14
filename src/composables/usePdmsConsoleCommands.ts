@@ -33,11 +33,8 @@ export function usePdmsConsoleCommands() {
         // 回退：从场景选中对象获取
         const viewer = getViewer();
         if (!viewer) return null;
-        // @ts-ignore
-        const selected = viewer.scene.selectedObjects;
-        if (!selected) return null;
-        const ids = Object.keys(selected);
-        if (ids.length === 0) return null;
+        const ids = viewer.scene.selectedObjectIds;
+        if (!ids || ids.length === 0) return null;
         return ids[0] ?? null; // Return first selected
     }
 
@@ -124,13 +121,13 @@ export function usePdmsConsoleCommands() {
                     const formatted = formatVec3(pos);
                     store.addLog('output', `Position (World): ${formatted}`);
                 } else {
-                    // 尝试从场景对象获取
-                    // @ts-ignore - Xeokit Entity 有 position 属性
-                    const object = viewer.scene.objects[id];
-                    // @ts-ignore
-                    if (object?.position) {
-                        // @ts-ignore
-                        store.addLog('output', `Position (World): ${formatPos(object.position)}`);
+                    // 尝试从场景 AABB 推导中心点
+                    const aabb = viewer.scene.getAABB([id]);
+                    if (aabb && aabb.length === 6) {
+                        const cx = (aabb[0] + aabb[3]) / 2;
+                        const cy = (aabb[1] + aabb[4]) / 2;
+                        const cz = (aabb[2] + aabb[5]) / 2;
+                        store.addLog('output', `Position (World): ${formatPos([cx, cy, cz])}`);
                     } else {
                         store.addLog('info', 'World position not available');
                     }

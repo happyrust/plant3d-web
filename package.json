@@ -15,7 +15,6 @@
     "@duckdb/duckdb-wasm": "^1.30.0",
     "@tanstack/vue-query": "^5.92.1",
     "@tanstack/vue-virtual": "^3.13.12",
-    "@xeokit/xeokit-sdk": "^2.6.100",
     "apache-arrow": "^21.1.0",
     "clsx": "^2.1.1",
     "dockview-vue": "^4.11.0",

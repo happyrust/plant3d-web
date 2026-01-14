@@ -1,5 +1,4 @@
 import { shallowRef } from 'vue';
-import type { useModelTree } from './useModelTree';
 import type { usePdmsOwnerTree } from './usePdmsOwnerTree';
 
 // Global reference to the tree instance
