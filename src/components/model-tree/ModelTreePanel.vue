@@ -14,7 +14,6 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
-import { usePipelineAnnotations } from '@/composables/usePipelineAnnotations';
 import { cn } from '@/lib/utils';
 
 const props = defineProps<{
@@ -47,9 +46,6 @@ setModelTreeInstance(pdmsTree);
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();
-
-// 管道标注渲染器
-const pipelineAnnotations = usePipelineAnnotations(pdmsViewerRef);
 
 const isRoomTree = computed(() => activeTree.value === 'room');
 
@@ -550,6 +546,7 @@ function showPtset() {
   // 只有 refno 格式的节点才能显示点集
   if (isRefnoLike(contextNodeId.value)) {
     toolStore.requestPtsetVisualization(contextNodeId.value);
+    ensurePanelAndActivate('ptset');
   }
   closeContextMenu();
 }
@@ -562,23 +559,6 @@ function viewProperties() {
     selection.setSelectedRefno(contextNodeId.value);
     // 确保属性面板存在并激活
     ensurePanelAndActivate('properties');
-  }
-  closeContextMenu();
-}
-
-async function showAnnotations() {
-  if (!contextNodeId.value) return;
-  // 只有 refno 格式的节点才能显示标注
-  if (isRefnoLike(contextNodeId.value)) {
-    console.log(`[标注] 加载管道标注: ${contextNodeId.value}`);
-    await pipelineAnnotations.loadAnnotations(contextNodeId.value);
-    
-    if (pipelineAnnotations.state.value.error) {
-      console.error(`[标注] 加载失败: ${pipelineAnnotations.state.value.error}`);
-    } else if (pipelineAnnotations.state.value.data) {
-      const data = pipelineAnnotations.state.value.data;
-      console.log(`[标注] 加载成功: ${data.commands.length} 个标注命令, ${data.welds_count} 个焔缝, ${data.slopes_count} 个坡度`);
-    }
   }
   closeContextMenu();
 }
@@ -809,11 +789,6 @@ function onSearchEnter(value: string) {
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           @click="viewProperties">
           查看属性
-        </button>
-        <button type="button"
-          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-          @click="showAnnotations">
-          显示标注
         </button>
       </div>
     </Teleport>

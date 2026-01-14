@@ -7,8 +7,11 @@ import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore'
 import {
   InstancesJsonNotFoundError,
   ensureDbnoInstancesAvailable,
-  loadDbnoInstancesForVisibleRefnos,
+  triggerSubtreeGenerateSse,
+  waitForDbnoInstancesFile,
 } from '@/composables/useDbnoInstancesJsonLoader'
+import { loadDbnoInstancesForVisibleRefnos as loadDbnoInstancesForVisibleRefnosXeokit } from '@/composables/useDbnoInstancesJsonLoader'
+import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader'
 
 export interface ModelGenerationOptions {
   db_num?: number
@@ -95,17 +98,50 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         await ensureDbnoInstancesAvailable(dbno)
       } catch (e) {
         if (e instanceof InstancesJsonNotFoundError) {
-          const ok = await dialog.open({
+          const choice = await dialog.openChoice({
             title: '缺少 instances 数据',
-            message: `后台未找到 /files/output/instances/instances_${dbno}.json。\n是否开始创建完整生成任务？`,
-            confirmText: '开始生成',
+            message:
+              `后台未找到 /files/output/instances/instances_${dbno}.json。\n` +
+              `请选择生成方式：\n` +
+              `1) 全量生成该 dbno（覆盖完整，但耗时更长）\n` +
+              `2) 仅生成当前节点子孙（SSE 流式，生成完会合并追加 instances_${dbno}.json）`,
+            choices: [
+              { id: 'full', text: '全量生成', color: 'primary', variant: 'flat' },
+              { id: 'subtree', text: '仅生成子孙（SSE）', color: 'secondary', variant: 'flat' },
+            ],
             cancelText: '取消',
           })
-          if (!ok) return false
+          if (!choice) return false
 
-          statusMessage.value = '已提交生成任务，等待产出 instances 文件...'
-          progress.value = 30
-          await ensureDbnoInstancesAvailable(dbno, { autoGenerate: true, timeoutMs: 10 * 60 * 1000 })
+          if (choice === 'full') {
+            statusMessage.value = '已提交全量生成任务，等待产出 instances 文件...'
+            progress.value = 30
+            await ensureDbnoInstancesAvailable(dbno, { autoGenerate: true, timeoutMs: 30 * 60 * 1000 })
+          } else if (choice === 'subtree') {
+            statusMessage.value = '通过 SSE 流式生成当前节点子孙...'
+            progress.value = 25
+            totalCount.value = 0
+            currentIndex.value = 0
+            currentRefno.value = refno
+
+            await triggerSubtreeGenerateSse(refno, {
+              timeoutMs: 30 * 60 * 1000,
+              onUpdate: (u) => {
+                if (u.message) statusMessage.value = u.message
+                if (u.currentRefno) currentRefno.value = u.currentRefno
+                if (typeof u.total === 'number' && u.total > 0) totalCount.value = u.total
+                if (typeof u.completed === 'number') currentIndex.value = u.completed
+                if (typeof u.percent === 'number') progress.value = Math.max(10, Math.min(90, u.percent))
+              },
+            })
+
+            statusMessage.value = '等待 instances 文件写入...'
+            progress.value = 92
+            await waitForDbnoInstancesFile(dbno, 10 * 60 * 1000)
+            await ensureDbnoInstancesAvailable(dbno)
+          } else {
+            return false
+          }
         } else {
           throw e
         }
@@ -114,11 +150,24 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       statusMessage.value = `加载 ${visibleRefnos.length} 个 refno 的实例...`
       progress.value = 60
 
-      await loadDbnoInstancesForVisibleRefnos(viewer, dbno, visibleRefnos, {
-        modelId: `instances-${dbno}`,
-        lodAssetKey: 'L1',
-        debug: false,
-      })
+      const anyViewer = viewer as unknown as {
+        __dtxLayer?: unknown
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+      }
+      const dtxLayer = anyViewer.__dtxLayer as any
+      if (dtxLayer) {
+        await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, visibleRefnos, {
+          lodAssetKey: 'L1',
+          debug: false,
+        })
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, visibleRefnos)
+      } else {
+        await loadDbnoInstancesForVisibleRefnosXeokit(viewer, dbno, visibleRefnos, {
+          modelId: `instances-${dbno}`,
+          lodAssetKey: 'L1',
+          debug: false,
+        })
+      }
 
       loadedRoots.add(refno)
       statusMessage.value = '加载完成'
@@ -153,4 +202,3 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     checkRefnoExists,
   }
 }
-

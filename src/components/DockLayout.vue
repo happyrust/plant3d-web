@@ -84,6 +84,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'hydraulic');
   closePanelIfExists(dockApi, 'annotation');
   closePanelIfExists(dockApi, 'measurement');
+  closePanelIfExists(dockApi, 'ptset');
   closePanelIfExists(dockApi, 'modelTree');
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
@@ -245,6 +246,18 @@ function ensurePanel(panelId: string) {
       id: 'modelQuery',
       component: 'ModelQueryPanel',
       title: '模型查询',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
+  if (panelId === 'ptset') {
+    return dockApi.addPanel({
+      id: 'ptset',
+      component: 'PtsetPanel',
+      title: '点集',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -444,6 +457,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.query':
       togglePanel('modelQuery');
+      return;
+    case 'panel.ptset':
+      togglePanel('ptset');
       return;
     case 'panel.review':
       togglePanel('review');

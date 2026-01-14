@@ -21,6 +21,7 @@ import TaskCreationPanelDock from '@/components/dock_panels/TaskCreationPanelDoc
 import ModelExportPanelDock from '@/components/dock_panels/ModelExportPanelDock.vue';
 import ConsolePanelDock from '@/components/dock_panels/ConsolePanelDock.vue';
 import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDock.vue';
+import PtsetPanelDock from '@/components/dock_panels/PtsetPanelDock.vue';
 import RoomStatusPanelDock from '@/components/dock_panels/RoomStatusPanelDock.vue';
 import BenchmarkView from '@/components/debug/BenchmarkView.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
@@ -38,6 +39,7 @@ app.component('HydraulicPanel', HydraulicPanelDock);
 app.component('ManagerPanel', ManagerPanelDock);
 app.component('PropertiesPanel', PropertiesPanelDock);
 app.component('ModelQueryPanel', ModelQueryPanelDock);
+app.component('PtsetPanel', PtsetPanelDock);
 app.component('ReviewPanel', ReviewPanelDock);
 app.component('InitiateReviewPanel', InitiateReviewPanelDock);
 app.component('ReviewerTaskListPanel', ReviewerTaskListPanelDock);

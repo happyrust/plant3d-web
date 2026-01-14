@@ -15,14 +15,29 @@ const dialog = useConfirmDialogStore()
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="dialog.close(false)">
-          {{ dialog.cancelText.value }}
-        </v-btn>
-        <v-btn color="primary" variant="flat" @click="dialog.close(true)">
-          {{ dialog.confirmText.value }}
-        </v-btn>
+        <template v-if="dialog.mode.value === 'confirm'">
+          <v-btn variant="text" @click="dialog.closeConfirm(false)">
+            {{ dialog.cancelText.value }}
+          </v-btn>
+          <v-btn color="primary" variant="flat" @click="dialog.closeConfirm(true)">
+            {{ dialog.confirmText.value }}
+          </v-btn>
+        </template>
+        <template v-else>
+          <v-btn variant="text" @click="dialog.cancelChoice()">
+            {{ dialog.cancelText.value }}
+          </v-btn>
+          <v-btn
+            v-for="c in dialog.choices.value"
+            :key="c.id"
+            :color="c.color || 'primary'"
+            :variant="c.variant || 'flat'"
+            @click="dialog.choose(c.id)"
+          >
+            {{ c.text }}
+          </v-btn>
+        </template>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
-
