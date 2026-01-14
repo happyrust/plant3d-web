@@ -24,6 +24,7 @@ import { emitToast } from "@/ribbon/toastBus";
 
 import { DtxViewer } from "@/viewer/dtx/DtxViewer";
 import { DtxCompatViewer } from "@/viewer/dtx/DtxCompatViewer";
+import { CadGrid } from "@/viewer/dtx/dtxCadGrid";
 import { loadDtxPrimitiveDemo } from "@/viewer/dtx/dtxPrimitiveDemo";
 import { DTXLayer, DTXSelectionController } from "@/utils/three/dtx";
 
@@ -50,6 +51,7 @@ const isDev = import.meta.env.DEV;
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
+const cadGridRef = shallowRef<CadGrid | null>(null);
 const compatViewerRef = shallowRef<DtxCompatViewer | null>(null);
 const toolsRef = shallowRef<ReturnType<typeof useDtxTools> | null>(null);
 const ptsetVisRef = shallowRef<ReturnType<
@@ -64,6 +66,7 @@ let shaderPrecompiled = false;
 let continuousRender = false;
 let demoMode: "none" | "primitives" = "none";
 let demoPrimitiveCount = 1000;
+let cadGridEnabled = true;
 let rafId: number | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
@@ -285,6 +288,9 @@ function renderFrame() {
 
         if (!needsRender && !cameraChanged && !continuousRender) return;
 
+        // CAD Grid（跟随 target 进行 snapping，模拟“无限地面网格”）
+        cadGridRef.value?.update(dtxViewer.controls.target);
+
         ensureLayerAttached();
         dtxLayer.update(dtxViewer.camera);
 
@@ -372,6 +378,7 @@ onMounted(() => {
     continuousRender = false;
     demoMode = "none";
     demoPrimitiveCount = 1000;
+    cadGridEnabled = true;
     try {
         // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
         continuousRender =
@@ -391,6 +398,11 @@ onMounted(() => {
             if (Number.isFinite(cnt) && cnt > 0) {
                 demoPrimitiveCount = Math.floor(cnt);
             }
+        }
+
+        const gridRaw = q.get("dtx_grid") || localStorage.getItem("dtx_grid");
+        if (gridRaw !== null && gridRaw !== undefined) {
+            cadGridEnabled = String(gridRaw).trim() !== "0";
         }
     } catch {
         // ignore
@@ -412,6 +424,18 @@ onMounted(() => {
         return;
     }
     dtxViewerRef.value = dtxViewer;
+
+    // CAD Grid：Three.js 常规渲染对象（与 DTX 混合渲染）
+    try {
+        const cadGrid = new CadGrid({
+            enabled: cadGridEnabled,
+            followTarget: true,
+        });
+        dtxViewer.scene.add(cadGrid.group);
+        cadGridRef.value = cadGrid;
+    } catch (e) {
+        console.warn("[ViewerPanel] CAD grid 初始化失败", e);
+    }
 
     const dtxLayer = new DTXLayer({
         renderer: dtxViewer.renderer,
@@ -439,6 +463,7 @@ onMounted(() => {
             selectionController.refreshSpatialIndex();
 
             const box = dtxLayer.getBoundingBox();
+            cadGridRef.value?.fitToBoundingBox(box);
             const center = new Vector3();
             const size = new Vector3();
             box.getCenter(center);
@@ -470,6 +495,11 @@ onMounted(() => {
         loadedRefnos: string[],
     ) => {
         compat.scene.ensureRefnos(loadedRefnos);
+        try {
+            cadGridRef.value?.fitToBoundingBox(dtxLayer.getBoundingBox());
+        } catch {
+            // ignore
+        }
         ensureLayerAttached();
         selectionController.refreshSpatialIndex();
         requestRender();
@@ -733,6 +763,13 @@ onUnmounted(() => {
         // ignore
     }
     selectionControllerRef.value = null;
+
+    try {
+        cadGridRef.value?.dispose();
+    } catch {
+        // ignore
+    }
+    cadGridRef.value = null;
 
     try {
         dtxLayerRef.value?.dispose();
