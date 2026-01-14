@@ -7,6 +7,7 @@ import { ArrowUpRight, Cloud, RectangleHorizontal, Trash2, X } from 'lucide-vue-
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import { pdmsGetPtset } from '@/api/genModelPdmsAttrApi';
+import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useDtxTools } from '@/composables/useDtxTools';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
@@ -45,6 +46,7 @@ const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
 const compatViewerRef = shallowRef<DtxCompatViewer | null>(null);
 const toolsRef = shallowRef<ReturnType<typeof useDtxTools> | null>(null);
 const ptsetVisRef = shallowRef<ReturnType<typeof usePtsetVisualizationThree> | null>(null);
+const modelGenerationRef = shallowRef<ReturnType<typeof useModelGeneration> | null>(null);
 
 let attachedToScene = false;
 let rafId: number | null = null;
@@ -52,6 +54,7 @@ let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
+let offShowModelByRefnos: (() => void) | null = null;
 
 function handleRibbonCommand(commandId: string) {
   switch (commandId) {
@@ -278,6 +281,7 @@ onMounted(() => {
     selectionController.refreshSpatialIndex();
   };
   compatViewerRef.value = compat;
+  modelGenerationRef.value = useModelGeneration({ viewer: compat });
 
   if (isDev) {
     (window as any).__xeokitViewer = compat;
@@ -302,6 +306,33 @@ onMounted(() => {
   viewerContext.overlayContainerRef.value = overlayContainer.value;
   viewerContext.store.value = store;
   viewerContext.tools.value = tools as any;
+
+  // 兼容：批注/脚本会 dispatch showModelByRefnos，Viewer 侧统一接住并按需加载
+  let showModelQueue: Promise<void> = Promise.resolve();
+  const handleShowModelByRefnos = (ev: Event) => {
+    const detail = (ev as CustomEvent<{ refnos?: unknown; regenModel?: boolean }>).detail;
+    const raw = (detail as any)?.refnos;
+    const refnos = Array.isArray(raw)
+      ? raw.map((r: unknown) => String(r || '').replace(/\//g, '_')).filter(Boolean)
+      : [];
+    if (refnos.length === 0) return;
+
+    const unique = Array.from(new Set(refnos));
+    const mg = modelGenerationRef.value;
+    if (!mg) return;
+
+    showModelQueue = showModelQueue
+      .then(async () => {
+        for (const r of unique) {
+          await mg.showModelByRefno(r);
+        }
+      })
+      .catch((e) => {
+        console.warn('[ViewerPanel] showModelByRefnos failed', e);
+      });
+  };
+  window.addEventListener('showModelByRefnos', handleShowModelByRefnos);
+  offShowModelByRefnos = () => window.removeEventListener('showModelByRefnos', handleShowModelByRefnos);
 
   offPtsetWatch = watch(
     () => store.ptsetVisualizationRequest.value,
@@ -345,6 +376,9 @@ onUnmounted(() => {
   stopRenderLoop();
   detachPicking();
   detachToolsInput();
+
+  offShowModelByRefnos?.();
+  offShowModelByRefnos = null;
 
   offPtsetWatch?.();
   offPtsetWatch = null;
