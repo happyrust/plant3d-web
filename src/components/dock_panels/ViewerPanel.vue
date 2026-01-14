@@ -403,6 +403,7 @@ onMounted(() => {
             background: 0xe5e7eb,
             debug: isDev,
             gizmo: { enabled: true, placement: "top-right", size: 100 },
+            skybox: "/texture/skybox.png",
         });
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

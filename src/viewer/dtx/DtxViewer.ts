@@ -1,7 +1,9 @@
 import {
   ACESFilmicToneMapping,
   AmbientLight,
+  CanvasTexture,
   Color,
+  CubeTexture,
   DirectionalLight,
   Object3D,
   PerspectiveCamera,
@@ -22,20 +24,22 @@ export type DtxViewerOptions = {
   background?: number | string;
   debug?: boolean;
   gizmo?: boolean | ViewportGizmoOptions;
+  /** 天空盒十字形展开图 URL（可选，设置后自动加载） */
+  skybox?: string;
 };
 
 export type ViewportGizmoOptions = {
   enabled?: boolean;
   placement?:
-    | "top-left"
-    | "top-right"
-    | "top-center"
-    | "center-right"
-    | "center-left"
-    | "center-center"
-    | "bottom-left"
-    | "bottom-right"
-    | "bottom-center";
+  | "top-left"
+  | "top-right"
+  | "top-center"
+  | "center-right"
+  | "center-left"
+  | "center-center"
+  | "bottom-left"
+  | "bottom-right"
+  | "bottom-center";
   size?: number;
   offset?: { left?: number; top?: number; right?: number; bottom?: number };
 };
@@ -118,6 +122,11 @@ export class DtxViewer {
     }
 
     this._setupDefaultLights();
+
+    // 如果配置了天空盒，自动加载
+    if (options.skybox) {
+      this.loadCrossSkybox(options.skybox);
+    }
   }
 
   private _parseGizmoOptions(
@@ -245,5 +254,95 @@ export class DtxViewer {
     };
 
     window.requestAnimationFrame(step);
+  }
+
+  /**
+   * 加载十字形 Skybox 纹理
+   * 从十字形展开图裁剪出 6 个面创建 CubeTexture
+   *
+   * 布局:
+   * ```
+   *       [py]
+   * [nx] [pz] [px] [nz]
+   *       [ny]
+   * ```
+   *
+   * @param url 十字形展开图 URL
+   */
+  loadCrossSkybox(url: string): void {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      // 十字形展开图: 4列 x 3行
+      const faceWidth = img.width / 4;
+      const faceHeight = img.height / 3;
+
+      // 定义6个面的位置 (列, 行)
+      // Three.js CubeTexture 顺序: px, nx, py, ny, pz, nz
+      const facePositions: Record<string, { col: number; row: number }> = {
+        px: { col: 2, row: 1 }, // 右
+        nx: { col: 0, row: 1 }, // 左
+        py: { col: 1, row: 0 }, // 上
+        ny: { col: 1, row: 2 }, // 下
+        pz: { col: 1, row: 1 }, // 前
+        nz: { col: 3, row: 1 }, // 后
+      };
+
+      const faceOrder = ["px", "nx", "py", "ny", "pz", "nz"];
+      const faceCanvases: HTMLCanvasElement[] = [];
+
+      faceOrder.forEach((face) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = faceWidth;
+        canvas.height = faceHeight;
+        const ctx = canvas.getContext("2d");
+
+        if (ctx) {
+          const pos = facePositions[face];
+          if (!pos) return;
+          ctx.drawImage(
+            img,
+            pos.col * faceWidth, // 源图 x
+            pos.row * faceHeight, // 源图 y
+            faceWidth, // 源图宽度
+            faceHeight, // 源图高度
+            0,
+            0, // 目标位置
+            faceWidth, // 目标宽度
+            faceHeight // 目标高度
+          );
+        }
+
+        faceCanvases.push(canvas);
+      });
+
+      // 创建 CubeTexture
+      const cubeTexture = new CubeTexture(faceCanvases);
+      cubeTexture.needsUpdate = true;
+
+      // 设置为场景背景和环境映射（环境映射直接影响 PBR 材质的感官效果）
+      this.scene.background = cubeTexture;
+      this.scene.environment = cubeTexture;
+
+      // 强制更新所有材质的环境关联
+      this.scene.traverse((obj) => {
+        if ((obj as any).isMesh && (obj as any).material) {
+          (obj as any).material.needsUpdate = true;
+        }
+      });
+
+      if (this._debug) {
+        // eslint-disable-next-line no-console
+        console.log("🌌 Skybox 加载完成，已应用到背景与环境映射");
+      }
+    };
+
+    img.onerror = (err) => {
+      // eslint-disable-next-line no-console
+      console.warn("🌌 Skybox 纹理加载失败:", err);
+    };
+
+    img.src = url;
   }
 }
