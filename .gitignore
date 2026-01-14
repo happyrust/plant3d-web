@@ -36,3 +36,9 @@ coverage
 
 *.tsbuildinfo
 .ace-tool/
+
+# Playwright / local screenshots
+artifacts/
+
+# Local sqlite caches
+deployment_sites.sqlite

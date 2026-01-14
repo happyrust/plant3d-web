@@ -8,8 +8,9 @@ import {
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
-} from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+} from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { ViewportGizmo } from "three-viewport-gizmo";
 
 export type FlyToOptions = {
   duration?: number; // ms
@@ -19,6 +20,23 @@ export type DtxViewerOptions = {
   canvas: HTMLCanvasElement;
   background?: number | string;
   debug?: boolean;
+  gizmo?: boolean | ViewportGizmoOptions;
+};
+
+export type ViewportGizmoOptions = {
+  enabled?: boolean;
+  placement?:
+    | "top-left"
+    | "top-right"
+    | "top-center"
+    | "center-right"
+    | "center-left"
+    | "center-center"
+    | "bottom-left"
+    | "bottom-right"
+    | "bottom-center";
+  size?: number;
+  offset?: { left?: number; top?: number; right?: number; bottom?: number };
 };
 
 export class DtxViewer {
@@ -27,21 +45,23 @@ export class DtxViewer {
   readonly scene: Scene;
   readonly camera: PerspectiveCamera;
   readonly controls: OrbitControls;
+  readonly gizmo: ViewportGizmo | null;
 
   private _rafId: number | null = null;
   private _debug: boolean;
+  private _gizmoEnabled: boolean;
 
   constructor(options: DtxViewerOptions) {
     this.canvas = options.canvas;
     this._debug = options.debug === true;
 
-    const gl = this.canvas.getContext('webgl2', {
+    const gl = this.canvas.getContext("webgl2", {
       alpha: false,
       antialias: true,
       depth: true,
       stencil: false,
       preserveDrawingBuffer: false,
-      powerPreference: 'high-performance',
+      powerPreference: "high-performance",
     });
     if (!gl) {
       throw new Error('需要 WebGL2（canvas.getContext("webgl2") 失败）');
@@ -70,22 +90,66 @@ export class DtxViewer {
     this.controls.target.set(-21.93, 1.35, 29.45);
     this.controls.update();
 
+    // 解析 gizmo 配置
+    const gizmoConfig = this._parseGizmoOptions(options.gizmo);
+    this._gizmoEnabled = gizmoConfig.enabled;
+
+    // 初始化 ViewportGizmo
+    if (this._gizmoEnabled) {
+      this.gizmo = new ViewportGizmo(this.camera, this.renderer, {
+        placement: gizmoConfig.placement,
+        size: gizmoConfig.size,
+        offset: gizmoConfig.offset,
+      });
+      this.gizmo.target = this.controls.target;
+
+      // 设置事件监听器以与 OrbitControls 协作
+      this.gizmo.addEventListener("start", () => {
+        this.controls.enabled = false;
+      });
+      this.gizmo.addEventListener("end", () => {
+        this.controls.enabled = true;
+      });
+      this.controls.addEventListener("change", () => {
+        this.gizmo?.update();
+      });
+    } else {
+      this.gizmo = null;
+    }
+
     this._setupDefaultLights();
+  }
+
+  private _parseGizmoOptions(
+    gizmoOption?: boolean | ViewportGizmoOptions,
+  ): Omit<ViewportGizmoOptions, "enabled"> & { enabled: boolean } {
+    if (gizmoOption === false) {
+      return { enabled: false, placement: "top-right", size: 100, offset: {} };
+    }
+    if (gizmoOption === true || gizmoOption === undefined) {
+      return { enabled: true, placement: "top-right", size: 100, offset: {} };
+    }
+    return {
+      enabled: gizmoOption.enabled !== false,
+      placement: gizmoOption.placement ?? "top-right",
+      size: gizmoOption.size ?? 100,
+      offset: gizmoOption.offset ?? {},
+    };
   }
 
   private _setupDefaultLights(): void {
     const ambient = new AmbientLight(0xffffff, 0.35);
-    ambient.name = 'DtxAmbientLight';
+    ambient.name = "DtxAmbientLight";
     this.scene.add(ambient);
 
     const dir0 = new DirectionalLight(0xffffff, 0.9);
     dir0.position.set(1, 1, 1);
-    dir0.name = 'DtxDirectionalLight0';
+    dir0.name = "DtxDirectionalLight0";
     this.scene.add(dir0);
 
     const dir1 = new DirectionalLight(0xffffff, 0.25);
     dir1.position.set(-1, 0.4, -1);
-    dir1.name = 'DtxDirectionalLight1';
+    dir1.name = "DtxDirectionalLight1";
     this.scene.add(dir1);
   }
 
@@ -107,6 +171,10 @@ export class DtxViewer {
     const tick = () => {
       this._rafId = window.requestAnimationFrame(tick);
       this.controls.update();
+      // 渲染 gizmo（如果启用）
+      if (this.gizmo) {
+        this.gizmo.render();
+      }
       this.renderer.render(this.scene, this.camera);
     };
 
@@ -123,6 +191,11 @@ export class DtxViewer {
     this.stop();
     try {
       this.controls.dispose();
+    } catch {
+      // ignore
+    }
+    try {
+      this.gizmo?.dispose();
     } catch {
       // ignore
     }
@@ -148,7 +221,8 @@ export class DtxViewer {
     const toTarget = target.clone();
 
     const start = performance.now();
-    const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+    const easeInOut = (t: number) =>
+      t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
     const step = () => {
       const now = performance.now();
@@ -161,11 +235,10 @@ export class DtxViewer {
         window.requestAnimationFrame(step);
       } else if (this._debug) {
         // eslint-disable-next-line no-console
-        console.log('[DtxViewer] flyTo done', { duration });
+        console.log("[DtxViewer] flyTo done", { duration });
       }
     };
 
     window.requestAnimationFrame(step);
   }
 }
-
