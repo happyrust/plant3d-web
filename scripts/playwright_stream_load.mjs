@@ -77,6 +77,7 @@ function killProcess(child) {
 }
 
 const refno = process.argv[2] || '24383_73962';
+const minObjects = Number(process.env.MIN_OBJECTS || '0');
 const port = await findFreePort(Number(process.env.PORT || 8080));
 const vitePort = await findFreePort(Number(process.env.VITE_PORT || 5173));
 const baseUrl = `http://127.0.0.1:${vitePort}`;
@@ -140,6 +141,20 @@ try {
     refno,
     { timeout: 300_000 }
   );
+
+  // 输出 DTX 统计并按需断言（用于 1000 objects 级别压测）
+  const stats = await page.evaluate(() => {
+    const v = window.__xeokitViewer;
+    const layer = v && v.__dtxLayer;
+    return layer && typeof layer.getStats === 'function' ? layer.getStats() : null;
+  });
+  process.stdout.write(`[dtx] stats=${JSON.stringify(stats)}\n`);
+  if (Number.isFinite(minObjects) && minObjects > 0) {
+    const total = Number(stats?.totalObjects || 0);
+    if (!Number.isFinite(total) || total < minObjects) {
+      throw new Error(`[dtx] totalObjects 不达标: ${total} < ${minObjects}`);
+    }
+  }
 
   const pngPath = path.join(artifactsDir, `${refno}.png`);
   await page.screenshot({ path: pngPath });
