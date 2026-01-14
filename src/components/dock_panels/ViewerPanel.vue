@@ -71,6 +71,7 @@ let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
+let offGizmoEvents: (() => void) | null = null;
 
 function handleRibbonCommand(commandId: string) {
     switch (commandId) {
@@ -294,6 +295,13 @@ function renderFrame() {
             dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
         }
 
+        // ViewportGizmo 需要在主场景渲染后再渲染（会改 viewport/scissor）
+        try {
+            dtxViewer.gizmo?.render();
+        } catch {
+            // ignore
+        }
+
         toolsRef.value?.updateOverlayPositions();
         ptsetVisRef.value?.updateLabelPositions();
 
@@ -508,6 +516,25 @@ onMounted(() => {
     offControlsChange = () =>
         dtxViewer.controls.removeEventListener("change", onControlsChange);
 
+    // gizmo 交互/动画期间需要持续触发渲染（否则按需渲染会“停帧”）
+    if (dtxViewer.gizmo) {
+        const onGizmoChange = () => requestRender();
+        const onGizmoStart = () => requestRender();
+        const onGizmoEnd = () => requestRender();
+        dtxViewer.gizmo.addEventListener("change", onGizmoChange);
+        dtxViewer.gizmo.addEventListener("start", onGizmoStart);
+        dtxViewer.gizmo.addEventListener("end", onGizmoEnd);
+        offGizmoEvents = () => {
+            try {
+                dtxViewer.gizmo?.removeEventListener("change", onGizmoChange);
+                dtxViewer.gizmo?.removeEventListener("start", onGizmoStart);
+                dtxViewer.gizmo?.removeEventListener("end", onGizmoEnd);
+            } catch {
+                // ignore
+            }
+        };
+    }
+
     selectionController.on("selectionChanged", () => requestRender());
     selectionController.on("flyTo", (ev: any) => {
         if (!ev?.position || !ev?.target) return;
@@ -669,6 +696,9 @@ onUnmounted(() => {
 
     offControlsChange?.();
     offControlsChange = null;
+
+    offGizmoEvents?.();
+    offGizmoEvents = null;
 
     offShowModelByRefnos?.();
     offShowModelByRefnos = null;

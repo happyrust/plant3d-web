@@ -3,6 +3,7 @@ import {
   AmbientLight,
   Color,
   DirectionalLight,
+  Object3D,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
@@ -55,6 +56,13 @@ export class DtxViewer {
     this.canvas = options.canvas;
     this._debug = options.debug === true;
 
+    // 全局使用 Z-up（与 E3D/DTX 坐标系一致；ViewportGizmo 也会参考 DEFAULT_UP 做坐标转换）
+    try {
+      Object3D.DEFAULT_UP.set(0, 0, 1);
+    } catch {
+      // ignore
+    }
+
     const gl = this.canvas.getContext("webgl2", {
       alpha: false,
       antialias: true,
@@ -97,22 +105,14 @@ export class DtxViewer {
     // 初始化 ViewportGizmo
     if (this._gizmoEnabled) {
       this.gizmo = new ViewportGizmo(this.camera, this.renderer, {
+        container: this.canvas.parentElement ?? this.canvas,
         placement: gizmoConfig.placement,
         size: gizmoConfig.size,
         offset: gizmoConfig.offset,
       });
       this.gizmo.target = this.controls.target;
-
-      // 设置事件监听器以与 OrbitControls 协作
-      this.gizmo.addEventListener("start", () => {
-        this.controls.enabled = false;
-      });
-      this.gizmo.addEventListener("end", () => {
-        this.controls.enabled = true;
-      });
-      this.controls.addEventListener("change", () => {
-        this.gizmo?.update();
-      });
+      // 与 OrbitControls 协作（库内部会处理交互状态/同步更新）
+      this.gizmo.attachControls(this.controls);
     } else {
       this.gizmo = null;
     }
@@ -163,6 +163,11 @@ export class DtxViewer {
 
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    try {
+      this.gizmo?.update();
+    } catch {
+      // ignore
+    }
   }
 
   start(): void {
@@ -171,11 +176,11 @@ export class DtxViewer {
     const tick = () => {
       this._rafId = window.requestAnimationFrame(tick);
       this.controls.update();
+      this.renderer.render(this.scene, this.camera);
       // 渲染 gizmo（如果启用）
       if (this.gizmo) {
         this.gizmo.render();
       }
-      this.renderer.render(this.scene, this.camera);
     };
 
     this._rafId = window.requestAnimationFrame(tick);
