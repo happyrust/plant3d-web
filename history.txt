@@ -2,3 +2,17 @@
 SELECT * FROM inst_relate_bool:`17496_106028`;
 LET $refs = ["17496_142306","17496_142305","17496_125330","17496_106029","17496_106030","17496_106028"]; 
 RETURN array::map($refs, |$r| { refno: $r, ngmr_cnt: (SELECT count() AS c FROM ngmr_relate WHERE out = type::record('pe', $r) GROUP ALL)[0].c ?? 0, bool_status: type::record('inst_relate_bool', $r).status });
+SELECT in, out.d as aabb FROM inst_relate_aabb LIMIT 2
+SELECT in FROM inst_relate_aabb WHERE in.dbnum = 1112 LIMIT 5
+SELECT in.id as refno FROM inst_relate WHERE in.dbnum = 1112 AND owner_type IN ['BRAN', 'HANG', 'EQUI'] LIMIT 5
+SELECT count() FROM inst_relate_aabb WHERE in IN (SELECT in FROM inst_relate WHERE in.dbnum = 1112 AND owner_type IN ['BRAN', 'HANG', 'EQUI']) GROUP ALL
+SELECT in.dbnum as dbnum, count() as cnt FROM inst_relate_aabb GROUP BY in.dbnum LIMIT 10
+SELECT in FROM inst_relate_aabb WHERE in.dbnum = 1112
+SELECT in FROM inst_relate WHERE in IN [pe:`17496_272065`, pe:`17496_272066`, pe:`17496_272067`]
+SELECT in, owner_type FROM inst_relate WHERE in IN [pe:`17496_272065`, pe:`17496_272066`, pe:`17496_272067`]
+SELECT owner_type, count() as cnt FROM inst_relate WHERE in.dbnum = 1112 GROUP BY owner_type
+SELECT in, out, out.geo, out.geo_trans FROM inst_relate WHERE in.dbnum = 1112 LIMIT 3
+SELECT * FROM inst_relate WHERE in.dbnum = 1112 LIMIT 1
+SELECT * FROM inst_info:`2`
+SELECT out FROM inst_relate WHERE in.dbnum = 1112 LIMIT 5
+SELECT * FROM inst_info LIMIT 3

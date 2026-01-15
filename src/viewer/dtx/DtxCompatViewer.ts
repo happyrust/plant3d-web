@@ -69,15 +69,18 @@ export class DtxCompatScene {
     return out
   }
 
-  ensureRefnos(refnos: string[]): void {
+  ensureRefnos(refnos: string[], options?: { computeAabb?: boolean }): void {
+    const computeAabb = options?.computeAabb !== false
     for (const id of refnos) {
       if (!id) continue
       if (!this.objects[id]) {
         this.objects[id] = { id, visible: true, selected: false, xrayed: false }
       }
-      const aabb = this._computeRefnoAabb(id)
-      if (aabb) {
-        this.objects[id]!.aabb = aabb
+      if (computeAabb) {
+        const aabb = this._computeRefnoAabb(id)
+        if (aabb) {
+          this.objects[id]!.aabb = aabb
+        }
       }
     }
   }
@@ -109,22 +112,24 @@ export class DtxCompatScene {
   }
 
   setObjectsVisible(refnos: string[], visible: boolean): void {
+    this.ensureRefnos(refnos, { computeAabb: false })
+    const objectIdsToApply = new Set<string>()
     for (const refno of refnos) {
-      this.ensureRefnos([refno])
       const st = this.objects[refno]
       if (st) st.visible = visible
 
       const objectIds = this._getDtxObjectIds(refno)
-      for (const objectId of objectIds) {
-        this._dtxLayer.setObjectVisible(objectId, visible)
-      }
+      for (const objectId of objectIds) objectIdsToApply.add(objectId)
+    }
+    if (objectIdsToApply.size > 0) {
+      this._dtxLayer.setObjectsVisible(Array.from(objectIdsToApply), visible)
     }
     this._onDirty?.()
   }
 
   setObjectsSelected(refnos: string[], selected: boolean): void {
+    this.ensureRefnos(refnos, { computeAabb: false })
     for (const refno of refnos) {
-      this.ensureRefnos([refno])
       const st = this.objects[refno]
       if (st) st.selected = selected
 
@@ -148,12 +153,57 @@ export class DtxCompatScene {
    * - xrayed=false 视为显示
    */
   setObjectsXRayed(refnos: string[], xrayed: boolean): void {
+    this.ensureRefnos(refnos, { computeAabb: false })
     for (const refno of refnos) {
-      this.ensureRefnos([refno])
       const st = this.objects[refno]
       if (st) st.xrayed = xrayed
     }
     this.setObjectsVisible(refnos, !xrayed)
+  }
+
+  /**
+   * 在“实例按需加载”场景下回放 refno 的当前状态到 DTXLayer
+   * - 避免 load 后默认 visible=true 覆盖用户之前在树上做的显隐/隔离
+   */
+  applyStateToRefnos(refnos: string[], options?: { computeAabb?: boolean; forceVisible?: boolean }): void {
+    if (!refnos || refnos.length === 0) return
+
+    const computeAabb = options?.computeAabb === true
+    const forceVisible = options?.forceVisible === true
+    this.ensureRefnos(refnos, { computeAabb })
+
+    const toShow = new Set<string>()
+    const toHide = new Set<string>()
+    const toSelect = new Set<string>()
+
+    for (const refno of refnos) {
+      const st = this.objects[refno]
+      if (!st) continue
+
+      const objectIds = this._getDtxObjectIds(refno)
+      if (objectIds.length === 0) continue
+
+      const effectiveVisible = st.xrayed ? false : st.visible
+      if (!effectiveVisible) {
+        for (const objectId of objectIds) toHide.add(objectId)
+      } else if (forceVisible) {
+        // 仅在明确需要时才强制把对象设为可见（避免对大规模加载造成无意义的写入）
+        for (const objectId of objectIds) toShow.add(objectId)
+      }
+
+      if (st.selected) {
+        for (const objectId of objectIds) toSelect.add(objectId)
+      }
+    }
+
+    if (toHide.size > 0) this._dtxLayer.setObjectsVisible(Array.from(toHide), false)
+    if (toShow.size > 0) this._dtxLayer.setObjectsVisible(Array.from(toShow), true)
+
+    if (this._selection) {
+      if (toSelect.size > 0) this._selection.select(Array.from(toSelect), true)
+    }
+
+    this._onDirty?.()
   }
 
   getAABB(refnos: string[]): Aabb6 | null {

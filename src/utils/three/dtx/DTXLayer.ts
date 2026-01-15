@@ -1432,6 +1432,46 @@ export class DTXLayer {
   }
 
   /**
+   * 批量设置对象可见性
+   * - 只在最后一次性标记 colorsAndFlagsTexture.needsUpdate，避免大量重复更新
+   */
+  setObjectsVisible(objectIds: string[], visible: boolean): void {
+    if (!objectIds || objectIds.length === 0) return;
+
+    const flag = visible ? 1 : 0;
+    let any = false;
+
+    let pixelsPerRow = 0;
+    let texData: Uint8Array | null = null;
+    if (this._colorsAndFlagsTexture) {
+      pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
+      texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+    }
+
+    for (const objectId of objectIds) {
+      const obj = this._objects.get(objectId);
+      if (!obj) continue;
+
+      obj.visible = visible;
+      const bufferOffset = obj.objectIndex * 16 + 2; // pixel 0, byte 2
+      this._colorsAndFlagsBuffer[bufferOffset] = flag;
+
+      if (texData) {
+        const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
+        const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
+        const dstOffset = (objY * pixelsPerRow + objX) * 4 + 2; // pixel 0, byte 2
+        texData[dstOffset] = flag;
+      }
+
+      any = true;
+    }
+
+    if (any && this._colorsAndFlagsTexture) {
+      this._colorsAndFlagsTexture.needsUpdate = true;
+    }
+  }
+
+  /**
    * 批量设置所有对象的可见性
    */
   setAllVisible(visible: boolean): void {

@@ -67,6 +67,57 @@ function deriveLoadRefnosFromInstancesManifest(manifest: InstanceManifest, rootR
   const root = normalizeRefnoString(rootRefno)
   if (!root) return []
 
+  // -1) gen-model-fork V0：顶层 instances（每个 refno 下挂 geo_instances）
+  // 这类数据没有层级信息，visible-insts 不可用时只能在“加载 root”与“加载文件内所有 refno”之间选择。
+  const flatV0 = (manifest as any)?.instances
+  if (Array.isArray(flatV0) && flatV0.length > 0 && Array.isArray(flatV0[0]?.geo_instances)) {
+    const allRefnos = uniqStrings(flatV0.map((x: any) => normalizeRefnoString(String(x?.refno ?? ''))).filter(Boolean))
+    if (allRefnos.length === 0) return [root]
+
+    // root 在文件内：默认加载文件内所有 refno（更符合“离线/导出子集直接预览”场景）
+    // 软阈值避免意外把超大 dbno 全量塞进前端（e3d 正常时仍会走 visible-insts 分支）
+    const MAX_FALLBACK_REFNOS = 20_000
+    if (allRefnos.includes(root)) {
+      return allRefnos.length <= MAX_FALLBACK_REFNOS ? allRefnos : [root]
+    }
+
+    // root 不在文件内：兜底加载文件内所有 refno（小文件更直观；大文件仍避免卡死）
+    return allRefnos.length <= MAX_FALLBACK_REFNOS ? allRefnos : [root]
+  }
+
+  // 0) export_dbnum_instances_json 新格式：groups（owner_refno + children/tubings）
+  for (const g of (manifest as any)?.groups || []) {
+    const ownerRefno = normalizeRefnoString(String(g?.owner_refno || ''))
+    if (!ownerRefno) continue
+
+    // root 是 owner：加载 owner + children + tubings（用于承接 tubing 的 refno 以及 UI 切换）
+    if (ownerRefno === root) {
+      const childRefnos = Array.isArray(g?.children)
+        ? g.children.map((c: any) => normalizeRefnoString(String(c?.refno || ''))).filter(Boolean)
+        : []
+
+      const tubingRefnos = Array.isArray(g?.tubings)
+        ? g.tubings.map((t: any) => normalizeRefnoString(String(t?.refno ?? t?.uniforms?.refno ?? ''))).filter(Boolean)
+        : []
+
+      return uniqStrings([ownerRefno, ...childRefnos, ...tubingRefnos]).filter(Boolean)
+    }
+
+    // root 是 child / tubing：直接加载自身
+    if (Array.isArray(g?.children)) {
+      for (const c of g.children) {
+        const r = normalizeRefnoString(String(c?.refno || ''))
+        if (r && r === root) return [root]
+      }
+    }
+    if (Array.isArray(g?.tubings)) {
+      for (const t of g.tubings) {
+        const r = normalizeRefnoString(String(t?.refno ?? t?.uniforms?.refno ?? ''))
+        if (r && r === root) return [root]
+      }
+    }
+  }
+
   // 1) V2: bran/equi group root -> children + (可选) tubings refno + group 自身（用于承接 tubing fallbackRefno）
   const groups = ([] as any[]).concat(manifest.bran_groups || []).concat(manifest.equi_groups || [])
   for (const g of groups) {
@@ -244,6 +295,54 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       // - root 自身可能就是可渲染元件（叶子节点）
       // - V2 bran/equi group 需要加载 children（并包含 group 自身以承接 tubing fallbackRefno）
       const manifest = await getDbnoInstancesManifest(dbno)
+
+      // gen-model-fork V0：manifest.instances（通常是“离线子集导出”），需要优先与 visibleRefnos 做交集，避免把整棵可见子孙（可能数万）都跑一遍但最终几乎全缺失。
+      const flatV0 = (manifest as any)?.instances
+      if (Array.isArray(flatV0) && flatV0.length > 0 && Array.isArray(flatV0[0]?.geo_instances)) {
+        const available = new Set<string>(
+          flatV0
+            .map((x: any) => normalizeRefnoString(String(x?.refno ?? '')))
+            .filter(Boolean)
+        )
+        const intersected = visibleRefnos.length > 0 ? visibleRefnos.filter((r) => available.has(r)) : []
+        const loadRefnos = (intersected.length > 0 ? intersected : deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)).filter(Boolean)
+        const loadRefnoSample = loadRefnos.slice(0, 10)
+
+        statusMessage.value = `加载 ${loadRefnos.length} 个 refno 的实例...`
+        progress.value = 60
+
+        const anyViewer = viewer as unknown as {
+          __dtxLayer?: unknown
+          __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        }
+        const dtxLayer = anyViewer.__dtxLayer as any
+        if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型')
+
+        const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
+          lodAssetKey: 'L1',
+          debug: false,
+        })
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos)
+
+        lastLoadDebug.value = {
+          refno: normalizedRoot,
+          dbno,
+          visibleInsts: {
+            ok: visibleOk,
+            count: visibleRefnos.length,
+            error: visibleErr,
+          },
+          loadRefnos: { count: loadRefnos.length, sample: loadRefnoSample },
+          result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects } : null,
+          ms: Date.now() - startedAt,
+        }
+
+        loadedRoots.add(normalizedRoot)
+        statusMessage.value = result.loadedObjects > 0 ? '加载完成' : '无可见几何实例'
+        progress.value = 100
+        return true
+      }
+
       const loadRefnos = visibleRefnos.length > 0 ? visibleRefnos : deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)
       const loadRefnoSample = loadRefnos.slice(0, 10)
 

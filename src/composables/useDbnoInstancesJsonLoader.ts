@@ -43,6 +43,15 @@ export async function getDbnoInstancesManifest(dbno: number): Promise<InstanceMa
   return await fetchInstancesManifest(dbno)
 }
 
+/**
+ * 手动注入 instances manifest（用于本地导入/调试）
+ * - 仅影响前端内存缓存，不会写回后端
+ * - 注入后，`getDbnoInstancesManifest(dbno)` 将直接命中该缓存
+ */
+export function setDbnoInstancesManifest(dbno: number, manifest: InstanceManifest): void {
+  manifestCache.set(dbno, manifest)
+}
+
 export function invalidateDbnoInstancesManifestCache(dbno: number): void {
   manifestCache.delete(dbno)
 }

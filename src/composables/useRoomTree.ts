@@ -2,6 +2,7 @@ import { computed, ref, shallowRef, watch } from 'vue';
 
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
+import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 
 import {
   roomTreeGetAncestors,
@@ -29,6 +30,8 @@ export function useRoomTree(
   viewerRef: { value: DtxCompatViewer | null },
   enabledRef?: { value: boolean },
 ) {
+  const sceneGraph = useSceneGraphOps(viewerRef);
+
   const nodesById = shallowRef<Record<string, TreeNode>>({});
   const rootIds = ref<string[]>([]);
 
@@ -225,6 +228,9 @@ export function useRoomTree(
       nodesById.value = nextNodes;
       childrenCountById.value = nextChildrenCount;
       childrenLoadedById.add(parentId);
+
+      // 按需加载：新加载到树里的节点也需要继承可见性状态，以便后续实例加载时能回放状态
+      sceneGraph.setVisible(childrenIds, inheritState !== 'unchecked');
     } finally {
       childrenLoadingById.delete(parentId);
     }
@@ -312,30 +318,14 @@ export function useRoomTree(
     selectedTypes.value = set;
   }
 
-  function collectLoadedRoomObjectIds(rootId: string) {
-    const viewer = viewerRef.value;
-    if (!viewer) return [];
-
+  function collectLoadedRoomRefnos(rootId: string) {
     const nodes = nodesById.value;
-    const out = new Set<string>();
-    const stack: string[] = [rootId];
-    while (stack.length > 0) {
-      const cur = stack.pop();
-      if (!cur) continue;
-
-      const node = nodes[cur];
-      if (!node) continue;
-
-      if (isRoomObjectId(node.id) && viewer.scene.objects[node.id]) {
-        out.add(node.id);
-        continue;
-      }
-
-      for (const childId of node.childrenIds) {
-        stack.push(childId);
-      }
-    }
-    return Array.from(out);
+    const ids = collectLoadedSubtreeIds(
+      rootId,
+      (id) => nodes[id]?.childrenIds,
+      { maxDepth: 256, maxNodes: 200_000 },
+    );
+    return ids.filter((id) => isRoomObjectId(id));
   }
 
   function setCheckStateDeep(id: string, state: CheckState) {
@@ -396,13 +386,9 @@ export function useRoomTree(
   }
 
   function setVisible(id: string, visible: boolean) {
-    const viewer = viewerRef.value;
-    if (!viewer) return;
-
-    const objectIds = collectLoadedRoomObjectIds(id);
-    if (objectIds.length > 0) {
-      viewer.scene.setObjectsVisible(objectIds, visible);
-    }
+    // 本地树：只对已加载到树中的对象做子树操作，同时记录状态用于后续实例按需加载回放
+    const refnos = collectLoadedRoomRefnos(id);
+    if (refnos.length > 0) sceneGraph.setVisible(refnos, visible);
 
     setCheckStateDeep(id, visible ? 'checked' : 'unchecked');
     recomputeParents(id);
@@ -423,14 +409,12 @@ export function useRoomTree(
 
     const union = new Set<string>();
     for (const id of selectedIds.value) {
-      const objIds = collectLoadedRoomObjectIds(id);
-      for (const objId of objIds) union.add(objId);
+      const refnos = collectLoadedRoomRefnos(id);
+      for (const refno of refnos) union.add(refno);
     }
 
     const list = Array.from(union);
-    if (list.length > 0) {
-      viewer.scene.setObjectsSelected(list, true);
-    }
+    if (list.length > 0) sceneGraph.setSelected(list, true);
   }
 
   function selectByRowIndex(index: number, ev: MouseEvent) {
@@ -474,37 +458,20 @@ export function useRoomTree(
     const viewer = viewerRef.value;
     if (!viewer) return;
 
-    const objectIds = collectLoadedRoomObjectIds(id);
-    if (objectIds.length === 0) return;
+    const refnos = collectLoadedRoomRefnos(id);
+    if (refnos.length === 0) return;
 
-    const aabb = viewer.scene.getAABB(objectIds);
+    const aabb = viewer.scene.getAABB(refnos);
     viewer.cameraFlight.flyTo({ aabb });
   }
 
   function isolateXray(id: string) {
-    const viewer = viewerRef.value;
-    if (!viewer) return;
-
-    const allObjectIds = viewer.scene.objectIds;
-    if (allObjectIds && allObjectIds.length > 0) {
-      viewer.scene.setObjectsXRayed(allObjectIds, true);
-    }
-
-    const objectIds = collectLoadedRoomObjectIds(id);
-    if (objectIds.length > 0) {
-      viewer.scene.setObjectsXRayed(objectIds, false);
-      viewer.scene.setObjectsVisible(objectIds, true);
-    }
+    const keep = collectLoadedRoomRefnos(id);
+    sceneGraph.isolate(keep);
   }
 
   function clearXray() {
-    const viewer = viewerRef.value;
-    if (!viewer) return;
-
-    const allObjectIds = viewer.scene.objectIds;
-    if (allObjectIds && allObjectIds.length > 0) {
-      viewer.scene.setObjectsXRayed(allObjectIds, false);
-    }
+    sceneGraph.clearIsolation();
   }
 
   function getCheckState(id: string): CheckState {

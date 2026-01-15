@@ -34,17 +34,27 @@ function parseDbno(refno) {
 
 function buildInstanceIndexByRefno(instancesManifest) {
   const index = new Map();
-  const groups = []
-    .concat(instancesManifest?.ungrouped || [])
-    .concat(instancesManifest?.bran_groups || [])
-    .concat(instancesManifest?.equi_groups || []);
+
+  const add = (refno, row) => {
+    const r = String(refno || '');
+    if (!r) return;
+    const list = index.get(r) || [];
+    list.push(row);
+    index.set(r, list);
+  };
+
+  // export_dbnum_instances_json 新格式：groups（owner_refno + children/tubings）
+  for (const g of instancesManifest?.groups || []) {
+    add(g?.owner_refno, g);
+    for (const c of g?.children || []) add(c?.refno, c);
+    for (const t of g?.tubings || []) add(t?.refno ?? t?.uniforms?.refno, t);
+  }
+
+  // 旧格式：ungrouped / bran_groups / equi_groups
+  const groups = [].concat(instancesManifest?.ungrouped || []).concat(instancesManifest?.bran_groups || []).concat(instancesManifest?.equi_groups || []);
 
   for (const row of groups) {
-    const refno = String(row.refno || '');
-    if (!refno) continue;
-    const list = index.get(refno) || [];
-    list.push(row);
-    index.set(refno, list);
+    add(row?.refno, row);
   }
   return index;
 }
@@ -118,10 +128,13 @@ async function main() {
     for (const r of sample.slice(0, 50)) {
       const rows = index.get(r) || [];
       for (const row of rows) {
-        const insts = row.instances || [];
+        // 1) 旧格式：row.instances[].geo_hash
+        const insts = row?.instances || [];
         for (const inst of insts) {
           if (inst && inst.geo_hash != null) geoHashes.add(String(inst.geo_hash));
         }
+        // 2) 新格式：tubings 项本身有 geo_hash
+        if (row && row.geo_hash != null) geoHashes.add(String(row.geo_hash));
       }
     }
     const list = Array.from(geoHashes).slice(0, 20);
@@ -146,4 +159,3 @@ main().catch((e) => {
   console.error('[test] ❌ 失败:', e?.stack || e?.message || String(e));
   process.exitCode = 1;
 });
-

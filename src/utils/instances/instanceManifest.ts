@@ -16,6 +16,24 @@ type NameEntry = {
   value: string
 }
 
+type Aabb = {
+  min: number[]
+  max: number[]
+}
+
+type FlatGeoInstanceV0 = {
+  geo_hash: string | number
+  transform: number[]
+}
+
+type FlatInstanceV0 = {
+  refno: string
+  noun?: string
+  name?: string | null
+  aabb?: Aabb | null
+  geo_instances: FlatGeoInstanceV0[]
+}
+
 type V2GeometryInstance = {
   geo_hash: string
   geo_index: number
@@ -66,15 +84,60 @@ export type InstanceManifest = {
   bran_groups?: HierarchyGroup[]
   equi_groups?: HierarchyGroup[]
   ungrouped?: ComponentInstances[]
+  /**
+   * gen-model-fork instances 新格式（V0）：顶层 instances（每个 refno 下挂 geo_instances）
+   * - 与旧格式的 components[].instances（InstanceEntry）不同：这里的 instances 是“构件实例列表”
+   */
+  instances?: FlatInstanceV0[]
+  /** export_dbnum_instances_json 新格式：顶层 groups（与 bran_groups/equi_groups/ungrouped 并存兼容） */
+  groups?: {
+    owner_refno?: string
+    owner_noun?: string
+    owner_name?: string
+    owner_aabb?: Aabb | null
+    children?: (ComponentInstances & { aabb?: Aabb | null })[]
+    tubings?: {
+      refno?: string
+      noun?: string
+      name?: string | null
+      aabb?: Aabb | null
+      geo_hash: string
+      matrix?: number[]
+      order?: number
+      lod_mask?: number
+      spec_value?: number | null
+      geo_index?: number
+      color_index?: number
+      uniforms?: Record<string, unknown> | null
+    }[]
+  }[]
 }
 
-function isV2Instances(manifest: InstanceManifest): boolean {
-  return (
-    manifest.version === 2 ||
-    manifest.bran_groups !== undefined ||
-    manifest.equi_groups !== undefined ||
-    manifest.ungrouped !== undefined
-  )
+function isNewGroupsInstances(manifest: InstanceManifest): boolean {
+  return Array.isArray(manifest.groups) && manifest.groups.length > 0
+}
+
+function isFlatInstancesV0(manifest: InstanceManifest): manifest is InstanceManifest & { instances: FlatInstanceV0[] } {
+  const insts = (manifest as any)?.instances
+  if (!Array.isArray(insts) || insts.length === 0) return false
+  const it = insts[0]
+  if (!it || typeof it !== 'object') return false
+  if (!Array.isArray((it as any).geo_instances)) return false
+  const gi = (it as any).geo_instances[0]
+  if (!gi || typeof gi !== 'object') return false
+  return 'geo_hash' in gi && 'transform' in gi
+}
+
+function isPrepackV2Instances(manifest: InstanceManifest): boolean {
+  if (manifest.bran_groups !== undefined || manifest.equi_groups !== undefined || manifest.ungrouped !== undefined) return true
+  // 某些版本可能只用 components + geo_transform/refno_transform 表示 V2
+  for (const c of manifest.components || []) {
+    if (Array.isArray((c as any).refno_transform) && (c as any).refno_transform.length >= 16) return true
+    for (const inst of c.instances || []) {
+      if (inst && typeof inst === 'object' && 'geo_transform' in inst && !('matrix' in inst)) return true
+    }
+  }
+  return false
 }
 
 function isV2GeometryInstance(inst: InstanceEntry | V2GeometryInstance): inst is V2GeometryInstance {
@@ -107,6 +170,10 @@ const IDENTITY_MATRIX: number[] = [
   0, 0, 0, 1,
 ]
 
+function normalizeRefnoString(refno: string): string {
+  return String(refno || '').trim().replace('/', '_')
+}
+
 function withRefno(
   uniforms: Record<string, unknown> | null | undefined,
   refno: string | undefined
@@ -123,7 +190,98 @@ function withRefno(
 function flattenInstances(manifest: InstanceManifest): InstanceEntry[] {
   const out: InstanceEntry[] = []
 
-  if (isV2Instances(manifest)) {
+  // export_dbnum_instances_json 新格式：顶层 groups
+  if (isNewGroupsInstances(manifest)) {
+    for (const g of manifest.groups || []) {
+      const ownerRefno = String(g?.owner_refno ?? '').trim() || undefined
+      const ownerNoun = String(g?.owner_noun ?? '').trim()
+      const ownerName = g?.owner_name ?? null
+
+      for (const child of g?.children || []) {
+        const refnoTransform = child.refno_transform || IDENTITY_MATRIX
+        const componentColorIndex = (child as any).color_index ?? 0
+        const componentLodMask = child.lod_mask ?? 1
+        const componentSpecValue = child.spec_value ?? 0
+        const componentRefno = child.refno
+        const componentNoun = child.noun || ''
+        const componentName = child.name ?? null
+
+        for (const inst of child.instances || []) {
+          let matrix: number[]
+          let geoHash: string
+          let geoIndex: number
+
+          if (isV2GeometryInstance(inst as any)) {
+            const v2 = inst as V2GeometryInstance
+            matrix = multiplyMat4(refnoTransform, v2.geo_transform)
+            geoHash = v2.geo_hash
+            geoIndex = v2.geo_index
+          } else {
+            const v1 = inst as InstanceEntry
+            matrix = v1.matrix
+            geoHash = v1.geo_hash
+            geoIndex = v1.geo_index ?? 0
+          }
+
+          out.push({
+            geo_hash: geoHash,
+            matrix,
+            geo_index: geoIndex,
+            color_index: componentColorIndex,
+            name_index: 0,
+            site_name_index: 0,
+            zone_name_index: null,
+            lod_mask: componentLodMask,
+            uniforms: withRefno(
+              {
+                owner_noun: ownerNoun,
+                owner_refno: ownerRefno,
+                owner_name: ownerName,
+                name: componentName,
+                noun: componentNoun,
+                spec_value: componentSpecValue,
+              },
+              componentRefno
+            ),
+            refno_transform: child.refno_transform,
+          })
+        }
+      }
+
+      for (const tubing of g?.tubings || []) {
+        const tubingRefno = String(tubing?.refno ?? (tubing.uniforms as any)?.refno ?? ownerRefno ?? '').trim() || undefined
+        const uniforms =
+          withRefno(tubing.uniforms, tubingRefno) ||
+          withRefno(
+            {
+              owner_noun: ownerNoun,
+              owner_refno: ownerRefno,
+              owner_name: ownerName,
+              noun: tubing.noun ?? 'TUBI',
+              name: tubing.name ?? null,
+              spec_value: tubing.spec_value ?? 0,
+            },
+            tubingRefno
+          )
+
+        out.push({
+          geo_hash: tubing.geo_hash,
+          matrix: tubing.matrix || IDENTITY_MATRIX,
+          geo_index: tubing.geo_index ?? 0,
+          color_index: tubing.color_index ?? 0,
+          name_index: 0,
+          site_name_index: 0,
+          zone_name_index: null,
+          lod_mask: tubing.lod_mask ?? 1,
+          uniforms,
+        })
+      }
+    }
+
+    return out
+  }
+
+  if (isPrepackV2Instances(manifest)) {
     const pushComponentInstances = (ownerNoun: string, ownerRefno: string | undefined, component: ComponentInstances): void => {
       const refnoTransform = component.refno_transform || IDENTITY_MATRIX
       const componentColorIndex = component.color_index ?? 0
@@ -245,11 +403,51 @@ function flattenInstances(manifest: InstanceManifest): InstanceEntry[] {
   return out
 }
 
-export function buildInstanceIndexByRefno(
-  manifest: InstanceManifest,
-  refnoFilter?: Set<string>
-): Map<string, InstanceEntry[]> {
+export function buildInstanceIndexByRefno(manifest: InstanceManifest, refnoFilter?: Set<string>): Map<string, InstanceEntry[]> {
   const index = new Map<string, InstanceEntry[]>()
+
+  // gen-model-fork V0：manifest.instances[].geo_instances[].transform
+  if (isFlatInstancesV0(manifest)) {
+    for (const inst of manifest.instances || []) {
+      const refno = normalizeRefnoString(String(inst?.refno ?? ''))
+      if (!refno) continue
+      if (refnoFilter && !refnoFilter.has(refno)) continue
+
+      const list = index.get(refno) || []
+      const noun = String(inst?.noun ?? '')
+      const name = inst?.name ?? null
+
+      for (const gi of inst.geo_instances || []) {
+        const geoHash = String((gi as any)?.geo_hash ?? '').trim()
+        if (!geoHash) continue
+
+        const matrix = Array.isArray((gi as any)?.transform) && (gi as any).transform.length === 16 ? (gi as any).transform : IDENTITY_MATRIX
+
+        list.push({
+          geo_hash: geoHash,
+          matrix,
+          geo_index: 0,
+          color_index: 0,
+          name_index: 0,
+          site_name_index: 0,
+          zone_name_index: null,
+          lod_mask: 1,
+          uniforms: withRefno(
+            {
+              noun,
+              name,
+            },
+            refno
+          ),
+        })
+      }
+
+      if (list.length > 0) index.set(refno, list)
+    }
+
+    return index
+  }
+
   const flat = flattenInstances(manifest)
   for (const instance of flat) {
     const refno = String(instance.uniforms?.refno ?? '')
@@ -261,4 +459,3 @@ export function buildInstanceIndexByRefno(
   }
   return index
 }
-

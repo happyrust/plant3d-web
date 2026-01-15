@@ -2,13 +2,12 @@ import { computed, ref, shallowRef, watch } from 'vue'
 
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree'
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer'
+import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph'
 
 import {
   e3dGetAncestors,
   e3dGetChildren,
   e3dSearch,
-  e3dGetVisibleInsts,
-  e3dGetSubtreeRefnos,
   e3dGetWorldRoot,
   type TreeNodeDto,
 } from '@/api/genModelE3dApi'
@@ -31,6 +30,8 @@ function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
 }
 
 export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
+  const sceneGraph = useSceneGraphOps(viewerRef)
+
   const nodesById = shallowRef<Record<string, TreeNode>>({})
   const rootIds = ref<string[]>([])
 
@@ -53,16 +54,8 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   const childrenLoadedById = new Set<string>()
   const childrenLoadingById = new Set<string>()
 
-  const subtreeObjectIdsCache = ref<Map<string, string[]>>(new Map())
-  const subtreeObjectIdsInFlight = new Map<string, Promise<string[]>>()
-
   const SUBTREE_MAX_DEPTH = 256
   const SUBTREE_LIMIT = 200_000
-
-  function clearCaches() {
-    subtreeObjectIdsCache.value.clear()
-    subtreeObjectIdsInFlight.clear()
-  }
 
   function resetAllState() {
     nodesById.value = {}
@@ -84,7 +77,6 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     childrenCountById.value = new Map()
     childrenLoadedById.clear()
     childrenLoadingById.clear()
-    clearCaches()
   }
 
   function rebuildInitialChecks() {
@@ -243,7 +235,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       nodesById.value = nextNodes
       childrenCountById.value = nextChildrenCount
       childrenLoadedById.add(parentId)
-      clearCaches()
+
+      // 按需加载：新加载到树里的节点也需要继承可见性状态，以便后续实例加载时能回放状态
+      sceneGraph.setVisible(childrenIds, inheritState !== 'unchecked')
     } finally {
       childrenLoadingById.delete(parentId)
     }
@@ -364,38 +358,13 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     selectedTypes.value = newSelected
   }
 
-  async function getObjectIdsForSubtree(id: string): Promise<string[]> {
-    const viewer = viewerRef.value
-    if (!viewer) return []
-
-    const cached = subtreeObjectIdsCache.value.get(id)
-    if (cached) return cached
-
-    const inflight = subtreeObjectIdsInFlight.get(id)
-    if (inflight) return await inflight
-
-    const p = (async () => {
-      const resp = await e3dGetSubtreeRefnos(id, {
-        includeSelf: true,
-        maxDepth: SUBTREE_MAX_DEPTH,
-        limit: SUBTREE_LIMIT,
-      })
-
-      if (!resp.success) {
-        throw new Error(resp.error_message || 'subtree-refnos api failed')
-      }
-
-      const filtered = (resp.refnos || []).filter((oid) => !!viewer.scene.objects[oid])
-      subtreeObjectIdsCache.value.set(id, filtered)
-      return filtered
-    })()
-
-    subtreeObjectIdsInFlight.set(id, p)
-    try {
-      return await p
-    } finally {
-      subtreeObjectIdsInFlight.delete(id)
-    }
+  function collectLoadedSubtreeRefnos(rootId: string): string[] {
+    const nodes = nodesById.value
+    return collectLoadedSubtreeIds(
+      rootId,
+      (id) => nodes[id]?.childrenIds,
+      { maxDepth: SUBTREE_MAX_DEPTH, maxNodes: SUBTREE_LIMIT },
+    )
   }
 
   function setCheckStateDeep(id: string, state: CheckState) {
@@ -457,51 +426,13 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     const viewer = viewerRef.value
     if (!viewer) return
 
-    const node = nodesById.value[id]
-    const hasChild = (nodeId: string, n?: TreeNode): boolean => {
-      const node = n ?? nodesById.value[nodeId]
-      if (!node) return false
-      if (node.childrenIds.length > 0) return true
-      const cnt = childrenCountById.value.get(nodeId)
-      return typeof cnt === 'number' && cnt > 0
-    }
-
-    const resolveTargetRefnos = async (): Promise<string[]> => {
-      if (node && !hasChild(id, node)) return [id]
-
-      if (node && (node.type === 'BRAN' || node.type === 'HANG')) {
-        const resp = await e3dGetSubtreeRefnos(id, {
-          includeSelf: true,
-          maxDepth: SUBTREE_MAX_DEPTH,
-          limit: SUBTREE_LIMIT,
-        })
-        if (!resp.success) throw new Error(resp.error_message || 'subtree-refnos api failed')
-        return resp.refnos || []
-      }
-
-      const resp = await e3dGetVisibleInsts(id)
-      if (!resp.success) throw new Error(resp.error_message || 'visible-insts api failed')
-      return resp.refnos || []
-    }
-
-    let targetRefnos: string[] = []
-    try {
-      targetRefnos = await resolveTargetRefnos()
-    } catch (e) {
-      if (import.meta.env.DEV) {
-        console.warn('[pdms-tree] resolveTargetRefnos failed', {
-          id,
-          visible,
-          err: e instanceof Error ? e.message : String(e),
-        })
-      }
-      targetRefnos = []
-    }
-
-    const loaded = targetRefnos.filter((r) => !!viewer.scene.objects[r])
-    const finalIds = loaded.length > 0 ? loaded : (viewer.scene.objects[id] ? [id] : [])
-    if (finalIds.length > 0) {
-      viewer.scene.setObjectsVisible(finalIds, visible)
+    // 本地树：只对已加载到树中的节点做子树操作，同时记录状态用于后续实例按需加载回放
+    const refnos = collectLoadedSubtreeRefnos(id)
+    if (refnos.length > 0) {
+      sceneGraph.setVisible(refnos, visible)
+    } else {
+      // 保底：至少记录当前节点的期望状态
+      sceneGraph.setVisible([id], visible)
     }
 
     setCheckStateDeep(id, visible ? 'checked' : 'unchecked')
@@ -523,18 +454,12 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
     const union = new Set<string>()
     for (const id of selectedIds.value) {
-      try {
-        const objIds = await getObjectIdsForSubtree(id)
-        for (const objId of objIds) union.add(objId)
-      } catch {
-        void 0
-      }
+      const ids = collectLoadedSubtreeRefnos(id)
+      for (const refno of ids) union.add(refno)
     }
 
     const list = Array.from(union)
-    if (list.length > 0) {
-      viewer.scene.setObjectsSelected(list, true)
-    }
+    if (list.length > 0) sceneGraph.setSelected(list, true)
   }
 
   function selectByRowIndex(index: number, ev: MouseEvent) {
@@ -572,37 +497,20 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     const viewer = viewerRef.value
     if (!viewer) return
 
-    const objectIds = await getObjectIdsForSubtree(id).catch(() => [])
-    if (objectIds.length === 0) return
+    const refnos = collectLoadedSubtreeRefnos(id)
+    if (refnos.length === 0) return
 
-    const aabb = viewer.scene.getAABB(objectIds)
+    const aabb = viewer.scene.getAABB(refnos)
     viewer.cameraFlight.flyTo({ aabb })
   }
 
   async function isolateXray(id: string) {
-    const viewer = viewerRef.value
-    if (!viewer) return
-
-    const allObjectIds = viewer.scene.objectIds
-    if (allObjectIds && allObjectIds.length > 0) {
-      viewer.scene.setObjectsXRayed(allObjectIds, true)
-    }
-
-    const objectIds = await getObjectIdsForSubtree(id).catch(() => [])
-    if (objectIds.length > 0) {
-      viewer.scene.setObjectsXRayed(objectIds, false)
-      viewer.scene.setObjectsVisible(objectIds, true)
-    }
+    const keep = collectLoadedSubtreeRefnos(id)
+    sceneGraph.isolate(keep)
   }
 
   function clearXray() {
-    const viewer = viewerRef.value
-    if (!viewer) return
-
-    const allObjectIds = viewer.scene.objectIds
-    if (allObjectIds && allObjectIds.length > 0) {
-      viewer.scene.setObjectsXRayed(allObjectIds, false)
-    }
+    sceneGraph.clearIsolation()
   }
 
   function getCheckState(id: string): CheckState {
@@ -736,7 +644,6 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       nextChildrenCount.set(root.id, resp.node.children_count ?? null)
       childrenCountById.value = nextChildrenCount
 
-      clearCaches()
       rebuildInitialChecks()
 
       void ensureChildrenLoaded(root.id)
@@ -809,4 +716,3 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     clearXray,
   }
 }
-

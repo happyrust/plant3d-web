@@ -494,7 +494,8 @@ onMounted(() => {
         _dbno: number,
         loadedRefnos: string[],
     ) => {
-        compat.scene.ensureRefnos(loadedRefnos);
+        // 按需实例加载：把树侧已有的可见/选中状态回放到新加载的对象（避免默认 visible=true 覆盖）
+        compat.scene.applyStateToRefnos(loadedRefnos, { computeAabb: false });
         try {
             cadGridRef.value?.fitToBoundingBox(dtxLayer.getBoundingBox());
         } catch {
