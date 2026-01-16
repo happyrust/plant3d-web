@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 
 import DockLayout from '@/components/DockLayout.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 
-// 固定高度，不再随展开缩放
-const extensionHeight = 32;
+const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
+const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
+
+// 展开时高度 = tab header (32px) + content panel (约 92px)
+// 折叠时高度 = tab header (32px)
+const extensionHeight = computed(() => (ribbonCollapsed.value ? 32 : 124));
 
 const urlParams = new URLSearchParams(window.location.search);
 const showBenchmark = urlParams.get('benchmark') === 'true';
@@ -22,9 +26,9 @@ const showBenchmark = urlParams.get('benchmark') === 'true';
       :extension-height="extensionHeight"
     >
       <template #extension>
-        <div class="flex items-center w-full">
-          <RibbonBar class="flex-1" />
-          <div class="px-2">
+        <div class="flex items-start w-full">
+          <RibbonBar ref="ribbonBarRef" class="flex-1" />
+          <div class="px-2 h-8 flex items-center">
             <UserAvatar />
           </div>
         </div>

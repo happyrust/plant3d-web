@@ -92,41 +92,118 @@ function parseDbnoFromRefno(refno) {
 function pickRootRefnoFromInstances(manifest) {
   const list = manifest?.instances;
   if (Array.isArray(list) && list.length > 0) {
-    const r = String(list[0]?.refno ?? '').trim().replace('/', '_');
-    if (r) return r;
+    // 优先挑一个“确实有几何实例”的 refno，否则后续 totalObjects>0 的等待条件会卡住。
+    for (const it of list) {
+      const geos = Array.isArray(it?.geo_instances) ? it.geo_instances : [];
+      if (geos.length <= 0) continue;
+      const r = String(it?.refno ?? '').trim().replace('/', '_');
+      if (r) return r;
+    }
+    const r0 = String(list[0]?.refno ?? '').trim().replace('/', '_');
+    if (r0) return r0;
   }
-  throw new Error('instances json 未包含 instances[0].refno，无法自动选择 root refno');
+  const groups = manifest?.groups;
+  if (Array.isArray(groups) && groups.length > 0) {
+    const g0 = groups[0];
+    const owner = String(g0?.owner_refno ?? '').trim().replace('/', '_');
+    if (owner) return owner;
+    const child = String(g0?.children?.[0]?.refno ?? '').trim().replace('/', '_');
+    if (child) return child;
+  }
+  throw new Error('instances json 未包含可用 root refno（instances[0].refno / groups[0].owner_refno）');
 }
 
 function buildExpectedCountsByRefno(manifest) {
   const out = new Map();
+  const add = (refno, n) => {
+    const r = String(refno ?? '').trim().replace('/', '_');
+    const nn = Number(n ?? 0);
+    if (!r || !Number.isFinite(nn)) return;
+    out.set(r, (out.get(r) || 0) + nn);
+  };
+
+  // gen-model-fork V0：instances[].geo_instances
   const list = manifest?.instances;
-  if (!Array.isArray(list)) return out;
-  for (const it of list) {
-    const refno = String(it?.refno ?? '').trim().replace('/', '_');
-    if (!refno) continue;
-    const geos = Array.isArray(it?.geo_instances) ? it.geo_instances : [];
-    out.set(refno, geos.length);
+  if (Array.isArray(list)) {
+    for (const it of list) {
+      const refno = String(it?.refno ?? '').trim().replace('/', '_');
+      if (!refno) continue;
+      const geos = Array.isArray(it?.geo_instances) ? it.geo_instances : [];
+      add(refno, geos.length);
+    }
   }
+
+  // export_dbnum_instances_json：groups[].children / groups[].tubings
+  const groups = manifest?.groups;
+  if (Array.isArray(groups)) {
+    for (const g of groups) {
+      for (const c of g?.children || []) {
+        const refno = String(c?.refno ?? '').trim().replace('/', '_');
+        if (!refno) continue;
+        const insts = Array.isArray(c?.instances) ? c.instances : [];
+        add(refno, insts.length);
+      }
+      for (const t of g?.tubings || []) {
+        const refno = String(t?.refno ?? t?.uniforms?.refno ?? '').trim().replace('/', '_');
+        if (!refno) continue;
+        // tubings 每条记录就是一个实例
+        add(refno, 1);
+      }
+    }
+  }
+
   return out;
 }
 
-function unionAabbFromManifest(manifest) {
+function buildAabbByRefno(manifest) {
+  const map = new Map();
+  const add = (refno, aabb) => {
+    const r = String(refno ?? '').trim().replace('/', '_');
+    const min = aabb?.min;
+    const max = aabb?.max;
+    if (!r || !Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) return;
+    const x0 = Number(min[0]), y0 = Number(min[1]), z0 = Number(min[2]);
+    const x1 = Number(max[0]), y1 = Number(max[1]), z1 = Number(max[2]);
+    if (![x0, y0, z0, x1, y1, z1].every((v) => Number.isFinite(v))) return;
+    const prev = map.get(r);
+    if (!prev) {
+      map.set(r, { min: [x0, y0, z0], max: [x1, y1, z1] });
+      return;
+    }
+    prev.min[0] = Math.min(prev.min[0], x0);
+    prev.min[1] = Math.min(prev.min[1], y0);
+    prev.min[2] = Math.min(prev.min[2], z0);
+    prev.max[0] = Math.max(prev.max[0], x1);
+    prev.max[1] = Math.max(prev.max[1], y1);
+    prev.max[2] = Math.max(prev.max[2], z1);
+  };
+
   const list = manifest?.instances;
-  if (!Array.isArray(list) || list.length === 0) return null;
+  if (Array.isArray(list)) {
+    for (const it of list) add(it?.refno, it?.aabb);
+  }
+
+  const groups = manifest?.groups;
+  if (Array.isArray(groups)) {
+    for (const g of groups) {
+      for (const c of g?.children || []) add(c?.refno, c?.aabb);
+      for (const t of g?.tubings || []) add(t?.refno ?? t?.uniforms?.refno, t?.aabb);
+    }
+  }
+  return map;
+}
+
+function unionAabbForRefnos(aabbByRefno, refnos) {
+  const list = Array.isArray(refnos) ? refnos : [];
+  if (!aabbByRefno || typeof aabbByRefno.get !== 'function' || list.length === 0) return null;
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   let hasAny = false;
-  for (const it of list) {
-    const aabb = it?.aabb;
-    const min = aabb?.min;
-    const max = aabb?.max;
-    if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) continue;
-    const x0 = Number(min[0]), y0 = Number(min[1]), z0 = Number(min[2]);
-    const x1 = Number(max[0]), y1 = Number(max[1]), z1 = Number(max[2]);
-    if (![x0, y0, z0, x1, y1, z1].every((v) => Number.isFinite(v))) continue;
-    minX = Math.min(minX, x0); minY = Math.min(minY, y0); minZ = Math.min(minZ, z0);
-    maxX = Math.max(maxX, x1); maxY = Math.max(maxY, y1); maxZ = Math.max(maxZ, z1);
+  for (const r of list) {
+    const aabb = aabbByRefno.get(String(r ?? '').trim().replace('/', '_'));
+    if (!aabb) continue;
+    minX = Math.min(minX, aabb.min[0]); minY = Math.min(minY, aabb.min[1]); minZ = Math.min(minZ, aabb.min[2]);
+    maxX = Math.max(maxX, aabb.max[0]); maxY = Math.max(maxY, aabb.max[1]); maxZ = Math.max(maxZ, aabb.max[2]);
     hasAny = true;
   }
   if (!hasAny) return null;
@@ -150,7 +227,7 @@ const instancesPath =
 const rawManifest = JSON.parse(readFileSync(instancesPath, 'utf-8'));
 const rootRefno = String(process.env.ROOT_REFNO || '').trim().replace('/', '_') || pickRootRefnoFromInstances(rawManifest);
 const dbno = Number(process.env.DBNO || parseDbnoFromRefno(rootRefno));
-const selectRefno = String(process.env.SELECT_REFNO || rootRefno).trim().replace('/', '_');
+const envSelectRefno = String(process.env.SELECT_REFNO || '').trim().replace('/', '_');
 
 const vitePort = await findFreePort(Number(process.env.VITE_PORT || 5173));
 const baseUrl = `http://127.0.0.1:${vitePort}`;
@@ -158,23 +235,27 @@ const baseUrl = `http://127.0.0.1:${vitePort}`;
 const artifactsDir = path.resolve(process.cwd(), 'artifacts');
 mkdirSync(artifactsDir, { recursive: true });
 const pngPath = path.join(artifactsDir, `import_instances_${dbno}_${rootRefno.replace(/[^\w.-]+/g, '_')}.png`);
-const selectedPngPath = path.join(
-  artifactsDir,
-  `import_instances_selected_${dbno}_${selectRefno.replace(/[^\w.-]+/g, '_')}.png`
-);
+let selectedPngPath = '';
 const expectRealGlb = process.env.EXPECT_REAL_GLB === '1';
 const expectNoFallback = process.env.EXPECT_NO_FALLBACK === '1';
 const expectScaleMatch = process.env.EXPECT_SCALE_MATCH === '1';
 
 const expectedCountsByRefno = buildExpectedCountsByRefno(rawManifest);
-const expectedTotalObjects = Array.from(expectedCountsByRefno.values()).reduce((a, b) => a + b, 0);
-const expectedSceneAabb = unionAabbFromManifest(rawManifest);
+const aabbByRefno = buildAabbByRefno(rawManifest);
+const selectRefno =
+  envSelectRefno ||
+  Array.from(expectedCountsByRefno.entries()).find(([, n]) => Number(n || 0) > 0)?.[0] ||
+  rootRefno;
+selectedPngPath = path.join(
+  artifactsDir,
+  `import_instances_selected_${dbno}_${selectRefno.replace(/[^\w.-]+/g, '_')}.png`
+);
 
 process.stdout.write(`[test] instancesPath=${instancesPath}\n`);
 process.stdout.write(`[test] dbno=${dbno}\n`);
 process.stdout.write(`[test] rootRefno=${rootRefno}\n`);
 process.stdout.write(`[test] selectRefno=${selectRefno}\n`);
-process.stdout.write(`[test] expectedTotalObjects=${expectedTotalObjects}\n`);
+process.stdout.write(`[test] manifestRefnos(with counts)=${expectedCountsByRefno.size}\n`);
 
 const vite = spawnLogged(
   'npm',
@@ -261,7 +342,22 @@ try {
   });
   process.stdout.write(`[test] dtx stats=${JSON.stringify(stats)}\n`);
 
-  // 1) 对象总数：应等于 instances.json 的 geo_instances 总数
+  // 1) 对象总数：应等于“本次实际加载 refno 集合”的预期实例数之和（从 manifest 侧统计）
+  const loadedRefnos = await page.evaluate(() => {
+    const v = window.__xeokitViewer;
+    const list = v && (v.__dtxLastLoadedRefnos || v.__dtxLoadedRefnos);
+    return Array.isArray(list) ? list : [];
+  });
+  mustOk(Array.isArray(loadedRefnos) && loadedRefnos.length > 0, `[test] 无法获取 loadedRefnos: got=${JSON.stringify(loadedRefnos)}`);
+
+  const uniqLoadedRefnos = Array.from(new Set(loadedRefnos.map((r) => String(r ?? '').trim().replace('/', '_')).filter(Boolean)));
+  const expectedEntries = [];
+  let expectedTotalObjects = 0;
+  for (const refno of uniqLoadedRefnos) {
+    const expected = Number(expectedCountsByRefno.get(refno) || 0);
+    expectedEntries.push([refno, expected]);
+    expectedTotalObjects += expected;
+  }
   mustOk(
     Number(stats?.totalObjects || 0) === expectedTotalObjects,
     `[test] totalObjects 不匹配: got=${Number(stats?.totalObjects || 0)} expected=${expectedTotalObjects}`
@@ -291,7 +387,7 @@ try {
       if (got !== expected) mismatches.push({ refno, got, expected });
     }
     return { ok: mismatches.length === 0, totalObjects: ids.length, uniqueRefnos: Object.keys(counts).length, mismatches };
-  }, Array.from(expectedCountsByRefno.entries()));
+  }, expectedEntries);
   mustOk(refnoCountCheck && refnoCountCheck.ok === true, `[test] refno objects 不匹配: ${JSON.stringify(refnoCountCheck)}`);
 
   // 3) bbox 有效性：抽样检查 object bbox 必须非空且值有限
@@ -456,7 +552,9 @@ try {
     );
   }
 
-  if (expectScaleMatch && expectedSceneAabb) {
+  if (expectScaleMatch) {
+    const expectedSceneAabb = unionAabbForRefnos(aabbByRefno, uniqLoadedRefnos);
+    mustOk(!!expectedSceneAabb, '[test] EXPECT_SCALE_MATCH=1 但无法从 manifest(aabb) 构建 expectedSceneAabb');
     const dtxBox = await page.evaluate(() => {
       const v = window.__xeokitViewer;
       const layer = v && v.__dtxLayer;

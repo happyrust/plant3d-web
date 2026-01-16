@@ -482,6 +482,68 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
     }
 
     /**
+     * 查询构件类型与父节点类型（用于 BRAN/HANG 特殊规则）
+     */
+    async function queryPeTypeInfo(refno: string): Promise<{ noun: string | null; ownerNoun: string | null } | null> {
+        const rawDb = toRaw(db.value)
+        if (!rawDb) return null
+
+        const sql = `SELECT noun, owner.noun as owner_noun FROM ${toPeKey(refno)}`
+
+        try {
+            const result = await rawDb.query(sql)
+            const rows = (result[0] ?? []) as Array<{ noun?: string; owner_noun?: string }>
+            const row = rows[0]
+            return {
+                noun: row?.noun ? String(row.noun) : null,
+                ownerNoun: row?.owner_noun ? String(row.owner_noun) : null,
+            }
+        } catch (e) {
+            console.error('[SurrealModelQuery] queryPeTypeInfo failed:', e)
+            return null
+        }
+    }
+
+    /**
+     * 查询可见几何子孙节点（移植自后端 query_visible_geo_descendants）
+     */
+    async function queryVisibleGeoDescendants(
+        refno: string,
+        options?: { includeSelf?: boolean; range?: string; applyBranHangRules?: boolean }
+    ): Promise<string[]> {
+        const rawDb = toRaw(db.value)
+        if (!rawDb) return []
+
+        const includeSelf = options?.includeSelf !== false
+        const range = options?.range ?? '..'
+        const applyRules = options?.applyBranHangRules !== false
+
+        if (applyRules) {
+            const typeInfo = await queryPeTypeInfo(refno)
+            const noun = (typeInfo?.noun || '').toUpperCase()
+            const ownerNoun = (typeInfo?.ownerNoun || '').toUpperCase()
+            if (ownerNoun === 'BRAN' || ownerNoun === 'HANG') {
+                return [refno]
+            }
+            if (noun === 'BRAN' || noun === 'HANG') {
+                return await queryChildren(refno)
+            }
+        }
+
+        const sql = `SELECT VALUE fn::visible_geo_descendants(${toPeKey(refno)}, ${includeSelf ? 'true' : 'false'}, "${range}")`
+
+        try {
+            const result = await rawDb.query(sql)
+            const rows = (result[0] ?? []) as unknown[]
+            const refnos = rows.map(r => extractRefno(r)).filter(Boolean)
+            return Array.from(new Set(refnos))
+        } catch (e) {
+            console.error('[SurrealModelQuery] queryVisibleGeoDescendants failed:', e)
+            throw e
+        }
+    }
+
+    /**
      * 查询子构件列表
      */
     async function queryChildren(refno: string): Promise<string[]> {
@@ -507,6 +569,8 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
         queryTubiInstsByBrans,
         /** 查询构件信息 */
         queryPeInfo,
+        /** 查询可见几何子孙 */
+        queryVisibleGeoDescendants,
         /** 查询子构件 */
         queryChildren,
     }

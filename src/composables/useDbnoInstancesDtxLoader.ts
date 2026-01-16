@@ -2,11 +2,21 @@ import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instan
 import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader'
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry'
 import { DTXLayer } from '@/utils/three/dtx'
-import { Box3, BufferAttribute, BufferGeometry, Color, Matrix4 } from 'three'
+import {
+  buildHiddenNounSet,
+  buildHiddenRefnoSet,
+  loadModelDisplayConfig,
+  normalizeNounKey,
+  normalizeRefnoKey,
+  resolveMaterialForInstance,
+  type ModelDisplayConfig,
+} from '@/utils/three/dtx/materialConfig'
+import { Box3, BufferAttribute, BufferGeometry, Matrix4 } from 'three'
 
 type LoaderOptions = {
   lodAssetKey?: string // "L1"
   debug?: boolean
+  forceReloadRefnos?: string[]
 }
 
 type DbnoRuntimeCache = {
@@ -17,6 +27,7 @@ type DbnoRuntimeCache = {
   refnoToObjectIds: Map<string, string[]>
   objectIdToRefno: Map<string, string>
   refnoTransform: Map<string, number[]>
+  refnoToNoun: Map<string, string>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>()
@@ -32,18 +43,10 @@ function getCache(dbno: number): DbnoRuntimeCache {
     refnoToObjectIds: new Map(),
     objectIdToRefno: new Map(),
     refnoTransform: new Map(),
+    refnoToNoun: new Map(),
   }
   cachesByDbno.set(dbno, created)
   return created
-}
-
-function normalizeRgbMaybe(rgb: number[]): [number, number, number] {
-  const r = Number(rgb[0] ?? 1)
-  const g = Number(rgb[1] ?? 1)
-  const b = Number(rgb[2] ?? 1)
-  const max = Math.max(r, g, b)
-  if (max > 1.0) return [r / 255, g / 255, b / 255]
-  return [r, g, b]
 }
 
 function createFallbackBoxGeometry(): BufferGeometry {
@@ -151,7 +154,8 @@ async function ensureGeometriesForGeoHashes(
 
 export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[] {
   const cache = cachesByDbno.get(dbno)
-  return cache?.refnoToObjectIds.get(refno) ?? []
+  const key = String(refno ?? '').trim().replace('/', '_')
+  return cache?.refnoToObjectIds.get(key) ?? []
 }
 
 export function resolveDtxRefnoByObjectId(dbno: number, objectId: string): string | null {
@@ -164,6 +168,59 @@ export function getDtxRefnoTransform(dbno: number, refno: string): number[] | un
   return cache?.refnoTransform.get(refno)
 }
 
+export function resolveDtxNounByRefno(dbno: number, refno: string): string | null {
+  const cache = cachesByDbno.get(dbno)
+  return cache?.refnoToNoun.get(refno) ?? null
+}
+
+export function getDtxNounCounts(dbno: number): Array<{ noun: string; count: number }> {
+  const cache = cachesByDbno.get(dbno)
+  if (!cache) return []
+  const counts = new Map<string, number>()
+  for (const noun of cache.refnoToNoun.values()) {
+    const key = normalizeNounKey(noun)
+    if (!key) continue
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return Array.from(counts.entries()).map(([noun, count]) => ({ noun, count }))
+}
+
+export function applyMaterialConfigToLoadedDtx(
+  dtxLayer: DTXLayer,
+  dbno: number,
+  config: ModelDisplayConfig
+): { updatedObjects: number } {
+  const cache = cachesByDbno.get(dbno)
+  if (!cache) return { updatedObjects: 0 }
+
+  const hiddenNouns = buildHiddenNounSet(config)
+  const hiddenRefnos = buildHiddenRefnoSet(config)
+  let updatedObjects = 0
+
+  for (const [refno, objectIds] of cache.refnoToObjectIds.entries()) {
+    const refnoKey = normalizeRefnoKey(refno)
+    const noun = normalizeNounKey(cache.refnoToNoun.get(refno) || '')
+    const isHidden = hiddenRefnos.has(refnoKey) || (noun && hiddenNouns.has(noun))
+    const resolved = resolveMaterialForInstance(config, refnoKey, noun)
+
+    for (const objectId of objectIds) {
+      if (isHidden || resolved.hidden) {
+        dtxLayer.setObjectVisible(objectId, false)
+        continue
+      }
+      dtxLayer.setObjectVisible(objectId, true)
+      dtxLayer.setObjectMaterial(objectId, {
+        color: resolved.color,
+        metalness: resolved.metalness,
+        roughness: resolved.roughness,
+      })
+      updatedObjects++
+    }
+  }
+
+  return { updatedObjects }
+}
+
 export async function loadDbnoInstancesForVisibleRefnosDtx(
   dtxLayer: DTXLayer,
   dbno: number,
@@ -173,26 +230,34 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   loadedRefnos: number
   skippedRefnos: number
   loadedObjects: number
+  missingRefnos: string[]
   sceneBoundingBox: Box3
 }> {
   const debug = options.debug === true
   const lodAssetKey = options.lodAssetKey || 'L1'
+  const forceReloadSet = options.forceReloadRefnos && options.forceReloadRefnos.length > 0
+    ? new Set(options.forceReloadRefnos)
+    : null
 
   if (refnos.length === 0) {
-    return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, sceneBoundingBox: dtxLayer.getBoundingBox() }
+    return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, missingRefnos: [], sceneBoundingBox: dtxLayer.getBoundingBox() }
   }
 
   const cache = getCache(dbno)
-  const toLoad = refnos.filter((r) => !cache.loadedRefnos.has(r))
+  const toLoad = refnos.filter((r) => (forceReloadSet && forceReloadSet.has(r)) || !cache.loadedRefnos.has(r))
   if (toLoad.length === 0) {
-    return { loadedRefnos: 0, skippedRefnos: refnos.length, loadedObjects: 0, sceneBoundingBox: dtxLayer.getBoundingBox() }
+    return { loadedRefnos: 0, skippedRefnos: refnos.length, loadedObjects: 0, missingRefnos: [], sceneBoundingBox: dtxLayer.getBoundingBox() }
   }
+
+  const displayConfig = await loadModelDisplayConfig()
+  const hiddenNouns = buildHiddenNounSet(displayConfig)
+  const hiddenRefnos = buildHiddenRefnoSet(displayConfig)
 
   const manifest: InstanceManifest = await getDbnoInstancesManifest(dbno)
   const index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
-  const colors = manifest.colors || []
 
   let loadedObjects = 0
+  const missingRefnos: string[] = []
 
   // 预取本次需要的所有几何体（并发 + 去重），避免在实例循环中串行 await
   const neededGeoHashes = new Set<string>()
@@ -206,13 +271,22 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, { concurrency: 8 })
 
   for (const refno of toLoad) {
+    const refnoKey = normalizeRefnoKey(refno)
+    if (hiddenRefnos.has(refnoKey)) {
+      cache.loadedRefnos.add(refno)
+      cache.refnoToObjectIds.set(refno, [])
+      continue
+    }
+
     const insts = index.get(refno) || []
     if (insts.length === 0) {
+      missingRefnos.push(refno)
       cache.loadedRefnos.add(refno)
       continue
     }
 
     const objectIds: string[] = []
+    let refnoNoun = ''
 
     for (const inst of insts) {
       const geoHash = String((inst as any).geo_hash || '')
@@ -221,11 +295,23 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       const objectId = `o:${refno}:${cache.objectCounter++}`
       const matrix = new Matrix4().fromArray((inst as any).matrix || [])
 
-      const rawColor = colors[(inst as any).color_index] || null
-      const [r, g, b] = rawColor ? normalizeRgbMaybe(rawColor) : [0.85, 0.85, 0.85]
-      const color = new Color(r, g, b)
+      const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '')
+      if (noun && !refnoNoun) {
+        refnoNoun = noun
+      }
+      if (noun && hiddenNouns.has(noun)) {
+        continue
+      }
 
-      dtxLayer.addObject(objectId, geoHash, matrix, color, { metalness: 0, roughness: 1 })
+      const resolved = resolveMaterialForInstance(displayConfig, refnoKey, noun)
+      if (resolved.hidden) {
+        continue
+      }
+
+      dtxLayer.addObject(objectId, geoHash, matrix, resolved.color, {
+        metalness: resolved.metalness,
+        roughness: resolved.roughness,
+      })
 
       objectIds.push(objectId)
       cache.objectIdToRefno.set(objectId, refno)
@@ -242,6 +328,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     if (objectIds.length > 0) {
       cache.refnoToObjectIds.set(refno, objectIds)
     }
+    if (refnoNoun) {
+      cache.refnoToNoun.set(refno, refnoNoun)
+    }
     cache.loadedRefnos.add(refno)
   }
 
@@ -254,6 +343,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     loadedRefnos: toLoad.length,
     skippedRefnos: refnos.length - toLoad.length,
     loadedObjects,
+    missingRefnos,
     sceneBoundingBox: dtxLayer.getBoundingBox(),
   }
 }

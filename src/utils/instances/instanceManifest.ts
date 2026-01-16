@@ -23,7 +23,8 @@ type Aabb = {
 
 type FlatGeoInstanceV0 = {
   geo_hash: string | number
-  transform: number[]
+  transform?: number[] // V0 格式：合成后的世界变换
+  geo_transform?: number[] // V2 格式：几何体相对 refno 的局部变换
 }
 
 type FlatInstanceV0 = {
@@ -31,6 +32,7 @@ type FlatInstanceV0 = {
   noun?: string
   name?: string | null
   aabb?: Aabb | null
+  refno_transform?: number[] // V2 格式：refno 的世界变换
   geo_instances: FlatGeoInstanceV0[]
 }
 
@@ -125,7 +127,8 @@ function isFlatInstancesV0(manifest: InstanceManifest): manifest is InstanceMani
   if (!Array.isArray((it as any).geo_instances)) return false
   const gi = (it as any).geo_instances[0]
   if (!gi || typeof gi !== 'object') return false
-  return 'geo_hash' in gi && 'transform' in gi
+  // 支持 V0 格式（transform）和 V2 格式（geo_transform + refno_transform）
+  return 'geo_hash' in gi && ('transform' in gi || 'geo_transform' in gi)
 }
 
 function isPrepackV2Instances(manifest: InstanceManifest): boolean {
@@ -406,7 +409,19 @@ function flattenInstances(manifest: InstanceManifest): InstanceEntry[] {
 export function buildInstanceIndexByRefno(manifest: InstanceManifest, refnoFilter?: Set<string>): Map<string, InstanceEntry[]> {
   const index = new Map<string, InstanceEntry[]>()
 
-  // gen-model-fork V0：manifest.instances[].geo_instances[].transform
+  // 1) 先把“结构化格式”(groups/prepack/旧 components)拍平进来
+  const flat = flattenInstances(manifest)
+  for (const instance of flat) {
+    const refno = String(instance.uniforms?.refno ?? '')
+    if (!refno) continue
+    if (refnoFilter && !refnoFilter.has(refno)) continue
+    const list = index.get(refno) || []
+    list.push(instance)
+    index.set(refno, list)
+  }
+
+  // 2) 再合并 gen-model-fork V0：manifest.instances[].geo_instances[].transform
+  // export_dbnum_instances_json 可能同时包含 groups + instances（instances 通常是非聚合 refno 的补集），因此不能 early-return。
   if (isFlatInstancesV0(manifest)) {
     for (const inst of manifest.instances || []) {
       const refno = normalizeRefnoString(String(inst?.refno ?? ''))
@@ -416,12 +431,25 @@ export function buildInstanceIndexByRefno(manifest: InstanceManifest, refnoFilte
       const list = index.get(refno) || []
       const noun = String(inst?.noun ?? '')
       const name = inst?.name ?? null
+      // V2 格式：refno_transform 为构件的世界变换
+      const refnoTransform = Array.isArray(inst?.refno_transform) && inst.refno_transform.length === 16
+        ? inst.refno_transform
+        : IDENTITY_MATRIX
 
       for (const gi of inst.geo_instances || []) {
         const geoHash = String((gi as any)?.geo_hash ?? '').trim()
         if (!geoHash) continue
 
-        const matrix = Array.isArray((gi as any)?.transform) && (gi as any).transform.length === 16 ? (gi as any).transform : IDENTITY_MATRIX
+        // V2 格式：geo_transform + refno_transform → 最终 matrix = refno_transform * geo_transform
+        // V0 格式：直接使用 transform
+        let matrix: number[]
+        if (Array.isArray((gi as any)?.geo_transform) && (gi as any).geo_transform.length === 16) {
+          matrix = multiplyMat4(refnoTransform, (gi as any).geo_transform)
+        } else if (Array.isArray((gi as any)?.transform) && (gi as any).transform.length === 16) {
+          matrix = (gi as any).transform
+        } else {
+          matrix = IDENTITY_MATRIX
+        }
 
         list.push({
           geo_hash: geoHash,
@@ -439,23 +467,13 @@ export function buildInstanceIndexByRefno(manifest: InstanceManifest, refnoFilte
             },
             refno
           ),
+          refno_transform: inst?.refno_transform,
         })
       }
 
       if (list.length > 0) index.set(refno, list)
     }
-
-    return index
   }
 
-  const flat = flattenInstances(manifest)
-  for (const instance of flat) {
-    const refno = String(instance.uniforms?.refno ?? '')
-    if (!refno) continue
-    if (refnoFilter && !refnoFilter.has(refno)) continue
-    const list = index.get(refno) || []
-    list.push(instance)
-    index.set(refno, list)
-  }
   return index
 }

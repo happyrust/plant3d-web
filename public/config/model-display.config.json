@@ -1,0 +1,209 @@
+{
+  "version": "1.1",
+  "description": "模型显示与材质配置文件 - 统一化材质预设",
+  "lastModified": "2026-01-14",
+  "displaySettings": {
+    "hiddenNouns": [],
+    "defaultVisible": true,
+    "comments": {
+      "hiddenNouns": "列表中的类型默认不显示",
+      "defaultVisible": "未在列表中的类型默认是否可见"
+    },
+    "hiddenRefnos": []
+  },
+  "defaultMaterial": {
+    "color": "#90a4ae",
+    "metalness": 0.1,
+    "roughness": 0.5,
+    "emissive": "#000000",
+    "emissiveIntensity": 0,
+    "opacity": 1,
+    "clearcoat": 0.3,
+    "clearcoatRoughness": 0.3,
+    "reflectivity": 0.5,
+    "envMapIntensity": 0.8
+  },
+  "materialConfigs": {
+    "EQUI": {
+      "name": "设备",
+      "color": "#93b2c9",
+      "metalness": 0.75,
+      "roughness": 0.45,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.3
+    },
+    "VALV": {
+      "name": "阀门",
+      "color": "#93b2c9",
+      "metalness": 0.75,
+      "roughness": 0.45,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.1
+    },
+    "TUBI": {
+      "name": "管道",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4,
+      "clearcoat": 0.2
+    },
+    "ELBO": {
+      "name": "弯头",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4,
+      "clearcoat": 0.2
+    },
+    "FLAN": {
+      "name": "法兰",
+      "color": "#f5f3e1",
+      "metalness": 0.2,
+      "roughness": 0.4,
+      "clearcoat": 0.2
+    },
+    "FILT": {
+      "name": "过滤器",
+      "color": "#93b2c9",
+      "metalness": 0.75,
+      "roughness": 0.45,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.3
+    },
+    "SCTN": {
+      "name": "截面",
+      "color": "#ababa6",
+      "metalness": 0.05,
+      "roughness": 0.5,
+      "clearcoat": 0.1
+    },
+    "TEE": {
+      "name": "三通",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "REDU": {
+      "name": "变径管",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "INST": {
+      "name": "仪表",
+      "color": "#b6cbdb",
+      "metalness": 0.65,
+      "roughness": 0.45,
+      "clearcoat": 0.2,
+      "clearcoatRoughness": 0.2
+    },
+    "FLOOR": {
+      "name": "楼板",
+      "color": "#bdbdbb",
+      "metalness": 0,
+      "roughness": 0.5,
+      "opacity": 1
+    },
+    "BRAN": {
+      "name": "分支管",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "CYLI": {
+      "name": "圆柱",
+      "color": "#edecdf",
+      "metalness": 0.1,
+      "roughness": 0.5
+    },
+    "BOX": {
+      "name": "箱体",
+      "color": "#f5f3e1",
+      "metalness": 0.15,
+      "roughness": 0.45
+    },
+    "DISH": {
+      "name": "封头",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "SLCY": {
+      "name": "斜圆柱",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.5
+    },
+    "POHE": {
+      "name": "多面体",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.5
+    },
+    "PCOM": {
+      "name": "管件组件",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "FIXING": {
+      "name": "固定件",
+      "color": "#f5f3e1",
+      "metalness": 0.2,
+      "roughness": 0.6
+    },
+    "FTUB": {
+      "name": "扁管",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "STWALL": {
+      "name": "钢墙",
+      "color": "#ababa6",
+      "metalness": 0.2,
+      "roughness": 0.7
+    },
+    "ATTA": {
+      "name": "附件",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "CROS": {
+      "name": "四通",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "CAP": {
+      "name": "管帽",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "PYRA": {
+      "name": "金字塔形",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.5
+    },
+    "CTOR": {
+      "name": "连接器",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    },
+    "CONE": {
+      "name": "锥体",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.5
+    },
+    "BEND": {
+      "name": "弯管",
+      "color": "#f5f3e1",
+      "metalness": 0.1,
+      "roughness": 0.4
+    }
+  }
+}

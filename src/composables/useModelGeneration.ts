@@ -7,11 +7,21 @@ import {
   InstancesJsonNotFoundError,
   ensureDbnoInstancesAvailable,
   getDbnoInstancesManifest,
+  invalidateDbnoInstancesManifestCache,
+  triggerBatchGenerateSse,
   triggerSubtreeGenerateSse,
   waitForDbnoInstancesFile,
 } from '@/composables/useDbnoInstancesJsonLoader'
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader'
+import { getDefaultSurrealConfig, useSurrealDB } from '@/composables/useSurrealDB'
+import { useSurrealModelQuery } from '@/composables/useSurrealModelQuery'
 import type { InstanceManifest } from '@/utils/instances/instanceManifest'
+
+/**
+ * 全局开关：是否跳过自动生成（SSE 流式生成、弹窗选择等）
+ * 设为 true 时，只加载已有的 instances 文件，不触发任何生成流程
+ */
+export const SKIP_AUTO_GENERATION = true
 
 export interface ModelGenerationOptions {
   db_num?: number
@@ -176,6 +186,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 } {
   const { viewer } = options
   const dialog = useConfirmDialogStore()
+  const surreal = useSurrealDB()
+  const surrealQuery = useSurrealModelQuery(surreal.db)
 
   const isGenerating = ref(false)
   const progress = ref(0)
@@ -188,6 +200,91 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null)
 
   const loadedRoots = new Set<string>()
+  const BATCH_LOAD_THRESHOLD = 20
+
+  async function ensureSurrealConnected(): Promise<boolean> {
+    if (surreal.isConnected.value) return true
+    try {
+      await surreal.connect(getDefaultSurrealConfig())
+      return true
+    } catch (e) {
+      console.warn('[model-generation] SurrealDB connect failed:', e)
+      return false
+    }
+  }
+
+  async function loadGeneratedRefnos(
+    dtxLayer: any,
+    dbno: number,
+    refnos: string[],
+    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void }
+  ): Promise<void> {
+    if (refnos.length === 0) return
+    invalidateDbnoInstancesManifestCache(dbno)
+    statusMessage.value = '正在加载新生成的模型...'
+    progress.value = 96
+    await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, refnos, {
+      lodAssetKey: 'L1',
+      debug: false,
+      forceReloadRefnos: refnos,
+    })
+    anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos)
+  }
+
+  async function handleMissingRefnos(
+    dtxLayer: any,
+    dbno: number,
+    missingRefnos: string[],
+    anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void }
+  ): Promise<void> {
+    if (missingRefnos.length === 0) return
+
+    // 开关打开时，跳过 SSE 批量生成
+    if (SKIP_AUTO_GENERATION) {
+      console.warn(`[model-generation] 发现 ${missingRefnos.length} 个缺失模型，已跳过自动生成`)
+      return
+    }
+
+    statusMessage.value = `发现 ${missingRefnos.length} 个缺失模型，正在生成...`
+    totalCount.value = missingRefnos.length
+    currentIndex.value = 0
+
+    const pending: string[] = []
+
+    try {
+      const { failedRefnos } = await triggerBatchGenerateSse(
+        missingRefnos,
+        {
+          onUpdate: (u) => {
+            statusMessage.value = u.message || ''
+            currentRefno.value = u.currentRefno || ''
+            currentIndex.value = u.completedCount
+            progress.value = Math.max(60, Math.min(95, 60 + u.percent * 0.35))
+          },
+          onItemDone: async (u) => {
+            if (!u.ok) return
+            pending.push(u.refno)
+            if (pending.length >= BATCH_LOAD_THRESHOLD) {
+              const batch = pending.splice(0, pending.length)
+              await loadGeneratedRefnos(dtxLayer, dbno, batch, anyViewer)
+            }
+          },
+          skipOnError: true,
+        }
+      )
+
+      if (pending.length > 0) {
+        const batch = pending.splice(0, pending.length)
+        await loadGeneratedRefnos(dtxLayer, dbno, batch, anyViewer)
+      }
+
+      if (failedRefnos.length > 0) {
+        console.warn(`[model-generation] ${failedRefnos.length} refnos failed to generate:`, failedRefnos)
+      }
+    } catch (e) {
+      console.error('[model-generation] Batch generate failed:', e)
+    }
+  }
 
   function checkRefnoExists(refno: string): boolean {
     if (loadedRoots.has(refno)) return true
@@ -220,16 +317,36 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let visibleErr: string | null = null
       let visibleRefnos: string[] = []
       try {
-        const visible = await e3dGetVisibleInsts(normalizedRoot)
-        if (!visible.success) {
-          throw new Error(visible.error_message || 'visible-insts 查询失败')
+        const canUseSurreal = await ensureSurrealConnected()
+        if (!canUseSurreal) {
+          throw new Error('SurrealDB 未连接')
         }
+        const surrealRefnos = await surrealQuery.queryVisibleGeoDescendants(normalizedRoot, {
+          includeSelf: true,
+          range: '..',
+          applyBranHangRules: true,
+        })
         visibleOk = true
-        visibleRefnos = uniqStrings((visible.refnos || []).map((r) => normalizeRefnoString(r))).filter(Boolean)
+        visibleRefnos = uniqStrings(surrealRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
       } catch (e) {
         visibleOk = false
         visibleErr = e instanceof Error ? e.message : String(e)
         visibleRefnos = []
+      }
+      if (!visibleOk) {
+        try {
+          const visible = await e3dGetVisibleInsts(normalizedRoot)
+          if (!visible.success) {
+            throw new Error(visible.error_message || 'visible-insts 查询失败')
+          }
+          visibleOk = true
+          visibleErr = null
+          visibleRefnos = uniqStrings((visible.refnos || []).map((r) => normalizeRefnoString(r))).filter(Boolean)
+        } catch (e) {
+          visibleOk = false
+          visibleErr = e instanceof Error ? e.message : String(e)
+          visibleRefnos = []
+        }
       }
 
       statusMessage.value = `加载 instances_${dbno}.json...`
@@ -239,6 +356,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         await ensureDbnoInstancesAvailable(dbno)
       } catch (e) {
         if (e instanceof InstancesJsonNotFoundError) {
+          // 开关打开时，跳过弹窗和自动生成，直接返回失败
+          if (SKIP_AUTO_GENERATION) {
+            console.warn(`[model-generation] instances_${dbno}.json 不存在，已跳过自动生成`)
+            statusMessage.value = `instances_${dbno}.json 不存在`
+            return false
+          }
           if (isAutomationMode()) {
             throw new Error(`缺少 instances 数据: /files/output/instances/instances_${dbno}.json`)
           }
@@ -297,8 +420,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const manifest = await getDbnoInstancesManifest(dbno)
 
       // gen-model-fork V0：manifest.instances（通常是“离线子集导出”），需要优先与 visibleRefnos 做交集，避免把整棵可见子孙（可能数万）都跑一遍但最终几乎全缺失。
+      // 注意：export_dbnum_instances_json 可能同时包含 groups + instances（instances 只是非聚合 refno 的补集），此时不能按“子集导出”处理，否则会误丢 groups。
       const flatV0 = (manifest as any)?.instances
-      if (Array.isArray(flatV0) && flatV0.length > 0 && Array.isArray(flatV0[0]?.geo_instances)) {
+      const hasNewGroups = Array.isArray((manifest as any)?.groups) && (manifest as any).groups.length > 0
+      if (!hasNewGroups && Array.isArray(flatV0) && flatV0.length > 0 && Array.isArray(flatV0[0]?.geo_instances)) {
         const available = new Set<string>(
           flatV0
             .map((x: any) => normalizeRefnoString(String(x?.refno ?? '')))
@@ -323,6 +448,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           debug: false,
         })
         anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos)
+
+        // 处理缺失的 refno：达到阈值或全部完成后再分批加载
+        if (result.missingRefnos.length > 0) {
+          await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+        }
 
         lastLoadDebug.value = {
           refno: normalizedRoot,
@@ -361,6 +491,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         debug: false,
       })
       anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos)
+
+      // 处理缺失的 refno：达到阈值或全部完成后再分批加载
+      if (result.missingRefnos.length > 0) {
+        await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+      }
 
       lastLoadDebug.value = {
         refno: normalizedRoot,

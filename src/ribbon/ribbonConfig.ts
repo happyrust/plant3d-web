@@ -83,6 +83,13 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         ],
       },
       {
+        id: 'view.panel.material',
+        label: '颜色配置',
+        items: [
+          { kind: 'button', id: 'panel.materialConfig', label: '颜色配置', icon: 'tag', commandId: 'panel.materialConfig' },
+        ],
+      },
+      {
         id: 'view.attributes',
         label: '属性显示',
         items: [

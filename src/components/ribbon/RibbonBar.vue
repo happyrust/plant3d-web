@@ -206,17 +206,6 @@ function onTabClick(tabId: string) {
   overflow-x: auto;
   background-color: hsl(var(--background));
   border-top: 1px solid hsl(var(--border));
-  
-  /* Absolute Positioning */
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 2000;
-  
-  /* Visuals for overlay */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
-  border-bottom: 1px solid hsl(var(--border));
 }
 
 .ribbon-content-panel::-webkit-scrollbar {

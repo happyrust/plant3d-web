@@ -265,6 +265,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'materialConfig') {
+    return dockApi.addPanel({
+      id: 'materialConfig',
+      component: 'DtxMaterialConfigPanel',
+      title: '颜色配置',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'review') {
     return dockApi.addPanel({
       id: 'review',
@@ -460,6 +472,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.ptset':
       togglePanel('ptset');
+      return;
+    case 'panel.materialConfig':
+      togglePanel('materialConfig');
       return;
     case 'panel.review':
       togglePanel('review');

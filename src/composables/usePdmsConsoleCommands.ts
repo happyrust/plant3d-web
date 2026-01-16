@@ -1,8 +1,14 @@
 import { useConsoleStore } from './useConsoleStore';
 import { useViewerContext } from './useViewerContext';
-import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import { pdmsGetUiAttr, pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
 import { e3dSearch } from '@/api/genModelE3dApi';
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
+import {
+    extractPosition,
+    extractEulerAnglesDegrees,
+    computeRelativeTransform,
+    type TransformMatrix,
+} from '@/utils/matrixUtils';
 
 // Helper to format vector
 function formatPos(p: number[] | Float32Array | Float64Array | { [key: number]: number, length: number }): string {
@@ -135,14 +141,25 @@ export function usePdmsConsoleCommands() {
                 return;
             }
 
-            // Handle Q POS - 查询本地坐标位置
+            // Handle Q POS - 查询本地坐标位置（从世界变换矩阵提取）
             if (cmd === 'POS') {
-                const pos = getAttr('POS') ?? getAttr('POSITION');
-                if (pos !== undefined) {
-                    const formatted = formatVec3(pos);
-                    store.addLog('output', `Position (Local): ${formatted}`);
-                } else {
-                    store.addLog('info', 'Local position not available');
+                try {
+                    const transformResp = await pdmsGetTransform(id);
+                    if (transformResp.success && transformResp.world_transform) {
+                        const pos = extractPosition(transformResp.world_transform as TransformMatrix);
+                        store.addLog('output', `Position (World): ${formatPos(pos)}`);
+                    } else {
+                        // 回退：从属性读取
+                        const pos = getAttr('POS') ?? getAttr('POSITION');
+                        if (pos !== undefined) {
+                            const formatted = formatVec3(pos);
+                            store.addLog('output', `Position (Local): ${formatted}`);
+                        } else {
+                            store.addLog('info', 'Position not available');
+                        }
+                    }
+                } catch (e) {
+                    store.addLog('error', `Failed to query transform: ${e}`);
                 }
                 return;
             }
@@ -159,38 +176,113 @@ export function usePdmsConsoleCommands() {
                 return;
             }
 
-            // Handle Q ORI - 查询本地坐标方位
+            // Handle Q ORI - 查询本地坐标方位（从世界变换矩阵提取）
             if (cmd === 'ORI') {
-                const ori = getAttr('ORI') ?? getAttr('ORIENTATION');
-                if (ori !== undefined) {
-                    const formatted = formatVec3(ori);
-                    store.addLog('output', `Orientation (Local): ${formatted}`);
-                } else {
-                    store.addLog('info', 'Local orientation not available');
+                try {
+                    const transformResp = await pdmsGetTransform(id);
+                    if (transformResp.success && transformResp.world_transform) {
+                        const ori = extractEulerAnglesDegrees(transformResp.world_transform as TransformMatrix);
+                        store.addLog('output', `Orientation (World, degrees): ${formatPos(ori)}`);
+                    } else {
+                        // 回退：从属性读取
+                        const ori = getAttr('ORI') ?? getAttr('ORIENTATION');
+                        if (ori !== undefined) {
+                            const formatted = formatVec3(ori);
+                            store.addLog('output', `Orientation (Local): ${formatted}`);
+                        } else {
+                            store.addLog('info', 'Orientation not available');
+                        }
+                    }
+                } catch (e) {
+                    store.addLog('error', `Failed to query transform: ${e}`);
                 }
                 return;
             }
 
             // Handle Q POS WRT OWNER - 查询相对于拥有者的位置
             if (cmd === 'POS WRT OWNER') {
-                const pos = getAttr('LPOS') ?? getAttr('LOCAL_POS') ?? getAttr('POS');
-                if (pos !== undefined) {
-                    const formatted = formatVec3(pos);
-                    store.addLog('output', `Position (WRT OWNER): ${formatted}`);
-                } else {
-                    store.addLog('info', 'Local position not available');
+                try {
+                    // 查询元素的变换矩阵
+                    const elementResp = await pdmsGetTransform(id);
+                    if (!elementResp.success || !elementResp.world_transform) {
+                        store.addLog('error', 'Failed to query element transform');
+                        return;
+                    }
+
+                    const elementWorld = elementResp.world_transform as TransformMatrix;
+                    const ownerRefno = elementResp.owner;
+
+                    if (!ownerRefno || ownerRefno === id) {
+                        // 没有 owner 或 owner 就是自己，返回世界位置
+                        const pos = extractPosition(elementWorld);
+                        store.addLog('output', `Position (WRT OWNER - no owner): ${formatPos(pos)}`);
+                        return;
+                    }
+
+                    // 查询 owner 的变换矩阵
+                    const ownerResp = await pdmsGetTransform(ownerRefno);
+                    if (!ownerResp.success || !ownerResp.world_transform) {
+                        store.addLog('error', `Failed to query owner transform (${ownerRefno})`);
+                        return;
+                    }
+
+                    const ownerWorld = ownerResp.world_transform as TransformMatrix;
+
+                    // 计算相对变换
+                    const relativeTransform = computeRelativeTransform(elementWorld, ownerWorld);
+                    if (!relativeTransform) {
+                        store.addLog('error', 'Failed to compute relative transform (matrix not invertible)');
+                        return;
+                    }
+
+                    const pos = extractPosition(relativeTransform);
+                    store.addLog('output', `Position (WRT OWNER ${ownerRefno}): ${formatPos(pos)}`);
+                } catch (e) {
+                    store.addLog('error', `Failed to compute position WRT owner: ${e}`);
                 }
                 return;
             }
 
             // Handle Q ORI WRT OWNER - 查询相对于拥有者的方位
             if (cmd === 'ORI WRT OWNER') {
-                const ori = getAttr('LORI') ?? getAttr('LOCAL_ORI') ?? getAttr('ORI');
-                if (ori !== undefined) {
-                    const formatted = formatVec3(ori);
-                    store.addLog('output', `Orientation (WRT OWNER): ${formatted}`);
-                } else {
-                    store.addLog('info', 'Local orientation not available');
+                try {
+                    // 查询元素的变换矩阵
+                    const elementResp = await pdmsGetTransform(id);
+                    if (!elementResp.success || !elementResp.world_transform) {
+                        store.addLog('error', 'Failed to query element transform');
+                        return;
+                    }
+
+                    const elementWorld = elementResp.world_transform as TransformMatrix;
+                    const ownerRefno = elementResp.owner;
+
+                    if (!ownerRefno || ownerRefno === id) {
+                        // 没有 owner 或 owner 就是自己，返回世界方位
+                        const ori = extractEulerAnglesDegrees(elementWorld);
+                        store.addLog('output', `Orientation (WRT OWNER - no owner, degrees): ${formatPos(ori)}`);
+                        return;
+                    }
+
+                    // 查询 owner 的变换矩阵
+                    const ownerResp = await pdmsGetTransform(ownerRefno);
+                    if (!ownerResp.success || !ownerResp.world_transform) {
+                        store.addLog('error', `Failed to query owner transform (${ownerRefno})`);
+                        return;
+                    }
+
+                    const ownerWorld = ownerResp.world_transform as TransformMatrix;
+
+                    // 计算相对变换
+                    const relativeTransform = computeRelativeTransform(elementWorld, ownerWorld);
+                    if (!relativeTransform) {
+                        store.addLog('error', 'Failed to compute relative transform (matrix not invertible)');
+                        return;
+                    }
+
+                    const ori = extractEulerAnglesDegrees(relativeTransform);
+                    store.addLog('output', `Orientation (WRT OWNER ${ownerRefno}, degrees): ${formatPos(ori)}`);
+                } catch (e) {
+                    store.addLog('error', `Failed to compute orientation WRT owner: ${e}`);
                 }
                 return;
             }

@@ -208,3 +208,97 @@ export async function ensureDbnoInstancesAvailable(dbno: number, options?: { aut
     await fetchInstancesManifest(dbno)
   }
 }
+
+export type BatchGenerateSseUpdate = {
+  stage: 'generating' | 'finished'
+  message?: string
+  currentRefno?: string
+  completedCount: number
+  totalCount: number
+  percent: number
+  failedRefnos?: string[]
+}
+
+export type BatchGenerateItemDone = {
+  refno: string
+  ok: boolean
+  completedCount: number
+  totalCount: number
+  percent: number
+}
+
+/**
+ * 串行生成多个 refno 的模型（逐个调用 SSE 接口）
+ * - 每个 refno 生成完成后会自动合并到 instances.json
+ * - 支持进度回调
+ */
+export async function triggerBatchGenerateSse(
+  refnos: string[],
+  options?: {
+    onUpdate?: (u: BatchGenerateSseUpdate) => void
+    onItemDone?: (u: BatchGenerateItemDone) => void | Promise<void>
+    timeoutMs?: number
+    skipOnError?: boolean
+  }
+): Promise<{ successRefnos: string[]; failedRefnos: string[] }> {
+  const total = refnos.length
+  const successRefnos: string[] = []
+  const failedRefnos: string[] = []
+  const timeoutMs = options?.timeoutMs ?? 5 * 60 * 1000
+  const skipOnError = options?.skipOnError ?? true
+
+  for (let i = 0; i < refnos.length; i++) {
+    const refno = refnos[i]!
+    const percent = Math.round((i / total) * 100)
+
+    options?.onUpdate?.({
+      stage: 'generating',
+      message: `正在生成 ${refno}...`,
+      currentRefno: refno,
+      completedCount: i,
+      totalCount: total,
+      percent,
+    })
+
+    try {
+      await triggerSubtreeGenerateSse(refno, {
+        timeoutMs,
+        maxDepth: 0,
+      })
+      successRefnos.push(refno)
+      const donePercent = total > 0 ? Math.round(((i + 1) / total) * 100) : 100
+      await options?.onItemDone?.({
+        refno,
+        ok: true,
+        completedCount: i + 1,
+        totalCount: total,
+        percent: donePercent,
+      })
+    } catch (e) {
+      console.warn(`[batch-generate] Failed to generate ${refno}:`, e)
+      failedRefnos.push(refno)
+      const donePercent = total > 0 ? Math.round(((i + 1) / total) * 100) : 100
+      await options?.onItemDone?.({
+        refno,
+        ok: false,
+        completedCount: i + 1,
+        totalCount: total,
+        percent: donePercent,
+      })
+      if (!skipOnError) {
+        throw e
+      }
+    }
+  }
+
+  options?.onUpdate?.({
+    stage: 'finished',
+    message: `生成完成：成功 ${successRefnos.length}，失败 ${failedRefnos.length}`,
+    completedCount: total,
+    totalCount: total,
+    percent: 100,
+    failedRefnos,
+  })
+
+  return { successRefnos, failedRefnos }
+}

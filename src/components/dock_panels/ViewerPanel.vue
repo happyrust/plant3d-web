@@ -15,6 +15,9 @@ import MeasurementWizard from "@/components/tools/MeasurementWizard.vue";
 import { pdmsGetPtset } from "@/api/genModelPdmsAttrApi";
 import { useModelGeneration } from "@/composables/useModelGeneration";
 import { useSelectionStore } from "@/composables/useSelectionStore";
+import { getDbnoInstancesManifest } from "@/composables/useDbnoInstancesJsonLoader";
+import { loadDbnoInstancesForVisibleRefnosDtx } from "@/composables/useDbnoInstancesDtxLoader";
+import { buildInstanceIndexByRefno } from "@/utils/instances/instanceManifest";
 import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
 import { useToolStore } from "@/composables/useToolStore";
@@ -236,14 +239,47 @@ function detachToolsInput() {
     offToolsInput = null;
 }
 
+/**
+ * 处理容器尺寸变化：同步渲染方案
+ * 在 setSize 后立即渲染一帧，消除黑屏闪烁
+ */
 function handleResize() {
     const el = containerRef.value;
     const dtxViewer = dtxViewerRef.value;
     if (!el || !dtxViewer) return;
+
     const rect = el.getBoundingClientRect();
     dtxViewer.setSize(rect.width, rect.height);
     selectionControllerRef.value?.resize(rect.width, rect.height);
-    requestRender();
+
+    // 立即同步渲染一帧，避免黑屏闪烁
+    renderFrameImmediate();
+}
+
+/**
+ * 立即渲染一帧（同步执行，用于 resize 后防闪烁）
+ */
+function renderFrameImmediate() {
+    const dtxViewer = dtxViewerRef.value;
+    const dtxLayer = dtxLayerRef.value;
+    if (!dtxViewer || !dtxLayer) return;
+
+    cadGridRef.value?.update(dtxViewer.controls.target);
+    ensureLayerAttached();
+    dtxLayer.update(dtxViewer.camera);
+
+    const selection = selectionControllerRef.value;
+    if (selection?.hasOutline() && selection.hasOutlinedObjects()) {
+        selection.renderOutline();
+    } else {
+        dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
+    }
+
+    try {
+        dtxViewer.gizmo?.render();
+    } catch {
+        // ignore
+    }
 }
 
 let needsRender = true;
@@ -494,6 +530,9 @@ onMounted(() => {
         _dbno: number,
         loadedRefnos: string[],
     ) => {
+        // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
+        (compat as any).__dtxLastLoadedDbno = _dbno;
+        (compat as any).__dtxLastLoadedRefnos = loadedRefnos;
         // 按需实例加载：把树侧已有的可见/选中状态回放到新加载的对象（避免默认 visible=true 覆盖）
         compat.scene.applyStateToRefnos(loadedRefnos, { computeAabb: false });
         try {
@@ -511,6 +550,55 @@ onMounted(() => {
     if (isDev) {
         (window as any).__xeokitViewer = compat;
         (window as any).__dtxViewer = dtxViewer;
+    }
+
+    // show_dbnum URL 参数：自动加载指定 dbnum 的所有 instances 数据
+    const urlParams = new URLSearchParams(window.location.search);
+    const showDbnum = urlParams.get("show_dbnum");
+    if (showDbnum && demoMode !== "primitives") {
+        const dbno = Number(showDbnum);
+        if (Number.isFinite(dbno) && dbno > 0) {
+            (async () => {
+                try {
+                    emitToast({ message: `正在加载 dbnum=${dbno} 的模型数据...` });
+                    const manifest = await getDbnoInstancesManifest(dbno);
+                    const index = buildInstanceIndexByRefno(manifest);
+                    const allRefnos = Array.from(index.keys());
+                    if (allRefnos.length === 0) {
+                        emitToast({ message: `dbnum=${dbno} 没有可加载的 refno` });
+                        return;
+                    }
+                    emitToast({ message: `发现 ${allRefnos.length} 个 refno，开始加载...` });
+                    const result = await loadDbnoInstancesForVisibleRefnosDtx(
+                        dtxLayer,
+                        dbno,
+                        allRefnos,
+                        { lodAssetKey: "L1", debug: isDev }
+                    );
+                    (compat as any).__dtxAfterInstancesLoaded?.(dbno, allRefnos);
+                    const box = dtxLayer.getBoundingBox();
+                    const center = new Vector3();
+                    const size = new Vector3();
+                    box.getCenter(center);
+                    box.getSize(size);
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const distance = Math.max(maxDim * 2.5, 5);
+                    const position = new Vector3(
+                        center.x + distance * 0.8,
+                        center.y + distance * 0.6,
+                        center.z + distance * 0.8
+                    );
+                    dtxViewer.flyTo(position, center, { duration: 0.5 });
+                    emitToast({
+                        message: `加载完成: ${result.loadedObjects} 个对象`,
+                    });
+                } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    console.error("[ViewerPanel] show_dbnum 加载失败:", e);
+                    emitToast({ message: `加载失败: ${msg}` });
+                }
+            })();
+        }
     }
 
     const tools = useDtxTools({

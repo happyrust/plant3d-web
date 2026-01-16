@@ -89,9 +89,17 @@ export class DtxCompatScene {
    * 获取 refno 对应的 DTX objectIds（如果未加载则为空）
    */
   private _getDtxObjectIds(refno: string): string[] {
-    const dbno = extractDbNumFromRefno(refno)
+    const normalized = refno.trim().replace('/', '_')
+    const dbno = extractDbNumFromRefno(normalized)
     if (!dbno) return []
-    return resolveDtxObjectIdsByRefno(dbno, refno)
+    const ids = resolveDtxObjectIdsByRefno(dbno, normalized)
+    if (ids.length > 0) return ids
+
+    // 兜底：避免开发环境下模块实例隔离/缓存不同步导致 resolve 失效
+    // objectId 命名规则：o:<refno>:<n>
+    const prefix = `o:${normalized}:`
+    const all = typeof (this._dtxLayer as any).getAllObjectIds === 'function' ? (this._dtxLayer as any).getAllObjectIds() : []
+    return Array.isArray(all) ? all.filter((id) => typeof id === 'string' && id.startsWith(prefix)) : []
   }
 
   private _computeRefnoAabb(refno: string): Aabb6 | null {

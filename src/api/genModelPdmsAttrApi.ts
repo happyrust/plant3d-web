@@ -85,3 +85,25 @@ export async function pdmsGetUiAttr(refno: string): Promise<PdmsUiAttrResponse> 
 export async function pdmsGetPtset(refno: string): Promise<PtsetResponse> {
   return await fetchJson<PtsetResponse>(`/api/pdms/ptset/${encodeURIComponent(refno)}`);
 }
+
+/**
+ * 变换矩阵查询响应
+ */
+export interface TransformResponse {
+  success: boolean;
+  refno: string;
+  /** 世界变换矩阵 (4x4 列主序) */
+  world_transform: number[] | null;
+  /** Owner refno */
+  owner: string | null;
+  error_message?: string | null;
+}
+
+/**
+ * 获取指定元件的变换矩阵和 owner
+ * @param refno 元件参考号，格式为 "24383_84631"
+ * @returns 包含变换矩阵和 owner 的响应
+ */
+export async function pdmsGetTransform(refno: string): Promise<TransformResponse> {
+  return await fetchJson<TransformResponse>(`/api/pdms/transform/${encodeURIComponent(refno)}`);
+}

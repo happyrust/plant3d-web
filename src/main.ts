@@ -23,6 +23,7 @@ import ConsolePanelDock from '@/components/dock_panels/ConsolePanelDock.vue';
 import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDock.vue';
 import PtsetPanelDock from '@/components/dock_panels/PtsetPanelDock.vue';
 import RoomStatusPanelDock from '@/components/dock_panels/RoomStatusPanelDock.vue';
+import DtxMaterialConfigPanelDock from '@/components/dock_panels/DtxMaterialConfigPanelDock.vue';
 import BenchmarkView from '@/components/debug/BenchmarkView.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
 import { VueQueryPlugin } from '@tanstack/vue-query';
@@ -51,6 +52,7 @@ app.component('ModelExportPanel', ModelExportPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('ParquetDebugPanel', ParquetDebugPanelDock);
 app.component('RoomStatusPanel', RoomStatusPanelDock);
+app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
 app.component('BenchmarkView', BenchmarkView);
 
 app.use(vuetify).mount('#app');
