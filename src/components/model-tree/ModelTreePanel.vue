@@ -303,21 +303,24 @@ watch(
 
 watch(
   () => flatRows.value.length,
-  (count) => {
-    console.log('[ModelTreePanel] flatRows.length changed:', count);
+  async (count) => {
+    // console.log('[ModelTreePanel] flatRows.length changed:', count);
     rowVirtualizer.value.setOptions({
       ...rowVirtualizer.value.options,
       count,
     });
-    // 强制重新计算虚拟行
-    console.log('[ModelTreePanel] virtualRows after setOptions:', rowVirtualizer.value.getVirtualItems());
+    // 等待 DOM 更新后强制重新测量，确保虚拟列表正确渲染
+    await nextTick();
+    if (containerRef.value) {
+      rowVirtualizer.value.measure();
+    }
   },
   { immediate: true }
 );
 
 const virtualRows = computed(() => {
   const items = rowVirtualizer.value.getVirtualItems();
-  console.log('[ModelTreePanel] virtualRows computed:', items.length, 'items');
+  // console.log('[ModelTreePanel] virtualRows computed:', items.length, 'items');
   return items;
 });
 const totalSize = computed(() => rowVirtualizer.value.getTotalSize());
@@ -368,9 +371,16 @@ function onGlobalMouseDown(ev: MouseEvent) {
   typePopoverOpen.value = false;
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('mousedown', onGlobalMouseDown);
-  
+
+  // 等待 DOM 渲染完成后，强制 virtualizer 重新测量滚动容器
+  // 解决初始化时 containerRef 为 null 导致虚拟列表无法正确计算可见区域的问题
+  await nextTick();
+  if (containerRef.value) {
+    rowVirtualizer.value.measure();
+  }
+
   // 监听自动定位事件 (from ViewerPanel via auto_locate_refno URL param)
   const handleAutoLocate = async (event: Event) => {
     const customEvent = event as CustomEvent<{ refno: string }>;
