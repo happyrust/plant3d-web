@@ -244,7 +244,15 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   }
 
   const cache = getCache(dbno)
-  const toLoad = refnos.filter((r) => (forceReloadSet && forceReloadSet.has(r)) || !cache.loadedRefnos.has(r))
+  const normalizedRefnos = refnos
+    .map((r) => normalizeRefnoKey(String(r ?? '')))
+    .filter((r) => !!r)
+  const normalizedForceReload = forceReloadSet
+    ? new Set(Array.from(forceReloadSet).map((r) => normalizeRefnoKey(String(r ?? ''))).filter((r) => !!r))
+    : null
+
+  const toLoad = Array.from(new Set(normalizedRefnos))
+    .filter((r) => (normalizedForceReload && normalizedForceReload.has(r)) || !cache.loadedRefnos.has(r))
   if (toLoad.length === 0) {
     return { loadedRefnos: 0, skippedRefnos: refnos.length, loadedObjects: 0, missingRefnos: [], sceneBoundingBox: dtxLayer.getBoundingBox() }
   }
@@ -270,18 +278,17 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   }
   await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, { concurrency: 8 })
 
-  for (const refno of toLoad) {
-    const refnoKey = normalizeRefnoKey(refno)
+  for (const refnoKey of toLoad) {
     if (hiddenRefnos.has(refnoKey)) {
-      cache.loadedRefnos.add(refno)
-      cache.refnoToObjectIds.set(refno, [])
+      cache.loadedRefnos.add(refnoKey)
+      cache.refnoToObjectIds.set(refnoKey, [])
       continue
     }
 
-    const insts = index.get(refno) || []
+    const insts = index.get(refnoKey) || []
     if (insts.length === 0) {
-      missingRefnos.push(refno)
-      cache.loadedRefnos.add(refno)
+      missingRefnos.push(refnoKey)
+      cache.loadedRefnos.add(refnoKey)
       continue
     }
 
@@ -292,7 +299,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       const geoHash = String((inst as any).geo_hash || '')
       if (!geoHash) continue
 
-      const objectId = `o:${refno}:${cache.objectCounter++}`
+      const objectId = `o:${refnoKey}:${cache.objectCounter++}`
       const matrix = new Matrix4().fromArray((inst as any).matrix || [])
 
       const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '')
@@ -308,30 +315,40 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         continue
       }
 
-      dtxLayer.addObject(objectId, geoHash, matrix, resolved.color, {
-        metalness: resolved.metalness,
-        roughness: resolved.roughness,
-      })
+      // 获取预计算的 AABB（如果 instances.json 中提供了）
+      const precomputedAabb = (inst as any).aabb ?? null
+
+      dtxLayer.addObject(
+        objectId,
+        geoHash,
+        matrix,
+        resolved.color,
+        {
+          metalness: resolved.metalness,
+          roughness: resolved.roughness,
+        },
+        precomputedAabb // 传递预计算的 AABB
+      )
 
       objectIds.push(objectId)
-      cache.objectIdToRefno.set(objectId, refno)
+      cache.objectIdToRefno.set(objectId, refnoKey)
       loadedObjects++
 
       const refnoTransform = (inst as any).refno_transform
       if (Array.isArray(refnoTransform) && refnoTransform.length === 16) {
-        if (!cache.refnoTransform.has(refno)) {
-          cache.refnoTransform.set(refno, refnoTransform as number[])
+        if (!cache.refnoTransform.has(refnoKey)) {
+          cache.refnoTransform.set(refnoKey, refnoTransform as number[])
         }
       }
     }
 
     if (objectIds.length > 0) {
-      cache.refnoToObjectIds.set(refno, objectIds)
+      cache.refnoToObjectIds.set(refnoKey, objectIds)
     }
     if (refnoNoun) {
-      cache.refnoToNoun.set(refno, refnoNoun)
+      cache.refnoToNoun.set(refnoKey, refnoNoun)
     }
-    cache.loadedRefnos.add(refno)
+    cache.loadedRefnos.add(refnoKey)
   }
 
   // 增量追加后重建 GPU 资源（1000 objects 级别可接受）

@@ -18,10 +18,10 @@ import {
   Vector2,
   WebGLRenderer
 } from 'three';
-
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
@@ -30,7 +30,7 @@ import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 /**
  * Outline 样式配置
  */
-export interface OutlineStyle {
+export type OutlineStyle = {
   /** 边缘颜色 (默认橙色 #ff8800) */
   edgeColor?: Color | number | string;
   /** 边缘强度 (默认 2.5) */
@@ -72,10 +72,11 @@ export class DTXOutlineHelper {
   private _composer: EffectComposer | null = null;
   private _outlinePass: OutlinePass | null = null;
   private _fxaaPass: ShaderPass | null = null;
+  private _outputPass: OutputPass | null = null;
 
   // 替身组
   private _outlineGroup: Group;
-  private _outlinedObjects: Map<string, Mesh> = new Map();
+  private _outlinedObjects: Map<string, Mesh> = new Map<string, Mesh>();
 
   // 几何体获取器
   private _geometryGetter: GeometryGetter | null = null;
@@ -133,6 +134,9 @@ export class DTXOutlineHelper {
     this._fxaaPass = new ShaderPass(FXAAShader);
     this._fxaaPass.uniforms['resolution']!.value.set(1 / size.x, 1 / size.y);
     this._composer.addPass(this._fxaaPass);
+
+    this._outputPass = new OutputPass();
+    this._composer.addPass(this._outputPass);
 
     // 添加替身组到场景
     this._scene.add(this._outlineGroup);
@@ -361,6 +365,7 @@ export class DTXOutlineHelper {
 
     this._outlinePass = null;
     this._fxaaPass = null;
+    this._outputPass = null;
     this._geometryGetter = null;
   }
 }

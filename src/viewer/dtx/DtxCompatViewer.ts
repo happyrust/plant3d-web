@@ -51,6 +51,9 @@ export class DtxCompatScene {
   private _selection: DTXSelectionController | null
   private _onDirty: (() => void) | null
 
+  private _fallbackRefnoToObjectIds: Map<string, string[]> | null = null
+  private _fallbackIndexObjectCount = 0
+
   constructor(options: { dtxLayer: DTXLayer; selection?: DTXSelectionController | null; onDirty?: (() => void) | null }) {
     this._dtxLayer = options.dtxLayer
     this._selection = options.selection ?? null
@@ -97,9 +100,27 @@ export class DtxCompatScene {
 
     // 兜底：避免开发环境下模块实例隔离/缓存不同步导致 resolve 失效
     // objectId 命名规则：o:<refno>:<n>
-    const prefix = `o:${normalized}:`
-    const all = typeof (this._dtxLayer as any).getAllObjectIds === 'function' ? (this._dtxLayer as any).getAllObjectIds() : []
-    return Array.isArray(all) ? all.filter((id) => typeof id === 'string' && id.startsWith(prefix)) : []
+    const objectCount = this._dtxLayer.objectCount
+    if (!this._fallbackRefnoToObjectIds || this._fallbackIndexObjectCount !== objectCount) {
+      const next = new Map<string, string[]>()
+      const all = this._dtxLayer.getAllObjectIds()
+      if (Array.isArray(all)) {
+        for (const objectId of all) {
+          if (typeof objectId !== 'string') continue
+          if (!objectId.startsWith('o:')) continue
+          const parts = objectId.split(':')
+          const r = parts.length >= 3 ? String(parts[1] ?? '') : ''
+          if (!r) continue
+          const list = next.get(r) || []
+          list.push(objectId)
+          next.set(r, list)
+        }
+      }
+      this._fallbackRefnoToObjectIds = next
+      this._fallbackIndexObjectCount = objectCount
+    }
+
+    return this._fallbackRefnoToObjectIds.get(normalized) ?? []
   }
 
   private _computeRefnoAabb(refno: string): Aabb6 | null {

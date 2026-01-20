@@ -508,6 +508,7 @@ export class DTXLayer {
    * @param matrix 变换矩阵
    * @param color 颜色
    * @param pbr PBR 参数
+   * @param precomputedAabb 预计算的世界空间包围盒（可选，如果提供则跳过计算）
    * @returns 对象句柄
    */
   addObject(
@@ -515,7 +516,8 @@ export class DTXLayer {
     geoHash: string,
     matrix: Matrix4,
     color: Color = new Color(0xffffff),
-    pbr: PBRParams = {}
+    pbr: PBRParams = {},
+    precomputedAabb?: { min: number[]; max: number[] } | null
   ): ObjectHandle {
     const geoHandle = this._geometries.get(geoHash);
     if (!geoHandle) {
@@ -555,9 +557,24 @@ export class DTXLayer {
     // 存储矩阵数据
     matrix.toArray(this._matricesBuffer, objectIndex * 16);
 
-    // 计算对象的世界包围盒 (供 _sceneBoundingBox 使用)
-    const geoBBox = this._computeGeometryLocalBBox(geoHandle);
-    obj.boundingBox.copy(geoBBox).applyMatrix4(matrix);
+    // 计算或使用预计算的世界包围盒
+    if (precomputedAabb && precomputedAabb.min && precomputedAabb.max) {
+      // 使用 instances.json 中预计算的 AABB，避免重复计算
+      obj.boundingBox.set(
+        new Vector3(precomputedAabb.min[0], precomputedAabb.min[1], precomputedAabb.min[2]),
+        new Vector3(precomputedAabb.max[0], precomputedAabb.max[1], precomputedAabb.max[2])
+      );
+      if (this._debug) {
+        console.log(`📦 使用预计算 AABB: ${objectId}`, precomputedAabb);
+      }
+    } else {
+      // 动态计算对象的世界包围盒（兜底逻辑）
+      const geoBBox = this._computeGeometryLocalBBox(geoHandle);
+      obj.boundingBox.copy(geoBBox).applyMatrix4(matrix);
+      if (this._debug) {
+        console.log(`🔧 动态计算 AABB: ${objectId}`);
+      }
+    }
     this._sceneBoundingBox.union(obj.boundingBox);
 
     // 存储颜色/标志数据 (4 pixels * 4 channels = 16 bytes)

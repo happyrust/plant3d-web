@@ -569,6 +569,8 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
         queryTubiInstsByBrans,
         /** 查询构件信息 */
         queryPeInfo,
+        /** 查询构件类型 */
+        queryPeTypeInfo,
         /** 查询可见几何子孙 */
         queryVisibleGeoDescendants,
         /** 查询子构件 */

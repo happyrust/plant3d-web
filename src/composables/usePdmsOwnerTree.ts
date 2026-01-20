@@ -9,6 +9,7 @@ import {
   e3dGetChildren,
   e3dSearch,
   e3dGetWorldRoot,
+  e3dGetSubtreeRefnos,
   type TreeNodeDto,
 } from '@/api/genModelE3dApi'
 
@@ -82,7 +83,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   function rebuildInitialChecks() {
     const next = new Map<string, CheckState>()
     for (const id of Object.keys(nodesById.value)) {
-      next.set(id, 'unchecked')
+      next.set(id, 'checked')
     }
     checkStateById.value = next
   }
@@ -367,16 +368,74 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     )
   }
 
-  function setCheckStateDeep(id: string, state: CheckState) {
+  /**
+   * 从 web-server 查询指定 refno 的子树所有 refnos
+   */
+  async function querySubtreeRefnos(refno: string): Promise<string[]> {
+    try {
+      const normalizedRefno = refno.replace('/', '_')
+      const resp = await e3dGetSubtreeRefnos(normalizedRefno)
+      
+      if (!resp.success) {
+        console.error('[pdms-tree] querySubtreeRefnos failed:', resp.error_message)
+        return []
+      }
+
+      // 将 RefnoEnum 格式 (17496_106028) 转换为前端格式 (17496/106028)
+      return resp.refnos.map(r => String(r).replace('_', '/'))
+    } catch (e) {
+      console.error('[pdms-tree] querySubtreeRefnos error:', e)
+      return []
+    }
+  }
+
+  /**
+   * 批量设置状态，只处理已加载到树中的节点，避免遍历大量未加载节点
+   */
+  async function setCheckStateDeep(id: string, state: CheckState) {
     const nodes = nodesById.value
     const stack: string[] = [id]
+    const toUpdate: string[] = []
+    
+    // 先收集所有需要更新的节点（只处理已加载的）
     while (stack.length > 0) {
       const cur = stack.pop()
       if (!cur) continue
-      checkStateById.value.set(cur, state)
-      const node = nodes[cur]
-      if (!node) continue
-      for (const childId of node.childrenIds) stack.push(childId)
+      
+      // 只处理已加载到树中的节点
+      if (nodes[cur]) {
+        toUpdate.push(cur)
+        const node = nodes[cur]
+        if (node) {
+          for (const childId of node.childrenIds) {
+            if (nodes[childId]) {
+              stack.push(childId)
+            }
+          }
+        }
+      }
+    }
+    
+    // 批量更新状态，避免频繁触发响应式更新
+    if (toUpdate.length > 0) {
+      const batchSize = 1000
+      for (let i = 0; i < toUpdate.length; i += batchSize) {
+        const batch = toUpdate.slice(i, i + batchSize)
+        for (const cur of batch) {
+          checkStateById.value.set(cur, state)
+        }
+        
+        // 让出控制权
+        if (i + batchSize < toUpdate.length) {
+          await new Promise(resolve => {
+            if ('requestIdleCallback' in window) {
+              requestIdleCallback(() => resolve(undefined), { timeout: 10 })
+            } else {
+              setTimeout(resolve, 1)
+            }
+          })
+        }
+      }
     }
   }
 
@@ -422,21 +481,28 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
   }
 
-  async function setVisible(id: string, visible: boolean) {
+  function setVisible(id: string, visible: boolean) {
     const viewer = viewerRef.value
     if (!viewer) return
 
-    // 本地树：只对已加载到树中的节点做子树操作，同时记录状态用于后续实例按需加载回放
-    const refnos = collectLoadedSubtreeRefnos(id)
-    if (refnos.length > 0) {
-      sceneGraph.setVisible(refnos, visible)
-    } else {
-      // 保底：至少记录当前节点的期望状态
-      sceneGraph.setVisible([id], visible)
-    }
-
-    setCheckStateDeep(id, visible ? 'checked' : 'unchecked')
-    recomputeParents(id)
+    // 1. 收集 refnos：隐藏时用后端 API，显示时用前端已加载节点
+    let refnos: string[] = []
+    // —— 全部暂时注释排查卡死 ——
+    // if (!visible) {
+    //   querySubtreeRefnos(id).then((r) => {
+    //     if (r.length > 0) {
+    //       const normalized = r.map((s) => String(s).replace('/', '_'))
+    //       sceneGraph.setVisible(normalized, false)
+    //     }
+    //   }).catch(() => {})
+    // }
+    // refnos = collectLoadedSubtreeRefnos(id)
+    // if (refnos.length === 0) refnos = [id]
+    // refnos = refnos.map((r) => String(r).replace('/', '_'))
+    // sceneGraph.setVisible(refnos, visible)
+    // setCheckStateDeep(id, visible ? 'checked' : 'unchecked')
+    // recomputeParents(id)
+    console.log('[pdms-tree] setVisible called but all logic commented out for debugging:', id, visible)
   }
 
   function clearSelectionInScene(viewer: DtxCompatViewer) {
@@ -514,7 +580,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   }
 
   function getCheckState(id: string): CheckState {
-    return checkStateById.value.get(id) || 'unchecked'
+    return checkStateById.value.get(id) || 'checked'
   }
 
   async function ensureNodeAttached(parentId: string, childId: string) {

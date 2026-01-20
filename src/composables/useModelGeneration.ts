@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 
-import { e3dGetVisibleInsts } from '@/api/genModelE3dApi'
+import { queryVisibleRefnos } from '@/api/genModelIndexTreeApi'
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore'
 import {
   InstancesJsonNotFoundError,
@@ -22,6 +22,7 @@ import type { InstanceManifest } from '@/utils/instances/instanceManifest'
  * 设为 true 时，只加载已有的 instances 文件，不触发任何生成流程
  */
 export const SKIP_AUTO_GENERATION = true
+const VISIBLE_REFNOS_PAGE_SIZE = 1000
 
 export interface ModelGenerationOptions {
   db_num?: number
@@ -71,6 +72,45 @@ function uniqStrings(list: string[]): string[] {
     out.push(v)
   }
   return out
+}
+
+async function queryVisibleRefnosPaged(refno: string, pageSize: number): Promise<{ refnos: string[]; total: number | null }> {
+  const normalized = normalizeRefnoString(refno)
+  if (!normalized) return { refnos: [], total: 0 }
+
+  const seen = new Set<string>()
+  const out: string[] = []
+  let offset = 0
+  let total: number | null = null
+
+  while (true) {
+    const resp = await queryVisibleRefnos({ refno: normalized, offset, limit: pageSize })
+    if (!resp.success) {
+      throw new Error(resp.error_message || 'query_visible_refnos 查询失败')
+    }
+
+    const list = Array.isArray(resp.refnos) ? resp.refnos : []
+    const beforeCount = out.length
+    for (const raw of list) {
+      const v = normalizeRefnoString(String(raw || ''))
+      if (!v || seen.has(v)) continue
+      seen.add(v)
+      out.push(v)
+    }
+
+    if (total == null && typeof resp.total === 'number') {
+      total = resp.total
+    }
+
+    if (list.length === 0) break
+    if (out.length === beforeCount && total == null) break
+
+    offset += list.length
+    if (total != null && offset >= total) break
+    if (list.length < pageSize) break
+  }
+
+  return { refnos: out, total }
 }
 
 function deriveLoadRefnosFromInstancesManifest(manifest: InstanceManifest, rootRefno: string): string[] {
@@ -310,6 +350,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const startedAt = Date.now()
       const dbno = options.db_num ?? extractDbNumFromRefno(normalizedRoot)
       if (!dbno) throw new Error('无法确定 dbno')
+      const resolvedDbno = dbno as number
 
       statusMessage.value = '查询可见几何子孙...'
       progress.value = 10
@@ -318,35 +359,36 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let visibleRefnos: string[] = []
       try {
         const canUseSurreal = await ensureSurrealConnected()
-        if (!canUseSurreal) {
-          throw new Error('SurrealDB 未连接')
+        let appliedRule = false
+
+        if (canUseSurreal) {
+          const typeInfo = await surrealQuery.queryPeTypeInfo(normalizedRoot)
+          const noun = (typeInfo?.noun || '').toUpperCase()
+          const ownerNoun = (typeInfo?.ownerNoun || '').toUpperCase()
+
+          if (ownerNoun === 'BRAN' || ownerNoun === 'HANG') {
+            visibleRefnos = [normalizedRoot]
+            appliedRule = true
+          } else if (noun === 'BRAN' || noun === 'HANG') {
+            visibleRefnos = await surrealQuery.queryChildren(normalizedRoot)
+            appliedRule = true
+          }
+        } else {
+          console.warn('[model-generation] SurrealDB 未连接，跳过 BRAN/HANG 规则')
         }
-        const surrealRefnos = await surrealQuery.queryVisibleGeoDescendants(normalizedRoot, {
-          includeSelf: true,
-          range: '..',
-          applyBranHangRules: true,
-        })
+
+        if (!appliedRule) {
+          const { refnos } = await queryVisibleRefnosPaged(normalizedRoot, VISIBLE_REFNOS_PAGE_SIZE)
+          visibleRefnos = refnos
+        }
+
+        visibleRefnos = uniqStrings(visibleRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
         visibleOk = true
-        visibleRefnos = uniqStrings(surrealRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
+        visibleErr = null
       } catch (e) {
         visibleOk = false
         visibleErr = e instanceof Error ? e.message : String(e)
         visibleRefnos = []
-      }
-      if (!visibleOk) {
-        try {
-          const visible = await e3dGetVisibleInsts(normalizedRoot)
-          if (!visible.success) {
-            throw new Error(visible.error_message || 'visible-insts 查询失败')
-          }
-          visibleOk = true
-          visibleErr = null
-          visibleRefnos = uniqStrings((visible.refnos || []).map((r) => normalizeRefnoString(r))).filter(Boolean)
-        } catch (e) {
-          visibleOk = false
-          visibleErr = e instanceof Error ? e.message : String(e)
-          visibleRefnos = []
-        }
       }
 
       statusMessage.value = `加载 instances_${dbno}.json...`
@@ -414,10 +456,67 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
       }
 
-      // 当 visible-insts 返回空/失败时，尝试从 instances manifest 推导加载目标：
+      // 当可见 refnos 返回空/失败时，尝试从 instances manifest 推导加载目标：
       // - root 自身可能就是可渲染元件（叶子节点）
       // - V2 bran/equi group 需要加载 children（并包含 group 自身以承接 tubing fallbackRefno）
       const manifest = await getDbnoInstancesManifest(dbno)
+
+      const anyViewer = viewer as unknown as {
+        __dtxLayer?: unknown
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+      }
+      const dtxLayer = anyViewer.__dtxLayer as any
+      if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型')
+
+      const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE
+
+      async function loadRefnosInChunks(refnos: string[], dbnoValue: number): Promise<{
+        loadedRefnos: number
+        skippedRefnos: number
+        loadedObjects: number
+        missingRefnos: string[]
+      }> {
+        if (refnos.length === 0) {
+          return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, missingRefnos: [] }
+        }
+
+        const total = refnos.length
+        const batchTotal = Math.ceil(total / LOAD_BATCH_SIZE)
+        let loadedRefnos = 0
+        let skippedRefnos = 0
+        let loadedObjects = 0
+        const missingAll: string[] = []
+
+        for (let start = 0; start < total; start += LOAD_BATCH_SIZE) {
+          const end = Math.min(total, start + LOAD_BATCH_SIZE)
+          const batch = refnos.slice(start, end)
+          const batchIndex = Math.floor(start / LOAD_BATCH_SIZE) + 1
+
+          statusMessage.value = `加载 refno 批次 ${batchIndex}/${batchTotal} (${end}/${total})...`
+          progress.value = Math.max(60, Math.min(95, 60 + Math.floor((end / total) * 35)))
+
+          const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbnoValue, batch, {
+            lodAssetKey: 'L1',
+            debug: false,
+          })
+          anyViewer.__dtxAfterInstancesLoaded?.(dbnoValue, batch)
+
+          loadedRefnos += result.loadedRefnos
+          skippedRefnos += result.skippedRefnos
+          loadedObjects += result.loadedObjects
+
+          if (result.missingRefnos.length > 0) {
+            missingAll.push(...result.missingRefnos)
+          }
+        }
+
+        return {
+          loadedRefnos,
+          skippedRefnos,
+          loadedObjects,
+          missingRefnos: uniqStrings(missingAll),
+        }
+      }
 
       // gen-model-fork V0：manifest.instances（通常是“离线子集导出”），需要优先与 visibleRefnos 做交集，避免把整棵可见子孙（可能数万）都跑一遍但最终几乎全缺失。
       // 注意：export_dbnum_instances_json 可能同时包含 groups + instances（instances 只是非聚合 refno 的补集），此时不能按“子集导出”处理，否则会误丢 groups。
@@ -436,18 +535,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         statusMessage.value = `加载 ${loadRefnos.length} 个 refno 的实例...`
         progress.value = 60
 
-        const anyViewer = viewer as unknown as {
-          __dtxLayer?: unknown
-          __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
-        }
-        const dtxLayer = anyViewer.__dtxLayer as any
-        if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型')
-
-        const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
-          lodAssetKey: 'L1',
-          debug: false,
-        })
-        anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos)
+        const result = await loadRefnosInChunks(loadRefnos, resolvedDbno)
 
         // 处理缺失的 refno：达到阈值或全部完成后再分批加载
         if (result.missingRefnos.length > 0) {
@@ -479,18 +567,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       statusMessage.value = `加载 ${loadRefnos.length} 个 refno 的实例...`
       progress.value = 60
 
-      const anyViewer = viewer as unknown as {
-        __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
-      }
-      const dtxLayer = anyViewer.__dtxLayer as any
-      if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型')
-
-      const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
-        lodAssetKey: 'L1',
-        debug: false,
-      })
-      anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos)
+      const result = await loadRefnosInChunks(loadRefnos, resolvedDbno)
 
       // 处理缺失的 refno：达到阈值或全部完成后再分批加载
       if (result.missingRefnos.length > 0) {

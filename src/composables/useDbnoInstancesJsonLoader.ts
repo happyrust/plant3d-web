@@ -35,6 +35,31 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
   }
 
   const json = (await resp.json()) as InstanceManifest
+
+  // V3 格式：加载全局 trans.json 和 aabb.json
+  if (json.version === 3) {
+    const [transResp, aabbResp] = await Promise.all([
+      fetch(`/files/output/instances/trans.json`).catch(() => null),
+      fetch(`/files/output/instances/aabb.json`).catch(() => null),
+    ])
+
+    if (transResp?.ok) {
+      try {
+        json.trans_table = await transResp.json()
+      } catch {
+        console.warn(`[instances] 解析 trans.json 失败`)
+      }
+    }
+
+    if (aabbResp?.ok) {
+      try {
+        json.aabb_table = await aabbResp.json()
+      } catch {
+        console.warn(`[instances] 解析 aabb.json 失败`)
+      }
+    }
+  }
+
   manifestCache.set(dbno, json)
   return json
 }
