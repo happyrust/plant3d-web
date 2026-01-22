@@ -269,7 +269,7 @@ function renderFrameImmediate() {
     dtxLayer.update(dtxViewer.camera);
 
     const selection = selectionControllerRef.value;
-    if (selection?.hasOutline() && selection.hasOutlinedObjects()) {
+    if (selection?.hasOutline()) {
         selection.renderOutline();
     } else {
         dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
@@ -331,7 +331,7 @@ function renderFrame() {
         dtxLayer.update(dtxViewer.camera);
 
         const selection = selectionControllerRef.value;
-        if (selection?.hasOutline() && selection.hasOutlinedObjects()) {
+        if (selection?.hasOutline()) {
             selection.renderOutline();
         } else {
             dtxViewer.renderer.render(dtxViewer.scene, dtxViewer.camera);
