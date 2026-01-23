@@ -1,7 +1,7 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
-import { Vector2, Vector3 } from "three";
+import { Matrix4, Vector2, Vector3 } from "three";
 import {
     ArrowUpRight,
     Cloud,
@@ -78,6 +78,111 @@ let offPtsetWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offGizmoEvents: (() => void) | null = null;
+
+let dtxGlobalTransformAppliedForDbno: number | null = null;
+
+function readDtxScaleConfigFromUrl(): {
+    scale: number;
+    recenter: boolean;
+    clip: boolean;
+} {
+    const urlParams = new URLSearchParams(window.location.search);
+    const units = String(urlParams.get("dtx_units") || "").trim().toLowerCase();
+    const scaleStr = String(urlParams.get("dtx_scale") || "").trim();
+
+    // 约定：
+    // - dtx_scale=0.001 明确指定缩放
+    // - dtx_units=mm => scale=0.001
+    // - dtx_units=m/raw => scale=1
+    // - 默认：按 mm 处理（scale=0.001），以缓解 z-fighting/大坐标精度问题
+    let scale = 0.001;
+    if (units === "m" || units === "raw") scale = 1;
+    if (units === "mm") scale = 0.001;
+    if (scaleStr) {
+        const v = Number(scaleStr);
+        if (Number.isFinite(v) && v > 0) scale = v;
+    }
+
+    const recenterParam = urlParams.get("dtx_recenter");
+    const recenter = recenterParam === null ? true : recenterParam !== "0";
+    const clipParam = urlParams.get("dtx_clip");
+    const clip = clipParam === null ? true : clipParam !== "0";
+
+    return { scale, recenter, clip };
+}
+
+function computeClipPlanesByDiag(diag: number): { near: number; far: number } {
+    const d = Math.max(0, Number(diag) || 0);
+
+    // 以 bbox 对角线长度为“分档”依据（单位：米）。
+    // 目标：压缩 far/near 比值，提升深度精度，降低 z-fighting。
+    if (d <= 1) return { near: 0.01, far: 50 };
+    if (d <= 10) return { near: 0.05, far: 200 };
+    if (d <= 100) return { near: 0.2, far: 2000 };
+    if (d <= 1000) return { near: 2, far: 20000 };
+    return { near: 10, far: Math.min(200000, Math.max(50000, d * 50)) };
+}
+
+function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
+    if (dtxGlobalTransformAppliedForDbno === dbno) return;
+
+    const { scale, recenter } = readDtxScaleConfigFromUrl();
+    if (!Number.isFinite(scale) || scale <= 0) return;
+
+    if (scale === 1 && !recenter) {
+        dtxGlobalTransformAppliedForDbno = dbno;
+        return;
+    }
+
+    // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
+    // 因此在首次归一化时，先临时置为 identity 再取“原始（mm）bbox”。
+    dtxLayer.setGlobalModelMatrix(new Matrix4());
+    const rawBox = dtxLayer.getBoundingBox();
+    if (rawBox.isEmpty()) return;
+
+    const centerMm = new Vector3();
+    rawBox.getCenter(centerMm);
+
+    const m = new Matrix4().makeScale(scale, scale, scale);
+    if (recenter) {
+        m.setPosition(
+            -centerMm.x * scale,
+            -centerMm.y * scale,
+            -centerMm.z * scale,
+        );
+    }
+    dtxLayer.setGlobalModelMatrix(m);
+
+    dtxGlobalTransformAppliedForDbno = dbno;
+}
+
+function applyDtxCameraClipByLayerBBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
+    const { clip } = readDtxScaleConfigFromUrl();
+    if (!clip) return;
+
+    const box = dtxLayer.getBoundingBox();
+    if (box.isEmpty()) return;
+
+    const size = new Vector3();
+    box.getSize(size);
+    const diag = size.length();
+    const { near, far } = computeClipPlanesByDiag(diag);
+
+    // 额外保护：避免 far/near 比值过大导致深度精度崩溃
+    const maxRatio = 2e4;
+    let nextNear = near;
+    let nextFar = far;
+    if (nextFar / nextNear > maxRatio) {
+        nextNear = Math.max(nextNear, nextFar / maxRatio);
+    }
+    if (nextFar <= nextNear * 1.01) {
+        nextFar = nextNear * 100;
+    }
+
+    dtxViewer.camera.near = nextNear;
+    dtxViewer.camera.far = nextFar;
+    dtxViewer.camera.updateProjectionMatrix();
+}
 
 function handleRibbonCommand(commandId: string) {
     switch (commandId) {
@@ -535,6 +640,21 @@ onMounted(() => {
         (compat as any).__dtxLastLoadedRefnos = loadedRefnos;
         // 按需实例加载：把树侧已有的可见/选中状态回放到新加载的对象（避免默认 visible=true 覆盖）
         compat.scene.applyStateToRefnos(loadedRefnos, { computeAabb: false });
+
+        // 单位归一化（mm -> m）与原点重定位：降低大坐标与 z-fighting 风险
+        try {
+            applyDtxGlobalTransformOnce(_dbno, dtxLayer);
+        } catch (e) {
+            console.warn("[ViewerPanel] DTX 全局变换应用失败", e);
+        }
+
+        // 相机裁剪面按 bbox 尺寸分档收紧，提升深度精度
+        try {
+            applyDtxCameraClipByLayerBBox(dtxViewer, dtxLayer);
+        } catch (e) {
+            console.warn("[ViewerPanel] 相机裁剪面自适应失败", e);
+        }
+
         try {
             cadGridRef.value?.fitToBoundingBox(dtxLayer.getBoundingBox());
         } catch {

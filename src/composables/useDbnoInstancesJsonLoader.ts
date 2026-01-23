@@ -21,6 +21,45 @@ export type StreamGenerateSseUpdate = {
 
 const manifestCache = new Map<number, InstanceManifest>()
 
+function looksLikeV3HashManifest(json: unknown): boolean {
+  if (!json || typeof json !== 'object') return false
+  const anyJson = json as any
+
+  // instances: [{ trans_hash, aabb_hash, geo_instances: [{ geo_trans_hash }] }]
+  const insts = anyJson.instances
+  if (Array.isArray(insts) && insts.length > 0) {
+    const first = insts[0]
+    if (first && typeof first === 'object') {
+      if ('trans_hash' in first || 'aabb_hash' in first) return true
+      const geoInsts = (first as any).geo_instances
+      if (Array.isArray(geoInsts) && geoInsts.length > 0) {
+        const gi0 = geoInsts[0]
+        if (gi0 && typeof gi0 === 'object' && 'geo_trans_hash' in gi0) return true
+      }
+    }
+  }
+
+  // groups: [{ children: [{ trans_hash, aabb_hash, geo_instances: [{ geo_trans_hash }] }] }]
+  const groups = anyJson.groups
+  if (Array.isArray(groups) && groups.length > 0) {
+    const g0 = groups[0]
+    const children = g0?.children
+    if (Array.isArray(children) && children.length > 0) {
+      const c0 = children[0]
+      if (c0 && typeof c0 === 'object') {
+        if ('trans_hash' in c0 || 'aabb_hash' in c0) return true
+        const geoInsts = (c0 as any).geo_instances
+        if (Array.isArray(geoInsts) && geoInsts.length > 0) {
+          const gi0 = geoInsts[0]
+          if (gi0 && typeof gi0 === 'object' && 'geo_trans_hash' in gi0) return true
+        }
+      }
+    }
+  }
+
+  return false
+}
+
 async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
   const cached = manifestCache.get(dbno)
   if (cached) return cached
@@ -37,7 +76,12 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
   const json = (await resp.json()) as InstanceManifest
 
   // V3 格式：加载全局 trans.json 和 aabb.json
-  if (json.version === 3) {
+  // 兼容：instances_*.json 可能缺少 version=3，但仍使用 trans_hash/aabb_hash/geo_trans_hash 引用表。
+  if (json.version === 3 || looksLikeV3HashManifest(json)) {
+    // 让 instanceManifest.ts 能识别为 V3（即使表加载失败，也至少会走 V3 flatten 分支，用 identity 兜底）
+    if (json.trans_table === undefined) json.trans_table = {}
+    if (json.aabb_table === undefined) json.aabb_table = {}
+
     const [transResp, aabbResp] = await Promise.all([
       fetch(`/files/output/instances/trans.json`).catch(() => null),
       fetch(`/files/output/instances/aabb.json`).catch(() => null),
