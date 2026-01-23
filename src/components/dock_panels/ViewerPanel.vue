@@ -735,7 +735,11 @@ onMounted(() => {
     const ptsetVis = usePtsetVisualizationThree(
         dtxViewerRef,
         overlayContainer,
-        { requestRender },
+        {
+            requestRender,
+            getGlobalModelMatrix: () =>
+                dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
+        },
     );
     ptsetVisRef.value = ptsetVis;
     viewerContext.ptsetVis.value = ptsetVis as any;

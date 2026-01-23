@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue'
-import { Box3, BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSegments, Vector3 } from 'three'
+import { Box3, BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSegments, Matrix4, Vector3 } from 'three'
 
 import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi'
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader'
@@ -175,9 +175,14 @@ function computeFlyToPositionFromBox(box: Box3): { position: Vector3; target: Ve
 export function usePtsetVisualizationThree(
   dtxViewerRef: Ref<DtxViewer | null>,
   labelContainerRef: Ref<HTMLElement | null>,
-  options: { requestRender?: (() => void) | null } = {}
+  options: {
+    requestRender?: (() => void) | null
+    /** 与 DTXLayer.globalModelMatrix 对齐（mm->m + recenter 等），用于 ptset 与模型同坐标系显示 */
+    getGlobalModelMatrix?: (() => Matrix4 | null) | null
+  } = {}
 ): UsePtsetVisualizationThreeReturn {
   const requestRender = options.requestRender ?? null
+  const getGlobalModelMatrix = options.getGlobalModelMatrix ?? null
   const visualObjects = ref<Map<string, PtsetVisualObject>>(new Map())
   const isVisible = ref(false)
   const currentRefno = ref<string | null>(null)
@@ -190,6 +195,8 @@ export function usePtsetVisualizationThree(
   const group = new Group()
   group.name = 'dtx-ptset'
   group.renderOrder = 980
+  group.matrixAutoUpdate = false
+  const identityMatrix = new Matrix4()
 
   function ensureGroupAttached() {
     const viewer = dtxViewerRef.value
@@ -274,6 +281,11 @@ export function usePtsetVisualizationThree(
       return
     }
 
+    // DTX 使用 shader uniform 的 globalModelMatrix 做全局变换；ptset 作为普通 Three 对象需要显式对齐。
+    const gm = getGlobalModelMatrix?.() || identityMatrix
+    group.matrix.copy(gm)
+    group.updateMatrixWorld(true)
+
     const unitFactor = response.unit_info?.conversion_factor || 1
     const targetUnit = response.unit_info?.target_unit || 'unknown'
 
@@ -298,6 +310,8 @@ export function usePtsetVisualizationThree(
 
       const worldPt = applyTransformToPoint(worldTransform, localPt)
       const worldDir = localDir ? applyTransformToDir(worldTransform, localDir) : null
+      const scenePtV = new Vector3(worldPt[0], worldPt[1], worldPt[2]).applyMatrix4(gm)
+      const scenePt: Vec3 = [scenePtV.x, scenePtV.y, scenePtV.z]
 
       // crosses
       const crossSize = Math.max(0.2, (point.pbore * unitFactor) * 0.15 || 0.6)
@@ -354,7 +368,7 @@ export function usePtsetVisualizationThree(
         id: objId,
         refno: normalizedRefno,
         point,
-        worldPos: worldPt,
+        worldPos: scenePt,
         cross: crossLine,
         arrow: arrowLine,
         labelDiv,
