@@ -175,8 +175,61 @@ function isNewGroupsInstances(manifest: InstanceManifest): boolean {
 }
 
 // V3 格式检测：version === 3 且有 trans_table/aabb_table
+// 或者：有 trans_table/aabb_table 且 instances 数组中使用了 hash 引用
 function isV3Format(manifest: InstanceManifest): boolean {
-  return manifest.version === 3 && (manifest.trans_table !== undefined || manifest.aabb_table !== undefined)
+  // 标准 V3 格式：version === 3
+  if (manifest.version === 3 && (manifest.trans_table !== undefined || manifest.aabb_table !== undefined)) {
+    return true
+  }
+
+  // 兼容：没有 version 字段，但有 trans_table/aabb_table 且 instances 使用 hash 引用
+  if (manifest.trans_table !== undefined || manifest.aabb_table !== undefined) {
+    // 检查 instances 数组是否使用 hash 引用（trans_hash, aabb_hash, geo_trans_hash）
+    const insts = (manifest as any)?.instances
+    if (Array.isArray(insts) && insts.length > 0) {
+      const firstInst = insts[0]
+      if (firstInst && typeof firstInst === 'object') {
+        // 如果有 trans_hash 或 aabb_hash，说明是 V3 格式
+        if ('trans_hash' in firstInst || 'aabb_hash' in firstInst) {
+          return true
+        }
+        // 检查 geo_instances 是否使用 geo_trans_hash
+        const geoInsts = (firstInst as any)?.geo_instances
+        if (Array.isArray(geoInsts) && geoInsts.length > 0) {
+          const firstGeoInst = geoInsts[0]
+          if (firstGeoInst && typeof firstGeoInst === 'object' && 'geo_trans_hash' in firstGeoInst) {
+            return true
+          }
+        }
+      }
+    }
+
+    // 检查 groups 数组是否使用 hash 引用
+    const groups = (manifest as any)?.groups
+    if (Array.isArray(groups) && groups.length > 0) {
+      const firstGroup = groups[0]
+      if (firstGroup && typeof firstGroup === 'object') {
+        const children = (firstGroup as any)?.children
+        if (Array.isArray(children) && children.length > 0) {
+          const firstChild = children[0]
+          if (firstChild && typeof firstChild === 'object') {
+            if ('trans_hash' in firstChild || 'aabb_hash' in firstChild) {
+              return true
+            }
+            const geoInsts = (firstChild as any)?.geo_instances
+            if (Array.isArray(geoInsts) && geoInsts.length > 0) {
+              const firstGeoInst = geoInsts[0]
+              if (firstGeoInst && typeof firstGeoInst === 'object' && 'geo_trans_hash' in firstGeoInst) {
+                return true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return false
 }
 
 function isFlatInstancesV0(manifest: InstanceManifest): manifest is InstanceManifest & { instances: FlatInstanceV0[] } {

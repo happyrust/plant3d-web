@@ -235,6 +235,10 @@ void main() {
   }
 
   vec3 N = normalize(vWorldNormal);
+  // 背面法线翻转：确保双面渲染时法线始终朝向相机
+  if (!gl_FrontFacing) {
+    N = -N;
+  }
   vec3 V = normalize(cameraPosition - vWorldPosition);
 
   vec3 albedo = vColor.rgb;
@@ -329,7 +333,7 @@ export class DTXMaterial extends ShaderMaterial {
   customProgramCacheKey(): string {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
-    return 'DTXMaterial_v4';
+    return 'DTXMaterial_v5';
   }
 
   /**

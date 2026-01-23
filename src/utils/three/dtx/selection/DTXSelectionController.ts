@@ -190,10 +190,9 @@ export class DTXSelectionController extends EventEmitter {
   }
 
   private _setupSelectionManager(): void {
-    this._selectionManager.setColorUpdateCallback((objectId, color) => {
-      if (color) this._dtxLayer.setObjectColor(objectId, color)
-      else this._dtxLayer.resetObjectColor(objectId)
-    })
+    // 注意：不再使用颜色覆盖来显示选中状态，而是只使用 OutlinePass
+    // 这样可以保持原始的 PBR 材质渲染效果，避免选中时切换渲染路径
+    // 参考 AiosPrepackViewer.vue 的做法
 
     this._selectionManager.on('selectionChanged', (event) => {
       this._outlineHelper?.setOutlinedObjects(event.selected)

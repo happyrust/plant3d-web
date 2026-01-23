@@ -299,8 +299,18 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       const geoHash = String((inst as any).geo_hash || '')
       if (!geoHash) continue
 
+      // 检查 matrix 数据是否有效（跳过包含 null 的数据）
+      const matrixData = (inst as any).matrix
+      if (!matrixData || !Array.isArray(matrixData) || matrixData.length !== 16) {
+        continue
+      }
+      // 检查 matrix 数组中是否包含 null 或 undefined
+      if (matrixData.some((v: any) => v === null || v === undefined || typeof v !== 'number')) {
+        continue
+      }
+
       const objectId = `o:${refnoKey}:${cache.objectCounter++}`
-      const matrix = new Matrix4().fromArray((inst as any).matrix || [])
+      const matrix = new Matrix4().fromArray(matrixData)
 
       const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '')
       if (noun && !refnoNoun) {
@@ -336,7 +346,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
       const refnoTransform = (inst as any).refno_transform
       if (Array.isArray(refnoTransform) && refnoTransform.length === 16) {
-        if (!cache.refnoTransform.has(refnoKey)) {
+        // 检查 refnoTransform 数组中是否包含 null 或 undefined
+        const hasInvalidValue = refnoTransform.some((v: any) => v === null || v === undefined || typeof v !== 'number')
+        if (!hasInvalidValue && !cache.refnoTransform.has(refnoKey)) {
           cache.refnoTransform.set(refnoKey, refnoTransform as number[])
         }
       }

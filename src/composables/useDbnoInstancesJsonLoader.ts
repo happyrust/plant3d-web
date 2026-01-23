@@ -45,7 +45,8 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
 
     if (transResp?.ok) {
       try {
-        json.trans_table = await transResp.json()
+        const transTable = await transResp.json()
+        json.trans_table = transTable
       } catch {
         console.warn(`[instances] 解析 trans.json 失败`)
       }
@@ -53,7 +54,8 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
 
     if (aabbResp?.ok) {
       try {
-        json.aabb_table = await aabbResp.json()
+        const aabbTable = await aabbResp.json()
+        json.aabb_table = aabbTable
       } catch {
         console.warn(`[instances] 解析 aabb.json 失败`)
       }

@@ -113,9 +113,12 @@ export class DTXOutlineHelper {
     if (this._composer) return;
 
     const size = this._renderer.getSize(new Vector2());
+    const pixelRatio = this._renderer.getPixelRatio ? this._renderer.getPixelRatio() : 1;
 
     // 创建 EffectComposer
     this._composer = new EffectComposer(this._renderer);
+    this._composer.setPixelRatio(pixelRatio);
+    this._composer.setSize(size.x, size.y);
 
     // 渲染通道
     const renderPass = new RenderPass(this._scene, this._camera);
@@ -132,7 +135,7 @@ export class DTXOutlineHelper {
 
     // FXAA 抗锯齿
     this._fxaaPass = new ShaderPass(FXAAShader);
-    this._fxaaPass.uniforms['resolution']!.value.set(1 / size.x, 1 / size.y);
+    this._fxaaPass.uniforms['resolution']!.value.set(1 / (size.x * pixelRatio), 1 / (size.y * pixelRatio));
     this._composer.addPass(this._fxaaPass);
 
     this._outputPass = new OutputPass();
@@ -316,11 +319,13 @@ export class DTXOutlineHelper {
    * 调整大小
    */
   resize(width: number, height: number): void {
+    const pixelRatio = this._renderer.getPixelRatio ? this._renderer.getPixelRatio() : 1;
     if (this._composer) {
+      this._composer.setPixelRatio(pixelRatio);
       this._composer.setSize(width, height);
     }
     if (this._fxaaPass) {
-      this._fxaaPass.uniforms['resolution']!.value.set(1 / width, 1 / height);
+      this._fxaaPass.uniforms['resolution']!.value.set(1 / (width * pixelRatio), 1 / (height * pixelRatio));
     }
   }
 
@@ -328,8 +333,11 @@ export class DTXOutlineHelper {
    * 渲染
    */
   render(): void {
-    if (!this._enabled || !this._composer) return;
-    if (this._outlinedObjects.size === 0) return;
+    if (!this._composer) return;
+
+    if (this._outlinePass) {
+      this._outlinePass.enabled = this._enabled && this._outlinedObjects.size > 0;
+    }
 
     this._composer.render();
   }
