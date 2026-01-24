@@ -158,6 +158,17 @@ export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[
   return cache?.refnoToObjectIds.get(key) ?? []
 }
 
+export function isDtxRefnoLoaded(dbno: number, refno: string): boolean {
+  const cache = cachesByDbno.get(dbno)
+  if (!cache) return false
+  const key = String(refno ?? '').trim().replace('/', '_')
+  return cache.loadedRefnos.has(key)
+}
+
+export function hasDtxDbnoCache(dbno: number): boolean {
+  return cachesByDbno.has(dbno)
+}
+
 export function resolveDtxRefnoByObjectId(dbno: number, objectId: string): string | null {
   const cache = cachesByDbno.get(dbno)
   return cache?.objectIdToRefno.get(objectId) ?? null

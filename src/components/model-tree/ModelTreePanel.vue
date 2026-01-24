@@ -49,6 +49,11 @@ const toolStore = useToolStore();
 
 const isRoomTree = computed(() => activeTree.value === 'room');
 
+// Debug: 用于排查点击 eye（显示/隐藏）导致卡死的问题。
+// - true: 禁用“显示时自动 showModelByRefno 加载/生成”，仅走树的 setVisible。
+// - false: 保持原行为。
+const DEBUG_SKIP_EYE_AUTO_GENERATE = false;
+
 const expandedIds = computed(() => (isRoomTree.value ? roomTree.expandedIds.value : pdmsTree.expandedIds.value));
 const flatRows = computed(() => (isRoomTree.value ? roomTree.flatRows.value : pdmsTree.flatRows.value));
 const filterText = computed(() => (isRoomTree.value ? roomTree.filterText.value : pdmsTree.filterText.value));
@@ -143,7 +148,7 @@ watch(
 
 async function setVisible(id: string, visible: boolean) {
   // Only auto-generate for PDMS tree and when trying to show (visible = true)
-  const shouldTryGenerate = !isRoomTree.value && visible && modelGenerationState.value;
+  const shouldTryGenerate = !DEBUG_SKIP_EYE_AUTO_GENERATE && !isRoomTree.value && visible && modelGenerationState.value;
 
   if (shouldTryGenerate) {
     // Check if it looks like a refno (123/456 or 123_456)
@@ -266,16 +271,17 @@ watch(
     if (!refno || !isRefnoLike(refno)) return;
 
     void (async () => {
+      const targetId = tab === 'room' ? refno : normalizeRefnoKeyLike(refno);
       try {
         if (tab === 'room') {
-          const already = roomTree.selectedIds.value.size === 1 && roomTree.selectedIds.value.has(refno);
+          const already = roomTree.selectedIds.value.size === 1 && roomTree.selectedIds.value.has(targetId);
           if (!already) {
-            await roomTree.focusNodeById(refno, { flyTo: false, syncSceneSelection: false, clearSearch: false });
+            await roomTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
           }
         } else {
-          const already = pdmsTree.selectedIds.value.size === 1 && pdmsTree.selectedIds.value.has(refno);
+          const already = pdmsTree.selectedIds.value.size === 1 && pdmsTree.selectedIds.value.has(targetId);
           if (!already) {
-            await pdmsTree.focusNodeById(refno, { flyTo: false, syncSceneSelection: false, clearSearch: false });
+            await pdmsTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
           }
         }
       } catch {
@@ -285,11 +291,19 @@ watch(
       await nextTick();
       if (seq !== selectionSyncSeq) return;
 
-      const idx = flatRows.value.findIndex((r) => r.id === refno);
+      if (containerRef.value) rowVirtualizer.value.measure();
+      await nextTick();
+      if (seq !== selectionSyncSeq) return;
+
+      const idx = flatRows.value.findIndex((r) => r.id === targetId);
       if (idx < 0) return;
 
       const v = rowVirtualizer.value as unknown as { scrollToIndex?: (index: number, opts?: unknown) => void };
       if (typeof v.scrollToIndex === 'function') {
+        v.scrollToIndex(idx, { align: 'center' });
+        await nextTick();
+        if (seq !== selectionSyncSeq) return;
+        if (containerRef.value) rowVirtualizer.value.measure();
         v.scrollToIndex(idx, { align: 'center' });
         return;
       }
@@ -508,18 +522,107 @@ function getSearchItemSubtitle(item: unknown): string {
   return `${noun} · ${id}`;
 }
 
+let pickClickTimer: number | null = null;
+let focusAndCenterSeq = 0;
+
+function normalizeRefnoKeyLike(id: string): string {
+  // 与项目其它处保持一致：统一使用 "_" refno 格式，并兼容后端/调试输出中的 record id 包装。
+  // - 123/456, 123,456 -> 123_456
+  // - pe:⟨12345_67890⟩ / pe:<12345_67890> -> 12345_67890
+  // - =123/456 -> 123_456
+  const raw = String(id || '').trim();
+  if (!raw) return '';
+  const wrapped = raw.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? raw;
+  const core = wrapped.replace(/^pe:/i, '').replace(/^=/, '');
+  return core.replace(/\//g, '_').replace(/,/g, '_');
+}
+
+async function focusAndCenterInTree(id: string) {
+  const seq = ++focusAndCenterSeq;
+  const targetId = isRoomTree.value ? id : normalizeRefnoKeyLike(id);
+
+  try {
+    // “搜索结果定位”仅需在树里展开/选中并滚动到居中；避免触发三维飞行与场景选中同步。
+    if (isRoomTree.value) {
+      await roomTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
+    } else {
+      await pdmsTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn('[model-tree] focusAndCenterInTree failed', e);
+    }
+  }
+
+  // 等待展开祖先导致的 flatRows/virtualizer 更新
+  await nextTick();
+  if (seq !== focusAndCenterSeq) return;
+  if (containerRef.value) {
+    rowVirtualizer.value.measure();
+  }
+  await nextTick();
+  if (seq !== focusAndCenterSeq) return;
+
+  const idx = flatRows.value.findIndex((r) => r.id === targetId);
+  if (idx < 0) return;
+
+  const v = rowVirtualizer.value as unknown as { scrollToIndex?: (index: number, opts?: unknown) => void };
+  if (typeof v.scrollToIndex === 'function') {
+    v.scrollToIndex(idx, { align: 'center' });
+    // 二次校正：首次滚动通常使用 estimateSize，等目标项渲染后再测量+再次居中更稳。
+    await nextTick();
+    if (seq !== focusAndCenterSeq) return;
+    if (containerRef.value) {
+      rowVirtualizer.value.measure();
+    }
+    v.scrollToIndex(idx, { align: 'center' });
+    return;
+  }
+  if (containerRef.value) {
+    // fallback：估算居中位置
+    const rowH = 32;
+    const center = containerRef.value.clientHeight / 2 - rowH / 2;
+    containerRef.value.scrollTop = Math.max(0, idx * rowH - center);
+  }
+}
+
 async function onPickSearchItem(refno: string) {
+  const targetId = isRoomTree.value ? refno : normalizeRefnoKeyLike(refno);
   try {
     if (isRoomTree.value) {
-      await roomTree.focusNodeById(refno);
+      await roomTree.focusNodeById(targetId);
     } else {
-      await pdmsTree.focusNodeById(refno);
+      await pdmsTree.focusNodeById(targetId);
     }
   } catch (e) {
     if (import.meta.env.DEV) {
       console.warn('[model-tree] focusNodeById failed', e);
     }
   }
+}
+
+function onPickSearchItemClick(refno: string) {
+  // 区分单击/双击：避免双击触发两次后端查询与 focus。
+  if (pickClickTimer !== null) {
+    clearTimeout(pickClickTimer);
+  }
+  pickClickTimer = window.setTimeout(() => {
+    pickClickTimer = null;
+    void onPickSearchItem(refno);
+  }, 220);
+}
+
+function onPickSearchItemDblClick(refno: string) {
+  if (pickClickTimer !== null) {
+    clearTimeout(pickClickTimer);
+    pickClickTimer = null;
+  }
+  void (async () => {
+    await focusAndCenterInTree(refno);
+    // “回到模型树显示”：关闭弹窗，露出树列表
+    searchPopoverOpen.value = false;
+    typePopoverOpen.value = false;
+  })();
 }
 
 function onClearXray() {
@@ -656,7 +759,8 @@ function onSearchEnter(value: string) {
                 :key="getSearchItemId(item)"
                 type="button"
                 class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-                @click="onPickSearchItem(getSearchItemId(item))">
+                @click="onPickSearchItemClick(getSearchItemId(item))"
+                @dblclick.prevent="onPickSearchItemDblClick(getSearchItemId(item))">
                 <div class="truncate">{{ (item as any).name }}</div>
                 <div class="-mt-0.5 truncate text-xs text-muted-foreground">{{ getSearchItemSubtitle(item) }}</div>
               </button>
@@ -667,6 +771,31 @@ function onSearchEnter(value: string) {
         <div v-if="typePopoverOpen"
           data-model-tree-popover="true"
           class="absolute left-0 top-full mt-2 w-full rounded-md border border-border bg-background p-2 shadow-md">
+          <!-- 名称搜索：与“类型筛选”合并展示，避免用户误以为“搜索类型”会出构件预览结果 -->
+          <div class="mb-2 border-b border-border pb-2">
+            <input class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+              placeholder="按名称搜索（至少 2 个字符）"
+              :value="filterText"
+              @input="setFilter(($event.target as HTMLInputElement).value)"
+              @keydown.enter="onSearchEnter(($event.target as HTMLInputElement).value)" />
+
+            <div v-if="searchLoading || searchError || (searchItems && searchItems.length > 0)" class="mt-2">
+              <div v-if="searchLoading" class="text-sm text-muted-foreground">搜索中...</div>
+              <div v-else-if="searchError" class="text-sm text-destructive">{{ searchError }}</div>
+              <div v-else class="max-h-40 overflow-auto">
+                <button v-for="item in searchItems"
+                  :key="getSearchItemId(item)"
+                  type="button"
+                  class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                  @click="onPickSearchItemClick(getSearchItemId(item))"
+                  @dblclick.prevent="onPickSearchItemDblClick(getSearchItemId(item))">
+                  <div class="truncate">{{ (item as any).name }}</div>
+                  <div class="-mt-0.5 truncate text-xs text-muted-foreground">{{ getSearchItemSubtitle(item) }}</div>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="mb-2 flex items-center justify-between">
             <span class="text-sm">{{ typesButtonLabel }}</span>
             <div v-if="!isRoomTree" class="flex items-center gap-1">
@@ -683,7 +812,7 @@ function onSearchEnter(value: string) {
             </div>
           </div>
           <input class="mb-2 h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
-            placeholder="搜索类型"
+            placeholder="搜索类型（仅过滤类型）"
             :value="typeQuery"
             @input="setTypeQuery(($event.target as HTMLInputElement).value)" />
 

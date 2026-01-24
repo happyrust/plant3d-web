@@ -1,6 +1,6 @@
 import { Box3, Vector3 } from 'three'
 
-import { resolveDtxObjectIdsByRefno } from '@/composables/useDbnoInstancesDtxLoader'
+import { hasDtxDbnoCache, resolveDtxObjectIdsByRefno } from '@/composables/useDbnoInstancesDtxLoader'
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
 import type { DTXLayer } from '@/utils/three/dtx'
 import type { DTXSelectionController } from '@/utils/three/dtx'
@@ -98,25 +98,38 @@ export class DtxCompatScene {
     const ids = resolveDtxObjectIdsByRefno(dbno, normalized)
     if (ids.length > 0) return ids
 
+    // 若运行时 cache 存在（即与 loader 同一模块实例），则 resolve 为空意味着该 refno 没有加载任何 objectIds，
+    // 不应触发兜底“全量扫描所有 objectIds”（否则点击叶子节点/未加载节点也会卡死）。
+    // 兜底扫描只用于 DEV/HMR 下模块实例隔离导致 cachesByDbno 不可见的极端情况。
+    if (hasDtxDbnoCache(dbno)) {
+      return []
+    }
+
     // 兜底：避免开发环境下模块实例隔离/缓存不同步导致 resolve 失效
     // objectId 命名规则：o:<refno>:<n>
     const objectCount = this._dtxLayer.objectCount
-    if (!this._fallbackRefnoToObjectIds || this._fallbackIndexObjectCount !== objectCount) {
-      const next = new Map<string, string[]>()
+    if (!this._fallbackRefnoToObjectIds) {
+      this._fallbackRefnoToObjectIds = new Map<string, string[]>()
+      this._fallbackIndexObjectCount = 0
+    }
+
+    // 增量构建 fallback 索引：只处理新增的 objectIds，避免每次 objectCount 变化都全量扫描导致卡顿
+    if (this._fallbackIndexObjectCount !== objectCount) {
       const all = this._dtxLayer.getAllObjectIds()
       if (Array.isArray(all)) {
-        for (const objectId of all) {
+        const start = Math.max(0, Math.min(this._fallbackIndexObjectCount, all.length))
+        for (let i = start; i < all.length; i++) {
+          const objectId = all[i]
           if (typeof objectId !== 'string') continue
           if (!objectId.startsWith('o:')) continue
           const parts = objectId.split(':')
           const r = parts.length >= 3 ? String(parts[1] ?? '') : ''
           if (!r) continue
-          const list = next.get(r) || []
+          const list = this._fallbackRefnoToObjectIds.get(r) || []
           list.push(objectId)
-          next.set(r, list)
+          this._fallbackRefnoToObjectIds.set(r, list)
         }
       }
-      this._fallbackRefnoToObjectIds = next
       this._fallbackIndexObjectCount = objectCount
     }
 

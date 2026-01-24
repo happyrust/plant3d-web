@@ -10,6 +10,7 @@ import {
   e3dSearch,
   e3dGetWorldRoot,
   e3dGetSubtreeRefnos,
+  e3dGetVisibleInsts,
   type TreeNodeDto,
 } from '@/api/genModelE3dApi'
 
@@ -20,9 +21,35 @@ export const NOUN_TYPES = [
 
 export type NounType = typeof NOUN_TYPES[number]
 
+function normalizeRefnoKey(value: string): string {
+  // 统一前端内部使用的 refno key：
+  // - 去掉 SurrealDB recordId 包装（例如 pe:⟨17496_123456⟩ -> 17496_123456）
+  // - 兼容 123/456 与 123,456
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const match = raw.match(/[⟨<]([^⟩>]+)[⟩>]/)
+  const core = match?.[1] ?? raw
+  return core.replace(/\//g, '_').replace(/,/g, '_')
+}
+
+function wrapSurrealThingId(value: string): string {
+  const key = normalizeRefnoKey(value)
+  if (!key) return ''
+  // 已经是 ⟨...⟩ / <...> 形式则不重复包裹
+  if (/[⟨<].*[⟩>]/.test(String(value || ''))) return String(value || '').trim()
+  // 用 ASCII "<...>"，避免 Unicode 角括号在部分服务端/代理层被错误处理。
+  return `<${key}>`
+}
+
+function shouldRetryWithWrappedId(errorMessage: string | null | undefined): boolean {
+  const msg = String(errorMessage || '')
+  // 后端 Surreal 查询构造失败/解析失败时常会带 SQL/rs_surreal 字样
+  return msg.includes('rs_surreal') || msg.includes('SQL:') || msg.includes('query_ancestor_refnos failed')
+}
+
 function dtoToTreeNode(dto: TreeNodeDto, parentId: string | null): TreeNode {
   return {
-    id: dto.refno,
+    id: normalizeRefnoKey(dto.refno),
     name: dto.name,
     type: dto.noun,
     parentId,
@@ -50,6 +77,22 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   const searchError = ref<string | null>(null)
 
   const checkStateById = ref<Map<string, CheckState>>(new Map())
+
+  function yieldToMainThread(): Promise<void> {
+    return new Promise((resolve) => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => resolve(), { timeout: 10 })
+      } else {
+        setTimeout(resolve, 1)
+      }
+    })
+  }
+
+  function yieldToNextFrame(): Promise<void> {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => resolve())
+    })
+  }
 
   const childrenCountById = ref<Map<string, number | null>>(new Map())
   const childrenLoadedById = new Set<string>()
@@ -196,51 +239,62 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   })
 
   async function ensureChildrenLoaded(parentId: string) {
-    const parent = nodesById.value[parentId]
+    const parentKey = normalizeRefnoKey(parentId)
+    const parent = nodesById.value[parentKey]
     if (!parent) return
 
-    if (childrenLoadedById.has(parentId) || childrenLoadingById.has(parentId)) return
+    if (childrenLoadedById.has(parentKey) || childrenLoadingById.has(parentKey)) return
 
-    childrenLoadingById.add(parentId)
+    childrenLoadingById.add(parentKey)
     try {
-      const resp = await e3dGetChildren(parentId, 2000)
+      let resp = await e3dGetChildren(parentKey, 2000)
+      if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
+        resp = await e3dGetChildren(wrapSurrealThingId(parentKey), 2000)
+      }
       if (!resp.success) throw new Error(resp.error_message || 'children api failed')
 
       const nextNodes: Record<string, TreeNode> = { ...nodesById.value }
       const nextChildrenCount = new Map(childrenCountById.value)
 
-      const parentCheck = checkStateById.value.get(parentId) || 'unchecked'
+      // 缺省按 checked 处理，避免出现“父节点可见但新加载子节点默认不可见”的反直觉情况。
+      const parentCheck = checkStateById.value.get(parentKey) || 'checked'
       const inheritState: CheckState = parentCheck === 'unchecked' ? 'unchecked' : 'checked'
+      const forceInherit = parentCheck !== 'indeterminate'
 
       const childrenIds: string[] = []
       for (const dto of resp.children) {
-        const id = dto.refno
+        const id = normalizeRefnoKey(dto.refno)
+        // 后端若返回“子列表包含自身”，会污染树结构（self-parent / 环），导致 recomputeParents 死循环卡死。
+        if (id === parentKey) {
+          console.warn('[pdms-tree] children api returned self, ignored:', { parentId: parentKey, id })
+          continue
+        }
         childrenIds.push(id)
 
         const existing = nextNodes[id]
         if (!existing) {
-          nextNodes[id] = dtoToTreeNode(dto, parentId)
+          nextNodes[id] = dtoToTreeNode(dto, parentKey)
         } else {
-          nextNodes[id] = { ...existing, parentId }
+          nextNodes[id] = { ...existing, parentId: parentKey }
         }
 
         nextChildrenCount.set(id, dto.children_count ?? null)
 
-        if (!checkStateById.value.has(id)) {
-          checkStateById.value.set(id, inheritState)
-        }
+        // 若父节点处于确定态（checked/unchecked），则子节点显隐应与父保持一致；
+        // 若父为 indeterminate，则仅在子节点无状态时才继承，避免覆盖“局部子树”显隐差异。
+        if (forceInherit || !checkStateById.value.has(id)) checkStateById.value.set(id, inheritState)
       }
 
-      nextNodes[parentId] = { ...parent, childrenIds }
+      nextNodes[parentKey] = { ...parent, childrenIds }
 
       nodesById.value = nextNodes
       childrenCountById.value = nextChildrenCount
-      childrenLoadedById.add(parentId)
+      childrenLoadedById.add(parentKey)
 
       // 按需加载：新加载到树里的节点也需要继承可见性状态，以便后续实例加载时能回放状态
       sceneGraph.setVisible(childrenIds, inheritState !== 'unchecked')
     } finally {
-      childrenLoadingById.delete(parentId)
+      childrenLoadingById.delete(parentKey)
     }
   }
 
@@ -373,16 +427,19 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
    */
   async function querySubtreeRefnos(refno: string): Promise<string[]> {
     try {
-      const normalizedRefno = refno.replace('/', '_')
-      const resp = await e3dGetSubtreeRefnos(normalizedRefno)
+      const normalizedRefno = normalizeRefnoKey(refno)
+      let resp = await e3dGetSubtreeRefnos(normalizedRefno, { includeSelf: true })
+      if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
+        resp = await e3dGetSubtreeRefnos(wrapSurrealThingId(normalizedRefno), { includeSelf: true })
+      }
       
       if (!resp.success) {
         console.error('[pdms-tree] querySubtreeRefnos failed:', resp.error_message)
         return []
       }
 
-      // 将 RefnoEnum 格式 (17496_106028) 转换为前端格式 (17496/106028)
-      return resp.refnos.map(r => String(r).replace('_', '/'))
+      // 全项目统一使用 "_" refno 格式
+      return (resp.refnos || []).map((r) => normalizeRefnoKey(String(r))).filter(Boolean)
     } catch (e) {
       console.error('[pdms-tree] querySubtreeRefnos error:', e)
       return []
@@ -390,15 +447,55 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   }
 
   /**
+   * 查询“可见几何实例”相关的 refnos（子孙 + 自身），用于切换 instances.json 里的显示/隐藏。
+   */
+  async function queryVisibleInstRefnos(refno: string): Promise<string[]> {
+    try {
+      const normalizedRefno = normalizeRefnoKey(refno)
+      let resp = await e3dGetVisibleInsts(normalizedRefno)
+      if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
+        resp = await e3dGetVisibleInsts(wrapSurrealThingId(normalizedRefno))
+      }
+      if (!resp.success) {
+        console.error('[pdms-tree] queryVisibleInstRefnos failed:', resp.error_message)
+        return []
+      }
+      return (resp.refnos || []).map((r) => normalizeRefnoKey(String(r))).filter(Boolean)
+    } catch (e) {
+      console.error('[pdms-tree] queryVisibleInstRefnos error:', e)
+      return []
+    }
+  }
+
+  async function setSceneVisibleInBatches(refnos: string[], visible: boolean, batchSize = 50): Promise<void> {
+    const viewer = viewerRef.value
+    if (!viewer) return
+    if (!refnos || refnos.length === 0) return
+
+    // 关键：不要把大量 refno 堆进 useSceneGraphOps.pendingVisible（否则 flush 会一次性 setObjectsVisible 导致长时间阻塞）。
+    // 直接分批调用 compat.scene.setObjectsVisible，把“重同步”工作切小并穿插让出帧。
+    for (let i = 0; i < refnos.length; i += batchSize) {
+      const batch = refnos.slice(i, i + batchSize)
+      viewer.scene.setObjectsVisible(batch, visible)
+
+      if (i + batchSize < refnos.length) {
+        // 让浏览器有机会渲染与响应输入，避免“看起来卡死”
+        await yieldToNextFrame()
+      }
+    }
+  }
+
+  /**
    * 批量设置状态，只处理已加载到树中的节点，避免遍历大量未加载节点
    */
-  async function setCheckStateDeep(id: string, state: CheckState) {
+  async function setCheckStateDeep(id: string, state: CheckState, guard?: () => boolean) {
     const nodes = nodesById.value
     const stack: string[] = [id]
     const toUpdate: string[] = []
     
     // 先收集所有需要更新的节点（只处理已加载的）
     while (stack.length > 0) {
+      if (guard && !guard()) return
       const cur = stack.pop()
       if (!cur) continue
       
@@ -420,6 +517,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     if (toUpdate.length > 0) {
       const batchSize = 1000
       for (let i = 0; i < toUpdate.length; i += batchSize) {
+        if (guard && !guard()) return
         const batch = toUpdate.slice(i, i + batchSize)
         for (const cur of batch) {
           checkStateById.value.set(cur, state)
@@ -427,6 +525,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
         
         // 让出控制权
         if (i + batchSize < toUpdate.length) {
+          if (guard && !guard()) return
           await new Promise(resolve => {
             if ('requestIdleCallback' in window) {
               requestIdleCallback(() => resolve(undefined), { timeout: 10 })
@@ -442,11 +541,24 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   function recomputeParents(id: string) {
     const nodes = nodesById.value
     let cur: string | null = id
+    const visited = new Set<string>()
 
     while (cur) {
+      // 防御：若树数据出现 parentId 环（例如 A->B->A 或 self-parent），会导致死循环卡死 UI。
+      // 这里直接中断并给出诊断日志。
+      if (visited.has(cur)) {
+        console.warn('[pdms-tree] recomputeParents detected cycle, aborting:', { start: id, at: cur })
+        return
+      }
+      visited.add(cur)
+
       const node: TreeNode | undefined = nodes[cur]
       const parentId: string | null = node?.parentId ?? null
       if (!parentId) break
+      if (parentId === cur) {
+        console.warn('[pdms-tree] recomputeParents detected self-parent, aborting:', { start: id, at: cur })
+        return
+      }
 
       const parent = nodes[parentId]
       if (!parent) break
@@ -481,28 +593,75 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
   }
 
-  function setVisible(id: string, visible: boolean) {
+  let setVisibleSeq = 0
+
+  async function setVisible(id: string, visible: boolean) {
     const viewer = viewerRef.value
     if (!viewer) return
 
-    // 1. 收集 refnos：隐藏时用后端 API，显示时用前端已加载节点
-    let refnos: string[] = []
-    // —— 全部暂时注释排查卡死 ——
-    // if (!visible) {
-    //   querySubtreeRefnos(id).then((r) => {
-    //     if (r.length > 0) {
-    //       const normalized = r.map((s) => String(s).replace('/', '_'))
-    //       sceneGraph.setVisible(normalized, false)
-    //     }
-    //   }).catch(() => {})
-    // }
-    // refnos = collectLoadedSubtreeRefnos(id)
-    // if (refnos.length === 0) refnos = [id]
-    // refnos = refnos.map((r) => String(r).replace('/', '_'))
-    // sceneGraph.setVisible(refnos, visible)
-    // setCheckStateDeep(id, visible ? 'checked' : 'unchecked')
-    // recomputeParents(id)
-    console.log('[pdms-tree] setVisible called but all logic commented out for debugging:', id, visible)
+    // Debug: 分段禁用以定位卡死点（改这里的开关即可，不用反复注释多处代码）
+    const DEBUG = {
+      // true: 不调用 /api/e3d/visible-insts，直接只切换当前 refno
+      skipVisibleInstsApi: false,
+      // true: 不对三维场景应用可见性（仅更新树 eye 状态）
+      skipSceneApply: false,
+      // true: 不做已加载子孙的 eye 批量更新/父节点重算（仅更新当前节点）
+      skipTreeCascade: false,
+      // true: 输出耗时日志（console）
+      logTiming: false,
+    }
+
+    const rootId = normalizeRefnoKey(id)
+    const desiredState: CheckState = visible ? 'checked' : 'unchecked'
+
+    const seq = ++setVisibleSeq
+    // 先更新当前节点的 eye（提升响应感）；子孙节点由 setCheckStateDeep 批量更新
+    checkStateById.value.set(rootId, desiredState)
+
+    // 先同步树侧 eye（子节点应跟随父节点变化），再异步应用到三维与 instances.json
+    if (!DEBUG.skipTreeCascade) {
+      const t2 = DEBUG.logTiming ? performance.now() : 0
+      await setCheckStateDeep(rootId, desiredState, () => seq === setVisibleSeq)
+      if (DEBUG.logTiming) {
+        console.log('[pdms-tree][perf] apply tree checkState', { refno: rootId, ms: performance.now() - t2 })
+      }
+    }
+    if (seq !== setVisibleSeq) return
+    if (!DEBUG.skipTreeCascade) {
+      const t3 = DEBUG.logTiming ? performance.now() : 0
+      recomputeParents(rootId)
+      if (DEBUG.logTiming) {
+        // recomputeParents 可能会遍历父节点的所有 childrenIds（子数很大时可能阻塞）
+        console.log('[pdms-tree][perf] recomputeParents', { refno: rootId, ms: performance.now() - t3 })
+      }
+    }
+
+    // 关键：不在前端递归遍历子树；改为后端一次性返回“可见实例 refnos（含子孙 + 自身）”
+    const t0 = DEBUG.logTiming ? performance.now() : 0
+    let refnos = DEBUG.skipVisibleInstsApi ? [rootId] : await queryVisibleInstRefnos(rootId)
+    if (seq !== setVisibleSeq) return
+
+    if (refnos.length === 0) {
+      // 兜底：至少切换自身
+      refnos = [rootId]
+    } else if (!refnos.includes(rootId)) {
+      // 需求：包含自己
+      refnos.unshift(rootId)
+    }
+
+    // 去重 + 规范化
+    const dedup: string[] = Array.from(new Set(refnos.map((r) => normalizeRefnoKey(r)).filter(Boolean)))
+    if (DEBUG.logTiming) {
+      console.log('[pdms-tree][perf] visible-insts+dedup', { refno: rootId, count: dedup.length, ms: performance.now() - t0 })
+    }
+
+    if (!DEBUG.skipSceneApply) {
+      const t1 = DEBUG.logTiming ? performance.now() : 0
+      await setSceneVisibleInBatches(dedup, visible)
+      if (DEBUG.logTiming) {
+        console.log('[pdms-tree][perf] apply scene visible', { refno: rootId, count: dedup.length, ms: performance.now() - t1 })
+      }
+    }
   }
 
   function clearSelectionInScene(viewer: DtxCompatViewer) {
@@ -584,6 +743,12 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   }
 
   async function ensureNodeAttached(parentId: string, childId: string) {
+    // 防御：避免把节点挂到自己下面，造成 self-parent / 环，进而触发 recomputeParents 死循环。
+    if (!parentId || !childId) return
+    if (parentId === childId) {
+      console.warn('[pdms-tree] ensureNodeAttached skip self-parent:', { parentId, childId })
+      return
+    }
     await ensureChildrenLoaded(parentId)
 
     let parent = nodesById.value[parentId]
@@ -632,10 +797,14 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     const rootId = rootIds.value[0]
     if (!rootId) return
 
-    const resp = await e3dGetAncestors(refno)
+    const key = normalizeRefnoKey(refno)
+    let resp = await e3dGetAncestors(key)
+    if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
+      resp = await e3dGetAncestors(wrapSurrealThingId(key))
+    }
     if (!resp.success) throw new Error(resp.error_message || 'ancestors failed')
 
-    const ancestors = resp.refnos || []
+    const ancestors = (resp.refnos || []).map((r) => normalizeRefnoKey(String(r))).filter(Boolean)
     if (ancestors.length === 0) return
 
     const path = [...ancestors].reverse()
@@ -651,10 +820,10 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
 
     expandedIds.value = nextExpanded
-    selectedIds.value = new Set([refno])
+    selectedIds.value = new Set([key])
 
     if (syncScene) await syncSceneSelection()
-    if (fly) await flyTo(refno)
+    if (fly) await flyTo(key)
 
     if (clearSearch) {
       filterText.value = ''

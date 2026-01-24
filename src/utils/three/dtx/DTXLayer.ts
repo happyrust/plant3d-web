@@ -440,12 +440,12 @@ export class DTXLayer {
     this._geometries.set(geoHash, handle);
 
     if (this._debug) {
-      console.log(`📐 添加几何体 ${geoHash}:`, {
-        vertexBase,
-        vertexCount,
-        indexBase,
-        indexCount
-      });
+      // console.log(`📐 添加几何体 ${geoHash}:`, {
+      //   vertexBase,
+      //   vertexCount,
+      //   indexBase,
+      //   indexCount
+      // });
     }
 
     return handle;
@@ -565,14 +565,14 @@ export class DTXLayer {
         new Vector3(precomputedAabb.max[0], precomputedAabb.max[1], precomputedAabb.max[2])
       );
       if (this._debug) {
-        console.log(`📦 使用预计算 AABB: ${objectId}`, precomputedAabb);
+        // console.log(`📦 使用预计算 AABB: ${objectId}`, precomputedAabb);
       }
     } else {
       // 动态计算对象的世界包围盒（兜底逻辑）
       const geoBBox = this._computeGeometryLocalBBox(geoHandle);
       obj.boundingBox.copy(geoBBox).applyMatrix4(matrix);
       if (this._debug) {
-        console.log(`🔧 动态计算 AABB: ${objectId}`);
+        // console.log(`🔧 动态计算 AABB: ${objectId}`);
       }
     }
     this._sceneBoundingBox.union(obj.boundingBox);

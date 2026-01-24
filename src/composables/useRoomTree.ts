@@ -199,6 +199,7 @@ export function useRoomTree(
 
       const parentCheck = checkStateById.value.get(parentId) || 'checked';
       const inheritState: CheckState = parentCheck === 'unchecked' ? 'unchecked' : 'checked';
+      const forceInherit = parentCheck !== 'indeterminate';
 
       const childrenIds: string[] = [];
       for (const dto of resp.children) {
@@ -218,9 +219,7 @@ export function useRoomTree(
           nextChildrenCount.set(id, null);
         }
 
-        if (!checkStateById.value.has(id)) {
-          checkStateById.value.set(id, inheritState);
-        }
+        if (forceInherit || !checkStateById.value.has(id)) checkStateById.value.set(id, inheritState);
       }
 
       nextNodes[parentId] = { ...parent, childrenIds };
@@ -346,11 +345,23 @@ export function useRoomTree(
   function recomputeParents(id: string) {
     const nodes = nodesById.value;
     let cur: string | null = id;
+    const visited = new Set<string>();
 
     while (cur) {
+      // 防御：避免 parentId 环导致死循环卡死
+      if (visited.has(cur)) {
+        console.warn('[room-tree] recomputeParents detected cycle, aborting:', { start: id, at: cur });
+        return;
+      }
+      visited.add(cur);
+
       const node: TreeNode | undefined = nodes[cur];
       const parentId: string | null = node?.parentId ?? null;
       if (!parentId) break;
+      if (parentId === cur) {
+        console.warn('[room-tree] recomputeParents detected self-parent, aborting:', { start: id, at: cur });
+        return;
+      }
 
       const parent = nodes[parentId];
       if (!parent) break;

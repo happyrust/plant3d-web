@@ -30,6 +30,7 @@ import { DtxCompatViewer } from "@/viewer/dtx/DtxCompatViewer";
 import { CadGrid } from "@/viewer/dtx/dtxCadGrid";
 import { loadDtxPrimitiveDemo } from "@/viewer/dtx/dtxPrimitiveDemo";
 import { DTXLayer, DTXSelectionController } from "@/utils/three/dtx";
+import { DynamicPivotController } from "@/utils/three/dtx/DynamicPivotController";
 
 defineProps<{
     params: {
@@ -54,6 +55,7 @@ const isDev = import.meta.env.DEV;
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
+const pivotControllerRef = shallowRef<DynamicPivotController | null>(null);
 const cadGridRef = shallowRef<CadGrid | null>(null);
 const compatViewerRef = shallowRef<DtxCompatViewer | null>(null);
 const toolsRef = shallowRef<ReturnType<typeof useDtxTools> | null>(null);
@@ -77,6 +79,7 @@ let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
+let offPivotEvents: (() => void) | null = null;
 let offGizmoEvents: (() => void) | null = null;
 
 let dtxGlobalTransformAppliedForDbno: number | null = null;
@@ -262,8 +265,9 @@ function attachPicking() {
         // Demo：DTX 基本体（不走 refno 选中逻辑，直接按 objectId 选中）
         if (demoMode === "primitives") {
             if (!hit) {
-                sel.clearSelection();
-                requestRender();
+                // 点击空白区域时不清除选中
+                // sel.clearSelection();
+                // requestRender();
                 return;
             }
             sel.clearSelection();
@@ -279,8 +283,9 @@ function attachPicking() {
         }
 
         if (!hit) {
-            selectionStore.clearSelection();
-            requestRender();
+            // 点击空白区域时不清除选中
+            // selectionStore.clearSelection();
+            // requestRender();
             return;
         }
 
@@ -372,6 +377,9 @@ function renderFrameImmediate() {
     cadGridRef.value?.update(dtxViewer.controls.target);
     ensureLayerAttached();
     dtxLayer.update(dtxViewer.camera);
+
+    // 更新动态 pivot 控制器
+    pivotControllerRef.value?.update();
 
     const selection = selectionControllerRef.value;
     if (selection?.hasOutline()) {
@@ -595,6 +603,21 @@ onMounted(() => {
     });
     selectionControllerRef.value = selectionController;
 
+    // 初始化动态 Pivot 控制器
+    const pivotController = new DynamicPivotController(
+        dtxViewer.controls,
+        selectionController,
+        dtxLayer,
+        dtxViewer.scene,
+        {
+            enabled: true,
+            longPressDelay: 300,
+            pinColor: '#FF6B35',
+            pinSize: 32,
+        }
+    );
+    pivotControllerRef.value = pivotController;
+
     if (demoMode === "primitives") {
         try {
             loadDtxPrimitiveDemo(dtxLayer, {
@@ -760,7 +783,7 @@ onMounted(() => {
     offControlsChange = () =>
         dtxViewer.controls.removeEventListener("change", onControlsChange);
 
-    // gizmo 交互/动画期间需要持续触发渲染（否则按需渲染会“停帧”）
+    // gizmo 交互/动画期间需要持续触发渲染（否则按需渲染会"停帧"）
     if (dtxViewer.gizmo) {
         const onGizmoChange = () => requestRender();
         const onGizmoStart = () => requestRender();
@@ -784,6 +807,35 @@ onMounted(() => {
         if (!ev?.position || !ev?.target) return;
         dtxViewer.flyTo(ev.position, ev.target, { duration: ev.duration });
     });
+
+    // 添加鼠标事件监听器，用于动态 pivot（长按 300ms 触发）
+    const onCanvasMouseDown = (e: PointerEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
+        pivotControllerRef.value?.handleMouseDown(canvasPos);
+    };
+
+    const onCanvasMouseMove = (e: PointerEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const canvasPos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
+        pivotControllerRef.value?.handleMouseMove(canvasPos);
+    };
+
+    const onCanvasMouseUp = () => {
+        pivotControllerRef.value?.handleMouseUp();
+    };
+
+    canvas.addEventListener("pointerdown", onCanvasMouseDown);
+    canvas.addEventListener("pointermove", onCanvasMouseMove);
+    canvas.addEventListener("pointerup", onCanvasMouseUp);
+    canvas.addEventListener("pointercancel", onCanvasMouseUp);
+
+    offPivotEvents = () => {
+        canvas.removeEventListener("pointerdown", onCanvasMouseDown);
+        canvas.removeEventListener("pointermove", onCanvasMouseMove);
+        canvas.removeEventListener("pointerup", onCanvasMouseUp);
+        canvas.removeEventListener("pointercancel", onCanvasMouseUp);
+    };
 
     // 兼容：批注/脚本会 dispatch showModelByRefnos，Viewer 侧统一接住并按需加载
     let showModelQueue: Promise<void> = Promise.resolve();
@@ -941,6 +993,9 @@ onUnmounted(() => {
     offControlsChange?.();
     offControlsChange = null;
 
+    offPivotEvents?.();
+    offPivotEvents = null;
+
     offGizmoEvents?.();
     offGizmoEvents = null;
 
@@ -976,6 +1031,13 @@ onUnmounted(() => {
         // ignore
     }
     selectionControllerRef.value = null;
+
+    try {
+        pivotControllerRef.value?.dispose();
+    } catch {
+        // ignore
+    }
+    pivotControllerRef.value = null;
 
     try {
         cadGridRef.value?.dispose();
