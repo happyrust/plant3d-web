@@ -16,9 +16,11 @@ import { emitCommand } from '@/ribbon/commandBus'
 import { dockActivatePanelIfExists, dockPanelExists } from '@/composables/useDockApi'
 import { useSelectionStore } from '@/composables/useSelectionStore'
 import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore'
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore'
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer'
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx'
+import { formatLengthMeters } from '@/utils/unitFormat'
 
 type DragRect = {
   active: boolean
@@ -327,6 +329,7 @@ export function useDtxTools(options: {
   const requestRender = options.requestRender ?? null
 
   const selectionStore = useSelectionStore()
+  const unitSettings = useUnitSettingsStore()
 
   let lastTextMarkerClickTime = 0
   let lastTextMarkerClickId: string | null = null
@@ -516,7 +519,9 @@ export function useDtxTools(options: {
 
         const mid = a.clone().add(b).multiplyScalar(0.5)
         const dist = a.distanceTo(b)
-        const el = makeMeasureLabelEl(overlay, `D ${dist.toFixed(2)}`)
+        const unit = unitSettings.displayUnit.value
+        const precision = unitSettings.precision.value
+        const el = makeMeasureLabelEl(overlay, `D ${formatLengthMeters(dist, unit, precision)}`)
         labels.set(`m:${m.id}`, { id: `m:${m.id}`, worldPos: mid, el })
       } else {
         const lineMat = new LineBasicMaterial({ color: 0x2563eb })
@@ -1374,6 +1379,16 @@ export function useDtxTools(options: {
       syncFromStore()
     },
     { deep: true }
+  )
+
+  // 显示单位变化：刷新测量标签等 overlay 文本
+  watch(
+    () => [unitSettings.displayUnit.value, unitSettings.precision.value],
+    () => {
+      if (!dtxViewerRef.value || !overlayContainerRef.value) return
+      syncFromStore()
+      requestRender?.()
+    }
   )
 
   watch(

@@ -2,8 +2,10 @@ import { ref, watch, type Ref } from 'vue'
 import { Box3, BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSegments, Matrix4, Vector3 } from 'three'
 
 import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi'
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore'
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader'
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
+import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat'
 
 type Vec3 = [number, number, number]
 
@@ -183,6 +185,7 @@ export function usePtsetVisualizationThree(
 ): UsePtsetVisualizationThreeReturn {
   const requestRender = options.requestRender ?? null
   const getGlobalModelMatrix = options.getGlobalModelMatrix ?? null
+  const unitSettings = useUnitSettingsStore()
   const visualObjects = ref<Map<string, PtsetVisualObject>>(new Map())
   const isVisible = ref(false)
   const currentRefno = ref<string | null>(null)
@@ -288,6 +291,9 @@ export function usePtsetVisualizationThree(
 
     const unitFactor = response.unit_info?.conversion_factor || 1
     const targetUnit = response.unit_info?.target_unit || 'unknown'
+    const policy = unitSettings.ptsetDisplayPolicy.value
+    const displayUnit = unitSettings.displayUnit.value
+    const precision = unitSettings.precision.value
 
     const dbno = extractDbNumFromRefno(refno)
     const normalizedRefno = refno.trim().replace('/', '_')
@@ -347,11 +353,19 @@ export function usePtsetVisualizationThree(
       labelDiv.className = 'ptset-label'
       labelDiv.setAttribute('data-ptset-point', String(point.number))
       const pboreInTargetUnit = point.pbore * unitFactor
+      const coordText = policy === 'follow_backend'
+        ? `(${formatNumber(worldPt[0], precision)}, ${formatNumber(worldPt[1], precision)}, ${formatNumber(worldPt[2], precision)})${targetUnit}`
+        : formatVec3Meters(worldPt as any, displayUnit, precision)
+      const boreText = point.pbore > 0
+        ? (policy === 'follow_backend'
+          ? `Ø${formatNumber(pboreInTargetUnit, precision)}${targetUnit}`
+          : `Ø${formatLengthMeters(pboreInTargetUnit, displayUnit, precision)}`)
+        : ''
       labelDiv.innerHTML = `
         <div class="ptset-label-content">
           <div class="ptset-label-number">#${point.number}</div>
-          <div class="ptset-label-coord">${formatCoord(worldPt)}</div>
-          ${point.pbore > 0 ? `<div class="ptset-label-bore">Ø${pboreInTargetUnit.toFixed(1)}${targetUnit}</div>` : ''}
+          <div class="ptset-label-coord">${coordText}</div>
+          ${boreText ? `<div class="ptset-label-bore">${boreText}</div>` : ''}
         </div>
       `
       labelDiv.style.cssText = `
@@ -431,6 +445,19 @@ export function usePtsetVisualizationThree(
       clearAll()
     }
   })
+
+  // 显示单位/精度/策略变化时，重建 label 文本（点数一般不多，直接重绘即可）。
+  watch(
+    () => [
+      unitSettings.displayUnit.value,
+      unitSettings.precision.value,
+      unitSettings.ptsetDisplayPolicy.value,
+    ],
+    () => {
+      if (!currentRefno.value || !currentResponse.value) return
+      renderPtset(currentRefno.value, currentResponse.value)
+    }
+  )
 
   return {
     visualObjects,
