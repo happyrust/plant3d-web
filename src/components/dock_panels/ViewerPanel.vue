@@ -704,6 +704,11 @@ onMounted(() => {
             (async () => {
                 try {
                     emitToast({ message: `正在加载 dbnum=${dbno} 的模型数据...` });
+                    const autoFitKey = `dtx_autofit_dbno_${dbno}`;
+                    let shouldAutoFit = true;
+                    try {
+                        shouldAutoFit = sessionStorage.getItem(autoFitKey) !== "1";
+                    } catch {}
                     const manifest = await getDbnoInstancesManifest(dbno);
                     const index = buildInstanceIndexByRefno(manifest);
                     const allRefnos = Array.from(index.keys());
@@ -719,19 +724,25 @@ onMounted(() => {
                         { lodAssetKey: "L1", debug: isDev }
                     );
                     (compat as any).__dtxAfterInstancesLoaded?.(dbno, allRefnos);
-                    const box = dtxLayer.getBoundingBox();
-                    const center = new Vector3();
-                    const size = new Vector3();
-                    box.getCenter(center);
-                    box.getSize(size);
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const distance = Math.max(maxDim * 2.5, 5);
-                    const position = new Vector3(
-                        center.x + distance * 0.8,
-                        center.y + distance * 0.6,
-                        center.z + distance * 0.8
-                    );
-                    dtxViewer.flyTo(position, center, { duration: 0.5 });
+                    if (shouldAutoFit) {
+                        const box = dtxLayer.getBoundingBox();
+                        const center = new Vector3();
+                        const size = new Vector3();
+                        box.getCenter(center);
+                        box.getSize(size);
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        const distance = Math.max(maxDim * 2.5, 5);
+                        const position = new Vector3(
+                            center.x + distance * 0.8,
+                            center.y + distance * 0.6,
+                            center.z + distance * 0.8
+                        );
+                        dtxViewer.flyTo(position, center, { duration: 0 });
+                        requestRender();
+                        try {
+                            sessionStorage.setItem(autoFitKey, "1");
+                        } catch {}
+                    }
                     emitToast({
                         message: `加载完成: ${result.loadedObjects} 个对象`,
                     });
