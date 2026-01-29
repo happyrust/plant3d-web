@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual';
 import { Filter, Plus, Search, X } from 'lucide-vue-next';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
+import { pdmsSearch, type PdmsSearchItem } from '@/api/genModelSearchApi';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { useModelGeneration } from '@/composables/useModelGeneration';
@@ -38,7 +39,8 @@ watch(
 );
 
 const pdmsTree = usePdmsOwnerTree(pdmsViewerRef);
-const roomTree = useRoomTree(roomViewerRef);
+// 房间树仅在 tab=room 时启用，避免其副作用影响 PDMS 模型树（显隐/选中回放等）
+const roomTree = useRoomTree(roomViewerRef, computed(() => activeTree.value === 'room'));
 
 // Register the global tree instance for console commands
 setModelTreeInstance(pdmsTree);
@@ -154,21 +156,18 @@ async function setVisible(id: string, visible: boolean) {
     // Check if it looks like a refno (123/456 or 123_456)
     // If it's a refno, we try to auto-generate if missing
     if (isRefnoLike(id)) {
-      // Check if refno exists in cache
-      const exists = modelGenerationState.value!.checkRefnoExists(id);
+      // eye 的“显示”也应支持 auto fit：
+      // - 若已加载：showModelByRefno 会直接用 AABB flyTo
+      // - 若未加载：showModelByRefno 会加载完成后 flyTo
+      const success = await modelGenerationState.value!.showModelByRefno(id, { flyTo: true });
 
-      if (!exists) {
-        // Use showModelByRefno (direct generation without task)
-        const success = await modelGenerationState.value!.showModelByRefno(id);
-
-        if (success) {
-          // 模型已加载成功：同步树的勾选状态（eye 图标）并确保可见。
-          // 这样后续点击 eye 只会切换 visible，不会再次触发 show-by-refno。
-          await pdmsTree.setVisible(id, true);
-          return;
-        }
-        // 失败时继续调用 setVisible 显示部分加载的数据
+      if (success) {
+        // 模型已加载成功：同步树的勾选状态（eye 图标）并确保可见。
+        // 这样后续点击 eye 只会切换 visible，不会再次触发 show-by-refno。
+        await pdmsTree.setVisible(id, true);
+        return;
       }
+      // 失败时继续调用 setVisible 显示部分加载的数据
     }
   }
 
@@ -196,6 +195,8 @@ function isRefnoLike(id: string): boolean {
 }
 
 function handleSelectionChanged(selected: Set<string>) {
+  // 约定：全局 selection（属性面板/查询等）只绑定 PDMS refno，房间树 id 不写入
+  if (isRoomTree.value) return;
   if (selected.size !== 1) return;
   const only = Array.from(selected)[0];
   if (!only || !isRefnoLike(only)) return;
@@ -250,6 +251,278 @@ const contextNodeId = ref<string | null>(null);
 
 const searchPopoverOpen = ref(false);
 const typePopoverOpen = ref(false);
+
+// ========================
+// 类型筛选：查看过滤结果（分组面板）
+// - 通过后端 /api/search/pdms（Meilisearch）做可分页查询
+// - 支持“按 SITE(dbnum) 分组”开关
+// ========================
+type FilterGroupState = {
+  open: boolean;
+  total: number;
+  offset: number;
+  items: PdmsSearchItem[];
+  loading: boolean;
+  error: string | null;
+};
+
+type SiteGroupState = {
+  open: boolean;
+  total: number;
+  nounCounts: Record<string, number>;
+  nounLoading: boolean;
+  nounError: string | null;
+  nounGroups: Record<string, FilterGroupState>;
+};
+
+const filterResultsOpen = ref(false);
+const filterResultsGroupBySite = ref(true);
+const filterResultsLoading = ref(false);
+const filterResultsError = ref<string | null>(null);
+const filterResultsFacet = ref<Record<string, Record<string, number>> | null>(null);
+
+const nounGroups = ref<Record<string, FilterGroupState>>({});
+const siteGroups = ref<Record<string, SiteGroupState>>({});
+
+const FILTER_RESULTS_PAGE_SIZE = 200;
+
+function selectedPdmsNouns(): string[] {
+  if (isRoomTree.value) return [];
+  return Array.from(pdmsTree.selectedTypes.value).map((t) => String(t || '').trim().toUpperCase()).filter(Boolean);
+}
+
+function currentKeyword(): string | undefined {
+  const q = String(filterText.value || '').trim();
+  return q ? q : undefined;
+}
+
+async function refreshFilterResultsFacets() {
+  if (isRoomTree.value) return;
+
+  const nouns = selectedPdmsNouns();
+  if (nouns.length === 0) {
+    filterResultsFacet.value = null;
+    nounGroups.value = {};
+    siteGroups.value = {};
+    return;
+  }
+
+  filterResultsLoading.value = true;
+  filterResultsError.value = null;
+  try {
+    const resp = await pdmsSearch({
+      keyword: currentKeyword(),
+      nouns,
+      offset: 0,
+      limit: 1,
+      facets: true,
+    });
+    if (!resp.success) {
+      filterResultsFacet.value = null;
+      filterResultsError.value = resp.error_message || 'search failed';
+      return;
+    }
+
+    filterResultsFacet.value = resp.facet_distribution || null;
+
+    const nounFacet = (resp.facet_distribution && resp.facet_distribution['noun']) || {};
+    const siteFacet = (resp.facet_distribution && resp.facet_distribution['site']) || {};
+
+    // 初始化 nounGroups（用于“无 SITE 分组”模式）
+    const nextNounGroups: Record<string, FilterGroupState> = {};
+    for (const noun of nouns) {
+      nextNounGroups[noun] = {
+        open: false,
+        total: Number(nounFacet[noun] ?? 0),
+        offset: 0,
+        items: [],
+        loading: false,
+        error: null,
+      };
+    }
+    nounGroups.value = nextNounGroups;
+
+    // 初始化 siteGroups（用于“按 SITE 分组”模式）
+    const nextSiteGroups: Record<string, SiteGroupState> = {};
+    const sites = Object.keys(siteFacet).sort((a, b) => {
+      const na = Number(a);
+      const nb = Number(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+    for (const site of sites) {
+      nextSiteGroups[site] = {
+        open: false,
+        total: Number(siteFacet[site] ?? 0),
+        nounCounts: {},
+        nounLoading: false,
+        nounError: null,
+        nounGroups: {},
+      };
+    }
+    siteGroups.value = nextSiteGroups;
+  } catch (e) {
+    filterResultsFacet.value = null;
+    filterResultsError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    filterResultsLoading.value = false;
+  }
+}
+
+async function openFilterResults() {
+  if (isRoomTree.value) return;
+  filterResultsOpen.value = true;
+  searchPopoverOpen.value = false;
+  typePopoverOpen.value = false;
+  await refreshFilterResultsFacets();
+}
+
+function closeFilterResults() {
+  filterResultsOpen.value = false;
+}
+
+async function loadNounGroup(noun: string, opts?: { site?: string; append?: boolean }) {
+  if (isRoomTree.value) return;
+
+  const append = opts?.append ?? false;
+  const site = opts?.site;
+
+  const key = String(noun || '').trim().toUpperCase();
+  if (!key) return;
+
+  const group = site
+    ? siteGroups.value[site]?.nounGroups?.[key]
+    : nounGroups.value[key];
+  if (!group) return;
+
+  group.loading = true;
+  group.error = null;
+  try {
+    const resp = await pdmsSearch({
+      keyword: currentKeyword(),
+      nouns: [key],
+      site,
+      offset: append ? group.offset : 0,
+      limit: FILTER_RESULTS_PAGE_SIZE,
+      facets: false,
+    });
+    if (!resp.success) {
+      group.error = resp.error_message || 'search failed';
+      return;
+    }
+
+    const nextItems = Array.isArray(resp.items) ? resp.items : [];
+    group.total = typeof resp.total === 'number' ? resp.total : group.total;
+    group.items = append ? group.items.concat(nextItems) : nextItems;
+    group.offset = group.items.length;
+  } catch (e) {
+    group.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    group.loading = false;
+  }
+}
+
+async function toggleNounGroupOpen(noun: string) {
+  const key = String(noun || '').trim().toUpperCase();
+  const group = nounGroups.value[key];
+  if (!group) return;
+  group.open = !group.open;
+  if (group.open && group.items.length === 0 && !group.loading) {
+    await loadNounGroup(key);
+  }
+}
+
+async function toggleSiteGroupOpen(site: string) {
+  const s = String(site || '').trim();
+  const siteGroup = siteGroups.value[s];
+  if (!siteGroup) return;
+
+  siteGroup.open = !siteGroup.open;
+  if (!siteGroup.open) return;
+
+  // 首次展开：加载该 site 下的 noun facet（用于二级分组计数）
+  if (Object.keys(siteGroup.nounCounts).length === 0 && !siteGroup.nounLoading) {
+    const nouns = selectedPdmsNouns();
+    siteGroup.nounLoading = true;
+    siteGroup.nounError = null;
+    try {
+      const resp = await pdmsSearch({
+        keyword: currentKeyword(),
+        nouns,
+        site: s,
+        offset: 0,
+        limit: 1,
+        facets: true,
+      });
+      if (!resp.success) {
+        siteGroup.nounError = resp.error_message || 'search failed';
+        return;
+      }
+      const nounFacet = (resp.facet_distribution && resp.facet_distribution['noun']) || {};
+      siteGroup.nounCounts = nounFacet;
+
+      const next: Record<string, FilterGroupState> = {};
+      for (const noun of nouns) {
+        next[noun] = {
+          open: false,
+          total: Number(nounFacet[noun] ?? 0),
+          offset: 0,
+          items: [],
+          loading: false,
+          error: null,
+        };
+      }
+      siteGroup.nounGroups = next;
+    } catch (e) {
+      siteGroup.nounError = e instanceof Error ? e.message : String(e);
+    } finally {
+      siteGroup.nounLoading = false;
+    }
+  }
+}
+
+async function toggleSiteNounGroupOpen(site: string, noun: string) {
+  const s = String(site || '').trim();
+  const key = String(noun || '').trim().toUpperCase();
+  const siteGroup = siteGroups.value[s];
+  const group = siteGroup?.nounGroups?.[key];
+  if (!siteGroup || !group) return;
+
+  group.open = !group.open;
+  if (group.open && group.items.length === 0 && !group.loading) {
+    await loadNounGroup(key, { site: s });
+  }
+}
+
+let filterResultsRefreshTimer: number | null = null;
+
+// 面板打开时：随筛选条件变化自动刷新分组（轻量防抖）
+watch(
+  () => [
+    filterResultsOpen.value,
+    filterResultsGroupBySite.value,
+    String(filterText.value || '').trim(),
+    isRoomTree.value ? '' : Array.from(pdmsTree.selectedTypes.value).sort().join('|'),
+  ] as const,
+  ([open]) => {
+    if (!open) return;
+    if (filterResultsRefreshTimer !== null) {
+      clearTimeout(filterResultsRefreshTimer);
+    }
+    filterResultsRefreshTimer = window.setTimeout(() => {
+      filterResultsRefreshTimer = null;
+      void refreshFilterResultsFacets();
+    }, 250);
+  },
+);
+
+// 切换 tab 时关闭结果面板，避免“PDMS 结果”挂在 ROOM 上
+watch(
+  () => activeTree.value,
+  () => {
+    filterResultsOpen.value = false;
+  },
+);
 
 const rowVirtualizer = useVirtualizer({
   count: flatRows.value.length,
@@ -420,7 +693,7 @@ onMounted(async () => {
         
         if (!exists) {
           console.log('[ModelTreePanel] Auto-loading model for:', refno);
-          const success = await modelGenerationState.value.showModelByRefno(refno);
+          const success = await modelGenerationState.value.showModelByRefno(refno, { flyTo: true });
           
           if (success) {
             console.log('[ModelTreePanel] Auto-load successful:', refno);
@@ -642,9 +915,21 @@ function focus() {
   closeContextMenu();
 }
 
-function showNode() {
+async function showNode() {
   if (!contextNodeId.value) return;
-  setVisible(contextNodeId.value, true);
+  const id = contextNodeId.value;
+
+  // 右键“显示”是显式操作：若是 PDMS refno，则优先触发加载并飞行聚焦。
+  if (!isRoomTree.value && isRefnoLike(id) && modelGenerationState.value && !DEBUG_SKIP_EYE_AUTO_GENERATE) {
+    try {
+      await modelGenerationState.value.showModelByRefno(id, { flyTo: true });
+    } finally {
+      await pdmsTree.setVisible(id, true);
+    }
+  } else {
+    await setVisible(id, true);
+  }
+
   closeContextMenu();
 }
 
@@ -860,7 +1145,134 @@ function onSearchEnter(value: string) {
               <Plus class="h-4 w-4" />
             </button>
           </div>
+
+          <!-- 应用：打开“过滤结果分组”面板（筛选本身已即时生效） -->
+          <div v-if="!isRoomTree" class="mt-2 flex items-center justify-between border-t border-border pt-2">
+            <label class="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox"
+                class="h-4 w-4"
+                v-model="filterResultsGroupBySite" />
+              按 SITE 分组
+            </label>
+            <button type="button"
+              class="rounded-md bg-muted px-3 py-1 text-sm text-foreground hover:bg-muted/70"
+              @click="openFilterResults">
+              应用
+            </button>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 过滤结果面板：按 SITE(dbnum) / noun 分组展示；单击/双击可定位到树 -->
+    <div v-if="filterResultsOpen && !isRoomTree"
+      class="mb-2 rounded-md border border-border bg-background p-2">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <div class="truncate text-sm font-medium">过滤结果（{{ filterResultsGroupBySite ? '按 SITE 分组' : '按类型分组' }}）</div>
+          <div class="truncate text-xs text-muted-foreground">
+            已选类型：{{ Array.from(pdmsTree.selectedTypes.value).join(', ') || '（无）' }}
+            <span v-if="filterText && String(filterText).trim()"> · 关键字：{{ String(filterText).trim() }}</span>
+          </div>
+        </div>
+        <button type="button"
+          class="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          @click="closeFilterResults">
+          关闭
+        </button>
+      </div>
+
+      <div class="mt-2">
+        <div v-if="filterResultsLoading" class="text-sm text-muted-foreground">加载中...</div>
+        <div v-else-if="filterResultsError" class="text-sm text-destructive">{{ filterResultsError }}</div>
+
+        <template v-else>
+          <!-- 按类型分组 -->
+          <div v-if="!filterResultsGroupBySite" class="space-y-2">
+            <div v-for="(g, noun) in nounGroups" :key="noun" class="rounded border border-border/60">
+              <button type="button"
+                class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-muted"
+                @click="toggleNounGroupOpen(noun)">
+                <div class="truncate text-sm">{{ noun }}</div>
+                <div class="text-xs text-muted-foreground">{{ g.total }}</div>
+              </button>
+              <div v-if="g.open" class="border-t border-border/60 p-2">
+                <div v-if="g.loading" class="text-sm text-muted-foreground">加载中...</div>
+                <div v-else-if="g.error" class="text-sm text-destructive">{{ g.error }}</div>
+                <div v-else class="max-h-56 overflow-auto">
+                  <button v-for="item in g.items"
+                    :key="item.refno"
+                    type="button"
+                    class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                    @click="onPickSearchItemClick(item.refno)"
+                    @dblclick.prevent="() => { onPickSearchItemDblClick(item.refno); filterResultsOpen = false; }">
+                    <div class="truncate">{{ item.name }}</div>
+                    <div class="-mt-0.5 truncate text-xs text-muted-foreground">{{ item.noun }} · {{ item.refno }}</div>
+                  </button>
+                  <button v-if="g.items.length < g.total"
+                    type="button"
+                    class="mt-1 w-full rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                    @click="loadNounGroup(noun, { append: true })">
+                    查看更多（{{ g.items.length }}/{{ g.total }}）
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 按 SITE 分组 -->
+          <div v-else class="space-y-2">
+            <div v-for="(sg, site) in siteGroups" :key="site" class="rounded border border-border/60">
+              <button type="button"
+                class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-muted"
+                @click="toggleSiteGroupOpen(site)">
+                <div class="truncate text-sm">SITE {{ site }}</div>
+                <div class="text-xs text-muted-foreground">{{ sg.total }}</div>
+              </button>
+
+              <div v-if="sg.open" class="border-t border-border/60 p-2">
+                <div v-if="sg.nounLoading" class="text-sm text-muted-foreground">加载分组中...</div>
+                <div v-else-if="sg.nounError" class="text-sm text-destructive">{{ sg.nounError }}</div>
+
+                <div v-else class="space-y-2">
+                  <div v-for="(g, noun) in sg.nounGroups" :key="`${site}_${noun}`" class="rounded border border-border/40">
+                    <button type="button"
+                      class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-muted"
+                      @click="toggleSiteNounGroupOpen(site, noun)">
+                      <div class="truncate text-sm">{{ noun }}</div>
+                      <div class="text-xs text-muted-foreground">{{ g.total }}</div>
+                    </button>
+                    <div v-if="g.open" class="border-t border-border/40 p-2">
+                      <div v-if="g.loading" class="text-sm text-muted-foreground">加载中...</div>
+                      <div v-else-if="g.error" class="text-sm text-destructive">{{ g.error }}</div>
+                      <div v-else class="max-h-48 overflow-auto">
+                        <button v-for="item in g.items"
+                          :key="item.refno"
+                          type="button"
+                          class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                          @click="onPickSearchItemClick(item.refno)"
+                          @dblclick.prevent="() => { onPickSearchItemDblClick(item.refno); filterResultsOpen = false; }">
+                          <div class="truncate">{{ item.name }}</div>
+                          <div class="-mt-0.5 truncate text-xs text-muted-foreground">{{ item.noun }} · {{ item.refno }}</div>
+                        </button>
+                        <button v-if="g.items.length < g.total"
+                          type="button"
+                          class="mt-1 w-full rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                          @click="loadNounGroup(noun, { site, append: true })">
+                          查看更多（{{ g.items.length }}/{{ g.total }}）
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="Object.keys(siteGroups).length === 0" class="text-sm text-muted-foreground">
+              无结果
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 

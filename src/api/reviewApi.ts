@@ -1,12 +1,14 @@
 // 校审管理 API 模块
 // 提供提资单、审核任务、确认记录的 CRUD 操作
 
-import type {
-  ReviewTask,
-  ReviewComponent,
-  ReviewAttachment,
-  AnnotationComment,
-  User,
+import {
+  fromBackendRole,
+  type ReviewTask,
+  type ReviewComponent,
+  type ReviewAttachment,
+  type AnnotationComment,
+  type User,
+  UserRole,
 } from '@/types/auth';
 
 // ============ 基础配置 ============
@@ -15,6 +17,16 @@ function getBaseUrl(): string {
   const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
     .VITE_GEN_MODEL_API_BASE_URL;
   return (envBase && envBase.trim()) || 'http://localhost:8080';
+}
+
+function getReviewWebBaseUrl(): string {
+  const envBase = (import.meta.env as unknown as { VITE_REVIEW_WEB_BASE_URL?: string })
+    .VITE_REVIEW_WEB_BASE_URL;
+  if (envBase && envBase.trim()) return envBase.trim();
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return getBaseUrl();
 }
 
 // Token 存储 key
@@ -111,6 +123,31 @@ export type ReviewActionResponse = {
   error_message?: string;
 };
 
+export type EmbedUrlResponse = {
+  code: number;
+  message: string;
+  data?: {
+    relative_path?: string;
+    relativePath?: string;
+    token?: string;
+    query?: {
+      form_id?: string;
+      formId?: string;
+      is_reviewer?: boolean;
+      isReviewer?: boolean;
+    };
+  };
+  url?: string;
+};
+
+export type CachePreloadResponse = {
+  code: number;
+  message: string;
+  data?: {
+    task_id?: string;
+  };
+};
+
 // 确认记录类型
 export type ConfirmedRecordData = {
   id?: string;
@@ -127,7 +164,7 @@ export type ConfirmedRecordData = {
 export type ConfirmedRecordResponse = {
   success: boolean;
   record?: ConfirmedRecordData & { id: string; confirmedAt: number };
-  records?: Array<ConfirmedRecordData & { id: string; confirmedAt: number }>;
+  records?: (ConfirmedRecordData & { id: string; confirmedAt: number })[];
   error_message?: string;
 };
 
@@ -153,14 +190,14 @@ export type WorkflowHistoryResponse = {
   success: boolean;
   currentNode: string;
   currentNodeName: string;
-  history: Array<{
+  history: {
     node: string;
     action: string;
     operatorId: string;
     operatorName: string;
     comment?: string;
     timestamp: number;
-  }>;
+  }[];
   error_message?: string;
 };
 
@@ -360,14 +397,47 @@ export async function reviewTaskGetWorkflow(
 // ============ 外部校审集成 API ============
 
 export async function reviewGetEmbedUrl(projectId: string, userId: string): Promise<{ url: string }> {
-  return await fetchJson<{ url: string }>('/api/review/embed-url', {
+  const response = await fetchJson<EmbedUrlResponse>('/api/review/embed-url', {
     method: 'POST',
     body: JSON.stringify({ project_id: projectId, user_id: userId }),
   });
+
+  if (response.url) {
+    return { url: response.url };
+  }
+
+  if (response.code !== 200 && response.code !== 0) {
+    throw new Error(response.message || '获取校审地址失败');
+  }
+
+  const data = response.data;
+  if (!data?.token) {
+    throw new Error('校审地址缺少凭证信息');
+  }
+
+  const relativePath = data.relative_path || data.relativePath || '';
+  if (!relativePath) {
+    throw new Error('校审地址缺少路径信息');
+  }
+
+  const query = data.query || {};
+  const formId = query.form_id || query.formId || '';
+  const baseUrl = getReviewWebBaseUrl().replace(/\/$/, '');
+  const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  const params = new URLSearchParams();
+  params.set('user_token', data.token);
+  if (formId) params.set('form_id', formId);
+  params.set('user_id', userId);
+  params.set('project_id', projectId);
+
+  return { url: `${baseUrl}${cleanPath}?${params.toString()}` };
 }
 
-export async function reviewPreloadCache(projectId: string, initiator: string): Promise<{ success: boolean; message: string }> {
-  return await fetchJson<{ success: boolean; message: string }>('/api/review/preload-cache', {
+export async function reviewPreloadCache(
+  projectId: string,
+  initiator: string
+): Promise<CachePreloadResponse> {
+  return await fetchJson<CachePreloadResponse>('/api/review/cache/preload', {
     method: 'POST',
     body: JSON.stringify({ project_id: projectId, initiator }),
   });
@@ -390,32 +460,32 @@ export async function reviewRecordCreate(
 
 /**
  * 获取任务的确认记录
- * GET /api/review/records/{taskId}
+ * GET /api/review/records/by-task/{taskId}
  */
 export async function reviewRecordGetByTaskId(taskId: string): Promise<ConfirmedRecordResponse> {
   return await fetchJson<ConfirmedRecordResponse>(
-    `/api/review/records/${encodeURIComponent(taskId)}`
+    `/api/review/records/by-task/${encodeURIComponent(taskId)}`
   );
 }
 
 /**
  * 删除确认记录
- * DELETE /api/review/records/{recordId}
+ * DELETE /api/review/records/item/{recordId}
  */
 export async function reviewRecordDelete(recordId: string): Promise<ReviewActionResponse> {
   return await fetchJson<ReviewActionResponse>(
-    `/api/review/records/${encodeURIComponent(recordId)}`,
+    `/api/review/records/item/${encodeURIComponent(recordId)}`,
     { method: 'DELETE' }
   );
 }
 
 /**
  * 清空任务的所有确认记录
- * DELETE /api/review/records/task/{taskId}
+ * DELETE /api/review/records/clear-task/{taskId}
  */
 export async function reviewRecordClearByTaskId(taskId: string): Promise<ReviewActionResponse> {
   return await fetchJson<ReviewActionResponse>(
-    `/api/review/records/task/${encodeURIComponent(taskId)}`,
+    `/api/review/records/clear-task/${encodeURIComponent(taskId)}`,
     { method: 'DELETE' }
   );
 }
@@ -448,23 +518,37 @@ export async function reviewCommentCreate(
 }
 
 /**
+ * 更新批注评论
+ * PATCH /api/review/comments/item/{commentId}
+ */
+export async function reviewCommentUpdate(
+  commentId: string,
+  content: string
+): Promise<{ success: boolean; comment?: AnnotationComment; error_message?: string }> {
+  return await fetchJson(`/api/review/comments/item/${encodeURIComponent(commentId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
+}
+
+/**
  * 获取批注评论
- * GET /api/review/comments/{annotationId}
+ * GET /api/review/comments/by-annotation/{annotationId}
  */
 export async function reviewCommentGetByAnnotation(
   annotationId: string,
   annotationType: AnnotationComment['annotationType']
 ): Promise<{ success: boolean; comments: AnnotationComment[]; error_message?: string }> {
   const params = new URLSearchParams({ type: annotationType });
-  return await fetchJson(`/api/review/comments/${encodeURIComponent(annotationId)}?${params}`);
+  return await fetchJson(`/api/review/comments/by-annotation/${encodeURIComponent(annotationId)}?${params}`);
 }
 
 /**
  * 删除评论
- * DELETE /api/review/comments/{commentId}
+ * DELETE /api/review/comments/item/{commentId}
  */
 export async function reviewCommentDelete(commentId: string): Promise<ReviewActionResponse> {
-  return await fetchJson(`/api/review/comments/${encodeURIComponent(commentId)}`, {
+  return await fetchJson(`/api/review/comments/item/${encodeURIComponent(commentId)}`, {
     method: 'DELETE',
   });
 }
@@ -506,18 +590,38 @@ export async function userGetReviewers(): Promise<UserListResponse> {
 
 // ============ 附件 API ============
 
+export type ReviewAttachmentUploadOptions = {
+  formId?: string | null;
+  modelRefnos?: string[];
+  fileType?: string;
+  description?: string;
+};
+
 /**
  * 上传附件
  * POST /api/review/attachments
  */
 export async function reviewAttachmentUpload(
   taskId: string,
-  file: File
+  file: File,
+  options?: ReviewAttachmentUploadOptions
 ): Promise<{ success: boolean; attachment?: ReviewAttachment; error_message?: string }> {
   const base = getBaseUrl().replace(/\/$/, '');
   const formData = new FormData();
   formData.append('file', file);
   formData.append('taskId', taskId);
+  if (options?.formId) {
+    formData.append('formId', options.formId);
+  }
+  if (options?.modelRefnos?.length) {
+    formData.append('modelRefnos', JSON.stringify(options.modelRefnos));
+  }
+  if (options?.fileType) {
+    formData.append('type', options.fileType);
+  }
+  if (options?.description) {
+    formData.append('description', options.description);
+  }
 
   const token = getAuthToken();
   const resp = await fetch(`${base}/api/review/attachments`, {
@@ -544,7 +648,8 @@ export async function reviewAttachmentUpload(
 export function reviewAttachmentUploadWithProgress(
   taskId: string | null,
   file: File,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  options?: ReviewAttachmentUploadOptions
 ): Promise<{ success: boolean; attachment?: ReviewAttachment; error_message?: string }> {
   return new Promise((resolve, reject) => {
     const base = getBaseUrl().replace(/\/$/, '');
@@ -552,6 +657,18 @@ export function reviewAttachmentUploadWithProgress(
     formData.append('file', file);
     if (taskId) {
       formData.append('taskId', taskId);
+    }
+    if (options?.formId) {
+      formData.append('formId', options.formId);
+    }
+    if (options?.modelRefnos?.length) {
+      formData.append('modelRefnos', JSON.stringify(options.modelRefnos));
+    }
+    if (options?.fileType) {
+      formData.append('type', options.fileType);
+    }
+    if (options?.description) {
+      formData.append('description', options.description);
     }
 
     const xhr = new XMLHttpRequest();
@@ -658,7 +775,9 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
     reviewerId: String(raw.reviewer_id || raw.reviewerId || ''),
     reviewerName: String(raw.reviewer_name || raw.reviewerName || ''),
     components: Array.isArray(raw.components) ? raw.components as ReviewComponent[] : [],
-    attachments: Array.isArray(raw.attachments) ? raw.attachments as ReviewAttachment[] : undefined,
+    attachments: Array.isArray(raw.attachments)
+      ? (raw.attachments as Record<string, unknown>[]).map(normalizeReviewAttachment)
+      : undefined,
     reviewComment: raw.review_comment ? String(raw.review_comment) : undefined,
     createdAt: normalizeTimestamp(raw.created_at || raw.createdAt) || Date.now(),
     updatedAt: normalizeTimestamp(raw.updated_at || raw.updatedAt) || Date.now(),
@@ -672,6 +791,54 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
       ? String(raw.return_reason || raw.returnReason)
       : undefined,
   };
+}
+
+export function normalizeReviewAttachment(raw: Record<string, unknown>): ReviewAttachment {
+  return {
+    id: String(raw.id || raw.file_id || ''),
+    name: String(raw.name || raw.file_name || ''),
+    url: String(raw.url || raw.download_url || ''),
+    size: typeof raw.size === 'number'
+      ? raw.size
+      : (typeof raw.file_size === 'number' ? raw.file_size : undefined),
+    type: raw.type ? String(raw.type) : undefined,
+    mimeType: raw.mimeType ? String(raw.mimeType) : (raw.mime_type ? String(raw.mime_type) : undefined),
+    uploadedAt: normalizeTimestamp(raw.uploaded_at || raw.uploadedAt || raw.created_at) || Date.now(),
+  };
+}
+
+export function normalizeAnnotationComment(raw: Record<string, unknown>): AnnotationComment {
+  return {
+    id: String(raw.id || ''),
+    annotationId: String(raw.annotationId || raw.annotation_id || ''),
+    annotationType: normalizeAnnotationType(raw.annotationType || raw.annotation_type),
+    authorId: String(raw.authorId || raw.author_id || ''),
+    authorName: String(raw.authorName || raw.author_name || ''),
+    authorRole: normalizeUserRole(raw.authorRole || raw.author_role),
+    content: String(raw.content || ''),
+    replyToId: raw.replyToId
+      ? String(raw.replyToId)
+      : (raw.reply_to_id ? String(raw.reply_to_id) : undefined),
+    createdAt: normalizeTimestamp(raw.created_at || raw.createdAt) || Date.now(),
+    updatedAt: normalizeTimestamp(raw.updated_at || raw.updatedAt),
+  };
+}
+
+function normalizeAnnotationType(value: unknown): AnnotationComment['annotationType'] {
+  const type = String(value || 'text').toLowerCase();
+  const allowed: AnnotationComment['annotationType'][] = ['text', 'cloud', 'rect', 'obb'];
+  return allowed.includes(type as AnnotationComment['annotationType'])
+    ? (type as AnnotationComment['annotationType'])
+    : 'text';
+}
+
+function normalizeUserRole(value: unknown): UserRole {
+  const role = String(value || '').toLowerCase();
+  const roleValues = Object.values(UserRole) as string[];
+  if (roleValues.includes(role)) {
+    return role as UserRole;
+  }
+  return fromBackendRole(role);
 }
 
 function normalizeWorkflowNode(node: unknown): ReviewTask['currentNode'] {

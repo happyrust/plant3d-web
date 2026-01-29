@@ -1,3 +1,5 @@
+import { useConsoleStore } from '@/composables/useConsoleStore';
+
 export type TreeNodeDto = {
   refno: string;
   name: string;
@@ -96,7 +98,25 @@ export async function e3dGetChildren(refno: string, limit?: number): Promise<Chi
 }
 
 export async function e3dGetAncestors(refno: string): Promise<AncestorsResponse> {
-  return await fetchJson<AncestorsResponse>(`/api/e3d/ancestors/${encodeURIComponent(refno)}`);
+  try {
+    const resp = await fetchJson<AncestorsResponse>(`/api/e3d/ancestors/${encodeURIComponent(refno)}`);
+    console.info('[vis][api] /api/e3d/ancestors', {
+      refno,
+      refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
+      success: resp.success,
+    });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'info',
+      `[vis][api] /api/e3d/ancestors success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0}`
+    );
+    return resp;
+  } catch (e) {
+    console.error('[vis][api] /api/e3d/ancestors failed', { refno, error: e });
+    const { addLog } = useConsoleStore();
+    addLog('error', `[vis][api] /api/e3d/ancestors failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`);
+    throw e;
+  }
 }
 
 export async function e3dGetSubtreeRefnos(
@@ -114,11 +134,70 @@ export async function e3dGetSubtreeRefnos(
   if (params?.limit !== undefined) {
     url.searchParams.set('limit', String(params.limit));
   }
-  return await fetchJson<SubtreeRefnosResponse>(`${url.pathname}${url.search}`);
+  try {
+    const resp = await fetchJson<SubtreeRefnosResponse>(`${url.pathname}${url.search}`);
+    console.info('[vis][api] /api/e3d/subtree-refnos', {
+      refno,
+      include_self: params?.includeSelf,
+      max_depth: params?.maxDepth,
+      limit: params?.limit,
+      refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
+      truncated: resp.truncated,
+      success: resp.success,
+    });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'info',
+      `[vis][api] /api/e3d/subtree-refnos success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0} truncated=${resp.truncated ? 1 : 0}`
+    );
+    return resp;
+  } catch (e) {
+    console.error('[vis][api] /api/e3d/subtree-refnos failed', {
+      refno,
+      include_self: params?.includeSelf,
+      max_depth: params?.maxDepth,
+      limit: params?.limit,
+      error: e,
+    });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'error',
+      `[vis][api] /api/e3d/subtree-refnos failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
+    );
+    throw e;
+  }
 }
 
 export async function e3dGetVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
-  return await fetchJson<VisibleInstsResponse>(`/api/e3d/visible-insts/${encodeURIComponent(refno)}`);
+  try {
+    const resp = await fetchJson<VisibleInstsResponse>(
+      `/api/e3d/visible-insts/${encodeURIComponent(refno)}`
+    );
+    const debugAny = (resp as any)?.debug as
+      | { candidates_count?: number; visible_count?: number; filtered_count?: number; source?: string }
+      | null
+      | undefined;
+    console.info('[vis][api] /api/e3d/visible-insts', {
+      refno,
+      refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
+      success: resp.success,
+      debug: debugAny || null,
+    });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'info',
+      `[vis][api] /api/e3d/visible-insts success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0}` +
+        (debugAny
+          ? ` candidates=${debugAny.candidates_count ?? ''} filtered=${debugAny.filtered_count ?? ''} visible=${debugAny.visible_count ?? ''} source=${debugAny.source ?? ''}`
+          : '')
+    );
+    return resp;
+  } catch (e) {
+    console.error('[vis][api] /api/e3d/visible-insts failed', { refno, error: e });
+    const { addLog } = useConsoleStore();
+    addLog('error', `[vis][api] /api/e3d/visible-insts failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`);
+    throw e;
+  }
 }
 
 export async function e3dSearch(req: SearchRequest): Promise<SearchResponse> {

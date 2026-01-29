@@ -50,6 +50,7 @@ export type ReviewAttachment = {
   url: string;
   size?: number;
   type?: string;
+  mimeType?: string;
   uploadedAt: number;
 };
 

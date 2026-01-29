@@ -2,6 +2,7 @@
 import { computed, ref, type Ref } from 'vue';
 
 import { setDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader';
+import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
@@ -147,13 +148,6 @@ function fitToScene() {
   }
 }
 
-function extractDbnoFromRefno(refno: string): number | null {
-  const normalized = String(refno || '').trim().replace('/', '_');
-  const head = normalized.split('_')[0];
-  const n = Number(head);
-  return Number.isFinite(n) ? n : null;
-}
-
 function guessRootRefnoFromManifest(manifest: InstanceManifest): string | null {
   const v0 = (manifest as any)?.instances;
   if (Array.isArray(v0) && v0.length > 0 && v0[0] && typeof v0[0] === 'object') {
@@ -182,9 +176,16 @@ async function handleInstancesFileSelect(event: Event) {
       instancesRootRefno.value = guessedRoot;
     }
 
-    const guessedDbno = extractDbnoFromRefno(instancesRootRefno.value || guessedRoot || '');
-    if (guessedDbno !== null && !instancesDbno.value) {
-      instancesDbno.value = String(guessedDbno);
+    // 尝试用 db_meta_info.json 解析 dbno（失败不阻塞导入，允许手动填写）
+    if (!instancesDbno.value) {
+      try {
+        await ensureDbMetaInfoLoaded();
+        const dbno = getDbnumByRefno(instancesRootRefno.value || guessedRoot || '');
+        instancesDbno.value = String(dbno);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        instancesImportError.value = msg;
+      }
     }
 
     instancesStatus.value = `已读取: ${file.name}`;

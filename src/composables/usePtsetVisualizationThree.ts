@@ -4,6 +4,7 @@ import { Box3, BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSe
 import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi'
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore'
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader'
+import { getDbnumByRefno } from '@/composables/useDbMetaInfo'
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
 import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat'
 
@@ -35,13 +36,6 @@ export type UsePtsetVisualizationThreeReturn = {
   setArrowsVisible: (visible: boolean) => void
   flyToPtset: () => void
   updateLabelPositions: () => void
-}
-
-function extractDbNumFromRefno(refno: string): number | null {
-  const normalized = refno.trim().replace('/', '_')
-  const head = normalized.split('_')[0]
-  const n = Number(head)
-  return Number.isFinite(n) ? n : null
 }
 
 function formatCoord(pt: [number, number, number]): string {
@@ -295,9 +289,9 @@ export function usePtsetVisualizationThree(
     const displayUnit = unitSettings.displayUnit.value
     const precision = unitSettings.precision.value
 
-    const dbno = extractDbNumFromRefno(refno)
     const normalizedRefno = refno.trim().replace('/', '_')
-    const refnoTransform = dbno ? getDtxRefnoTransform(dbno, normalizedRefno) : undefined
+    const dbno = getDbnumByRefno(normalizedRefno)
+    const refnoTransform = getDtxRefnoTransform(dbno, normalizedRefno)
     const worldTransform = refnoTransform || response.world_transform
 
     for (const point of response.ptset) {

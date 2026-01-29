@@ -53,6 +53,30 @@ export function usePdmsConsoleCommands() {
     const store = useConsoleStore();
     const ctx = useViewerContext();
 
+    function parsePdmsRefnoFromArgs(args: string[]): string | null {
+        const raw = args.join(' ').trim();
+        if (!raw) return null;
+
+        // 若用户粘贴了 JSON 片段，优先尝试提取 "refno": "..."
+        const jsonRef = raw.match(/"refno"\s*:\s*"([^"]+)"/i)?.[1];
+        if (jsonRef) {
+            const normalized = String(jsonRef).trim().replace(/\//g, '_').replace(/,/g, '_');
+            if (/^\d+_\d+$/.test(normalized)) return normalized;
+        }
+
+        // 常见输入：=17496/171640、17496_171640、pe:⟨17496_171640⟩、<17496_171640>
+        const noEq = raw.replace(/^=/, '').trim();
+        const unwrapped = noEq.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? noEq;
+        const core = unwrapped.replace(/^pe:/i, '').trim();
+        const normalized = core.replace(/\//g, '_').replace(/,/g, '_');
+        if (/^\d+_\d+$/.test(normalized)) return normalized;
+
+        // 兜底：从更长文本中提取第一个 refno-like（避免把 geo_hash/aabb_hash 等长数字误识别）
+        const m = raw.match(/\b(\d+)[_\/,](\d+)\b/);
+        if (m) return `${m[1]}_${m[2]}`;
+        return null;
+    }
+
     function getViewer() {
         return ctx.viewerRef.value;
     }
@@ -360,14 +384,15 @@ export function usePdmsConsoleCommands() {
 
     // = <Refno> (Go to Refno)
     store.registerCommand('=', async (args: string[]) => {
-        let refno = args[0];
+        const refno = parsePdmsRefnoFromArgs(args);
         if (!refno) {
-            store.addLog('error', 'Usage: = <refno>');
+            const raw = args.join(' ').trim();
+            const hint = raw.startsWith('{') || raw.startsWith('[')
+                ? '（你似乎粘贴了 JSON 片段；这里需要的是 refno，例如 17496/171640）'
+                : '';
+            store.addLog('error', `Usage: = <refno> 例如：= 17496/171640 ${hint}`);
             return;
         }
-
-        // 将斜线格式转换为下划线格式（例如 17496/272482 -> 17496_272482）
-        refno = refno.replace(/\//g, '_');
 
         const tree = getModelTreeInstance();
         if (!tree) {

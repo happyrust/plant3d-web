@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
@@ -70,6 +70,11 @@ function spawnLogged(command, args, options) {
 function killProcess(child) {
   if (!child || child.killed) return;
   try {
+    // Windows: cmd.exe + 子进程树不一定响应 SIGTERM，直接 taskkill /T 更稳。
+    if (process.platform === 'win32' && child.pid) {
+      spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      return;
+    }
     child.kill('SIGTERM');
   } catch {
     // ignore
@@ -80,10 +85,10 @@ const refnos = (process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['243
   .map((r) => String(r || '').trim())
   .filter(Boolean);
 const minObjects = Number(process.env.MIN_OBJECTS || '0');
-const port = await findFreePort(Number(process.env.PORT || 8080));
+const FLY_TO = process.env.FLY_TO === '1';
+const desiredBackendPort = Number(process.env.BACKEND_PORT || process.env.PORT || 8080);
 const vitePort = await findFreePort(Number(process.env.VITE_PORT || 5173));
 const baseUrl = `http://127.0.0.1:${vitePort}`;
-const backendHealthUrl = `http://127.0.0.1:${port}/api/health`;
 
 const artifactsDir = path.resolve(process.cwd(), 'artifacts');
 mkdirSync(artifactsDir, { recursive: true });
@@ -96,16 +101,29 @@ let backendConfig = String(process.env.DB_OPTION_FILE || 'DbOption').trim();
 if (backendConfig.toLowerCase().endsWith('.toml')) {
   backendConfig = backendConfig.slice(0, -5);
 }
-const backend = spawnLogged(
-  backendBin,
-  ['--config', backendConfig],
-  { cwd: backendCwd, env: { ...process.env, PORT: String(port) } }
-);
+const SHOULD_SPAWN_BACKEND = process.env.SPAWN_BACKEND !== '0';
+let port = desiredBackendPort;
+let backend = null;
+if (SHOULD_SPAWN_BACKEND && existsSync(backendBin)) {
+  port = await findFreePort(desiredBackendPort);
+  backend = spawnLogged(
+    backendBin,
+    ['--config', backendConfig],
+    { cwd: backendCwd, env: { ...process.env, PORT: String(port) } }
+  );
+} else {
+  process.stdout.write(`[info] skip spawn backend, use existing backend: http://127.0.0.1:${port}\n`);
+}
+const backendHealthUrl = `http://127.0.0.1:${port}/api/health`;
 
-// 2) 启动前端 Vite
+// 2) 启动前端 Vite（Windows 下用 cmd.exe /c，避免 spawn 直接执行 .cmd/.bat 失败）
+const viteCommand = process.platform === 'win32' ? 'cmd.exe' : 'npm';
+const viteArgs = process.platform === 'win32'
+  ? ['/c', 'npm', 'run', 'dev', '--', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort']
+  : ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'];
 const vite = spawnLogged(
-  'npm',
-  ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'],
+  viteCommand,
+  viteArgs,
   { cwd: process.cwd(), env: { ...process.env, VITE_BACKEND_PORT: String(port) } }
 );
 
@@ -141,17 +159,27 @@ try {
       const stats = layer && typeof layer.getStats === 'function' ? layer.getStats() : null;
       return Number(stats?.totalObjects || 0);
     });
+    const initialCamera = await page.evaluate(() => {
+      const v = window.__xeokitViewer;
+      const dv = v && v.__dtxViewer;
+      const pos = dv?.camera?.position;
+      const tgt = dv?.controls?.target;
+      return {
+        pos: pos ? [pos.x, pos.y, pos.z] : null,
+        target: tgt ? [tgt.x, tgt.y, tgt.z] : null,
+      };
+    });
 
     const prevRunId = await page.evaluate(() => String(window.__dtxShowModelByRefnos?.runId || ''));
 
     // 触发按需加载
-    await page.evaluate((id) => {
+    await page.evaluate(({ id, flyTo }) => {
       window.dispatchEvent(
         new CustomEvent('showModelByRefnos', {
-          detail: { refnos: [id], regenModel: false },
+          detail: { refnos: [id], regenModel: false, flyTo: !!flyTo },
         })
       );
-    }, refno);
+    }, { id: refno, flyTo: FLY_TO });
 
     // 等待 ViewerPanel 侧的调试状态回写（用于区分：加载失败/需要交互/无数据等）
     await page.waitForFunction(
@@ -199,6 +227,26 @@ try {
       process.stdout.write(
         `[dtx][warn] no objects increased. reportedLoadedObjects=${loadedObjectsReported} visibleOk=${visibleOk} visibleCount=${visibleCount} visibleErr=${visibleErr || '-'}\n`
       );
+    }
+
+    if (FLY_TO) {
+      // 等待 flyTo 动画落地（ViewerPanel 标记 done 之后仍可能在飞行）
+      await page.waitForTimeout(1500);
+      const afterCamera = await page.evaluate(() => {
+        const v = window.__xeokitViewer;
+        const dv = v && v.__dtxViewer;
+        const pos = dv?.camera?.position;
+        const tgt = dv?.controls?.target;
+        return {
+          pos: pos ? [pos.x, pos.y, pos.z] : null,
+          target: tgt ? [tgt.x, tgt.y, tgt.z] : null,
+        };
+      });
+      process.stdout.write(`[camera] refno=${refno} before=${JSON.stringify(initialCamera)} after=${JSON.stringify(afterCamera)}\n`);
+
+      const pngPath = path.join(artifactsDir, `flyto_${refno.replace(/[^\w.-]+/g, '_')}.png`);
+      await page.screenshot({ path: pngPath });
+      process.stdout.write(`[screenshot] ${pngPath}\n`);
     }
 
     // 某些 refno 可能没有可见几何子孙（则不会触发 DTX 编译/对象增长）；此处仅做兜底等待

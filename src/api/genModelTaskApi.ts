@@ -11,6 +11,7 @@ import type {
   TaskActionResponse,
   SystemMetricsResponse,
 } from '@/types/task';
+import { useConsoleStore } from '@/composables/useConsoleStore';
 
 // ============ 基础配置 ============
 
@@ -241,10 +242,51 @@ export async function modelShowByRefno(params: {
   };
   parquet_files?: string[];
 }> {
-  return await fetchJson('/api/model/show-by-refno', {
-    method: 'POST',
-    body: JSON.stringify(params),
+  const refnoCount = Array.isArray(params.refnos) ? params.refnos.length : 0;
+  const { addLog } = useConsoleStore();
+
+  console.info('[vis][api] /api/model/show-by-refno', {
+    refno_count: refnoCount,
+    db_num: params.db_num,
+    regen_model: params.regen_model,
+    gen_mesh: params.gen_mesh,
+    gen_model: params.gen_model,
   });
+  addLog(
+    'info',
+    `[vis][api] /api/model/show-by-refno refno_count=${refnoCount} db_num=${params.db_num ?? ''} regen_model=${params.regen_model ? 1 : 0}`
+  );
+
+  try {
+    const resp = await fetchJson('/api/model/show-by-refno', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+
+    console.info('[vis][api] /api/model/show-by-refno resp', {
+      success: (resp as any)?.success,
+      refno_count: (resp as any)?.metadata?.refno_count ?? null,
+      dbno: (resp as any)?.metadata?.dbno ?? null,
+      parquet_files: Array.isArray((resp as any)?.parquet_files) ? (resp as any).parquet_files.length : 0,
+    });
+    addLog(
+      'info',
+      `[vis][api] /api/model/show-by-refno resp success=${(resp as any)?.success ? 1 : 0} refno_count=${(resp as any)?.metadata?.refno_count ?? ''} dbno=${(resp as any)?.metadata?.dbno ?? ''} parquet_files=${Array.isArray((resp as any)?.parquet_files) ? (resp as any).parquet_files.length : 0}`
+    );
+
+    return resp;
+  } catch (e) {
+    console.error('[vis][api] /api/model/show-by-refno failed', {
+      refno_count: refnoCount,
+      db_num: params.db_num,
+      error: e,
+    });
+    addLog(
+      'error',
+      `[vis][api] /api/model/show-by-refno failed refno_count=${refnoCount} db_num=${params.db_num ?? ''} err=${e instanceof Error ? e.message : String(e)}`
+    );
+    throw e;
+  }
 }
 
 // ============ 延迟删除 ============

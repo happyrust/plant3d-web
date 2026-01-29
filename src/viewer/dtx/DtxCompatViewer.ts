@@ -1,18 +1,12 @@
 import { Box3, Vector3 } from 'three'
 
 import { hasDtxDbnoCache, resolveDtxObjectIdsByRefno } from '@/composables/useDbnoInstancesDtxLoader'
+import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo'
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
 import type { DTXLayer } from '@/utils/three/dtx'
 import type { DTXSelectionController } from '@/utils/three/dtx'
 
 export type Aabb6 = [number, number, number, number, number, number]
-
-function extractDbNumFromRefno(refno: string): number | null {
-  const normalized = refno.trim().replace('/', '_')
-  const head = normalized.split('_')[0]
-  const n = Number(head)
-  return Number.isFinite(n) ? n : null
-}
 
 function aabbFromBox3(box: Box3): Aabb6 {
   return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z]
@@ -93,7 +87,9 @@ export class DtxCompatScene {
    */
   private _getDtxObjectIds(refno: string): string[] {
     const normalized = refno.trim().replace('/', '_')
-    const dbno = extractDbNumFromRefno(normalized)
+    // 仅对 refno-like 的对象尝试解析 dbno；避免把树节点/非 refno id 当作 refno 处理。
+    if (!/^\d+_/.test(normalized)) return []
+    const dbno = tryGetDbnumByRefno(normalized)
     if (!dbno) return []
     const ids = resolveDtxObjectIdsByRefno(dbno, normalized)
     if (ids.length > 0) return ids

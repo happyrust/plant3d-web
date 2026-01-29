@@ -182,6 +182,8 @@ export function useRoomTree(
   });
 
   async function ensureChildrenLoaded(parentId: string) {
+    if (!enabled.value) return;
+    if (!viewerRef.value) return;
     const parent = nodesById.value[parentId];
     if (!parent) return;
 
@@ -193,6 +195,9 @@ export function useRoomTree(
       if (!resp.success) {
         throw new Error(resp.error_message || 'room-tree children api failed');
       }
+      // 请求期间可能已切换 tab/禁用：此时不应再写入状态或回放到场景
+      if (!enabled.value) return;
+      if (!viewerRef.value) return;
 
       const nextNodes: Record<string, TreeNode> = { ...nodesById.value };
       const nextChildrenCount = new Map(childrenCountById.value);
@@ -229,7 +234,9 @@ export function useRoomTree(
       childrenLoadedById.add(parentId);
 
       // 按需加载：新加载到树里的节点也需要继承可见性状态，以便后续实例加载时能回放状态
-      sceneGraph.setVisible(childrenIds, inheritState !== 'unchecked');
+      if (enabled.value) {
+        sceneGraph.setVisible(childrenIds, inheritState !== 'unchecked');
+      }
     } finally {
       childrenLoadingById.delete(parentId);
     }
@@ -397,6 +404,7 @@ export function useRoomTree(
   }
 
   function setVisible(id: string, visible: boolean) {
+    if (!enabled.value) return;
     // 本地树：只对已加载到树中的对象做子树操作，同时记录状态用于后续实例按需加载回放
     const refnos = collectLoadedRoomRefnos(id);
     if (refnos.length > 0) sceneGraph.setVisible(refnos, visible);
@@ -413,6 +421,7 @@ export function useRoomTree(
   }
 
   function syncSceneSelection() {
+    if (!enabled.value) return;
     const viewer = viewerRef.value;
     if (!viewer) return;
 
@@ -466,6 +475,7 @@ export function useRoomTree(
   }
 
   function flyTo(id: string) {
+    if (!enabled.value) return;
     const viewer = viewerRef.value;
     if (!viewer) return;
 
@@ -477,6 +487,7 @@ export function useRoomTree(
   }
 
   function isolateXray(id: string) {
+    if (!enabled.value) return;
     const keep = collectLoadedRoomRefnos(id);
     sceneGraph.isolate(keep);
   }

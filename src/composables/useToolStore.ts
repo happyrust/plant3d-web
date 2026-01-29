@@ -465,6 +465,43 @@ function addCommentToAnnotation(
 }
 
 /**
+ * 覆盖批注评论列表（用于后端同步）
+ */
+function setAnnotationComments(
+  annotationType: AnnotationType,
+  annotationId: string,
+  comments: AnnotationComment[]
+): boolean {
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, { comments });
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, { comments });
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, { comments });
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, { comments });
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 更新批注中的某条评论
  */
 function updateAnnotationComment(
@@ -698,6 +735,7 @@ export function useToolStore() {
 
     // 评论/意见管理
     addCommentToAnnotation,
+    setAnnotationComments,
     updateAnnotationComment,
     removeAnnotationComment,
     getAnnotationComments,

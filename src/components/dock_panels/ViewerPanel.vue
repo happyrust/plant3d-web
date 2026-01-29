@@ -15,7 +15,10 @@ import MeasurementWizard from "@/components/tools/MeasurementWizard.vue";
 import { pdmsGetPtset } from "@/api/genModelPdmsAttrApi";
 import { useModelGeneration } from "@/composables/useModelGeneration";
 import { useSelectionStore } from "@/composables/useSelectionStore";
-import { getDbnoInstancesManifest } from "@/composables/useDbnoInstancesJsonLoader";
+import {
+    getDbnoInstancesManifest,
+    preloadInstancesSharedTables,
+} from "@/composables/useDbnoInstancesJsonLoader";
 import { loadDbnoInstancesForVisibleRefnosDtx } from "@/composables/useDbnoInstancesDtxLoader";
 import { buildInstanceIndexByRefno } from "@/utils/instances/instanceManifest";
 import { useDtxTools } from "@/composables/useDtxTools";
@@ -23,6 +26,8 @@ import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationT
 import { useToolStore } from "@/composables/useToolStore";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
 import { useViewerContext } from "@/composables/useViewerContext";
+import { ensureDbMetaInfoLoaded } from "@/composables/useDbMetaInfo";
+import { useConsoleStore } from "@/composables/useConsoleStore";
 import { onCommand } from "@/ribbon/commandBus";
 import { emitToast } from "@/ribbon/toastBus";
 
@@ -46,6 +51,7 @@ const mainCanvas = ref<HTMLCanvasElement>();
 const overlayContainer = ref<HTMLElement | null>(null);
 
 const store = useToolStore();
+const consoleStore = useConsoleStore();
 const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
@@ -121,6 +127,19 @@ function readDtxScaleConfigFromUrl(): {
     const autoFitOnLoad = unitSettings.autoFitOnLoad.value;
 
     return { scale, recenter, clip, autoFitOnLoad };
+}
+
+function getDefaultCadGridSizeByUnit(modelUnit: string): number {
+    switch (modelUnit) {
+        case "mm":
+            return 100;
+        case "m":
+            return 100;
+        case "raw":
+            return 100000;
+        default:
+            return 100;
+    }
 }
 
 function computeClipPlanesByDiag(diag: number): { near: number; far: number } {
@@ -627,7 +646,7 @@ function deleteActiveAnnotation() {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     const canvas = mainCanvas.value;
     const container = containerRef.value;
     if (!canvas || !container) return;
@@ -691,6 +710,7 @@ onMounted(() => {
         const cadGrid = new CadGrid({
             enabled: cadGridEnabled,
             followTarget: true,
+            initialSize: getDefaultCadGridSizeByUnit(unitSettings.modelUnit.value),
         });
         dtxViewer.scene.add(cadGrid.group);
         cadGridRef.value = cadGrid;
@@ -810,6 +830,47 @@ onMounted(() => {
     compatViewerRef.value = compat;
     modelGenerationRef.value = useModelGeneration({ viewer: compat });
 
+    const tools = useDtxTools({
+        dtxViewerRef,
+        dtxLayerRef,
+        selectionRef: selectionControllerRef,
+        overlayContainerRef: overlayContainer,
+        store,
+        compatViewerRef,
+        requestRender,
+    });
+    toolsRef.value = tools;
+
+    const ptsetVis = usePtsetVisualizationThree(
+        dtxViewerRef,
+        overlayContainer,
+        {
+            requestRender,
+            getGlobalModelMatrix: () =>
+                dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
+        },
+    );
+    ptsetVisRef.value = ptsetVis;
+
+    // 启动预拉：db_meta_info + shared trans/aabb（失败直接报错）
+    // 注意：onMounted(async () => ...) 中，任何依赖注入上下文的 hooks（如 vue-query）必须在首个 await 之前调用。
+    // 因此这里先初始化 tools/ptsetVis（它们会调用 useSelectionStore/useQuery），再 await 预拉。
+    try {
+        await ensureDbMetaInfoLoaded();
+        await preloadInstancesSharedTables();
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        initError.value = msg;
+        emitToast({ message: msg });
+        return;
+    }
+
+    viewerContext.ptsetVis.value = ptsetVis as any;
+    viewerContext.viewerRef.value = compat as any;
+    viewerContext.overlayContainerRef.value = overlayContainer.value;
+    viewerContext.store.value = store;
+    viewerContext.tools.value = tools as any;
+
     if (isDev) {
         (window as any).__xeokitViewer = compat;
         (window as any).__dtxViewer = dtxViewer;
@@ -863,34 +924,6 @@ onMounted(() => {
             })();
         }
     }
-
-    const tools = useDtxTools({
-        dtxViewerRef,
-        dtxLayerRef,
-        selectionRef: selectionControllerRef,
-        overlayContainerRef: overlayContainer,
-        store,
-        compatViewerRef,
-        requestRender,
-    });
-    toolsRef.value = tools;
-
-    const ptsetVis = usePtsetVisualizationThree(
-        dtxViewerRef,
-        overlayContainer,
-        {
-            requestRender,
-            getGlobalModelMatrix: () =>
-                dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
-        },
-    );
-    ptsetVisRef.value = ptsetVis;
-    viewerContext.ptsetVis.value = ptsetVis as any;
-
-    viewerContext.viewerRef.value = compat as any;
-    viewerContext.overlayContainerRef.value = overlayContainer.value;
-    viewerContext.store.value = store;
-    viewerContext.tools.value = tools as any;
 
     const onControlsChange = () => {
         if (isRendering) {
@@ -978,6 +1011,17 @@ onMounted(() => {
         if (refnos.length === 0) return;
 
         const unique = Array.from(new Set(refnos));
+        const flyTo = !!(detail as any)?.flyTo;
+        console.info("[vis][event] showModelByRefnos", {
+            raw_refno_count: refnos.length,
+            unique_refno_count: unique.length,
+            regenModel: !!(detail as any)?.regenModel,
+            flyTo,
+        });
+        consoleStore.addLog(
+            "info",
+            `[vis][event] showModelByRefnos raw_refno_count=${refnos.length} unique_refno_count=${unique.length} regenModel=${(detail as any)?.regenModel ? 1 : 0} flyTo=${flyTo ? 1 : 0}`,
+        );
         const mg = modelGenerationRef.value;
         if (!mg) return;
         const dtxLayer = dtxLayerRef.value;
@@ -1020,7 +1064,7 @@ onMounted(() => {
                 for (const r of unique) {
                     const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
-                    const ok = await mg.showModelByRefno(r);
+                    const ok = await mg.showModelByRefno(r, { flyTo: flyTo && unique.length === 1 });
                     const loadDebug = mg.lastLoadDebug?.value ?? null;
                     const dtxStatsAfter =
                         (dtxLayer as any)?.getStats?.() ?? null;
