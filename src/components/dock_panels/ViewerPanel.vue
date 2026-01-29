@@ -731,7 +731,16 @@ onMounted(async () => {
         camera: dtxViewer.camera,
         renderer: dtxViewer.renderer,
         container: canvas,
-        enableOutline: true,
+        // 方案甲：覆层半透明填充（蓝）+ Edges 描边（绿）
+        enableOutline: false,
+        highlightMode: "overlay",
+        overlayStyle: {
+            fillColor: 0x4b7cff,
+            fillOpacity: 0.85,
+            edgeColor: 0x00ff00,
+            edgeThresholdAngle: 20,
+            edgeAlwaysOnTop: false,
+        },
     });
     selectionControllerRef.value = selectionController;
 
