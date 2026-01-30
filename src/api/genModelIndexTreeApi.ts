@@ -1,3 +1,5 @@
+import { useConsoleStore } from '@/composables/useConsoleStore';
+
 export type VisibleRefnosResponse = {
   success: boolean;
   refno: string;
@@ -46,5 +48,34 @@ export async function queryVisibleRefnos(params: VisibleRefnosQuery): Promise<Vi
   url.searchParams.set('refno', params.refno);
   if (params.offset !== undefined) url.searchParams.set('offset', String(params.offset));
   if (params.limit !== undefined) url.searchParams.set('limit', String(params.limit));
-  return await fetchJson<VisibleRefnosResponse>(`${url.pathname}${url.search}`);
+  try {
+    const resp = await fetchJson<VisibleRefnosResponse>(`${url.pathname}${url.search}`);
+    console.info('[vis][api] /api/indextree/query_visible_refnos', {
+      refno: params.refno,
+      offset: params.offset,
+      limit: params.limit,
+      refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
+      total: resp.total,
+      success: resp.success,
+    });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'info',
+      `[vis][api] /api/indextree/query_visible_refnos success=${resp.success ? 1 : 0} refno=${params.refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0} offset=${params.offset ?? 0} limit=${params.limit ?? ''} total=${typeof resp.total === 'number' ? resp.total : ''}`
+    );
+    return resp;
+  } catch (e) {
+    console.error('[vis][api] /api/indextree/query_visible_refnos failed', {
+      refno: params.refno,
+      offset: params.offset,
+      limit: params.limit,
+      error: e,
+    });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'error',
+      `[vis][api] /api/indextree/query_visible_refnos failed refno=${params.refno} offset=${params.offset ?? 0} limit=${params.limit ?? ''} err=${e instanceof Error ? e.message : String(e)}`
+    );
+    throw e;
+  }
 }

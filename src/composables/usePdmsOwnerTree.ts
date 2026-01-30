@@ -32,6 +32,16 @@ function normalizeRefnoKey(value: string): string {
   return core.replace(/\//g, '_').replace(/,/g, '_')
 }
 
+function isPdmsRefnoKey(value: string): boolean {
+  // 17496_171640（dbno_refno）。只要是纯数字 + "_" + 纯数字即可。
+  return /^\d+_\d+$/.test(value)
+}
+
+function formatBadRefno(value: string): string {
+  const s = String(value || '')
+  return s.length > 120 ? `${s.slice(0, 120)}...` : s
+}
+
 function wrapSurrealThingId(value: string): string {
   const key = normalizeRefnoKey(value)
   if (!key) return ''
@@ -798,6 +808,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     if (!rootId) return
 
     const key = normalizeRefnoKey(refno)
+    if (!isPdmsRefnoKey(key)) {
+      throw new Error(`非法 refno（期望 17496/171640 或 17496_171640）: ${formatBadRefno(refno)}`)
+    }
     let resp = await e3dGetAncestors(key)
     if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
       resp = await e3dGetAncestors(wrapSurrealThingId(key))

@@ -1,5 +1,6 @@
 import type { InstanceManifest } from '@/utils/instances/instanceManifest'
 import { getBaseUrl } from '@/api/genModelTaskApi'
+import { getJson, setJson } from '@/utils/storage/indexedDbCache'
 
 export class InstancesJsonNotFoundError extends Error {
   readonly dbno: number
@@ -20,6 +21,70 @@ export type StreamGenerateSseUpdate = {
 }
 
 const manifestCache = new Map<number, InstanceManifest>()
+
+// ========= V3 shared tables (trans/aabb) =========
+const SHARED_STORE = 'instances_shared' as const
+const SHARED_TRANS_KEY = 'trans' as const
+const SHARED_AABB_KEY = 'aabb' as const
+const SHARED_TRANS_URL = '/files/output/instances/trans.json'
+const SHARED_AABB_URL = '/files/output/instances/aabb.json'
+
+let sharedTransTable: Record<string, number[]> | null = null
+let sharedAabbTable: Record<string, unknown> | null = null
+let sharedTablesPromise: Promise<void> | null = null
+
+function setSharedTables(trans: unknown, aabb: unknown): void {
+  if (!trans || typeof trans !== 'object') throw new Error('[instances] trans.json 结构不符合预期')
+  if (!aabb || typeof aabb !== 'object') throw new Error('[instances] aabb.json 结构不符合预期')
+  sharedTransTable = trans as Record<string, number[]>
+  sharedAabbTable = aabb as Record<string, unknown>
+}
+
+export async function preloadInstancesSharedTables(): Promise<void> {
+  if (sharedTablesPromise) return await sharedTablesPromise
+
+  sharedTablesPromise = (async () => {
+    // 1) IndexedDB 预热（即使损坏也不回退旧逻辑，继续强制拉新）
+    const cachedTrans = await getJson<unknown>(SHARED_STORE, SHARED_TRANS_KEY)
+    const cachedAabb = await getJson<unknown>(SHARED_STORE, SHARED_AABB_KEY)
+    if (cachedTrans && cachedAabb) {
+      try {
+        setSharedTables(cachedTrans, cachedAabb)
+      } catch {
+        // ignore corrupted cache
+      }
+    }
+
+    // 2) 强制刷新（失败直接抛错）
+    const [transResp, aabbResp] = await Promise.all([fetch(SHARED_TRANS_URL), fetch(SHARED_AABB_URL)])
+    if (!transResp.ok) {
+      throw new Error(`[instances] 加载失败: HTTP ${transResp.status} ${transResp.statusText} (${SHARED_TRANS_URL})`)
+    }
+    if (!aabbResp.ok) {
+      throw new Error(`[instances] 加载失败: HTTP ${aabbResp.status} ${aabbResp.statusText} (${SHARED_AABB_URL})`)
+    }
+    const transJson = (await transResp.json()) as unknown
+    const aabbJson = (await aabbResp.json()) as unknown
+    setSharedTables(transJson, aabbJson)
+
+    await Promise.all([
+      setJson(SHARED_STORE, SHARED_TRANS_KEY, transJson),
+      setJson(SHARED_STORE, SHARED_AABB_KEY, aabbJson),
+    ])
+  })()
+
+  return await sharedTablesPromise
+}
+
+async function ensureSharedTablesLoaded(): Promise<{ trans: Record<string, number[]>; aabb: Record<string, unknown> }> {
+  if (!sharedTransTable || !sharedAabbTable) {
+    await preloadInstancesSharedTables()
+  }
+  if (!sharedTransTable || !sharedAabbTable) {
+    throw new Error('[instances] shared tables 未加载')
+  }
+  return { trans: sharedTransTable, aabb: sharedAabbTable }
+}
 
 function looksLikeV3HashManifest(json: unknown): boolean {
   if (!json || typeof json !== 'object') return false
@@ -78,32 +143,10 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
   // V3 格式：加载全局 trans.json 和 aabb.json
   // 兼容：instances_*.json 可能缺少 version=3，但仍使用 trans_hash/aabb_hash/geo_trans_hash 引用表。
   if (json.version === 3 || looksLikeV3HashManifest(json)) {
-    // 让 instanceManifest.ts 能识别为 V3（即使表加载失败，也至少会走 V3 flatten 分支，用 identity 兜底）
-    if (json.trans_table === undefined) json.trans_table = {}
-    if (json.aabb_table === undefined) json.aabb_table = {}
-
-    const [transResp, aabbResp] = await Promise.all([
-      fetch(`/files/output/instances/trans.json`).catch(() => null),
-      fetch(`/files/output/instances/aabb.json`).catch(() => null),
-    ])
-
-    if (transResp?.ok) {
-      try {
-        const transTable = await transResp.json()
-        json.trans_table = transTable
-      } catch {
-        console.warn(`[instances] 解析 trans.json 失败`)
-      }
-    }
-
-    if (aabbResp?.ok) {
-      try {
-        const aabbTable = await aabbResp.json()
-        json.aabb_table = aabbTable
-      } catch {
-        console.warn(`[instances] 解析 aabb.json 失败`)
-      }
-    }
+    const shared = await ensureSharedTablesLoaded()
+    json.trans_table = shared.trans
+    json.aabb_table = shared.aabb as any
+    if (json.version !== 3) json.version = 3
   }
 
   manifestCache.set(dbno, json)

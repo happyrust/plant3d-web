@@ -15,13 +15,19 @@ import MeasurementWizard from "@/components/tools/MeasurementWizard.vue";
 import { pdmsGetPtset } from "@/api/genModelPdmsAttrApi";
 import { useModelGeneration } from "@/composables/useModelGeneration";
 import { useSelectionStore } from "@/composables/useSelectionStore";
-import { getDbnoInstancesManifest } from "@/composables/useDbnoInstancesJsonLoader";
+import {
+    getDbnoInstancesManifest,
+    preloadInstancesSharedTables,
+} from "@/composables/useDbnoInstancesJsonLoader";
 import { loadDbnoInstancesForVisibleRefnosDtx } from "@/composables/useDbnoInstancesDtxLoader";
 import { buildInstanceIndexByRefno } from "@/utils/instances/instanceManifest";
 import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
 import { useToolStore } from "@/composables/useToolStore";
+import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
 import { useViewerContext } from "@/composables/useViewerContext";
+import { ensureDbMetaInfoLoaded } from "@/composables/useDbMetaInfo";
+import { useConsoleStore } from "@/composables/useConsoleStore";
 import { onCommand } from "@/ribbon/commandBus";
 import { emitToast } from "@/ribbon/toastBus";
 
@@ -45,6 +51,8 @@ const mainCanvas = ref<HTMLCanvasElement>();
 const overlayContainer = ref<HTMLElement | null>(null);
 
 const store = useToolStore();
+const consoleStore = useConsoleStore();
+const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
 
@@ -82,12 +90,15 @@ let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
 let offGizmoEvents: (() => void) | null = null;
 
-let dtxGlobalTransformAppliedForDbno: number | null = null;
+let dtxGlobalTransformAppliedKey: string | null = null;
+let dtxAutoFitAppliedKey: string | null = null;
+let activeDbno: number | null = null;
 
 function readDtxScaleConfigFromUrl(): {
     scale: number;
     recenter: boolean;
     clip: boolean;
+    autoFitOnLoad: boolean;
 } {
     const urlParams = new URLSearchParams(window.location.search);
     const units = String(urlParams.get("dtx_units") || "").trim().toLowerCase();
@@ -98,7 +109,8 @@ function readDtxScaleConfigFromUrl(): {
     // - dtx_units=mm => scale=0.001
     // - dtx_units=m/raw => scale=1
     // - 默认：按 mm 处理（scale=0.001），以缓解 z-fighting/大坐标精度问题
-    let scale = 0.001;
+    // 一期新增：若 URL 未显式指定，则从设置读取 modelUnit 作为默认来源。
+    let scale = unitSettings.modelUnit.value === "mm" ? 0.001 : 1;
     if (units === "m" || units === "raw") scale = 1;
     if (units === "mm") scale = 0.001;
     if (scaleStr) {
@@ -107,11 +119,27 @@ function readDtxScaleConfigFromUrl(): {
     }
 
     const recenterParam = urlParams.get("dtx_recenter");
-    const recenter = recenterParam === null ? true : recenterParam !== "0";
+    const recenter =
+        recenterParam === null ? unitSettings.recenter.value : recenterParam !== "0";
     const clipParam = urlParams.get("dtx_clip");
-    const clip = clipParam === null ? true : clipParam !== "0";
+    const clip = clipParam === null ? unitSettings.clip.value : clipParam !== "0";
 
-    return { scale, recenter, clip };
+    const autoFitOnLoad = unitSettings.autoFitOnLoad.value;
+
+    return { scale, recenter, clip, autoFitOnLoad };
+}
+
+function getDefaultCadGridSizeByUnit(modelUnit: string): number {
+    switch (modelUnit) {
+        case "mm":
+            return 100;
+        case "m":
+            return 100;
+        case "raw":
+            return 100000;
+        default:
+            return 100;
+    }
 }
 
 function computeClipPlanesByDiag(diag: number): { near: number; far: number } {
@@ -127,26 +155,30 @@ function computeClipPlanesByDiag(diag: number): { near: number; far: number } {
 }
 
 function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
-    if (dtxGlobalTransformAppliedForDbno === dbno) return;
-
     const { scale, recenter } = readDtxScaleConfigFromUrl();
     if (!Number.isFinite(scale) || scale <= 0) return;
 
-    if (scale === 1 && !recenter) {
-        dtxGlobalTransformAppliedForDbno = dbno;
-        return;
-    }
+    const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
+    if (dtxGlobalTransformAppliedKey === key) return;
 
     // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
     // 因此在首次归一化时，先临时置为 identity 再取“原始（mm）bbox”。
+    const prevMatrix = dtxLayer.getGlobalModelMatrix();
     dtxLayer.setGlobalModelMatrix(new Matrix4());
     const rawBox = dtxLayer.getBoundingBox();
-    if (rawBox.isEmpty()) return;
+    if (rawBox.isEmpty()) {
+        // 兜底：避免因 bbox 不可用导致把矩阵永久置为 identity
+        dtxLayer.setGlobalModelMatrix(prevMatrix);
+        return;
+    }
 
     const centerMm = new Vector3();
     rawBox.getCenter(centerMm);
 
-    const m = new Matrix4().makeScale(scale, scale, scale);
+    const m = new Matrix4();
+    if (scale !== 1) {
+        m.makeScale(scale, scale, scale);
+    }
     if (recenter) {
         m.setPosition(
             -centerMm.x * scale,
@@ -156,7 +188,32 @@ function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
     }
     dtxLayer.setGlobalModelMatrix(m);
 
-    dtxGlobalTransformAppliedForDbno = dbno;
+    dtxGlobalTransformAppliedKey = key;
+}
+
+function fitToDtxLayerBBoxOnce(dbno: number, dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
+    const { scale, recenter, autoFitOnLoad } = readDtxScaleConfigFromUrl();
+    if (!autoFitOnLoad) return;
+
+    const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
+    if (dtxAutoFitAppliedKey === key) return;
+
+    const box = dtxLayer.getBoundingBox();
+    if (!box || box.isEmpty()) return;
+
+    const center = new Vector3();
+    const size = new Vector3();
+    box.getCenter(center);
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const distance = Math.max(maxDim * 2.5, 5);
+    const position = new Vector3(
+        center.x + distance * 0.8,
+        center.y + distance * 0.6,
+        center.z + distance * 0.8,
+    );
+    dtxViewer.flyTo(position, center, { duration: 0 });
+    dtxAutoFitAppliedKey = key;
 }
 
 function applyDtxCameraClipByLayerBBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer): void {
@@ -186,6 +243,80 @@ function applyDtxCameraClipByLayerBBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer)
     dtxViewer.camera.far = nextFar;
     dtxViewer.camera.updateProjectionMatrix();
 }
+
+// 设置变更时，按需重算：全局矩阵、裁剪、网格与拾取索引（避免单位切换后不一致）。
+watch(
+    () => [
+        unitSettings.modelUnit.value,
+        unitSettings.recenter.value,
+        unitSettings.clip.value,
+    ],
+    () => {
+        const dtxViewer = dtxViewerRef.value;
+        const dtxLayer = dtxLayerRef.value;
+        if (!dtxViewer || !dtxLayer || activeDbno === null) return;
+
+        try {
+            applyDtxGlobalTransformOnce(activeDbno, dtxLayer);
+        } catch (e) {
+            console.warn("[ViewerPanel] DTX 全局变换应用失败", e);
+        }
+
+        try {
+            selectionControllerRef.value?.refreshSpatialIndex();
+        } catch {
+            // ignore
+        }
+
+        try {
+            cadGridRef.value?.fitToBoundingBox(dtxLayer.getBoundingBox());
+        } catch {
+            // ignore
+        }
+
+        try {
+            applyDtxCameraClipByLayerBBox(dtxViewer, dtxLayer);
+        } catch (e) {
+            console.warn("[ViewerPanel] 相机裁剪面自适应失败", e);
+        }
+
+        requestRender();
+    },
+    { immediate: true },
+);
+
+// 模型单位/重心变更会改变全局矩阵（scale/translation），为避免既有标注错位，一期采取安全策略：有数据时自动清空。
+watch(
+    () => [unitSettings.modelUnit.value, unitSettings.recenter.value],
+    ([nextUnit, nextRecenter], [prevUnit, prevRecenter]) => {
+        if (prevUnit === undefined) return;
+        if (nextUnit === prevUnit && nextRecenter === prevRecenter) return;
+        if (activeDbno === null) return;
+
+        const hasMarks =
+            (store.measurements.value?.length ?? 0) > 0 ||
+            (store.annotations.value?.length ?? 0) > 0 ||
+            (store.cloudAnnotations.value?.length ?? 0) > 0 ||
+            (store.rectAnnotations.value?.length ?? 0) > 0 ||
+            (store.obbAnnotations.value?.length ?? 0) > 0;
+
+        const hasPtset = (ptsetVisRef.value?.visualObjects.value?.size ?? 0) > 0;
+
+        if (!hasMarks && !hasPtset) return;
+
+        try {
+            store.clearAll();
+            ptsetVisRef.value?.clearAll();
+            emitToast({
+                message:
+                    "模型单位/重心设置已变更：为避免错位，已清空测量/批注/点集（可重新创建）",
+            });
+        } catch {
+            // ignore
+        }
+        requestRender();
+    },
+);
 
 function handleRibbonCommand(commandId: string) {
     switch (commandId) {
@@ -276,17 +407,17 @@ function attachPicking() {
             return;
         }
 
-        // 清空旧选中
-        const prev = compat.scene.selectedObjectIds;
-        if (prev.length > 0) {
-            compat.scene.setObjectsSelected(prev, false);
-        }
-
         if (!hit) {
             // 点击空白区域时不清除选中
             // selectionStore.clearSelection();
             // requestRender();
             return;
+        }
+
+        // 清空旧选中
+        const prev = compat.scene.selectedObjectIds;
+        if (prev.length > 0) {
+            compat.scene.setObjectsSelected(prev, false);
         }
 
         const refno = parseRefnoFromObjectId(hit.objectId);
@@ -515,7 +646,7 @@ function deleteActiveAnnotation() {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     const canvas = mainCanvas.value;
     const container = containerRef.value;
     if (!canvas || !container) return;
@@ -579,6 +710,7 @@ onMounted(() => {
         const cadGrid = new CadGrid({
             enabled: cadGridEnabled,
             followTarget: true,
+            initialSize: getDefaultCadGridSizeByUnit(unitSettings.modelUnit.value),
         });
         dtxViewer.scene.add(cadGrid.group);
         cadGridRef.value = cadGrid;
@@ -658,6 +790,7 @@ onMounted(() => {
         _dbno: number,
         loadedRefnos: string[],
     ) => {
+        activeDbno = _dbno;
         // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
         (compat as any).__dtxLastLoadedDbno = _dbno;
         (compat as any).__dtxLastLoadedRefnos = loadedRefnos;
@@ -678,6 +811,13 @@ onMounted(() => {
             console.warn("[ViewerPanel] 相机裁剪面自适应失败", e);
         }
 
+        // 按需在首次加载后 auto-fit（需在单位归一化后执行）
+        try {
+            fitToDtxLayerBBoxOnce(_dbno, dtxViewer, dtxLayer);
+        } catch (e) {
+            console.warn("[ViewerPanel] auto-fit 失败", e);
+        }
+
         try {
             cadGridRef.value?.fitToBoundingBox(dtxLayer.getBoundingBox());
         } catch {
@@ -689,6 +829,47 @@ onMounted(() => {
     };
     compatViewerRef.value = compat;
     modelGenerationRef.value = useModelGeneration({ viewer: compat });
+
+    const tools = useDtxTools({
+        dtxViewerRef,
+        dtxLayerRef,
+        selectionRef: selectionControllerRef,
+        overlayContainerRef: overlayContainer,
+        store,
+        compatViewerRef,
+        requestRender,
+    });
+    toolsRef.value = tools;
+
+    const ptsetVis = usePtsetVisualizationThree(
+        dtxViewerRef,
+        overlayContainer,
+        {
+            requestRender,
+            getGlobalModelMatrix: () =>
+                dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
+        },
+    );
+    ptsetVisRef.value = ptsetVis;
+
+    // 启动预拉：db_meta_info + shared trans/aabb（失败直接报错）
+    // 注意：onMounted(async () => ...) 中，任何依赖注入上下文的 hooks（如 vue-query）必须在首个 await 之前调用。
+    // 因此这里先初始化 tools/ptsetVis（它们会调用 useSelectionStore/useQuery），再 await 预拉。
+    try {
+        await ensureDbMetaInfoLoaded();
+        await preloadInstancesSharedTables();
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        initError.value = msg;
+        emitToast({ message: msg });
+        return;
+    }
+
+    viewerContext.ptsetVis.value = ptsetVis as any;
+    viewerContext.viewerRef.value = compat as any;
+    viewerContext.overlayContainerRef.value = overlayContainer.value;
+    viewerContext.store.value = store;
+    viewerContext.tools.value = tools as any;
 
     if (isDev) {
         (window as any).__xeokitViewer = compat;
@@ -754,34 +935,6 @@ onMounted(() => {
             })();
         }
     }
-
-    const tools = useDtxTools({
-        dtxViewerRef,
-        dtxLayerRef,
-        selectionRef: selectionControllerRef,
-        overlayContainerRef: overlayContainer,
-        store,
-        compatViewerRef,
-        requestRender,
-    });
-    toolsRef.value = tools;
-
-    const ptsetVis = usePtsetVisualizationThree(
-        dtxViewerRef,
-        overlayContainer,
-        {
-            requestRender,
-            getGlobalModelMatrix: () =>
-                dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
-        },
-    );
-    ptsetVisRef.value = ptsetVis;
-    viewerContext.ptsetVis.value = ptsetVis as any;
-
-    viewerContext.viewerRef.value = compat as any;
-    viewerContext.overlayContainerRef.value = overlayContainer.value;
-    viewerContext.store.value = store;
-    viewerContext.tools.value = tools as any;
 
     const onControlsChange = () => {
         if (isRendering) {
@@ -869,6 +1022,17 @@ onMounted(() => {
         if (refnos.length === 0) return;
 
         const unique = Array.from(new Set(refnos));
+        const flyTo = !!(detail as any)?.flyTo;
+        console.info("[vis][event] showModelByRefnos", {
+            raw_refno_count: refnos.length,
+            unique_refno_count: unique.length,
+            regenModel: !!(detail as any)?.regenModel,
+            flyTo,
+        });
+        consoleStore.addLog(
+            "info",
+            `[vis][event] showModelByRefnos raw_refno_count=${refnos.length} unique_refno_count=${unique.length} regenModel=${(detail as any)?.regenModel ? 1 : 0} flyTo=${flyTo ? 1 : 0}`,
+        );
         const mg = modelGenerationRef.value;
         if (!mg) return;
         const dtxLayer = dtxLayerRef.value;
@@ -911,7 +1075,7 @@ onMounted(() => {
                 for (const r of unique) {
                     const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
-                    const ok = await mg.showModelByRefno(r);
+                    const ok = await mg.showModelByRefno(r, { flyTo: flyTo && unique.length === 1 });
                     const loadDebug = mg.lastLoadDebug?.value ?? null;
                     const dtxStatsAfter =
                         (dtxLayer as any)?.getStats?.() ?? null;

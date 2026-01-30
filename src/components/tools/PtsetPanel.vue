@@ -5,6 +5,8 @@ import { Eye, EyeOff, X, MapPin, Tag, ArrowRight, Focus } from 'lucide-vue-next'
 import Badge from '@/components/ui/Badge.vue';
 import ScrollArea from '@/components/ui/ScrollArea.vue';
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat';
 
 const props = defineProps<{
   refno: string | null;
@@ -33,13 +35,53 @@ const unitInfo = computed(() => {
   return props.response?.unit_info;
 });
 
-function formatCoord(pt: [number, number, number], factor: number = 1): string {
-  return `(${(pt[0] * factor).toFixed(1)}, ${(pt[1] * factor).toFixed(1)}, ${(pt[2] * factor).toFixed(1)})`;
+const unitSettings = useUnitSettingsStore();
+
+const unitLabel = computed(() => {
+  const policy = unitSettings.ptsetDisplayPolicy.value;
+  if (policy === 'follow_backend') {
+    return unitInfo.value?.target_unit || '';
+  }
+  return unitSettings.displayUnit.value;
+});
+
+function formatCoord(pt: [number, number, number]): string {
+  const factorToMeters = unitInfo.value?.conversion_factor || 1;
+  const policy = unitSettings.ptsetDisplayPolicy.value;
+
+  // 兼容：按后端 unit_info 展示（不假设 target_unit 一定是 m）
+  if (policy === 'follow_backend' && unitInfo.value) {
+    const p = Math.max(0, Math.min(6, unitSettings.precision.value));
+    const suffix = unitInfo.value.target_unit || '';
+    return `(${formatNumber(pt[0] * factorToMeters, p)}, ${formatNumber(pt[1] * factorToMeters, p)}, ${formatNumber(pt[2] * factorToMeters, p)})${suffix}`;
+  }
+
+  // 默认：ptset 先按 conversion_factor 归一到“场景米制”，再按显示单位格式化
+  const meters: [number, number, number] = [
+    pt[0] * factorToMeters,
+    pt[1] * factorToMeters,
+    pt[2] * factorToMeters,
+  ];
+  return formatVec3Meters(meters, unitSettings.displayUnit.value, unitSettings.precision.value);
 }
 
 function formatDir(dir: [number, number, number] | null): string {
   if (!dir) return '-';
   return `(${dir[0].toFixed(2)}, ${dir[1].toFixed(2)}, ${dir[2].toFixed(2)})`;
+}
+
+function formatBore(pbore: number): string {
+  const factorToMeters = unitInfo.value?.conversion_factor || 1;
+  const policy = unitSettings.ptsetDisplayPolicy.value;
+
+  if (policy === 'follow_backend' && unitInfo.value) {
+    const p = Math.max(0, Math.min(6, unitSettings.precision.value));
+    const suffix = unitInfo.value.target_unit || '';
+    return `Ø${formatNumber(pbore * factorToMeters, p)}${suffix}`;
+  }
+
+  const meters = pbore * factorToMeters;
+  return `Ø${formatLengthMeters(meters, unitSettings.displayUnit.value, unitSettings.precision.value)}`;
 }
 </script>
 
@@ -149,7 +191,7 @@ function formatDir(dir: [number, number, number] | null): string {
         <!-- 统计信息 -->
         <div class="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
           <span>{{ points.length }} 个连接点</span>
-          <span v-if="unitInfo">| 单位: {{ unitInfo.target_unit }}</span>
+          <span v-if="unitLabel">| 单位: {{ unitLabel }}</span>
         </div>
       </div>
 
@@ -165,14 +207,14 @@ function formatDir(dir: [number, number, number] | null): string {
             <div class="flex items-center justify-between">
               <span class="text-xs font-medium text-green-600">#{{ point.number }}</span>
               <Badge v-if="point.pbore > 0" variant="secondary" class="text-[10px]">
-                {{ unitInfo ? `Ø${(point.pbore * (unitInfo.conversion_factor || 1)).toFixed(1)}${unitInfo.target_unit}` : `Ø${point.pbore.toFixed(1)}` }}
+                {{ formatBore(point.pbore) }}
               </Badge>
             </div>
 
             <!-- 坐标 -->
             <div class="mt-1 text-[11px] text-muted-foreground">
               <span class="text-foreground/70">位置:</span>
-              {{ formatCoord(point.pt, unitInfo?.conversion_factor || 1) }}
+              {{ formatCoord(point.pt) }}
             </div>
 
             <!-- 方向 -->

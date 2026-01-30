@@ -1,15 +1,6 @@
 import { computed, ref, watch } from 'vue';
 
 import {
-  type ReviewComponent,
-  type ReviewTask,
-  type User,
-  type WorkflowNode,
-  type WorkflowStep,
-  UserRole,
-  UserStatus,
-} from '@/types/auth';
-import {
   reviewTaskCreate,
   reviewTaskGetList,
   reviewTaskGetById,
@@ -29,6 +20,16 @@ import {
   getReviewWebSocketUrl,
   type ReviewTaskCreateRequest,
 } from '@/api/reviewApi';
+import {
+  type ReviewComponent,
+  type ReviewAttachment,
+  type ReviewTask,
+  type User,
+  type WorkflowNode,
+  type WorkflowStep,
+  UserRole,
+  UserStatus,
+} from '@/types/auth';
 
 type UserPersistedState = {
   version: 3;
@@ -405,6 +406,7 @@ async function createReviewTask(data: {
   components: ReviewComponent[];
   dueDate?: number;
   formId?: string;
+  attachments?: ReviewAttachment[];
 }): Promise<ReviewTask> {
   const user = currentUser.value;
   if (!user) throw new Error('No user logged in');
@@ -422,6 +424,7 @@ async function createReviewTask(data: {
         priority: data.priority,
         components: data.components,
         dueDate: data.dueDate,
+        attachments: data.attachments,
       };
 
       const response = await reviewTaskCreate(request);
@@ -458,6 +461,7 @@ async function createReviewTask(data: {
     reviewerId: data.reviewerId,
     reviewerName: reviewer.name,
     components: data.components,
+    attachments: data.attachments,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     dueDate: data.dueDate,
@@ -532,6 +536,47 @@ async function updateTaskStatus(
     ...reviewTasks.value.slice(index + 1),
   ];
   console.log(`[useUserStore] Updated task ${taskId} status to: ${status}`);
+}
+
+async function updateTaskAttachments(taskId: string, attachments: ReviewAttachment[]): Promise<void> {
+  if (USE_BACKEND.value) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const response = await reviewTaskUpdate(taskId, { attachments });
+      if (!response.success) {
+        throw new Error(response.error_message || '更新任务附件失败');
+      }
+
+      if (response.task) {
+        reviewTasks.value = reviewTasks.value.map((t) => (t.id === taskId ? response.task! : t));
+      } else {
+        await loadReviewTasks();
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '更新任务附件失败';
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+    return;
+  }
+
+  const index = reviewTasks.value.findIndex((t) => t.id === taskId);
+  if (index === -1) return;
+  const task = reviewTasks.value[index];
+  if (!task) return;
+
+  const updated: ReviewTask = {
+    ...task,
+    attachments,
+    updatedAt: Date.now(),
+  };
+  reviewTasks.value = [
+    ...reviewTasks.value.slice(0, index),
+    updated,
+    ...reviewTasks.value.slice(index + 1),
+  ];
 }
 
 async function submitTaskToNextNode(taskId: string, comment?: string): Promise<void> {
@@ -848,6 +893,7 @@ export function useUserStore() {
     loadReviewTasks,
     createReviewTask,
     updateTaskStatus,
+    updateTaskAttachments,
     submitTaskToNextNode,
     returnTaskToNode,
     getTaskWorkflowHistory,

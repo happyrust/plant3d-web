@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 
-import { queryVisibleRefnos } from '@/api/genModelIndexTreeApi'
+import { e3dGetSubtreeRefnos } from '@/api/genModelE3dApi'
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore'
 import {
   InstancesJsonNotFoundError,
@@ -13,9 +13,11 @@ import {
   waitForDbnoInstancesFile,
 } from '@/composables/useDbnoInstancesJsonLoader'
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader'
+import { useConsoleStore } from '@/composables/useConsoleStore'
 import { getDefaultSurrealConfig, useSurrealDB } from '@/composables/useSurrealDB'
 import { useSurrealModelQuery } from '@/composables/useSurrealModelQuery'
-import type { InstanceManifest } from '@/utils/instances/instanceManifest'
+import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo'
+import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
 
 /**
  * 全局开关：是否跳过自动生成（SSE 流式生成、弹窗选择等）
@@ -45,16 +47,10 @@ export type ModelLoadDebugInfo = {
   refno: string
   dbno: number
   visibleInsts: { ok: boolean; count: number; error: string | null }
+  manifestMatch?: { candidates: number; matched: number; missing: number; missingSample: string[] }
   loadRefnos: { count: number; sample: string[] }
   result: { loadedRefnos: number; skippedRefnos: number; loadedObjects: number } | null
   ms: number
-}
-
-function extractDbNumFromRefno(refno: string): number | null {
-  const normalized = refno.trim().replace('/', '_')
-  const head = normalized.split('_')[0]
-  const n = Number(head)
-  return Number.isFinite(n) ? n : null
 }
 
 function normalizeRefnoString(refno: string): string {
@@ -74,43 +70,18 @@ function uniqStrings(list: string[]): string[] {
   return out
 }
 
-async function queryVisibleRefnosPaged(refno: string, pageSize: number): Promise<{ refnos: string[]; total: number | null }> {
+async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; truncated: boolean }> {
   const normalized = normalizeRefnoString(refno)
-  if (!normalized) return { refnos: [], total: 0 }
+  if (!normalized) return { refnos: [], truncated: false }
 
-  const seen = new Set<string>()
-  const out: string[] = []
-  let offset = 0
-  let total: number | null = null
-
-  while (true) {
-    const resp = await queryVisibleRefnos({ refno: normalized, offset, limit: pageSize })
-    if (!resp.success) {
-      throw new Error(resp.error_message || 'query_visible_refnos 查询失败')
-    }
-
-    const list = Array.isArray(resp.refnos) ? resp.refnos : []
-    const beforeCount = out.length
-    for (const raw of list) {
-      const v = normalizeRefnoString(String(raw || ''))
-      if (!v || seen.has(v)) continue
-      seen.add(v)
-      out.push(v)
-    }
-
-    if (total == null && typeof resp.total === 'number') {
-      total = resp.total
-    }
-
-    if (list.length === 0) break
-    if (out.length === beforeCount && total == null) break
-
-    offset += list.length
-    if (total != null && offset >= total) break
-    if (list.length < pageSize) break
+  // 约定：后端返回“子孙可见 refnos”（此处用 subtree-refnos 承接）
+  const resp = await e3dGetSubtreeRefnos(normalized, { includeSelf: true, limit: 200_000 })
+  if (!resp.success) {
+    throw new Error(resp.error_message || 'e3d subtree-refnos 查询失败')
   }
-
-  return { refnos: out, total }
+  const list = Array.isArray(resp.refnos) ? resp.refnos : []
+  const out = uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean)
+  return { refnos: out, truncated: !!resp.truncated }
 }
 
 function deriveLoadRefnosFromInstancesManifest(manifest: InstanceManifest, rootRefno: string): string[] {
@@ -221,11 +192,12 @@ function isAutomationMode(): boolean {
 
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
-  showModelByRefno: (refno: string) => Promise<boolean>
+  showModelByRefno: (refno: string, options?: { flyTo?: boolean }) => Promise<boolean>
   checkRefnoExists: (refno: string) => boolean
 } {
   const { viewer } = options
   const dialog = useConfirmDialogStore()
+  const consoleStore = useConsoleStore()
   const surreal = useSurrealDB()
   const surrealQuery = useSurrealModelQuery(surreal.db)
 
@@ -332,10 +304,29 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     return !!v?.scene?.objects?.[refno]
   }
 
-  async function showModelByRefno(refno: string): Promise<boolean> {
+  async function showModelByRefno(refno: string, loadOptions?: { flyTo?: boolean }): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno)
     if (!normalizedRoot) return false
-    if (checkRefnoExists(normalizedRoot)) return true
+    if (checkRefnoExists(normalizedRoot)) {
+      if (loadOptions?.flyTo) {
+        try {
+          const anyViewer = viewer as any
+          const aabb = anyViewer?.scene?.getAABB?.([normalizedRoot]) ?? null
+          if (aabb) {
+            anyViewer?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true })
+            consoleStore.addLog('info', `[model-load] flyTo 已加载 refno=${normalizedRoot}`)
+          } else {
+            consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`)
+          }
+        } catch (e) {
+          consoleStore.addLog(
+            'error',
+            `[model-load] flyTo 异常 refno=${normalizedRoot} err=${e instanceof Error ? e.message : String(e)}`
+          )
+        }
+      }
+      return true
+    }
 
     isGenerating.value = true
     error.value = null
@@ -348,9 +339,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
     try {
       const startedAt = Date.now()
-      const dbno = options.db_num ?? extractDbNumFromRefno(normalizedRoot)
-      if (!dbno) throw new Error('无法确定 dbno')
-      const resolvedDbno = dbno as number
+      let dbno: number
+      if (typeof options.db_num === 'number') {
+        dbno = options.db_num
+      } else {
+        await ensureDbMetaInfoLoaded()
+        dbno = getDbnumByRefno(normalizedRoot)
+      }
+      if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno')
 
       statusMessage.value = '查询可见几何子孙...'
       progress.value = 10
@@ -378,8 +374,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
 
         if (!appliedRule) {
-          const { refnos } = await queryVisibleRefnosPaged(normalizedRoot, VISIBLE_REFNOS_PAGE_SIZE)
+          const { refnos, truncated } = await querySubtreeRefnos(normalizedRoot)
           visibleRefnos = refnos
+          if (truncated) {
+            consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`)
+          }
         }
 
         visibleRefnos = uniqStrings(visibleRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
@@ -390,6 +389,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         visibleErr = e instanceof Error ? e.message : String(e)
         visibleRefnos = []
       }
+      consoleStore.addLog(
+        'info',
+        `[model-load] visible_refnos ok=${visibleOk ? 1 : 0} refno=${normalizedRoot} dbno=${dbno} count=${visibleRefnos.length}` +
+          (visibleErr ? ` err=${visibleErr}` : '')
+      )
 
       statusMessage.value = `加载 instances_${dbno}.json...`
       progress.value = 20
@@ -529,17 +533,82 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             .filter(Boolean)
         )
         const intersected = visibleRefnos.length > 0 ? visibleRefnos.filter((r) => available.has(r)) : []
-        const loadRefnos = (intersected.length > 0 ? intersected : deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)).filter(Boolean)
+        const missingByManifest = visibleRefnos.length > 0 ? visibleRefnos.filter((r) => !available.has(r)) : []
+        if (visibleRefnos.length > 0) {
+          const sample = missingByManifest.slice(0, 50)
+          consoleStore.addLog(
+            missingByManifest.length > 0 ? 'error' : 'info',
+            `[model-load] instances_${dbno}.json 匹配: candidates=${visibleRefnos.length} matched=${intersected.length} missing=${missingByManifest.length}` +
+              (missingByManifest.length > 0 ? ` sample=${sample.join(',')}${missingByManifest.length > sample.length ? ' ...' : ''}` : '')
+          )
+        }
+
+        const loadRefnos = (visibleRefnos.length > 0 ? intersected : deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)).filter(Boolean)
         const loadRefnoSample = loadRefnos.slice(0, 10)
+
+        if (visibleRefnos.length > 0 && loadRefnos.length === 0) {
+          statusMessage.value = '无可加载模型（instances 未命中）'
+          progress.value = 100
+          lastLoadDebug.value = {
+            refno: normalizedRoot,
+            dbno,
+            visibleInsts: {
+              ok: visibleOk,
+              count: visibleRefnos.length,
+              error: visibleErr,
+            },
+            manifestMatch: {
+              candidates: visibleRefnos.length,
+              matched: intersected.length,
+              missing: missingByManifest.length,
+              missingSample: missingByManifest.slice(0, 10),
+            },
+            loadRefnos: { count: 0, sample: [] },
+            result: { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0 },
+            ms: Date.now() - startedAt,
+          }
+          return false
+        }
 
         statusMessage.value = `加载 ${loadRefnos.length} 个 refno 的实例...`
         progress.value = 60
+        consoleStore.addLog('info', `[model-load] 开始加载 dbno=${dbno} refno_count=${loadRefnos.length}`)
 
-        const result = await loadRefnosInChunks(loadRefnos, resolvedDbno)
+        const result = await loadRefnosInChunks(loadRefnos, dbno)
 
         // 处理缺失的 refno：达到阈值或全部完成后再分批加载
         if (result.missingRefnos.length > 0) {
           await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+        }
+        if (result.missingRefnos.length > 0) {
+          const sample = result.missingRefnos.slice(0, 50)
+          consoleStore.addLog(
+            'error',
+            `[model-load] 缺失模型（loader missing） dbno=${dbno} missing=${result.missingRefnos.length} sample=${sample.join(',')}${result.missingRefnos.length > sample.length ? ' ...' : ''}`
+          )
+        }
+
+        if (loadOptions?.flyTo) {
+          try {
+            const anyViewer = viewer as any
+            const max = 5000
+            const flyRefnos = loadRefnos.length > max ? loadRefnos.slice(0, max) : loadRefnos
+            if (loadRefnos.length > flyRefnos.length) {
+              consoleStore.addLog('info', `[model-load] flyTo refnos 过多，截断 ${flyRefnos.length}/${loadRefnos.length}`)
+            }
+            const aabb = anyViewer?.scene?.getAABB?.(flyRefnos) ?? null
+            if (aabb) {
+              anyViewer?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true })
+              consoleStore.addLog('info', `[model-load] flyTo 完成 refno=${normalizedRoot}`)
+            } else {
+              consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`)
+            }
+          } catch (e) {
+            consoleStore.addLog(
+              'error',
+              `[model-load] flyTo 异常 refno=${normalizedRoot} err=${e instanceof Error ? e.message : String(e)}`
+            )
+          }
         }
 
         lastLoadDebug.value = {
@@ -550,6 +619,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             count: visibleRefnos.length,
             error: visibleErr,
           },
+          manifestMatch: visibleRefnos.length > 0
+            ? {
+                candidates: visibleRefnos.length,
+                matched: intersected.length,
+                missing: missingByManifest.length,
+                missingSample: missingByManifest.slice(0, 10),
+              }
+            : undefined,
           loadRefnos: { count: loadRefnos.length, sample: loadRefnoSample },
           result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects } : null,
           ms: Date.now() - startedAt,
@@ -561,17 +638,84 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         return true
       }
 
-      const loadRefnos = visibleRefnos.length > 0 ? visibleRefnos : deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)
+      let loadRefnos: string[] = []
+      let missingByManifest: string[] = []
+      if (visibleRefnos.length > 0) {
+        const candidate = uniqStrings(visibleRefnos)
+        const index = buildInstanceIndexByRefno(manifest, new Set(candidate))
+        loadRefnos = candidate.filter((r) => index.has(r))
+        missingByManifest = candidate.filter((r) => !index.has(r))
+
+        const sample = missingByManifest.slice(0, 50)
+        consoleStore.addLog(
+          missingByManifest.length > 0 ? 'error' : 'info',
+          `[model-load] instances_${dbno}.json 匹配: candidates=${candidate.length} matched=${loadRefnos.length} missing=${missingByManifest.length}` +
+            (missingByManifest.length > 0 ? ` sample=${sample.join(',')}${missingByManifest.length > sample.length ? ' ...' : ''}` : '')
+        )
+
+        if (loadRefnos.length === 0) {
+          statusMessage.value = '无可加载模型（instances 未命中）'
+          progress.value = 100
+          lastLoadDebug.value = {
+            refno: normalizedRoot,
+            dbno,
+            visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+            manifestMatch: {
+              candidates: candidate.length,
+              matched: 0,
+              missing: missingByManifest.length,
+              missingSample: missingByManifest.slice(0, 10),
+            },
+            loadRefnos: { count: 0, sample: [] },
+            result: { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0 },
+            ms: Date.now() - startedAt,
+          }
+          return false
+        }
+      } else {
+        loadRefnos = deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)
+      }
       const loadRefnoSample = loadRefnos.slice(0, 10)
 
       statusMessage.value = `加载 ${loadRefnos.length} 个 refno 的实例...`
       progress.value = 60
+      consoleStore.addLog('info', `[model-load] 开始加载 dbno=${dbno} refno_count=${loadRefnos.length}`)
 
-      const result = await loadRefnosInChunks(loadRefnos, resolvedDbno)
+      const result = await loadRefnosInChunks(loadRefnos, dbno)
 
       // 处理缺失的 refno：达到阈值或全部完成后再分批加载
       if (result.missingRefnos.length > 0) {
         await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+      }
+      if (result.missingRefnos.length > 0) {
+        const sample = result.missingRefnos.slice(0, 50)
+        consoleStore.addLog(
+          'error',
+          `[model-load] 缺失模型（loader missing） dbno=${dbno} missing=${result.missingRefnos.length} sample=${sample.join(',')}${result.missingRefnos.length > sample.length ? ' ...' : ''}`
+        )
+      }
+
+      if (loadOptions?.flyTo) {
+        try {
+          const anyViewer = viewer as any
+          const max = 5000
+          const flyRefnos = loadRefnos.length > max ? loadRefnos.slice(0, max) : loadRefnos
+          if (loadRefnos.length > flyRefnos.length) {
+            consoleStore.addLog('info', `[model-load] flyTo refnos 过多，截断 ${flyRefnos.length}/${loadRefnos.length}`)
+          }
+          const aabb = anyViewer?.scene?.getAABB?.(flyRefnos) ?? null
+          if (aabb) {
+            anyViewer?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true })
+            consoleStore.addLog('info', `[model-load] flyTo 完成 refno=${normalizedRoot}`)
+          } else {
+            consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`)
+          }
+        } catch (e) {
+          consoleStore.addLog(
+            'error',
+            `[model-load] flyTo 异常 refno=${normalizedRoot} err=${e instanceof Error ? e.message : String(e)}`
+          )
+        }
       }
 
       lastLoadDebug.value = {
@@ -582,6 +726,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           count: visibleRefnos.length,
           error: visibleErr,
         },
+        manifestMatch: visibleRefnos.length > 0
+          ? {
+              candidates: visibleRefnos.length,
+              matched: loadRefnos.length,
+              missing: missingByManifest.length,
+              missingSample: missingByManifest.slice(0, 10),
+            }
+          : undefined,
         loadRefnos: { count: loadRefnos.length, sample: loadRefnoSample },
         result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects } : null,
         ms: Date.now() - startedAt,

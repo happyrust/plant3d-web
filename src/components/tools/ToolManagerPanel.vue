@@ -2,10 +2,13 @@
 import { computed, ref, type Ref } from 'vue';
 
 import { setDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader';
+import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useToolStore } from '@/composables/useToolStore';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import type { InstanceManifest } from '@/utils/instances/instanceManifest';
+import { formatLengthMeters, formatVec3Meters } from '@/utils/unitFormat';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -18,6 +21,7 @@ const props = defineProps<{
 }>();
 
 const store = useToolStore();
+const unitSettings = useUnitSettingsStore();
 const ctx = useViewerContext();
 const isDev = import.meta.env.DEV;
 
@@ -33,11 +37,115 @@ const instancesImportError = ref<string | null>(null);
 const instancesLoading = ref(false);
 const instancesStatus = ref<string>('');
 
-function extractDbnoFromRefno(refno: string): number | null {
-  const normalized = String(refno || '').trim().replace('/', '_');
-  const head = normalized.split('_')[0];
-  const n = Number(head);
-  return Number.isFinite(n) ? n : null;
+const modelUnitModel = computed({
+  get: () => unitSettings.modelUnit.value,
+  set: (v) => unitSettings.setModelUnit(v as any),
+});
+
+const displayUnitModel = computed({
+  get: () => unitSettings.displayUnit.value,
+  set: (v) => unitSettings.setDisplayUnit(v as any),
+});
+
+const precisionModel = computed({
+  get: () => unitSettings.precision.value,
+  set: (v) => unitSettings.setPrecision(Number(v)),
+});
+
+const recenterModel = computed({
+  get: () => unitSettings.recenter.value,
+  set: (v) => unitSettings.setRecenter(Boolean(v)),
+});
+
+const clipModel = computed({
+  get: () => unitSettings.clip.value,
+  set: (v) => unitSettings.setClip(Boolean(v)),
+});
+
+const autoFitOnLoadModel = computed({
+  get: () => unitSettings.autoFitOnLoad.value,
+  set: (v) => unitSettings.setAutoFitOnLoad(Boolean(v)),
+});
+
+const ptsetPolicyModel = computed({
+  get: () => unitSettings.ptsetDisplayPolicy.value,
+  set: (v) => unitSettings.setPtsetDisplayPolicy(v as any),
+});
+
+type CameraSnapshot = {
+  position: [number, number, number];
+  target: [number, number, number];
+  distance: number;
+  near: number;
+  far: number;
+};
+
+const cameraSnapshot = ref<CameraSnapshot | null>(null);
+
+function refreshCameraSnapshot() {
+  const viewer = ctx.viewerRef.value as any;
+  if (!viewer) {
+    cameraSnapshot.value = null;
+    return;
+  }
+
+  try {
+    const dtxViewer = viewer.__dtxViewer as any;
+    const cam = dtxViewer?.camera as any;
+    const controls = dtxViewer?.controls as any;
+    const pos = cam?.position;
+    const tgt = controls?.target;
+    if (!pos || !tgt) {
+      cameraSnapshot.value = null;
+      return;
+    }
+
+    const dx = Number(pos.x) - Number(tgt.x);
+    const dy = Number(pos.y) - Number(tgt.y);
+    const dz = Number(pos.z) - Number(tgt.z);
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    cameraSnapshot.value = {
+      position: [Number(pos.x) || 0, Number(pos.y) || 0, Number(pos.z) || 0],
+      target: [Number(tgt.x) || 0, Number(tgt.y) || 0, Number(tgt.z) || 0],
+      distance: Number.isFinite(dist) ? dist : 0,
+      near: Number(cam.near) || 0,
+      far: Number(cam.far) || 0,
+    };
+  } catch {
+    cameraSnapshot.value = null;
+  }
+}
+
+async function copyCameraSnapshot() {
+  if (!cameraSnapshot.value) return;
+  const u = unitSettings.displayUnit.value;
+  const p = unitSettings.precision.value;
+  const text =
+    `position=${formatVec3Meters(cameraSnapshot.value.position, u, p)}\n` +
+    `target=${formatVec3Meters(cameraSnapshot.value.target, u, p)}\n` +
+    `distance=${formatLengthMeters(cameraSnapshot.value.distance, u, p)}\n` +
+    `clip=${cameraSnapshot.value.near.toFixed(3)}..${cameraSnapshot.value.far.toFixed(3)}`;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // ignore
+  }
+}
+
+function fitToScene() {
+  const viewer = ctx.viewerRef.value as any;
+  if (!viewer) return;
+  try {
+    const layer = viewer.__dtxLayer as any;
+    const box = layer?.getBoundingBox?.();
+    if (!box || !box.min || !box.max) return;
+    viewer.cameraFlight?.jumpTo?.({
+      aabb: [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z],
+    });
+  } catch {
+    // ignore
+  }
 }
 
 function guessRootRefnoFromManifest(manifest: InstanceManifest): string | null {
@@ -68,9 +176,16 @@ async function handleInstancesFileSelect(event: Event) {
       instancesRootRefno.value = guessedRoot;
     }
 
-    const guessedDbno = extractDbnoFromRefno(instancesRootRefno.value || guessedRoot || '');
-    if (guessedDbno !== null && !instancesDbno.value) {
-      instancesDbno.value = String(guessedDbno);
+    // 尝试用 db_meta_info.json 解析 dbno（失败不阻塞导入，允许手动填写）
+    if (!instancesDbno.value) {
+      try {
+        await ensureDbMetaInfoLoaded();
+        const dbno = getDbnumByRefno(instancesRootRefno.value || guessedRoot || '');
+        instancesDbno.value = String(dbno);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        instancesImportError.value = msg;
+      }
     }
 
     instancesStatus.value = `已读取: ${file.name}`;
@@ -178,6 +293,98 @@ function clearAll() {
 
       <div class="mt-2 text-xs text-muted-foreground">
         清空会同时删除场景中的标记，并清除本地存储。
+      </div>
+    </div>
+
+    <div class="rounded-md border border-border bg-background p-3">
+      <div class="flex items-center justify-between gap-2">
+        <div class="text-sm font-semibold">单位与视角</div>
+        <div class="flex items-center gap-2">
+          <button type="button"
+            class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+            @click="fitToScene">
+            重新适配视角
+          </button>
+          <button type="button"
+            class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+            @click="refreshCameraSnapshot">
+            刷新视角
+          </button>
+          <button type="button"
+            class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted disabled:opacity-50"
+            :disabled="!cameraSnapshot"
+            @click="copyCameraSnapshot">
+            复制
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-3 grid grid-cols-1 gap-2 text-sm">
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">模型单位（DTX 源数据）</span>
+          <select class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm"
+            v-model="modelUnitModel">
+            <option value="mm">毫米(mm) → 归一化到米</option>
+            <option value="m">米(m) → 原样</option>
+            <option value="raw">原始(raw) → 原样</option>
+          </select>
+        </label>
+
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">显示单位</span>
+          <select class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm"
+            v-model="displayUnitModel">
+            <option value="m">米(m)</option>
+            <option value="cm">厘米(cm)</option>
+            <option value="mm">毫米(mm)</option>
+          </select>
+        </label>
+
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">小数位</span>
+          <input type="number"
+            class="h-9 w-44 rounded-md border border-input bg-background px-3 text-sm"
+            min="0" max="6" step="1"
+            v-model.number="precisionModel" />
+        </label>
+
+        <div class="flex flex-wrap items-center gap-4 pt-1 text-xs">
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" v-model="recenterModel" />
+            <span>重心归位(recenter)</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" v-model="clipModel" />
+            <span>裁剪面自适应(clip)</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" v-model="autoFitOnLoadModel" />
+            <span>加载后自动适配(auto-fit)</span>
+          </label>
+        </div>
+
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">点集显示策略</span>
+          <select class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm"
+            v-model="ptsetPolicyModel">
+            <option value="use_display_unit">使用显示单位</option>
+            <option value="follow_backend">跟随后端 unit_info</option>
+          </select>
+        </label>
+
+        <div class="mt-2 rounded-md border border-border bg-muted/30 p-2 text-xs text-muted-foreground">
+          <div v-if="cameraSnapshot">
+            <div>position: {{ formatVec3Meters(cameraSnapshot.position, unitSettings.displayUnit.value, unitSettings.precision.value) }}</div>
+            <div>target: {{ formatVec3Meters(cameraSnapshot.target, unitSettings.displayUnit.value, unitSettings.precision.value) }}</div>
+            <div>distance: {{ formatLengthMeters(cameraSnapshot.distance, unitSettings.displayUnit.value, unitSettings.precision.value) }}</div>
+            <div>clip: {{ cameraSnapshot.near.toFixed(3) }} .. {{ cameraSnapshot.far.toFixed(3) }}</div>
+          </div>
+          <div v-else>未获取到视角信息（请先打开 3D Viewer 并点击“刷新视角”）</div>
+        </div>
+
+        <div class="mt-1 text-xs text-muted-foreground">
+          说明：显示单位仅影响数值展示；模型单位会影响 bbox/auto-fit/拾取/裁剪。变更模型单位可能需要清空现有测量/批注/点集。
+        </div>
       </div>
     </div>
 

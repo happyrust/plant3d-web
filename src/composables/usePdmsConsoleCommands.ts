@@ -3,6 +3,9 @@ import { useViewerContext } from './useViewerContext';
 import { pdmsGetUiAttr, pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
 import { e3dSearch } from '@/api/genModelE3dApi';
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import { formatVec3Meters } from '@/utils/unitFormat';
+import { Matrix4, Vector3 } from 'three';
 import {
     extractPosition,
     extractEulerAnglesDegrees,
@@ -10,18 +13,69 @@ import {
     type TransformMatrix,
 } from '@/utils/matrixUtils';
 
-// Helper to format vector
-function formatPos(p: number[] | Float32Array | Float64Array | { [key: number]: number, length: number }): string {
+const unitSettings = useUnitSettingsStore();
+
+function formatPosSceneMeters(p: [number, number, number]): string {
+    return formatVec3Meters(p, unitSettings.displayUnit.value as any, unitSettings.precision.value);
+}
+
+function formatPosFromRawMaybe(viewer: any, p: [number, number, number]): string {
+    const v = new Vector3(p[0], p[1], p[2]);
+
+    // 尽量与 Viewer 的 globalModelMatrix 对齐（mm->m + recenter 等）
+    try {
+        const layer = viewer?.__dtxLayer as any;
+        const gm = layer?.getGlobalModelMatrix?.() as Matrix4 | null;
+        if (gm) {
+            v.applyMatrix4(gm);
+        } else {
+            const scale = unitSettings.modelUnit.value === 'mm' ? 0.001 : 1;
+            v.multiplyScalar(scale);
+        }
+    } catch {
+        const scale = unitSettings.modelUnit.value === 'mm' ? 0.001 : 1;
+        v.multiplyScalar(scale);
+    }
+
+    return formatPosSceneMeters([v.x, v.y, v.z]);
+}
+
+// 用于角度/非长度的三元组输出（保持原有控制台输出风格）
+function formatTriple(p: number[] | Float32Array | Float64Array | { [key: number]: number, length: number }): string {
     if (!p) return 'N/A';
     if (Array.isArray(p) || ArrayBuffer.isView(p)) {
-        return `${p[0]?.toFixed(2)} ${p[1]?.toFixed(2)} ${p[2]?.toFixed(2)}`;
+        return `${Number(p[0] ?? 0).toFixed(2)} ${Number(p[1] ?? 0).toFixed(2)} ${Number(p[2] ?? 0).toFixed(2)}`;
     }
-    return 'Invalid Pos';
+    return 'Invalid Vec3';
 }
 
 export function usePdmsConsoleCommands() {
     const store = useConsoleStore();
     const ctx = useViewerContext();
+
+    function parsePdmsRefnoFromArgs(args: string[]): string | null {
+        const raw = args.join(' ').trim();
+        if (!raw) return null;
+
+        // 若用户粘贴了 JSON 片段，优先尝试提取 "refno": "..."
+        const jsonRef = raw.match(/"refno"\s*:\s*"([^"]+)"/i)?.[1];
+        if (jsonRef) {
+            const normalized = String(jsonRef).trim().replace(/\//g, '_').replace(/,/g, '_');
+            if (/^\d+_\d+$/.test(normalized)) return normalized;
+        }
+
+        // 常见输入：=17496/171640、17496_171640、pe:⟨17496_171640⟩、<17496_171640>
+        const noEq = raw.replace(/^=/, '').trim();
+        const unwrapped = noEq.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? noEq;
+        const core = unwrapped.replace(/^pe:/i, '').trim();
+        const normalized = core.replace(/\//g, '_').replace(/,/g, '_');
+        if (/^\d+_\d+$/.test(normalized)) return normalized;
+
+        // 兜底：从更长文本中提取第一个 refno-like（避免把 geo_hash/aabb_hash 等长数字误识别）
+        const m = raw.match(/\b(\d+)[_\/,](\d+)\b/);
+        if (m) return `${m[1]}_${m[2]}`;
+        return null;
+    }
 
     function getViewer() {
         return ctx.viewerRef.value;
@@ -124,8 +178,12 @@ export function usePdmsConsoleCommands() {
             if (cmd === 'WPOS' || cmd === 'POS WRT /*') {
                 const pos = getAttr('WPOS') ?? getAttr('POS');
                 if (pos !== undefined) {
-                    const formatted = formatVec3(pos);
-                    store.addLog('output', `Position (World): ${formatted}`);
+                    if (Array.isArray(pos) && pos.length >= 3 && typeof pos[0] === 'number' && typeof pos[1] === 'number' && typeof pos[2] === 'number') {
+                        store.addLog('output', `Position (World): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
+                    } else {
+                        const formatted = formatVec3(pos);
+                        store.addLog('output', `Position (World): ${formatted}`);
+                    }
                 } else {
                     // 尝试从场景 AABB 推导中心点
                     const aabb = viewer.scene.getAABB([id]);
@@ -133,7 +191,7 @@ export function usePdmsConsoleCommands() {
                         const cx = (aabb[0] + aabb[3]) / 2;
                         const cy = (aabb[1] + aabb[4]) / 2;
                         const cz = (aabb[2] + aabb[5]) / 2;
-                        store.addLog('output', `Position (World): ${formatPos([cx, cy, cz])}`);
+                        store.addLog('output', `Position (World): ${formatPosSceneMeters([cx, cy, cz])}`);
                     } else {
                         store.addLog('info', 'World position not available');
                     }
@@ -147,7 +205,7 @@ export function usePdmsConsoleCommands() {
                     const transformResp = await pdmsGetTransform(id);
                     if (transformResp.success && transformResp.world_transform) {
                         const pos = extractPosition(transformResp.world_transform as TransformMatrix);
-                        store.addLog('output', `Position (World): ${formatPos(pos)}`);
+                        store.addLog('output', `Position (World): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
                     } else {
                         // 回退：从属性读取
                         const pos = getAttr('POS') ?? getAttr('POSITION');
@@ -182,7 +240,7 @@ export function usePdmsConsoleCommands() {
                     const transformResp = await pdmsGetTransform(id);
                     if (transformResp.success && transformResp.world_transform) {
                         const ori = extractEulerAnglesDegrees(transformResp.world_transform as TransformMatrix);
-                        store.addLog('output', `Orientation (World, degrees): ${formatPos(ori)}`);
+                        store.addLog('output', `Orientation (World, degrees): ${formatTriple(ori as any)}`);
                     } else {
                         // 回退：从属性读取
                         const ori = getAttr('ORI') ?? getAttr('ORIENTATION');
@@ -215,7 +273,7 @@ export function usePdmsConsoleCommands() {
                     if (!ownerRefno || ownerRefno === id) {
                         // 没有 owner 或 owner 就是自己，返回世界位置
                         const pos = extractPosition(elementWorld);
-                        store.addLog('output', `Position (WRT OWNER - no owner): ${formatPos(pos)}`);
+                        store.addLog('output', `Position (WRT OWNER - no owner): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
                         return;
                     }
 
@@ -236,7 +294,7 @@ export function usePdmsConsoleCommands() {
                     }
 
                     const pos = extractPosition(relativeTransform);
-                    store.addLog('output', `Position (WRT OWNER ${ownerRefno}): ${formatPos(pos)}`);
+                    store.addLog('output', `Position (WRT OWNER ${ownerRefno}): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
                 } catch (e) {
                     store.addLog('error', `Failed to compute position WRT owner: ${e}`);
                 }
@@ -259,7 +317,7 @@ export function usePdmsConsoleCommands() {
                     if (!ownerRefno || ownerRefno === id) {
                         // 没有 owner 或 owner 就是自己，返回世界方位
                         const ori = extractEulerAnglesDegrees(elementWorld);
-                        store.addLog('output', `Orientation (WRT OWNER - no owner, degrees): ${formatPos(ori)}`);
+                        store.addLog('output', `Orientation (WRT OWNER - no owner, degrees): ${formatTriple(ori as any)}`);
                         return;
                     }
 
@@ -280,7 +338,7 @@ export function usePdmsConsoleCommands() {
                     }
 
                     const ori = extractEulerAnglesDegrees(relativeTransform);
-                    store.addLog('output', `Orientation (WRT OWNER ${ownerRefno}, degrees): ${formatPos(ori)}`);
+                    store.addLog('output', `Orientation (WRT OWNER ${ownerRefno}, degrees): ${formatTriple(ori as any)}`);
                 } catch (e) {
                     store.addLog('error', `Failed to compute orientation WRT owner: ${e}`);
                 }
@@ -326,14 +384,15 @@ export function usePdmsConsoleCommands() {
 
     // = <Refno> (Go to Refno)
     store.registerCommand('=', async (args: string[]) => {
-        let refno = args[0];
+        const refno = parsePdmsRefnoFromArgs(args);
         if (!refno) {
-            store.addLog('error', 'Usage: = <refno>');
+            const raw = args.join(' ').trim();
+            const hint = raw.startsWith('{') || raw.startsWith('[')
+                ? '（你似乎粘贴了 JSON 片段；这里需要的是 refno，例如 17496/171640）'
+                : '';
+            store.addLog('error', `Usage: = <refno> 例如：= 17496/171640 ${hint}`);
             return;
         }
-
-        // 将斜线格式转换为下划线格式（例如 17496/272482 -> 17496_272482）
-        refno = refno.replace(/\//g, '_');
 
         const tree = getModelTreeInstance();
         if (!tree) {
