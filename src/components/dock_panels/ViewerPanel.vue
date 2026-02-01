@@ -5,29 +5,45 @@ import { Matrix4, Vector2, Vector3 } from "three";
 import {
     ArrowUpRight,
     Cloud,
+    Crosshair,
+    Eye,
+    EyeOff,
+    Focus,
+    GitCompare,
+    LocateFixed,
     RectangleHorizontal,
+    Ruler,
+    Settings,
     Trash2,
     X,
 } from "lucide-vue-next";
 
 import ReviewConfirmation from "@/components/review/ReviewConfirmation.vue";
 import MeasurementWizard from "@/components/tools/MeasurementWizard.vue";
-import { pdmsGetPtset } from "@/api/genModelPdmsAttrApi";
+import { pdmsGetPtsetWithContext } from "@/api/genModelPdmsAttrApi";
+import { getMbdPipeAnnotations } from "@/api/mbdPipeApi";
 import { useModelGeneration } from "@/composables/useModelGeneration";
 import { useSelectionStore } from "@/composables/useSelectionStore";
 import {
     getDbnoInstancesManifest,
+    getDbnoInstancesMeta,
     preloadInstancesSharedTables,
 } from "@/composables/useDbnoInstancesJsonLoader";
 import { loadDbnoInstancesForVisibleRefnosDtx } from "@/composables/useDbnoInstancesDtxLoader";
 import { buildInstanceIndexByRefno } from "@/utils/instances/instanceManifest";
 import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
+import { useMbdPipeAnnotationThree } from "@/composables/useMbdPipeAnnotationThree";
+import { useAnnotationThree } from "@/composables/useAnnotationThree";
 import { useToolStore } from "@/composables/useToolStore";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
 import { useViewerContext } from "@/composables/useViewerContext";
-import { ensureDbMetaInfoLoaded } from "@/composables/useDbMetaInfo";
+import { ensureDbMetaInfoLoaded, getDbnumByRefno } from "@/composables/useDbMetaInfo";
 import { useConsoleStore } from "@/composables/useConsoleStore";
+import { ensurePanelAndActivate } from "@/composables/useDockApi";
+import { useQuickViewRequestStore } from "@/composables/useQuickViewRequestStore";
+import { useRangeQuerySettingsStore } from "@/composables/useRangeQuerySettingsStore";
+import { SiteSpecValue, getSpecValueName } from "@/types/spec";
 import { onCommand } from "@/ribbon/commandBus";
 import { emitToast } from "@/ribbon/toastBus";
 
@@ -35,8 +51,9 @@ import { DtxViewer } from "@/viewer/dtx/DtxViewer";
 import { DtxCompatViewer } from "@/viewer/dtx/DtxCompatViewer";
 import { CadGrid } from "@/viewer/dtx/dtxCadGrid";
 import { loadDtxPrimitiveDemo } from "@/viewer/dtx/dtxPrimitiveDemo";
-import { DTXLayer, DTXSelectionController } from "@/utils/three/dtx";
+import { DTXLayer, DTXSelectionController, DTXViewCullController } from "@/utils/three/dtx";
 import { DynamicPivotController } from "@/utils/three/dtx/DynamicPivotController";
+import { DTXTileLodController } from "@/viewer/dtx/DTXTileLodController";
 
 defineProps<{
     params: {
@@ -60,15 +77,170 @@ const initError = ref<string | null>(null);
 
 const isDev = import.meta.env.DEV;
 
+type DtxTileLodUiConfig = {
+    l1Px: number;
+    l2Px: number;
+    hysteresis: number;
+    settleMs: number;
+};
+
+type DtxLodPrewarmUiConfig = {
+    enabled: boolean;
+    topK: number;
+    minCount: number;
+    concurrency: number;
+};
+
+function safeLsGet(key: string): string | null {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function safeLsSet(key: string, value: string): void {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // ignore
+    }
+}
+
+function isDtxLodDebugEnabled(): boolean {
+    if (typeof window === "undefined") return false;
+    const q = new URLSearchParams(window.location.search);
+    const raw = q.get("dtx_lod_debug") ?? safeLsGet("dtx_lod_debug") ?? "0";
+    return String(raw).trim() === "1";
+}
+
+function setDtxLodDebugEnabled(enabled: boolean): void {
+    safeLsSet("dtx_lod_debug", enabled ? "1" : "0");
+}
+
+const lodDebugVisible = ref(isDev && isDtxLodDebugEnabled());
+function closeLodDebugPanel(): void {
+    lodDebugVisible.value = false;
+    setDtxLodDebugEnabled(false);
+}
+
+function readDtxLodPrewarmConfigFromUrl(): DtxLodPrewarmUiConfig {
+    if (typeof window === "undefined") {
+        return { enabled: false, topK: 80, minCount: 5, concurrency: 8 };
+    }
+    const q = new URLSearchParams(window.location.search);
+    const enabledRaw =
+        q.get("dtx_lod_prewarm") ?? safeLsGet("dtx_lod_prewarm") ?? "0";
+    const topRaw =
+        q.get("dtx_lod_prewarm_top") ??
+        safeLsGet("dtx_lod_prewarm_top") ??
+        "80";
+    const minRaw =
+        q.get("dtx_lod_prewarm_min") ??
+        safeLsGet("dtx_lod_prewarm_min") ??
+        "5";
+    const concRaw =
+        q.get("dtx_lod_prewarm_conc") ??
+        safeLsGet("dtx_lod_prewarm_conc") ??
+        "8";
+
+    const topK0 = Number(topRaw);
+    const minCount0 = Number(minRaw);
+    const conc0 = Number(concRaw);
+
+    return {
+        enabled: String(enabledRaw).trim() !== "0",
+        topK: Number.isFinite(topK0) && topK0 > 0 ? Math.floor(topK0) : 80,
+        minCount:
+            Number.isFinite(minCount0) && minCount0 > 0
+                ? Math.floor(minCount0)
+                : 5,
+        concurrency:
+            Number.isFinite(conc0) && conc0 > 0 ? Math.floor(conc0) : 8,
+    };
+}
+
+const lodUiConfig = ref<DtxTileLodUiConfig>(readDtxTileLodConfigFromUrl());
+const lodPrewarmUiConfig = ref<DtxLodPrewarmUiConfig>(
+    readDtxLodPrewarmConfigFromUrl(),
+);
+
+let lodCfgPersistTimer: ReturnType<typeof setTimeout> | null = null;
+watch(
+    lodUiConfig,
+    (cfg) => {
+        const ctl = tileLodControllerRef.value;
+        if (ctl) {
+            ctl.setConfig(cfg);
+            const viewer = dtxViewerRef.value;
+            if (viewer) ctl.requestUpdate(viewer.camera);
+            requestRender();
+        }
+
+        if (lodCfgPersistTimer) clearTimeout(lodCfgPersistTimer);
+        lodCfgPersistTimer = setTimeout(() => {
+            safeLsSet("dtx_lod_l1px", String(cfg.l1Px));
+            safeLsSet("dtx_lod_l2px", String(cfg.l2Px));
+            safeLsSet("dtx_lod_hys", String(cfg.hysteresis));
+            safeLsSet("dtx_lod_settle", String(cfg.settleMs));
+        }, 200);
+    },
+    { deep: true },
+);
+
+let prewarmCfgPersistTimer: ReturnType<typeof setTimeout> | null = null;
+watch(
+    lodPrewarmUiConfig,
+    (cfg) => {
+        if (prewarmCfgPersistTimer) clearTimeout(prewarmCfgPersistTimer);
+        prewarmCfgPersistTimer = setTimeout(() => {
+            safeLsSet("dtx_lod_prewarm", cfg.enabled ? "1" : "0");
+            safeLsSet("dtx_lod_prewarm_top", String(cfg.topK));
+            safeLsSet("dtx_lod_prewarm_min", String(cfg.minCount));
+            safeLsSet("dtx_lod_prewarm_conc", String(cfg.concurrency));
+            // 约定：本项目当前策略为只预热 L2
+            safeLsSet("dtx_lod_prewarm_lods", "L2");
+        }, 200);
+    },
+    { deep: true },
+);
+
+// 左侧竖直工具栏（快捷操作）
+const leftToolbarRef = ref<HTMLDivElement | null>(null);
+const leftToolbarOpenMeasureMenu = ref(false);
+const hasSelectedRefno = computed(() => !!selectionStore.selectedRefno.value);
+const isMeasureModeActive = computed(() => {
+    const mode = store.toolMode.value;
+    return mode === "measure_distance" || mode === "measure_angle";
+});
+
+// 右侧竖直工具栏（查看/快捷）
+const rightToolbarOpenSettings = ref(false);
+const rangeSettings = useRangeQuerySettingsStore();
+const quickViewReq = useQuickViewRequestStore();
+// 避免模板对“对象属性 ref”做 v-model 赋值时覆盖 ref 本身：解构为顶层绑定
+const rangeRadiusM = rangeSettings.radiusM;
+const rangeSpecValues = rangeSettings.specValues;
+const rangeNounsText = rangeSettings.nounsText;
+const rangeNameQuery = rangeSettings.nameQuery;
+
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
+const viewCullControllerRef = shallowRef<DTXViewCullController | null>(null);
 const pivotControllerRef = shallowRef<DynamicPivotController | null>(null);
 const cadGridRef = shallowRef<CadGrid | null>(null);
 const compatViewerRef = shallowRef<DtxCompatViewer | null>(null);
+const tileLodControllerRef = shallowRef<DTXTileLodController | null>(null);
 const toolsRef = shallowRef<ReturnType<typeof useDtxTools> | null>(null);
 const ptsetVisRef = shallowRef<ReturnType<
     typeof usePtsetVisualizationThree
+> | null>(null);
+const mbdPipeVisRef = shallowRef<ReturnType<
+    typeof useMbdPipeAnnotationThree
+> | null>(null);
+const annotationSystemRef = shallowRef<ReturnType<
+    typeof useAnnotationThree
 > | null>(null);
 const modelGenerationRef = shallowRef<ReturnType<
     typeof useModelGeneration
@@ -85,14 +257,18 @@ let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
+let offMbdPipeWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
 let offGizmoEvents: (() => void) | null = null;
+let offDocPointerDown: (() => void) | null = null;
+let offKeydown: (() => void) | null = null;
 
 let dtxGlobalTransformAppliedKey: string | null = null;
 let dtxAutoFitAppliedKey: string | null = null;
 let activeDbno: number | null = null;
+let tileLodInitializedDbno: number | null = null;
 
 function readDtxScaleConfigFromUrl(): {
     scale: number;
@@ -127,6 +303,39 @@ function readDtxScaleConfigFromUrl(): {
     const autoFitOnLoad = unitSettings.autoFitOnLoad.value;
 
     return { scale, recenter, clip, autoFitOnLoad };
+}
+
+function readDtxTileLodConfigFromUrl(): {
+    l1Px: number;
+    l2Px: number;
+    hysteresis: number;
+    settleMs: number;
+} {
+    const urlParams = new URLSearchParams(window.location.search);
+    const ls = (k: string) => {
+        try {
+            return localStorage.getItem(k);
+        } catch {
+            return null;
+        }
+    };
+
+    const l1Raw = urlParams.get("dtx_lod_l1px") ?? ls("dtx_lod_l1px") ?? "200";
+    const l2Raw = urlParams.get("dtx_lod_l2px") ?? ls("dtx_lod_l2px") ?? "80";
+    const hRaw = urlParams.get("dtx_lod_hys") ?? ls("dtx_lod_hys") ?? "0.15";
+    const sRaw = urlParams.get("dtx_lod_settle") ?? ls("dtx_lod_settle") ?? "250";
+
+    const l1 = Number(l1Raw);
+    const l2 = Number(l2Raw);
+    const h = Number(hRaw);
+    const s = Number(sRaw);
+
+    return {
+        l1Px: Number.isFinite(l1) && l1 > 0 ? Math.floor(l1) : 200,
+        l2Px: Number.isFinite(l2) && l2 > 0 ? Math.floor(l2) : 80,
+        hysteresis: Number.isFinite(h) && h >= 0 && h < 0.9 ? h : 0.15,
+        settleMs: Number.isFinite(s) && s >= 0 ? Math.floor(s) : 250,
+    };
 }
 
 function getDefaultCadGridSizeByUnit(modelUnit: string): number {
@@ -269,6 +478,18 @@ watch(
         }
 
         try {
+            viewCullControllerRef.value?.refreshSpatialIndex();
+        } catch {
+            // ignore
+        }
+
+        try {
+            tileLodControllerRef.value?.onGlobalModelMatrixChanged();
+        } catch {
+            // ignore
+        }
+
+        try {
             cadGridRef.value?.fitToBoundingBox(dtxLayer.getBoundingBox());
         } catch {
             // ignore
@@ -301,15 +522,17 @@ watch(
             (store.obbAnnotations.value?.length ?? 0) > 0;
 
         const hasPtset = (ptsetVisRef.value?.visualObjects.value?.size ?? 0) > 0;
+        const hasMbdPipe = !!mbdPipeVisRef.value?.currentData.value;
 
-        if (!hasMarks && !hasPtset) return;
+        if (!hasMarks && !hasPtset && !hasMbdPipe) return;
 
         try {
             store.clearAll();
             ptsetVisRef.value?.clearAll();
+            mbdPipeVisRef.value?.clearAll();
             emitToast({
                 message:
-                    "模型单位/重心设置已变更：为避免错位，已清空测量/批注/点集（可重新创建）",
+                    "模型单位/重心设置已变更：为避免错位，已清空测量/批注/点集/MBD管道标注（可重新创建）",
             });
         } catch {
             // ignore
@@ -318,19 +541,131 @@ watch(
     },
 );
 
+function toastNeedSelection(): void {
+    emitToast({ message: "请先选择对象" });
+}
+
+function getSelectedRefno(): string | null {
+    const raw = selectionStore.selectedRefno.value;
+    const s = typeof raw === "string" ? raw.trim() : "";
+    return s ? s : null;
+}
+
+function hideSelected(): void {
+    const refno = getSelectedRefno();
+    if (!refno) {
+        toastNeedSelection();
+        return;
+    }
+    const compat = compatViewerRef.value;
+    if (!compat) return;
+    compat.scene.setObjectsVisible([refno], false);
+    requestRender();
+}
+
+function showSelected(): void {
+    const refno = getSelectedRefno();
+    if (!refno) {
+        toastNeedSelection();
+        return;
+    }
+    const compat = compatViewerRef.value;
+    if (!compat) return;
+    compat.scene.setObjectsVisible([refno], true);
+    requestRender();
+}
+
+function hideAll(): void {
+    const dtxLayer = dtxLayerRef.value;
+    if (!dtxLayer) return;
+    dtxLayer.setAllVisible(false);
+    requestRender();
+}
+
+function locateShowSelected(): void {
+    const refno = getSelectedRefno();
+    if (!refno) {
+        toastNeedSelection();
+        return;
+    }
+    const compat = compatViewerRef.value;
+    if (!compat) return;
+
+    // 先确保可见，再定位
+    compat.scene.setObjectsVisible([refno], true);
+    const aabb = compat.scene.getAABB([refno]);
+    if (!aabb) {
+        emitToast({ message: "定位失败：未获取到对象包围盒" });
+        requestRender();
+        return;
+    }
+    compat.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
+    requestRender();
+}
+
+function setMeasureMode(next: "measure_distance" | "measure_angle"): void {
+    if (store.toolMode.value === next) {
+        store.setToolMode("none");
+    } else {
+        store.setToolMode(next);
+    }
+    requestRender();
+}
+
+function toggleLeftMeasureMenu(): void {
+    leftToolbarOpenMeasureMenu.value = !leftToolbarOpenMeasureMenu.value;
+}
+
+function onLeftMeasureDistanceClick(): void {
+    setMeasureMode("measure_distance");
+    leftToolbarOpenMeasureMenu.value = false;
+}
+
+function onLeftMeasureAngleClick(): void {
+    setMeasureMode("measure_angle");
+    leftToolbarOpenMeasureMenu.value = false;
+}
+
+function setAutoNearestMode(
+    next: "measure_pipe_to_structure" | "measure_pipe_to_pipe",
+): void {
+    if (store.toolMode.value === next) {
+        store.setToolMode("none");
+    } else {
+        store.setToolMode(next);
+    }
+    requestRender();
+}
+
 function handleRibbonCommand(commandId: string) {
     switch (commandId) {
+        case "viewer.hide_selected":
+            hideSelected();
+            return;
+        case "viewer.show_selected":
+            showSelected();
+            return;
+        case "viewer.hide_all":
+            hideAll();
+            return;
+        case "viewer.locate_show_selected":
+            locateShowSelected();
+            return;
         case "measurement.distance":
-            store.setToolMode("measure_distance");
-            requestRender();
+            setMeasureMode("measure_distance");
             return;
         case "measurement.angle":
-            store.setToolMode("measure_angle");
-            requestRender();
+            setMeasureMode("measure_angle");
             return;
         case "measurement.point_to_mesh":
             store.setToolMode("measure_point_to_object");
             requestRender();
+            return;
+        case "measurement.pipe_to_structure":
+            setAutoNearestMode("measure_pipe_to_structure");
+            return;
+        case "measurement.pipe_to_pipe":
+            setAutoNearestMode("measure_pipe_to_pipe");
             return;
         case "measurement.clear":
             store.clearMeasurements();
@@ -343,6 +678,7 @@ function handleRibbonCommand(commandId: string) {
         case "tools.clear_all":
             store.clearAll();
             ptsetVisRef.value?.clearAll();
+            mbdPipeVisRef.value?.clearAll();
             requestRender();
             return;
     }
@@ -385,53 +721,131 @@ function attachPicking() {
     const compat = compatViewerRef.value;
     if (!canvas || !sel || !compat) return;
 
-    const onClick = (e: PointerEvent) => {
-        // 工具模式开启时，点击事件交给 tools（阶段 1 后续接入）
+    const clickState = {
+        down: null as { x: number; y: number } | null,
+        moved: false,
+        pointerId: null as number | null,
+    };
+
+    const onDown = (e: PointerEvent) => {
+        // 工具模式开启时，交由 tools
         if (store.toolMode.value && store.toolMode.value !== "none") return;
+        if (e.button !== 0) return;
+        clickState.down = { x: e.clientX, y: e.clientY };
+        clickState.moved = false;
+        clickState.pointerId = e.pointerId;
+    };
+
+    const onMove = (e: PointerEvent) => {
+        if (!clickState.down) return;
+        if (clickState.pointerId !== e.pointerId) return;
+        const dx = e.clientX - clickState.down.x;
+        const dy = e.clientY - clickState.down.y;
+        if (dx * dx + dy * dy > 9) clickState.moved = true;
+    };
+
+    const onUp = (e: PointerEvent) => {
+        // 工具模式开启时，交由 tools
+        if (store.toolMode.value && store.toolMode.value !== "none") return;
+
+        // Shift+拖拽：框选由 useDtxTools 处理，这里不做 click picking
+        if (e.shiftKey) {
+            clickState.down = null;
+            clickState.moved = false;
+            clickState.pointerId = null;
+            return;
+        }
+
+        const moved = clickState.moved;
+        clickState.down = null;
+        clickState.moved = false;
+        clickState.pointerId = null;
+        if (moved) return;
 
         const rect = canvas.getBoundingClientRect();
         const pos = new Vector2(e.clientX - rect.left, e.clientY - rect.top);
         const hit = sel.pick(pos);
 
+        // Ctrl/Cmd 键：追加/切换选中模式
+        const additive = e.ctrlKey || e.metaKey;
+
         // Demo：DTX 基本体（不走 refno 选中逻辑，直接按 objectId 选中）
         if (demoMode === "primitives") {
             if (!hit) {
-                // 点击空白区域时不清除选中
-                // sel.clearSelection();
-                // requestRender();
+                // 点击空白区域：非追加模式下清空选中
+                if (!additive) {
+                    sel.clearSelection();
+                    requestRender();
+                }
                 return;
             }
-            sel.clearSelection();
-            sel.select(hit.objectId, false);
+            if (additive) {
+                // Ctrl+点击：切换选中状态
+                if (sel.isSelected(hit.objectId)) {
+                    sel.deselect(hit.objectId);
+                } else {
+                    sel.select(hit.objectId, true);
+                }
+            } else {
+                sel.clearSelection();
+                sel.select(hit.objectId, false);
+            }
             requestRender();
             return;
         }
 
         if (!hit) {
-            // 点击空白区域时不清除选中
-            // selectionStore.clearSelection();
-            // requestRender();
+            // 点击空白区域：非追加模式下清空选中
+            if (!additive) {
+                const prev = compat.scene.selectedObjectIds;
+                if (prev.length > 0) {
+                    compat.scene.setObjectsSelected(prev, false);
+                }
+                selectionStore.clearSelection();
+                requestRender();
+            }
             return;
-        }
-
-        // 清空旧选中
-        const prev = compat.scene.selectedObjectIds;
-        if (prev.length > 0) {
-            compat.scene.setObjectsSelected(prev, false);
         }
 
         const refno = parseRefnoFromObjectId(hit.objectId);
         if (!refno) return;
 
-        selectionStore.setSelectedRefno(refno);
-        compat.scene.ensureRefnos([refno]);
-        compat.scene.setObjectsSelected([refno], true);
+        if (additive) {
+            // Ctrl+点击：切换选中状态
+            const wasSelected = selectionStore.isSelected(refno);
+            selectionStore.toggleSelectedRefno(refno);
+            compat.scene.ensureRefnos([refno]);
+            compat.scene.setObjectsSelected([refno], !wasSelected);
+        } else {
+            // 普通点击：单选（清空之前的选中）
+            const prev = compat.scene.selectedObjectIds;
+            if (prev.length > 0) {
+                compat.scene.setObjectsSelected(prev, false);
+            }
+            selectionStore.setSelectedRefno(refno);
+            compat.scene.ensureRefnos([refno]);
+            compat.scene.setObjectsSelected([refno], true);
+        }
         requestRender();
     };
 
-    canvas.addEventListener("pointerup", onClick);
-    (attachPicking as any)._cleanup = () =>
-        canvas.removeEventListener("pointerup", onClick);
+    const onCancel = (e: PointerEvent) => {
+        void e;
+        clickState.down = null;
+        clickState.moved = false;
+        clickState.pointerId = null;
+    };
+
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointercancel", onCancel);
+    (attachPicking as any)._cleanup = () => {
+        canvas.removeEventListener("pointerdown", onDown);
+        canvas.removeEventListener("pointermove", onMove);
+        canvas.removeEventListener("pointerup", onUp);
+        canvas.removeEventListener("pointercancel", onCancel);
+    };
 }
 
 function detachPicking() {
@@ -492,6 +906,12 @@ function handleResize() {
     const rect = el.getBoundingClientRect();
     dtxViewer.setSize(rect.width, rect.height);
     selectionControllerRef.value?.resize(rect.width, rect.height);
+    tileLodControllerRef.value?.setViewportSize(rect.width, rect.height);
+
+    // 更新三维标注系统的分辨率（LineMaterial 需要）
+    annotationSystemRef.value?.setResolution(rect.width, rect.height);
+    // 更新 MBD 管道标注分辨率（LineMaterial + CSS2DRenderer 需要）
+    mbdPipeVisRef.value?.setResolution(rect.width, rect.height);
 
     // 立即同步渲染一帧，避免黑屏闪烁
     renderFrameImmediate();
@@ -509,6 +929,10 @@ function renderFrameImmediate() {
     ensureLayerAttached();
     dtxLayer.update(dtxViewer.camera);
 
+    // resize 会改变 aspect/projectionMatrix，需更新视锥裁剪与 LOD（避免“旧裁剪状态”）
+    viewCullControllerRef.value?.update(dtxViewer.camera);
+    tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
+
     // 更新动态 pivot 控制器
     pivotControllerRef.value?.update();
 
@@ -524,12 +948,23 @@ function renderFrameImmediate() {
     } catch {
         // ignore
     }
+
+    // resize 同步渲染：补一次 overlay/labels 更新，避免标签与线条在首帧错位
+    toolsRef.value?.updateOverlayPositions();
+    ptsetVisRef.value?.updateLabelPositions();
+    mbdPipeVisRef.value?.updateLabelPositions();
+    if (annotationSystemRef.value) {
+        annotationSystemRef.value.update(dtxViewer.camera);
+        annotationSystemRef.value.renderLabels(dtxViewer.scene, dtxViewer.camera);
+    }
 }
 
 let needsRender = true;
 let isRendering = false;
 const tmpCameraPos = new Vector3();
 const tmpCameraTarget = new Vector3();
+const tmpProjMatrix = new Matrix4();
+let hasLastProjMatrix = false;
 const CAMERA_EPS_SQ = 1e-12;
 
 function scheduleFrame() {
@@ -556,6 +991,10 @@ function renderFrame() {
         // 计算相机是否变化（支持 enableDamping / flyTo / resize 后的按需刷新）
         tmpCameraPos.copy(dtxViewer.camera.position);
         tmpCameraTarget.copy(dtxViewer.controls.target);
+        if (!hasLastProjMatrix) {
+            tmpProjMatrix.copy(dtxViewer.camera.projectionMatrix);
+            hasLastProjMatrix = true;
+        }
         dtxViewer.controls.update();
         const posDeltaSq = tmpCameraPos.distanceToSquared(
             dtxViewer.camera.position,
@@ -563,8 +1002,10 @@ function renderFrame() {
         const targetDeltaSq = tmpCameraTarget.distanceToSquared(
             dtxViewer.controls.target,
         );
+        const projChanged = !tmpProjMatrix.equals(dtxViewer.camera.projectionMatrix);
         const cameraChanged =
-            posDeltaSq > CAMERA_EPS_SQ || targetDeltaSq > CAMERA_EPS_SQ;
+            posDeltaSq > CAMERA_EPS_SQ || targetDeltaSq > CAMERA_EPS_SQ || projChanged;
+        if (projChanged) tmpProjMatrix.copy(dtxViewer.camera.projectionMatrix);
 
         if (!needsRender && !cameraChanged && !continuousRender) return;
 
@@ -573,6 +1014,10 @@ function renderFrame() {
 
         ensureLayerAttached();
         dtxLayer.update(dtxViewer.camera);
+        if (cameraChanged) {
+            viewCullControllerRef.value?.update(dtxViewer.camera);
+            tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
+        }
 
         const selection = selectionControllerRef.value;
         if (selection?.hasOutline()) {
@@ -590,6 +1035,13 @@ function renderFrame() {
 
         toolsRef.value?.updateOverlayPositions();
         ptsetVisRef.value?.updateLabelPositions();
+        mbdPipeVisRef.value?.updateLabelPositions();
+
+        // 三维标注系统更新
+        if (annotationSystemRef.value) {
+            annotationSystemRef.value.update(dtxViewer.camera);
+            annotationSystemRef.value.renderLabels(dtxViewer.scene, dtxViewer.camera);
+        }
 
         needsRender = false;
 
@@ -644,6 +1096,32 @@ function deleteActiveAnnotation() {
         store.removeObbAnnotation(obbId);
         store.activeObbAnnotationId.value = null;
     }
+}
+
+function onRightRangeQuickViewClick(): void {
+    const refno = getSelectedRefno();
+    if (!refno) {
+        toastNeedSelection();
+        return;
+    }
+
+    // 通过“请求-消费”方式触发，避免面板未挂载导致事件丢失。
+    quickViewReq.requestRangeQueryFromSelection();
+    ensurePanelAndActivate("modelQuery");
+}
+
+function onRightRoomShowAllClick(): void {
+    // 以“房间树当前选中房间”为准：由 ModelTreePanel 消费请求并执行 isolate/flyTo。
+    quickViewReq.requestShowSelectedRoomModels();
+    ensurePanelAndActivate("modelTree");
+}
+
+function onRightPipeNetworkClick(): void {
+    emitToast({ message: "管网（BRAN）功能建设中（占位）" });
+}
+
+function toggleRightSettings(): void {
+    rightToolbarOpenSettings.value = !rightToolbarOpenSettings.value;
 }
 
 onMounted(async () => {
@@ -724,6 +1202,22 @@ onMounted(async () => {
     });
     dtxLayer.setRenderer(dtxViewer.renderer);
     dtxLayerRef.value = dtxLayer;
+
+    // 显示加速：View Frustum Culling（按对象 AABB）
+    viewCullControllerRef.value = new DTXViewCullController({ dtxLayer });
+
+    // 显示加速：Tile LOD（manifest.groups）
+    tileLodControllerRef.value = new DTXTileLodController({
+        dtxLayer,
+        debug: isDev,
+        requestRender,
+    });
+    try {
+        const cfg = readDtxTileLodConfigFromUrl();
+        tileLodControllerRef.value.setConfig(cfg);
+    } catch {
+        // ignore
+    }
 
     const selectionController = new DTXSelectionController({
         dtxLayer,
@@ -834,6 +1328,32 @@ onMounted(async () => {
         }
         ensureLayerAttached();
         selectionController.refreshSpatialIndex();
+        try {
+            viewCullControllerRef.value?.refreshSpatialIndex();
+            viewCullControllerRef.value?.update(dtxViewer.camera);
+        } catch {
+            // ignore
+        }
+        try {
+            tileLodControllerRef.value?.onGlobalModelMatrixChanged();
+        } catch {
+            // ignore
+        }
+
+        // Tile LOD：仅在首次切换到该 dbno 时初始化（避免重复拉 manifest）
+        if (tileLodInitializedDbno !== _dbno) {
+            tileLodInitializedDbno = _dbno;
+            (async () => {
+                try {
+                    const manifest = await getDbnoInstancesManifest(_dbno);
+                    tileLodControllerRef.value?.setManifest(_dbno, manifest);
+                    tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
+                    requestRender();
+                } catch {
+                    // ignore
+                }
+            })();
+        }
         requestRender();
     };
     compatViewerRef.value = compat;
@@ -861,6 +1381,27 @@ onMounted(async () => {
     );
     ptsetVisRef.value = ptsetVis;
 
+    const mbdPipeVis = useMbdPipeAnnotationThree(dtxViewerRef, overlayContainer, {
+        requestRender,
+        getGlobalModelMatrix: () =>
+            dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
+    });
+    mbdPipeVisRef.value = mbdPipeVis;
+
+    // 三维标注系统初始化
+    const annotationSystem = useAnnotationThree(dtxViewerRef, overlayContainer, {
+        requestRender,
+        getGlobalModelMatrix: () =>
+            dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
+    });
+    annotationSystemRef.value = annotationSystem;
+    // 初始化 CSS2DRenderer
+    if (overlayContainer.value && mainCanvas.value) {
+        annotationSystem.initCSS2DRenderer(overlayContainer.value, mainCanvas.value);
+        // 启用标注交互（点击选中、悬停高亮）
+        annotationSystem.enableInteraction(mainCanvas.value);
+    }
+
     // 启动预拉：db_meta_info + shared trans/aabb（失败直接报错）
     // 注意：onMounted(async () => ...) 中，任何依赖注入上下文的 hooks（如 vue-query）必须在首个 await 之前调用。
     // 因此这里先初始化 tools/ptsetVis（它们会调用 useSelectionStore/useQuery），再 await 预拉。
@@ -875,6 +1416,8 @@ onMounted(async () => {
     }
 
     viewerContext.ptsetVis.value = ptsetVis as any;
+    viewerContext.mbdPipeVis.value = mbdPipeVis as any;
+    viewerContext.annotationSystem.value = annotationSystem;
     viewerContext.viewerRef.value = compat as any;
     viewerContext.overlayContainerRef.value = overlayContainer.value;
     viewerContext.store.value = store;
@@ -909,6 +1452,13 @@ onMounted(async () => {
                         { lodAssetKey: "L1", debug: isDev }
                     );
                     (compat as any).__dtxAfterInstancesLoaded?.(dbno, allRefnos);
+                    try {
+                        tileLodInitializedDbno = dbno;
+                        tileLodControllerRef.value?.setManifest(dbno, manifest);
+                        tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
+                    } catch {
+                        // ignore
+                    }
                     const box = dtxLayer.getBoundingBox();
                     const center = new Vector3();
                     const size = new Vector3();
@@ -1021,11 +1571,18 @@ onMounted(async () => {
 
         const unique = Array.from(new Set(refnos));
         const flyTo = !!(detail as any)?.flyTo;
+        const requestIdRaw = (detail as any)?.requestId;
+        const requestId =
+            typeof requestIdRaw === "string"
+                ? requestIdRaw.trim()
+                : String(requestIdRaw || "").trim();
+        const hasRequestId = requestId.length > 0;
         console.info("[vis][event] showModelByRefnos", {
             raw_refno_count: refnos.length,
             unique_refno_count: unique.length,
             regenModel: !!(detail as any)?.regenModel,
             flyTo,
+            requestId: hasRequestId ? requestId : undefined,
         });
         consoleStore.addLog(
             "info",
@@ -1104,6 +1661,20 @@ onMounted(async () => {
             .finally(() => {
                 debugState.status = "done";
                 debugState.finishedAt = Date.now();
+                // 供外部 await：只在明确传入 requestId 时派发，避免影响既有调用方（批注/脚本）。
+                if (hasRequestId) {
+                    window.dispatchEvent(
+                        new CustomEvent("showModelByRefnosDone", {
+                            detail: {
+                                requestId,
+                                requested: unique,
+                                ok: debugState.ok,
+                                fail: debugState.fail,
+                                error: debugState.error,
+                            },
+                        }),
+                    );
+                }
                 requestRender();
             });
     };
@@ -1121,7 +1692,28 @@ onMounted(async () => {
 
             try {
                 emitToast({ message: `正在加载点集数据: ${request.refno}` });
-                const response = await pdmsGetPtset(request.refno);
+                // ptset 按需获取：尽量带上 dbno + batch_id（来自 meta_{dbno}.json）以确保与当前模型快照一致。
+                const normalized = String(request.refno ?? "").trim().replace("/", "_");
+                let dbno: number | null = null;
+                try {
+                    dbno = getDbnumByRefno(normalized);
+                } catch {
+                    dbno = null;
+                }
+                let batchId: string | null = null;
+                if (dbno) {
+                    try {
+                        const meta = await getDbnoInstancesMeta(dbno);
+                        batchId = meta?.batch_id ?? null;
+                    } catch {
+                        batchId = null;
+                    }
+                }
+
+                const response = await pdmsGetPtsetWithContext(request.refno, {
+                    dbno: dbno ?? undefined,
+                    batchId,
+                });
                 if (response.success && response.ptset.length > 0) {
                     ptsetVis.renderPtset(request.refno, response);
                     ptsetVis.flyToPtset();
@@ -1144,7 +1736,95 @@ onMounted(async () => {
         { immediate: true },
     );
 
+    offMbdPipeWatch = watch(
+        () => store.mbdPipeAnnotationRequest.value,
+        async (request) => {
+            if (!request) return;
+            try {
+                emitToast({ message: `正在生成管道标注: ${request.refno}` });
+                const resp = await getMbdPipeAnnotations(request.refno, {
+                    // 首期默认值：对齐 MBD 默认
+                    min_slope: 0.001,
+                    max_slope: 0.1,
+                    dim_min_length: 1.0,
+                    weld_merge_threshold: 1.0,
+                    include_dims: true,
+                    include_welds: true,
+                    include_slopes: true,
+                });
+                if (resp.success && resp.data) {
+                    mbdPipeVis.renderBranch(resp.data);
+                    mbdPipeVis.flyTo();
+                    emitToast({
+                        message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count}`,
+                    });
+                    requestRender();
+                } else {
+                    const msg = resp.error_message || "生成管道标注失败";
+                    emitToast({ message: msg });
+                    console.warn("[mbd-pipe]", msg);
+                }
+            } catch (e) {
+                console.error("[mbd-pipe] Failed to load:", e);
+                emitToast({ message: "生成管道标注失败" });
+            } finally {
+                store.clearMbdPipeAnnotationRequest();
+            }
+        },
+        { immediate: true },
+    );
+
     offRibbonCommand = onCommand(handleRibbonCommand);
+
+    // 点击工具栏外部时关闭“测量”下拉菜单（不影响当前工具模式）
+    const onDocPointerDown = (ev: PointerEvent) => {
+        if (!leftToolbarOpenMeasureMenu.value) return;
+        const el = leftToolbarRef.value;
+        const target = ev.target as Node | null;
+        if (!el || !target) {
+            leftToolbarOpenMeasureMenu.value = false;
+            return;
+        }
+        if (el.contains(target)) return;
+        leftToolbarOpenMeasureMenu.value = false;
+    };
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    offDocPointerDown = () => {
+        document.removeEventListener("pointerdown", onDocPointerDown, true);
+    };
+
+    const onKeydown = (ev: KeyboardEvent) => {
+        const target = ev.target as HTMLElement | null;
+        const tag = target?.tagName?.toLowerCase() ?? "";
+        const isEditable =
+            tag === "input" ||
+            tag === "textarea" ||
+            (target as any)?.isContentEditable === true;
+        if (isEditable) return;
+
+        if (ev.key === "Escape") {
+            try {
+                toolsRef.value?.cancelMeasurementInteraction?.();
+            } catch {
+                // ignore
+            }
+            requestRender();
+            return;
+        }
+
+        if (ev.key === "Delete" || ev.key === "Backspace") {
+            const id = store.activeMeasurementId.value;
+            if (!id) return;
+            try {
+                toolsRef.value?.removeMeasurement(id);
+            } catch {
+                // ignore
+            }
+            requestRender();
+        }
+    };
+    window.addEventListener("keydown", onKeydown);
+    offKeydown = () => window.removeEventListener("keydown", onKeydown);
 
     resizeObserver = new ResizeObserver(() => handleResize());
     resizeObserver.observe(container);
@@ -1178,12 +1858,26 @@ onUnmounted(() => {
     offPtsetWatch?.();
     offPtsetWatch = null;
 
+    offMbdPipeWatch?.();
+    offMbdPipeWatch = null;
+
     try {
         ptsetVisRef.value?.clearAll();
     } catch {
         // ignore
     }
     ptsetVisRef.value = null;
+
+    try {
+        // 释放材质/CSS2DRenderer DOM 等资源
+        mbdPipeVisRef.value?.dispose?.();
+    } catch {
+        // ignore
+    }
+    mbdPipeVisRef.value = null;
+
+    // 仅清理引用（useAnnotationThree 内部已注册 onUnmounted 执行 dispose）
+    annotationSystemRef.value = null;
 
     try {
         toolsRef.value?.dispose();
@@ -1198,12 +1892,26 @@ onUnmounted(() => {
     offRibbonCommand?.();
     offRibbonCommand = null;
 
+    offDocPointerDown?.();
+    offDocPointerDown = null;
+
+    offKeydown?.();
+    offKeydown = null;
+
     try {
         selectionControllerRef.value?.dispose();
     } catch {
         // ignore
     }
     selectionControllerRef.value = null;
+
+    try {
+        tileLodControllerRef.value?.dispose();
+    } catch {
+        // ignore
+    }
+    tileLodControllerRef.value = null;
+    viewCullControllerRef.value = null;
 
     try {
         pivotControllerRef.value?.dispose();
@@ -1246,13 +1954,350 @@ onUnmounted(() => {
     viewerContext.overlayContainerRef.value = null;
     viewerContext.tools.value = null;
     viewerContext.ptsetVis.value = null;
+    viewerContext.mbdPipeVis.value = null;
+    viewerContext.annotationSystem.value = null;
 });
 </script>
 
 <template>
     <div ref="containerRef" class="viewer-panel-container">
         <canvas ref="mainCanvas" class="viewer" />
-        <div ref="overlayContainer" class="xeokitOverlay" />
+    <div ref="overlayContainer" class="xeokitOverlay" />
+
+        <!-- DEV：LOD 调参面板（屏幕相关阈值 + L2 预热） -->
+        <div
+            v-if="lodDebugVisible"
+            class="pointer-events-auto absolute left-3 top-3 w-[260px] rounded-md border border-border bg-background/90 p-2 text-foreground shadow-lg backdrop-blur"
+            style="z-index: 950"
+            @pointerdown.stop
+            @wheel.stop
+        >
+            <div class="flex items-center justify-between gap-2">
+                <div class="text-xs font-medium">DTX LOD Debug</div>
+                <button
+                    type="button"
+                    class="inline-flex h-7 w-7 items-center justify-center rounded border border-input bg-background hover:bg-muted"
+                    title="关闭"
+                    @click.stop="closeLodDebugPanel"
+                >
+                    <X class="h-4 w-4" />
+                </button>
+            </div>
+
+            <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+                <label class="flex flex-col gap-1">
+                    <span class="text-muted-foreground">L1 px</span>
+                    <input
+                        v-model.number="lodUiConfig.l1Px"
+                        type="number"
+                        min="1"
+                        step="1"
+                        class="h-8 rounded border border-input bg-background px-2"
+                    />
+                </label>
+                <label class="flex flex-col gap-1">
+                    <span class="text-muted-foreground">L2 px</span>
+                    <input
+                        v-model.number="lodUiConfig.l2Px"
+                        type="number"
+                        min="1"
+                        step="1"
+                        class="h-8 rounded border border-input bg-background px-2"
+                    />
+                </label>
+                <label class="flex flex-col gap-1">
+                    <span class="text-muted-foreground">滞回</span>
+                    <input
+                        v-model.number="lodUiConfig.hysteresis"
+                        type="number"
+                        min="0"
+                        max="0.89"
+                        step="0.01"
+                        class="h-8 rounded border border-input bg-background px-2"
+                    />
+                </label>
+                <label class="flex flex-col gap-1">
+                    <span class="text-muted-foreground">settle ms</span>
+                    <input
+                        v-model.number="lodUiConfig.settleMs"
+                        type="number"
+                        min="0"
+                        step="10"
+                        class="h-8 rounded border border-input bg-background px-2"
+                    />
+                </label>
+            </div>
+
+            <div class="mt-2 border-t border-border pt-2">
+                <div class="text-xs font-medium">预热（L2，仅影响后续加载）</div>
+                <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <label class="flex items-center gap-2">
+                        <input
+                            v-model="lodPrewarmUiConfig.enabled"
+                            type="checkbox"
+                            class="h-4 w-4"
+                        />
+                        <span>启用</span>
+                    </label>
+                    <div class="text-[10px] text-muted-foreground">
+                        keys: dtx_lod_prewarm*
+                    </div>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-muted-foreground">topK</span>
+                        <input
+                            v-model.number="lodPrewarmUiConfig.topK"
+                            type="number"
+                            min="1"
+                            step="1"
+                            class="h-8 rounded border border-input bg-background px-2"
+                        />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-muted-foreground">minCount</span>
+                        <input
+                            v-model.number="lodPrewarmUiConfig.minCount"
+                            type="number"
+                            min="1"
+                            step="1"
+                            class="h-8 rounded border border-input bg-background px-2"
+                        />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-muted-foreground">并发</span>
+                        <input
+                            v-model.number="lodPrewarmUiConfig.concurrency"
+                            type="number"
+                            min="1"
+                            step="1"
+                            class="h-8 rounded border border-input bg-background px-2"
+                        />
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div
+            v-if="store.toolMode.value !== 'none' && toolsRef"
+            class="pointer-events-none absolute bottom-2 right-2 rounded-md border border-border bg-background/85 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur"
+            style="z-index: 940"
+        >
+            <div>{{ toolsRef.statusText.value }}</div>
+            <div v-if="toolsRef.hoverText.value" class="mt-1 text-muted-foreground">
+                {{ toolsRef.hoverText.value }}
+            </div>
+        </div>
+
+        <!-- 左侧竖直工具栏（快捷操作） -->
+        <div
+            ref="leftToolbarRef"
+            class="pointer-events-auto absolute left-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
+            style="z-index: 940"
+            @pointerdown.stop
+            @wheel.stop
+        >
+            <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="隐藏（选中对象）"
+                :disabled="!hasSelectedRefno"
+                @click.stop="hideSelected"
+            >
+                <EyeOff class="h-5 w-5" />
+            </button>
+            <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="显示（选中对象）"
+                :disabled="!hasSelectedRefno"
+                @click.stop="showSelected"
+            >
+                <Eye class="h-5 w-5" />
+            </button>
+            <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
+                title="全部隐藏"
+                @click.stop="hideAll"
+            >
+                <EyeOff class="h-5 w-5" />
+            </button>
+            <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="定位显示（选中对象）"
+                :disabled="!hasSelectedRefno"
+                @click.stop="locateShowSelected"
+            >
+                <LocateFixed class="h-5 w-5" />
+            </button>
+
+            <!-- 测量（下拉：长度/角度） -->
+            <div class="relative">
+                <button
+                    type="button"
+                    class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
+                    :class="isMeasureModeActive ? 'bg-muted' : ''"
+                    title="测量"
+                    @click.stop="toggleLeftMeasureMenu"
+                >
+                    <Ruler class="h-5 w-5" />
+                </button>
+
+                <div
+                    v-if="leftToolbarOpenMeasureMenu"
+                    class="absolute left-full top-0 ml-2 flex w-40 flex-col gap-1 rounded-xl border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
+                    style="z-index: 941"
+                >
+                    <button
+                        type="button"
+                        class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                        :class="store.toolMode.value === 'measure_distance' ? 'bg-muted' : ''"
+                        @click.stop="onLeftMeasureDistanceClick"
+                    >
+                        <Ruler class="h-4 w-4" />
+                        <span>长度测量</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                        :class="store.toolMode.value === 'measure_angle' ? 'bg-muted' : ''"
+                        @click.stop="onLeftMeasureAngleClick"
+                    >
+                        <Ruler class="h-4 w-4" />
+                        <span>角度测量</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧竖直工具栏（查看/快捷） -->
+        <div
+            class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
+            style="z-index: 940"
+            @pointerdown.stop
+            @wheel.stop
+        >
+            <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="范围周边（以选中构件为中心）"
+                :disabled="!hasSelectedRefno"
+                @click.stop="onRightRangeQuickViewClick"
+            >
+                <Crosshair class="h-5 w-5" />
+            </button>
+
+            <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
+                title="显示所在房间全部模型（以房间树选中房间为准）"
+                @click.stop="onRightRoomShowAllClick"
+            >
+                <Focus class="h-5 w-5" />
+            </button>
+
+            <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
+                title="管网（占位）"
+                @click.stop="onRightPipeNetworkClick"
+            >
+                <GitCompare class="h-5 w-5" />
+            </button>
+
+            <!-- 设置（弹出配置） -->
+            <div class="relative">
+                <button
+                    type="button"
+                    class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
+                    :class="rightToolbarOpenSettings ? 'bg-muted' : ''"
+                    title="查看工具设置"
+                    @click.stop="toggleRightSettings"
+                >
+                    <Settings class="h-5 w-5" />
+                </button>
+
+                <div
+                    v-if="rightToolbarOpenSettings"
+                    class="absolute right-full top-0 mr-2 w-72 rounded-xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur"
+                    style="z-index: 941"
+                    @pointerdown.stop
+                    @wheel.stop
+                >
+                    <div class="text-sm font-medium">查看工具设置</div>
+
+                    <div class="mt-3 space-y-3">
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs text-muted-foreground">范围半径 (m)</label>
+                                <span class="text-xs tabular-nums text-foreground">{{ rangeRadiusM }}</span>
+                            </div>
+                            <input v-model="rangeRadiusM" type="range" min="1" max="500" class="w-full" />
+                        </div>
+
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs text-muted-foreground">按专业过滤</label>
+                                <button
+                                    type="button"
+                                    class="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    @click.stop="rangeSettings.clearSpecFilter"
+                                >
+                                    清空
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                                    <input type="checkbox"
+                                        :checked="rangeSpecValues.includes(SiteSpecValue.Pipe)"
+                                        @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Pipe)" />
+                                    <span>{{ getSpecValueName(SiteSpecValue.Pipe) }}</span>
+                                </label>
+                                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                                    <input type="checkbox"
+                                        :checked="rangeSpecValues.includes(SiteSpecValue.Elec)"
+                                        @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Elec)" />
+                                    <span>{{ getSpecValueName(SiteSpecValue.Elec) }}</span>
+                                </label>
+                                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                                    <input type="checkbox"
+                                        :checked="rangeSpecValues.includes(SiteSpecValue.Inst)"
+                                        @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Inst)" />
+                                    <span>{{ getSpecValueName(SiteSpecValue.Inst) }}</span>
+                                </label>
+                                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                                    <input type="checkbox"
+                                        :checked="rangeSpecValues.includes(SiteSpecValue.Hvac)"
+                                        @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Hvac)" />
+                                    <span>{{ getSpecValueName(SiteSpecValue.Hvac) }}</span>
+                                </label>
+                            </div>
+                            <div class="text-[11px] text-muted-foreground">
+                                注：若模型未提供专业元数据，可能无法命中过滤。
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="text-xs text-muted-foreground">按类型过滤（nouns，逗号分隔）</label>
+                            <input
+                                v-model="rangeNounsText"
+                                class="h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                placeholder="例如：PIPE,BRAN,TUBI"
+                            />
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="text-xs text-muted-foreground">按名称过滤</label>
+                            <input
+                                v-model="rangeNameQuery"
+                                class="h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                placeholder="refno 或名称关键字"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div
             v-if="initError"
@@ -1271,7 +2316,17 @@ onUnmounted(() => {
 
         <MeasurementWizard
             v-if="
-                store.toolMode.value === 'measure_point_to_object' && toolsRef
+                (store.toolMode.value === 'measure_point_to_object' ||
+                    store.toolMode.value === 'measure_pipe_to_structure' ||
+                    store.toolMode.value === 'measure_pipe_to_pipe') &&
+                toolsRef
+            "
+            :title="
+                store.toolMode.value === 'measure_point_to_object'
+                    ? '点到面测量'
+                    : store.toolMode.value === 'measure_pipe_to_structure'
+                      ? '管-结构/墙 最近点测量'
+                      : '管-管 最近点测量'
             "
             :status-text="toolsRef.statusText.value"
             style="position: absolute; top: 12px; left: 12px; z-index: 940"
