@@ -39,6 +39,8 @@ coverage
 
 # Playwright / local screenshots
 artifacts/
+test-results/
+playwright-report/
 
 # Local sqlite caches
 deployment_sites.sqlite
