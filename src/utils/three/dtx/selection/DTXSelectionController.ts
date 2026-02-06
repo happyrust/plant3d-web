@@ -16,6 +16,7 @@ import { Box3, Camera, Color, Raycaster, Scene, Vector2, Vector3, WebGLRenderer 
 
 import { DTXLayer } from '../DTXLayer'
 import { DTXOutlineHelper } from '../outline/DTXOutlineHelper'
+import { DTXOverlayHighlighter, type DTXOverlayHighlightStyle } from './DTXOverlayHighlighter'
 import { EventEmitter } from './EventEmitter'
 import { ObjectsKdTree } from './ObjectsKdTree'
 import { GPUPicker, type PickResult } from './GPUPicker'
@@ -29,6 +30,10 @@ export interface DTXSelectionControllerOptions {
   container: HTMLElement
   selectionColor?: Color | number | string
   enableOutline?: boolean
+  /** 选中高亮模式：outline（后处理描边）| overlay（覆层填充+描边）| both */
+  highlightMode?: 'outline' | 'overlay' | 'both'
+  /** overlay 模式样式（默认：蓝面+绿边） */
+  overlayStyle?: DTXOverlayHighlightStyle
   resolveObjectIdsByRefno?: (refno: string) => string[]
 }
 
@@ -50,7 +55,9 @@ export class DTXSelectionController extends EventEmitter {
   private _kdTree: ObjectsKdTree
   private _selectionManager: SelectionManager
   private _outlineHelper: DTXOutlineHelper | null = null
+  private _overlayHighlighter: DTXOverlayHighlighter | null = null
   private _gpuPicker: GPUPicker
+  private _highlightMode: 'outline' | 'overlay' | 'both'
 
   constructor(options: DTXSelectionControllerOptions) {
     super()
@@ -69,14 +76,24 @@ export class DTXSelectionController extends EventEmitter {
       selectionColor: options.selectionColor ?? 0xff8800,
       multiSelect: true,
     })
+    this._highlightMode = options.highlightMode ?? 'outline'
     this._setupSelectionManager()
 
     this._gpuPicker = new GPUPicker(this._renderer)
     this._gpuPicker.setObjectIndexMapper((index) => this._dtxLayer.getObjectIdByIndex(index))
 
-    const enableOutline = options.enableOutline ?? true
+    const enableOutline =
+      (options.enableOutline ?? true) &&
+      (this._highlightMode === 'outline' || this._highlightMode === 'both')
     if (enableOutline) {
       this._initOutlineHelper()
+    }
+
+    if (this._highlightMode === 'overlay' || this._highlightMode === 'both') {
+      this._overlayHighlighter = new DTXOverlayHighlighter(this._scene, options.overlayStyle)
+      this._overlayHighlighter.setGeometryGetter((objectId) =>
+        this._dtxLayer.getObjectGeometryData(objectId),
+      )
     }
   }
 
@@ -195,7 +212,12 @@ export class DTXSelectionController extends EventEmitter {
     // 参考 AiosPrepackViewer.vue 的做法
 
     this._selectionManager.on('selectionChanged', (event) => {
-      this._outlineHelper?.setOutlinedObjects(event.selected)
+      if (this._highlightMode === 'outline' || this._highlightMode === 'both') {
+        this._outlineHelper?.setOutlinedObjects(event.selected)
+      }
+      if (this._highlightMode === 'overlay' || this._highlightMode === 'both') {
+        this._overlayHighlighter?.setHighlightedObjects(event.selected)
+      }
       this.emit('selectionChanged', event)
     })
   }
@@ -254,6 +276,7 @@ export class DTXSelectionController extends EventEmitter {
 
   dispose(): void {
     this._outlineHelper?.dispose()
+    this._overlayHighlighter?.dispose()
     this._selectionManager.dispose()
     this._gpuPicker.dispose()
     this.removeAllListeners()

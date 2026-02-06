@@ -84,7 +84,9 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'hydraulic');
   closePanelIfExists(dockApi, 'annotation');
   closePanelIfExists(dockApi, 'measurement');
+  closePanelIfExists(dockApi, 'dimension');
   closePanelIfExists(dockApi, 'ptset');
+  closePanelIfExists(dockApi, 'mbdPipe');
   closePanelIfExists(dockApi, 'modelTree');
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
@@ -109,6 +111,13 @@ function createDefaultLayout(dockApi: DockApi) {
     component: 'MeasurementPanel',
     title: '测量',
     position: { referencePanel: viewerPanel, direction: 'right' },
+  });
+
+  dockApi.addPanel({
+    id: 'dimension',
+    component: 'DimensionPanel',
+    title: '尺寸标注',
+    position: { referencePanel: measurementPanel, direction: 'within' },
   });
 
   dockApi.addPanel({
@@ -193,6 +202,18 @@ function ensurePanel(panelId: string) {
       position: viewerPanel ? { referencePanel: viewerPanel, direction: 'right' } : undefined,
     });
   }
+  if (panelId === 'dimension') {
+    return dockApi.addPanel({
+      id: 'dimension',
+      component: 'DimensionPanel',
+      title: '尺寸标注',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'annotation') {
     return dockApi.addPanel({
       id: 'annotation',
@@ -258,6 +279,18 @@ function ensurePanel(panelId: string) {
       id: 'ptset',
       component: 'PtsetPanel',
       title: '点集',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
+  if (panelId === 'mbdPipe') {
+    return dockApi.addPanel({
+      id: 'mbdPipe',
+      component: 'MbdPipePanel',
+      title: 'MBD-管道标注',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -455,6 +488,9 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.measurement':
       togglePanel('measurement');
       return;
+    case 'panel.dimension':
+      togglePanel('dimension');
+      return;
     case 'panel.annotation':
       togglePanel('annotation');
       return;
@@ -472,6 +508,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.ptset':
       togglePanel('ptset');
+      return;
+    case 'panel.mbdPipe':
+      togglePanel('mbdPipe');
       return;
     case 'panel.materialConfig':
       togglePanel('materialConfig');

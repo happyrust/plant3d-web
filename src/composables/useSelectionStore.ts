@@ -1,15 +1,15 @@
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 
 import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 
 const selectedRefno = ref<string | null>(null);
 
-function usePdmsUiAttrQuery(refno: string | null) {
+function usePdmsUiAttrQuery(refno: { value: string | null }) {
   return useQuery({
-    queryKey: ['pdms', 'ui-attr', refno],
-    queryFn: () => pdmsGetUiAttr(refno!),
-    enabled: computed(() => !!refno),
+    queryKey: computed(() => ['pdms', 'ui-attr', refno.value]),
+    queryFn: () => pdmsGetUiAttr(refno.value!),
+    enabled: computed(() => !!refno.value),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
   });
@@ -21,7 +21,7 @@ export function useSelectionStore() {
     isLoading: propertiesLoading,
     error,
     isError,
-  } = usePdmsUiAttrQuery(selectedRefno.value);
+  } = usePdmsUiAttrQuery(selectedRefno);
 
   // 当外部逻辑（如 loadProperties）修改 selectedRefno 时，我们需要确保 query 能感知到。
   // 注意：在 store 模式下，selectedRefno 是全局单例。

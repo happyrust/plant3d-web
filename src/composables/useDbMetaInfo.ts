@@ -1,4 +1,5 @@
 import { getJson, setJson } from '@/utils/storage/indexedDbCache'
+import { buildFilesOutputUrl } from '@/lib/filesOutput'
 
 type DbMetaFileEntry = {
   dbnum?: number
@@ -11,7 +12,7 @@ type DbMetaInfoJson = {
 
 const IDB_STORE = 'meta_info' as const
 const IDB_KEY = 'db_meta_info' as const
-const META_URL = '/files/output/scene_tree/db_meta_info.json'
+const META_URL = buildFilesOutputUrl('scene_tree/db_meta_info.json')
 
 let ref0ToDbnum: Map<number, number> | null = null
 let loadPromise: Promise<void> | null = null

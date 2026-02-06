@@ -11,7 +11,7 @@ import {
   resolveMaterialForInstance,
   type ModelDisplayConfig,
 } from '@/utils/three/dtx/materialConfig'
-import { Box3, BufferAttribute, BufferGeometry, Matrix4 } from 'three'
+import { Box3, BufferAttribute, BufferGeometry, CylinderGeometry, Matrix4 } from 'three'
 
 type LoaderOptions = {
   lodAssetKey?: string // "L1"
@@ -71,6 +71,28 @@ function createFallbackBoxGeometry(): BufferGeometry {
   return g
 }
 
+let cachedUnitTubiGeometry: BufferGeometry | null = null
+
+/**
+ * TUBI 几何体兜底：单位圆柱（对齐后端常用约定：z=[0..1]）。
+ *
+ * 说明：部分数据集的 instances_{dbno}.json 里，tubings[].geo_hash 会是 `tubi_{refno}`，但后端并不输出对应 GLB。
+ * 此处直接用程序生成的单位圆柱承接（几何由 transform 缩放/旋转/平移到位）。
+ */
+function getUnitTubiGeometry(): BufferGeometry {
+  if (cachedUnitTubiGeometry) return cachedUnitTubiGeometry
+
+  // three.js CylinderGeometry 默认沿 Y 轴、中心在原点、高度=1。
+  // 我们把它旋转到 Z 轴，并整体平移到 z=[0..1] 区间。
+  const g = new CylinderGeometry(0.5, 0.5, 1, 16, 1, false)
+  g.rotateX(Math.PI / 2)
+  g.translate(0, 0, 0.5)
+  g.computeBoundingBox()
+
+  cachedUnitTubiGeometry = g
+  return g
+}
+
 async function ensureGeometryForGeoHash(
   dtxLayer: DTXLayer,
   dbno: number,
@@ -87,6 +109,14 @@ async function ensureGeometryForGeoHash(
   }
 
   const task = (async () => {
+    // 约定：tubi_* 属于“虚拟管段几何”（unit cylinder），不走 glb 下载。
+    // 这样可避免大量 404 噪音，并确保“管道只有标注不见模型”的场景可直接显示。
+    if (geoHash.startsWith('tubi_') || geoHash.startsWith('t_')) {
+      dtxLayer.addGeometry(geoHash, getUnitTubiGeometry())
+      cache.loadedGeoHash.add(geoHash)
+      return
+    }
+
     const glbUrl = `/files/meshes/lod_${lodAssetKey}/${geoHash}_${lodAssetKey}.glb`
     let geometry: BufferGeometry | null = null
 
