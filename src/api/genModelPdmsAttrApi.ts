@@ -87,6 +87,18 @@ export async function pdmsGetPtset(refno: string): Promise<PtsetResponse> {
 }
 
 /**
+ * 获取 ptset（带上下文）
+ *
+ * 说明：当前后端 ptset 接口不依赖 dbno/batch_id；这里保留签名以便与 ViewerPanel 的“快照一致性”逻辑对齐。
+ */
+export async function pdmsGetPtsetWithContext(
+  refno: string,
+  _ctx?: { dbno?: number; batchId?: string | null },
+): Promise<PtsetResponse> {
+  return await pdmsGetPtset(refno);
+}
+
+/**
  * 变换矩阵查询响应
  */
 export interface TransformResponse {
@@ -106,4 +118,40 @@ export interface TransformResponse {
  */
 export async function pdmsGetTransform(refno: string): Promise<TransformResponse> {
   return await fetchJson<TransformResponse>(`/api/pdms/transform/${encodeURIComponent(refno)}`);
+}
+
+// ========================
+// PDMS 模型查询辅助（后端 SurrealDB）
+// ========================
+
+export interface PdmsTypeInfoResponse {
+  success: boolean;
+  refno: string;
+  noun?: string | null;
+  owner_refno?: string | null;
+  owner_noun?: string | null;
+  error_message?: string | null;
+}
+
+export interface PdmsChildrenResponse {
+  success: boolean;
+  refno: string;
+  children: string[];
+  error_message?: string | null;
+}
+
+/**
+ * 获取 noun / owner_noun（用于 BRAN/HANG 规则；后端查询 SurrealDB）
+ */
+export async function pdmsGetTypeInfo(refno: string): Promise<PdmsTypeInfoResponse> {
+  const qs = new URLSearchParams({ refno: String(refno || '') }).toString();
+  return await fetchJson<PdmsTypeInfoResponse>(`/api/pdms/type-info?${qs}`);
+}
+
+/**
+ * 获取 pe->owns 子节点（用于 BRAN/HANG children；后端查询 SurrealDB）
+ */
+export async function pdmsGetOwnsChildren(refno: string): Promise<PdmsChildrenResponse> {
+  const qs = new URLSearchParams({ refno: String(refno || '') }).toString();
+  return await fetchJson<PdmsChildrenResponse>(`/api/pdms/children?${qs}`);
 }

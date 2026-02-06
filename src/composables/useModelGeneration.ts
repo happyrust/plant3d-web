@@ -16,6 +16,7 @@ import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInsta
 import { useConsoleStore } from '@/composables/useConsoleStore'
 import { getDefaultSurrealConfig, useSurrealDB } from '@/composables/useSurrealDB'
 import { useSurrealModelQuery } from '@/composables/useSurrealModelQuery'
+import { pdmsGetOwnsChildren, pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi'
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo'
 import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
 
@@ -370,7 +371,26 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             appliedRule = true
           }
         } else {
-          console.warn('[model-generation] SurrealDB 未连接，跳过 BRAN/HANG 规则')
+          // WS 直连失败时，改走后端 HTTP（后端再查 SurrealDB），避免 BRAN/HANG 场景“只见面板不见模型”
+          try {
+            const resp = await pdmsGetTypeInfo(normalizedRoot)
+            if (resp.success) {
+              const noun = String(resp.noun || '').toUpperCase()
+              const ownerNoun = String(resp.owner_noun || '').toUpperCase()
+              if (ownerNoun === 'BRAN' || ownerNoun === 'HANG') {
+                visibleRefnos = [normalizedRoot]
+                appliedRule = true
+              } else if (noun === 'BRAN' || noun === 'HANG') {
+                const childrenResp = await pdmsGetOwnsChildren(normalizedRoot)
+                if (childrenResp.success) {
+                  visibleRefnos = childrenResp.children || []
+                  appliedRule = true
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[model-generation] SurrealDB 未连接，且后端 BRAN/HANG 查询失败，将回退 e3d subtree-refnos', e)
+          }
         }
 
         if (!appliedRule) {

@@ -1,6 +1,7 @@
 import type { InstanceManifest } from '@/utils/instances/instanceManifest'
 import { getBaseUrl } from '@/api/genModelTaskApi'
 import { getJson, setJson } from '@/utils/storage/indexedDbCache'
+import { buildFilesOutputUrl } from '@/lib/filesOutput'
 
 export class InstancesJsonNotFoundError extends Error {
   readonly dbno: number
@@ -21,13 +22,14 @@ export type StreamGenerateSseUpdate = {
 }
 
 const manifestCache = new Map<number, InstanceManifest>()
+const metaCache = new Map<number, unknown>()
 
 // ========= V3 shared tables (trans/aabb) =========
 const SHARED_STORE = 'instances_shared' as const
 const SHARED_TRANS_KEY = 'trans' as const
 const SHARED_AABB_KEY = 'aabb' as const
-const SHARED_TRANS_URL = '/files/output/instances/trans.json'
-const SHARED_AABB_URL = '/files/output/instances/aabb.json'
+const SHARED_TRANS_URL = buildFilesOutputUrl('instances/trans.json')
+const SHARED_AABB_URL = buildFilesOutputUrl('instances/aabb.json')
 
 let sharedTransTable: Record<string, number[]> | null = null
 let sharedAabbTable: Record<string, unknown> | null = null
@@ -129,7 +131,7 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
   const cached = manifestCache.get(dbno)
   if (cached) return cached
 
-  const url = `/files/output/instances/instances_${dbno}.json`
+  const url = buildFilesOutputUrl(`instances/instances_${dbno}.json`)
   const resp = await fetch(url)
   if (resp.status === 404) {
     throw new InstancesJsonNotFoundError(dbno)
@@ -155,6 +157,26 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
 
 export async function getDbnoInstancesManifest(dbno: number): Promise<InstanceManifest> {
   return await fetchInstancesManifest(dbno)
+}
+
+/**
+ * 读取 meta_{dbno}.json（用于 batch_id 等快照信息）。
+ * - 404：返回 null（不抛错，便于旧数据集兼容）
+ */
+export async function getDbnoInstancesMeta<T = any>(dbno: number): Promise<T | null> {
+  const cached = metaCache.get(dbno)
+  if (cached) return cached as T
+
+  const url = buildFilesOutputUrl(`instances/meta_${dbno}.json`)
+  const resp = await fetch(url)
+  if (resp.status === 404) return null
+  if (!resp.ok) {
+    throw new Error(`加载 meta 失败: HTTP ${resp.status} ${resp.statusText}`)
+  }
+
+  const json = (await resp.json()) as unknown
+  metaCache.set(dbno, json)
+  return json as T
 }
 
 /**

@@ -25,6 +25,7 @@ export abstract class AnnotationBase extends THREE.Object3D {
   // 缓存向量，避免每帧分配
   protected readonly _worldPosition = new THREE.Vector3()
   protected readonly _eye = new THREE.Vector3()
+  protected readonly _worldScale = new THREE.Vector3()
   private _lastScaleFactor = 1
   private readonly _ownedMaterials: THREE.Material[] = []
 
@@ -45,10 +46,23 @@ export abstract class AnnotationBase extends THREE.Object3D {
     this._eye.copy(camera.position).sub(this._worldPosition).normalize()
 
     if (this.shouldRescaleOnZoom) {
-      const factor = this.scaleIndependentOfZoom(camera, this._worldPosition)
-      if (factor !== this._lastScaleFactor) {
-        this._lastScaleFactor = factor
-        this.onScaleFactorChanged(factor)
+      // scaleIndependentOfZoom 返回的是“世界空间”尺度；若父级存在缩放（如 globalModelMatrix=0.001），
+      // 需要换算到本地缩放系数，避免标注装饰件/文字被全局缩放压扁。
+      const worldFactor = this.scaleIndependentOfZoom(camera, this._worldPosition)
+      let localFactor = worldFactor
+      try {
+        this.getWorldScale(this._worldScale)
+        const s = (Math.abs(this._worldScale.x) + Math.abs(this._worldScale.y) + Math.abs(this._worldScale.z)) / 3
+        if (Number.isFinite(s) && s > 1e-9) {
+          localFactor = worldFactor / s
+        }
+      } catch {
+        // ignore
+      }
+
+      if (localFactor !== this._lastScaleFactor) {
+        this._lastScaleFactor = localFactor
+        this.onScaleFactorChanged(localFactor)
       }
     }
   }

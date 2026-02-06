@@ -27,6 +27,8 @@ export interface AnnotationHitResult {
   annotation: AnnotationBase
   /** 标注 ID */
   id: string
+  /** 命中的子对象（用于区分拖拽角色） */
+  hitObject: THREE.Object3D
   /** 命中点（世界坐标） */
   point: THREE.Vector3
   /** 距离相机的距离 */
@@ -39,6 +41,7 @@ export type AnnotationInteractionEvent = {
   id: string | null
   originalEvent?: MouseEvent
   point?: THREE.Vector3
+  hitObject?: THREE.Object3D
 }
 
 export type AnnotationInteractionCallback = (event: AnnotationInteractionEvent) => void
@@ -52,6 +55,10 @@ export class AnnotationInteractionController {
 
   private options: Required<AnnotationInteractionOptions>
   private callbacks: AnnotationInteractionCallback[] = []
+
+  // 为拖拽提供“全局 mouseup/move”兜底：避免鼠标移出 canvas 松手导致卡死。
+  // (runtime 可被测试通过 (as any) 读取)
+  private windowDragAttached = false
 
   // 状态
   private _hoveredId = ref<string | null>(null)
@@ -80,6 +87,21 @@ export class AnnotationInteractionController {
     this.onMouseDown = this.onMouseDown.bind(this)
     this.onMouseUp = this.onMouseUp.bind(this)
     this.onClick = this.onClick.bind(this)
+  }
+
+  private attachWindowDragListeners(): void {
+    if (this.windowDragAttached) return
+    this.windowDragAttached = true
+    // 拖拽中依赖 mousemove 发 drag 事件；mouseup 结束拖拽并恢复 controls
+    window.addEventListener('mousemove', this.onMouseMove)
+    window.addEventListener('mouseup', this.onMouseUp)
+  }
+
+  private detachWindowDragListeners(): void {
+    if (!this.windowDragAttached) return
+    this.windowDragAttached = false
+    window.removeEventListener('mousemove', this.onMouseMove)
+    window.removeEventListener('mouseup', this.onMouseUp)
   }
 
   /** 当前悬停的标注 ID */
@@ -126,6 +148,8 @@ export class AnnotationInteractionController {
 
   /** 从 DOM 元素分离 */
   detach(): void {
+    // detach 时必须清理全局拖拽监听器，避免泄漏与“卡拖拽”状态
+    this.detachWindowDragListeners()
     if (this.domElement) {
       this.domElement.removeEventListener('mousemove', this.onMouseMove)
       this.domElement.removeEventListener('click', this.onClick)
@@ -209,14 +233,24 @@ export class AnnotationInteractionController {
 
     for (const [id, annotation] of this.annotations) {
       if (!annotation.visible) continue
+      const ud = (annotation as any).userData as any
+      if (ud && (ud.pickable === false || ud.noPick === true)) continue
 
       const intersects = this.raycaster.intersectObject(annotation, true)
       if (intersects.length > 0) {
-        const hit = intersects[0]
+        let hit: THREE.Intersection<THREE.Object3D> | null = null
+        for (const it of intersects) {
+          const hud = (it.object as any)?.userData as any
+          if (hud && (hud.noPick === true || hud.pickable === false)) continue
+          hit = it as any
+          break
+        }
+        if (!hit) continue
         if (!closest || hit.distance < closest.distance) {
           closest = {
             annotation,
             id,
+            hitObject: hit.object,
             point: hit.point.clone(),
             distance: hit.distance,
           }
@@ -244,6 +278,7 @@ export class AnnotationInteractionController {
         id: this.dragAnnotationId,
         originalEvent: event,
         point: hit?.point,
+        hitObject: hit?.hitObject,
       })
       return
     }
@@ -272,6 +307,7 @@ export class AnnotationInteractionController {
           id: hit.id,
           originalEvent: event,
           point: hit.point,
+          hitObject: hit.hitObject,
         })
       }
     } else {
@@ -299,6 +335,7 @@ export class AnnotationInteractionController {
         id: hit.id,
         originalEvent: event,
         point: hit.point,
+        hitObject: hit.hitObject,
       })
     } else {
       // 点击空白区域取消选中
@@ -319,10 +356,15 @@ export class AnnotationInteractionController {
     const hit = this.hitTest()
 
     if (hit && hit.id === this._selectedId.value) {
+      const ud = (hit.annotation as any).userData as any
+      if (!ud || ud.draggable !== true) return
+
       this._isDragging.value = true
       this.dragAnnotation = hit.annotation
       this.dragAnnotationId = hit.id
       this.dragStartPoint = hit.point.clone()
+      // 绑定 window 级监听器：避免拖拽过程中鼠标移出 domElement 后无法收到 mouseup
+      this.attachWindowDragListeners()
 
       this.emit({
         type: 'drag-start',
@@ -330,6 +372,7 @@ export class AnnotationInteractionController {
         id: hit.id,
         originalEvent: event,
         point: hit.point,
+        hitObject: hit.hitObject,
       })
     }
   }
@@ -347,6 +390,7 @@ export class AnnotationInteractionController {
       this.dragAnnotation = null
       this.dragAnnotationId = null
       this.dragStartPoint = null
+      this.detachWindowDragListeners()
     }
   }
 }

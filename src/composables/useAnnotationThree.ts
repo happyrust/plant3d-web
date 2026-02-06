@@ -246,7 +246,9 @@ export function useAnnotationThree(
 
   /** 渲染 CSS2D 标签 */
   function renderLabels(scene: THREE.Scene, camera: THREE.Camera): void {
-    css2dRenderer?.render(scene, camera)
+    // 只渲染标注子树，避免同一页面多套 CSS2DRenderer 时互相 re-parent DOM 元素。
+    void scene
+    css2dRenderer?.render(annotationGroup, camera)
   }
 
   /** 更新分辨率 */

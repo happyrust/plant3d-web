@@ -55,6 +55,13 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         ],
       },
       {
+        id: 'view.panel.dimension',
+        label: '尺寸标注',
+        items: [
+          { kind: 'button', id: 'panel.dimension', label: '尺寸标注', icon: 'ruler', commandId: 'panel.dimension' },
+        ],
+      },
+      {
         id: 'view.panel.annotation',
         label: '批注',
         items: [
@@ -156,6 +163,27 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         label: '管理',
         items: [
           { kind: 'button', id: 'measurement.clear', label: '清空', icon: 'trash', commandId: 'measurement.clear' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'dimension',
+    label: '尺寸标注',
+    groups: [
+      {
+        id: 'dimension.create',
+        label: '创建',
+        items: [
+          { kind: 'button', id: 'dimension.linear', label: '距离', icon: 'ruler', commandId: 'dimension.linear' },
+          { kind: 'button', id: 'dimension.angle', label: '角度', icon: 'ruler', commandId: 'dimension.angle' },
+        ],
+      },
+      {
+        id: 'dimension.manage',
+        label: '管理',
+        items: [
+          { kind: 'button', id: 'dimension.clear', label: '清空', icon: 'trash', commandId: 'dimension.clear' },
         ],
       },
     ],

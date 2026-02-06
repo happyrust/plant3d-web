@@ -1,0 +1,304 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+
+import type { UseMbdPipeAnnotationThreeReturn } from '@/composables/useMbdPipeAnnotationThree'
+import type { MbdDimKind } from '@/api/mbdPipeApi'
+
+const props = defineProps<{
+  vis: UseMbdPipeAnnotationThreeReturn
+}>()
+
+defineEmits<{
+  (e: 'close'): void
+}>()
+
+const tab = ref<'dims' | 'welds' | 'slopes' | 'attrs' | 'segments'>('dims')
+
+const data = computed(() => props.vis.currentData.value)
+const stats = computed(() => data.value?.stats ?? null)
+const branchName = computed(() => data.value?.branch_name ?? '')
+const branchRefno = computed(() => data.value?.branch_refno ?? '')
+const inputRefno = computed(() => data.value?.input_refno ?? '')
+
+const dims = computed(() => data.value?.dims ?? [])
+const welds = computed(() => data.value?.welds ?? [])
+const slopes = computed(() => data.value?.slopes ?? [])
+const segments = computed(() => data.value?.segments ?? [])
+const attrs = computed(() => data.value?.branch_attrs ?? null)
+
+function normalizeDimKind(kind: unknown): MbdDimKind {
+  return (kind === 'chain' || kind === 'overall' || kind === 'port' || kind === 'segment')
+    ? kind
+    : 'segment'
+}
+
+function dimKindLabel(kind: MbdDimKind): string {
+  if (kind === 'segment') return '段长'
+  if (kind === 'chain') return '链式'
+  if (kind === 'overall') return '总长'
+  return '端口'
+}
+
+const filteredDims = computed(() => {
+  const showSeg = props.vis.showDimSegment.value
+  const showChain = props.vis.showDimChain.value
+  const showOverall = props.vis.showDimOverall.value
+  const showPort = props.vis.showDimPort.value
+
+  const kindOrder: Record<MbdDimKind, number> = {
+    segment: 10,
+    chain: 20,
+    overall: 30,
+    port: 40,
+  }
+
+  return (dims.value || [])
+    .filter((d: any) => {
+      const k = normalizeDimKind(d?.kind)
+      return (
+        (k === 'segment' && showSeg) ||
+        (k === 'chain' && showChain) ||
+        (k === 'overall' && showOverall) ||
+        (k === 'port' && showPort)
+      )
+    })
+    .slice()
+    .sort((a: any, b: any) => {
+      const ka = normalizeDimKind(a?.kind)
+      const kb = normalizeDimKind(b?.kind)
+      const ok = (kindOrder[ka] ?? 99) - (kindOrder[kb] ?? 99)
+      if (ok !== 0) return ok
+
+      const ga = typeof a?.group_id === 'string' ? a.group_id : ''
+      const gb = typeof b?.group_id === 'string' ? b.group_id : ''
+      if (ga !== gb) return ga.localeCompare(gb)
+
+      const sa = Number.isFinite(a?.seq) ? Number(a.seq) : Number.POSITIVE_INFINITY
+      const sb = Number.isFinite(b?.seq) ? Number(b.seq) : Number.POSITIVE_INFINITY
+      if (sa !== sb) return sa - sb
+
+      const ta = String(a?.text ?? '')
+      const tb = String(b?.text ?? '')
+      return ta.localeCompare(tb)
+    })
+})
+
+function setActive(id: string | null) {
+  props.vis.highlightItem(id)
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-3">
+    <div class="flex items-center justify-between gap-2">
+      <div class="min-w-0">
+        <div class="truncate text-sm font-semibold">
+          {{ branchName || 'MBD 管道标注' }}
+        </div>
+        <div class="truncate text-xs text-muted-foreground">
+          BRAN/HANG: {{ branchRefno || '（未生成）' }}
+          <span v-if="inputRefno"> · input: {{ inputRefno }}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button"
+          class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+          @click="vis.flyTo">
+          飞行
+        </button>
+        <button type="button"
+          class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+          @click="vis.clearAll">
+          清除
+        </button>
+        <button type="button"
+          class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+          @click="$emit('close')">
+          关闭
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox" :checked="vis.isVisible.value" @change="vis.isVisible.value = !vis.isVisible.value" />
+        <span>显示</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox" :checked="vis.showLabels.value" @change="vis.showLabels.value = !vis.showLabels.value" />
+        <span>文字</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox" :checked="vis.showDims.value" @change="vis.showDims.value = !vis.showDims.value" />
+        <span>尺寸</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox" :checked="vis.showWelds.value" @change="vis.showWelds.value = !vis.showWelds.value" />
+        <span>焊缝</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox" :checked="vis.showSlopes.value" @change="vis.showSlopes.value = !vis.showSlopes.value" />
+        <span>坡度</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox" :checked="vis.showSegments.value" @change="vis.showSegments.value = !vis.showSegments.value" />
+        <span>管段</span>
+      </label>
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        @click="setActive(null)">
+        取消高亮
+      </button>
+    </div>
+
+    <div v-if="stats" class="grid grid-cols-4 gap-2 text-xs">
+      <div class="rounded-md border border-border px-2 py-1">
+        段: <span class="font-semibold">{{ stats.segments_count }}</span>
+      </div>
+      <div class="rounded-md border border-border px-2 py-1">
+        尺寸: <span class="font-semibold">{{ stats.dims_count }}</span>
+      </div>
+      <div class="rounded-md border border-border px-2 py-1">
+        焊缝: <span class="font-semibold">{{ stats.welds_count }}</span>
+      </div>
+      <div class="rounded-md border border-border px-2 py-1">
+        坡度: <span class="font-semibold">{{ stats.slopes_count }}</span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        :class="tab === 'dims' ? 'bg-muted' : ''"
+        @click="tab = 'dims'">
+        尺寸
+      </button>
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        :class="tab === 'welds' ? 'bg-muted' : ''"
+        @click="tab = 'welds'">
+        焊缝
+      </button>
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        :class="tab === 'slopes' ? 'bg-muted' : ''"
+        @click="tab = 'slopes'">
+        坡度
+      </button>
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        :class="tab === 'attrs' ? 'bg-muted' : ''"
+        @click="tab = 'attrs'">
+        图纸属性
+      </button>
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        :class="tab === 'segments' ? 'bg-muted' : ''"
+        @click="tab = 'segments'">
+        段
+      </button>
+    </div>
+
+    <div v-if="tab === 'dims'" class="flex flex-col gap-2">
+      <div class="grid grid-cols-2 gap-2">
+        <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+          <input type="checkbox" :checked="vis.showDimSegment.value" @change="vis.showDimSegment.value = !vis.showDimSegment.value" />
+          <span>段长</span>
+        </label>
+        <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+          <input type="checkbox" :checked="vis.showDimChain.value" @change="vis.showDimChain.value = !vis.showDimChain.value" />
+          <span>链式(含两端)</span>
+        </label>
+        <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+          <input type="checkbox" :checked="vis.showDimOverall.value" @change="vis.showDimOverall.value = !vis.showDimOverall.value" />
+          <span>总长</span>
+        </label>
+        <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+          <input type="checkbox" :checked="vis.showDimPort.value" @change="vis.showDimPort.value = !vis.showDimPort.value" />
+          <span>端口</span>
+        </label>
+      </div>
+
+      <button v-for="d in filteredDims" :key="d.id"
+        type="button"
+        class="w-full rounded-md border border-border p-2 text-left text-xs hover:bg-muted"
+        :class="vis.activeItemId.value === d.id ? 'bg-muted' : ''"
+        @click="setActive(d.id)">
+        <div class="flex items-center justify-between gap-2">
+          <div class="truncate font-semibold">
+            <span class="text-muted-foreground">[{{ dimKindLabel(normalizeDimKind(d.kind)) }}]</span>
+            {{ ' ' }}{{ d.text }}
+          </div>
+          <div class="text-muted-foreground">{{ d.length.toFixed(1) }}</div>
+        </div>
+        <div class="mt-1 text-muted-foreground truncate">start: {{ d.start.join(',') }} · end: {{ d.end.join(',') }}</div>
+      </button>
+      <div v-if="filteredDims.length === 0" class="text-xs text-muted-foreground">（暂无尺寸）</div>
+    </div>
+
+    <div v-else-if="tab === 'welds'" class="flex flex-col gap-2">
+      <button v-for="w in welds" :key="w.id"
+        type="button"
+        class="w-full rounded-md border border-border p-2 text-left text-xs hover:bg-muted"
+        :class="vis.activeItemId.value === w.id ? 'bg-muted' : ''"
+        @click="setActive(w.id)">
+        <div class="flex items-center justify-between gap-2">
+          <div class="truncate font-semibold">{{ w.label }}</div>
+          <div class="text-muted-foreground">{{ w.is_shop ? '车间焊' : '现场焊' }}</div>
+        </div>
+        <div class="mt-1 text-muted-foreground truncate">pos: {{ w.position.join(',') }}</div>
+      </button>
+      <div v-if="welds.length === 0" class="text-xs text-muted-foreground">（暂无焊缝）</div>
+    </div>
+
+    <div v-else-if="tab === 'slopes'" class="flex flex-col gap-2">
+      <button v-for="s in slopes" :key="s.id"
+        type="button"
+        class="w-full rounded-md border border-border p-2 text-left text-xs hover:bg-muted"
+        :class="vis.activeItemId.value === s.id ? 'bg-muted' : ''"
+        @click="setActive(s.id)">
+        <div class="flex items-center justify-between gap-2">
+          <div class="truncate font-semibold">{{ s.text }}</div>
+          <div class="text-muted-foreground">{{ s.slope.toFixed(4) }}</div>
+        </div>
+        <div class="mt-1 text-muted-foreground truncate">start: {{ s.start.join(',') }} · end: {{ s.end.join(',') }}</div>
+      </button>
+      <div v-if="slopes.length === 0" class="text-xs text-muted-foreground">（暂无坡度）</div>
+    </div>
+
+    <div v-else-if="tab === 'segments'" class="flex flex-col gap-2">
+      <button v-for="s in segments" :key="s.id"
+        type="button"
+        class="w-full rounded-md border border-border p-2 text-left text-xs hover:bg-muted"
+        :class="vis.activeItemId.value === s.id ? 'bg-muted' : ''"
+        @click="setActive(s.id)">
+        <div class="flex items-center justify-between gap-2">
+          <div class="truncate font-semibold">{{ s.noun }}</div>
+          <div class="text-muted-foreground">{{ s.length.toFixed(1) }}</div>
+        </div>
+        <div class="mt-1 text-muted-foreground truncate">refno: {{ s.refno }} <span v-if="s.name">· {{ s.name }}</span></div>
+      </button>
+      <div v-if="segments.length === 0" class="text-xs text-muted-foreground">（暂无管段）</div>
+    </div>
+
+    <div v-else class="rounded-md border border-border p-2 text-xs">
+      <div v-if="attrs" class="grid grid-cols-2 gap-x-2 gap-y-1">
+        <div class="text-muted-foreground">介质</div><div class="truncate">{{ attrs.duty ?? '' }}</div>
+        <div class="text-muted-foreground">管道等级</div><div class="truncate">{{ attrs.pspec ?? '' }}</div>
+        <div class="text-muted-foreground">RCCM</div><div class="truncate">{{ attrs.rccm ?? '' }}</div>
+        <div class="text-muted-foreground">清洁度</div><div class="truncate">{{ attrs.clean ?? '' }}</div>
+        <div class="text-muted-foreground">设计温度</div><div class="truncate">{{ attrs.temp ?? '' }}</div>
+        <div class="text-muted-foreground">设计压力</div><div class="truncate">{{ attrs.pressure ?? '' }}</div>
+        <div class="text-muted-foreground">保温</div><div class="truncate">{{ attrs.ispec ?? '' }}</div>
+        <div class="text-muted-foreground">保温厚度</div><div class="truncate">{{ attrs.insuthick ?? '' }}</div>
+        <div class="text-muted-foreground">伴热</div><div class="truncate">{{ attrs.tspec ?? '' }}</div>
+        <div class="text-muted-foreground">室外</div><div class="truncate">{{ attrs.swgd ?? '' }}</div>
+        <div class="text-muted-foreground">图号</div><div class="truncate">{{ attrs.drawnum ?? '' }}</div>
+        <div class="text-muted-foreground">版本</div><div class="truncate">{{ attrs.rev ?? '' }}</div>
+        <div class="text-muted-foreground">状态</div><div class="truncate">{{ attrs.status ?? '' }}</div>
+        <div class="text-muted-foreground">介质(FLUID)</div><div class="truncate">{{ attrs.fluid ?? '' }}</div>
+      </div>
+      <div v-else class="text-muted-foreground">（暂无图纸属性）</div>
+    </div>
+  </div>
+</template>

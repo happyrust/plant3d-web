@@ -7,6 +7,8 @@ export type ToolMode =
   | 'measure_distance'
   | 'measure_angle'
   | 'measure_point_to_object'
+  | 'dimension_linear'
+  | 'dimension_angle'
   | 'annotation'
   | 'annotation_cloud'
   | 'annotation_rect'
@@ -44,6 +46,39 @@ export type AngleMeasurementRecord = {
 };
 
 export type MeasurementRecord = DistanceMeasurementRecord | AngleMeasurementRecord;
+
+export type DimensionKind = 'linear_distance' | 'angle';
+
+export type LinearDistanceDimensionRecord = {
+  id: string;
+  kind: 'linear_distance';
+  origin: MeasurementPoint;
+  target: MeasurementPoint;
+  offset: number;
+  direction: Vec3 | null;
+  /** 文本在尺寸线上的位置（0..1，默认 0.5） */
+  labelT?: number;
+  textOverride?: string;
+  visible: boolean;
+  createdAt: number;
+};
+
+export type AngleDimensionRecord = {
+  id: string;
+  kind: 'angle';
+  origin: MeasurementPoint;
+  corner: MeasurementPoint;
+  target: MeasurementPoint;
+  offset: number;
+  direction: Vec3 | null;
+  /** 文本在圆弧上的位置（0..1，默认 0.5） */
+  labelT?: number;
+  textOverride?: string;
+  visible: boolean;
+  createdAt: number;
+};
+
+export type DimensionRecord = LinearDistanceDimensionRecord | AngleDimensionRecord;
 
 export type AnnotationRecord = {
   id: string;
@@ -121,6 +156,12 @@ export type PtsetVisualizationRequest = {
   timestamp: number;
 };
 
+// MBD 管道标注请求（用于跨组件通信）
+export type MbdPipeAnnotationRequest = {
+  refno: string;
+  timestamp: number;
+};
+
 type PersistedStateV1 = {
   version: 1;
   measurements: MeasurementRecord[];
@@ -143,49 +184,83 @@ type PersistedStateV3 = {
   rectAnnotations: RectAnnotationRecord[];
 };
 
+type PersistedStateV4 = {
+  version: 4;
+  measurements: MeasurementRecord[];
+  annotations: AnnotationRecord[];
+  obbAnnotations: ObbAnnotationRecord[];
+  cloudAnnotations: CloudAnnotationRecord[];
+  rectAnnotations: RectAnnotationRecord[];
+  dimensions: DimensionRecord[];
+};
+
 const STORAGE_KEY_V1 = 'plant3d-web-tools-v1';
 const STORAGE_KEY_V2 = 'plant3d-web-tools-v2';
 const STORAGE_KEY_V3 = 'plant3d-web-tools-v3';
+const STORAGE_KEY_V4 = 'plant3d-web-tools-v4';
 
-function normalizeV1(parsed: PersistedStateV1): PersistedStateV3 {
+function normalizeV1(parsed: PersistedStateV1): PersistedStateV4 {
   return {
-    version: 3,
+    version: 4,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
     obbAnnotations: [],
     cloudAnnotations: [],
     rectAnnotations: [],
+    dimensions: [],
   };
 }
 
-function normalizeV2(parsed: PersistedStateV2): PersistedStateV3 {
+function normalizeV2(parsed: PersistedStateV2): PersistedStateV4 {
   return {
-    version: 3,
+    version: 4,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: [],
     rectAnnotations: [],
+    dimensions: [],
   };
 }
 
-function normalizeV3(parsed: PersistedStateV3): PersistedStateV3 {
+function normalizeV3(parsed: PersistedStateV3): PersistedStateV4 {
   return {
-    version: 3,
+    version: 4,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
+    dimensions: [],
   };
 }
 
-function loadPersisted(): PersistedStateV3 {
+function normalizeV4(parsed: PersistedStateV4): PersistedStateV4 {
+  return {
+    version: 4,
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
+    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
+    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
+    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
+    dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
+  };
+}
+
+function loadPersisted(): PersistedStateV4 {
   if (typeof localStorage === 'undefined') {
-    return { version: 3, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [] };
+    return { version: 4, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [], dimensions: [] };
   }
 
   try {
+    const rawV4 = localStorage.getItem(STORAGE_KEY_V4);
+    if (rawV4) {
+      const parsed = JSON.parse(rawV4) as PersistedStateV4;
+      if (parsed && parsed.version === 4) {
+        return normalizeV4(parsed);
+      }
+    }
+
     const rawV3 = localStorage.getItem(STORAGE_KEY_V3);
     if (rawV3) {
       const parsed = JSON.parse(rawV3) as PersistedStateV3;
@@ -213,7 +288,7 @@ function loadPersisted(): PersistedStateV3 {
     // ignore
   }
 
-  return { version: 3, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [] };
+  return { version: 4, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [], dimensions: [] };
 }
 
 const persisted = loadPersisted();
@@ -223,6 +298,7 @@ const annotations = ref<AnnotationRecord[]>(persisted.annotations);
 const obbAnnotations = ref<ObbAnnotationRecord[]>(persisted.obbAnnotations);
 const cloudAnnotations = ref<CloudAnnotationRecord[]>(persisted.cloudAnnotations);
 const rectAnnotations = ref<RectAnnotationRecord[]>(persisted.rectAnnotations);
+const dimensions = ref<DimensionRecord[]>(persisted.dimensions);
 
 const activeTab = ref<'tree' | 'measurement' | 'annotation' | 'obb_annotation' | 'manager' | 'properties'>('tree');
 const toolMode = ref<ToolMode>('none');
@@ -235,14 +311,18 @@ const activeAnnotationId = ref<string | null>(null);
 const activeObbAnnotationId = ref<string | null>(null);
 const activeCloudAnnotationId = ref<string | null>(null);
 const activeRectAnnotationId = ref<string | null>(null);
+const activeDimensionId = ref<string | null>(null);
 
 const pickedQueryCenter = ref<PickedQueryCenter | null>(null);
 
 // Ptset 可视化请求
 const ptsetVisualizationRequest = ref<PtsetVisualizationRequest | null>(null);
+// MBD 管道标注请求
+const mbdPipeAnnotationRequest = ref<MbdPipeAnnotationRequest | null>(null);
 
 const pendingObbEditId = ref<string | null>(null);
 const pendingTextAnnotationEditId = ref<string | null>(null);
+const pendingDimensionEditId = ref<string | null>(null);
 
 watch(
   () => ({
@@ -251,19 +331,21 @@ watch(
     obbAnnotations: obbAnnotations.value,
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
+    dimensions: dimensions.value,
   }),
   (state) => {
     if (typeof localStorage === 'undefined') return;
-    const payload: PersistedStateV3 = {
-      version: 3,
+    const payload: PersistedStateV4 = {
+      version: 4,
       measurements: state.measurements,
       annotations: state.annotations,
       obbAnnotations: state.obbAnnotations,
       cloudAnnotations: state.cloudAnnotations,
       rectAnnotations: state.rectAnnotations,
+      dimensions: state.dimensions,
     };
     try {
-      localStorage.setItem(STORAGE_KEY_V3, JSON.stringify(payload));
+      localStorage.setItem(STORAGE_KEY_V4, JSON.stringify(payload));
     } catch {
       // ignore
     }
@@ -297,6 +379,31 @@ function removeMeasurement(id: string) {
 
 function clearMeasurements() {
   measurements.value = [];
+}
+
+function addDimension(rec: DimensionRecord) {
+  dimensions.value = [...dimensions.value, rec];
+  activeDimensionId.value = rec.id;
+}
+
+function updateDimension(id: string, patch: Partial<DimensionRecord>) {
+  dimensions.value = dimensions.value.map((d) => (d.id === id ? ({ ...d, ...patch } as DimensionRecord) : d));
+}
+
+function updateDimensionVisible(id: string, visible: boolean) {
+  updateDimension(id, { visible } as Partial<DimensionRecord>);
+}
+
+function removeDimension(id: string) {
+  dimensions.value = dimensions.value.filter((d) => d.id !== id);
+  if (activeDimensionId.value === id) {
+    activeDimensionId.value = null;
+  }
+}
+
+function clearDimensions() {
+  dimensions.value = [];
+  activeDimensionId.value = null;
 }
 
 function addAnnotation(rec: AnnotationRecord) {
@@ -403,6 +510,7 @@ function clearRectAnnotations() {
 
 function clearAll() {
   clearMeasurements();
+  clearDimensions();
   clearAnnotations();
   clearObbAnnotations();
   clearCloudAnnotations();
@@ -617,40 +725,46 @@ function getAnnotationComments(
 }
 
 function exportJSON(): string {
-  const payload: PersistedStateV3 = {
-    version: 3,
+  const payload: PersistedStateV4 = {
+    version: 4,
     measurements: measurements.value,
     annotations: annotations.value,
     obbAnnotations: obbAnnotations.value,
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
+    dimensions: dimensions.value,
   };
   return JSON.stringify(payload, null, 2);
 }
 
 function importJSON(raw: string) {
-  const parsed = JSON.parse(raw) as PersistedStateV1 | PersistedStateV2 | PersistedStateV3;
-  if (!parsed || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3)) {
+  const parsed = JSON.parse(raw) as PersistedStateV1 | PersistedStateV2 | PersistedStateV3 | PersistedStateV4;
+  if (!parsed || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4)) {
     throw new Error('Unsupported tools JSON format');
   }
 
-  const v3 =
+  const v4 =
     parsed.version === 1
       ? normalizeV1(parsed)
       : parsed.version === 2
         ? normalizeV2(parsed)
-        : normalizeV3(parsed);
+        : parsed.version === 3
+          ? normalizeV3(parsed)
+          : normalizeV4(parsed);
 
-  measurements.value = v3.measurements;
-  annotations.value = v3.annotations;
-  obbAnnotations.value = v3.obbAnnotations;
-  cloudAnnotations.value = v3.cloudAnnotations;
-  rectAnnotations.value = v3.rectAnnotations;
+  measurements.value = v4.measurements;
+  annotations.value = v4.annotations;
+  obbAnnotations.value = v4.obbAnnotations;
+  cloudAnnotations.value = v4.cloudAnnotations;
+  rectAnnotations.value = v4.rectAnnotations;
+  dimensions.value = v4.dimensions;
 
   activeAnnotationId.value = null;
   activeObbAnnotationId.value = null;
   activeCloudAnnotationId.value = null;
   activeRectAnnotationId.value = null;
+  activeDimensionId.value = null;
+  pendingDimensionEditId.value = null;
   toolMode.value = 'none';
 }
 
@@ -659,10 +773,12 @@ const annotationCount = computed(() => annotations.value.length);
 const obbAnnotationCount = computed(() => obbAnnotations.value.length);
 const cloudAnnotationCount = computed(() => cloudAnnotations.value.length);
 const rectAnnotationCount = computed(() => rectAnnotations.value.length);
+const dimensionCount = computed(() => dimensions.value.length);
 
 const allItems = computed(() => {
   return {
     measurements: measurements.value,
+    dimensions: dimensions.value,
     annotations: annotations.value,
     obbAnnotations: obbAnnotations.value,
     cloudAnnotations: cloudAnnotations.value,
@@ -678,16 +794,20 @@ export function useToolStore() {
     activeObbAnnotationId,
     activeCloudAnnotationId,
     activeRectAnnotationId,
+    activeDimensionId,
     pendingObbEditId,
     pendingTextAnnotationEditId,
+    pendingDimensionEditId,
 
     measurements,
+    dimensions,
     annotations,
     obbAnnotations,
     cloudAnnotations,
     rectAnnotations,
 
     measurementCount,
+    dimensionCount,
     annotationCount,
     obbAnnotationCount,
     cloudAnnotationCount,
@@ -706,6 +826,12 @@ export function useToolStore() {
     updateMeasurementVisible,
     removeMeasurement,
     clearMeasurements,
+
+    addDimension,
+    updateDimension,
+    updateDimensionVisible,
+    removeDimension,
+    clearDimensions,
 
     addAnnotation,
     updateAnnotation,
@@ -755,6 +881,15 @@ export function useToolStore() {
     },
     clearPtsetVisualizationRequest: () => {
       ptsetVisualizationRequest.value = null;
+    },
+
+    // MBD 管道标注
+    mbdPipeAnnotationRequest,
+    requestMbdPipeAnnotation: (refno: string) => {
+      mbdPipeAnnotationRequest.value = { refno, timestamp: Date.now() };
+    },
+    clearMbdPipeAnnotationRequest: () => {
+      mbdPipeAnnotationRequest.value = null;
     },
   };
 }

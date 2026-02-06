@@ -2,6 +2,8 @@ import { shallowRef, type ShallowRef } from 'vue';
 
 import type { useToolStore } from './useToolStore';
 import type { UsePtsetVisualizationThreeReturn } from './usePtsetVisualizationThree';
+import type { UseMbdPipeAnnotationThreeReturn } from './useMbdPipeAnnotationThree';
+import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { useDtxTools } from './useDtxTools';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
@@ -11,6 +13,8 @@ export type ViewerContext = {
   tools: ShallowRef<ReturnType<typeof useDtxTools> | null>;
   store: ShallowRef<ReturnType<typeof useToolStore> | null>;
   ptsetVis: ShallowRef<UsePtsetVisualizationThreeReturn | null>;
+  mbdPipeVis: ShallowRef<UseMbdPipeAnnotationThreeReturn | null>;
+  annotationSystem: ShallowRef<UseAnnotationThreeReturn | null>;
 };
 
 const globalViewerContext: ViewerContext = {
@@ -19,6 +23,8 @@ const globalViewerContext: ViewerContext = {
   tools: shallowRef(null),
   store: shallowRef(null),
   ptsetVis: shallowRef(null),
+  mbdPipeVis: shallowRef(null),
+  annotationSystem: shallowRef(null),
 };
 
 export function useViewerContext(): ViewerContext {

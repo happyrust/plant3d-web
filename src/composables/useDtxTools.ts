@@ -15,11 +15,14 @@ import {
 import { emitCommand } from '@/ribbon/commandBus'
 import { dockActivatePanelIfExists, dockPanelExists } from '@/composables/useDockApi'
 import { useSelectionStore } from '@/composables/useSelectionStore'
-import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore'
+import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore'
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore'
+import type { UseAnnotationThreeReturn } from './useAnnotationThree'
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer'
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx'
+import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation'
+import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir'
 import { formatLengthMeters } from '@/utils/unitFormat'
 
 type DragRect = {
@@ -53,6 +56,16 @@ function nowId(prefix: string): string {
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
+}
+
+function formatAngleDegrees(deg: number, precision: number): string {
+  const p = Math.max(0, Math.min(6, Math.floor(Number(precision) || 0)))
+  return `${deg.toFixed(p)}°`
+}
+
+function computeDimensionOffsetDirectionByCamera(start: Vector3, end: Vector3, camera: any): Vector3 | null {
+  // 保持原语义：优先按相机“屏幕直觉”计算；退化时返回 null 交由调用方 fallback。
+  return computeDimensionOffsetDir(start, end, camera as any)
 }
 
 function vec3ToTuple(v: Vector3): Vec3 {
@@ -321,6 +334,7 @@ export function useDtxTools(options: {
   dtxLayerRef: Ref<DTXLayer | null>
   selectionRef: Ref<DTXSelectionController | null>
   overlayContainerRef: Ref<HTMLElement | null>
+  annotationSystemRef?: Ref<UseAnnotationThreeReturn | null>
   store: ReturnType<typeof useToolStore>
   compatViewerRef: Ref<DtxCompatViewer | null>
   requestRender?: (() => void) | null
@@ -347,6 +361,136 @@ export function useDtxTools(options: {
   const progressPoints = ref<MeasurementPoint[]>([])
   const pointToObjectStart = ref<MeasurementPoint | null>(null)
 
+  // dimensions (独立于测量)
+  const dimensionPoints = ref<MeasurementPoint[]>([])
+
+  const DIMENSION_PREVIEW_ID = 'dim_preview'
+
+  function clearDimensionPreview(): void {
+    const sys = options.annotationSystemRef?.value ?? null
+    if (!sys) return
+    try {
+      sys.removeAnnotation(DIMENSION_PREVIEW_ID)
+    } catch {
+      // ignore
+    }
+  }
+
+  function ensureLinearPreview(sys: UseAnnotationThreeReturn): LinearDimension3D {
+    const existing = sys.getAnnotation(DIMENSION_PREVIEW_ID)
+    if (existing instanceof LinearDimension3D) return existing
+    if (existing) sys.removeAnnotation(DIMENSION_PREVIEW_ID)
+
+    const dim = new LinearDimension3D(sys.materials, {
+      start: new Vector3(),
+      end: new Vector3(1, 0, 0),
+      offset: 0.5,
+      labelT: 0.5,
+      text: '',
+    })
+    dim.userData.pickable = false
+    dim.userData.draggable = false
+    sys.addAnnotation(DIMENSION_PREVIEW_ID, dim)
+    return dim
+  }
+
+  function ensureAnglePreview(sys: UseAnnotationThreeReturn): AngleDimension3D {
+    const existing = sys.getAnnotation(DIMENSION_PREVIEW_ID)
+    if (existing instanceof AngleDimension3D) return existing
+    if (existing) sys.removeAnnotation(DIMENSION_PREVIEW_ID)
+
+    const dim = new AngleDimension3D(sys.materials, {
+      vertex: new Vector3(),
+      point1: new Vector3(1, 0, 0),
+      point2: new Vector3(0, 1, 0),
+      arcRadius: 0.8,
+      labelT: 0.5,
+      text: '',
+      decimals: 1,
+    })
+    dim.userData.pickable = false
+    dim.userData.draggable = false
+    sys.addAnnotation(DIMENSION_PREVIEW_ID, dim)
+    return dim
+  }
+
+  function updateDimensionPreview(canvas: HTMLCanvasElement, e: PointerEvent): void {
+    const sys = options.annotationSystemRef?.value ?? null
+    if (!sys) return
+
+    const mode = store.toolMode.value
+    if (mode !== 'dimension_linear' && mode !== 'dimension_angle') {
+      clearDimensionPreview()
+      return
+    }
+
+    const hit = pickSurfacePoint(canvas, e)
+    if (!hit) {
+      clearDimensionPreview()
+      return
+    }
+
+    if (mode === 'dimension_linear') {
+      if (dimensionPoints.value.length !== 1) {
+        clearDimensionPreview()
+        return
+      }
+      const p0 = dimensionPoints.value[0]!
+      const start = new Vector3(...p0.worldPos)
+      const end = hit.worldPos.clone()
+      const dist = start.distanceTo(end)
+      if (dist < 1e-9) {
+        clearDimensionPreview()
+        return
+      }
+
+      const viewer = dtxViewerRef.value
+      const dir = viewer ? computeDimensionOffsetDirectionByCamera(start, end, viewer.camera as any) : null
+      const offset = Math.max(0.2, Math.min(2, dist * 0.15))
+      const text = formatLengthMeters(dist, unitSettings.displayUnit.value, unitSettings.precision.value)
+
+      const dim = ensureLinearPreview(sys)
+      dim.setParams({
+        start,
+        end,
+        offset,
+        labelT: 0.5,
+        direction: dir ?? undefined,
+        text,
+      })
+      dim.visible = true
+      return
+    }
+
+    // angle
+    if (dimensionPoints.value.length !== 2) {
+      clearDimensionPreview()
+      return
+    }
+    const p0 = dimensionPoints.value[0]!
+    const p1 = dimensionPoints.value[1]!
+    const origin = new Vector3(...p0.worldPos)
+    const corner = new Vector3(...p1.worldPos)
+    const target = hit.worldPos.clone()
+
+    const arm1 = origin.distanceTo(corner)
+    const arm2 = target.distanceTo(corner)
+    const arcRadius = clamp(Math.min(arm1, arm2) * 0.3, 0.3, 1.2)
+
+    const dim = ensureAnglePreview(sys)
+    dim.setParams({
+      vertex: corner,
+      point1: origin,
+      point2: target,
+      arcRadius,
+      labelT: 0.5,
+      decimals: Math.max(0, Math.min(6, Math.floor(Number(unitSettings.precision.value) || 0))),
+    })
+    const deg = dim.getAngleDegrees()
+    dim.setParams({ text: formatAngleDegrees(deg, unitSettings.precision.value) })
+    dim.visible = true
+  }
+
   const statusText = computed(() => {
     const mode = store.toolMode.value
     if (mode === 'none') return '未启用工具'
@@ -362,6 +506,14 @@ export function useDtxTools(options: {
     }
     if (mode === 'measure_point_to_object') {
       return pointToObjectStart.value ? '点到面测量：请点击选择目标对象（自动计算最近距离）' : '点到面测量：请点击选择起始点'
+    }
+    if (mode === 'dimension_linear') {
+      return dimensionPoints.value.length === 0 ? '尺寸标注（距离）：请选择起点' : '尺寸标注（距离）：请选择终点'
+    }
+    if (mode === 'dimension_angle') {
+      if (dimensionPoints.value.length === 0) return '尺寸标注（角度）：请选择起点'
+      if (dimensionPoints.value.length === 1) return '尺寸标注（角度）：请选择拐点'
+      return '尺寸标注（角度）：请选择终点'
     }
     if (mode === 'pick_query_center') {
       return '请点击模型拾取查询中心点'
@@ -402,6 +554,8 @@ export function useDtxTools(options: {
   function resetProgress() {
     progressPoints.value = []
     pointToObjectStart.value = null
+    dimensionPoints.value = []
+    clearDimensionPreview()
   }
 
   function ensureToolsGroupAttached() {
@@ -737,6 +891,22 @@ export function useDtxTools(options: {
     viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 })
   }
 
+  function flyToDimension(id: string) {
+    const viewer = compatViewerRef.value
+    if (!viewer) return
+    const rec = store.dimensions.value.find((d) => d.id === id) as any
+    if (!rec) return
+    const pts: Vec3[] = []
+    if (rec.kind === 'linear_distance') {
+      pts.push(rec.origin.worldPos, rec.target.worldPos)
+    } else {
+      pts.push(rec.origin.worldPos, rec.corner.worldPos, rec.target.worldPos)
+    }
+    const aabb = aabbFromPoints(pts)
+    if (!aabb) return
+    viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 })
+  }
+
   function flyToAnnotation(id: string) {
     const viewer = compatViewerRef.value
     if (!viewer) return
@@ -781,6 +951,10 @@ export function useDtxTools(options: {
 
   function removeMeasurement(id: string) {
     store.removeMeasurement(id)
+  }
+
+  function removeDimension(id: string) {
+    store.removeDimension(id)
   }
 
   function removeAnnotation(id: string) {
@@ -829,6 +1003,7 @@ export function useDtxTools(options: {
     clearGroup(toolsGroup)
     clearOverlayEls()
     hideMarquee()
+    clearDimensionPreview()
     try {
       rectPreviewLine.value?.geometry.dispose()
       ;(rectPreviewLine.value?.material as any)?.dispose?.()
@@ -847,6 +1022,7 @@ export function useDtxTools(options: {
     clearGroup(toolsGroup)
     clearOverlayEls()
     hideMarquee()
+    clearDimensionPreview()
 
     if (marqueeDiv.value) {
       try { marqueeDiv.value.remove() } catch { /* ignore */ }
@@ -1222,6 +1398,17 @@ export function useDtxTools(options: {
       moveRectDrag(canvas, e)
       return
     }
+
+    if (mode === 'dimension_linear' || mode === 'dimension_angle') {
+      // 仅在“已选中部分点”的情况下才做 preview，避免每帧 pick 带来额外开销
+      if (
+        (mode === 'dimension_linear' && dimensionPoints.value.length >= 1) ||
+        (mode === 'dimension_angle' && dimensionPoints.value.length >= 2)
+      ) {
+        updateDimensionPreview(canvas, e)
+        requestRender?.()
+      }
+    }
   }
 
   function onCanvasPointerUp(canvas: HTMLCanvasElement, e: PointerEvent) {
@@ -1295,6 +1482,62 @@ export function useDtxTools(options: {
       return
     }
 
+    if (mode === 'dimension_linear') {
+      const hit = pickSurfacePoint(canvas, e)
+      if (!hit) return
+      dimensionPoints.value = [...dimensionPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }]
+      if (dimensionPoints.value.length >= 2) {
+        const [p0, p1] = dimensionPoints.value as [MeasurementPoint, MeasurementPoint]
+        const a = new Vector3(...p0.worldPos)
+        const b = new Vector3(...p1.worldPos)
+        const dist = a.distanceTo(b)
+        const viewer = dtxViewerRef.value
+        const dir = viewer ? computeDimensionOffsetDirectionByCamera(a, b, viewer.camera as any) : null
+        const offset = Math.max(0.2, Math.min(2, dist * 0.15))
+
+        const rec: LinearDistanceDimensionRecord = {
+          id: nowId('dim'),
+          kind: 'linear_distance',
+          origin: p0,
+          target: p1,
+          offset,
+          direction: dir ? vec3ToTuple(dir) : null,
+          labelT: 0.5,
+          visible: true,
+          createdAt: Date.now(),
+        }
+        store.addDimension(rec)
+        dimensionPoints.value = []
+        clearDimensionPreview()
+      }
+      return
+    }
+
+    if (mode === 'dimension_angle') {
+      const hit = pickSurfacePoint(canvas, e)
+      if (!hit) return
+      dimensionPoints.value = [...dimensionPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }]
+      if (dimensionPoints.value.length >= 3) {
+        const [p0, p1, p2] = dimensionPoints.value as [MeasurementPoint, MeasurementPoint, MeasurementPoint]
+        const rec: AngleDimensionRecord2 = {
+          id: nowId('dimang'),
+          kind: 'angle',
+          origin: p0,
+          corner: p1,
+          target: p2,
+          offset: 0.8,
+          direction: null,
+          labelT: 0.5,
+          visible: true,
+          createdAt: Date.now(),
+        }
+        store.addDimension(rec as any)
+        dimensionPoints.value = []
+        clearDimensionPreview()
+      }
+      return
+    }
+
     if (mode === 'measure_point_to_object') {
       const hit = pickSurfacePoint(canvas, e)
       if (!hit) return
@@ -1352,6 +1595,7 @@ export function useDtxTools(options: {
     const viewer = dtxViewerRef.value
     if (viewer) viewer.controls.enabled = true
     hideMarquee()
+    clearDimensionPreview()
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null }
     try {
       rectPreviewLine.value?.geometry.dispose()
@@ -1394,8 +1638,10 @@ export function useDtxTools(options: {
   watch(
     () => store.toolMode.value,
     (mode, prev) => {
-      if (mode === 'none' && prev !== 'none') {
+      if (mode !== prev) {
         resetProgress()
+      }
+      if (mode === 'none' && prev !== 'none') {
         hideMarquee()
       }
     }
@@ -1427,12 +1673,14 @@ export function useDtxTools(options: {
 
     // actions used by panels
     flyToMeasurement,
+    flyToDimension,
     flyToAnnotation,
     flyToCloudAnnotation,
     flyToRectAnnotation,
     flyToObbAnnotation,
 
     removeMeasurement,
+    removeDimension,
     removeAnnotation,
     removeCloudAnnotation,
     removeRectAnnotation,

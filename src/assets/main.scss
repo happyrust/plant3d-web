@@ -143,51 +143,6 @@ html {
   margin-top: 2px;
 }
 
-/* MBD 管道标注标签样式 */
-.mbd-label {
-  position: absolute;
-  pointer-events: none;
-  z-index: 1001;
-}
-
-.mbd-label-content {
-  background: rgba(17, 24, 39, 0.78);
-  color: #fff;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  line-height: 1.3;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.mbd-label-title {
-  font-weight: 600;
-}
-
-.mbd-label-sub {
-  margin-top: 1px;
-  font-size: 10px;
-  color: rgba(209, 213, 219, 0.95);
-}
-
-.mbd-label--dim .mbd-label-title {
-  color: #22c55e;
-}
-
-.mbd-label--weld .mbd-label-title {
-  color: #f97316;
-}
-
-.mbd-label--slope .mbd-label-title {
-  color: #3b82f6;
-}
-
-.mbd-label--active .mbd-label-content {
-  outline: 2px solid rgba(250, 204, 21, 0.9);
-}
-
 /* ========================================
    三维标注系统样式 (CSS2DRenderer)
    ======================================== */

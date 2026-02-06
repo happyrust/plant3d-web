@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dimension Pipe Sandbox</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #0b1020; color: #e5e7eb; font-family: ui-sans-serif, system-ui; }
+      #wrap { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+      #bar { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 12px; opacity: 0.9; }
+      #bar code { color: #a7f3d0; }
+      #canvas { width: 100%; height: 100%; display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <div id="bar">
+        管道净距尺寸标注沙盒：<code>pipe-wall</code> / <code>pipe-column</code>。此页仅用于测试标注计算与渲染，不依赖后端。
+      </div>
+      <canvas id="canvas"></canvas>
+    </div>
+    <script type="module" src="/src/debug/dimensionPipeSandbox.ts"></script>
+  </body>
+</html>
+

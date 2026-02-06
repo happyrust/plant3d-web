@@ -21,12 +21,16 @@ export { AnnotationMaterials, type AnnotationMaterialSet } from './core/Annotati
 
 // Annotations
 export { LinearDimension, type LinearDimensionParams } from './annotations/LinearDimension'
+export { LinearDimension3D, type LinearDimension3DParams } from './annotations/LinearDimension3D'
 export { AlignedDimension, type AlignedDimensionParams } from './annotations/AlignedDimension'
 export { AngleDimension, type AngleDimensionParams } from './annotations/AngleDimension'
+export { AngleDimension3D, type AngleDimension3DParams } from './annotations/AngleDimension3D'
 export { RadiusDimension, type RadiusDimensionParams } from './annotations/RadiusDimension'
 export { LeaderAnnotation, type LeaderAnnotationParams } from './annotations/LeaderAnnotation'
 export { WeldAnnotation, type WeldAnnotationParams } from './annotations/WeldAnnotation'
+export { WeldAnnotation3D, type WeldAnnotation3DParams } from './annotations/WeldAnnotation3D'
 export { SlopeAnnotation, type SlopeAnnotationParams } from './annotations/SlopeAnnotation'
+export { SlopeAnnotation3D, type SlopeAnnotation3DParams } from './annotations/SlopeAnnotation3D'
 
 // Interaction
 export {
