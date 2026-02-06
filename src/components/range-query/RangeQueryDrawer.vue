@@ -157,6 +157,15 @@ function handleQuery() {
     const specFilter = rangeSettings.specValues.value;
     const hasSpecFilter = specFilter.length > 0;
 
+    // nouns filter (comma-separated category keywords)
+    const nounsRaw = rangeSettings.nounsText.value.trim();
+    const nounsSet = nounsRaw
+      ? new Set(nounsRaw.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))
+      : null;
+
+    // name filter (keyword substring match)
+    const nameKw = rangeSettings.nameQuery.value.trim().toLowerCase();
+
     for (const id of Object.keys(objects)) {
       const entity = objects[id];
       if (!entity || !entity.aabb) continue;
@@ -172,6 +181,19 @@ function handleQuery() {
 
         // apply spec filter
         if (hasSpecFilter && !specFilter.includes(specValue)) continue;
+
+        // apply nouns filter (match category)
+        if (nounsSet && meta?.category) {
+          const cat = meta.category.toUpperCase();
+          if (!nounsSet.has(cat)) continue;
+        }
+
+        // apply name filter (substring match on id or meta.name)
+        if (nameKw) {
+          const matchId = id.toLowerCase().includes(nameKw);
+          const matchName = meta?.name?.toLowerCase().includes(nameKw);
+          if (!matchId && !matchName) continue;
+        }
 
         const specName = getSpecValueName(specValue);
         if (!groups[specName]) groups[specName] = [];
