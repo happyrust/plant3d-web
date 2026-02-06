@@ -7,7 +7,6 @@ import {
   Crosshair,
   Eye,
   EyeOff,
-  Filter,
   Locate,
   MousePointerClick,
   Search,
@@ -302,15 +301,16 @@ function close() {
 </script>
 
 <template>
-  <!-- backdrop: click to close -->
-  <Transition name="range-drawer-fade">
-    <div
-      v-if="open"
-      class="absolute inset-0"
-      style="z-index: 941"
-      @click="close"
-    />
-  </Transition>
+  <div>
+    <!-- backdrop: click to close -->
+    <Transition name="range-drawer-fade">
+      <div
+        v-if="open"
+        class="pointer-events-auto absolute inset-0"
+        style="z-index: 941"
+        @click="close"
+      />
+    </Transition>
 
   <!-- drawer panel -->
   <Transition name="range-drawer-slide">
@@ -541,6 +541,7 @@ function close() {
       </div>
     </div>
   </Transition>
+  </div>
 </template>
 
 <style scoped>
