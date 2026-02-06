@@ -1240,10 +1240,12 @@ function onRightPipeNetworkClick(): void {
 
 function toggleRightSettings(): void {
     rightToolbarOpenSettings.value = !rightToolbarOpenSettings.value;
+    if (rightToolbarOpenSettings.value) rangeDrawerOpen.value = false;
 }
 
 function toggleRangeDrawer(): void {
     rangeDrawerOpen.value = !rangeDrawerOpen.value;
+    if (rangeDrawerOpen.value) rightToolbarOpenSettings.value = false;
 }
 
 onMounted(async () => {
