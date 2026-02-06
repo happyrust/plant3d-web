@@ -58,6 +58,7 @@ import { DTXLayer, DTXSelectionController, DTXViewCullController } from "@/utils
 import { DynamicPivotController } from "@/utils/three/dtx/DynamicPivotController";
 import { DTXTileLodController } from "@/viewer/dtx/DTXTileLodController";
 import { AngleDimension3D, LinearDimension3D } from "@/utils/three/annotation";
+import { computeDimensionOffsetDir } from "@/utils/three/annotation/utils/computeDimensionOffsetDir";
 
 defineProps<{
     params: {
@@ -988,28 +989,8 @@ function computeDimensionOffsetDirectionByCamera(
     end: Vector3,
     camera: any,
 ): Vector3 | null {
-    const seg = end.clone().sub(start);
-    if (seg.lengthSq() < 1e-9) return null;
-    seg.normalize();
-
-    const mid = start.clone().add(end).multiplyScalar(0.5);
-    const camDir = new Vector3()
-        .copy(camera?.position ?? new Vector3())
-        .sub(mid);
-    if (camDir.lengthSq() < 1e-9) return null;
-    camDir.normalize();
-
-    let n = seg.clone().cross(camDir);
-    if (n.lengthSq() < 1e-9) {
-        const up = (camera?.up ? new Vector3().copy(camera.up) : new Vector3(0, 1, 0)).normalize();
-        n = seg.clone().cross(up);
-    }
-    if (n.lengthSq() < 1e-9) return null;
-
-    const perp = n.cross(seg);
-    if (perp.lengthSq() < 1e-9) return null;
-    perp.normalize();
-    return perp;
+    // 保持原语义：退化时返回 null，由调用方自行决定 fallback（锁定方向/XY 垂线等）。
+    return computeDimensionOffsetDir(start, end, camera as any);
 }
 
 /**
@@ -1886,14 +1867,17 @@ onMounted(async () => {
     // 启动预拉：db_meta_info + shared trans/aabb（失败直接报错）
     // 注意：onMounted(async () => ...) 中，任何依赖注入上下文的 hooks（如 vue-query）必须在首个 await 之前调用。
     // 因此这里先初始化 tools/ptsetVis（它们会调用 useSelectionStore/useQuery），再 await 预拉。
-    try {
-        await ensureDbMetaInfoLoaded();
-        await preloadInstancesSharedTables();
-    } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        initError.value = msg;
-        emitToast({ message: msg });
-        return;
+    // primitives demo 不依赖后端数据，跳过预拉避免无后端时初始化失败。
+    if (demoMode !== "primitives") {
+        try {
+            await ensureDbMetaInfoLoaded();
+            await preloadInstancesSharedTables();
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            initError.value = msg;
+            emitToast({ message: msg });
+            return;
+        }
     }
 
     viewerContext.ptsetVis.value = ptsetVis as any;
