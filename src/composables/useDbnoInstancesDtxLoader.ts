@@ -1,5 +1,6 @@
 import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
 import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader'
+import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader'
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry'
 import { DTXLayer } from '@/utils/three/dtx'
 import {
@@ -17,6 +18,13 @@ type LoaderOptions = {
   lodAssetKey?: string // "L1"
   debug?: boolean
   forceReloadRefnos?: string[]
+  /**
+   * 数据源选择：
+   * - 'auto'：优先 Parquet（instances_parquet 多表），失败回退 JSON
+   * - 'parquet'：强制 Parquet（失败则抛错）
+   * - 'json'：强制旧 JSON
+   */
+  dataSource?: 'auto' | 'parquet' | 'json'
 }
 
 type DbnoRuntimeCache = {
@@ -302,8 +310,33 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const hiddenNouns = buildHiddenNounSet(displayConfig)
   const hiddenRefnos = buildHiddenRefnoSet(displayConfig)
 
-  const manifest: InstanceManifest = await getDbnoInstancesManifest(dbno)
-  const index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
+  const dataSource = options.dataSource || 'auto'
+  let index: Map<string, any[]> | null = null
+
+  // 优先 Parquet（新架构）
+  if (dataSource === 'auto' || dataSource === 'parquet') {
+    try {
+      const parquet = useDbnoInstancesParquetLoader()
+      const available = await parquet.isParquetAvailable(dbno)
+      if (available) {
+        index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
+        if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
+      } else if (dataSource === 'parquet') {
+        throw new Error(`[dtx][instances] parquet not available for dbno=${dbno}`)
+      }
+    } catch (e) {
+      if (dataSource === 'parquet') throw e
+      if (debug) console.warn('[dtx][instances] parquet failed, fallback to json', e)
+      index = null
+    }
+  }
+
+  // 回退 JSON（旧架构）
+  if (!index) {
+    const manifest: InstanceManifest = await getDbnoInstancesManifest(dbno)
+    index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
+    if (debug) console.log('[dtx][instances] using json', { dbno, refnos: toLoad.length })
+  }
 
   let loadedObjects = 0
   const missingRefnos: string[] = []

@@ -86,6 +86,7 @@ const refnos = (process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['243
   .filter(Boolean);
 const minObjects = Number(process.env.MIN_OBJECTS || '0');
 const FLY_TO = process.env.FLY_TO === '1';
+const OUTPUT_PROJECT = String(process.env.OUTPUT_PROJECT || '').trim();
 const desiredBackendPort = Number(process.env.BACKEND_PORT || process.env.PORT || 8080);
 const vitePort = await findFreePort(Number(process.env.VITE_PORT || 5173));
 const baseUrl = `http://127.0.0.1:${vitePort}`;
@@ -148,7 +149,10 @@ try {
     });
     page.on('pageerror', (err) => process.stderr.write(`[pageerror] ${err}\n`));
 
-    await page.goto(`${baseUrl}/?dtx_automation=1`, { waitUntil: 'domcontentloaded' });
+    const qs = new URLSearchParams();
+    qs.set('dtx_automation', '1');
+    if (OUTPUT_PROJECT) qs.set('output_project', OUTPUT_PROJECT);
+    await page.goto(`${baseUrl}/?${qs.toString()}`, { waitUntil: 'domcontentloaded' });
 
     // 等待 Viewer 初始化并暴露到 window（DEV 模式下 ViewerPanel 会设置 window.__xeokitViewer）
     await page.waitForFunction(() => !!window.__xeokitViewer?.scene, null, { timeout: 120_000 });
