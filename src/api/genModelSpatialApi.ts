@@ -26,8 +26,13 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await resp.json()) as T;
 }
 
+// ============================================================================
+// Types
+// ============================================================================
+
 export type SpatialQueryResultItem = {
-  refno: number;
+  /** "dbnum_refno" 格式的字符串 */
+  refno: string;
   noun: string;
   aabb?: {
     min: { x: number; y: number; z: number };
@@ -38,12 +43,20 @@ export type SpatialQueryResultItem = {
 export type SpatialQueryResult = {
   success: boolean;
   results?: SpatialQueryResultItem[];
+  /** 是否因 max_results 截断 */
+  truncated?: boolean;
+  /** 实际查询使用的 AABB */
+  query_bbox?: {
+    min: { x: number; y: number; z: number };
+    max: { x: number; y: number; z: number };
+  };
   error?: string;
 };
 
 export type SpatialQueryParams = {
   mode?: 'bbox' | 'refno';
   refno?: string;
+  /** 外扩距离（毫米） */
   distance?: number;
   minx?: number;
   miny?: number;
@@ -51,22 +64,85 @@ export type SpatialQueryParams = {
   maxx?: number;
   maxy?: number;
   maxz?: number;
+  /** 最大返回数量（默认 5000） */
+  max_results?: number;
+  /** noun 过滤（逗号分隔，如 "EQUI,PIPE,TUBI"） */
+  nouns?: string;
+  /** 是否包含自身（mode=refno 时有效，默认 true） */
+  include_self?: boolean;
 };
 
-export async function querySpatialIndex(params: SpatialQueryParams): Promise<SpatialQueryResult> {
-  const url = new URL('http://localhost'); // Dummy base, will be replaced by fetchJson path logic
-  url.pathname = '/api/sqlite-spatial/query';
-  
-  if (params.mode) url.searchParams.set('mode', params.mode);
-  if (params.refno) url.searchParams.set('refno', params.refno);
-  if (params.distance !== undefined) url.searchParams.set('distance', String(params.distance));
-  
-  if (params.minx !== undefined) url.searchParams.set('minx', String(params.minx));
-  if (params.miny !== undefined) url.searchParams.set('miny', String(params.miny));
-  if (params.minz !== undefined) url.searchParams.set('minz', String(params.minz));
-  if (params.maxx !== undefined) url.searchParams.set('maxx', String(params.maxx));
-  if (params.maxy !== undefined) url.searchParams.set('maxy', String(params.maxy));
-  if (params.maxz !== undefined) url.searchParams.set('maxz', String(params.maxz));
+export type SpatialStatsResult = {
+  success: boolean;
+  total_elements: number;
+  index_type: string;
+  index_path: string;
+  error?: string;
+};
 
-  return await fetchJson<SpatialQueryResult>(`${url.pathname}${url.search}`);
+// ============================================================================
+// API functions
+// ============================================================================
+
+/**
+ * 查询空间索引：按 refno 或 bbox 查找周边构件
+ *
+ * 用于"范围显示周边模型"：先从服务端获取周边 refno 列表，再按需加载模型。
+ */
+export async function querySpatialIndex(params: SpatialQueryParams): Promise<SpatialQueryResult> {
+  const sp = new URLSearchParams();
+
+  if (params.mode) sp.set('mode', params.mode);
+  if (params.refno) sp.set('refno', params.refno);
+  if (params.distance !== undefined) sp.set('distance', String(params.distance));
+
+  if (params.minx !== undefined) sp.set('minx', String(params.minx));
+  if (params.miny !== undefined) sp.set('miny', String(params.miny));
+  if (params.minz !== undefined) sp.set('minz', String(params.minz));
+  if (params.maxx !== undefined) sp.set('maxx', String(params.maxx));
+  if (params.maxy !== undefined) sp.set('maxy', String(params.maxy));
+  if (params.maxz !== undefined) sp.set('maxz', String(params.maxz));
+
+  if (params.max_results !== undefined) sp.set('max_results', String(params.max_results));
+  if (params.nouns) sp.set('nouns', params.nouns);
+  if (params.include_self !== undefined) sp.set('include_self', String(params.include_self));
+
+  const query = sp.toString();
+  return await fetchJson<SpatialQueryResult>(`/api/sqlite-spatial/query${query ? '?' + query : ''}`);
+}
+
+/**
+ * 查询空间索引统计信息（健康检查）
+ */
+export async function querySpatialStats(): Promise<SpatialStatsResult> {
+  return await fetchJson<SpatialStatsResult>('/api/sqlite-spatial/stats');
+}
+
+/**
+ * 便捷方法：按中心点 + 半径查询周边构件
+ *
+ * @param cx 中心 X（毫米）
+ * @param cy 中心 Y（毫米）
+ * @param cz 中心 Z（毫米）
+ * @param radius 半径（毫米）
+ * @param options 可选过滤参数
+ */
+export async function queryNearbyByCenter(
+  cx: number,
+  cy: number,
+  cz: number,
+  radius: number,
+  options?: { nouns?: string; max_results?: number },
+): Promise<SpatialQueryResult> {
+  return querySpatialIndex({
+    mode: 'bbox',
+    minx: cx - radius,
+    miny: cy - radius,
+    minz: cz - radius,
+    maxx: cx + radius,
+    maxy: cy + radius,
+    maxz: cz + radius,
+    max_results: options?.max_results,
+    nouns: options?.nouns,
+  });
 }

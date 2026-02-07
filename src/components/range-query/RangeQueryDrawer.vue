@@ -5,11 +5,13 @@ import {
   ChevronDown,
   ChevronRight,
   Crosshair,
+  Download,
   Eye,
   EyeOff,
   Locate,
   MousePointerClick,
   Search,
+  Server,
   X,
 } from 'lucide-vue-next';
 
@@ -18,6 +20,7 @@ import { useRangeQuerySettingsStore } from '@/composables/useRangeQuerySettingsS
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { SiteSpecValue, getSpecValueName } from '@/types/spec';
+import { queryNearbyByCenter, type SpatialQueryResultItem } from '@/api/genModelSpatialApi';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
@@ -51,6 +54,16 @@ const errorMsg = ref('');
 const disciplines = ref<DisciplineNode[]>([]);
 const filterText = ref('');
 const isIsolated = ref(false);
+
+// --- server query state ---
+/** Number of nearby refnos found on server but not yet loaded in viewer */
+const unloadedCount = ref(0);
+/** Refno strings from the server that are not loaded in the viewer */
+const unloadedRefnos = ref<string[]>([]);
+/** Whether the server query returned truncated results */
+const serverTruncated = ref(false);
+/** Whether we are currently loading unloaded models */
+const isLoadingNearby = ref(false);
 
 // --- computed ---
 const totalCount = computed(() =>
@@ -140,9 +153,13 @@ function handleQuery() {
   isLoading.value = true;
   errorMsg.value = '';
   disciplines.value = [];
+  unloadedCount.value = 0;
+  unloadedRefnos.value = [];
+  serverTruncated.value = false;
 
   try {
     const objects = viewer.scene.objects;
+    const loadedIds = new Set(Object.keys(objects));
     const groups: Record<string, RefNode[]> = {};
     const metaByRefno = (
       viewer.scene as unknown as {
@@ -218,11 +235,49 @@ function handleQuery() {
     if (disciplines.value.length === 0) {
       errorMsg.value = '未找到构件';
     }
+
+    // --- server-side query: discover unloaded nearby refnos ---
+    // Use millimeters (same coordinate system as the viewer/spatial index)
+    queryNearbyByCenter(cx, cy, cz, r, {
+      nouns: nounsRaw || undefined,
+      max_results: 5000,
+    }).then((resp) => {
+      if (!resp.success || !resp.results) return;
+      serverTruncated.value = resp.truncated ?? false;
+      const notLoaded = resp.results
+        .map((item) => item.refno)
+        .filter((refno) => !loadedIds.has(refno));
+      unloadedRefnos.value = notLoaded;
+      unloadedCount.value = notLoaded.length;
+    }).catch((e) => {
+      console.warn('[RangeQueryDrawer] server spatial query failed:', e);
+      // Non-critical: don't overwrite errorMsg
+    });
   } catch (e) {
     errorMsg.value = String(e);
   } finally {
     isLoading.value = false;
   }
+}
+
+// --- load unloaded nearby models ---
+function loadNearbyModels() {
+  if (unloadedRefnos.value.length === 0) return;
+  isLoadingNearby.value = true;
+  // Dispatch the standard showModelByRefnos event for ViewerPanel to pick up
+  const event = new CustomEvent('showModelByRefnos', {
+    detail: {
+      refnos: unloadedRefnos.value,
+      flyTo: false,
+    },
+  });
+  document.dispatchEvent(event);
+  // Reset after dispatching
+  setTimeout(() => {
+    isLoadingNearby.value = false;
+    unloadedCount.value = 0;
+    unloadedRefnos.value = [];
+  }, 1000);
 }
 
 // --- visibility ---
@@ -442,6 +497,20 @@ function close() {
         >
           {{ isLoading ? '查询中...' : '查询模型' }}
         </button>
+
+        <!-- load unloaded nearby models from server -->
+        <div v-if="unloadedCount > 0" class="flex items-center gap-2">
+          <button
+            :disabled="isLoadingNearby"
+            class="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-primary/20 disabled:pointer-events-none disabled:opacity-50"
+            @click="loadNearbyModels"
+          >
+            <Download class="h-3 w-3" />
+            {{ isLoadingNearby ? '加载中...' : `加载周边 (${unloadedCount})` }}
+          </button>
+          <span v-if="serverTruncated" class="text-[10px] text-amber-500" title="服务端结果已截断">截断</span>
+        </div>
+
         <div v-if="errorMsg" class="text-xs text-destructive">{{ errorMsg }}</div>
       </div>
 
