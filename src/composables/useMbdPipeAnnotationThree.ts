@@ -60,6 +60,22 @@ export type UseMbdPipeAnnotationThreeReturn = {
   setResolution: (width: number, height: number) => void
   /** 释放资源（Viewer 卸载时调用） */
   dispose: () => void
+
+  /** Session-only：更新 MBD dim 交互调整（offset/label/reference 等） */
+  updateDimOverride: (dimId: string, patch: Partial<MbdDimOverride>) => void
+  /** Session-only：重置单个 MBD dim 的交互调整 */
+  resetDimOverride: (dimId: string) => void
+  /** 获取 dim annotations map（用于外部交互控制器注册） */
+  getDimAnnotations: () => Map<string, LinearDimension3D>
+}
+
+/** MBD dims session-only override（不写回后端，仅当前会话有效） */
+export type MbdDimOverride = {
+  offset?: number
+  direction?: [number, number, number]
+  labelT?: number
+  labelOffsetWorld?: [number, number, number] | null
+  isReference?: boolean
 }
 
 function computeFlyToPositionFromBox(box: Box3): { position: Vector3; target: Vector3 } {
@@ -120,6 +136,9 @@ export function useMbdPipeAnnotationThree(
   const segmentMaterial = new LineBasicMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.9 })
   const segmentHighlightMaterial = new LineBasicMaterial({ color: 0xf59e0b })
 
+  // Session-only overrides（不写回后端）
+  const dimOverrides = new Map<string, MbdDimOverride>()
+
   function applyLabelVisibility(): void {
     const visible = isVisible.value && showLabels.value
     for (const annotation of dimAnnotations.value.values()) {
@@ -175,6 +194,9 @@ export function useMbdPipeAnnotationThree(
     for (const child of [...group.children]) {
       group.remove(child)
     }
+
+    // 清理 session-only overrides
+    dimOverrides.clear()
 
     currentData.value = null
     activeItemId.value = null
@@ -262,14 +284,31 @@ export function useMbdPipeAnnotationThree(
       const dist = start.distanceTo(end)
       const offset = computeMbdDimOffset(dist)
 
+      // 合并 session-only overrides
+      const ov = dimOverrides.get(d.id)
+      const finalOffset = ov?.offset ?? offset
+      const finalDir = ov?.direction ? new Vector3(ov.direction[0], ov.direction[1], ov.direction[2]) : offsetDir
+      const finalLabelT = ov?.labelT ?? 0.5
+      const finalLabelOffsetWorld = ov?.labelOffsetWorld
+        ? new Vector3(ov.labelOffsetWorld[0], ov.labelOffsetWorld[1], ov.labelOffsetWorld[2])
+        : null
+      const finalIsReference = ov?.isReference ?? false
+
       const dim = new LinearDimension3D(materials, {
         start,
         end,
-        offset,
-        labelT: 0.5,
+        offset: finalOffset,
+        labelT: finalLabelT,
+        labelOffsetWorld: finalLabelOffsetWorld,
+        isReference: finalIsReference,
         text: d.text,
-        direction: offsetDir,
+        direction: finalDir,
       })
+
+      // 可交互：MBD dims 在当前会话内支持拖拽调整
+      dim.userData.pickable = true
+      dim.userData.draggable = true
+      ;(dim.userData as any).mbdDimId = d.id
 
       // 颜色仅用于快速区分不同尺寸语义；屏幕布局/避让由前端负责。
       if (kind === 'segment') dim.setMaterialSet(materials.green)
@@ -431,6 +470,42 @@ export function useMbdPipeAnnotationThree(
     materials.setResolution(width, height)
   }
 
+  /** Session-only：更新指定 MBD dim 的交互调整并即时刷新 3D 标注 */
+  function updateDimOverride(dimId: string, patch: Partial<MbdDimOverride>): void {
+    const existing = dimOverrides.get(dimId) ?? {}
+    const merged = { ...existing, ...patch }
+    dimOverrides.set(dimId, merged)
+
+    // 即时更新已渲染的标注（避免重建全部）
+    const dim = dimAnnotations.value.get(dimId)
+    if (dim) {
+      const p: any = {}
+      if (merged.offset !== undefined) p.offset = merged.offset
+      if (merged.direction) p.direction = new Vector3(merged.direction[0], merged.direction[1], merged.direction[2])
+      if (merged.labelT !== undefined) p.labelT = merged.labelT
+      if ('labelOffsetWorld' in merged) {
+        p.labelOffsetWorld = merged.labelOffsetWorld
+          ? new Vector3(merged.labelOffsetWorld[0], merged.labelOffsetWorld[1], merged.labelOffsetWorld[2])
+          : null
+      }
+      if (merged.isReference !== undefined) p.isReference = merged.isReference
+      dim.setParams(p)
+    }
+    requestRender?.()
+  }
+
+  /** Session-only：重置指定 MBD dim 的交互调整 */
+  function resetDimOverride(dimId: string): void {
+    dimOverrides.delete(dimId)
+    // 需要重建才能回到后端原始状态（简单方案：如果有 currentData 就重新渲染该 dim）
+    requestRender?.()
+  }
+
+  /** 获取 dim annotations map（用于外部将 MBD dims 注册到交互控制器） */
+  function getDimAnnotations(): Map<string, LinearDimension3D> {
+    return dimAnnotations.value
+  }
+
   function dispose(): void {
     clearAll()
     materials.dispose()
@@ -492,5 +567,8 @@ export function useMbdPipeAnnotationThree(
     highlightItem,
     setResolution,
     dispose,
+    updateDimOverride,
+    resetDimOverride,
+    getDimAnnotations,
   }
 }

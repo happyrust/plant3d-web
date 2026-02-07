@@ -36,12 +36,14 @@ export interface AnnotationHitResult {
 }
 
 export type AnnotationInteractionEvent = {
-  type: 'hover' | 'click' | 'select' | 'deselect' | 'drag-start' | 'drag' | 'drag-end'
+  type: 'hover' | 'click' | 'select' | 'deselect' | 'drag-start' | 'drag' | 'drag-end' | 'contextmenu'
   annotation: AnnotationBase | null
   id: string | null
   originalEvent?: MouseEvent
   point?: THREE.Vector3
   hitObject?: THREE.Object3D
+  /** 屏幕坐标（contextmenu 用，方便在此位置弹出菜单） */
+  screenPos?: { x: number; y: number }
 }
 
 export type AnnotationInteractionCallback = (event: AnnotationInteractionEvent) => void
@@ -87,6 +89,7 @@ export class AnnotationInteractionController {
     this.onMouseDown = this.onMouseDown.bind(this)
     this.onMouseUp = this.onMouseUp.bind(this)
     this.onClick = this.onClick.bind(this)
+    this.onContextMenu = this.onContextMenu.bind(this)
   }
 
   private attachWindowDragListeners(): void {
@@ -144,6 +147,8 @@ export class AnnotationInteractionController {
       domElement.addEventListener('mousedown', this.onMouseDown)
       domElement.addEventListener('mouseup', this.onMouseUp)
     }
+    // 右键菜单（始终注册，以便 contextmenu hit-test + 事件发出）
+    domElement.addEventListener('contextmenu', this.onContextMenu)
   }
 
   /** 从 DOM 元素分离 */
@@ -155,6 +160,7 @@ export class AnnotationInteractionController {
       this.domElement.removeEventListener('click', this.onClick)
       this.domElement.removeEventListener('mousedown', this.onMouseDown)
       this.domElement.removeEventListener('mouseup', this.onMouseUp)
+      this.domElement.removeEventListener('contextmenu', this.onContextMenu)
       this.domElement = null
     }
   }
@@ -373,6 +379,26 @@ export class AnnotationInteractionController {
         originalEvent: event,
         point: hit.point,
         hitObject: hit.hitObject,
+      })
+    }
+  }
+
+  private onContextMenu(event: MouseEvent): void {
+    this.updateMousePosition(event)
+    const hit = this.hitTest()
+    if (hit) {
+      // 阻止浏览器默认右键菜单，由上层组件展示自定义菜单
+      event.preventDefault()
+      event.stopPropagation()
+      this.select(hit.id)
+      this.emit({
+        type: 'contextmenu',
+        annotation: hit.annotation,
+        id: hit.id,
+        originalEvent: event,
+        point: hit.point,
+        hitObject: hit.hitObject,
+        screenPos: { x: event.clientX, y: event.clientY },
       })
     }
   }

@@ -33,11 +33,16 @@ function createLinearDimension(
   const direction = rec.direction ? new THREE.Vector3(...rec.direction) : undefined
   const text = rec.textOverride ?? formatLengthMeters(distance, unit, precision)
 
+  const labelOffsetWorld = rec.labelOffsetWorld
+    ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
+    : undefined
   const dim = new LinearDimension3D(annotationSystem.materials, {
     start,
     end,
     offset: rec.offset,
     labelT: rec.labelT ?? 0.5,
+    labelOffsetWorld: labelOffsetWorld ?? null,
+    isReference: rec.isReference ?? false,
     direction,
     text,
   })
@@ -57,12 +62,18 @@ function createAngleDimension(
   const corner = new THREE.Vector3(...rec.corner.worldPos)
   const target = new THREE.Vector3(...rec.target.worldPos)
 
+  const labelOffsetWorld = rec.labelOffsetWorld
+    ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
+    : undefined
   const dim = new AngleDimension3D(annotationSystem.materials, {
     vertex: corner,
     point1: origin,
     point2: target,
     arcRadius: Math.max(0.3, Math.min(1.2, rec.offset || 0.8)),
     labelT: rec.labelT ?? 0.5,
+    labelOffsetWorld: labelOffsetWorld ?? null,
+    isReference: rec.isReference ?? false,
+    supplementary: rec.supplementary ?? false,
     decimals: precision,
     text: rec.textOverride,
   })
@@ -119,17 +130,27 @@ export class DimensionAnnotationManager {
           const distance = start.distanceTo(end)
           const direction = rec.direction ? new THREE.Vector3(...rec.direction) : undefined
           const text = rec.textOverride ?? formatLengthMeters(distance, this.unit, this.precision)
-          existing.setParams({ start, end, offset: rec.offset, labelT: rec.labelT ?? 0.5, direction, text })
+          const low = rec.labelOffsetWorld
+            ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
+            : null
+          existing.setParams({
+            start, end, offset: rec.offset, labelT: rec.labelT ?? 0.5,
+            labelOffsetWorld: low, isReference: rec.isReference ?? false,
+            direction, text,
+          })
         } else if (rec.kind === 'angle' && existing instanceof AngleDimension3D) {
           const origin = new THREE.Vector3(...rec.origin.worldPos)
           const corner = new THREE.Vector3(...rec.corner.worldPos)
           const target = new THREE.Vector3(...rec.target.worldPos)
+          const low = rec.labelOffsetWorld
+            ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
+            : null
           existing.setParams({
-            vertex: corner,
-            point1: origin,
-            point2: target,
+            vertex: corner, point1: origin, point2: target,
             arcRadius: Math.max(0.3, Math.min(10, rec.offset || 0.8)),
             labelT: rec.labelT ?? 0.5,
+            labelOffsetWorld: low, isReference: rec.isReference ?? false,
+            supplementary: rec.supplementary ?? false,
           })
           const deg = existing.getAngleDegrees()
           const text = rec.textOverride ?? formatAngleDegrees(deg, this.precision)

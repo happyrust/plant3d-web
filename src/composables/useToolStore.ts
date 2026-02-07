@@ -58,6 +58,10 @@ export type LinearDistanceDimensionRecord = {
   direction: Vec3 | null;
   /** 文本在尺寸线上的位置（0..1，默认 0.5） */
   labelT?: number;
+  /** SolveSpace 风格：文字自由拖拽偏移（世界坐标，相对于 labelT 基准位置） */
+  labelOffsetWorld?: Vec3 | null;
+  /** 参考尺寸（仅显示，不参与约束计算） */
+  isReference?: boolean;
   textOverride?: string;
   visible: boolean;
   createdAt: number;
@@ -73,6 +77,12 @@ export type AngleDimensionRecord = {
   direction: Vec3 | null;
   /** 文本在圆弧上的位置（0..1，默认 0.5） */
   labelT?: number;
+  /** SolveSpace 风格：文字自由拖拽偏移（世界坐标，相对于 labelT 基准位置） */
+  labelOffsetWorld?: Vec3 | null;
+  /** 参考尺寸（仅显示，不参与约束计算） */
+  isReference?: boolean;
+  /** 显示补角（minor/major 模式切换） */
+  supplementary?: boolean;
   textOverride?: string;
   visible: boolean;
   createdAt: number;

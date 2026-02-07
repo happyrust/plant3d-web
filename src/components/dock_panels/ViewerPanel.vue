@@ -24,6 +24,7 @@ import ReviewConfirmation from "@/components/review/ReviewConfirmation.vue";
 import MeasurementWizard from "@/components/tools/MeasurementWizard.vue";
 import { pdmsGetPtsetWithContext } from "@/api/genModelPdmsAttrApi";
 import { getMbdPipeAnnotations } from "@/api/mbdPipeApi";
+import { demoMbdPipeData, injectMbdPipeDemoGeometry, flyToPipeDemo } from "@/debug/injectMbdPipeDemo";
 import { useModelGeneration } from "@/composables/useModelGeneration";
 import { useSelectionStore } from "@/composables/useSelectionStore";
 import {
@@ -38,7 +39,7 @@ import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationT
 import { useMbdPipeAnnotationThree } from "@/composables/useMbdPipeAnnotationThree";
 import { useAnnotationThree } from "@/composables/useAnnotationThree";
 import { DimensionAnnotationManager } from "@/composables/useDimensionAnnotation";
-import { useToolStore } from "@/composables/useToolStore";
+import { useToolStore, type DimensionKind } from "@/composables/useToolStore";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
 import { useViewerContext } from "@/composables/useViewerContext";
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from "@/composables/useDbMetaInfo";
@@ -282,9 +283,28 @@ const modelGenerationRef = shallowRef<ReturnType<
 let attachedToScene = false;
 let shaderPrecompiled = false;
 let continuousRender = false;
-let demoMode: "none" | "primitives" = "none";
+let demoMode: "none" | "primitives" | "mbd_pipe" = "none";
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
+
+// ── 标注右键菜单状态 ──
+const dimContextMenu = ref<{
+    visible: boolean;
+    x: number;
+    y: number;
+    dimId: string;
+    kind: DimensionKind | null;
+    isReference: boolean;
+    supplementary: boolean;
+}>({
+    visible: false,
+    x: 0,
+    y: 0,
+    dimId: "",
+    kind: null,
+    isReference: false,
+    supplementary: false,
+});
 let rafId: number | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
@@ -1229,6 +1249,92 @@ function toggleRangeDrawer(): void {
     if (rangeDrawerOpen.value) rightToolbarOpenSettings.value = false;
 }
 
+// ── 标注右键菜单动作 ──
+function closeDimContextMenu(): void {
+    dimContextMenu.value.visible = false;
+}
+
+function dimCtxToggleReference(): void {
+    const { dimId, isReference } = dimContextMenu.value;
+    if (!dimId) return;
+    if (dimId.startsWith("mbd:")) {
+        const mbdId = dimId.slice(4);
+        mbdPipeVisRef.value?.updateDimOverride(mbdId, { isReference: !isReference });
+    } else {
+        try { store.updateDimension(dimId, { isReference: !isReference } as any); } catch { /* ignore */ }
+    }
+    closeDimContextMenu();
+    requestRender();
+}
+
+function dimCtxToggleSupplementary(): void {
+    const { dimId, supplementary } = dimContextMenu.value;
+    if (!dimId) return;
+    try {
+        store.updateDimension(dimId, { supplementary: !supplementary } as any);
+    } catch { /* ignore */ }
+    closeDimContextMenu();
+    requestRender();
+}
+
+function dimCtxSnapToGrid(): void {
+    const { dimId } = dimContextMenu.value;
+    if (!dimId) return;
+    if (dimId.startsWith("mbd:")) {
+        // MBD dim: snap 当前 annotation 的 labelOffsetWorld
+        const mbdId = dimId.slice(4);
+        const dim = mbdPipeVisRef.value?.getDimAnnotations().get(mbdId);
+        if (dim) {
+            const p = dim.getParams();
+            const low = p.labelOffsetWorld;
+            if (low) {
+                const gridStep = 0.05;
+                const snapped = new Vector3(
+                    Math.round(low.x / gridStep) * gridStep,
+                    Math.round(low.y / gridStep) * gridStep,
+                    Math.round(low.z / gridStep) * gridStep,
+                );
+                dim.setParams({ labelOffsetWorld: snapped });
+                mbdPipeVisRef.value?.updateDimOverride(mbdId, {
+                    labelOffsetWorld: [snapped.x, snapped.y, snapped.z],
+                });
+            }
+        }
+    } else {
+        const rec = (store.dimensions.value || []).find((d: any) => d?.id === dimId) as any;
+        if (!rec) { closeDimContextMenu(); return; }
+        const low = rec.labelOffsetWorld as [number, number, number] | null | undefined;
+        if (low) {
+            const gridStep = 0.05;
+            const snapped: [number, number, number] = [
+                Math.round(low[0] / gridStep) * gridStep,
+                Math.round(low[1] / gridStep) * gridStep,
+                Math.round(low[2] / gridStep) * gridStep,
+            ];
+            try { store.updateDimension(dimId, { labelOffsetWorld: snapped } as any); } catch { /* ignore */ }
+        }
+    }
+    closeDimContextMenu();
+    requestRender();
+}
+
+function dimCtxResetLayout(): void {
+    const { dimId } = dimContextMenu.value;
+    if (!dimId) return;
+    if (dimId.startsWith("mbd:")) {
+        const mbdId = dimId.slice(4);
+        const dim = mbdPipeVisRef.value?.getDimAnnotations().get(mbdId);
+        if (dim) {
+            dim.setParams({ labelOffsetWorld: null, labelT: 0.5 });
+            mbdPipeVisRef.value?.resetDimOverride(mbdId);
+        }
+    } else {
+        try { store.updateDimension(dimId, { labelOffsetWorld: null, labelT: 0.5 } as any); } catch { /* ignore */ }
+    }
+    closeDimContextMenu();
+    requestRender();
+}
+
 onMounted(async () => {
     const canvas = mainCanvas.value;
     const container = containerRef.value;
@@ -1261,6 +1367,8 @@ onMounted(async () => {
             if (Number.isFinite(cnt) && cnt > 0) {
                 demoPrimitiveCount = Math.floor(cnt);
             }
+        } else if (demo === "mbd_pipe") {
+            demoMode = "mbd_pipe";
         }
 
         const gridRaw = q.get("dtx_grid") || localStorage.getItem("dtx_grid");
@@ -1494,6 +1602,21 @@ onMounted(async () => {
     });
     mbdPipeVisRef.value = mbdPipeVis;
 
+    // mbd_pipe demo：不依赖后端，直接注入模拟管道几何体 + 标注
+    if (demoMode === "mbd_pipe") {
+        try {
+            injectMbdPipeDemoGeometry(dtxViewer);
+            mbdPipeVis.renderBranch(demoMbdPipeData);
+            flyToPipeDemo(dtxViewer);
+            emitToast({
+                message: `[mbd_pipe demo] 已加载：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count}`,
+            });
+            requestRender();
+        } catch (e) {
+            console.warn("[ViewerPanel] mbd_pipe demo 初始化失败", e);
+        }
+    }
+
     // 三维标注系统初始化
     const annotationSystem = useAnnotationThree(dtxViewerRef, overlayContainer, {
         requestRender,
@@ -1523,8 +1646,108 @@ onMounted(async () => {
         offAnnotationInteraction = annotationSystem.onInteraction((ev) => {
             const id = typeof ev?.id === "string" ? ev.id : null;
             if (!id) return;
-            if (!id.startsWith("dim_")) return;
             if (id === "dim_preview") return;
+
+            // MBD dims 处理（session-only 交互）
+            if (id.startsWith("mbd_dim_")) {
+                const mbdDimId = id.slice("mbd_dim_".length);
+                const dtxViewer2 = dtxViewerRef.value;
+                if (!dtxViewer2) return;
+
+                if (ev.type === "drag-start") {
+                    dtxViewer2.controls.enabled = false;
+                    return;
+                }
+                if (ev.type === "drag-end") {
+                    dtxViewer2.controls.enabled = true;
+                    requestRender();
+                    return;
+                }
+                if (ev.type === "drag" && ev.annotation instanceof LinearDimension3D) {
+                    const me = ev.originalEvent;
+                    if (!me) return;
+                    const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
+                    const p = ev.annotation.getParams();
+                    const start = p.start.clone();
+                    const end = p.end.clone();
+
+                    if (role === "label") {
+                        // SolveSpace 风格：自由拖拽 label
+                        const seg = end.clone().sub(start);
+                        if (seg.lengthSq() < 1e-9) return;
+                        seg.normalize();
+                        const offsetDirVec = p.direction?.clone() ?? new Vector3(-seg.y, seg.x, 0);
+                        if (offsetDirVec.lengthSq() < 1e-9) offsetDirVec.set(1, 0, 0);
+                        offsetDirVec.normalize();
+                        const mid = start.clone().add(end).multiplyScalar(0.5);
+                        const planeNormal = seg.clone().cross(offsetDirVec);
+                        if (planeNormal.lengthSq() < 1e-9) return;
+                        planeNormal.normalize();
+                        const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, mid);
+                        const hit = intersectPlaneFromMouseEvent(me, plane);
+                        if (!hit) return;
+                        const defaultLabelPos = ev.annotation.getDefaultLabelWorldPos();
+                        let labelOffset = hit.clone().sub(defaultLabelPos);
+                        if (me.shiftKey) {
+                            const gridStep = 0.05;
+                            labelOffset.x = Math.round(labelOffset.x / gridStep) * gridStep;
+                            labelOffset.y = Math.round(labelOffset.y / gridStep) * gridStep;
+                            labelOffset.z = Math.round(labelOffset.z / gridStep) * gridStep;
+                        }
+                        try {
+                            ev.annotation.setParams({ labelOffsetWorld: labelOffset });
+                            mbdPipeVisRef.value?.updateDimOverride(mbdDimId, {
+                                labelOffsetWorld: [labelOffset.x, labelOffset.y, labelOffset.z],
+                            });
+                        } catch { /* ignore */ }
+                        requestRender();
+                        return;
+                    }
+
+                    if (role === "offset") {
+                        // 拖拽尺寸线调整 offset
+                        const seg = end.clone().sub(start);
+                        if (seg.lengthSq() < 1e-9) return;
+                        seg.normalize();
+                        const offsetDirVec = p.direction?.clone() ?? new Vector3(-seg.y, seg.x, 0);
+                        if (offsetDirVec.lengthSq() < 1e-9) offsetDirVec.set(1, 0, 0);
+                        offsetDirVec.normalize();
+                        const mid = start.clone().add(end).multiplyScalar(0.5);
+                        const planeNormal = seg.clone().cross(offsetDirVec);
+                        if (planeNormal.lengthSq() < 1e-9) return;
+                        planeNormal.normalize();
+                        const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, mid);
+                        const hit = intersectPlaneFromMouseEvent(me, plane);
+                        if (!hit) return;
+                        const nextOffset = hit.clone().sub(mid).dot(offsetDirVec);
+                        try {
+                            ev.annotation.setParams({ offset: nextOffset });
+                            mbdPipeVisRef.value?.updateDimOverride(mbdDimId, {
+                                offset: nextOffset,
+                                direction: [offsetDirVec.x, offsetDirVec.y, offsetDirVec.z],
+                            });
+                        } catch { /* ignore */ }
+                        requestRender();
+                        return;
+                    }
+                }
+                // contextmenu: 右键菜单也适用于 MBD dims
+                if (ev.type === "contextmenu") {
+                    const sp = (ev as any).screenPos as { x: number; y: number } | undefined;
+                    dimContextMenu.value = {
+                        visible: true,
+                        x: sp?.x ?? 0,
+                        y: sp?.y ?? 0,
+                        dimId: `mbd:${mbdDimId}`,
+                        kind: 'linear_distance',
+                        isReference: false,
+                        supplementary: false,
+                    };
+                }
+                return;
+            }
+
+            if (!id.startsWith("dim_")) return;
 
             const dtxViewer2 = dtxViewerRef.value;
             if (!dtxViewer2) return;
@@ -1540,6 +1763,21 @@ onMounted(async () => {
                 if (store.activeDimensionId.value === dimId) {
                     store.activeDimensionId.value = null;
                 }
+            }
+
+            // 右键菜单：显示尺寸标注的操作菜单
+            if (ev.type === "contextmenu") {
+                const sp = (ev as any).screenPos as { x: number; y: number } | undefined;
+                dimContextMenu.value = {
+                    visible: true,
+                    x: sp?.x ?? 0,
+                    y: sp?.y ?? 0,
+                    dimId,
+                    kind: rec.kind as DimensionKind,
+                    isReference: !!rec.isReference,
+                    supplementary: !!(rec as any).supplementary,
+                };
+                return;
             }
 
             // 双击文字：打开尺寸面板编辑 textOverride
@@ -1692,43 +1930,29 @@ onMounted(async () => {
                 if (!hit) return;
 
                 if (role === "label") {
-                    const curOffset = Number(p.offset) || 0;
-                    const dimStart = start.clone().addScaledVector(offsetDir, curOffset);
-                    const dimEnd = end.clone().addScaledVector(offsetDir, curOffset);
-                    const dimDir = dimEnd.clone().sub(dimStart);
-                    const lenSq = dimDir.lengthSq();
-                    if (lenSq < 1e-12) return;
+                    // SolveSpace 风格：label 自由拖拽（ray-plane intersection）
+                    // 按住 Shift 时 snap to grid（默认步长 0.05 世界单位）
+                    const defaultLabelPos = ev.annotation.getDefaultLabelWorldPos();
+                    let labelOffset = hit.clone().sub(defaultLabelPos);
 
-                    let t = clamp(hit.clone().sub(dimStart).dot(dimDir) / lenSq, 0, 1);
-                    const snap = maybeSnapLabelT(t);
-                    t = snap.t;
+                    // Snap to Grid（Shift 键激活）
+                    if (me.shiftKey) {
+                        const gridStep = 0.05; // 世界坐标网格步长
+                        labelOffset.x = Math.round(labelOffset.x / gridStep) * gridStep;
+                        labelOffset.y = Math.round(labelOffset.y / gridStep) * gridStep;
+                        labelOffset.z = Math.round(labelOffset.z / gridStep) * gridStep;
+                    }
+
                     try {
-                        ev.annotation.setLabelSnapActive(snap.snapped);
-                        ev.annotation.setLabelSnapMarkersState(
-                            me.shiftKey || me.altKey,
-                            snap.snapped ? snap.index : null,
-                            snap.nearIndex,
-                        );
-                        // 吸附提示线：连接文字位置 -> 当前吸附目标点（snapped 用 index，否则用 nearIndex）
-                        if (me.shiftKey || me.altKey) {
-                            const targetIndex = snap.snapped ? snap.index : snap.nearIndex;
-                            const targetPos =
-                                typeof targetIndex === "number"
-                                    ? ev.annotation.getSnapMarkerWorldPos(targetIndex)
-                                    : null;
-                            ev.annotation.setLabelSnapGuideTarget(targetPos);
-                            ev.annotation.setLabelSnapGuideVisible(!!targetPos);
-                        } else {
-                            ev.annotation.setLabelSnapGuideTarget(null);
-                            ev.annotation.setLabelSnapGuideVisible(false);
-                        }
+                        ev.annotation.setParams({
+                            labelOffsetWorld: labelOffset,
+                        });
                     } catch {
                         // ignore
                     }
                     try {
                         store.updateDimension(dimId, {
-                            labelT: t,
-                            // 文本拖拽：不改 direction（Shift 用于吸附）
+                            labelOffsetWorld: [labelOffset.x, labelOffset.y, labelOffset.z],
                             direction: rec.direction,
                         });
                     } catch {
@@ -1774,47 +1998,29 @@ onMounted(async () => {
 
                 const rVec = hit.clone().sub(vertex);
                 if (role === "label") {
-                    const uu = u.clone();
-                    const ww = v.clone();
-                    if (uu.lengthSq() < 1e-9 || ww.lengthSq() < 1e-9) return;
-                    uu.normalize();
-                    ww.normalize();
-                    const dot = clamp(uu.dot(ww), -1, 1);
-                    const theta = Math.acos(dot);
-                    const vv = ww.clone().addScaledVector(uu, -dot);
-                    if (vv.lengthSq() < 1e-9 || theta < 1e-9) return;
-                    vv.normalize();
+                    // SolveSpace 风格：label 自由拖拽
+                    const defaultLabelPos = ev.annotation.getDefaultLabelWorldPos();
+                    let labelOffset = hit.clone().sub(defaultLabelPos);
 
-                    const x = rVec.dot(uu);
-                    const y = rVec.dot(vv);
-                    const a = clamp(Math.atan2(y, x), 0, theta);
-                    let t = clamp(a / theta, 0, 1);
-                    const snap = maybeSnapLabelT(t);
-                    t = snap.t;
+                    // Snap to Grid（Shift 键激活）
+                    if (me.shiftKey) {
+                        const gridStep = 0.05;
+                        labelOffset.x = Math.round(labelOffset.x / gridStep) * gridStep;
+                        labelOffset.y = Math.round(labelOffset.y / gridStep) * gridStep;
+                        labelOffset.z = Math.round(labelOffset.z / gridStep) * gridStep;
+                    }
+
                     try {
-                        ev.annotation.setLabelSnapActive(snap.snapped);
-                        ev.annotation.setLabelSnapMarkersState(
-                            me.shiftKey || me.altKey,
-                            snap.snapped ? snap.index : null,
-                            snap.nearIndex,
-                        );
-                        if (me.shiftKey || me.altKey) {
-                            const targetIndex = snap.snapped ? snap.index : snap.nearIndex;
-                            const targetPos =
-                                typeof targetIndex === "number"
-                                    ? ev.annotation.getSnapMarkerWorldPos(targetIndex)
-                                    : null;
-                            ev.annotation.setLabelSnapGuideTarget(targetPos);
-                            ev.annotation.setLabelSnapGuideVisible(!!targetPos);
-                        } else {
-                            ev.annotation.setLabelSnapGuideTarget(null);
-                            ev.annotation.setLabelSnapGuideVisible(false);
-                        }
+                        ev.annotation.setParams({
+                            labelOffsetWorld: labelOffset,
+                        });
                     } catch {
                         // ignore
                     }
                     try {
-                        store.updateDimension(dimId, { labelT: t });
+                        store.updateDimension(dimId, {
+                            labelOffsetWorld: [labelOffset.x, labelOffset.y, labelOffset.z],
+                        });
                     } catch {
                         // ignore
                     }
@@ -1864,11 +2070,30 @@ onMounted(async () => {
         console.warn("[ViewerPanel] 尺寸标注管理器初始化失败", e);
     }
 
+    // 将 MBD dims 注册到标注交互系统（使其可 pick/drag/contextmenu）
+    function syncMbdDimsToInteraction(): void {
+        if (!mbdPipeVisRef.value || !annotationSystemRef.value) return;
+        const dimMap = mbdPipeVisRef.value.getDimAnnotations();
+        for (const [dimId, dim] of dimMap) {
+            const interactionId = `mbd_dim_${dimId}`;
+            annotationSystemRef.value.registerExternalAnnotation(interactionId, dim as any);
+        }
+    }
+
+    // 对 mbd_pipe demo：此时标注已在 renderBranch 中创建，注册到交互系统
+    if (demoMode === "mbd_pipe") {
+        try {
+            syncMbdDimsToInteraction();
+        } catch (e) {
+            console.warn("[ViewerPanel] MBD dims 交互注册失败", e);
+        }
+    }
+
     // 启动预拉：db_meta_info + shared trans/aabb（失败直接报错）
     // 注意：onMounted(async () => ...) 中，任何依赖注入上下文的 hooks（如 vue-query）必须在首个 await 之前调用。
     // 因此这里先初始化 tools/ptsetVis（它们会调用 useSelectionStore/useQuery），再 await 预拉。
-    // primitives demo 不依赖后端数据，跳过预拉避免无后端时初始化失败。
-    if (demoMode !== "primitives") {
+    // demo 模式（primitives / mbd_pipe）不依赖后端数据，跳过预拉避免无后端时初始化失败。
+    if (demoMode !== "primitives" && demoMode !== "mbd_pipe") {
         try {
             await ensureDbMetaInfoLoaded();
             await preloadInstancesSharedTables();
@@ -1882,6 +2107,27 @@ onMounted(async () => {
 
     viewerContext.ptsetVis.value = ptsetVis as any;
     viewerContext.mbdPipeVis.value = mbdPipeVis as any;
+
+    // 开发模式：暴露全局函数用于测试模拟数据
+    if (isDev && typeof window !== "undefined") {
+        (window as any).loadMockMbdPipeData = () => {
+            try {
+                ensurePanelAndActivate("mbdPipe");
+                if (mbdPipeVisRef.value) {
+                    mbdPipeVisRef.value.renderBranch(demoMbdPipeData);
+                    mbdPipeVisRef.value.flyTo();
+                    emitToast({
+                        message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count}`,
+                    });
+                    requestRender();
+                }
+            } catch (e) {
+                console.error("[mbd-pipe-mock] Failed to load:", e);
+                emitToast({ message: "加载模拟数据失败" });
+            }
+        };
+        console.log("[dev] 已暴露全局函数: window.loadMockMbdPipeData()");
+    }
     viewerContext.annotationSystem.value = annotationSystem;
     viewerContext.viewerRef.value = compat as any;
     viewerContext.overlayContainerRef.value = overlayContainer.value;
@@ -2278,6 +2524,8 @@ onMounted(async () => {
                 if (resp.success && resp.data) {
                     mbdPipeVis.renderBranch(resp.data);
                     mbdPipeVis.flyTo();
+                    // 将 MBD dims 注册到交互系统
+                    try { syncMbdDimsToInteraction(); } catch { /* ignore */ }
                     emitToast({
                         message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count}`,
                     });
@@ -2324,6 +2572,26 @@ onMounted(async () => {
             tag === "textarea" ||
             (target as any)?.isContentEditable === true;
         if (isEditable) return;
+
+        // 开发模式：Ctrl+Shift+M 加载模拟 MBD 管道标注数据
+        if (isDev && ev.ctrlKey && ev.shiftKey && ev.key === "M") {
+            ev.preventDefault();
+            try {
+                ensurePanelAndActivate("mbdPipe");
+                if (mbdPipeVisRef.value) {
+                    mbdPipeVisRef.value.renderBranch(demoMbdPipeData);
+                    mbdPipeVisRef.value.flyTo();
+                    emitToast({
+                        message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count}`,
+                    });
+                    requestRender();
+                }
+            } catch (e) {
+                console.error("[mbd-pipe-mock] Failed to load:", e);
+                emitToast({ message: "加载模拟数据失败" });
+            }
+            return;
+        }
 
         if (ev.key === "Escape") {
             try {
@@ -2864,6 +3132,55 @@ onUnmounted(() => {
                 <div class="mt-2 text-muted-foreground">{{ initError }}</div>
             </div>
         </div>
+
+        <!-- 标注右键菜单（SolveSpace 风格） -->
+        <div
+            v-if="dimContextMenu.visible"
+            class="pointer-events-auto fixed z-[960] min-w-[180px] rounded-lg border border-border bg-background py-1 text-sm shadow-lg"
+            :style="{ left: dimContextMenu.x + 'px', top: dimContextMenu.y + 'px' }"
+            @pointerdown.stop
+            @contextmenu.prevent.stop
+        >
+            <button
+                class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+                @click="dimCtxToggleReference"
+            >
+                {{ dimContextMenu.isReference ? '取消参考尺寸' : '设为参考尺寸' }}
+            </button>
+            <button
+                v-if="dimContextMenu.kind === 'angle'"
+                class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+                @click="dimCtxToggleSupplementary"
+            >
+                {{ dimContextMenu.supplementary ? '显示原始角度' : '显示补角' }}
+            </button>
+            <button
+                class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+                @click="dimCtxSnapToGrid"
+            >
+                Snap to Grid
+            </button>
+            <div class="my-1 border-t border-border"></div>
+            <button
+                class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+                @click="dimCtxResetLayout"
+            >
+                重置文字位置
+            </button>
+            <button
+                class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-muted-foreground hover:bg-muted"
+                @click="closeDimContextMenu"
+            >
+                取消
+            </button>
+        </div>
+        <!-- 点击空白处关闭右键菜单 -->
+        <div
+            v-if="dimContextMenu.visible"
+            class="pointer-events-auto fixed inset-0 z-[959]"
+            @click="closeDimContextMenu"
+            @contextmenu.prevent="closeDimContextMenu"
+        />
 
         <MeasurementWizard
             v-if="

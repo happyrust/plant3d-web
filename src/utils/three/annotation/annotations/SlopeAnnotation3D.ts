@@ -55,7 +55,7 @@ export class SlopeAnnotation3D extends AnnotationBase {
       fontSize: 0.18,
       color: 0x3b82f6,
       outlineColor: 0x000000,
-      outlineWidth: 0.04,
+      outlineWidth: 0.015,
     })
     this.add(this.textLabel.object3d)
 

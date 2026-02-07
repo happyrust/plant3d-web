@@ -17,6 +17,12 @@ export interface AngleDimension3DParams {
   arcRadius?: number
   /** 文本在圆弧上的位置（0..1，默认 0.5） */
   labelT?: number
+  /** SolveSpace 风格：文字自由拖拽偏移（世界坐标，相对于 labelT 基准位置） */
+  labelOffsetWorld?: THREE.Vector3 | null
+  /** 参考尺寸（灰色半透明样式，仅显示不参与约束） */
+  isReference?: boolean
+  /** 显示补角（360-angle 模式） */
+  supplementary?: boolean
   /** 自定义文本（默认自动计算角度） */
   text?: string
   /** 单位（默认 °） */
@@ -37,7 +43,13 @@ const SNAP_TS = [0, 0.25, 0.5, 0.75, 1] as const
 const snapMarkerGeometry = new THREE.CircleGeometry(0.12, 24)
 
 export class AngleDimension3D extends AnnotationBase {
-  private params: Required<Omit<AngleDimension3DParams, 'text' | 'fontUrl'>> & { text?: string; fontUrl?: string }
+  private params: Required<Omit<AngleDimension3DParams, 'text' | 'fontUrl' | 'labelOffsetWorld' | 'isReference' | 'supplementary'>> & {
+    text?: string
+    fontUrl?: string
+    labelOffsetWorld?: THREE.Vector3 | null
+    isReference?: boolean
+    supplementary?: boolean
+  }
   private materialSet: AnnotationMaterialSet
 
   private ray1: Line2
@@ -83,6 +95,9 @@ export class AngleDimension3D extends AnnotationBase {
       point2: params.point2.clone(),
       arcRadius: params.arcRadius ?? 1,
       labelT: params.labelT ?? 0.5,
+      labelOffsetWorld: params.labelOffsetWorld?.clone() ?? null,
+      isReference: params.isReference ?? false,
+      supplementary: params.supplementary ?? false,
       text: params.text,
       unit: params.unit ?? '°',
       decimals: params.decimals ?? 1,
@@ -134,7 +149,7 @@ export class AngleDimension3D extends AnnotationBase {
       fontSize: 0.18,
       color: 0xfacc15,
       outlineColor: 0x000000,
-      outlineWidth: 0.04,
+      outlineWidth: 0.015,
     })
     this.textLabel.object3d.userData.dragRole = 'label'
     this.add(this.textLabel.object3d)
@@ -290,6 +305,9 @@ export class AngleDimension3D extends AnnotationBase {
       point2: this.params.point2.clone(),
       arcRadius: this.params.arcRadius,
       labelT: this.params.labelT,
+      labelOffsetWorld: this.params.labelOffsetWorld?.clone() ?? null,
+      isReference: this.params.isReference,
+      supplementary: this.params.supplementary,
       text: this.params.text,
       unit: this.params.unit,
       decimals: this.params.decimals,
@@ -298,12 +316,40 @@ export class AngleDimension3D extends AnnotationBase {
     }
   }
 
+  /** 获取 label 默认位置（无 labelOffsetWorld 时的基准，即 labelT 插值点） */
+  getDefaultLabelWorldPos(): THREE.Vector3 {
+    // 复用当前文字位置逻辑但不含 offset
+    const { vertex, arcRadius } = this.params
+    const u = this.tempU.copy(this.params.point1).sub(vertex)
+    const w = this.tempW.copy(this.params.point2).sub(vertex)
+    if (u.lengthSq() < 1e-9 || w.lengthSq() < 1e-9) return vertex.clone()
+    u.normalize()
+    w.normalize()
+    const dot = clamp(u.dot(w), -1, 1)
+    const theta = this.params.supplementary ? (2 * Math.PI - Math.acos(dot)) : Math.acos(dot)
+    const v = this.tempV.copy(w).addScaledVector(u, -clamp(u.dot(w), -1, 1))
+    if (v.lengthSq() < 1e-9) return vertex.clone().addScaledVector(u, arcRadius)
+    v.normalize()
+    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5))
+    const a = theta * t
+    return new THREE.Vector3()
+      .copy(u).multiplyScalar(Math.cos(a))
+      .addScaledVector(v, Math.sin(a))
+      .multiplyScalar(arcRadius)
+      .add(vertex)
+  }
+
   setParams(params: Partial<AngleDimension3DParams>): void {
     if (params.vertex) this.params.vertex.copy(params.vertex)
     if (params.point1) this.params.point1.copy(params.point1)
     if (params.point2) this.params.point2.copy(params.point2)
     if (params.arcRadius !== undefined) this.params.arcRadius = params.arcRadius
     if (params.labelT !== undefined) this.params.labelT = params.labelT
+    if ('labelOffsetWorld' in params) {
+      this.params.labelOffsetWorld = params.labelOffsetWorld?.clone() ?? null
+    }
+    if (params.isReference !== undefined) this.params.isReference = params.isReference
+    if (params.supplementary !== undefined) this.params.supplementary = params.supplementary
     if (params.text !== undefined) this.params.text = params.text
     if (params.unit !== undefined) this.params.unit = params.unit
     if (params.decimals !== undefined) this.params.decimals = params.decimals
@@ -357,7 +403,8 @@ export class AngleDimension3D extends AnnotationBase {
     w.normalize()
 
     const dot = clamp(u.dot(w), -1, 1)
-    const theta = Math.acos(dot)
+    const minorTheta = Math.acos(dot)
+    const theta = this.params.supplementary ? (2 * Math.PI - minorTheta) : minorTheta
     const deg = (theta * 180) / Math.PI
     this.lastAngleDeg = deg
 
@@ -392,18 +439,39 @@ export class AngleDimension3D extends AnnotationBase {
     }
     this.arcGeometry.setPositions(positions)
 
-    const display = this.params.text ?? `${deg.toFixed(this.params.decimals)}${this.params.unit}`
+    // 参考尺寸样式
+    if (this.params.isReference) {
+      const setRefOpacity = (obj: any) => {
+        try {
+          const m = obj.material
+          if (m) { m.opacity = 0.4; m.transparent = true }
+        } catch { /* ignore */ }
+      }
+      setRefOpacity(this.ray1)
+      setRefOpacity(this.ray2)
+      setRefOpacity(this.arcLine)
+    }
+
+    let display = this.params.text ?? `${deg.toFixed(this.params.decimals)}${this.params.unit}`
+    if (this.params.isReference && !display.startsWith('REF ')) {
+      display = `REF ${display}`
+    }
     this.lastDisplayText = display
     this.textLabel.setText(display)
 
-    // label at arc t
+    // label at arc t（基准位置），然后叠加 labelOffsetWorld
     const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5))
     const a = theta * t
-    this.textLabel.object3d.position
+    const baseLabelPos = new THREE.Vector3()
       .copy(u).multiplyScalar(Math.cos(a))
       .addScaledVector(v, Math.sin(a))
       .multiplyScalar(arcRadius)
       .add(vertex)
+    if (this.params.labelOffsetWorld) {
+      this.textLabel.object3d.position.copy(baseLabelPos).add(this.params.labelOffsetWorld)
+    } else {
+      this.textLabel.object3d.position.copy(baseLabelPos)
+    }
 
     // snap marker positions
     for (let i = 0; i < this.snapMarkers.length; i++) {

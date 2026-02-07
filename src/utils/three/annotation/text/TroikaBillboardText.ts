@@ -35,15 +35,30 @@ export class TroikaBillboardText {
     t.font = params.fontUrl
     t.fontSize = params.fontSize
     t.color = this.baseColor
-    t.outlineColor = this.baseOutlineColor
-    t.outlineWidth = this.baseOutlineWidth
     t.anchorX = 'center'
     t.anchorY = 'middle'
     t.frustumCulled = false
     t.renderOrder = 910
+
+    // ── SDF 质量优化 ──────────────────────────────────────────────
+    // troika-three-text 内部使用 SDF 渲染字形。默认 sdfGlyphSize=64，
+    // 在 scale-independent 大缩放下（mm 坐标系文字被放大数百倍）会出现：
+    //  1) 字形边缘锯齿/模糊
+    //  2) outline 的黑色硬边变成巨大的色块，遮挡文字本身
+    //
+    // 修复：
+    //  - sdfGlyphSize 提高到 128：SDF 纹理精度翻倍，远距离/大缩放仍清晰
+    //  - outlineBlur：给描边加少量高斯模糊，消除硬边 → 柔和的"光晕"描边
+    //  - outlineWidth 保持小值：SDF 缩放后天然锐利，不需要粗描边
+    ;(t as any).sdfGlyphSize = 128
+
+    t.outlineColor = this.baseOutlineColor
+    t.outlineWidth = this.baseOutlineWidth
+    ;(t as any).outlineBlur = params.outlineWidth * 0.5
+
     t.sync()
 
-    // 作为“标注文字”，默认不参与深度测试，避免被模型遮挡（与 CSS2D 标签体验一致）。
+    // 作为"标注文字"，默认不参与深度测试，避免被模型遮挡（与 CSS2D 标签体验一致）。
     // 注意：troika Text 的 material 可能为数组；这里做兼容处理。
     try {
       const m = (t as any).material as THREE.Material | THREE.Material[] | undefined
@@ -63,10 +78,11 @@ export class TroikaBillboardText {
   }
 
   private applyStyle(): void {
-    // 以描边为主：highlight 用“更粗”，snap 用“更亮”
+    // 以描边为主：highlight 用"更粗"，snap 用"更亮"
     this.textMesh.outlineColor = this.snapActive ? this.snapOutlineColor : this.baseOutlineColor
     const w = this.highlighted ? Math.max(this.baseOutlineWidth, 0.08) : this.baseOutlineWidth
     this.textMesh.outlineWidth = this.snapActive ? Math.max(w, 0.12) : w
+    ;(this.textMesh as any).outlineBlur = w * 0.5
     this.textMesh.sync()
   }
 

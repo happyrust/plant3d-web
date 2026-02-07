@@ -65,6 +65,11 @@ export interface UseAnnotationThreeReturn {
   /** 选中标注 */
   selectAnnotation: (id: string | null) => void
 
+  /** 注册外部标注（已在场景中，仅加入交互控制器，不加入标注组） */
+  registerExternalAnnotation: (id: string, annotation: AnnotationBase) => void
+  /** 取消注册外部标注（从交互控制器中移除，不 dispose） */
+  unregisterExternalAnnotation: (id: string) => void
+
   /** 添加交互事件监听器 */
   onInteraction: (callback: AnnotationInteractionCallback) => () => void
 
@@ -192,6 +197,20 @@ export function useAnnotationThree(
   /** 获取标注 */
   function getAnnotation(id: string): AnnotationBase | undefined {
     return annotations.value.get(id)
+  }
+
+  /** 注册外部标注（已在场景中，仅加入交互控制器的 map，不加入 annotationGroup） */
+  function registerExternalAnnotation(id: string, annotation: AnnotationBase): void {
+    annotations.value.set(id, annotation)
+    annotations.value = new Map(annotations.value)
+    interactionController.setAnnotations(annotations.value)
+  }
+
+  /** 取消注册外部标注（不 dispose，仅从交互 map 中移除） */
+  function unregisterExternalAnnotation(id: string): void {
+    annotations.value.delete(id)
+    annotations.value = new Map(annotations.value)
+    interactionController.setAnnotations(annotations.value)
   }
 
   /** 清空所有标注 */
@@ -324,6 +343,8 @@ export function useAnnotationThree(
     addAnnotation,
     removeAnnotation,
     getAnnotation,
+    registerExternalAnnotation,
+    unregisterExternalAnnotation,
     clearAll,
     highlightAnnotation,
     selectAnnotation,

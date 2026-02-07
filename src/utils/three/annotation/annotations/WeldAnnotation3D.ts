@@ -59,7 +59,7 @@ export class WeldAnnotation3D extends AnnotationBase {
       fontSize: 0.18,
       color: 0xf97316,
       outlineColor: 0x000000,
-      outlineWidth: 0.04,
+      outlineWidth: 0.015,
     })
     this.add(this.textLabel.object3d)
 

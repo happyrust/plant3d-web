@@ -15,6 +15,10 @@ export interface LinearDimension3DParams {
   offset?: number
   /** 文本在尺寸线上的位置（0..1，默认 0.5） */
   labelT?: number
+  /** SolveSpace 风格：文字自由拖拽偏移（世界坐标，相对于 labelT 基准位置）。设置后优先于 labelT 定位。 */
+  labelOffsetWorld?: THREE.Vector3 | null
+  /** 参考尺寸（灰色虚线样式，仅显示不参与约束） */
+  isReference?: boolean
   /** 自定义文本（默认自动计算距离） */
   text?: string
   /** 偏移方向（默认自动计算垂直方向） */
@@ -37,9 +41,11 @@ const SNAP_TS = [0, 0.25, 0.5, 0.75, 1] as const
 const snapMarkerGeometry = new THREE.CircleGeometry(0.12, 24)
 
 export class LinearDimension3D extends AnnotationBase {
-  private params: Required<Omit<LinearDimension3DParams, 'direction' | 'fontUrl'>> & {
+  private params: Required<Omit<LinearDimension3DParams, 'direction' | 'fontUrl' | 'labelOffsetWorld' | 'isReference'>> & {
     direction?: THREE.Vector3
     fontUrl?: string
+    labelOffsetWorld?: THREE.Vector3 | null
+    isReference?: boolean
   }
   private materialSet: AnnotationMaterialSet
 
@@ -93,6 +99,8 @@ export class LinearDimension3D extends AnnotationBase {
       end: params.end.clone(),
       offset: params.offset ?? 0.5,
       labelT: params.labelT ?? 0.5,
+      labelOffsetWorld: params.labelOffsetWorld?.clone() ?? null,
+      isReference: params.isReference ?? false,
       text: params.text ?? '',
       direction: params.direction?.clone(),
       unit: params.unit ?? '',
@@ -157,7 +165,7 @@ export class LinearDimension3D extends AnnotationBase {
       fontSize: 0.18,
       color: 0x22c55e,
       outlineColor: 0x000000,
-      outlineWidth: 0.04,
+      outlineWidth: 0.015,
     })
     this.textLabel.object3d.userData.dragRole = 'label'
     this.add(this.textLabel.object3d)
@@ -306,6 +314,8 @@ export class LinearDimension3D extends AnnotationBase {
       end: this.params.end.clone(),
       offset: this.params.offset,
       labelT: this.params.labelT,
+      labelOffsetWorld: this.params.labelOffsetWorld?.clone() ?? null,
+      isReference: this.params.isReference,
       text: this.params.text || undefined,
       direction: this.params.direction?.clone(),
       unit: this.params.unit,
@@ -314,12 +324,22 @@ export class LinearDimension3D extends AnnotationBase {
     }
   }
 
+  /** 获取 label 默认位置（无 labelOffsetWorld 时的基准，即 labelT 插值点） */
+  getDefaultLabelWorldPos(): THREE.Vector3 {
+    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5))
+    return this.dimStart.clone().lerp(this.dimEnd, t)
+  }
+
   /** 更新参数并重建几何 */
   setParams(params: Partial<LinearDimension3DParams>): void {
     if (params.start) this.params.start.copy(params.start)
     if (params.end) this.params.end.copy(params.end)
     if (params.offset !== undefined) this.params.offset = params.offset
     if (params.labelT !== undefined) this.params.labelT = params.labelT
+    if ('labelOffsetWorld' in params) {
+      this.params.labelOffsetWorld = params.labelOffsetWorld?.clone() ?? null
+    }
+    if (params.isReference !== undefined) this.params.isReference = params.isReference
     if (params.text !== undefined) this.params.text = params.text
     if (params.direction) this.params.direction = params.direction.clone()
     if (params.unit !== undefined) this.params.unit = params.unit
@@ -401,14 +421,41 @@ export class LinearDimension3D extends AnnotationBase {
     this.arrow2.position.copy(this.dimEnd)
     this.arrow2.quaternion.setFromUnitVectors(xAxis, dimDir.clone().negate())
 
+    // 参考尺寸样式（灰色半透明）
+    if (this.params.isReference) {
+      this.dimensionLine.visible = true
+      this.extensionLine1.visible = true
+      this.extensionLine2.visible = true
+      // 视觉区分：降低不透明度
+      const setRefOpacity = (obj: any) => {
+        try {
+          const m = obj.material
+          if (m) { m.opacity = 0.4; m.transparent = true }
+        } catch { /* ignore */ }
+      }
+      setRefOpacity(this.dimensionLine)
+      setRefOpacity(this.extensionLine1)
+      setRefOpacity(this.extensionLine2)
+      setRefOpacity(this.arrow1)
+      setRefOpacity(this.arrow2)
+    }
+
     // 更新文本
-    const displayText = this.params.text || `${distance.toFixed(this.params.decimals)}${this.params.unit}`
+    let displayText = this.params.text || `${distance.toFixed(this.params.decimals)}${this.params.unit}`
+    if (this.params.isReference && !displayText.startsWith('REF ')) {
+      displayText = `REF ${displayText}`
+    }
     this.lastDisplayText = displayText
     this.textLabel.setText(displayText)
 
-    // 文本位置（尺寸线插值点）
+    // 文本位置：优先使用 labelOffsetWorld（SolveSpace 自由拖拽），否则用 labelT 插值
     const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5))
-    this.textLabel.object3d.position.copy(this.dimStart).lerp(this.dimEnd, t)
+    const baseLabelPos = this.tempVec.copy(this.dimStart).lerp(this.dimEnd, t)
+    if (this.params.labelOffsetWorld) {
+      this.textLabel.object3d.position.copy(baseLabelPos).add(this.params.labelOffsetWorld)
+    } else {
+      this.textLabel.object3d.position.copy(baseLabelPos)
+    }
 
     // 吸附点位置
     for (let i = 0; i < this.snapMarkers.length; i++) {
