@@ -69,6 +69,11 @@ export type Task = {
   type: TaskType;
   status: TaskStatus;
   progress: number;           // 0-100
+  processedItems?: number;    // 已处理数量
+  totalItems?: number;        // 总数量
+  currentStep?: string;       // 当前步骤描述
+  stepIndex?: number;         // 当前步骤编号
+  totalSteps?: number;        // 总步骤数
   startTime?: string;
   endTime?: string;
   durationMs?: number;

@@ -119,7 +119,7 @@ export function useTaskMonitor(options: UseTaskMonitorOptions = {}): UseTaskMoni
   // 监听 WebSocket 消息
   watch(lastMessage, (message) => {
     if (!message) return;
-    handleWebSocketMessage(message as WebSocketMessage);
+    handleWebSocketMessage(message);
   });
 
   // 监听 WebSocket 错误
@@ -195,14 +195,39 @@ export function useTaskMonitor(options: UseTaskMonitorOptions = {}): UseTaskMoni
   /**
    * 处理 WebSocket 消息
    */
-  function handleWebSocketMessage(message: WebSocketMessage): void {
-    lastUpdateTime.value = message.timestamp || new Date().toISOString();
+  function handleWebSocketMessage(message: any): void {
+    lastUpdateTime.value = new Date().toISOString();
 
-    switch (message.type) {
+    // Handle backend ProgressMessage format (from ProgressHub)
+    if (message.task_id && message.percentage != null) {
+      const taskId = String(message.task_id);
+      const task = tasks.value.find((t) => t.id === taskId);
+      if (task) {
+        task.progress = Number(message.percentage) || 0;
+        task.currentStep = message.current_step || undefined;
+        task.processedItems = message.processed_items != null ? Number(message.processed_items) : undefined;
+        task.totalItems = message.total_items != null ? Number(message.total_items) : undefined;
+        task.stepIndex = message.current_step_number != null ? Number(message.current_step_number) : undefined;
+        task.totalSteps = message.total_steps != null ? Number(message.total_steps) : undefined;
+        // Update status if terminal
+        if (message.status === 'completed' || message.status === 'failed' || message.status === 'cancelled') {
+          task.status = message.status;
+        } else if (message.status === 'running') {
+          task.status = 'running';
+        }
+      }
+      return;
+    }
+
+    // Handle wrapped WebSocketMessage format (future-proof)
+    const wsMsg = message as WebSocketMessage;
+    if (!wsMsg.type) return;
+
+    switch (wsMsg.type) {
       case 'task_update':
       case 'task_completed':
       case 'task_failed': {
-        const updatedTask = normalizeTask(message.data as Record<string, unknown>);
+        const updatedTask = normalizeTask(wsMsg.data as Record<string, unknown>);
         const index = tasks.value.findIndex((t) => t.id === updatedTask.id);
         if (index >= 0) {
           tasks.value[index] = updatedTask;
@@ -213,7 +238,7 @@ export function useTaskMonitor(options: UseTaskMonitorOptions = {}): UseTaskMoni
       }
 
       case 'task_progress': {
-        const progressData = message.data as { taskId: string; progress: number };
+        const progressData = wsMsg.data as { taskId: string; progress: number };
         const task = tasks.value.find((t) => t.id === progressData.taskId);
         if (task) {
           task.progress = progressData.progress;
@@ -222,7 +247,7 @@ export function useTaskMonitor(options: UseTaskMonitorOptions = {}): UseTaskMoni
       }
 
       case 'system_metrics': {
-        systemMetrics.value = message.data as SystemMetrics;
+        systemMetrics.value = wsMsg.data as SystemMetrics;
         break;
       }
     }

@@ -134,7 +134,8 @@ export async function taskGetSystemMetrics(): Promise<SystemMetricsResponse> {
   type RawStatusResponse = {
     cpu_usage: number;
     memory_usage: number;
-    active_task_count: number;
+    active_tasks: number;
+    queued_task_count?: number;
   };
   const raw = await fetchJson<RawStatusResponse>('/api/status');
   return {
@@ -142,8 +143,8 @@ export async function taskGetSystemMetrics(): Promise<SystemMetricsResponse> {
     metrics: {
       cpuUsage: raw.cpu_usage,
       memoryUsage: raw.memory_usage,
-      activeTaskCount: raw.active_task_count,
-      queuedTaskCount: 0, // 后端不返回此字段
+      activeTaskCount: raw.active_tasks,
+      queuedTaskCount: raw.queued_task_count ?? 0,
     },
   };
 }
@@ -375,21 +376,45 @@ export function getTaskProgressWebSocketUrl(taskId: string): string {
  * 规范化任务数据（处理后端返回的不一致格式）
  */
 export function normalizeTask(raw: Record<string, unknown>): Task {
+  // Backend returns progress as an object with percentage, processed_items, etc.
+  const progressObj = raw.progress as Record<string, unknown> | undefined;
+  const progressNumber = typeof raw.progress === 'number' 
+    ? raw.progress 
+    : (progressObj?.percentage != null ? Number(progressObj.percentage) : 0);
+
   return {
     id: String(raw.id || raw.task_id || ''),
     name: String(raw.name || raw.task_name || ''),
     type: normalizeTaskType(raw.type || raw.task_type),
     status: normalizeTaskStatus(raw.status),
-    progress: Number(raw.progress || 0),
-    startTime: normalizeTimestamp(raw.start_time || raw.startTime),
-    endTime: normalizeTimestamp(raw.end_time || raw.endTime),
-    durationMs: raw.duration_ms != null ? Number(raw.duration_ms) : undefined,
+    progress: progressNumber,
+    processedItems: progressObj?.processed_items != null ? Number(progressObj.processed_items) : undefined,
+    totalItems: progressObj?.total_items != null ? Number(progressObj.total_items) : undefined,
+    currentStep: progressObj?.current_step != null ? String(progressObj.current_step) : undefined,
+    stepIndex: progressObj?.current_step_number != null ? Number(progressObj.current_step_number) : undefined,
+    totalSteps: progressObj?.total_steps != null ? Number(progressObj.total_steps) : undefined,
+    startTime: normalizeTimestamp(raw.started_at || raw.start_time || raw.startTime),
+    endTime: normalizeTimestamp(raw.completed_at || raw.end_time || raw.endTime),
+    durationMs: raw.actual_duration != null ? Number(raw.actual_duration) : (raw.duration_ms != null ? Number(raw.duration_ms) : undefined),
     estimatedTimeMs: raw.estimated_time_ms != null ? Number(raw.estimated_time_ms) : undefined,
-    priority: (raw.priority || 'normal') as Task['priority'],
+    priority: normalizePriority(raw.priority),
     parameters: raw.parameters as Task['parameters'],
     result: raw.result as Task['result'],
     error: raw.error ? String(raw.error) : undefined,
+    metadata: (raw.metadata || undefined) as Record<string, any> | undefined,
   };
+}
+
+function normalizePriority(priority: unknown): Task['priority'] {
+  const p = String(priority || 'normal').toLowerCase();
+  const map: Record<string, Task['priority']> = {
+    'low': 'low',
+    'normal': 'normal',
+    'high': 'high',
+    'urgent': 'critical',
+    'critical': 'critical',
+  };
+  return map[p] || 'normal';
 }
 
 /**

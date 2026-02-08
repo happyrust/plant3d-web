@@ -1,5 +1,5 @@
 <template>
-  <div class="task-status-card" :class="[`status-${task.status}`]">
+  <div class="task-status-card" :class="[`status-${task.status}`]" @click="$emit('detail', task.id)">
     <!-- 任务头部 -->
     <div class="card-header">
       <div class="task-info">
@@ -30,7 +30,21 @@
         rounded
         :indeterminate="task.status === 'running' && task.progress === 0"
       />
-      <span class="progress-text">{{ task.progress }}%</span>
+      <span class="progress-text">
+        {{ Math.round(task.progress) }}%
+        <template v-if="task.totalItems && task.totalItems > 0">
+          · {{ task.processedItems ?? 0 }}/{{ task.totalItems }}
+        </template>
+      </span>
+    </div>
+
+    <!-- 当前步骤 -->
+    <div v-if="task.currentStep && task.status === 'running'" class="card-step">
+      <v-icon size="12" color="info">mdi-arrow-right-circle</v-icon>
+      <span class="step-text">{{ task.currentStep }}</span>
+      <span v-if="task.stepIndex && task.totalSteps" class="step-count">
+        ({{ task.stepIndex }}/{{ task.totalSteps }})
+      </span>
     </div>
 
     <!-- 任务详情 -->
@@ -68,6 +82,13 @@
       </div>
     </div>
 
+    <!-- 批量任务信息 -->
+    <div v-if="task.metadata?.batch_id" class="card-batch-info">
+      <v-icon size="12">mdi-layers-outline</v-icon>
+      <span>批量 {{ task.metadata.batch_index }}/{{ task.metadata.batch_total }}</span>
+      <span v-if="task.metadata.db_num" class="ml-1">· DB {{ task.metadata.db_num }}</span>
+    </div>
+
     <!-- 错误信息 -->
     <div v-if="task.error" class="card-error">
       <v-icon size="14" color="error">mdi-alert-circle</v-icon>
@@ -75,7 +96,7 @@
     </div>
 
     <!-- 操作按钮 -->
-    <div class="card-actions">
+    <div class="card-actions" @click.stop>
       <!-- 等待中：启动、删除 -->
       <template v-if="task.status === 'pending'">
         <v-btn
@@ -171,6 +192,7 @@ defineEmits<{
   stop: [taskId: string];
   restart: [taskId: string];
   delete: [taskId: string];
+  detail: [taskId: string];
 }>();
 
 // ============ 计算属性 ============
@@ -211,6 +233,7 @@ function formatTime(isoString: string): string {
   padding: 12px;
   margin-bottom: 8px;
   transition: box-shadow 0.2s;
+  cursor: pointer;
 
   &:hover {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -312,6 +335,36 @@ function formatTime(isoString: string): string {
     display: flex;
     flex-wrap: wrap;
   }
+}
+
+.card-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+
+  .step-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .step-count {
+    color: rgba(var(--v-theme-on-surface), 0.5);
+    font-size: 10px;
+  }
+}
+
+.card-batch-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .card-error {

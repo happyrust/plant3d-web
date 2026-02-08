@@ -32,6 +32,17 @@ const safeDepth = computed(() => {
 const isVisible = computed(() => props.checkState !== 'unchecked');
 const typeIconUrl = computed(() => getPdmsTypeIconUrl(props.row.type));
 
+/** 显示名称：优先使用 name，为空时用 refno（dbnum/sesno 格式）兜底 */
+const displayName = computed(() => {
+  const name = props.row.name;
+  if (name && name.trim()) return name;
+  // refno 格式：24381_145018 → 24381/145018
+  const id = props.row.id;
+  if (id && id.includes('_')) return id.replace('_', '/');
+  return id || '';
+});
+const isNameFallback = computed(() => !props.row.name || !props.row.name.trim());
+
 // hover 状态管理
 const isHovering = ref(false);
 const showEyeIcon = ref(false);
@@ -110,7 +121,7 @@ onUnmounted(() => {
       <span v-else class="h-4 w-4 shrink-0" />
 
       <div class="min-w-0 flex-1 leading-none">
-        <div class="truncate font-medium">{{ row.name }}</div>
+        <div class="truncate" :class="isNameFallback ? 'text-muted-foreground text-xs' : 'font-medium'">{{ displayName }}</div>
       </div>
 
       <button type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon ? 'opacity-100' : 'opacity-0'" @mousedown.stop @click="onToggleVisible">

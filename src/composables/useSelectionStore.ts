@@ -5,6 +5,15 @@ import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 
 const selectedRefno = ref<string | null>(null);
 
+/**
+ * 在不需要 Vue 注入上下文的场景（如异步回调、命令处理器）中直接修改 selectedRefno。
+ * 不调用 useQuery，因此可以在 setup() 外安全使用。
+ */
+export function setGlobalSelectedRefno(refno: string | null) {
+  if (refno === selectedRefno.value) return;
+  selectedRefno.value = refno;
+}
+
 function usePdmsUiAttrQuery(refno: { value: string | null }) {
   return useQuery({
     queryKey: computed(() => ['pdms', 'ui-attr', refno.value]),

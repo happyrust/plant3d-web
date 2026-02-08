@@ -52,6 +52,16 @@ class ParquetNotFoundError extends Error {
   }
 }
 
+function toAbsoluteUrl(url: string): string {
+  // DuckDB-WASM 的 worker 可能运行在 blob: URL 下，若传入相对路径会导致 XHR.open 抛 Invalid URL。
+  if (typeof window === 'undefined') return url
+  try {
+    return new URL(url, window.location.origin).toString()
+  } catch {
+    return url
+  }
+}
+
 // DuckDB 单例（参考 useParquetSqlStore 的实现）
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -133,7 +143,21 @@ async function fetchManifest(dbno: number): Promise<ParquetManifest> {
   const url = buildFilesOutputUrl(`instances_parquet/manifest_${dbno}.json`)
   const resp = await fetch(url)
   if (resp.status === 404) {
-    throw new ParquetNotFoundError(`manifest not found: ${url}`)
+    // 兼容“仅导出 Parquet 文件但未生成 manifest”的场景：按约定命名兜底。
+    return {
+      version: 1,
+      format: 'parquet',
+      generated_at: new Date().toISOString(),
+      dbnum: dbno,
+      root_refno: null,
+      tables: {
+        instances: { file: `instances_${dbno}.parquet` },
+        geo_instances: { file: `geo_instances_${dbno}.parquet` },
+        tubings: { file: `tubings_${dbno}.parquet` },
+        transforms: { file: 'transforms.parquet' },
+        aabb: { file: 'aabb.parquet' },
+      },
+    }
   }
   if (!resp.ok) {
     throw new Error(`加载 manifest 失败: HTTP ${resp.status} ${resp.statusText}`)
@@ -168,9 +192,8 @@ async function registerDbno(dbno: number): Promise<RegisteredDbno> {
 
     // 注册远程文件（HTTP Range）
     const registerOne = async (localName: string, remoteFile: string) => {
-      const url = `${baseDirUrl}/${remoteFile}`.replace(/\/{2,}/g, '/')
-      // buildFilesOutputUrl 会返回以 /files/output 开头的绝对路径；这里做简单 join
-      const remoteUrl = url.startsWith('/files/') ? url : `${baseDirUrl}/${remoteFile}`
+      const remotePath = `${baseDirUrl}/${remoteFile}`.replace(/\/{2,}/g, '/')
+      const remoteUrl = toAbsoluteUrl(remotePath)
       await db!.registerFileURL(localName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, false)
     }
 
@@ -222,14 +245,8 @@ export function useDbnoInstancesParquetLoader() {
     await ensureDuckDB()
     if (!conn) throw new Error('DuckDB connection unavailable')
 
-    // refno 在 parquet 里是 refno_str（带 /），而 DTX 侧使用 '_' key。
-    // 这里需要把 '_' 转回 '/' 以匹配 parquet（仅替换第一个 '_'）
-    const toRefnoStr = (k: string) => {
-      const s = String(k)
-      const idx = s.indexOf('_')
-      if (idx <= 0) return s
-      return `${s.slice(0, idx)}/${s.slice(idx + 1)}`
-    }
+    // refno 在 parquet 里是 refno_str（与前端 refnoKey 一致：`24381_100818` 这种下划线格式）
+    const toRefnoStr = (k: string) => String(k)
 
     const resultMap = new Map<string, InstanceEntry[]>()
 
@@ -344,6 +361,94 @@ export function useDbnoInstancesParquetLoader() {
       if (debug) {
         // eslint-disable-next-line no-console
         console.log('[instances-parquet] chunk loaded', { dbno, chunk: [i, i + CHUNK], rows: rows.length })
+      }
+
+      // tubings：tubings_{dbno}.parquet（TUBI 段）
+      // - 以 tubi_refno_str 作为 refno_str（与 instances.refno_str 一致：带 /）
+      // - matrix 仅使用 tubings.trans_hash 对应的 world matrix（无 geo_local）
+      const sqlTubi = `
+        WITH target(refno_str) AS (
+          SELECT UNNEST(${listExpr}) AS refno_str
+        )
+        SELECT
+          t.tubi_refno_str AS refno_str,
+          'TUBI' AS noun,
+          '' AS name,
+          t.owner_refno_str,
+          '' AS owner_noun,
+          t.spec_value,
+          false AS has_neg,
+          t.trans_hash,
+          t.aabb_hash,
+          t.order AS geo_index,
+          t.geo_hash,
+          '' AS geo_trans_hash,
+          aw.min_x, aw.min_y, aw.min_z, aw.max_x, aw.max_y, aw.max_z,
+          tw.m00, tw.m10, tw.m20, tw.m30,
+          tw.m01, tw.m11, tw.m21, tw.m31,
+          tw.m02, tw.m12, tw.m22, tw.m32,
+          tw.m03, tw.m13, tw.m23, tw.m33,
+          NULL AS g_m00, NULL AS g_m10, NULL AS g_m20, NULL AS g_m30,
+          NULL AS g_m01, NULL AS g_m11, NULL AS g_m21, NULL AS g_m31,
+          NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
+          NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
+        FROM target x
+        JOIN parquet_scan('${reg.files.tubings}') t ON t.tubi_refno_str = x.refno_str
+        LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = t.aabb_hash
+        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = t.trans_hash
+        ORDER BY t.tubi_refno_str, t.order
+      `
+
+      const tubiArrow = await conn.query(sqlTubi)
+      const tubiRows = tubiArrow.toArray() as any[]
+
+      for (const row of tubiRows) {
+        const refnoStr = String(row.refno_str || '')
+        const refnoKey = normalizeRefnoKey(refnoStr)
+        if (!refnoKey) continue
+
+        const worldCols = colsMajorToMatrixArray(row)
+        if (!worldCols) continue
+
+        const matrix = multiplyWorldAndGeoLocal(worldCols, null)
+
+        const aabb =
+          row.min_x !== null && row.max_x !== null
+            ? { min: [Number(row.min_x), Number(row.min_y), Number(row.min_z)], max: [Number(row.max_x), Number(row.max_y), Number(row.max_z)] }
+            : null
+
+        const noun = String(row.noun ?? 'TUBI')
+        const ownerRefno = row.owner_refno_str ? String(row.owner_refno_str) : null
+        const ownerNoun = String(row.owner_noun ?? '')
+
+        const entry: InstanceEntry = {
+          geo_hash: String(row.geo_hash ?? ''),
+          matrix,
+          geo_index: Number(row.geo_index ?? 0),
+          color_index: 0,
+          name_index: 0,
+          site_name_index: 0,
+          lod_mask: 1,
+          uniforms: {
+            refno: refnoStr,
+            noun,
+            name: row.name ? String(row.name) : '',
+            owner_refno: ownerRefno,
+            owner_noun: ownerNoun,
+            spec_value: Number(row.spec_value ?? 0),
+            has_neg: false,
+            trans_hash: row.trans_hash ? String(row.trans_hash) : '',
+            aabb_hash: row.aabb_hash ? String(row.aabb_hash) : '',
+          },
+          refno_transform: worldCols,
+          aabb,
+        }
+
+        if (!entry.geo_hash) continue
+
+        const list = resultMap.get(refnoKey) ?? []
+        list.push(entry)
+        resultMap.set(refnoKey, list)
       }
     }
 

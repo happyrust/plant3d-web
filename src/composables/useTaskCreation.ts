@@ -158,8 +158,11 @@ export function useTaskCreation(): UseTaskCreationReturn {
 
     if (step === 2) {
       if (formData.type === 'DataParsingWizard') {
-        if (formData.parseMode === 'dbnum' && (!formData.dbnum.trim() || isNaN(Number(formData.dbnum)))) {
-          return false;
+        if (formData.parseMode === 'dbnum') {
+          const parts = formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+          if (parts.length === 0 || parts.some(s => isNaN(Number(s)))) {
+            return false;
+          }
         }
         if (formData.parseMode === 'refno' && !formData.refno.trim()) {
           return false;
@@ -203,10 +206,13 @@ export function useTaskCreation(): UseTaskCreationReturn {
 
     if (step === 2) {
       if (formData.type === 'DataParsingWizard') {
-        if (formData.parseMode === 'dbnum' && !formData.dbnum.trim()) {
-          newErrors.dbnum = '请输入数据库编号';
-        } else if (formData.parseMode === 'dbnum' && isNaN(Number(formData.dbnum))) {
-          newErrors.dbnum = '数据库编号必须是数字';
+        if (formData.parseMode === 'dbnum') {
+          const parts = formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+          if (parts.length === 0) {
+            newErrors.dbnum = '请输入数据库编号';
+          } else if (parts.some(s => isNaN(Number(s)))) {
+            newErrors.dbnum = '数据库编号必须是数字，多个用逗号分隔';
+          }
         }
         if (formData.parseMode === 'refno' && !formData.refno.trim()) {
           newErrors.refno = '请输入参考号';
@@ -345,7 +351,9 @@ export function useTaskCreation(): UseTaskCreationReturn {
       task_type: formData.type === 'DataParsingWizard' ? 'DataParsingWizard' : 'DataGeneration',
       config: {
         name: formData.name.trim(),
-        manual_db_nums: formData.parseMode === 'dbnum' ? [Number(formData.dbnum)] : [],
+        manual_db_nums: formData.parseMode === 'dbnum'
+          ? formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(s => s && !isNaN(Number(s))).map(Number)
+          : [],
         manual_refnos: formData.parseMode === 'refno' ? [formData.refno.trim()] : [],
         // 以下为 DatabaseConfig 的默认必需字段，参考后端 Default 实现
         project_name: 'AvevaMarineSample',

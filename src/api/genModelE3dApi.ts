@@ -1,58 +1,49 @@
 import { useConsoleStore } from '@/composables/useConsoleStore';
+import {
+  e3dParquetGetAncestors,
+  e3dParquetGetChildren,
+  e3dParquetGetNode,
+  e3dParquetGetSubtreeRefnos,
+  e3dParquetGetVisibleInsts,
+  e3dParquetGetWorldRoot,
+  e3dParquetSearch,
+} from '@/api/genModelE3dParquetApi';
+import type {
+  AncestorsResponse,
+  ChildrenResponse,
+  NodeResponse,
+  SearchRequest,
+  SearchResponse,
+  SubtreeRefnosResponse,
+  TreeNodeDto,
+  VisibleInstsResponse,
+} from '@/api/genModelE3dTypes';
 
-export type TreeNodeDto = {
-  refno: string;
-  name: string;
-  noun: string;
-  owner?: string | null;
-  children_count?: number | null;
-};
+export type {
+  AncestorsResponse,
+  ChildrenResponse,
+  NodeResponse,
+  SearchRequest,
+  SearchResponse,
+  SubtreeRefnosResponse,
+  TreeNodeDto,
+  VisibleInstsResponse,
+} from '@/api/genModelE3dTypes';
 
-export type NodeResponse = {
-  success: boolean;
-  node: TreeNodeDto | null;
-  error_message?: string | null;
-};
+type E3dSource = 'backend' | 'parquet' | 'auto';
 
-export type ChildrenResponse = {
-  success: boolean;
-  parent_refno: string;
-  children: TreeNodeDto[];
-  truncated: boolean;
-  error_message?: string | null;
-};
-
-export type AncestorsResponse = {
-  success: boolean;
-  refnos: string[];
-  error_message?: string | null;
-};
-
-export type SubtreeRefnosResponse = {
-  success: boolean;
-  refnos: string[];
-  truncated: boolean;
-  error_message?: string | null;
-};
-
-export type VisibleInstsResponse = {
-  success: boolean;
-  refno: string;
-  refnos: string[];
-  error_message?: string | null;
-};
-
-export type SearchRequest = {
-  keyword: string;
-  nouns?: string[];
-  limit?: number;
-};
-
-export type SearchResponse = {
-  success: boolean;
-  items: TreeNodeDto[];
-  error_message?: string | null;
-};
+function getE3dSource(): E3dSource {
+  try {
+    const v = new URLSearchParams(window.location.search).get('e3d_source') || '';
+    const s = v.trim().toLowerCase();
+    if (s === 'parquet') return 'parquet';
+    if (s === 'auto') return 'auto';
+    if (s === 'backend') return 'backend';
+  } catch {
+    // ignore
+  }
+  return 'backend';
+}
 
 function getBaseUrl(): string {
   const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
@@ -81,45 +72,100 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function e3dGetWorldRoot(): Promise<NodeResponse> {
-  return await fetchJson<NodeResponse>('/api/e3d/world-root');
+  const source = getE3dSource();
+  if (source === 'parquet') return await e3dParquetGetWorldRoot();
+  if (source === 'backend') return await fetchJson<NodeResponse>('/api/e3d/world-root');
+
+  // auto：优先后端，失败/非 success 回退 Parquet
+  try {
+    const resp = await fetchJson<NodeResponse>('/api/e3d/world-root');
+    if (resp?.success) return resp;
+  } catch {
+    // ignore
+  }
+  return await e3dParquetGetWorldRoot();
 }
 
 export async function e3dGetNode(refno: string): Promise<NodeResponse> {
-  return await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
+  const source = getE3dSource();
+  if (source === 'parquet') return await e3dParquetGetNode(refno);
+  if (source === 'backend') return await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
+
+  try {
+    const resp = await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
+    if (resp?.success) return resp;
+  } catch {
+    // ignore
+  }
+  return await e3dParquetGetNode(refno);
 }
 
 export async function e3dGetChildren(refno: string, limit?: number): Promise<ChildrenResponse> {
+  const source = getE3dSource();
+  if (source === 'parquet') return await e3dParquetGetChildren(refno, limit);
+
   const url = new URL('http://localhost');
   url.pathname = `/api/e3d/children/${encodeURIComponent(refno)}`;
   if (limit !== undefined) {
     url.searchParams.set('limit', String(limit));
   }
-  return await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
+
+  if (source === 'backend') {
+    return await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
+  }
+
+  // auto：优先后端
+  try {
+    const resp = await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
+    if (resp?.success) return resp;
+  } catch {
+    // ignore
+  }
+  return await e3dParquetGetChildren(refno, limit);
+}
+
+async function backendE3dGetAncestors(refno: string): Promise<AncestorsResponse> {
+  const resp = await fetchJson<AncestorsResponse>(`/api/e3d/ancestors/${encodeURIComponent(refno)}`);
+  console.info('[vis][api] /api/e3d/ancestors', {
+    refno,
+    refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
+    success: resp.success,
+  });
+  const { addLog } = useConsoleStore();
+  addLog(
+    'info',
+    `[vis][api] /api/e3d/ancestors success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0}`
+  );
+  return resp;
 }
 
 export async function e3dGetAncestors(refno: string): Promise<AncestorsResponse> {
-  try {
-    const resp = await fetchJson<AncestorsResponse>(`/api/e3d/ancestors/${encodeURIComponent(refno)}`);
-    console.info('[vis][api] /api/e3d/ancestors', {
-      refno,
-      refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
-      success: resp.success,
-    });
-    const { addLog } = useConsoleStore();
-    addLog(
-      'info',
-      `[vis][api] /api/e3d/ancestors success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0}`
-    );
-    return resp;
-  } catch (e) {
-    console.error('[vis][api] /api/e3d/ancestors failed', { refno, error: e });
-    const { addLog } = useConsoleStore();
-    addLog('error', `[vis][api] /api/e3d/ancestors failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`);
-    throw e;
+  const source = getE3dSource();
+  if (source === 'parquet') return await e3dParquetGetAncestors(refno);
+
+  if (source === 'backend') {
+    try {
+      return await backendE3dGetAncestors(refno);
+    } catch (e) {
+      console.error('[vis][api] /api/e3d/ancestors failed', { refno, error: e });
+      const { addLog } = useConsoleStore();
+      addLog('error', `[vis][api] /api/e3d/ancestors failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`);
+      throw e;
+    }
   }
+
+  // auto：优先后端，失败/非 success 回退 Parquet
+  try {
+    const resp = await backendE3dGetAncestors(refno);
+    if (resp?.success) return resp;
+  } catch (e) {
+    console.warn('[vis][api] /api/e3d/ancestors backend failed, fallback to parquet', { refno, error: e });
+  }
+
+  return await e3dParquetGetAncestors(refno);
 }
 
-export async function e3dGetSubtreeRefnos(
+async function backendE3dGetSubtreeRefnos(
   refno: string,
   params?: { includeSelf?: boolean; maxDepth?: number; limit?: number }
 ): Promise<SubtreeRefnosResponse> {
@@ -134,77 +180,124 @@ export async function e3dGetSubtreeRefnos(
   if (params?.limit !== undefined) {
     url.searchParams.set('limit', String(params.limit));
   }
+
+  const resp = await fetchJson<SubtreeRefnosResponse>(`${url.pathname}${url.search}`);
+  console.info('[vis][api] /api/e3d/subtree-refnos', {
+    refno,
+    include_self: params?.includeSelf,
+    max_depth: params?.maxDepth,
+    limit: params?.limit,
+    refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
+    truncated: resp.truncated,
+    success: resp.success,
+  });
+  const { addLog } = useConsoleStore();
+  addLog(
+    'info',
+    `[vis][api] /api/e3d/subtree-refnos success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0} truncated=${resp.truncated ? 1 : 0}`
+  );
+  return resp;
+}
+
+export async function e3dGetSubtreeRefnos(
+  refno: string,
+  params?: { includeSelf?: boolean; maxDepth?: number; limit?: number }
+): Promise<SubtreeRefnosResponse> {
+  const source = getE3dSource();
+  if (source === 'parquet') return await e3dParquetGetSubtreeRefnos(refno, params);
+
+  if (source === 'backend') {
+    try {
+      return await backendE3dGetSubtreeRefnos(refno, params);
+    } catch (e) {
+      console.error('[vis][api] /api/e3d/subtree-refnos failed', {
+        refno,
+        include_self: params?.includeSelf,
+        max_depth: params?.maxDepth,
+        limit: params?.limit,
+        error: e,
+      });
+      const { addLog } = useConsoleStore();
+      addLog(
+        'error',
+        `[vis][api] /api/e3d/subtree-refnos failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
+      );
+      throw e;
+    }
+  }
+
+  // auto：优先后端
   try {
-    const resp = await fetchJson<SubtreeRefnosResponse>(`${url.pathname}${url.search}`);
-    console.info('[vis][api] /api/e3d/subtree-refnos', {
-      refno,
-      include_self: params?.includeSelf,
-      max_depth: params?.maxDepth,
-      limit: params?.limit,
-      refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
-      truncated: resp.truncated,
-      success: resp.success,
-    });
-    const { addLog } = useConsoleStore();
-    addLog(
-      'info',
-      `[vis][api] /api/e3d/subtree-refnos success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0} truncated=${resp.truncated ? 1 : 0}`
-    );
-    return resp;
+    const resp = await backendE3dGetSubtreeRefnos(refno, params);
+    if (resp?.success) return resp;
   } catch (e) {
-    console.error('[vis][api] /api/e3d/subtree-refnos failed', {
+    console.warn('[vis][api] /api/e3d/subtree-refnos backend failed, fallback to parquet', {
       refno,
       include_self: params?.includeSelf,
       max_depth: params?.maxDepth,
       limit: params?.limit,
       error: e,
     });
-    const { addLog } = useConsoleStore();
-    addLog(
-      'error',
-      `[vis][api] /api/e3d/subtree-refnos failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
-    );
-    throw e;
   }
+
+  return await e3dParquetGetSubtreeRefnos(refno, params);
+}
+
+async function backendE3dGetVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
+  const resp = await fetchJson<VisibleInstsResponse>(`/api/e3d/visible-insts/${encodeURIComponent(refno)}`);
+  const debugAny = (resp as any)?.debug as
+    | { candidates_count?: number; visible_count?: number; filtered_count?: number; source?: string }
+    | null
+    | undefined;
+  console.info('[vis][api] /api/e3d/visible-insts', {
+    refno,
+    refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
+    success: resp.success,
+    debug: debugAny || null,
+  });
+  const { addLog } = useConsoleStore();
+  addLog(
+    'info',
+    `[vis][api] /api/e3d/visible-insts success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0}` +
+      (debugAny
+        ? ` candidates=${debugAny.candidates_count ?? ''} filtered=${debugAny.filtered_count ?? ''} visible=${debugAny.visible_count ?? ''} source=${debugAny.source ?? ''}`
+        : '')
+  );
+  return resp;
 }
 
 export async function e3dGetVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
-  try {
-    const resp = await fetchJson<VisibleInstsResponse>(
-      `/api/e3d/visible-insts/${encodeURIComponent(refno)}`
-    );
-    const debugAny = (resp as any)?.debug as
-      | { candidates_count?: number; visible_count?: number; filtered_count?: number; source?: string }
-      | null
-      | undefined;
-    console.info('[vis][api] /api/e3d/visible-insts', {
-      refno,
-      refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
-      success: resp.success,
-      debug: debugAny || null,
-    });
-    const { addLog } = useConsoleStore();
-    addLog(
-      'info',
-      `[vis][api] /api/e3d/visible-insts success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0}` +
-        (debugAny
-          ? ` candidates=${debugAny.candidates_count ?? ''} filtered=${debugAny.filtered_count ?? ''} visible=${debugAny.visible_count ?? ''} source=${debugAny.source ?? ''}`
-          : '')
-    );
-    return resp;
-  } catch (e) {
-    console.error('[vis][api] /api/e3d/visible-insts failed', { refno, error: e });
-    const { addLog } = useConsoleStore();
-    addLog('error', `[vis][api] /api/e3d/visible-insts failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`);
-    throw e;
+  const source = getE3dSource();
+  if (source === 'parquet') return await e3dParquetGetVisibleInsts(refno);
+
+  if (source === 'backend') {
+    try {
+      return await backendE3dGetVisibleInsts(refno);
+    } catch (e) {
+      console.error('[vis][api] /api/e3d/visible-insts failed', { refno, error: e });
+      const { addLog } = useConsoleStore();
+      addLog(
+        'error',
+        `[vis][api] /api/e3d/visible-insts failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
+      );
+      throw e;
+    }
   }
+
+  // auto：优先后端
+  try {
+    const resp = await backendE3dGetVisibleInsts(refno);
+    if (resp?.success) return resp;
+  } catch (e) {
+    console.warn('[vis][api] /api/e3d/visible-insts backend failed, fallback to parquet', { refno, error: e });
+  }
+
+  return await e3dParquetGetVisibleInsts(refno);
 }
 
 export async function e3dSearch(req: SearchRequest): Promise<SearchResponse> {
-  return await fetchJson<SearchResponse>('/api/e3d/search', {
-    method: 'POST',
-    body: JSON.stringify(req),
-  });
+  // 搜索只走 Parquet（DuckDB-WASM），不再 fallback 后端
+  return await e3dParquetSearch(req);
 }
 
 // ========================

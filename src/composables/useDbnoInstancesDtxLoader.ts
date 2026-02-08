@@ -12,7 +12,7 @@ import {
   resolveMaterialForInstance,
   type ModelDisplayConfig,
 } from '@/utils/three/dtx/materialConfig'
-import { Box3, BufferAttribute, BufferGeometry, CylinderGeometry, Matrix4 } from 'three'
+import { Box3, BufferAttribute, BufferGeometry, CylinderGeometry, Matrix4, SphereGeometry } from 'three'
 
 type LoaderOptions = {
   lodAssetKey?: string // "L1"
@@ -79,6 +79,13 @@ function createFallbackBoxGeometry(): BufferGeometry {
   return g
 }
 
+let cachedUnitBoxGeometry: BufferGeometry | null = null
+function getUnitBoxGeometry(): BufferGeometry {
+  if (cachedUnitBoxGeometry) return cachedUnitBoxGeometry
+  cachedUnitBoxGeometry = createFallbackBoxGeometry()
+  return cachedUnitBoxGeometry
+}
+
 let cachedUnitTubiGeometry: BufferGeometry | null = null
 
 /**
@@ -101,6 +108,15 @@ function getUnitTubiGeometry(): BufferGeometry {
   return g
 }
 
+let cachedUnitSphereGeometry: BufferGeometry | null = null
+function getUnitSphereGeometry(): BufferGeometry {
+  if (cachedUnitSphereGeometry) return cachedUnitSphereGeometry
+  const g = new SphereGeometry(0.5, 16, 12)
+  g.computeBoundingBox()
+  cachedUnitSphereGeometry = g
+  return g
+}
+
 async function ensureGeometryForGeoHash(
   dtxLayer: DTXLayer,
   dbno: number,
@@ -117,6 +133,25 @@ async function ensureGeometryForGeoHash(
   }
 
   const task = (async () => {
+    // 基础几何体（后端约定 geo_hash = 1/2/3），直接在前端生成，避免无意义的 GLB 请求。
+    const basic = String(geoHash).trim()
+    if (basic === '1') {
+      dtxLayer.addGeometry(geoHash, getUnitBoxGeometry())
+      cache.loadedGeoHash.add(geoHash)
+      return
+    }
+    if (basic === '2') {
+      // CYLINDER/TUBI 在后端均使用 2，统一用单位圆柱承接
+      dtxLayer.addGeometry(geoHash, getUnitTubiGeometry())
+      cache.loadedGeoHash.add(geoHash)
+      return
+    }
+    if (basic === '3') {
+      dtxLayer.addGeometry(geoHash, getUnitSphereGeometry())
+      cache.loadedGeoHash.add(geoHash)
+      return
+    }
+
     // 约定：tubi_* 属于“虚拟管段几何”（unit cylinder），不走 glb 下载。
     // 这样可避免大量 404 噪音，并确保“管道只有标注不见模型”的场景可直接显示。
     if (geoHash.startsWith('tubi_') || geoHash.startsWith('t_')) {
@@ -310,33 +345,10 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const hiddenNouns = buildHiddenNounSet(displayConfig)
   const hiddenRefnos = buildHiddenRefnoSet(displayConfig)
 
-  const dataSource = options.dataSource || 'auto'
-  let index: Map<string, any[]> | null = null
-
-  // 优先 Parquet（新架构）
-  if (dataSource === 'auto' || dataSource === 'parquet') {
-    try {
-      const parquet = useDbnoInstancesParquetLoader()
-      const available = await parquet.isParquetAvailable(dbno)
-      if (available) {
-        index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
-        if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
-      } else if (dataSource === 'parquet') {
-        throw new Error(`[dtx][instances] parquet not available for dbno=${dbno}`)
-      }
-    } catch (e) {
-      if (dataSource === 'parquet') throw e
-      if (debug) console.warn('[dtx][instances] parquet failed, fallback to json', e)
-      index = null
-    }
-  }
-
-  // 回退 JSON（旧架构）
-  if (!index) {
-    const manifest: InstanceManifest = await getDbnoInstancesManifest(dbno)
-    index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
-    if (debug) console.log('[dtx][instances] using json', { dbno, refnos: toLoad.length })
-  }
+  // 只走 Parquet（不再 fallback JSON）
+  const parquet = useDbnoInstancesParquetLoader()
+  const index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
+  if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
 
   let loadedObjects = 0
   const missingRefnos: string[] = []

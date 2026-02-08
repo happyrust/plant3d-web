@@ -131,7 +131,7 @@ export function useSceneTreeLoader() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    query: `SELECT * FROM scene_node WHERE dbno = ${dbno}`
+                    query: `SELECT *, fn::default_name(type::thing('pe', record::id(id))) ?? '' as name FROM scene_node WHERE dbnum = ${dbno}`
                 })
             })
 

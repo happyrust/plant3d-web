@@ -201,6 +201,7 @@ function handleSelectionChanged(selected: Set<string>) {
   const only = Array.from(selected)[0];
   if (!only || !isRefnoLike(only)) return;
 
+  internalTreeSelection = true;
   selection.setSelectedRefno(only);
 }
 
@@ -534,12 +535,19 @@ const rowVirtualizer = useVirtualizer({
 const activeRootId = computed(() => (isRoomTree.value ? roomTree.rootIds.value[0] : pdmsTree.rootIds.value[0]));
 
 let selectionSyncSeq = 0;
+let internalTreeSelection = false;
 
 watch(
   () => [selection.selectedRefno.value, activeTree.value, activeRootId.value] as const,
   ([refno, tab]) => {
     selectionSyncSeq++;
     const seq = selectionSyncSeq;
+
+    // 树内点击选中时不需要展开/滚动定位，只有外部选中才需要
+    if (internalTreeSelection) {
+      internalTreeSelection = false;
+      return;
+    }
 
     if (!refno || !isRefnoLike(refno)) return;
 
@@ -686,6 +694,11 @@ onMounted(async () => {
       }
       
       console.log('[ModelTreePanel] Node located in tree:', refno);
+
+      // 1.5. 设置全局 selection 触发树滚动居中
+      if (!isRoomTree.value && isRefnoLike(refno)) {
+        selection.setSelectedRefno(normalizeRefnoKeyLike(refno));
+      }
       
       // 2. 然后调用 show-by-refno 加载模型
       if (!isRoomTree.value && isRefnoLike(refno) && modelGenerationState.value) {

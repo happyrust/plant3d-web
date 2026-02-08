@@ -820,17 +820,38 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     const ancestors = (resp.refnos || []).map((r) => normalizeRefnoKey(String(r))).filter(Boolean)
     if (ancestors.length === 0) return
 
-    const path = [...ancestors].reverse()
+    // 祖先集合（包含目标节点本身），用于在每层子节点中识别"路径上的下一个节点"。
+    // 注意：后端和 Parquet 返回的祖先链顺序不同（TOP-DOWN vs BOTTOM-UP），
+    // 且 MDB 环境下祖先链的 WORL 节点可能与树根不同，因此不能依赖返回顺序。
+    // 改用"从根向下逐层查找"策略，完全不依赖返回顺序。
+    const ancestorSet = new Set(ancestors)
+    ancestorSet.add(key)
+
     const nextExpanded = new Set(expandedIds.value)
     nextExpanded.add(rootId)
 
-    let parentId = rootId
-    for (let i = 0; i < path.length; i++) {
-      const curId = path[i]!
-      await ensureNodeAttached(parentId, curId)
-      if (i < path.length - 1) nextExpanded.add(curId)
-      parentId = curId
+    // 从树根向下逐层查找：在每层子节点中找到属于祖先集合的节点，依次展开
+    let curParent = rootId
+    const maxSteps = ancestors.length + 2
+    for (let step = 0; step < maxSteps; step++) {
+      await ensureChildrenLoaded(curParent)
+      nextExpanded.add(curParent)
+
+      const parent = nodesById.value[curParent]
+      if (!parent) break
+
+      // 目标节点已经在当前层级的子节点中 → 找到了
+      if (parent.childrenIds.includes(key)) break
+
+      // 在子节点中找属于祖先链的下一跳节点
+      const nextStep = parent.childrenIds.find((childId) => ancestorSet.has(childId))
+      if (!nextStep) break
+
+      curParent = nextStep
     }
+
+    // 确保最终父节点的子节点已加载（目标节点应在其中）
+    await ensureChildrenLoaded(curParent)
 
     expandedIds.value = nextExpanded
     selectedIds.value = new Set([key])

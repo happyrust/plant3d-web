@@ -107,25 +107,93 @@
 
     <!-- 任务列表 -->
     <div class="task-list">
-      <div v-if="loading && filteredTasks.length === 0" class="loading-state">
+      <div v-if="loading && filteredTasks.length === 0 && batchGroups.length === 0" class="loading-state">
         <v-progress-circular indeterminate size="24" />
         <span>加载中...</span>
       </div>
 
-      <div v-else-if="filteredTasks.length === 0" class="empty-state">
+      <div v-else-if="filteredTasks.length === 0 && batchGroups.length === 0" class="empty-state">
         <v-icon size="48" color="grey-lighten-1">mdi-clipboard-text-off-outline</v-icon>
         <span>暂无任务</span>
       </div>
 
       <template v-else>
+        <!-- 批量任务组（按 batch_id 聚合） -->
+        <div
+          v-for="batch in batchGroups"
+          :key="batch.batchId"
+          class="batch-group"
+        >
+          <div class="batch-header" @click="toggleBatch(batch.batchId)">
+            <div class="batch-info">
+              <v-icon size="16" class="mr-1">
+                {{ expandedBatches.has(batch.batchId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+              </v-icon>
+              <v-icon size="16" class="mr-1">mdi-layers-outline</v-icon>
+              <span class="batch-title">批量任务</span>
+              <v-chip size="x-small" variant="tonal" class="ml-2">
+                {{ batch.completedCount }}/{{ batch.totalCount }}
+              </v-chip>
+              <v-chip
+                size="x-small"
+                :color="getBatchStatusColor(batch)"
+                variant="tonal"
+                class="ml-1"
+              >
+                {{ getBatchStatusLabel(batch) }}
+              </v-chip>
+            </div>
+            <div class="batch-actions">
+              <v-btn
+                v-if="batch.pendingCount > 0"
+                size="x-small"
+                color="primary"
+                variant="tonal"
+                @click.stop="handleStartAllBatch(batch)"
+              >
+                <v-icon start size="14">mdi-play-circle-outline</v-icon>
+                启动全部
+              </v-btn>
+            </div>
+          </div>
+          <!-- 批量聚合进度条 -->
+          <div class="batch-progress">
+            <v-progress-linear
+              :model-value="batch.aggregateProgress"
+              :color="getBatchStatusColor(batch)"
+              height="6"
+              rounded
+            />
+            <span class="batch-progress-text">
+              {{ Math.round(batch.aggregateProgress) }}%
+              · 完成 {{ batch.completedCount }}/{{ batch.totalCount }}
+            </span>
+          </div>
+          <!-- 展开的子任务列表 -->
+          <div v-if="expandedBatches.has(batch.batchId)" class="batch-children">
+            <TaskStatusCard
+              v-for="task in batch.tasks"
+              :key="task.id"
+              :task="task"
+              @start="handleStartTask"
+              @stop="handleStopTask"
+              @restart="handleRestartTask"
+              @delete="handleDeleteTask"
+              @detail="handleDetailTask"
+            />
+          </div>
+        </div>
+
+        <!-- 独立任务（无 batch_id 的） -->
         <TaskStatusCard
-          v-for="task in filteredTasks"
+          v-for="task in standaloneTasks"
           :key="task.id"
           :task="task"
           @start="handleStartTask"
           @stop="handleStopTask"
           @restart="handleRestartTask"
           @delete="handleDeleteTask"
+          @detail="handleDetailTask"
         />
       </template>
     </div>
@@ -134,6 +202,15 @@
     <div v-if="lastUpdateTime" class="last-update">
       最后更新: {{ formatUpdateTime(lastUpdateTime) }}
     </div>
+
+    <!-- 任务详情弹窗 -->
+    <TaskDetailModal
+      v-model="detailDialogOpen"
+      :task="detailTask"
+      @start="handleStartTask"
+      @stop="handleStopTask"
+      @restart="handleRestartTask"
+    />
   </div>
 </template>
 
@@ -143,6 +220,7 @@ import { ref, computed } from 'vue';
 import { useTaskMonitor } from '@/composables/useTaskMonitor';
 import type { Task } from '@/types/task';
 import TaskStatusCard from './TaskStatusCard.vue';
+import TaskDetailModal from './TaskDetailModal.vue';
 
 // ============ 任务监控 ============
 // 后端支持的操作：start, stop, restart, delete
@@ -164,6 +242,18 @@ const {
   deleteTask,
 } = useTaskMonitor();
 
+// ============ 任务详情弹窗 ============
+const detailDialogOpen = ref(false);
+const detailTask = ref<Task | null>(null);
+
+function handleDetailTask(taskId: string) {
+  const task = tasks.value.find(t => t.id === taskId);
+  if (task) {
+    detailTask.value = task;
+    detailDialogOpen.value = true;
+  }
+}
+
 // ============ 过滤状态 ============
 const filterStatus = ref<Task['status'] | null>(null);
 
@@ -173,6 +263,91 @@ const filteredTasks = computed(() => {
   }
   return tasksByStatus.value[filterStatus.value] || [];
 });
+
+// ============ 批量任务分组 ============
+
+type BatchGroup = {
+  batchId: string;
+  tasks: Task[];
+  totalCount: number;
+  completedCount: number;
+  failedCount: number;
+  runningCount: number;
+  pendingCount: number;
+  aggregateProgress: number;
+};
+
+const expandedBatches = ref<Set<string>>(new Set());
+
+/** 按 batch_id 分组的批量任务 */
+const batchGroups = computed<BatchGroup[]>(() => {
+  const source = filteredTasks.value;
+  const groupMap = new Map<string, Task[]>();
+  for (const task of source) {
+    const batchId = task.metadata?.batch_id;
+    if (batchId) {
+      if (!groupMap.has(batchId)) groupMap.set(batchId, []);
+      groupMap.get(batchId)!.push(task);
+    }
+  }
+  const groups: BatchGroup[] = [];
+  for (const [batchId, batchTasks] of groupMap) {
+    // 按 batch_index 排序
+    batchTasks.sort((a, b) => (a.metadata?.batch_index ?? 0) - (b.metadata?.batch_index ?? 0));
+    const totalCount = batchTasks.length;
+    const completedCount = batchTasks.filter(t => t.status === 'completed').length;
+    const failedCount = batchTasks.filter(t => t.status === 'failed').length;
+    const runningCount = batchTasks.filter(t => t.status === 'running').length;
+    const pendingCount = batchTasks.filter(t => t.status === 'pending').length;
+    // 聚合进度: (已完成数 + 当前运行中的进度/100) / 总数 * 100
+    const runningProgress = batchTasks
+      .filter(t => t.status === 'running')
+      .reduce((sum, t) => sum + (t.progress || 0), 0) / 100;
+    const aggregateProgress = totalCount > 0
+      ? ((completedCount + runningProgress) / totalCount) * 100
+      : 0;
+    groups.push({ batchId, tasks: batchTasks, totalCount, completedCount, failedCount, runningCount, pendingCount, aggregateProgress });
+  }
+  return groups;
+});
+
+/** 不属于任何批量的独立任务 */
+const standaloneTasks = computed(() => {
+  return filteredTasks.value.filter(t => !t.metadata?.batch_id);
+});
+
+function toggleBatch(batchId: string) {
+  if (expandedBatches.value.has(batchId)) {
+    expandedBatches.value.delete(batchId);
+  } else {
+    expandedBatches.value.add(batchId);
+  }
+}
+
+function getBatchStatusColor(batch: BatchGroup): string {
+  if (batch.failedCount > 0) return 'error';
+  if (batch.runningCount > 0) return 'primary';
+  if (batch.completedCount === batch.totalCount) return 'success';
+  if (batch.pendingCount > 0) return 'warning';
+  return 'grey';
+}
+
+function getBatchStatusLabel(batch: BatchGroup): string {
+  if (batch.failedCount > 0 && batch.completedCount + batch.failedCount === batch.totalCount) return '部分失败';
+  if (batch.failedCount > 0) return '有失败';
+  if (batch.completedCount === batch.totalCount) return '全部完成';
+  if (batch.runningCount > 0) return '执行中';
+  if (batch.pendingCount === batch.totalCount) return '等待中';
+  return '进行中';
+}
+
+async function handleStartAllBatch(batch: BatchGroup) {
+  for (const task of batch.tasks) {
+    if (task.status === 'pending') {
+      await startTask(task.id);
+    }
+  }
+}
 
 // ============ 辅助函数 ============
 function getMetricColor(value: number): string {
@@ -333,6 +508,55 @@ async function handleDeleteTask(taskId: string) {
     color: rgba(var(--v-theme-on-surface), 0.5);
     font-size: 13px;
   }
+}
+
+.batch-group {
+  margin-bottom: 12px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.batch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    background: rgba(var(--v-theme-surface-variant), 0.5);
+  }
+
+  .batch-info {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .batch-title {
+    font-size: 13px;
+    font-weight: 500;
+  }
+}
+
+.batch-progress {
+  padding: 6px 12px 8px;
+  background: rgba(var(--v-theme-surface-variant), 0.15);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+
+  .batch-progress-text {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+  }
+}
+
+.batch-children {
+  padding: 8px;
 }
 
 .last-update {

@@ -142,12 +142,15 @@
             <label class="form-label required">数据库编号</label>
             <v-text-field
               v-model="formData.dbnum"
-              placeholder="请输入数据库编号"
+              placeholder="输入数据库编号，多个用逗号分隔，如: 7999,8000,1112"
               variant="outlined"
               density="compact"
-              type="number"
               :error-messages="errors.dbnum"
             />
+            <div v-if="parsedDbnums.length > 1" class="form-hint mt-1">
+              <v-icon size="14" color="info" class="mr-1">mdi-information-outline</v-icon>
+              将创建 {{ parsedDbnums.length }} 个子任务，按顺序逐个执行
+            </div>
           </div>
 
           <div v-if="formData.parseMode === 'refno'" class="form-group">
@@ -275,7 +278,12 @@
             </div>
             <div v-if="formData.parseMode === 'dbnum'" class="preview-item">
               <span class="preview-label">数据库编号</span>
-              <span class="preview-value">{{ formData.dbnum }}</span>
+              <span class="preview-value">
+                {{ formData.dbnum }}
+                <span v-if="parsedDbnums.length > 1" class="ml-1" style="color: rgb(var(--v-theme-info));">
+                  ({{ parsedDbnums.length }} 个子任务)
+                </span>
+              </span>
             </div>
             <div v-if="formData.parseMode === 'refno'" class="preview-item">
               <span class="preview-label">参考号</span>
@@ -421,6 +429,17 @@ const parseModeLabels: Record<string, string> = {
 };
 
 // ============ 计算属性 ============
+
+/** 解析逗号分隔的 dbnum 输入为数字数组 */
+const parsedDbnums = computed<number[]>(() => {
+  if (formData.parseMode !== 'dbnum' || !formData.dbnum.trim()) return [];
+  return formData.dbnum
+    .split(/[,，\s]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && !isNaN(Number(s)))
+    .map(Number);
+});
+
 const generateContentText = computed(() => {
   const items: string[] = [];
   if (formData.generateModels) items.push('模型');
@@ -456,8 +475,85 @@ function handleClose() {
 }
 
 async function handleSubmit() {
+  // 多 dbnum 时走批量创建
+  if (formData.parseMode === 'dbnum' && parsedDbnums.value.length > 1) {
+    await handleBatchSubmit();
+    return;
+  }
   const success = await submitTask();
   if (success && createdTaskId.value) {
+    emit('created', createdTaskId.value);
+  }
+}
+
+/** 批量创建：为每个 dbnum 创建独立子任务（共享 batch_id） */
+async function handleBatchSubmit() {
+  const { taskCreate } = await import('@/api/genModelTaskApi');
+  loading.value = true;
+  submitError.value = null;
+
+  const batchId = crypto.randomUUID ? crypto.randomUUID() : `batch-${Date.now()}`;
+  const dbnums = parsedDbnums.value;
+  const createdIds: string[] = [];
+
+  try {
+    for (let i = 0; i < dbnums.length; i++) {
+      const dbnum = dbnums[i];
+      const taskName = `${formData.name.trim()} - DB${dbnum}`;
+      const request: any = {
+        name: taskName,
+        task_type: formData.type === 'DataParsingWizard' ? 'DataParsingWizard' : 'DataGeneration',
+        config: {
+          name: taskName,
+          manual_db_nums: [dbnum],
+          manual_refnos: [],
+          project_name: 'AvevaMarineSample',
+          project_path: '/Users/dongpengcheng/Documents/models/e3d_models',
+          project_code: 1516,
+          mdb_name: 'ALL',
+          module: 'DESI',
+          db_type: 'surrealdb',
+          surreal_ns: 1516,
+          db_ip: 'localhost',
+          db_port: '8020',
+          db_user: 'root',
+          db_password: 'root',
+          gen_model: formData.type === 'DataGeneration' ? formData.generateModels : true,
+          gen_mesh: formData.type === 'DataGeneration' ? formData.generateMesh : false,
+          gen_spatial_tree: formData.type === 'DataGeneration' ? formData.generateSpatialTree : true,
+          apply_boolean_operation: formData.type === 'DataGeneration' ? formData.applyBooleanOperation : true,
+          mesh_tol_ratio: formData.type === 'DataGeneration' ? formData.meshTolRatio : 3.0,
+          room_keyword: '-RM',
+        },
+        metadata: {
+          batch_id: batchId,
+          batch_index: i + 1,
+          batch_total: dbnums.length,
+          db_num: dbnum,
+        },
+      };
+
+      const resp = await taskCreate(request);
+      if (resp.success && resp.taskId) {
+        createdIds.push(resp.taskId);
+      } else {
+        submitError.value = `创建子任务 DB${dbnum} 失败: ${resp.error_message || '未知错误'}`;
+        break;
+      }
+    }
+
+    if (createdIds.length === dbnums.length) {
+      createdTaskId.value = createdIds[0];
+      // 标记：多个任务已创建
+      submitError.value = null;
+    }
+  } catch (e) {
+    submitError.value = `批量创建失败: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    loading.value = false;
+  }
+
+  if (createdTaskId.value) {
     emit('created', createdTaskId.value);
   }
 }
@@ -567,6 +663,13 @@ function handleCreateAnother() {
     content: ' *';
     color: rgb(var(--v-theme-error));
   }
+}
+
+.form-hint {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .form-row {

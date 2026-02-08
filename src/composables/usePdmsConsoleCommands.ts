@@ -3,6 +3,7 @@ import { useViewerContext } from './useViewerContext';
 import { pdmsGetUiAttr, pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
 import { e3dSearch } from '@/api/genModelE3dApi';
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
+import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { formatVec3Meters } from '@/utils/unitFormat';
 import { Matrix4, Vector3 } from 'three';
@@ -407,6 +408,11 @@ export function usePdmsConsoleCommands() {
                 syncSceneSelection: true,
                 clearSearch: true
             });
+
+            // 设置全局 selection，触发 ModelTreePanel 的 watcher
+            // 使树自动滚动到目标节点并居中显示
+            setGlobalSelectedRefno(refno.replace(/\//g, '_'));
+
             store.addLog('output', `CE set to: ${refno}`);
         } catch (e) {
             store.addLog('error', `Navigation failed: ${e instanceof Error ? e.message : String(e)}`);
