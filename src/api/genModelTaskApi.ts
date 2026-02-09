@@ -13,6 +13,36 @@ import type {
 } from '@/types/task';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 
+// ============ 后端配置类型 ============
+
+/** 后端 DatabaseConfig 结构（对应 Rust web_server::models::DatabaseConfig） */
+export type DatabaseConfig = {
+  name: string;
+  manual_db_nums: number[];
+  manual_refnos: string[];
+  project_name: string;
+  project_path: string;
+  project_code: number;
+  mdb_name: string;
+  module: string;
+  db_type: string;
+  surreal_ns: number;
+  db_ip: string;
+  db_port: string;
+  db_user: string;
+  db_password: string;
+  gen_model: boolean;
+  gen_mesh: boolean;
+  gen_spatial_tree: boolean;
+  apply_boolean_operation: boolean;
+  mesh_tol_ratio: number;
+  room_keyword: string;
+  target_sesno?: number;
+  meshes_path?: string;
+  export_json: boolean;
+  export_parquet: boolean;
+};
+
 // ============ 基础配置 ============
 
 // 暴露基础地址构造，便于其他模块复用同一配置
@@ -41,6 +71,16 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await resp.json()) as T;
+}
+
+// ============ 服务器配置 API ============
+
+/**
+ * 获取服务器当前 DatabaseConfig
+ * GET /api/config
+ */
+export async function getServerConfig(): Promise<DatabaseConfig> {
+  return await fetchJson<DatabaseConfig>('/api/config');
 }
 
 /**

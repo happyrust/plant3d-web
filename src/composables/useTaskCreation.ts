@@ -7,7 +7,8 @@ import type {
   ParseTaskParameters,
   ModelGenParameters,
 } from '@/types/task';
-import { taskCreate, taskValidateName } from '@/api/genModelTaskApi';
+import { taskCreate, taskValidateName, taskStart, getServerConfig } from '@/api/genModelTaskApi';
+import type { DatabaseConfig } from '@/api/genModelTaskApi';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 
 // ============ 表单数据类型 ============
@@ -78,6 +79,8 @@ export type UseTaskCreationReturn = {
   resetForm: () => void;
   /** 应用预设类型 */
   applyPresetType: () => void;
+  /** 后端服务器配置（动态加载） */
+  serverConfig: Ref<DatabaseConfig | null>;
 };
 
 /**
@@ -95,6 +98,17 @@ export function useTaskCreation(): UseTaskCreationReturn {
   const errors = ref<ValidationErrors>({});
 
   const taskCreationStore = useTaskCreationStore();
+
+  // 后端配置（动态加载）
+  const serverConfig = ref<DatabaseConfig | null>(null);
+
+  onMounted(async () => {
+    try {
+      serverConfig.value = await getServerConfig();
+    } catch (e) {
+      console.warn('获取服务器配置失败，将使用默认值:', e);
+    }
+  });
 
   // 表单数据
   const formData = reactive<TaskCreationFormData>({
@@ -345,6 +359,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
    * 构建请求数据
    */
   function buildRequest(): any {
+    const cfg = serverConfig.value;
     // 后端真正的请求结构是 CreateTaskRequest { name, task_type, config }
     const request: any = {
       name: formData.name.trim(),
@@ -355,25 +370,25 @@ export function useTaskCreation(): UseTaskCreationReturn {
           ? formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(s => s && !isNaN(Number(s))).map(Number)
           : [],
         manual_refnos: formData.parseMode === 'refno' ? [formData.refno.trim()] : [],
-        // 以下为 DatabaseConfig 的默认必需字段，参考后端 Default 实现
-        project_name: 'AvevaMarineSample',
-        project_path: '/Users/dongpengcheng/Documents/models/e3d_models',
-        project_code: 1516,
-        mdb_name: 'ALL',
-        module: 'DESI',
-        db_type: 'surrealdb',
-        surreal_ns: 1516,
-        db_ip: 'localhost',
-        db_port: '8020',
-        db_user: 'root',
-        db_password: 'root',
+        // 使用后端配置，回退到默认值
+        project_name: cfg?.project_name ?? 'AvevaMarineSample',
+        project_path: cfg?.project_path ?? '',
+        project_code: cfg?.project_code ?? 1516,
+        mdb_name: cfg?.mdb_name ?? 'ALL',
+        module: cfg?.module ?? 'DESI',
+        db_type: cfg?.db_type ?? 'surrealdb',
+        surreal_ns: cfg?.surreal_ns ?? 1516,
+        db_ip: cfg?.db_ip ?? 'localhost',
+        db_port: cfg?.db_port ?? '8020',
+        db_user: cfg?.db_user ?? 'root',
+        db_password: cfg?.db_password ?? 'root',
         // 任务开关
         gen_model: formData.type === 'DataGeneration' ? formData.generateModels : true,
         gen_mesh: formData.type === 'DataGeneration' ? formData.generateMesh : false,
         gen_spatial_tree: formData.type === 'DataGeneration' ? formData.generateSpatialTree : true,
         apply_boolean_operation: formData.type === 'DataGeneration' ? formData.applyBooleanOperation : true,
         mesh_tol_ratio: formData.type === 'DataGeneration' ? formData.meshTolRatio : 3.0,
-        room_keyword: '-RM',
+        room_keyword: cfg?.room_keyword ?? '-RM',
       },
     };
 
@@ -400,6 +415,12 @@ export function useTaskCreation(): UseTaskCreationReturn {
 
       if (response.success && response.taskId) {
         createdTaskId.value = response.taskId;
+        // 自动启动任务
+        try {
+          await taskStart(response.taskId);
+        } catch (e) {
+          console.warn('自动启动任务失败:', e);
+        }
         return true;
       } else {
         submitError.value = response.error_message || response.message || '创建任务失败';
@@ -476,5 +497,6 @@ export function useTaskCreation(): UseTaskCreationReturn {
     submitTask,
     resetForm,
     applyPresetType,
+    serverConfig,
   };
 }

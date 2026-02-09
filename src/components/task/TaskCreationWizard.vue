@@ -405,6 +405,7 @@ const {
   submitTask,
   resetForm,
   applyPresetType,
+  serverConfig,
 } = useTaskCreation();
 
 // 组件挂载时应用预设类型
@@ -488,10 +489,11 @@ async function handleSubmit() {
 
 /** 批量创建：为每个 dbnum 创建独立子任务（共享 batch_id） */
 async function handleBatchSubmit() {
-  const { taskCreate } = await import('@/api/genModelTaskApi');
+  const { taskCreate, taskStart } = await import('@/api/genModelTaskApi');
   loading.value = true;
   submitError.value = null;
 
+  const cfg = serverConfig.value;
   const batchId = crypto.randomUUID ? crypto.randomUUID() : `batch-${Date.now()}`;
   const dbnums = parsedDbnums.value;
   const createdIds: string[] = [];
@@ -507,23 +509,23 @@ async function handleBatchSubmit() {
           name: taskName,
           manual_db_nums: [dbnum],
           manual_refnos: [],
-          project_name: 'AvevaMarineSample',
-          project_path: '/Users/dongpengcheng/Documents/models/e3d_models',
-          project_code: 1516,
-          mdb_name: 'ALL',
-          module: 'DESI',
-          db_type: 'surrealdb',
-          surreal_ns: 1516,
-          db_ip: 'localhost',
-          db_port: '8020',
-          db_user: 'root',
-          db_password: 'root',
+          project_name: cfg?.project_name ?? 'AvevaMarineSample',
+          project_path: cfg?.project_path ?? '',
+          project_code: cfg?.project_code ?? 1516,
+          mdb_name: cfg?.mdb_name ?? 'ALL',
+          module: cfg?.module ?? 'DESI',
+          db_type: cfg?.db_type ?? 'surrealdb',
+          surreal_ns: cfg?.surreal_ns ?? 1516,
+          db_ip: cfg?.db_ip ?? 'localhost',
+          db_port: cfg?.db_port ?? '8020',
+          db_user: cfg?.db_user ?? 'root',
+          db_password: cfg?.db_password ?? 'root',
           gen_model: formData.type === 'DataGeneration' ? formData.generateModels : true,
           gen_mesh: formData.type === 'DataGeneration' ? formData.generateMesh : false,
           gen_spatial_tree: formData.type === 'DataGeneration' ? formData.generateSpatialTree : true,
           apply_boolean_operation: formData.type === 'DataGeneration' ? formData.applyBooleanOperation : true,
           mesh_tol_ratio: formData.type === 'DataGeneration' ? formData.meshTolRatio : 3.0,
-          room_keyword: '-RM',
+          room_keyword: cfg?.room_keyword ?? '-RM',
         },
         metadata: {
           batch_id: batchId,
@@ -536,6 +538,12 @@ async function handleBatchSubmit() {
       const resp = await taskCreate(request);
       if (resp.success && resp.taskId) {
         createdIds.push(resp.taskId);
+        // 自动启动子任务
+        try {
+          await taskStart(resp.taskId);
+        } catch (e) {
+          console.warn(`自动启动子任务 DB${dbnum} 失败:`, e);
+        }
       } else {
         submitError.value = `创建子任务 DB${dbnum} 失败: ${resp.error_message || '未知错误'}`;
         break;
@@ -544,7 +552,6 @@ async function handleBatchSubmit() {
 
     if (createdIds.length === dbnums.length) {
       createdTaskId.value = createdIds[0];
-      // 标记：多个任务已创建
       submitError.value = null;
     }
   } catch (e) {
