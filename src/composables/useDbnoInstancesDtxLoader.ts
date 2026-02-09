@@ -20,9 +20,9 @@ type LoaderOptions = {
   forceReloadRefnos?: string[]
   /**
    * 数据源选择：
-   * - 'auto'：优先 Parquet（instances_parquet 多表），失败回退 JSON
-   * - 'parquet'：强制 Parquet（失败则抛错）
-   * - 'json'：强制旧 JSON
+   * - 'parquet'：默认（失败则抛错）
+   * - 'json'：调试用，显式指定才启用
+   * - 'auto'：兼容旧逻辑（Parquet 不可用时回退 JSON，仅调试/临时）
    */
   dataSource?: 'auto' | 'parquet' | 'json'
 }
@@ -345,10 +345,42 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const hiddenNouns = buildHiddenNounSet(displayConfig)
   const hiddenRefnos = buildHiddenRefnoSet(displayConfig)
 
-  // 只走 Parquet（不再 fallback JSON）
-  const parquet = useDbnoInstancesParquetLoader()
-  const index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
-  if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
+  // 根据 dataSource 选项决定数据源
+  const dataSource = options.dataSource || 'parquet'
+  let index: Map<string, import('@/utils/instances/instanceManifest').InstanceEntry[]>
+
+  if (dataSource === 'json') {
+    // 强制 JSON：从 instances_{dbno}.json manifest 获取实例数据
+    const manifest = await getDbnoInstancesManifest(dbno)
+    index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
+    if (debug) console.log('[dtx][instances] using json', { dbno, refnos: toLoad.length, indexSize: index.size })
+  } else if (dataSource === 'parquet') {
+    // 默认 Parquet
+    const parquet = useDbnoInstancesParquetLoader()
+    const available = await parquet.isParquetAvailable(dbno)
+    if (!available) {
+      throw new Error(`Parquet not available (dbno=${dbno})`)
+    }
+    index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
+    if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
+  } else {
+    // auto：优先 Parquet，失败回退 JSON
+    try {
+      const parquet = useDbnoInstancesParquetLoader()
+      const available = await parquet.isParquetAvailable(dbno)
+      if (available) {
+        index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
+        if (debug) console.log('[dtx][instances] using parquet (auto)', { dbno, refnos: toLoad.length })
+      } else {
+        throw new Error('Parquet not available')
+      }
+    } catch (parquetErr) {
+      if (debug) console.log('[dtx][instances] parquet failed, falling back to json', { dbno, error: parquetErr })
+      const manifest = await getDbnoInstancesManifest(dbno)
+      index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
+      if (debug) console.log('[dtx][instances] using json (fallback)', { dbno, refnos: toLoad.length, indexSize: index.size })
+    }
+  }
 
   let loadedObjects = 0
   const missingRefnos: string[] = []

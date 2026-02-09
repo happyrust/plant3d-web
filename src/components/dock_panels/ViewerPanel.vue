@@ -42,6 +42,7 @@ import { DimensionAnnotationManager } from "@/composables/useDimensionAnnotation
 import { useToolStore, type DimensionKind } from "@/composables/useToolStore";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
 import { useViewerContext } from "@/composables/useViewerContext";
+import { e3dGetVisibleInsts } from "@/api/genModelE3dApi";
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from "@/composables/useDbMetaInfo";
 import { useConsoleStore } from "@/composables/useConsoleStore";
 import { ensurePanelAndActivate } from "@/composables/useDockApi";
@@ -760,6 +761,95 @@ function handleRibbonCommand(commandId: string) {
             } catch {
                 // ignore
             }
+            return;
+        case "panel.mbdPipe":
+            try {
+                ensurePanelAndActivate("mbdPipe");
+            } catch {
+                // ignore
+            }
+            return;
+        case "mbd.dim.segment":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showDimSegment.value =
+                    !mbdPipeVisRef.value.showDimSegment.value;
+            }
+            requestRender();
+            return;
+        case "mbd.dim.chain":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showDimChain.value =
+                    !mbdPipeVisRef.value.showDimChain.value;
+            }
+            requestRender();
+            return;
+        case "mbd.dim.overall":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showDimOverall.value =
+                    !mbdPipeVisRef.value.showDimOverall.value;
+            }
+            requestRender();
+            return;
+        case "mbd.dim.port":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showDimPort.value =
+                    !mbdPipeVisRef.value.showDimPort.value;
+            }
+            requestRender();
+            return;
+        case "mbd.weld":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showWelds.value =
+                    !mbdPipeVisRef.value.showWelds.value;
+            }
+            requestRender();
+            return;
+        case "mbd.slope":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showSlopes.value =
+                    !mbdPipeVisRef.value.showSlopes.value;
+            }
+            requestRender();
+            return;
+        case "mbd.segments":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showSegments.value =
+                    !mbdPipeVisRef.value.showSegments.value;
+            }
+            requestRender();
+            return;
+        case "mbd.labels":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.showLabels.value =
+                    !mbdPipeVisRef.value.showLabels.value;
+            }
+            requestRender();
+            return;
+        case "mbd.toggle_all":
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.isVisible.value =
+                    !mbdPipeVisRef.value.isVisible.value;
+            }
+            requestRender();
+            return;
+        case "mbd.flyTo":
+            mbdPipeVisRef.value?.flyTo();
+            requestRender();
+            return;
+        case "mbd.clear":
+            mbdPipeVisRef.value?.clearAll();
+            requestRender();
+            return;
+        case "mbd.settings":
+            try {
+                ensurePanelAndActivate("mbdPipe");
+            } catch {
+                // ignore
+            }
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.uiTab.value = "settings";
+            }
+            requestRender();
             return;
         case "tools.clear_all":
             store.clearAll();
@@ -2207,6 +2297,79 @@ onMounted(async () => {
                 }
             })();
         }
+    }
+
+    // debug_refno URL 参数：加载指定 refno 下的可见实例（如 debug_refno=24381_145018）
+    const debugRefno = urlParams.get("debug_refno");
+    if (debugRefno && !showDbnum && demoMode !== "primitives") {
+        // 支持 24381_145018 或 24381/145018 格式
+        const refnoStr = debugRefno.replace("/", "_");
+        (async () => {
+            try {
+                emitToast({ message: `[debug_refno] 正在查询 ${refnoStr} 的可见实例...` });
+                console.log(`[debug_refno] refno=${refnoStr}`);
+
+                // 1. 确保 db_meta_info 已加载，解析 refno → dbnum
+                await ensureDbMetaInfoLoaded();
+                let dbno: number;
+                try {
+                    dbno = getDbnumByRefno(refnoStr);
+                } catch {
+                    console.error(`[debug_refno] 无法解析 ${refnoStr} 的 dbnum`);
+                    emitToast({ message: `[debug_refno] 无法解析 dbnum (refno=${refnoStr})` });
+                    return;
+                }
+                console.log(`[debug_refno] refno=${refnoStr} → dbnum=${dbno}`);
+
+                // 2. 查询该 refno 下的可见实例
+                const visResp = await e3dGetVisibleInsts(refnoStr);
+                const refnos = visResp?.refnos ?? [];
+                console.log(`[debug_refno] visible-insts 返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
+                if (refnos.length === 0) {
+                    emitToast({ message: `[debug_refno] ${refnoStr} 下无可见实例` });
+                    return;
+                }
+                emitToast({ message: `[debug_refno] 发现 ${refnos.length} 个实例，开始加载 (dbnum=${dbno})...` });
+
+                // 3. 加载实例到 DTX（优先 parquet，失败回退 json）
+                const urlDataSource = new URLSearchParams(window.location.search).get("data_source") as "json" | "parquet" | "auto" | null;
+                const ds = urlDataSource || "auto";
+                console.log(`[debug_refno] dataSource=${ds}`);
+                const result = await loadDbnoInstancesForVisibleRefnosDtx(
+                    dtxLayer,
+                    dbno,
+                    refnos,
+                    { lodAssetKey: "L1", debug: true, dataSource: ds }
+                );
+                (compat as any).__dtxAfterInstancesLoaded?.(dbno, refnos);
+
+                // 4. 自适应视角
+                requestRender();
+                const box = dtxLayer.getBoundingBox();
+                const center = new Vector3();
+                const size = new Vector3();
+                box.getCenter(center);
+                box.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const distance = Math.max(maxDim * 2.5, 5);
+                const position = new Vector3(
+                    center.x + distance * 0.8,
+                    center.y + distance * 0.6,
+                    center.z + distance * 0.8
+                );
+                dtxViewer.flyTo(position, center, { duration: 0 });
+                requestRender();
+
+                emitToast({
+                    message: `[debug_refno] 加载完成: ${result.loadedObjects} 个对象 (${refnos.length} refnos)`,
+                });
+                console.log(`[debug_refno] ✅ 加载完成`, result);
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                console.error("[debug_refno] 加载失败:", e);
+                emitToast({ message: `[debug_refno] 加载失败: ${msg}` });
+            }
+        })();
     }
 
     const onControlsChange = () => {
