@@ -174,7 +174,7 @@ export class AnnotationInteractionController {
     }
   }
 
-  /** 选中标注 */
+  /** 选中标注（SolveSpace: selected=红色，优先级高于 hovered） */
   select(id: string | null): void {
     const prevId = this._selectedId.value
     if (prevId === id) return
@@ -182,7 +182,11 @@ export class AnnotationInteractionController {
     // 取消之前的选中
     if (prevId) {
       const prev = this.annotations.get(prevId)
-      if (prev) prev.highlighted = false
+      if (prev) {
+        prev.selected = false
+        // 如果不再被 hover，也清除 hovered
+        if (this._hoveredId.value !== prevId) prev.hovered = false
+      }
       this.emit({ type: 'deselect', annotation: prev ?? null, id: prevId })
     }
 
@@ -191,7 +195,7 @@ export class AnnotationInteractionController {
     if (id) {
       const annotation = this.annotations.get(id)
       if (annotation) {
-        annotation.highlighted = true
+        annotation.selected = true
         this.emit({ type: 'select', annotation, id })
       }
     }
@@ -242,7 +246,12 @@ export class AnnotationInteractionController {
       const ud = (annotation as any).userData as any
       if (ud && (ud.pickable === false || ud.noPick === true)) continue
 
-      const intersects = this.raycaster.intersectObject(annotation, true)
+      let intersects: THREE.Intersection<THREE.Object3D>[]
+      try {
+        intersects = this.raycaster.intersectObject(annotation, true)
+      } catch {
+        continue
+      }
       if (intersects.length > 0) {
         let hit: THREE.Intersection<THREE.Object3D> | null = null
         for (const it of intersects) {
@@ -289,23 +298,21 @@ export class AnnotationInteractionController {
       return
     }
 
-    // 悬停检测
+    // 悬停检测（SolveSpace 风格：hovered=黄，selected 优先级更高）
     const hit = this.hitTest()
     const prevHovered = this._hoveredId.value
 
     if (hit) {
       if (prevHovered !== hit.id) {
         // 取消之前的悬停
-        if (prevHovered && prevHovered !== this._selectedId.value) {
+        if (prevHovered) {
           const prev = this.annotations.get(prevHovered)
-          if (prev) prev.highlighted = false
+          if (prev) prev.hovered = false
         }
 
         // 设置新的悬停
         this._hoveredId.value = hit.id
-        if (hit.id !== this._selectedId.value) {
-          hit.annotation.highlighted = true
-        }
+        hit.annotation.hovered = true
 
         this.emit({
           type: 'hover',
@@ -319,10 +326,8 @@ export class AnnotationInteractionController {
     } else {
       // 清除悬停
       if (prevHovered) {
-        if (prevHovered !== this._selectedId.value) {
-          const prev = this.annotations.get(prevHovered)
-          if (prev) prev.highlighted = false
-        }
+        const prev = this.annotations.get(prevHovered)
+        if (prev) prev.hovered = false
         this._hoveredId.value = null
         this.emit({ type: 'hover', annotation: null, id: null, originalEvent: event })
       }

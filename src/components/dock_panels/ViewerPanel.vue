@@ -2666,8 +2666,7 @@ onMounted(async () => {
                 }
 
                 const resp = await getMbdPipeAnnotations(refnoKey, {
-                    // 约定：MBD 数据以数据库（SurrealDB）为准，不再走 foyer cache
-                    source: "db",
+                    // 默认走 parquet（后端 MbdPipeSource 默认值）
                     debug: isDev,
                     dbno: dbno ?? undefined,
                     batch_id: batchId,

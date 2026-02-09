@@ -550,7 +550,7 @@ export function useSurrealModelQuery(db: Ref<Surreal | null>) {
         const rawDb = toRaw(db.value)
         if (!rawDb) return []
 
-        const sql = `SELECT record::id(out) as child FROM ${toPeKey(refno)}->owns ORDER BY order_index`
+        const sql = `SELECT record::id(out) as child, order_index FROM ${toPeKey(refno)}->owns ORDER BY order_index`
 
         try {
             const result = await rawDb.query(sql)

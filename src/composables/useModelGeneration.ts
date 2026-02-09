@@ -14,9 +14,6 @@ import {
 } from '@/composables/useDbnoInstancesJsonLoader'
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader'
 import { useConsoleStore } from '@/composables/useConsoleStore'
-import { getDefaultSurrealConfig, useSurrealDB } from '@/composables/useSurrealDB'
-import { useSurrealModelQuery } from '@/composables/useSurrealModelQuery'
-import { pdmsGetOwnsChildren, pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi'
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo'
 import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
 
@@ -199,8 +196,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const { viewer } = options
   const dialog = useConfirmDialogStore()
   const consoleStore = useConsoleStore()
-  const surreal = useSurrealDB()
-  const surrealQuery = useSurrealModelQuery(surreal.db)
 
   const isGenerating = ref(false)
   const progress = ref(0)
@@ -215,16 +210,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const loadedRoots = new Set<string>()
   const BATCH_LOAD_THRESHOLD = 20
 
-  async function ensureSurrealConnected(): Promise<boolean> {
-    if (surreal.isConnected.value) return true
-    try {
-      await surreal.connect(getDefaultSurrealConfig())
-      return true
-    } catch (e) {
-      console.warn('[model-generation] SurrealDB connect failed:', e)
-      return false
-    }
-  }
 
   async function loadGeneratedRefnos(
     dtxLayer: any,
@@ -355,50 +340,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       let visibleErr: string | null = null
       let visibleRefnos: string[] = []
       try {
-        const canUseSurreal = await ensureSurrealConnected()
-        let appliedRule = false
-
-        if (canUseSurreal) {
-          const typeInfo = await surrealQuery.queryPeTypeInfo(normalizedRoot)
-          const noun = (typeInfo?.noun || '').toUpperCase()
-          const ownerNoun = (typeInfo?.ownerNoun || '').toUpperCase()
-
-          if (ownerNoun === 'BRAN' || ownerNoun === 'HANG') {
-            visibleRefnos = [normalizedRoot]
-            appliedRule = true
-          } else if (noun === 'BRAN' || noun === 'HANG') {
-            visibleRefnos = await surrealQuery.queryChildren(normalizedRoot)
-            appliedRule = true
-          }
-        } else {
-          // WS 直连失败时，改走后端 HTTP（后端再查 SurrealDB），避免 BRAN/HANG 场景“只见面板不见模型”
-          try {
-            const resp = await pdmsGetTypeInfo(normalizedRoot)
-            if (resp.success) {
-              const noun = String(resp.noun || '').toUpperCase()
-              const ownerNoun = String(resp.owner_noun || '').toUpperCase()
-              if (ownerNoun === 'BRAN' || ownerNoun === 'HANG') {
-                visibleRefnos = [normalizedRoot]
-                appliedRule = true
-              } else if (noun === 'BRAN' || noun === 'HANG') {
-                const childrenResp = await pdmsGetOwnsChildren(normalizedRoot)
-                if (childrenResp.success) {
-                  visibleRefnos = childrenResp.children || []
-                  appliedRule = true
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('[model-generation] SurrealDB 未连接，且后端 BRAN/HANG 查询失败，将回退 e3d subtree-refnos', e)
-          }
-        }
-
-        if (!appliedRule) {
-          const { refnos, truncated } = await querySubtreeRefnos(normalizedRoot)
-          visibleRefnos = refnos
-          if (truncated) {
-            consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`)
-          }
+        const { refnos, truncated } = await querySubtreeRefnos(normalizedRoot)
+        visibleRefnos = refnos
+        if (truncated) {
+          consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`)
         }
 
         visibleRefnos = uniqStrings(visibleRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
