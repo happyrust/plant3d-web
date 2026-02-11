@@ -59,7 +59,7 @@ import { loadDtxPrimitiveDemo } from "@/viewer/dtx/dtxPrimitiveDemo";
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from "@/utils/three/dtx";
 import { DynamicPivotController } from "@/utils/three/dtx/DynamicPivotController";
 import { DTXTileLodController } from "@/viewer/dtx/DTXTileLodController";
-import { AngleDimension3D, LinearDimension3D } from "@/utils/three/annotation";
+import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from "@/utils/three/annotation";
 import { computeDimensionOffsetDir } from "@/utils/three/annotation/utils/computeDimensionOffsetDir";
 
 defineProps<{
@@ -769,6 +769,29 @@ function handleRibbonCommand(commandId: string) {
                 // ignore
             }
             return;
+        case "mbd.generate": {
+            // 一条龙：用当前选中 refno 触发 MBD 管道标注生成（复用 store watcher 链路）。
+            try {
+                ensurePanelAndActivate("mbdPipe");
+            } catch {
+                // ignore
+            }
+            if (mbdPipeVisRef.value) {
+                mbdPipeVisRef.value.uiTab.value = "dims";
+            }
+
+            const refno = selectionStore.selectedRefno.value;
+            if (!refno) {
+                emitToast({
+                    message:
+                        "请先选中一个构件（模型树/场景），再生成 MBD 管道标注",
+                });
+                return;
+            }
+
+            store.requestMbdPipeAnnotation(refno);
+            return;
+        }
         case "mbd.dim.segment":
             if (mbdPipeVisRef.value) {
                 mbdPipeVisRef.value.showDimSegment.value =
@@ -1837,6 +1860,76 @@ onMounted(async () => {
                 return;
             }
 
+            // MBD weld 处理（session-only 交互：label 拖拽）
+            if (id.startsWith("mbd_weld_")) {
+                const dtxViewer2 = dtxViewerRef.value;
+                if (!dtxViewer2) return;
+
+                if (ev.type === "drag-start") {
+                    dtxViewer2.controls.enabled = false;
+                    return;
+                }
+                if (ev.type === "drag-end") {
+                    dtxViewer2.controls.enabled = true;
+                    requestRender();
+                    return;
+                }
+                if (ev.type === "drag" && ev.annotation instanceof WeldAnnotation3D) {
+                    const me = ev.originalEvent;
+                    if (!me) return;
+                    const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
+                    if (role === "label") {
+                        const defaultPos = ev.annotation.getDefaultLabelWorldPos();
+                        const camDir = dtxViewer2.camera.getWorldDirection(new Vector3());
+                        const planeNormal = camDir.clone();
+                        const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, defaultPos);
+                        const hit = intersectPlaneFromMouseEvent(me, plane);
+                        if (!hit) return;
+                        const labelOffset = hit.clone().sub(defaultPos);
+                        try {
+                            ev.annotation.setParams({ labelOffsetWorld: labelOffset });
+                        } catch { /* ignore */ }
+                        requestRender();
+                    }
+                }
+                return;
+            }
+
+            // MBD slope 处理（session-only 交互：label 拖拽）
+            if (id.startsWith("mbd_slope_")) {
+                const dtxViewer2 = dtxViewerRef.value;
+                if (!dtxViewer2) return;
+
+                if (ev.type === "drag-start") {
+                    dtxViewer2.controls.enabled = false;
+                    return;
+                }
+                if (ev.type === "drag-end") {
+                    dtxViewer2.controls.enabled = true;
+                    requestRender();
+                    return;
+                }
+                if (ev.type === "drag" && ev.annotation instanceof SlopeAnnotation3D) {
+                    const me = ev.originalEvent;
+                    if (!me) return;
+                    const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
+                    if (role === "label") {
+                        const defaultPos = ev.annotation.getDefaultLabelWorldPos();
+                        const camDir = dtxViewer2.camera.getWorldDirection(new Vector3());
+                        const planeNormal = camDir.clone();
+                        const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, defaultPos);
+                        const hit = intersectPlaneFromMouseEvent(me, plane);
+                        if (!hit) return;
+                        const labelOffset = hit.clone().sub(defaultPos);
+                        try {
+                            ev.annotation.setParams({ labelOffsetWorld: labelOffset });
+                        } catch { /* ignore */ }
+                        requestRender();
+                    }
+                }
+                return;
+            }
+
             if (!id.startsWith("dim_")) return;
 
             const dtxViewer2 = dtxViewerRef.value;
@@ -2160,22 +2253,32 @@ onMounted(async () => {
         console.warn("[ViewerPanel] 尺寸标注管理器初始化失败", e);
     }
 
-    // 将 MBD dims 注册到标注交互系统（使其可 pick/drag/contextmenu）
-    function syncMbdDimsToInteraction(): void {
+    // 将 MBD 标注注册到标注交互系统（使其可 pick/drag/contextmenu）
+    function syncMbdAnnotationsToInteraction(): void {
         if (!mbdPipeVisRef.value || !annotationSystemRef.value) return;
         const dimMap = mbdPipeVisRef.value.getDimAnnotations();
         for (const [dimId, dim] of dimMap) {
             const interactionId = `mbd_dim_${dimId}`;
             annotationSystemRef.value.registerExternalAnnotation(interactionId, dim as any);
         }
+        const weldMap = mbdPipeVisRef.value.getWeldAnnotations();
+        for (const [weldId, weld] of weldMap) {
+            const interactionId = `mbd_weld_${weldId}`;
+            annotationSystemRef.value.registerExternalAnnotation(interactionId, weld as any);
+        }
+        const slopeMap = mbdPipeVisRef.value.getSlopeAnnotations();
+        for (const [slopeId, slope] of slopeMap) {
+            const interactionId = `mbd_slope_${slopeId}`;
+            annotationSystemRef.value.registerExternalAnnotation(interactionId, slope as any);
+        }
     }
 
     // 对 mbd_pipe demo：此时标注已在 renderBranch 中创建，注册到交互系统
     if (demoMode === "mbd_pipe") {
         try {
-            syncMbdDimsToInteraction();
+            syncMbdAnnotationsToInteraction();
         } catch (e) {
-            console.warn("[ViewerPanel] MBD dims 交互注册失败", e);
+            console.warn("[ViewerPanel] MBD 标注交互注册失败", e);
         }
     }
 
@@ -2686,8 +2789,8 @@ onMounted(async () => {
                 if (resp.success && resp.data) {
                     mbdPipeVis.renderBranch(resp.data);
                     mbdPipeVis.flyTo();
-                    // 将 MBD dims 注册到交互系统
-                    try { syncMbdDimsToInteraction(); } catch { /* ignore */ }
+                    // 将 MBD 标注注册到交互系统
+                    try { syncMbdAnnotationsToInteraction(); } catch { /* ignore */ }
                     emitToast({
                         message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count}`,
                     });

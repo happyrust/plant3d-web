@@ -266,11 +266,80 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
     label: 'MBD',
     groups: [
       {
-        id: 'mbd.basic',
-        label: '标注',
+        id: 'mbd.pipe',
+        label: '管道标注',
         items: [
-          { kind: 'button', id: 'mbd.placeholder', label: '未实现', icon: 'pencil', commandId: 'mbd.placeholder' },
+          { kind: 'button', id: 'panel.mbdPipe', label: '管道标注', icon: 'ruler', commandId: 'panel.mbdPipe' },
+          { kind: 'button', id: 'mbd.generate', label: '生成标注', icon: 'plus', commandId: 'mbd.generate' },
         ],
+      },
+      {
+        id: 'mbd.dims',
+        label: '尺寸类型',
+        items: [
+          {
+            kind: 'stack',
+            id: 'mbd.dims.left',
+            items: [
+              { kind: 'button', id: 'mbd.dim.segment', label: '段长', icon: 'ruler', commandId: 'mbd.dim.segment' },
+              { kind: 'button', id: 'mbd.dim.chain', label: '链式', icon: 'link', commandId: 'mbd.dim.chain' },
+            ],
+          },
+          {
+            kind: 'stack',
+            id: 'mbd.dims.right',
+            items: [
+              { kind: 'button', id: 'mbd.dim.overall', label: '总长', icon: 'move_horizontal', commandId: 'mbd.dim.overall' },
+              { kind: 'button', id: 'mbd.dim.port', label: '端口', icon: 'circle_dot', commandId: 'mbd.dim.port' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'mbd.annotation',
+        label: '其他标注',
+        items: [
+          {
+            kind: 'stack',
+            id: 'mbd.annotation.stack',
+            items: [
+              { kind: 'button', id: 'mbd.weld', label: '焊缝', icon: 'zap', commandId: 'mbd.weld' },
+              { kind: 'button', id: 'mbd.slope', label: '坡度', icon: 'trending_up', commandId: 'mbd.slope' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'mbd.display',
+        label: '显示控制',
+        items: [
+          {
+            kind: 'stack',
+            id: 'mbd.display.left',
+            items: [
+              { kind: 'button', id: 'mbd.segments', label: '管段线', icon: 'spline', commandId: 'mbd.segments' },
+              { kind: 'button', id: 'mbd.labels', label: '文字标签', icon: 'file_text', commandId: 'mbd.labels' },
+            ],
+          },
+          {
+            kind: 'stack',
+            id: 'mbd.display.right',
+            items: [{ kind: 'button', id: 'mbd.toggle_all', label: '全部显隐', icon: 'eye', commandId: 'mbd.toggle_all' }],
+          },
+        ],
+      },
+      {
+        id: 'mbd.actions',
+        label: '操作',
+        items: [
+          { kind: 'button', id: 'mbd.flyTo', label: '飞行定位', icon: 'locate', commandId: 'mbd.flyTo' },
+          { kind: 'button', id: 'mbd.clear', label: '清除', icon: 'trash', commandId: 'mbd.clear' },
+        ],
+      },
+      {
+        id: 'mbd.config',
+        label: '配置',
+        items: [{ kind: 'button', id: 'mbd.settings', label: '标注设置', icon: 'settings', commandId: 'mbd.settings' }],
       },
     ],
   },

@@ -974,6 +974,25 @@ function viewProperties() {
   closeContextMenu();
 }
 
+// MBD 标注：右键菜单可用的 noun 类型
+const MBD_NOUNS = new Set(['BRAN', 'HANG', 'PIPE'])
+
+const contextNodeCanMbd = computed(() => {
+  if (isRoomTree.value) return false;
+  const id = contextNodeId.value;
+  if (!id || !isRefnoLike(id)) return false;
+  const node = pdmsTree.nodesById.value[id];
+  return !!node && MBD_NOUNS.has(node.type);
+})
+
+function generateMbd() {
+  if (!contextNodeId.value) return;
+  if (isRefnoLike(contextNodeId.value)) {
+    toolStore.requestMbdPipeAnnotation(contextNodeId.value);
+  }
+  closeContextMenu();
+}
+
 function onSearchEnter(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return;
@@ -1354,6 +1373,14 @@ function onSearchEnter(value: string) {
           @click="viewProperties">
           查看属性
         </button>
+        <template v-if="contextNodeCanMbd">
+          <div class="my-1 h-px bg-border" />
+          <button type="button"
+            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            @click="generateMbd">
+            生成 MBD 标注
+          </button>
+        </template>
       </div>
     </Teleport>
 

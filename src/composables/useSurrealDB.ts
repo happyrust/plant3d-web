@@ -86,7 +86,9 @@ export function useSurrealDB() {
             const surreal = new Surreal()
 
             console.log('[SurrealDB] Connecting to:', newConfig.url)
-            await surreal.connect(newConfig.url)
+            await surreal.connect(newConfig.url, {
+                versionCheck: false,   // SurrealDB 3.0 超出 SDK 1.x 的版本范围检查，跳过
+            })
 
             // 登录
             if (newConfig.username && newConfig.password) {

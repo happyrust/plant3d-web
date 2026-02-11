@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 
 import type { UseMbdPipeAnnotationThreeReturn } from '@/composables/useMbdPipeAnnotationThree'
 import type { MbdDimKind } from '@/api/mbdPipeApi'
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore'
 
 const props = defineProps<{
   vis: UseMbdPipeAnnotationThreeReturn
@@ -12,7 +13,43 @@ defineEmits<{
   (e: 'close'): void
 }>()
 
-const tab = ref<'dims' | 'welds' | 'slopes' | 'attrs' | 'segments'>('dims')
+const tab = computed({
+  get: () => props.vis.uiTab.value,
+  set: (v) => {
+    props.vis.uiTab.value = v as any
+  },
+})
+
+const unitSettings = useUnitSettingsStore()
+const displayUnitModel = computed({
+  get: () => unitSettings.displayUnit.value,
+  set: (v) => unitSettings.setDisplayUnit(v as any),
+})
+const precisionModel = computed({
+  get: () => unitSettings.precision.value,
+  set: (v) => unitSettings.setPrecision(Number(v)),
+})
+
+const dimTextModeModel = computed({
+  get: () => props.vis.dimTextMode.value,
+  set: (v) => {
+    props.vis.dimTextMode.value = v === 'auto' ? 'auto' : 'backend'
+  },
+})
+const dimOffsetScaleModel = computed({
+  get: () => props.vis.dimOffsetScale.value,
+  set: (v) => {
+    const n = Number(v)
+    props.vis.dimOffsetScale.value = Number.isFinite(n) ? Math.max(0.05, Math.min(50, n)) : 1
+  },
+})
+const dimLabelTModel = computed({
+  get: () => props.vis.dimLabelT.value,
+  set: (v) => {
+    const n = Number(v)
+    props.vis.dimLabelT.value = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.5
+  },
+})
 
 const data = computed(() => props.vis.currentData.value)
 const stats = computed(() => data.value?.stats ?? null)
@@ -197,6 +234,12 @@ function setActive(id: string | null) {
         @click="tab = 'segments'">
         段
       </button>
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        :class="tab === 'settings' ? 'bg-muted' : ''"
+        @click="tab = 'settings'">
+        设置
+      </button>
     </div>
 
     <div v-if="tab === 'dims'" class="flex flex-col gap-2">
@@ -279,6 +322,65 @@ function setActive(id: string | null) {
         <div class="mt-1 text-muted-foreground truncate">refno: {{ s.refno }} <span v-if="s.name">· {{ s.name }}</span></div>
       </button>
       <div v-if="segments.length === 0" class="text-xs text-muted-foreground">（暂无管段）</div>
+    </div>
+
+    <div v-else-if="tab === 'settings'" class="flex flex-col gap-2">
+      <div class="rounded-md border border-border p-2 text-xs">
+        <div class="text-sm font-semibold">尺寸显示</div>
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          <label class="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1">
+            <span class="text-muted-foreground">单位</span>
+            <select v-model="displayUnitModel"
+              class="rounded-md border border-border bg-background px-2 py-1 text-xs">
+              <option value="m">m</option>
+              <option value="cm">cm</option>
+              <option value="mm">mm</option>
+            </select>
+          </label>
+          <label class="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1">
+            <span class="text-muted-foreground">精度</span>
+            <input v-model.number="precisionModel"
+              type="number"
+              min="0"
+              max="6"
+              step="1"
+              class="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs" />
+          </label>
+
+          <label class="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1">
+            <span class="text-muted-foreground">文字来源</span>
+            <select v-model="dimTextModeModel"
+              class="rounded-md border border-border bg-background px-2 py-1 text-xs">
+              <option value="backend">后端</option>
+              <option value="auto">自动</option>
+            </select>
+          </label>
+          <label class="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1">
+            <span class="text-muted-foreground">偏移倍率</span>
+            <input v-model.number="dimOffsetScaleModel"
+              type="number"
+              min="0.05"
+              max="50"
+              step="0.1"
+              class="w-20 rounded-md border border-border bg-background px-2 py-1 text-xs" />
+          </label>
+
+          <label class="col-span-2 flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1">
+            <span class="text-muted-foreground">标签位置</span>
+            <input v-model.number="dimLabelTModel"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              class="flex-1" />
+            <span class="w-12 text-right tabular-nums">{{ Number(dimLabelTModel).toFixed(2) }}</span>
+          </label>
+        </div>
+
+        <div class="mt-2 text-muted-foreground">
+          说明：偏移倍率/标签位置只影响未手动拖拽覆盖的尺寸；手动调整后以会话内覆盖为准。
+        </div>
+      </div>
     </div>
 
     <div v-else class="rounded-md border border-border p-2 text-xs">

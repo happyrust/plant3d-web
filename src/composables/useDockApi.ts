@@ -6,8 +6,35 @@ type DockApiLike = {
 
 const dockApiRef = shallowRef<DockApiLike | null>(null);
 
+// Layout change listeners
+type LayoutChangeCallback = () => void;
+const layoutChangeListeners: LayoutChangeCallback[] = [];
+
 export function setDockApi(api: DockApiLike | null) {
   dockApiRef.value = api;
+}
+
+/**
+ * Register a callback that fires whenever the dock layout changes
+ * (panels added, removed, moved, resized, etc.).
+ * Returns an unsubscribe function.
+ */
+export function onDockLayoutChange(cb: LayoutChangeCallback): () => void {
+  layoutChangeListeners.push(cb);
+  return () => {
+    const idx = layoutChangeListeners.indexOf(cb);
+    if (idx >= 0) layoutChangeListeners.splice(idx, 1);
+  };
+}
+
+/**
+ * Called by DockLayout when `onDidLayoutChange` fires.
+ * Notifies all registered listeners.
+ */
+export function notifyDockLayoutChange() {
+  for (const cb of layoutChangeListeners) {
+    try { cb(); } catch { /* ignore */ }
+  }
 }
 
 export function dockPanelExists(panelId: string): boolean {

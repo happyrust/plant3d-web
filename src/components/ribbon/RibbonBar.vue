@@ -69,12 +69,14 @@ function onTabClick(tabId: string) {
         @click="onTabClick(tab.id)">
         {{ tab.label }}
       </button>
-      <!-- Spacer to push collapse button to the right -->
+      <!-- Spacer to push right-side items to the right -->
       <div class="ribbon-tab-spacer" />
       <!-- Collapse/Expand Button -->
       <button type="button" class="ribbon-collapse-btn" :title="collapsed ? '展开' : '折叠'" @click="toggleCollapse">
         <component :is="collapsed ? ribbonIcons.chevron_down : ribbonIcons.chevron_up" class="ribbon-collapse-icon" />
       </button>
+      <!-- Slot for extra right-side content (toggle buttons, avatar, etc.) -->
+      <slot name="header-right" />
     </div>
 
     <!-- Tab Content Panel -->

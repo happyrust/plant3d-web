@@ -2,7 +2,7 @@
  * Dbno Instances Parquet Loader (new multi-table schema)
  *
  * 目标：
- * - 从 `/files/output/<project>/instances_parquet/manifest_{dbno}.json` 读取表清单
+ * - 从 `/files/output/<project>/parquet/manifest_{dbno}.json` 读取表清单
  * - 使用 DuckDB-WASM (HTTP Range) 查询 Parquet
  * - 按 refno 批量查询并返回 `Map<refnoKey, InstanceEntry[]>`，供 DTXLoader 增量加载
  *
@@ -140,7 +140,7 @@ function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null)
 }
 
 async function fetchManifest(dbno: number): Promise<ParquetManifest> {
-  const url = buildFilesOutputUrl(`instances_parquet/manifest_${dbno}.json`)
+  const url = buildFilesOutputUrl(`parquet/manifest_${dbno}.json`)
   const resp = await fetch(url)
   if (resp.status === 404) {
     // 兼容“仅导出 Parquet 文件但未生成 manifest”的场景：按约定命名兜底。
@@ -180,7 +180,7 @@ async function registerDbno(dbno: number): Promise<RegisteredDbno> {
     if (!db || !conn) throw new Error('DuckDB not ready')
 
     const manifest = await fetchManifest(dbno)
-    const baseDirUrl = buildFilesOutputUrl('instances_parquet')
+    const baseDirUrl = buildFilesOutputUrl('parquet')
 
     const files = {
       instances: `p_${dbno}_instances.parquet`,

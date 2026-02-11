@@ -3,7 +3,15 @@ import { computed, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 
 import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 
-import { setDockApi } from '@/composables/useDockApi';
+import { setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
+import {
+  initPanelZones,
+  disposePanelZones,
+  toggleZone as togglePanelZone,
+  onPanelOpened,
+  resetZoneState,
+  type ZoneName,
+} from '@/composables/usePanelZones';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
@@ -456,6 +464,7 @@ function togglePanel(panelId: string) {
   }
 
   console.log(`[DockLayout] Creating panel ${panelId}`);
+  onPanelOpened(panelId); // auto-expand zone if collapsed
   const created = ensurePanel(panelId);
   if (created) {
     console.log(`[DockLayout] Panel ${panelId} created, setting active`);
@@ -467,6 +476,7 @@ function togglePanel(panelId: string) {
 
 function resetLayout() {
   if (!api.value) return;
+  resetZoneState();
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
   createDefaultLayout(api.value);
 }
@@ -477,6 +487,10 @@ function popoutActiveGroup() {
   const activeGroup = dockApi.activeGroup;
   if (!activeGroup) return;
   dockApi.addPopoutGroup(activeGroup);
+}
+
+function handleZoneToggle(zone: ZoneName) {
+  togglePanelZone(zone);
 }
 
 function handleRibbonCommand(commandId: string) {
@@ -545,6 +559,18 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.roomStatus':
       togglePanel('roomStatus');
       return;
+
+    // zone toggle commands
+    case 'zone.toggleLeft':
+      handleZoneToggle('left');
+      return;
+    case 'zone.toggleBottom':
+      handleZoneToggle('bottom');
+      return;
+    case 'zone.toggleRight':
+      handleZoneToggle('right');
+      return;
+
     case 'room.compute':
       // 触发房间计算，同时打开状态面板
       togglePanel('roomStatus');
@@ -657,6 +683,12 @@ function onReady(event: DockviewReadyEvent) {
   api.value = event.api as unknown as DockApi;
   setDockApi(event.api as unknown as { getPanel: (id: string) => unknown });
 
+  // Initialize panel zone management
+  initPanelZones(
+    api.value as unknown as { getPanel: (id: string) => { api: { close: () => void; setActive: () => void } } | undefined },
+    ensurePanel as (panelId: string) => { api: { setActive: () => void } } | undefined,
+  );
+
   const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);
   let loaded = false;
 
@@ -683,6 +715,7 @@ function onReady(event: DockviewReadyEvent) {
 
   event.api.onDidLayoutChange(() => {
     saveLayout();
+    notifyDockLayoutChange();
   });
 
   migratePropertiesPanelOnce();
@@ -731,6 +764,7 @@ onUnmounted(() => {
     offCommand = null;
   }
 
+  disposePanelZones();
   setDockApi(null);
 });
 

@@ -73,8 +73,8 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function e3dGetWorldRoot(): Promise<NodeResponse> {
   const source = getE3dSource();
-  if (source === 'parquet') return await e3dParquetGetWorldRoot();
-  if (source === 'backend') return await fetchJson<NodeResponse>('/api/e3d/world-root');
+  // parquet 模式下树操作仍走后端 SurrealDB API
+  if (source === 'parquet' || source === 'backend') return await fetchJson<NodeResponse>('/api/e3d/world-root');
 
   // auto：优先后端，失败/非 success 回退 Parquet
   try {
@@ -88,8 +88,8 @@ export async function e3dGetWorldRoot(): Promise<NodeResponse> {
 
 export async function e3dGetNode(refno: string): Promise<NodeResponse> {
   const source = getE3dSource();
-  if (source === 'parquet') return await e3dParquetGetNode(refno);
-  if (source === 'backend') return await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
+  // parquet 模式下树操作仍走后端 SurrealDB API
+  if (source === 'parquet' || source === 'backend') return await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
 
   try {
     const resp = await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
@@ -102,7 +102,7 @@ export async function e3dGetNode(refno: string): Promise<NodeResponse> {
 
 export async function e3dGetChildren(refno: string, limit?: number): Promise<ChildrenResponse> {
   const source = getE3dSource();
-  if (source === 'parquet') return await e3dParquetGetChildren(refno, limit);
+  // parquet 模式下树操作仍走后端 SurrealDB API（不走 parquet children）
 
   const url = new URL('http://localhost');
   url.pathname = `/api/e3d/children/${encodeURIComponent(refno)}`;
@@ -110,7 +110,7 @@ export async function e3dGetChildren(refno: string, limit?: number): Promise<Chi
     url.searchParams.set('limit', String(limit));
   }
 
-  if (source === 'backend') {
+  if (source === 'parquet' || source === 'backend') {
     return await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
   }
 
@@ -141,9 +141,9 @@ async function backendE3dGetAncestors(refno: string): Promise<AncestorsResponse>
 
 export async function e3dGetAncestors(refno: string): Promise<AncestorsResponse> {
   const source = getE3dSource();
-  if (source === 'parquet') return await e3dParquetGetAncestors(refno);
+  // parquet 模式下树操作仍走后端 SurrealDB API
 
-  if (source === 'backend') {
+  if (source === 'parquet' || source === 'backend') {
     try {
       return await backendE3dGetAncestors(refno);
     } catch (e) {
@@ -204,9 +204,9 @@ export async function e3dGetSubtreeRefnos(
   params?: { includeSelf?: boolean; maxDepth?: number; limit?: number }
 ): Promise<SubtreeRefnosResponse> {
   const source = getE3dSource();
-  if (source === 'parquet') return await e3dParquetGetSubtreeRefnos(refno, params);
+  // parquet 模式下树操作仍走后端 SurrealDB API
 
-  if (source === 'backend') {
+  if (source === 'parquet' || source === 'backend') {
     try {
       return await backendE3dGetSubtreeRefnos(refno, params);
     } catch (e) {

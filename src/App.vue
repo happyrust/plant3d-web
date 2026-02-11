@@ -4,6 +4,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 
 import DockLayout from '@/components/DockLayout.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
+import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 
 const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
@@ -26,12 +27,14 @@ const showBenchmark = urlParams.get('benchmark') === 'true';
       :extension-height="extensionHeight"
     >
       <template #extension>
-        <div class="flex items-start w-full">
-          <RibbonBar ref="ribbonBarRef" class="flex-1" />
-          <div class="px-2 h-8 flex items-center">
-            <UserAvatar />
-          </div>
-        </div>
+        <RibbonBar ref="ribbonBarRef" class="w-full">
+          <template #header-right>
+            <div class="flex items-center gap-2 px-2">
+              <LayoutToggleButtons />
+              <UserAvatar />
+            </div>
+          </template>
+        </RibbonBar>
       </template>
     </v-app-bar>
 

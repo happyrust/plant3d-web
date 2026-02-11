@@ -250,6 +250,7 @@ function ensureDiv(parent: HTMLElement, className: string, styleText: string): H
 }
 
 function makeMarkerEl(parent: HTMLElement, text: string, color: string): HTMLDivElement {
+  // SolveSpace 风格：透明背景、纯文本+描边、无圆形气泡
   const el = ensureDiv(
     parent,
     'dtx-anno-marker',
@@ -259,18 +260,14 @@ function makeMarkerEl(parent: HTMLElement, text: string, color: string): HTMLDiv
       'pointer-events:auto',
       'user-select:none',
       'z-index:920',
-      'width:22px',
-      'height:22px',
-      'border-radius:9999px',
-      `background:${color}`,
-      'color:#fff',
-      'font-size:11px',
+      `color:${color}`,
+      "font-family:'Roboto Mono','Consolas',monospace",
+      'font-size:12px',
       'font-weight:700',
-      'display:flex',
-      'align-items:center',
-      'justify-content:center',
-      'box-shadow:0 6px 14px rgba(0,0,0,0.25)',
-      'border:2px solid rgba(255,255,255,0.75)',
+      'background:transparent',
+      'box-shadow:none',
+      'border:none',
+      'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000',
     ].join(';')
   )
   el.textContent = text
@@ -278,6 +275,7 @@ function makeMarkerEl(parent: HTMLElement, text: string, color: string): HTMLDiv
 }
 
 function makeLabelEl(parent: HTMLElement, title: string, description: string): HTMLDivElement {
+  // SolveSpace 风格：透明背景、纯文本
   const el = ensureDiv(
     parent,
     'dtx-anno-label',
@@ -287,19 +285,22 @@ function makeLabelEl(parent: HTMLElement, title: string, description: string): H
       'pointer-events:auto',
       'z-index:910',
       'max-width:260px',
-      'padding:8px 10px',
-      'border-radius:8px',
-      'background:rgba(20,20,20,0.88)',
+      'padding:2px 4px',
+      'border-radius:0',
+      'background:transparent',
       'color:#fff',
-      'box-shadow:0 8px 18px rgba(0,0,0,0.35)',
+      'box-shadow:none',
       'white-space:pre-wrap',
+      "font-family:'Roboto Mono','Consolas',monospace",
+      'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000',
     ].join(';')
   )
-  el.innerHTML = `<div style="font-weight:700;line-height:1.2;">${title}</div><div style="margin-top:4px;font-size:12px;opacity:0.95;">${description || ''}</div>`
+  el.innerHTML = `<div style="font-weight:700;line-height:1.2;">${title}</div><div style="margin-top:2px;font-size:12px;opacity:0.95;">${description || ''}</div>`
   return el
 }
 
 function makeMeasureLabelEl(parent: HTMLElement, text: string): HTMLDivElement {
+  // SolveSpace 风格：透明背景、纯文本+描边
   const el = ensureDiv(
     parent,
     'dtx-measure-label',
@@ -308,13 +309,15 @@ function makeMeasureLabelEl(parent: HTMLElement, text: string): HTMLDivElement {
       'transform:translate(-50%,-100%)',
       'pointer-events:none',
       'z-index:905',
-      'padding:3px 6px',
-      'border-radius:6px',
-      'background:rgba(17,24,39,0.85)',
-      'color:#fff',
+      'padding:1px 3px',
+      'border-radius:0',
+      'background:transparent',
+      'color:#22c55e',
+      "font-family:'Roboto Mono','Consolas',monospace",
       'font-size:11px',
-      'font-weight:600',
-      'box-shadow:0 6px 14px rgba(0,0,0,0.25)',
+      'font-weight:700',
+      'box-shadow:none',
+      'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000',
     ].join(';')
   )
   el.textContent = text
