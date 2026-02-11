@@ -17,9 +17,20 @@ export interface AnnotationOptions {
   depthTest?: boolean
 }
 
+/**
+ * SolveSpace 风格交互状态（与 SolveSpace style.cpp 的 Hovered/Selected/Constraint 色对齐）
+ */
+export type AnnotationInteractionState = 'normal' | 'hovered' | 'selected'
+
 export abstract class AnnotationBase extends THREE.Object3D {
   protected materials: AnnotationMaterials
   protected options: AnnotationOptions
+
+  // ── SolveSpace 风格交互状态 ──────────────────────────────────
+  protected _hovered = false
+  protected _selected = false
+  protected _dragging = false
+  /** @deprecated 兼容旧代码；读取时等价于 hovered || selected */
   protected _highlighted = false
 
   // 缓存向量，避免每帧分配
@@ -137,19 +148,70 @@ export abstract class AnnotationBase extends THREE.Object3D {
     }
   }
 
-  /** 高亮状态 */
+  // ── SolveSpace 风格交互属性 ──────────────────────────────────
+
+  /** 悬停状态（SolveSpace: 黄色） */
+  get hovered(): boolean { return this._hovered }
+  set hovered(value: boolean) {
+    if (this._hovered === value) return
+    this._hovered = value
+    this._syncHighlighted()
+  }
+
+  /** 选中状态（SolveSpace: 红色），优先级高于 hovered */
+  get selected(): boolean { return this._selected }
+  set selected(value: boolean) {
+    if (this._selected === value) return
+    this._selected = value
+    this._syncHighlighted()
+  }
+
+  /** 拖拽中 */
+  get dragging(): boolean { return this._dragging }
+  set dragging(value: boolean) {
+    if (this._dragging === value) return
+    this._dragging = value
+    // 拖拽状态不直接驱动颜色，由具体标注的 snapActive 处理
+  }
+
+  /** 当前有效的交互状态（selected > hovered > normal） */
+  get interactionState(): AnnotationInteractionState {
+    if (this._selected) return 'selected'
+    if (this._hovered) return 'hovered'
+    return 'normal'
+  }
+
+  /**
+   * 高亮状态（兼容旧代码）。
+   * - 读：等价于 hovered || selected
+   * - 写：映射到 hovered 切换（保持向后兼容）
+   */
   get highlighted(): boolean {
     return this._highlighted
   }
 
   set highlighted(value: boolean) {
-    if (this._highlighted === value) return
-    this._highlighted = value
-    this.onHighlightChanged(value)
+    // 兼容：外部直接写 highlighted 时映射为 hovered
+    this.hovered = value
   }
 
-  /** 子类实现：高亮状态变化时的处理 */
+  /** 同步 _highlighted 并通知子类 */
+  private _syncHighlighted(): void {
+    const next = this._hovered || this._selected
+    if (this._highlighted === next) {
+      // 即使 _highlighted 不变，交互状态可能已变（hovered→selected），仍需通知子类
+      this.onHighlightChanged(next)
+      return
+    }
+    this._highlighted = next
+    this.onHighlightChanged(next)
+  }
+
+  /** 子类实现：高亮状态变化时的处理（可通过 this.interactionState 区分 hovered/selected） */
   protected abstract onHighlightChanged(highlighted: boolean): void
+
+  /** Set text background occlusion color (should match scene background). Override in subclasses with vector text. */
+  setBackgroundColor(_color: THREE.ColorRepresentation): void {}
 
   /** 释放资源 */
   dispose(): void {

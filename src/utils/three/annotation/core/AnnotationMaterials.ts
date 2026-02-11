@@ -1,23 +1,20 @@
 /**
  * 三维标注材质管理
  *
- * 管理 Line2 和 Mesh 材质，支持正常/高亮状态切换
- * 需要每帧调用 setResolution() 更新 LineMaterial 分辨率
+ * SolveSpace 风格：使用原生 GL 线（LineBasicMaterial）+ Mesh 材质。
+ * 原生 GL 线宽度固定 1px，与 SolveSpace 行为一致。
  */
 
 import * as THREE from 'three'
-import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 
 export interface AnnotationMaterialSet {
-  line: LineMaterial
-  lineHover: LineMaterial
+  line: THREE.LineBasicMaterial
+  lineHover: THREE.LineBasicMaterial
   mesh: THREE.MeshBasicMaterial
   meshHover: THREE.MeshBasicMaterial
 }
 
 export class AnnotationMaterials {
-  private resolution = new THREE.Vector2(1, 1)
-  private lastDpr = 1
 
   // 预定义颜色集
   readonly green: AnnotationMaterialSet   // 尺寸标注
@@ -26,12 +23,29 @@ export class AnnotationMaterials {
   readonly white: AnnotationMaterialSet   // 通用
   readonly yellow: AnnotationMaterialSet  // 高亮/默认
 
+  // ── SolveSpace 约束默认色（洋红）────────────────────────────
+  /** SolveSpace constraint default (magenta) */
+  readonly ssConstraintMagenta: AnnotationMaterialSet
+
+  // ── SolveSpace 交互色（与 style.cpp Defaults 对齐）──────────
+  /** Hovered 状态材质（SolveSpace: 黄色 RGBf(1,1,0)） */
+  readonly ssHovered: AnnotationMaterialSet
+  /** Selected 状态材质（SolveSpace: 红色 RGBf(1,0,0)） */
+  readonly ssSelected: AnnotationMaterialSet
+
   constructor() {
     this.green = this.createMaterialSet(0x22c55e, 0x4ade80)
     this.orange = this.createMaterialSet(0xf97316, 0xfb923c)
     this.blue = this.createMaterialSet(0x3b82f6, 0x60a5fa)
     this.white = this.createMaterialSet(0xffffff, 0xffffff)
     this.yellow = this.createMaterialSet(0xfacc15, 0xfde047)
+
+    // SolveSpace 约束洋红（默认）
+    this.ssConstraintMagenta = this.createMaterialSet(0xff00ff, 0xff44ff)
+
+    // SolveSpace 交互色
+    this.ssHovered = this.createMaterialSet(0xffff00, 0xffff44)
+    this.ssSelected = this.createMaterialSet(0xff0000, 0xff4444)
   }
 
   private createMaterialSet(normalColor: number, hoverColor: number): AnnotationMaterialSet {
@@ -45,16 +59,12 @@ export class AnnotationMaterials {
     }
 
     return {
-      line: new LineMaterial({
+      line: new THREE.LineBasicMaterial({
         color: normalColor,
-        linewidth: 2,
-        resolution: this.resolution,
         ...depthParams,
       }),
-      lineHover: new LineMaterial({
+      lineHover: new THREE.LineBasicMaterial({
         color: hoverColor,
-        linewidth: 3,
-        resolution: this.resolution,
         ...depthParams,
       }),
       mesh: new THREE.MeshBasicMaterial({
@@ -70,29 +80,13 @@ export class AnnotationMaterials {
     }
   }
 
-  /** 每帧渲染前调用，更新 LineMaterial 分辨率 */
-  setResolution(width: number, height: number): void {
-    // LineMaterial.resolution 使用绘制缓冲区像素更稳；linewidth 也按 dpr 做同尺度缩放（与 useDtxTools 一致）。
-    const dpr = Math.max(1, Number((window as any)?.devicePixelRatio) || 1)
-    const w = Math.max(1, Math.floor(width * dpr))
-    const h = Math.max(1, Math.floor(height * dpr))
-
-    this.resolution.set(w, h)
-    for (const set of this.all) {
-      set.line.resolution.set(w, h)
-      set.lineHover.resolution.set(w, h)
-
-      // 仅在 dpr 变化时重设 linewidth，避免外部未来做自定义宽度时被每次覆盖
-      if (dpr !== this.lastDpr) {
-        set.line.linewidth = 2 * dpr
-        set.lineHover.linewidth = 3 * dpr
-      }
-    }
-    this.lastDpr = dpr
+  /** 保留 API 兼容（原生 GL 线不需要 resolution） */
+  setResolution(_width: number, _height: number): void {
+    // LineBasicMaterial 不需要 resolution，此方法保留以兼容调用方
   }
 
   get all(): AnnotationMaterialSet[] {
-    return [this.green, this.orange, this.blue, this.white, this.yellow]
+    return [this.green, this.orange, this.blue, this.white, this.yellow, this.ssConstraintMagenta, this.ssHovered, this.ssSelected]
   }
 
   dispose(): void {

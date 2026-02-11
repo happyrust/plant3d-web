@@ -16,7 +16,7 @@
  */
 
 // Core
-export { AnnotationBase, type AnnotationOptions } from './core/AnnotationBase'
+export { AnnotationBase, type AnnotationOptions, type AnnotationInteractionState } from './core/AnnotationBase'
 export { AnnotationMaterials, type AnnotationMaterialSet } from './core/AnnotationMaterials'
 
 // Annotations

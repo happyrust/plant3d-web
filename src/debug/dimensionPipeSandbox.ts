@@ -95,8 +95,14 @@ function main(): void {
       })
     : null
 
-  if (dimPipeWall) scene.add(dimPipeWall)
-  if (dimPipeColumn) scene.add(dimPipeColumn)
+  if (dimPipeWall) {
+    dimPipeWall.setBackgroundColor(0x0b1020)
+    scene.add(dimPipeWall)
+  }
+  if (dimPipeColumn) {
+    dimPipeColumn.setBackgroundColor(0x0b1020)
+    scene.add(dimPipeColumn)
+  }
 
   // 暴露给 Playwright：不依赖渲染，只读“计算结果/显示文本”
   window.__dimensionPipeSandbox = {

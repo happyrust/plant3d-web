@@ -8,7 +8,7 @@
  */
 
 import { ref, type Ref, watch, shallowRef } from 'vue'
-import { Box3, BufferGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, Matrix4, Vector3 } from 'three'
+import { Box3, BufferGeometry, Color, Float32BufferAttribute, Group, Line, LineBasicMaterial, Matrix4, Vector3 } from 'three'
 
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
 import type {
@@ -22,6 +22,8 @@ import type {
 } from '@/api/mbdPipeApi'
 
 import { computeMbdDimOffset } from '@/composables/mbd/computeMbdDimOffset'
+import { computePipeAlignedOffsetDirs, findSegmentOffsetDir } from '@/composables/mbd/computePipeAlignedOffsetDirs'
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore'
 
 import {
   AnnotationMaterials,
@@ -30,8 +32,19 @@ import {
   SlopeAnnotation3D,
 } from '@/utils/three/annotation'
 import { computeDimensionOffsetDirInLocal } from '@/utils/three/annotation/utils/computeDimensionOffsetDirInLocal'
+import { formatLengthMeters } from '@/utils/unitFormat'
 
 export type UseMbdPipeAnnotationThreeReturn = {
+  /** MBD 面板当前页签（仅 UI 状态） */
+  uiTab: Ref<MbdPipeUiTab>
+
+  /** 尺寸文字来源：backend=用后端 text；auto=按当前单位/精度自动计算 */
+  dimTextMode: Ref<'backend' | 'auto'>
+  /** 尺寸偏移倍率（作用于 computeMbdDimOffset 结果；仅对未手动拖拽覆盖的尺寸生效） */
+  dimOffsetScale: Ref<number>
+  /** 尺寸标签位置比例（0..1；仅对未手动拖拽覆盖的尺寸生效） */
+  dimLabelT: Ref<number>
+
   isVisible: Ref<boolean>
   showDims: Ref<boolean>
   /** 每段长度（默认 kind=segment） */
@@ -67,6 +80,10 @@ export type UseMbdPipeAnnotationThreeReturn = {
   resetDimOverride: (dimId: string) => void
   /** 获取 dim annotations map（用于外部交互控制器注册） */
   getDimAnnotations: () => Map<string, LinearDimension3D>
+  /** 获取 weld annotations map（用于外部交互控制器注册） */
+  getWeldAnnotations: () => Map<string, WeldAnnotation3D>
+  /** 获取 slope annotations map（用于外部交互控制器注册） */
+  getSlopeAnnotations: () => Map<string, SlopeAnnotation3D>
 }
 
 /** MBD dims session-only override（不写回后端，仅当前会话有效） */
@@ -76,6 +93,20 @@ export type MbdDimOverride = {
   labelT?: number
   labelOffsetWorld?: [number, number, number] | null
   isReference?: boolean
+}
+
+export type MbdPipeUiTab = 'dims' | 'welds' | 'slopes' | 'attrs' | 'segments' | 'settings'
+
+function clamp01(n: number, fallback: number): number {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return fallback
+  return Math.max(0, Math.min(1, v))
+}
+
+function clampNumber(n: number, min: number, max: number, fallback: number): number {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return fallback
+  return Math.max(min, Math.min(max, v))
 }
 
 function computeFlyToPositionFromBox(box: Box3): { position: Vector3; target: Vector3 } {
@@ -101,6 +132,16 @@ export function useMbdPipeAnnotationThree(
   const getGlobalModelMatrix = options.getGlobalModelMatrix ?? null
   // 方案B：MBD 标注统一为 3D 文本，不再需要 CSS2D 容器；保留参数以维持 API 兼容。
   void labelContainerRef
+
+  const unitSettings = useUnitSettingsStore()
+
+  // UI 状态（MbdPipePanel 使用）
+  const uiTab = ref<MbdPipeUiTab>('dims')
+
+  // MBD 尺寸显示配置
+  const dimTextMode = ref<'backend' | 'auto'>('backend')
+  const dimOffsetScale = ref<number>(1)
+  const dimLabelT = ref<number>(0.5)
 
   const isVisible = ref(false)
   const showDims = ref(true)
@@ -138,6 +179,7 @@ export function useMbdPipeAnnotationThree(
 
   // Session-only overrides（不写回后端）
   const dimOverrides = new Map<string, MbdDimOverride>()
+  const dimTextById = shallowRef<Map<string, string>>(new Map())
 
   function applyLabelVisibility(): void {
     const visible = isVisible.value && showLabels.value
@@ -205,6 +247,14 @@ export function useMbdPipeAnnotationThree(
     requestRender?.()
   }
 
+  function applyBackgroundColor(viewer: DtxViewer): void {
+    const bg = viewer.scene.background
+    const color = bg instanceof Color ? bg : new Color(0xe5e7eb)
+    for (const a of dimAnnotations.value.values()) a.setBackgroundColor(color)
+    for (const a of weldAnnotations.value.values()) a.setBackgroundColor(color)
+    for (const a of slopeAnnotations.value.values()) a.setBackgroundColor(color)
+  }
+
   function applyVisibility(): void {
     // 尺寸标注可见性
     for (const annotation of dimAnnotations.value.values()) {
@@ -268,31 +318,45 @@ export function useMbdPipeAnnotationThree(
     requestRender?.()
   }
 
-  function renderDims(dims: MbdDimDto[]): void {
+  function renderDims(dims: MbdDimDto[], segments: MbdPipeSegmentDto[], pipeOffsetDirs: Vector3[]): void {
     const viewer = dtxViewerRef.value
     const gm = getGlobalModelMatrix?.() || identityMatrix
+    dimTextById.value.clear()
     for (const d of dims) {
       const start = new Vector3(d.start[0], d.start[1], d.start[2])
       const end = new Vector3(d.end[0], d.end[1], d.end[2])
       const kind = (d.kind ?? 'segment') as MbdDimKind
 
-      // 计算偏移方向：优先按相机方向（SolveSpace 风格“屏幕直觉”），退化时 fallback。
-      const offsetDir =
-        computeDimensionOffsetDirInLocal(start, end, viewer?.camera ?? null, gm) ||
-        new Vector3(1, 0, 0)
+      // 计算偏移方向：优先从管道拓扑推断，fallback 到相机方向
+      const pipeDir = findSegmentOffsetDir(segments, d.start, d.end, pipeOffsetDirs)
+      const offsetDir = pipeDir
+        ?? computeDimensionOffsetDirInLocal(start, end, viewer?.camera ?? null, gm)
+        ?? new Vector3(1, 0, 0)
 
       const dist = start.distanceTo(end)
-      const offset = computeMbdDimOffset(dist)
+      const offset = computeMbdDimOffset(dist) * clampNumber(dimOffsetScale.value, 0.05, 50, 1)
 
       // 合并 session-only overrides
       const ov = dimOverrides.get(d.id)
       const finalOffset = ov?.offset ?? offset
       const finalDir = ov?.direction ? new Vector3(ov.direction[0], ov.direction[1], ov.direction[2]) : offsetDir
-      const finalLabelT = ov?.labelT ?? 0.5
+      const finalLabelT = ov?.labelT ?? clamp01(dimLabelT.value, 0.5)
       const finalLabelOffsetWorld = ov?.labelOffsetWorld
         ? new Vector3(ov.labelOffsetWorld[0], ov.labelOffsetWorld[1], ov.labelOffsetWorld[2])
         : null
       const finalIsReference = ov?.isReference ?? false
+
+      dimTextById.value.set(d.id, String(d.text ?? ''))
+
+      const useBackendText = dimTextMode.value === 'backend'
+      const text = useBackendText
+        ? String(d.text ?? '')
+        : (() => {
+          const a = start.clone().applyMatrix4(gm)
+          const b = end.clone().applyMatrix4(gm)
+          const distWorldM = a.distanceTo(b)
+          return formatLengthMeters(distWorldM, unitSettings.displayUnit.value, unitSettings.precision.value)
+        })()
 
       const dim = new LinearDimension3D(materials, {
         start,
@@ -301,7 +365,7 @@ export function useMbdPipeAnnotationThree(
         labelT: finalLabelT,
         labelOffsetWorld: finalLabelOffsetWorld,
         isReference: finalIsReference,
-        text: d.text,
+        text,
         direction: finalDir,
       })
 
@@ -333,6 +397,11 @@ export function useMbdPipeAnnotationThree(
         crossSize: 50, // 世界单位
       })
 
+      // 可交互：MBD welds 支持拖拽调整文字位置
+      weld.userData.pickable = true
+      weld.userData.draggable = true
+      ;(weld.userData as any).mbdWeldId = w.id
+
       weld.setMaterialSet(materials.orange)
       group.add(weld)
       weldAnnotations.value.set(w.id, weld)
@@ -350,6 +419,11 @@ export function useMbdPipeAnnotationThree(
         text: s.text,
         slope: s.slope,
       })
+
+      // 可交互：MBD slopes 支持拖拽调整文字位置
+      slope.userData.pickable = true
+      slope.userData.draggable = true
+      ;(slope.userData as any).mbdSlopeId = s.id
 
       slope.setMaterialSet(materials.blue)
       group.add(slope)
@@ -393,10 +467,16 @@ export function useMbdPipeAnnotationThree(
     setResolution(rect.width, rect.height)
 
     // 渲染各类标注
-    if (data.dims?.length) renderDims(data.dims)
+    const pipeOffsetDirs = data.segments?.length
+      ? computePipeAlignedOffsetDirs(data.segments)
+      : []
+    if (data.dims?.length) renderDims(data.dims, data.segments ?? [], pipeOffsetDirs)
     if (data.welds?.length) renderWelds(data.welds)
     if (data.slopes?.length) renderSlopes(data.slopes)
     if (data.segments?.length) renderSegments(data.segments)
+
+    // Set text background occlusion color to match scene background
+    applyBackgroundColor(viewer)
 
     highlightItem(null)
     applyVisibility()
@@ -506,6 +586,16 @@ export function useMbdPipeAnnotationThree(
     return dimAnnotations.value
   }
 
+  /** 获取 weld annotations map（用于外部将 MBD welds 注册到交互控制器） */
+  function getWeldAnnotations(): Map<string, WeldAnnotation3D> {
+    return weldAnnotations.value
+  }
+
+  /** 获取 slope annotations map（用于外部将 MBD slopes 注册到交互控制器） */
+  function getSlopeAnnotations(): Map<string, SlopeAnnotation3D> {
+    return slopeAnnotations.value
+  }
+
   function dispose(): void {
     clearAll()
     materials.dispose()
@@ -529,9 +619,60 @@ export function useMbdPipeAnnotationThree(
       showLabels,
     ],
     () => {
-    applyVisibility()
-    applyLabelVisibility()
-    requestRender?.()
+      applyVisibility()
+      applyLabelVisibility()
+      requestRender?.()
+    }
+  )
+
+  // 监听尺寸显示配置变化（文字/偏移/标签位置/单位精度）
+  watch(
+    [
+      dimTextMode,
+      dimOffsetScale,
+      dimLabelT,
+      () => unitSettings.displayUnit.value,
+      () => unitSettings.precision.value,
+    ],
+    () => {
+      if (dimAnnotations.value.size === 0) return
+
+      // 仅当 dims 已存在时，按配置刷新文字/布局（不重建全部；保留 session overrides）
+      try {
+        const gm = getGlobalModelMatrix?.() || identityMatrix
+        const useBackendText = dimTextMode.value === 'backend'
+        const offsetScale = clampNumber(dimOffsetScale.value, 0.05, 50, 1)
+        const baseLabelT = clamp01(dimLabelT.value, 0.5)
+
+        for (const [dimId, dim] of dimAnnotations.value.entries()) {
+          const ov = dimOverrides.get(dimId) ?? {}
+
+          // 距离与默认 offset 以“局部坐标”计算（与几何保持一致）
+          const p = dim.getParams()
+          const distLocal = p.start.distanceTo(p.end)
+          const baseOffset = computeMbdDimOffset(distLocal) * offsetScale
+          const nextOffset = ov.offset ?? baseOffset
+
+          // 若用户拖拽过文字（labelOffsetWorld!=null），避免全局 labelT 影响其基准位置
+          const hasManualLabel = (('labelOffsetWorld' in ov) ? ov.labelOffsetWorld : p.labelOffsetWorld) != null
+          const nextLabelT = ov.labelT ?? (hasManualLabel ? (p.labelT ?? baseLabelT) : baseLabelT)
+
+          const nextText = useBackendText
+            ? (dimTextById.value.get(dimId) ?? '')
+            : (() => {
+              const a = p.start.clone().applyMatrix4(gm)
+              const b = p.end.clone().applyMatrix4(gm)
+              const distWorldM = a.distanceTo(b)
+              return formatLengthMeters(distWorldM, unitSettings.displayUnit.value, unitSettings.precision.value)
+            })()
+
+          dim.setParams({ offset: nextOffset, labelT: nextLabelT, text: nextText })
+        }
+      } catch {
+        // ignore
+      }
+
+      requestRender?.()
     }
   )
 
@@ -548,6 +689,10 @@ export function useMbdPipeAnnotationThree(
   })
 
   return {
+    uiTab,
+    dimTextMode,
+    dimOffsetScale,
+    dimLabelT,
     isVisible,
     showDims,
     showDimSegment,
@@ -570,5 +715,7 @@ export function useMbdPipeAnnotationThree(
     updateDimOverride,
     resetDimOverride,
     getDimAnnotations,
+    getWeldAnnotations,
+    getSlopeAnnotations,
   }
 }

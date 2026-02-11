@@ -1,10 +1,8 @@
 import * as THREE from 'three'
-import { Line2 } from 'three/examples/jsm/lines/Line2.js'
-import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
 import { AnnotationBase, type AnnotationOptions } from '../core/AnnotationBase'
 import type { AnnotationMaterials, AnnotationMaterialSet } from '../core/AnnotationMaterials'
-import { TroikaBillboardText } from '../text/TroikaBillboardText'
-import { DEFAULT_DIMENSION_FONT_URL } from '../text/defaultFontUrl'
+import { SolveSpaceBillboardVectorText } from '../text/SolveSpaceBillboardVectorText'
+import { alignToPixelGrid, lineTrimmedAgainstBoxT, worldPerPixelAt } from '../utils/solvespaceLike'
 
 export interface LinearDimension3DParams {
   /** 起点 */
@@ -31,12 +29,6 @@ export interface LinearDimension3DParams {
   fontUrl?: string
 }
 
-// 共享几何体
-const arrowGeometry = new THREE.ConeGeometry(0.06, 0.18, 8)
-arrowGeometry.rotateZ(-Math.PI / 2) // 指向 +X 方向
-
-const xAxis = new THREE.Vector3(1, 0, 0)
-
 const SNAP_TS = [0, 0.25, 0.5, 0.75, 1] as const
 const snapMarkerGeometry = new THREE.CircleGeometry(0.12, 24)
 
@@ -50,12 +42,14 @@ export class LinearDimension3D extends AnnotationBase {
   private materialSet: AnnotationMaterialSet
 
   // 子组件
-  private dimensionLine: Line2
-  private extensionLine1: Line2
-  private extensionLine2: Line2
-  private arrow1: THREE.Mesh
-  private arrow2: THREE.Mesh
-  private textLabel: TroikaBillboardText
+  private dimensionLineA: THREE.Line
+  private dimensionLineB: THREE.Line
+  private dimensionLineOutside: THREE.Line
+  private extensionLine1: THREE.Line
+  private extensionLine2: THREE.Line
+  private arrow1: THREE.LineSegments
+  private arrow2: THREE.LineSegments
+  private textLabel: SolveSpaceBillboardVectorText
   private snapGuideLine: THREE.Line
   private snapGuideGeometry: THREE.BufferGeometry
   private snapGuidePositions: Float32Array
@@ -71,10 +65,19 @@ export class LinearDimension3D extends AnnotationBase {
   private lastDistance = 0
   private lastDisplayText = ''
 
+  // 参考尺寸虚线材质（仅本实例使用；避免污染共享 LineMaterial）
+  private dashedLineMatNormal: any | null = null
+  private dashedLineMatHovered: any | null = null
+  private dashedLineMatSelected: any | null = null
+
   // 几何体（需要动态更新）
-  private dimLineGeometry: LineGeometry
-  private ext1Geometry: LineGeometry
-  private ext2Geometry: LineGeometry
+  private dimLineGeometryA: THREE.BufferGeometry
+  private dimLineGeometryB: THREE.BufferGeometry
+  private dimLineGeometryOutside: THREE.BufferGeometry
+  private ext1Geometry: THREE.BufferGeometry
+  private ext2Geometry: THREE.BufferGeometry
+  private arrowGeometry1: THREE.BufferGeometry
+  private arrowGeometry2: THREE.BufferGeometry
 
   // 缓存计算结果
   private readonly dimStart = new THREE.Vector3()
@@ -86,6 +89,30 @@ export class LinearDimension3D extends AnnotationBase {
   private readonly tempWorldB = new THREE.Vector3()
   private readonly tempLocalA = new THREE.Vector3()
   private readonly tempLocalB = new THREE.Vector3()
+  private readonly wppTmp = {
+    ndc: new THREE.Vector3(),
+    ndc2: new THREE.Vector3(),
+    p0: new THREE.Vector3(),
+    p1: new THREE.Vector3(),
+    p2: new THREE.Vector3(),
+  }
+  private readonly camRight = new THREE.Vector3()
+  private readonly camUp = new THREE.Vector3()
+  private readonly camForward = new THREE.Vector3()
+  private readonly tmpQuat = new THREE.Quaternion()
+  private readonly refWorld = new THREE.Vector3()
+  private readonly startWorld = new THREE.Vector3()
+  private readonly endWorld = new THREE.Vector3()
+  private readonly aeWorld = new THREE.Vector3()
+  private readonly beWorld = new THREE.Vector3()
+  private readonly dlWorld = new THREE.Vector3()
+  private readonly dimDirUnitWorld = new THREE.Vector3()
+  private readonly outDirWorld = new THREE.Vector3()
+  private readonly tmpWorldC = new THREE.Vector3()
+  private readonly tmpWorldD = new THREE.Vector3()
+  private readonly tmpWorldE = new THREE.Vector3()
+  private readonly tmpWorldF = new THREE.Vector3()
+  private readonly tmpWorldG = new THREE.Vector3()
 
   constructor(
     materials: AnnotationMaterials,
@@ -107,30 +134,44 @@ export class LinearDimension3D extends AnnotationBase {
       decimals: params.decimals ?? 1,
       fontUrl: params.fontUrl,
     }
-    this.materialSet = this.resolveMaterialSet(materials.green)
+    // SolveSpace: constraints/dimensions default to magenta
+    this.materialSet = this.resolveMaterialSet(materials.ssConstraintMagenta)
 
     // 创建几何体
-    this.dimLineGeometry = new LineGeometry()
-    this.ext1Geometry = new LineGeometry()
-    this.ext2Geometry = new LineGeometry()
+    this.dimLineGeometryA = new THREE.BufferGeometry()
+    this.dimLineGeometryB = new THREE.BufferGeometry()
+    this.dimLineGeometryOutside = new THREE.BufferGeometry()
+    this.ext1Geometry = new THREE.BufferGeometry()
+    this.ext2Geometry = new THREE.BufferGeometry()
+    this.arrowGeometry1 = new THREE.BufferGeometry()
+    this.arrowGeometry2 = new THREE.BufferGeometry()
 
-    // 创建尺寸线
-    this.dimensionLine = new Line2(this.dimLineGeometry, this.materialSet.line)
-    this.dimensionLine.userData.dragRole = 'offset'
-    this.add(this.dimensionLine)
+    // 创建尺寸线（SolveSpace: 可能被 label 留白切分）
+    this.dimensionLineA = new THREE.Line(this.dimLineGeometryA, this.materialSet.line)
+    this.dimensionLineB = new THREE.Line(this.dimLineGeometryB, this.materialSet.line)
+    this.dimensionLineOutside = new THREE.Line(this.dimLineGeometryOutside, this.materialSet.line)
+    for (const l of [this.dimensionLineA, this.dimensionLineB, this.dimensionLineOutside]) {
+      l.userData.dragRole = 'offset'
+      l.frustumCulled = false
+      this.add(l)
+    }
 
     // 创建尺寸界线
-    this.extensionLine1 = new Line2(this.ext1Geometry, this.materialSet.line)
-    this.extensionLine2 = new Line2(this.ext2Geometry, this.materialSet.line)
+    this.extensionLine1 = new THREE.Line(this.ext1Geometry, this.materialSet.line)
+    this.extensionLine2 = new THREE.Line(this.ext2Geometry, this.materialSet.line)
     this.extensionLine1.userData.dragRole = 'offset'
     this.extensionLine2.userData.dragRole = 'offset'
+    this.extensionLine1.frustumCulled = false
+    this.extensionLine2.frustumCulled = false
     this.add(this.extensionLine1, this.extensionLine2)
 
-    // 创建箭头
-    this.arrow1 = new THREE.Mesh(arrowGeometry, this.materialSet.mesh)
-    this.arrow2 = new THREE.Mesh(arrowGeometry, this.materialSet.mesh)
+    // 创建箭头（SolveSpace: V 形线段）
+    this.arrow1 = new THREE.LineSegments(this.arrowGeometry1, this.materialSet.line)
+    this.arrow2 = new THREE.LineSegments(this.arrowGeometry2, this.materialSet.line)
     this.arrow1.userData.dragRole = 'offset'
     this.arrow2.userData.dragRole = 'offset'
+    this.arrow1.frustumCulled = false
+    this.arrow2.frustumCulled = false
     this.add(this.arrow1, this.arrow2)
 
     // 吸附点标记（仅拖拽文字时临时显示）
@@ -157,17 +198,15 @@ export class LinearDimension3D extends AnnotationBase {
     }
     this.add(this.snapGroup)
 
-    // 创建 3D 文本标签（billboard）
-    const fontUrl = params.fontUrl ?? DEFAULT_DIMENSION_FONT_URL
-    this.textLabel = new TroikaBillboardText({
+    // 创建 SolveSpace 矢量文字标签（billboard）
+    this.textLabel = new SolveSpaceBillboardVectorText({
       text: '',
-      fontUrl,
-      fontSize: 0.18,
-      color: 0x22c55e,
-      outlineColor: 0x000000,
-      outlineWidth: 0.015,
+      materialNormal: this.materialSet.line,
+      materialHovered: this.materials.ssHovered.line,
+      materialSelected: this.materials.ssSelected.line,
     })
     this.textLabel.object3d.userData.dragRole = 'label'
+    this.textLabel.syncPickProxyUserData()
     this.add(this.textLabel.object3d)
 
     // 吸附提示线（拖拽文字时临时显示；不参与拾取；使用普通 Line 避免 LineMaterial 分辨率维护）
@@ -190,10 +229,12 @@ export class LinearDimension3D extends AnnotationBase {
     this.add(this.snapGuideLine)
 
     this.rebuild()
+    this.applyMaterials()
   }
 
   override update(camera: THREE.Camera): void {
     super.update(camera)
+    this._updateSolveSpaceGeometry(camera)
     this.textLabel.update(camera)
 
     // snap markers face camera + pulse (仅拖拽显示时)
@@ -212,7 +253,8 @@ export class LinearDimension3D extends AnnotationBase {
 
   /** 设置文字吸附提示（拖拽时用） */
   setLabelSnapActive(active: boolean): void {
-    this.textLabel.setSnapActive(active)
+    // SolveSpaceBillboardVectorText 不做 SDF 描边强化；保持 API 兼容即可。
+    void active
   }
 
   /** 吸附提示线显隐（拖拽文字时用） */
@@ -346,23 +388,265 @@ export class LinearDimension3D extends AnnotationBase {
     if (params.decimals !== undefined) this.params.decimals = params.decimals
     if (params.fontUrl !== undefined) this.params.fontUrl = params.fontUrl
     this.rebuild()
+    this.applyMaterials()
   }
 
   /** 设置材质颜色集 */
   setMaterialSet(materialSet: AnnotationMaterialSet): void {
     this.materialSet = materialSet
+    this.textLabel.setMaterials({ normal: this.materialSet.line })
     this.applyMaterials()
   }
 
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line
-    const meshMat = this._highlighted ? this.materialSet.meshHover : this.materialSet.mesh
+    // SolveSpace 风格：selected > hovered > normal
+    const state = this.interactionState
+    let solidLineMat: any
+    if (state === 'selected') {
+      solidLineMat = this.materials.ssSelected.line
+    } else if (state === 'hovered') {
+      solidLineMat = this.materials.ssHovered.line
+    } else {
+      solidLineMat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line
+    }
 
-    this.dimensionLine.material = mat
-    this.extensionLine1.material = mat
-    this.extensionLine2.material = mat
-    this.arrow1.material = meshMat
-    this.arrow2.material = meshMat
+    const lineMat = this.params.isReference ? this.getDashedLineMaterial(state, solidLineMat) : solidLineMat
+
+    this.dimensionLineA.material = lineMat
+    this.dimensionLineB.material = lineMat
+    this.dimensionLineOutside.material = lineMat
+    this.extensionLine1.material = lineMat
+    this.extensionLine2.material = lineMat
+    // SolveSpace: reference dims can be dashed, but arrow heads stay solid
+    this.arrow1.material = solidLineMat
+    this.arrow2.material = solidLineMat
+  }
+
+  private getDashedLineMaterial(state: 'normal' | 'hovered' | 'selected', solid: any): any {
+    let cached: any | null
+    if (state === 'selected') cached = this.dashedLineMatSelected
+    else if (state === 'hovered') cached = this.dashedLineMatHovered
+    else cached = this.dashedLineMatNormal
+
+    // Re-create if missing or if source material changed (e.g. setMaterialSet)
+    const src = (cached as any)?.__src as any | undefined
+    if (!cached || src !== solid) {
+      cached = solid.clone()
+      ;(cached as any).__src = solid
+      cached.dashed = true
+      // dash sizes are updated per-frame in _updateSolveSpaceGeometry (need wpp)
+
+      if (state === 'selected') this.dashedLineMatSelected = cached
+      else if (state === 'hovered') this.dashedLineMatHovered = cached
+      else this.dashedLineMatNormal = cached
+    }
+    return cached
+  }
+
+  private setLineGeometryFromWorld(
+    geom: THREE.BufferGeometry,
+    aWorld: THREE.Vector3,
+    bWorld: THREE.Vector3,
+    camera: THREE.Camera,
+    viewportWidthPx: number,
+    viewportHeightPx: number
+  ): void {
+    alignToPixelGrid(camera, aWorld, viewportWidthPx, viewportHeightPx, this.tempWorldA)
+    alignToPixelGrid(camera, bWorld, viewportWidthPx, viewportHeightPx, this.tempWorldB)
+
+    const aLocal = this.worldToLocal(this.tempLocalA.copy(this.tempWorldA))
+    const bLocal = this.worldToLocal(this.tempLocalB.copy(this.tempWorldB))
+    geom.setAttribute('position', new THREE.Float32BufferAttribute([
+      aLocal.x, aLocal.y, aLocal.z,
+      bLocal.x, bLocal.y, bLocal.z,
+    ], 3))
+  }
+
+  /**
+   * SolveSpace 风格几何更新（每帧，依赖 camera）。
+   *
+   * 对齐点：
+   * - 所有线段端点做 AlignToPixelGrid（对应 SolveSpace Constraint::DoLine）
+   *
+   * 样式：
+   * - 箭头：V 形两线段（13px, 18° half-angle）
+   * - 尺寸线：遇 label box 留白切分（DoLineTrimmedAgainstBox）
+   * - 界线：超出箭头端点 10px
+   */
+  private _updateSolveSpaceGeometry(camera: THREE.Camera): void {
+    const dpr = Math.max(1, Number((window as any)?.devicePixelRatio) || 1)
+    const vw = Math.max(1, Math.floor((window?.innerWidth ?? 1) * dpr))
+    const vh = Math.max(1, Math.floor((window?.innerHeight ?? 1) * dpr))
+
+    // Ensure world matrices are up to date for local<->world transforms
+    this.updateWorldMatrix(true, true)
+
+    // Camera display axes (SolveSpace: projRight/projUp)
+    this.camRight.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize()
+    this.camUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize()
+    this.camForward.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize()
+
+    // Label: align to pixel grid + compute world-per-pixel scale
+    this.textLabel.object3d.getWorldPosition(this.tmpWorldF)
+    alignToPixelGrid(camera, this.tmpWorldF, vw, vh, this.refWorld)
+    const wpp = worldPerPixelAt(camera, this.refWorld, vw, vh, this.wppTmp)
+    if (!Number.isFinite(wpp) || wpp <= 0) return
+
+    this.textLabel.setWorldPerPixel(wpp)
+    this.textLabel.object3d.position.copy(this.worldToLocal(this.tmpWorldG.copy(this.refWorld)))
+
+    // Key points in world space (keep in stable vectors to avoid aliasing)
+    const startW = this.localToWorld(this.startWorld.copy(this.params.start))
+    const endW = this.localToWorld(this.endWorld.copy(this.params.end))
+    const aeW = this.localToWorld(this.aeWorld.copy(this.dimStart))
+    const beW = this.localToWorld(this.beWorld.copy(this.dimEnd))
+
+    // Dimension line direction
+    const dlW = this.dlWorld.copy(beW).sub(aeW)
+    const dlLen = dlW.length()
+    if (dlLen < 1e-9) {
+      this.dimensionLineA.visible = false
+      this.dimensionLineB.visible = false
+      this.dimensionLineOutside.visible = false
+      this.arrow1.visible = false
+      this.arrow2.visible = false
+      return
+    }
+    const dirUnit = this.dimDirUnitWorld.copy(dlW).divideScalar(dlLen)
+
+    // Extension line direction (SolveSpace: out)
+    const outDirW = this.outDirWorld.copy(aeW).sub(startW)
+    if (outDirW.lengthSq() < 1e-12) {
+      outDirW.copy(this.camUp)
+    } else {
+      outDirW.normalize()
+    }
+
+    // Extension lines overshoot 10px
+    const ext = 10 * wpp
+    this.setLineGeometryFromWorld(
+      this.ext1Geometry,
+      startW,
+      this.tmpWorldF.copy(aeW).addScaledVector(outDirW, ext),
+      camera,
+      vw,
+      vh
+    )
+    this.setLineGeometryFromWorld(
+      this.ext2Geometry,
+      endW,
+      this.tmpWorldF.copy(beW).addScaledVector(outDirW, ext),
+      camera,
+      vw,
+      vh
+    )
+
+    // Label box size in world units (SolveSpace: +8px padding).
+    // 若字体尚未加载，extents 可能为 0；此时不做留白切分，避免出现错误 gap。
+    const extPx = this.textLabel.getExtentsPx()
+    const hasLabelBox = extPx.width > 0 && extPx.height > 0
+    const swidth = hasLabelBox ? (extPx.width + 8) * wpp : 0
+    const sheight = hasLabelBox ? (extPx.height + 8) * wpp : 0
+
+    const trim = hasLabelBox
+      ? lineTrimmedAgainstBoxT(this.refWorld, aeW, beW, this.camRight, this.camUp, swidth, sheight, true)
+      : ({ within: 0, segmentsT: [[0, 1]] } as const)
+
+    // Main trimmed segments (0..2)
+    const segs = trim.segmentsT
+    const toWorldAt = (t: number, out: THREE.Vector3) => out.copy(aeW).addScaledVector(dlW, t)
+
+    if (segs.length >= 1) {
+      const [t0, t1] = segs[0]!
+      this.dimensionLineA.visible = true
+      this.setLineGeometryFromWorld(this.dimLineGeometryA, toWorldAt(t0, this.tmpWorldF), toWorldAt(t1, this.tmpWorldG), camera, vw, vh)
+    } else {
+      this.dimensionLineA.visible = false
+    }
+
+    if (segs.length >= 2) {
+      const [t0, t1] = segs[1]!
+      this.dimensionLineB.visible = true
+      this.setLineGeometryFromWorld(this.dimLineGeometryB, toWorldAt(t0, this.tmpWorldF), toWorldAt(t1, this.tmpWorldG), camera, vw, vh)
+    } else {
+      this.dimensionLineB.visible = false
+    }
+
+    // Outside extension segment when label is outside the line (SolveSpace DoLineWithArrows)
+    if (trim.within !== 0) {
+      const segLen = 18 * wpp
+      const segVec = this.tmpWorldF.copy(dirUnit).multiplyScalar(segLen)
+      const sW = trim.within < 0 ? aeW : beW
+      const eW = trim.within < 0 ? this.tmpWorldG.copy(aeW).sub(segVec) : this.tmpWorldG.copy(beW).add(segVec)
+      this.dimensionLineOutside.visible = true
+      this.setLineGeometryFromWorld(this.dimLineGeometryOutside, sW, eW, camera, vw, vh)
+    } else {
+      this.dimensionLineOutside.visible = false
+    }
+
+    // Arrow heads (V shape): 13px, 18° half-angle
+    const theta = 18 * Math.PI / 180
+    const width = 13 * wpp
+    const legLen = width / Math.cos(theta)
+
+    // Plane normal for arrow rotation (SolveSpace: n = (a-b) x (a-ref))
+    const nW = this.tmpWorldC.copy(startW).sub(endW).cross(this.tmpWorldD.copy(startW).sub(this.refWorld))
+    if (nW.lengthSq() < 1e-12) {
+      nW.copy(this.camForward)
+    } else {
+      nW.normalize()
+    }
+
+    const arrowDir = this.tmpWorldD.copy(dirUnit)
+    if (trim.within !== 0) arrowDir.multiplyScalar(-1)
+
+    // Build arrow geometries in local space (with pixel-grid aligned endpoints)
+    const setArrow = (geom: THREE.BufferGeometry, tip: THREE.Vector3, dir: THREE.Vector3) => {
+      const e1 = this.tmpWorldE.copy(dir).applyAxisAngle(nW, +theta).setLength(legLen).add(tip)
+      const e2 = this.tmpWorldF.copy(dir).applyAxisAngle(nW, -theta).setLength(legLen).add(tip)
+
+      // Align each endpoint like SolveSpace DoLine() does
+      alignToPixelGrid(camera, tip, vw, vh, this.tempWorldA)
+      const pLocal = this.worldToLocal(this.tempLocalA.copy(this.tempWorldA))
+
+      alignToPixelGrid(camera, e1, vw, vh, this.tempWorldA)
+      const e1Local = this.worldToLocal(this.tempLocalB.copy(this.tempWorldA))
+
+      alignToPixelGrid(camera, e2, vw, vh, this.tempWorldA)
+      const e2Local = this.worldToLocal(this.tmpWorldG.copy(this.tempWorldA))
+
+      geom.setAttribute('position', new THREE.Float32BufferAttribute([
+        pLocal.x, pLocal.y, pLocal.z, e1Local.x, e1Local.y, e1Local.z,
+        pLocal.x, pLocal.y, pLocal.z, e2Local.x, e2Local.y, e2Local.z,
+      ], 3))
+    }
+
+    setArrow(this.arrowGeometry1, aeW, arrowDir)
+    setArrow(this.arrowGeometry2, beW, this.tmpWorldE.copy(arrowDir).multiplyScalar(-1))
+    this.arrow1.visible = true
+    this.arrow2.visible = true
+
+    // Reference dims: dashed/stippled lines (SolveSpace-like)
+    if (this.params.isReference) {
+      const updateDash = (m: any | null) => {
+        if (!m) return
+        // dash size in world units to match pixels
+        m.dashed = true
+        m.dashScale = 1
+        m.dashSize = 4 * wpp
+        m.gapSize = 4 * wpp
+      }
+      updateDash(this.dashedLineMatNormal)
+      updateDash(this.dashedLineMatHovered)
+      updateDash(this.dashedLineMatSelected)
+
+      // geometry distances are needed for dashed rendering
+      try { this.dimensionLineA.computeLineDistances() } catch { /* ignore */ }
+      try { this.dimensionLineB.computeLineDistances() } catch { /* ignore */ }
+      try { this.dimensionLineOutside.computeLineDistances() } catch { /* ignore */ }
+      try { this.extensionLine1.computeLineDistances() } catch { /* ignore */ }
+      try { this.extensionLine2.computeLineDistances() } catch { /* ignore */ }
+    }
   }
 
   /** 重建几何体 */
@@ -383,67 +667,42 @@ export class LinearDimension3D extends AnnotationBase {
       this.offsetDir.normalize()
     }
 
-    // 尺寸线端点
+    // 尺寸线端点（局部坐标）
     this.dimStart.copy(start).addScaledVector(this.offsetDir, offset)
     this.dimEnd.copy(end).addScaledVector(this.offsetDir, offset)
 
-    // 更新尺寸线几何
-    this.dimLineGeometry.setPositions([
+    // 先放一个占位几何；真正 SolveSpace 像素对齐/留白/箭头在每帧 update(camera) 中更新
+    this.dimLineGeometryA.setAttribute('position', new THREE.Float32BufferAttribute([
       this.dimStart.x, this.dimStart.y, this.dimStart.z,
       this.dimEnd.x, this.dimEnd.y, this.dimEnd.z,
-    ])
+    ], 3))
+    this.dimensionLineA.visible = true
+    this.dimLineGeometryB.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3))
+    this.dimensionLineB.visible = false
+    this.dimLineGeometryOutside.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3))
+    this.dimensionLineOutside.visible = false
 
-    // 更新尺寸界线几何
-    const extGap = 0.03 * Math.abs(offset)
-    const extOvershoot = 0.08 * Math.abs(offset)
-    const signedOffset = offset >= 0 ? 1 : -1
+    // 占位界线（无像素 overshoot，后续在 update(camera) 里按 SolveSpace 10px 逻辑更新）
+    this.ext1Geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+      start.x, start.y, start.z,
+      this.dimStart.x, this.dimStart.y, this.dimStart.z,
+    ], 3))
+    this.ext2Geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+      end.x, end.y, end.z,
+      this.dimEnd.x, this.dimEnd.y, this.dimEnd.z,
+    ], 3))
 
-    // 界线1：从 start 向 dimStart
-    const ext1Start = this.tempVec.copy(start).addScaledVector(this.offsetDir, extGap * signedOffset)
-    const ext1End = this.tempVec2.copy(this.dimStart).addScaledVector(this.offsetDir, extOvershoot * signedOffset)
-    this.ext1Geometry.setPositions([
-      ext1Start.x, ext1Start.y, ext1Start.z,
-      ext1End.x, ext1End.y, ext1End.z,
-    ])
-
-    // 界线2：从 end 向 dimEnd
-    const ext2Start = this.tempVec.copy(end).addScaledVector(this.offsetDir, extGap * signedOffset)
-    const ext2End = this.tempVec2.copy(this.dimEnd).addScaledVector(this.offsetDir, extOvershoot * signedOffset)
-    this.ext2Geometry.setPositions([
-      ext2Start.x, ext2Start.y, ext2Start.z,
-      ext2End.x, ext2End.y, ext2End.z,
-    ])
-
-    // 更新箭头位置和朝向
-    const dimDir = this.tempVec.copy(this.dimEnd).sub(this.dimStart).normalize()
-    this.arrow1.position.copy(this.dimStart)
-    this.arrow1.quaternion.setFromUnitVectors(xAxis, dimDir)
-    this.arrow2.position.copy(this.dimEnd)
-    this.arrow2.quaternion.setFromUnitVectors(xAxis, dimDir.clone().negate())
-
-    // 参考尺寸样式（灰色半透明）
-    if (this.params.isReference) {
-      this.dimensionLine.visible = true
-      this.extensionLine1.visible = true
-      this.extensionLine2.visible = true
-      // 视觉区分：降低不透明度
-      const setRefOpacity = (obj: any) => {
-        try {
-          const m = obj.material
-          if (m) { m.opacity = 0.4; m.transparent = true }
-        } catch { /* ignore */ }
-      }
-      setRefOpacity(this.dimensionLine)
-      setRefOpacity(this.extensionLine1)
-      setRefOpacity(this.extensionLine2)
-      setRefOpacity(this.arrow1)
-      setRefOpacity(this.arrow2)
-    }
+    // 占位箭头（隐藏），后续在 update(camera) 中按 13px/18° 生成 V 形
+    this.arrowGeometry1.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3))
+    this.arrowGeometry2.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3))
+    this.arrow1.visible = false
+    this.arrow2.visible = false
 
     // 更新文本
     let displayText = this.params.text || `${distance.toFixed(this.params.decimals)}${this.params.unit}`
-    if (this.params.isReference && !displayText.startsWith('REF ')) {
-      displayText = `REF ${displayText}`
+    // SolveSpace: reference label suffix " REF"
+    if (this.params.isReference && !displayText.endsWith(' REF')) {
+      displayText = `${displayText} REF`
     }
     this.lastDisplayText = displayText
     this.textLabel.setText(displayText)
@@ -466,26 +725,34 @@ export class LinearDimension3D extends AnnotationBase {
   }
 
   protected override onScaleFactorChanged(factor: number): void {
-    this.arrow1.scale.setScalar(factor)
-    this.arrow2.scale.setScalar(factor)
-    this.textLabel.setScale(factor)
     this.snapScaleBase = factor
+  }
+
+  override setBackgroundColor(color: THREE.ColorRepresentation): void {
+    this.textLabel.setBackgroundColor(color)
   }
 
   protected onHighlightChanged(highlighted: boolean): void {
     this.applyMaterials()
-    this.textLabel.setHighlighted(highlighted)
+    this.textLabel.setInteractionState(this.interactionState)
   }
 
   override dispose(): void {
-    this.dimLineGeometry.dispose()
+    this.dimLineGeometryA.dispose()
+    this.dimLineGeometryB.dispose()
+    this.dimLineGeometryOutside.dispose()
     this.ext1Geometry.dispose()
     this.ext2Geometry.dispose()
+    this.arrowGeometry1.dispose()
+    this.arrowGeometry2.dispose()
     this.textLabel.dispose()
     this.snapGuideGeometry.dispose()
     this.snapGuideMaterial.dispose()
     this.snapMarkerMat.dispose()
     this.snapMarkerMatActive.dispose()
+    try { this.dashedLineMatNormal?.dispose?.() } catch { /* ignore */ }
+    try { this.dashedLineMatHovered?.dispose?.() } catch { /* ignore */ }
+    try { this.dashedLineMatSelected?.dispose?.() } catch { /* ignore */ }
     super.dispose()
   }
 }

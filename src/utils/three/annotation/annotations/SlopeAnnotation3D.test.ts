@@ -7,22 +7,6 @@ describe('SlopeAnnotation3D', () => {
   })
 
   it('should construct and toggle label visibility', async () => {
-    vi.mock('troika-three-text', () => {
-      class FakeText extends THREE.Mesh {
-        text = ''
-        color: any
-        outlineColor: any
-        outlineWidth = 0
-        font = ''
-        fontSize = 1
-        anchorX: any
-        anchorY: any
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        sync() {}
-      }
-      return { Text: FakeText }
-    })
-
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials')
     const { SlopeAnnotation3D } = await import('./SlopeAnnotation3D')
 
@@ -37,9 +21,10 @@ describe('SlopeAnnotation3D', () => {
     expect(ann.getParams().text).toBe('1:100')
     ann.setLabelVisible(false)
 
-    const textChild = ann.children.find((c: any) => typeof (c as any)?.text === 'string') as any
-    expect(textChild).toBeTruthy()
-    expect(textChild.visible).toBe(false)
+    // SolveSpaceBillboardVectorText.object3d is a Group (LineSegments + pickProxy)
+    const textGroup = ann.children.find((c: any) => c.isGroup && c.children?.some((cc: any) => cc.isLineSegments)) as any
+    expect(textGroup).toBeTruthy()
+    expect(textGroup.visible).toBe(false)
 
     ann.dispose()
     materials.dispose()

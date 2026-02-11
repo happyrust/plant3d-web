@@ -275,6 +275,9 @@ function main(): void {
     slope1,
   ]
 
+  // Set text background occlusion color to match scene background
+  for (const a of allAnnotations) a.setBackgroundColor(0x0b1020)
+
   // ─── 渲染循环 ───────────────────────────────────────
   function resize(): void {
     const w = canvas!.clientWidth || window.innerWidth

@@ -1,10 +1,7 @@
 import * as THREE from 'three'
-import { Line2 } from 'three/examples/jsm/lines/Line2.js'
-import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
 import { AnnotationBase, type AnnotationOptions } from '../core/AnnotationBase'
 import type { AnnotationMaterials, AnnotationMaterialSet } from '../core/AnnotationMaterials'
-import { TroikaBillboardText } from '../text/TroikaBillboardText'
-import { DEFAULT_DIMENSION_FONT_URL } from '../text/defaultFontUrl'
+import { SolveSpaceBillboardVectorText } from '../text/SolveSpaceBillboardVectorText'
 
 export interface SlopeAnnotation3DParams {
   /** 起点 */
@@ -15,17 +12,17 @@ export interface SlopeAnnotation3DParams {
   text: string
   /** 坡度值（可选，仅保留字段以兼容后端） */
   slope?: number
-  /** 字体 URL（默认使用内置 Roboto Mono woff） */
-  fontUrl?: string
+  /** 文字世界偏移（拖拽后保存） */
+  labelOffsetWorld?: THREE.Vector3 | null
 }
 
 export class SlopeAnnotation3D extends AnnotationBase {
-  private params: Required<Omit<SlopeAnnotation3DParams, 'slope' | 'fontUrl'>> & { slope?: number; fontUrl?: string }
+  private params: Required<Omit<SlopeAnnotation3DParams, 'slope' | 'labelOffsetWorld'>> & { slope?: number; labelOffsetWorld: THREE.Vector3 | null }
   private materialSet: AnnotationMaterialSet
 
-  private slopeLine: Line2
-  private lineGeometry: LineGeometry
-  private textLabel: TroikaBillboardText
+  private slopeLine: THREE.Line
+  private lineGeometry: THREE.BufferGeometry
+  private textLabel: SolveSpaceBillboardVectorText
   private readonly _delta = new THREE.Vector3()
 
   constructor(
@@ -40,23 +37,22 @@ export class SlopeAnnotation3D extends AnnotationBase {
       end: params.end.clone(),
       text: params.text,
       slope: params.slope,
-      fontUrl: params.fontUrl,
+      labelOffsetWorld: params.labelOffsetWorld?.clone() ?? null,
     }
     this.materialSet = this.resolveMaterialSet(materials.blue)
 
-    this.lineGeometry = new LineGeometry()
-    this.slopeLine = new Line2(this.lineGeometry, this.materialSet.line)
+    this.lineGeometry = new THREE.BufferGeometry()
+    this.slopeLine = new THREE.Line(this.lineGeometry, this.materialSet.line)
+    this.slopeLine.userData.dragRole = 'offset'
     this.add(this.slopeLine)
 
-    const fontUrl = params.fontUrl ?? DEFAULT_DIMENSION_FONT_URL
-    this.textLabel = new TroikaBillboardText({
+    this.textLabel = new SolveSpaceBillboardVectorText({
       text: '',
-      fontUrl,
-      fontSize: 0.18,
-      color: 0x3b82f6,
-      outlineColor: 0x000000,
-      outlineWidth: 0.015,
+      materialNormal: this.materialSet.line,
+      materialHovered: materials.ssHovered.line,
+      materialSelected: materials.ssSelected.line,
     })
+    this.textLabel.object3d.userData.dragRole = 'label'
     this.add(this.textLabel.object3d)
 
     this.rebuild()
@@ -78,7 +74,7 @@ export class SlopeAnnotation3D extends AnnotationBase {
       end: this.params.end.clone(),
       text: this.params.text,
       slope: this.params.slope,
-      fontUrl: this.params.fontUrl,
+      labelOffsetWorld: this.params.labelOffsetWorld?.clone() ?? null,
     }
   }
 
@@ -87,7 +83,9 @@ export class SlopeAnnotation3D extends AnnotationBase {
     if (params.end) this.params.end.copy(params.end)
     if (params.text !== undefined) this.params.text = params.text
     if (params.slope !== undefined) this.params.slope = params.slope
-    if (params.fontUrl !== undefined) this.params.fontUrl = params.fontUrl
+    if ('labelOffsetWorld' in params) {
+      this.params.labelOffsetWorld = params.labelOffsetWorld?.clone() ?? null
+    }
     this.rebuild()
   }
 
@@ -96,26 +94,50 @@ export class SlopeAnnotation3D extends AnnotationBase {
     this.applyMaterials()
   }
 
+  /** 获取默认文字位置（本地坐标，用于拖拽偏移计算） */
+  getDefaultLabelLocalPos(): THREE.Vector3 {
+    return this._delta.clone().multiplyScalar(0.5)
+  }
+
+  /** 获取默认文字世界位置（用于拖拽偏移计算） */
+  getDefaultLabelWorldPos(): THREE.Vector3 {
+    const local = this.getDefaultLabelLocalPos()
+    return this.localToWorld(local)
+  }
+
   private rebuild(): void {
-    const { start, end, text } = this.params
+    const { start, end, text, labelOffsetWorld } = this.params
 
     // root = start，线段与文字均用相对坐标，避免全局缩放/缩放独立时漂移
     this.position.copy(start)
     this._delta.copy(end).sub(start)
 
-    this.lineGeometry.setPositions([
+    this.lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
       0, 0, 0,
       this._delta.x, this._delta.y, this._delta.z,
-    ])
+    ], 3))
 
     // two-line text
     this.textLabel.setText(`${text}\n坡度`)
-    this.textLabel.object3d.position.copy(this._delta).multiplyScalar(0.5)
+    const labelPos = this._delta.clone().multiplyScalar(0.5)
+    if (labelOffsetWorld) {
+      labelPos.add(labelOffsetWorld)
+    }
+    this.textLabel.object3d.position.copy(labelPos)
   }
 
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line
-    this.slopeLine.material = mat
+    // SolveSpace 风格：selected > hovered > normal
+    const state = this.interactionState
+    let lineMat: any
+    if (state === 'selected') {
+      lineMat = this.materials.ssSelected.line
+    } else if (state === 'hovered') {
+      lineMat = this.materials.ssHovered.line
+    } else {
+      lineMat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line
+    }
+    this.slopeLine.material = lineMat
   }
 
   protected override onScaleFactorChanged(factor: number): void {
@@ -123,9 +145,13 @@ export class SlopeAnnotation3D extends AnnotationBase {
     this.textLabel.setScale(factor)
   }
 
+  override setBackgroundColor(color: THREE.ColorRepresentation): void {
+    this.textLabel.setBackgroundColor(color)
+  }
+
   protected onHighlightChanged(highlighted: boolean): void {
     this.applyMaterials()
-    this.textLabel.setHighlighted(highlighted)
+    this.textLabel.setInteractionState(this.interactionState)
   }
 
   override dispose(): void {

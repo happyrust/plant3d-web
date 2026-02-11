@@ -94,8 +94,10 @@ describe('AnnotationInteractionController', () => {
       expect(controller.selectedId.value).toBe('dim1')
     })
 
-    it('should highlight selected annotation', () => {
+    it('should set selected state on annotation (SolveSpace: red)', () => {
       controller.select('dim1')
+      expect(annotations.get('dim1')?.selected).toBe(true)
+      // highlighted is hovered || selected, so should also be true
       expect(annotations.get('dim1')?.highlighted).toBe(true)
     })
 
@@ -104,8 +106,8 @@ describe('AnnotationInteractionController', () => {
       controller.select('dim2')
 
       expect(controller.selectedId.value).toBe('dim2')
-      expect(annotations.get('dim1')?.highlighted).toBe(false)
-      expect(annotations.get('dim2')?.highlighted).toBe(true)
+      expect(annotations.get('dim1')?.selected).toBe(false)
+      expect(annotations.get('dim2')?.selected).toBe(true)
     })
 
     it('should clear selection when passing null', () => {
@@ -113,7 +115,18 @@ describe('AnnotationInteractionController', () => {
       controller.select(null)
 
       expect(controller.selectedId.value).toBeNull()
-      expect(annotations.get('dim1')?.highlighted).toBe(false)
+      expect(annotations.get('dim1')?.selected).toBe(false)
+    })
+
+    it('should have interactionState=selected when selected', () => {
+      controller.select('dim1')
+      expect(annotations.get('dim1')?.interactionState).toBe('selected')
+    })
+
+    it('should have interactionState=normal after deselect', () => {
+      controller.select('dim1')
+      controller.select(null)
+      expect(annotations.get('dim1')?.interactionState).toBe('normal')
     })
 
     it('should not trigger if same id selected', () => {
