@@ -38,6 +38,12 @@ import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
 import { useMbdPipeAnnotationThree } from "@/composables/useMbdPipeAnnotationThree";
 import { useAnnotationThree } from "@/composables/useAnnotationThree";
+import {
+    createLatestOnlyGate,
+    ExternalAnnotationRegistry,
+    shouldClearMbdRequest,
+    type MbdPipeAnnotationRequestLike,
+} from "@/composables/mbd/mbdRequestSync";
 import { DimensionAnnotationManager } from "@/composables/useDimensionAnnotation";
 import { useToolStore, type DimensionKind } from "@/composables/useToolStore";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
@@ -312,6 +318,7 @@ let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offMbdPipeWatch: (() => void) | null = null;
+let offMbdPipeDataWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
@@ -324,6 +331,8 @@ let dtxGlobalTransformAppliedKey: string | null = null;
 let dtxAutoFitAppliedKey: string | null = null;
 let activeDbno: number | null = null;
 let tileLodInitializedDbno: number | null = null;
+const mbdRequestGate = createLatestOnlyGate();
+const mbdInteractionRegistry = new ExternalAnnotationRegistry();
 
 function readDtxScaleConfigFromUrl(): {
     scale: number;
@@ -707,6 +716,53 @@ function setAutoNearestMode(
     requestRender();
 }
 
+function syncMbdAnnotationsToInteraction(): void {
+    const annotationSystem = annotationSystemRef.value;
+    const mbdPipeVis = mbdPipeVisRef.value;
+    if (!annotationSystem || !mbdPipeVis) return;
+
+    const nextIds = new Set<string>();
+
+    for (const [dimId, dim] of mbdPipeVis.getDimAnnotations()) {
+        const interactionId = `mbd_dim_${dimId}`;
+        annotationSystem.registerExternalAnnotation(interactionId, dim as any);
+        nextIds.add(interactionId);
+    }
+    for (const [weldId, weld] of mbdPipeVis.getWeldAnnotations()) {
+        const interactionId = `mbd_weld_${weldId}`;
+        annotationSystem.registerExternalAnnotation(interactionId, weld as any);
+        nextIds.add(interactionId);
+    }
+    for (const [slopeId, slope] of mbdPipeVis.getSlopeAnnotations()) {
+        const interactionId = `mbd_slope_${slopeId}`;
+        annotationSystem.registerExternalAnnotation(interactionId, slope as any);
+        nextIds.add(interactionId);
+    }
+
+    mbdInteractionRegistry.sync(
+        nextIds,
+        () => {
+            // MBD 标注已在前面 register，这里只需同步 registry 集合。
+        },
+        (id) => {
+            annotationSystem.unregisterExternalAnnotation(id);
+        },
+    );
+}
+
+function clearMbdAnnotationsFromInteraction(): void {
+    const annotationSystem = annotationSystemRef.value;
+    if (!annotationSystem) {
+        mbdInteractionRegistry.clear(() => {
+            // ignore
+        });
+        return;
+    }
+    mbdInteractionRegistry.clear((id) => {
+        annotationSystem.unregisterExternalAnnotation(id);
+    });
+}
+
 function handleRibbonCommand(commandId: string) {
     switch (commandId) {
         case "viewer.hide_selected":
@@ -861,6 +917,7 @@ function handleRibbonCommand(commandId: string) {
             return;
         case "mbd.clear":
             mbdPipeVisRef.value?.clearAll();
+            clearMbdAnnotationsFromInteraction();
             requestRender();
             return;
         case "mbd.settings":
@@ -878,6 +935,7 @@ function handleRibbonCommand(commandId: string) {
             store.clearAll();
             ptsetVisRef.value?.clearAll();
             mbdPipeVisRef.value?.clearAll();
+            clearMbdAnnotationsFromInteraction();
             requestRender();
             return;
     }
@@ -1714,6 +1772,15 @@ onMounted(async () => {
             dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
     });
     mbdPipeVisRef.value = mbdPipeVis;
+    offMbdPipeDataWatch?.();
+    offMbdPipeDataWatch = watch(
+        () => mbdPipeVis.currentData.value,
+        (data) => {
+            if (data) return;
+            clearMbdAnnotationsFromInteraction();
+        },
+        { immediate: true },
+    );
 
     // mbd_pipe demo：不依赖后端，直接注入模拟管道几何体 + 标注
     if (demoMode === "mbd_pipe") {
@@ -2253,26 +2320,6 @@ onMounted(async () => {
         console.warn("[ViewerPanel] 尺寸标注管理器初始化失败", e);
     }
 
-    // 将 MBD 标注注册到标注交互系统（使其可 pick/drag/contextmenu）
-    function syncMbdAnnotationsToInteraction(): void {
-        if (!mbdPipeVisRef.value || !annotationSystemRef.value) return;
-        const dimMap = mbdPipeVisRef.value.getDimAnnotations();
-        for (const [dimId, dim] of dimMap) {
-            const interactionId = `mbd_dim_${dimId}`;
-            annotationSystemRef.value.registerExternalAnnotation(interactionId, dim as any);
-        }
-        const weldMap = mbdPipeVisRef.value.getWeldAnnotations();
-        for (const [weldId, weld] of weldMap) {
-            const interactionId = `mbd_weld_${weldId}`;
-            annotationSystemRef.value.registerExternalAnnotation(interactionId, weld as any);
-        }
-        const slopeMap = mbdPipeVisRef.value.getSlopeAnnotations();
-        for (const [slopeId, slope] of slopeMap) {
-            const interactionId = `mbd_slope_${slopeId}`;
-            annotationSystemRef.value.registerExternalAnnotation(interactionId, slope as any);
-        }
-    }
-
     // 对 mbd_pipe demo：此时标注已在 renderBranch 中创建，注册到交互系统
     if (demoMode === "mbd_pipe") {
         try {
@@ -2731,6 +2778,11 @@ onMounted(async () => {
         () => store.mbdPipeAnnotationRequest.value,
         async (request) => {
             if (!request) return;
+            const handledRequest: MbdPipeAnnotationRequestLike = {
+                refno: request.refno,
+                timestamp: request.timestamp,
+            };
+            const requestSeq = mbdRequestGate.issue();
             try {
                 try {
                     ensurePanelAndActivate("mbdPipe");
@@ -2750,6 +2802,7 @@ onMounted(async () => {
                 } catch (e) {
                     console.warn("[mbd-pipe] 预加载模型失败（将继续生成标注）", e);
                 }
+                if (!mbdRequestGate.isLatest(requestSeq)) return;
 
                 // 标注按需获取：尽量带上 dbno + batch_id（来自 meta_{dbno}.json）以确保与当前模型快照一致。
                 let dbno: number | null = null;
@@ -2786,6 +2839,7 @@ onMounted(async () => {
                     include_welds: true,
                     include_slopes: true,
                 });
+                if (!mbdRequestGate.isLatest(requestSeq)) return;
                 if (resp.success && resp.data) {
                     mbdPipeVis.renderBranch(resp.data);
                     mbdPipeVis.flyTo();
@@ -2797,14 +2851,18 @@ onMounted(async () => {
                     requestRender();
                 } else {
                     const msg = resp.error_message || "生成管道标注失败";
+                    clearMbdAnnotationsFromInteraction();
                     emitToast({ message: msg });
                     console.warn("[mbd-pipe]", msg);
                 }
             } catch (e) {
                 console.error("[mbd-pipe] Failed to load:", e);
+                clearMbdAnnotationsFromInteraction();
                 emitToast({ message: "生成管道标注失败" });
             } finally {
-                store.clearMbdPipeAnnotationRequest();
+                if (shouldClearMbdRequest(store.mbdPipeAnnotationRequest.value, handledRequest)) {
+                    store.clearMbdPipeAnnotationRequest();
+                }
             }
         },
         { immediate: true },
@@ -2931,6 +2989,11 @@ onUnmounted(() => {
 
     offMbdPipeWatch?.();
     offMbdPipeWatch = null;
+
+    offMbdPipeDataWatch?.();
+    offMbdPipeDataWatch = null;
+
+    clearMbdAnnotationsFromInteraction();
 
     try {
         ptsetVisRef.value?.clearAll();
