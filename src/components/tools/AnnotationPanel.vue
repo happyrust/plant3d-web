@@ -245,6 +245,13 @@ const pendingObbDescription = ref('');
 const showTextEditDialog = ref(false);
 const pendingTextTitle = ref('');
 const pendingTextDescription = ref('');
+// 获取待编辑文字批注的关联 refno
+const pendingAnnotationRefno = computed(() => {
+  const id = store.pendingTextAnnotationEditId.value;
+  if (!id) return null;
+  const rec = store.annotations.value.find((a) => a.id === id);
+  return rec?.refno || null;
+});
 
 watch(() => store.pendingObbEditId.value, (id) => {
   if (id) {
@@ -483,6 +490,12 @@ function formatCommentTime(timestamp: number): string {
       <div class="w-80 rounded-lg border border-border bg-background p-4 shadow-xl">
         <div class="text-base font-semibold">编辑文字批注</div>
         <div class="mt-1 text-xs text-muted-foreground">图钉已创建，请输入批注信息</div>
+        <!-- 显示关联构件 refno -->
+        <div v-if="pendingAnnotationRefno" class="mt-2 flex items-center gap-1 text-xs">
+          <span class="text-muted-foreground">关联构件：</span>
+          <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-blue-600 dark:bg-blue-950 dark:text-blue-400">{{ pendingAnnotationRefno }}</span>
+        </div>
+        <div v-else class="mt-2 text-xs text-muted-foreground/60">未关联构件</div>
 
         <div class="mt-4 flex flex-col gap-3">
           <div>
@@ -620,6 +633,7 @@ function formatCommentTime(timestamp: number): string {
               <div class="truncate text-sm">
                 <span class="font-semibold">{{ a.glyph }}</span>
                 <span class="ml-2">{{ a.title }}</span>
+                <span v-if="a.refno" class="ml-1 inline-block rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950 dark:text-blue-400" :title="'RefNo: ' + a.refno">{{ a.refno }}</span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
             </div>
@@ -693,6 +707,12 @@ function formatCommentTime(timestamp: number): string {
               class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
               @click.stop="flyCloud(a.id)">
               定位
+            </button>
+
+            <button v-if="a.refnos && a.refnos.length > 0" type="button"
+              class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+              @click.stop="highlightCloudRefnos(a.refnos)">
+              高亮
             </button>
 
             <button type="button"
@@ -800,6 +820,12 @@ function formatCommentTime(timestamp: number): string {
               class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
               @click.stop="flyObb(a.id)">
               定位
+            </button>
+
+            <button v-if="(a.refnos && a.refnos.length > 0) || a.objectIds.length > 0" type="button"
+              class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+              @click.stop="highlightObbRefnos(a.refnos && a.refnos.length > 0 ? a.refnos : a.objectIds)">
+              高亮
             </button>
 
             <button type="button"

@@ -65,6 +65,7 @@ export type UseMbdPipeAnnotationThreeReturn = {
   activeItemId: Ref<string | null>
 
   renderBranch: (data: MbdPipeData) => void
+  renderDemoDims: () => void
   clearAll: () => void
   flyTo: () => void
   updateLabelPositions: () => void
@@ -225,7 +226,7 @@ export function useMbdPipeAnnotationThree(
     // 清理管段骨架线
     for (const line of segmentLines.value.values()) {
       try {
-        ;(line.geometry as BufferGeometry)?.dispose?.()
+        ; (line.geometry as BufferGeometry)?.dispose?.()
       } catch {
         // ignore
       }
@@ -372,7 +373,7 @@ export function useMbdPipeAnnotationThree(
       // 可交互：MBD dims 在当前会话内支持拖拽调整
       dim.userData.pickable = true
       dim.userData.draggable = true
-      ;(dim.userData as any).mbdDimId = d.id
+        ; (dim.userData as any).mbdDimId = d.id
 
       // 颜色仅用于快速区分不同尺寸语义；屏幕布局/避让由前端负责。
       if (kind === 'segment') dim.setMaterialSet(materials.green)
@@ -380,7 +381,7 @@ export function useMbdPipeAnnotationThree(
       else if (kind === 'overall') dim.setMaterialSet(materials.white)
       else dim.setMaterialSet(materials.blue) // port
 
-      ;(dim.userData as any).mbdDimKind = kind
+        ; (dim.userData as any).mbdDimKind = kind
       group.add(dim)
       dimAnnotations.value.set(d.id, dim)
     }
@@ -400,7 +401,7 @@ export function useMbdPipeAnnotationThree(
       // 可交互：MBD welds 支持拖拽调整文字位置
       weld.userData.pickable = true
       weld.userData.draggable = true
-      ;(weld.userData as any).mbdWeldId = w.id
+        ; (weld.userData as any).mbdWeldId = w.id
 
       weld.setMaterialSet(materials.orange)
       group.add(weld)
@@ -423,7 +424,7 @@ export function useMbdPipeAnnotationThree(
       // 可交互：MBD slopes 支持拖拽调整文字位置
       slope.userData.pickable = true
       slope.userData.draggable = true
-      ;(slope.userData as any).mbdSlopeId = s.id
+        ; (slope.userData as any).mbdSlopeId = s.id
 
       slope.setMaterialSet(materials.blue)
       group.add(slope)
@@ -482,6 +483,63 @@ export function useMbdPipeAnnotationThree(
     applyVisibility()
     applyLabelVisibility()
     requestRender?.()
+  }
+
+  function renderDemoDims(): void {
+    const data: MbdPipeData = {
+      input_refno: 'demo-input',
+      branch_refno: 'demo-branch',
+      branch_name: 'Demo Branch',
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      dims: [
+        // 1. 正常长管段
+        {
+          id: 'dim-normal',
+          kind: 'segment',
+          start: [0, 0, 0],
+          end: [2.0, 0, 0],
+          length: 2.0,
+          text: '2000',
+        },
+        // 2. 稍短管段
+        {
+          id: 'dim-short-1',
+          kind: 'segment',
+          start: [2.0, 0, 0],
+          end: [2.5, 0, 0],
+          length: 0.5,
+          text: '500',
+        },
+        // 3. 极短管段 (触发自动箭头外置翻转)
+        {
+          id: 'dim-short-2',
+          kind: 'segment',
+          start: [2.5, 0, 0],
+          end: [2.6, 0, 0],
+          length: 0.1,
+          text: '100',
+        },
+        // 4. 重叠密集极短管段连段
+        {
+          id: 'dim-short-3',
+          kind: 'segment',
+          start: [2.6, 0, 0],
+          end: [2.65, 0, 0],
+          length: 0.05,
+          text: '50',
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 4,
+        welds_count: 0,
+        slopes_count: 0,
+      },
+    }
+    renderBranch(data)
   }
 
   function flyTo(): void {
@@ -706,6 +764,7 @@ export function useMbdPipeAnnotationThree(
     currentData,
     activeItemId,
     renderBranch,
+    renderDemoDims,
     clearAll,
     flyTo,
     updateLabelPositions,

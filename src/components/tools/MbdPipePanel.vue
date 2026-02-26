@@ -140,6 +140,11 @@ function setActive(id: string | null) {
       <div class="flex items-center gap-2">
         <button type="button"
           class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+          @click="vis.renderDemoDims">
+          测试标注
+        </button>
+        <button type="button"
+          class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
           @click="vis.flyTo">
           飞行
         </button>

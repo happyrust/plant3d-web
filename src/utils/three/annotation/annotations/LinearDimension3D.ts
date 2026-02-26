@@ -589,6 +589,10 @@ export class LinearDimension3D extends AnnotationBase {
     const width = 13 * wpp
     const legLen = width / Math.cos(theta)
 
+    // Arrow Reversing Logic: if distance is too small to fit arrows + label
+    const minSpaceForArrows = 2 * legLen + swidth
+    const isArrowReversed = dlLen < minSpaceForArrows
+
     // Plane normal for arrow rotation (SolveSpace: n = (a-b) x (a-ref))
     const nW = this.tmpWorldC.copy(startW).sub(endW).cross(this.tmpWorldD.copy(startW).sub(this.refWorld))
     if (nW.lengthSq() < 1e-12) {
@@ -597,8 +601,12 @@ export class LinearDimension3D extends AnnotationBase {
       nW.normalize()
     }
 
-    const arrowDir = this.tmpWorldD.copy(dirUnit)
-    if (trim.within !== 0) arrowDir.multiplyScalar(-1)
+    const arrowDir = this.tempWorldB.copy(dirUnit)
+    // If inside label box, reverse arrow to point outward from box.
+    // If space too small, reverse arrow completely so it sits *outside* the extension lines.
+    if (trim.within !== 0 || isArrowReversed) {
+      arrowDir.multiplyScalar(-1)
+    }
 
     // Build arrow geometries in local space (with pixel-grid aligned endpoints)
     const setArrow = (geom: THREE.BufferGeometry, tip: THREE.Vector3, dir: THREE.Vector3) => {
@@ -621,8 +629,38 @@ export class LinearDimension3D extends AnnotationBase {
       ], 3))
     }
 
-    setArrow(this.arrowGeometry1, aeW, arrowDir)
-    setArrow(this.arrowGeometry2, beW, this.tmpWorldE.copy(arrowDir).multiplyScalar(-1))
+    // Calculate actual tip positions
+    // If reversed, the arrows are moved *outside* the dimension boundaries.
+    const tip1 = this.tmpWorldC.copy(aeW)
+    const tip2 = this.tmpWorldD.copy(beW)
+    
+    if (isArrowReversed) {
+      tip1.addScaledVector(dirUnit, -legLen)
+      tip2.addScaledVector(dirUnit, legLen)
+      
+      // Also need to extend the outer lines to meet these new arrow positions
+      const segLen = Math.max(18 * wpp, legLen + 5 * wpp) // ensure line extends past the reversed arrow
+      const segVec = this.tmpWorldE.copy(dirUnit).multiplyScalar(segLen)
+      
+      // Redraw outside lines since the standard trim logic doesn't know about arrow reversing
+      const eW1 = this.tmpWorldF.copy(aeW).sub(segVec)
+      const eW2 = this.tmpWorldG.copy(beW).add(segVec)
+      
+      this.dimensionLineOutside.visible = true
+      // We overwrite the geometry to contain BOTH outside segments instead of just one side
+      const p1Local = this.worldToLocal(new THREE.Vector3().copy(aeW))
+      const e1Local = this.worldToLocal(new THREE.Vector3().copy(eW1))
+      const p2Local = this.worldToLocal(new THREE.Vector3().copy(beW))
+      const e2Local = this.worldToLocal(new THREE.Vector3().copy(eW2))
+      
+      this.dimLineGeometryOutside.setAttribute('position', new THREE.Float32BufferAttribute([
+        p1Local.x, p1Local.y, p1Local.z, e1Local.x, e1Local.y, e1Local.z,
+        p2Local.x, p2Local.y, p2Local.z, e2Local.x, e2Local.y, e2Local.z,
+      ], 3))
+    }
+
+    setArrow(this.arrowGeometry1, tip1, arrowDir)
+    setArrow(this.arrowGeometry2, tip2, this.tmpWorldE.copy(arrowDir).multiplyScalar(-1))
     this.arrow1.visible = true
     this.arrow2.visible = true
 

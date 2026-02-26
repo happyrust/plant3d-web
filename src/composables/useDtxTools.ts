@@ -662,9 +662,9 @@ export function useDtxTools(options: {
 
       if (m.kind === 'distance') {
         const lineMat = new LineBasicMaterial({ color: 0x2563eb })
-        ;(lineMat as any).depthTest = false
-        ;(lineMat as any).transparent = true
-        ;(lineMat as any).opacity = 0.95
+          ; (lineMat as any).depthTest = false
+          ; (lineMat as any).transparent = true
+          ; (lineMat as any).opacity = 0.95
 
         const a = new Vector3(...m.origin.worldPos)
         const b = new Vector3(...m.target.worldPos)
@@ -682,9 +682,9 @@ export function useDtxTools(options: {
         labels.set(`m:${m.id}`, { id: `m:${m.id}`, worldPos: mid, el })
       } else {
         const lineMat = new LineBasicMaterial({ color: 0x2563eb })
-        ;(lineMat as any).depthTest = false
-        ;(lineMat as any).transparent = true
-        ;(lineMat as any).opacity = 0.95
+          ; (lineMat as any).depthTest = false
+          ; (lineMat as any).transparent = true
+          ; (lineMat as any).opacity = 0.95
 
         const o = new Vector3(...m.origin.worldPos)
         const c = new Vector3(...m.corner.worldPos)
@@ -749,7 +749,7 @@ export function useDtxTools(options: {
       const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]))
       const g = buildWireBoxGeometryFromBox3(box)
       const mat = new LineBasicMaterial({ color: 0xdc2626 })
-      ;(mat as any).depthTest = false
+        ; (mat as any).depthTest = false
       const wire = new LineSegments(g, mat)
       wire.renderOrder = 900
       toolsGroup.add(wire)
@@ -794,7 +794,7 @@ export function useDtxTools(options: {
         )
       )
       const mat = new LineBasicMaterial({ color: 0x111827 })
-      ;(mat as any).depthTest = false
+        ; (mat as any).depthTest = false
       const wire = new LineSegments(g, mat)
       wire.renderOrder = 900
       toolsGroup.add(wire)
@@ -824,7 +824,7 @@ export function useDtxTools(options: {
       const g = buildWireBoxGeometryFromCorners(o.obb.corners as unknown as Vec3[])
       if (!g) continue
       const mat = new LineBasicMaterial({ color: 0x0f766e })
-      ;(mat as any).depthTest = false
+        ; (mat as any).depthTest = false
       const wire = new LineSegments(g, mat)
       wire.renderOrder = 900
       toolsGroup.add(wire)
@@ -1009,7 +1009,7 @@ export function useDtxTools(options: {
     clearDimensionPreview()
     try {
       rectPreviewLine.value?.geometry.dispose()
-      ;(rectPreviewLine.value?.material as any)?.dispose?.()
+        ; (rectPreviewLine.value?.material as any)?.dispose?.()
     } catch { /* ignore */ }
     rectPreviewLine.value = null
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null }
@@ -1034,7 +1034,7 @@ export function useDtxTools(options: {
 
     try {
       rectPreviewLine.value?.geometry.dispose()
-      ;(rectPreviewLine.value?.material as any)?.dispose?.()
+        ; (rectPreviewLine.value?.material as any)?.dispose?.()
     } catch { /* ignore */ }
     rectPreviewLine.value = null
   }
@@ -1092,7 +1092,7 @@ export function useDtxTools(options: {
     const g = new BufferGeometry()
     g.setAttribute('position', new BufferAttribute(new Float32Array(arr), 3))
     const mat = new LineBasicMaterial({ color: 0x111827 })
-    ;(mat as any).depthTest = false
+      ; (mat as any).depthTest = false
     const line = new Line(g, mat)
     line.renderOrder = 950
 
@@ -1100,7 +1100,7 @@ export function useDtxTools(options: {
       try {
         toolsGroup.remove(rectPreviewLine.value)
         rectPreviewLine.value.geometry.dispose()
-        ;(rectPreviewLine.value.material as any)?.dispose?.()
+          ; (rectPreviewLine.value.material as any)?.dispose?.()
       } catch { /* ignore */ }
     }
     rectPreviewLine.value = line
@@ -1574,6 +1574,8 @@ export function useDtxTools(options: {
       const hit = pickSurfacePoint(canvas, e)
       if (!hit) return
       const n = store.annotations.value.length + 1
+      // 优先绑定当前点击命中的构件，避免沿用全局旧选中导致误绑。
+      const boundRefno = String(hit.entityId || '').trim() || selectionStore.selectedRefno.value || undefined
       const rec: AnnotationRecord = {
         id: nowId('anno'),
         entityId: hit.entityId,
@@ -1583,7 +1585,7 @@ export function useDtxTools(options: {
         title: `批注 ${n}`,
         description: '',
         createdAt: Date.now(),
-        refno: hit.entityId,
+        refno: boundRefno,
       }
       store.addAnnotation(rec)
       ensurePanelActivated('annotation')
@@ -1602,7 +1604,7 @@ export function useDtxTools(options: {
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null }
     try {
       rectPreviewLine.value?.geometry.dispose()
-      ;(rectPreviewLine.value?.material as any)?.dispose?.()
+        ; (rectPreviewLine.value?.material as any)?.dispose?.()
     } catch { /* ignore */ }
     rectPreviewLine.value = null
     clickTracker.value = { down: null, moved: false }

@@ -1,10 +1,11 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import { AlertCircle, ArrowRight, Calendar, FileText, Link, Paperclip, Plus, Users, X } from 'lucide-vue-next';
 
 import { useUserStore } from '@/composables/useUserStore';
+import { useSelectionStore } from '@/composables/useSelectionStore';
 import type { ReviewComponent } from '@/types/auth';
 import { getRoleDisplayName } from '@/types/auth';
 import FileUploadSection from './FileUploadSection.vue';
@@ -13,15 +14,34 @@ import AssociatedFilesList from './AssociatedFilesList.vue';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
 
 const userStore = useUserStore();
+const selectionStore = useSelectionStore();
 
 const packageName = ref('');
 const description = ref('');
 const reviewerId = ref('');
 const priority = ref<'low' | 'medium' | 'high' | 'urgent'>('medium');
 const dueDate = ref('');
-const selectedComponents = ref<ReviewComponent[]>([
-  { id: 'comp-001', name: '/1RCV0244', refNo: '24383_75021', type: '管道组件' },
-]);
+const selectedComponents = ref<ReviewComponent[]>([]);
+
+// 侦听三维视图中的构件选中，自动追加到构件列表
+watch(
+  () => selectionStore.selectedRefno.value,
+  (refno) => {
+    if (!refno) return;
+    // 已存在则跳过
+    if (selectedComponents.value.some((c) => c.refNo === refno)) return;
+    // 从属性数据中获取名称和类型
+    const attrs = selectionStore.propertiesData.value;
+    const name = (attrs?.NAME || attrs?.DESCRIPTION || refno) as string;
+    const type = (attrs?.NOUN || '构件') as string;
+    selectedComponents.value.push({
+      id: `comp-${Date.now()}`,
+      refNo: refno,
+      name,
+      type,
+    });
+  }
+);
 const uploadedFiles = ref<UploadedFile[]>([]);
 const showExternalReview = ref(false);
 
@@ -141,9 +161,7 @@ async function handleSubmit() {
     reviewerId.value = '';
     priority.value = 'medium';
     dueDate.value = '';
-    selectedComponents.value = [
-      { id: 'comp-001', name: '/1RCV0244', refNo: '24383_75021', type: '管道组件' },
-    ];
+    selectedComponents.value = [];
     uploadedFiles.value = [];
   } catch (error) {
     notification.value = {
@@ -189,6 +207,7 @@ function clearNotification() {
     <!-- 模型构件选择 -->
     <div class="space-y-2">
       <label class="text-sm font-medium">选择模型构件 *</label>
+      <p class="text-xs text-gray-400 mt-0.5">在三维视图中点击构件可自动追加</p>
       <div class="border rounded-lg p-3">
         <div class="flex justify-between items-center mb-2">
           <span class="text-sm text-gray-600">已选择 {{ selectedComponents.length }} 个构件</span>
