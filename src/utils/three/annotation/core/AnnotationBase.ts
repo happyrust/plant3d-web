@@ -130,21 +130,25 @@ export abstract class AnnotationBase extends THREE.Object3D {
     const lineHover = base.lineHover.clone()
     const mesh = base.mesh.clone()
     const meshHover = base.meshHover.clone()
+    const fatLine = base.fatLine.clone()
+    const fatLineHover = base.fatLineHover.clone()
 
     // 关闭深度测试/写入：实现“始终在最上层”效果
-    for (const m of [line, lineHover, mesh, meshHover]) {
+    for (const m of [line, lineHover, mesh, meshHover, fatLine, fatLineHover]) {
       m.depthTest = false
       m.depthWrite = false
       // 关闭 polygonOffset，避免与深度相关的偏移逻辑干扰
       ;(m as any).polygonOffset = false
     }
 
-    this._ownedMaterials.push(line, lineHover, mesh, meshHover)
+    this._ownedMaterials.push(line, lineHover, mesh, meshHover, fatLine, fatLineHover)
     return {
       line: line as any,
       lineHover: lineHover as any,
       mesh: mesh as any,
       meshHover: meshHover as any,
+      fatLine: fatLine as any,
+      fatLineHover: fatLineHover as any,
     }
   }
 

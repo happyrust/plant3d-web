@@ -25,6 +25,7 @@ import ParquetDebugPanelDock from '@/components/dock_panels/ParquetDebugPanelDoc
 import PtsetPanelDock from '@/components/dock_panels/PtsetPanelDock.vue';
 import MbdPipePanelDock from '@/components/dock_panels/MbdPipePanelDock.vue';
 import RoomStatusPanelDock from '@/components/dock_panels/RoomStatusPanelDock.vue';
+import DimensionStylePanelDock from '@/components/dock_panels/DimensionStylePanelDock.vue';
 import DtxMaterialConfigPanelDock from '@/components/dock_panels/DtxMaterialConfigPanelDock.vue';
 import BenchmarkView from '@/components/debug/BenchmarkView.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
@@ -56,6 +57,7 @@ app.component('ModelExportPanel', ModelExportPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('ParquetDebugPanel', ParquetDebugPanelDock);
 app.component('RoomStatusPanel', RoomStatusPanelDock);
+app.component('DimensionStylePanel', DimensionStylePanelDock);
 app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
 app.component('BenchmarkView', BenchmarkView);
 

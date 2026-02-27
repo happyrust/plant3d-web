@@ -257,18 +257,46 @@ export class DtxViewer {
   }
 
   /**
-   * 加载十字形 Skybox 纹理
-   * 从十字形展开图裁剪出 6 个面创建 CubeTexture
-   *
-   * 布局:
-   * ```
-   *       [py]
-   * [nx] [pz] [px] [nz]
-   *       [ny]
-   * ```
-   *
-   * @param url 十字形展开图 URL
+   * 设置垂直渐变背景（顶→底）
+   * 使用 offscreen canvas 绘制线性渐变，生成 CanvasTexture 作为场景背景。
    */
+  setGradientBackground(topColor: string, bottomColor: string): void {
+    const w = 2;
+    const h = 512;
+    const cvs = document.createElement("canvas");
+    cvs.width = w;
+    cvs.height = h;
+    const ctx = cvs.getContext("2d");
+    if (!ctx) return;
+
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, topColor);
+    grad.addColorStop(1, bottomColor);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    const tex = new CanvasTexture(cvs);
+    tex.needsUpdate = true;
+    this.scene.background = tex;
+    // 渐变模式下不使用环境映射
+    this.scene.environment = null;
+  }
+
+  /**
+   * 设置纯色背景
+   */
+  setSolidBackground(color: number | string): void {
+    this.scene.background = new Color(color);
+    this.scene.environment = null;
+  }
+
+  /**
+   * 清除 skybox 背景和环境映射
+   */
+  clearSkybox(): void {
+    this.scene.environment = null;
+  }
+
   loadCrossSkybox(url: string): void {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -346,3 +374,25 @@ export class DtxViewer {
     img.src = url;
   }
 }
+
+export type BackgroundMode =
+  | 'gradient_solidworks'
+  | 'gradient_dark'
+  | 'solid_light'
+  | 'solid_dark'
+  | 'skybox'
+
+export type BackgroundPreset = {
+  mode: BackgroundMode
+  label: string
+  topColor: string
+  bottomColor: string
+}
+
+export const BACKGROUND_PRESETS: BackgroundPreset[] = [
+  { mode: 'gradient_solidworks', label: 'SolidWorks', topColor: '#e8ecf4', bottomColor: '#c5cede' },
+  { mode: 'gradient_dark', label: '深色渐变', topColor: '#3a4a5c', bottomColor: '#1a202c' },
+  { mode: 'solid_light', label: '浅灰纯色', topColor: '#e5e7eb', bottomColor: '#e5e7eb' },
+  { mode: 'solid_dark', label: '深色纯色', topColor: '#1e293b', bottomColor: '#1e293b' },
+  { mode: 'skybox', label: '天空盒', topColor: '#87ceeb', bottomColor: '#4682b4' },
+];

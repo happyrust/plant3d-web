@@ -355,8 +355,8 @@ async function ensureInstancesDbnums(): Promise<Set<number>> {
     const dbnums = await ensureWorldDbnums()
     const ok = new Set<number>()
     await parallelLimit(dbnums, 16, async (dbnum) => {
-      const instUrl = buildFilesOutputUrl(`parquet/instances_${dbnum}.parquet`)
-      const geoUrl = buildFilesOutputUrl(`parquet/geo_instances_${dbnum}.parquet`)
+      const instUrl = buildFilesOutputUrl(`instances/instances_${dbnum}.parquet`)
+      const geoUrl = buildFilesOutputUrl(`instances/geo_instances_${dbnum}.parquet`)
       const [instOk, geoOk] = await Promise.all([urlExists(instUrl), urlExists(geoUrl)])
       if (instOk && geoOk) ok.add(dbnum)
     })
@@ -402,7 +402,7 @@ async function ensureInstancesFiles(dbnum: number): Promise<{ geo_instances: str
   let geoFile = `geo_instances_${dbnum}.parquet`
   let tubiFile: string | null = `tubings_${dbnum}.parquet`
   try {
-    const manifestUrl = buildFilesOutputUrl(`parquet/manifest_${dbnum}.json`)
+    const manifestUrl = buildFilesOutputUrl(`instances/manifest_${dbnum}.json`)
     const resp = await fetch(manifestUrl)
     if (resp.ok) {
       const manifest = (await resp.json()) as InstancesParquetManifest
@@ -417,11 +417,11 @@ async function ensureInstancesFiles(dbnum: number): Promise<{ geo_instances: str
 
   const geoLocal = `e3d_geo_instances_${dbnum}.parquet`
   const tubiLocal = `e3d_tubings_${dbnum}.parquet`
-  await registerFile(geoLocal, buildFilesOutputUrl(`parquet/${geoFile}`))
+  await registerFile(geoLocal, buildFilesOutputUrl(`instances/${geoFile}`))
 
   let tubiLocalOrNull: string | null = null
   if (tubiFile) {
-    const tubiUrl = buildFilesOutputUrl(`parquet/${tubiFile}`)
+    const tubiUrl = buildFilesOutputUrl(`instances/${tubiFile}`)
     if (await urlExists(tubiUrl)) {
       await registerFile(tubiLocal, tubiUrl)
       tubiLocalOrNull = tubiLocal

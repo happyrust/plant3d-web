@@ -24,6 +24,7 @@ import type {
 import { computeMbdDimOffset } from '@/composables/mbd/computeMbdDimOffset'
 import { computePipeAlignedOffsetDirs, findSegmentOffsetDir } from '@/composables/mbd/computePipeAlignedOffsetDirs'
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore'
+import { useBackgroundStore, getPreset } from '@/composables/useBackgroundStore'
 
 import {
   AnnotationMaterials,
@@ -250,7 +251,14 @@ export function useMbdPipeAnnotationThree(
 
   function applyBackgroundColor(viewer: DtxViewer): void {
     const bg = viewer.scene.background
-    const color = bg instanceof Color ? bg : new Color(0xe5e7eb)
+    let color: Color
+    if (bg instanceof Color) {
+      color = bg
+    } else {
+      const bgStore = useBackgroundStore()
+      const preset = getPreset(bgStore.mode.value)
+      color = new Color(preset.bottomColor)
+    }
     for (const a of dimAnnotations.value.values()) a.setBackgroundColor(color)
     for (const a of weldAnnotations.value.values()) a.setBackgroundColor(color)
     for (const a of slopeAnnotations.value.values()) a.setBackgroundColor(color)

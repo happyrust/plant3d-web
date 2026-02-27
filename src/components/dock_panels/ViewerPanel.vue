@@ -33,6 +33,7 @@ import {
     preloadInstancesSharedTables,
 } from "@/composables/useDbnoInstancesJsonLoader";
 import { loadDbnoInstancesForVisibleRefnosDtx } from "@/composables/useDbnoInstancesDtxLoader";
+import { useDbnoInstancesParquetLoader } from "@/composables/useDbnoInstancesParquetLoader";
 import { buildInstanceIndexByRefno } from "@/utils/instances/instanceManifest";
 import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
@@ -58,7 +59,8 @@ import { SiteSpecValue, getSpecValueName } from "@/types/spec";
 import { onCommand } from "@/ribbon/commandBus";
 import { emitToast } from "@/ribbon/toastBus";
 
-import { DtxViewer } from "@/viewer/dtx/DtxViewer";
+import { useBackgroundStore } from "@/composables/useBackgroundStore";
+import { DtxViewer, type BackgroundMode } from "@/viewer/dtx/DtxViewer";
 import { DtxCompatViewer } from "@/viewer/dtx/DtxCompatViewer";
 import { CadGrid } from "@/viewer/dtx/dtxCadGrid";
 import { loadDtxPrimitiveDemo } from "@/viewer/dtx/dtxPrimitiveDemo";
@@ -85,6 +87,7 @@ const consoleStore = useConsoleStore();
 const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
+const backgroundStore = useBackgroundStore();
 
 const initError = ref<string | null>(null);
 
@@ -605,6 +608,25 @@ watch(
         requestRender();
     },
 );
+
+function applyBackground(mode: BackgroundMode): void {
+    const viewer = dtxViewerRef.value;
+    if (!viewer) return;
+    const preset = backgroundStore.getPreset(mode);
+    if (mode === "skybox") {
+        viewer.loadCrossSkybox("/texture/skybox.png");
+    } else if (preset.topColor === preset.bottomColor) {
+        viewer.setSolidBackground(preset.topColor);
+    } else {
+        viewer.setGradientBackground(preset.topColor, preset.bottomColor);
+    }
+    requestRender();
+}
+
+function onBackgroundChange(mode: BackgroundMode): void {
+    backgroundStore.setMode(mode);
+    applyBackground(mode);
+}
 
 function toastNeedSelection(): void {
     emitToast({ message: "请先选择对象" });
@@ -1557,7 +1579,6 @@ onMounted(async () => {
             background: 0xe5e7eb,
             debug: isDev,
             gizmo: { enabled: true, placement: "top-right", size: 100 },
-            skybox: "/texture/skybox.png",
         });
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -1566,6 +1587,9 @@ onMounted(async () => {
         return;
     }
     dtxViewerRef.value = dtxViewer;
+
+    // 应用持久化的背景设置（默认 SolidWorks 渐变）
+    applyBackground(backgroundStore.mode.value);
 
     // CAD Grid：Three.js 常规渲染对象（与 DTX 混合渲染）
     try {
@@ -2393,9 +2417,9 @@ onMounted(async () => {
                     try {
                         shouldAutoFit = sessionStorage.getItem(autoFitKey) !== "1";
                     } catch {}
-                    const manifest = await getDbnoInstancesManifest(dbno);
-                    const index = buildInstanceIndexByRefno(manifest);
-                    const allRefnos = Array.from(index.keys());
+                    // 优先从 Parquet 获取 refno 列表（不依赖 JSON manifest）
+                    const parquetLoader = useDbnoInstancesParquetLoader();
+                    const allRefnos = await parquetLoader.queryAllRefnoKeys(dbno, { debug: isDev });
                     if (allRefnos.length === 0) {
                         emitToast({ message: `dbnum=${dbno} 没有可加载的 refno` });
                         return;
@@ -2405,16 +2429,17 @@ onMounted(async () => {
                         dtxLayer,
                         dbno,
                         allRefnos,
-                        { lodAssetKey: "L1", debug: isDev }
+                        { lodAssetKey: "L1", debug: isDev, dataSource: "parquet" }
                     );
                     (compat as any).__dtxAfterInstancesLoaded?.(dbno, allRefnos);
-                    // show_dbnum 路径下也需要初始化 Tile LOD（不走常规 dbno 切换流）
+                    // show_dbnum 路径下也需要初始化 Tile LOD（若 JSON manifest 可用）
                     try {
                         tileLodInitializedDbno = dbno;
+                        const manifest = await getDbnoInstancesManifest(dbno);
                         tileLodControllerRef.value?.setManifest(dbno, manifest);
                         tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
                     } catch {
-                        // ignore
+                        // JSON manifest 不存在时跳过 Tile LOD
                     }
 
                     requestRender();
@@ -2822,7 +2847,8 @@ onMounted(async () => {
                 }
 
                 const resp = await getMbdPipeAnnotations(refnoKey, {
-                    // 默认走 parquet（后端 MbdPipeSource 默认值）
+                    // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
+                    source: "db",
                     debug: isDev,
                     dbno: dbno ?? undefined,
                     batch_id: batchId,
@@ -3371,6 +3397,28 @@ onUnmounted(() => {
                     <div class="text-sm font-medium">查看工具设置</div>
 
                     <div class="mt-3 space-y-3">
+                        <!-- 背景切换 -->
+                        <div class="space-y-1">
+                            <label class="text-xs text-muted-foreground">场景背景</label>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button
+                                    v-for="preset in backgroundStore.presets"
+                                    :key="preset.mode"
+                                    type="button"
+                                    class="flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                                    :class="backgroundStore.mode.value === preset.mode ? 'border-ring bg-muted font-medium' : 'border-border'"
+                                    :title="preset.label"
+                                    @click.stop="onBackgroundChange(preset.mode)"
+                                >
+                                    <span
+                                        class="inline-block h-4 w-4 shrink-0 rounded-sm border border-border"
+                                        :style="{ background: `linear-gradient(to bottom, ${preset.topColor}, ${preset.bottomColor})` }"
+                                    />
+                                    <span>{{ preset.label }}</span>
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="space-y-1">
                             <div class="flex items-center justify-between">
                                 <label class="text-xs text-muted-foreground">范围半径 (m)</label>

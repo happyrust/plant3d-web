@@ -186,6 +186,13 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'dimension.clear', label: '清空', icon: 'trash', commandId: 'dimension.clear' },
         ],
       },
+      {
+        id: 'dimension.config',
+        label: '配置',
+        items: [
+          { kind: 'button', id: 'dimension.settings', label: '样式设置', icon: 'settings', commandId: 'dimension.settings' },
+        ],
+      },
     ],
   },
   {

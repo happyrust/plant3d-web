@@ -6,18 +6,22 @@
  * - 角度尺寸：AngleDimension3D（Line2 + troika 3D text）
  */
 
-import * as THREE from 'three'
-import type { UseAnnotationThreeReturn } from './useAnnotationThree'
-import type { DimensionRecord, LinearDistanceDimensionRecord, AngleDimensionRecord } from './useToolStore'
-import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation'
-import { formatLengthMeters } from '@/utils/unitFormat'
+import * as THREE from 'three';
+
+import { useDimensionStyleStore } from './useDimensionStyleStore';
+
+import type { UseAnnotationThreeReturn } from './useAnnotationThree';
+import type { DimensionRecord, LinearDistanceDimensionRecord, AngleDimensionRecord } from './useToolStore';
+
+import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation';
+import { formatLengthMeters } from '@/utils/unitFormat';
 
 /** 尺寸标注 ID 前缀 */
-const DIMENSION_PREFIX = 'dim_'
+const DIMENSION_PREFIX = 'dim_';
 
 function formatAngleDegrees(deg: number, precision: number): string {
-  const p = Math.max(0, Math.min(6, Math.floor(Number(precision) || 0)))
-  return `${deg.toFixed(p)}°`
+  const p = Math.max(0, Math.min(6, Math.floor(Number(precision) || 0)));
+  return `${deg.toFixed(p)}°`;
 }
 
 function createLinearDimension(
@@ -26,16 +30,17 @@ function createLinearDimension(
   unit: 'm' | 'cm' | 'mm',
   precision: number
 ): void {
-  const id = DIMENSION_PREFIX + rec.id
-  const start = new THREE.Vector3(...rec.origin.worldPos)
-  const end = new THREE.Vector3(...rec.target.worldPos)
-  const distance = start.distanceTo(end)
-  const direction = rec.direction ? new THREE.Vector3(...rec.direction) : undefined
-  const text = rec.textOverride ?? formatLengthMeters(distance, unit, precision)
+  const id = DIMENSION_PREFIX + rec.id;
+  const start = new THREE.Vector3(...rec.origin.worldPos);
+  const end = new THREE.Vector3(...rec.target.worldPos);
+  const distance = start.distanceTo(end);
+  const direction = rec.direction ? new THREE.Vector3(...rec.direction) : undefined;
+  const text = rec.textOverride ?? formatLengthMeters(distance, unit, precision);
 
   const labelOffsetWorld = rec.labelOffsetWorld
     ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
-    : undefined
+    : undefined;
+  const { style } = useDimensionStyleStore();
   const dim = new LinearDimension3D(annotationSystem.materials, {
     start,
     end,
@@ -45,11 +50,17 @@ function createLinearDimension(
     isReference: rec.isReference ?? false,
     direction,
     text,
-  })
-  dim.userData.pickable = true
-  dim.userData.draggable = true
-  dim.visible = rec.visible
-  annotationSystem.addAnnotation(id, dim)
+    decimals: precision,
+    unit: unit === 'm' ? '' : unit,
+    arrowStyle: style.arrowStyle,
+    arrowSizePx: style.arrowSizePx,
+    arrowAngleDeg: style.arrowAngleDeg,
+    extensionOvershootPx: style.extensionOvershootPx,
+  });
+  dim.userData.pickable = true;
+  dim.userData.draggable = true;
+  dim.visible = rec.visible;
+  annotationSystem.addAnnotation(id, dim);
 }
 
 function createAngleDimension(
@@ -57,14 +68,14 @@ function createAngleDimension(
   rec: AngleDimensionRecord,
   precision: number
 ): void {
-  const id = DIMENSION_PREFIX + rec.id
-  const origin = new THREE.Vector3(...rec.origin.worldPos)
-  const corner = new THREE.Vector3(...rec.corner.worldPos)
-  const target = new THREE.Vector3(...rec.target.worldPos)
+  const id = DIMENSION_PREFIX + rec.id;
+  const origin = new THREE.Vector3(...rec.origin.worldPos);
+  const corner = new THREE.Vector3(...rec.corner.worldPos);
+  const target = new THREE.Vector3(...rec.target.worldPos);
 
   const labelOffsetWorld = rec.labelOffsetWorld
     ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
-    : undefined
+    : undefined;
   const dim = new AngleDimension3D(annotationSystem.materials, {
     vertex: corner,
     point1: origin,
@@ -75,17 +86,17 @@ function createAngleDimension(
     isReference: rec.isReference ?? false,
     supplementary: rec.supplementary ?? false,
     decimals: precision,
-    text: rec.textOverride,
-  })
-  dim.userData.pickable = true
-  dim.userData.draggable = true
+    text: rec.textOverride ?? formatAngleDegrees(0, precision),
+  });
+  dim.userData.pickable = true;
+  dim.userData.draggable = true;
   if (!rec.textOverride) {
-    const deg = dim.getAngleDegrees()
-    dim.setParams({ text: formatAngleDegrees(deg, precision) })
+    const deg = dim.getAngleDegrees();
+    dim.setParams({ text: formatAngleDegrees(deg, precision) });
   }
 
-  dim.visible = rec.visible
-  annotationSystem.addAnnotation(id, dim)
+  dim.visible = rec.visible;
+  annotationSystem.addAnnotation(id, dim);
 }
 
 /**
@@ -94,100 +105,100 @@ function createAngleDimension(
  * 负责将尺寸标注记录同步到标注系统
  */
 export class DimensionAnnotationManager {
-  private annotationSystem: UseAnnotationThreeReturn
-  private currentIds = new Set<string>()
-  private unit: 'm' | 'cm' | 'mm' = 'm'
-  private precision = 2
+  private annotationSystem: UseAnnotationThreeReturn;
+  private currentIds = new Set<string>();
+  private unit: 'm' | 'cm' | 'mm' = 'm';
+  private precision = 2;
 
   constructor(annotationSystem: UseAnnotationThreeReturn) {
-    this.annotationSystem = annotationSystem
+    this.annotationSystem = annotationSystem;
   }
 
   setUnit(unit: 'm' | 'cm' | 'mm'): void {
-    this.unit = unit
+    this.unit = unit;
   }
 
   setPrecision(precision: number): void {
-    this.precision = precision
+    this.precision = precision;
   }
 
   sync(records: DimensionRecord[]): void {
-    const newIds = new Set<string>()
+    const newIds = new Set<string>();
 
     for (const rec of records) {
-      const id = DIMENSION_PREFIX + rec.id
-      newIds.add(id)
+      const id = DIMENSION_PREFIX + rec.id;
+      newIds.add(id);
 
-      const existing = this.annotationSystem.getAnnotation(id)
+      const existing = this.annotationSystem.getAnnotation(id);
       if (existing) {
-        existing.visible = rec.visible
-        const ud = ((existing as any).userData ||= {})
-        ud.pickable = true
-        ud.draggable = true
+        existing.visible = rec.visible;
+        const ud = ((existing as any).userData ||= {});
+        ud.pickable = true;
+        ud.draggable = true;
         if (rec.kind === 'linear_distance' && existing instanceof LinearDimension3D) {
-          const start = new THREE.Vector3(...rec.origin.worldPos)
-          const end = new THREE.Vector3(...rec.target.worldPos)
-          const distance = start.distanceTo(end)
-          const direction = rec.direction ? new THREE.Vector3(...rec.direction) : undefined
-          const text = rec.textOverride ?? formatLengthMeters(distance, this.unit, this.precision)
+          const start = new THREE.Vector3(...rec.origin.worldPos);
+          const end = new THREE.Vector3(...rec.target.worldPos);
+          const distance = start.distanceTo(end);
+          const direction = rec.direction ? new THREE.Vector3(...rec.direction) : undefined;
+          const text = rec.textOverride ?? formatLengthMeters(distance, this.unit, this.precision);
           const low = rec.labelOffsetWorld
             ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
-            : null
+            : null;
           existing.setParams({
             start, end, offset: rec.offset, labelT: rec.labelT ?? 0.5,
             labelOffsetWorld: low, isReference: rec.isReference ?? false,
             direction, text,
-          })
+          });
         } else if (rec.kind === 'angle' && existing instanceof AngleDimension3D) {
-          const origin = new THREE.Vector3(...rec.origin.worldPos)
-          const corner = new THREE.Vector3(...rec.corner.worldPos)
-          const target = new THREE.Vector3(...rec.target.worldPos)
+          const origin = new THREE.Vector3(...rec.origin.worldPos);
+          const corner = new THREE.Vector3(...rec.corner.worldPos);
+          const target = new THREE.Vector3(...rec.target.worldPos);
           const low = rec.labelOffsetWorld
             ? new THREE.Vector3(rec.labelOffsetWorld[0], rec.labelOffsetWorld[1], rec.labelOffsetWorld[2])
-            : null
+            : null;
           existing.setParams({
             vertex: corner, point1: origin, point2: target,
             arcRadius: Math.max(0.3, Math.min(10, rec.offset || 0.8)),
             labelT: rec.labelT ?? 0.5,
             labelOffsetWorld: low, isReference: rec.isReference ?? false,
             supplementary: rec.supplementary ?? false,
-          })
-          const deg = existing.getAngleDegrees()
-          const text = rec.textOverride ?? formatAngleDegrees(deg, this.precision)
-          existing.setParams({ text })
+          });
+          const deg = existing.getAngleDegrees();
+          const text = rec.textOverride ?? formatAngleDegrees(deg, this.precision);
+          existing.setParams({ text });
         }
-        continue
+        continue;
       }
 
       if (rec.kind === 'linear_distance') {
-        createLinearDimension(this.annotationSystem, rec, this.unit, this.precision)
+        createLinearDimension(this.annotationSystem, rec, this.unit, this.precision);
       } else if (rec.kind === 'angle') {
-        createAngleDimension(this.annotationSystem, rec, this.precision)
+        createAngleDimension(this.annotationSystem, rec, this.precision);
       }
     }
 
     for (const id of this.currentIds) {
       if (!newIds.has(id)) {
-        this.annotationSystem.removeAnnotation(id)
+        this.annotationSystem.removeAnnotation(id);
       }
     }
-    this.currentIds = newIds
+    this.currentIds = newIds;
   }
 
   clear(): void {
     for (const id of this.currentIds) {
-      this.annotationSystem.removeAnnotation(id)
+      this.annotationSystem.removeAnnotation(id);
     }
-    this.currentIds.clear()
+    this.currentIds.clear();
   }
 
   highlight(dimensionId: string | null): void {
-    const id = dimensionId ? DIMENSION_PREFIX + dimensionId : null
-    this.annotationSystem.highlightAnnotation(id)
+    const id = dimensionId ? DIMENSION_PREFIX + dimensionId : null;
+    this.annotationSystem.highlightAnnotation(id);
   }
 
   select(dimensionId: string | null): void {
-    const id = dimensionId ? DIMENSION_PREFIX + dimensionId : null
-    this.annotationSystem.selectAnnotation(id)
+    const id = dimensionId ? DIMENSION_PREFIX + dimensionId : null;
+    this.annotationSystem.selectAnnotation(id);
   }
 }

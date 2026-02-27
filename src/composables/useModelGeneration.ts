@@ -13,6 +13,7 @@ import {
   waitForDbnoInstancesFile,
 } from '@/composables/useDbnoInstancesJsonLoader'
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader'
+import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader'
 import { useConsoleStore } from '@/composables/useConsoleStore'
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo'
 import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
@@ -360,6 +361,94 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           (visibleErr ? ` err=${visibleErr}` : '')
       )
 
+      // ========== Parquet 优先路径 ==========
+      const parquetLoader = useDbnoInstancesParquetLoader()
+      const parquetAvailable = await parquetLoader.isParquetAvailable(dbno)
+
+      if (parquetAvailable) {
+        consoleStore.addLog('info', `[model-load] 使用 Parquet 数据源 dbno=${dbno}`)
+        statusMessage.value = `从 Parquet 加载 dbno=${dbno}...`
+        progress.value = 20
+
+        const anyViewer = viewer as unknown as {
+          __dtxLayer?: unknown
+          __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        }
+        const dtxLayer = anyViewer.__dtxLayer as any
+        if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型')
+
+        // 可见 refnos 优先；若为空则从 Parquet 查询全量
+        const loadRefnos = visibleRefnos.length > 0
+          ? visibleRefnos
+          : await parquetLoader.queryAllRefnoKeys(dbno, { debug: false })
+
+        if (loadRefnos.length === 0) {
+          statusMessage.value = `dbnum=${dbno} 无可加载 refno`
+          progress.value = 100
+          return false
+        }
+
+        statusMessage.value = `加载 ${loadRefnos.length} 个 refno (Parquet)...`
+        progress.value = 60
+
+        const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE
+        const total = loadRefnos.length
+        const batchTotal = Math.ceil(total / LOAD_BATCH_SIZE)
+        let totalLoaded = 0
+        let totalSkipped = 0
+        let totalObjects = 0
+        const missingAll: string[] = []
+
+        for (let start = 0; start < total; start += LOAD_BATCH_SIZE) {
+          const end = Math.min(total, start + LOAD_BATCH_SIZE)
+          const batch = loadRefnos.slice(start, end)
+          const batchIndex = Math.floor(start / LOAD_BATCH_SIZE) + 1
+          statusMessage.value = `加载批次 ${batchIndex}/${batchTotal} (${end}/${total}) [Parquet]`
+          progress.value = Math.max(60, Math.min(95, 60 + Math.floor((end / total) * 35)))
+
+          const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
+            lodAssetKey: 'L1',
+            debug: false,
+            dataSource: 'parquet',
+          })
+          anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch)
+          totalLoaded += result.loadedRefnos
+          totalSkipped += result.skippedRefnos
+          totalObjects += result.loadedObjects
+          if (result.missingRefnos.length > 0) missingAll.push(...result.missingRefnos)
+        }
+
+        if (missingAll.length > 0) {
+          await handleMissingRefnos(dtxLayer, dbno, uniqStrings(missingAll), anyViewer)
+        }
+
+        if (loadOptions?.flyTo) {
+          try {
+            const av = viewer as any
+            const max = 5000
+            const flyRefnos = loadRefnos.length > max ? loadRefnos.slice(0, max) : loadRefnos
+            const aabb = av?.scene?.getAABB?.(flyRefnos) ?? null
+            if (aabb) {
+              av?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true })
+            }
+          } catch { /* ignore flyTo errors */ }
+        }
+
+        lastLoadDebug.value = {
+          refno: normalizedRoot,
+          dbno,
+          visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+          loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+          result: { loadedRefnos: totalLoaded, skippedRefnos: totalSkipped, loadedObjects: totalObjects },
+          ms: Date.now() - startedAt,
+        }
+        loadedRoots.add(normalizedRoot)
+        statusMessage.value = totalObjects > 0 ? '加载完成 (Parquet)' : '无可见几何实例'
+        progress.value = 100
+        return true
+      }
+
+      // ========== JSON 回退路径 ==========
       statusMessage.value = `加载 instances_${dbno}.json...`
       progress.value = 20
 

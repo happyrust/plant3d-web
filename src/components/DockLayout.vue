@@ -306,6 +306,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'dimensionStyle') {
+    return dockApi.addPanel({
+      id: 'dimensionStyle',
+      component: 'DimensionStylePanel',
+      title: '尺寸样式',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'materialConfig') {
     return dockApi.addPanel({
       id: 'materialConfig',
@@ -528,6 +540,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.materialConfig':
       togglePanel('materialConfig');
+      return;
+    case 'dimension.settings':
+      togglePanel('dimensionStyle');
       return;
     case 'panel.review':
       togglePanel('review');
