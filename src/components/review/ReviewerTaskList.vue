@@ -20,6 +20,11 @@ const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
 
 const tasks = computed(() => userStore.pendingReviewTasks.value);
+const reviewStageLabel = computed(() => {
+  if (userStore.isChecker.value) return '校核';
+  if (userStore.isApprover.value) return '审核';
+  return '校审';
+});
 
 const filteredTasks = computed(() => {
   let result = [...tasks.value];
@@ -81,12 +86,22 @@ function handleStartReview(task: ReviewTask) {
 }
 
 function handleApprove(task: ReviewTask) {
-  userStore.updateTaskStatus(task.id, 'approved');
+  const node = task.currentNode || 'sj';
+  if (node === 'jd') {
+    // 校核通过 -> 进入审核节点
+    userStore.submitTaskToNextNode(task.id, '校核通过');
+  } else {
+    // 审核通过 -> 任务结束
+    userStore.updateTaskStatus(task.id, 'approved', '审核通过');
+  }
   selectedTask.value = null;
 }
 
 function handleReject(task: ReviewTask) {
-  userStore.updateTaskStatus(task.id, 'rejected');
+  const reason = (window.prompt('请输入驳回原因（必填）', '') || '').trim();
+  if (!reason) return;
+  // 统一规则：驳回一律回发起设计人（sj）
+  userStore.returnTaskToNode(task.id, 'sj', reason);
   selectedTask.value = null;
 }
 
@@ -97,6 +112,17 @@ function handleViewTask(task: ReviewTask) {
 function closeTaskDetail() {
   selectedTask.value = null;
 }
+
+function getStartActionLabel(task: ReviewTask): string {
+  const node = task.currentNode || 'sj';
+  if (node === 'jd') {
+    return task.status === 'submitted' ? '开始校核' : '继续校核';
+  }
+  if (node === 'sh') {
+    return task.status === 'submitted' ? '开始审核' : '继续审核';
+  }
+  return '处理任务';
+}
 </script>
 
 <template>
@@ -104,8 +130,8 @@ function closeTaskDetail() {
     <!-- 头部 -->
     <div class="flex items-center justify-between">
       <div>
-        <h3 class="text-lg font-semibold">我的审核任务</h3>
-        <p class="text-sm text-gray-500">审核人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个任务</p>
+        <h3 class="text-lg font-semibold">我的{{ reviewStageLabel }}任务</h3>
+        <p class="text-sm text-gray-500">{{ reviewStageLabel }}人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个任务</p>
       </div>
       <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
         :disabled="isLoading"
@@ -174,6 +200,10 @@ function closeTaskDetail() {
                   <span>发起人: {{ task.requesterName }}</span>
                 </div>
                 <div class="flex items-center gap-1">
+                  <User class="h-3 w-3" />
+                  <span>校核: {{ task.checkerName || task.reviewerName || '-' }} / 审核: {{ task.approverName || '-' }}</span>
+                </div>
+                <div class="flex items-center gap-1">
                   <Calendar class="h-3 w-3" />
                   <span>创建: {{ formatDate(task.createdAt) }}</span>
                 </div>
@@ -187,7 +217,7 @@ function closeTaskDetail() {
               <button v-if="task.status === 'submitted' || task.status === 'in_review'"
                 class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 @click.stop="handleStartReview(task)">
-                {{ task.status === 'submitted' ? '开始审核' : '继续审核' }}
+                {{ getStartActionLabel(task) }}
               </button>
               <button class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50" @click.stop="handleViewTask(task)">
                 查看详情

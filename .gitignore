@@ -44,3 +44,7 @@ playwright-report/
 
 # Local sqlite caches
 deployment_sites.sqlite
+
+npm-cache
+e2e
+scripts

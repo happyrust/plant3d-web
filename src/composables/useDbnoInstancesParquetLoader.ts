@@ -29,6 +29,39 @@ type ParquetManifest = {
     transforms: { file: string; rows?: number }
     aabb: { file: string; rows?: number }
   }
+  mesh_validation?: {
+    lod_tag?: string
+    report_file?: string
+    checked_geo_hashes?: number
+    missing_geo_hashes?: number
+    missing_owner_refnos?: number
+  }
+}
+
+type MissingMeshReport = {
+  version?: number
+  generated_at?: string
+  dbnum?: number
+  mesh_base_dir?: string
+  lod_tag?: string
+  checked_geo_hashes?: number
+  missing_geo_hashes?: number
+  missing_owner_refnos?: number
+  missing_geo_hash_list?: Array<{
+    geo_hash?: string
+    row_count?: number
+    owner_refno_count?: number
+  }>
+}
+
+export type ParquetMeshValidationInfo = {
+  lodTag: string
+  reportFile: string | null
+  checkedGeoHashes: number
+  missingGeoHashes: number
+  missingOwnerRefnos: number
+  topMissingGeoHashes: Array<{ geoHash: string; rowCount: number; ownerRefnoCount: number }>
+  reportGeneratedAt: string | null
 }
 
 type RegisteredDbno = {
@@ -70,6 +103,7 @@ let initPromise: Promise<void> | null = null
 // 每个 dbno 的注册缓存
 const registeredByDbno = new Map<number, RegisteredDbno>()
 const registeringByDbno = new Map<number, Promise<RegisteredDbno>>()
+const meshValidationByDbno = new Map<number, Promise<ParquetMeshValidationInfo | null>>()
 
 async function ensureDuckDB(): Promise<void> {
   if (db && conn) return
@@ -140,8 +174,9 @@ function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null)
 }
 
 async function fetchManifest(dbno: number): Promise<ParquetManifest> {
-  const url = buildFilesOutputUrl(`instances/manifest_${dbno}.json`)
-  const resp = await fetch(url)
+  const url = buildFilesOutputUrl(`parquet/manifest_${dbno}.json`)
+  // 该 manifest 在导出流程中可能被反复覆盖；禁用浏览器缓存以避免读到旧版本。
+  const resp = await fetch(url, { cache: 'no-store' })
   if (resp.status === 404) {
     // 兼容“仅导出 Parquet 文件但未生成 manifest”的场景：按约定命名兜底。
     return {
@@ -154,8 +189,8 @@ async function fetchManifest(dbno: number): Promise<ParquetManifest> {
         instances: { file: `instances_${dbno}.parquet` },
         geo_instances: { file: `geo_instances_${dbno}.parquet` },
         tubings: { file: `tubings_${dbno}.parquet` },
-        transforms: { file: 'transforms.parquet' },
-        aabb: { file: 'aabb.parquet' },
+        transforms: { file: `transforms_${dbno}.parquet` },
+        aabb: { file: `aabb_${dbno}.parquet` },
       },
     }
   }
@@ -180,7 +215,7 @@ async function registerDbno(dbno: number): Promise<RegisteredDbno> {
     if (!db || !conn) throw new Error('DuckDB not ready')
 
     const manifest = await fetchManifest(dbno)
-    const baseDirUrl = buildFilesOutputUrl('instances')
+    const baseDirUrl = buildFilesOutputUrl('parquet')
 
     const files = {
       instances: `p_${dbno}_instances.parquet`,
@@ -197,22 +232,13 @@ async function registerDbno(dbno: number): Promise<RegisteredDbno> {
       await db!.registerFileURL(localName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, false)
     }
 
-    // 必须注册的核心表
     await Promise.all([
       registerOne(files.instances, manifest.tables.instances.file),
       registerOne(files.geo_instances, manifest.tables.geo_instances.file),
+      registerOne(files.tubings, manifest.tables.tubings.file),
       registerOne(files.transforms, manifest.tables.transforms.file),
       registerOne(files.aabb, manifest.tables.aabb.file),
     ])
-    // tubings 可能为空（rows=0 时后端不生成文件），跳过注册不影响主流程
-    const tubiRows = manifest.tables.tubings?.rows
-    if (tubiRows === undefined || tubiRows > 0) {
-      try {
-        await registerOne(files.tubings, manifest.tables.tubings.file)
-      } catch {
-        // tubings 文件不存在时静默跳过
-      }
-    }
 
     const reg: RegisteredDbno = { dbno, baseDirUrl, manifest, files }
     registeredByDbno.set(dbno, reg)
@@ -272,7 +298,6 @@ export function useDbnoInstancesParquetLoader() {
         SELECT
           i.refno_str,
           i.noun,
-          i.name,
           i.owner_refno_str,
           i.owner_noun,
           i.spec_value,
@@ -348,7 +373,7 @@ export function useDbnoInstancesParquetLoader() {
           uniforms: {
             refno: refnoStr,
             noun,
-            name: row.name ? String(row.name) : '',
+            name: '',
             owner_refno: ownerRefno,
             owner_noun: ownerNoun,
             spec_value: Number(row.spec_value ?? 0),
@@ -375,49 +400,41 @@ export function useDbnoInstancesParquetLoader() {
       // tubings：tubings_{dbno}.parquet（TUBI 段）
       // - 以 tubi_refno_str 作为 refno_str（与 instances.refno_str 一致：带 /）
       // - matrix 仅使用 tubings.trans_hash 对应的 world matrix（无 geo_local）
-      // - tubings 文件可能不存在（rows=0 时后端不生成），需容错
-      const hasTubings = (reg.manifest.tables.tubings?.rows ?? -1) !== 0
-      let tubiRows: any[] = []
-      if (hasTubings) {
-        try {
-          const sqlTubi = `
-            WITH target(refno_str) AS (
-              SELECT UNNEST(${listExpr}) AS refno_str
-            )
-            SELECT
-              t.tubi_refno_str AS refno_str,
-              'TUBI' AS noun,
-              '' AS name,
-              t.owner_refno_str,
-              '' AS owner_noun,
-              t.spec_value,
-              false AS has_neg,
-              t.trans_hash,
-              t.aabb_hash,
-              t.order AS geo_index,
-              t.geo_hash,
-              '' AS geo_trans_hash,
-              aw.min_x, aw.min_y, aw.min_z, aw.max_x, aw.max_y, aw.max_z,
-              tw.m00, tw.m10, tw.m20, tw.m30,
-              tw.m01, tw.m11, tw.m21, tw.m31,
-              tw.m02, tw.m12, tw.m22, tw.m32,
-              tw.m03, tw.m13, tw.m23, tw.m33,
-              NULL AS g_m00, NULL AS g_m10, NULL AS g_m20, NULL AS g_m30,
-              NULL AS g_m01, NULL AS g_m11, NULL AS g_m21, NULL AS g_m31,
-              NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
-              NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
-            FROM target x
-            JOIN parquet_scan('${reg.files.tubings}') t ON t.tubi_refno_str = x.refno_str
-            LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = t.aabb_hash
-            LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = t.trans_hash
-            ORDER BY t.tubi_refno_str, t.order
-          `
-          const tubiArrow = await conn.query(sqlTubi)
-          tubiRows = tubiArrow.toArray() as any[]
-        } catch {
-          // tubings parquet 文件不存在或查询失败，静默跳过
-        }
-      }
+      const sqlTubi = `
+        WITH target(refno_str) AS (
+          SELECT UNNEST(${listExpr}) AS refno_str
+        )
+        SELECT
+          t.tubi_refno_str AS refno_str,
+          'TUBI' AS noun,
+          '' AS name,
+          t.owner_refno_str,
+          '' AS owner_noun,
+          t.spec_value,
+          false AS has_neg,
+          t.trans_hash,
+          t.aabb_hash,
+          t.order AS geo_index,
+          t.geo_hash,
+          '' AS geo_trans_hash,
+          aw.min_x, aw.min_y, aw.min_z, aw.max_x, aw.max_y, aw.max_z,
+          tw.m00, tw.m10, tw.m20, tw.m30,
+          tw.m01, tw.m11, tw.m21, tw.m31,
+          tw.m02, tw.m12, tw.m22, tw.m32,
+          tw.m03, tw.m13, tw.m23, tw.m33,
+          NULL AS g_m00, NULL AS g_m10, NULL AS g_m20, NULL AS g_m30,
+          NULL AS g_m01, NULL AS g_m11, NULL AS g_m21, NULL AS g_m31,
+          NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
+          NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
+        FROM target x
+        JOIN parquet_scan('${reg.files.tubings}') t ON t.tubi_refno_str = x.refno_str
+        LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = t.aabb_hash
+        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = t.trans_hash
+        ORDER BY t.tubi_refno_str, t.order
+      `
+
+      const tubiArrow = await conn.query(sqlTubi)
+      const tubiRows = tubiArrow.toArray() as any[]
 
       for (const row of tubiRows) {
         const refnoStr = String(row.refno_str || '')
@@ -449,7 +466,7 @@ export function useDbnoInstancesParquetLoader() {
           uniforms: {
             refno: refnoStr,
             noun,
-            name: row.name ? String(row.name) : '',
+            name: '',
             owner_refno: ownerRefno,
             owner_noun: ownerNoun,
             spec_value: Number(row.spec_value ?? 0),
@@ -472,33 +489,126 @@ export function useDbnoInstancesParquetLoader() {
     return resultMap
   }
 
-  async function queryAllRefnoKeys(
+  async function queryAllRefnosByDbno(
     dbno: number,
-    options?: { debug?: boolean }
+    options?: { limit?: number; debug?: boolean }
   ): Promise<string[]> {
     lastError.value = null
-    const debug = options?.debug === true
 
     const reg = await registerDbno(dbno)
     await ensureDuckDB()
     if (!conn) throw new Error('DuckDB connection unavailable')
 
-    const sql = `SELECT DISTINCT refno_str FROM parquet_scan('${reg.files.instances}') ORDER BY refno_str`
+    const limit =
+      typeof options?.limit === 'number' && Number.isFinite(options.limit)
+        ? Math.max(1, Math.floor(options.limit))
+        : null
+
+    const sql = `
+      WITH all_refnos AS (
+        SELECT refno_str AS refno
+        FROM parquet_scan('${reg.files.instances}')
+        UNION
+        SELECT tubi_refno_str AS refno
+        FROM parquet_scan('${reg.files.tubings}')
+      )
+      SELECT refno
+      FROM all_refnos
+      WHERE refno IS NOT NULL AND refno <> ''
+      ORDER BY refno
+      ${limit ? `LIMIT ${limit}` : ''}
+    `
+
     const arrow = await conn.query(sql)
     const rows = arrow.toArray() as any[]
-    const keys = rows.map((r) => normalizeRefnoKey(String(r.refno_str || ''))).filter(Boolean)
+    const out = Array.from(
+      new Set(
+        rows
+          .map((r) => normalizeRefnoKey(String(r?.refno || '')))
+          .filter(Boolean)
+      )
+    )
 
-    if (debug) {
-      console.log('[instances-parquet] queryAllRefnoKeys', { dbno, count: keys.length })
+    if (options?.debug) {
+      // eslint-disable-next-line no-console
+      console.log('[instances-parquet] all refnos loaded', { dbno, count: out.length })
     }
-    return keys
+
+    return out
+  }
+
+  async function queryMeshValidationInfoByDbno(
+    dbno: number,
+    options?: { topN?: number; forceRefresh?: boolean }
+  ): Promise<ParquetMeshValidationInfo | null> {
+    const topN =
+      typeof options?.topN === 'number' && Number.isFinite(options.topN)
+        ? Math.max(1, Math.floor(options.topN))
+        : 5
+
+    if (options?.forceRefresh) {
+      meshValidationByDbno.delete(dbno)
+    }
+
+    const cached = meshValidationByDbno.get(dbno)
+    if (cached) return await cached
+
+    const task = (async (): Promise<ParquetMeshValidationInfo | null> => {
+      let manifest: ParquetManifest
+      try {
+        manifest = await fetchManifest(dbno)
+      } catch {
+        return null
+      }
+
+      const mv = manifest.mesh_validation
+      if (!mv || typeof mv !== 'object') return null
+
+      const info: ParquetMeshValidationInfo = {
+        lodTag: String(mv.lod_tag || 'L1'),
+        reportFile: mv.report_file ? String(mv.report_file) : null,
+        checkedGeoHashes: Number(mv.checked_geo_hashes || 0),
+        missingGeoHashes: Number(mv.missing_geo_hashes || 0),
+        missingOwnerRefnos: Number(mv.missing_owner_refnos || 0),
+        topMissingGeoHashes: [],
+        reportGeneratedAt: null,
+      }
+
+      if (!info.reportFile) return info
+
+      try {
+        const reportUrl = buildFilesOutputUrl(`parquet/${info.reportFile}`)
+        // 同 manifest，缺失报告也需要实时读取最新内容。
+        const resp = await fetch(reportUrl, { cache: 'no-store' })
+        if (!resp.ok) return info
+        const report = (await resp.json()) as MissingMeshReport
+        info.reportGeneratedAt = report.generated_at ? String(report.generated_at) : null
+        const list = Array.isArray(report.missing_geo_hash_list) ? report.missing_geo_hash_list : []
+        info.topMissingGeoHashes = list
+          .map((x) => ({
+            geoHash: String(x?.geo_hash || ''),
+            rowCount: Number(x?.row_count || 0),
+            ownerRefnoCount: Number(x?.owner_refno_count || 0),
+          }))
+          .filter((x) => !!x.geoHash)
+          .sort((a, b) => b.rowCount - a.rowCount || a.geoHash.localeCompare(b.geoHash))
+          .slice(0, topN)
+      } catch {
+        // ignore report fetch errors; manifest-level stats are still useful
+      }
+
+      return info
+    })()
+
+    meshValidationByDbno.set(dbno, task)
+    return await task
   }
 
   return {
     lastError,
     isParquetAvailable,
-    queryAllRefnoKeys,
     queryInstanceEntriesByRefnos,
+    queryAllRefnosByDbno,
+    queryMeshValidationInfoByDbno,
   }
 }
-

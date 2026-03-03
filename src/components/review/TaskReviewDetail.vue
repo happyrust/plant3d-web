@@ -207,10 +207,12 @@ onMounted(() => {
               </div>
             </div>
             <div>
-              <label class="text-sm text-gray-500">审核人员</label>
+              <label class="text-sm text-gray-500">校审人员</label>
               <div class="flex items-center gap-2 mt-1">
                 <User class="h-4 w-4 text-gray-400" />
-                <p class="font-medium">{{ task.reviewerName }}</p>
+                <p class="font-medium">
+                  校核：{{ task.checkerName || task.reviewerName || '-' }} / 审核：{{ task.approverName || '-' }}
+                </p>
               </div>
             </div>
             <div>

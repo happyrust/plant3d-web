@@ -8,7 +8,6 @@ import {
   reviewTaskDelete,
   reviewTaskStartReview,
   reviewTaskApprove,
-  reviewTaskReject,
   reviewTaskCancel,
   reviewTaskSubmitToNext,
   reviewTaskReturn,
@@ -45,7 +44,16 @@ const STORAGE_KEY_V1 = 'plant3d-web-user-v1';
 // 配置：是否使用后端 API
 const USE_BACKEND = ref(true);
 
-const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
+// 三段角色：编制(sj) -> 校核(jd) -> 审核(sh)
+const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh'];
+
+function isCheckerRole(role: UserRole | undefined): boolean {
+  return role === UserRole.PROOFREADER;
+}
+
+function isApproverRole(role: UserRole | undefined): boolean {
+  return role === UserRole.REVIEWER || role === UserRole.MANAGER || role === UserRole.ADMIN;
+}
 
 function getNextWorkflowNode(node?: WorkflowNode): WorkflowNode | null {
   const current = node ?? 'sj';
@@ -250,18 +258,32 @@ const isReviewer = computed(() => {
   );
 });
 
+const isChecker = computed(() => isCheckerRole(currentUser.value?.role));
+const isApprover = computed(() => isApproverRole(currentUser.value?.role));
+
 const availableUsers = computed(() => users.value);
 
 const availableReviewers = computed(() => reviewerUsers.value);
+const availableCheckers = computed(() => reviewerUsers.value.filter((u) => isCheckerRole(u.role)));
+const availableApprovers = computed(() => reviewerUsers.value.filter((u) => isApproverRole(u.role)));
 
 // 当前用户的待审核任务（作为审核人员）
 const pendingReviewTasks = computed(() => {
   if (!currentUser.value) return [];
-  return reviewTasks.value.filter(
-    (t) =>
-      t.reviewerId === currentUser.value!.id &&
-      (t.status === 'submitted' || t.status === 'in_review')
-  );
+  const uid = currentUser.value.id;
+  return reviewTasks.value.filter((t) => {
+    const node = t.currentNode ?? 'sj';
+    const checkerId = t.checkerId || t.reviewerId;
+    const approverId = t.approverId;
+
+    if (isChecker.value) {
+      return checkerId === uid && node === 'jd' && (t.status === 'submitted' || t.status === 'in_review');
+    }
+    if (isApprover.value) {
+      return approverId === uid && node === 'sh' && (t.status === 'submitted' || t.status === 'in_review');
+    }
+    return false;
+  });
 });
 
 // 当前用户发起的任务（作为设计人员）
@@ -401,7 +423,8 @@ async function createReviewTask(data: {
   title: string;
   description: string;
   modelName: string;
-  reviewerId: string;
+  checkerId: string;
+  approverId: string;
   priority: ReviewTask['priority'];
   components: ReviewComponent[];
   dueDate?: number;
@@ -419,7 +442,9 @@ async function createReviewTask(data: {
         title: data.title,
         description: data.description,
         modelName: data.modelName,
-        reviewerId: data.reviewerId,
+        checkerId: data.checkerId,
+        approverId: data.approverId,
+        reviewerId: data.checkerId,
         formId: data.formId,
         priority: data.priority,
         components: data.components,
@@ -445,8 +470,10 @@ async function createReviewTask(data: {
   }
 
   // 本地模式
-  const reviewer = users.value.find((u) => u.id === data.reviewerId);
-  if (!reviewer) throw new Error('Reviewer not found');
+  const checker = users.value.find((u) => u.id === data.checkerId);
+  if (!checker) throw new Error('Checker not found');
+  const approver = users.value.find((u) => u.id === data.approverId);
+  if (!approver) throw new Error('Approver not found');
 
   const task: ReviewTask = {
     id: `task-${Date.now()}`,
@@ -458,8 +485,12 @@ async function createReviewTask(data: {
     priority: data.priority,
     requesterId: user.id,
     requesterName: user.name,
-    reviewerId: data.reviewerId,
-    reviewerName: reviewer.name,
+    checkerId: data.checkerId,
+    checkerName: checker.name,
+    approverId: data.approverId,
+    approverName: approver.name,
+    reviewerId: data.checkerId,
+    reviewerName: checker.name,
     components: data.components,
     attachments: data.attachments,
     createdAt: Date.now(),
@@ -492,7 +523,8 @@ async function updateTaskStatus(
           response = await reviewTaskApprove(taskId, comment);
           break;
         case 'rejected':
-          response = await reviewTaskReject(taskId, comment || '');
+          // 统一规则：驳回一律回发起设计人（sj）
+          response = await reviewTaskReturn(taskId, 'sj', comment || '驳回');
           break;
         case 'cancelled':
           response = await reviewTaskCancel(taskId, comment);
@@ -526,7 +558,8 @@ async function updateTaskStatus(
 
   const updated: ReviewTask = {
     ...task,
-    status,
+    status: status === 'rejected' ? 'draft' : status,
+    currentNode: status === 'rejected' ? 'sj' : task.currentNode,
     updatedAt: Date.now(),
     reviewComment: comment,
   };
@@ -634,12 +667,14 @@ async function submitTaskToNextNode(taskId: string, comment?: string): Promise<v
   ];
 }
 
-async function returnTaskToNode(taskId: string, targetNode: WorkflowNode, reason: string): Promise<void> {
+async function returnTaskToNode(taskId: string, _targetNode: WorkflowNode, reason: string): Promise<void> {
+  const fixedTargetNode: WorkflowNode = 'sj';
+
   if (USE_BACKEND.value) {
     loading.value = true;
     error.value = null;
     try {
-      const response = await reviewTaskReturn(taskId, targetNode, reason);
+      const response = await reviewTaskReturn(taskId, fixedTargetNode, reason);
       if (!response.success) {
         throw new Error(response.error_message || '驳回失败');
       }
@@ -672,8 +707,8 @@ async function returnTaskToNode(taskId: string, targetNode: WorkflowNode, reason
 
   const updated: ReviewTask = {
     ...task,
-    status: statusFromNode(targetNode),
-    currentNode: targetNode,
+    status: statusFromNode(fixedTargetNode),
+    currentNode: fixedTargetNode,
     workflowHistory: [...(task.workflowHistory || []), step],
     returnReason: reason,
     updatedAt: Date.now(),
@@ -867,8 +902,12 @@ export function useUserStore() {
     currentUserId,
     isDesigner,
     isReviewer,
+    isChecker,
+    isApprover,
     availableUsers,
     availableReviewers,
+    availableCheckers,
+    availableApprovers,
     reviewTasks,
     pendingReviewTasks,
     myInitiatedTasks,

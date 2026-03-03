@@ -86,7 +86,12 @@ export type ReviewTaskCreateRequest = {
   title: string;
   description?: string;
   modelName: string;
-  reviewerId: string;
+  /** 校核人（第二段） */
+  checkerId: string;
+  /** 审核人（第三段） */
+  approverId: string;
+  /** 兼容旧接口字段（语义同 checkerId） */
+  reviewerId?: string;
   /** 外部已创建单据时传入，后端会沿用；不传则由后端生成 */
   formId?: string;
   priority: ReviewTask['priority'];
@@ -232,6 +237,8 @@ export async function reviewTaskGetList(options?: {
   status?: ReviewTask['status'] | 'all';
   priority?: ReviewTask['priority'] | 'all';
   requesterId?: string;
+  checkerId?: string;
+  approverId?: string;
   reviewerId?: string;
   limit?: number;
   offset?: number;
@@ -240,6 +247,8 @@ export async function reviewTaskGetList(options?: {
   if (options?.status && options.status !== 'all') params.set('status', options.status);
   if (options?.priority && options.priority !== 'all') params.set('priority', options.priority);
   if (options?.requesterId) params.set('requester_id', options.requesterId);
+  if (options?.checkerId) params.set('checker_id', options.checkerId);
+  if (options?.approverId) params.set('approver_id', options.approverId);
   if (options?.reviewerId) params.set('reviewer_id', options.reviewerId);
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.offset) params.set('offset', String(options.offset));
@@ -762,6 +771,11 @@ export function getReviewUserWebSocketUrl(userId: string): string {
  * 规范化审核任务数据
  */
 export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
+  const checkerId = String(raw.checker_id || raw.checkerId || raw.reviewer_id || raw.reviewerId || '');
+  const checkerName = String(raw.checker_name || raw.checkerName || raw.reviewer_name || raw.reviewerName || '');
+  const approverId = String(raw.approver_id || raw.approverId || '');
+  const approverName = String(raw.approver_name || raw.approverName || '');
+
   return {
     id: String(raw.id || ''),
     formId: raw.formId ? String(raw.formId) : (raw.form_id ? String(raw.form_id) : undefined),
@@ -772,8 +786,13 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
     priority: normalizeReviewPriority(raw.priority),
     requesterId: String(raw.requester_id || raw.requesterId || ''),
     requesterName: String(raw.requester_name || raw.requesterName || ''),
-    reviewerId: String(raw.reviewer_id || raw.reviewerId || ''),
-    reviewerName: String(raw.reviewer_name || raw.reviewerName || ''),
+    checkerId,
+    checkerName,
+    approverId,
+    approverName,
+    // reviewer 字段兼容旧数据与旧界面语义（映射到校核人）
+    reviewerId: checkerId,
+    reviewerName: checkerName,
     components: Array.isArray(raw.components) ? raw.components as ReviewComponent[] : [],
     attachments: Array.isArray(raw.attachments)
       ? (raw.attachments as Record<string, unknown>[]).map(normalizeReviewAttachment)

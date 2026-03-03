@@ -18,7 +18,8 @@ const selectionStore = useSelectionStore();
 
 const packageName = ref('');
 const description = ref('');
-const reviewerId = ref('');
+const checkerId = ref('');
+const approverId = ref('');
 const priority = ref<'low' | 'medium' | 'high' | 'urgent'>('medium');
 const dueDate = ref('');
 const selectedComponents = ref<ReviewComponent[]>([]);
@@ -100,17 +101,25 @@ const currentProjectId = computed<string>(() => {
   return 'demo-project';
 });
 
-const availableReviewers = computed(() => userStore.availableReviewers.value);
+const availableCheckers = computed(() => {
+  const checkers = userStore.availableCheckers.value;
+  return checkers.length > 0 ? checkers : userStore.availableReviewers.value;
+});
+const availableApprovers = computed(() => {
+  const approvers = userStore.availableApprovers.value;
+  return approvers.length > 0 ? approvers : userStore.availableReviewers.value;
+});
 
 const canSubmit = computed(() => {
-  return packageName.value.trim() && reviewerId.value && selectedComponents.value.length > 0;
+  return packageName.value.trim() && checkerId.value && approverId.value && selectedComponents.value.length > 0;
 });
 
 const missingFields = computed(() => {
   const fields: string[] = [];
   if (selectedComponents.value.length === 0) fields.push('选择模型构件');
   if (!packageName.value.trim()) fields.push('数据包名称');
-  if (!reviewerId.value) fields.push('审核人员');
+  if (!checkerId.value) fields.push('校核人员');
+  if (!approverId.value) fields.push('审核人员');
   return fields;
 });
 
@@ -139,7 +148,8 @@ async function handleSubmit() {
       title: packageName.value,
       description: description.value || `模型数据包：${packageName.value}`,
       modelName: packageName.value,
-      reviewerId: reviewerId.value,
+      checkerId: checkerId.value,
+      approverId: approverId.value,
       // 外部已创建单据时统一复用 formId；否则走正常创建逻辑（后端生成）
       formId: embedModeParams.value.isEmbedMode ? (embedModeParams.value.formId || undefined) : undefined,
       priority: priority.value,
@@ -147,18 +157,20 @@ async function handleSubmit() {
       dueDate: dueDate.value ? new Date(dueDate.value).getTime() : undefined,
     });
 
-    const reviewer = availableReviewers.value.find((r) => r.id === reviewerId.value);
+    const checker = availableCheckers.value.find((r) => r.id === checkerId.value);
+    const approver = availableApprovers.value.find((r) => r.id === approverId.value);
 
     notification.value = {
       type: 'success',
       message: '提资单创建成功！',
-      details: `数据包「${task.title}」已创建并分配给 ${reviewer?.name}（${reviewer?.department}），包含 ${selectedComponents.value.length} 个构件`,
+      details: `数据包「${task.title}」已创建，校核人：${checker?.name}，审核人：${approver?.name}，包含 ${selectedComponents.value.length} 个构件`,
     };
 
     // 重置表单
     packageName.value = '';
     description.value = '';
-    reviewerId.value = '';
+    checkerId.value = '';
+    approverId.value = '';
     priority.value = 'medium';
     dueDate.value = '';
     selectedComponents.value = [];
@@ -184,7 +196,7 @@ function clearNotification() {
     <div class="border-b pb-3 flex justify-between items-start">
       <div>
         <h3 class="text-lg font-semibold">创建提资单</h3>
-        <p class="text-sm text-gray-500 mt-1">选择模型构件并指定审核人员</p>
+        <p class="text-sm text-gray-500 mt-1">选择模型构件并手动指定校核/审核人员</p>
         <!-- 嵌入模式显示 form_id -->
         <div v-if="embedModeParams.isEmbedMode" class="mt-2 flex items-center gap-2">
           <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
@@ -288,16 +300,29 @@ function clearNotification() {
       <AssociatedFilesList />
     </div>
 
-    <!-- 审核人员和优先级 -->
-    <div class="grid grid-cols-2 gap-4">
+    <!-- 校核/审核人员和优先级 -->
+    <div class="grid grid-cols-3 gap-4">
+      <div class="space-y-2">
+        <label class="text-sm font-medium">校核人员 *</label>
+        <select
+          v-model="checkerId"
+          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">选择校核人员</option>
+          <option v-for="r in availableCheckers" :key="r.id" :value="r.id">
+            {{ r.name }} ({{ getRoleDisplayName(r.role) }})
+          </option>
+        </select>
+      </div>
+
       <div class="space-y-2">
         <label class="text-sm font-medium">审核人员 *</label>
         <select
-          v-model="reviewerId"
+          v-model="approverId"
           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">选择审核人员</option>
-          <option v-for="r in availableReviewers" :key="r.id" :value="r.id">
+          <option v-for="r in availableApprovers" :key="r.id" :value="r.id">
             {{ r.name }} ({{ getRoleDisplayName(r.role) }})
           </option>
         </select>

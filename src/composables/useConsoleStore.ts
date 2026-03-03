@@ -26,7 +26,9 @@ const HISTORY_STORAGE_KEY = 'plant3d-console-history';
 // Load history from localStorage on initialization
 function loadHistoryFromStorage() {
     try {
-        const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
+        const ls: any = (globalThis as any).localStorage;
+        if (!ls || typeof ls.getItem !== 'function') return;
+        const stored = ls.getItem(HISTORY_STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
@@ -41,7 +43,9 @@ function loadHistoryFromStorage() {
 // Save history to localStorage
 function saveHistoryToStorage() {
     try {
-        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.value));
+        const ls: any = (globalThis as any).localStorage;
+        if (!ls || typeof ls.setItem !== 'function') return;
+        ls.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.value));
     } catch (e) {
         console.warn('Failed to save console history to localStorage:', e);
     }
