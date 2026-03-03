@@ -60,6 +60,7 @@ const inputRefno = computed(() => data.value?.input_refno ?? '')
 const dims = computed(() => data.value?.dims ?? [])
 const welds = computed(() => data.value?.welds ?? [])
 const slopes = computed(() => data.value?.slopes ?? [])
+const bends = computed(() => data.value?.bends ?? [])
 const segments = computed(() => data.value?.segments ?? [])
 const attrs = computed(() => data.value?.branch_attrs ?? null)
 
@@ -183,6 +184,10 @@ function setActive(id: string | null) {
         <span>坡度</span>
       </label>
       <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox" :checked="vis.showBends.value" @change="vis.showBends.value = !vis.showBends.value" />
+        <span>弯头</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
         <input type="checkbox" :checked="vis.showSegments.value" @change="vis.showSegments.value = !vis.showSegments.value" />
         <span>管段</span>
       </label>
@@ -206,6 +211,9 @@ function setActive(id: string | null) {
       <div class="rounded-md border border-border px-2 py-1">
         坡度: <span class="font-semibold">{{ stats.slopes_count }}</span>
       </div>
+      <div class="rounded-md border border-border px-2 py-1">
+        弯头: <span class="font-semibold">{{ stats.bends_count }}</span>
+      </div>
     </div>
 
     <div class="flex items-center gap-2">
@@ -226,6 +234,12 @@ function setActive(id: string | null) {
         :class="tab === 'slopes' ? 'bg-muted' : ''"
         @click="tab = 'slopes'">
         坡度
+      </button>
+      <button type="button"
+        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+        :class="tab === 'bends' ? 'bg-muted' : ''"
+        @click="tab = 'bends'">
+        弯头
       </button>
       <button type="button"
         class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
@@ -312,6 +326,23 @@ function setActive(id: string | null) {
         <div class="mt-1 text-muted-foreground truncate">start: {{ s.start.join(',') }} · end: {{ s.end.join(',') }}</div>
       </button>
       <div v-if="slopes.length === 0" class="text-xs text-muted-foreground">（暂无坡度）</div>
+    </div>
+
+    <div v-else-if="tab === 'bends'" class="flex flex-col gap-2">
+      <button v-for="b in bends" :key="b.id"
+        type="button"
+        class="w-full rounded-md border border-border p-2 text-left text-xs hover:bg-muted"
+        :class="vis.activeItemId.value === b.id ? 'bg-muted' : ''"
+        @click="setActive(b.id)">
+        <div class="flex items-center justify-between gap-2">
+          <div class="truncate font-semibold">{{ b.noun }} · {{ b.refno }}</div>
+          <div class="text-muted-foreground">
+            <span v-if="b.angle != null">{{ b.angle.toFixed(1) }}°</span>
+            <span v-if="b.radius != null"> R{{ b.radius.toFixed(0) }}</span>
+          </div>
+        </div>
+      </button>
+      <div v-if="bends.length === 0" class="text-xs text-muted-foreground">（暂无弯头）</div>
     </div>
 
     <div v-else-if="tab === 'segments'" class="flex flex-col gap-2">

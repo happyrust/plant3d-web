@@ -2,12 +2,12 @@ import { ref } from 'vue'
 import type { Ref } from 'vue'
 
 import { e3dGetSubtreeRefnos } from '@/api/genModelE3dApi'
+import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi'
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore'
 import {
   InstancesJsonNotFoundError,
   ensureDbnoInstancesAvailable,
   getDbnoInstancesManifest,
-  invalidateDbnoInstancesManifestCache,
   triggerBatchGenerateSse,
   triggerSubtreeGenerateSse,
   waitForDbnoInstancesFile,
@@ -20,9 +20,28 @@ import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instan
 
 /**
  * 全局开关：是否跳过自动生成（SSE 流式生成、弹窗选择等）
- * 设为 true 时，只加载已有的 instances 文件，不触发任何生成流程
+ * 默认 false（开启自动补生成）；可通过 query/localStorage 强制关闭：
+ * - query: `dtx_skip_auto_generation=1`
+ * - localStorage: `dtx_skip_auto_generation=1`
  */
-export const SKIP_AUTO_GENERATION = true
+function shouldSkipAutoGeneration(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const q = new URLSearchParams(window.location.search)
+    const rawQ = (q.get('dtx_skip_auto_generation') || '').trim().toLowerCase()
+    if (rawQ === '1' || rawQ === 'true') return true
+    if (rawQ === '0' || rawQ === 'false') return false
+
+    const rawLs = (window.localStorage?.getItem('dtx_skip_auto_generation') || '').trim().toLowerCase()
+    if (rawLs === '1' || rawLs === 'true') return true
+    if (rawLs === '0' || rawLs === 'false') return false
+  } catch {
+    // ignore
+  }
+  return false
+}
+
+export const SKIP_AUTO_GENERATION = shouldSkipAutoGeneration()
 const VISIBLE_REFNOS_PAGE_SIZE = 1000
 
 export interface ModelGenerationOptions {
@@ -32,6 +51,7 @@ export interface ModelGenerationOptions {
 
 export interface ModelGenerationState {
   isGenerating: Ref<boolean>
+  showProgressModal: Ref<boolean>
   progress: Ref<number>
   statusMessage: Ref<string>
   error: Ref<string | null>
@@ -199,6 +219,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const consoleStore = useConsoleStore()
 
   const isGenerating = ref(false)
+  const showProgressModal = ref(false)
   const progress = ref(0)
   const statusMessage = ref('')
   const error = ref<string | null>(null)
@@ -209,25 +230,73 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   const lastLoadDebug = ref<ModelLoadDebugInfo | null>(null)
 
   const loadedRoots = new Set<string>()
-  const BATCH_LOAD_THRESHOLD = 20
+  const PARQUET_VERSION_POLL_INTERVAL_MS = 3000
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
 
   async function loadGeneratedRefnos(
     dtxLayer: any,
     dbno: number,
     refnos: string[],
     anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void }
-  ): Promise<void> {
-    if (refnos.length === 0) return
-    invalidateDbnoInstancesManifestCache(dbno)
-    statusMessage.value = '正在加载新生成的模型...'
-    progress.value = 96
-    await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, refnos, {
+  ): Promise<{
+    loadedRefnos: number
+    skippedRefnos: number
+    loadedObjects: number
+    missingRefnos: string[]
+  }> {
+    if (refnos.length === 0) {
+      return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, missingRefnos: [] }
+    }
+
+    statusMessage.value = '正在加载实时生成模型...'
+    progress.value = Math.max(progress.value, 96)
+
+    const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, refnos, {
       lodAssetKey: 'L1',
       debug: false,
+      dataSource: 'backend',
       forceReloadRefnos: refnos,
     })
     anyViewer.__dtxAfterInstancesLoaded?.(dbno, refnos)
+    return result
+  }
+
+  async function pollParquetVersionAfterEnqueue(
+    dbno: number,
+    baselineRevision: number,
+    maxWaitMs = 3 * 60 * 1000
+  ): Promise<{ updated: boolean; revision: number; error?: string }> {
+    const startedAt = Date.now()
+    let lastError = ''
+
+    while (Date.now() - startedAt < maxWaitMs) {
+      await sleep(PARQUET_VERSION_POLL_INTERVAL_MS)
+      try {
+        const version = await getParquetVersion(dbno)
+        const revision = Number(version.revision || 0)
+        if (revision > baselineRevision) {
+          return { updated: true, revision }
+        }
+        if (!version.running && Number(version.pending_count || 0) <= 0) {
+          return {
+            updated: false,
+            revision,
+            error: version.last_error || undefined,
+          }
+        }
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e)
+      }
+    }
+
+    return {
+      updated: false,
+      revision: baselineRevision,
+      error: lastError || '版本轮询超时',
+    }
   }
 
   async function handleMissingRefnos(
@@ -235,54 +304,100 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     dbno: number,
     missingRefnos: string[],
     anyViewer: { __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void }
-  ): Promise<void> {
-    if (missingRefnos.length === 0) return
-
-    // 开关打开时，跳过 SSE 批量生成
-    if (SKIP_AUTO_GENERATION) {
-      console.warn(`[model-generation] 发现 ${missingRefnos.length} 个缺失模型，已跳过自动生成`)
-      return
+  ): Promise<{ loadedObjects: number; failedRefnos: string[] }> {
+    const normalizedMissing = uniqStrings(missingRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
+    if (normalizedMissing.length === 0) {
+      return { loadedObjects: 0, failedRefnos: [] }
     }
 
-    statusMessage.value = `发现 ${missingRefnos.length} 个缺失模型，正在生成...`
-    totalCount.value = missingRefnos.length
-    currentIndex.value = 0
+    if (SKIP_AUTO_GENERATION) {
+      console.warn(`[model-generation] 发现 ${normalizedMissing.length} 个缺失模型，已跳过自动生成`)
+      return { loadedObjects: 0, failedRefnos: normalizedMissing }
+    }
 
-    const pending: string[] = []
+    showProgressModal.value = true
+    statusMessage.value = `发现 ${normalizedMissing.length} 个缺失模型，正在实时生成...`
+    totalCount.value = normalizedMissing.length
+    currentIndex.value = 0
+    currentRefno.value = ''
+
+    let loadedObjects = 0
+    let failedRefnos: string[] = []
+    const backendMissing = new Set<string>()
+    let baselineRevision = 0
+    let enqueuedAny = false
 
     try {
-      const { failedRefnos } = await triggerBatchGenerateSse(
-        missingRefnos,
-        {
-          onUpdate: (u) => {
-            statusMessage.value = u.message || ''
-            currentRefno.value = u.currentRefno || ''
-            currentIndex.value = u.completedCount
-            progress.value = Math.max(60, Math.min(95, 60 + u.percent * 0.35))
-          },
-          onItemDone: async (u) => {
-            if (!u.ok) return
-            pending.push(u.refno)
-            if (pending.length >= BATCH_LOAD_THRESHOLD) {
-              const batch = pending.splice(0, pending.length)
-              await loadGeneratedRefnos(dtxLayer, dbno, batch, anyViewer)
-            }
-          },
-          skipOnError: true,
-        }
-      )
-
-      if (pending.length > 0) {
-        const batch = pending.splice(0, pending.length)
-        await loadGeneratedRefnos(dtxLayer, dbno, batch, anyViewer)
+      try {
+        const version = await getParquetVersion(dbno)
+        baselineRevision = Number(version.revision || 0)
+      } catch (e) {
+        console.warn('[model-generation] 读取 parquet 版本失败，继续执行实时加载', e)
       }
 
+      const result = await triggerBatchGenerateSse(normalizedMissing, {
+        onUpdate: (u) => {
+          statusMessage.value = u.message || ''
+          if (u.currentRefno) {
+            currentRefno.value = normalizeRefnoString(u.currentRefno)
+          }
+          currentIndex.value = Math.max(0, Math.min(u.totalCount || normalizedMissing.length, u.completedCount || 0))
+          if (u.stage === 'exportInstances') {
+            progress.value = Math.max(95, Math.min(99, 95 + u.percent * 0.04))
+          } else {
+            progress.value = Math.max(60, Math.min(95, 60 + u.percent * 0.35))
+          }
+        },
+        onBatchDone: async (u) => {
+          const readyRefnos = uniqStrings(u.readyRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
+          if (readyRefnos.length === 0) return
+
+          const loadResult = await loadGeneratedRefnos(dtxLayer, dbno, readyRefnos, anyViewer)
+          loadedObjects += loadResult.loadedObjects
+          for (const missingRefno of loadResult.missingRefnos) {
+            backendMissing.add(normalizeRefnoString(missingRefno))
+          }
+
+          try {
+            await enqueueParquetIncremental(dbno, readyRefnos)
+            enqueuedAny = true
+          } catch (e) {
+            console.warn('[model-generation] parquet 增量入队失败', e)
+          }
+        },
+        skipOnError: true,
+        exportInstances: false,
+        mergeInstances: false,
+      })
+
+      failedRefnos = uniqStrings(result.failedRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
       if (failedRefnos.length > 0) {
         console.warn(`[model-generation] ${failedRefnos.length} refnos failed to generate:`, failedRefnos)
       }
+
+      if (enqueuedAny) {
+        statusMessage.value = '正在轮询 parquet 版本，等待离线缓存更新...'
+        const poll = await pollParquetVersionAfterEnqueue(dbno, baselineRevision)
+        if (poll.updated) {
+          consoleStore.addLog('info', `[model-load] parquet 版本已更新 dbno=${dbno} revision=${poll.revision}`)
+        } else if (poll.error) {
+          consoleStore.addLog('error', `[model-load] parquet 版本轮询未更新 dbno=${dbno} err=${poll.error}`)
+        }
+      }
     } catch (e) {
       console.error('[model-generation] Batch generate failed:', e)
+      const msg = e instanceof Error ? e.message : String(e)
+      consoleStore.addLog('error', `[model-load] 实时生成失败 dbno=${dbno} err=${msg}`)
+      failedRefnos = normalizedMissing
+    } finally {
+      showProgressModal.value = false
+      totalCount.value = 0
+      currentIndex.value = 0
+      currentRefno.value = ''
     }
+
+    const mergedFailed = uniqStrings([...failedRefnos, ...Array.from(backendMissing)])
+    return { loadedObjects, failedRefnos: mergedFailed }
   }
 
   function checkRefnoExists(refno: string): boolean {
@@ -419,7 +534,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
 
         if (missingAll.length > 0) {
-          await handleMissingRefnos(dtxLayer, dbno, uniqStrings(missingAll), anyViewer)
+          const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, uniqStrings(missingAll), anyViewer)
+          totalObjects += realtimeResult.loadedObjects
         }
 
         if (loadOptions?.flyTo) {
@@ -442,7 +558,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           result: { loadedRefnos: totalLoaded, skippedRefnos: totalSkipped, loadedObjects: totalObjects },
           ms: Date.now() - startedAt,
         }
-        loadedRoots.add(normalizedRoot)
+        if (totalObjects > 0) {
+          loadedRoots.add(normalizedRoot)
+        }
         statusMessage.value = totalObjects > 0 ? '加载完成 (Parquet)' : '无可见几何实例'
         progress.value = 100
         return true
@@ -556,6 +674,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbnoValue, batch, {
             lodAssetKey: 'L1',
             debug: false,
+            dataSource: 'json',
           })
           anyViewer.__dtxAfterInstancesLoaded?.(dbnoValue, batch)
 
@@ -629,10 +748,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         consoleStore.addLog('info', `[model-load] 开始加载 dbno=${dbno} refno_count=${loadRefnos.length}`)
 
         const result = await loadRefnosInChunks(loadRefnos, dbno)
+        let realtimeLoadedObjects = 0
 
-        // 处理缺失的 refno：达到阈值或全部完成后再分批加载
+        // 处理缺失的 refno：批量实时生成并边生成边加载
         if (result.missingRefnos.length > 0) {
-          await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+          const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+          realtimeLoadedObjects += realtimeResult.loadedObjects
         }
         if (result.missingRefnos.length > 0) {
           const sample = result.missingRefnos.slice(0, 50)
@@ -682,12 +803,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               }
             : undefined,
           loadRefnos: { count: loadRefnos.length, sample: loadRefnoSample },
-          result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects } : null,
+          result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects + realtimeLoadedObjects } : null,
           ms: Date.now() - startedAt,
         }
 
-        loadedRoots.add(normalizedRoot)
-        statusMessage.value = result.loadedObjects > 0 ? '加载完成' : '无可见几何实例'
+        const totalLoadedObjects = result.loadedObjects + realtimeLoadedObjects
+        if (totalLoadedObjects > 0) {
+          loadedRoots.add(normalizedRoot)
+        }
+        statusMessage.value = totalLoadedObjects > 0 ? '加载完成' : '无可见几何实例'
         progress.value = 100
         return true
       }
@@ -736,10 +860,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       consoleStore.addLog('info', `[model-load] 开始加载 dbno=${dbno} refno_count=${loadRefnos.length}`)
 
       const result = await loadRefnosInChunks(loadRefnos, dbno)
+      let realtimeLoadedObjects = 0
 
-      // 处理缺失的 refno：达到阈值或全部完成后再分批加载
+      // 处理缺失的 refno：批量实时生成并边生成边加载
       if (result.missingRefnos.length > 0) {
-        await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+        const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
+        realtimeLoadedObjects += realtimeResult.loadedObjects
       }
       if (result.missingRefnos.length > 0) {
         const sample = result.missingRefnos.slice(0, 50)
@@ -789,12 +915,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
             }
           : undefined,
         loadRefnos: { count: loadRefnos.length, sample: loadRefnoSample },
-        result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects } : null,
+        result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects + realtimeLoadedObjects } : null,
         ms: Date.now() - startedAt,
       }
 
-      loadedRoots.add(normalizedRoot)
-      statusMessage.value = result.loadedObjects > 0 ? '加载完成' : '无可见几何实例'
+      const totalLoadedObjects = result.loadedObjects + realtimeLoadedObjects
+      if (totalLoadedObjects > 0) {
+        loadedRoots.add(normalizedRoot)
+      }
+      statusMessage.value = totalLoadedObjects > 0 ? '加载完成' : '无可见几何实例'
       progress.value = 100
       return true
     } catch (e) {
@@ -804,6 +933,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       return false
     } finally {
       isGenerating.value = false
+      showProgressModal.value = false
     }
   }
 
@@ -814,6 +944,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   return {
     isGenerating,
+    showProgressModal,
     progress,
     statusMessage,
     error,

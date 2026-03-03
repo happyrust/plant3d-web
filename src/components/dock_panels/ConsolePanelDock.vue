@@ -80,9 +80,8 @@ onMounted(() => {
     @click="handleContainerClick"
   >
     <!-- Header -->
-    <div class="flex flex-none items-center justify-between border-b border-gray-200 bg-gray-50 px-2 py-1 text-xs select-none">
-      <span class="text-gray-600 font-semibold">控制台</span>
-      <button 
+    <div class="flex flex-none items-center justify-end border-b border-gray-200 bg-gray-50 px-2 py-1 text-xs select-none">
+      <button
         @click.stop="store.clearLogs()"
         class="hover:bg-gray-200 text-gray-600 hover:text-gray-900 rounded px-2 py-0.5 transition-colors"
         title="清空控制台"

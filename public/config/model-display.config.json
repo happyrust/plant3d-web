@@ -26,39 +26,39 @@
   "materialConfigs": {
     "EQUI": {
       "name": "设备",
-      "color": "#93b2c9",
-      "metalness": 0.75,
-      "roughness": 0.45,
+      "color": "#c6ab6a",
+      "metalness": 0.18,
+      "roughness": 0.46,
       "clearcoat": 0.2,
       "clearcoatRoughness": 0.3
     },
     "VALV": {
       "name": "阀门",
-      "color": "#93b2c9",
-      "metalness": 0.75,
-      "roughness": 0.45,
+      "color": "#c9ad69",
+      "metalness": 0.22,
+      "roughness": 0.44,
       "clearcoat": 0.2,
       "clearcoatRoughness": 0.1
     },
     "TUBI": {
       "name": "管道",
-      "color": "#f5f3e1",
-      "metalness": 0.1,
-      "roughness": 0.4,
+      "color": "#c9cdd3",
+      "metalness": 0.06,
+      "roughness": 0.62,
       "clearcoat": 0.2
     },
     "ELBO": {
       "name": "弯头",
-      "color": "#f5f3e1",
-      "metalness": 0.1,
-      "roughness": 0.4,
+      "color": "#c9cdd3",
+      "metalness": 0.06,
+      "roughness": 0.62,
       "clearcoat": 0.2
     },
     "FLAN": {
       "name": "法兰",
-      "color": "#f5f3e1",
+      "color": "#ceb06e",
       "metalness": 0.2,
-      "roughness": 0.4,
+      "roughness": 0.48,
       "clearcoat": 0.2
     },
     "FILT": {

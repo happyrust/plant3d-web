@@ -1,6 +1,7 @@
 import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
 import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader'
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader'
+import { realtimeInstancesByRefnos } from '@/api/genModelRealtimeApi'
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry'
 import { DTXLayer } from '@/utils/three/dtx'
 import {
@@ -20,11 +21,12 @@ type LoaderOptions = {
   forceReloadRefnos?: string[]
   /**
    * 数据源选择：
+   * - 'backend'：实时查库（用于 parquet miss 回填）
    * - 'parquet'：默认（失败则抛错）
    * - 'json'：调试用，显式指定才启用
    * - 'auto'：兼容旧逻辑（Parquet 不可用时回退 JSON，仅调试/临时）
    */
-  dataSource?: 'auto' | 'parquet' | 'json'
+  dataSource?: 'auto' | 'parquet' | 'json' | 'backend'
 }
 
 type DbnoRuntimeCache = {
@@ -349,7 +351,22 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const dataSource = options.dataSource || 'parquet'
   let index: Map<string, import('@/utils/instances/instanceManifest').InstanceEntry[]>
 
-  if (dataSource === 'json') {
+  if (dataSource === 'backend') {
+    const resp = await realtimeInstancesByRefnos(dbno, toLoad, {
+      includeTubings: true,
+      enableHoles: true,
+    })
+    if (!resp.success) {
+      throw new Error(resp.message || `后端实时查询失败 (dbno=${dbno})`)
+    }
+    index = new Map()
+    for (const [rawRefno, entries] of Object.entries(resp.instances_by_refno || {})) {
+      const refnoKey = normalizeRefnoKey(rawRefno)
+      if (!refnoKey) continue
+      index.set(refnoKey, Array.isArray(entries) ? entries : [])
+    }
+    if (debug) console.log('[dtx][instances] using backend', { dbno, refnos: toLoad.length, indexSize: index.size, missing: resp.missing_refnos?.length ?? 0 })
+  } else if (dataSource === 'json') {
     // 强制 JSON：从 instances_{dbno}.json manifest 获取实例数据
     const manifest = await getDbnoInstancesManifest(dbno)
     index = buildInstanceIndexByRefno(manifest, new Set(toLoad))

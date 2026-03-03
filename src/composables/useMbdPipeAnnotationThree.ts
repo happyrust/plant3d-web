@@ -17,6 +17,7 @@ import type {
   MbdDimKind,
   MbdSlopeDto,
   MbdWeldDto,
+  MbdBendDto,
   MbdPipeSegmentDto,
   Vec3 as ApiVec3,
 } from '@/api/mbdPipeApi'
@@ -31,6 +32,7 @@ import {
   LinearDimension3D,
   WeldAnnotation3D,
   SlopeAnnotation3D,
+  AngleDimension3D,
 } from '@/utils/three/annotation'
 import { computeDimensionOffsetDirInLocal } from '@/utils/three/annotation/utils/computeDimensionOffsetDirInLocal'
 import { formatLengthMeters } from '@/utils/unitFormat'
@@ -58,6 +60,7 @@ export type UseMbdPipeAnnotationThreeReturn = {
   showDimPort: Ref<boolean>
   showWelds: Ref<boolean>
   showSlopes: Ref<boolean>
+  showBends: Ref<boolean>
   /** 显示“管段骨架线”（当真实 meshes 缺失时用于定位/对齐标注） */
   showSegments: Ref<boolean>
   showLabels: Ref<boolean>
@@ -86,6 +89,8 @@ export type UseMbdPipeAnnotationThreeReturn = {
   getWeldAnnotations: () => Map<string, WeldAnnotation3D>
   /** 获取 slope annotations map（用于外部交互控制器注册） */
   getSlopeAnnotations: () => Map<string, SlopeAnnotation3D>
+  /** 获取 bend annotations map（用于外部交互控制器注册） */
+  getBendAnnotations: () => Map<string, AngleDimension3D>
 }
 
 /** MBD dims session-only override（不写回后端，仅当前会话有效） */
@@ -97,7 +102,7 @@ export type MbdDimOverride = {
   isReference?: boolean
 }
 
-export type MbdPipeUiTab = 'dims' | 'welds' | 'slopes' | 'attrs' | 'segments' | 'settings'
+export type MbdPipeUiTab = 'dims' | 'welds' | 'slopes' | 'bends' | 'attrs' | 'segments' | 'settings'
 
 function clamp01(n: number, fallback: number): number {
   const v = Number(n)
@@ -130,6 +135,7 @@ export function useMbdPipeAnnotationThree(
     getGlobalModelMatrix?: (() => Matrix4 | null) | null
   } = {}
 ): UseMbdPipeAnnotationThreeReturn {
+  const isDev = !!(import.meta.env as unknown as { DEV?: boolean }).DEV
   const requestRender = options.requestRender ?? null
   const getGlobalModelMatrix = options.getGlobalModelMatrix ?? null
   // 方案B：MBD 标注统一为 3D 文本，不再需要 CSS2D 容器；保留参数以维持 API 兼容。
@@ -153,6 +159,7 @@ export function useMbdPipeAnnotationThree(
   const showDimPort = ref(true)
   const showWelds = ref(true)
   const showSlopes = ref(true)
+  const showBends = ref(true)
   const showSegments = ref(true)
   const showLabels = ref(true)
 
@@ -175,6 +182,7 @@ export function useMbdPipeAnnotationThree(
   const weldAnnotations = shallowRef<Map<string, WeldAnnotation3D>>(new Map())
   const slopeAnnotations = shallowRef<Map<string, SlopeAnnotation3D>>(new Map())
   const segmentLines = shallowRef<Map<string, Line>>(new Map())
+  const bendAnnotations = shallowRef<Map<string, AngleDimension3D>>(new Map())
 
   const segmentMaterial = new LineBasicMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.9 })
   const segmentHighlightMaterial = new LineBasicMaterial({ color: 0xf59e0b })
@@ -192,6 +200,9 @@ export function useMbdPipeAnnotationThree(
       annotation.setLabelVisible(visible)
     }
     for (const annotation of slopeAnnotations.value.values()) {
+      annotation.setLabelVisible(visible)
+    }
+    for (const annotation of bendAnnotations.value.values()) {
       annotation.setLabelVisible(visible)
     }
   }
@@ -223,6 +234,12 @@ export function useMbdPipeAnnotationThree(
       annotation.dispose()
     }
     slopeAnnotations.value.clear()
+
+    // 清理弯头标注
+    for (const annotation of bendAnnotations.value.values()) {
+      annotation.dispose()
+    }
+    bendAnnotations.value.clear()
 
     // 清理管段骨架线
     for (const line of segmentLines.value.values()) {
@@ -262,6 +279,7 @@ export function useMbdPipeAnnotationThree(
     for (const a of dimAnnotations.value.values()) a.setBackgroundColor(color)
     for (const a of weldAnnotations.value.values()) a.setBackgroundColor(color)
     for (const a of slopeAnnotations.value.values()) a.setBackgroundColor(color)
+    for (const a of bendAnnotations.value.values()) a.setBackgroundColor(color)
   }
 
   function applyVisibility(): void {
@@ -286,6 +304,11 @@ export function useMbdPipeAnnotationThree(
       annotation.visible = isVisible.value && showSlopes.value
     }
 
+    // 弯头标注可见性
+    for (const annotation of bendAnnotations.value.values()) {
+      annotation.visible = isVisible.value && showBends.value
+    }
+
     // 管段骨架线可见性
     for (const line of segmentLines.value.values()) {
       line.visible = isVisible.value && showSegments.value
@@ -305,6 +328,9 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of slopeAnnotations.value.values()) {
       annotation.highlighted = false
     }
+    for (const annotation of bendAnnotations.value.values()) {
+      annotation.highlighted = false
+    }
     for (const line of segmentLines.value.values()) {
       line.material = segmentMaterial
     }
@@ -319,6 +345,9 @@ export function useMbdPipeAnnotationThree(
 
       const slope = slopeAnnotations.value.get(id)
       if (slope) slope.highlighted = true
+
+      const bend = bendAnnotations.value.get(id)
+      if (bend) bend.highlighted = true
 
       const seg = segmentLines.value.get(id)
       if (seg) seg.material = segmentHighlightMaterial
@@ -440,6 +469,47 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function renderBends(bends: MbdBendDto[]): void {
+    let skippedMissingFaceCenter = 0
+    for (const b of bends) {
+      const wp = new Vector3(b.work_point[0], b.work_point[1], b.work_point[2])
+
+      // face_center 作为角度的两条边端点；若缺失则跳过（无法绘制角度弧线）
+      if (!b.face_center_1 || !b.face_center_2) {
+        skippedMissingFaceCenter += 1
+        continue
+      }
+      const p1 = new Vector3(b.face_center_1[0], b.face_center_1[1], b.face_center_1[2])
+      const p2 = new Vector3(b.face_center_2[0], b.face_center_2[1], b.face_center_2[2])
+
+      const angleText = b.angle != null ? `${b.angle.toFixed(1)}°` : ''
+
+      const angleDim = new AngleDimension3D(materials, {
+        vertex: wp,
+        point1: p1,
+        point2: p2,
+        text: angleText,
+      })
+
+      angleDim.userData.pickable = true
+      angleDim.userData.draggable = true
+        ; (angleDim.userData as any).mbdBendId = b.id
+
+      angleDim.setMaterialSet(materials.yellow)
+      group.add(angleDim)
+      bendAnnotations.value.set(b.id, angleDim)
+    }
+    if (isDev && bends.length > 0) {
+      const rendered = bends.length - skippedMissingFaceCenter
+      // 帮助联调定位“统计里有 bends 但场景没渲染”的来源。
+      console.info('[mbd-bends] render stats', {
+        total: bends.length,
+        rendered,
+        skippedMissingFaceCenter,
+      })
+    }
+  }
+
   function renderSegments(segments: MbdPipeSegmentDto[]): void {
     for (const s of segments) {
       if (!s.arrive || !s.leave) continue
@@ -482,6 +552,7 @@ export function useMbdPipeAnnotationThree(
     if (data.dims?.length) renderDims(data.dims, data.segments ?? [], pipeOffsetDirs)
     if (data.welds?.length) renderWelds(data.welds)
     if (data.slopes?.length) renderSlopes(data.slopes)
+    if (data.bends?.length) renderBends(data.bends)
     if (data.segments?.length) renderSegments(data.segments)
 
     // Set text background occlusion color to match scene background
@@ -502,6 +573,7 @@ export function useMbdPipeAnnotationThree(
       segments: [],
       welds: [],
       slopes: [],
+      bends: [],
       dims: [
         // 1. 正常长管段
         {
@@ -545,6 +617,7 @@ export function useMbdPipeAnnotationThree(
         dims_count: 4,
         welds_count: 0,
         slopes_count: 0,
+        bends_count: 0,
       },
     }
     renderBranch(data)
@@ -574,6 +647,11 @@ export function useMbdPipeAnnotationThree(
     for (const w of data.welds || []) expand(w.position)
     for (const s of data.slopes || []) {
       expand(s.start); expand(s.end)
+    }
+    for (const b of data.bends || []) {
+      expand(b.work_point)
+      if (b.face_center_1) expand(b.face_center_1)
+      if (b.face_center_2) expand(b.face_center_2)
     }
     for (const seg of data.segments || []) {
       if (seg.arrive) expand(seg.arrive)
@@ -608,6 +686,9 @@ export function useMbdPipeAnnotationThree(
       annotation.update(camera)
     }
     for (const annotation of slopeAnnotations.value.values()) {
+      annotation.update(camera)
+    }
+    for (const annotation of bendAnnotations.value.values()) {
       annotation.update(camera)
     }
   }
@@ -662,6 +743,11 @@ export function useMbdPipeAnnotationThree(
     return slopeAnnotations.value
   }
 
+  /** 获取 bend annotations map（用于外部将 MBD bends 注册到交互控制器） */
+  function getBendAnnotations(): Map<string, AngleDimension3D> {
+    return bendAnnotations.value
+  }
+
   function dispose(): void {
     clearAll()
     materials.dispose()
@@ -681,6 +767,7 @@ export function useMbdPipeAnnotationThree(
       showDimPort,
       showWelds,
       showSlopes,
+      showBends,
       showSegments,
       showLabels,
     ],
@@ -767,6 +854,7 @@ export function useMbdPipeAnnotationThree(
     showDimPort,
     showWelds,
     showSlopes,
+    showBends,
     showSegments,
     showLabels,
     currentData,
@@ -784,5 +872,6 @@ export function useMbdPipeAnnotationThree(
     getDimAnnotations,
     getWeldAnnotations,
     getSlopeAnnotations,
+    getBendAnnotations,
   }
 }

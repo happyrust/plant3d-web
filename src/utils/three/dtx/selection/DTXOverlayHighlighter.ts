@@ -9,9 +9,11 @@ import {
   Scene,
   type BufferGeometry,
   type ColorRepresentation,
-} from "three";
+} from 'three';
 
 export type DTXOverlayHighlightStyle = {
+  /** 是否绘制填充面，默认 true。 */
+  showFill?: boolean;
   fillColor?: ColorRepresentation;
   fillOpacity?: number;
   edgeColor?: ColorRepresentation;
@@ -45,10 +47,11 @@ export class DTXOverlayHighlighter {
   constructor(scene: Scene, style: DTXOverlayHighlightStyle = {}) {
     this._scene = scene;
     this._group = new Group();
-    this._group.name = "DTXSelectionOverlay";
+    this._group.name = 'DTXSelectionOverlay';
     this._group.renderOrder = 900;
 
     this._style = {
+      showFill: style.showFill ?? true,
       fillColor: style.fillColor ?? 0x4b7cff,
       fillOpacity: style.fillOpacity ?? 0.85,
       edgeColor: style.edgeColor ?? 0x00ff00,
@@ -82,6 +85,7 @@ export class DTXOverlayHighlighter {
 
   setStyle(next: DTXOverlayHighlightStyle): void {
     this._style = {
+      showFill: next.showFill ?? this._style.showFill,
       fillColor: next.fillColor ?? this._style.fillColor,
       fillOpacity: next.fillOpacity ?? this._style.fillOpacity,
       edgeColor: next.edgeColor ?? this._style.edgeColor,
@@ -111,12 +115,15 @@ export class DTXOverlayHighlighter {
       const data = this._getGeometryData(objectId);
       if (!data) continue;
 
-      const fill = new Mesh(data.geometry, this._fillMat);
-      fill.matrixAutoUpdate = false;
-      fill.frustumCulled = false;
-      fill.renderOrder = 901;
-      fill.matrix.copy(data.matrix);
-      fill.name = `sel_fill_${objectId}`;
+      let fill: Mesh | null = null;
+      if (this._style.showFill) {
+        fill = new Mesh(data.geometry, this._fillMat);
+        fill.matrixAutoUpdate = false;
+        fill.frustumCulled = false;
+        fill.renderOrder = 901;
+        fill.matrix.copy(data.matrix);
+        fill.name = `sel_fill_${objectId}`;
+      }
 
       const edges = this._getEdgesGeometry(data.geometry, this._style.edgeThresholdAngle);
       const line = new LineSegments(edges, this._edgeMat);
@@ -126,7 +133,11 @@ export class DTXOverlayHighlighter {
       line.matrix.copy(data.matrix);
       line.name = `sel_edge_${objectId}`;
 
-      this._group.add(fill, line);
+      if (fill) {
+        this._group.add(fill, line);
+      } else {
+        this._group.add(line);
+      }
     }
   }
 

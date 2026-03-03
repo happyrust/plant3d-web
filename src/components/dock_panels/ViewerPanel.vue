@@ -60,15 +60,16 @@ import { onCommand } from "@/ribbon/commandBus";
 import { emitToast } from "@/ribbon/toastBus";
 
 import { useBackgroundStore } from "@/composables/useBackgroundStore";
+import { DTXLayer, DTXSelectionController, DTXViewCullController } from "@/utils/three/dtx";
+import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from "@/utils/three/annotation";
+import { computeDimensionOffsetDir } from "@/utils/three/annotation/utils/computeDimensionOffsetDir";
+import { DTXOverlayHighlighter } from "@/utils/three/dtx/selection/DTXOverlayHighlighter";
 import { DtxViewer, type BackgroundMode } from "@/viewer/dtx/DtxViewer";
 import { DtxCompatViewer } from "@/viewer/dtx/DtxCompatViewer";
 import { CadGrid } from "@/viewer/dtx/dtxCadGrid";
 import { loadDtxPrimitiveDemo } from "@/viewer/dtx/dtxPrimitiveDemo";
-import { DTXLayer, DTXSelectionController, DTXViewCullController } from "@/utils/three/dtx";
 import { DynamicPivotController } from "@/utils/three/dtx/DynamicPivotController";
 import { DTXTileLodController } from "@/viewer/dtx/DTXTileLodController";
-import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from "@/utils/three/annotation";
-import { computeDimensionOffsetDir } from "@/utils/three/annotation/utils/computeDimensionOffsetDir";
 
 defineProps<{
     params: {
@@ -101,6 +102,101 @@ function normalizeRefnoKeyLike(raw: string): string | null {
     const m = s.match(/^(\d+)\s*[\\/_-]\s*(\d+)$/);
     if (!m) return s;
     return `${m[1]}_${m[2]}`;
+}
+
+type CameraViewMode = "cad_weak" | "cad_flat" | "normal";
+
+function getCameraFovByMode(mode: CameraViewMode): number {
+    switch (mode) {
+        case "cad_flat":
+            return 18;
+        case "normal":
+            return 45;
+        case "cad_weak":
+        default:
+            return 30;
+    }
+}
+
+function clampGlobalEdgeThresholdAngle(value: number): number {
+    if (!Number.isFinite(value)) return 20;
+    return Math.max(1, Math.min(60, Math.round(value)));
+}
+
+function syncGlobalEdgeOverlay(force = false): void {
+    const dtxLayer = dtxLayerRef.value;
+    const overlay = globalEdgeOverlayRef.value;
+    if (!dtxLayer || !overlay) return;
+
+    const revision = dtxLayer.visibilityRevision;
+    if (!globalEdgeEnabled.value) {
+        overlay.clear();
+        lastGlobalEdgeRevision = revision;
+        return;
+    }
+
+    if (!force && revision === lastGlobalEdgeRevision) return;
+    lastGlobalEdgeRevision = revision;
+
+    const objectIds = dtxLayer.getVisibleObjectIds();
+    overlay.setHighlightedObjects(objectIds);
+}
+
+function applyCameraViewMode(mode: CameraViewMode): void {
+    const viewer = dtxViewerRef.value;
+    if (!viewer) return;
+    const nextFov = getCameraFovByMode(mode);
+    if (Math.abs((viewer.camera.fov || 0) - nextFov) < 1e-6) return;
+    viewer.camera.fov = nextFov;
+    viewer.camera.updateProjectionMatrix();
+    requestRender();
+}
+
+function applyGlobalEdgeStyle(): void {
+    const overlay = globalEdgeOverlayRef.value;
+    if (!overlay) return;
+
+    overlay.setStyle({
+        showFill: false,
+        edgeColor: 0x4b5563,
+        edgeThresholdAngle: clampGlobalEdgeThresholdAngle(globalEdgeThresholdAngle.value),
+        edgeAlwaysOnTop: false,
+    });
+    lastGlobalEdgeRevision = -1;
+    syncGlobalEdgeOverlay(true);
+    requestRender();
+}
+
+function onCameraViewModeChange(mode: CameraViewMode): void {
+    cameraViewMode.value = mode;
+    applyCameraViewMode(mode);
+    try {
+        localStorage.setItem("dtx_camera_mode", mode);
+    } catch {
+        // ignore
+    }
+}
+
+function onGlobalEdgeEnabledChange(enabled: boolean): void {
+    globalEdgeEnabled.value = enabled;
+    applyGlobalEdgeStyle();
+    try {
+        localStorage.setItem("dtx_global_edges", enabled ? "1" : "0");
+    } catch {
+        // ignore
+    }
+}
+
+function onGlobalEdgeThresholdInput(value: number | string): void {
+    const next = clampGlobalEdgeThresholdAngle(Number(value));
+    if (next === globalEdgeThresholdAngle.value) return;
+    globalEdgeThresholdAngle.value = next;
+    applyGlobalEdgeStyle();
+    try {
+        localStorage.setItem("dtx_edge_angle", String(next));
+    } catch {
+        // ignore
+    }
 }
 
 // URL 预加载：在现有 Viewer 页面中通过 ?mbd_pipe=... 自动触发 MBD 管道标注。
@@ -271,6 +367,7 @@ const rangeNameQuery = rangeSettings.nameQuery;
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
 const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
+const globalEdgeOverlayRef = shallowRef<DTXOverlayHighlighter | null>(null);
 const viewCullControllerRef = shallowRef<DTXViewCullController | null>(null);
 const pivotControllerRef = shallowRef<DynamicPivotController | null>(null);
 const cadGridRef = shallowRef<CadGrid | null>(null);
@@ -290,8 +387,13 @@ const modelGenerationRef = shallowRef<ReturnType<
     typeof useModelGeneration
 > | null>(null);
 
+const cameraViewMode = ref<CameraViewMode>("cad_weak");
+const globalEdgeEnabled = ref(true);
+const globalEdgeThresholdAngle = ref(20);
+
 let attachedToScene = false;
 let shaderPrecompiled = false;
+let lastGlobalEdgeRevision = -1;
 let continuousRender = false;
 let demoMode: "none" | "primitives" | "mbd_pipe" = "none";
 let demoPrimitiveCount = 1000;
@@ -758,6 +860,11 @@ function syncMbdAnnotationsToInteraction(): void {
     for (const [slopeId, slope] of mbdPipeVis.getSlopeAnnotations()) {
         const interactionId = `mbd_slope_${slopeId}`;
         annotationSystem.registerExternalAnnotation(interactionId, slope as any);
+        nextIds.add(interactionId);
+    }
+    for (const [bendId, bend] of mbdPipeVis.getBendAnnotations()) {
+        const interactionId = `mbd_bend_${bendId}`;
+        annotationSystem.registerExternalAnnotation(interactionId, bend as any);
         nextIds.add(interactionId);
     }
 
@@ -1248,6 +1355,8 @@ function renderFrameImmediate() {
     // 更新动态 pivot 控制器
     pivotControllerRef.value?.update();
 
+    syncGlobalEdgeOverlay();
+
     const selection = selectionControllerRef.value;
     if (selection?.hasOutline()) {
         selection.renderOutline();
@@ -1330,6 +1439,8 @@ function renderFrame() {
             viewCullControllerRef.value?.update(dtxViewer.camera);
             tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
         }
+
+        syncGlobalEdgeOverlay();
 
         const selection = selectionControllerRef.value;
         if (selection?.hasOutline()) {
@@ -1541,6 +1652,9 @@ onMounted(async () => {
     demoMode = "none";
     demoPrimitiveCount = 1000;
     cadGridEnabled = true;
+    cameraViewMode.value = "cad_weak";
+    globalEdgeEnabled.value = true;
+    globalEdgeThresholdAngle.value = 20;
     try {
         // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
         continuousRender =
@@ -1568,6 +1682,30 @@ onMounted(async () => {
         if (gridRaw !== null && gridRaw !== undefined) {
             cadGridEnabled = String(gridRaw).trim() !== "0";
         }
+
+        const cameraModeRaw =
+            q.get("dtx_camera_mode") || localStorage.getItem("dtx_camera_mode");
+        if (
+            cameraModeRaw === "cad_weak" ||
+            cameraModeRaw === "cad_flat" ||
+            cameraModeRaw === "normal"
+        ) {
+            cameraViewMode.value = cameraModeRaw;
+        }
+
+        const globalEdgesRaw =
+            q.get("dtx_global_edges") || localStorage.getItem("dtx_global_edges");
+        if (globalEdgesRaw !== null && globalEdgesRaw !== undefined) {
+            globalEdgeEnabled.value = String(globalEdgesRaw).trim() !== "0";
+        }
+
+        const edgeAngleRaw =
+            q.get("dtx_edge_angle") || localStorage.getItem("dtx_edge_angle");
+        if (edgeAngleRaw !== null && edgeAngleRaw !== undefined) {
+            globalEdgeThresholdAngle.value = clampGlobalEdgeThresholdAngle(
+                Number(edgeAngleRaw),
+            );
+        }
     } catch {
         // ignore
     }
@@ -1587,6 +1725,7 @@ onMounted(async () => {
         return;
     }
     dtxViewerRef.value = dtxViewer;
+    applyCameraViewMode(cameraViewMode.value);
 
     // 应用持久化的背景设置（默认 SolidWorks 渐变）
     applyBackground(backgroundStore.mode.value);
@@ -1611,6 +1750,20 @@ onMounted(async () => {
     dtxLayer.setRenderer(dtxViewer.renderer);
     dtxLayerRef.value = dtxLayer;
 
+    // 全局工程边线：深灰细线（无填充），用于接近 CAD 轮廓观感
+    const globalEdgeOverlay = new DTXOverlayHighlighter(dtxViewer.scene, {
+        showFill: false,
+        edgeColor: 0x4b5563,
+        edgeThresholdAngle: 20,
+        edgeAlwaysOnTop: false,
+    });
+    globalEdgeOverlay.setGeometryGetter((objectId) =>
+        dtxLayer.getObjectGeometryData(objectId),
+    );
+    globalEdgeOverlayRef.value = globalEdgeOverlay;
+    lastGlobalEdgeRevision = -1;
+    applyGlobalEdgeStyle();
+
     // 显示加速：View Frustum Culling（按对象 AABB）
     viewCullControllerRef.value = new DTXViewCullController({ dtxLayer });
 
@@ -1633,13 +1786,13 @@ onMounted(async () => {
         camera: dtxViewer.camera,
         renderer: dtxViewer.renderer,
         container: canvas,
-        // 方案甲：覆层半透明填充（蓝）+ Edges 描边（绿）
+        // 工程风格：低透明覆层 + 深灰细边
         enableOutline: false,
         highlightMode: "overlay",
         overlayStyle: {
-            fillColor: 0x4b7cff,
-            fillOpacity: 0.85,
-            edgeColor: 0x00ff00,
+            fillColor: 0x94a3b8,
+            fillOpacity: 0.22,
+            edgeColor: 0x4b5563,
             edgeThresholdAngle: 20,
             edgeAlwaysOnTop: false,
         },
@@ -1813,7 +1966,7 @@ onMounted(async () => {
             mbdPipeVis.renderBranch(demoMbdPipeData);
             flyToPipeDemo(dtxViewer);
             emitToast({
-                message: `[mbd_pipe demo] 已加载：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count}`,
+                message: `[mbd_pipe demo] 已加载：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count} 弯头${demoMbdPipeData.stats.bends_count}`,
             });
             requestRender();
         } catch (e) {
@@ -2009,6 +2162,40 @@ onMounted(async () => {
                         const camDir = dtxViewer2.camera.getWorldDirection(new Vector3());
                         const planeNormal = camDir.clone();
                         const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, defaultPos);
+                        const hit = intersectPlaneFromMouseEvent(me, plane);
+                        if (!hit) return;
+                        const labelOffset = hit.clone().sub(defaultPos);
+                        try {
+                            ev.annotation.setParams({ labelOffsetWorld: labelOffset });
+                        } catch { /* ignore */ }
+                        requestRender();
+                    }
+                }
+                return;
+            }
+
+            // MBD bend 处理（session-only 交互：label 拖拽）
+            if (id.startsWith("mbd_bend_")) {
+                const dtxViewer2 = dtxViewerRef.value;
+                if (!dtxViewer2) return;
+
+                if (ev.type === "drag-start") {
+                    dtxViewer2.controls.enabled = false;
+                    return;
+                }
+                if (ev.type === "drag-end") {
+                    dtxViewer2.controls.enabled = true;
+                    requestRender();
+                    return;
+                }
+                if (ev.type === "drag" && ev.annotation instanceof AngleDimension3D) {
+                    const me = ev.originalEvent;
+                    if (!me) return;
+                    const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
+                    if (role === "label") {
+                        const defaultPos = ev.annotation.getDefaultLabelWorldPos();
+                        const camDir = dtxViewer2.camera.getWorldDirection(new Vector3());
+                        const plane = new Plane().setFromNormalAndCoplanarPoint(camDir, defaultPos);
                         const hit = intersectPlaneFromMouseEvent(me, plane);
                         if (!hit) return;
                         const labelOffset = hit.clone().sub(defaultPos);
@@ -2381,7 +2568,7 @@ onMounted(async () => {
                     mbdPipeVisRef.value.renderBranch(demoMbdPipeData);
                     mbdPipeVisRef.value.flyTo();
                     emitToast({
-                        message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count}`,
+                        message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count} 弯头${demoMbdPipeData.stats.bends_count}`,
                     });
                     requestRender();
                 }
@@ -2864,6 +3051,8 @@ onMounted(async () => {
                     include_port_dims: true,
                     include_welds: true,
                     include_slopes: true,
+                    include_bends: true,
+                    bend_mode: "facecenter",
                 });
                 if (!mbdRequestGate.isLatest(requestSeq)) return;
                 if (resp.success && resp.data) {
@@ -2872,7 +3061,7 @@ onMounted(async () => {
                     // 将 MBD 标注注册到交互系统
                     try { syncMbdAnnotationsToInteraction(); } catch { /* ignore */ }
                     emitToast({
-                        message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count}`,
+                        message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count} 弯头${resp.data.stats.bends_count}`,
                     });
                     requestRender();
                 } else {
@@ -2931,7 +3120,7 @@ onMounted(async () => {
                     mbdPipeVisRef.value.renderBranch(demoMbdPipeData);
                     mbdPipeVisRef.value.flyTo();
                     emitToast({
-                        message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count}`,
+                        message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count} 弯头${demoMbdPipeData.stats.bends_count}`,
                     });
                     requestRender();
                 }
@@ -3064,6 +3253,13 @@ onUnmounted(() => {
         // ignore
     }
     selectionControllerRef.value = null;
+
+    try {
+        globalEdgeOverlayRef.value?.dispose();
+    } catch {
+        // ignore
+    }
+    globalEdgeOverlayRef.value = null;
 
     try {
         tileLodControllerRef.value?.dispose();
@@ -3416,6 +3612,68 @@ onUnmounted(() => {
                                     />
                                     <span>{{ preset.label }}</span>
                                 </button>
+                            </div>
+                        </div>
+
+                        <!-- 相机模式 -->
+                        <div class="space-y-1">
+                            <label class="text-xs text-muted-foreground">相机视角</label>
+                            <div class="grid grid-cols-3 gap-1.5">
+                                <button
+                                    type="button"
+                                    class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                                    :class="cameraViewMode === 'cad_weak' ? 'border-ring bg-muted font-medium' : 'border-border'"
+                                    @click.stop="onCameraViewModeChange('cad_weak')"
+                                >
+                                    弱透视
+                                </button>
+                                <button
+                                    type="button"
+                                    class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                                    :class="cameraViewMode === 'cad_flat' ? 'border-ring bg-muted font-medium' : 'border-border'"
+                                    @click.stop="onCameraViewModeChange('cad_flat')"
+                                >
+                                    近平行
+                                </button>
+                                <button
+                                    type="button"
+                                    class="h-8 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                                    :class="cameraViewMode === 'normal' ? 'border-ring bg-muted font-medium' : 'border-border'"
+                                    @click.stop="onCameraViewModeChange('normal')"
+                                >
+                                    标准
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 全局工程边线 -->
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs text-muted-foreground">全局工程边线</label>
+                                <button
+                                    type="button"
+                                    class="rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted"
+                                    :class="globalEdgeEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                                    @click.stop="onGlobalEdgeEnabledChange(!globalEdgeEnabled)"
+                                >
+                                    {{ globalEdgeEnabled ? '已开启' : '已关闭' }}
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs text-muted-foreground">边线角阈值</label>
+                                <span class="text-xs tabular-nums text-foreground">{{ globalEdgeThresholdAngle }}°</span>
+                            </div>
+                            <input
+                                v-model.number="globalEdgeThresholdAngle"
+                                type="range"
+                                min="1"
+                                max="60"
+                                class="w-full"
+                                :disabled="!globalEdgeEnabled"
+                                @input="onGlobalEdgeThresholdInput(globalEdgeThresholdAngle)"
+                            />
+                            <div class="text-[11px] text-muted-foreground">
+                                角度越小，边线越密；建议 15~25。
                             </div>
                         </div>
 

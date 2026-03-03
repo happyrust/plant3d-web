@@ -87,12 +87,14 @@ export class DtxViewer {
     });
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.setPixelRatio(Math.max(1, window.devicePixelRatio || 1));
 
     this.scene = new Scene();
     this.scene.background = new Color(options.background ?? 0xe5e7eb);
 
-    this.camera = new PerspectiveCamera(45, 1, 0.1, 1_000_000);
+    // CAD 弱透视：降低 FOV，减少近大远小夸张感
+    this.camera = new PerspectiveCamera(30, 1, 0.1, 1_000_000);
     this.camera.up.set(0, 0, 1);
     this.camera.position.set(-37.1, 13.0, 58.5);
 
@@ -147,16 +149,16 @@ export class DtxViewer {
   }
 
   private _setupDefaultLights(): void {
-    const ambient = new AmbientLight(0xffffff, 0.35);
+    const ambient = new AmbientLight(0xffffff, 0.22);
     ambient.name = "DtxAmbientLight";
     this.scene.add(ambient);
 
-    const dir0 = new DirectionalLight(0xffffff, 0.9);
+    const dir0 = new DirectionalLight(0xffffff, 1.05);
     dir0.position.set(1, 1, 1);
     dir0.name = "DtxDirectionalLight0";
     this.scene.add(dir0);
 
-    const dir1 = new DirectionalLight(0xffffff, 0.25);
+    const dir1 = new DirectionalLight(0xffffff, 0.18);
     dir1.position.set(-1, 0.4, -1);
     dir1.name = "DtxDirectionalLight1";
     this.scene.add(dir1);
@@ -390,7 +392,7 @@ export type BackgroundPreset = {
 }
 
 export const BACKGROUND_PRESETS: BackgroundPreset[] = [
-  { mode: 'gradient_solidworks', label: 'SolidWorks', topColor: '#e8ecf4', bottomColor: '#c5cede' },
+  { mode: 'gradient_solidworks', label: 'SolidWorks', topColor: '#edf1f7', bottomColor: '#cfd7e6' },
   { mode: 'gradient_dark', label: '深色渐变', topColor: '#3a4a5c', bottomColor: '#1a202c' },
   { mode: 'solid_light', label: '浅灰纯色', topColor: '#e5e7eb', bottomColor: '#e5e7eb' },
   { mode: 'solid_dark', label: '深色纯色', topColor: '#1e293b', bottomColor: '#1e293b' },

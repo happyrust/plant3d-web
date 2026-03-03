@@ -1387,14 +1387,14 @@ function onSearchEnter(value: string) {
     <!-- Model Generation Progress Modal -->
     <ModelGenerationProgressModal 
       v-if="modelGenerationState"
-      :open="modelGenerationState.isGenerating.value"
+      :open="modelGenerationState.isGenerating.value && modelGenerationState.showProgressModal.value"
       :progress="modelGenerationState.progress.value"
       :status="modelGenerationState.statusMessage.value"
       :error="modelGenerationState.error.value"
       :total-count="modelGenerationState.totalCount.value"
       :current-index="modelGenerationState.currentIndex.value"
       :current-refno="modelGenerationState.currentRefno.value"
-      @close="modelGenerationState.isGenerating.value = false"
+      @close="modelGenerationState.showProgressModal.value = false"
     />
   </div>
 </template>
