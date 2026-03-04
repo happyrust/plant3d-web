@@ -20,6 +20,7 @@ export default defineConfig({
     }),
   ],
   server: {
+    host: true, // 监听 0.0.0.0，允许通过局域网 IP（如 192.168.31.60）访问
     proxy: {
       '/api': {
         target: backendTarget,

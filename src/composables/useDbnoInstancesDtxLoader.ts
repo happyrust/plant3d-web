@@ -39,13 +39,18 @@ type DbnoRuntimeCache = {
   objectIdToRefno: Map<string, string>
   refnoTransform: Map<string, number[]>
   refnoToNoun: Map<string, string>
+  /** objectId → spec_value，用于 applyMaterialConfigToLoadedDtx 按专业着色 */
+  objectIdToSpecValue: Map<string, number>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>()
 
 function getCache(dbno: number): DbnoRuntimeCache {
   const existing = cachesByDbno.get(dbno)
-  if (existing) return existing
+  if (existing) {
+    if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map()
+    return existing
+  }
   const created: DbnoRuntimeCache = {
     loadedRefnos: new Set(),
     loadedGeoHash: new Set(),
@@ -56,6 +61,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
     objectIdToRefno: new Map(),
     refnoTransform: new Map(),
     refnoToNoun: new Map(),
+    objectIdToSpecValue: new Map(),
   }
   cachesByDbno.set(dbno, created)
   return created
@@ -319,9 +325,10 @@ export function applyMaterialConfigToLoadedDtx(
     const refnoKey = normalizeRefnoKey(refno)
     const noun = normalizeNounKey(cache.refnoToNoun.get(refno) || '')
     const isHidden = hiddenRefnos.has(refnoKey) || (noun && hiddenNouns.has(noun))
-    const resolved = resolveMaterialForInstance(config, refnoKey, noun)
 
     for (const objectId of objectIds) {
+      const specValue = cache.objectIdToSpecValue.get(objectId) ?? 0
+      const resolved = resolveMaterialForInstance(config, refnoKey, noun, specValue)
       if (isHidden || resolved.hidden) {
         dtxLayer.setObjectVisible(objectId, false)
         continue
@@ -490,6 +497,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       const matrix = new Matrix4().fromArray(matrixData)
 
       const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '')
+      const specValue = typeof (inst as any).uniforms?.spec_value === 'number' ? (inst as any).uniforms.spec_value : 0
       if (noun && !refnoNoun) {
         refnoNoun = noun
       }
@@ -497,7 +505,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         continue
       }
 
-      const resolved = resolveMaterialForInstance(displayConfig, refnoKey, noun)
+      const resolved = resolveMaterialForInstance(displayConfig, refnoKey, noun, specValue)
       if (resolved.hidden) {
         continue
       }
@@ -519,6 +527,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
       objectIds.push(objectId)
       cache.objectIdToRefno.set(objectId, refnoKey)
+      cache.objectIdToSpecValue.set(objectId, specValue)
       loadedObjects++
 
       const refnoTransform = (inst as any).refno_transform
