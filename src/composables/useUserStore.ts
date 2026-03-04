@@ -47,15 +47,15 @@ const USE_BACKEND = ref(true);
 // 三段角色：编制(sj) -> 校核(jd) -> 审核(sh)
 const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh'];
 
-function isCheckerRole(role: UserRole | undefined): boolean {
+export function isCheckerRole(role: UserRole | undefined): boolean {
   return role === UserRole.PROOFREADER;
 }
 
-function isApproverRole(role: UserRole | undefined): boolean {
+export function isApproverRole(role: UserRole | undefined): boolean {
   return role === UserRole.REVIEWER || role === UserRole.MANAGER || role === UserRole.ADMIN;
 }
 
-function getNextWorkflowNode(node?: WorkflowNode): WorkflowNode | null {
+export function getNextWorkflowNode(node?: WorkflowNode): WorkflowNode | null {
   const current = node ?? 'sj';
   const idx = WORKFLOW_NODE_ORDER.indexOf(current);
   if (idx < 0) return 'jd';
@@ -63,7 +63,7 @@ function getNextWorkflowNode(node?: WorkflowNode): WorkflowNode | null {
   return next ?? null;
 }
 
-function statusFromNode(node: WorkflowNode): ReviewTask['status'] {
+export function statusFromNode(node: WorkflowNode): ReviewTask['status'] {
   switch (node) {
     case 'sj':
       return 'draft';
@@ -516,6 +516,9 @@ async function updateTaskStatus(
     try {
       let response;
       switch (status) {
+        case 'submitted':
+          response = await reviewTaskSubmitToNext(taskId, comment);
+          break;
         case 'in_review':
           response = await reviewTaskStartReview(taskId);
           break;
@@ -523,7 +526,6 @@ async function updateTaskStatus(
           response = await reviewTaskApprove(taskId, comment);
           break;
         case 'rejected':
-          // 统一规则：驳回一律回发起设计人（sj）
           response = await reviewTaskReturn(taskId, 'sj', comment || '驳回');
           break;
         case 'cancelled':
@@ -667,14 +669,12 @@ async function submitTaskToNextNode(taskId: string, comment?: string): Promise<v
   ];
 }
 
-async function returnTaskToNode(taskId: string, _targetNode: WorkflowNode, reason: string): Promise<void> {
-  const fixedTargetNode: WorkflowNode = 'sj';
-
+async function returnTaskToNode(taskId: string, targetNode: WorkflowNode, reason: string): Promise<void> {
   if (USE_BACKEND.value) {
     loading.value = true;
     error.value = null;
     try {
-      const response = await reviewTaskReturn(taskId, fixedTargetNode, reason);
+      const response = await reviewTaskReturn(taskId, targetNode, reason);
       if (!response.success) {
         throw new Error(response.error_message || '驳回失败');
       }
@@ -707,8 +707,8 @@ async function returnTaskToNode(taskId: string, _targetNode: WorkflowNode, reaso
 
   const updated: ReviewTask = {
     ...task,
-    status: statusFromNode(fixedTargetNode),
-    currentNode: fixedTargetNode,
+    status: statusFromNode(targetNode),
+    currentNode: targetNode,
     workflowHistory: [...(task.workflowHistory || []), step],
     returnReason: reason,
     updatedAt: Date.now(),

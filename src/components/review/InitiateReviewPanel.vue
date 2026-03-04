@@ -24,23 +24,53 @@ const priority = ref<'low' | 'medium' | 'high' | 'urgent'>('medium');
 const dueDate = ref('');
 const selectedComponents = ref<ReviewComponent[]>([]);
 
+/** 从属性中解析显示名称：有 NAME 则用 NAME，否则用 refno */
+function resolveDisplayName(attrs: Record<string, unknown> | null, refno: string): string {
+  if (!attrs || typeof attrs !== 'object') return refno;
+  const v = attrs['NAME'];
+  return v != null && v !== '' ? String(v) : refno;
+}
+
+/** 从属性中解析类型 */
+function resolveType(attrs: Record<string, unknown> | null): string {
+  if (!attrs || typeof attrs !== 'object') return '构件';
+  const v = attrs['NOUN'];
+  return v != null && v !== '' ? String(v) : '构件';
+}
+
 // 侦听三维视图中的构件选中，自动追加到构件列表
+// 阶段1：selectedRefno 变化时立即添加（先用 refno 占位，避免竞态时 attrs 未就绪）
 watch(
   () => selectionStore.selectedRefno.value,
   (refno) => {
     if (!refno) return;
-    // 已存在则跳过
     if (selectedComponents.value.some((c) => c.refNo === refno)) return;
-    // 从属性数据中获取名称和类型
-    const attrs = selectionStore.propertiesData.value;
-    const name = (attrs?.NAME || attrs?.DESCRIPTION || refno) as string;
-    const type = (attrs?.NOUN || '构件') as string;
+    const attrs = selectionStore.propertiesData.value as Record<string, unknown> | null;
+    const name = resolveDisplayName(attrs, refno);
+    const type = resolveType(attrs);
     selectedComponents.value.push({
       id: `comp-${Date.now()}`,
       refNo: refno,
       name,
       type,
     });
+  }
+);
+
+// 阶段2：当 propertiesData 异步加载完成时，更新已添加构件的名称（解决竞态）
+watch(
+  () => selectionStore.propertiesData.value,
+  (attrs) => {
+    const refno = selectionStore.selectedRefno.value;
+    if (!refno || !attrs) return;
+    const comp = selectedComponents.value.find((c) => c.refNo === refno);
+    if (!comp) return;
+    const name = resolveDisplayName(attrs as Record<string, unknown>, refno);
+    const type = resolveType(attrs as Record<string, unknown>);
+    if (comp.name !== name || comp.type !== type) {
+      comp.name = name;
+      comp.type = type;
+    }
   }
 );
 const uploadedFiles = ref<UploadedFile[]>([]);
@@ -110,8 +140,16 @@ const availableApprovers = computed(() => {
   return approvers.length > 0 ? approvers : userStore.availableReviewers.value;
 });
 
+const samePersonError = computed(() => {
+  return checkerId.value && approverId.value && checkerId.value === approverId.value;
+});
+
 const canSubmit = computed(() => {
-  return packageName.value.trim() && checkerId.value && approverId.value && selectedComponents.value.length > 0;
+  return packageName.value.trim()
+    && checkerId.value
+    && approverId.value
+    && !samePersonError.value
+    && selectedComponents.value.length > 0;
 });
 
 const missingFields = computed(() => {
@@ -120,10 +158,14 @@ const missingFields = computed(() => {
   if (!packageName.value.trim()) fields.push('数据包名称');
   if (!checkerId.value) fields.push('校核人员');
   if (!approverId.value) fields.push('审核人员');
+  if (samePersonError.value) fields.push('校核人和审核人不能为同一人');
   return fields;
 });
 
+const isDev = import.meta.env.DEV;
+
 function addMockComponent() {
+  if (!isDev) return;
   const id = `comp-${Date.now()}`;
   selectedComponents.value.push({
     id,
@@ -144,17 +186,27 @@ async function handleSubmit() {
   isSubmitting.value = true;
 
   try {
+    const attachments = uploadedFiles.value
+      .filter((f) => f.status === 'success' && f.serverAttachmentId)
+      .map((f) => ({
+        id: f.serverAttachmentId!,
+        name: f.name,
+        url: f.serverUrl || '',
+        size: f.size,
+        mimeType: f.type || undefined,
+      }));
+
     const task = await userStore.createReviewTask({
       title: packageName.value,
       description: description.value || `模型数据包：${packageName.value}`,
       modelName: packageName.value,
       checkerId: checkerId.value,
       approverId: approverId.value,
-      // 外部已创建单据时统一复用 formId；否则走正常创建逻辑（后端生成）
       formId: embedModeParams.value.isEmbedMode ? (embedModeParams.value.formId || undefined) : undefined,
       priority: priority.value,
       components: [...selectedComponents.value],
       dueDate: dueDate.value ? new Date(dueDate.value).getTime() : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     });
 
     const checker = availableCheckers.value.find((r) => r.id === checkerId.value);
@@ -224,11 +276,12 @@ function clearNotification() {
         <div class="flex justify-between items-center mb-2">
           <span class="text-sm text-gray-600">已选择 {{ selectedComponents.length }} 个构件</span>
           <button
+            v-if="isDev"
             class="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-gray-50"
             @click="addMockComponent"
           >
             <Plus class="h-3 w-3" />
-            添加构件
+            添加构件(DEV)
           </button>
         </div>
         <div class="space-y-2 max-h-40 overflow-y-auto">
