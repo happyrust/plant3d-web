@@ -18,9 +18,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "npx playwright test",
-    "test:e2e:ui": "npx playwright test --ui",
-    "test:e2e:headed": "npx playwright test --headed"
+    "test:e2e": "npx @playwright/test test",
+    "test:e2e:ui": "npx @playwright/test test --ui",
+    "test:e2e:headed": "npx @playwright/test test --headed",
+    "test:e2e:mbd-arrow-gallery": "npx @playwright/test e2e/mbd-pipe-arrow-style-gallery.spec.ts --reporter=line",
+    "compare:mbd-rebarviz-beam": "node scripts/compare-mbd-rebarviz-beam.mjs",
+    "demo:rebarviz-beam": "vite --open /rebar-beam-demo.html",
+    "demo:mbd-pipe-annotation": "vite --host 127.0.0.1 --port 5173 --strictPort --open \"/?dtx_demo=mbd_pipe&mbd_pipe_case=rebarviz_beam&mbd_dim_mode=rebarviz\"",
+    "demo:mbd-pipe-annotation:arrow": "vite --host 127.0.0.1 --port 5173 --strictPort --open \"/?dtx_demo=mbd_pipe&mbd_pipe_case=rebarviz_beam&mbd_dim_mode=rebarviz&mbd_arrow_style=tick&mbd_arrow_size=20&mbd_arrow_angle=24&mbd_line_width=3\"",
+    "demo:mbd-pipe-annotation:filled": "vite --host 127.0.0.1 --port 5173 --strictPort --open \"/?dtx_demo=mbd_pipe&mbd_pipe_case=rebarviz_beam&mbd_dim_mode=rebarviz&mbd_arrow_style=filled&mbd_arrow_size=18&mbd_arrow_angle=18&mbd_line_width=2.6\""
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.30.0",
@@ -35,7 +41,7 @@
     "mammoth": "^1.10.0",
     "parquet-wasm": "^0.7.1",
     "pdfjs-dist": "^5.4.530",
-    "playwright": "^1.57.0",
+    "playwright": "^1.58.2",
     "surrealdb": "^2.0.0",
     "tailwind-merge": "^3.3.1",
     "three": "^0.162.0",
@@ -46,7 +52,7 @@
   },
   "devDependencies": {
     "@mdi/font": "^7.4.47",
-    "@playwright/test": "^1.58.1",
+    "@playwright/test": "^1.58.2",
     "@tsconfig/node-lts": "latest",
     "@types/node": "~22.19.1",
     "@types/three": "^0.182.0",

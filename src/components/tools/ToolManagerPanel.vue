@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, type Ref } from 'vue';
 
-import { setDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useToolStore } from '@/composables/useToolStore';
@@ -225,7 +224,6 @@ async function importInstancesAndLoadDtx() {
 
   instancesLoading.value = true;
   try {
-    setDbnoInstancesManifest(dbno, manifest);
     const gen = useModelGeneration({ viewer, db_num: dbno });
     const ok = await gen.showModelByRefno(rootRefno);
     instancesStatus.value = ok ? 'DTX 加载完成' : (gen.error.value || 'DTX 加载失败');

@@ -19,11 +19,12 @@ export class AnnotationMaterials {
   private resolutionHeight = 1
 
   // 预定义颜色集
-  readonly green: AnnotationMaterialSet   // 尺寸标注
-  readonly orange: AnnotationMaterialSet  // 焊缝标注
-  readonly blue: AnnotationMaterialSet    // 坡度/引线标注
-  readonly white: AnnotationMaterialSet   // 通用
-  readonly yellow: AnnotationMaterialSet  // 高亮/默认
+  readonly green: AnnotationMaterialSet;   // 尺寸标注
+  readonly orange: AnnotationMaterialSet;  // 焊缝标注
+  readonly blue: AnnotationMaterialSet;    // 坡度/引线标注
+  readonly white: AnnotationMaterialSet;   // 通用
+  readonly yellow: AnnotationMaterialSet;  // 高亮/默认
+  readonly black: AnnotationMaterialSet;   // 黑色（工程图纸风格）
 
   // ── SolveSpace 约束默认色（洋红）────────────────────────────
   /** SolveSpace constraint default (magenta) */
@@ -36,11 +37,12 @@ export class AnnotationMaterials {
   readonly ssSelected: AnnotationMaterialSet
 
   constructor() {
-    this.green = this.createMaterialSet(0x22c55e, 0x4ade80)
-    this.orange = this.createMaterialSet(0xf97316, 0xfb923c)
-    this.blue = this.createMaterialSet(0x3b82f6, 0x60a5fa)
-    this.white = this.createMaterialSet(0xffffff, 0xffffff)
-    this.yellow = this.createMaterialSet(0xfacc15, 0xfde047)
+    this.green = this.createMaterialSet(0x22c55e, 0x4ade80);
+    this.orange = this.createMaterialSet(0xf97316, 0xfb923c);
+    this.blue = this.createMaterialSet(0x3b82f6, 0x60a5fa);
+    this.white = this.createMaterialSet(0xffffff, 0xffffff);
+    this.yellow = this.createMaterialSet(0xfacc15, 0xfde047);
+    this.black = this.createMaterialSet(0x000000, 0x333333);
 
     // SolveSpace 约束洋红（默认）
     this.ssConstraintMagenta = this.createMaterialSet(0xff00ff, 0xff44ff)
@@ -82,14 +84,11 @@ export class AnnotationMaterials {
     }
   }
 
-  /**
-   * 缓存当前视口尺寸（CSS 像素）。
-   * 虽然 LineBasicMaterial 本身不依赖 resolution，但 SolveSpace 风格几何更新
-   * 需要使用准确的画布尺寸做像素对齐与 wpp 计算。
-   */
-  setResolution(width: number, height: number): void {
-    this.resolutionWidth = Number.isFinite(width) && width > 0 ? width : 1
-    this.resolutionHeight = Number.isFinite(height) && height > 0 ? height : 1
+  get all(): AnnotationMaterialSet[] {
+    return [
+      this.green, this.orange, this.blue, this.white, this.yellow, this.black,
+      this.ssConstraintMagenta, this.ssDimensionDefault, this.ssHovered, this.ssSelected,
+    ];
   }
 
   getResolution(): { width: number, height: number } {

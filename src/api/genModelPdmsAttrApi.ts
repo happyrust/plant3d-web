@@ -2,6 +2,8 @@ export type PdmsUiAttrResponse = {
   success: boolean;
   refno: string;
   attrs: Record<string, unknown>;
+  /** 构件完整路径名称（层级路径） */
+  full_name?: string | null;
   error_message?: string | null;
 };
 

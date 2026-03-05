@@ -258,6 +258,14 @@ export function useAnnotationThree(
   function update(camera: THREE.Camera): void {
     updateGroupMatrix()
     interactionController.setCamera(camera)
+    const viewer = dtxViewerRef.value
+    if (viewer) {
+      const rect = viewer.canvas.getBoundingClientRect()
+      ;(camera as any).userData.annotationViewport = {
+        width: rect.width,
+        height: rect.height,
+      }
+    }
     for (const annotation of annotations.value.values()) {
       annotation.update(camera)
     }

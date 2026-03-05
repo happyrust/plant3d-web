@@ -24,10 +24,18 @@ import ReviewConfirmation from "@/components/review/ReviewConfirmation.vue";
 import MeasurementWizard from "@/components/tools/MeasurementWizard.vue";
 import { pdmsGetPtsetWithContext } from "@/api/genModelPdmsAttrApi";
 import { getMbdPipeAnnotations } from "@/api/mbdPipeApi";
-import { demoMbdPipeData, injectMbdPipeDemoGeometry, flyToPipeDemo } from "@/debug/injectMbdPipeDemo";
+import {
+    demoMbdPipeData,
+    getMbdPipeDemoConfig,
+    resolveMbdPipeDemoCaseFromUrl,
+} from "@/debug/injectMbdPipeDemo";
 import { useModelGeneration } from "@/composables/useModelGeneration";
 import { useSelectionStore } from "@/composables/useSelectionStore";
-import { loadDbnoInstancesForVisibleRefnosDtx } from "@/composables/useDbnoInstancesDtxLoader";
+import {
+    getDbnoInstancesManifest,
+    getDbnoInstancesMeta,
+} from "@/composables/useDbnoInstancesJsonLoader";
+import { loadDbnoInstancesForVisibleRefnosDtx, applyMaterialConfigToLoadedDtx } from "@/composables/useDbnoInstancesDtxLoader";
 import { useDbnoInstancesParquetLoader } from "@/composables/useDbnoInstancesParquetLoader";
 import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
@@ -48,6 +56,8 @@ import { onCommand } from "@/ribbon/commandBus";
 import { emitToast } from "@/ribbon/toastBus";
 
 import { useBackgroundStore } from "@/composables/useBackgroundStore";
+import { useDisplayThemeStore, type DisplayTheme } from "@/composables/useDisplayThemeStore";
+import { loadModelDisplayConfig } from "@/utils/three/dtx/materialConfig";
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from "@/utils/three/dtx";
 import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from "@/utils/three/annotation";
 import { computeDimensionOffsetDir } from "@/utils/three/annotation/utils/computeDimensionOffsetDir";
@@ -76,6 +86,8 @@ const consoleStore = useConsoleStore();
 const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
+const backgroundStore = useBackgroundStore();
+const displayThemeStore = useDisplayThemeStore();
 
 const initError = ref<string | null>(null);
 
@@ -89,6 +101,80 @@ function normalizeRefnoKeyLike(raw: string): string | null {
     const m = s.match(/^(\d+)\s*[\\/_-]\s*(\d+)$/);
     if (!m) return s;
     return `${m[1]}_${m[2]}`;
+}
+
+function readMbdDimModeFromUrl(): "classic" | "rebarviz" | null {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const raw = String(q.get("mbd_dim_mode") || "")
+            .trim()
+            .toLowerCase();
+        if (raw === "classic") return "classic";
+        if (raw === "rebarviz") return "rebarviz";
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function readMbdDimTextModeFromUrl(): "backend" | "auto" | null {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const raw = String(q.get("mbd_text_mode") || "")
+            .trim()
+            .toLowerCase();
+        if (raw === "backend") return "backend";
+        if (raw === "auto") return "auto";
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function readMbdArrowSizeFromUrl(): number | null {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const raw = Number(String(q.get("mbd_arrow_size") || "").trim());
+        if (Number.isFinite(raw)) return Math.max(6, Math.min(40, raw));
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function readMbdArrowAngleFromUrl(): number | null {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const raw = Number(String(q.get("mbd_arrow_angle") || "").trim());
+        if (Number.isFinite(raw)) return Math.max(8, Math.min(40, raw));
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function readMbdLineWidthFromUrl(): number | null {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const raw = Number(String(q.get("mbd_line_width") || "").trim());
+        if (Number.isFinite(raw)) return Math.max(1, Math.min(6, raw));
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function readMbdArrowStyleFromUrl(): "open" | "filled" | "tick" | null {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const raw = String(q.get("mbd_arrow_style") || "")
+            .trim()
+            .toLowerCase();
+        if (raw === "open" || raw === "filled" || raw === "tick") return raw;
+    } catch {
+        // ignore
+    }
+    return null;
 }
 
 type CameraViewMode = "cad_weak" | "cad_flat" | "normal";
@@ -694,6 +780,39 @@ watch(
         requestRender();
     },
 );
+
+function applyBackground(mode: BackgroundMode): void {
+    const viewer = dtxViewerRef.value;
+    if (!viewer) return;
+    const preset = backgroundStore.getPreset(mode);
+    if (mode === "skybox") {
+        viewer.loadCrossSkybox("/texture/skybox.png");
+    } else if (preset.topColor === preset.bottomColor) {
+        viewer.setSolidBackground(preset.topColor);
+    } else {
+        viewer.setGradientBackground(preset.topColor, preset.bottomColor);
+    }
+    requestRender();
+}
+
+function onBackgroundChange(mode: BackgroundMode): void {
+    backgroundStore.setMode(mode);
+    applyBackground(mode);
+}
+
+const displayThemePresets: { mode: DisplayTheme; label: string; colorHint: string }[] = [
+    { mode: "default", label: "默认", colorHint: "#90a4ae" },
+    { mode: "design3d", label: "三维设计", colorHint: "#4CAF50" },
+];
+
+async function onDisplayThemeChange(theme: DisplayTheme): Promise<void> {
+    displayThemeStore.setDisplayTheme(theme);
+    const layer = dtxLayerRef.value;
+    if (!layer || activeDbno === null) return;
+    const config = await loadModelDisplayConfig();
+    applyMaterialConfigToLoadedDtx(layer, activeDbno, config, theme);
+    requestRender();
+}
 
 function toastNeedSelection(): void {
     emitToast({ message: "请先选择对象" });
@@ -1905,17 +2024,49 @@ onMounted(async () => {
         getGlobalModelMatrix: () =>
             dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
     });
+    const mbdDimModeFromUrl = readMbdDimModeFromUrl();
+    if (mbdDimModeFromUrl) {
+        mbdPipeVis.dimMode.value = mbdDimModeFromUrl;
+    }
+    const mbdDimTextModeFromUrl = readMbdDimTextModeFromUrl();
+    if (mbdDimTextModeFromUrl) {
+        mbdPipeVis.dimTextMode.value = mbdDimTextModeFromUrl;
+    }
+    const mbdArrowStyleFromUrl = readMbdArrowStyleFromUrl();
+    if (mbdArrowStyleFromUrl) {
+        mbdPipeVis.rebarvizArrowStyle.value = mbdArrowStyleFromUrl;
+    }
+    const mbdArrowSizeFromUrl = readMbdArrowSizeFromUrl();
+    if (mbdArrowSizeFromUrl !== null) {
+        mbdPipeVis.rebarvizArrowSizePx.value = mbdArrowSizeFromUrl;
+    }
+    const mbdArrowAngleFromUrl = readMbdArrowAngleFromUrl();
+    if (mbdArrowAngleFromUrl !== null) {
+        mbdPipeVis.rebarvizArrowAngleDeg.value = mbdArrowAngleFromUrl;
+    }
+    const mbdLineWidthFromUrl = readMbdLineWidthFromUrl();
+    if (mbdLineWidthFromUrl !== null) {
+        mbdPipeVis.rebarvizLineWidthPx.value = mbdLineWidthFromUrl;
+    }
     mbdPipeVisRef.value = mbdPipeVis;
 
     // mbd_pipe demo：不依赖后端，直接注入模拟管道几何体 + 标注
     if (demoMode === "mbd_pipe") {
         try {
-            injectMbdPipeDemoGeometry(dtxViewer);
-            mbdPipeVis.renderBranch(demoMbdPipeData);
-            flyToPipeDemo(dtxViewer);
+            const demoCase = resolveMbdPipeDemoCaseFromUrl();
+            const demoConfig = getMbdPipeDemoConfig(demoCase);
+            demoConfig.geometry(dtxViewer);
+            mbdPipeVis.renderBranch(demoConfig.data);
+            demoConfig.flyTo(dtxViewer);
             emitToast({
-                message: `[mbd_pipe demo] 已加载：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count} 弯头${demoMbdPipeData.stats.bends_count}`,
+                message: `[mbd_pipe demo:${demoConfig.key}] ${demoConfig.title} 已加载：段${demoConfig.data.stats.segments_count} 尺寸${demoConfig.data.stats.dims_count} 焊缝${demoConfig.data.stats.welds_count} 坡度${demoConfig.data.stats.slopes_count} 弯头${demoConfig.data.stats.bends_count}`,
             });
+            if (demoConfig.key === "rebarviz_beam") {
+                emitToast({
+                    message:
+                        "[mbd_pipe demo] 对标 RebarViz 梁案例：可用 ?mbd_pipe_case=rebarviz_beam 直接访问",
+                });
+            }
             requestRender();
         } catch (e) {
             console.warn("[ViewerPanel] mbd_pipe demo 初始化失败", e);
@@ -2512,9 +2663,7 @@ onMounted(async () => {
         }
     }
 
-    // 启动预拉：仅加载 db_meta_info（Parquet 模式下不再预拉 instances/trans.json 与 aabb.json）
-    // 注意：onMounted(async () => ...) 中，任何依赖注入上下文的 hooks（如 vue-query）必须在首个 await 之前调用。
-    // 因此这里先初始化 tools/ptsetVis（它们会调用 useSelectionStore/useQuery），再 await 预拉。
+    // 启动预拉：db_meta_info（关键，提供 refno->dbnum 映射）
     // demo 模式（primitives / mbd_pipe）不依赖后端数据，跳过预拉避免无后端时初始化失败。
     if (demoMode !== "primitives" && demoMode !== "mbd_pipe") {
         try {
@@ -3044,13 +3193,13 @@ onMounted(async () => {
                     dim_min_length: 1.0,
                     weld_merge_threshold: 1.0,
                     include_dims: true,
-                    // 额外尺寸类型（仍输出到同一个 dims 数组中，通过 d.kind 区分）
-                    include_chain_dims: true,
-                    include_overall_dim: true,
+                    // 默认只请求端口尺寸，减少密集场景下的视觉噪声
+                    include_chain_dims: false,
+                    include_overall_dim: false,
                     include_port_dims: true,
-                    include_welds: true,
-                    include_slopes: true,
-                    include_bends: true,
+                    include_welds: false,
+                    include_slopes: false,
+                    include_bends: false,
                     bend_mode: "facecenter",
                 });
                 if (resp.success && resp.data) {
@@ -3427,7 +3576,7 @@ onUnmounted(() => {
             style="z-index: 940"
         >
             <div>{{ toolsRef.statusText.value }}</div>
-            <div v-if="toolsRef.hoverText.value" class="mt-1 text-muted-foreground">
+            <div v-if="toolsRef.hoverText?.value" class="mt-1 text-muted-foreground">
                 {{ toolsRef.hoverText.value }}
             </div>
         </div>
@@ -3598,6 +3747,28 @@ onUnmounted(() => {
                                     <span
                                         class="inline-block h-4 w-4 shrink-0 rounded-sm border border-border"
                                         :style="{ background: `linear-gradient(to bottom, ${preset.topColor}, ${preset.bottomColor})` }"
+                                    />
+                                    <span>{{ preset.label }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 显示主题 -->
+                        <div class="space-y-1">
+                            <label class="text-xs text-muted-foreground">显示主题</label>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button
+                                    v-for="preset in displayThemePresets"
+                                    :key="preset.mode"
+                                    type="button"
+                                    class="flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
+                                    :class="displayThemeStore.currentTheme.value === preset.mode ? 'border-ring bg-muted font-medium' : 'border-border'"
+                                    :title="preset.label"
+                                    @click.stop="onDisplayThemeChange(preset.mode)"
+                                >
+                                    <span
+                                        class="inline-block h-4 w-4 shrink-0 rounded-full border border-border"
+                                        :style="{ background: preset.colorHint }"
                                     />
                                     <span>{{ preset.label }}</span>
                                 </button>

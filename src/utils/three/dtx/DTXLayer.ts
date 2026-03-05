@@ -96,6 +96,7 @@ interface DTXObject {
 export interface PBRParams {
   metalness?: number;
   roughness?: number;
+  opacity?: number;
 }
 
 export interface MaterialParams extends PBRParams {
@@ -109,6 +110,7 @@ export interface MaterialPaletteEntry {
   color: Color;
   metalness: number;
   roughness: number;
+  opacity: number;
 }
 
 /**
@@ -177,7 +179,7 @@ export class DTXLayer {
   private _colorsAndFlagsTexture: DataTexture | null = null;
   /** 图元到对象映射纹理 (R32UI, 8个三角形共享) */
   private _primitiveToObjectTexture: DataTexture | null = null;
-  /** 材质调色板纹理 (RGBA32F, 每材质2行: row0=color+metalness, row1=roughness+padding) */
+  /** 材质调色板纹理 (RGBA32F, 每材质2行: row0=color+metalness, row1=roughness+opacity+padding) */
   private _materialPaletteTexture: DataTexture | null = null;
   /** 颜色覆盖纹理 (RGBA8, 用于独立颜色覆盖) */
   private _colorOverrideTexture: DataTexture | null = null;
@@ -204,7 +206,7 @@ export class DTXLayer {
 
   /** 材质调色板: key -> index */
   private _materialPalette: Map<string, number> = new Map();
-  /** 材质调色板数据 (每材质 8 floats: r,g,b,metalness,roughness,0,0,0) */
+  /** 材质调色板数据 (每材质 8 floats: r,g,b,metalness,roughness,opacity,0,0) */
   private _materialPaletteBuffer: Float32Array;
   /** 当前材质数量 */
   private _materialCount = 0;
@@ -238,12 +240,16 @@ export class DTXLayer {
 
   // ========== 渲染相关 ==========
 
-  /** Three.js 材质 */
+  /** Three.js 材质（不透明通道） */
   private _material: DTXMaterial | null = null;
+  /** Three.js 材质（透明通道） */
+  private _transparentMaterial: DTXMaterial | null = null;
   /** Three.js 几何体 */
   private _geometry: DTXGeometry | null = null;
-  /** Three.js 网格 */
+  /** Three.js 网格（不透明通道） */
   private _mesh: Mesh | null = null;
+  /** Three.js 网格（透明通道） */
+  private _transparentMesh: Mesh | null = null;
   /** GPU Picking 材质 */
   private _pickingMaterial: DTXPickingMaterial | null = null;
   /** GPU Picking 网格 */
@@ -462,14 +468,15 @@ export class DTXLayer {
    * @param roughness 粗糙度
    * @returns 材质索引
    */
-  private _getOrCreateMaterialIndex(color: Color, metalness: number, roughness: number): number {
+  private _getOrCreateMaterialIndex(color: Color, metalness: number, roughness: number, opacity: number): number {
     // 生成材质键 (颜色精度降低到 0-255，PBR 精度降低到 0-100)
     const r = Math.floor(color.r * 255);
     const g = Math.floor(color.g * 255);
     const b = Math.floor(color.b * 255);
     const m = Math.floor(metalness * 100);
     const rg = Math.floor(roughness * 100);
-    const key = `${r}_${g}_${b}_${m}_${rg}`;
+    const a = Math.floor(opacity * 100);
+    const key = `${r}_${g}_${b}_${m}_${rg}_${a}`;
 
     if (this._materialPalette.has(key)) {
       return this._materialPalette.get(key)!;
@@ -489,7 +496,7 @@ export class DTXLayer {
     this._materialPaletteBuffer[offset + 2] = color.b;
     this._materialPaletteBuffer[offset + 3] = metalness;
     this._materialPaletteBuffer[offset + 4] = roughness;
-    this._materialPaletteBuffer[offset + 5] = 0;
+    this._materialPaletteBuffer[offset + 5] = opacity;
     this._materialPaletteBuffer[offset + 6] = 0;
     this._materialPaletteBuffer[offset + 7] = 0;
 
@@ -529,9 +536,10 @@ export class DTXLayer {
     const objectIndex = this._objectCount;
     const metalness = pbr.metalness ?? 0.5;
     const roughness = pbr.roughness ?? 0.5;
+    const opacity = Math.min(1, Math.max(0, pbr.opacity ?? 1));
 
     // 获取或创建材质调色板索引
-    const materialIndex = this._getOrCreateMaterialIndex(color, metalness, roughness);
+    const materialIndex = this._getOrCreateMaterialIndex(color, metalness, roughness, opacity);
 
     const triangleCount = Math.floor(geoHandle.indexCount / 3);
     const primitiveOffset = this._drawTriangleCount;
@@ -548,7 +556,7 @@ export class DTXLayer {
       materialIndex,
       hasColorOverride: false,
       colorOverride: new Color(0xffffff),
-      opacity: 1.0,
+      opacity,
       visible: true,
       selected: false,
       highlighted: false,
@@ -713,6 +721,9 @@ export class DTXLayer {
     if (scene && this._mesh) {
       scene.remove(this._mesh);
     }
+    if (scene && this._transparentMesh) {
+      scene.remove(this._transparentMesh);
+    }
 
     // 释放旧 GPU 资源
     this._positionsTexture?.dispose();
@@ -735,11 +746,14 @@ export class DTXLayer {
 
     this._geometry?.dispose();
     this._material?.dispose();
+    this._transparentMaterial?.dispose();
     this._pickingMaterial?.dispose();
 
     this._geometry = null;
     this._material = null;
+    this._transparentMaterial = null;
     this._mesh = null;
+    this._transparentMesh = null;
     this._pickingMaterial = null;
     this._pickingMesh = null;
 
@@ -753,6 +767,9 @@ export class DTXLayer {
       this._lightingCacheDirty = true;
       if (this._mesh) {
         scene.add(this._mesh);
+      }
+      if (this._transparentMesh) {
+        scene.add(this._transparentMesh);
       }
     }
   }
@@ -774,6 +791,9 @@ export class DTXLayer {
 
     if (this._material) {
       (this._material.uniforms as any).globalModelMatrix.value = this._globalModelMatrix;
+    }
+    if (this._transparentMaterial) {
+      (this._transparentMaterial.uniforms as any).globalModelMatrix.value = this._globalModelMatrix;
     }
     if (this._pickingMaterial) {
       (this._pickingMaterial.uniforms as any).globalModelMatrix.value = this._globalModelMatrix;
@@ -983,7 +1003,7 @@ export class DTXLayer {
 
   /**
    * 创建材质调色板纹理
-   * 每材质占 2 行: row0=[r,g,b,metalness], row1=[roughness,0,0,0]
+   * 每材质占 2 行: row0=[r,g,b,metalness], row1=[roughness,opacity,0,0]
    */
   private _createMaterialPaletteTexture(): void {
     // 256 材质，每材质 2 行，每行 4 floats
@@ -999,9 +1019,9 @@ export class DTXLayer {
       data[i * 4 + 1] = this._materialPaletteBuffer[srcOffset + 1]!;
       data[i * 4 + 2] = this._materialPaletteBuffer[srcOffset + 2]!;
       data[i * 4 + 3] = this._materialPaletteBuffer[srcOffset + 3]!;
-      // row 1: roughness, 0, 0, 0
+      // row 1: roughness, opacity, 0, 0
       data[width * 4 + i * 4] = this._materialPaletteBuffer[srcOffset + 4]!;
-      data[width * 4 + i * 4 + 1] = 0;
+      data[width * 4 + i * 4 + 1] = this._materialPaletteBuffer[srcOffset + 5]!;
       data[width * 4 + i * 4 + 2] = 0;
       data[width * 4 + i * 4 + 3] = 0;
     }
@@ -1062,7 +1082,7 @@ export class DTXLayer {
    * 创建渲染对象 (Material, Geometry, Mesh)
    */
   private _createRenderObjects(): void {
-    // 创建材质
+    // 创建不透明通道材质
     this._material = new DTXMaterial({
       positionsTexture: this._positionsTexture,
       indicesTexture: this._indicesTexture,
@@ -1076,16 +1096,50 @@ export class DTXLayer {
       positionsTextureWidth: POSITIONS_TEXTURE_WIDTH,
       indicesTextureWidth: INDICES_TEXTURE_WIDTH,
       objectsTextureWidth: OBJECTS_TEXTURE_WIDTH,
-      primitiveToObjectTextureWidth: INDICES_TEXTURE_WIDTH
+      primitiveToObjectTextureWidth: INDICES_TEXTURE_WIDTH,
+      renderPass: 1,
+      alphaCutoff: 0.999,
+      transparent: false,
+      depthWrite: true,
+      depthTest: true
+    });
+
+    // 创建透明通道材质
+    this._transparentMaterial = new DTXMaterial({
+      positionsTexture: this._positionsTexture,
+      indicesTexture: this._indicesTexture,
+      normalsTexture: this._normalsTexture,
+      matricesTexture: this._matricesTexture,
+      colorsAndFlagsTexture: this._colorsAndFlagsTexture,
+      primitiveToObjectTexture: this._primitiveToObjectTexture,
+      materialPaletteTexture: this._materialPaletteTexture,
+      colorOverrideTexture: this._colorOverrideTexture,
+      globalModelMatrix: this._globalModelMatrix,
+      positionsTextureWidth: POSITIONS_TEXTURE_WIDTH,
+      indicesTextureWidth: INDICES_TEXTURE_WIDTH,
+      objectsTextureWidth: OBJECTS_TEXTURE_WIDTH,
+      primitiveToObjectTextureWidth: INDICES_TEXTURE_WIDTH,
+      renderPass: 2,
+      alphaCutoff: 0.999,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true
     });
 
     // 创建几何体 (不再是 totalIndices，而是 drawIndexCount)
     this._geometry = new DTXGeometry(this._drawIndexCount);
 
-    // 创建网格
+    // 创建不透明通道网格
     this._mesh = new Mesh(this._geometry, this._material);
     this._mesh.frustumCulled = false; // DTX 自己管理裁剪
     this._mesh.name = 'DTXLayer';
+    this._mesh.renderOrder = 0;
+
+    // 创建透明通道网格（与不透明通道共享同一几何）
+    this._transparentMesh = new Mesh(this._geometry, this._transparentMaterial);
+    this._transparentMesh.frustumCulled = false;
+    this._transparentMesh.name = 'DTXLayerTransparent';
+    this._transparentMesh.renderOrder = 1;
 
     // 创建 GPU Picking 材质与网格
     this._pickingMaterial = new DTXPickingMaterial({
@@ -1121,6 +1175,9 @@ export class DTXLayer {
     if (this._mesh) {
       scene.add(this._mesh);
     }
+    if (this._transparentMesh) {
+      scene.add(this._transparentMesh);
+    }
   }
 
   /**
@@ -1136,6 +1193,9 @@ export class DTXLayer {
   removeFromScene(): void {
     if (this._scene && this._mesh) {
       this._scene.remove(this._mesh);
+    }
+    if (this._scene && this._transparentMesh) {
+      this._scene.remove(this._transparentMesh);
     }
     this._scene = null;
     this._lightingCacheDirty = true;
@@ -1156,7 +1216,10 @@ export class DTXLayer {
   }
 
   private _syncLighting(): void {
-    if (!this._material) return;
+    const materials: DTXMaterial[] = [];
+    if (this._material) materials.push(this._material);
+    if (this._transparentMaterial) materials.push(this._transparentMaterial);
+    if (materials.length === 0) return;
     const scene = this._scene;
     if (!scene) return;
 
@@ -1219,12 +1282,14 @@ export class DTXLayer {
       this._tmpColor1.copy(best1.color).multiplyScalar(best1.intensity ?? 1);
     }
 
-    const u: any = this._material.uniforms;
-    u.ambientLight.value.set(ambientR, ambientG, ambientB);
-    u.lightDirection0.value.copy(this._tmpDir0);
-    u.lightColor0.value.set(this._tmpColor0.r, this._tmpColor0.g, this._tmpColor0.b);
-    u.lightDirection1.value.copy(this._tmpDir1);
-    u.lightColor1.value.set(this._tmpColor1.r, this._tmpColor1.g, this._tmpColor1.b);
+    for (const material of materials) {
+      const u: any = material.uniforms;
+      u.ambientLight.value.set(ambientR, ambientG, ambientB);
+      u.lightDirection0.value.copy(this._tmpDir0);
+      u.lightColor0.value.set(this._tmpColor0.r, this._tmpColor0.g, this._tmpColor0.b);
+      u.lightDirection1.value.copy(this._tmpDir1);
+      u.lightColor1.value.set(this._tmpColor1.r, this._tmpColor1.g, this._tmpColor1.b);
+    }
   }
 
   private _refreshLightingCache(scene: Scene): void {
@@ -1244,9 +1309,15 @@ export class DTXLayer {
   private _refreshLightingCacheShallow(scene: Scene): void {
     const amb: AmbientLight[] = [];
     const dir: DirectionalLight[] = [];
-    for (const child of scene.children as any[]) {
-      if (child?.isAmbientLight) amb.push(child as AmbientLight);
-      if (child?.isDirectionalLight) dir.push(child as DirectionalLight);
+    const stack: any[] = [...(scene.children as any[])];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node) continue;
+      if (node?.isAmbientLight) amb.push(node as AmbientLight);
+      if (node?.isDirectionalLight) dir.push(node as DirectionalLight);
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        stack.push(...node.children);
+      }
     }
     this._cachedAmbientLights = amb;
     this._cachedDirectionalLights = dir;
@@ -1262,10 +1333,12 @@ export class DTXLayer {
     const b = this._materialPaletteBuffer[offset + 2]!;
     const metalness = this._materialPaletteBuffer[offset + 3]!;
     const roughness = this._materialPaletteBuffer[offset + 4]!;
+    const opacity = this._materialPaletteBuffer[offset + 5]!;
     return {
       color: new Color(r, g, b),
       metalness,
-      roughness
+      roughness,
+      opacity
     };
   }
 
@@ -1286,10 +1359,10 @@ export class DTXLayer {
     texData[row0 + 2] = entry.color.b;
     texData[row0 + 3] = entry.metalness;
 
-    // row 1: [roughness, 0, 0, 0]
+    // row 1: [roughness, opacity, 0, 0]
     const row1 = (1 * width + materialIndex) * 4;
     texData[row1 + 0] = entry.roughness;
-    texData[row1 + 1] = 0;
+    texData[row1 + 1] = entry.opacity;
     texData[row1 + 2] = 0;
     texData[row1 + 3] = 0;
 
@@ -1307,14 +1380,21 @@ export class DTXLayer {
     const current = this._getMaterialPaletteEntry(obj.materialIndex) ?? {
       color: new Color(1, 1, 1),
       metalness: 0.5,
-      roughness: 0.5
+      roughness: 0.5,
+      opacity: 1
     };
 
     const nextColor = params.color ?? current.color;
     const nextMetalness = params.metalness ?? current.metalness;
     const nextRoughness = params.roughness ?? current.roughness;
+    const nextOpacity = Math.min(1, Math.max(0, params.opacity ?? current.opacity));
 
-    const nextMaterialIndex = this._getOrCreateMaterialIndex(nextColor, nextMetalness, nextRoughness);
+    const nextMaterialIndex = this._getOrCreateMaterialIndex(
+      nextColor,
+      nextMetalness,
+      nextRoughness,
+      nextOpacity
+    );
 
     if (nextMaterialIndex !== obj.materialIndex) {
       obj.materialIndex = nextMaterialIndex;
@@ -1332,6 +1412,8 @@ export class DTXLayer {
         this._colorsAndFlagsTexture.needsUpdate = true;
       }
     }
+
+    obj.opacity = nextOpacity;
 
     if (!options.keepColorOverride) {
       obj.hasColorOverride = false;
@@ -2070,6 +2152,7 @@ export class DTXLayer {
     // 释放渲染对象
     this._geometry?.dispose();
     this._material?.dispose();
+    this._transparentMaterial?.dispose();
     this._pickingMaterial?.dispose();
 
     // 清理引用

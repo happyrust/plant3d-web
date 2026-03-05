@@ -86,7 +86,7 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
 
     if (refno === firstRefno) {
       firstHit += 1
-      await page.waitForTimeout(600)
+      await new Promise<void>((resolve) => setTimeout(resolve, 600))
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -97,7 +97,7 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
 
     if (refno === secondRefno) {
       secondHit += 1
-      await page.waitForTimeout(80)
+      await new Promise<void>((resolve) => setTimeout(resolve, 80))
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

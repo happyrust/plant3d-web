@@ -108,12 +108,13 @@ void main() {
   // 3.2 从材质调色板获取颜色和 PBR 参数
   // row 0: [r, g, b, metalness]
   vec4 matRow0 = texelFetch(materialPaletteTexture, ivec2(int(materialIndex), 0), 0);
-  // row 1: [roughness, 0, 0, 0]
+  // row 1: [roughness, opacity, 0, 0]
   vec4 matRow1 = texelFetch(materialPaletteTexture, ivec2(int(materialIndex), 1), 0);
 
   vec3 baseColor = matRow0.rgb;
   float metalness = matRow0.a;
   float roughness = matRow1.r;
+  float opacity = matRow1.g;
 
   // 3.3 检查颜色覆盖
   if (hasColorOverride) {
@@ -122,7 +123,7 @@ void main() {
     baseColor = overrideColor.rgb;
   }
 
-  vColor = vec4(baseColor, 1.0);
+  vColor = vec4(baseColor, opacity);
   vMetalness = metalness;
   vRoughness = roughness;
   vFlags = visibleFlag;
@@ -194,6 +195,9 @@ uniform vec3 lightDirection0;
 uniform vec3 lightColor0;
 uniform vec3 lightDirection1;
 uniform vec3 lightColor1;
+// 0=all, 1=opaque, 2=transparent
+uniform int renderPass;
+uniform float alphaCutoff;
 
 // === 输出 ===
 out vec4 fragColor;
@@ -204,13 +208,14 @@ vec3 calculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metalness, float ro
   float NdotL = max(dot(N, L), 0.0);
   float NdotV = max(dot(N, V), 0.001);
   float NdotH = max(dot(N, H), 0.0);
+  float VdotH = max(dot(V, H), 0.0);
 
   // 简化的 PBR
   vec3 F0 = mix(vec3(0.04), albedo, metalness);
   float alpha = roughness * roughness;
 
   // Fresnel (Schlick)
-  vec3 F = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
+  vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
 
   // Distribution (GGX)
   float alphaSq = alpha * alpha;
@@ -231,6 +236,16 @@ vec3 calculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metalness, float ro
 
 void main() {
   if (vFlags == 0u) {
+    discard;
+  }
+  bool isOpaque = vColor.a >= alphaCutoff;
+  if (renderPass == 1 && !isOpaque) {
+    discard;
+  }
+  if (renderPass == 2 && isOpaque) {
+    discard;
+  }
+  if (vColor.a <= 0.001) {
     discard;
   }
 
@@ -273,6 +288,11 @@ export interface DTXMaterialOptions {
   indicesTextureWidth?: number;
   objectsTextureWidth?: number;
   primitiveToObjectTextureWidth?: number;
+  renderPass?: 0 | 1 | 2;
+  alphaCutoff?: number;
+  transparent?: boolean;
+  depthWrite?: boolean;
+  depthTest?: boolean;
 }
 
 // ========== DTXMaterial 类 ==========
@@ -311,7 +331,9 @@ export class DTXMaterial extends ShaderMaterial {
         lightDirection0: { value: new Vector3(1, 1, 1).normalize() },
         lightColor0: { value: new Vector3(1, 1, 1) },
         lightDirection1: { value: new Vector3(-1, 0.4, -1).normalize() },
-        lightColor1: { value: new Vector3(0, 0, 0) }
+        lightColor1: { value: new Vector3(0, 0, 0) },
+        renderPass: { value: options.renderPass ?? 0 },
+        alphaCutoff: { value: options.alphaCutoff ?? 0.999 }
       },
       // 重要：启用 WebGL2 的 GLSL 3.0 语法
       glslVersion: GLSL3
@@ -319,6 +341,9 @@ export class DTXMaterial extends ShaderMaterial {
 
     // 禁用背面剔除以便调试
     this.side = 2; // DoubleSide
+    this.transparent = options.transparent ?? false;
+    this.depthWrite = options.depthWrite ?? true;
+    this.depthTest = options.depthTest ?? true;
   }
 
   /**
@@ -333,7 +358,7 @@ export class DTXMaterial extends ShaderMaterial {
   customProgramCacheKey(): string {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
-    return 'DTXMaterial_v5';
+    return 'DTXMaterial_v7';
   }
 
   /**
