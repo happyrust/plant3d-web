@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>钢筋梁尺寸标注演示</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                overflow: hidden;
+                background: #f5f5f5;
+            }
+            #canvas-container {
+                width: 100vw;
+                height: 100vh;
+                position: relative;
+            }
+            #status {
+                position: absolute;
+                top: 68px;
+                left: 20px;
+                background: rgba(255, 255, 255, 0.95);
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                font-size: 14px;
+                color: #333;
+                z-index: 100;
+                max-width: 600px;
+            }
+            #info {
+                position: absolute;
+                bottom: 20px;
+                left: 20px;
+                background: rgba(255, 255, 255, 0.95);
+                padding: 16px 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                font-size: 13px;
+                color: #666;
+                z-index: 100;
+                line-height: 1.6;
+            }
+            #info h3 {
+                margin: 0 0 8px 0;
+                font-size: 14px;
+                color: #333;
+            }
+            #view-controls {
+                position: absolute;
+                top: 12px;
+                left: 12px;
+                z-index: 120;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 8px;
+                background: rgba(255, 255, 255, 0.9);
+                border: 1px solid rgba(0, 0, 0, 0.1);
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+                font-size: 12px;
+            }
+            .view-btn {
+                border: 1px solid #d6d6d6;
+                background: #f5f6f7;
+                color: #54647c;
+                border-radius: 6px;
+                padding: 4px 10px;
+                cursor: pointer;
+                font-size: 12px;
+                line-height: 1.2;
+            }
+            .view-btn:hover {
+                background: #eef1f5;
+            }
+            .view-btn.active {
+                background: #e8f0ff;
+                color: #2f63da;
+                border-color: #9fb9ef;
+            }
+            #opacity-control {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                margin-left: 4px;
+                color: #6f7c91;
+            }
+            #opacity-slider {
+                width: 72px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="canvas-container"></div>
+        <div id="view-controls">
+            <button class="view-btn" data-view="front">正面</button>
+            <button class="view-btn" data-view="side">侧面</button>
+            <button class="view-btn" data-view="top">俯视</button>
+            <button class="view-btn" data-view="persp">透视</button>
+            <button class="view-btn active" data-view="match">参考图</button>
+            <label id="opacity-control">
+                <span>透明</span>
+                <input
+                    id="opacity-slider"
+                    type="range"
+                    min="20"
+                    max="90"
+                    value="58"
+                />
+            </label>
+        </div>
+        <div id="status">加载中...</div>
+        <div id="info">
+            <h3>钢筋梁尺寸标注演示</h3>
+            <div>复刻 RebarViz 的梁平法“尺寸标注层”效果</div>
+            <div>• 混凝土梁 + 钢筋模型</div>
+            <div>• 语义化标注：ln / ln/3 / 加密区 / 搭接 / 锚固 / hc / c</div>
+            <div>• 鼠标拖拽旋转 / 滚轮缩放</div>
+        </div>
+        <script type="module" src="/src/debug/rebarBeamDemo.ts"></script>
+    </body>
+</html>
