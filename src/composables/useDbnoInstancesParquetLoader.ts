@@ -78,6 +78,12 @@ type RegisteredDbno = {
   }
 }
 
+type ParquetManifestWithBaseDir = {
+  manifest: ParquetManifest
+  // manifest 所在目录：用于拼接 parquet 文件 URL
+  baseDir: 'parquet' | 'instances'
+}
+
 class ParquetNotFoundError extends Error {
   constructor(message: string) {
     super(message)
@@ -173,13 +179,37 @@ function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null)
   return combined.toArray()
 }
 
-async function fetchManifest(dbno: number): Promise<ParquetManifest> {
-  const url = buildFilesOutputUrl(`parquet/manifest_${dbno}.json`)
-  // 该 manifest 在导出流程中可能被反复覆盖；禁用浏览器缓存以避免读到旧版本。
-  const resp = await fetch(url, { cache: 'no-store' })
-  if (resp.status === 404) {
-    // 兼容“仅导出 Parquet 文件但未生成 manifest”的场景：按约定命名兜底。
-    return {
+async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
+  const tryFetchManifest = async (
+    baseDir: 'parquet' | 'instances'
+  ): Promise<ParquetManifest | null> => {
+    const url = buildFilesOutputUrl(`${baseDir}/manifest_${dbno}.json`)
+    const resp = await fetch(url)
+    if (resp.status === 404) return null
+    if (!resp.ok) {
+      throw new Error(`加载 manifest 失败(${baseDir}): HTTP ${resp.status} ${resp.statusText}`)
+    }
+    const json = (await resp.json()) as ParquetManifest
+    if (!json || typeof json !== 'object' || !json.tables?.instances?.file) {
+      throw new Error(`manifest 结构不符合预期(${baseDir})`)
+    }
+    return json
+  }
+
+  // 优先新目录 parquet/，兼容旧目录 instances/
+  const parquetManifest = await tryFetchManifest('parquet')
+  if (parquetManifest) {
+    return { manifest: parquetManifest, baseDir: 'parquet' }
+  }
+  const instancesManifest = await tryFetchManifest('instances')
+  if (instancesManifest) {
+    return { manifest: instancesManifest, baseDir: 'instances' }
+  }
+
+  // 兼容“仅导出 Parquet 文件但未生成 manifest”的场景：按新目录约定命名兜底。
+  return {
+    baseDir: 'parquet',
+    manifest: {
       version: 1,
       format: 'parquet',
       generated_at: new Date().toISOString(),
@@ -192,16 +222,8 @@ async function fetchManifest(dbno: number): Promise<ParquetManifest> {
         transforms: { file: `transforms_${dbno}.parquet` },
         aabb: { file: `aabb_${dbno}.parquet` },
       },
-    }
+    },
   }
-  if (!resp.ok) {
-    throw new Error(`加载 manifest 失败: HTTP ${resp.status} ${resp.statusText}`)
-  }
-  const json = (await resp.json()) as ParquetManifest
-  if (!json || typeof json !== 'object' || !json.tables?.instances?.file) {
-    throw new Error('manifest 结构不符合预期')
-  }
-  return json
 }
 
 async function registerDbno(dbno: number): Promise<RegisteredDbno> {
@@ -214,8 +236,8 @@ async function registerDbno(dbno: number): Promise<RegisteredDbno> {
     await ensureDuckDB()
     if (!db || !conn) throw new Error('DuckDB not ready')
 
-    const manifest = await fetchManifest(dbno)
-    const baseDirUrl = buildFilesOutputUrl('parquet')
+    const { manifest, baseDir } = await fetchManifest(dbno)
+    const baseDirUrl = buildFilesOutputUrl(baseDir)
 
     const files = {
       instances: `p_${dbno}_instances.parquet`,

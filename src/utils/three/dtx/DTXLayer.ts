@@ -233,6 +233,8 @@ export class DTXLayer {
   private _objectsArray: DTXObject[] = [];
   /** 当前对象数量 */
   private _objectCount = 0;
+  /** 对象可见性/结构变更版本（用于上层按需同步边线等派生视图） */
+  private _visibilityRevision = 0;
 
   // ========== 渲染相关 ==========
 
@@ -606,6 +608,7 @@ export class DTXLayer {
     this._objects.set(objectId, obj);
     this._objectsArray.push(obj);
     this._objectCount++;
+    this._visibilityRevision++;
 
     // 累计 drawIndexCount / drawTriangleCount
     this._drawTriangleCount += triangleCount;
@@ -1430,6 +1433,7 @@ export class DTXLayer {
   setObjectVisible(objectId: string, visible: boolean): void {
     const obj = this._objects.get(objectId);
     if (!obj) return;
+    if (obj.visible === visible) return;
 
     obj.visible = visible;
 
@@ -1446,6 +1450,8 @@ export class DTXLayer {
       texData[dstOffset] = visible ? 1 : 0;
       this._colorsAndFlagsTexture.needsUpdate = true;
     }
+
+    this._visibilityRevision++;
   }
 
   /**
@@ -1457,6 +1463,7 @@ export class DTXLayer {
 
     const flag = visible ? 1 : 0;
     let any = false;
+    let changed = false;
 
     let pixelsPerRow = 0;
     let texData: Uint8Array | null = null;
@@ -1468,6 +1475,7 @@ export class DTXLayer {
     for (const objectId of objectIds) {
       const obj = this._objects.get(objectId);
       if (!obj) continue;
+      if (obj.visible === visible) continue;
 
       obj.visible = visible;
       const bufferOffset = obj.objectIndex * 16 + 2; // pixel 0, byte 2
@@ -1481,10 +1489,14 @@ export class DTXLayer {
       }
 
       any = true;
+      changed = true;
     }
 
     if (any && this._colorsAndFlagsTexture) {
       this._colorsAndFlagsTexture.needsUpdate = true;
+    }
+    if (changed) {
+      this._visibilityRevision++;
     }
   }
 
@@ -1493,9 +1505,13 @@ export class DTXLayer {
    */
   setAllVisible(visible: boolean): void {
     const flag = visible ? 1 : 0;
+    let changed = false;
 
     // 更新内部缓冲区
     for (const obj of this._objects.values()) {
+      if (obj.visible !== visible) {
+        changed = true;
+      }
       obj.visible = visible;
       const flagsOffset = obj.objectIndex * 16 + 2;
       this._colorsAndFlagsBuffer[flagsOffset] = flag;
@@ -1514,6 +1530,10 @@ export class DTXLayer {
       }
 
       this._colorsAndFlagsTexture.needsUpdate = true;
+    }
+
+    if (changed) {
+      this._visibilityRevision++;
     }
   }
 
@@ -1548,6 +1568,19 @@ export class DTXLayer {
    */
   getAllObjectIds(): string[] {
     return Array.from(this._objects.keys());
+  }
+
+  /**
+   * 获取当前可见对象 ID 列表（基于对象 visible 标志）。
+   */
+  getVisibleObjectIds(): string[] {
+    const result: string[] = [];
+    for (const [objectId, obj] of this._objects) {
+      if (obj.visible) {
+        result.push(objectId);
+      }
+    }
+    return result;
   }
 
   /**
@@ -1977,6 +2010,13 @@ export class DTXLayer {
    */
   get objectCount(): number {
     return this._objects.size;
+  }
+
+  /**
+   * 当前可见性/结构版本号（addObject / setObjectVisible / setObjectsVisible / setAllVisible 会递增）。
+   */
+  get visibilityRevision(): number {
+    return this._visibilityRevision;
   }
 
   // ========== 统计信息 ==========

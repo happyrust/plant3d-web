@@ -31,6 +31,7 @@ export type MbdPipeStats = {
   dims_count: number
   welds_count: number
   slopes_count: number
+  bends_count: number
 }
 
 export type MbdPipeDebugInfo = {
@@ -88,6 +89,24 @@ export type MbdSlopeDto = {
   text: string
 }
 
+export type MbdBendMode = 'workpoint' | 'facecenter'
+
+export type MbdBendDto = {
+  id: string
+  refno: string
+  noun: string
+  /** 弯曲角度（度） */
+  angle?: number | null
+  /** 弯曲半径（mm） */
+  radius?: number | null
+  /** 中心线交点（WorkPoint） */
+  work_point: Vec3
+  /** 端面中心 P1（ARRI 侧） */
+  face_center_1?: Vec3 | null
+  /** 端面中心 P2（LEAV 侧） */
+  face_center_2?: Vec3 | null
+}
+
 export type MbdPipeData = {
   input_refno: string
   branch_refno: string
@@ -97,6 +116,7 @@ export type MbdPipeData = {
   dims: MbdDimDto[]
   welds: MbdWeldDto[]
   slopes: MbdSlopeDto[]
+  bends: MbdBendDto[]
   stats: MbdPipeStats
   debug_info?: MbdPipeDebugInfo
 }
@@ -131,6 +151,8 @@ export type MbdPipeQueryParams = {
   include_dims?: boolean
   include_welds?: boolean
   include_slopes?: boolean
+  include_bends?: boolean
+  bend_mode?: MbdBendMode
 }
 
 function getBaseUrl(): string {

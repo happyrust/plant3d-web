@@ -108,7 +108,8 @@ export const demoMbdPipeData: MbdPipeData = {
   slopes: [
     { id: 'sl1', start: [0, 0, 0], end: [1000, 0, 0], slope: 0.01, text: '1%' },
   ],
-  stats: { segments_count: 3, dims_count: 8, welds_count: 2, slopes_count: 1 },
+  bends: [],
+  stats: { segments_count: 3, dims_count: 8, welds_count: 2, slopes_count: 1, bends_count: 0 },
   debug_info: { source: 'mock', notes: ['dtx_demo=mbd_pipe 模式'] },
 }
 

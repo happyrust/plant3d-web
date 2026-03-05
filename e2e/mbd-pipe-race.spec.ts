@@ -12,11 +12,13 @@ type MbdPipeResponse = {
     dims: Array<Record<string, unknown>>
     welds: Array<Record<string, unknown>>
     slopes: Array<Record<string, unknown>>
+    bends: Array<Record<string, unknown>>
     stats: {
       segments_count: number
       dims_count: number
       welds_count: number
       slopes_count: number
+      bends_count: number
     }
   }
 }
@@ -52,11 +54,13 @@ function buildMbdResponse(refno: string): MbdPipeResponse {
       ],
       welds: [],
       slopes: [],
+      bends: [],
       stats: {
         segments_count: 1,
         dims_count: 1,
         welds_count: 0,
         slopes_count: 0,
+        bends_count: 0,
       },
     },
   }
@@ -68,10 +72,17 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
 
   let firstHit = 0
   let secondHit = 0
+  const malformedQueryUrls: string[] = []
 
   await page.route('**/api/mbd/pipe/**', async (route) => {
     const url = new URL(route.request().url())
     const refno = decodeURIComponent(url.pathname.split('/').pop() || '')
+    const includeBends = url.searchParams.get('include_bends')
+    const bendMode = url.searchParams.get('bend_mode')
+
+    if (includeBends !== 'true' || bendMode !== 'facecenter') {
+      malformedQueryUrls.push(url.toString())
+    }
 
     if (refno === firstRefno) {
       firstHit += 1
@@ -136,4 +147,5 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
 
   expect(firstHit).toBeGreaterThan(0)
   expect(secondHit).toBeGreaterThan(0)
+  expect(malformedQueryUrls).toEqual([])
 })
