@@ -1,6 +1,5 @@
 import type { InstanceManifest } from '@/utils/instances/instanceManifest'
 import { getBaseUrl } from '@/api/genModelTaskApi'
-import { getJson, setJson } from '@/utils/storage/indexedDbCache'
 import { buildFilesOutputUrl } from '@/lib/filesOutput'
 
 export class InstancesJsonNotFoundError extends Error {
@@ -24,109 +23,6 @@ export type StreamGenerateSseUpdate = {
 const manifestCache = new Map<number, InstanceManifest>()
 const metaCache = new Map<number, unknown>()
 
-// ========= V3 shared tables (trans/aabb) =========
-const SHARED_STORE = 'instances_shared' as const
-const SHARED_TRANS_KEY = 'trans' as const
-const SHARED_AABB_KEY = 'aabb' as const
-const SHARED_TRANS_URL = buildFilesOutputUrl('instances/trans.json')
-const SHARED_AABB_URL = buildFilesOutputUrl('instances/aabb.json')
-
-let sharedTransTable: Record<string, number[]> | null = null
-let sharedAabbTable: Record<string, unknown> | null = null
-let sharedTablesPromise: Promise<void> | null = null
-
-function setSharedTables(trans: unknown, aabb: unknown): void {
-  if (!trans || typeof trans !== 'object') throw new Error('[instances] trans.json 结构不符合预期')
-  if (!aabb || typeof aabb !== 'object') throw new Error('[instances] aabb.json 结构不符合预期')
-  sharedTransTable = trans as Record<string, number[]>
-  sharedAabbTable = aabb as Record<string, unknown>
-}
-
-export async function preloadInstancesSharedTables(): Promise<void> {
-  if (sharedTablesPromise) return await sharedTablesPromise
-
-  sharedTablesPromise = (async () => {
-    // 1) IndexedDB 预热（即使损坏也不回退旧逻辑，继续强制拉新）
-    const cachedTrans = await getJson<unknown>(SHARED_STORE, SHARED_TRANS_KEY)
-    const cachedAabb = await getJson<unknown>(SHARED_STORE, SHARED_AABB_KEY)
-    if (cachedTrans && cachedAabb) {
-      try {
-        setSharedTables(cachedTrans, cachedAabb)
-      } catch {
-        // ignore corrupted cache
-      }
-    }
-
-    // 2) 强制刷新（失败直接抛错）
-    const [transResp, aabbResp] = await Promise.all([fetch(SHARED_TRANS_URL), fetch(SHARED_AABB_URL)])
-    if (!transResp.ok) {
-      throw new Error(`[instances] 加载失败: HTTP ${transResp.status} ${transResp.statusText} (${SHARED_TRANS_URL})`)
-    }
-    if (!aabbResp.ok) {
-      throw new Error(`[instances] 加载失败: HTTP ${aabbResp.status} ${aabbResp.statusText} (${SHARED_AABB_URL})`)
-    }
-    const transJson = (await transResp.json()) as unknown
-    const aabbJson = (await aabbResp.json()) as unknown
-    setSharedTables(transJson, aabbJson)
-
-    await Promise.all([
-      setJson(SHARED_STORE, SHARED_TRANS_KEY, transJson),
-      setJson(SHARED_STORE, SHARED_AABB_KEY, aabbJson),
-    ])
-  })()
-
-  return await sharedTablesPromise
-}
-
-async function ensureSharedTablesLoaded(): Promise<{ trans: Record<string, number[]>; aabb: Record<string, unknown> }> {
-  if (!sharedTransTable || !sharedAabbTable) {
-    await preloadInstancesSharedTables()
-  }
-  if (!sharedTransTable || !sharedAabbTable) {
-    throw new Error('[instances] shared tables 未加载')
-  }
-  return { trans: sharedTransTable, aabb: sharedAabbTable }
-}
-
-function looksLikeV3HashManifest(json: unknown): boolean {
-  if (!json || typeof json !== 'object') return false
-  const anyJson = json as any
-
-  // instances: [{ trans_hash, aabb_hash, geo_instances: [{ geo_trans_hash }] }]
-  const insts = anyJson.instances
-  if (Array.isArray(insts) && insts.length > 0) {
-    const first = insts[0]
-    if (first && typeof first === 'object') {
-      if ('trans_hash' in first || 'aabb_hash' in first) return true
-      const geoInsts = (first as any).geo_instances
-      if (Array.isArray(geoInsts) && geoInsts.length > 0) {
-        const gi0 = geoInsts[0]
-        if (gi0 && typeof gi0 === 'object' && 'geo_trans_hash' in gi0) return true
-      }
-    }
-  }
-
-  // groups: [{ children: [{ trans_hash, aabb_hash, geo_instances: [{ geo_trans_hash }] }] }]
-  const groups = anyJson.groups
-  if (Array.isArray(groups) && groups.length > 0) {
-    const g0 = groups[0]
-    const children = g0?.children
-    if (Array.isArray(children) && children.length > 0) {
-      const c0 = children[0]
-      if (c0 && typeof c0 === 'object') {
-        if ('trans_hash' in c0 || 'aabb_hash' in c0) return true
-        const geoInsts = (c0 as any).geo_instances
-        if (Array.isArray(geoInsts) && geoInsts.length > 0) {
-          const gi0 = geoInsts[0]
-          if (gi0 && typeof gi0 === 'object' && 'geo_trans_hash' in gi0) return true
-        }
-      }
-    }
-  }
-
-  return false
-}
-
 async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
   const cached = manifestCache.get(dbno)
   if (cached) return cached
@@ -141,16 +37,6 @@ async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
   }
 
   const json = (await resp.json()) as InstanceManifest
-
-  // V3 格式：加载全局 trans.json 和 aabb.json
-  // 兼容：instances_*.json 可能缺少 version=3，但仍使用 trans_hash/aabb_hash/geo_trans_hash 引用表。
-  if (json.version === 3 || looksLikeV3HashManifest(json)) {
-    const shared = await ensureSharedTablesLoaded()
-    json.trans_table = shared.trans
-    json.aabb_table = shared.aabb as any
-    if (json.version !== 3) json.version = 3
-  }
-
   manifestCache.set(dbno, json)
   return json
 }

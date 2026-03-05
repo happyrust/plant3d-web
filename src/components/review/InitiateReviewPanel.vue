@@ -1,9 +1,10 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { AlertCircle, ArrowRight, Calendar, FileText, Link, Paperclip, Plus, Users, X } from 'lucide-vue-next';
 
+import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import { useUserStore } from '@/composables/useUserStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import type { ReviewComponent } from '@/types/auth';
@@ -22,15 +23,30 @@ const reviewerId = ref('');
 const priority = ref<'low' | 'medium' | 'high' | 'urgent'>('medium');
 const dueDate = ref('');
 const selectedComponents = ref<ReviewComponent[]>([]);
+const addingComponent = ref(false);
 
-// 侦听三维视图中的构件选中，自动追加到构件列表
-watch(
-  () => selectionStore.selectedRefno.value,
-  (refno) => {
-    if (!refno) return;
-    // 已存在则跳过
-    if (selectedComponents.value.some((c) => c.refNo === refno)) return;
-    // 从属性数据中获取名称和类型
+async function addSelectedComponent() {
+  const refno = selectionStore.selectedRefno.value;
+  if (!refno) return;
+  if (selectedComponents.value.some((c) => c.refNo === refno)) return;
+
+  addingComponent.value = true;
+  try {
+    const resp = await pdmsGetUiAttr(refno);
+    const name =
+      (resp.full_name && resp.full_name.trim()) ||
+      (resp.attrs?.NAME as string) ||
+      (resp.attrs?.DESCRIPTION as string) ||
+      refno;
+    const type = (resp.attrs?.NOUN as string) || '构件';
+    selectedComponents.value.push({
+      id: `comp-${Date.now()}`,
+      refNo: refno,
+      name: String(name).trim() || refno,
+      type,
+    });
+  } catch (_e) {
+    // 网络失败时使用选中时的属性作为兜底
     const attrs = selectionStore.propertiesData.value;
     const name = (attrs?.NAME || attrs?.DESCRIPTION || refno) as string;
     const type = (attrs?.NOUN || '构件') as string;
@@ -40,8 +56,11 @@ watch(
       name,
       type,
     });
+  } finally {
+    addingComponent.value = false;
   }
-);
+}
+
 const uploadedFiles = ref<UploadedFile[]>([]);
 const showExternalReview = ref(false);
 
@@ -113,16 +132,6 @@ const missingFields = computed(() => {
   if (!reviewerId.value) fields.push('审核人员');
   return fields;
 });
-
-function addMockComponent() {
-  const id = `comp-${Date.now()}`;
-  selectedComponents.value.push({
-    id,
-    name: `/Component-${selectedComponents.value.length + 1}`,
-    refNo: `${Math.floor(Math.random() * 99999)}_${Math.floor(Math.random() * 99999)}`,
-    type: '管道组件',
-  });
-}
 
 function removeComponent(id: string) {
   selectedComponents.value = selectedComponents.value.filter((c) => c.id !== id);
@@ -207,16 +216,18 @@ function clearNotification() {
     <!-- 模型构件选择 -->
     <div class="space-y-2">
       <label class="text-sm font-medium">选择模型构件 *</label>
-      <p class="text-xs text-gray-400 mt-0.5">在三维视图中点击构件可自动追加</p>
+      <p class="text-xs text-gray-400 mt-0.5">在三维视图中选择构件后，点击下方按钮追加到列表</p>
       <div class="border rounded-lg p-3">
         <div class="flex justify-between items-center mb-2">
           <span class="text-sm text-gray-600">已选择 {{ selectedComponents.length }} 个构件</span>
           <button
-            class="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-gray-50"
-            @click="addMockComponent"
+            class="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="!selectionStore.selectedRefno || addingComponent"
+            :title="selectionStore.selectedRefno ? '将选中的构件添加到列表' : '请先在三维视图中点击选中一个构件'"
+            @click="addSelectedComponent"
           >
             <Plus class="h-3 w-3" />
-            添加构件
+            {{ addingComponent ? '获取中...' : '添加构件' }}
           </button>
         </div>
         <div class="space-y-2 max-h-40 overflow-y-auto">

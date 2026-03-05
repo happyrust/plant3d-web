@@ -68,6 +68,64 @@ function toAbsoluteUrl(url: string): string {
   }
 }
 
+async function urlExists(url: string): Promise<boolean> {
+  const abs = toAbsoluteUrl(url)
+  try {
+    const head = await fetch(abs, { method: 'HEAD' })
+    if (head.ok) return true
+    if (head.status !== 405 && head.status !== 403) return false
+  } catch {
+    // ignore and fallback to range get
+  }
+
+  try {
+    const get = await fetch(abs, { headers: { Range: 'bytes=0-0' } })
+    return get.ok
+  } catch {
+    return false
+  }
+}
+
+async function tryFetchManifest(
+  dbno: number,
+  baseDir: 'parquet' | 'instances'
+): Promise<ParquetManifest | null> {
+  const url = buildFilesOutputUrl(`${baseDir}/manifest_${dbno}.json`)
+  const resp = await fetch(url)
+  if (resp.status === 404) return null
+  if (!resp.ok) {
+    throw new Error(`加载 manifest 失败(${baseDir}): HTTP ${resp.status} ${resp.statusText}`)
+  }
+  const json = (await resp.json()) as ParquetManifest
+  if (!json || typeof json !== 'object' || !json.tables?.instances?.file) {
+    throw new Error(`manifest 结构不符合预期(${baseDir})`)
+  }
+  return json
+}
+
+function getDefaultParquetFiles(dbno: number): Pick<RegisteredDbno['files'], 'instances' | 'geo_instances' | 'transforms' | 'aabb'> {
+  return {
+    instances: `instances_${dbno}.parquet`,
+    geo_instances: `geo_instances_${dbno}.parquet`,
+    transforms: `transforms_${dbno}.parquet`,
+    aabb: `aabb_${dbno}.parquet`,
+  }
+}
+
+async function areRequiredParquetFilesPresent(
+  baseDir: 'parquet' | 'instances',
+  files: Pick<RegisteredDbno['files'], 'instances' | 'geo_instances' | 'transforms' | 'aabb'>
+): Promise<boolean> {
+  const checks = [
+    urlExists(buildFilesOutputUrl(`${baseDir}/${files.instances}`)),
+    urlExists(buildFilesOutputUrl(`${baseDir}/${files.geo_instances}`)),
+    urlExists(buildFilesOutputUrl(`${baseDir}/${files.transforms}`)),
+    urlExists(buildFilesOutputUrl(`${baseDir}/${files.aabb}`)),
+  ]
+  const [instOk, geoOk, transOk, aabbOk] = await Promise.all(checks)
+  return instOk && geoOk && transOk && aabbOk
+}
+
 // DuckDB 单例（参考 useParquetSqlStore 的实现）
 let db: duckdb.AsyncDuckDB | null = null
 let conn: duckdb.AsyncDuckDBConnection | null = null
@@ -146,28 +204,12 @@ function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null)
 }
 
 async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
-  const tryFetchManifest = async (
-    baseDir: 'parquet' | 'instances'
-  ): Promise<ParquetManifest | null> => {
-    const url = buildFilesOutputUrl(`${baseDir}/manifest_${dbno}.json`)
-    const resp = await fetch(url)
-    if (resp.status === 404) return null
-    if (!resp.ok) {
-      throw new Error(`加载 manifest 失败(${baseDir}): HTTP ${resp.status} ${resp.statusText}`)
-    }
-    const json = (await resp.json()) as ParquetManifest
-    if (!json || typeof json !== 'object' || !json.tables?.instances?.file) {
-      throw new Error(`manifest 结构不符合预期(${baseDir})`)
-    }
-    return json
-  }
-
   // 优先新目录 parquet/，兼容旧目录 instances/
-  const parquetManifest = await tryFetchManifest('parquet')
+  const parquetManifest = await tryFetchManifest(dbno, 'parquet')
   if (parquetManifest) {
     return { manifest: parquetManifest, baseDir: 'parquet' }
   }
-  const instancesManifest = await tryFetchManifest('instances')
+  const instancesManifest = await tryFetchManifest(dbno, 'instances')
   if (instancesManifest) {
     return { manifest: instancesManifest, baseDir: 'instances' }
   }
@@ -255,8 +297,33 @@ export function useDbnoInstancesParquetLoader() {
 
   async function isParquetAvailable(dbno: number): Promise<boolean> {
     try {
-      await fetchManifest(dbno)
-      return true
+      // 1) manifest 驱动（优先 parquet/，兼容 instances/）
+      const parquetManifest = await tryFetchManifest(dbno, 'parquet')
+      if (parquetManifest) {
+        return await areRequiredParquetFilesPresent('parquet', {
+          instances: parquetManifest.tables.instances.file,
+          geo_instances: parquetManifest.tables.geo_instances.file,
+          transforms: parquetManifest.tables.transforms.file,
+          aabb: parquetManifest.tables.aabb.file,
+        })
+      }
+
+      const instancesManifest = await tryFetchManifest(dbno, 'instances')
+      if (instancesManifest) {
+        return await areRequiredParquetFilesPresent('instances', {
+          instances: instancesManifest.tables.instances.file,
+          geo_instances: instancesManifest.tables.geo_instances.file,
+          transforms: instancesManifest.tables.transforms.file,
+          aabb: instancesManifest.tables.aabb.file,
+        })
+      }
+
+      // 2) 无 manifest：按约定命名兜底探测
+      const defaults = getDefaultParquetFiles(dbno)
+      const okParquet = await areRequiredParquetFilesPresent('parquet', defaults)
+      if (okParquet) return true
+      const okInstances = await areRequiredParquetFilesPresent('instances', defaults)
+      return okInstances
     } catch {
       return false
     }
@@ -295,7 +362,6 @@ export function useDbnoInstancesParquetLoader() {
         SELECT
           i.refno_str,
           i.noun,
-          i.name,
           i.owner_refno_str,
           i.owner_noun,
           i.spec_value,
@@ -371,7 +437,7 @@ export function useDbnoInstancesParquetLoader() {
           uniforms: {
             refno: refnoStr,
             noun,
-            name: row.name ? String(row.name) : '',
+            name: '',
             owner_refno: ownerRefno,
             owner_noun: ownerNoun,
             spec_value: Number(row.spec_value ?? 0),
@@ -472,7 +538,7 @@ export function useDbnoInstancesParquetLoader() {
           uniforms: {
             refno: refnoStr,
             noun,
-            name: row.name ? String(row.name) : '',
+            name: '',
             owner_refno: ownerRefno,
             owner_noun: ownerNoun,
             spec_value: Number(row.spec_value ?? 0),

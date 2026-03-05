@@ -3,20 +3,14 @@ import type { Ref } from 'vue'
 
 import { e3dGetSubtreeRefnos } from '@/api/genModelE3dApi'
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi'
+import { modelShowByRefno } from '@/api/genModelTaskApi'
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore'
-import {
-  InstancesJsonNotFoundError,
-  ensureDbnoInstancesAvailable,
-  getDbnoInstancesManifest,
-  triggerBatchGenerateSse,
-  triggerSubtreeGenerateSse,
-  waitForDbnoInstancesFile,
-} from '@/composables/useDbnoInstancesJsonLoader'
+import { triggerBatchGenerateSse } from '@/composables/useDbnoInstancesJsonLoader'
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader'
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader'
 import { useConsoleStore } from '@/composables/useConsoleStore'
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo'
-import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
+import type { InstanceManifest } from '@/utils/instances/instanceManifest'
 
 /**
  * 全局开关：是否跳过自动生成（SSE 流式生成、弹窗选择等）
@@ -74,6 +68,13 @@ export type ModelLoadDebugInfo = {
 
 function normalizeRefnoString(refno: string): string {
   return String(refno || '').trim().replace('/', '_')
+}
+
+function toBackendRefno(refno: string): string {
+  const normalized = normalizeRefnoString(refno)
+  const m = normalized.match(/^(\d+)_(\d+)$/)
+  if (m) return `${m[1]}/${m[2]}`
+  return normalized
 }
 
 function uniqStrings(list: string[]): string[] {
@@ -299,6 +300,73 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     }
   }
 
+  async function ensureParquetAvailableByAutoExport(
+    dbno: number,
+    candidateRefnos: string[]
+  ): Promise<boolean> {
+    const parquetLoader = useDbnoInstancesParquetLoader()
+    if (await parquetLoader.isParquetAvailable(dbno)) return true
+
+    if (SKIP_AUTO_GENERATION) {
+      console.warn(`[model-generation] parquet 缺失且已禁用自动补生成 dbno=${dbno}`)
+      return false
+    }
+
+    const normalized = uniqStrings(candidateRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean)
+    if (normalized.length === 0) return false
+    const backendRefnos = normalized.map((r) => toBackendRefno(r))
+
+    let baselineRevision = 0
+    try {
+      const version = await getParquetVersion(dbno)
+      baselineRevision = Number(version.revision || 0)
+    } catch {
+      baselineRevision = 0
+    }
+
+    statusMessage.value = `检测到 parquet 缺失，正在自动导出（${backendRefnos.length} 个 refno）...`
+    progress.value = Math.max(progress.value, 20)
+    consoleStore.addLog('info', `[model-load] parquet 缺失，触发自动导出 dbno=${dbno} refno_count=${backendRefnos.length}`)
+
+    const exportResp = await modelShowByRefno({
+      db_num: dbno,
+      refnos: backendRefnos,
+      gen_model: true,
+      gen_mesh: true,
+      regen_model: false,
+      gen_parquet: true,
+    })
+
+    if (!exportResp?.success) {
+      consoleStore.addLog(
+        'error',
+        `[model-load] 自动导出 parquet 失败 dbno=${dbno} message=${exportResp?.message ?? 'unknown'}`
+      )
+      return false
+    }
+
+    const timeoutMs = 10 * 60 * 1000
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      if (await parquetLoader.isParquetAvailable(dbno)) {
+        consoleStore.addLog('info', `[model-load] parquet 已可用 dbno=${dbno}`)
+        return true
+      }
+      await sleep(2000)
+    }
+
+    const poll = await pollParquetVersionAfterEnqueue(dbno, baselineRevision, 2 * 60 * 1000)
+    if (poll.updated && (await parquetLoader.isParquetAvailable(dbno))) {
+      consoleStore.addLog('info', `[model-load] parquet 版本更新后可用 dbno=${dbno} revision=${poll.revision}`)
+      return true
+    }
+    if (poll.error) {
+      consoleStore.addLog('error', `[model-load] 自动导出后 parquet 仍不可用 dbno=${dbno} err=${poll.error}`)
+    }
+
+    return await parquetLoader.isParquetAvailable(dbno)
+  }
+
   async function handleMissingRefnos(
     dtxLayer: any,
     dbno: number,
@@ -476,9 +544,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           (visibleErr ? ` err=${visibleErr}` : '')
       )
 
-      // ========== Parquet 优先路径 ==========
+      // ========== Parquet 优先路径（不可用时自动导出） ==========
       const parquetLoader = useDbnoInstancesParquetLoader()
-      const parquetAvailable = await parquetLoader.isParquetAvailable(dbno)
+      let parquetAvailable = await parquetLoader.isParquetAvailable(dbno)
+
+      if (!parquetAvailable) {
+        const exportTargets = visibleRefnos.length > 0 ? visibleRefnos : [normalizedRoot]
+        parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, exportTargets)
+      }
 
       if (parquetAvailable) {
         consoleStore.addLog('info', `[model-load] 使用 Parquet 数据源 dbno=${dbno}`)
@@ -566,366 +639,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         return true
       }
 
-      // ========== JSON 回退路径 ==========
-      statusMessage.value = `加载 instances_${dbno}.json...`
-      progress.value = 20
-
-      try {
-        await ensureDbnoInstancesAvailable(dbno)
-      } catch (e) {
-        if (e instanceof InstancesJsonNotFoundError) {
-          // 开关打开时，跳过弹窗和自动生成，直接返回失败
-          if (SKIP_AUTO_GENERATION) {
-            console.warn(`[model-generation] instances_${dbno}.json 不存在，已跳过自动生成`)
-            statusMessage.value = `instances_${dbno}.json 不存在`
-            return false
-          }
-          if (isAutomationMode()) {
-            throw new Error(`缺少 instances 数据: /files/output/instances/instances_${dbno}.json`)
-          }
-          const choice = await dialog.openChoice({
-            title: '缺少 instances 数据',
-            message:
-              `后台未找到 /files/output/instances/instances_${dbno}.json。\n` +
-              `请选择生成方式：\n` +
-              `1) 全量生成该 dbno（覆盖完整，但耗时更长）\n` +
-              `2) 仅生成当前节点子孙（SSE 流式，生成完会合并追加 instances_${dbno}.json）`,
-            choices: [
-              { id: 'full', text: '全量生成', color: 'primary', variant: 'flat' },
-              { id: 'subtree', text: '仅生成子孙（SSE）', color: 'secondary', variant: 'flat' },
-            ],
-            cancelText: '取消',
-          })
-          if (!choice) return false
-
-          if (choice === 'full') {
-            statusMessage.value = '已提交全量生成任务，等待产出 instances 文件...'
-            progress.value = 30
-            await ensureDbnoInstancesAvailable(dbno, { autoGenerate: true, timeoutMs: 30 * 60 * 1000 })
-          } else if (choice === 'subtree') {
-            statusMessage.value = '通过 SSE 流式生成当前节点子孙...'
-            progress.value = 25
-            totalCount.value = 0
-            currentIndex.value = 0
-            currentRefno.value = normalizedRoot
-
-            await triggerSubtreeGenerateSse(normalizedRoot, {
-              timeoutMs: 30 * 60 * 1000,
-              onUpdate: (u) => {
-                if (u.message) statusMessage.value = u.message
-                if (u.currentRefno) currentRefno.value = u.currentRefno
-                if (typeof u.total === 'number' && u.total > 0) totalCount.value = u.total
-                if (typeof u.completed === 'number') currentIndex.value = u.completed
-                if (typeof u.percent === 'number') progress.value = Math.max(10, Math.min(90, u.percent))
-              },
-            })
-
-            statusMessage.value = '等待 instances 文件写入...'
-            progress.value = 92
-            await waitForDbnoInstancesFile(dbno, 10 * 60 * 1000)
-            await ensureDbnoInstancesAvailable(dbno)
-          } else {
-            return false
-          }
-        } else {
-          throw e
-        }
-      }
-
-      // 当可见 refnos 返回空/失败时，尝试从 instances manifest 推导加载目标：
-      // - root 自身可能就是可渲染元件（叶子节点）
-      // - V2 bran/equi group 需要加载 children（并包含 group 自身以承接 tubing fallbackRefno）
-      const manifest = await getDbnoInstancesManifest(dbno)
-
-      const anyViewer = viewer as unknown as {
-        __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
-      }
-      const dtxLayer = anyViewer.__dtxLayer as any
-      if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型')
-
-      const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE
-
-      async function loadRefnosInChunks(refnos: string[], dbnoValue: number): Promise<{
-        loadedRefnos: number
-        skippedRefnos: number
-        loadedObjects: number
-        missingRefnos: string[]
-      }> {
-        if (refnos.length === 0) {
-          return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, missingRefnos: [] }
-        }
-
-        const total = refnos.length
-        const batchTotal = Math.ceil(total / LOAD_BATCH_SIZE)
-        let loadedRefnos = 0
-        let skippedRefnos = 0
-        let loadedObjects = 0
-        const missingAll: string[] = []
-
-        for (let start = 0; start < total; start += LOAD_BATCH_SIZE) {
-          const end = Math.min(total, start + LOAD_BATCH_SIZE)
-          const batch = refnos.slice(start, end)
-          const batchIndex = Math.floor(start / LOAD_BATCH_SIZE) + 1
-
-          statusMessage.value = `加载 refno 批次 ${batchIndex}/${batchTotal} (${end}/${total})...`
-          progress.value = Math.max(60, Math.min(95, 60 + Math.floor((end / total) * 35)))
-
-          const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbnoValue, batch, {
-            lodAssetKey: 'L1',
-            debug: false,
-            dataSource: 'json',
-          })
-          anyViewer.__dtxAfterInstancesLoaded?.(dbnoValue, batch)
-
-          loadedRefnos += result.loadedRefnos
-          skippedRefnos += result.skippedRefnos
-          loadedObjects += result.loadedObjects
-
-          if (result.missingRefnos.length > 0) {
-            missingAll.push(...result.missingRefnos)
-          }
-        }
-
-        return {
-          loadedRefnos,
-          skippedRefnos,
-          loadedObjects,
-          missingRefnos: uniqStrings(missingAll),
-        }
-      }
-
-      // gen-model-fork V0：manifest.instances（通常是“离线子集导出”），需要优先与 visibleRefnos 做交集，避免把整棵可见子孙（可能数万）都跑一遍但最终几乎全缺失。
-      // 注意：export_dbnum_instances_json 可能同时包含 groups + instances（instances 只是非聚合 refno 的补集），此时不能按“子集导出”处理，否则会误丢 groups。
-      const flatV0 = (manifest as any)?.instances
-      const hasNewGroups = Array.isArray((manifest as any)?.groups) && (manifest as any).groups.length > 0
-      if (!hasNewGroups && Array.isArray(flatV0) && flatV0.length > 0 && Array.isArray(flatV0[0]?.geo_instances)) {
-        const available = new Set<string>(
-          flatV0
-            .map((x: any) => normalizeRefnoString(String(x?.refno ?? '')))
-            .filter(Boolean)
-        )
-        const intersected = visibleRefnos.length > 0 ? visibleRefnos.filter((r) => available.has(r)) : []
-        const missingByManifest = visibleRefnos.length > 0 ? visibleRefnos.filter((r) => !available.has(r)) : []
-        if (visibleRefnos.length > 0) {
-          const sample = missingByManifest.slice(0, 50)
-          consoleStore.addLog(
-            missingByManifest.length > 0 ? 'error' : 'info',
-            `[model-load] instances_${dbno}.json 匹配: candidates=${visibleRefnos.length} matched=${intersected.length} missing=${missingByManifest.length}` +
-              (missingByManifest.length > 0 ? ` sample=${sample.join(',')}${missingByManifest.length > sample.length ? ' ...' : ''}` : '')
-          )
-        }
-
-        const loadRefnos = (visibleRefnos.length > 0 ? intersected : deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)).filter(Boolean)
-        const loadRefnoSample = loadRefnos.slice(0, 10)
-
-        if (visibleRefnos.length > 0 && loadRefnos.length === 0) {
-          statusMessage.value = '无可加载模型（instances 未命中）'
-          progress.value = 100
-          lastLoadDebug.value = {
-            refno: normalizedRoot,
-            dbno,
-            visibleInsts: {
-              ok: visibleOk,
-              count: visibleRefnos.length,
-              error: visibleErr,
-            },
-            manifestMatch: {
-              candidates: visibleRefnos.length,
-              matched: intersected.length,
-              missing: missingByManifest.length,
-              missingSample: missingByManifest.slice(0, 10),
-            },
-            loadRefnos: { count: 0, sample: [] },
-            result: { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0 },
-            ms: Date.now() - startedAt,
-          }
-          return false
-        }
-
-        statusMessage.value = `加载 ${loadRefnos.length} 个 refno 的实例...`
-        progress.value = 60
-        consoleStore.addLog('info', `[model-load] 开始加载 dbno=${dbno} refno_count=${loadRefnos.length}`)
-
-        const result = await loadRefnosInChunks(loadRefnos, dbno)
-        let realtimeLoadedObjects = 0
-
-        // 处理缺失的 refno：批量实时生成并边生成边加载
-        if (result.missingRefnos.length > 0) {
-          const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
-          realtimeLoadedObjects += realtimeResult.loadedObjects
-        }
-        if (result.missingRefnos.length > 0) {
-          const sample = result.missingRefnos.slice(0, 50)
-          consoleStore.addLog(
-            'error',
-            `[model-load] 缺失模型（loader missing） dbno=${dbno} missing=${result.missingRefnos.length} sample=${sample.join(',')}${result.missingRefnos.length > sample.length ? ' ...' : ''}`
-          )
-        }
-
-        if (loadOptions?.flyTo) {
-          try {
-            const anyViewer = viewer as any
-            const max = 5000
-            const flyRefnos = loadRefnos.length > max ? loadRefnos.slice(0, max) : loadRefnos
-            if (loadRefnos.length > flyRefnos.length) {
-              consoleStore.addLog('info', `[model-load] flyTo refnos 过多，截断 ${flyRefnos.length}/${loadRefnos.length}`)
-            }
-            const aabb = anyViewer?.scene?.getAABB?.(flyRefnos) ?? null
-            if (aabb) {
-              anyViewer?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true })
-              consoleStore.addLog('info', `[model-load] flyTo 完成 refno=${normalizedRoot}`)
-            } else {
-              consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`)
-            }
-          } catch (e) {
-            consoleStore.addLog(
-              'error',
-              `[model-load] flyTo 异常 refno=${normalizedRoot} err=${e instanceof Error ? e.message : String(e)}`
-            )
-          }
-        }
-
-        lastLoadDebug.value = {
-          refno: normalizedRoot,
-          dbno,
-          visibleInsts: {
-            ok: visibleOk,
-            count: visibleRefnos.length,
-            error: visibleErr,
-          },
-          manifestMatch: visibleRefnos.length > 0
-            ? {
-                candidates: visibleRefnos.length,
-                matched: intersected.length,
-                missing: missingByManifest.length,
-                missingSample: missingByManifest.slice(0, 10),
-              }
-            : undefined,
-          loadRefnos: { count: loadRefnos.length, sample: loadRefnoSample },
-          result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects + realtimeLoadedObjects } : null,
-          ms: Date.now() - startedAt,
-        }
-
-        const totalLoadedObjects = result.loadedObjects + realtimeLoadedObjects
-        if (totalLoadedObjects > 0) {
-          loadedRoots.add(normalizedRoot)
-        }
-        statusMessage.value = totalLoadedObjects > 0 ? '加载完成' : '无可见几何实例'
-        progress.value = 100
-        return true
-      }
-
-      let loadRefnos: string[] = []
-      let missingByManifest: string[] = []
-      if (visibleRefnos.length > 0) {
-        const candidate = uniqStrings(visibleRefnos)
-        const index = buildInstanceIndexByRefno(manifest, new Set(candidate))
-        loadRefnos = candidate.filter((r) => index.has(r))
-        missingByManifest = candidate.filter((r) => !index.has(r))
-
-        const sample = missingByManifest.slice(0, 50)
-        consoleStore.addLog(
-          missingByManifest.length > 0 ? 'error' : 'info',
-          `[model-load] instances_${dbno}.json 匹配: candidates=${candidate.length} matched=${loadRefnos.length} missing=${missingByManifest.length}` +
-            (missingByManifest.length > 0 ? ` sample=${sample.join(',')}${missingByManifest.length > sample.length ? ' ...' : ''}` : '')
-        )
-
-        if (loadRefnos.length === 0) {
-          statusMessage.value = '无可加载模型（instances 未命中）'
-          progress.value = 100
-          lastLoadDebug.value = {
-            refno: normalizedRoot,
-            dbno,
-            visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
-            manifestMatch: {
-              candidates: candidate.length,
-              matched: 0,
-              missing: missingByManifest.length,
-              missingSample: missingByManifest.slice(0, 10),
-            },
-            loadRefnos: { count: 0, sample: [] },
-            result: { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0 },
-            ms: Date.now() - startedAt,
-          }
-          return false
-        }
-      } else {
-        loadRefnos = deriveLoadRefnosFromInstancesManifest(manifest, normalizedRoot)
-      }
-      const loadRefnoSample = loadRefnos.slice(0, 10)
-
-      statusMessage.value = `加载 ${loadRefnos.length} 个 refno 的实例...`
-      progress.value = 60
-      consoleStore.addLog('info', `[model-load] 开始加载 dbno=${dbno} refno_count=${loadRefnos.length}`)
-
-      const result = await loadRefnosInChunks(loadRefnos, dbno)
-      let realtimeLoadedObjects = 0
-
-      // 处理缺失的 refno：批量实时生成并边生成边加载
-      if (result.missingRefnos.length > 0) {
-        const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, result.missingRefnos, anyViewer)
-        realtimeLoadedObjects += realtimeResult.loadedObjects
-      }
-      if (result.missingRefnos.length > 0) {
-        const sample = result.missingRefnos.slice(0, 50)
-        consoleStore.addLog(
-          'error',
-          `[model-load] 缺失模型（loader missing） dbno=${dbno} missing=${result.missingRefnos.length} sample=${sample.join(',')}${result.missingRefnos.length > sample.length ? ' ...' : ''}`
-        )
-      }
-
-      if (loadOptions?.flyTo) {
-        try {
-          const anyViewer = viewer as any
-          const max = 5000
-          const flyRefnos = loadRefnos.length > max ? loadRefnos.slice(0, max) : loadRefnos
-          if (loadRefnos.length > flyRefnos.length) {
-            consoleStore.addLog('info', `[model-load] flyTo refnos 过多，截断 ${flyRefnos.length}/${loadRefnos.length}`)
-          }
-          const aabb = anyViewer?.scene?.getAABB?.(flyRefnos) ?? null
-          if (aabb) {
-            anyViewer?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true })
-            consoleStore.addLog('info', `[model-load] flyTo 完成 refno=${normalizedRoot}`)
-          } else {
-            consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`)
-          }
-        } catch (e) {
-          consoleStore.addLog(
-            'error',
-            `[model-load] flyTo 异常 refno=${normalizedRoot} err=${e instanceof Error ? e.message : String(e)}`
-          )
-        }
-      }
-
-      lastLoadDebug.value = {
-        refno: normalizedRoot,
-        dbno,
-        visibleInsts: {
-          ok: visibleOk,
-          count: visibleRefnos.length,
-          error: visibleErr,
-        },
-        manifestMatch: visibleRefnos.length > 0
-          ? {
-              candidates: visibleRefnos.length,
-              matched: loadRefnos.length,
-              missing: missingByManifest.length,
-              missingSample: missingByManifest.slice(0, 10),
-            }
-          : undefined,
-        loadRefnos: { count: loadRefnos.length, sample: loadRefnoSample },
-        result: result ? { loadedRefnos: result.loadedRefnos, skippedRefnos: result.skippedRefnos, loadedObjects: result.loadedObjects + realtimeLoadedObjects } : null,
-        ms: Date.now() - startedAt,
-      }
-
-      const totalLoadedObjects = result.loadedObjects + realtimeLoadedObjects
-      if (totalLoadedObjects > 0) {
-        loadedRoots.add(normalizedRoot)
-      }
-      statusMessage.value = totalLoadedObjects > 0 ? '加载完成' : '无可见几何实例'
-      progress.value = 100
-      return true
+      throw new Error(`Parquet 不可用且自动导出失败 (dbno=${dbno})`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       error.value = msg

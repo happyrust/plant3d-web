@@ -205,5 +205,19 @@
       "metalness": 0.1,
       "roughness": 0.4
     }
+  },
+  "themes": {
+    "design3d": {
+      "name": "三维设计",
+      "ownerOverrides": {
+        "BRAN": {
+          "name": "BRAN 下统一配色",
+          "color": "#4CAF50",
+          "metalness": 0.25,
+          "roughness": 0.35,
+          "opacity": 1
+        }
+      }
+    }
   }
 }

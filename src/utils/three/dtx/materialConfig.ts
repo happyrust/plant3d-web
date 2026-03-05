@@ -9,6 +9,11 @@ export type MaterialConfigEntry = {
   hidden?: boolean
 }
 
+export type ThemeConfig = {
+  name?: string
+  ownerOverrides?: Record<string, MaterialConfigEntry>
+}
+
 export type ModelDisplayConfig = {
   version?: string
   description?: string
@@ -21,12 +26,14 @@ export type ModelDisplayConfig = {
   defaultMaterial?: MaterialConfigEntry
   materialConfigs?: Record<string, MaterialConfigEntry>
   instanceConfigs?: Record<string, MaterialConfigEntry>
+  themes?: Record<string, ThemeConfig>
 }
 
 export type ResolvedMaterial = {
   color: Color
   metalness: number
   roughness: number
+  opacity: number
   hidden: boolean
 }
 
@@ -99,6 +106,7 @@ function normalizeMaterialMap(
 function loadLocalConfig(): {
   nounConfigs?: Record<string, MaterialConfigEntry>
   instanceConfigs?: Record<string, MaterialConfigEntry>
+  themes?: Record<string, ThemeConfig>
 } | null {
   if (typeof window === 'undefined' || !window.localStorage) return null
   try {
@@ -108,10 +116,12 @@ function loadLocalConfig(): {
       nounConfigs?: Record<string, MaterialConfigEntry>
       materialConfigs?: Record<string, MaterialConfigEntry>
       instanceConfigs?: Record<string, MaterialConfigEntry>
+      themes?: Record<string, ThemeConfig>
     }
     return {
       nounConfigs: parsed.nounConfigs || parsed.materialConfigs,
       instanceConfigs: parsed.instanceConfigs || {},
+      themes: parsed.themes || undefined,
     }
   } catch {
     return null
@@ -132,6 +142,29 @@ function normalizeDisplaySettings(input: ModelDisplayConfig['displaySettings']):
   }
 }
 
+function mergeThemes(
+  fileThemes?: Record<string, ThemeConfig>,
+  localThemes?: Record<string, ThemeConfig>
+): Record<string, ThemeConfig> | undefined {
+  if (!fileThemes && !localThemes) return undefined
+  const merged: Record<string, ThemeConfig> = {}
+  for (const [key, value] of Object.entries(fileThemes || {})) {
+    merged[key] = { ...value, ownerOverrides: normalizeMaterialMap(value.ownerOverrides) }
+  }
+  for (const [key, localTheme] of Object.entries(localThemes || {})) {
+    const base = merged[key] || {}
+    merged[key] = {
+      ...base,
+      ...localTheme,
+      ownerOverrides: {
+        ...(base.ownerOverrides || {}),
+        ...normalizeMaterialMap(localTheme.ownerOverrides),
+      },
+    }
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
 function mergeConfigs(fileConfig: ModelDisplayConfig, localConfig: ReturnType<typeof loadLocalConfig>): ModelDisplayConfig {
   const baseMaterialConfigs = normalizeMaterialMap(fileConfig.materialConfigs)
   const localMaterialConfigs = normalizeMaterialMap(localConfig?.nounConfigs)
@@ -143,6 +176,7 @@ function mergeConfigs(fileConfig: ModelDisplayConfig, localConfig: ReturnType<ty
     ...(fileConfig.instanceConfigs || {}),
     ...(localConfig?.instanceConfigs || {}),
   }
+  const themes = mergeThemes(fileConfig.themes, localConfig?.themes)
 
   return {
     ...fileConfig,
@@ -153,6 +187,7 @@ function mergeConfigs(fileConfig: ModelDisplayConfig, localConfig: ReturnType<ty
     },
     materialConfigs: mergedMaterialConfigs,
     instanceConfigs,
+    themes,
   }
 }
 
@@ -190,11 +225,15 @@ export function clearModelDisplayConfigCache(): void {
 export function saveLocalMaterialConfig(payload: {
   nounConfigs: Record<string, MaterialConfigEntry>
   instanceConfigs?: Record<string, MaterialConfigEntry>
+  themes?: Record<string, ThemeConfig>
 }): void {
   if (typeof window === 'undefined' || !window.localStorage) return
-  const safePayload = {
+  const safePayload: Record<string, unknown> = {
     nounConfigs: normalizeMaterialMap(payload.nounConfigs),
     instanceConfigs: payload.instanceConfigs || {},
+  }
+  if (payload.themes && Object.keys(payload.themes).length > 0) {
+    safePayload.themes = payload.themes
   }
   window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(safePayload))
   clearModelDisplayConfigCache()
@@ -246,6 +285,7 @@ export function resolveMaterialForInstance(config: ModelDisplayConfig, refno: st
   const colorValue = chosen.color ?? fallbackColor
   const baseMetalness = typeof defaultMaterial.metalness === 'number' ? defaultMaterial.metalness : 0.1
   const baseRoughness = typeof defaultMaterial.roughness === 'number' ? defaultMaterial.roughness : 0.5
+  const baseOpacity = typeof defaultMaterial.opacity === 'number' ? defaultMaterial.opacity : 1
   const metalness = clamp01(
     typeof chosen.metalness === 'number' ? chosen.metalness : baseMetalness,
     baseMetalness
@@ -254,14 +294,55 @@ export function resolveMaterialForInstance(config: ModelDisplayConfig, refno: st
     typeof chosen.roughness === 'number' ? chosen.roughness : baseRoughness,
     baseRoughness
   )
-  const hidden = Boolean(chosen.hidden) || (typeof chosen.opacity === 'number' && chosen.opacity <= 0)
+  const opacity = clamp01(
+    typeof chosen.opacity === 'number' ? chosen.opacity : baseOpacity,
+    baseOpacity
+  )
+  const hidden = Boolean(chosen.hidden) || opacity <= 0
 
   return {
     color: toThreeColor(colorValue, fallbackColor),
     metalness,
     roughness,
+    opacity,
     hidden,
   }
+}
+
+import type { DisplayTheme } from '@/composables/useDisplayThemeStore'
+
+export function resolveThemeOwnerOverride(
+  config: ModelDisplayConfig,
+  theme: DisplayTheme,
+  ownerNoun: string,
+): MaterialConfigEntry | undefined {
+  if (theme === 'default' || !ownerNoun) return undefined
+  const themeConfig = config.themes?.[theme]
+  if (!themeConfig?.ownerOverrides) return undefined
+  const key = normalizeNounKey(ownerNoun)
+  return key ? themeConfig.ownerOverrides[key] : undefined
+}
+
+export function resolveMaterialWithTheme(
+  config: ModelDisplayConfig,
+  refno: string,
+  noun: string,
+  ownerNoun: string,
+  theme: DisplayTheme,
+): ResolvedMaterial {
+  const override = resolveThemeOwnerOverride(config, theme, ownerNoun)
+  if (override) {
+    const fallbackColor = config.defaultMaterial?.color ?? DEFAULT_MATERIAL.color ?? '#90a4ae'
+    const colorValue = override.color ?? fallbackColor
+    return {
+      color: toThreeColor(colorValue, fallbackColor),
+      metalness: clamp01(typeof override.metalness === 'number' ? override.metalness : 0.1, 0.1),
+      roughness: clamp01(typeof override.roughness === 'number' ? override.roughness : 0.5, 0.5),
+      opacity: clamp01(typeof override.opacity === 'number' ? override.opacity : 1, 1),
+      hidden: Boolean(override.hidden),
+    }
+  }
+  return resolveMaterialForInstance(config, refno, noun)
 }
 
 export function buildExportConfig(config: ModelDisplayConfig): ModelDisplayConfig {
@@ -286,6 +367,21 @@ export function buildExportConfig(config: ModelDisplayConfig): ModelDisplayConfi
     }
   }
 
+  const exportedThemes: Record<string, ThemeConfig> = {}
+  for (const [themeKey, themeConfig] of Object.entries(config.themes || {})) {
+    const exportedOverrides: Record<string, MaterialConfigEntry> = {}
+    for (const [ownerKey, entry] of Object.entries(themeConfig.ownerOverrides || {})) {
+      exportedOverrides[ownerKey] = {
+        ...entry,
+        color: normalizeColorString(entry.color),
+      }
+    }
+    exportedThemes[themeKey] = {
+      ...themeConfig,
+      ownerOverrides: exportedOverrides,
+    }
+  }
+
   return {
     version: config.version || '1.0',
     description: config.description || 'model-display.config.json',
@@ -300,5 +396,6 @@ export function buildExportConfig(config: ModelDisplayConfig): ModelDisplayConfi
       color: normalizeColorString(config.defaultMaterial?.color),
     },
     materialConfigs: exportedMaterialConfigs,
+    ...(Object.keys(exportedThemes).length > 0 ? { themes: exportedThemes } : {}),
   }
 }

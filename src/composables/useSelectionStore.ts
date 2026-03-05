@@ -37,6 +37,9 @@ export function useSelectionStore() {
 
   // 暴露给外界的响应式属性
   const propertiesData = computed(() => (data.value?.success ? data.value.attrs : null));
+  const fullName = computed(() =>
+    data.value?.success && data.value?.full_name ? String(data.value.full_name) : null,
+  );
   const propertiesError = computed(() => {
     if (isError.value) return error.value instanceof Error ? error.value.message : String(error.value);
     if (data.value && !data.value.success) return data.value.error_message || '属性查询失败';
@@ -61,6 +64,7 @@ export function useSelectionStore() {
     propertiesLoading,
     propertiesError,
     propertiesData,
+    fullName,
     loadProperties,
     clearSelection,
     setSelectedRefno,

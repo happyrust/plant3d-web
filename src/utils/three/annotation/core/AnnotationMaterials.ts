@@ -28,6 +28,7 @@ export class AnnotationMaterials {
   readonly blue: AnnotationMaterialSet;    // 坡度/引线标注
   readonly white: AnnotationMaterialSet;   // 通用
   readonly yellow: AnnotationMaterialSet;  // 高亮/默认
+  readonly black: AnnotationMaterialSet;   // 黑色（工程图纸风格）
 
   // ── SolveSpace 约束默认色（洋红）────────────────────────────
   /** SolveSpace constraint default (magenta) */
@@ -51,6 +52,7 @@ export class AnnotationMaterials {
     this.blue = this.createMaterialSet(0x3b82f6, 0x60a5fa);
     this.white = this.createMaterialSet(0xffffff, 0xffffff);
     this.yellow = this.createMaterialSet(0xfacc15, 0xfde047);
+    this.black = this.createMaterialSet(0x000000, 0x333333);
 
     // SolveSpace 约束洋红（默认）
     this.ssConstraintMagenta = this.createMaterialSet(0xff00ff, 0xff44ff);
@@ -147,7 +149,7 @@ export class AnnotationMaterials {
 
   get all(): AnnotationMaterialSet[] {
     return [
-      this.green, this.orange, this.blue, this.white, this.yellow,
+      this.green, this.orange, this.blue, this.white, this.yellow, this.black,
       this.ssConstraintMagenta, this.ssDimensionDefault, this.ssHovered, this.ssSelected,
     ];
   }

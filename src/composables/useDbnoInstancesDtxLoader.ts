@@ -1,5 +1,3 @@
-import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
-import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader'
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader'
 import { realtimeInstancesByRefnos } from '@/api/genModelRealtimeApi'
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry'
@@ -10,9 +8,10 @@ import {
   loadModelDisplayConfig,
   normalizeNounKey,
   normalizeRefnoKey,
-  resolveMaterialForInstance,
+  resolveMaterialWithTheme,
   type ModelDisplayConfig,
 } from '@/utils/three/dtx/materialConfig'
+import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore'
 import { Box3, BufferAttribute, BufferGeometry, CylinderGeometry, Matrix4, SphereGeometry } from 'three'
 
 type LoaderOptions = {
@@ -21,12 +20,10 @@ type LoaderOptions = {
   forceReloadRefnos?: string[]
   /**
    * 数据源选择：
-   * - 'backend'：实时查库（用于 parquet miss 回填）
    * - 'parquet'：默认（失败则抛错）
-   * - 'json'：调试用，显式指定才启用
-   * - 'auto'：兼容旧逻辑（Parquet 不可用时回退 JSON，仅调试/临时）
+   * - 'backend'：实时查库（用于 parquet miss 回填）
    */
-  dataSource?: 'auto' | 'parquet' | 'json' | 'backend'
+  dataSource?: 'parquet' | 'backend'
 }
 
 type DbnoRuntimeCache = {
@@ -38,6 +35,7 @@ type DbnoRuntimeCache = {
   objectIdToRefno: Map<string, string>
   refnoTransform: Map<string, number[]>
   refnoToNoun: Map<string, string>
+  refnoToOwnerNoun: Map<string, string>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>()
@@ -54,6 +52,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
     objectIdToRefno: new Map(),
     refnoTransform: new Map(),
     refnoToNoun: new Map(),
+    refnoToOwnerNoun: new Map(),
   }
   cachesByDbno.set(dbno, created)
   return created
@@ -259,6 +258,11 @@ export function resolveDtxNounByRefno(dbno: number, refno: string): string | nul
   return cache?.refnoToNoun.get(refno) ?? null
 }
 
+export function resolveDtxOwnerNounByRefno(dbno: number, refno: string): string | null {
+  const cache = cachesByDbno.get(dbno)
+  return cache?.refnoToOwnerNoun.get(refno) ?? null
+}
+
 export function getDtxNounCounts(dbno: number): Array<{ noun: string; count: number }> {
   const cache = cachesByDbno.get(dbno)
   if (!cache) return []
@@ -274,7 +278,8 @@ export function getDtxNounCounts(dbno: number): Array<{ noun: string; count: num
 export function applyMaterialConfigToLoadedDtx(
   dtxLayer: DTXLayer,
   dbno: number,
-  config: ModelDisplayConfig
+  config: ModelDisplayConfig,
+  theme: DisplayTheme = 'default',
 ): { updatedObjects: number } {
   const cache = cachesByDbno.get(dbno)
   if (!cache) return { updatedObjects: 0 }
@@ -286,8 +291,9 @@ export function applyMaterialConfigToLoadedDtx(
   for (const [refno, objectIds] of cache.refnoToObjectIds.entries()) {
     const refnoKey = normalizeRefnoKey(refno)
     const noun = normalizeNounKey(cache.refnoToNoun.get(refno) || '')
+    const ownerNoun = normalizeNounKey(cache.refnoToOwnerNoun.get(refno) || '')
     const isHidden = hiddenRefnos.has(refnoKey) || (noun && hiddenNouns.has(noun))
-    const resolved = resolveMaterialForInstance(config, refnoKey, noun)
+    const resolved = resolveMaterialWithTheme(config, refnoKey, noun, ownerNoun, theme)
 
     for (const objectId of objectIds) {
       if (isHidden || resolved.hidden) {
@@ -299,6 +305,7 @@ export function applyMaterialConfigToLoadedDtx(
         color: resolved.color,
         metalness: resolved.metalness,
         roughness: resolved.roughness,
+        opacity: resolved.opacity,
       })
       updatedObjects++
     }
@@ -347,6 +354,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const hiddenNouns = buildHiddenNounSet(displayConfig)
   const hiddenRefnos = buildHiddenRefnoSet(displayConfig)
 
+  const { currentTheme } = useDisplayThemeStore()
+  const currentLoadTheme: DisplayTheme = currentTheme.value
+
   // 根据 dataSource 选项决定数据源
   const dataSource = options.dataSource || 'parquet'
   let index: Map<string, import('@/utils/instances/instanceManifest').InstanceEntry[]>
@@ -366,13 +376,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       index.set(refnoKey, Array.isArray(entries) ? entries : [])
     }
     if (debug) console.log('[dtx][instances] using backend', { dbno, refnos: toLoad.length, indexSize: index.size, missing: resp.missing_refnos?.length ?? 0 })
-  } else if (dataSource === 'json') {
-    // 强制 JSON：从 instances_{dbno}.json manifest 获取实例数据
-    const manifest = await getDbnoInstancesManifest(dbno)
-    index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
-    if (debug) console.log('[dtx][instances] using json', { dbno, refnos: toLoad.length, indexSize: index.size })
-  } else if (dataSource === 'parquet') {
-    // 默认 Parquet
+  } else {
     const parquet = useDbnoInstancesParquetLoader()
     const available = await parquet.isParquetAvailable(dbno)
     if (!available) {
@@ -380,23 +384,6 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     }
     index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
     if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
-  } else {
-    // auto：优先 Parquet，失败回退 JSON
-    try {
-      const parquet = useDbnoInstancesParquetLoader()
-      const available = await parquet.isParquetAvailable(dbno)
-      if (available) {
-        index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
-        if (debug) console.log('[dtx][instances] using parquet (auto)', { dbno, refnos: toLoad.length })
-      } else {
-        throw new Error('Parquet not available')
-      }
-    } catch (parquetErr) {
-      if (debug) console.log('[dtx][instances] parquet failed, falling back to json', { dbno, error: parquetErr })
-      const manifest = await getDbnoInstancesManifest(dbno)
-      index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
-      if (debug) console.log('[dtx][instances] using json (fallback)', { dbno, refnos: toLoad.length, indexSize: index.size })
-    }
   }
 
   let loadedObjects = 0
@@ -455,7 +442,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         continue
       }
 
-      const resolved = resolveMaterialForInstance(displayConfig, refnoKey, noun)
+      const instOwnerNoun = normalizeNounKey((inst as any).uniforms?.owner_noun || '')
+      const resolved = resolveMaterialWithTheme(displayConfig, refnoKey, noun, instOwnerNoun, currentLoadTheme)
       if (resolved.hidden) {
         continue
       }
@@ -471,6 +459,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         {
           metalness: resolved.metalness,
           roughness: resolved.roughness,
+          opacity: resolved.opacity,
         },
         precomputedAabb // 传递预计算的 AABB
       )
@@ -494,6 +483,11 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     }
     if (refnoNoun) {
       cache.refnoToNoun.set(refnoKey, refnoNoun)
+    }
+    const firstInst = insts[0]
+    const ownerNoun = normalizeNounKey((firstInst as any)?.uniforms?.owner_noun || '')
+    if (ownerNoun && !cache.refnoToOwnerNoun.has(refnoKey)) {
+      cache.refnoToOwnerNoun.set(refnoKey, ownerNoun)
     }
     cache.loadedRefnos.add(refnoKey)
   }
