@@ -1,0 +1,37 @@
+{
+  "dbnum": 7997,
+  "format": "parquet",
+  "generated_at": "2026-03-04T08:48:40.572Z",
+  "mesh_validation": {
+    "checked_geo_hashes": 2691,
+    "lod_tag": "L1",
+    "missing_geo_hashes": 5,
+    "missing_owner_refnos": 3,
+    "report_file": "missing_mesh_report_7997.json"
+  },
+  "root_refno": null,
+  "tables": {
+    "aabb": {
+      "file": "aabb.parquet",
+      "rows": 4990
+    },
+    "geo_instances": {
+      "file": "geo_instances.parquet",
+      "rows": 20801
+    },
+    "instances": {
+      "file": "instances.parquet",
+      "rows": 7216
+    },
+    "transforms": {
+      "file": "transforms.parquet",
+      "rows": 18085
+    },
+    "tubings": {
+      "file": "tubings.parquet",
+      "rows": 5102
+    }
+  },
+  "total_bytes": 1877971,
+  "version": 1
+}

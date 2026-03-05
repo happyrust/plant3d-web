@@ -27,24 +27,12 @@ import { getMbdPipeAnnotations } from "@/api/mbdPipeApi";
 import { demoMbdPipeData, injectMbdPipeDemoGeometry, flyToPipeDemo } from "@/debug/injectMbdPipeDemo";
 import { useModelGeneration } from "@/composables/useModelGeneration";
 import { useSelectionStore } from "@/composables/useSelectionStore";
-import {
-    getDbnoInstancesManifest,
-    getDbnoInstancesMeta,
-    preloadInstancesSharedTables,
-} from "@/composables/useDbnoInstancesJsonLoader";
 import { loadDbnoInstancesForVisibleRefnosDtx } from "@/composables/useDbnoInstancesDtxLoader";
 import { useDbnoInstancesParquetLoader } from "@/composables/useDbnoInstancesParquetLoader";
-import { buildInstanceIndexByRefno } from "@/utils/instances/instanceManifest";
 import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
 import { useMbdPipeAnnotationThree } from "@/composables/useMbdPipeAnnotationThree";
 import { useAnnotationThree } from "@/composables/useAnnotationThree";
-import {
-    createLatestOnlyGate,
-    ExternalAnnotationRegistry,
-    shouldClearMbdRequest,
-    type MbdPipeAnnotationRequestLike,
-} from "@/composables/mbd/mbdRequestSync";
 import { DimensionAnnotationManager } from "@/composables/useDimensionAnnotation";
 import { useToolStore, type DimensionKind } from "@/composables/useToolStore";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
@@ -59,8 +47,7 @@ import { SiteSpecValue, getSpecValueName } from "@/types/spec";
 import { onCommand } from "@/ribbon/commandBus";
 import { emitToast } from "@/ribbon/toastBus";
 
-import { useBackgroundStore } from "@/composables/useBackgroundStore";
-import { DtxViewer, type BackgroundMode } from "@/viewer/dtx/DtxViewer";
+import { DtxViewer } from "@/viewer/dtx/DtxViewer";
 import { DtxCompatViewer } from "@/viewer/dtx/DtxCompatViewer";
 import { CadGrid } from "@/viewer/dtx/dtxCadGrid";
 import { loadDtxPrimitiveDemo } from "@/viewer/dtx/dtxPrimitiveDemo";
@@ -87,7 +74,6 @@ const consoleStore = useConsoleStore();
 const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
-const backgroundStore = useBackgroundStore();
 
 const initError = ref<string | null>(null);
 
@@ -321,7 +307,6 @@ let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offMbdPipeWatch: (() => void) | null = null;
-let offMbdPipeDataWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
@@ -334,8 +319,6 @@ let dtxGlobalTransformAppliedKey: string | null = null;
 let dtxAutoFitAppliedKey: string | null = null;
 let activeDbno: number | null = null;
 let tileLodInitializedDbno: number | null = null;
-const mbdRequestGate = createLatestOnlyGate();
-const mbdInteractionRegistry = new ExternalAnnotationRegistry();
 
 function readDtxScaleConfigFromUrl(): {
     scale: number;
@@ -609,25 +592,6 @@ watch(
     },
 );
 
-function applyBackground(mode: BackgroundMode): void {
-    const viewer = dtxViewerRef.value;
-    if (!viewer) return;
-    const preset = backgroundStore.getPreset(mode);
-    if (mode === "skybox") {
-        viewer.loadCrossSkybox("/texture/skybox.png");
-    } else if (preset.topColor === preset.bottomColor) {
-        viewer.setSolidBackground(preset.topColor);
-    } else {
-        viewer.setGradientBackground(preset.topColor, preset.bottomColor);
-    }
-    requestRender();
-}
-
-function onBackgroundChange(mode: BackgroundMode): void {
-    backgroundStore.setMode(mode);
-    applyBackground(mode);
-}
-
 function toastNeedSelection(): void {
     emitToast({ message: "请先选择对象" });
 }
@@ -736,53 +700,6 @@ function setAutoNearestMode(
         store.setToolMode(next);
     }
     requestRender();
-}
-
-function syncMbdAnnotationsToInteraction(): void {
-    const annotationSystem = annotationSystemRef.value;
-    const mbdPipeVis = mbdPipeVisRef.value;
-    if (!annotationSystem || !mbdPipeVis) return;
-
-    const nextIds = new Set<string>();
-
-    for (const [dimId, dim] of mbdPipeVis.getDimAnnotations()) {
-        const interactionId = `mbd_dim_${dimId}`;
-        annotationSystem.registerExternalAnnotation(interactionId, dim as any);
-        nextIds.add(interactionId);
-    }
-    for (const [weldId, weld] of mbdPipeVis.getWeldAnnotations()) {
-        const interactionId = `mbd_weld_${weldId}`;
-        annotationSystem.registerExternalAnnotation(interactionId, weld as any);
-        nextIds.add(interactionId);
-    }
-    for (const [slopeId, slope] of mbdPipeVis.getSlopeAnnotations()) {
-        const interactionId = `mbd_slope_${slopeId}`;
-        annotationSystem.registerExternalAnnotation(interactionId, slope as any);
-        nextIds.add(interactionId);
-    }
-
-    mbdInteractionRegistry.sync(
-        nextIds,
-        () => {
-            // MBD 标注已在前面 register，这里只需同步 registry 集合。
-        },
-        (id) => {
-            annotationSystem.unregisterExternalAnnotation(id);
-        },
-    );
-}
-
-function clearMbdAnnotationsFromInteraction(): void {
-    const annotationSystem = annotationSystemRef.value;
-    if (!annotationSystem) {
-        mbdInteractionRegistry.clear(() => {
-            // ignore
-        });
-        return;
-    }
-    mbdInteractionRegistry.clear((id) => {
-        annotationSystem.unregisterExternalAnnotation(id);
-    });
 }
 
 function handleRibbonCommand(commandId: string) {
@@ -939,7 +856,6 @@ function handleRibbonCommand(commandId: string) {
             return;
         case "mbd.clear":
             mbdPipeVisRef.value?.clearAll();
-            clearMbdAnnotationsFromInteraction();
             requestRender();
             return;
         case "mbd.settings":
@@ -957,7 +873,6 @@ function handleRibbonCommand(commandId: string) {
             store.clearAll();
             ptsetVisRef.value?.clearAll();
             mbdPipeVisRef.value?.clearAll();
-            clearMbdAnnotationsFromInteraction();
             requestRender();
             return;
     }
@@ -1579,6 +1494,7 @@ onMounted(async () => {
             background: 0xe5e7eb,
             debug: isDev,
             gizmo: { enabled: true, placement: "top-right", size: 100 },
+            skybox: "/texture/skybox.png",
         });
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -1587,9 +1503,6 @@ onMounted(async () => {
         return;
     }
     dtxViewerRef.value = dtxViewer;
-
-    // 应用持久化的背景设置（默认 SolidWorks 渐变）
-    applyBackground(backgroundStore.mode.value);
 
     // CAD Grid：Three.js 常规渲染对象（与 DTX 混合渲染）
     try {
@@ -1748,19 +1661,15 @@ onMounted(async () => {
             // ignore
         }
 
-        // Tile LOD：仅在首次切换到该 dbno 时初始化（避免重复拉 manifest）
+        // Tile LOD：仅在首次切换到该 dbno 时初始化（Parquet 模式下不再读取 instances_*.json）
         if (tileLodInitializedDbno !== _dbno) {
             tileLodInitializedDbno = _dbno;
-            (async () => {
-                try {
-                    const manifest = await getDbnoInstancesManifest(_dbno);
-                    tileLodControllerRef.value?.setManifest(_dbno, manifest);
-                    tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
-                    requestRender();
-                } catch {
-                    // ignore
-                }
-            })();
+            tileLodControllerRef.value?.setManifest(_dbno, {
+                dbno: _dbno,
+                source: "parquet",
+            });
+            tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
+            requestRender();
         }
         requestRender();
     };
@@ -1796,15 +1705,6 @@ onMounted(async () => {
             dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
     });
     mbdPipeVisRef.value = mbdPipeVis;
-    offMbdPipeDataWatch?.();
-    offMbdPipeDataWatch = watch(
-        () => mbdPipeVis.currentData.value,
-        (data) => {
-            if (data) return;
-            clearMbdAnnotationsFromInteraction();
-        },
-        { immediate: true },
-    );
 
     // mbd_pipe demo：不依赖后端，直接注入模拟管道几何体 + 标注
     if (demoMode === "mbd_pipe") {
@@ -1938,13 +1838,17 @@ onMounted(async () => {
                 // contextmenu: 右键菜单也适用于 MBD dims
                 if (ev.type === "contextmenu") {
                     const sp = (ev as any).screenPos as { x: number; y: number } | undefined;
+                    const isReference =
+                        ev.annotation instanceof LinearDimension3D
+                            ? !!ev.annotation.getParams().isReference
+                            : false;
                     dimContextMenu.value = {
                         visible: true,
                         x: sp?.x ?? 0,
                         y: sp?.y ?? 0,
                         dimId: `mbd:${mbdDimId}`,
                         kind: 'linear_distance',
-                        isReference: false,
+                        isReference,
                         supplementary: false,
                     };
                 }
@@ -2344,6 +2248,26 @@ onMounted(async () => {
         console.warn("[ViewerPanel] 尺寸标注管理器初始化失败", e);
     }
 
+    // 将 MBD 标注注册到标注交互系统（使其可 pick/drag/contextmenu）
+    function syncMbdAnnotationsToInteraction(): void {
+        if (!mbdPipeVisRef.value || !annotationSystemRef.value) return;
+        const dimMap = mbdPipeVisRef.value.getDimAnnotations();
+        for (const [dimId, dim] of dimMap) {
+            const interactionId = `mbd_dim_${dimId}`;
+            annotationSystemRef.value.registerExternalAnnotation(interactionId, dim as any);
+        }
+        const weldMap = mbdPipeVisRef.value.getWeldAnnotations();
+        for (const [weldId, weld] of weldMap) {
+            const interactionId = `mbd_weld_${weldId}`;
+            annotationSystemRef.value.registerExternalAnnotation(interactionId, weld as any);
+        }
+        const slopeMap = mbdPipeVisRef.value.getSlopeAnnotations();
+        for (const [slopeId, slope] of slopeMap) {
+            const interactionId = `mbd_slope_${slopeId}`;
+            annotationSystemRef.value.registerExternalAnnotation(interactionId, slope as any);
+        }
+    }
+
     // 对 mbd_pipe demo：此时标注已在 renderBranch 中创建，注册到交互系统
     if (demoMode === "mbd_pipe") {
         try {
@@ -2353,14 +2277,13 @@ onMounted(async () => {
         }
     }
 
-    // 启动预拉：db_meta_info + shared trans/aabb（失败直接报错）
+    // 启动预拉：仅加载 db_meta_info（Parquet 模式下不再预拉 instances/trans.json 与 aabb.json）
     // 注意：onMounted(async () => ...) 中，任何依赖注入上下文的 hooks（如 vue-query）必须在首个 await 之前调用。
     // 因此这里先初始化 tools/ptsetVis（它们会调用 useSelectionStore/useQuery），再 await 预拉。
     // demo 模式（primitives / mbd_pipe）不依赖后端数据，跳过预拉避免无后端时初始化失败。
     if (demoMode !== "primitives" && demoMode !== "mbd_pipe") {
         try {
             await ensureDbMetaInfoLoaded();
-            await preloadInstancesSharedTables();
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             initError.value = msg;
@@ -2403,7 +2326,7 @@ onMounted(async () => {
         (window as any).__dtxViewer = dtxViewer;
     }
 
-    // show_dbnum URL 参数：自动加载指定 dbnum 的所有 instances 数据
+    // show_dbnum URL 参数：按 dbno 直接走 Parquet 全量加载。
     const urlParams = new URLSearchParams(window.location.search);
     const showDbnum = urlParams.get("show_dbnum");
     if (showDbnum && demoMode !== "primitives") {
@@ -2411,35 +2334,81 @@ onMounted(async () => {
         if (Number.isFinite(dbno) && dbno > 0) {
             (async () => {
                 try {
-                    emitToast({ message: `正在加载 dbnum=${dbno} 的模型数据...` });
+                    emitToast({ message: `正在加载 dbnum=${dbno} 的 Parquet 模型数据...` });
                     const autoFitKey = `dtx_autofit_dbno_${dbno}`;
                     let shouldAutoFit = true;
                     try {
                         shouldAutoFit = sessionStorage.getItem(autoFitKey) !== "1";
                     } catch {}
-                    // 优先从 Parquet 获取 refno 列表（不依赖 JSON manifest）
+
                     const parquetLoader = useDbnoInstancesParquetLoader();
-                    const allRefnos = await parquetLoader.queryAllRefnoKeys(dbno, { debug: isDev });
+                    const available = await parquetLoader.isParquetAvailable(dbno);
+                    if (!available) {
+                        emitToast({ message: `dbnum=${dbno} 未找到 Parquet 数据` });
+                        return;
+                    }
+
+                    const allRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, {
+                        debug: isDev,
+                    });
                     if (allRefnos.length === 0) {
                         emitToast({ message: `dbnum=${dbno} 没有可加载的 refno` });
                         return;
                     }
-                    emitToast({ message: `发现 ${allRefnos.length} 个 refno，开始加载...` });
-                    const result = await loadDbnoInstancesForVisibleRefnosDtx(
-                        dtxLayer,
-                        dbno,
-                        allRefnos,
-                        { lodAssetKey: "L1", debug: isDev, dataSource: "parquet" }
-                    );
-                    (compat as any).__dtxAfterInstancesLoaded?.(dbno, allRefnos);
-                    // show_dbnum 路径下也需要初始化 Tile LOD（若 JSON manifest 可用）
+
+                    emitToast({ message: `发现 ${allRefnos.length} 个 refno，开始分批加载...` });
+
+                    const LOAD_BATCH_SIZE = 1000;
+                    let loadedRefnos = 0;
+                    let skippedRefnos = 0;
+                    let loadedObjects = 0;
+                    let missingRefnos = 0;
+                    const missingNoGeoRows = new Set<string>();
+                    const missingMesh404Refnos = new Set<string>();
+                    const missingMesh404GeoHashes = new Set<string>();
+
+                    for (let start = 0; start < allRefnos.length; start += LOAD_BATCH_SIZE) {
+                        const end = Math.min(allRefnos.length, start + LOAD_BATCH_SIZE);
+                        const batch = allRefnos.slice(start, end);
+                        const batchResult = await loadDbnoInstancesForVisibleRefnosDtx(
+                            dtxLayer,
+                            dbno,
+                            batch,
+                            { lodAssetKey: "L1", debug: isDev, dataSource: "parquet" }
+                        );
+                        (compat as any).__dtxAfterInstancesLoaded?.(dbno, batch);
+
+                        loadedRefnos += batchResult.loadedRefnos;
+                        skippedRefnos += batchResult.skippedRefnos;
+                        loadedObjects += batchResult.loadedObjects;
+                        missingRefnos += batchResult.missingRefnos.length;
+                        for (const r of batchResult.missingBreakdown.noGeoRowsRefnos) {
+                            missingNoGeoRows.add(r);
+                        }
+                        for (const r of batchResult.missingBreakdown.mesh404Refnos) {
+                            missingMesh404Refnos.add(r);
+                        }
+                        for (const gh of batchResult.missingBreakdown.mesh404GeoHashes) {
+                            missingMesh404GeoHashes.add(gh);
+                        }
+
+                        if (end < allRefnos.length) {
+                            await new Promise<void>((resolve) =>
+                                requestAnimationFrame(() => resolve())
+                            );
+                        }
+                    }
+
+                    // show_dbnum 路径下也需要初始化 Tile LOD（不走常规 dbno 切换流）
                     try {
                         tileLodInitializedDbno = dbno;
-                        const manifest = await getDbnoInstancesManifest(dbno);
-                        tileLodControllerRef.value?.setManifest(dbno, manifest);
+                        tileLodControllerRef.value?.setManifest(dbno, {
+                            dbno,
+                            source: "parquet",
+                        });
                         tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
                     } catch {
-                        // JSON manifest 不存在时跳过 Tile LOD
+                        // ignore
                     }
 
                     requestRender();
@@ -2463,11 +2432,13 @@ onMounted(async () => {
                         } catch {}
                     }
                     emitToast({
-                        message: `加载完成: ${result.loadedObjects} 个对象`,
+                        message:
+                            `加载完成: 对象${loadedObjects} 已加载${loadedRefnos} 已跳过${skippedRefnos} 缺失${missingRefnos}` +
+                            ` (mesh缺失${missingMesh404Refnos.size}/hash${missingMesh404GeoHashes.size}, 无几何${missingNoGeoRows.size})`,
                     });
                 } catch (e) {
                     const msg = e instanceof Error ? e.message : String(e);
-                    console.error("[ViewerPanel] show_dbnum 加载失败:", e);
+                    console.error("[ViewerPanel] show_dbnum Parquet 加载失败:", e);
                     emitToast({ message: `加载失败: ${msg}` });
                 }
             })();
@@ -2536,7 +2507,10 @@ onMounted(async () => {
                 requestRender();
 
                 emitToast({
-                    message: `[debug_refno] 加载完成: ${result.loadedObjects} 个对象 (${refnos.length} refnos)`,
+                    message:
+                        `[debug_refno] 加载完成: ${result.loadedObjects} 个对象 (${refnos.length} refnos,` +
+                        ` mesh缺失${result.missingBreakdown.mesh404Refnos.length},` +
+                        ` 无几何${result.missingBreakdown.noGeoRowsRefnos.length})`,
                 });
                 console.log(`[debug_refno] ✅ 加载完成`, result);
             } catch (e) {
@@ -2764,14 +2738,6 @@ onMounted(async () => {
                     dbno = null;
                 }
                 let batchId: string | null = null;
-                if (dbno) {
-                    try {
-                        const meta = await getDbnoInstancesMeta(dbno);
-                        batchId = meta?.batch_id ?? null;
-                    } catch {
-                        batchId = null;
-                    }
-                }
 
                 const response = await pdmsGetPtsetWithContext(request.refno, {
                     dbno: dbno ?? undefined,
@@ -2803,11 +2769,6 @@ onMounted(async () => {
         () => store.mbdPipeAnnotationRequest.value,
         async (request) => {
             if (!request) return;
-            const handledRequest: MbdPipeAnnotationRequestLike = {
-                refno: request.refno,
-                timestamp: request.timestamp,
-            };
-            const requestSeq = mbdRequestGate.issue();
             try {
                 try {
                     ensurePanelAndActivate("mbdPipe");
@@ -2827,7 +2788,6 @@ onMounted(async () => {
                 } catch (e) {
                     console.warn("[mbd-pipe] 预加载模型失败（将继续生成标注）", e);
                 }
-                if (!mbdRequestGate.isLatest(requestSeq)) return;
 
                 // 标注按需获取：尽量带上 dbno + batch_id（来自 meta_{dbno}.json）以确保与当前模型快照一致。
                 let dbno: number | null = null;
@@ -2837,18 +2797,9 @@ onMounted(async () => {
                     dbno = null;
                 }
                 let batchId: string | null = null;
-                if (dbno) {
-                    try {
-                        const meta = await getDbnoInstancesMeta(dbno);
-                        batchId = meta?.batch_id ?? null;
-                    } catch {
-                        batchId = null;
-                    }
-                }
 
                 const resp = await getMbdPipeAnnotations(refnoKey, {
-                    // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
-                    source: "db",
+                    // 默认走 parquet（后端 MbdPipeSource 默认值）
                     debug: isDev,
                     dbno: dbno ?? undefined,
                     batch_id: batchId,
@@ -2865,7 +2816,6 @@ onMounted(async () => {
                     include_welds: true,
                     include_slopes: true,
                 });
-                if (!mbdRequestGate.isLatest(requestSeq)) return;
                 if (resp.success && resp.data) {
                     mbdPipeVis.renderBranch(resp.data);
                     mbdPipeVis.flyTo();
@@ -2877,18 +2827,14 @@ onMounted(async () => {
                     requestRender();
                 } else {
                     const msg = resp.error_message || "生成管道标注失败";
-                    clearMbdAnnotationsFromInteraction();
                     emitToast({ message: msg });
                     console.warn("[mbd-pipe]", msg);
                 }
             } catch (e) {
                 console.error("[mbd-pipe] Failed to load:", e);
-                clearMbdAnnotationsFromInteraction();
                 emitToast({ message: "生成管道标注失败" });
             } finally {
-                if (shouldClearMbdRequest(store.mbdPipeAnnotationRequest.value, handledRequest)) {
-                    store.clearMbdPipeAnnotationRequest();
-                }
+                store.clearMbdPipeAnnotationRequest();
             }
         },
         { immediate: true },
@@ -3015,11 +2961,6 @@ onUnmounted(() => {
 
     offMbdPipeWatch?.();
     offMbdPipeWatch = null;
-
-    offMbdPipeDataWatch?.();
-    offMbdPipeDataWatch = null;
-
-    clearMbdAnnotationsFromInteraction();
 
     try {
         ptsetVisRef.value?.clearAll();
@@ -3397,28 +3338,6 @@ onUnmounted(() => {
                     <div class="text-sm font-medium">查看工具设置</div>
 
                     <div class="mt-3 space-y-3">
-                        <!-- 背景切换 -->
-                        <div class="space-y-1">
-                            <label class="text-xs text-muted-foreground">场景背景</label>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button
-                                    v-for="preset in backgroundStore.presets"
-                                    :key="preset.mode"
-                                    type="button"
-                                    class="flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs transition-colors hover:bg-muted"
-                                    :class="backgroundStore.mode.value === preset.mode ? 'border-ring bg-muted font-medium' : 'border-border'"
-                                    :title="preset.label"
-                                    @click.stop="onBackgroundChange(preset.mode)"
-                                >
-                                    <span
-                                        class="inline-block h-4 w-4 shrink-0 rounded-sm border border-border"
-                                        :style="{ background: `linear-gradient(to bottom, ${preset.topColor}, ${preset.bottomColor})` }"
-                                    />
-                                    <span>{{ preset.label }}</span>
-                                </button>
-                            </div>
-                        </div>
-
                         <div class="space-y-1">
                             <div class="flex items-center justify-between">
                                 <label class="text-xs text-muted-foreground">范围半径 (m)</label>

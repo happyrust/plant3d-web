@@ -312,7 +312,7 @@ export async function triggerSubtreeGenerateSse(
 }
 
 async function waitForInstancesFile(dbno: number, timeoutMs = 10 * 60 * 1000): Promise<void> {
-  const url = `/files/output/instances/instances_${dbno}.json`
+  const url = buildFilesOutputUrl(`instances/instances_${dbno}.json`)
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
     const resp = await fetch(url, { method: 'GET' })

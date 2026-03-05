@@ -2,6 +2,11 @@
   "version": "1.1",
   "description": "模型显示与材质配置文件 - 统一化材质预设",
   "lastModified": "2026-01-14",
+  "disciplineOverrides": {
+    "0": "#2196F3",
+    "3": "#4CAF50",
+    "4": "#FF9800"
+  },
   "displaySettings": {
     "hiddenNouns": [],
     "defaultVisible": true,

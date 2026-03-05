@@ -8,7 +8,6 @@ import {
   Download,
   FileText,
   Filter,
-  MapPin,
   MessageSquare,
   Paperclip,
   Plus,
@@ -19,10 +18,6 @@ import {
 
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
-import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
-import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
-import WorkflowTimeline from './WorkflowTimeline.vue';
-import RoleSwitcher from './RoleSwitcher.vue';
 import {
   reviewGetAuxData,
   reviewGetCollisionData,
@@ -80,27 +75,6 @@ const isFilteringByTask = ref(false);
 // 审核操作相关
 const showRejectDialog = ref(false);
 const rejectComment = ref('');
-
-// 工作流对话框
-const showSubmitDialog = ref(false);
-const showReturnDialog = ref(false);
-const workflowActionLoading = ref(false);
-
-// 工作流节点顺序
-const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
-
-const nextWorkflowNode = computed<WorkflowNode | null>(() => {
-  const current = currentTask.value?.currentNode ?? 'sj';
-  const idx = WORKFLOW_NODE_ORDER.indexOf(current);
-  if (idx < 0) return 'jd';
-  return WORKFLOW_NODE_ORDER[idx + 1] ?? null;
-});
-
-const canSubmitToNextNode = computed(() => !!nextWorkflowNode.value);
-const canReturnToPrevNode = computed(() => {
-  const current = currentTask.value?.currentNode ?? 'sj';
-  return WORKFLOW_NODE_ORDER.indexOf(current) > 0;
-});
 
 // ============ 同步（后端） ============
 
@@ -178,32 +152,6 @@ async function queryCollision() {
     collisionError.value = e instanceof Error ? e.message : '查询失败';
   } finally {
     collisionLoading.value = false;
-  }
-}
-
-/** 在三维视图中高亮定位碰撞构件 */
-function locateCollisionItem(refnos: string[]) {
-  const viewer = viewerContext.viewerRef.value;
-  if (!viewer) return;
-
-  const ids = refnos.map((r) => String(r).replace(/\//g, '_')).filter(Boolean);
-  if (ids.length === 0) return;
-
-  // 发出 showModelByRefnos 事件以确保模型已加载
-  window.dispatchEvent(new CustomEvent('showModelByRefnos', { detail: { refnos: ids, regenModel: false } }));
-
-  // 清除旧选中并高亮新目标
-  const prev = viewer.scene.selectedObjectIds;
-  if (prev.length > 0) {
-    viewer.scene.setObjectsSelected(prev, false);
-  }
-  viewer.scene.ensureRefnos(ids);
-  viewer.scene.setObjectsSelected(ids, true);
-
-  // 飞行到目标构件
-  const aabb = viewer.scene.getAABB(ids);
-  if (aabb) {
-    viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
   }
 }
 
@@ -297,40 +245,22 @@ async function refreshCurrentTask(taskId: string) {
   }
 }
 
-function handleSubmitToNextNode() {
-  if (!currentTask.value || !canSubmitToNextNode.value || !nextWorkflowNode.value) return;
-  showSubmitDialog.value = true;
-}
-
-function handleReturnToNode() {
-  if (!currentTask.value || !canReturnToPrevNode.value) return;
-  showReturnDialog.value = true;
-}
-
-async function onSubmitConfirm(comment?: string) {
+async function handleSubmitToNextNode() {
   if (!currentTask.value) return;
-  workflowActionLoading.value = true;
-  try {
-    await userStore.submitTaskToNextNode(currentTask.value.id, comment);
-    await refreshCurrentTask(currentTask.value.id);
-    await loadWorkflow(currentTask.value.id);
-    showSubmitDialog.value = false;
-  } finally {
-    workflowActionLoading.value = false;
-  }
+  const comment = window.prompt('提交备注（可选）', '') || undefined;
+  await userStore.submitTaskToNextNode(currentTask.value.id, comment);
+  await refreshCurrentTask(currentTask.value.id);
+  await loadWorkflow(currentTask.value.id);
 }
 
-async function onReturnConfirm(targetNode: WorkflowNode, reason: string) {
+async function handleReturnToNode() {
   if (!currentTask.value) return;
-  workflowActionLoading.value = true;
-  try {
-    await userStore.returnTaskToNode(currentTask.value.id, targetNode, reason);
-    await refreshCurrentTask(currentTask.value.id);
-    await loadWorkflow(currentTask.value.id);
-    showReturnDialog.value = false;
-  } finally {
-    workflowActionLoading.value = false;
-  }
+  const reason = (window.prompt('请输入驳回原因（必填）', '') || '').trim();
+  if (!reason) return;
+  // 统一规则：驳回一律回发起设计人（sj）
+  await userStore.returnTaskToNode(currentTask.value.id, 'sj', reason);
+  await refreshCurrentTask(currentTask.value.id);
+  await loadWorkflow(currentTask.value.id);
 }
 
 // 根据任务过滤模型显示
@@ -397,34 +327,34 @@ watch(currentTask, (newTask) => {
 // 审核操作函数
 function handleApprove() {
   if (!currentTask.value) return;
-  
-  // 更新任务状态为通过
+
+  const node = currentTask.value.currentNode || 'sj';
+  if (node === 'jd') {
+    // 校核通过 -> 进入审核节点
+    userStore.submitTaskToNextNode(currentTask.value.id, '校核通过');
+    console.log('任务已提交至审核节点');
+    return;
+  }
+
+  // 审核通过 -> 流程完成
   userStore.updateTaskStatus(currentTask.value.id, 'approved', '审核通过');
-  
-  // 清除当前任务
   reviewStore.clearCurrentTask();
-  
-  // 显示成功提示
-  // TODO: 添加 toast 提示
   console.log('任务已通过审核');
 }
 
 function handleReject() {
   if (!currentTask.value) return;
-  
-  // 更新任务状态为驳回
-  userStore.updateTaskStatus(currentTask.value.id, 'rejected', rejectComment.value);
-  
-  // 清除当前任务
+
+  const reason = rejectComment.value.trim();
+  if (!reason) return;
+
+  // 统一规则：驳回一律回发起设计人（sj）
+  userStore.returnTaskToNode(currentTask.value.id, 'sj', reason);
   reviewStore.clearCurrentTask();
-  
-  // 关闭对话框
+
   showRejectDialog.value = false;
   rejectComment.value = '';
-  
-  // 显示成功提示
-  // TODO: 添加 toast 提示
-  console.log('任务已驳回');
+  console.log('任务已驳回至设计节点');
 }
 
 const pendingAnnotationCount = computed(() => {
@@ -504,9 +434,6 @@ onUnmounted(() => {
 
 <template>
   <div class="flex h-full flex-col gap-3 overflow-y-auto p-3">
-    <!-- 角色切换器 -->
-    <RoleSwitcher />
-
     <!-- 当前任务信息 -->
     <div v-if="currentTask" class="rounded-md border border-border bg-background p-3">
       <div class="flex items-center justify-between">
@@ -540,6 +467,8 @@ onUnmounted(() => {
         <div class="text-xs text-muted-foreground">模型: {{ currentTask.modelName }}</div>
         <div class="text-xs text-muted-foreground">
           发起人: {{ currentTask.requesterName }} | 
+          校核: {{ currentTask.checkerName || currentTask.reviewerName || '-' }} |
+          审核: {{ currentTask.approverName || '-' }} |
           构件数: {{ currentTask.components.length }}
         </div>
         <div class="mt-2 rounded-md bg-muted/50 p-2 text-xs">
@@ -554,7 +483,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading || !canSubmitToNextNode"
+                :disabled="workflowLoading"
                 @click="handleSubmitToNextNode"
               >
                 提交到下一节点
@@ -562,21 +491,27 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading || !canReturnToPrevNode"
+                :disabled="workflowLoading"
                 @click="handleReturnToNode"
               >
-                驳回到指定节点
+                驳回到设计
               </button>
             </div>
           </div>
           <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
           <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
-          <WorkflowTimeline
-            v-else-if="workflow"
-            class="mt-2"
-            :current-node="(currentTask.currentNode || 'sj') as WorkflowNode"
-            :history="workflow.history"
-          />
+          <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
+            <div
+              v-for="(step, idx) in workflow.history"
+              :key="idx"
+              class="flex items-center justify-between text-muted-foreground"
+            >
+              <span>
+                {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
+              </span>
+              <span>{{ formatDate(step.timestamp) }}</span>
+            </div>
+          </div>
         </div>
         <div class="flex gap-2 mt-2">
           <button
@@ -827,36 +762,8 @@ onUnmounted(() => {
           </div>
           <div v-if="collisionLoading" class="mt-2 text-xs text-muted-foreground">查询中...</div>
           <div v-else-if="collisionError" class="mt-2 text-xs text-red-600">{{ collisionError }}</div>
-          <div v-else-if="collisionData" class="mt-2">
-            <div class="mb-1.5 text-xs text-muted-foreground">命中 {{ collisionData.total }} 条</div>
-            <div v-if="collisionData.data.length > 0" class="max-h-48 space-y-1 overflow-y-auto">
-              <div
-                v-for="(item, idx) in collisionData.data"
-                :key="idx"
-                class="flex items-start gap-1.5 rounded border border-border bg-background p-1.5 text-xs"
-              >
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-1 text-foreground">
-                    <span class="font-medium truncate" :title="item.ObjectOne">{{ item.ObjectOne }}</span>
-                    <span class="text-muted-foreground">↔</span>
-                    <span class="font-medium truncate" :title="item.ObjectTow">{{ item.ObjectTow }}</span>
-                  </div>
-                  <div class="mt-0.5 text-muted-foreground truncate" :title="item.ErrorMsg">{{ item.ErrorMsg }}</div>
-                  <div class="mt-0.5 flex gap-2 text-muted-foreground">
-                    <span>{{ item.ErrorStatus }}</span>
-                    <span v-if="item.CheckDate">{{ item.CheckDate }}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="shrink-0 rounded p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-                  title="在三维视图中定位"
-                  @click="locateCollisionItem([item.ObjectOne, item.ObjectTow])"
-                >
-                  <MapPin class="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
+          <div v-else-if="collisionData" class="mt-2 text-xs text-muted-foreground">
+            命中 {{ collisionData.total }} 条
           </div>
         </div>
 
@@ -966,24 +873,5 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-
-    <!-- 工作流提交对话框 -->
-    <WorkflowSubmitDialog
-      v-if="currentTask && nextWorkflowNode"
-      v-model:visible="showSubmitDialog"
-      :current-node="(currentTask.currentNode || 'sj') as WorkflowNode"
-      :target-node="nextWorkflowNode"
-      :loading="workflowActionLoading"
-      @confirm="onSubmitConfirm"
-    />
-
-    <!-- 工作流驳回对话框 -->
-    <WorkflowReturnDialog
-      v-if="currentTask"
-      v-model:visible="showReturnDialog"
-      :current-node="(currentTask.currentNode || 'sj') as WorkflowNode"
-      :loading="workflowActionLoading"
-      @confirm="onReturnConfirm"
-    />
   </div>
 </template>

@@ -86,6 +86,16 @@ export type ReviewTask = {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   requesterId: string;
   requesterName: string;
+  /** 校核人（第二段） */
+  checkerId?: string;
+  checkerName?: string;
+  /** 审核人（第三段） */
+  approverId?: string;
+  approverName?: string;
+  /**
+   * 兼容旧字段：历史数据中 reviewer 语义等同校核人。
+   * 新流程请优先使用 checker/approver。
+   */
   reviewerId: string;
   reviewerName: string;
   components: ReviewComponent[];

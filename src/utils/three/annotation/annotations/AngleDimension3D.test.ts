@@ -51,9 +51,9 @@ describe('AngleDimension3D', () => {
 
     dim.update(camera)
 
-    expect((ray1.material as any).dashed).toBe(true)
-    expect((arcLine.material as any).dashed).toBe(true)
-    expect((arrow1.material as any).dashed).not.toBe(true)
+    expect(ray1.material).toBeInstanceOf(THREE.LineDashedMaterial)
+    expect(arcLine.material).toBeInstanceOf(THREE.LineDashedMaterial)
+    expect(arrow1.material).not.toBeInstanceOf(THREE.LineDashedMaterial)
     expect(spy).toHaveBeenCalled()
   })
 })

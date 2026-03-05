@@ -231,7 +231,7 @@ function getStatusIconClass(status: ReviewTask['status']) {
                 </div>
                 <div class="flex items-center gap-1">
                   <User class="h-3 w-3" />
-                  <span>审核人: {{ task.reviewerName }}</span>
+                  <span>校核: {{ task.checkerName || task.reviewerName || '-' }} / 审核: {{ task.approverName || '-' }}</span>
                 </div>
                 <div class="flex items-center gap-1">
                   <Calendar class="h-3 w-3" />

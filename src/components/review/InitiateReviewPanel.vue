@@ -18,28 +18,59 @@ const selectionStore = useSelectionStore();
 
 const packageName = ref('');
 const description = ref('');
-const reviewerId = ref('');
+const checkerId = ref('');
+const approverId = ref('');
 const priority = ref<'low' | 'medium' | 'high' | 'urgent'>('medium');
 const dueDate = ref('');
 const selectedComponents = ref<ReviewComponent[]>([]);
 
+/** 从属性中解析显示名称：有 NAME 则用 NAME，否则用 refno */
+function resolveDisplayName(attrs: Record<string, unknown> | null, refno: string): string {
+  if (!attrs || typeof attrs !== 'object') return refno;
+  const v = attrs['NAME'];
+  return v != null && v !== '' ? String(v) : refno;
+}
+
+/** 从属性中解析类型 */
+function resolveType(attrs: Record<string, unknown> | null): string {
+  if (!attrs || typeof attrs !== 'object') return '构件';
+  const v = attrs['NOUN'];
+  return v != null && v !== '' ? String(v) : '构件';
+}
+
 // 侦听三维视图中的构件选中，自动追加到构件列表
+// 阶段1：selectedRefno 变化时立即添加（先用 refno 占位，避免竞态时 attrs 未就绪）
 watch(
   () => selectionStore.selectedRefno.value,
   (refno) => {
     if (!refno) return;
-    // 已存在则跳过
     if (selectedComponents.value.some((c) => c.refNo === refno)) return;
-    // 从属性数据中获取名称和类型
-    const attrs = selectionStore.propertiesData.value;
-    const name = (attrs?.NAME || attrs?.DESCRIPTION || refno) as string;
-    const type = (attrs?.NOUN || '构件') as string;
+    const attrs = selectionStore.propertiesData.value as Record<string, unknown> | null;
+    const name = resolveDisplayName(attrs, refno);
+    const type = resolveType(attrs);
     selectedComponents.value.push({
       id: `comp-${Date.now()}`,
       refNo: refno,
       name,
       type,
     });
+  }
+);
+
+// 阶段2：当 propertiesData 异步加载完成时，更新已添加构件的名称（解决竞态）
+watch(
+  () => selectionStore.propertiesData.value,
+  (attrs) => {
+    const refno = selectionStore.selectedRefno.value;
+    if (!refno || !attrs) return;
+    const comp = selectedComponents.value.find((c) => c.refNo === refno);
+    if (!comp) return;
+    const name = resolveDisplayName(attrs as Record<string, unknown>, refno);
+    const type = resolveType(attrs as Record<string, unknown>);
+    if (comp.name !== name || comp.type !== type) {
+      comp.name = name;
+      comp.type = type;
+    }
   }
 );
 const uploadedFiles = ref<UploadedFile[]>([]);
@@ -100,21 +131,41 @@ const currentProjectId = computed<string>(() => {
   return 'demo-project';
 });
 
-const availableReviewers = computed(() => userStore.availableReviewers.value);
+const availableCheckers = computed(() => {
+  const checkers = userStore.availableCheckers.value;
+  return checkers.length > 0 ? checkers : userStore.availableReviewers.value;
+});
+const availableApprovers = computed(() => {
+  const approvers = userStore.availableApprovers.value;
+  return approvers.length > 0 ? approvers : userStore.availableReviewers.value;
+});
+
+const samePersonError = computed(() => {
+  return checkerId.value && approverId.value && checkerId.value === approverId.value;
+});
 
 const canSubmit = computed(() => {
-  return packageName.value.trim() && reviewerId.value && selectedComponents.value.length > 0;
+  return packageName.value.trim()
+    && checkerId.value
+    && approverId.value
+    && !samePersonError.value
+    && selectedComponents.value.length > 0;
 });
 
 const missingFields = computed(() => {
   const fields: string[] = [];
   if (selectedComponents.value.length === 0) fields.push('选择模型构件');
   if (!packageName.value.trim()) fields.push('数据包名称');
-  if (!reviewerId.value) fields.push('审核人员');
+  if (!checkerId.value) fields.push('校核人员');
+  if (!approverId.value) fields.push('审核人员');
+  if (samePersonError.value) fields.push('校核人和审核人不能为同一人');
   return fields;
 });
 
+const isDev = import.meta.env.DEV;
+
 function addMockComponent() {
+  if (!isDev) return;
   const id = `comp-${Date.now()}`;
   selectedComponents.value.push({
     id,
@@ -135,30 +186,43 @@ async function handleSubmit() {
   isSubmitting.value = true;
 
   try {
+    const attachments = uploadedFiles.value
+      .filter((f) => f.status === 'success' && f.serverAttachmentId)
+      .map((f) => ({
+        id: f.serverAttachmentId!,
+        name: f.name,
+        url: f.serverUrl || '',
+        size: f.size,
+        mimeType: f.type || undefined,
+      }));
+
     const task = await userStore.createReviewTask({
       title: packageName.value,
       description: description.value || `模型数据包：${packageName.value}`,
       modelName: packageName.value,
-      reviewerId: reviewerId.value,
-      // 外部已创建单据时统一复用 formId；否则走正常创建逻辑（后端生成）
+      checkerId: checkerId.value,
+      approverId: approverId.value,
       formId: embedModeParams.value.isEmbedMode ? (embedModeParams.value.formId || undefined) : undefined,
       priority: priority.value,
       components: [...selectedComponents.value],
       dueDate: dueDate.value ? new Date(dueDate.value).getTime() : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     });
 
-    const reviewer = availableReviewers.value.find((r) => r.id === reviewerId.value);
+    const checker = availableCheckers.value.find((r) => r.id === checkerId.value);
+    const approver = availableApprovers.value.find((r) => r.id === approverId.value);
 
     notification.value = {
       type: 'success',
       message: '提资单创建成功！',
-      details: `数据包「${task.title}」已创建并分配给 ${reviewer?.name}（${reviewer?.department}），包含 ${selectedComponents.value.length} 个构件`,
+      details: `数据包「${task.title}」已创建，校核人：${checker?.name}，审核人：${approver?.name}，包含 ${selectedComponents.value.length} 个构件`,
     };
 
     // 重置表单
     packageName.value = '';
     description.value = '';
-    reviewerId.value = '';
+    checkerId.value = '';
+    approverId.value = '';
     priority.value = 'medium';
     dueDate.value = '';
     selectedComponents.value = [];
@@ -184,7 +248,7 @@ function clearNotification() {
     <div class="border-b pb-3 flex justify-between items-start">
       <div>
         <h3 class="text-lg font-semibold">创建提资单</h3>
-        <p class="text-sm text-gray-500 mt-1">选择模型构件并指定审核人员</p>
+        <p class="text-sm text-gray-500 mt-1">选择模型构件并手动指定校核/审核人员</p>
         <!-- 嵌入模式显示 form_id -->
         <div v-if="embedModeParams.isEmbedMode" class="mt-2 flex items-center gap-2">
           <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
@@ -212,11 +276,12 @@ function clearNotification() {
         <div class="flex justify-between items-center mb-2">
           <span class="text-sm text-gray-600">已选择 {{ selectedComponents.length }} 个构件</span>
           <button
+            v-if="isDev"
             class="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-gray-50"
             @click="addMockComponent"
           >
             <Plus class="h-3 w-3" />
-            添加构件
+            添加构件(DEV)
           </button>
         </div>
         <div class="space-y-2 max-h-40 overflow-y-auto">
@@ -288,16 +353,29 @@ function clearNotification() {
       <AssociatedFilesList />
     </div>
 
-    <!-- 审核人员和优先级 -->
-    <div class="grid grid-cols-2 gap-4">
+    <!-- 校核/审核人员和优先级 -->
+    <div class="grid grid-cols-3 gap-4">
+      <div class="space-y-2">
+        <label class="text-sm font-medium">校核人员 *</label>
+        <select
+          v-model="checkerId"
+          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">选择校核人员</option>
+          <option v-for="r in availableCheckers" :key="r.id" :value="r.id">
+            {{ r.name }} ({{ getRoleDisplayName(r.role) }})
+          </option>
+        </select>
+      </div>
+
       <div class="space-y-2">
         <label class="text-sm font-medium">审核人员 *</label>
         <select
-          v-model="reviewerId"
+          v-model="approverId"
           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">选择审核人员</option>
-          <option v-for="r in availableReviewers" :key="r.id" :value="r.id">
+          <option v-for="r in availableApprovers" :key="r.id" :value="r.id">
             {{ r.name }} ({{ getRoleDisplayName(r.role) }})
           </option>
         </select>

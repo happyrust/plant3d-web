@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>测试 Parquet 7997 加载</title>
+  <script type="module">
+    import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/+esm';
+
+    async function testParquet7997() {
+      const log = (msg) => {
+        const output = document.getElementById('output');
+        output.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+        console.log(msg);
+      };
+
+      try {
+        log('🚀 开始测试 7997 parquet 数据加载...');
+
+        // 1. 初始化 DuckDB
+        log('📦 初始化 DuckDB-WASM...');
+        const bundles = duckdb.getJsDelivrBundles();
+        const bundle = await duckdb.selectBundle(bundles);
+        const workerUrl = URL.createObjectURL(
+          new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+        );
+        const worker = new Worker(workerUrl);
+        const logger = new duckdb.ConsoleLogger();
+        const db = new duckdb.AsyncDuckDB(logger, worker);
+        await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+        const conn = await db.connect();
+        log('✅ DuckDB 初始化完成');
+
+        // 2. 加载 manifest
+        log('📄 加载 manifest_7997.json...');
+        const manifestResp = await fetch('/files/output/AvevaMarineSample/parquet/manifest_7997.json');
+        const manifest = await manifestResp.json();
+        log(`✅ Manifest 加载成功: ${JSON.stringify(manifest.tables, null, 2)}`);
+
+        // 3. 注册 parquet 文件
+        log('📂 注册 Parquet 文件...');
+        const baseUrl = '/files/output/AvevaMarineSample/parquet';
+
+        await db.registerFileURL(
+          'instances.parquet',
+          `${baseUrl}/${manifest.tables.instances.file}`,
+          duckdb.DuckDBDataProtocol.HTTP,
+          false
+        );
+
+        await db.registerFileURL(
+          'geo_instances.parquet',
+          `${baseUrl}/${manifest.tables.geo_instances.file}`,
+          duckdb.DuckDBDataProtocol.HTTP,
+          false
+        );
+
+        log('✅ Parquet 文件注册完成');
+
+        // 4. 查询统计信息
+        log('🔍 查询数据统计...');
+        const countSql = `
+          SELECT
+            (SELECT COUNT(*) FROM 'instances.parquet') as instances_count,
+            (SELECT COUNT(*) FROM 'geo_instances.parquet') as geo_instances_count
+        `;
+        const countResult = await conn.query(countSql);
+        const countRow = countResult.toArray()[0];
+        log(`✅ 实例数: ${countRow.instances_count}, 几何实例数: ${countRow.geo_instances_count}`);
+
+        // 5. 查询前 5 条实例数据
+        log('📊 查询前 5 条实例数据...');
+        const sampleSql = `SELECT * FROM 'instances.parquet' LIMIT 5`;
+        const sampleResult = await conn.query(sampleSql);
+        const samples = sampleResult.toArray();
+        log(`✅ 样本数据:\n${JSON.stringify(samples, null, 2)}`);
+
+        log('🎉 测试完成！7997 parquet 数据加载成功！');
+
+      } catch (error) {
+        log(`❌ 错误: ${error.message}`);
+        console.error(error);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('testBtn').addEventListener('click', testParquet7997);
+    });
+  </script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    #output {
+      margin-top: 20px;
+      padding: 20px;
+      background: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    #output div {
+      padding: 4px 0;
+      border-bottom: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 测试 Parquet 7997 数据加载</h1>
+  <p>点击按钮测试从 plant3d-web 加载 7997 的 parquet 模型数据</p>
+  <button id="testBtn">开始测试</button>
+  <div id="output"></div>
+</body>
+</html>

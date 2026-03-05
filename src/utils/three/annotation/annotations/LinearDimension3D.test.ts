@@ -50,9 +50,9 @@ describe('LinearDimension3D', () => {
 
     dim.update(camera)
 
-    expect((lineA.material as any).dashed).toBe(true)
-    expect((ext1.material as any).dashed).toBe(true)
-    expect((arrow1.material as any).dashed).not.toBe(true)
+    expect(lineA.material).toBeInstanceOf(THREE.LineDashedMaterial)
+    expect(ext1.material).toBeInstanceOf(THREE.LineDashedMaterial)
+    expect(arrow1.material).not.toBeInstanceOf(THREE.LineDashedMaterial)
     expect(spy).toHaveBeenCalled()
   })
 

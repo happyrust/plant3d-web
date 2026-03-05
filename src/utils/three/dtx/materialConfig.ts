@@ -21,6 +21,8 @@ export type ModelDisplayConfig = {
   defaultMaterial?: MaterialConfigEntry
   materialConfigs?: Record<string, MaterialConfigEntry>
   instanceConfigs?: Record<string, MaterialConfigEntry>
+  /** spec_value (专业) → 颜色覆盖；如 { "3": "#4CAF50", "4": "#FF9800" } */
+  disciplineOverrides?: Record<string, string>
 }
 
 export type ResolvedMaterial = {
@@ -227,13 +229,19 @@ export function buildHiddenRefnoSet(config: ModelDisplayConfig): Set<string> {
   return new Set(list.map((r) => normalizeRefnoKey(String(r || ''))).filter(Boolean))
 }
 
-export function resolveMaterialForInstance(config: ModelDisplayConfig, refno: string, noun: string): ResolvedMaterial {
+export function resolveMaterialForInstance(
+  config: ModelDisplayConfig,
+  refno: string,
+  noun: string,
+  spec_value?: number | null
+): ResolvedMaterial {
   const defaultMaterial: MaterialConfigEntry = {
     ...DEFAULT_MATERIAL,
     ...(config.defaultMaterial || {}),
   }
   const materialConfigs = config.materialConfigs || {}
   const instanceConfigs = config.instanceConfigs || {}
+  const disciplineOverrides = config.disciplineOverrides || {}
 
   const nounKey = normalizeNounKey(noun)
   const refnoKey = normalizeRefnoKey(refno)
@@ -243,7 +251,11 @@ export function resolveMaterialForInstance(config: ModelDisplayConfig, refno: st
 
   const fallbackColor =
     defaultMaterial.color !== undefined ? defaultMaterial.color : (DEFAULT_MATERIAL.color ?? '#90a4ae')
-  const colorValue = chosen.color ?? fallbackColor
+  let colorValue = chosen.color ?? fallbackColor
+  // 按专业覆盖颜色：spec_value 0=PIPE, 3=INST, 4=HVAC 等
+  if (spec_value != null && disciplineOverrides[String(spec_value)]) {
+    colorValue = disciplineOverrides[String(spec_value)]
+  }
   const baseMetalness = typeof defaultMaterial.metalness === 'number' ? defaultMaterial.metalness : 0.1
   const baseRoughness = typeof defaultMaterial.roughness === 'number' ? defaultMaterial.roughness : 0.5
   const metalness = clamp01(

@@ -1,0 +1,84 @@
+{
+  "checked_geo_hashes": 2691,
+  "dbnum": 7997,
+  "generated_at": "2026-03-04T08:48:40.127Z",
+  "lod_tag": "L1",
+  "mesh_base_dir": "./assets/meshes",
+  "missing_geo_hash_list": [
+    {
+      "geo_hash": "13814768256666451270",
+      "mesh_candidates": [
+        "./assets/meshes\\lod_L1\\13814768256666451270_L1.glb",
+        "./assets/meshes\\lod_L1\\13814768256666451270.glb",
+        "./assets/meshes\\13814768256666451270.glb"
+      ],
+      "owner_refno_count": 2,
+      "owner_refno_sample": [
+        "24381_115",
+        "24381_134"
+      ],
+      "owner_refno_sample_count": 2,
+      "row_count": 4
+    },
+    {
+      "geo_hash": "11447390633431047120",
+      "mesh_candidates": [
+        "./assets/meshes\\lod_L1\\11447390633431047120_L1.glb",
+        "./assets/meshes\\lod_L1\\11447390633431047120.glb",
+        "./assets/meshes\\11447390633431047120.glb"
+      ],
+      "owner_refno_count": 2,
+      "owner_refno_sample": [
+        "24381_115",
+        "24381_134"
+      ],
+      "owner_refno_sample_count": 2,
+      "row_count": 2
+    },
+    {
+      "geo_hash": "16786845597161712901",
+      "mesh_candidates": [
+        "./assets/meshes\\lod_L1\\16786845597161712901_L1.glb",
+        "./assets/meshes\\lod_L1\\16786845597161712901.glb",
+        "./assets/meshes\\16786845597161712901.glb"
+      ],
+      "owner_refno_count": 1,
+      "owner_refno_sample": [
+        "24381_772"
+      ],
+      "owner_refno_sample_count": 1,
+      "row_count": 2
+    },
+    {
+      "geo_hash": "2086197442380416866",
+      "mesh_candidates": [
+        "./assets/meshes\\lod_L1\\2086197442380416866_L1.glb",
+        "./assets/meshes\\lod_L1\\2086197442380416866.glb",
+        "./assets/meshes\\2086197442380416866.glb"
+      ],
+      "owner_refno_count": 1,
+      "owner_refno_sample": [
+        "24381_772"
+      ],
+      "owner_refno_sample_count": 1,
+      "row_count": 1
+    },
+    {
+      "geo_hash": "42046714013873709",
+      "mesh_candidates": [
+        "./assets/meshes\\lod_L1\\42046714013873709_L1.glb",
+        "./assets/meshes\\lod_L1\\42046714013873709.glb",
+        "./assets/meshes\\42046714013873709.glb"
+      ],
+      "owner_refno_count": 1,
+      "owner_refno_sample": [
+        "24381_772"
+      ],
+      "owner_refno_sample_count": 1,
+      "row_count": 1
+    }
+  ],
+  "missing_geo_hashes": 5,
+  "missing_owner_refnos": 3,
+  "version": 1
+}

@@ -1,5 +1,3 @@
-import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest'
-import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader'
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader'
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry'
 import { DTXLayer } from '@/utils/three/dtx'
@@ -19,39 +17,51 @@ type LoaderOptions = {
   debug?: boolean
   forceReloadRefnos?: string[]
   /**
-   * 数据源选择：
-   * - 'parquet'：默认（失败则抛错）
-   * - 'json'：调试用，显式指定才启用
-   * - 'auto'：兼容旧逻辑（Parquet 不可用时回退 JSON，仅调试/临时）
+   * 数据源选择：仅支持 parquet。
    */
-  dataSource?: 'auto' | 'parquet' | 'json'
+  dataSource?: 'parquet'
+}
+
+export type DtxMissingBreakdown = {
+  noGeoRowsRefnos: string[]
+  mesh404Refnos: string[]
+  mesh404GeoHashes: string[]
 }
 
 type DbnoRuntimeCache = {
   loadedRefnos: Set<string>
   loadedGeoHash: Set<string>
+  /** 记录曾经 404 的 geoHash；用于触发按 refno 的自动生成，并在后续 forceReload 时重新拉取 GLB */
+  notFoundGeoHash: Set<string>
   loadingGeoHash: Map<string, Promise<void>>
   objectCounter: number
   refnoToObjectIds: Map<string, string[]>
   objectIdToRefno: Map<string, string>
   refnoTransform: Map<string, number[]>
   refnoToNoun: Map<string, string>
+  /** objectId → spec_value，用于 applyMaterialConfigToLoadedDtx 按专业着色 */
+  objectIdToSpecValue: Map<string, number>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>()
 
 function getCache(dbno: number): DbnoRuntimeCache {
   const existing = cachesByDbno.get(dbno)
-  if (existing) return existing
+  if (existing) {
+    if (!existing.objectIdToSpecValue) existing.objectIdToSpecValue = new Map()
+    return existing
+  }
   const created: DbnoRuntimeCache = {
     loadedRefnos: new Set(),
     loadedGeoHash: new Set(),
+    notFoundGeoHash: new Set(),
     loadingGeoHash: new Map(),
     objectCounter: 0,
     refnoToObjectIds: new Map(),
     objectIdToRefno: new Map(),
     refnoTransform: new Map(),
     refnoToNoun: new Map(),
+    objectIdToSpecValue: new Map(),
   }
   cachesByDbno.set(dbno, created)
   return created
@@ -123,13 +133,17 @@ async function ensureGeometryForGeoHash(
   geoHash: string,
   lodAssetKey: string,
   debug: boolean
-): Promise<void> {
+): Promise<{ status: 'ok' | 'not_found' | 'error'; notFoundNew: boolean }> {
   const cache = getCache(dbno)
-  if (cache.loadedGeoHash.has(geoHash)) return
+  const wasNotFound = cache.notFoundGeoHash.has(geoHash)
+  // 已加载且非 404：无需再拉取
+  if (cache.loadedGeoHash.has(geoHash) && !wasNotFound) {
+    return { status: 'ok', notFoundNew: false }
+  }
   const pending = cache.loadingGeoHash.get(geoHash)
   if (pending) {
     await pending
-    return
+    return { status: cache.notFoundGeoHash.has(geoHash) ? 'not_found' : 'ok', notFoundNew: false }
   }
 
   const task = (async () => {
@@ -138,18 +152,21 @@ async function ensureGeometryForGeoHash(
     if (basic === '1') {
       dtxLayer.addGeometry(geoHash, getUnitBoxGeometry())
       cache.loadedGeoHash.add(geoHash)
-      return
+      cache.notFoundGeoHash.delete(geoHash)
+      return { status: 'ok' as const, notFoundNew: false }
     }
     if (basic === '2') {
       // CYLINDER/TUBI 在后端均使用 2，统一用单位圆柱承接
       dtxLayer.addGeometry(geoHash, getUnitTubiGeometry())
       cache.loadedGeoHash.add(geoHash)
-      return
+      cache.notFoundGeoHash.delete(geoHash)
+      return { status: 'ok' as const, notFoundNew: false }
     }
     if (basic === '3') {
       dtxLayer.addGeometry(geoHash, getUnitSphereGeometry())
       cache.loadedGeoHash.add(geoHash)
-      return
+      cache.notFoundGeoHash.delete(geoHash)
+      return { status: 'ok' as const, notFoundNew: false }
     }
 
     // 约定：tubi_* 属于“虚拟管段几何”（unit cylinder），不走 glb 下载。
@@ -157,14 +174,22 @@ async function ensureGeometryForGeoHash(
     if (geoHash.startsWith('tubi_') || geoHash.startsWith('t_')) {
       dtxLayer.addGeometry(geoHash, getUnitTubiGeometry())
       cache.loadedGeoHash.add(geoHash)
-      return
+      cache.notFoundGeoHash.delete(geoHash)
+      return { status: 'ok' as const, notFoundNew: false }
     }
 
     const glbUrl = `/files/meshes/lod_${lodAssetKey}/${geoHash}_${lodAssetKey}.glb`
     let geometry: BufferGeometry | null = null
+    let notFound = false
+    let notFoundNew = false
 
     try {
       const resp = await fetch(glbUrl)
+      if (resp.status === 404) {
+        notFound = true
+        notFoundNew = !cache.notFoundGeoHash.has(geoHash)
+        cache.notFoundGeoHash.add(geoHash)
+      }
       if (resp.ok) {
         const glbData = await resp.arrayBuffer()
         const parsed = await parseGlbGeometry(glbData)
@@ -183,17 +208,22 @@ async function ensureGeometryForGeoHash(
       if (debug) console.warn('[dtx][instances-json] load glb failed', { geoHash, glbUrl, e })
     }
 
-    if (!geometry) {
-      geometry = createFallbackBoxGeometry()
+    if (geometry) {
+      dtxLayer.addGeometry(geoHash, geometry)
+      cache.loadedGeoHash.add(geoHash)
+      cache.notFoundGeoHash.delete(geoHash)
+      return { status: 'ok' as const, notFoundNew: false }
     }
 
-    dtxLayer.addGeometry(geoHash, geometry)
+    // 404 或解析失败：用兜底盒子承接，避免完全不可见；同时保留 notFound 标记，便于后续生成后重拉 GLB。
+    dtxLayer.addGeometry(geoHash, getUnitBoxGeometry())
     cache.loadedGeoHash.add(geoHash)
+    return { status: notFound ? ('not_found' as const) : ('error' as const), notFoundNew }
   })()
 
   cache.loadingGeoHash.set(geoHash, task)
   try {
-    await task
+    return await task
   } finally {
     cache.loadingGeoHash.delete(geoHash)
   }
@@ -206,23 +236,33 @@ async function ensureGeometriesForGeoHashes(
   lodAssetKey: string,
   debug: boolean,
   options: { concurrency?: number } = {}
-): Promise<void> {
+): Promise<string[]> {
   const cache = getCache(dbno)
-  const unique = Array.from(new Set(geoHashes)).filter((h) => !!h && !cache.loadedGeoHash.has(h))
-  if (unique.length === 0) return
+  const unique = Array.from(new Set(geoHashes)).filter((h) => {
+    if (!h) return false
+    if (!cache.loadedGeoHash.has(h)) return true
+    // 对曾经 404 的几何体：允许重试拉取（用于生成完成后的 forceReload）。
+    return cache.notFoundGeoHash.has(h)
+  })
+  if (unique.length === 0) return []
 
   const queue = unique.slice()
   const concurrency = Math.max(1, Math.min(options.concurrency ?? 8, queue.length))
+  const missing = new Set<string>()
 
   const workers = Array.from({ length: concurrency }, async () => {
     while (queue.length > 0) {
       const geoHash = queue.pop()
       if (!geoHash) continue
-      await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug)
+      const res = await ensureGeometryForGeoHash(dtxLayer, dbno, geoHash, lodAssetKey, debug)
+      if (res.status === 'not_found' && res.notFoundNew) {
+        missing.add(geoHash)
+      }
     }
   })
 
   await Promise.all(workers)
+  return Array.from(missing)
 }
 
 export function resolveDtxObjectIdsByRefno(dbno: number, refno: string): string[] {
@@ -285,9 +325,10 @@ export function applyMaterialConfigToLoadedDtx(
     const refnoKey = normalizeRefnoKey(refno)
     const noun = normalizeNounKey(cache.refnoToNoun.get(refno) || '')
     const isHidden = hiddenRefnos.has(refnoKey) || (noun && hiddenNouns.has(noun))
-    const resolved = resolveMaterialForInstance(config, refnoKey, noun)
 
     for (const objectId of objectIds) {
+      const specValue = cache.objectIdToSpecValue.get(objectId) ?? 0
+      const resolved = resolveMaterialForInstance(config, refnoKey, noun, specValue)
       if (isHidden || resolved.hidden) {
         dtxLayer.setObjectVisible(objectId, false)
         continue
@@ -315,6 +356,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   skippedRefnos: number
   loadedObjects: number
   missingRefnos: string[]
+  missingBreakdown: DtxMissingBreakdown
   sceneBoundingBox: Box3
 }> {
   const debug = options.debug === true
@@ -322,9 +364,21 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const forceReloadSet = options.forceReloadRefnos && options.forceReloadRefnos.length > 0
     ? new Set(options.forceReloadRefnos)
     : null
+  const createEmptyMissingBreakdown = (): DtxMissingBreakdown => ({
+    noGeoRowsRefnos: [],
+    mesh404Refnos: [],
+    mesh404GeoHashes: [],
+  })
 
   if (refnos.length === 0) {
-    return { loadedRefnos: 0, skippedRefnos: 0, loadedObjects: 0, missingRefnos: [], sceneBoundingBox: dtxLayer.getBoundingBox() }
+    return {
+      loadedRefnos: 0,
+      skippedRefnos: 0,
+      loadedObjects: 0,
+      missingRefnos: [],
+      missingBreakdown: createEmptyMissingBreakdown(),
+      sceneBoundingBox: dtxLayer.getBoundingBox(),
+    }
   }
 
   const cache = getCache(dbno)
@@ -338,63 +392,74 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
   const toLoad = Array.from(new Set(normalizedRefnos))
     .filter((r) => (normalizedForceReload && normalizedForceReload.has(r)) || !cache.loadedRefnos.has(r))
   if (toLoad.length === 0) {
-    return { loadedRefnos: 0, skippedRefnos: refnos.length, loadedObjects: 0, missingRefnos: [], sceneBoundingBox: dtxLayer.getBoundingBox() }
+    return {
+      loadedRefnos: 0,
+      skippedRefnos: refnos.length,
+      loadedObjects: 0,
+      missingRefnos: [],
+      missingBreakdown: createEmptyMissingBreakdown(),
+      sceneBoundingBox: dtxLayer.getBoundingBox(),
+    }
   }
 
   const displayConfig = await loadModelDisplayConfig()
   const hiddenNouns = buildHiddenNounSet(displayConfig)
   const hiddenRefnos = buildHiddenRefnoSet(displayConfig)
 
-  // 根据 dataSource 选项决定数据源
-  const dataSource = options.dataSource || 'parquet'
-  let index: Map<string, import('@/utils/instances/instanceManifest').InstanceEntry[]>
-
-  if (dataSource === 'json') {
-    // 强制 JSON：从 instances_{dbno}.json manifest 获取实例数据
-    const manifest = await getDbnoInstancesManifest(dbno)
-    index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
-    if (debug) console.log('[dtx][instances] using json', { dbno, refnos: toLoad.length, indexSize: index.size })
-  } else if (dataSource === 'parquet') {
-    // 默认 Parquet
-    const parquet = useDbnoInstancesParquetLoader()
-    const available = await parquet.isParquetAvailable(dbno)
-    if (!available) {
-      throw new Error(`Parquet not available (dbno=${dbno})`)
-    }
-    index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
-    if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
-  } else {
-    // auto：优先 Parquet，失败回退 JSON
-    try {
-      const parquet = useDbnoInstancesParquetLoader()
-      const available = await parquet.isParquetAvailable(dbno)
-      if (available) {
-        index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
-        if (debug) console.log('[dtx][instances] using parquet (auto)', { dbno, refnos: toLoad.length })
-      } else {
-        throw new Error('Parquet not available')
-      }
-    } catch (parquetErr) {
-      if (debug) console.log('[dtx][instances] parquet failed, falling back to json', { dbno, error: parquetErr })
-      const manifest = await getDbnoInstancesManifest(dbno)
-      index = buildInstanceIndexByRefno(manifest, new Set(toLoad))
-      if (debug) console.log('[dtx][instances] using json (fallback)', { dbno, refnos: toLoad.length, indexSize: index.size })
-    }
+  const parquet = useDbnoInstancesParquetLoader()
+  const available = await parquet.isParquetAvailable(dbno)
+  if (!available) {
+    throw new Error(`Parquet not available (dbno=${dbno})`)
   }
+  const index = await parquet.queryInstanceEntriesByRefnos(dbno, toLoad, { debug })
+  if (debug) console.log('[dtx][instances] using parquet', { dbno, refnos: toLoad.length })
 
   let loadedObjects = 0
   const missingRefnos: string[] = []
+  const noGeoRowsRefnos = new Set<string>()
+  const mesh404Refnos = new Set<string>()
+  const mesh404GeoHashes = new Set<string>()
 
   // 预取本次需要的所有几何体（并发 + 去重），避免在实例循环中串行 await
   const neededGeoHashes = new Set<string>()
+  const geoHashToRefnos = new Map<string, Set<string>>()
   for (const refno of toLoad) {
+    // 隐藏 refno：不预取几何体，也不参与“缺失 mesh -> 触发生成”逻辑。
+    if (hiddenRefnos.has(refno)) continue
     const insts = index.get(refno) || []
     for (const inst of insts) {
       const geoHash = String((inst as any).geo_hash || '')
-      if (geoHash) neededGeoHashes.add(geoHash)
+      if (!geoHash) continue
+      neededGeoHashes.add(geoHash)
+      let set = geoHashToRefnos.get(geoHash)
+      if (!set) {
+        set = new Set<string>()
+        geoHashToRefnos.set(geoHash, set)
+      }
+      set.add(refno)
     }
   }
-  await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, { concurrency: 8 })
+  const missingGeoHashes = await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, { concurrency: 8 })
+  if (missingGeoHashes.length > 0) {
+    const extraMissing = new Set<string>()
+    for (const gh of missingGeoHashes) {
+      mesh404GeoHashes.add(gh)
+      const owners = geoHashToRefnos.get(gh)
+      if (!owners) continue
+      for (const r of owners) extraMissing.add(r)
+    }
+    if (extraMissing.size > 0) {
+      // 将“mesh 404”映射为“缺失 refno”，交由上层触发 SSE 生成并 forceReload。
+      const existing = new Set<string>(missingRefnos)
+      for (const r of extraMissing) {
+        mesh404Refnos.add(r)
+        if (!existing.has(r)) {
+          missingRefnos.push(r)
+          existing.add(r)
+        }
+      }
+    }
+  }
 
   for (const refnoKey of toLoad) {
     if (hiddenRefnos.has(refnoKey)) {
@@ -405,7 +470,8 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
     const insts = index.get(refnoKey) || []
     if (insts.length === 0) {
-      missingRefnos.push(refnoKey)
+      noGeoRowsRefnos.add(refnoKey)
+      if (!missingRefnos.includes(refnoKey)) missingRefnos.push(refnoKey)
       cache.loadedRefnos.add(refnoKey)
       continue
     }
@@ -431,6 +497,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       const matrix = new Matrix4().fromArray(matrixData)
 
       const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '')
+      const specValue = typeof (inst as any).uniforms?.spec_value === 'number' ? (inst as any).uniforms.spec_value : 0
       if (noun && !refnoNoun) {
         refnoNoun = noun
       }
@@ -438,7 +505,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         continue
       }
 
-      const resolved = resolveMaterialForInstance(displayConfig, refnoKey, noun)
+      const resolved = resolveMaterialForInstance(displayConfig, refnoKey, noun, specValue)
       if (resolved.hidden) {
         continue
       }
@@ -460,6 +527,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
       objectIds.push(objectId)
       cache.objectIdToRefno.set(objectId, refnoKey)
+      cache.objectIdToSpecValue.set(objectId, specValue)
       loadedObjects++
 
       const refnoTransform = (inst as any).refno_transform
@@ -491,6 +559,11 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     skippedRefnos: refnos.length - toLoad.length,
     loadedObjects,
     missingRefnos,
+    missingBreakdown: {
+      noGeoRowsRefnos: Array.from(noGeoRowsRefnos),
+      mesh404Refnos: Array.from(mesh404Refnos),
+      mesh404GeoHashes: Array.from(mesh404GeoHashes),
+    },
     sceneBoundingBox: dtxLayer.getBoundingBox(),
   }
 }
