@@ -50,8 +50,8 @@ export function resolveMbdDimensionMaterialSet(
   mode: MbdDimensionMode,
 ): AnnotationMaterialSet {
   if (mode === "rebarviz") {
-    if (kind === "overall") return materials.blue;
-    if (kind === "chain") return materials.orange;
+    if (kind === "overall") return materials.ssDimensionDefault;
+    if (kind === "chain") return materials.ssDimensionDefault;
     if (kind === "port") return materials.black;
     return materials.ssDimensionDefault;
   }

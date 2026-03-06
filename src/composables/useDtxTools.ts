@@ -23,7 +23,6 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx'
 import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation'
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir'
-import { formatLengthMeters } from '@/utils/unitFormat'
 
 type DragRect = {
   active: boolean
@@ -296,31 +295,6 @@ function makeLabelEl(parent: HTMLElement, title: string, description: string): H
     ].join(';')
   )
   el.innerHTML = `<div style="font-weight:700;line-height:1.2;">${title}</div><div style="margin-top:2px;font-size:12px;opacity:0.95;">${description || ''}</div>`
-  return el
-}
-
-function makeMeasureLabelEl(parent: HTMLElement, text: string): HTMLDivElement {
-  // SolveSpace 风格：透明背景、纯文本+描边
-  const el = ensureDiv(
-    parent,
-    'dtx-measure-label',
-    [
-      'position:absolute',
-      'transform:translate(-50%,-100%)',
-      'pointer-events:none',
-      'z-index:905',
-      'padding:1px 3px',
-      'border-radius:0',
-      'background:transparent',
-      'color:#22c55e',
-      "font-family:'Roboto Mono','Consolas',monospace",
-      'font-size:11px',
-      'font-weight:700',
-      'box-shadow:none',
-      'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000',
-    ].join(';')
-  )
-  el.textContent = text
   return el
 }
 
@@ -655,56 +629,6 @@ export function useDtxTools(options: {
     ensureToolsGroupAttached()
     clearGroup(toolsGroup)
     clearOverlayEls()
-
-    // ---------------- Measurements ----------------
-    for (const m of store.measurements.value) {
-      if (!m.visible) continue
-
-      if (m.kind === 'distance') {
-        const lineMat = new LineBasicMaterial({ color: 0x2563eb })
-          ; (lineMat as any).depthTest = false
-          ; (lineMat as any).transparent = true
-          ; (lineMat as any).opacity = 0.95
-
-        const a = new Vector3(...m.origin.worldPos)
-        const b = new Vector3(...m.target.worldPos)
-        const g = new BufferGeometry()
-        g.setAttribute('position', new BufferAttribute(new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z]), 3))
-        const line = new Line(g, lineMat)
-        line.renderOrder = 1000
-        toolsGroup.add(line)
-
-        const mid = a.clone().add(b).multiplyScalar(0.5)
-        const dist = a.distanceTo(b)
-        const unit = unitSettings.displayUnit.value
-        const precision = unitSettings.precision.value
-        const el = makeMeasureLabelEl(overlay, `D ${formatLengthMeters(dist, unit, precision)}`)
-        labels.set(`m:${m.id}`, { id: `m:${m.id}`, worldPos: mid, el })
-      } else {
-        const lineMat = new LineBasicMaterial({ color: 0x2563eb })
-          ; (lineMat as any).depthTest = false
-          ; (lineMat as any).transparent = true
-          ; (lineMat as any).opacity = 0.95
-
-        const o = new Vector3(...m.origin.worldPos)
-        const c = new Vector3(...m.corner.worldPos)
-        const t = new Vector3(...m.target.worldPos)
-        const g = new BufferGeometry()
-        g.setAttribute(
-          'position',
-          new BufferAttribute(new Float32Array([o.x, o.y, o.z, c.x, c.y, c.z, c.x, c.y, c.z, t.x, t.y, t.z]), 3)
-        )
-        const seg = new LineSegments(g, lineMat)
-        seg.renderOrder = 1000
-        toolsGroup.add(seg)
-
-        const v1 = o.clone().sub(c).normalize()
-        const v2 = t.clone().sub(c).normalize()
-        const angle = Math.acos(clamp(v1.dot(v2), -1, 1)) * (180 / Math.PI)
-        const el = makeMeasureLabelEl(overlay, `${angle.toFixed(1)}°`)
-        labels.set(`m:${m.id}`, { id: `m:${m.id}`, worldPos: c, el })
-      }
-    }
 
     // ---------------- Text annotations ----------------
     for (const a of store.annotations.value) {
@@ -1112,7 +1036,7 @@ export function useDtxTools(options: {
     const overlay = overlayContainerRef.value
     const dtxViewer = dtxViewerRef.value
     if (!viewer || !overlay || !dtxViewer) return []
-    const refnos = viewer.scene.objectIds
+    const refnos = viewer.scene.getLoadedRefnos()
     if (!refnos || refnos.length === 0) return []
 
     const sel: string[] = []

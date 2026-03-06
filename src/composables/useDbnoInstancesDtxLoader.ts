@@ -44,6 +44,7 @@ type DbnoRuntimeCache = {
   refnoTransform: Map<string, number[]>
   refnoToNoun: Map<string, string>
   refnoToOwnerNoun: Map<string, string>
+  refnoToSpecValue: Map<string, number | null>
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>()
@@ -65,6 +66,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
     refnoTransform: new Map(),
     refnoToNoun: new Map(),
     refnoToOwnerNoun: new Map(),
+    refnoToSpecValue: new Map(),
   }
   cachesByDbno.set(dbno, created)
   return created
@@ -334,8 +336,9 @@ export function applyMaterialConfigToLoadedDtx(
     const refnoKey = normalizeRefnoKey(refno)
     const noun = normalizeNounKey(cache.refnoToNoun.get(refno) || '')
     const ownerNoun = normalizeNounKey(cache.refnoToOwnerNoun.get(refno) || '')
+    const specValue = cache.refnoToSpecValue.get(refno) ?? null
     const isHidden = hiddenRefnos.has(refnoKey) || (noun && hiddenNouns.has(noun))
-    const resolved = resolveMaterialWithTheme(config, refnoKey, noun, ownerNoun, theme)
+    const resolved = resolveMaterialWithTheme(config, refnoKey, noun, ownerNoun, theme, specValue)
 
     for (const objectId of objectIds) {
       const specValue = cache.objectIdToSpecValue.get(objectId) ?? 0
@@ -542,7 +545,11 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       }
 
       const instOwnerNoun = normalizeNounKey((inst as any).uniforms?.owner_noun || '')
-      const resolved = resolveMaterialWithTheme(displayConfig, refnoKey, noun, instOwnerNoun, currentLoadTheme)
+      const rawSpecValue = (inst as any).uniforms?.spec_value
+      const specValue = typeof rawSpecValue === 'number'
+        ? rawSpecValue
+        : (typeof rawSpecValue === 'string' && rawSpecValue.trim() !== '' ? Number(rawSpecValue) : null)
+      const resolved = resolveMaterialWithTheme(displayConfig, refnoKey, noun, instOwnerNoun, currentLoadTheme, Number.isFinite(specValue as number) ? specValue : null)
       if (resolved.hidden) {
         continue
       }
@@ -588,6 +595,13 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     const ownerNoun = normalizeNounKey((firstInst as any)?.uniforms?.owner_noun || '')
     if (ownerNoun && !cache.refnoToOwnerNoun.has(refnoKey)) {
       cache.refnoToOwnerNoun.set(refnoKey, ownerNoun)
+    }
+    const rawSpecValue = (firstInst as any)?.uniforms?.spec_value
+    const firstSpecValue = typeof rawSpecValue === 'number'
+      ? rawSpecValue
+      : (typeof rawSpecValue === 'string' && rawSpecValue.trim() !== '' ? Number(rawSpecValue) : null)
+    if (!cache.refnoToSpecValue.has(refnoKey)) {
+      cache.refnoToSpecValue.set(refnoKey, Number.isFinite(firstSpecValue as number) ? firstSpecValue : null)
     }
     cache.loadedRefnos.add(refnoKey)
   }

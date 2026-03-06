@@ -58,6 +58,22 @@ export class DtxCompatScene {
     return Object.keys(this.objects)
   }
 
+  getLoadedRefnos(): string[] {
+    const loaded = new Set<string>()
+    for (const objectId of this._dtxLayer.getAllObjectIds()) {
+      if (typeof objectId !== 'string' || !objectId) continue
+      if (objectId.startsWith('o:')) {
+        const parts = objectId.split(':')
+        const refno = parts.length >= 3 ? String(parts[1] ?? '').trim() : ''
+        if (!refno) continue
+        loaded.add(refno)
+        continue
+      }
+      loaded.add(objectId)
+    }
+    return Array.from(loaded)
+  }
+
   get selectedObjectIds(): string[] {
     const out: string[] = []
     for (const [id, obj] of Object.entries(this.objects)) {
@@ -87,6 +103,9 @@ export class DtxCompatScene {
    */
   private _getDtxObjectIds(refno: string): string[] {
     const normalized = refno.trim().replace('/', '_')
+    if (this._dtxLayer.hasObject(normalized)) {
+      return [normalized]
+    }
     // 仅对 refno-like 的对象尝试解析 dbno；避免把树节点/非 refno id 当作 refno 处理。
     if (!/^\d+_/.test(normalized)) return []
     const dbno = tryGetDbnumByRefno(normalized)

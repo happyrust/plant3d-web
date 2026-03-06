@@ -77,10 +77,25 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
   await page.route('**/api/mbd/pipe/**', async (route) => {
     const url = new URL(route.request().url())
     const refno = decodeURIComponent(url.pathname.split('/').pop() || '')
+    const mode = url.searchParams.get('mode')
+    const includeChainDims = url.searchParams.get('include_chain_dims')
+    const includeOverallDim = url.searchParams.get('include_overall_dim')
+    const includePortDims = url.searchParams.get('include_port_dims')
+    const includeWelds = url.searchParams.get('include_welds')
+    const includeSlopes = url.searchParams.get('include_slopes')
     const includeBends = url.searchParams.get('include_bends')
     const bendMode = url.searchParams.get('bend_mode')
 
-    if (includeBends !== 'true' || bendMode !== 'facecenter') {
+    if (
+      mode !== 'construction' ||
+      includeChainDims !== 'true' ||
+      includeOverallDim !== 'true' ||
+      includePortDims !== 'false' ||
+      includeWelds !== 'true' ||
+      includeSlopes !== 'true' ||
+      includeBends !== 'false' ||
+      bendMode !== 'facecenter'
+    ) {
       malformedQueryUrls.push(url.toString())
     }
 

@@ -3,12 +3,16 @@ import { computed, ref } from 'vue';
 export type DisplayTheme = 'default' | 'design3d';
 
 const STORAGE_KEY = 'viewer_display_theme';
+const DEFAULT_THEME: DisplayTheme = 'design3d';
 
 function loadPersistedTheme(): DisplayTheme {
-  if (typeof window === 'undefined' || !window.localStorage) return 'default';
+  if (typeof window === 'undefined' || !window.localStorage) return DEFAULT_THEME;
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (raw === 'design3d') return 'design3d';
-  return 'default';
+  if (raw === 'default') {
+    window.localStorage.setItem(STORAGE_KEY, DEFAULT_THEME);
+  }
+  return DEFAULT_THEME;
 }
 
 const currentTheme = ref<DisplayTheme>(loadPersistedTheme());

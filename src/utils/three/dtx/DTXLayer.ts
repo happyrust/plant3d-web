@@ -1945,6 +1945,7 @@ export class DTXLayer {
 
     const matrix = new Matrix4();
     matrix.fromArray(this._matricesBuffer, obj.objectIndex * 16);
+    matrix.premultiply(this._globalModelMatrix);
 
     const tempA = new Vector3();
     const tempB = new Vector3();

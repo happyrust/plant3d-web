@@ -321,6 +321,7 @@ const activeAnnotationId = ref<string | null>(null);
 const activeObbAnnotationId = ref<string | null>(null);
 const activeCloudAnnotationId = ref<string | null>(null);
 const activeRectAnnotationId = ref<string | null>(null);
+const activeMeasurementId = ref<string | null>(null);
 const activeDimensionId = ref<string | null>(null);
 
 const pickedQueryCenter = ref<PickedQueryCenter | null>(null);
@@ -377,6 +378,7 @@ function setCompareMode(enabled: boolean) {
 
 function addMeasurement(rec: MeasurementRecord) {
   measurements.value = [...measurements.value, rec];
+  activeMeasurementId.value = rec.id;
 }
 
 function updateMeasurementVisible(id: string, visible: boolean) {
@@ -385,10 +387,14 @@ function updateMeasurementVisible(id: string, visible: boolean) {
 
 function removeMeasurement(id: string) {
   measurements.value = measurements.value.filter((m) => m.id !== id);
+  if (activeMeasurementId.value === id) {
+    activeMeasurementId.value = null;
+  }
 }
 
 function clearMeasurements() {
   measurements.value = [];
+  activeMeasurementId.value = null;
 }
 
 function addDimension(rec: DimensionRecord) {
@@ -773,6 +779,7 @@ function importJSON(raw: string) {
   activeObbAnnotationId.value = null;
   activeCloudAnnotationId.value = null;
   activeRectAnnotationId.value = null;
+  activeMeasurementId.value = null;
   activeDimensionId.value = null;
   pendingDimensionEditId.value = null;
   toolMode.value = 'none';
@@ -804,6 +811,7 @@ export function useToolStore() {
     activeObbAnnotationId,
     activeCloudAnnotationId,
     activeRectAnnotationId,
+    activeMeasurementId,
     activeDimensionId,
     pendingObbEditId,
     pendingTextAnnotationEditId,

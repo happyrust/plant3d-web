@@ -2,7 +2,7 @@
 import { computed } from "vue";
 
 import type { UseMbdPipeAnnotationThreeReturn } from "@/composables/useMbdPipeAnnotationThree";
-import type { MbdDimKind } from "@/api/mbdPipeApi";
+import type { MbdDimKind, MbdPipeViewMode } from "@/api/mbdPipeApi";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
 
 const props = defineProps<{
@@ -34,6 +34,14 @@ const dimTextModeModel = computed({
     get: () => props.vis.dimTextMode.value,
     set: (v) => {
         props.vis.dimTextMode.value = v === "auto" ? "auto" : "backend";
+    },
+});
+const mbdViewModeModel = computed({
+    get: () => props.vis.mbdViewMode.value,
+    set: (v) => {
+        props.vis.mbdViewMode.value = v === "inspection"
+            ? "inspection"
+            : "construction";
     },
 });
 const dimModeModel = computed({
@@ -176,6 +184,10 @@ const filteredDims = computed(() => {
 function setActive(id: string | null) {
     props.vis.highlightItem(id);
 }
+
+function modeLabel(mode: MbdPipeViewMode): string {
+    return mode === "inspection" ? "校核模式" : "施工模式";
+}
 </script>
 
 <template>
@@ -219,6 +231,35 @@ function setActive(id: string | null) {
                 >
                     关闭
                 </button>
+            </div>
+        </div>
+
+        <div class="rounded-md border border-border p-2 text-xs">
+            <div class="flex items-center justify-between gap-2">
+                <div>
+                    <div class="font-semibold">模式预设</div>
+                    <div class="text-muted-foreground">
+                        当前：{{ modeLabel(mbdViewModeModel) }}。切换模式只影响下次生成；点击重置可回到当前模式默认显示。
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <select
+                        data-testid="mbd-view-mode"
+                        v-model="mbdViewModeModel"
+                        class="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                    >
+                        <option value="construction">施工模式</option>
+                        <option value="inspection">校核模式</option>
+                    </select>
+                    <button
+                        data-testid="mbd-view-mode-reset"
+                        type="button"
+                        class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+                        @click="vis.resetToCurrentModeDefaults"
+                    >
+                        重置当前模式默认
+                    </button>
+                </div>
             </div>
         </div>
 

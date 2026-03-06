@@ -41,6 +41,13 @@ import { useDtxTools } from "@/composables/useDtxTools";
 import { usePtsetVisualizationThree } from "@/composables/usePtsetVisualizationThree";
 import { useMbdPipeAnnotationThree } from "@/composables/useMbdPipeAnnotationThree";
 import { useAnnotationThree } from "@/composables/useAnnotationThree";
+import {
+    createLatestOnlyGate,
+    ExternalAnnotationRegistry,
+    shouldClearMbdRequest,
+    type MbdPipeAnnotationRequestLike,
+} from "@/composables/mbd/mbdRequestSync";
+import { MeasurementAnnotationManager } from "@/composables/useMeasurementAnnotation";
 import { DimensionAnnotationManager } from "@/composables/useDimensionAnnotation";
 import { useToolStore, type DimensionKind } from "@/composables/useToolStore";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
@@ -461,7 +468,7 @@ const modelGenerationRef = shallowRef<ReturnType<
 > | null>(null);
 
 const cameraViewMode = ref<CameraViewMode>("cad_weak");
-const globalEdgeEnabled = ref(true);
+const globalEdgeEnabled = ref(false);
 const globalEdgeThresholdAngle = ref(20);
 
 let attachedToScene = false;
@@ -1735,7 +1742,7 @@ onMounted(async () => {
     demoPrimitiveCount = 1000;
     cadGridEnabled = true;
     cameraViewMode.value = "cad_weak";
-    globalEdgeEnabled.value = true;
+    globalEdgeEnabled.value = false;
     globalEdgeThresholdAngle.value = 20;
     try {
         // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
@@ -1867,9 +1874,10 @@ onMounted(async () => {
         renderer: dtxViewer.renderer,
         container: canvas,
         // 工程风格：低透明覆层 + 深灰细边
-        enableOutline: false,
-        highlightMode: "overlay",
+        enableOutline: true,
+        highlightMode: "both",
         overlayStyle: {
+            showEdges: false,
             fillColor: 0x94a3b8,
             fillOpacity: 0.22,
             edgeColor: 0x4b5563,
@@ -2311,6 +2319,24 @@ onMounted(async () => {
                 return;
             }
 
+            if (id.startsWith("meas_")) {
+                const measurementId = id.slice("meas_".length);
+
+                if (ev.type === "select") {
+                    store.activeMeasurementId.value = measurementId;
+                    return;
+                }
+
+                if (ev.type === "deselect") {
+                    if (store.activeMeasurementId.value === measurementId) {
+                        store.activeMeasurementId.value = null;
+                    }
+                    return;
+                }
+
+                return;
+            }
+
             if (!id.startsWith("dim_")) return;
 
             const dtxViewer2 = dtxViewerRef.value;
@@ -2602,6 +2628,56 @@ onMounted(async () => {
                 requestRender();
             }
         });
+    }
+
+    // 测量标注：同步到三维标注系统（SolveSpace 风格 3D 标注）
+    try {
+        const mgr = new MeasurementAnnotationManager(annotationSystem);
+        const syncSelectedMeasurementAnnotation = () => {
+            const activeId = store.activeMeasurementId.value;
+            if (activeId) {
+                annotationSystem.selectAnnotation(`meas_${activeId}`);
+                return;
+            }
+            if (annotationSystem.selectedId.value?.startsWith("meas_")) {
+                annotationSystem.selectAnnotation(null);
+            }
+        };
+        mgr.setUnit(unitSettings.displayUnit.value as any);
+        mgr.setPrecision(unitSettings.precision.value);
+        mgr.sync(store.measurements.value as any);
+        syncSelectedMeasurementAnnotation();
+
+        watch(
+            () => store.measurements.value,
+            (measurements) => {
+                mgr.sync(measurements as any);
+                syncSelectedMeasurementAnnotation();
+                requestRender();
+            },
+            { deep: true },
+        );
+
+        watch(
+            () => store.activeMeasurementId.value,
+            () => {
+                syncSelectedMeasurementAnnotation();
+                requestRender();
+            },
+        );
+
+        watch(
+            () => [unitSettings.displayUnit.value, unitSettings.precision.value] as const,
+            ([unit, precision]) => {
+                mgr.setUnit(unit as any);
+                mgr.setPrecision(precision);
+                mgr.sync(store.measurements.value as any);
+                syncSelectedMeasurementAnnotation();
+                requestRender();
+            },
+        );
+    } catch (e) {
+        console.warn("[ViewerPanel] 测量标注管理器初始化失败", e);
     }
 
     // 尺寸标注（与测量分离）：同步到三维标注系统（3D 文字 + 3D 线）
@@ -3183,7 +3259,9 @@ onMounted(async () => {
                 let batchId: string | null = null;
 
                 const resp = await getMbdPipeAnnotations(refnoKey, {
-                    // 默认走 parquet（后端 MbdPipeSource 默认值）
+                    mode: mbdPipeVis.mbdViewMode.value,
+                    // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
+                    source: "db",
                     debug: isDev,
                     dbno: dbno ?? undefined,
                     batch_id: batchId,
@@ -3193,12 +3271,12 @@ onMounted(async () => {
                     dim_min_length: 1.0,
                     weld_merge_threshold: 1.0,
                     include_dims: true,
-                    // 默认只请求端口尺寸，减少密集场景下的视觉噪声
-                    include_chain_dims: false,
-                    include_overall_dim: false,
-                    include_port_dims: true,
-                    include_welds: false,
-                    include_slopes: false,
+                    // 一期默认切到施工视图：链式/总长/焊口/坡度优先
+                    include_chain_dims: true,
+                    include_overall_dim: true,
+                    include_port_dims: false,
+                    include_welds: true,
+                    include_slopes: true,
                     include_bends: false,
                     bend_mode: "facecenter",
                 });

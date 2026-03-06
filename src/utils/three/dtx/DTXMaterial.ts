@@ -245,6 +245,10 @@ void main() {
   if (renderPass == 2 && isOpaque) {
     discard;
   }
+  // 透明对象：丢弃背面片元，避免内部三角边缘穿透可见
+  if (renderPass == 2 && !gl_FrontFacing) {
+    discard;
+  }
   if (vColor.a <= 0.001) {
     discard;
   }
@@ -358,7 +362,7 @@ export class DTXMaterial extends ShaderMaterial {
   customProgramCacheKey(): string {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
-    return 'DTXMaterial_v7';
+    return 'DTXMaterial_v8';
   }
 
   /**

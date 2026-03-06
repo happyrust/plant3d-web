@@ -8,6 +8,7 @@
 export type Vec3 = [number, number, number]
 
 export type MbdPipeSource = 'db' | 'cache'
+export type MbdPipeViewMode = 'construction' | 'inspection'
 
 export type BranchAttrsDto = {
   duty?: string | null
@@ -128,6 +129,8 @@ export type MbdPipeResponse = {
 }
 
 export type MbdPipeQueryParams = {
+  /** 语义模式：construction=施工表达（默认），inspection=几何校核 */
+  mode?: MbdPipeViewMode
   /** 数据源：db=SurrealDB（默认），cache=foyer cache */
   source?: MbdPipeSource
   /** 后端返回 debug_info（用于对比/定位） */

@@ -79,17 +79,6 @@ onMounted(() => {
     class="flex h-full w-full flex-col bg-white text-sm font-mono text-gray-900"
     @click="handleContainerClick"
   >
-    <!-- Header -->
-    <div class="flex flex-none items-center justify-end border-b border-gray-200 bg-gray-50 px-2 py-1 text-xs select-none">
-      <button
-        @click.stop="store.clearLogs()"
-        class="hover:bg-gray-200 text-gray-600 hover:text-gray-900 rounded px-2 py-0.5 transition-colors"
-        title="清空控制台"
-      >
-        清空
-      </button>
-    </div>
-
     <!-- Logs & Input Area -->
     <div ref="scrollContainer" class="flex-1 overflow-y-auto p-3 cursor-text">
       <div v-if="store.logs.value.length === 0" class="text-gray-500 italic mb-2">

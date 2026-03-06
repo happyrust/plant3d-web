@@ -87,7 +87,7 @@ export class DtxViewer {
     });
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.9;
+    this.renderer.toneMappingExposure = 1.3;
     this.renderer.setPixelRatio(Math.max(1, window.devicePixelRatio || 1));
 
     this.scene = new Scene();
@@ -149,7 +149,7 @@ export class DtxViewer {
   }
 
   private _setupDefaultLights(): void {
-    const ambient = new AmbientLight(0xffffff, 0.18);
+    const ambient = new AmbientLight(0xffffff, 0.4);
     ambient.name = "DtxAmbientLight";
     this.scene.add(ambient);
 
@@ -158,7 +158,7 @@ export class DtxViewer {
     dir0.name = "DtxDirectionalLight0";
     this.scene.add(dir0);
 
-    const dir1 = new DirectionalLight(0xffffff, 0.26);
+    const dir1 = new DirectionalLight(0xffffff, 0.55);
     dir1.position.set(-0.8, 0.2, -0.9);
     dir1.name = "DtxDirectionalLight1";
     this.scene.add(dir1);

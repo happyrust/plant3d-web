@@ -2,8 +2,10 @@
 import { computed, nextTick, ref, watch } from 'vue';
 
 import {
+  Box,
   ChevronDown,
   ChevronRight,
+  Circle,
   Crosshair,
   Download,
   Eye,
@@ -193,6 +195,14 @@ function handleQuery() {
         aabb[4] >= miny && aabb[1] <= maxy &&
         aabb[5] >= minz && aabb[2] <= maxz
       ) {
+        // 球体模式：检查 AABB 中心到查询中心的距离
+        if (rangeSettings.queryShape.value === 'sphere') {
+          const ecx = (aabb[0] + aabb[3]) / 2;
+          const ecy = (aabb[1] + aabb[4]) / 2;
+          const ecz = (aabb[2] + aabb[5]) / 2;
+          const dx = ecx - cx, dy = ecy - cy, dz = ecz - cz;
+          if (dx * dx + dy * dy + dz * dz > r * r) continue;
+        }
         const meta = metaByRefno[id];
         const specValue = meta?.specValue ?? SiteSpecValue.Unknown;
 
@@ -241,6 +251,7 @@ function handleQuery() {
     queryNearbyByCenter(cx, cy, cz, r, {
       nouns: nounsRaw || undefined,
       max_results: 5000,
+      shape: rangeSettings.queryShape.value,
     }).then((resp) => {
       if (!resp.success || !resp.results) return;
       serverTruncated.value = resp.truncated ?? false;
@@ -461,6 +472,39 @@ function close() {
             max="500"
             class="w-full"
           />
+        </div>
+
+        <!-- query shape -->
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">查询形状</label>
+          <div class="flex gap-2">
+            <label
+              class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border px-2 py-1 text-xs transition-colors"
+              :class="rangeSettings.queryShape.value === 'cube' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border hover:bg-muted'"
+            >
+              <input
+                v-model="rangeSettings.queryShape.value"
+                type="radio"
+                value="cube"
+                class="sr-only"
+              />
+              <Box class="h-3.5 w-3.5" />
+              <span>立方体</span>
+            </label>
+            <label
+              class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border px-2 py-1 text-xs transition-colors"
+              :class="rangeSettings.queryShape.value === 'sphere' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border hover:bg-muted'"
+            >
+              <input
+                v-model="rangeSettings.queryShape.value"
+                type="radio"
+                value="sphere"
+                class="sr-only"
+              />
+              <Circle class="h-3.5 w-3.5" />
+              <span>球体</span>
+            </label>
+          </div>
         </div>
 
         <!-- spec filter -->

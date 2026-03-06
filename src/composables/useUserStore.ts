@@ -222,6 +222,7 @@ function savePersisted(state: Partial<UserPersistedState> & { version: 3 }): voi
 
 // 全局状态
 const persistedState = loadPersisted();
+USE_BACKEND.value = persistedState.useBackend;
 const currentUserId = ref<string | null>(persistedState.currentUserId);
 const reviewTasks = ref<ReviewTask[]>(persistedState.reviewTasks);
 const users = ref<User[]>(mockUsers);
@@ -457,13 +458,12 @@ async function createReviewTask(data: {
         reviewTasks.value = [...reviewTasks.value, response.task];
         console.log('[useUserStore] Created review task:', response.task.title);
         return response.task;
-      } else {
-        // 后端返回失败，回退到本地模式
-        console.warn('[useUserStore] Backend failed, falling back to local mode:', response.error_message);
       }
+      throw new Error(response.error_message || '创建提资单失败');
     } catch (e) {
-      // 后端调用异常，回退到本地模式
-      console.warn('[useUserStore] Backend error, falling back to local mode:', e);
+      const message = e instanceof Error ? e.message : '创建提资单失败';
+      error.value = message;
+      throw e instanceof Error ? e : new Error(message);
     } finally {
       loading.value = false;
     }

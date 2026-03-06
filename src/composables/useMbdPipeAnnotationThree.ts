@@ -32,6 +32,7 @@ import type {
   MbdWeldDto,
   MbdBendDto,
   MbdPipeSegmentDto,
+  MbdPipeViewMode,
   Vec3 as ApiVec3,
 } from "@/api/mbdPipeApi";
 
@@ -65,6 +66,8 @@ import { formatLengthMeters } from "@/utils/unitFormat";
 export type UseMbdPipeAnnotationThreeReturn = {
   /** MBD 面板当前页签（仅 UI 状态） */
   uiTab: Ref<MbdPipeUiTab>;
+  /** 语义模式：construction=施工表达；inspection=几何校核 */
+  mbdViewMode: Ref<MbdPipeViewMode>;
 
   /** 尺寸文字来源：backend=用后端 text；auto=按当前单位/精度自动计算 */
   dimTextMode: Ref<"backend" | "auto">;
@@ -116,6 +119,8 @@ export type UseMbdPipeAnnotationThreeReturn = {
     canvas: HTMLCanvasElement,
   ) => CSS2DRenderer;
   highlightItem: (id: string | null) => void;
+  applyModeDefaults: (mode: MbdPipeViewMode) => void;
+  resetToCurrentModeDefaults: () => void;
   /** 更新分辨率（resize 时调用：LineMaterial） */
   setResolution: (width: number, height: number) => void;
   /** 释放资源（Viewer 卸载时调用） */
@@ -224,6 +229,7 @@ export function useMbdPipeAnnotationThree(
 
   // UI 状态（MbdPipePanel 使用）
   const uiTab = ref<MbdPipeUiTab>("dims");
+  const mbdViewMode = ref<MbdPipeViewMode>("construction");
 
   // MBD 尺寸显示配置
   const dimTextMode = ref<"backend" | "auto">("backend");
@@ -241,11 +247,11 @@ export function useMbdPipeAnnotationThree(
   const isVisible = ref(false);
   const showDims = ref(true);
   const showDimSegment = ref(false);
-  const showDimChain = ref(false);
-  const showDimOverall = ref(false);
-  const showDimPort = ref(true);
-  const showWelds = ref(false);
-  const showSlopes = ref(false);
+  const showDimChain = ref(true);
+  const showDimOverall = ref(true);
+  const showDimPort = ref(false);
+  const showWelds = ref(true);
+  const showSlopes = ref(true);
   const showBends = ref(false);
   const showSegments = ref(false);
   const showLabels = ref(true);
@@ -285,6 +291,37 @@ export function useMbdPipeAnnotationThree(
   const dimOverrides = new Map<string, MbdDimOverride>();
   const dimTextById = shallowRef<Map<string, string>>(new Map());
   const asRaw = <T,>(value: T): T => toRaw(value) as T;
+
+  function applyModeDefaults(mode: MbdPipeViewMode): void {
+    mbdViewMode.value = mode;
+    showDims.value = true;
+    if (mode === "inspection") {
+      dimMode.value = "rebarviz";
+      showDimSegment.value = false;
+      showDimChain.value = false;
+      showDimOverall.value = false;
+      showDimPort.value = true;
+      showWelds.value = false;
+      showSlopes.value = false;
+      showBends.value = false;
+      showSegments.value = false;
+      return;
+    }
+
+    dimMode.value = "rebarviz";
+    showDimSegment.value = false;
+    showDimChain.value = true;
+    showDimOverall.value = true;
+    showDimPort.value = false;
+    showWelds.value = true;
+    showSlopes.value = true;
+    showBends.value = false;
+    showSegments.value = false;
+  }
+
+  function resetToCurrentModeDefaults(): void {
+    applyModeDefaults(mbdViewMode.value);
+  }
 
   function getRuntimeModeConfig(): MbdDimensionModeConfig {
     const base = getMbdDimensionModeConfig(dimMode.value);
@@ -431,12 +468,14 @@ export function useMbdPipeAnnotationThree(
       const ann = asRaw(annotation);
       const kind = ((ann.userData as any)?.mbdDimKind ??
         "segment") as MbdDimKind;
+      const declutterHidden = !!(ann.userData as any)?.mbdDeclutterHidden;
       const kindVisible =
         (kind === "segment" && showDimSegment.value) ||
         (kind === "chain" && showDimChain.value) ||
         (kind === "overall" && showDimOverall.value) ||
         (kind === "port" && showDimPort.value);
-      ann.visible = isVisible.value && showDims.value && kindVisible;
+      ann.visible =
+        isVisible.value && showDims.value && kindVisible && !declutterHidden;
     }
 
     // 焊缝标注可见性
@@ -619,6 +658,90 @@ export function useMbdPipeAnnotationThree(
       group.add(rawDim);
       dimAnnotations.set(d.id, rawDim);
     }
+    applyPortDimLabelDeclutter();
+  }
+
+  function applyPortDimLabelDeclutter(): void {
+    const portAnnotations: Array<[string, LinearDimension3D]> = [];
+    for (const [dimId, dim] of dimAnnotations.entries()) {
+      const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? "segment") as MbdDimKind;
+      if (kind === "port") portAnnotations.push([dimId, asRaw(dim)]);
+    }
+    if (portAnnotations.length <= 1) return;
+
+    // 第一步：近邻端口尺寸稀疏化（只隐藏，保留数据与交互 id）
+    // 说明：单位为后端原始坐标（通常 mm），阈值按当前样本调优，目标是降低端口密集区域拥挤。
+    const minAnchorGap = 200;
+    const keptAnchors: Vector3[] = [];
+    const sortedByLengthDesc = portAnnotations
+      .slice()
+      .sort(([, a], [, b]) => b.getDistance() - a.getDistance());
+
+    for (const [_, dim] of sortedByLengthDesc) {
+      const p = dim.getParams();
+      const anchor = p.start.clone().add(p.end).multiplyScalar(0.5);
+      const tooClose = keptAnchors.some((k) => k.distanceTo(anchor) < minAnchorGap);
+      (dim.userData as any).mbdDeclutterHidden = tooClose;
+      if (!tooClose) keptAnchors.push(anchor);
+    }
+
+    const baseLabelT = clamp01(dimLabelT.value, 0.5);
+    const minGap = 160;
+    const placed: Vector3[] = [];
+    let rank = 0;
+
+    for (const [dimId, dim] of portAnnotations) {
+      if ((dim.userData as any).mbdDeclutterHidden) continue;
+      const ov = dimOverrides.get(dimId);
+      const hasManualLabel =
+        (ov?.labelOffsetWorld != null) || ov?.labelT !== undefined;
+      if (hasManualLabel) {
+        placed.push(dim.getLabelWorldPos());
+        rank += 1;
+        continue;
+      }
+
+      const p = dim.getParams();
+      const segDir = p.end.clone().sub(p.start);
+      if (segDir.lengthSq() < 1e-9) {
+        placed.push(dim.getLabelWorldPos());
+        rank += 1;
+        continue;
+      }
+      segDir.normalize();
+
+      const offDir = p.direction?.clone() ?? new Vector3(-segDir.y, segDir.x, 0);
+      if (offDir.lengthSq() < 1e-9) offDir.set(1, 0, 0);
+      offDir.normalize();
+
+      const tOffset = ((rank % 5) - 2) * 0.12;
+      const nextLabelT = Math.max(0.12, Math.min(0.88, baseLabelT + tOffset));
+      const segmentLength = p.start.distanceTo(p.end);
+      const step = Math.max(50, Math.min(220, segmentLength * 0.4));
+      const baseLabelPos = p.start.clone().lerp(p.end, nextLabelT);
+      const nextLabelOffset = new Vector3();
+
+      let placedPos = baseLabelPos.clone();
+      for (let i = 0; i < 5; i += 1) {
+        const candidate = baseLabelPos.clone().add(nextLabelOffset);
+        const overlap = placed.some((prev) => prev.distanceTo(candidate) < minGap);
+        placedPos = candidate;
+        if (!overlap) break;
+
+        const sign = (rank + i) % 2 === 0 ? 1 : -1;
+        nextLabelOffset
+          .addScaledVector(segDir, sign * step * 0.45)
+          .addScaledVector(offDir, sign * step * 0.25);
+      }
+
+      dim.setParams({
+        labelT: nextLabelT,
+        labelOffsetWorld:
+          nextLabelOffset.lengthSq() > 1e-9 ? nextLabelOffset : null,
+      });
+      placed.push(placedPos);
+      rank += 1;
+    }
   }
 
   function rebuildDimsByCurrentData(): void {
@@ -647,6 +770,8 @@ export function useMbdPipeAnnotationThree(
 
   function renderWelds(welds: MbdWeldDto[]): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
+    const weldMaterial =
+      mbdViewMode.value === "construction" ? materials.black : materials.orange;
     for (const w of welds) {
       const position = new Vector3(w.position[0], w.position[1], w.position[2]);
 
@@ -664,7 +789,7 @@ export function useMbdPipeAnnotationThree(
       (weld.userData as any).mbdWeldId = w.id;
       weld.setLabelRenderStyle(labelRenderStyle);
 
-      weld.setMaterialSet(materials.orange);
+      weld.setMaterialSet(weldMaterial);
       const rawWeld = markRaw(weld);
       group.add(rawWeld);
       weldAnnotations.set(w.id, rawWeld);
@@ -673,6 +798,8 @@ export function useMbdPipeAnnotationThree(
 
   function renderSlopes(slopes: MbdSlopeDto[]): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
+    const slopeMaterial =
+      mbdViewMode.value === "construction" ? materials.black : materials.blue;
     for (const s of slopes) {
       const start = new Vector3(s.start[0], s.start[1], s.start[2]);
       const end = new Vector3(s.end[0], s.end[1], s.end[2]);
@@ -691,7 +818,7 @@ export function useMbdPipeAnnotationThree(
       (slope.userData as any).mbdSlopeId = s.id;
       slope.setLabelRenderStyle(labelRenderStyle);
 
-      slope.setMaterialSet(materials.blue);
+      slope.setMaterialSet(slopeMaterial);
       const rawSlope = markRaw(slope);
       group.add(rawSlope);
       slopeAnnotations.set(s.id, rawSlope);
@@ -1121,6 +1248,7 @@ export function useMbdPipeAnnotationThree(
           });
           rawDim.setLineWidthPx(modeConfig.lineWidthPx);
         }
+        applyPortDimLabelDeclutter();
       } catch {
         // ignore
       }
@@ -1154,6 +1282,7 @@ export function useMbdPipeAnnotationThree(
 
   return {
     uiTab,
+    mbdViewMode,
     dimTextMode,
     dimOffsetScale,
     dimLabelT,
@@ -1183,6 +1312,8 @@ export function useMbdPipeAnnotationThree(
     renderLabels,
     initCSS2DRenderer,
     highlightItem,
+    applyModeDefaults,
+    resetToCurrentModeDefaults,
     setResolution,
     dispose,
     updateDimOverride,

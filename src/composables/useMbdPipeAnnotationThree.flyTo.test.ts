@@ -11,7 +11,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vi.restoreAllMocks();
   });
 
-  it("默认仅显示端口尺寸标注", () => {
+  it("默认显示施工视图相关标注", () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -27,6 +27,37 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
+    expect(vis.mbdViewMode.value).toBe("construction");
+    expect(vis.dimMode.value).toBe("rebarviz");
+    expect(vis.showDimSegment.value).toBe(false);
+    expect(vis.showDimChain.value).toBe(true);
+    expect(vis.showDimOverall.value).toBe(true);
+    expect(vis.showDimPort.value).toBe(false);
+    expect(vis.showWelds.value).toBe(true);
+    expect(vis.showSlopes.value).toBe(true);
+    expect(vis.showBends.value).toBe(false);
+    expect(vis.showSegments.value).toBe(false);
+  });
+
+  it("applyModeDefaults 应切换 construction 与 inspection 的默认显示映射", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults("inspection");
+    expect(vis.mbdViewMode.value).toBe("inspection");
+    expect(vis.dimMode.value).toBe("rebarviz");
     expect(vis.showDimSegment.value).toBe(false);
     expect(vis.showDimChain.value).toBe(false);
     expect(vis.showDimOverall.value).toBe(false);
@@ -35,6 +66,168 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(vis.showSlopes.value).toBe(false);
     expect(vis.showBends.value).toBe(false);
     expect(vis.showSegments.value).toBe(false);
+
+    vis.applyModeDefaults("construction");
+    expect(vis.mbdViewMode.value).toBe("construction");
+    expect(vis.dimMode.value).toBe("rebarviz");
+    expect(vis.showDimChain.value).toBe(true);
+    expect(vis.showDimOverall.value).toBe(true);
+    expect(vis.showDimPort.value).toBe(false);
+    expect(vis.showWelds.value).toBe(true);
+    expect(vis.showSlopes.value).toBe(true);
+  });
+
+  it("resetToCurrentModeDefaults 应回到当前模式默认态", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.mbdViewMode.value = "inspection";
+    vis.showDimPort.value = false;
+    vis.showWelds.value = true;
+    vis.dimMode.value = "classic";
+
+    vis.resetToCurrentModeDefaults();
+
+    expect(vis.mbdViewMode.value).toBe("inspection");
+    expect(vis.dimMode.value).toBe("rebarviz");
+    expect(vis.showDimPort.value).toBe(true);
+    expect(vis.showWelds.value).toBe(false);
+    expect(vis.showSlopes.value).toBe(false);
+  });
+
+  it("密集端口尺寸应自动错位排布标签", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [
+        {
+          id: "port-1",
+          kind: "port",
+          start: [0, 0, 0],
+          end: [220, 0, 0],
+          length: 220,
+          text: "220",
+        },
+        {
+          id: "port-2",
+          kind: "port",
+          start: [260, 20, 0],
+          end: [480, 20, 0],
+          length: 220,
+          text: "220",
+        },
+        {
+          id: "port-3",
+          kind: "port",
+          start: [520, 40, 0],
+          end: [740, 40, 0],
+          length: 220,
+          text: "220",
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 3,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const p1 = vis.getDimAnnotations().get("port-1")?.getParams();
+    const p2 = vis.getDimAnnotations().get("port-2")?.getParams();
+    const p3 = vis.getDimAnnotations().get("port-3")?.getParams();
+
+    expect(p1).toBeTruthy();
+    expect(p2).toBeTruthy();
+    expect(p3).toBeTruthy();
+    expect(p1?.labelT).not.toBeCloseTo(p2?.labelT ?? 0.5, 6);
+    expect(p2?.labelT).not.toBeCloseTo(p3?.labelT ?? 0.5, 6);
+  });
+
+  it("密集端口尺寸应自动稀疏显示", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+    vis.showDimPort.value = true;
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [
+        { id: "p1", kind: "port", start: [0, 0, 0], end: [210, 0, 0], length: 210, text: "210" },
+        { id: "p2", kind: "port", start: [15, 10, 0], end: [225, 10, 0], length: 210, text: "210" },
+        { id: "p3", kind: "port", start: [30, 20, 0], end: [240, 20, 0], length: 210, text: "210" },
+        { id: "p4", kind: "port", start: [45, 30, 0], end: [255, 30, 0], length: 210, text: "210" },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 4,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const visibleCount = [...vis.getDimAnnotations().values()].filter(
+      (d) => d.visible,
+    ).length;
+    expect(visibleCount).toBeLessThan(4);
+    expect(visibleCount).toBeGreaterThan(0);
   });
 
   it("仅有 bends 数据时也应触发 flyTo", () => {
@@ -105,6 +298,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ref<HTMLElement | null>(null),
       { getGlobalModelMatrix: () => new Matrix4() },
     );
+    vis.dimMode.value = "rebarviz";
+    await nextTick();
+    await nextTick();
 
     const data: MbdPipeData = {
       input_refno: "24381_145018",
@@ -302,6 +498,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ref<HTMLElement | null>(null),
       { getGlobalModelMatrix: () => new Matrix4() },
     );
+    vis.dimMode.value = "rebarviz";
+    await nextTick();
+    await nextTick();
 
     const data: MbdPipeData = {
       input_refno: "24381_145018",

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, type Ref } from 'vue';
+import { computed, watch, type Ref } from 'vue';
 
 import { useToolStore } from '@/composables/useToolStore';
+import { useViewerContext } from '@/composables/useViewerContext';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -15,6 +16,7 @@ const props = defineProps<{
 }>();
 
 const store = useToolStore();
+const ctx = useViewerContext();
 
 const sorted = computed(() => {
   return [...store.measurements.value].sort((a, b) => b.createdAt - a.createdAt);
@@ -35,6 +37,40 @@ function remove(id: string) {
 function fly(id: string) {
   props.tools.flyToMeasurement(id);
 }
+
+function syncSelectedMeasurement(id: string | null) {
+  const annotationSystem = ctx.annotationSystem.value;
+  if (!annotationSystem) return;
+
+  try {
+    if (id) {
+      annotationSystem.selectAnnotation(`meas_${id}`);
+      return;
+    }
+
+    if (annotationSystem.selectedId.value?.startsWith('meas_')) {
+      annotationSystem.selectAnnotation(null);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function selectMeasurement(id: string) {
+  store.activeMeasurementId.value = id;
+}
+
+function clearMeasurements() {
+  store.clearMeasurements();
+}
+
+watch(
+  () => store.activeMeasurementId.value,
+  (id) => {
+    syncSelectedMeasurement(id);
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
@@ -82,7 +118,19 @@ function fly(id: string) {
       </div>
 
       <div v-else class="mt-2 flex flex-col gap-2">
-        <div v-for="m in sorted" :key="m.id" class="rounded-md border border-border p-2">
+        <div
+          v-for="m in sorted"
+          :key="m.id"
+          :data-testid="`measurement-row-${m.id}`"
+          :data-selected="store.activeMeasurementId.value === m.id ? 'true' : 'false'"
+          class="rounded-md border p-2 transition-colors"
+          :class="store.activeMeasurementId.value === m.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'"
+          role="button"
+          tabindex="0"
+          @click="selectMeasurement(m.id)"
+          @keydown.enter.prevent="selectMeasurement(m.id)"
+          @keydown.space.prevent="selectMeasurement(m.id)"
+        >
           <div class="flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm">
@@ -95,24 +143,35 @@ function fly(id: string) {
             <div class="flex shrink-0 items-center gap-2">
               <button type="button"
                 class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-                @click="fly(m.id)">
+                @click.stop="fly(m.id)">
                 定位
               </button>
 
               <button type="button"
                 class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-                @click="toggleVisible(m.id, m.visible)">
+                @click.stop="toggleVisible(m.id, m.visible)">
                 {{ m.visible ? '隐藏' : '显示' }}
               </button>
 
               <button type="button"
                 class="h-8 rounded-md border border-input bg-background px-2 text-xs text-destructive hover:bg-muted"
-                @click="remove(m.id)">
+                @click.stop="remove(m.id)">
                 删除
               </button>
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="mt-3 flex justify-end">
+        <button
+          type="button"
+          data-testid="measurement-clear-all"
+          class="h-9 rounded-md border border-input bg-background px-3 text-sm text-destructive hover:bg-muted"
+          @click="clearMeasurements()"
+        >
+          清空测量
+        </button>
       </div>
     </div>
   </div>

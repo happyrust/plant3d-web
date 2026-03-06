@@ -9,6 +9,7 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
+import { refreshReviewerTasksSafely } from './reviewerTaskListActions';
 
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
@@ -52,11 +53,13 @@ const filteredTasks = computed(() => {
 
 const currentUser = computed(() => userStore.currentUser.value);
 
-function refreshTasks() {
-  isLoading.value = true;
-  setTimeout(() => {
-    isLoading.value = false;
-  }, 500);
+async function refreshTasks() {
+  await refreshReviewerTasksSafely({
+    loadReviewTasks: userStore.loadReviewTasks,
+    setLoading: (loading) => {
+      isLoading.value = loading;
+    },
+  });
 }
 
 function clearFilters() {

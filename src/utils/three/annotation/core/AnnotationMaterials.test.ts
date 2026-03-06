@@ -25,13 +25,15 @@ describe('AnnotationMaterials', () => {
 
     it('should return all color sets via all getter', () => {
       const allSets = materials.all
-      expect(allSets).toHaveLength(8)
+      expect(allSets).toHaveLength(10)
       expect(allSets).toContain(materials.green)
       expect(allSets).toContain(materials.orange)
       expect(allSets).toContain(materials.blue)
       expect(allSets).toContain(materials.white)
       expect(allSets).toContain(materials.yellow)
+      expect(allSets).toContain(materials.black)
       expect(allSets).toContain(materials.ssConstraintMagenta)
+      expect(allSets).toContain(materials.ssDimensionDefault)
       expect(allSets).toContain(materials.ssHovered)
       expect(allSets).toContain(materials.ssSelected)
     })

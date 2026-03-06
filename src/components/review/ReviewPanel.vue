@@ -19,6 +19,11 @@ import {
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 import {
+  canFinalizeAtCurrentNode,
+  confirmCurrentDataSafely,
+  finalizeTaskDecisionSafely,
+} from './reviewPanelActions';
+import {
   reviewGetAuxData,
   reviewGetCollisionData,
   reviewSyncExport,
@@ -75,7 +80,32 @@ const isFilteringByTask = ref(false);
 // 审核操作相关
 const showRejectDialog = ref(false);
 const rejectComment = ref('');
+const decisionActionLoading = ref(false);
+const decisionActionError = ref<string | null>(null);
 
+// 工作流对话框
+const showSubmitDialog = ref(false);
+const showReturnDialog = ref(false);
+const workflowActionLoading = ref(false);
+
+// 工作流节点顺序
+const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
+
+const nextWorkflowNode = computed<WorkflowNode | null>(() => {
+  const current = currentTask.value?.currentNode ?? 'sj';
+  const idx = WORKFLOW_NODE_ORDER.indexOf(current);
+  if (idx < 0) return 'jd';
+  return WORKFLOW_NODE_ORDER[idx + 1] ?? null;
+});
+
+const canSubmitToNextNode = computed(() => !!nextWorkflowNode.value);
+const canReturnToPrevNode = computed(() => {
+  const current = currentTask.value?.currentNode ?? 'sj';
+  return WORKFLOW_NODE_ORDER.indexOf(current) > 0;
+});
+const canFinalizeCurrentTask = computed(() =>
+  canFinalizeAtCurrentNode(currentTask.value?.currentNode)
+);
 // ============ 同步（后端） ============
 
 const syncExporting = ref(false);
@@ -325,36 +355,48 @@ watch(currentTask, (newTask) => {
 });
 
 // 审核操作函数
-function handleApprove() {
-  if (!currentTask.value) return;
+async function handleApprove() {
+  if (!currentTask.value || decisionActionLoading.value) return;
 
-  const node = currentTask.value.currentNode || 'sj';
-  if (node === 'jd') {
-    // 校核通过 -> 进入审核节点
-    userStore.submitTaskToNextNode(currentTask.value.id, '校核通过');
-    console.log('任务已提交至审核节点');
-    return;
+  decisionActionLoading.value = true;
+  decisionActionError.value = null;
+  try {
+    await finalizeTaskDecisionSafely({
+      updateTaskStatus: userStore.updateTaskStatus,
+      clearCurrentTask: reviewStore.clearCurrentTask,
+      taskId: currentTask.value.id,
+      status: 'approved',
+      comment: '审核通过',
+    });
+    console.log('任务已通过审核');
+  } catch (e) {
+    decisionActionError.value = e instanceof Error ? e.message : '审核通过失败';
+  } finally {
+    decisionActionLoading.value = false;
   }
-
-  // 审核通过 -> 流程完成
-  userStore.updateTaskStatus(currentTask.value.id, 'approved', '审核通过');
-  reviewStore.clearCurrentTask();
-  console.log('任务已通过审核');
 }
 
-function handleReject() {
-  if (!currentTask.value) return;
+async function handleReject() {
+  if (!currentTask.value || decisionActionLoading.value) return;
 
-  const reason = rejectComment.value.trim();
-  if (!reason) return;
-
-  // 统一规则：驳回一律回发起设计人（sj）
-  userStore.returnTaskToNode(currentTask.value.id, 'sj', reason);
-  reviewStore.clearCurrentTask();
-
-  showRejectDialog.value = false;
-  rejectComment.value = '';
-  console.log('任务已驳回至设计节点');
+  decisionActionLoading.value = true;
+  decisionActionError.value = null;
+  try {
+    await finalizeTaskDecisionSafely({
+      updateTaskStatus: userStore.updateTaskStatus,
+      clearCurrentTask: reviewStore.clearCurrentTask,
+      taskId: currentTask.value.id,
+      status: 'rejected',
+      comment: rejectComment.value.trim(),
+    });
+    showRejectDialog.value = false;
+    rejectComment.value = '';
+    console.log('任务已驳回');
+  } catch (e) {
+    decisionActionError.value = e instanceof Error ? e.message : '驳回失败';
+  } finally {
+    decisionActionLoading.value = false;
+  }
 }
 
 const pendingAnnotationCount = computed(() => {
@@ -371,22 +413,39 @@ const pendingMeasurementCount = computed(() => toolStore.measurementCount.value)
 const hasPendingData = computed(() => {
   return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
 });
+const confirmSaving = ref(false);
+const confirmError = ref<string | null>(null);
 
-function confirmCurrentData() {
-  if (!hasPendingData.value) return;
+async function confirmCurrentData() {
+  if (confirmSaving.value) return;
 
-  reviewStore.addConfirmedRecord({
-    type: 'batch',
-    annotations: [...toolStore.annotations.value],
-    cloudAnnotations: [...toolStore.cloudAnnotations.value],
-    rectAnnotations: [...toolStore.rectAnnotations.value],
-    obbAnnotations: [...toolStore.obbAnnotations.value],
-    measurements: [...toolStore.measurements.value],
-    note: confirmNote.value.trim(),
-  });
-
-  toolStore.clearAll();
-  confirmNote.value = '';
+  confirmSaving.value = true;
+  confirmError.value = null;
+  try {
+    await confirmCurrentDataSafely({
+      hasPendingData: hasPendingData.value,
+      payload: {
+        type: 'batch' as const,
+        annotations: [...toolStore.annotations.value],
+        cloudAnnotations: [...toolStore.cloudAnnotations.value],
+        rectAnnotations: [...toolStore.rectAnnotations.value],
+        obbAnnotations: [...toolStore.obbAnnotations.value],
+        measurements: [...toolStore.measurements.value],
+        note: confirmNote.value.trim(),
+      },
+      addConfirmedRecord: reviewStore.addConfirmedRecord,
+      clearAll: () => {
+        toolStore.clearAll();
+      },
+      resetNote: () => {
+        confirmNote.value = '';
+      },
+    });
+  } catch (e) {
+    confirmError.value = e instanceof Error ? e.message : '确认当前数据失败';
+  } finally {
+    confirmSaving.value = false;
+  }
 }
 
 function exportData() {
@@ -532,23 +591,31 @@ onUnmounted(() => {
           </button>
         </div>
         <!-- 审核操作按钮 -->
-        <div class="flex gap-2 mt-3 pt-3 border-t">
+        <div v-if="canFinalizeCurrentTask" class="flex gap-2 mt-3 pt-3 border-t">
           <button
             type="button"
-            class="flex-1 h-8 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center gap-1"
+            class="flex-1 h-8 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center gap-1 disabled:opacity-50"
+            :disabled="decisionActionLoading"
             @click="handleApprove"
           >
             <CheckCircle class="h-3 w-3" />
-            通过
+            {{ decisionActionLoading ? '处理中...' : '通过' }}
           </button>
           <button
             type="button"
-            class="flex-1 h-8 text-xs bg-red-500 text-white rounded hover:bg-red-600 flex items-center justify-center gap-1"
+            class="flex-1 h-8 text-xs bg-red-500 text-white rounded hover:bg-red-600 flex items-center justify-center gap-1 disabled:opacity-50"
+            :disabled="decisionActionLoading"
             @click="showRejectDialog = true"
           >
             <XCircle class="h-3 w-3" />
             驳回
           </button>
+        </div>
+        <div v-else class="mt-3 border-t pt-3 text-xs text-muted-foreground">
+          当前节点仅支持“提交到下一节点”或“驳回到指定节点”。
+        </div>
+        <div v-if="decisionActionError" class="mt-2 text-xs text-red-600">
+          {{ decisionActionError }}
         </div>
       </div>
     </div>
@@ -629,11 +696,12 @@ onUnmounted(() => {
 
       <button type="button"
         class="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        :disabled="!hasPendingData"
+        :disabled="!hasPendingData || confirmSaving"
         @click="confirmCurrentData">
         <CheckCircle class="h-4 w-4" />
-        确认当前数据
+        {{ confirmSaving ? '保存中...' : '确认当前数据' }}
       </button>
+      <div v-if="confirmError" class="mt-2 text-xs text-red-600">{{ confirmError }}</div>
     </div>
 
     <!-- 附件列表 -->

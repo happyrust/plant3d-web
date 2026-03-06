@@ -70,6 +70,8 @@ export type SpatialQueryParams = {
   nouns?: string;
   /** 是否包含自身（mode=refno 时有效，默认 true） */
   include_self?: boolean;
+  /** 查询形状：cube（立方体，默认）| sphere（球体） */
+  shape?: 'cube' | 'sphere';
 };
 
 export type SpatialStatsResult = {
@@ -106,6 +108,7 @@ export async function querySpatialIndex(params: SpatialQueryParams): Promise<Spa
   if (params.max_results !== undefined) sp.set('max_results', String(params.max_results));
   if (params.nouns) sp.set('nouns', params.nouns);
   if (params.include_self !== undefined) sp.set('include_self', String(params.include_self));
+  if (params.shape) sp.set('shape', params.shape);
 
   const query = sp.toString();
   return await fetchJson<SpatialQueryResult>(`/api/sqlite-spatial/query${query ? '?' + query : ''}`);
@@ -132,7 +135,7 @@ export async function queryNearbyByCenter(
   cy: number,
   cz: number,
   radius: number,
-  options?: { nouns?: string; max_results?: number },
+  options?: { nouns?: string; max_results?: number; shape?: 'cube' | 'sphere' },
 ): Promise<SpatialQueryResult> {
   return querySpatialIndex({
     mode: 'bbox',
@@ -144,5 +147,6 @@ export async function queryNearbyByCenter(
     maxz: cz + radius,
     max_results: options?.max_results,
     nouns: options?.nouns,
+    shape: options?.shape,
   });
 }

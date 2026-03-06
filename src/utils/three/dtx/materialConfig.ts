@@ -12,6 +12,7 @@ export type MaterialConfigEntry = {
 export type ThemeConfig = {
   name?: string
   ownerOverrides?: Record<string, MaterialConfigEntry>
+  ownerSpecOverrides?: Record<string, Record<string, MaterialConfigEntry>>
 }
 
 export type ModelDisplayConfig = {
@@ -103,6 +104,27 @@ function normalizeMaterialMap(
   return out
 }
 
+function normalizeOwnerSpecOverrides(
+  map?: Record<string, Record<string, MaterialConfigEntry>>
+): Record<string, Record<string, MaterialConfigEntry>> {
+  const out: Record<string, Record<string, MaterialConfigEntry>> = {}
+  if (!map) return out
+  for (const [ownerKey, specMap] of Object.entries(map)) {
+    const owner = normalizeNounKey(ownerKey)
+    if (!owner) continue
+    const normalizedSpecMap: Record<string, MaterialConfigEntry> = {}
+    for (const [specKey, entry] of Object.entries(specMap || {})) {
+      const spec = normalizeNounKey(specKey)
+      if (!spec) continue
+      normalizedSpecMap[spec] = { ...(entry || {}) }
+    }
+    if (Object.keys(normalizedSpecMap).length > 0) {
+      out[owner] = normalizedSpecMap
+    }
+  }
+  return out
+}
+
 function loadLocalConfig(): {
   nounConfigs?: Record<string, MaterialConfigEntry>
   instanceConfigs?: Record<string, MaterialConfigEntry>
@@ -149,10 +171,25 @@ function mergeThemes(
   if (!fileThemes && !localThemes) return undefined
   const merged: Record<string, ThemeConfig> = {}
   for (const [key, value] of Object.entries(fileThemes || {})) {
-    merged[key] = { ...value, ownerOverrides: normalizeMaterialMap(value.ownerOverrides) }
+    merged[key] = {
+      ...value,
+      ownerOverrides: normalizeMaterialMap(value.ownerOverrides),
+      ownerSpecOverrides: normalizeOwnerSpecOverrides(value.ownerSpecOverrides),
+    }
   }
   for (const [key, localTheme] of Object.entries(localThemes || {})) {
     const base = merged[key] || {}
+    const baseOwnerSpecOverrides = normalizeOwnerSpecOverrides(base.ownerSpecOverrides)
+    const localOwnerSpecOverrides = normalizeOwnerSpecOverrides(localTheme.ownerSpecOverrides)
+    const mergedOwnerSpecOverrides: Record<string, Record<string, MaterialConfigEntry>> = {
+      ...baseOwnerSpecOverrides,
+    }
+    for (const [ownerKey, specMap] of Object.entries(localOwnerSpecOverrides)) {
+      mergedOwnerSpecOverrides[ownerKey] = {
+        ...(baseOwnerSpecOverrides[ownerKey] || {}),
+        ...specMap,
+      }
+    }
     merged[key] = {
       ...base,
       ...localTheme,
@@ -160,6 +197,7 @@ function mergeThemes(
         ...(base.ownerOverrides || {}),
         ...normalizeMaterialMap(localTheme.ownerOverrides),
       },
+      ownerSpecOverrides: mergedOwnerSpecOverrides,
     }
   }
   return Object.keys(merged).length > 0 ? merged : undefined
@@ -321,16 +359,26 @@ export function resolveMaterialForInstance(
 
 import type { DisplayTheme } from '@/composables/useDisplayThemeStore'
 
+function normalizeSpecOverrideKey(specValue?: number | null): string {
+  if (specValue === 1) return 'PIPE'
+  if (specValue === 4) return 'HVAC'
+  return 'UNKNOWN'
+}
+
 export function resolveThemeOwnerOverride(
   config: ModelDisplayConfig,
   theme: DisplayTheme,
   ownerNoun: string,
+  specValue?: number | null,
 ): MaterialConfigEntry | undefined {
   if (theme === 'default' || !ownerNoun) return undefined
   const themeConfig = config.themes?.[theme]
-  if (!themeConfig?.ownerOverrides) return undefined
   const key = normalizeNounKey(ownerNoun)
-  return key ? themeConfig.ownerOverrides[key] : undefined
+  if (!key) return undefined
+  const specKey = normalizeSpecOverrideKey(specValue)
+  const specOverride = themeConfig?.ownerSpecOverrides?.[key]?.[specKey]
+  if (specOverride) return specOverride
+  return themeConfig?.ownerOverrides?.[key]
 }
 
 export function resolveMaterialWithTheme(
@@ -339,8 +387,9 @@ export function resolveMaterialWithTheme(
   noun: string,
   ownerNoun: string,
   theme: DisplayTheme,
+  specValue?: number | null,
 ): ResolvedMaterial {
-  const override = resolveThemeOwnerOverride(config, theme, ownerNoun)
+  const override = resolveThemeOwnerOverride(config, theme, ownerNoun, specValue)
   if (override) {
     const fallbackColor = config.defaultMaterial?.color ?? DEFAULT_MATERIAL.color ?? '#90a4ae'
     const colorValue = override.color ?? fallbackColor
@@ -386,9 +435,21 @@ export function buildExportConfig(config: ModelDisplayConfig): ModelDisplayConfi
         color: normalizeColorString(entry.color),
       }
     }
+    const exportedOwnerSpecOverrides: Record<string, Record<string, MaterialConfigEntry>> = {}
+    for (const [ownerKey, specMap] of Object.entries(themeConfig.ownerSpecOverrides || {})) {
+      const exportedSpecMap: Record<string, MaterialConfigEntry> = {}
+      for (const [specKey, entry] of Object.entries(specMap || {})) {
+        exportedSpecMap[specKey] = {
+          ...entry,
+          color: normalizeColorString(entry.color),
+        }
+      }
+      exportedOwnerSpecOverrides[ownerKey] = exportedSpecMap
+    }
     exportedThemes[themeKey] = {
       ...themeConfig,
       ownerOverrides: exportedOverrides,
+      ownerSpecOverrides: exportedOwnerSpecOverrides,
     }
   }
 

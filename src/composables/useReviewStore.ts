@@ -86,6 +86,7 @@ function loadPersisted(): ReviewPersistedState {
 }
 
 const persisted = loadPersisted();
+USE_BACKEND.value = persisted.useBackend;
 
 const reviewMode = ref<boolean>(persisted.reviewMode);
 const confirmedRecords = ref<ConfirmedRecord[]>(persisted.confirmedRecords);
@@ -197,6 +198,8 @@ async function addConfirmedRecord(
 }
 
 async function removeConfirmedRecord(id: string): Promise<void> {
+  let canRemoveLocal = true;
+
   if (USE_BACKEND.value) {
     loading.value = true;
     error.value = null;
@@ -207,13 +210,15 @@ async function removeConfirmedRecord(id: string): Promise<void> {
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : '删除确认记录失败';
-      // 继续删除本地记录，保持 UI 一致
+      canRemoveLocal = false;
     } finally {
       loading.value = false;
     }
   }
 
-  confirmedRecords.value = confirmedRecords.value.filter((r) => r.id !== id);
+  if (canRemoveLocal) {
+    confirmedRecords.value = confirmedRecords.value.filter((r) => r.id !== id);
+  }
 }
 
 async function clearConfirmedRecords(): Promise<void> {

@@ -14,6 +14,8 @@ import {
 export type DTXOverlayHighlightStyle = {
   /** 是否绘制填充面，默认 true。 */
   showFill?: boolean;
+  /** 是否绘制 edge 线段，默认 true。 */
+  showEdges?: boolean;
   fillColor?: ColorRepresentation;
   fillOpacity?: number;
   edgeColor?: ColorRepresentation;
@@ -52,6 +54,7 @@ export class DTXOverlayHighlighter {
 
     this._style = {
       showFill: style.showFill ?? true,
+      showEdges: style.showEdges ?? true,
       fillColor: style.fillColor ?? 0x4b7cff,
       fillOpacity: style.fillOpacity ?? 0.85,
       edgeColor: style.edgeColor ?? 0x00ff00,
@@ -86,6 +89,7 @@ export class DTXOverlayHighlighter {
   setStyle(next: DTXOverlayHighlightStyle): void {
     this._style = {
       showFill: next.showFill ?? this._style.showFill,
+      showEdges: next.showEdges ?? this._style.showEdges,
       fillColor: next.fillColor ?? this._style.fillColor,
       fillOpacity: next.fillOpacity ?? this._style.fillOpacity,
       edgeColor: next.edgeColor ?? this._style.edgeColor,
@@ -125,17 +129,22 @@ export class DTXOverlayHighlighter {
         fill.name = `sel_fill_${objectId}`;
       }
 
-      const edges = this._getEdgesGeometry(data.geometry, this._style.edgeThresholdAngle);
-      const line = new LineSegments(edges, this._edgeMat);
-      line.matrixAutoUpdate = false;
-      line.frustumCulled = false;
-      line.renderOrder = 902;
-      line.matrix.copy(data.matrix);
-      line.name = `sel_edge_${objectId}`;
+      let line: LineSegments | null = null;
+      if (this._style.showEdges) {
+        const edges = this._getEdgesGeometry(data.geometry, this._style.edgeThresholdAngle);
+        line = new LineSegments(edges, this._edgeMat);
+        line.matrixAutoUpdate = false;
+        line.frustumCulled = false;
+        line.renderOrder = 902;
+        line.matrix.copy(data.matrix);
+        line.name = `sel_edge_${objectId}`;
+      }
 
-      if (fill) {
+      if (fill && line) {
         this._group.add(fill, line);
-      } else {
+      } else if (fill) {
+        this._group.add(fill);
+      } else if (line) {
         this._group.add(line);
       }
     }
@@ -179,4 +188,3 @@ export class DTXOverlayHighlighter {
     return created;
   }
 }
-

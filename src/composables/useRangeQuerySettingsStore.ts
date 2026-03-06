@@ -11,6 +11,7 @@ const radiusM = ref<number>(50)
 const specValues = ref<SiteSpecValue[]>([])
 const nounsText = ref<string>('')
 const nameQuery = ref<string>('')
+const queryShape = ref<'cube' | 'sphere'>('cube')
 
 export function useRangeQuerySettingsStore() {
   return {
@@ -18,6 +19,7 @@ export function useRangeQuerySettingsStore() {
     specValues,
     nounsText,
     nameQuery,
+    queryShape,
     toggleSpecValue: (sv: SiteSpecValue) => {
       const idx = specValues.value.indexOf(sv)
       if (idx >= 0) specValues.value.splice(idx, 1)
@@ -31,6 +33,7 @@ export function useRangeQuerySettingsStore() {
       specValues.value = []
       nounsText.value = ''
       nameQuery.value = ''
+      queryShape.value = 'cube'
     },
   }
 }
