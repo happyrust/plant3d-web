@@ -255,6 +255,24 @@ function resolveLayeredDimOffset(
   return safeBase + offsetLevel * layerGap;
 }
 
+function resolveSemanticDimOffset(
+  baseOffset: number,
+  role: "segment" | "chain" | "overall" | "port" | "cut_tubi",
+  hint?: MbdLayoutHint | null,
+): number {
+  const layered = resolveLayeredDimOffset(baseOffset, hint);
+  if (role === "chain") {
+    return layered + Math.max(baseOffset * 0.55, 420);
+  }
+  if (role === "overall") {
+    return layered + Math.max(baseOffset * 0.75, 520);
+  }
+  if (role === "cut_tubi") {
+    return layered + Math.max(baseOffset * 0.12, 80);
+  }
+  return layered;
+}
+
 function stableAlternatingSign(seed?: string | null): number {
   const raw = String(seed ?? "").trim();
   if (!raw) return 1;
@@ -263,52 +281,6 @@ function stableAlternatingSign(seed?: string | null): number {
     hash = (hash * 33 + raw.charCodeAt(i)) | 0;
   }
   return (hash & 1) === 0 ? 1 : -1;
-}
-
-function resolveLayoutLabelOffset(
-  hint?: MbdLayoutHint | null,
-  dimOffset = 0,
-  baseLabelPos?: Vector3 | null,
-): Vector3 | null {
-  const anchorPoint = toVector3(hint?.anchor_point ?? null);
-  const charDir =
-    toVector3(hint?.char_dir ?? null) ?? toVector3(hint?.offset_dir ?? null);
-  const offsetDir = toVector3(hint?.offset_dir ?? null);
-  const primaryAxis = toVector3(hint?.primary_axis ?? null);
-  if (
-    (!anchorPoint || anchorPoint.lengthSq() < 1e-9) &&
-    (!charDir || charDir.lengthSq() < 1e-9) &&
-    (!offsetDir || offsetDir.lengthSq() < 1e-9) &&
-    (!primaryAxis || primaryAxis.lengthSq() < 1e-9)
-  ) {
-    return null;
-  }
-
-  const baseGap = clampNumber(dimOffset * 0.16, 18, 80, 32);
-  const desiredPos =
-    anchorPoint?.clone() ?? baseLabelPos?.clone() ?? new Vector3();
-  if (anchorPoint && offsetDir && offsetDir.lengthSq() >= 1e-9) {
-    desiredPos.copy(anchorPoint).addScaledVector(offsetDir.normalize(), dimOffset);
-  }
-  if (charDir && charDir.lengthSq() >= 1e-9) {
-    desiredPos.addScaledVector(charDir.normalize(), baseGap);
-  } else if (offsetDir && offsetDir.lengthSq() >= 1e-9) {
-    desiredPos.addScaledVector(offsetDir.normalize(), Math.max(baseGap * 0.45, 12));
-  }
-  if (
-    hint?.label_role === "cut_tubi" &&
-    primaryAxis &&
-    primaryAxis.lengthSq() >= 1e-9
-  ) {
-    const axialGap = clampNumber(dimOffset * 0.22, 24, 120, 48);
-    desiredPos.addScaledVector(
-      primaryAxis.normalize(),
-      axialGap * stableAlternatingSign(hint?.owner_segment_id),
-    );
-  }
-  if (!baseLabelPos) return desiredPos.lengthSq() >= 1e-9 ? desiredPos : null;
-  const offset = desiredPos.sub(baseLabelPos);
-  return offset.lengthSq() >= 1e-9 ? offset : null;
 }
 
 function resolveFloatingLabelOffset(
@@ -358,6 +330,7 @@ function recordSuppressedAnnotation(
 }
 
 type MbdFittingKind = "elbow" | "branch" | "flange";
+type MbdTagKind = MbdFittingKind | "tubi" | "other";
 
 function classifyFitting(fitting: MbdFittingDto): MbdFittingKind {
   const raw = `${fitting.kind ?? ""} ${fitting.noun ?? ""}`.toUpperCase();
@@ -370,6 +343,64 @@ function classifyFitting(fitting: MbdFittingDto): MbdFittingKind {
   }
   if (raw.includes("FLAN")) return "flange";
   return "elbow";
+}
+
+function classifyTag(tag: MbdTagDto): MbdTagKind {
+  const raw = `${tag.role ?? ""} ${tag.noun ?? ""}`.toUpperCase();
+  if (raw.includes("TUBI")) return "tubi";
+  if (raw.includes("TEE") || raw.includes("BRANCH") || raw.includes("OLET")) {
+    return "branch";
+  }
+  if (raw.includes("FLAN")) return "flange";
+  if (raw.includes("ELBO") || raw.includes("BEND")) return "elbow";
+  return "other";
+}
+
+function canRenderFittingGeometry(fitting: MbdFittingDto): boolean {
+  const kind = classifyFitting(fitting);
+  if (
+    kind === "elbow" &&
+    fitting.angle != null &&
+    fitting.face_center_1 &&
+    fitting.face_center_2
+  ) {
+    return true;
+  }
+  return String(fitting.text ?? "").trim().length > 0;
+}
+
+function shouldSuppressTag(tag: MbdTagDto, data: MbdPipeData): boolean {
+  const tagKind = classifyTag(tag);
+  if (tagKind === "tubi" && (data.cut_tubis?.length ?? 0) > 0) {
+    return true;
+  }
+  if (
+    tagKind === "elbow" &&
+    (data.fittings ?? []).some(
+      (fitting) =>
+        fitting.refno === tag.refno &&
+        classifyFitting(fitting) === "elbow" &&
+        canRenderFittingGeometry(fitting),
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function resolveTagPriority(kind: MbdTagKind): number {
+  if (kind === "branch") return 0;
+  if (kind === "flange") return 1;
+  if (kind === "elbow") return 2;
+  if (kind === "tubi") return 3;
+  return 4;
+}
+
+function getAnnotationLabelWorldPos<T extends { updateWorldMatrix: (a?: boolean, b?: boolean) => void; getLabelWorldPos: () => Vector3 }>(
+  annotation: T,
+): Vector3 {
+  annotation.updateWorldMatrix(true, true);
+  return annotation.getLabelWorldPos();
 }
 
 export function useMbdPipeAnnotationThree(
@@ -579,7 +610,9 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).setLabelVisible(visible);
     }
     for (const annotation of fittingAnnotations.values()) {
-      asRaw(annotation).setLabelVisible(visible);
+      const raw = asRaw(annotation);
+      const forceHide = !!(raw.userData as any)?.mbdForceHideLabel;
+      raw.setLabelVisible(visible && !forceHide);
     }
     for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).setLabelVisible(visible);
@@ -757,7 +790,21 @@ export function useMbdPipeAnnotationThree(
     }
 
     for (const annotation of tagAnnotations.values()) {
-      asRaw(annotation).visible = isVisible.value;
+      const raw = asRaw(annotation);
+      const kind = ((raw.userData as any)?.mbdTagKind ??
+        "other") as MbdTagKind;
+      const declutterHidden = !!(raw.userData as any)?.mbdDeclutterHidden;
+      const visible =
+        kind === "tubi"
+          ? showCutTubis.value
+          : kind === "elbow"
+            ? showElbows.value
+            : kind === "branch"
+              ? showBranches.value
+            : kind === "flange"
+                ? showFlanges.value
+                : true;
+      raw.visible = isVisible.value && visible && !declutterHidden;
     }
 
     for (const marker of anchorDebugMarkers.values()) {
@@ -899,7 +946,7 @@ export function useMbdPipeAnnotationThree(
       const baseOffset =
         computeMbdDimOffset(dist) *
         clampNumber(dimOffsetScale.value, 0.05, 50, 1);
-      const offset = resolveLayeredDimOffset(baseOffset, d.layout_hint);
+      const offset = resolveSemanticDimOffset(baseOffset, kind, d.layout_hint);
 
       // 合并 session-only overrides
       const ov = dimOverrides.get(d.id);
@@ -907,20 +954,14 @@ export function useMbdPipeAnnotationThree(
       const finalDir = ov?.direction
         ? new Vector3(ov.direction[0], ov.direction[1], ov.direction[2])
         : offsetDir;
-      const finalLabelT =
-        ov?.labelT ??
-        clamp01(dimLabelT.value, 0.5);
-      const baseLabelPos = start
-        .clone()
-        .addScaledVector(finalDir, finalOffset)
-        .lerp(end.clone().addScaledVector(finalDir, finalOffset), finalLabelT);
+      const finalLabelT = ov?.labelT ?? 0.5;
       const finalLabelOffsetWorld = ov?.labelOffsetWorld
         ? new Vector3(
             ov.labelOffsetWorld[0],
             ov.labelOffsetWorld[1],
             ov.labelOffsetWorld[2],
           )
-        : resolveLayoutLabelOffset(d.layout_hint, finalOffset, baseLabelPos);
+        : null;
       const finalIsReference = ov?.isReference ?? false;
 
       dimTextById.value.set(d.id, String(d.text ?? ""));
@@ -1059,6 +1100,273 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function applyCutTubiLabelDeclutter(includeVisibleTags = false): void {
+    if (cutTubiAnnotations.size <= 0) return;
+
+    const minGap = includeVisibleTags ? 0.95 : 0.42;
+    const placed: Vector3[] = [];
+
+    for (const dim of dimAnnotations.values()) {
+      if (!dim.visible) continue;
+      const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? "segment") as MbdDimKind;
+      if (kind !== "chain" && kind !== "overall") continue;
+      placed.push(getAnnotationLabelWorldPos(asRaw(dim)));
+    }
+
+    if (includeVisibleTags) {
+      for (const tag of tagAnnotations.values()) {
+        const rawTag = asRaw(tag);
+        if (!rawTag.visible) continue;
+        placed.push(getAnnotationLabelWorldPos(rawTag).clone());
+      }
+    }
+
+    for (const cut of cutTubiAnnotations.values()) {
+      const rawCut = asRaw(cut);
+      if (!rawCut.visible) continue;
+
+      const p = rawCut.getParams();
+      const baseOffset = Number(
+        (rawCut.userData as any)?.mbdBaseOffset ?? p.offset ?? 0,
+      );
+      const offsetSteps = [0, 180, 320, 500, 720, 960, 1280, 1640, 2120];
+      const candidateOffsets = offsetSteps.map((step) => baseOffset + step);
+      let chosenPos: Vector3 | null = null;
+      let chosenOffset = baseOffset;
+
+      for (const candidateOffset of candidateOffsets) {
+        rawCut.setParams({
+          offset: candidateOffset,
+          labelT: 0.5,
+          labelOffsetWorld: null,
+        });
+        const candidatePos = getAnnotationLabelWorldPos(rawCut);
+        const overlap = placed.some((prev) => prev.distanceTo(candidatePos) < minGap);
+        if (!overlap) {
+          chosenPos = candidatePos.clone();
+          chosenOffset = candidateOffset;
+          break;
+        }
+      }
+
+      rawCut.setParams({
+        offset: chosenOffset,
+        labelT: 0.5,
+        labelOffsetWorld: null,
+      });
+      if (!chosenPos) {
+        chosenPos = getAnnotationLabelWorldPos(rawCut).clone();
+      }
+      placed.push(chosenPos);
+    }
+  }
+
+  function applyTagLabelDeclutter(): void {
+    if (tagAnnotations.size <= 0) return;
+
+    const occupied: Vector3[] = [];
+    const placedTagMeta: Array<{ kind: MbdTagKind; text: string; pos: Vector3 }> = [];
+    const minGap = 0.7;
+    const duplicateElbowGap = 1.35;
+
+    for (const dim of dimAnnotations.values()) {
+      const rawDim = asRaw(dim);
+      if (!rawDim.visible) continue;
+      const kind = ((rawDim.userData as any)?.mbdDimKind ?? "segment") as MbdDimKind;
+      if (kind !== "chain" && kind !== "overall") continue;
+      occupied.push(getAnnotationLabelWorldPos(rawDim).clone());
+    }
+
+    for (const cut of cutTubiAnnotations.values()) {
+      const rawCut = asRaw(cut);
+      if (!rawCut.visible) continue;
+      occupied.push(getAnnotationLabelWorldPos(rawCut).clone());
+    }
+
+    const sortedTags = [...tagAnnotations.values()].sort((a, b) => {
+      const kindA = (((asRaw(a).userData as any)?.mbdTagKind ?? "other") as MbdTagKind);
+      const kindB = (((asRaw(b).userData as any)?.mbdTagKind ?? "other") as MbdTagKind);
+      return resolveTagPriority(kindA) - resolveTagPriority(kindB);
+    });
+
+    for (const tag of sortedTags) {
+      const rawTag = asRaw(tag);
+      (rawTag.userData as any).mbdDeclutterHidden = false;
+      if (!rawTag.visible) continue;
+
+      const params = rawTag.getParams();
+      const userData = (rawTag.userData as any) ?? {};
+      const tagKind = ((userData.mbdTagKind ?? "other") as MbdTagKind);
+      const hint = (userData.mbdLayoutHint ?? null) as MbdLayoutHint | null;
+      const baseOffset =
+        toVector3(userData.mbdBaseLabelOffset ?? null) ??
+        params.labelOffsetWorld?.clone() ??
+        new Vector3();
+
+      const offsetDir =
+        toVector3(hint?.offset_dir ?? null) ?? new Vector3(0, 1, 0);
+      if (offsetDir.lengthSq() < 1e-9) offsetDir.set(0, 1, 0);
+      offsetDir.normalize();
+
+      const charDir =
+        toVector3(hint?.char_dir ?? null) ??
+        toVector3(hint?.primary_axis ?? null) ??
+        new Vector3(0, 0, 1);
+      if (charDir.lengthSq() < 1e-9) charDir.set(0, 0, 1);
+      charDir.normalize();
+
+      const candidateOffsets = [
+        baseOffset.clone(),
+        baseOffset.clone().addScaledVector(charDir, 260),
+        baseOffset.clone().addScaledVector(charDir, -260),
+        baseOffset.clone().addScaledVector(offsetDir, 220),
+        baseOffset.clone().addScaledVector(offsetDir, -220),
+        baseOffset.clone().addScaledVector(charDir, 420).addScaledVector(offsetDir, 180),
+        baseOffset.clone().addScaledVector(charDir, -420).addScaledVector(offsetDir, 180),
+        baseOffset.clone().addScaledVector(charDir, 620).addScaledVector(offsetDir, 320),
+        baseOffset.clone().addScaledVector(charDir, -620).addScaledVector(offsetDir, 320),
+      ];
+
+      let chosenOffset = baseOffset.clone();
+      let chosenPos = getAnnotationLabelWorldPos(rawTag).clone();
+      let foundCandidate = false;
+
+      for (const candidate of candidateOffsets) {
+        rawTag.setParams({ labelOffsetWorld: candidate });
+        const candidatePos = getAnnotationLabelWorldPos(rawTag);
+        const overlap = occupied.some((prev) => prev.distanceTo(candidatePos) < minGap);
+        if (!overlap) {
+          chosenOffset = candidate.clone();
+          chosenPos = candidatePos.clone();
+          foundCandidate = true;
+          break;
+        }
+      }
+
+      const duplicateElbow = placedTagMeta.some(
+        (item) =>
+          tagKind === "elbow" &&
+          item.kind === "elbow" &&
+          item.text === params.label &&
+          item.pos.distanceTo(chosenPos) < duplicateElbowGap,
+      );
+      const duplicateElbowCount = placedTagMeta.filter(
+        (item) =>
+          tagKind === "elbow" &&
+          item.kind === "elbow" &&
+          item.text === params.label,
+      ).length;
+
+      if (!foundCandidate || duplicateElbow || duplicateElbowCount >= 2) {
+        if (tagKind === "elbow" || tagKind === "other") {
+          (rawTag.userData as any).mbdDeclutterHidden = true;
+          rawTag.visible = false;
+          continue;
+        }
+      }
+
+      rawTag.setParams({ labelOffsetWorld: chosenOffset });
+      occupied.push(chosenPos);
+      placedTagMeta.push({
+        kind: tagKind,
+        text: params.label,
+        pos: chosenPos.clone(),
+      });
+    }
+  }
+
+  function buildTextOnlyFittingAnnotation(
+    fitting: MbdFittingDto,
+    anchor: Vector3,
+    labelRenderStyle: MbdDimensionModeConfig["labelRenderStyle"],
+  ): WeldAnnotation3D | null {
+    const text = String(fitting.text ?? "").trim();
+    if (!text) return null;
+    const annotation = new WeldAnnotation3D(materials, {
+      position: anchor,
+      label: text,
+      subtitle: "",
+      isShop: true,
+      crossSize: 0,
+      labelOffsetWorld: resolveFloatingLabelOffset(fitting.layout_hint, 120),
+      labelRenderStyle,
+    });
+    return annotation;
+  }
+
+  function applyFittingMaterial(
+    annotation: WeldAnnotation3D | AngleDimension3D,
+    fittingKind: MbdFittingKind,
+  ): void {
+    if (fittingKind === "flange") annotation.setMaterialSet(materials.blue);
+    else if (fittingKind === "branch") annotation.setMaterialSet(materials.orange);
+    else annotation.setMaterialSet(materials.yellow);
+  }
+
+  function storeFittingAnnotation(
+    fitting: MbdFittingDto,
+    fittingKind: MbdFittingKind,
+    annotation: WeldAnnotation3D | AngleDimension3D,
+  ): void {
+    const rawAnnotation = markRaw(annotation);
+    (rawAnnotation.userData as any).mbdAuxKind = "fitting";
+    (rawAnnotation.userData as any).mbdFittingKind = fittingKind;
+    group.add(rawAnnotation);
+    fittingAnnotations.set(fitting.id, rawAnnotation as any);
+  }
+
+  function renderFittings(fittings: MbdFittingDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    for (const fitting of fittings) {
+      const fittingKind = classifyFitting(fitting);
+      const anchor =
+        toVector3(fitting.anchor_point) ??
+        toVector3(fitting.layout_hint?.anchor_point ?? null);
+      if (!anchor) {
+        recordSuppressedAnnotation(suppressedWrongLineCount, "fitting_missing_anchor");
+        continue;
+      }
+
+      if (
+        fittingKind === "elbow" &&
+        fitting.angle != null &&
+        fitting.face_center_1 &&
+        fitting.face_center_2
+      ) {
+        const point1 = toVector3(fitting.face_center_1);
+        const point2 = toVector3(fitting.face_center_2);
+        if (point1 && point2) {
+          const angleDim = new AngleDimension3D(materials, {
+            vertex: anchor,
+            point1,
+            point2,
+            text:
+              `${fitting.noun ?? "ELBO"} ${Number(fitting.angle).toFixed(1)}°`,
+            labelRenderStyle,
+          });
+          applyFittingMaterial(angleDim, fittingKind);
+          storeFittingAnnotation(fitting, fittingKind, angleDim);
+          continue;
+        }
+      }
+
+      const textOnly = buildTextOnlyFittingAnnotation(
+        fitting,
+        anchor,
+        labelRenderStyle,
+      );
+      if (!textOnly) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          "fitting_missing_renderable_geometry",
+        );
+        continue;
+      }
+      applyFittingMaterial(textOnly, fittingKind);
+      storeFittingAnnotation(fitting, fittingKind, textOnly);
+    }
+  }
+
   function rebuildDimsByCurrentData(): void {
     const data = currentData.value;
     if (!data) return;
@@ -1074,6 +1382,7 @@ export function useMbdPipeAnnotationThree(
     if (data.dims?.length) {
       renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
     }
+    applyCutTubiLabelDeclutter();
 
     const viewer = dtxViewerRef.value;
     if (viewer) applyBackgroundColor(viewer);
@@ -1168,26 +1477,20 @@ export function useMbdPipeAnnotationThree(
       const label = String(
         cutTubi.text ?? cutTubi.refno ?? "CUT",
       );
-      const cutOffset = resolveLayeredDimOffset(
-        computeMbdDimOffset(start.distanceTo(end)),
+      const cutBaseOffset = computeMbdDimOffset(start.distanceTo(end));
+      const finalCutOffset = resolveSemanticDimOffset(
+        cutBaseOffset,
+        "cut_tubi",
         cutTubi.layout_hint,
       );
-      const baseLabelPos = start
-        .clone()
-        .addScaledVector(direction, cutOffset)
-        .lerp(end.clone().addScaledVector(direction, cutOffset), 0.5);
       const dim = new LinearDimension3D(
         materials,
         {
           start,
           end,
-          offset: cutOffset,
+          offset: finalCutOffset,
           labelT: 0.5,
-          labelOffsetWorld: resolveLayoutLabelOffset(
-            cutTubi.layout_hint,
-            cutOffset,
-            baseLabelPos,
-          ),
+          labelOffsetWorld: null,
           text: label,
           direction,
           arrowStyle: modeConfig.arrowStyle,
@@ -1204,71 +1507,19 @@ export function useMbdPipeAnnotationThree(
       dim.setLineWidthPx(modeConfig.lineWidthPx);
       const rawDim = markRaw(dim);
       (rawDim.userData as any).mbdAuxKind = "cut_tubi";
+      (rawDim.userData as any).mbdBaseOffset = finalCutOffset;
       group.add(rawDim);
       cutTubiAnnotations.set(cutTubi.id, rawDim);
     }
   }
 
-  function renderFittings(fittings: MbdFittingDto[]): void {
-    const { labelRenderStyle } = getRuntimeModeConfig();
-    for (const fitting of fittings) {
-      const fittingKind = classifyFitting(fitting);
-      const anchor =
-        toVector3(fitting.anchor_point) ??
-        toVector3(fitting.layout_hint?.anchor_point ?? null);
-      if (!anchor) {
-        recordSuppressedAnnotation(suppressedWrongLineCount, "fitting_missing_anchor");
-        continue;
-      }
-
-      if (
-        fittingKind === "elbow" &&
-        fitting.angle != null &&
-        fitting.face_center_1 &&
-        fitting.face_center_2
-      ) {
-        const point1 = toVector3(fitting.face_center_1);
-        const point2 = toVector3(fitting.face_center_2);
-        if (point1 && point2) {
-          const angleDim = new AngleDimension3D(materials, {
-            vertex: anchor,
-            point1,
-            point2,
-            text:
-              `${fitting.noun ?? "ELBO"} ${Number(fitting.angle).toFixed(1)}°`,
-            labelRenderStyle,
-          });
-          angleDim.setMaterialSet(materials.yellow);
-          const rawAngle = markRaw(angleDim);
-          (rawAngle.userData as any).mbdAuxKind = "fitting";
-          (rawAngle.userData as any).mbdFittingKind = fittingKind;
-          group.add(rawAngle);
-          fittingAnnotations.set(fitting.id, rawAngle);
-          continue;
-        }
-      }
-
-      const weld = new WeldAnnotation3D(materials, {
-        position: anchor,
-        label: String(fitting.noun ?? fitting.refno ?? "FIT"),
-        isShop: fittingKind !== "branch",
-        crossSize: 40,
-        labelRenderStyle,
-      });
-      if (fittingKind === "flange") weld.setMaterialSet(materials.blue);
-      else if (fittingKind === "branch") weld.setMaterialSet(materials.orange);
-      else weld.setMaterialSet(materials.yellow);
-      const rawWeld = markRaw(weld);
-      (rawWeld.userData as any).mbdAuxKind = "fitting";
-      (rawWeld.userData as any).mbdFittingKind = fittingKind;
-      group.add(rawWeld);
-      fittingAnnotations.set(fitting.id, rawWeld);
-    }
-  }
-
   function renderTags(tags: MbdTagDto[]): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
+    const data = currentData.value;
     for (const tag of tags) {
+      if (data && shouldSuppressTag(tag, data)) {
+        continue;
+      }
       const anchor =
         toVector3(tag.position) ??
         toVector3(tag.layout_hint?.anchor_point ?? null);
@@ -1288,6 +1539,12 @@ export function useMbdPipeAnnotationThree(
       annotation.setMaterialSet(materials.black);
       const rawTag = markRaw(annotation);
       (rawTag.userData as any).mbdAuxKind = "tag";
+      (rawTag.userData as any).mbdTagKind = classifyTag(tag);
+      (rawTag.userData as any).mbdLayoutHint = tag.layout_hint ?? null;
+      const baseLabelOffset = annotation.getParams().labelOffsetWorld;
+      (rawTag.userData as any).mbdBaseLabelOffset = baseLabelOffset
+        ? [baseLabelOffset.x, baseLabelOffset.y, baseLabelOffset.z]
+        : null;
       group.add(rawTag);
       tagAnnotations.set(tag.id, rawTag);
     }
@@ -1491,8 +1748,11 @@ export function useMbdPipeAnnotationThree(
     if (data.slopes?.length) renderSlopes(data.slopes);
     if (data.bends?.length) renderBends(data.bends);
     if (data.cut_tubis?.length) renderCutTubis(data.cut_tubis);
+    applyCutTubiLabelDeclutter();
     if (data.fittings?.length) renderFittings(data.fittings);
     if (data.tags?.length) renderTags(data.tags);
+    applyTagLabelDeclutter();
+    applyCutTubiLabelDeclutter(true);
     if (data.segments?.length) renderSegments(data.segments);
     renderDebugOverlays(data);
 
@@ -1780,6 +2040,8 @@ export function useMbdPipeAnnotationThree(
     () => {
       try {
         applyVisibility();
+        applyTagLabelDeclutter();
+        applyCutTubiLabelDeclutter(true);
         applyLabelVisibility();
       } catch {
         // 避免在测试环境中因 Proxy 包装 three 对象导致的可见性回放异常中断主流程
@@ -1809,7 +2071,6 @@ export function useMbdPipeAnnotationThree(
         const gm = getGlobalModelMatrix?.() || identityMatrix;
         const useBackendText = dimTextMode.value === "backend";
         const offsetScale = clampNumber(dimOffsetScale.value, 0.05, 50, 1);
-        const baseLabelT = clamp01(dimLabelT.value, 0.5);
         const modeConfig = getRuntimeModeConfig();
 
         for (const [dimId, dim] of dimAnnotations.entries()) {
@@ -1817,34 +2078,19 @@ export function useMbdPipeAnnotationThree(
           const ov = dimOverrides.get(dimId) ?? {};
           const sourceDim =
             currentData.value?.dims?.find((item) => item.id === dimId) ?? null;
+          const kind = (((rawDim.userData as any)?.mbdDimKind ??
+            sourceDim?.kind ??
+            "segment") as MbdDimKind);
 
           // 距离与默认 offset 以“局部坐标”计算（与几何保持一致）
           const p = rawDim.getParams();
           const distLocal = p.start.distanceTo(p.end);
-          const baseOffset = resolveLayeredDimOffset(
+          const baseOffset = resolveSemanticDimOffset(
             computeMbdDimOffset(distLocal) * offsetScale,
+            kind,
             sourceDim?.layout_hint,
           );
           const nextOffset = ov.offset ?? baseOffset;
-          const nextDirection = p.direction?.clone() ?? null;
-          const nextLabelTBase = ov.labelT ?? p.labelT ?? baseLabelT;
-          const baseLabelPos =
-            nextDirection && nextDirection.lengthSq() > 1e-9
-              ? p.start
-                  .clone()
-                  .addScaledVector(nextDirection.normalize(), nextOffset)
-                  .lerp(
-                    p.end
-                      .clone()
-                      .addScaledVector(nextDirection.clone().normalize(), nextOffset),
-                    nextLabelTBase,
-                  )
-              : null;
-          const autoLabelOffset = resolveLayoutLabelOffset(
-            sourceDim?.layout_hint,
-            nextOffset,
-            baseLabelPos,
-          );
           const nextLabelOffset =
             "labelOffsetWorld" in ov
               ? ov.labelOffsetWorld
@@ -1854,14 +2100,14 @@ export function useMbdPipeAnnotationThree(
                     ov.labelOffsetWorld[2],
                   )
                 : null
-              : autoLabelOffset;
+              : null;
 
           // 若用户拖拽过文字（labelOffsetWorld!=null），避免全局 labelT 影响其基准位置
           const hasManualLabel =
             "labelOffsetWorld" in ov && ov.labelOffsetWorld != null;
           const nextLabelT =
             ov.labelT ??
-            (hasManualLabel ? (p.labelT ?? baseLabelT) : baseLabelT);
+            (hasManualLabel ? (p.labelT ?? 0.5) : 0.5);
 
           const nextText = resolveDimDisplayText(
             dimTextById.value.get(dimId),

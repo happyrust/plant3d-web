@@ -235,7 +235,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(visibleCount).toBeGreaterThan(0);
   });
 
-  it("带 layout_hint 的尺寸文字应按 char_dir 偏移并随 offsetScale 更新", async () => {
+  it("带 layout_hint 的尺寸文字应固定在线中点并随 offsetScale 更新线层", async () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -292,23 +292,20 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const before = vis.getDimAnnotations().get("seg-layout-1")?.getParams();
-    expect(before?.labelOffsetWorld).toBeTruthy();
+    expect(before?.labelT).toBe(0.5);
+    expect(before?.labelOffsetWorld).toBeNull();
     expect(before?.offset ?? 0).toBeGreaterThan(150);
-    expect(before?.labelOffsetWorld?.y ?? 0).toBeCloseTo(0, 6);
-    expect(before?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
-    const beforeLen = before?.labelOffsetWorld?.length() ?? 0;
-    expect(beforeLen).toBeGreaterThan(0);
 
     vis.dimOffsetScale.value = 2;
     await nextTick();
 
     const after = vis.getDimAnnotations().get("seg-layout-1")?.getParams();
+    expect(after?.labelT).toBe(0.5);
+    expect(after?.labelOffsetWorld).toBeNull();
     expect(after?.offset ?? 0).toBeGreaterThan(before?.offset ?? 0);
-    const afterLen = after?.labelOffsetWorld?.length() ?? 0;
-    expect(afterLen).toBeGreaterThan(beforeLen);
   });
 
-  it("cut_tubi 角色应沿 primary_axis 轻微展开文字以避免堆叠", () => {
+  it("chain 与 cut_tubi 同区域时应强制分层，避免文字挤在一起", () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -323,51 +320,97 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ref<HTMLElement | null>(null),
       { getGlobalModelMatrix: () => new Matrix4() },
     );
+    vis.showDimChain.value = true;
+    vis.showCutTubis.value = true;
+
+    const hint = {
+      anchor_point: [500, 0, 0] as [number, number, number],
+      primary_axis: [1, 0, 0] as [number, number, number],
+      offset_dir: [0, 1, 0] as [number, number, number],
+      char_dir: [0, 0, 1] as [number, number, number],
+      label_role: "chain",
+      avoid_line_of_sight: true,
+      owner_segment_id: "seg-1",
+      offset_level: 1,
+    };
 
     const data: MbdPipeData = {
       input_refno: "24381_145018",
       branch_refno: "24381_145018",
       branch_name: "BRAN-TEST",
       branch_attrs: {},
-      segments: [],
+      segments: [
+        {
+          id: "seg-1",
+          refno: "seg-1",
+          noun: "TUBI",
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: "chain-1",
+          kind: "chain",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: hint,
+        },
+      ],
       welds: [],
       slopes: [],
       bends: [],
-      dims: [
+      cut_tubis: [
         {
-          id: "seg-layout-cut-like",
-          kind: "segment",
+          id: "cut-1",
+          segment_id: "seg-1",
+          refno: "seg-1",
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
           text: "1000",
           layout_hint: {
-            anchor_point: [500, 0, 0],
-            primary_axis: [1, 0, 0],
-            offset_dir: [0, 1, 0],
-            char_dir: [0, 0, 1],
+            ...hint,
             label_role: "cut_tubi",
-            avoid_line_of_sight: true,
-            owner_segment_id: "seg-layout-cut-owner",
-            offset_level: 1,
           },
         },
       ],
+      fittings: [],
+      tags: [],
       stats: {
-        segments_count: 0,
+        segments_count: 1,
         dims_count: 1,
         welds_count: 0,
         slopes_count: 0,
         bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 0,
       },
     };
 
     vis.renderBranch(data);
 
-    const params = vis.getDimAnnotations().get("seg-layout-cut-like")?.getParams();
-    expect(params?.labelOffsetWorld).toBeTruthy();
-    expect(Math.abs(params?.labelOffsetWorld?.x ?? 0)).toBeGreaterThan(20);
-    expect(params?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
+    const chain = vis.getDimAnnotations().get("chain-1");
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const cut = root?.children?.find(
+      (child: any) => child?.userData?.mbdAuxKind === "cut_tubi",
+    );
+
+    const chainPos = chain?.getLabelWorldPos();
+    const cutPos = cut?.getLabelWorldPos?.();
+    const cutParams = cut?.getParams?.();
+    expect(chainPos).toBeTruthy();
+    expect(cutPos).toBeTruthy();
+    expect(cutParams?.labelT).toBe(0.5);
+    expect(cutParams?.labelOffsetWorld).toBeNull();
+    expect(chainPos!.distanceTo(cutPos)).toBeGreaterThan(0.35);
   });
 
   it("tag_tubi 应按 layout_hint 偏移且不附带焊缝副标题", () => {
@@ -434,6 +477,594 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(Math.abs(params?.labelOffsetWorld?.x ?? 0)).toBeGreaterThan(20);
     expect(params?.labelOffsetWorld?.y ?? 0).toBeGreaterThan(120);
     expect(params?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
+  });
+
+  it("重叠的 fitting tags 应自动错开文字位置", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const hint = {
+      anchor_point: [500, 0, 0] as [number, number, number],
+      primary_axis: [1, 0, 0] as [number, number, number],
+      offset_dir: [0, 1, 0] as [number, number, number],
+      char_dir: [0, 0, 1] as [number, number, number],
+      label_role: "fitting_bend",
+      avoid_line_of_sight: true,
+      owner_segment_id: "seg-tag-overlap",
+      offset_level: 0,
+    };
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [
+        {
+          id: "tag-elbow-a",
+          refno: "elbow-a",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO A",
+          position: [500, 0, 0],
+          layout_hint: hint,
+        },
+        {
+          id: "tag-elbow-b",
+          refno: "elbow-b",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO B",
+          position: [500, 0, 0],
+          layout_hint: hint,
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 2,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const tagA = vis.getTagAnnotations().get("tag-elbow-a");
+    const tagB = vis.getTagAnnotations().get("tag-elbow-b");
+    const posA = tagA?.getLabelWorldPos();
+    const posB = tagB?.getLabelWorldPos();
+    const paramsA = tagA?.getParams();
+    const paramsB = tagB?.getParams();
+
+    expect(posA).toBeTruthy();
+    expect(posB).toBeTruthy();
+    expect(posA!.distanceTo(posB!)).toBeGreaterThan(0.7);
+    expect(paramsA?.labelOffsetWorld).toBeTruthy();
+    expect(paramsB?.labelOffsetWorld).toBeTruthy();
+    expect(
+      paramsA!.labelOffsetWorld!.distanceTo(paramsB!.labelOffsetWorld!),
+    ).toBeGreaterThan(0.1);
+  });
+
+  it("短段附近重复的 elbow tags 在无法拉开时应抑制低优先级项", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const hint = {
+      anchor_point: [500, 0, 0] as [number, number, number],
+      primary_axis: [1, 0, 0] as [number, number, number],
+      offset_dir: [0, 1, 0] as [number, number, number],
+      char_dir: [0, 0, 1] as [number, number, number],
+      label_role: "fitting_bend",
+      avoid_line_of_sight: true,
+      owner_segment_id: "seg-tag-cluster",
+      offset_level: 0,
+    };
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [
+        {
+          id: "seg-1",
+          refno: "seg-1",
+          noun: "TUBI",
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: "chain-1",
+          kind: "chain",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            ...hint,
+            label_role: "chain",
+            offset_level: 1,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [
+        {
+          id: "cut-1",
+          segment_id: "seg-1",
+          refno: "seg-1",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            ...hint,
+            label_role: "cut_tubi",
+          },
+        },
+      ],
+      fittings: [],
+      tags: [
+        {
+          id: "tag-branch",
+          refno: "branch-1",
+          noun: "OLET",
+          role: "fitting_branch",
+          text: "OLET",
+          position: [500, 0, 0],
+          layout_hint: {
+            ...hint,
+            label_role: "fitting_branch",
+            offset_level: 2,
+          },
+        },
+        {
+          id: "tag-elbow-a",
+          refno: "elbow-a",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO 89.7° R0",
+          position: [500, 0, 0],
+          layout_hint: hint,
+        },
+        {
+          id: "tag-elbow-b",
+          refno: "elbow-b",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO 89.7° R0",
+          position: [500, 0, 0],
+          layout_hint: hint,
+        },
+        {
+          id: "tag-elbow-c",
+          refno: "elbow-c",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO 89.7° R0",
+          position: [500, 0, 0],
+          layout_hint: hint,
+        },
+      ],
+      stats: {
+        segments_count: 1,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 4,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const visibleTagTexts = root.children
+      .filter(
+        (child: any) =>
+          child?.userData?.mbdAuxKind === "tag" && child.visible,
+      )
+      .map((child: any) => child.getParams?.().label ?? "")
+      .filter((text: string) => text.includes("ELBO 89.7° R0"));
+
+    expect(visibleTagTexts.length).toBeLessThan(3);
+    expect(visibleTagTexts.length).toBeGreaterThan(0);
+  });
+
+  it("branch tag 在短段簇内应与 cut_tubi 保持更大间距", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.showDimChain.value = true;
+    vis.showCutTubis.value = true;
+    vis.showBranches.value = true;
+
+    const hint = {
+      anchor_point: [500, 0, 0] as [number, number, number],
+      primary_axis: [1, 0, 0] as [number, number, number],
+      offset_dir: [0, 1, 0] as [number, number, number],
+      char_dir: [0, 0, 1] as [number, number, number],
+      label_role: "segment",
+      avoid_line_of_sight: true,
+      owner_segment_id: "seg-branch-cut",
+      offset_level: 0,
+    };
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [
+        {
+          id: "seg-1",
+          refno: "seg-1",
+          noun: "TUBI",
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: "chain-1",
+          kind: "chain",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            ...hint,
+            label_role: "chain",
+            offset_level: 1,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [
+        {
+          id: "cut-1",
+          segment_id: "seg-1",
+          refno: "seg-1",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            ...hint,
+            label_role: "cut_tubi",
+          },
+        },
+      ],
+      fittings: [],
+      tags: [
+        {
+          id: "tag-branch-1",
+          refno: "branch-1",
+          noun: "OLET",
+          role: "fitting_branch",
+          text: "OLET",
+          position: [500, 0, 0],
+          layout_hint: {
+            ...hint,
+            label_role: "fitting_branch",
+            offset_level: 2,
+          },
+        },
+        {
+          id: "tag-elbow-a",
+          refno: "elbow-a",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO 89.7° R0",
+          position: [500, 0, 0],
+          layout_hint: hint,
+        },
+        {
+          id: "tag-elbow-b",
+          refno: "elbow-b",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO 90.0° R0",
+          position: [500, 0, 0],
+          layout_hint: hint,
+        },
+      ],
+      stats: {
+        segments_count: 1,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 3,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const cut = root?.children?.find(
+      (child: any) => child?.userData?.mbdAuxKind === "cut_tubi",
+    );
+    const tag = vis.getTagAnnotations().get("tag-branch-1");
+
+    const cutPos = cut?.getLabelWorldPos?.();
+    const tagPos = tag?.getLabelWorldPos();
+    expect(cutPos).toBeTruthy();
+    expect(tagPos).toBeTruthy();
+    expect(cutPos!.distanceTo(tagPos!)).toBeGreaterThan(1.1);
+  });
+
+  it("存在 cut_tubis 时不应重复渲染 tubi tags", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [
+        {
+          id: "cut-1",
+          segment_id: "seg-1",
+          refno: "24381_145018",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+        },
+      ],
+      fittings: [],
+      tags: [
+        {
+          id: "tag-tubi-1",
+          refno: "24381_145018",
+          noun: "TUBI",
+          role: "tubi",
+          text: "L=1000",
+          position: [500, 0, 0],
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 1,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    expect(vis.getTagAnnotations().has("tag-tubi-1")).toBe(false);
+  });
+
+  it("branch fitting 缺少可渲染几何时不应再默认画十字锚点", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [
+        {
+          id: "fit-branch-1",
+          refno: "fit-branch-1",
+          noun: "TEE",
+          kind: "tee",
+          anchor_point: [100, 0, 0],
+        },
+      ],
+      tags: [
+        {
+          id: "tag-branch-1",
+          refno: "fit-branch-1",
+          noun: "TEE",
+          role: "fitting_branch",
+          text: "TEE",
+          position: [100, 0, 0],
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 1,
+        tags_count: 1,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const fittingObject = root?.children?.find(
+      (child: any) => child?.userData?.mbdAuxKind === "fitting",
+    ) as any;
+    expect(fittingObject).toBeFalsy();
+    expect(vis.getTagAnnotations().has("tag-branch-1")).toBe(true);
+    expect(vis.suppressedWrongLineCount.value).toBe(1);
+  });
+
+  it("缺少弯头几何时不应压制 elbow tag", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [
+        {
+          id: "fit-elbow-1",
+          refno: "fit-elbow-1",
+          noun: "ELBO",
+          kind: "elbo",
+          anchor_point: [100, 0, 0],
+          angle: 90,
+        },
+      ],
+      tags: [
+        {
+          id: "tag-elbow-1",
+          refno: "fit-elbow-1",
+          noun: "ELBO",
+          role: "fitting_bend",
+          text: "ELBO 90°",
+          position: [100, 0, 0],
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 1,
+        tags_count: 1,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    expect(vis.getTagAnnotations().has("tag-elbow-1")).toBe(true);
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const fittingObject = root?.children?.find(
+      (child: any) => child?.userData?.mbdAuxKind === "fitting",
+    ) as any;
+    expect(fittingObject).toBeFalsy();
   });
 
   it("仅有 bends 数据时也应触发 flyTo", () => {
