@@ -28,8 +28,15 @@ function createVisStub() {
     showDims: ref(true),
     showDimSegment: ref(false),
     showDimChain: ref(true),
-    showDimOverall: ref(true),
+    showDimOverall: ref(false),
     showDimPort: ref(false),
+    showCutTubis: ref(true),
+    showElbows: ref(true),
+    showBranches: ref(true),
+    showFlanges: ref(true),
+    showAnchorDebug: ref(false),
+    showOwnerSegmentDebug: ref(false),
+    suppressedWrongLineCount: ref(0),
     showWelds: ref(true),
     showSlopes: ref(true),
     showBends: ref(false),
@@ -94,6 +101,52 @@ describe("MbdPipePanel mode controls", () => {
 
     resetButton!.click();
     expect(vis.resetToCurrentModeDefaults).toHaveBeenCalledTimes(1);
+
+    app.unmount();
+  });
+
+  it("应基于 fittings.kind 统计弯头、支管和法兰分类", async () => {
+    const vis = createVisStub();
+    vis.currentData.value = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [
+        { id: "f1", refno: "f1", noun: "FITT", kind: "elbo", anchor_point: [0, 0, 0] },
+        { id: "f2", refno: "f2", noun: "FITT", kind: "tee", anchor_point: [1, 0, 0] },
+        { id: "f3", refno: "f3", noun: "FITT", kind: "flan", anchor_point: [2, 0, 0] },
+        { id: "f4", refno: "f4", noun: "FITT", kind: "bend", anchor_point: [3, 0, 0] },
+      ],
+      tags: [],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 4,
+        tags_count: 0,
+      },
+    } as any;
+
+    host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const app = createApp(MbdPipePanel, { vis });
+    app.mount(host);
+    await nextTick();
+
+    expect(host.textContent).toContain("elbows=2");
+    expect(host.textContent).toContain("branches=1");
+    expect(host.textContent).toContain("flanges=1");
 
     app.unmount();
   });

@@ -1,40 +1,38 @@
 /**
  * 三维标注材质管理
  *
- * SolveSpace 风格：使用原生 GL 线（LineBasicMaterial）+ Mesh 材质。
- * 原生 GL 线宽度固定 1px，与 SolveSpace 行为一致。
+ * 说明：
+ * - 当前标注系统主要使用原生 GL 线和基础 Mesh 材质。
+ * - `setResolution()` 对这套材质是 no-op，但保留统一接口，方便调用方无差别更新。
  */
 
-import * as THREE from 'three'
+import * as THREE from "three";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
 export interface AnnotationMaterialSet {
-  line: THREE.LineBasicMaterial
-  lineHover: THREE.LineBasicMaterial
-  mesh: THREE.MeshBasicMaterial
-  meshHover: THREE.MeshBasicMaterial
+  line: THREE.LineBasicMaterial;
+  lineHover: THREE.LineBasicMaterial;
+  mesh: THREE.MeshBasicMaterial;
+  meshHover: THREE.MeshBasicMaterial;
+  fatLine: LineMaterial;
+  fatLineHover: LineMaterial;
 }
 
 export class AnnotationMaterials {
-  private resolutionWidth = 1
-  private resolutionHeight = 1
+  private resolutionWidth = 1;
+  private resolutionHeight = 1;
 
-  // 预定义颜色集
-  readonly green: AnnotationMaterialSet;   // 尺寸标注
-  readonly orange: AnnotationMaterialSet;  // 焊缝标注
-  readonly blue: AnnotationMaterialSet;    // 坡度/引线标注
-  readonly white: AnnotationMaterialSet;   // 通用
-  readonly yellow: AnnotationMaterialSet;  // 高亮/默认
-  readonly black: AnnotationMaterialSet;   // 黑色（工程图纸风格）
+  readonly green: AnnotationMaterialSet;
+  readonly orange: AnnotationMaterialSet;
+  readonly blue: AnnotationMaterialSet;
+  readonly white: AnnotationMaterialSet;
+  readonly yellow: AnnotationMaterialSet;
+  readonly black: AnnotationMaterialSet;
 
-  // ── SolveSpace 约束默认色（洋红）────────────────────────────
-  /** SolveSpace constraint default (magenta) */
-  readonly ssConstraintMagenta: AnnotationMaterialSet
-
-  // ── SolveSpace 交互色（与 style.cpp Defaults 对齐）──────────
-  /** Hovered 状态材质（SolveSpace: 黄色 RGBf(1,1,0)） */
-  readonly ssHovered: AnnotationMaterialSet
-  /** Selected 状态材质（SolveSpace: 红色 RGBf(1,0,0)） */
-  readonly ssSelected: AnnotationMaterialSet
+  readonly ssConstraintMagenta: AnnotationMaterialSet;
+  readonly ssDimensionDefault: AnnotationMaterialSet;
+  readonly ssHovered: AnnotationMaterialSet;
+  readonly ssSelected: AnnotationMaterialSet;
 
   constructor() {
     this.green = this.createMaterialSet(0x22c55e, 0x4ade80);
@@ -44,67 +42,100 @@ export class AnnotationMaterials {
     this.yellow = this.createMaterialSet(0xfacc15, 0xfde047);
     this.black = this.createMaterialSet(0x000000, 0x333333);
 
-    // SolveSpace 约束洋红（默认）
-    this.ssConstraintMagenta = this.createMaterialSet(0xff00ff, 0xff44ff)
-
-    // SolveSpace 交互色
-    this.ssHovered = this.createMaterialSet(0xffff00, 0xffff44)
-    this.ssSelected = this.createMaterialSet(0xff0000, 0xff4444)
+    this.ssConstraintMagenta = this.createMaterialSet(0xff00ff, 0xff44ff);
+    this.ssDimensionDefault = this.createMaterialSet(0x8b5cf6, 0xa78bfa);
+    this.ssHovered = this.createMaterialSet(0xffff00, 0xffff44);
+    this.ssSelected = this.createMaterialSet(0xff0000, 0xff4444);
   }
 
-  private createMaterialSet(normalColor: number, hoverColor: number): AnnotationMaterialSet {
-    const depthParams = {
+  private createMaterialSet(
+    normalColor: number,
+    hoverColor: number,
+  ): AnnotationMaterialSet {
+    const sharedParams = {
       depthTest: true,
       depthWrite: true,
       transparent: true,
       polygonOffset: true,
       polygonOffsetFactor: -4,
       polygonOffsetUnits: -4,
-    }
+    } satisfies Partial<THREE.Material>;
 
     return {
       line: new THREE.LineBasicMaterial({
         color: normalColor,
-        ...depthParams,
+        ...sharedParams,
       }),
       lineHover: new THREE.LineBasicMaterial({
         color: hoverColor,
-        ...depthParams,
+        ...sharedParams,
       }),
       mesh: new THREE.MeshBasicMaterial({
         color: normalColor,
         opacity: 0.9,
-        ...depthParams,
+        ...sharedParams,
       }),
       meshHover: new THREE.MeshBasicMaterial({
         color: hoverColor,
         opacity: 1,
-        ...depthParams,
+        ...sharedParams,
       }),
-    }
+      fatLine: new LineMaterial({
+        color: normalColor,
+        transparent: true,
+        linewidth: 2,
+        depthTest: true,
+        depthWrite: true,
+      }),
+      fatLineHover: new LineMaterial({
+        color: hoverColor,
+        transparent: true,
+        linewidth: 2,
+        depthTest: true,
+        depthWrite: true,
+      }),
+    };
   }
 
   get all(): AnnotationMaterialSet[] {
     return [
-      this.green, this.orange, this.blue, this.white, this.yellow, this.black,
-      this.ssConstraintMagenta, this.ssDimensionDefault, this.ssHovered, this.ssSelected,
+      this.green,
+      this.orange,
+      this.blue,
+      this.white,
+      this.yellow,
+      this.black,
+      this.ssConstraintMagenta,
+      this.ssDimensionDefault,
+      this.ssHovered,
+      this.ssSelected,
     ];
   }
 
-  getResolution(): { width: number, height: number } {
-    return { width: this.resolutionWidth, height: this.resolutionHeight }
+  setResolution(width: number, height: number): void {
+    this.resolutionWidth = Number.isFinite(width) && width > 0 ? width : 1;
+    this.resolutionHeight = Number.isFinite(height) && height > 0 ? height : 1;
+    for (const set of this.all) {
+      set.fatLine.resolution.set(this.resolutionWidth, this.resolutionHeight);
+      set.fatLineHover.resolution.set(this.resolutionWidth, this.resolutionHeight);
+    }
   }
 
-  get all(): AnnotationMaterialSet[] {
-    return [this.green, this.orange, this.blue, this.white, this.yellow, this.ssConstraintMagenta, this.ssHovered, this.ssSelected]
+  getResolution(): { width: number; height: number } {
+    return {
+      width: this.resolutionWidth,
+      height: this.resolutionHeight,
+    };
   }
 
   dispose(): void {
     for (const set of this.all) {
-      set.line.dispose()
-      set.lineHover.dispose()
-      set.mesh.dispose()
-      set.meshHover.dispose()
+      set.line.dispose();
+      set.lineHover.dispose();
+      set.mesh.dispose();
+      set.meshHover.dispose();
+      set.fatLine.dispose();
+      set.fatLineHover.dispose();
     }
   }
 }

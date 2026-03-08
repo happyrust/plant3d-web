@@ -33,6 +33,9 @@ export type MbdPipeStats = {
   welds_count: number
   slopes_count: number
   bends_count: number
+  cut_tubis_count?: number
+  fittings_count?: number
+  tags_count?: number
 }
 
 export type MbdPipeDebugInfo = {
@@ -68,6 +71,7 @@ export type MbdDimDto = {
   end: Vec3
   length: number
   text: string
+  layout_hint?: MbdLayoutHint | null
 }
 
 export type MbdWeldType = 'Butt' | 'Fillet' | 'Socket' | 0 | 1 | 2
@@ -80,6 +84,7 @@ export type MbdWeldDto = {
   label: string
   left_refno: string
   right_refno: string
+  layout_hint?: MbdLayoutHint | null
 }
 
 export type MbdSlopeDto = {
@@ -108,6 +113,55 @@ export type MbdBendDto = {
   face_center_2?: Vec3 | null
 }
 
+export type MbdLayoutHint = {
+  anchor_point: Vec3
+  primary_axis: Vec3
+  offset_dir: Vec3
+  char_dir: Vec3
+  label_role: string
+  avoid_line_of_sight: boolean
+  owner_segment_id?: string | null
+  offset_level: number
+  suppress_reason?: string | null
+  [k: string]: unknown
+}
+
+export type MbdCutTubiDto = {
+  id: string
+  segment_id: string
+  refno: string
+  start: Vec3
+  end: Vec3
+  length: number
+  text: string
+  layout_hint?: MbdLayoutHint | null
+}
+
+export type MbdFittingKind = 'elbo' | 'bend' | 'tee' | 'olet' | 'flan' | 'unknown'
+
+export type MbdFittingDto = {
+  id: string
+  refno: string
+  noun: string
+  kind: MbdFittingKind
+  anchor_point: Vec3
+  angle?: number | null
+  radius?: number | null
+  face_center_1?: Vec3 | null
+  face_center_2?: Vec3 | null
+  layout_hint?: MbdLayoutHint | null
+}
+
+export type MbdTagDto = {
+  id: string
+  refno: string
+  noun: string
+  role: string
+  text: string
+  position: Vec3
+  layout_hint?: MbdLayoutHint | null
+}
+
 export type MbdPipeData = {
   input_refno: string
   branch_refno: string
@@ -118,6 +172,9 @@ export type MbdPipeData = {
   welds: MbdWeldDto[]
   slopes: MbdSlopeDto[]
   bends: MbdBendDto[]
+  cut_tubis?: MbdCutTubiDto[]
+  fittings?: MbdFittingDto[]
+  tags?: MbdTagDto[]
   stats: MbdPipeStats
   debug_info?: MbdPipeDebugInfo
 }
@@ -150,6 +207,10 @@ export type MbdPipeQueryParams = {
   include_overall_dim?: boolean
   /** 是否输出端口间距尺寸到 dims（kind=port） */
   include_port_dims?: boolean
+  include_cut_tubis?: boolean
+  include_fittings?: boolean
+  include_tags?: boolean
+  include_layout_hints?: boolean
   weld_merge_threshold?: number
   include_dims?: boolean
   include_welds?: boolean

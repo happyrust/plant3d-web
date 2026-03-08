@@ -2,7 +2,11 @@
 import { computed } from "vue";
 
 import type { UseMbdPipeAnnotationThreeReturn } from "@/composables/useMbdPipeAnnotationThree";
-import type { MbdDimKind, MbdPipeViewMode } from "@/api/mbdPipeApi";
+import type {
+    MbdDimKind,
+    MbdFittingDto,
+    MbdPipeViewMode,
+} from "@/api/mbdPipeApi";
 import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
 
 const props = defineProps<{
@@ -114,8 +118,37 @@ const dims = computed(() => data.value?.dims ?? []);
 const welds = computed(() => data.value?.welds ?? []);
 const slopes = computed(() => data.value?.slopes ?? []);
 const bends = computed(() => data.value?.bends ?? []);
+const cutTubis = computed(() => data.value?.cut_tubis ?? []);
+const fittings = computed(() => data.value?.fittings ?? []);
+const tags = computed(() => data.value?.tags ?? []);
 const segments = computed(() => data.value?.segments ?? []);
 const attrs = computed(() => data.value?.branch_attrs ?? null);
+
+function classifyFitting(fitting: Partial<MbdFittingDto> | null | undefined):
+    | "elbow"
+    | "branch"
+    | "flange" {
+    const raw = `${fitting?.kind ?? ""} ${fitting?.noun ?? ""}`.toUpperCase();
+    if (
+        raw.includes("TEE") ||
+        raw.includes("BRANCH") ||
+        raw.includes("OLET")
+    ) {
+        return "branch";
+    }
+    if (raw.includes("FLAN")) return "flange";
+    return "elbow";
+}
+
+const elbowCount = computed(() =>
+    fittings.value.filter((f: any) => classifyFitting(f) === "elbow").length
+);
+const branchCount = computed(() =>
+    fittings.value.filter((f: any) => classifyFitting(f) === "branch").length
+);
+const flangeCount = computed(() =>
+    fittings.value.filter((f: any) => classifyFitting(f) === "flange").length
+);
 
 function normalizeDimKind(kind: unknown): MbdDimKind {
     return kind === "chain" ||
@@ -343,6 +376,72 @@ function modeLabel(mode: MbdPipeViewMode): string {
             </button>
         </div>
 
+        <div class="grid grid-cols-2 gap-2">
+            <label
+                class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs"
+            >
+                <input
+                    type="checkbox"
+                    :checked="vis.showCutTubis.value"
+                    @change="vis.showCutTubis.value = !vis.showCutTubis.value"
+                />
+                <span>切管段</span>
+            </label>
+            <label
+                class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs"
+            >
+                <input
+                    type="checkbox"
+                    :checked="vis.showElbows.value"
+                    @change="vis.showElbows.value = !vis.showElbows.value"
+                />
+                <span>弯头件</span>
+            </label>
+            <label
+                class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs"
+            >
+                <input
+                    type="checkbox"
+                    :checked="vis.showBranches.value"
+                    @change="vis.showBranches.value = !vis.showBranches.value"
+                />
+                <span>三通/支管件</span>
+            </label>
+            <label
+                class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs"
+            >
+                <input
+                    type="checkbox"
+                    :checked="vis.showFlanges.value"
+                    @change="vis.showFlanges.value = !vis.showFlanges.value"
+                />
+                <span>法兰件</span>
+            </label>
+            <label
+                class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs"
+            >
+                <input
+                    type="checkbox"
+                    :checked="vis.showAnchorDebug.value"
+                    @change="vis.showAnchorDebug.value = !vis.showAnchorDebug.value"
+                />
+                <span>锚点调试</span>
+            </label>
+            <label
+                class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs"
+            >
+                <input
+                    type="checkbox"
+                    :checked="vis.showOwnerSegmentDebug.value"
+                    @change="
+                        vis.showOwnerSegmentDebug.value =
+                            !vis.showOwnerSegmentDebug.value
+                    "
+                />
+                <span>所属段调试</span>
+            </label>
+        </div>
+
         <div v-if="stats" class="grid grid-cols-4 gap-2 text-xs">
             <div class="rounded-md border border-border px-2 py-1">
                 段:
@@ -361,6 +460,42 @@ function modeLabel(mode: MbdPipeViewMode): string {
             <div class="rounded-md border border-border px-2 py-1">
                 弯头: <span class="font-semibold">{{ stats.bends_count }}</span>
             </div>
+            <div class="rounded-md border border-border px-2 py-1">
+                切管:
+                <span class="font-semibold">{{
+                    stats.cut_tubis_count ?? cutTubis.length
+                }}</span>
+            </div>
+            <div class="rounded-md border border-border px-2 py-1">
+                管件:
+                <span class="font-semibold">{{
+                    stats.fittings_count ?? fittings.length
+                }}</span>
+            </div>
+            <div class="rounded-md border border-border px-2 py-1">
+                标签:
+                <span class="font-semibold">{{
+                    stats.tags_count ?? tags.length
+                }}</span>
+            </div>
+            <div class="rounded-md border border-border px-2 py-1">
+                抑制:
+                <span class="font-semibold">{{
+                    vis.suppressedWrongLineCount.value
+                }}</span>
+            </div>
+        </div>
+
+        <div
+            class="rounded-md border border-border p-2 text-xs text-muted-foreground"
+        >
+            cut_tubis={{ cutTubis.length }} · elbows={{ elbowCount }} ·
+            branches={{ branchCount }} · flanges={{ flangeCount }} ·
+            tags={{ tags.length }} · anchor_debug={{
+                vis.showAnchorDebug.value ? "on" : "off"
+            }} · owner_segment_debug={{
+                vis.showOwnerSegmentDebug.value ? "on" : "off"
+            }}
         </div>
 
         <div class="flex items-center gap-2">

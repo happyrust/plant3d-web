@@ -3273,8 +3273,12 @@ onMounted(async () => {
                     include_dims: true,
                     // 一期默认切到施工视图：链式/总长/焊口/坡度优先
                     include_chain_dims: true,
-                    include_overall_dim: true,
+                    include_overall_dim: false,
                     include_port_dims: false,
+                    include_cut_tubis: true,
+                    include_fittings: true,
+                    include_tags: true,
+                    include_layout_hints: true,
                     include_welds: true,
                     include_slopes: true,
                     include_bends: false,
@@ -3286,7 +3290,7 @@ onMounted(async () => {
                     // 将 MBD 标注注册到交互系统
                     try { syncMbdAnnotationsToInteraction(); } catch { /* ignore */ }
                     emitToast({
-                        message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count} 弯头${resp.data.stats.bends_count}`,
+                        message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count} 弯头${resp.data.stats.bends_count} 切管${resp.data.stats.cut_tubis_count ?? resp.data.cut_tubis?.length ?? 0} 管件${resp.data.stats.fittings_count ?? resp.data.fittings?.length ?? 0} 标签${resp.data.stats.tags_count ?? resp.data.tags?.length ?? 0}`,
                     });
                     requestRender();
                 } else {

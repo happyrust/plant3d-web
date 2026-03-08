@@ -17,6 +17,7 @@ import {
   Group,
   Line,
   LineBasicMaterial,
+  LineSegments,
   Matrix4,
   Scene,
   Vector3,
@@ -26,9 +27,13 @@ import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import type { DtxViewer } from "@/viewer/dtx/DtxViewer";
 import type {
   MbdPipeData,
+  MbdCutTubiDto,
   MbdDimDto,
   MbdDimKind,
+  MbdFittingDto,
+  MbdLayoutHint,
   MbdSlopeDto,
+  MbdTagDto,
   MbdWeldDto,
   MbdBendDto,
   MbdPipeSegmentDto,
@@ -96,6 +101,13 @@ export type UseMbdPipeAnnotationThreeReturn = {
   showDimOverall: Ref<boolean>;
   /** 元件端口间距（kind=port） */
   showDimPort: Ref<boolean>;
+  showCutTubis: Ref<boolean>;
+  showElbows: Ref<boolean>;
+  showBranches: Ref<boolean>;
+  showFlanges: Ref<boolean>;
+  showAnchorDebug: Ref<boolean>;
+  showOwnerSegmentDebug: Ref<boolean>;
+  suppressedWrongLineCount: Ref<number>;
   showWelds: Ref<boolean>;
   showSlopes: Ref<boolean>;
   showBends: Ref<boolean>;
@@ -211,6 +223,48 @@ function resolveDimDisplayText(
   return formatLengthMeters(distWorldM, unit, precision);
 }
 
+function toVector3(vec?: ApiVec3 | null): Vector3 | null {
+  if (!vec || vec.length !== 3) return null;
+  const [x, y, z] = vec;
+  if (![x, y, z].every((v) => Number.isFinite(v))) return null;
+  return new Vector3(x, y, z);
+}
+
+function resolveLayoutDirection(hint?: MbdLayoutHint | null): Vector3 | null {
+  const dir = toVector3(hint?.offset_dir ?? null);
+  if (!dir || dir.lengthSq() < 1e-9) return null;
+  return dir.normalize();
+}
+
+function resolveLayoutLabelOffset(
+  hint?: MbdLayoutHint | null,
+): Vector3 | null {
+  void hint;
+  return null;
+}
+
+function recordSuppressedAnnotation(
+  counter: Ref<number>,
+  _reason: string,
+): void {
+  counter.value += 1;
+}
+
+type MbdFittingKind = "elbow" | "branch" | "flange";
+
+function classifyFitting(fitting: MbdFittingDto): MbdFittingKind {
+  const raw = `${fitting.kind ?? ""} ${fitting.noun ?? ""}`.toUpperCase();
+  if (
+    raw.includes("TEE") ||
+    raw.includes("BRANCH") ||
+    raw.includes("OLET")
+  ) {
+    return "branch";
+  }
+  if (raw.includes("FLAN")) return "flange";
+  return "elbow";
+}
+
 export function useMbdPipeAnnotationThree(
   dtxViewerRef: Ref<DtxViewer | null>,
   labelContainerRef: Ref<HTMLElement | null>,
@@ -248,8 +302,15 @@ export function useMbdPipeAnnotationThree(
   const showDims = ref(true);
   const showDimSegment = ref(false);
   const showDimChain = ref(true);
-  const showDimOverall = ref(true);
+  const showDimOverall = ref(false);
   const showDimPort = ref(false);
+  const showCutTubis = ref(true);
+  const showElbows = ref(true);
+  const showBranches = ref(true);
+  const showFlanges = ref(true);
+  const showAnchorDebug = ref(false);
+  const showOwnerSegmentDebug = ref(false);
+  const suppressedWrongLineCount = ref(0);
   const showWelds = ref(true);
   const showSlopes = ref(true);
   const showBends = ref(false);
@@ -276,6 +337,14 @@ export function useMbdPipeAnnotationThree(
   const slopeAnnotations = new Map<string, SlopeAnnotation3D>();
   const segmentLines = new Map<string, Line>();
   const bendAnnotations = new Map<string, AngleDimension3D>();
+  const cutTubiAnnotations = new Map<string, LinearDimension3D>();
+  const fittingAnnotations = new Map<
+    string,
+    AngleDimension3D | WeldAnnotation3D
+  >();
+  const tagAnnotations = new Map<string, WeldAnnotation3D>();
+  const anchorDebugMarkers = new Map<string, LineSegments>();
+  const ownerSegmentDebugLines = new Map<string, Line>();
 
   const segmentMaterial = new LineBasicMaterial({
     color: 0x9ca3af,
@@ -283,6 +352,16 @@ export function useMbdPipeAnnotationThree(
     opacity: 0.9,
   });
   const segmentHighlightMaterial = new LineBasicMaterial({ color: 0xf59e0b });
+  const anchorDebugMaterial = new LineBasicMaterial({
+    color: 0x10b981,
+    transparent: true,
+    opacity: 0.95,
+  });
+  const ownerSegmentDebugMaterial = new LineBasicMaterial({
+    color: 0x06b6d4,
+    transparent: true,
+    opacity: 0.9,
+  });
 
   // 历史兼容：保留 initCSS2DRenderer API（但不再实际参与渲染）
   let legacyCss2dRenderer: CSS2DRenderer | null = null;
@@ -301,6 +380,12 @@ export function useMbdPipeAnnotationThree(
       showDimChain.value = false;
       showDimOverall.value = false;
       showDimPort.value = true;
+      showCutTubis.value = false;
+      showElbows.value = true;
+      showBranches.value = true;
+      showFlanges.value = true;
+      showAnchorDebug.value = false;
+      showOwnerSegmentDebug.value = false;
       showWelds.value = false;
       showSlopes.value = false;
       showBends.value = false;
@@ -311,8 +396,14 @@ export function useMbdPipeAnnotationThree(
     dimMode.value = "rebarviz";
     showDimSegment.value = false;
     showDimChain.value = true;
-    showDimOverall.value = true;
+    showDimOverall.value = false;
     showDimPort.value = false;
+    showCutTubis.value = true;
+    showElbows.value = true;
+    showBranches.value = true;
+    showFlanges.value = true;
+    showAnchorDebug.value = false;
+    showOwnerSegmentDebug.value = false;
     showWelds.value = true;
     showSlopes.value = true;
     showBends.value = false;
@@ -368,6 +459,9 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of dimAnnotations.values()) {
       asRaw(annotation).setLabelVisible(visible);
     }
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).setLabelVisible(visible);
+    }
     for (const annotation of weldAnnotations.values()) {
       asRaw(annotation).setLabelVisible(visible);
     }
@@ -375,6 +469,12 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).setLabelVisible(visible);
     }
     for (const annotation of bendAnnotations.values()) {
+      asRaw(annotation).setLabelVisible(visible);
+    }
+    for (const annotation of fittingAnnotations.values()) {
+      asRaw(annotation).setLabelVisible(visible);
+    }
+    for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).setLabelVisible(visible);
     }
   }
@@ -399,6 +499,11 @@ export function useMbdPipeAnnotationThree(
     }
     dimAnnotations.clear();
 
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    cutTubiAnnotations.clear();
+
     // 清理焊缝标注
     for (const annotation of weldAnnotations.values()) {
       asRaw(annotation).dispose();
@@ -417,6 +522,36 @@ export function useMbdPipeAnnotationThree(
     }
     bendAnnotations.clear();
 
+    for (const annotation of fittingAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    fittingAnnotations.clear();
+
+    for (const annotation of tagAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    tagAnnotations.clear();
+
+    for (const marker of anchorDebugMarkers.values()) {
+      try {
+        (marker.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      marker.removeFromParent();
+    }
+    anchorDebugMarkers.clear();
+
+    for (const line of ownerSegmentDebugLines.values()) {
+      try {
+        (line.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      line.removeFromParent();
+    }
+    ownerSegmentDebugLines.clear();
+
     // 清理管段骨架线
     for (const line of segmentLines.values()) {
       try {
@@ -434,6 +569,7 @@ export function useMbdPipeAnnotationThree(
 
     // 清理 session-only overrides
     dimOverrides.clear();
+    suppressedWrongLineCount.value = 0;
 
     currentData.value = null;
     activeItemId.value = null;
@@ -454,11 +590,17 @@ export function useMbdPipeAnnotationThree(
     }
     for (const a of dimAnnotations.values())
       asRaw(a).setBackgroundColor(color);
+    for (const a of cutTubiAnnotations.values())
+      asRaw(a).setBackgroundColor(color);
     for (const a of weldAnnotations.values())
       asRaw(a).setBackgroundColor(color);
     for (const a of slopeAnnotations.values())
       asRaw(a).setBackgroundColor(color);
     for (const a of bendAnnotations.values())
+      asRaw(a).setBackgroundColor(color);
+    for (const a of fittingAnnotations.values())
+      asRaw(a).setBackgroundColor(color);
+    for (const a of tagAnnotations.values())
       asRaw(a).setBackgroundColor(color);
   }
 
@@ -478,6 +620,10 @@ export function useMbdPipeAnnotationThree(
         isVisible.value && showDims.value && kindVisible && !declutterHidden;
     }
 
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).visible = isVisible.value && showCutTubis.value;
+    }
+
     // 焊缝标注可见性
     for (const annotation of weldAnnotations.values()) {
       asRaw(annotation).visible = isVisible.value && showWelds.value;
@@ -493,6 +639,28 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).visible = isVisible.value && showBends.value;
     }
 
+    for (const annotation of fittingAnnotations.values()) {
+      const kind = ((asRaw(annotation).userData as any)?.mbdFittingKind ??
+        "elbow") as MbdFittingKind;
+      const visible =
+        (kind === "elbow" && showElbows.value) ||
+        (kind === "branch" && showBranches.value) ||
+        (kind === "flange" && showFlanges.value);
+      asRaw(annotation).visible = isVisible.value && visible;
+    }
+
+    for (const annotation of tagAnnotations.values()) {
+      asRaw(annotation).visible = isVisible.value;
+    }
+
+    for (const marker of anchorDebugMarkers.values()) {
+      marker.visible = isVisible.value && showAnchorDebug.value;
+    }
+
+    for (const line of ownerSegmentDebugLines.values()) {
+      line.visible = isVisible.value && showOwnerSegmentDebug.value;
+    }
+
     // 管段骨架线可见性
     for (const line of segmentLines.values()) {
       line.visible = isVisible.value && showSegments.value;
@@ -504,6 +672,9 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of dimAnnotations.values()) {
       asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
     }
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
+    }
     for (const annotation of weldAnnotations.values()) {
       asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
     }
@@ -511,6 +682,12 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
     }
     for (const annotation of bendAnnotations.values()) {
+      asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
+    }
+    for (const annotation of fittingAnnotations.values()) {
+      asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
+    }
+    for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
     }
   }
@@ -522,6 +699,9 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of dimAnnotations.values()) {
       asRaw(annotation).highlighted = false;
     }
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).highlighted = false;
+    }
     for (const annotation of weldAnnotations.values()) {
       asRaw(annotation).highlighted = false;
     }
@@ -529,6 +709,12 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).highlighted = false;
     }
     for (const annotation of bendAnnotations.values()) {
+      asRaw(annotation).highlighted = false;
+    }
+    for (const annotation of fittingAnnotations.values()) {
+      asRaw(annotation).highlighted = false;
+    }
+    for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).highlighted = false;
     }
     for (const line of segmentLines.values()) {
@@ -540,6 +726,9 @@ export function useMbdPipeAnnotationThree(
       const dim = dimAnnotations.get(id);
       if (dim) asRaw(dim).highlighted = true;
 
+      const cutTubi = cutTubiAnnotations.get(id);
+      if (cutTubi) asRaw(cutTubi).highlighted = true;
+
       const weld = weldAnnotations.get(id);
       if (weld) asRaw(weld).highlighted = true;
 
@@ -548,6 +737,12 @@ export function useMbdPipeAnnotationThree(
 
       const bend = bendAnnotations.get(id);
       if (bend) asRaw(bend).highlighted = true;
+
+      const fitting = fittingAnnotations.get(id);
+      if (fitting) asRaw(fitting).highlighted = true;
+
+      const tag = tagAnnotations.get(id);
+      if (tag) asRaw(tag).highlighted = true;
 
       const seg = segmentLines.get(id);
       if (seg) seg.material = segmentHighlightMaterial;
@@ -570,7 +765,8 @@ export function useMbdPipeAnnotationThree(
       const end = new Vector3(d.end[0], d.end[1], d.end[2]);
       const kind = (d.kind ?? "segment") as MbdDimKind;
 
-      // 计算偏移方向：优先从管道拓扑推断，fallback 到相机方向
+      // 计算偏移方向：优先 layout_hint，其次管道拓扑，再次相机方向；都失败则抑制该错误线
+      const hintedDir = resolveLayoutDirection(d.layout_hint);
       const pipeDir = findSegmentOffsetDir(
         segments,
         d.start,
@@ -578,14 +774,19 @@ export function useMbdPipeAnnotationThree(
         pipeOffsetDirs,
       );
       const offsetDir =
+        hintedDir ??
         pipeDir ??
         computeDimensionOffsetDirInLocal(
           start,
           end,
           viewer?.camera ?? null,
           gm,
-        ) ??
-        new Vector3(1, 0, 0);
+        );
+      if (!offsetDir || offsetDir.lengthSq() < 1e-9) {
+        suppressedWrongLineCount.value += 1;
+        continue;
+      }
+      offsetDir.normalize();
 
       const dist = start.distanceTo(end);
       const offset =
@@ -598,14 +799,16 @@ export function useMbdPipeAnnotationThree(
       const finalDir = ov?.direction
         ? new Vector3(ov.direction[0], ov.direction[1], ov.direction[2])
         : offsetDir;
-      const finalLabelT = ov?.labelT ?? clamp01(dimLabelT.value, 0.5);
+      const finalLabelT =
+        ov?.labelT ??
+        clamp01(dimLabelT.value, 0.5);
       const finalLabelOffsetWorld = ov?.labelOffsetWorld
         ? new Vector3(
             ov.labelOffsetWorld[0],
             ov.labelOffsetWorld[1],
             ov.labelOffsetWorld[2],
           )
-        : null;
+        : resolveLayoutLabelOffset(d.layout_hint);
       const finalIsReference = ov?.isReference ?? false;
 
       dimTextById.value.set(d.id, String(d.text ?? ""));
@@ -825,6 +1028,145 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function renderCutTubis(cutTubis: MbdCutTubiDto[]): void {
+    const viewer = dtxViewerRef.value;
+    const gm = getGlobalModelMatrix?.() || identityMatrix;
+    const modeConfig = getRuntimeModeConfig();
+    for (const cutTubi of cutTubis) {
+      const start = toVector3(cutTubi.start);
+      const end = toVector3(cutTubi.end);
+      if (!start || !end) {
+        recordSuppressedAnnotation(suppressedWrongLineCount, "cut_tubi_invalid_endpoint");
+        continue;
+      }
+
+      const direction =
+        resolveLayoutDirection(cutTubi.layout_hint) ??
+        computeDimensionOffsetDirInLocal(
+          start,
+          end,
+          viewer?.camera ?? null,
+          gm,
+        );
+      if (!direction || direction.lengthSq() < 1e-9) {
+        recordSuppressedAnnotation(suppressedWrongLineCount, "cut_tubi_invalid_direction");
+        continue;
+      }
+
+      const label = String(
+        cutTubi.text ?? cutTubi.refno ?? "CUT",
+      );
+      const dim = new LinearDimension3D(
+        materials,
+        {
+          start,
+          end,
+          offset: computeMbdDimOffset(start.distanceTo(end)),
+          labelT: 0.5,
+          labelOffsetWorld: resolveLayoutLabelOffset(cutTubi.layout_hint),
+          text: label,
+          direction,
+          arrowStyle: modeConfig.arrowStyle,
+          arrowSizePx: modeConfig.arrowSizePx,
+          arrowAngleDeg: modeConfig.arrowAngleDeg,
+          extensionOvershootPx: modeConfig.extensionOvershootPx,
+          labelRenderStyle: modeConfig.labelRenderStyle,
+        },
+        {
+          depthTest: modeConfig.depthTest,
+        },
+      );
+      dim.setMaterialSet(materials.black);
+      dim.setLineWidthPx(modeConfig.lineWidthPx);
+      const rawDim = markRaw(dim);
+      (rawDim.userData as any).mbdAuxKind = "cut_tubi";
+      group.add(rawDim);
+      cutTubiAnnotations.set(cutTubi.id, rawDim);
+    }
+  }
+
+  function renderFittings(fittings: MbdFittingDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    for (const fitting of fittings) {
+      const fittingKind = classifyFitting(fitting);
+      const anchor =
+        toVector3(fitting.anchor_point) ??
+        toVector3(fitting.layout_hint?.anchor_point ?? null);
+      if (!anchor) {
+        recordSuppressedAnnotation(suppressedWrongLineCount, "fitting_missing_anchor");
+        continue;
+      }
+
+      if (
+        fittingKind === "elbow" &&
+        fitting.angle != null &&
+        fitting.face_center_1 &&
+        fitting.face_center_2
+      ) {
+        const point1 = toVector3(fitting.face_center_1);
+        const point2 = toVector3(fitting.face_center_2);
+        if (point1 && point2) {
+          const angleDim = new AngleDimension3D(materials, {
+            vertex: anchor,
+            point1,
+            point2,
+            text:
+              `${fitting.noun ?? "ELBO"} ${Number(fitting.angle).toFixed(1)}°`,
+            labelRenderStyle,
+          });
+          angleDim.setMaterialSet(materials.yellow);
+          const rawAngle = markRaw(angleDim);
+          (rawAngle.userData as any).mbdAuxKind = "fitting";
+          (rawAngle.userData as any).mbdFittingKind = fittingKind;
+          group.add(rawAngle);
+          fittingAnnotations.set(fitting.id, rawAngle);
+          continue;
+        }
+      }
+
+      const weld = new WeldAnnotation3D(materials, {
+        position: anchor,
+        label: String(fitting.noun ?? fitting.refno ?? "FIT"),
+        isShop: fittingKind !== "branch",
+        crossSize: 40,
+        labelRenderStyle,
+      });
+      if (fittingKind === "flange") weld.setMaterialSet(materials.blue);
+      else if (fittingKind === "branch") weld.setMaterialSet(materials.orange);
+      else weld.setMaterialSet(materials.yellow);
+      const rawWeld = markRaw(weld);
+      (rawWeld.userData as any).mbdAuxKind = "fitting";
+      (rawWeld.userData as any).mbdFittingKind = fittingKind;
+      group.add(rawWeld);
+      fittingAnnotations.set(fitting.id, rawWeld);
+    }
+  }
+
+  function renderTags(tags: MbdTagDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    for (const tag of tags) {
+      const anchor =
+        toVector3(tag.position) ??
+        toVector3(tag.layout_hint?.anchor_point ?? null);
+      if (!anchor) {
+        recordSuppressedAnnotation(suppressedWrongLineCount, "tag_missing_anchor");
+        continue;
+      }
+      const annotation = new WeldAnnotation3D(materials, {
+        position: anchor,
+        label: tag.text,
+        isShop: true,
+        crossSize: 24,
+        labelRenderStyle,
+      });
+      annotation.setMaterialSet(materials.white);
+      const rawTag = markRaw(annotation);
+      (rawTag.userData as any).mbdAuxKind = "tag";
+      group.add(rawTag);
+      tagAnnotations.set(tag.id, rawTag);
+    }
+  }
+
   function renderBends(bends: MbdBendDto[]): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
     let skippedMissingFaceCenter = 0;
@@ -899,6 +1241,100 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function createDebugAnchorMarker(
+    id: string,
+    point: Vector3,
+    size = 40,
+  ): LineSegments {
+    const geom = new BufferGeometry();
+    const points = new Float32Array([
+      point.x - size, point.y, point.z,
+      point.x + size, point.y, point.z,
+      point.x, point.y - size, point.z,
+      point.x, point.y + size, point.z,
+      point.x, point.y, point.z - size,
+      point.x, point.y, point.z + size,
+    ]);
+    geom.setAttribute("position", new Float32BufferAttribute(points, 3));
+    const marker = new LineSegments(geom, anchorDebugMaterial);
+    marker.name = `mbd-debug-anchor:${id}`;
+    (marker.userData as any).mbdAuxKind = "debug-anchor";
+    (marker.userData as any).mbdDebugId = id;
+    const rawMarker = markRaw(marker);
+    group.add(rawMarker);
+    anchorDebugMarkers.set(id, rawMarker);
+    return rawMarker;
+  }
+
+  function createOwnerSegmentDebugLine(segment: MbdPipeSegmentDto): Line | null {
+    if (!segment.arrive || !segment.leave) return null;
+    const geom = new BufferGeometry();
+    const pos = new Float32Array([
+      segment.arrive[0],
+      segment.arrive[1],
+      segment.arrive[2],
+      segment.leave[0],
+      segment.leave[1],
+      segment.leave[2],
+    ]);
+    geom.setAttribute("position", new Float32BufferAttribute(pos, 3));
+    const line = new Line(geom, ownerSegmentDebugMaterial);
+    line.name = `mbd-debug-owner:${segment.id}`;
+    (line.userData as any).mbdAuxKind = "debug-owner-segment";
+    (line.userData as any).mbdDebugId = segment.id;
+    const rawLine = markRaw(line);
+    group.add(rawLine);
+    ownerSegmentDebugLines.set(segment.id, rawLine);
+    return rawLine;
+  }
+
+  function renderDebugOverlays(data: MbdPipeData): void {
+    const ownerSegments = new Set<string>();
+    const anchorEntries: Array<{ id: string; point: ApiVec3 | null | undefined }> = [];
+
+    const collectOwnerAndAnchor = (
+      id: string,
+      hint?: MbdLayoutHint | null,
+    ) => {
+      if (hint?.anchor_point) {
+        anchorEntries.push({ id, point: hint.anchor_point });
+      }
+      if (hint?.owner_segment_id) {
+        ownerSegments.add(hint.owner_segment_id);
+      }
+    };
+
+    for (const dim of data.dims || []) collectOwnerAndAnchor(dim.id, dim.layout_hint);
+    for (const weld of data.welds || []) collectOwnerAndAnchor(weld.id, weld.layout_hint);
+    for (const cut of data.cut_tubis || []) collectOwnerAndAnchor(cut.id, cut.layout_hint);
+    for (const fitting of data.fittings || []) {
+      collectOwnerAndAnchor(fitting.id, fitting.layout_hint);
+      anchorEntries.push({ id: fitting.id, point: fitting.anchor_point });
+    }
+    for (const tag of data.tags || []) {
+      collectOwnerAndAnchor(tag.id, tag.layout_hint);
+      anchorEntries.push({ id: tag.id, point: tag.position });
+    }
+
+    const seenAnchorIds = new Set<string>();
+    for (const entry of anchorEntries) {
+      if (seenAnchorIds.has(entry.id)) continue;
+      seenAnchorIds.add(entry.id);
+      const point = toVector3(entry.point ?? null);
+      if (!point) continue;
+      createDebugAnchorMarker(entry.id, point);
+    }
+
+    const segmentById = new Map(
+      (data.segments || []).map((segment) => [segment.id, segment] as const),
+    );
+    for (const segmentId of ownerSegments) {
+      const segment = segmentById.get(segmentId);
+      if (!segment) continue;
+      createOwnerSegmentDebugLine(segment);
+    }
+  }
+
   function renderBranch(data: MbdPipeData): void {
     const viewer = dtxViewerRef.value;
     if (!viewer) return;
@@ -908,6 +1344,7 @@ export function useMbdPipeAnnotationThree(
 
     currentData.value = data;
     isVisible.value = true;
+    suppressedWrongLineCount.value = 0;
 
     // 应用全局模型矩阵
     const gm = getGlobalModelMatrix?.() || identityMatrix;
@@ -927,7 +1364,11 @@ export function useMbdPipeAnnotationThree(
     if (data.welds?.length) renderWelds(data.welds);
     if (data.slopes?.length) renderSlopes(data.slopes);
     if (data.bends?.length) renderBends(data.bends);
+    if (data.cut_tubis?.length) renderCutTubis(data.cut_tubis);
+    if (data.fittings?.length) renderFittings(data.fittings);
+    if (data.tags?.length) renderTags(data.tags);
     if (data.segments?.length) renderSegments(data.segments);
+    renderDebugOverlays(data);
 
     // Set text background occlusion color to match scene background
     applyBackgroundColor(viewer);
@@ -1029,6 +1470,21 @@ export function useMbdPipeAnnotationThree(
       if (b.face_center_1) expand(b.face_center_1);
       if (b.face_center_2) expand(b.face_center_2);
     }
+    for (const cutTubi of data.cut_tubis || []) {
+      expand(cutTubi.start);
+      expand(cutTubi.end);
+      if (cutTubi.layout_hint?.anchor_point) expand(cutTubi.layout_hint.anchor_point);
+    }
+    for (const fitting of data.fittings || []) {
+      expand(fitting.anchor_point);
+      if (fitting.face_center_1) expand(fitting.face_center_1);
+      if (fitting.face_center_2) expand(fitting.face_center_2);
+      if (fitting.layout_hint?.anchor_point) expand(fitting.layout_hint.anchor_point);
+    }
+    for (const tag of data.tags || []) {
+      expand(tag.position);
+      if (tag.layout_hint?.anchor_point) expand(tag.layout_hint.anchor_point);
+    }
     for (const seg of data.segments || []) {
       if (seg.arrive) expand(seg.arrive);
       if (seg.leave) expand(seg.leave);
@@ -1063,6 +1519,9 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of dimAnnotations.values()) {
       asRaw(annotation).update(camera);
     }
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).update(camera);
+    }
     for (const annotation of weldAnnotations.values()) {
       asRaw(annotation).update(camera);
     }
@@ -1070,6 +1529,12 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).update(camera);
     }
     for (const annotation of bendAnnotations.values()) {
+      asRaw(annotation).update(camera);
+    }
+    for (const annotation of fittingAnnotations.values()) {
+      asRaw(annotation).update(camera);
+    }
+    for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).update(camera);
     }
   }
@@ -1155,6 +1620,8 @@ export function useMbdPipeAnnotationThree(
     materials.dispose();
     segmentMaterial.dispose();
     segmentHighlightMaterial.dispose();
+    anchorDebugMaterial.dispose();
+    ownerSegmentDebugMaterial.dispose();
     group.removeFromParent();
   }
 
@@ -1167,6 +1634,12 @@ export function useMbdPipeAnnotationThree(
       showDimChain,
       showDimOverall,
       showDimPort,
+      showCutTubis,
+      showElbows,
+      showBranches,
+      showFlanges,
+      showAnchorDebug,
+      showOwnerSegmentDebug,
       showWelds,
       showSlopes,
       showBends,
@@ -1297,6 +1770,13 @@ export function useMbdPipeAnnotationThree(
     showDimChain,
     showDimOverall,
     showDimPort,
+    showCutTubis,
+    showElbows,
+    showBranches,
+    showFlanges,
+    showAnchorDebug,
+    showOwnerSegmentDebug,
+    suppressedWrongLineCount,
     showWelds,
     showSlopes,
     showBends,

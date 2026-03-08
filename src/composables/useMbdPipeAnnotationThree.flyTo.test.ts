@@ -31,8 +31,12 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(vis.dimMode.value).toBe("rebarviz");
     expect(vis.showDimSegment.value).toBe(false);
     expect(vis.showDimChain.value).toBe(true);
-    expect(vis.showDimOverall.value).toBe(true);
+    expect(vis.showDimOverall.value).toBe(false);
     expect(vis.showDimPort.value).toBe(false);
+    expect(vis.showCutTubis.value).toBe(true);
+    expect(vis.showElbows.value).toBe(true);
+    expect(vis.showBranches.value).toBe(true);
+    expect(vis.showFlanges.value).toBe(true);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
     expect(vis.showBends.value).toBe(false);
@@ -71,8 +75,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(vis.mbdViewMode.value).toBe("construction");
     expect(vis.dimMode.value).toBe("rebarviz");
     expect(vis.showDimChain.value).toBe(true);
-    expect(vis.showDimOverall.value).toBe(true);
+    expect(vis.showDimOverall.value).toBe(false);
     expect(vis.showDimPort.value).toBe(false);
+    expect(vis.showCutTubis.value).toBe(true);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
   });
@@ -281,6 +286,305 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.flyTo();
 
     expect(flyTo).toHaveBeenCalledTimes(1);
+  });
+
+  it("construction 下 tags 应默认可见", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [
+        {
+          id: "tag-1",
+          refno: "tag-1",
+          noun: "TUBI",
+          role: "spec",
+          text: "DN50",
+          position: [100, 0, 0],
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 1,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const tagObject = root?.children?.find(
+      (child: any) => child?.userData?.mbdAuxKind === "tag",
+    );
+
+    expect(tagObject).toBeTruthy();
+    expect(tagObject?.visible).toBe(true);
+  });
+
+  it("fitting 缺少合法锚点时应抑制并计数", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [
+        {
+          id: "fit-1",
+          refno: "fit-1",
+          noun: "TEE",
+          kind: "tee",
+          anchor_point: [Number.NaN, 0, 0] as any,
+        },
+      ],
+      tags: [],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 1,
+        tags_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const fittingObject = root?.children?.find(
+      (child: any) => child?.userData?.mbdAuxKind === "fitting",
+    );
+
+    expect(fittingObject).toBeFalsy();
+    expect(vis.suppressedWrongLineCount.value).toBe(1);
+  });
+
+  it("开启 showAnchorDebug 后应显示锚点调试几何", async () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      dims: [
+        {
+          id: "dim-1",
+          kind: "chain",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            anchor_point: [200, 100, 0],
+            offset_dir: [0, 1, 0],
+            primary_axis: [1, 0, 0],
+            char_dir: [0, 0, 1],
+            label_role: "chain",
+            avoid_line_of_sight: true,
+            owner_segment_id: "seg-1",
+            offset_level: 1,
+            suppress_reason: null,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 0,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const debugBefore = root?.children?.filter(
+      (child: any) => child?.userData?.mbdAuxKind === "debug-anchor",
+    ) ?? [];
+    expect(debugBefore.length).toBeGreaterThan(0);
+    expect(debugBefore.every((child: any) => child.visible === false)).toBe(true);
+
+    vis.showAnchorDebug.value = true;
+    await nextTick();
+
+    const debugAfter = root?.children?.filter(
+      (child: any) => child?.userData?.mbdAuxKind === "debug-anchor",
+    ) ?? [];
+    expect(debugAfter.length).toBeGreaterThan(0);
+    expect(debugAfter.every((child: any) => child.visible === true)).toBe(true);
+  });
+
+  it("开启 showOwnerSegmentDebug 后应显示所属段调试几何", async () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [
+        {
+          id: "seg-1",
+          refno: "seg-1",
+          noun: "TUBI",
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: "dim-1",
+          kind: "chain",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            anchor_point: [200, 100, 0],
+            offset_dir: [0, 1, 0],
+            primary_axis: [1, 0, 0],
+            char_dir: [0, 0, 1],
+            label_role: "chain",
+            avoid_line_of_sight: true,
+            owner_segment_id: "seg-1",
+            offset_level: 1,
+            suppress_reason: null,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+    ) as any;
+    const debugBefore = root?.children?.filter(
+      (child: any) => child?.userData?.mbdAuxKind === "debug-owner-segment",
+    ) ?? [];
+    expect(debugBefore.length).toBe(1);
+    expect(debugBefore[0]?.visible).toBe(false);
+
+    vis.showOwnerSegmentDebug.value = true;
+    await nextTick();
+
+    const debugAfter = root?.children?.filter(
+      (child: any) => child?.userData?.mbdAuxKind === "debug-owner-segment",
+    ) ?? [];
+    expect(debugAfter.length).toBe(1);
+    expect(debugAfter[0]?.visible).toBe(true);
   });
 
   it("切换 dimMode 重建后应保持当前高亮项", async () => {

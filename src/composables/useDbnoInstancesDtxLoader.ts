@@ -41,6 +41,7 @@ type DbnoRuntimeCache = {
   objectCounter: number
   refnoToObjectIds: Map<string, string[]>
   objectIdToRefno: Map<string, string>
+  objectIdToSpecValue: Map<string, number | null>
   refnoTransform: Map<string, number[]>
   refnoToNoun: Map<string, string>
   refnoToOwnerNoun: Map<string, string>
@@ -63,6 +64,7 @@ function getCache(dbno: number): DbnoRuntimeCache {
     objectCounter: 0,
     refnoToObjectIds: new Map(),
     objectIdToRefno: new Map(),
+    objectIdToSpecValue: new Map(),
     refnoTransform: new Map(),
     refnoToNoun: new Map(),
     refnoToOwnerNoun: new Map(),
@@ -130,6 +132,19 @@ function getUnitSphereGeometry(): BufferGeometry {
   g.computeBoundingBox()
   cachedUnitSphereGeometry = g
   return g
+}
+
+function parseSpecValue(rawSpecValue: unknown): number | null {
+  if (typeof rawSpecValue === 'number') {
+    return Number.isFinite(rawSpecValue) ? rawSpecValue : null
+  }
+  if (typeof rawSpecValue === 'string') {
+    const trimmed = rawSpecValue.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
 async function ensureGeometryForGeoHash(
@@ -336,13 +351,11 @@ export function applyMaterialConfigToLoadedDtx(
     const refnoKey = normalizeRefnoKey(refno)
     const noun = normalizeNounKey(cache.refnoToNoun.get(refno) || '')
     const ownerNoun = normalizeNounKey(cache.refnoToOwnerNoun.get(refno) || '')
-    const specValue = cache.refnoToSpecValue.get(refno) ?? null
     const isHidden = hiddenRefnos.has(refnoKey) || (noun && hiddenNouns.has(noun))
-    const resolved = resolveMaterialWithTheme(config, refnoKey, noun, ownerNoun, theme, specValue)
 
     for (const objectId of objectIds) {
-      const specValue = cache.objectIdToSpecValue.get(objectId) ?? 0
-      const resolved = resolveMaterialForInstance(config, refnoKey, noun, specValue)
+      const objectSpecValue = cache.objectIdToSpecValue.get(objectId) ?? cache.refnoToSpecValue.get(refno) ?? null
+      const resolved = resolveMaterialWithTheme(config, refnoKey, noun, ownerNoun, theme, objectSpecValue)
       if (isHidden || resolved.hidden) {
         dtxLayer.setObjectVisible(objectId, false)
         continue
@@ -536,7 +549,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       const matrix = new Matrix4().fromArray(matrixData)
 
       const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '')
-      const specValue = typeof (inst as any).uniforms?.spec_value === 'number' ? (inst as any).uniforms.spec_value : 0
+      const specValue = parseSpecValue((inst as any).uniforms?.spec_value)
       if (noun && !refnoNoun) {
         refnoNoun = noun
       }
@@ -545,11 +558,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       }
 
       const instOwnerNoun = normalizeNounKey((inst as any).uniforms?.owner_noun || '')
-      const rawSpecValue = (inst as any).uniforms?.spec_value
-      const specValue = typeof rawSpecValue === 'number'
-        ? rawSpecValue
-        : (typeof rawSpecValue === 'string' && rawSpecValue.trim() !== '' ? Number(rawSpecValue) : null)
-      const resolved = resolveMaterialWithTheme(displayConfig, refnoKey, noun, instOwnerNoun, currentLoadTheme, Number.isFinite(specValue as number) ? specValue : null)
+      const resolved = resolveMaterialWithTheme(displayConfig, refnoKey, noun, instOwnerNoun, currentLoadTheme, specValue)
       if (resolved.hidden) {
         continue
       }
@@ -597,11 +606,9 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       cache.refnoToOwnerNoun.set(refnoKey, ownerNoun)
     }
     const rawSpecValue = (firstInst as any)?.uniforms?.spec_value
-    const firstSpecValue = typeof rawSpecValue === 'number'
-      ? rawSpecValue
-      : (typeof rawSpecValue === 'string' && rawSpecValue.trim() !== '' ? Number(rawSpecValue) : null)
+    const firstSpecValue = parseSpecValue(rawSpecValue)
     if (!cache.refnoToSpecValue.has(refnoKey)) {
-      cache.refnoToSpecValue.set(refnoKey, Number.isFinite(firstSpecValue as number) ? firstSpecValue : null)
+      cache.refnoToSpecValue.set(refnoKey, firstSpecValue)
     }
     cache.loadedRefnos.add(refnoKey)
   }
