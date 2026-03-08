@@ -12,6 +12,7 @@
 
 import * as duckdb from '@duckdb/duckdb-wasm'
 import { shallowRef } from 'vue'
+import { getParquetVersion } from '@/api/genModelRealtimeApi'
 import { buildFilesOutputUrl } from '@/lib/filesOutput'
 import type { InstanceEntry } from '@/utils/instances/instanceManifest'
 import { Matrix4 } from 'three'
@@ -84,6 +85,13 @@ type ParquetManifestWithBaseDir = {
   baseDir: 'parquet' | 'instances'
 }
 
+type ParquetBaseDir = 'parquet' | 'instances'
+
+type ParquetDirectoryHint = {
+  manifestBaseDir: ParquetBaseDir | null
+  filesBaseDir: ParquetBaseDir | null
+}
+
 class ParquetNotFoundError extends Error {
   constructor(message: string) {
     super(message)
@@ -121,7 +129,7 @@ async function urlExists(url: string): Promise<boolean> {
 
 async function tryFetchManifest(
   dbno: number,
-  baseDir: 'parquet' | 'instances'
+  baseDir: ParquetBaseDir
 ): Promise<ParquetManifest | null> {
   const url = buildFilesOutputUrl(`${baseDir}/manifest_${dbno}.json`)
   const resp = await fetch(url)
@@ -146,7 +154,7 @@ function getDefaultParquetFiles(dbno: number): Pick<RegisteredDbno['files'], 'in
 }
 
 async function areRequiredParquetFilesPresent(
-  baseDir: 'parquet' | 'instances',
+  baseDir: ParquetBaseDir,
   files: Pick<RegisteredDbno['files'], 'instances' | 'geo_instances' | 'transforms' | 'aabb'>
 ): Promise<boolean> {
   const checks = [
@@ -157,6 +165,22 @@ async function areRequiredParquetFilesPresent(
   ]
   const [instOk, geoOk, transOk, aabbOk] = await Promise.all(checks)
   return instOk && geoOk && transOk && aabbOk
+}
+
+function normalizeBaseDir(value: unknown): ParquetBaseDir | null {
+  return value === 'parquet' || value === 'instances' ? value : null
+}
+
+async function getDirectoryHint(dbno: number): Promise<ParquetDirectoryHint | null> {
+  try {
+    const version = await getParquetVersion(dbno)
+    return {
+      manifestBaseDir: normalizeBaseDir(version.manifest_base_dir),
+      filesBaseDir: normalizeBaseDir(version.files_base_dir),
+    }
+  } catch {
+    return null
+  }
 }
 
 // DuckDB 单例（参考 useParquetSqlStore 的实现）
@@ -238,6 +262,14 @@ function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null)
 }
 
 async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
+  const hint = await getDirectoryHint(dbno)
+  if (hint?.manifestBaseDir) {
+    const hintedManifest = await tryFetchManifest(dbno, hint.manifestBaseDir)
+    if (hintedManifest) {
+      return { manifest: hintedManifest, baseDir: hint.manifestBaseDir }
+    }
+  }
+
   // 优先新目录 parquet/，兼容旧目录 instances/
   const parquetManifest = await tryFetchManifest(dbno, 'parquet')
   if (parquetManifest) {
@@ -249,8 +281,9 @@ async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> 
   }
 
   // 兼容“仅导出 Parquet 文件但未生成 manifest”的场景：按新目录约定命名兜底。
+  const fallbackBaseDir = hint?.filesBaseDir ?? 'parquet'
   return {
-    baseDir: 'parquet',
+    baseDir: fallbackBaseDir,
     manifest: {
       version: 1,
       format: 'parquet',
@@ -322,6 +355,23 @@ export function useDbnoInstancesParquetLoader() {
 
   async function isParquetAvailable(dbno: number): Promise<boolean> {
     try {
+      const hint = await getDirectoryHint(dbno)
+      if (hint?.manifestBaseDir) {
+        const hintedManifest = await tryFetchManifest(dbno, hint.manifestBaseDir)
+        if (hintedManifest) {
+          return await areRequiredParquetFilesPresent(hint.manifestBaseDir, {
+            instances: hintedManifest.tables.instances.file,
+            geo_instances: hintedManifest.tables.geo_instances.file,
+            transforms: hintedManifest.tables.transforms.file,
+            aabb: hintedManifest.tables.aabb.file,
+          })
+        }
+      }
+
+      if (hint?.filesBaseDir) {
+        return await areRequiredParquetFilesPresent(hint.filesBaseDir, getDefaultParquetFiles(dbno))
+      }
+
       // 1) manifest 驱动（优先 parquet/，兼容 instances/）
       const parquetManifest = await tryFetchManifest(dbno, 'parquet')
       if (parquetManifest) {
@@ -644,8 +694,11 @@ export function useDbnoInstancesParquetLoader() {
 
     const task = (async (): Promise<ParquetMeshValidationInfo | null> => {
       let manifest: ParquetManifest
+      let baseDir: ParquetBaseDir
       try {
-        manifest = await fetchManifest(dbno)
+        const fetched = await fetchManifest(dbno)
+        manifest = fetched.manifest
+        baseDir = fetched.baseDir
       } catch {
         return null
       }
@@ -666,7 +719,7 @@ export function useDbnoInstancesParquetLoader() {
       if (!info.reportFile) return info
 
       try {
-        const reportUrl = buildFilesOutputUrl(`parquet/${info.reportFile}`)
+        const reportUrl = buildFilesOutputUrl(`${baseDir}/${info.reportFile}`)
         // 同 manifest，缺失报告也需要实时读取最新内容。
         const resp = await fetch(reportUrl, { cache: 'no-store' })
         if (!resp.ok) return info

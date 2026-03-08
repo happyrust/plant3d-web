@@ -45,6 +45,8 @@ export type ParquetVersionResponse = {
   dbnum: number
   revision: number
   updated_at?: string | null
+  manifest_base_dir?: 'parquet' | 'instances' | null
+  files_base_dir?: 'parquet' | 'instances' | null
   running: boolean
   pending_count: number
   last_error?: string | null
