@@ -15,6 +15,8 @@ export interface WeldAnnotation3DParams {
   position: THREE.Vector3;
   /** 焊缝标签 */
   label: string;
+  /** 可选副标题；为空时仅显示单行标签 */
+  subtitle?: string | null;
   /** 是否为车间焊 */
   isShop?: boolean;
   /** 十字大小（世界单位；在全局缩放下会自动换算为本地） */
@@ -59,6 +61,7 @@ export class WeldAnnotation3D extends AnnotationBase {
     this.params = {
       position: params.position.clone(),
       label: params.label,
+      subtitle: params.subtitle ?? null,
       isShop: params.isShop ?? false,
       crossSize: params.crossSize ?? 50,
       labelOffsetWorld: params.labelOffsetWorld?.clone() ?? null,
@@ -123,6 +126,7 @@ export class WeldAnnotation3D extends AnnotationBase {
     return {
       position: this.params.position.clone(),
       label: this.params.label,
+      subtitle: this.params.subtitle,
       isShop: this.params.isShop,
       crossSize: this.params.crossSize,
       labelOffsetWorld: this.params.labelOffsetWorld?.clone() ?? null,
@@ -133,6 +137,7 @@ export class WeldAnnotation3D extends AnnotationBase {
   setParams(params: Partial<WeldAnnotation3DParams>): void {
     if (params.position) this.params.position.copy(params.position);
     if (params.label !== undefined) this.params.label = params.label;
+    if ("subtitle" in params) this.params.subtitle = params.subtitle ?? null;
     if (params.isShop !== undefined) this.params.isShop = params.isShop;
     if (params.crossSize !== undefined)
       this.params.crossSize = params.crossSize;
@@ -169,7 +174,7 @@ export class WeldAnnotation3D extends AnnotationBase {
   }
 
   private rebuild(): void {
-    const { position, label, isShop, crossSize } = this.params;
+    const { position, label, subtitle, isShop, crossSize } = this.params;
     const s = crossSize;
 
     // 以 position 作为根节点位置，几何体用“相对坐标”，避免全局缩放/缩放独立时漂移
@@ -184,9 +189,15 @@ export class WeldAnnotation3D extends AnnotationBase {
       new THREE.Float32BufferAttribute([0, -s, 0, 0, s, 0], 3),
     );
 
-    const subtitle = isShop ? "车间焊" : "现场焊";
-    // two-line text
-    this.textLabel.setText(`${label}\n${subtitle}`);
+    const subtitleText =
+      subtitle !== null && subtitle !== undefined
+        ? String(subtitle)
+        : isShop
+          ? "车间焊"
+          : "现场焊";
+    this.textLabel.setText(
+      subtitleText.trim().length > 0 ? `${label}\n${subtitleText}` : label,
+    );
     const labelPos = new THREE.Vector3(0, s * 0.9, 0);
     if (this.params.labelOffsetWorld) {
       labelPos.add(this.params.labelOffsetWorld);

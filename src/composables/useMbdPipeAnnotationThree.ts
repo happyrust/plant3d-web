@@ -150,6 +150,8 @@ export type UseMbdPipeAnnotationThreeReturn = {
   getSlopeAnnotations: () => Map<string, SlopeAnnotation3D>;
   /** 获取 bend annotations map（用于外部交互控制器注册） */
   getBendAnnotations: () => Map<string, AngleDimension3D>;
+  /** 获取 tag annotations map（用于调试/测试） */
+  getTagAnnotations: () => Map<string, WeldAnnotation3D>;
 };
 
 /** MBD dims session-only override（不写回后端，仅当前会话有效） */
@@ -236,11 +238,116 @@ function resolveLayoutDirection(hint?: MbdLayoutHint | null): Vector3 | null {
   return dir.normalize();
 }
 
+function resolveLayoutOffsetLevel(hint?: MbdLayoutHint | null): number {
+  const raw = Number(hint?.offset_level ?? 0);
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.floor(raw));
+}
+
+function resolveLayeredDimOffset(
+  baseOffset: number,
+  hint?: MbdLayoutHint | null,
+): number {
+  const safeBase = clampNumber(baseOffset, 1, 5000, 100);
+  const offsetLevel = resolveLayoutOffsetLevel(hint);
+  if (offsetLevel <= 0) return safeBase;
+  const layerGap = Math.max(safeBase * 0.85, 60);
+  return safeBase + offsetLevel * layerGap;
+}
+
+function stableAlternatingSign(seed?: string | null): number {
+  const raw = String(seed ?? "").trim();
+  if (!raw) return 1;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash * 33 + raw.charCodeAt(i)) | 0;
+  }
+  return (hash & 1) === 0 ? 1 : -1;
+}
+
 function resolveLayoutLabelOffset(
   hint?: MbdLayoutHint | null,
+  dimOffset = 0,
+  baseLabelPos?: Vector3 | null,
 ): Vector3 | null {
-  void hint;
-  return null;
+  const anchorPoint = toVector3(hint?.anchor_point ?? null);
+  const charDir =
+    toVector3(hint?.char_dir ?? null) ?? toVector3(hint?.offset_dir ?? null);
+  const offsetDir = toVector3(hint?.offset_dir ?? null);
+  const primaryAxis = toVector3(hint?.primary_axis ?? null);
+  if (
+    (!anchorPoint || anchorPoint.lengthSq() < 1e-9) &&
+    (!charDir || charDir.lengthSq() < 1e-9) &&
+    (!offsetDir || offsetDir.lengthSq() < 1e-9) &&
+    (!primaryAxis || primaryAxis.lengthSq() < 1e-9)
+  ) {
+    return null;
+  }
+
+  const baseGap = clampNumber(dimOffset * 0.16, 18, 80, 32);
+  const desiredPos =
+    anchorPoint?.clone() ?? baseLabelPos?.clone() ?? new Vector3();
+  if (anchorPoint && offsetDir && offsetDir.lengthSq() >= 1e-9) {
+    desiredPos.copy(anchorPoint).addScaledVector(offsetDir.normalize(), dimOffset);
+  }
+  if (charDir && charDir.lengthSq() >= 1e-9) {
+    desiredPos.addScaledVector(charDir.normalize(), baseGap);
+  } else if (offsetDir && offsetDir.lengthSq() >= 1e-9) {
+    desiredPos.addScaledVector(offsetDir.normalize(), Math.max(baseGap * 0.45, 12));
+  }
+  if (
+    hint?.label_role === "cut_tubi" &&
+    primaryAxis &&
+    primaryAxis.lengthSq() >= 1e-9
+  ) {
+    const axialGap = clampNumber(dimOffset * 0.22, 24, 120, 48);
+    desiredPos.addScaledVector(
+      primaryAxis.normalize(),
+      axialGap * stableAlternatingSign(hint?.owner_segment_id),
+    );
+  }
+  if (!baseLabelPos) return desiredPos.lengthSq() >= 1e-9 ? desiredPos : null;
+  const offset = desiredPos.sub(baseLabelPos);
+  return offset.lengthSq() >= 1e-9 ? offset : null;
+}
+
+function resolveFloatingLabelOffset(
+  hint?: MbdLayoutHint | null,
+  baseOffset = 110,
+): Vector3 | null {
+  const offsetDir = toVector3(hint?.offset_dir ?? null);
+  const charDir =
+    toVector3(hint?.char_dir ?? null) ?? toVector3(hint?.offset_dir ?? null);
+  const primaryAxis = toVector3(hint?.primary_axis ?? null);
+  if (
+    (!offsetDir || offsetDir.lengthSq() < 1e-9) &&
+    (!charDir || charDir.lengthSq() < 1e-9) &&
+    (!primaryAxis || primaryAxis.lengthSq() < 1e-9)
+  ) {
+    return null;
+  }
+
+  const resolvedOffset = resolveLayeredDimOffset(baseOffset, hint);
+  const textGap = clampNumber(baseOffset * 0.16, 18, 64, 28);
+  const offset = new Vector3();
+  if (offsetDir && offsetDir.lengthSq() >= 1e-9) {
+    offset.addScaledVector(offsetDir.normalize(), resolvedOffset);
+  }
+  if (charDir && charDir.lengthSq() >= 1e-9) {
+    offset.addScaledVector(charDir.normalize(), textGap);
+  }
+  if (
+    primaryAxis &&
+    primaryAxis.lengthSq() >= 1e-9 &&
+    `${hint?.label_role ?? ""}`.includes("tubi")
+  ) {
+    const axialGap = clampNumber(baseOffset * 0.2, 24, 96, 40);
+    offset.addScaledVector(
+      primaryAxis.normalize(),
+      axialGap * stableAlternatingSign(hint?.owner_segment_id),
+    );
+  }
+  return offset.lengthSq() >= 1e-9 ? offset : null;
 }
 
 function recordSuppressedAnnotation(
@@ -789,9 +896,10 @@ export function useMbdPipeAnnotationThree(
       offsetDir.normalize();
 
       const dist = start.distanceTo(end);
-      const offset =
+      const baseOffset =
         computeMbdDimOffset(dist) *
         clampNumber(dimOffsetScale.value, 0.05, 50, 1);
+      const offset = resolveLayeredDimOffset(baseOffset, d.layout_hint);
 
       // 合并 session-only overrides
       const ov = dimOverrides.get(d.id);
@@ -802,13 +910,17 @@ export function useMbdPipeAnnotationThree(
       const finalLabelT =
         ov?.labelT ??
         clamp01(dimLabelT.value, 0.5);
+      const baseLabelPos = start
+        .clone()
+        .addScaledVector(finalDir, finalOffset)
+        .lerp(end.clone().addScaledVector(finalDir, finalOffset), finalLabelT);
       const finalLabelOffsetWorld = ov?.labelOffsetWorld
         ? new Vector3(
             ov.labelOffsetWorld[0],
             ov.labelOffsetWorld[1],
             ov.labelOffsetWorld[2],
           )
-        : resolveLayoutLabelOffset(d.layout_hint);
+        : resolveLayoutLabelOffset(d.layout_hint, finalOffset, baseLabelPos);
       const finalIsReference = ov?.isReference ?? false;
 
       dimTextById.value.set(d.id, String(d.text ?? ""));
@@ -1056,14 +1168,26 @@ export function useMbdPipeAnnotationThree(
       const label = String(
         cutTubi.text ?? cutTubi.refno ?? "CUT",
       );
+      const cutOffset = resolveLayeredDimOffset(
+        computeMbdDimOffset(start.distanceTo(end)),
+        cutTubi.layout_hint,
+      );
+      const baseLabelPos = start
+        .clone()
+        .addScaledVector(direction, cutOffset)
+        .lerp(end.clone().addScaledVector(direction, cutOffset), 0.5);
       const dim = new LinearDimension3D(
         materials,
         {
           start,
           end,
-          offset: computeMbdDimOffset(start.distanceTo(end)),
+          offset: cutOffset,
           labelT: 0.5,
-          labelOffsetWorld: resolveLayoutLabelOffset(cutTubi.layout_hint),
+          labelOffsetWorld: resolveLayoutLabelOffset(
+            cutTubi.layout_hint,
+            cutOffset,
+            baseLabelPos,
+          ),
           text: label,
           direction,
           arrowStyle: modeConfig.arrowStyle,
@@ -1155,11 +1279,13 @@ export function useMbdPipeAnnotationThree(
       const annotation = new WeldAnnotation3D(materials, {
         position: anchor,
         label: tag.text,
+        subtitle: "",
         isShop: true,
-        crossSize: 24,
+        crossSize: 0,
+        labelOffsetWorld: resolveFloatingLabelOffset(tag.layout_hint, 120),
         labelRenderStyle,
       });
-      annotation.setMaterialSet(materials.white);
+      annotation.setMaterialSet(materials.black);
       const rawTag = markRaw(annotation);
       (rawTag.userData as any).mbdAuxKind = "tag";
       group.add(rawTag);
@@ -1613,6 +1739,11 @@ export function useMbdPipeAnnotationThree(
     return bendAnnotations;
   }
 
+  /** 获取 tag annotations map（用于调试与测试） */
+  function getTagAnnotations(): Map<string, WeldAnnotation3D> {
+    return tagAnnotations;
+  }
+
   function dispose(): void {
     clearAll();
     legacyCss2dRenderer?.domElement.remove();
@@ -1684,18 +1815,50 @@ export function useMbdPipeAnnotationThree(
         for (const [dimId, dim] of dimAnnotations.entries()) {
           const rawDim = asRaw(dim);
           const ov = dimOverrides.get(dimId) ?? {};
+          const sourceDim =
+            currentData.value?.dims?.find((item) => item.id === dimId) ?? null;
 
           // 距离与默认 offset 以“局部坐标”计算（与几何保持一致）
           const p = rawDim.getParams();
           const distLocal = p.start.distanceTo(p.end);
-          const baseOffset = computeMbdDimOffset(distLocal) * offsetScale;
+          const baseOffset = resolveLayeredDimOffset(
+            computeMbdDimOffset(distLocal) * offsetScale,
+            sourceDim?.layout_hint,
+          );
           const nextOffset = ov.offset ?? baseOffset;
+          const nextDirection = p.direction?.clone() ?? null;
+          const nextLabelTBase = ov.labelT ?? p.labelT ?? baseLabelT;
+          const baseLabelPos =
+            nextDirection && nextDirection.lengthSq() > 1e-9
+              ? p.start
+                  .clone()
+                  .addScaledVector(nextDirection.normalize(), nextOffset)
+                  .lerp(
+                    p.end
+                      .clone()
+                      .addScaledVector(nextDirection.clone().normalize(), nextOffset),
+                    nextLabelTBase,
+                  )
+              : null;
+          const autoLabelOffset = resolveLayoutLabelOffset(
+            sourceDim?.layout_hint,
+            nextOffset,
+            baseLabelPos,
+          );
+          const nextLabelOffset =
+            "labelOffsetWorld" in ov
+              ? ov.labelOffsetWorld
+                ? new Vector3(
+                    ov.labelOffsetWorld[0],
+                    ov.labelOffsetWorld[1],
+                    ov.labelOffsetWorld[2],
+                  )
+                : null
+              : autoLabelOffset;
 
           // 若用户拖拽过文字（labelOffsetWorld!=null），避免全局 labelT 影响其基准位置
           const hasManualLabel =
-            ("labelOffsetWorld" in ov
-              ? ov.labelOffsetWorld
-              : p.labelOffsetWorld) != null;
+            "labelOffsetWorld" in ov && ov.labelOffsetWorld != null;
           const nextLabelT =
             ov.labelT ??
             (hasManualLabel ? (p.labelT ?? baseLabelT) : baseLabelT);
@@ -1713,6 +1876,7 @@ export function useMbdPipeAnnotationThree(
           rawDim.setParams({
             offset: nextOffset,
             labelT: nextLabelT,
+            labelOffsetWorld: nextLabelOffset,
             text: nextText,
             arrowStyle: modeConfig.arrowStyle,
             arrowSizePx: modeConfig.arrowSizePx,
@@ -1802,5 +1966,6 @@ export function useMbdPipeAnnotationThree(
     getWeldAnnotations,
     getSlopeAnnotations,
     getBendAnnotations,
+    getTagAnnotations,
   };
 }

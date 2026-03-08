@@ -235,6 +235,207 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(visibleCount).toBeGreaterThan(0);
   });
 
+  it("带 layout_hint 的尺寸文字应按 char_dir 偏移并随 offsetScale 更新", async () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [
+        {
+          id: "seg-layout-1",
+          kind: "segment",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            anchor_point: [500, 0, 0],
+            primary_axis: [1, 0, 0],
+            offset_dir: [0, 1, 0],
+            char_dir: [0, 0, 1],
+            label_role: "segment",
+            avoid_line_of_sight: true,
+            owner_segment_id: "seg-layout-owner",
+            offset_level: 1,
+          },
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const before = vis.getDimAnnotations().get("seg-layout-1")?.getParams();
+    expect(before?.labelOffsetWorld).toBeTruthy();
+    expect(before?.offset ?? 0).toBeGreaterThan(150);
+    expect(before?.labelOffsetWorld?.y ?? 0).toBeCloseTo(0, 6);
+    expect(before?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
+    const beforeLen = before?.labelOffsetWorld?.length() ?? 0;
+    expect(beforeLen).toBeGreaterThan(0);
+
+    vis.dimOffsetScale.value = 2;
+    await nextTick();
+
+    const after = vis.getDimAnnotations().get("seg-layout-1")?.getParams();
+    expect(after?.offset ?? 0).toBeGreaterThan(before?.offset ?? 0);
+    const afterLen = after?.labelOffsetWorld?.length() ?? 0;
+    expect(afterLen).toBeGreaterThan(beforeLen);
+  });
+
+  it("cut_tubi 角色应沿 primary_axis 轻微展开文字以避免堆叠", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [
+        {
+          id: "seg-layout-cut-like",
+          kind: "segment",
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: "1000",
+          layout_hint: {
+            anchor_point: [500, 0, 0],
+            primary_axis: [1, 0, 0],
+            offset_dir: [0, 1, 0],
+            char_dir: [0, 0, 1],
+            label_role: "cut_tubi",
+            avoid_line_of_sight: true,
+            owner_segment_id: "seg-layout-cut-owner",
+            offset_level: 1,
+          },
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const params = vis.getDimAnnotations().get("seg-layout-cut-like")?.getParams();
+    expect(params?.labelOffsetWorld).toBeTruthy();
+    expect(Math.abs(params?.labelOffsetWorld?.x ?? 0)).toBeGreaterThan(20);
+    expect(params?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
+  });
+
+  it("tag_tubi 应按 layout_hint 偏移且不附带焊缝副标题", () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: "24381_145018",
+      branch_refno: "24381_145018",
+      branch_name: "BRAN-TEST",
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [],
+      tags: [
+        {
+          id: "tag-layout-1",
+          refno: "24381_145018",
+          noun: "TUBI",
+          role: "tubi",
+          text: "L=1683",
+          position: [500, 0, 0],
+          layout_hint: {
+            anchor_point: [500, 0, 0],
+            primary_axis: [1, 0, 0],
+            offset_dir: [0, 1, 0],
+            char_dir: [0, 0, 1],
+            label_role: "tag_tubi",
+            avoid_line_of_sight: true,
+            owner_segment_id: "seg-tag-owner",
+            offset_level: 1,
+          },
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const tag = vis.getTagAnnotations().get("tag-layout-1");
+    const params = tag?.getParams();
+    expect(params?.crossSize).toBe(0);
+    expect(params?.subtitle).toBe("");
+    expect(Math.abs(params?.labelOffsetWorld?.x ?? 0)).toBeGreaterThan(20);
+    expect(params?.labelOffsetWorld?.y ?? 0).toBeGreaterThan(120);
+    expect(params?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
+  });
+
   it("仅有 bends 数据时也应触发 flyTo", () => {
     const flyTo = vi.fn();
     const viewer = {
