@@ -477,8 +477,7 @@ export class LinearDimension3D extends AnnotationBase {
 
   /** 获取 label 默认位置（无 labelOffsetWorld 时的基准，即 labelT 插值点） */
   getDefaultLabelWorldPos(): THREE.Vector3 {
-    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5))
-    return this.dimStart.clone().lerp(this.dimEnd, t)
+    return this.dimStart.clone().lerp(this.dimEnd, 0.5)
   }
 
   /** 更新参数并重建几何 */
@@ -670,14 +669,18 @@ export class LinearDimension3D extends AnnotationBase {
       .applyQuaternion(camera.quaternion)
       .normalize();
 
-    // Label: align to pixel grid + compute world-per-pixel scale
-    this.textLabel.object3d.getWorldPosition(this.tmpWorldF)
-    alignToPixelGrid(camera, this.tmpWorldF, vw, vh, this.refWorld)
+    // Key points in world space (keep in stable vectors to avoid aliasing)
+    const startW = this.localToWorld(this.startWorld.copy(this.params.start))
+    const endW = this.localToWorld(this.endWorld.copy(this.params.end))
+    const aeW = this.localToWorld(this.aeWorld.copy(this.dimStart))
+    const beW = this.localToWorld(this.beWorld.copy(this.dimEnd))
+    const baseRefWorld = this.tmpWorldF.copy(aeW).lerp(beW, 0.5)
+    alignToPixelGrid(camera, baseRefWorld, vw, vh, this.refWorld)
     const wpp = worldPerPixelAt(camera, this.refWorld, vw, vh, this.wppTmp)
     if (!Number.isFinite(wpp) || wpp <= 0) return
 
     // `worldPerPixelAt` 返回的是世界坐标尺度；若父级存在全局缩放（例如 mm->m=0.001），
-    // 需要换算为本地尺度，否则文字会被额外缩小，出现“线可见但字极小不可见”。
+    // 需要换算成本地尺度，否则文字会被额外缩小。
     let localWpp = wpp;
     try {
       this.getWorldScale(this.worldScale);
@@ -693,15 +696,7 @@ export class LinearDimension3D extends AnnotationBase {
       // ignore
     }
     this.textLabel.setWorldPerPixel(localWpp);
-    this.textLabel.object3d.position.copy(
-      this.worldToLocal(this.tmpWorldG.copy(this.refWorld)),
-    );
-
-    // Key points in world space (keep in stable vectors to avoid aliasing)
-    const startW = this.localToWorld(this.startWorld.copy(this.params.start))
-    const endW = this.localToWorld(this.endWorld.copy(this.params.end))
-    const aeW = this.localToWorld(this.aeWorld.copy(this.dimStart))
-    const beW = this.localToWorld(this.beWorld.copy(this.dimEnd))
+    this.textLabel.setFrame(this.refWorld, this.camRight, this.camUp);
 
     // Dimension line direction
     const dlW = this.dlWorld.copy(beW).sub(aeW)
@@ -1143,16 +1138,10 @@ export class LinearDimension3D extends AnnotationBase {
     this.lastDisplayText = displayText
     this.textLabel.setText(displayText)
 
-    // 文本位置：优先使用 labelOffsetWorld（SolveSpace 自由拖拽），否则用 labelT 插值
-    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5))
-    const baseLabelPos = this.tempVec.copy(this.dimStart).lerp(this.dimEnd, t)
-    if (this.params.labelOffsetWorld) {
-      this.textLabel.object3d.position
-        .copy(baseLabelPos)
-        .add(this.params.labelOffsetWorld);
-    } else {
-      this.textLabel.object3d.position.copy(baseLabelPos)
-    }
+    // 默认布局固定把文字锚在尺寸线中点；常规避让通过抬整条尺寸线完成。
+    this.textLabel.object3d.position.copy(
+      this.tempVec.copy(this.dimStart).lerp(this.dimEnd, 0.5),
+    )
 
     // 吸附点位置
     for (let i = 0; i < this.snapMarkers.length; i++) {

@@ -108,6 +108,11 @@ export class WeldAnnotation3D extends AnnotationBase {
     if (Number.isFinite(wpp) && wpp > 0) {
       this.textLabel.setWorldPerPixel(wpp);
     }
+    this.textLabel.setFrame(
+      this.labelWorld,
+      new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion),
+      new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion),
+    );
     this.textLabel.update(camera);
   }
 

@@ -173,6 +173,36 @@ describe("LinearDimension3D", () => {
     expect(scaleSmallViewport).toBeGreaterThan(scaleLargeViewport);
   });
 
+  it("should keep label centered on the dimension line even when labelOffsetWorld is provided", async () => {
+    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
+    const { LinearDimension3D } = await import("./LinearDimension3D");
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      labelOffsetWorld: new THREE.Vector3(5, 9, 0),
+      text: "10000",
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    camera.position.set(0, 0, 30);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    dim.update(camera);
+
+    const dimStart = (dim as any).dimStart as THREE.Vector3;
+    const dimEnd = (dim as any).dimEnd as THREE.Vector3;
+    const expected = dimStart.clone().lerp(dimEnd, 0.5);
+    const labelPos = dim.getLabelWorldPos();
+
+    expect(labelPos.distanceTo(expected)).toBeLessThan(0.1);
+  });
+
   it("should keep label world scale stable under parent global scaling", async () => {
     const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
     const { LinearDimension3D } = await import("./LinearDimension3D");

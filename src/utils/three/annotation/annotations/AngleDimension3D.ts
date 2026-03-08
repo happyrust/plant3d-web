@@ -657,9 +657,7 @@ export class AngleDimension3D extends AnnotationBase {
       // ignore
     }
     this.textLabel.setWorldPerPixel(localWpp);
-    this.textLabel.object3d.position.copy(
-      this.worldToLocal(this.tmpWorldG.copy(this.refWorld)),
-    );
+    this.textLabel.setFrame(this.refWorld, this.camRight, this.camUp);
 
     // Label box size in world units (SolveSpace: +8px padding)
     const extPx = this.textLabel.getExtentsPx()

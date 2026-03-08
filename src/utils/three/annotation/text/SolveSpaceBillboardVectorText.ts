@@ -17,7 +17,6 @@ type LabelStylePreset = {
   haloOpacity: number;
   haloScale: number;
   forceTextDepthOff: boolean;
-  useCanvasText: boolean;
 };
 
 export type SolveSpaceBillboardVectorTextParams = {
@@ -50,7 +49,6 @@ const LABEL_STYLE_PRESETS: Record<
     haloOpacity: 0.68,
     haloScale: 1.06,
     forceTextDepthOff: false,
-    useCanvasText: false,
   },
   rebarviz: {
     minCapHeightPx: 16,
@@ -61,7 +59,6 @@ const LABEL_STYLE_PRESETS: Record<
     haloOpacity: 0.72,
     haloScale: 1.08,
     forceTextDepthOff: true,
-    useCanvasText: true,
   },
 };
 
@@ -97,19 +94,6 @@ export class SolveSpaceBillboardVectorText {
   private haloLine: THREE.LineSegments | null = null;
   private haloMaterial: THREE.LineBasicMaterial | null = null;
   private spriteMesh: THREE.Mesh | null = null;
-  private spriteGeometry: THREE.PlaneGeometry | null = null;
-  private spriteMaterial: THREE.MeshBasicMaterial | null = null;
-  private spriteTexture: THREE.CanvasTexture | null = null;
-  private spriteCanvas: HTMLCanvasElement | null = null;
-  private spriteCtx: CanvasRenderingContext2D | null = null;
-  private spriteLayout: {
-    lines: string[];
-    fontPx: number;
-    lineHeight: number;
-    pad: number;
-    canvasWidth: number;
-    canvasHeight: number;
-  } | null = null;
   private readonly rebarvizMaterialCache = new Map<
     string,
     THREE.LineBasicMaterial
@@ -126,6 +110,17 @@ export class SolveSpaceBillboardVectorText {
   private widthPx = 0;
   private heightPx = 0;
   private lineHasGeometry = false;
+  private hasExplicitFrame = false;
+  private readonly frameOriginWorld = new THREE.Vector3();
+  private readonly frameAxisUWorld = new THREE.Vector3(1, 0, 0);
+  private readonly frameAxisVWorld = new THREE.Vector3(0, 1, 0);
+  private readonly frameAxisNLocal = new THREE.Vector3();
+  private readonly frameAxisULocal = new THREE.Vector3();
+  private readonly frameAxisVLocal = new THREE.Vector3();
+  private readonly frameOriginLocal = new THREE.Vector3();
+  private readonly tmpWorldOrigin = new THREE.Vector3();
+  private readonly tmpParentQuat = new THREE.Quaternion();
+  private readonly tmpMatrix = new THREE.Matrix4();
 
   constructor(params: SolveSpaceBillboardVectorTextParams) {
     this.renderStyle = params.renderStyle ?? "solvespace";
@@ -148,7 +143,6 @@ export class SolveSpaceBillboardVectorText {
 
     this._createHaloLine();
     this.object3d.add(this.line);
-    this._createRebarvizSprite();
 
     this._createBackgroundMesh();
     this._createPickProxy();
@@ -201,6 +195,18 @@ export class SolveSpaceBillboardVectorText {
     this.object3d.visible = visible;
   }
 
+  setFrame(
+    originWorld: THREE.Vector3,
+    axisUWorld: THREE.Vector3,
+    axisVWorld: THREE.Vector3,
+  ): void {
+    this.hasExplicitFrame = true;
+    this.frameOriginWorld.copy(originWorld);
+    this.frameAxisUWorld.copy(axisUWorld);
+    this.frameAxisVWorld.copy(axisVWorld);
+    this.applyFrameFromWorld();
+  }
+
   /** Set background occlusion color (should match scene background). */
   setBackgroundColor(color: THREE.ColorRepresentation): void {
     if (this.bgMaterial) {
@@ -208,9 +214,15 @@ export class SolveSpaceBillboardVectorText {
     }
   }
 
-  /** SolveSpace style billboard */
   update(camera: THREE.Camera): void {
-    this.object3d.quaternion.copy(camera.quaternion);
+    if (!this.hasExplicitFrame) {
+      this.object3d.updateWorldMatrix(true, false);
+      this.object3d.getWorldPosition(this.tmpWorldOrigin);
+      this.frameOriginWorld.copy(this.tmpWorldOrigin);
+      this.frameAxisUWorld.set(1, 0, 0).applyQuaternion(camera.quaternion);
+      this.frameAxisVWorld.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    }
+    this.applyFrameFromWorld();
   }
 
   setInteractionState(state: AnnotationInteractionState): void {
@@ -272,21 +284,6 @@ export class SolveSpaceBillboardVectorText {
     } catch {
       // ignore
     }
-    try {
-      this.spriteGeometry?.dispose();
-    } catch {
-      // ignore
-    }
-    try {
-      this.spriteMaterial?.dispose();
-    } catch {
-      // ignore
-    }
-    try {
-      this.spriteTexture?.dispose();
-    } catch {
-      // ignore
-    }
     this.clearRebarvizMaterialCache();
     this.object3d.removeFromParent();
   }
@@ -305,9 +302,6 @@ export class SolveSpaceBillboardVectorText {
   private applyRenderStylePreset(): void {
     const preset = this.getStylePreset();
     this.line.renderOrder = preset.textRenderOrder;
-    if (this.spriteMesh) {
-      this.spriteMesh.renderOrder = preset.textRenderOrder;
-    }
     if (this.haloLine) {
       this.haloLine.renderOrder = preset.haloRenderOrder;
       this.haloLine.scale.setScalar(preset.haloScale);
@@ -324,7 +318,6 @@ export class SolveSpaceBillboardVectorText {
     const stateMat = this.resolveStateMaterial();
     if (this.getStylePreset().forceTextDepthOff) {
       this.line.material = this.getRebarvizTextMaterial(stateMat);
-      this.refreshRebarvizSpriteText();
       return;
     }
 
@@ -338,12 +331,10 @@ export class SolveSpaceBillboardVectorText {
   }
 
   private _applyRenderStyleVisibility(): void {
-    const hasText = this.getStylePreset().useCanvasText
-      ? !!this.spriteLayout
-      : this.lineHasGeometry;
+    const hasText = this.lineHasGeometry;
     this.applyRenderStylePreset();
 
-    this.line.visible = hasText && this.renderStyle === "solvespace";
+    this.line.visible = hasText;
 
     if (this.haloLine) {
       this.haloLine.visible = hasText && this.renderStyle === "rebarviz";
@@ -351,9 +342,6 @@ export class SolveSpaceBillboardVectorText {
 
     if (this.bgMesh) {
       this.bgMesh.visible = hasText && this.renderStyle === "solvespace";
-    }
-    if (this.spriteMesh) {
-      this.spriteMesh.visible = hasText && this.renderStyle === "rebarviz";
     }
   }
 
@@ -373,36 +361,6 @@ export class SolveSpaceBillboardVectorText {
     this.haloLine.userData.noPick = true;
     this.haloLine.visible = false;
     this.object3d.add(this.haloLine);
-  }
-
-  private _createRebarvizSprite(): void {
-    this.spriteGeometry = new THREE.PlaneGeometry(1, 1);
-    this.spriteMaterial = new THREE.MeshBasicMaterial({
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-      side: THREE.DoubleSide,
-    });
-    this.spriteMesh = new THREE.Mesh(this.spriteGeometry, this.spriteMaterial);
-    this.spriteMesh.userData.noPick = true;
-    this.spriteMesh.visible = false;
-    this.object3d.add(this.spriteMesh);
-  }
-
-  private ensureSpriteCanvas(): boolean {
-    if (this.spriteCanvas && this.spriteCtx) return true;
-    if (typeof document === "undefined") return false;
-    this.spriteCanvas = document.createElement("canvas");
-    this.spriteCtx = this.spriteCanvas.getContext("2d");
-    return !!this.spriteCtx;
-  }
-
-  private getActiveTextColorCss(): string {
-    const mat = this.resolveStateMaterial();
-    const color = (mat as any)?.color as THREE.Color | undefined;
-    if (!color) return "#6d28d9";
-    return `#${color.getHexString()}`;
   }
 
   private resolveStateMaterial(): THREE.LineBasicMaterial {
@@ -425,51 +383,6 @@ export class SolveSpaceBillboardVectorText {
       .catch(() => {
         this.fontPromise = null;
       });
-  }
-
-  private refreshRebarvizSpriteText(): void {
-    if (!this.spriteLayout || !this.spriteMaterial || !this.spriteMesh) return;
-    if (!this.ensureSpriteCanvas()) return;
-    const canvas = this.spriteCanvas!;
-    const ctx = this.spriteCtx!;
-    const layout = this.spriteLayout;
-    const dpr =
-      typeof window !== "undefined"
-        ? Math.max(1, window.devicePixelRatio || 1)
-        : 1;
-
-    canvas.width = Math.max(1, Math.floor(layout.canvasWidth * dpr));
-    canvas.height = Math.max(1, Math.floor(layout.canvasHeight * dpr));
-    canvas.style.width = `${layout.canvasWidth}px`;
-    canvas.style.height = `${layout.canvasHeight}px`;
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, layout.canvasWidth, layout.canvasHeight);
-    ctx.textBaseline = "top";
-    ctx.textAlign = "left";
-    ctx.lineJoin = "round";
-    ctx.miterLimit = 2;
-    ctx.font = `700 ${layout.fontPx}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`;
-    ctx.fillStyle = this.getActiveTextColorCss();
-    ctx.strokeStyle = "rgba(255,255,255,0.78)";
-    ctx.lineWidth = Math.max(1.6, layout.fontPx * 0.12);
-
-    for (let i = 0; i < layout.lines.length; i++) {
-      const line = layout.lines[i] ?? "";
-      const y = layout.pad + i * layout.lineHeight;
-      ctx.strokeText(line, layout.pad, y);
-      ctx.fillText(line, layout.pad, y);
-    }
-
-    this.spriteTexture?.dispose();
-    this.spriteTexture = new THREE.CanvasTexture(canvas);
-    this.spriteTexture.needsUpdate = true;
-    this.spriteTexture.minFilter = THREE.LinearFilter;
-    this.spriteTexture.magFilter = THREE.LinearFilter;
-
-    this.spriteMaterial.map = this.spriteTexture;
-    this.spriteMaterial.needsUpdate = true;
-    this.spriteMesh.scale.set(layout.canvasWidth, layout.canvasHeight, 1);
   }
 
   private clearRebarvizMaterialCache(): void {
@@ -534,92 +447,63 @@ export class SolveSpaceBillboardVectorText {
       this.widthPx = 0;
       this.heightPx = this.capHeightPx;
       this.lineHasGeometry = false;
-      this.spriteLayout = null;
       this._applyRenderStyleVisibility();
       return;
     }
 
-    let contentW = 0;
-    let contentH = this.capHeightPx;
-    if (this.getStylePreset().useCanvasText) {
-      const lines = text.split("\n");
-      const fontPx = this.capHeightPx;
-      const lineHeight = Math.max(1, fontPx * 1.15);
-      const pad = 4;
-      let maxLineWidth = 0;
-      if (this.ensureSpriteCanvas()) {
-        const ctx = this.spriteCtx!;
-        ctx.font = `700 ${fontPx}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`;
-        for (const line of lines) {
-          maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width);
-        }
-      } else {
-        maxLineWidth = Math.max(
-          ...lines.map((x) => x.length * fontPx * 0.62),
-          fontPx,
-        );
-      }
-
-      const contentHeight = Math.max(fontPx, lines.length * lineHeight);
-      const canvasWidth = Math.ceil(maxLineWidth + pad * 2);
-      const canvasHeight = Math.ceil(contentHeight + pad * 2);
-
-      contentW = maxLineWidth;
-      contentH = contentHeight;
-      this.spriteLayout = {
-        lines,
-        fontPx,
-        lineHeight,
-        pad,
-        canvasWidth,
-        canvasHeight,
-      };
-
-      this.refreshRebarvizSpriteText();
+    if (!this.font) {
+      this.ensureSolveSpaceFontLoaded();
+      this.widthPx = 0;
+      this.heightPx = this.capHeightPx;
       this.lineHasGeometry = false;
-    } else {
-      if (!this.font) {
-        this.ensureSolveSpaceFontLoaded();
-        this.widthPx = 0;
-        this.heightPx = this.capHeightPx;
-        this.lineHasGeometry = false;
-        this.spriteLayout = null;
-        this._applyRenderStyleVisibility();
-        return;
-      }
+      this._applyRenderStyleVisibility();
+      return;
+    }
 
-      const w = this.font.getWidth(this.capHeightPx, text);
-      const h = this.font.getCapHeight(this.capHeightPx);
-      contentW = w;
-      contentH = h;
+    const lines = text.split("\n");
+    const capHeight = this.font.getCapHeight(this.capHeightPx);
+    const fontHeight =
+      typeof (this.font as any).getHeight === "function"
+        ? (this.font as any).getHeight(this.capHeightPx)
+        : capHeight;
+    const lineHeight = Math.max(capHeight, fontHeight * 1.15);
+    const lineWidths = lines.map((line) =>
+      line.length > 0 ? this.font!.getWidth(this.capHeightPx, line) : 0,
+    );
+    const contentW = Math.max(1, ...lineWidths);
+    const contentH =
+      lines.length <= 1 ? capHeight : capHeight + lineHeight * (lines.length - 1);
 
-      const originX = -w / 2;
-      const originY = -h / 2;
-
-      const positions: number[] = [];
+    const positions: number[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] ?? "";
+      if (!line) continue;
+      const lineWidth = lineWidths[i] ?? 0;
+      const originX = -lineWidth / 2;
+      const originY = contentH / 2 - capHeight - i * lineHeight;
       this.font.trace2D(
         this.capHeightPx,
         originX,
         originY,
-        text,
+        line,
         (ax, ay, bx, by) => {
           positions.push(ax, ay, 0, bx, by, 0);
         },
       );
+    }
 
-      if (positions.length >= 6) {
-        this.lineGeometry.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(positions, 3),
-        );
-        this.lineHasGeometry = true;
-      } else {
-        this.lineGeometry.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3),
-        );
-        this.lineHasGeometry = false;
-      }
+    if (positions.length >= 6) {
+      this.lineGeometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(positions, 3),
+      );
+      this.lineHasGeometry = true;
+    } else {
+      this.lineGeometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3),
+      );
+      this.lineHasGeometry = false;
     }
 
     this.widthPx = contentW;
@@ -646,5 +530,35 @@ export class SolveSpaceBillboardVectorText {
 
     this._applyMaterial();
     this._applyRenderStyleVisibility();
+  }
+
+  private applyFrameFromWorld(): void {
+    const axisU = this.frameAxisULocal.copy(this.frameAxisUWorld);
+    const axisV = this.frameAxisVLocal.copy(this.frameAxisVWorld);
+    if (axisU.lengthSq() < 1e-12 || axisV.lengthSq() < 1e-12) return;
+
+    const parent = this.object3d.parent;
+    if (parent) {
+      parent.updateWorldMatrix(true, false);
+      parent.getWorldQuaternion(this.tmpParentQuat);
+      this.tmpParentQuat.invert();
+      axisU.applyQuaternion(this.tmpParentQuat);
+      axisV.applyQuaternion(this.tmpParentQuat);
+      this.frameOriginLocal.copy(this.frameOriginWorld);
+      parent.worldToLocal(this.frameOriginLocal);
+    } else {
+      this.frameOriginLocal.copy(this.frameOriginWorld);
+    }
+
+    axisU.normalize();
+    axisV.normalize();
+    this.frameAxisNLocal.copy(axisU).cross(axisV);
+    if (this.frameAxisNLocal.lengthSq() < 1e-12) return;
+    this.frameAxisNLocal.normalize();
+    axisV.copy(this.frameAxisNLocal).cross(axisU).normalize();
+
+    this.tmpMatrix.makeBasis(axisU, axisV, this.frameAxisNLocal);
+    this.object3d.position.copy(this.frameOriginLocal);
+    this.object3d.quaternion.setFromRotationMatrix(this.tmpMatrix);
   }
 }
