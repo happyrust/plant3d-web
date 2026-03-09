@@ -12,10 +12,14 @@ import {
   resetZoneState,
   type ZoneName,
 } from '@/composables/usePanelZones';
+import {
+  applyEmbedLandingState,
+  resolveEmbedLandingTarget,
+} from '@/components/review/embedRoleLanding';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { onCommand } from '@/ribbon/commandBus';
 
 // 检测 URL 参数（用于 iframe 嵌入模式）
@@ -29,7 +33,6 @@ const embedModeParams = computed(() => {
     isEmbedMode: !!urlParams.get('form_id'),
   };
 });
-
 
 const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v2';
 const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v2-migrated-properties';
@@ -740,24 +743,21 @@ function onReady(event: DockviewReadyEvent) {
     if (embedModeParams.value.isEmbedMode) {
       console.log('[DockLayout] 📋 嵌入模式检测到:', embedModeParams.value);
       
-      // 存储嵌入模式参数供其他组件使用
-      sessionStorage.setItem('embed_mode_params', JSON.stringify(embedModeParams.value));
-      
-      // 根据用户角色打开相应面板
-      if (userStore.isDesigner.value) {
-        // 设计人员：自动打开发起提资面板
-        console.log('[DockLayout] 设计人员模式 - 打开发起提资面板');
-        const panel = ensurePanel('initiateReview');
-        if (panel) {
-          panel.api.setActive();
-        }
-      } else if (userStore.isReviewer.value) {
-        // 审核人员：打开校审面板
-        console.log('[DockLayout] 审核人员模式 - 打开校审面板');
-        const panel = ensurePanel('review');
-        if (panel) {
-          panel.api.setActive();
-        }
+      const landingTarget = resolveEmbedLandingTarget({
+        isEmbedMode: embedModeParams.value.isEmbedMode,
+        isDesigner: userStore.isDesigner.value,
+        isReviewer: userStore.isReviewer.value,
+      });
+
+      if (landingTarget) {
+        console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
+        applyEmbedLandingState({
+          ensurePanel,
+          activatePanel,
+          sessionStorageLike: sessionStorage,
+          embedModeParams: embedModeParams.value,
+          target: landingTarget,
+        });
       }
     } else {
       // 正常模式

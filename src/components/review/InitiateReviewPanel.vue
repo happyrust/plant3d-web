@@ -4,15 +4,17 @@ import { computed, onMounted, ref } from 'vue';
 
 import { AlertCircle, ArrowRight, Calendar, FileText, Link, Paperclip, Plus, Users, X } from 'lucide-vue-next';
 
-import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
-import { useUserStore } from '@/composables/useUserStore';
-import { useSelectionStore } from '@/composables/useSelectionStore';
-import type { ReviewComponent } from '@/types/auth';
-import { getRoleDisplayName } from '@/types/auth';
-import FileUploadSection from './FileUploadSection.vue';
-import type { UploadedFile } from './FileUploadSection.vue';
 import AssociatedFilesList from './AssociatedFilesList.vue';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
+import FileUploadSection from './FileUploadSection.vue';
+
+import type { UploadedFile } from './FileUploadSection.vue';
+import type { ReviewComponent } from '@/types/auth';
+
+import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import { useSelectionStore } from '@/composables/useSelectionStore';
+import { useUserStore } from '@/composables/useUserStore';
+import { getRoleDisplayName } from '@/types/auth';
 
 const userStore = useUserStore();
 const selectionStore = useSelectionStore();
@@ -87,6 +89,13 @@ const embedModeParams = ref<{
   isEmbedMode: false,
 });
 
+const embedLandingState = ref<{
+  target?: string;
+  formId?: string | null;
+  primaryPanelId?: string;
+  visiblePanelIds?: string[];
+} | null>(null);
+
 // 在组件挂载时读取嵌入模式参数
 onMounted(() => {
   const storedParams = sessionStorage.getItem('embed_mode_params');
@@ -96,6 +105,15 @@ onMounted(() => {
       console.log('[InitiateReviewPanel] 嵌入模式参数:', embedModeParams.value);
     } catch (e) {
       console.warn('[InitiateReviewPanel] 无法解析嵌入模式参数');
+    }
+  }
+
+  const storedLandingState = sessionStorage.getItem('embed_landing_state');
+  if (storedLandingState) {
+    try {
+      embedLandingState.value = JSON.parse(storedLandingState);
+    } catch {
+      console.warn('[InitiateReviewPanel] 无法解析嵌入模式落点状态');
     }
   }
 });
@@ -221,10 +239,15 @@ function clearNotification() {
 
 <template>
   <div class="p-4 space-y-4 overflow-auto h-full">
-    <div class="border-b pb-3 flex justify-between items-start">
+    <div class="border-b pb-3 flex justify-between items-start" data-testid="designer-landing-workspace">
       <div>
         <h3 class="text-lg font-semibold">创建提资单</h3>
         <p class="text-sm text-gray-500 mt-1">选择模型构件并手动指定校核/审核人员</p>
+        <div v-if="embedLandingState?.target === 'designer'"
+          data-testid="designer-landing-cta"
+          class="mt-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700">
+          自动进入提资/编辑工作区
+        </div>
         <!-- 嵌入模式显示 form_id -->
         <div v-if="embedModeParams.isEmbedMode" class="mt-2 flex items-center gap-2">
           <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
@@ -233,12 +256,15 @@ function clearNotification() {
           <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
             🏭 项目: {{ currentProjectId }}
           </span>
+          <span v-if="embedLandingState?.formId"
+            data-testid="designer-lineage-form-id"
+            class="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
+            Lineage: {{ embedLandingState.formId }}
+          </span>
         </div>
       </div>
-      <button
-        class="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-        @click="showExternalReview = true"
-      >
+      <button class="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+        @click="showExternalReview = true">
         <Link class="h-4 w-4" />
         三维校审
       </button>
@@ -251,22 +277,18 @@ function clearNotification() {
       <div class="border rounded-lg p-3">
         <div class="flex justify-between items-center mb-2">
           <span class="text-sm text-gray-600">已选择 {{ selectedComponents.length }} 个构件</span>
-          <button
-            class="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          <button class="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="!selectionStore.selectedRefno || addingComponent"
             :title="selectionStore.selectedRefno ? '将选中的构件添加到列表' : '请先在三维视图中点击选中一个构件'"
-            @click="addSelectedComponent"
-          >
+            @click="addSelectedComponent">
             <Plus class="h-3 w-3" />
             {{ addingComponent ? '获取中...' : '添加构件' }}
           </button>
         </div>
         <div class="space-y-2 max-h-40 overflow-y-auto">
-          <div
-            v-for="comp in selectedComponents"
+          <div v-for="comp in selectedComponents"
             :key="comp.id"
-            class="flex items-center justify-between p-2 rounded bg-gray-50 hover:bg-gray-100"
-          >
+            class="flex items-center justify-between p-2 rounded bg-gray-50 hover:bg-gray-100">
             <div class="flex items-center gap-2">
               <FileText class="h-4 w-4 text-blue-600" />
               <div>
@@ -285,23 +307,19 @@ function clearNotification() {
     <!-- 数据包名称 -->
     <div class="space-y-2">
       <label class="text-sm font-medium">模型数据包名称 *</label>
-      <input
-        v-model="packageName"
+      <input v-model="packageName"
         type="text"
         placeholder="输入模型数据包名称"
-        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
+        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
     </div>
 
     <!-- 描述 -->
     <div class="space-y-2">
       <label class="text-sm font-medium">描述</label>
-      <textarea
-        v-model="description"
+      <textarea v-model="description"
         rows="2"
         placeholder="输入提资单描述（可选）"
-        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-      />
+        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
     </div>
 
     <!-- 附件文件上传 -->
@@ -310,14 +328,12 @@ function clearNotification() {
         <Paperclip class="h-4 w-4" />
         附件文件
       </label>
-      <FileUploadSection
-        v-model="uploadedFiles"
+      <FileUploadSection v-model="uploadedFiles"
         :max-files="10"
         :max-size="50"
-        accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
-      />
+        accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg" />
       <p class="text-xs text-gray-500">
-              支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB
+        支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB
       </p>
     </div>
 
@@ -334,10 +350,8 @@ function clearNotification() {
     <div class="grid grid-cols-3 gap-4">
       <div class="space-y-2">
         <label class="text-sm font-medium">校核人员 *</label>
-        <select
-          v-model="checkerId"
-          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
+        <select v-model="checkerId"
+          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">选择校核人员</option>
           <option v-for="r in availableCheckers" :key="r.id" :value="r.id">
             {{ r.name }} ({{ getRoleDisplayName(r.role) }})
@@ -347,10 +361,8 @@ function clearNotification() {
 
       <div class="space-y-2">
         <label class="text-sm font-medium">审核人员 *</label>
-        <select
-          v-model="approverId"
-          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
+        <select v-model="approverId"
+          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">选择审核人员</option>
           <option v-for="r in availableApprovers" :key="r.id" :value="r.id">
             {{ r.name }} ({{ getRoleDisplayName(r.role) }})
@@ -360,10 +372,8 @@ function clearNotification() {
 
       <div class="space-y-2">
         <label class="text-sm font-medium">优先级</label>
-        <select
-          v-model="priority"
-          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
+        <select v-model="priority"
+          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="low">低</option>
           <option value="medium">中</option>
           <option value="high">高</option>
@@ -377,20 +387,16 @@ function clearNotification() {
       <label class="text-sm font-medium">截止时间（可选）</label>
       <div class="relative">
         <Calendar class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <input
-          v-model="dueDate"
+        <input v-model="dueDate"
           type="date"
-          class="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+          class="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
     </div>
 
     <!-- 提交按钮 -->
-    <button
-      :disabled="!canSubmit || isSubmitting"
+    <button :disabled="!canSubmit || isSubmitting"
       class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-      @click="handleSubmit"
-    >
+      @click="handleSubmit">
       <template v-if="isSubmitting">
         <div class="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
         正在创建...
@@ -402,15 +408,13 @@ function clearNotification() {
     </button>
 
     <!-- 通知 -->
-    <div
-      v-if="notification.type"
+    <div v-if="notification.type"
       :class="[
         'flex items-start gap-3 p-3 rounded-lg',
         notification.type === 'success'
           ? 'bg-green-50 text-green-800 border border-green-200'
           : 'bg-red-50 text-red-800 border border-red-200',
-      ]"
-    >
+      ]">
       <div class="flex-1">
         <div class="font-medium text-sm">{{ notification.message }}</div>
         <div v-if="notification.details" class="text-sm mt-1 opacity-90">
@@ -423,18 +427,14 @@ function clearNotification() {
     </div>
 
     <!-- 验证提示 -->
-    <div
-      v-if="!notification.type && missingFields.length > 0"
-      class="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 p-2 rounded-lg"
-    >
+    <div v-if="!notification.type && missingFields.length > 0"
+      class="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 p-2 rounded-lg">
       <AlertCircle class="h-4 w-4" />
       <span>请填写必填字段：{{ missingFields.join('、') }}</span>
     </div>
 
     <!-- 外部校审浏览器 -->
-    <ExternalReviewViewer
-      v-model="showExternalReview"
-      :project-id="currentProjectId"
-    />
+    <ExternalReviewViewer v-model="showExternalReview"
+      :project-id="currentProjectId" />
   </div>
 </template>

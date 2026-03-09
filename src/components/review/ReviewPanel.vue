@@ -16,13 +16,14 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
-import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
-import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 import {
   canFinalizeAtCurrentNode,
   confirmCurrentDataSafely,
   finalizeTaskDecisionSafely,
 } from './reviewPanelActions';
+
+import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
+
 import {
   reviewGetAuxData,
   reviewGetCollisionData,
@@ -33,11 +34,30 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
+import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
 const viewerContext = useViewerContext();
+
+const embedLandingState = ref<{
+  target?: string;
+  formId?: string | null;
+  primaryPanelId?: string;
+  visiblePanelIds?: string[];
+} | null>(null);
+
+if (typeof sessionStorage !== 'undefined') {
+  const storedLandingState = sessionStorage.getItem('embed_landing_state');
+  if (storedLandingState) {
+    try {
+      embedLandingState.value = JSON.parse(storedLandingState);
+    } catch {
+      console.warn('[ReviewPanel] 无法解析嵌入模式落点状态');
+    }
+  }
+}
 
 const confirmNote = ref('');
 
@@ -494,29 +514,27 @@ onUnmounted(() => {
 <template>
   <div class="flex h-full flex-col gap-3 overflow-y-auto p-3">
     <!-- 当前任务信息 -->
-    <div v-if="currentTask" class="rounded-md border border-border bg-background p-3">
+    <div v-if="currentTask"
+      class="rounded-md border border-border bg-background p-3"
+      data-testid="reviewer-landing-workspace">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <ClipboardCheck class="h-5 w-5 text-primary" />
           <span class="text-sm font-semibold">当前审核任务</span>
         </div>
         <div class="flex items-center gap-2">
-          <button
-            v-if="isFilteringByTask"
+          <button v-if="isFilteringByTask"
             type="button"
             title="显示所有模型"
             class="h-6 rounded px-2 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200"
-            @click="clearModelFilter"
-          >
+            @click="clearModelFilter">
             <Filter class="h-3 w-3 inline mr-1" />
             已过滤
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="h-6 rounded px-2 text-xs hover:bg-muted"
-            @click="reviewStore.clearCurrentTask()"
             title="关闭任务"
-          >
+            @click="reviewStore.clearCurrentTask()">
             <XCircle class="h-4 w-4" />
           </button>
         </div>
@@ -539,20 +557,16 @@ onUnmounted(() => {
               </span>
             </div>
             <div class="flex gap-2">
-              <button
-                type="button"
+              <button type="button"
                 class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
                 :disabled="workflowLoading"
-                @click="handleSubmitToNextNode"
-              >
+                @click="handleSubmitToNextNode">
                 提交到下一节点
               </button>
-              <button
-                type="button"
+              <button type="button"
                 class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
                 :disabled="workflowLoading"
-                @click="handleReturnToNode"
-              >
+                @click="handleReturnToNode">
                 驳回到设计
               </button>
             </div>
@@ -560,11 +574,9 @@ onUnmounted(() => {
           <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
           <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
           <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
-            <div
-              v-for="(step, idx) in workflow.history"
+            <div v-for="(step, idx) in workflow.history"
               :key="idx"
-              class="flex items-center justify-between text-muted-foreground"
-            >
+              class="flex items-center justify-between text-muted-foreground">
               <span>
                 {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
               </span>
@@ -573,40 +585,32 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="flex gap-2 mt-2">
-          <button
-            type="button"
+          <button type="button"
             class="flex-1 h-7 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
-            @click="filterModelByTask"
-          >
+            @click="filterModelByTask">
             <Filter class="h-3 w-3 inline mr-1" />
             只显示任务构件
           </button>
-          <button
-            v-if="isFilteringByTask"
+          <button v-if="isFilteringByTask"
             type="button"
             class="flex-1 h-7 text-xs border rounded hover:bg-muted"
-            @click="clearModelFilter"
-          >
+            @click="clearModelFilter">
             显示全部
           </button>
         </div>
         <!-- 审核操作按钮 -->
         <div v-if="canFinalizeCurrentTask" class="flex gap-2 mt-3 pt-3 border-t">
-          <button
-            type="button"
+          <button type="button"
             class="flex-1 h-8 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center gap-1 disabled:opacity-50"
             :disabled="decisionActionLoading"
-            @click="handleApprove"
-          >
+            @click="handleApprove">
             <CheckCircle class="h-3 w-3" />
             {{ decisionActionLoading ? '处理中...' : '通过' }}
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="flex-1 h-8 text-xs bg-red-500 text-white rounded hover:bg-red-600 flex items-center justify-center gap-1 disabled:opacity-50"
             :disabled="decisionActionLoading"
-            @click="showRejectDialog = true"
-          >
+            @click="showRejectDialog = true">
             <XCircle class="h-3 w-3" />
             驳回
           </button>
@@ -616,6 +620,24 @@ onUnmounted(() => {
         </div>
         <div v-if="decisionActionError" class="mt-2 text-xs text-red-600">
           {{ decisionActionError }}
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="embedLandingState?.target === 'reviewer'"
+      data-testid="reviewer-landing-workspace"
+      class="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-900">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <div class="text-sm font-semibold" data-testid="reviewer-landing-cta">自动进入校审/待处理工作区</div>
+          <div class="mt-1 text-xs text-blue-700">
+            审批相关角色打开同一 form-id 时，首屏将落在待处理/校审工作区，无需手动切换面板。
+          </div>
+        </div>
+        <div v-if="embedLandingState.formId"
+          data-testid="reviewer-lineage-form-id"
+          class="rounded-full bg-white px-3 py-1 text-xs text-blue-700">
+          Lineage: {{ embedLandingState.formId }}
         </div>
       </div>
     </div>
@@ -708,12 +730,10 @@ onUnmounted(() => {
     <div v-if="currentTask && currentTask.attachments && currentTask.attachments.length > 0" class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">附件文件 ({{ currentTask.attachments.length }})</div>
       <div class="mt-2 space-y-2 max-h-48 overflow-y-auto">
-        <div
-          v-for="attachment in currentTask.attachments"
+        <div v-for="attachment in currentTask.attachments"
           :key="attachment.id"
           class="flex items-center gap-2 p-2 rounded-md bg-muted/50 hover:bg-muted cursor-pointer"
-          @click="downloadAttachment(attachment)"
-        >
+          @click="downloadAttachment(attachment)">
           <Paperclip class="h-4 w-4 text-gray-500" />
           <div class="flex-1 min-w-0">
             <div class="text-sm font-medium truncate">{{ attachment.name }}</div>
@@ -778,24 +798,20 @@ onUnmounted(() => {
       <div class="flex items-center justify-between">
         <div class="text-sm font-semibold">数据同步（后端）</div>
         <label class="flex items-center gap-2 text-xs text-muted-foreground">
-          <input type="checkbox" v-model="syncOverwrite" />
+          <input v-model="syncOverwrite" type="checkbox" />
           导入覆盖
         </label>
       </div>
       <div class="mt-2 flex gap-2">
-        <button
-          type="button"
+        <button type="button"
           class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50"
           :disabled="syncExporting"
-          @click="exportFromServer"
-        >
+          @click="exportFromServer">
           <Download class="h-3.5 w-3.5" />
           导出(后端)
         </button>
-        <label
-          class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50 cursor-pointer"
-          :class="{ 'opacity-50 pointer-events-none': syncImporting }"
-        >
+        <label class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50 cursor-pointer"
+          :class="{ 'opacity-50 pointer-events-none': syncImporting }">
           <FileText class="h-3.5 w-3.5" />
           导入(后端)
           <input type="file" accept="application/json" class="hidden" @change="importFromFile" />
@@ -813,18 +829,14 @@ onUnmounted(() => {
         <div class="rounded-md bg-muted/30 p-2">
           <div class="text-xs font-medium">碰撞数据查询</div>
           <div class="mt-2 flex gap-2">
-            <input
-              v-model="collisionRefno"
+            <input v-model="collisionRefno"
               type="text"
               placeholder="RefNo（可选）"
-              class="h-8 flex-1 rounded-md border px-2 text-xs"
-            />
-            <button
-              type="button"
+              class="h-8 flex-1 rounded-md border px-2 text-xs" />
+            <button type="button"
               class="h-8 rounded-md border px-3 text-xs hover:bg-muted disabled:opacity-50"
               :disabled="collisionLoading"
-              @click="queryCollision"
-            >
+              @click="queryCollision">
               查询
             </button>
           </div>
@@ -847,12 +859,10 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="mt-2 flex gap-2">
-            <button
-              type="button"
+            <button type="button"
               class="h-8 flex-1 rounded-md border px-3 text-xs hover:bg-muted disabled:opacity-50"
               :disabled="!currentTask || auxLoading"
-              @click="fetchAuxDataForCurrentTask"
-            >
+              @click="fetchAuxDataForCurrentTask">
               获取当前任务辅助数据
             </button>
           </div>
@@ -916,26 +926,20 @@ onUnmounted(() => {
         <h3 class="text-lg font-semibold mb-4">驳回审核</h3>
         <div class="mb-4">
           <label class="block text-sm font-medium mb-2">驳回理由</label>
-          <textarea
-            v-model="rejectComment"
+          <textarea v-model="rejectComment"
             class="w-full h-24 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="请输入驳回理由..."
-          ></textarea>
+            placeholder="请输入驳回理由..." />
         </div>
         <div class="flex gap-3 justify-end">
-          <button
-            type="button"
+          <button type="button"
             class="px-4 py-2 text-sm border rounded hover:bg-muted"
-            @click="showRejectDialog = false; rejectComment = ''"
-          >
+            @click="showRejectDialog = false; rejectComment = ''">
             取消
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="px-4 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600"
             :disabled="!rejectComment.trim()"
-            @click="handleReject"
-          >
+            @click="handleReject">
             确认驳回
           </button>
         </div>
