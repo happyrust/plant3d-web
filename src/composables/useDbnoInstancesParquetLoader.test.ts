@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/api/genModelTaskApi', () => ({
-  getBaseUrl: () => 'http://127.0.0.1:8080',
+  getBaseUrl: () => 'http://127.0.0.1:3100',
 }))
 
 function createManifest(dbno: number) {

@@ -49,8 +49,8 @@ export type DatabaseConfig = {
 export function getBaseUrl(): string {
   const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
     .VITE_GEN_MODEL_API_BASE_URL;
-  // Default to localhost:8080 if not specified
-  return (envBase && envBase.trim()) || 'http://localhost:8080';
+  // Default to localhost:3100 if not specified
+  return (envBase && envBase.trim()) || 'http://localhost:3100';
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

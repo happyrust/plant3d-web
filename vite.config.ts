@@ -20,7 +20,7 @@ function inferBackendPortFromApiBase(apiBase: string | undefined): string {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const inferredPort = inferBackendPortFromApiBase(env.VITE_GEN_MODEL_API_BASE_URL);
-  const backendPort = env.VITE_BACKEND_PORT || inferredPort || '8080';
+  const backendPort = env.VITE_BACKEND_PORT || inferredPort || '3100';
   const backendTarget = `http://localhost:${backendPort}`;
 
   return {
@@ -35,6 +35,8 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       host: true,
+      port: 3101,
+      strictPort: true,
       proxy: {
         '/api': {
           target: backendTarget,

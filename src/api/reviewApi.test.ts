@@ -1,9 +1,65 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  authVerifyToken,
+  reviewGetEmbedUrl,
   normalizeReviewTask,
   normalizeReviewAttachment,
   normalizeAnnotationComment,
 } from './reviewApi';
+
+describe('reviewApi base url defaults', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
+  });
+
+  it('uses 3100 default backend when building embed url', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'ok',
+        data: {
+          token: 'token-1',
+          relative_path: '/review/embed',
+          query: { form_id: 'FORM-1' },
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await reviewGetEmbedUrl('project-1', 'user-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3100/api/review/embed-url',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(result.url).toContain('form_id=FORM-1');
+    expect(result.url).toContain('project_id=project-1');
+  });
+
+  it('uses 3100 default backend when verifying token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 0,
+        message: 'ok',
+        data: { valid: true },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await authVerifyToken('token-verify');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3100/api/auth/verify',
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+});
 
 describe('normalizeReviewTask', () => {
   it('normalizes a task with camelCase fields', () => {
