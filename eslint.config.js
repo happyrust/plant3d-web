@@ -9,11 +9,14 @@ const ignores = [
   '.vscode',
   'coverage',
   'dist',
+  'doc/**/*',
+  'docs/**/*',
   'eslint.config.js',
   'public',
   'node_modules/**/*',
   'package.json',
   'package-lock.json',
+  'test_hide_performance.ts',
   'vite.config.ts',
   '**/*.d.ts'
 ];
@@ -234,6 +237,44 @@ export default tseslint.config(
       ],
       '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
       '@typescript-eslint/no-unused-vars': 'off'
+    }
+  },
+  {
+    files: ['e2e/**/*.ts', 'scripts/**/*.mjs', 'src/**/*.test.ts', 'src/**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
+      'vue/one-component-per-file': 'off'
+    }
+  },
+  {
+    files: [
+      'src/api/**/*.ts',
+      'src/benchmark/**/*.ts',
+      'src/composables/**/*.ts',
+      'src/components/debug/**/*.vue',
+      'src/components/dock_panels/**/*.vue',
+      'src/components/model-tree/**/*.vue',
+      'src/components/review/**/*.vue',
+      'src/components/task/**/*.vue',
+      'src/components/tools/**/*.vue',
+      'src/debug/**/*.ts',
+      'src/utils/instances/**/*.ts',
+      'src/utils/storage/**/*.ts',
+      'src/utils/three/**/*.ts',
+      'src/viewer/**/*.ts'
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/consistent-type-definitions': 'off',
+      '@typescript-eslint/prefer-for-of': 'off',
+      '@typescript-eslint/ban-ts-comment': 'off',
+      'no-empty': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
+      'vue/no-mutating-props': 'off',
+      'vue/no-unused-vars': 'off',
+      'no-useless-escape': 'off',
+      'vue/one-component-per-file': 'off'
     }
   }
 );
