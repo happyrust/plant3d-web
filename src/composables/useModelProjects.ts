@@ -76,6 +76,19 @@ export function useModelProjects() {
     }
   }
 
+  // 按 ID 切换项目（支持嵌入模式）
+  function switchProjectById(projectId: string): boolean {
+    const project = projects.value.find(p => p.id === projectId);
+    if (project && currentProject.value?.id !== projectId) {
+      currentProject.value = project;
+      window.dispatchEvent(new CustomEvent('modelProjectChanged', { 
+        detail: { project } 
+      }));
+      return true;
+    }
+    return false;
+  }
+
   // 获取当前项目的 bundle URL
   const currentBundleUrl = computed(() => {
     if (!currentProject.value) return '';
@@ -91,6 +104,7 @@ export function useModelProjects() {
     isLoading: computed(() => isLoading.value),
     loadProjects,
     switchProject,
+    switchProjectById,
     currentBundleUrl,
   };
 }

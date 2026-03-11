@@ -130,4 +130,72 @@ describe('embed role landing', () => {
       visiblePanelIds: ['review', 'reviewerTasks'],
     });
   });
+
+  it('switches project when projectId is provided in embed mode', () => {
+    let switchedProjectId: string | null = null;
+    const mockSwitchProjectById = (projectId: string) => {
+      switchedProjectId = projectId;
+      return true;
+    };
+
+    applyEmbedLandingState({
+      ensurePanel: () => ({ api: { setActive: () => undefined } }),
+      activatePanel: () => undefined,
+      sessionStorageLike: sessionStorage,
+      embedModeParams: {
+        formId: 'FORM-123',
+        userToken: 'token-1',
+        userId: 'user_001',
+        projectId: 'AvevaMarineSample',
+        isEmbedMode: true,
+      },
+      target: 'designer',
+      switchProjectById: mockSwitchProjectById,
+    });
+
+    expect(switchedProjectId).toBe('AvevaMarineSample');
+  });
+
+  it('does not switch project when projectId is null', () => {
+    let switchCalled = false;
+    const mockSwitchProjectById = () => {
+      switchCalled = true;
+      return true;
+    };
+
+    applyEmbedLandingState({
+      ensurePanel: () => ({ api: { setActive: () => undefined } }),
+      activatePanel: () => undefined,
+      sessionStorageLike: sessionStorage,
+      embedModeParams: {
+        formId: 'FORM-123',
+        userToken: 'token-1',
+        userId: 'user_001',
+        projectId: null,
+        isEmbedMode: true,
+      },
+      target: 'designer',
+      switchProjectById: mockSwitchProjectById,
+    });
+
+    expect(switchCalled).toBe(false);
+  });
+
+  it('works without switchProjectById callback', () => {
+    expect(() => {
+      applyEmbedLandingState({
+        ensurePanel: () => ({ api: { setActive: () => undefined } }),
+        activatePanel: () => undefined,
+        sessionStorageLike: sessionStorage,
+        embedModeParams: {
+          formId: 'FORM-123',
+          userToken: 'token-1',
+          userId: 'user_001',
+          projectId: 'project-1',
+          isEmbedMode: true,
+        },
+        target: 'designer',
+      });
+    }).not.toThrow();
+  });
 });

@@ -3,7 +3,13 @@ import { computed, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 
 import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 
+import {
+  applyEmbedLandingState,
+  resolveEmbedLandingTarget,
+} from '@/components/review/embedRoleLanding';
+import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
+import { useModelProjects } from '@/composables/useModelProjects';
 import {
   initPanelZones,
   disposePanelZones,
@@ -12,10 +18,6 @@ import {
   resetZoneState,
   type ZoneName,
 } from '@/composables/usePanelZones';
-import {
-  applyEmbedLandingState,
-  resolveEmbedLandingTarget,
-} from '@/components/review/embedRoleLanding';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
@@ -70,6 +72,14 @@ const userStore = useUserStore();
 const taskCreationStore = useTaskCreationStore();
 
 let offCommand: (() => void) | null = null;
+let userStoreInitializationPromise: Promise<void> | null = null;
+
+function ensureUserStoreInitialized(): Promise<void> {
+  if (!userStoreInitializationPromise) {
+    userStoreInitializationPromise = userStore.initialize();
+  }
+  return userStoreInitializationPromise;
+}
 
 function closePanelIfExists(dockApi: DockApi, id: string) {
   const panel = dockApi.getPanel(id);
@@ -697,6 +707,62 @@ function migratePropertiesPanelOnce() {
   localStorage.setItem(LAYOUT_MIGRATION_PROPERTIES_KEY, '1');
 }
 
+async function bootstrapEmbedSession(): Promise<void> {
+  if (!embedModeParams.value.isEmbedMode) {
+    await ensureUserStoreInitialized();
+    return;
+  }
+
+  console.log('[DockLayout] 📋 嵌入模式检测到:', embedModeParams.value);
+
+  const token = embedModeParams.value.userToken;
+  if (token) {
+    setAuthToken(token);
+
+    try {
+      const verifyResponse = await authVerifyToken(token, embedModeParams.value.formId || undefined);
+      if (!verifyResponse.data?.valid) {
+        console.warn('[DockLayout] Embedded token verification failed:', verifyResponse.data?.error);
+        clearAuthToken();
+      }
+    } catch (error) {
+      console.warn('[DockLayout] Embedded token verification request failed:', error);
+      clearAuthToken();
+    }
+  }
+
+  await ensureUserStoreInitialized();
+}
+
+async function applyInitialLanding() {
+  await bootstrapEmbedSession();
+
+  if (embedModeParams.value.isEmbedMode) {
+    const landingTarget = resolveEmbedLandingTarget({
+      isEmbedMode: embedModeParams.value.isEmbedMode,
+      isDesigner: userStore.isDesigner.value,
+      isReviewer: userStore.isReviewer.value,
+    });
+
+    if (landingTarget) {
+      console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
+      const { switchProjectById } = useModelProjects();
+      applyEmbedLandingState({
+        ensurePanel,
+        activatePanel,
+        sessionStorageLike: sessionStorage,
+        embedModeParams: embedModeParams.value,
+        target: landingTarget,
+        switchProjectById,
+      });
+      return;
+    }
+  }
+
+  activatePanel('modelTree');
+  activatePanel('viewer');
+}
+
 function onReady(event: DockviewReadyEvent) {
   api.value = event.api as unknown as DockApi;
   setDockApi(event.api as unknown as { getPanel: (id: string) => unknown });
@@ -738,33 +804,7 @@ function onReady(event: DockviewReadyEvent) {
 
   migratePropertiesPanelOnce();
 
-  setTimeout(() => {
-    // 检测是否为嵌入模式（三维校审）
-    if (embedModeParams.value.isEmbedMode) {
-      console.log('[DockLayout] 📋 嵌入模式检测到:', embedModeParams.value);
-      
-      const landingTarget = resolveEmbedLandingTarget({
-        isEmbedMode: embedModeParams.value.isEmbedMode,
-        isDesigner: userStore.isDesigner.value,
-        isReviewer: userStore.isReviewer.value,
-      });
-
-      if (landingTarget) {
-        console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
-        applyEmbedLandingState({
-          ensurePanel,
-          activatePanel,
-          sessionStorageLike: sessionStorage,
-          embedModeParams: embedModeParams.value,
-          target: landingTarget,
-        });
-      }
-    } else {
-      // 正常模式
-      activatePanel('modelTree');
-      activatePanel('viewer');
-    }
-  }, 0);
+  void applyInitialLanding();
 }
 
 onMounted(() => {

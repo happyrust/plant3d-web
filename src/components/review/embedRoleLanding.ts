@@ -31,7 +31,13 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
   sessionStorageLike?: Pick<Storage, 'setItem' | 'removeItem'>;
   embedModeParams: EmbedModeParams;
   target: EmbedLandingTarget;
+  switchProjectById?: (projectId: string) => boolean;
 }) {
+  // 如果有 projectId，尝试切换项目
+  if (options.embedModeParams.projectId && options.switchProjectById) {
+    options.switchProjectById(options.embedModeParams.projectId);
+  }
+
   const panelIds = getEmbedLandingPanelIds(options.target);
   const primaryPanelId = panelIds[0];
   if (!primaryPanelId) return null;
