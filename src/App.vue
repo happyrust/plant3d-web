@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import AboutDialog from '@/components/AboutDialog.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import ProjectCardList from '@/components/model-project/ProjectCardList.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
@@ -39,6 +40,7 @@ function handleProjectSelect(projectId: string) {
             <template #header-right>
               <div class="flex items-center gap-2 px-2">
                 <LayoutToggleButtons />
+                <AboutDialog />
                 <UserAvatar />
               </div>
             </template>

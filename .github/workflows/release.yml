@@ -1,0 +1,119 @@
+name: Release and Deploy
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    name: Build Frontend Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Create version metadata
+        run: |
+          mkdir -p public
+          cat > public/version.json << EOF
+          {
+            "version": "${{ steps.version.outputs.VERSION }}",
+            "commit": "${{ github.sha }}",
+            "buildDate": "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          }
+          EOF
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Package release
+        run: |
+          cd dist
+          tar -czf ../plant3d-web-${{ steps.version.outputs.VERSION }}.tar.gz .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-release
+          path: plant3d-web-*.tar.gz
+          retention-days: 30
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: plant3d-web-*.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-release
+      
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Deploy to production server
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $PROD_HOST >> ~/.ssh/known_hosts
+          
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          RELEASE_DIR="/opt/plant3d-web/releases/$VERSION"
+          
+          scp -i ~/.ssh/deploy_key plant3d-web-$VERSION.tar.gz $PROD_USER@$PROD_HOST:/tmp/
+          
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST << 'ENDSSH'
+            VERSION="${{ steps.version.outputs.VERSION }}"
+            RELEASE_DIR="/opt/plant3d-web/releases/$VERSION"
+            CURRENT_LINK="/opt/plant3d-web/current"
+            
+            mkdir -p $RELEASE_DIR
+            cd $RELEASE_DIR
+            tar -xzf /tmp/plant3d-web-$VERSION.tar.gz
+            rm /tmp/plant3d-web-$VERSION.tar.gz
+            
+            if [ -L "$CURRENT_LINK" ]; then
+              PREV_RELEASE=$(readlink $CURRENT_LINK)
+              echo "Previous release: $PREV_RELEASE"
+            fi
+            
+            ln -sfn $RELEASE_DIR $CURRENT_LINK
+            
+            sudo nginx -t && sudo systemctl reload nginx || echo "Nginx reload skipped"
+            
+            echo "Deployed frontend version $VERSION to production"
+          ENDSSH
