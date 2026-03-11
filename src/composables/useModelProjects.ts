@@ -1,16 +1,63 @@
 import { ref, computed } from 'vue';
 
+import { setCurrentProjectPath } from '@/lib/filesOutput';
+
 export type ModelProject = {
   id: string;
   name: string;
   description: string;
   path: string;
+  showDbnum?: number;
+  thumbnail?: string;
+  updatedAt?: string;
   default?: boolean;
 };
 
 const projects = ref<ModelProject[]>([]);
 const currentProject = ref<ModelProject | null>(null);
 const isLoading = ref(false);
+
+function readRequestedProject(): { projectId: string | null; projectPath: string | null } {
+  if (typeof window === 'undefined') {
+    return { projectId: null, projectPath: null };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('project_id');
+  const projectPath = params.get('output_project');
+  return {
+    projectId: projectId ? String(projectId).trim() : null,
+    projectPath: projectPath ? String(projectPath).trim() : null,
+  };
+}
+
+function syncProjectUrl(project: ModelProject): void {
+  if (typeof window === 'undefined') return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.set('output_project', project.path);
+
+  if (project.showDbnum != null) {
+    url.searchParams.set('show_dbnum', String(project.showDbnum));
+    url.searchParams.delete('debug_refno');
+  } else {
+    url.searchParams.delete('show_dbnum');
+  }
+
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function applyProject(project: ModelProject, emitChangeEvent: boolean): void {
+  currentProject.value = project;
+  setCurrentProjectPath(project.path);
+  syncProjectUrl(project);
+
+  if (emitChangeEvent && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('modelProjectChanged', {
+      detail: { project }
+    }));
+  }
+}
 
 export function useModelProjects() {
   // 加载项目列表
@@ -31,20 +78,16 @@ export function useModelProjects() {
       
       const data = await response.json();
       projects.value = data;
-      
-      // 设置默认项目
-      if (!currentProject.value && projects.value.length > 0) {
-        const defaultProject = projects.value.find(p => p.default) || projects.value[0];
-        if (defaultProject) {
-          currentProject.value = defaultProject;
-          
-          // 如果只有一个项目，自动触发加载
-          if (projects.value.length === 1) {
-            window.dispatchEvent(new CustomEvent('modelProjectChanged', { 
-              detail: { project: defaultProject } 
-            }));
-          }
-        }
+
+      const requested = readRequestedProject();
+      const matchedProject = projects.value.find((project) =>
+        project.id === requested.projectId ||
+        project.path === requested.projectId ||
+        project.id === requested.projectPath ||
+        project.path === requested.projectPath
+      );
+      if (matchedProject) {
+        applyProject(matchedProject, false);
       }
     } catch (error) {
       console.error('Failed to load model projects:', error);
@@ -54,13 +97,22 @@ export function useModelProjects() {
         id: 'ams-model',
         name: 'AMS 项目',
         description: 'AMS 系统模型',
-        path: 'ams-model',
+        path: 'AvevaMarineSample',
+        showDbnum: 7997,
         default: true
       };
       projects.value = [fallbackProject];
-      currentProject.value = fallbackProject;
+      applyProject(fallbackProject, false);
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  // 选择项目（首次进入）
+  function selectProject(projectId: string) {
+    const project = projects.value.find(p => p.id === projectId);
+    if (project) {
+      applyProject(project, true);
     }
   }
 
@@ -68,22 +120,15 @@ export function useModelProjects() {
   function switchProject(projectId: string) {
     const project = projects.value.find(p => p.id === projectId);
     if (project) {
-      currentProject.value = project;
-      // 触发重新加载模型
-      window.dispatchEvent(new CustomEvent('modelProjectChanged', { 
-        detail: { project } 
-      }));
+      applyProject(project, true);
     }
   }
 
-  // 按 ID 切换项目（支持嵌入模式）
+  // 按 ID 切换项目（支持嵌入模式，支持通过 id 或 path 匹配）
   function switchProjectById(projectId: string): boolean {
-    const project = projects.value.find(p => p.id === projectId);
-    if (project && currentProject.value?.id !== projectId) {
-      currentProject.value = project;
-      window.dispatchEvent(new CustomEvent('modelProjectChanged', { 
-        detail: { project } 
-      }));
+    const project = projects.value.find(p => p.id === projectId || p.path === projectId);
+    if (project && currentProject.value?.id !== project.id) {
+      applyProject(project, true);
       return true;
     }
     return false;
@@ -103,6 +148,7 @@ export function useModelProjects() {
     currentProject: computed(() => currentProject.value),
     isLoading: computed(() => isLoading.value),
     loadProjects,
+    selectProject,
     switchProject,
     switchProjectById,
     currentBundleUrl,

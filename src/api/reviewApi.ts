@@ -29,6 +29,26 @@ function getReviewWebBaseUrl(): string {
   return getBaseUrl();
 }
 
+function getReviewWebSocketBaseUrl(): string | null {
+  const env = import.meta.env as unknown as {
+    VITE_REVIEW_WS_BASE_URL?: string;
+    VITE_REVIEW_WEB_BASE_URL?: string;
+  };
+
+  const explicitWsBase = env.VITE_REVIEW_WS_BASE_URL?.trim();
+  if (explicitWsBase) return explicitWsBase;
+
+  const reviewWebBase = env.VITE_REVIEW_WEB_BASE_URL?.trim();
+  if (reviewWebBase) return reviewWebBase;
+
+  return null;
+}
+
+function toWebSocketBaseUrl(base: string): string {
+  const normalized = base.replace(/\/$/, '');
+  return normalized.startsWith('ws') ? normalized : normalized.replace(/^http/, 'ws');
+}
+
 // Token 存储 key
 const TOKEN_STORAGE_KEY = 'review_auth_token';
 
@@ -438,6 +458,7 @@ export async function reviewGetEmbedUrl(projectId: string, userId: string): Prom
   if (formId) params.set('form_id', formId);
   params.set('user_id', userId);
   params.set('project_id', projectId);
+  params.set('output_project', projectId);
 
   return { url: `${baseUrl}${cleanPath}?${params.toString()}` };
 }
@@ -739,30 +760,22 @@ export async function reviewAttachmentDelete(attachmentId: string): Promise<Revi
  * 获取审核通知 WebSocket URL
  * WebSocket 端点: /ws/review
  */
-export function getReviewWebSocketUrl(): string {
-  const base = getBaseUrl();
-  if (!base) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws/review`;
-  }
+export function getReviewWebSocketUrl(): string | null {
+  const base = getReviewWebSocketBaseUrl();
+  if (!base) return null;
 
-  const wsBase = base.replace(/^http/, 'ws');
-  return `${wsBase}/ws/review`;
+  return `${toWebSocketBaseUrl(base)}/ws/review`;
 }
 
 /**
  * 获取用户专属审核通知 WebSocket URL
  * WebSocket 端点: /ws/review/user/{userId}
  */
-export function getReviewUserWebSocketUrl(userId: string): string {
-  const base = getBaseUrl();
-  if (!base) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws/review/user/${encodeURIComponent(userId)}`;
-  }
+export function getReviewUserWebSocketUrl(userId: string): string | null {
+  const base = getReviewWebSocketBaseUrl();
+  if (!base) return null;
 
-  const wsBase = base.replace(/^http/, 'ws');
-  return `${wsBase}/ws/review/user/${encodeURIComponent(userId)}`;
+  return `${toWebSocketBaseUrl(base)}/ws/review/user/${encodeURIComponent(userId)}`;
 }
 
 // ============ 辅助函数 ============
@@ -971,7 +984,7 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
  * 验证 JWT Token
  * POST /api/auth/verify
  */
-export async function authVerifyToken(token?: string): Promise<VerifyResponse> {
+export async function authVerifyToken(token?: string, formId?: string): Promise<VerifyResponse> {
   const tokenToVerify = token || getAuthToken();
   if (!tokenToVerify) {
     return {
@@ -985,7 +998,10 @@ export async function authVerifyToken(token?: string): Promise<VerifyResponse> {
   const resp = await fetch(`${base}/api/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: tokenToVerify }),
+    body: JSON.stringify({
+      token: tokenToVerify,
+      ...(formId ? { form_id: formId } : {}),
+    }),
   });
 
   if (!resp.ok) {

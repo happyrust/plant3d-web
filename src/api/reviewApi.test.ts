@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   authVerifyToken,
+  getReviewUserWebSocketUrl,
+  getReviewWebSocketUrl,
   reviewGetEmbedUrl,
   normalizeReviewTask,
   normalizeReviewAttachment,
@@ -10,12 +13,27 @@ import {
 describe('reviewApi base url defaults', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     vi.stubGlobal('localStorage', {
       getItem: vi.fn(() => null),
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
     });
+  });
+
+  it('disables review websocket urls when no explicit websocket base is configured', () => {
+    expect(getReviewWebSocketUrl()).toBeNull();
+    expect(getReviewUserWebSocketUrl('reviewer_001')).toBeNull();
+  });
+
+  it('builds review websocket urls from an explicit websocket base', () => {
+    vi.stubEnv('VITE_REVIEW_WS_BASE_URL', 'http://review-web.local');
+
+    expect(getReviewWebSocketUrl()).toBe('ws://review-web.local/ws/review');
+    expect(getReviewUserWebSocketUrl('reviewer_001')).toBe(
+      'ws://review-web.local/ws/review/user/reviewer_001'
+    );
   });
 
   it('uses 3100 default backend when building embed url', async () => {
@@ -27,6 +45,7 @@ describe('reviewApi base url defaults', () => {
           token: 'token-1',
           relative_path: '/review/embed',
           query: { form_id: 'FORM-1' },
+          lineage: { form_id: 'FORM-1', task_id: null, current_node: null, status: null },
         },
       }), { status: 200 })
     );
@@ -40,6 +59,64 @@ describe('reviewApi base url defaults', () => {
     );
     expect(result.url).toContain('form_id=FORM-1');
     expect(result.url).toContain('project_id=project-1');
+    expect(result.url).toContain('output_project=project-1');
+  });
+
+  it('tolerates lineage metadata in embed-url payloads for existing tasks', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'ok',
+        data: {
+          token: 'token-2',
+          relative_path: '/review/embed',
+          query: { form_id: 'FORM-LINEAGE' },
+          lineage: {
+            form_id: 'FORM-LINEAGE',
+            task_id: 'task-form-lineage',
+            current_node: 'jd',
+            status: 'in_review',
+          },
+          task: {
+            id: 'task-form-lineage',
+            form_id: 'FORM-LINEAGE',
+            current_node: 'jd',
+            status: 'in_review',
+          },
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await reviewGetEmbedUrl('project-2', 'user-2');
+
+    expect(result.url).toContain('form_id=FORM-LINEAGE');
+    expect(result.url).toContain('output_project=project-2');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes output_project parameter matching project_id in embed URL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'ok',
+        data: {
+          token: 'token-ams',
+          relative_path: '/review/embed',
+          query: { form_id: 'FORM-AMS' },
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await reviewGetEmbedUrl('AvevaMarineSample', 'user-ams');
+
+    expect(result.url).toContain('project_id=AvevaMarineSample');
+    expect(result.url).toContain('output_project=AvevaMarineSample');
+    
+    const url = new URL(result.url);
+    expect(url.searchParams.get('project_id')).toBe('AvevaMarineSample');
+    expect(url.searchParams.get('output_project')).toBe('AvevaMarineSample');
   });
 
   it('uses 3100 default backend when verifying token', async () => {
@@ -57,6 +134,27 @@ describe('reviewApi base url defaults', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:3100/api/auth/verify',
       expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('passes form_id when verifying embed token lineage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 0,
+        message: 'ok',
+        data: { valid: true },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await authVerifyToken('token-verify', 'FORM-EMBED-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3100/api/auth/verify',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ token: 'token-verify', form_id: 'FORM-EMBED-1' }),
+      })
     );
   });
 });

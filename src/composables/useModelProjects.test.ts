@@ -72,4 +72,52 @@ describe('useModelProjects', () => {
     
     window.removeEventListener('modelProjectChanged', eventSpy);
   });
+
+  it('switchProjectById matches project by path when id does not match', () => {
+    const { switchProjectById, currentProject } = useModelProjects();
+    
+    const mockProjects = [
+      { id: 'ams-model', name: 'AMS Project', description: 'Test AMS', path: 'AvevaMarineSample' },
+    ];
+    
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => mockProjects,
+    } as Response);
+
+    setTimeout(() => {
+      const result = switchProjectById('AvevaMarineSample');
+      expect(result).toBe(true);
+      expect(currentProject.value?.id).toBe('ams-model');
+      expect(currentProject.value?.path).toBe('AvevaMarineSample');
+    }, 100);
+  });
+
+  it('switchProjectById matches project by id or path for embed URLs', () => {
+    const { switchProjectById, currentProject } = useModelProjects();
+    
+    const mockProjects = [
+      { id: 'ams-model', name: 'AMS Project', description: 'Test AMS', path: 'AvevaMarineSample', showDbnum: 7997 },
+      { id: 'other-project', name: 'Other', description: 'Other project', path: 'OtherPath' },
+    ];
+    
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => mockProjects,
+    } as Response);
+
+    setTimeout(() => {
+      // Test matching by path (when project_id in URL is actually a path value)
+      let result = switchProjectById('AvevaMarineSample');
+      expect(result).toBe(true);
+      expect(currentProject.value?.id).toBe('ams-model');
+      
+      // Test matching by id
+      result = switchProjectById('other-project');
+      expect(result).toBe(true);
+      expect(currentProject.value?.id).toBe('other-project');
+    }, 100);
+  });
 });
