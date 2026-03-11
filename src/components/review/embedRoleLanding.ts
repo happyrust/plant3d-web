@@ -33,9 +33,25 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
   target: EmbedLandingTarget;
   switchProjectById?: (projectId: string) => boolean;
 }) {
-  // 如果有 projectId，尝试切换项目
+  // 如果有 projectId，尝试切换项目并直接进入查看器
   if (options.embedModeParams.projectId && options.switchProjectById) {
-    options.switchProjectById(options.embedModeParams.projectId);
+    const switched = options.switchProjectById(options.embedModeParams.projectId);
+    if (switched) {
+      // 项目切换成功，直接打开查看器和模型树
+      options.activatePanel('modelTree');
+      options.activatePanel('viewer');
+      
+      const storage = options.sessionStorageLike;
+      if (storage) {
+        storage.setItem('embed_mode_params', JSON.stringify(options.embedModeParams));
+      }
+      
+      return {
+        target: options.target,
+        primaryPanelId: 'viewer',
+        visiblePanelIds: ['modelTree', 'viewer'],
+      };
+    }
   }
 
   const panelIds = getEmbedLandingPanelIds(options.target);

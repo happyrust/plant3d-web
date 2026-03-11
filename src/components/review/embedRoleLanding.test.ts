@@ -131,16 +131,20 @@ describe('embed role landing', () => {
     });
   });
 
-  it('switches project when projectId is provided in embed mode', () => {
+  it('switches project and opens viewer when projectId is provided', () => {
     let switchedProjectId: string | null = null;
+    const activatedPanels: string[] = [];
+    
     const mockSwitchProjectById = (projectId: string) => {
       switchedProjectId = projectId;
       return true;
     };
 
-    applyEmbedLandingState({
+    const result = applyEmbedLandingState({
       ensurePanel: () => ({ api: { setActive: () => undefined } }),
-      activatePanel: () => undefined,
+      activatePanel: (panelId: string) => {
+        activatedPanels.push(panelId);
+      },
       sessionStorageLike: sessionStorage,
       embedModeParams: {
         formId: 'FORM-123',
@@ -154,6 +158,9 @@ describe('embed role landing', () => {
     });
 
     expect(switchedProjectId).toBe('AvevaMarineSample');
+    expect(activatedPanels).toContain('modelTree');
+    expect(activatedPanels).toContain('viewer');
+    expect(result?.primaryPanelId).toBe('viewer');
   });
 
   it('does not switch project when projectId is null', () => {
