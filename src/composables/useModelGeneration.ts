@@ -116,6 +116,7 @@ async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; tr
 
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
+  showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number }>
   showModelByRefno: (refno: string, options?: { flyTo?: boolean }) => Promise<boolean>
   checkRefnoExists: (refno: string) => boolean
 } {
@@ -554,6 +555,129 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     }
   }
 
+  async function showModelByDbnum(
+    dbno: number,
+    loadOptions?: { flyTo?: boolean }
+  ): Promise<{ loaded: boolean; instanceCount: number; refnoCount: number }> {
+    isGenerating.value = true;
+    error.value = null;
+    lastLoadDebug.value = null;
+    progress.value = 0;
+    currentRefno.value = '';
+    totalCount.value = 0;
+    currentIndex.value = 0;
+
+    try {
+      if (!Number.isFinite(dbno) || dbno <= 0) {
+        throw new Error(`Invalid dbnum: ${dbno}`);
+      }
+
+      const parquetLoader = useDbnoInstancesParquetLoader();
+      statusMessage.value = `Checking model files for dbnum=${dbno}...`;
+      progress.value = 10;
+
+      let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
+      if (!parquetAvailable) {
+        parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, []);
+      }
+      if (!parquetAvailable) {
+        throw new Error(`Model files not found for dbnum=${dbno}`);
+      }
+
+      statusMessage.value = `Loading refnos for dbnum=${dbno}...`;
+      progress.value = 25;
+      const loadRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, { debug: false });
+      const uniqueRefnos = uniqStrings(loadRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
+
+      if (uniqueRefnos.length === 0) {
+        statusMessage.value = 'Model is empty (0 instances)';
+        progress.value = 100;
+        consoleStore.addLog('info', `[model-load] Model loaded dbno=${dbno} refno_count=0 instance_count=0`);
+        return { loaded: true, instanceCount: 0, refnoCount: 0 };
+      }
+
+      const anyViewer = viewer as unknown as {
+        __dtxLayer?: unknown
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        scene?: { getAABB?: (ids: string[]) => unknown }
+        cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
+      };
+      const dtxLayer = anyViewer.__dtxLayer as any;
+      if (!dtxLayer) {
+        throw new Error('DTXLayer 未初始化，无法加载模型');
+      }
+
+      totalCount.value = uniqueRefnos.length;
+      currentIndex.value = 0;
+
+      const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE;
+      let totalLoadedRefnos = 0;
+      let totalSkippedRefnos = 0;
+      let totalLoadedObjects = 0;
+      const missingAll: string[] = [];
+
+      for (let start = 0; start < uniqueRefnos.length; start += LOAD_BATCH_SIZE) {
+        const end = Math.min(uniqueRefnos.length, start + LOAD_BATCH_SIZE);
+        const batch = uniqueRefnos.slice(start, end);
+        currentIndex.value = end;
+        statusMessage.value = `Loading model batch ${Math.ceil(end / LOAD_BATCH_SIZE)}/${Math.ceil(uniqueRefnos.length / LOAD_BATCH_SIZE)}...`;
+        progress.value = Math.max(35, Math.min(92, 35 + Math.floor((end / uniqueRefnos.length) * 55)));
+
+        const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
+          lodAssetKey: 'L1',
+          debug: false,
+          dataSource: 'parquet',
+          forceReloadRefnos: batch,
+        });
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, batch);
+        totalLoadedRefnos += result.loadedRefnos;
+        totalSkippedRefnos += result.skippedRefnos;
+        totalLoadedObjects += result.loadedObjects;
+        if (result.missingRefnos.length > 0) {
+          missingAll.push(...result.missingRefnos);
+        }
+      }
+
+      const uniqueMissing = uniqStrings(missingAll.map((r) => normalizeRefnoString(r))).filter(Boolean);
+      if (uniqueMissing.length > 0) {
+        const realtimeResult = await handleMissingRefnos(dtxLayer, dbno, uniqueMissing, anyViewer);
+        totalLoadedObjects += realtimeResult.loadedObjects;
+      }
+
+      if (loadOptions?.flyTo) {
+        try {
+          const flyTargets = uniqueRefnos.length > 5000 ? uniqueRefnos.slice(0, 5000) : uniqueRefnos;
+          const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+          if (aabb) {
+            anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+          }
+        } catch {
+          // ignore flyTo errors
+        }
+      }
+
+      progress.value = 100;
+      statusMessage.value = totalLoadedObjects > 0 ? 'Model loaded' : 'Model is empty (0 instances)';
+      consoleStore.addLog(
+        'info',
+        `[model-load] Model loaded dbno=${dbno} refno_count=${uniqueRefnos.length} loaded_refnos=${totalLoadedRefnos} skipped_refnos=${totalSkippedRefnos} instance_count=${totalLoadedObjects}`
+      );
+      return {
+        loaded: true,
+        instanceCount: totalLoadedObjects,
+        refnoCount: uniqueRefnos.length,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      statusMessage.value = '加载失败';
+      return { loaded: false, instanceCount: 0, refnoCount: 0 };
+    } finally {
+      isGenerating.value = false;
+      showProgressModal.value = false;
+    }
+  }
+
   async function generateAndLoadModel(refno: string): Promise<boolean> {
     // 统一入口：当前策略下“显示”即按需触发生成 instances 并加载
     return await showModelByRefno(refno);
@@ -571,6 +695,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     currentRefno,
     lastLoadDebug,
     generateAndLoadModel,
+    showModelByDbnum,
     showModelByRefno,
     checkRefnoExists,
   };

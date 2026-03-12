@@ -197,7 +197,9 @@ import type { Task } from '@/types/task';
 
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useConsoleStore } from '@/composables/useConsoleStore';
+import { useViewerContext } from '@/composables/useViewerContext';
 import { useTaskMonitor } from '@/composables/useTaskMonitor';
+import { useModelGeneration } from '@/composables/useModelGeneration';
 
 // ============ 任务监控 ============
 // 后端支持的操作：start, stop, restart, delete
@@ -219,6 +221,11 @@ const {
   deleteTask,
 } = useTaskMonitor();
 const consoleStore = useConsoleStore();
+const viewerContext = useViewerContext();
+const modelGenerationState = computed(() => {
+  const viewer = viewerContext.viewerRef.value;
+  return viewer ? useModelGeneration({ viewer }) : null;
+});
 
 // ============ 任务详情弹窗 ============
 const detailDialogOpen = ref(false);
@@ -370,24 +377,117 @@ async function handlePreviewTask(payload: { dbnum?: number; refno?: string; task
     return;
   }
 
+  // Give the dock layout a tick to mount/focus ViewerPanel before using the shared viewer context.
+  const viewerReady = await waitForViewerReady();
+  if (!viewerReady) {
+    return;
+  }
+
   if (!refno && !dbnum) {
     consoleStore.addLog('error', `[task-preview] Missing preview target for task=${payload.task.id}`);
     return;
   }
 
   if (refno) {
-    window.dispatchEvent(new CustomEvent('showModelByRefnos', {
-      detail: {
-        refnos: [refno],
-        flyTo: true,
-      },
-    }));
-    consoleStore.addLog('info', `[task-preview] Preview requested for refno=${refno} task=${payload.task.id}`);
+    const ok = await showPreviewByRefnos([refno], payload.task.id);
+    if (ok) {
+      consoleStore.addLog('info', `[task-preview] Model loaded refno=${refno} task=${payload.task.id}`);
+    }
     return;
   }
 
-  const message = `Preview requested for dbnum=${dbnum}, viewer loading will be completed by follow-up feature.`;
-  consoleStore.addLog('info', `[task-preview] ${message} task=${payload.task.id}`);
+  if (typeof dbnum === 'number') {
+    const ok = await showPreviewByDbnum(dbnum, payload.task.id);
+    if (ok) {
+      consoleStore.addLog('info', `[task-preview] Model loaded dbnum=${dbnum} task=${payload.task.id}`);
+    }
+  }
+}
+
+async function waitForViewerReady(timeoutMs = 4000): Promise<boolean> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (viewerContext.viewerRef.value) {
+      return true;
+    }
+    await delay(50);
+  }
+
+  consoleStore.addLog('error', '[task-preview] Viewer panel did not become ready in time');
+  return false;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function showPreviewByDbnum(dbnum: number, taskId: string): Promise<boolean> {
+  const modelGeneration = modelGenerationState.value;
+  if (!modelGeneration) {
+    consoleStore.addLog('error', `[task-preview] Viewer model generation state unavailable for dbnum=${dbnum} task=${taskId}`);
+    return false;
+  }
+
+  try {
+    const allRefnos = await modelGeneration.showModelByDbnum(dbnum, { flyTo: true });
+    if (allRefnos.loaded) {
+      return true;
+    }
+
+    const errorMessage = modelGeneration.error.value || `Model files not found for dbnum=${dbnum}`;
+    consoleStore.addLog('error', `[task-preview] ${errorMessage} task=${taskId}`);
+    return false;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    consoleStore.addLog('error', `[task-preview] Failed to preview dbnum=${dbnum} task=${taskId}: ${message}`);
+    return false;
+  }
+}
+
+async function showPreviewByRefnos(refnos: string[], taskId: string): Promise<boolean> {
+  const requestId = `task-preview-${taskId}-${Date.now()}`;
+
+  const completion = await new Promise<{ ok: string[]; fail: Array<{ refno: string; error: string | null }>; error: string | null }>((resolve) => {
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
+      resolve({ ok: [], fail: [], error: 'Viewer load timed out' });
+    }, 15000);
+
+    const onDone = (event: Event) => {
+      const detail = (event as CustomEvent<{ requestId?: string; ok?: string[]; fail?: Array<{ refno: string; error: string | null }>; error?: string | null }>).detail;
+      if (detail?.requestId !== requestId) {
+        return;
+      }
+      window.clearTimeout(timeout);
+      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
+      resolve({
+        ok: Array.isArray(detail?.ok) ? detail.ok : [],
+        fail: Array.isArray(detail?.fail) ? detail.fail : [],
+        error: detail?.error ?? null,
+      });
+    };
+
+    window.addEventListener('showModelByRefnosDone', onDone as EventListener);
+    window.dispatchEvent(new CustomEvent('showModelByRefnos', {
+      detail: {
+        refnos,
+        flyTo: true,
+        requestId,
+      },
+    }));
+  });
+
+  if (completion.ok.length > 0 && completion.fail.length === 0 && !completion.error) {
+    return true;
+  }
+
+  const missing404 = completion.fail.some(item => /404|not found/i.test(item.error ?? ''));
+  const message = missing404
+    ? 'Model files not found'
+    : completion.error || completion.fail.map(item => item.error || `Failed to load ${item.refno}`).join('; ') || 'Model preview failed';
+  consoleStore.addLog('error', `[task-preview] ${message} task=${taskId}`);
+  return false;
 }
 </script>
 
