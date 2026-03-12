@@ -193,6 +193,30 @@
 
           <div class="form-row">
             <div class="form-group flex-1">
+              <label class="form-label">数据库编号</label>
+              <v-text-field v-model="formData.dbnum"
+                placeholder="例如：7997"
+                variant="outlined"
+                density="compact"
+                :error-messages="errors.dbnum" />
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label">参考号</label>
+              <v-text-field v-model="formData.refno"
+                placeholder="例如：24381_145018"
+                variant="outlined"
+                density="compact"
+                :error-messages="errors.refno" />
+            </div>
+          </div>
+
+          <div class="form-hint">
+            <v-icon size="14" color="info" class="mr-1">mdi-information-outline</v-icon>
+            可选填写 dbnum 或 refno，留空表示处理全部数据库
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
               <label class="form-label">网格容差比例</label>
               <v-text-field v-model.number="formData.meshTolRatio"
                 variant="outlined"
@@ -306,6 +330,14 @@
             </div>
           </template>
           <template v-if="formData.type === 'DataGeneration'">
+            <div class="preview-item">
+              <span class="preview-label">数据库编号</span>
+              <span class="preview-value">{{ dataGenerationDbnumPreviewText }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="preview-label">参考号</span>
+              <span class="preview-value">{{ dataGenerationRefnoPreviewText }}</span>
+            </div>
             <div class="preview-item">
               <span class="preview-label">生成内容</span>
               <span class="preview-value">{{ generateContentText }}</span>
@@ -472,6 +504,16 @@ const enabledNounsPreviewText = computed(() => {
 const limitPerNounTypePreviewText = computed(() => {
   const value = formData.limitPerNounType.trim();
   return value ? value : '无限制';
+});
+
+const dataGenerationDbnumPreviewText = computed(() => {
+  const value = formData.dbnum.trim();
+  return value ? value : '全部数据库';
+});
+
+const dataGenerationRefnoPreviewText = computed(() => {
+  const value = formData.refno.trim();
+  return value ? value : '未指定';
 });
 
 // ============ 辅助函数 ============

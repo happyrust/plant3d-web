@@ -86,6 +86,12 @@ export type UseTaskCreationReturn = {
   applyPresetType: () => void;
   /** 后端服务器配置（动态加载） */
   serverConfig: Ref<DatabaseConfig | null>;
+  /** 添加单个 noun 过滤项 */
+  addNoun: (rawValue: string) => boolean;
+  /** 移除单个 noun 过滤项 */
+  removeNoun: (noun: string) => void;
+  /** 批量设置 noun 过滤项 */
+  setEnabledNouns: (values: string[]) => void;
 };
 
 /**
@@ -195,6 +201,17 @@ export function useTaskCreation(): UseTaskCreationReturn {
         if (!formData.generateModels && !formData.generateMesh && !formData.generateSpatialTree) {
           return false;
         }
+        const hasDbnum = formData.dbnum.trim().length > 0;
+        const hasRefno = formData.refno.trim().length > 0;
+        if (hasDbnum && hasRefno) {
+          return false;
+        }
+        if (hasDbnum && !isDbnumInputValid(formData.dbnum)) {
+          return false;
+        }
+        if (hasRefno && !isRefnoInputValid(formData.refno)) {
+          return false;
+        }
         if (formData.meshTolRatio <= 0 || formData.meshTolRatio > 1) {
           return false;
         }
@@ -227,6 +244,14 @@ export function useTaskCreation(): UseTaskCreationReturn {
   function isLimitPerNounTypeValid(): boolean {
     const parsed = getLimitPerNounTypeValue();
     return parsed === null || (Number.isInteger(parsed) && parsed > 0);
+  }
+
+  function isDbnumInputValid(value: string): boolean {
+    return /^\d+$/.test(value.trim());
+  }
+
+  function isRefnoInputValid(value: string): boolean {
+    return /^\d+_\d+$/.test(value.trim());
   }
 
   function getLimitPerNounTypeError(): string | null {
@@ -322,6 +347,19 @@ export function useTaskCreation(): UseTaskCreationReturn {
         if (!formData.generateModels && !formData.generateMesh && !formData.generateSpatialTree) {
           newErrors.generateModels = '请至少选择一项生成内容';
         }
+        const hasDbnum = formData.dbnum.trim().length > 0;
+        const hasRefno = formData.refno.trim().length > 0;
+        if (hasDbnum && hasRefno) {
+          newErrors.dbnum = 'Cannot specify both dbnum and refno';
+          newErrors.refno = 'Cannot specify both dbnum and refno';
+        } else {
+          if (hasDbnum && !isDbnumInputValid(formData.dbnum)) {
+            newErrors.dbnum = 'Database number must be numeric';
+          }
+          if (hasRefno && !isRefnoInputValid(formData.refno)) {
+            newErrors.refno = 'Invalid refno format (expected: dbnum_sequence)';
+          }
+        }
         if (formData.meshTolRatio <= 0 || formData.meshTolRatio > 1) {
           newErrors.meshTolRatio = '网格容差比例必须在 0-1 之间';
         }
@@ -342,6 +380,13 @@ export function useTaskCreation(): UseTaskCreationReturn {
     if (step === 1) {
       if (!newErrors.name && errors.value.name && errors.value.name !== '任务名称已存在') delete errors.value.name;
       if (!newErrors.type && errors.value.type) delete errors.value.type;
+    }
+    if (step === 2) {
+      for (const field of ['dbnum', 'refno', 'generateModels', 'meshTolRatio', 'maxConcurrent', 'limitPerNounType'] as const) {
+        if (!newErrors[field]) {
+          delete errors.value[field];
+        }
+      }
     }
 
     return Object.keys(newErrors).length === 0;
@@ -449,16 +494,24 @@ export function useTaskCreation(): UseTaskCreationReturn {
    */
   function buildRequest(): any {
     const cfg = serverConfig.value;
+    const trimmedDbnum = formData.dbnum.trim();
+    const trimmedRefno = formData.refno.trim();
+    const manualDbNums = formData.type === 'DataGeneration'
+      ? (trimmedDbnum ? [Number(trimmedDbnum)] : [])
+      : (formData.parseMode === 'dbnum'
+          ? formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(s => s && !isNaN(Number(s))).map(Number)
+          : []);
+    const manualRefnos = formData.type === 'DataGeneration'
+      ? (trimmedRefno ? [trimmedRefno] : [])
+      : (formData.parseMode === 'refno' ? [trimmedRefno] : []);
     // 后端真正的请求结构是 CreateTaskRequest { name, task_type, config }
     const request: any = {
       name: formData.name.trim(),
       task_type: formData.type === 'DataParsingWizard' ? 'DataParsingWizard' : 'DataGeneration',
       config: {
         name: formData.name.trim(),
-        manual_db_nums: formData.parseMode === 'dbnum'
-          ? formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(s => s && !isNaN(Number(s))).map(Number)
-          : [],
-        manual_refnos: formData.parseMode === 'refno' ? [formData.refno.trim()] : [],
+        manual_db_nums: manualDbNums,
+        manual_refnos: manualRefnos,
         // 使用后端配置，回退到默认值
         project_name: cfg?.project_name ?? 'AvevaMarineSample',
         project_path: cfg?.project_path ?? '',
