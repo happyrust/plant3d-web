@@ -37,6 +37,7 @@ export type TaskCreationFormData = {
   exportWebBundle: boolean;  // 导出 Web 数据包
   enabledNouns: string[];
   nounInput: string;
+  limitPerNounType: string;
 };
 
 export type ValidationErrors = Partial<Record<keyof TaskCreationFormData, string>>;
@@ -137,6 +138,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
     exportWebBundle: true,  // 默认开启 Web 数据包导出
     enabledNouns: [],
     nounInput: '',
+    limitPerNounType: '',
   });
 
   const stepProcessing = ref(false);
@@ -199,10 +201,49 @@ export function useTaskCreation(): UseTaskCreationReturn {
         if (formData.maxConcurrent < 1 || formData.maxConcurrent > 16) {
           return false;
         }
+        if (!isLimitPerNounTypeValid()) {
+          return false;
+        }
       }
     }
 
     return true;
+  }
+
+  function getLimitPerNounTypeValue(): number | null {
+    const rawValue = formData.limitPerNounType.trim();
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+      return NaN;
+    }
+
+    return parsed;
+  }
+
+  function isLimitPerNounTypeValid(): boolean {
+    const parsed = getLimitPerNounTypeValue();
+    return parsed === null || (Number.isInteger(parsed) && parsed > 0);
+  }
+
+  function getLimitPerNounTypeError(): string | null {
+    const rawValue = formData.limitPerNounType.trim();
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+      return 'Limit must be a number';
+    }
+    if (parsed <= 0) {
+      return 'Limit must be greater than 0';
+    }
+
+    return null;
   }
 
   function normalizeNoun(value: string): string {
@@ -286,6 +327,10 @@ export function useTaskCreation(): UseTaskCreationReturn {
         }
         if (formData.maxConcurrent < 1 || formData.maxConcurrent > 16) {
           newErrors.maxConcurrent = '并发数必须在 1-16 之间';
+        }
+        const limitError = getLimitPerNounTypeError();
+        if (limitError) {
+          newErrors.limitPerNounType = limitError;
         }
       }
     }
@@ -434,6 +479,9 @@ export function useTaskCreation(): UseTaskCreationReturn {
         mesh_tol_ratio: formData.type === 'DataGeneration' ? formData.meshTolRatio : 3.0,
         room_keyword: cfg?.room_keyword ?? '-RM',
         enabled_nouns: formData.enabledNouns,
+        ...(formData.type === 'DataGeneration' && getLimitPerNounTypeValue() !== null
+          ? { debug_limit_per_noun_type: getLimitPerNounTypeValue() }
+          : {}),
       },
     };
 
@@ -507,6 +555,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
     formData.exportWebBundle = true;
     formData.enabledNouns = [];
     formData.nounInput = '';
+    formData.limitPerNounType = '';
   }
 
   /**

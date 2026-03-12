@@ -243,6 +243,18 @@
               </template>
             </v-combobox>
           </div>
+
+          <div class="form-group">
+            <label class="form-label">Limit instances per noun type (optional, for testing)</label>
+            <v-text-field v-model="formData.limitPerNounType"
+              placeholder="Leave empty for no limit"
+              variant="outlined"
+              density="compact"
+              type="number"
+              min="1"
+              step="1"
+              :error-messages="errors.limitPerNounType" />
+          </div>
         </template>
       </div>
 
@@ -313,6 +325,10 @@
             <div class="preview-item">
               <span class="preview-label">Noun 过滤</span>
               <span class="preview-value">{{ enabledNounsPreviewText }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="preview-label">实例限制</span>
+              <span class="preview-value">{{ limitPerNounTypePreviewText }}</span>
             </div>
           </template>
         </div>
@@ -451,6 +467,11 @@ const generateContentText = computed(() => {
 
 const enabledNounsPreviewText = computed(() => {
   return formData.enabledNouns.length > 0 ? formData.enabledNouns.join('、') : '全部类型';
+});
+
+const limitPerNounTypePreviewText = computed(() => {
+  const value = formData.limitPerNounType.trim();
+  return value ? value : '无限制';
 });
 
 // ============ 辅助函数 ============
