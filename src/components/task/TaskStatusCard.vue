@@ -91,6 +91,15 @@
 
     <!-- 操作按钮 -->
     <div class="card-actions" @click.stop>
+      <v-btn v-if="previewTarget"
+        size="x-small"
+        color="primary"
+        variant="tonal"
+        @click="$emit('preview', previewTarget)">
+        <v-icon start size="14">mdi-eye-outline</v-icon>
+        Preview
+      </v-btn>
+
       <!-- 等待中：启动、删除 -->
       <template v-if="task.status === 'pending'">
         <v-btn size="x-small"
@@ -177,6 +186,7 @@ defineEmits<{
   restart: [taskId: string];
   delete: [taskId: string];
   detail: [taskId: string];
+  preview: [payload: { dbnum?: number; refno?: string; task: Task }];
 }>();
 
 // ============ 计算属性 ============
@@ -197,7 +207,90 @@ const progressColor = computed(() => {
   }
 });
 
+const previewTarget = computed<{ dbnum?: number; refno?: string; task: Task } | null>(() => {
+  if (props.task.status !== 'completed') {
+    return null;
+  }
+
+  const metadata = (props.task.metadata ?? {}) as Record<string, unknown>;
+  const config = metadata.config as Record<string, unknown> | undefined;
+  const parameters = (props.task.parameters ?? {}) as Record<string, unknown>;
+
+  const metadataDbnum = toPositiveNumber(metadata.db_num)
+    ?? toPositiveNumber(metadata.dbnum)
+    ?? toPositiveNumber(config?.db_num)
+    ?? toPositiveNumber(config?.dbnum);
+  const configDbnum = firstPositiveNumberFromArray(config?.manual_db_nums)
+    ?? toPositiveNumber(parameters.dbnum);
+  const dbnum = metadataDbnum ?? configDbnum;
+
+  const metadataRefno = toRefnoString(metadata.refno)
+    ?? toRefnoString(config?.refno);
+  const configRefno = firstRefnoFromArray(config?.manual_refnos)
+    ?? toRefnoString(parameters.refno);
+  const refno = metadataRefno ?? configRefno;
+
+  if (!dbnum && !refno) {
+    return null;
+  }
+
+  return {
+    ...(dbnum ? { dbnum } : {}),
+    ...(refno ? { refno } : {}),
+    task: props.task,
+  };
+});
+
 // ============ 辅助函数 ============
+function toPositiveNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function firstPositiveNumberFromArray(value: unknown): number | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  for (const item of value) {
+    const parsed = toPositiveNumber(item);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function toRefnoString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function firstRefnoFromArray(value: unknown): string | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  for (const item of value) {
+    const refno = toRefnoString(item);
+    if (refno) {
+      return refno;
+    }
+  }
+  return undefined;
+}
+
 function formatTime(isoString: string): string {
   const date = new Date(isoString);
   return date.toLocaleString('zh-CN', {

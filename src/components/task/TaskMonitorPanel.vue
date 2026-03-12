@@ -154,6 +154,7 @@
               @stop="handleStopTask"
               @restart="handleRestartTask"
               @delete="handleDeleteTask"
+              @preview="handlePreviewTask"
               @detail="handleDetailTask" />
           </div>
         </div>
@@ -166,6 +167,7 @@
           @stop="handleStopTask"
           @restart="handleRestartTask"
           @delete="handleDeleteTask"
+          @preview="handlePreviewTask"
           @detail="handleDetailTask" />
       </template>
     </div>
@@ -193,6 +195,8 @@ import TaskStatusCard from './TaskStatusCard.vue';
 
 import type { Task } from '@/types/task';
 
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useConsoleStore } from '@/composables/useConsoleStore';
 import { useTaskMonitor } from '@/composables/useTaskMonitor';
 
 // ============ 任务监控 ============
@@ -214,6 +218,7 @@ const {
   restartTask,
   deleteTask,
 } = useTaskMonitor();
+const consoleStore = useConsoleStore();
 
 // ============ 任务详情弹窗 ============
 const detailDialogOpen = ref(false);
@@ -353,6 +358,36 @@ async function handleRestartTask(taskId: string) {
 
 async function handleDeleteTask(taskId: string) {
   await deleteTask(taskId);
+}
+
+async function handlePreviewTask(payload: { dbnum?: number; refno?: string; task: Task }) {
+  const refno = payload.refno?.trim();
+  const dbnum = payload.dbnum;
+
+  ensurePanelAndActivate('viewer');
+
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (!refno && !dbnum) {
+    consoleStore.addLog('error', `[task-preview] Missing preview target for task=${payload.task.id}`);
+    return;
+  }
+
+  if (refno) {
+    window.dispatchEvent(new CustomEvent('showModelByRefnos', {
+      detail: {
+        refnos: [refno],
+        flyTo: true,
+      },
+    }));
+    consoleStore.addLog('info', `[task-preview] Preview requested for refno=${refno} task=${payload.task.id}`);
+    return;
+  }
+
+  const message = `Preview requested for dbnum=${dbnum}, viewer loading will be completed by follow-up feature.`;
+  consoleStore.addLog('info', `[task-preview] ${message} task=${payload.task.id}`);
 }
 </script>
 
