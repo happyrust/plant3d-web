@@ -35,6 +35,8 @@ export type TaskCreationFormData = {
   meshTolRatio: number;
   maxConcurrent: number;
   exportWebBundle: boolean;  // 导出 Web 数据包
+  enabledNouns: string[];
+  nounInput: string;
 };
 
 export type ValidationErrors = Partial<Record<keyof TaskCreationFormData, string>>;
@@ -133,6 +135,8 @@ export function useTaskCreation(): UseTaskCreationReturn {
     meshTolRatio: 0.01,
     maxConcurrent: 4,
     exportWebBundle: true,  // 默认开启 Web 数据包导出
+    enabledNouns: [],
+    nounInput: '',
   });
 
   const stepProcessing = ref(false);
@@ -199,6 +203,44 @@ export function useTaskCreation(): UseTaskCreationReturn {
     }
 
     return true;
+  }
+
+  function normalizeNoun(value: string): string {
+    return value.trim().toUpperCase();
+  }
+
+  function normalizeEnabledNouns(values: string[]): string[] {
+    return Array.from(
+      new Set(
+        values
+          .map(normalizeNoun)
+          .filter(Boolean)
+      )
+    );
+  }
+
+  function syncEnabledNouns(values: string[]): void {
+    formData.enabledNouns = normalizeEnabledNouns(values);
+  }
+
+  function addNoun(rawValue: string): boolean {
+    const normalized = normalizeNoun(rawValue);
+    formData.nounInput = '';
+    if (!normalized || formData.enabledNouns.includes(normalized)) {
+      return false;
+    }
+    syncEnabledNouns([...formData.enabledNouns, normalized]);
+    return true;
+  }
+
+  function removeNoun(noun: string): void {
+    const normalized = normalizeNoun(noun);
+    syncEnabledNouns(formData.enabledNouns.filter(item => item !== normalized));
+  }
+
+  function setEnabledNouns(values: string[]): void {
+    syncEnabledNouns(values);
+    formData.nounInput = '';
   }
 
   /**
@@ -391,6 +433,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
         apply_boolean_operation: formData.type === 'DataGeneration' ? formData.applyBooleanOperation : true,
         mesh_tol_ratio: formData.type === 'DataGeneration' ? formData.meshTolRatio : 3.0,
         room_keyword: cfg?.room_keyword ?? '-RM',
+        enabled_nouns: formData.enabledNouns,
       },
     };
 
@@ -461,6 +504,9 @@ export function useTaskCreation(): UseTaskCreationReturn {
     formData.applyBooleanOperation = false;
     formData.meshTolRatio = 0.01;
     formData.maxConcurrent = 4;
+    formData.exportWebBundle = true;
+    formData.enabledNouns = [];
+    formData.nounInput = '';
   }
 
   /**
@@ -500,5 +546,8 @@ export function useTaskCreation(): UseTaskCreationReturn {
     resetForm,
     applyPresetType,
     serverConfig,
+    addNoun,
+    removeNoun,
+    setEnabledNouns,
   };
 }

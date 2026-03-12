@@ -214,6 +214,35 @@
                 :error-messages="errors.maxConcurrent" />
             </div>
           </div>
+
+          <div class="form-group">
+            <label class="form-label">Noun 过滤</label>
+            <v-combobox :model-value="formData.enabledNouns"
+              :search="formData.nounInput"
+              multiple
+              chips
+              closable-chips
+              clear-on-select
+              hide-selected
+              hint="输入 noun 后按 Enter 添加；留空表示不过滤，生成全部类型"
+              persistent-hint
+              placeholder="例如：BRAN、HANG、PANE"
+              variant="outlined"
+              density="compact"
+              @update:search="handleNounSearch"
+              @update:model-value="handleNounListChange"
+              @keydown.enter.prevent="handleNounEnter"
+              @click:clear="clearNounInput">
+              <template #chip="{ props, item }">
+                <v-chip v-bind="props"
+                  size="small"
+                  closable
+                  @click:close="removeNoun(String(item.raw))">
+                  {{ String(item.raw) }}
+                </v-chip>
+              </template>
+            </v-combobox>
+          </div>
         </template>
       </div>
 
@@ -280,6 +309,10 @@
             <div class="preview-item">
               <span class="preview-label">并发数</span>
               <span class="preview-value">{{ formData.maxConcurrent }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="preview-label">Noun 过滤</span>
+              <span class="preview-value">{{ enabledNounsPreviewText }}</span>
             </div>
           </template>
         </div>
@@ -370,6 +403,9 @@ const {
   resetForm,
   applyPresetType,
   serverConfig,
+  addNoun,
+  removeNoun,
+  setEnabledNouns,
 } = useTaskCreation();
 
 // 组件挂载时应用预设类型
@@ -413,6 +449,10 @@ const generateContentText = computed(() => {
   return items.length > 0 ? items.join('、') : '无';
 });
 
+const enabledNounsPreviewText = computed(() => {
+  return formData.enabledNouns.length > 0 ? formData.enabledNouns.join('、') : '全部类型';
+});
+
 // ============ 辅助函数 ============
 function getPriorityColor(priority: TaskPriority): string {
   const colors: Record<TaskPriority, string> = {
@@ -432,6 +472,30 @@ function getPriorityLabel(priority: TaskPriority): string {
     critical: '紧急',
   };
   return labels[priority] || priority;
+}
+
+function handleNounSearch(value: string) {
+  formData.nounInput = value;
+}
+
+function handleNounEnter() {
+  addNoun(formData.nounInput);
+}
+
+function clearNounInput() {
+  formData.nounInput = '';
+}
+
+function handleNounListChange(values: unknown[]) {
+  const normalizedValues = values
+    .map(value => {
+      if (typeof value === 'string') return value;
+      if (value && typeof value === 'object' && 'value' in value) {
+        return String((value as { value?: unknown }).value ?? '');
+      }
+      return String(value ?? '');
+    });
+  setEnabledNouns(normalizedValues);
 }
 
 // ============ 事件处理 ============
