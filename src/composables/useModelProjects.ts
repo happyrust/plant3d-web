@@ -37,11 +37,18 @@ function syncProjectUrl(project: ModelProject): void {
   const url = new URL(window.location.href);
   url.searchParams.set('output_project', project.path);
 
+  // URL 参数透传规则：
+  // - 如果项目本身配置了 showDbnum，则用项目配置覆盖 URL（历史行为）。
+  // - 如果项目未配置 showDbnum，但 URL 已经带了 show_dbnum，则保留（用于 e2e/调试手动指定 dbno）。
+  // - 只有两者都没有时才删除 show_dbnum。
   if (project.showDbnum != null) {
     url.searchParams.set('show_dbnum', String(project.showDbnum));
     url.searchParams.delete('debug_refno');
   } else {
-    url.searchParams.delete('show_dbnum');
+    const hasShowDbnumInUrl = new URLSearchParams(window.location.search).has('show_dbnum');
+    if (!hasShowDbnumInUrl) {
+      url.searchParams.delete('show_dbnum');
+    }
   }
 
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
@@ -63,7 +70,7 @@ export function useModelProjects() {
   // 加载项目列表
   async function loadProjects() {
     if (isLoading.value) return;
-    
+
     isLoading.value = true;
     try {
       // 从后端 API 加载项目列表（通过 Vite proxy 转发到 plant-model-gen）
@@ -71,11 +78,11 @@ export function useModelProjects() {
       if (!response.ok) {
         throw new Error(`Failed to load projects: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       // 后端返回 {items: ProjectItem[], total, page, per_page}
       const items: Record<string, unknown>[] = data.items || [];
-      
+
       // 将后端 ProjectItem 映射为前端 ModelProject
       // 后端字段: name, version, url, env, status, owner, ...
       // name 同时作为 output 目录名（path）

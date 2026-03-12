@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
@@ -18,15 +16,6 @@ function inferBackendPortFromApiBase(apiBase: string | undefined): string {
   }
 }
 
-function shouldServeLocalFiles(url: string | undefined): boolean {
-  if (!url) return false;
-
-  const pathname = url.split('?')[0] || '';
-  const relPath = pathname.replace(/^\/files\/?/, 'files/');
-  if (!relPath.startsWith('files/')) return false;
-
-  return existsSync(join(process.cwd(), 'public', decodeURIComponent(relPath)));
-}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -57,12 +46,10 @@ export default defineConfig(({ mode }) => {
         '/files': {
           target: backendTarget,
           changeOrigin: true,
-          bypass(req) {
-            if (shouldServeLocalFiles(req.url)) {
-              return req.url;
-            }
-            return undefined;
-          },
+          // 强制所有 /files 请求走后端（plant-model-gen）。
+          // 说明：此前存在“若 public/files 下存在同名文件则由前端静态服务返回”的旁路逻辑，
+          // 会造成数据源不一致（本地文件意外覆盖后端 output 目录）。
+          // 按项目约定，/files 始终对应后端 output 根目录。
         },
       },
     },
