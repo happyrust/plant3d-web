@@ -40,8 +40,121 @@ need_cmd() {
   }
 }
 
+# Retry wrapper for transient SSH failures
+retry_with_backoff() {
+  local max_attempts=5
+  local delay=2
+  local attempt=1
+  local exit_code=0
+
+  while [[ $attempt -le $max_attempts ]]; do
+    if "$@"; then
+      return 0
+    else
+      exit_code=$?
+      if [[ $attempt -lt $max_attempts ]]; then
+        log "Attempt $attempt/$max_attempts failed (exit code $exit_code), retrying in ${delay}s..."
+        sleep "$delay"
+        delay=$((delay * 2))
+        attempt=$((attempt + 1))
+      else
+        log "All $max_attempts attempts failed"
+        return $exit_code
+      fi
+    fi
+  done
+}
+
 run_remote() {
-  sshpass -p "$REMOTE_PASS" ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "$@"
+  local attempt=1
+  local max_attempts=5
+  local delay=2
+  
+  while [[ $attempt -le $max_attempts ]]; do
+    if sshpass -p "$REMOTE_PASS" ssh "${SSH_OPTS[@]}" "$REMOTE_USER@$REMOTE_HOST" "$@"; then
+      return 0
+    else
+      local exit_code=$?
+      if [[ $attempt -lt $max_attempts ]]; then
+        log "SSH attempt $attempt/$max_attempts failed (exit code $exit_code), retrying in ${delay}s..."
+        sleep "$delay"
+        delay=$((delay * 2))
+        attempt=$((attempt + 1))
+      else
+        log "All $max_attempts SSH attempts failed"
+        return $exit_code
+      fi
+    fi
+  done
+}
+
+run_rsync() {
+  local attempt=1
+  local max_attempts=5
+  local delay=2
+  
+  while [[ $attempt -le $max_attempts ]]; do
+    if sshpass -p "$REMOTE_PASS" rsync -az --delete -e "ssh ${SSH_OPTS[*]}" "$@"; then
+      return 0
+    else
+      local exit_code=$?
+      if [[ $attempt -lt $max_attempts ]]; then
+        log "rsync attempt $attempt/$max_attempts failed (exit code $exit_code), retrying in ${delay}s..."
+        sleep "$delay"
+        delay=$((delay * 2))
+        attempt=$((attempt + 1))
+      else
+        log "All $max_attempts rsync attempts failed"
+        return $exit_code
+      fi
+    fi
+  done
+}
+
+run_rsync_file() {
+  local attempt=1
+  local max_attempts=5
+  local delay=2
+  
+  while [[ $attempt -le $max_attempts ]]; do
+    if sshpass -p "$REMOTE_PASS" rsync -az -e "ssh ${SSH_OPTS[*]}" "$@"; then
+      return 0
+    else
+      local exit_code=$?
+      if [[ $attempt -lt $max_attempts ]]; then
+        log "rsync attempt $attempt/$max_attempts failed (exit code $exit_code), retrying in ${delay}s..."
+        sleep "$delay"
+        delay=$((delay * 2))
+        attempt=$((attempt + 1))
+      else
+        log "All $max_attempts rsync attempts failed"
+        return $exit_code
+      fi
+    fi
+  done
+}
+
+run_scp() {
+  local attempt=1
+  local max_attempts=5
+  local delay=2
+  
+  while [[ $attempt -le $max_attempts ]]; do
+    if sshpass -p "$REMOTE_PASS" scp "${SSH_OPTS[@]}" "$@"; then
+      return 0
+    else
+      local exit_code=$?
+      if [[ $attempt -lt $max_attempts ]]; then
+        log "scp attempt $attempt/$max_attempts failed (exit code $exit_code), retrying in ${delay}s..."
+        sleep "$delay"
+        delay=$((delay * 2))
+        attempt=$((attempt + 1))
+      else
+        log "All $max_attempts scp attempts failed"
+        return $exit_code
+      fi
+    fi
+  done
 }
 
 cleanup() {
@@ -116,10 +229,10 @@ log "Preparing remote deploy directory"
 run_remote "set -e; mkdir -p '$DEPLOY_PATH'; mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled; if [ -f /etc/nginx/conf.d/plant3d-web.conf ]; then mv /etc/nginx/conf.d/plant3d-web.conf /etc/nginx/conf.d/plant3d-web.conf.bak; fi"
 
 log "Uploading dist/"
-sshpass -p "$REMOTE_PASS" rsync -az --delete -e "ssh ${SSH_OPTS[*]}" "$DIST_DIR/" "$REMOTE_USER@$REMOTE_HOST:$DEPLOY_PATH/"
+run_rsync "$DIST_DIR/" "$REMOTE_USER@$REMOTE_HOST:$DEPLOY_PATH/"
 
 log "Uploading nginx config"
-sshpass -p "$REMOTE_PASS" scp "${SSH_OPTS[@]}" "$TMP_NGINX_CONF" "$REMOTE_USER@$REMOTE_HOST:/tmp/plant3d-web.conf"
+run_rsync_file "$TMP_NGINX_CONF" "$REMOTE_USER@$REMOTE_HOST:/tmp/plant3d-web.conf"
 
 log "Reloading nginx"
 run_remote "set -e; mv /tmp/plant3d-web.conf '$SITE_CONF_PATH'; ln -sfn '$SITE_CONF_PATH' /etc/nginx/sites-enabled/plant3d-web; nginx -t; systemctl reload nginx || nginx -s reload; systemctl is-active nginx"

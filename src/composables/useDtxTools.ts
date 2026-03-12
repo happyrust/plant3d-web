@@ -942,7 +942,7 @@ export function useDtxTools(options: {
     clearDimensionPreview();
     try {
       rectPreviewLine.value?.geometry.dispose()
-      ; (rectPreviewLine.value?.material as any)?.dispose?.();
+        ; (rectPreviewLine.value?.material as any)?.dispose?.();
     } catch { /* ignore */ }
     rectPreviewLine.value = null;
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
@@ -967,7 +967,7 @@ export function useDtxTools(options: {
 
     try {
       rectPreviewLine.value?.geometry.dispose()
-      ; (rectPreviewLine.value?.material as any)?.dispose?.();
+        ; (rectPreviewLine.value?.material as any)?.dispose?.();
     } catch { /* ignore */ }
     rectPreviewLine.value = null;
   }
@@ -1033,7 +1033,7 @@ export function useDtxTools(options: {
       try {
         toolsGroup.remove(rectPreviewLine.value);
         rectPreviewLine.value.geometry.dispose()
-        ; (rectPreviewLine.value.material as any)?.dispose?.();
+          ; (rectPreviewLine.value.material as any)?.dispose?.();
       } catch { /* ignore */ }
     }
     rectPreviewLine.value = line;
@@ -1384,13 +1384,13 @@ export function useDtxTools(options: {
         }
         return;
       }
-      
+
       const refno = hit.entityId;
       const viewer = compatViewerRef.value;
       if (!viewer) return;
-      
+
       viewer.scene.ensureRefnos([refno]);
-      
+
       if (e.shiftKey) {
         // Shift 多选：切换选中状态
         const isSelected = viewer.scene.selectedObjectIds.includes(refno);
@@ -1419,16 +1419,16 @@ export function useDtxTools(options: {
       if (!hit) return;
       let targetRefno = hit.entityId;
       const filter = store.pickRefnoFilter.value;
-      
-      // 如果过滤器要求 BRAN，但点击的不是 BRAN，则查找其所属 BRAN
+
+      // 允许直接点击 TUBI 等子件时回溯其所属 BRAN；noun 缺失时也要尝试回溯。
       if (filter.includes('BRAN')) {
         const noun = findNounByRefnoAcrossAllDbnos(targetRefno);
-        if (noun && noun !== 'BRAN' && noun !== 'HANG') {
+        if (noun !== 'BRAN' && noun !== 'HANG') {
           const branRefno = findOwnerRefnoByTubi(targetRefno);
           if (branRefno) targetRefno = branRefno;
         }
       }
-      
+
       // noun 过滤验证
       if (filter.length > 0) {
         const noun = findNounByRefnoAcrossAllDbnos(targetRefno);
@@ -1606,7 +1606,7 @@ export function useDtxTools(options: {
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
     try {
       rectPreviewLine.value?.geometry.dispose()
-      ; (rectPreviewLine.value?.material as any)?.dispose?.();
+        ; (rectPreviewLine.value?.material as any)?.dispose?.();
     } catch { /* ignore */ }
     rectPreviewLine.value = null;
     clickTracker.value = { down: null, moved: false };
