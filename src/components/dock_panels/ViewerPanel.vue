@@ -1873,16 +1873,20 @@ onMounted(async () => {
         camera: dtxViewer.camera,
         renderer: dtxViewer.renderer,
         container: canvas,
-        // 工程风格：低透明覆层 + 深灰细边
+        // 参考图风格：粉色填充 + 亮绿色 outline
         enableOutline: true,
         highlightMode: "both",
+        outlineStyle: {
+            edgeColor: 0x36f97b,
+            edgeStrength: 3.2,
+            edgeGlow: 0.2,
+            edgeThickness: 1.4,
+        },
         overlayStyle: {
+            showFill: true,
             showEdges: false,
-            fillColor: 0x94a3b8,
-            fillOpacity: 0.22,
-            edgeColor: 0x4b5563,
-            edgeThresholdAngle: 20,
-            edgeAlwaysOnTop: false,
+            fillColor: 0xff4fd8,
+            fillOpacity: 0.72,
         },
     });
     selectionControllerRef.value = selectionController;

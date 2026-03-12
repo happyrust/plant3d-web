@@ -109,7 +109,9 @@ export class DtxCompatScene {
     // 仅对 refno-like 的对象尝试解析 dbno；避免把树节点/非 refno id 当作 refno 处理。
     if (!/^\d+_/.test(normalized)) return []
     const dbno = tryGetDbnumByRefno(normalized)
-    if (!dbno) return []
+    if (!dbno) {
+      return this._getObjectIdsFromLoadedIndex(normalized)
+    }
     const ids = resolveDtxObjectIdsByRefno(dbno, normalized)
     if (ids.length > 0) return ids
 
@@ -122,6 +124,10 @@ export class DtxCompatScene {
 
     // 兜底：避免开发环境下模块实例隔离/缓存不同步导致 resolve 失效
     // objectId 命名规则：o:<refno>:<n>
+    return this._getObjectIdsFromLoadedIndex(normalized)
+  }
+
+  private _getObjectIdsFromLoadedIndex(refno: string): string[] {
     const objectCount = this._dtxLayer.objectCount
     if (!this._fallbackRefnoToObjectIds) {
       this._fallbackRefnoToObjectIds = new Map<string, string[]>()
@@ -138,17 +144,17 @@ export class DtxCompatScene {
           if (typeof objectId !== 'string') continue
           if (!objectId.startsWith('o:')) continue
           const parts = objectId.split(':')
-          const r = parts.length >= 3 ? String(parts[1] ?? '') : ''
-          if (!r) continue
-          const list = this._fallbackRefnoToObjectIds.get(r) || []
+          const normalizedRefno = parts.length >= 3 ? String(parts[1] ?? '') : ''
+          if (!normalizedRefno) continue
+          const list = this._fallbackRefnoToObjectIds.get(normalizedRefno) || []
           list.push(objectId)
-          this._fallbackRefnoToObjectIds.set(r, list)
+          this._fallbackRefnoToObjectIds.set(normalizedRefno, list)
         }
       }
       this._fallbackIndexObjectCount = objectCount
     }
 
-    return this._fallbackRefnoToObjectIds.get(normalized) ?? []
+    return this._fallbackRefnoToObjectIds.get(refno) ?? []
   }
 
   private _computeRefnoAabb(refno: string): Aabb6 | null {

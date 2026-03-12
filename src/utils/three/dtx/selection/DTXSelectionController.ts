@@ -15,7 +15,7 @@
 import { Box3, Camera, Color, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from 'three'
 
 import { DTXLayer } from '../DTXLayer'
-import { DTXOutlineHelper } from '../outline/DTXOutlineHelper'
+import { DTXOutlineHelper, type OutlineStyle } from '../outline/DTXOutlineHelper'
 import { DTXOverlayHighlighter, type DTXOverlayHighlightStyle } from './DTXOverlayHighlighter'
 import { EventEmitter } from './EventEmitter'
 import { ObjectsKdTree } from './ObjectsKdTree'
@@ -32,6 +32,8 @@ export interface DTXSelectionControllerOptions {
   enableOutline?: boolean
   /** 选中高亮模式：outline（后处理描边）| overlay（覆层填充+描边）| both */
   highlightMode?: 'outline' | 'overlay' | 'both'
+  /** outline 模式样式（默认：橙色描边） */
+  outlineStyle?: OutlineStyle
   /** overlay 模式样式（默认：蓝面+绿边） */
   overlayStyle?: DTXOverlayHighlightStyle
   resolveObjectIdsByRefno?: (refno: string) => string[]
@@ -58,6 +60,7 @@ export class DTXSelectionController extends EventEmitter {
   private _overlayHighlighter: DTXOverlayHighlighter | null = null
   private _gpuPicker: GPUPicker
   private _highlightMode: 'outline' | 'overlay' | 'both'
+  private _outlineStyle: OutlineStyle | undefined
 
   constructor(options: DTXSelectionControllerOptions) {
     super()
@@ -77,6 +80,7 @@ export class DTXSelectionController extends EventEmitter {
       multiSelect: true,
     })
     this._highlightMode = options.highlightMode ?? 'outline'
+    this._outlineStyle = options.outlineStyle
     this._setupSelectionManager()
 
     this._gpuPicker = new GPUPicker(this._renderer)
@@ -231,6 +235,7 @@ export class DTXSelectionController extends EventEmitter {
       edgeStrength: 2.5,
       edgeGlow: 0.5,
       edgeThickness: 1.0,
+      ...this._outlineStyle,
     })
   }
 

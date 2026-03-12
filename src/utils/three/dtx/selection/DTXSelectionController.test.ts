@@ -130,4 +130,48 @@ describe("DTXSelectionController", () => {
     ]);
     expect(outlineHelpers[0]?.getOutlinedObjects()).toEqual(["o:demo:0"]);
   });
+
+  it("允许通过 options 自定义 outline 样式", () => {
+    const scene = new Scene();
+    const geometry = createQuadGeometry();
+    const container = document.createElement("div");
+    Object.defineProperty(container, "getBoundingClientRect", {
+      value: () => ({ width: 800, height: 600, left: 0, top: 0 }),
+    });
+
+    const dtxLayer = {
+      getAllObjectsWithBounds: () => [],
+      getObjectIdByIndex: () => null,
+      getObjectGeometryData: () => ({
+        geometry,
+        matrix: new Matrix4(),
+      }),
+      getObjectBoundingBoxInto: () => null,
+      hasObject: () => true,
+    } as any;
+
+    new DTXSelectionController({
+      dtxLayer,
+      scene,
+      camera: new PerspectiveCamera(),
+      renderer: {} as any,
+      container,
+      enableOutline: true,
+      highlightMode: "both",
+      outlineStyle: {
+        edgeColor: 0x36f97b,
+        edgeStrength: 3.2,
+        edgeGlow: 0.2,
+        edgeThickness: 1.4,
+      },
+    } as any);
+
+    expect(outlineHelpers).toHaveLength(1);
+    expect(outlineHelpers[0]?.setStyle).toHaveBeenCalledWith({
+      edgeColor: 0x36f97b,
+      edgeStrength: 3.2,
+      edgeGlow: 0.2,
+      edgeThickness: 1.4,
+    });
+  });
 });
