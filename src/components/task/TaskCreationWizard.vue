@@ -243,6 +243,8 @@
             <label class="form-label">Noun 过滤</label>
             <v-combobox :model-value="formData.enabledNouns"
               :search="formData.nounInput"
+              :error="nounInputInvalid"
+              :error-messages="nounInputError ? [nounInputError] : []"
               multiple
               chips
               closable-chips
@@ -424,6 +426,8 @@ import type { TaskPriority } from '@/types/task';
 
 import { useTaskCreation } from '@/composables/useTaskCreation';
 
+const DEFAULT_TASK_TYPE = 'DataParsingWizard';
+
 // ============ Emits ============
 const emit = defineEmits<{
   close: [];
@@ -454,6 +458,8 @@ const {
   addNoun,
   removeNoun,
   setEnabledNouns,
+  nounInputInvalid,
+  nounInputError,
 } = useTaskCreation();
 
 // 组件挂载时应用预设类型
@@ -542,7 +548,9 @@ function handleNounSearch(value: string) {
 }
 
 function handleNounEnter() {
-  addNoun(formData.nounInput);
+  if (!nounInputInvalid.value) {
+    addNoun(formData.nounInput);
+  }
 }
 
 function clearNounInput() {
@@ -658,6 +666,7 @@ async function handleBatchSubmit() {
 
 function handleCreateAnother() {
   resetForm();
+  formData.type = DEFAULT_TASK_TYPE;
 }
 </script>
 

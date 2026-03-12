@@ -42,6 +42,9 @@ export type TaskCreationFormData = {
 
 export type ValidationErrors = Partial<Record<keyof TaskCreationFormData, string>>;
 
+const TASK_NAME_MAX_LENGTH = 200;
+const NOUN_PATTERN = /^[A-Za-z]+$/;
+
 export type UseTaskCreationReturn = {
   /** 当前步骤 (1-3) */
   currentStep: Ref<number>;
@@ -92,6 +95,10 @@ export type UseTaskCreationReturn = {
   removeNoun: (noun: string) => void;
   /** 批量设置 noun 过滤项 */
   setEnabledNouns: (values: string[]) => void;
+  /** 当前 noun 输入是否无效 */
+  nounInputInvalid: import('vue').ComputedRef<boolean>;
+  /** noun 输入错误文案 */
+  nounInputError: import('vue').ComputedRef<string>;
 };
 
 /**
@@ -171,12 +178,29 @@ export function useTaskCreation(): UseTaskCreationReturn {
     );
   });
 
+  const nounInputError = computed(() => {
+    const normalized = normalizeNoun(formData.nounInput);
+    if (!normalized) {
+      return '';
+    }
+    if (!NOUN_PATTERN.test(normalized)) {
+      return 'Noun must contain alphabetic characters only';
+    }
+    if (formData.enabledNouns.includes(normalized)) {
+      return 'Noun already added';
+    }
+    return '';
+  });
+
+  const nounInputInvalid = computed(() => nounInputError.value.length > 0);
+
   /**
    * 纯函数检查步骤是否有效（不修改 errors，用于 computed）
    */
   function checkStepValid(step: number): boolean {
     if (step === 1) {
-      if (!formData.name.trim() || formData.name.length < 2 || formData.name.length > 100) {
+      const trimmedName = formData.name.trim();
+      if (!trimmedName || trimmedName.length > TASK_NAME_MAX_LENGTH) {
         return false;
       }
       if (!formData.type) {
@@ -275,12 +299,16 @@ export function useTaskCreation(): UseTaskCreationReturn {
     return value.trim().toUpperCase();
   }
 
+  function isValidNoun(value: string): boolean {
+    return NOUN_PATTERN.test(value);
+  }
+
   function normalizeEnabledNouns(values: string[]): string[] {
     return Array.from(
       new Set(
         values
           .map(normalizeNoun)
-          .filter(Boolean)
+          .filter(value => value.length > 0 && isValidNoun(value))
       )
     );
   }
@@ -292,7 +320,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
   function addNoun(rawValue: string): boolean {
     const normalized = normalizeNoun(rawValue);
     formData.nounInput = '';
-    if (!normalized || formData.enabledNouns.includes(normalized)) {
+    if (!normalized || !isValidNoun(normalized) || formData.enabledNouns.includes(normalized)) {
       return false;
     }
     syncEnabledNouns([...formData.enabledNouns, normalized]);
@@ -316,12 +344,11 @@ export function useTaskCreation(): UseTaskCreationReturn {
     const newErrors: ValidationErrors = {};
 
     if (step === 1) {
-      if (!formData.name.trim()) {
-        newErrors.name = '请输入任务名称';
-      } else if (formData.name.length < 2) {
-        newErrors.name = '任务名称至少2个字符';
-      } else if (formData.name.length > 100) {
-        newErrors.name = '任务名称不能超过100个字符';
+      const trimmedName = formData.name.trim();
+      if (!trimmedName) {
+        newErrors.name = 'Task name is required';
+      } else if (trimmedName.length > TASK_NAME_MAX_LENGTH) {
+        newErrors.name = 'Task name must be less than 200 characters';
       }
       if (!formData.type) {
         newErrors.type = '请选择任务类型';
@@ -378,7 +405,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
       errors.value = { ...errors.value, ...newErrors };
     }
     if (step === 1) {
-      if (!newErrors.name && errors.value.name && errors.value.name !== '任务名称已存在') delete errors.value.name;
+      if (!newErrors.name && errors.value.name && errors.value.name !== 'Task name already exists') delete errors.value.name;
       if (!newErrors.type && errors.value.type) delete errors.value.type;
     }
     if (step === 2) {
@@ -413,7 +440,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
       const response = await taskValidateName(formData.name);
       nameAvailable.value = response.available;
       if (!response.available) {
-        errors.value.name = '任务名称已存在';
+        errors.value.name = 'Task name already exists';
       } else {
         delete errors.value.name;
       }
@@ -651,5 +678,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
     addNoun,
     removeNoun,
     setEnabledNouns,
+    nounInputInvalid,
+    nounInputError,
   };
 }
