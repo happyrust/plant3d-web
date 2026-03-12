@@ -17,9 +17,10 @@ import {
 } from 'lucide-vue-next';
 
 import {
-  canFinalizeAtCurrentNode,
+  canReturnAtCurrentNode,
+  canSubmitAtCurrentNode,
   confirmCurrentDataSafely,
-  finalizeTaskDecisionSafely,
+  getSubmitActionLabel,
 } from './reviewPanelActions';
 
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
@@ -27,10 +28,15 @@ import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 import {
   reviewGetAuxData,
   reviewGetCollisionData,
+  type CollisionItem,
   reviewSyncExport,
   reviewSyncImport,
 } from '@/api/reviewApi';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
+import CollisionResultList from './CollisionResultList.vue';
+import ReviewDataSync from './ReviewDataSync.vue';
+import ReviewAuxData from './ReviewAuxData.vue';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -98,34 +104,9 @@ function downloadAttachment(attachment: ReviewAttachment) {
 const isFilteringByTask = ref(false);
 
 // 审核操作相关
-const showRejectDialog = ref(false);
-const rejectComment = ref('');
-const decisionActionLoading = ref(false);
-const decisionActionError = ref<string | null>(null);
-
-// 工作流对话框
-const showSubmitDialog = ref(false);
-const showReturnDialog = ref(false);
-const workflowActionLoading = ref(false);
-
-// 工作流节点顺序
-const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
-
-const nextWorkflowNode = computed<WorkflowNode | null>(() => {
-  const current = currentTask.value?.currentNode ?? 'sj';
-  const idx = WORKFLOW_NODE_ORDER.indexOf(current);
-  if (idx < 0) return 'jd';
-  return WORKFLOW_NODE_ORDER[idx + 1] ?? null;
-});
-
-const canSubmitToNextNode = computed(() => !!nextWorkflowNode.value);
-const canReturnToPrevNode = computed(() => {
-  const current = currentTask.value?.currentNode ?? 'sj';
-  return WORKFLOW_NODE_ORDER.indexOf(current) > 0;
-});
-const canFinalizeCurrentTask = computed(() =>
-  canFinalizeAtCurrentNode(currentTask.value?.currentNode)
-);
+const canSubmitToNextNode = computed(() => canSubmitAtCurrentNode(currentTask.value?.currentNode));
+const canReturnToPrevNode = computed(() => canReturnAtCurrentNode(currentTask.value?.currentNode));
+const submitActionLabel = computed(() => getSubmitActionLabel(currentTask.value?.currentNode));
 // ============ 同步（后端） ============
 
 const syncExporting = ref(false);
@@ -205,6 +186,27 @@ async function queryCollision() {
   }
 }
 
+function handleCollisionLocate(item: CollisionItem) {
+  // 通过构件名称定位三维视图
+  const viewer = (window as any).__xeokit_viewer;
+  if (!viewer) return;
+  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean);
+  if (objectIds.length > 0) {
+    viewer.cameraFlight?.flyTo({ aabb: viewer.scene?.getAABB(objectIds) }, () => {});
+  }
+}
+
+function handleCollisionHighlight(item: CollisionItem) {
+  const viewer = (window as any).__xeokit_viewer;
+  if (!viewer) return;
+  // 先清除旧的高亮
+  viewer.scene?.setObjectsHighlighted(viewer.scene.highlightedObjectIds, false);
+  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean);
+  if (objectIds.length > 0) {
+    viewer.scene?.setObjectsHighlighted(objectIds, true);
+  }
+}
+
 const AUX_UCODE_KEY = 'review_aux_ucode';
 const AUX_UKEY_KEY = 'review_aux_ukey';
 const auxUCode = ref(localStorage.getItem(AUX_UCODE_KEY) || '');
@@ -253,6 +255,13 @@ const workflowLoading = ref(false);
 const workflowError = ref<string | null>(null);
 const workflow = ref<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>> | null>(null);
 
+// 内联表单状态 (替代 window.prompt)
+const showSubmitForm = ref(false);
+const submitComment = ref('');
+const showReturnForm = ref(false);
+const returnReason = ref('');
+const workflowActionLoading = ref(false);
+
 function getWorkflowActionLabel(action: string): string {
   switch (action) {
     case 'submit':
@@ -296,21 +305,43 @@ async function refreshCurrentTask(taskId: string) {
 }
 
 async function handleSubmitToNextNode() {
-  if (!currentTask.value) return;
-  const comment = window.prompt('提交备注（可选）', '') || undefined;
-  await userStore.submitTaskToNextNode(currentTask.value.id, comment);
-  await refreshCurrentTask(currentTask.value.id);
-  await loadWorkflow(currentTask.value.id);
+  if (!currentTask.value || !canSubmitToNextNode.value) return;
+  workflowActionLoading.value = true;
+  workflowError.value = null;
+  try {
+    await userStore.submitTaskToNextNode(currentTask.value.id, submitComment.value.trim() || undefined);
+    await refreshCurrentTask(currentTask.value.id);
+    await loadWorkflow(currentTask.value.id);
+    showSubmitForm.value = false;
+    submitComment.value = '';
+  } catch (e) {
+    workflowError.value = e instanceof Error ? e.message : '提交失败';
+  } finally {
+    workflowActionLoading.value = false;
+  }
 }
 
 async function handleReturnToNode() {
-  if (!currentTask.value) return;
-  const reason = (window.prompt('请输入驳回原因（必填）', '') || '').trim();
-  if (!reason) return;
-  // 统一规则：驳回一律回发起设计人（sj）
-  await userStore.returnTaskToNode(currentTask.value.id, 'sj', reason);
-  await refreshCurrentTask(currentTask.value.id);
-  await loadWorkflow(currentTask.value.id);
+  if (!currentTask.value || !canReturnToPrevNode.value) return;
+  if (!returnReason.value.trim()) return;
+  workflowActionLoading.value = true;
+  workflowError.value = null;
+  try {
+    await userStore.returnTaskToNode(currentTask.value.id, 'sj', returnReason.value.trim());
+    await refreshCurrentTask(currentTask.value.id);
+    await loadWorkflow(currentTask.value.id);
+    showReturnForm.value = false;
+    returnReason.value = '';
+  } catch (e) {
+    workflowError.value = e instanceof Error ? e.message : '驳回失败';
+  } finally {
+    workflowActionLoading.value = false;
+  }
+}
+
+function handleClearConfirmedRecords() {
+  if (!window.confirm('确定要清空所有已确认的数据？此操作不可撤销。')) return;
+  reviewStore.clearConfirmedRecords();
 }
 
 // 根据任务过滤模型显示
@@ -373,51 +404,6 @@ watch(currentTask, (newTask) => {
     workflowError.value = null;
   }
 });
-
-// 审核操作函数
-async function handleApprove() {
-  if (!currentTask.value || decisionActionLoading.value) return;
-
-  decisionActionLoading.value = true;
-  decisionActionError.value = null;
-  try {
-    await finalizeTaskDecisionSafely({
-      updateTaskStatus: userStore.updateTaskStatus,
-      clearCurrentTask: reviewStore.clearCurrentTask,
-      taskId: currentTask.value.id,
-      status: 'approved',
-      comment: '审核通过',
-    });
-    console.log('任务已通过审核');
-  } catch (e) {
-    decisionActionError.value = e instanceof Error ? e.message : '审核通过失败';
-  } finally {
-    decisionActionLoading.value = false;
-  }
-}
-
-async function handleReject() {
-  if (!currentTask.value || decisionActionLoading.value) return;
-
-  decisionActionLoading.value = true;
-  decisionActionError.value = null;
-  try {
-    await finalizeTaskDecisionSafely({
-      updateTaskStatus: userStore.updateTaskStatus,
-      clearCurrentTask: reviewStore.clearCurrentTask,
-      taskId: currentTask.value.id,
-      status: 'rejected',
-      comment: rejectComment.value.trim(),
-    });
-    showRejectDialog.value = false;
-    rejectComment.value = '';
-    console.log('任务已驳回');
-  } catch (e) {
-    decisionActionError.value = e instanceof Error ? e.message : '驳回失败';
-  } finally {
-    decisionActionLoading.value = false;
-  }
-}
 
 const pendingAnnotationCount = computed(() => {
   return (
@@ -482,6 +468,7 @@ function exportData() {
 }
 
 function startAnnotation() {
+  ensurePanelAndActivate('annotation');
   toolStore.setToolMode('annotation');
 }
 
@@ -559,18 +546,63 @@ onUnmounted(() => {
             <div class="flex gap-2">
               <button type="button"
                 class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading"
-                @click="handleSubmitToNextNode">
-                提交到下一节点
+                :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode || showReturnForm"
+                @click="showSubmitForm = !showSubmitForm">
+                {{ submitActionLabel }}
               </button>
               <button type="button"
                 class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading"
-                @click="handleReturnToNode">
+                :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode || showSubmitForm"
+                @click="showReturnForm = !showReturnForm">
                 驳回到设计
               </button>
             </div>
           </div>
+
+          <!-- 提交内联表单 -->
+          <div v-if="showSubmitForm" class="mt-2 space-y-2 rounded-md border border-blue-200 bg-blue-50 p-2 dark:border-blue-800 dark:bg-blue-950">
+            <label class="text-xs text-muted-foreground">{{ submitActionLabel }}备注（可选）</label>
+            <textarea v-model="submitComment"
+              class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
+              rows="2"
+              placeholder="输入备注..." />
+            <div class="flex gap-2">
+              <button type="button"
+                class="h-7 flex-1 rounded bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                :disabled="workflowActionLoading"
+                @click="handleSubmitToNextNode">
+                {{ workflowActionLoading ? '提交中...' : '确认提交' }}
+              </button>
+              <button type="button"
+                class="h-7 rounded border border-input px-2 text-xs hover:bg-muted"
+                @click="showSubmitForm = false; submitComment = ''">
+                取消
+              </button>
+            </div>
+          </div>
+
+          <!-- 驳回内联表单 -->
+          <div v-if="showReturnForm" class="mt-2 space-y-2 rounded-md border border-red-200 bg-red-50 p-2 dark:border-red-800 dark:bg-red-950">
+            <label class="text-xs text-muted-foreground">驳回原因（必填）</label>
+            <textarea v-model="returnReason"
+              class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
+              rows="2"
+              placeholder="请输入驳回原因..." />
+            <div class="flex gap-2">
+              <button type="button"
+                class="h-7 flex-1 rounded bg-red-600 px-2 text-xs text-white hover:bg-red-700 disabled:opacity-50"
+                :disabled="workflowActionLoading || !returnReason.trim()"
+                @click="handleReturnToNode">
+                {{ workflowActionLoading ? '驳回中...' : '确认驳回' }}
+              </button>
+              <button type="button"
+                class="h-7 rounded border border-input px-2 text-xs hover:bg-muted"
+                @click="showReturnForm = false; returnReason = ''">
+                取消
+              </button>
+            </div>
+          </div>
+
           <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
           <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
           <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
@@ -598,28 +630,8 @@ onUnmounted(() => {
             显示全部
           </button>
         </div>
-        <!-- 审核操作按钮 -->
-        <div v-if="canFinalizeCurrentTask" class="flex gap-2 mt-3 pt-3 border-t">
-          <button type="button"
-            class="flex-1 h-8 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center gap-1 disabled:opacity-50"
-            :disabled="decisionActionLoading"
-            @click="handleApprove">
-            <CheckCircle class="h-3 w-3" />
-            {{ decisionActionLoading ? '处理中...' : '通过' }}
-          </button>
-          <button type="button"
-            class="flex-1 h-8 text-xs bg-red-500 text-white rounded hover:bg-red-600 flex items-center justify-center gap-1 disabled:opacity-50"
-            :disabled="decisionActionLoading"
-            @click="showRejectDialog = true">
-            <XCircle class="h-3 w-3" />
-            驳回
-          </button>
-        </div>
-        <div v-else class="mt-3 border-t pt-3 text-xs text-muted-foreground">
-          当前节点仅支持“提交到下一节点”或“驳回到指定节点”。
-        </div>
-        <div v-if="decisionActionError" class="mt-2 text-xs text-red-600">
-          {{ decisionActionError }}
+        <div class="mt-3 border-t pt-3 text-xs text-muted-foreground">
+          当前操作统一走工作流流转：提交到下一节点或驳回到设计节点。
         </div>
       </div>
     </div>
@@ -786,7 +798,7 @@ onUnmounted(() => {
         <button type="button"
           class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs text-destructive hover:bg-muted disabled:opacity-50"
           :disabled="reviewStore.confirmedRecordCount.value === 0"
-          @click="reviewStore.clearConfirmedRecords()">
+          @click="handleClearConfirmedRecords()">
           <Trash2 class="h-3.5 w-3.5" />
           清空
         </button>
@@ -794,86 +806,10 @@ onUnmounted(() => {
     </div>
 
     <!-- 后端数据同步 -->
-    <div class="rounded-md border border-border bg-background p-3">
-      <div class="flex items-center justify-between">
-        <div class="text-sm font-semibold">数据同步（后端）</div>
-        <label class="flex items-center gap-2 text-xs text-muted-foreground">
-          <input v-model="syncOverwrite" type="checkbox" />
-          导入覆盖
-        </label>
-      </div>
-      <div class="mt-2 flex gap-2">
-        <button type="button"
-          class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50"
-          :disabled="syncExporting"
-          @click="exportFromServer">
-          <Download class="h-3.5 w-3.5" />
-          导出(后端)
-        </button>
-        <label class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50 cursor-pointer"
-          :class="{ 'opacity-50 pointer-events-none': syncImporting }">
-          <FileText class="h-3.5 w-3.5" />
-          导入(后端)
-          <input type="file" accept="application/json" class="hidden" @change="importFromFile" />
-        </label>
-      </div>
-      <div class="mt-2 text-xs text-muted-foreground">
-        说明：导出/导入走 `/api/review/sync/export|import`，用于跨环境迁移校审数据。
-      </div>
-    </div>
+    <ReviewDataSync />
 
     <!-- 辅助校审数据 -->
-    <div class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">辅助校审数据</div>
-      <div class="mt-2 space-y-3">
-        <div class="rounded-md bg-muted/30 p-2">
-          <div class="text-xs font-medium">碰撞数据查询</div>
-          <div class="mt-2 flex gap-2">
-            <input v-model="collisionRefno"
-              type="text"
-              placeholder="RefNo（可选）"
-              class="h-8 flex-1 rounded-md border px-2 text-xs" />
-            <button type="button"
-              class="h-8 rounded-md border px-3 text-xs hover:bg-muted disabled:opacity-50"
-              :disabled="collisionLoading"
-              @click="queryCollision">
-              查询
-            </button>
-          </div>
-          <div v-if="collisionLoading" class="mt-2 text-xs text-muted-foreground">查询中...</div>
-          <div v-else-if="collisionError" class="mt-2 text-xs text-red-600">{{ collisionError }}</div>
-          <div v-else-if="collisionData" class="mt-2 text-xs text-muted-foreground">
-            命中 {{ collisionData.total }} 条
-          </div>
-        </div>
-
-        <div class="rounded-md bg-muted/30 p-2">
-          <div class="text-xs font-medium">外部辅助数据（aux-data）</div>
-          <div class="mt-2 grid grid-cols-2 gap-2">
-            <input v-model="auxProjectId" type="text" placeholder="project_id（可选）" class="h-8 rounded-md border px-2 text-xs" />
-            <input v-model="auxFormId" type="text" placeholder="form_id（可选）" class="h-8 rounded-md border px-2 text-xs" />
-            <input v-model="auxMajor" type="text" placeholder="major（默认 general）" class="h-8 rounded-md border px-2 text-xs" />
-            <div class="flex gap-2">
-              <input v-model="auxUCode" type="text" placeholder="UCode" class="h-8 flex-1 rounded-md border px-2 text-xs" />
-              <input v-model="auxUKey" type="text" placeholder="UKey" class="h-8 flex-1 rounded-md border px-2 text-xs" />
-            </div>
-          </div>
-          <div class="mt-2 flex gap-2">
-            <button type="button"
-              class="h-8 flex-1 rounded-md border px-3 text-xs hover:bg-muted disabled:opacity-50"
-              :disabled="!currentTask || auxLoading"
-              @click="fetchAuxDataForCurrentTask">
-              获取当前任务辅助数据
-            </button>
-          </div>
-          <div v-if="auxLoading" class="mt-2 text-xs text-muted-foreground">请求中...</div>
-          <div v-else-if="auxError" class="mt-2 text-xs text-red-600">{{ auxError }}</div>
-          <div v-else-if="auxData" class="mt-2 text-xs text-muted-foreground">
-            返回 collision: {{ auxData.data.collision.length }} 条，total={{ auxData.total }}
-          </div>
-        </div>
-      </div>
-    </div>
+    <ReviewAuxData />
 
     <!-- 确认历史 -->
     <div class="rounded-md border border-border bg-background p-3">
@@ -916,32 +852,6 @@ onUnmounted(() => {
           <div v-if="record.note" class="mt-1 truncate text-xs text-muted-foreground">
             备注: {{ record.note }}
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 驳回对话框 -->
-    <div v-if="showRejectDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg p-6 w-96 max-w-full mx-4">
-        <h3 class="text-lg font-semibold mb-4">驳回审核</h3>
-        <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">驳回理由</label>
-          <textarea v-model="rejectComment"
-            class="w-full h-24 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="请输入驳回理由..." />
-        </div>
-        <div class="flex gap-3 justify-end">
-          <button type="button"
-            class="px-4 py-2 text-sm border rounded hover:bg-muted"
-            @click="showRejectDialog = false; rejectComment = ''">
-            取消
-          </button>
-          <button type="button"
-            class="px-4 py-2 text-sm bg-red-500 text-white rounded hover:bg-red-600"
-            :disabled="!rejectComment.trim()"
-            @click="handleReject">
-            确认驳回
-          </button>
         </div>
       </div>
     </div>

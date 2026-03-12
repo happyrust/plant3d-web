@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { useModelProjects } from './useModelProjects';
 
 describe('useModelProjects', () => {
@@ -9,24 +10,29 @@ describe('useModelProjects', () => {
   it('switchProjectById switches to existing project', () => {
     const { switchProjectById, currentProject } = useModelProjects();
     
-    // Mock projects data
-    const mockProjects = [
-      { id: 'project-1', name: 'Project 1', description: 'Test 1', path: 'p1' },
-      { id: 'AvevaMarineSample', name: 'Aveva Marine', description: 'Marine', path: 'ams' },
-    ];
+    // Mock 后端 /api/projects 返回格式
+    const mockApiResponse = {
+      items: [
+        { id: 'project-1', name: 'Project1', notes: 'Test 1' },
+        { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
+      ],
+      total: 2,
+      page: 1,
+      per_page: 20,
+    };
     
     // Simulate projects loaded
     vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => mockProjects,
+      json: async () => mockApiResponse,
     } as Response);
 
     // Wait for projects to load, then switch
     setTimeout(() => {
       const result = switchProjectById('AvevaMarineSample');
       expect(result).toBe(true);
-      expect(currentProject.value?.id).toBe('AvevaMarineSample');
+      expect(currentProject.value?.path).toBe('AvevaMarineSample');
     }, 100);
   });
 
@@ -76,20 +82,24 @@ describe('useModelProjects', () => {
   it('switchProjectById matches project by path when id does not match', () => {
     const { switchProjectById, currentProject } = useModelProjects();
     
-    const mockProjects = [
-      { id: 'ams-model', name: 'AMS Project', description: 'Test AMS', path: 'AvevaMarineSample' },
-    ];
+    const mockApiResponse = {
+      items: [
+        { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS' },
+      ],
+      total: 1,
+      page: 1,
+      per_page: 20,
+    };
     
     vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => mockProjects,
+      json: async () => mockApiResponse,
     } as Response);
 
     setTimeout(() => {
       const result = switchProjectById('AvevaMarineSample');
       expect(result).toBe(true);
-      expect(currentProject.value?.id).toBe('ams-model');
       expect(currentProject.value?.path).toBe('AvevaMarineSample');
     }, 100);
   });
@@ -97,22 +107,27 @@ describe('useModelProjects', () => {
   it('switchProjectById matches project by id or path for embed URLs', () => {
     const { switchProjectById, currentProject } = useModelProjects();
     
-    const mockProjects = [
-      { id: 'ams-model', name: 'AMS Project', description: 'Test AMS', path: 'AvevaMarineSample', showDbnum: 7997 },
-      { id: 'other-project', name: 'Other', description: 'Other project', path: 'OtherPath' },
-    ];
+    const mockApiResponse = {
+      items: [
+        { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS', show_dbnum: 7997 },
+        { id: 'other-project', name: 'OtherPath', notes: 'Other project' },
+      ],
+      total: 2,
+      page: 1,
+      per_page: 20,
+    };
     
     vi.spyOn(window, 'fetch').mockResolvedValueOnce({
       ok: true,
       headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => mockProjects,
+      json: async () => mockApiResponse,
     } as Response);
 
     setTimeout(() => {
       // Test matching by path (when project_id in URL is actually a path value)
       let result = switchProjectById('AvevaMarineSample');
       expect(result).toBe(true);
-      expect(currentProject.value?.id).toBe('ams-model');
+      expect(currentProject.value?.path).toBe('AvevaMarineSample');
       
       // Test matching by id
       result = switchProjectById('other-project');
@@ -121,3 +136,4 @@ describe('useModelProjects', () => {
     }, 100);
   });
 });
+

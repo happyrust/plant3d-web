@@ -1,0 +1,349 @@
+{
+  "input_refno": "TEST-BRAN-001",
+  "branch_refno": "TEST-BRAN-001",
+  "branch_name": "BRAN-TEST-COMPREHENSIVE",
+  "branch_attrs": {
+    "duty": "TEST",
+    "pspec": "PS-TEST-001",
+    "fluid": "WATER",
+    "pressure": 150.0,
+    "temp": "25",
+    "ispec": "IS-001"
+  },
+  "segments": [
+    {
+      "id": "seg_t1",
+      "refno": "S:T1",
+      "noun": "STRA",
+      "name": "Test Segment 1",
+      "arrive": [0, 0, 0],
+      "leave": [800, 0, 0],
+      "length": 800,
+      "straight_length": 800,
+      "outside_diameter": 168.3,
+      "bore": 150
+    },
+    {
+      "id": "seg_t2",
+      "refno": "S:T2",
+      "noun": "STRA",
+      "name": "Test Segment 2",
+      "arrive": [800, 0, 0],
+      "leave": [800, 600, 0],
+      "length": 600,
+      "straight_length": 600,
+      "outside_diameter": 168.3,
+      "bore": 150
+    },
+    {
+      "id": "seg_t3",
+      "refno": "S:T3",
+      "noun": "STRA",
+      "name": "Test Segment 3",
+      "arrive": [800, 600, 0],
+      "leave": [1800, 600, 0],
+      "length": 1000,
+      "straight_length": 1000,
+      "outside_diameter": 168.3,
+      "bore": 150
+    },
+    {
+      "id": "seg_t4",
+      "refno": "S:T4",
+      "noun": "STRA",
+      "name": "Test Segment 4 (Short)",
+      "arrive": [1800, 600, 0],
+      "leave": [1950, 600, 0],
+      "length": 150,
+      "straight_length": 150,
+      "outside_diameter": 168.3,
+      "bore": 150
+    },
+    {
+      "id": "seg_t5",
+      "refno": "S:T5",
+      "noun": "STRA",
+      "name": "Test Segment 5",
+      "arrive": [1950, 600, 0],
+      "leave": [2850, 600, 0],
+      "length": 900,
+      "straight_length": 900,
+      "outside_diameter": 168.3,
+      "bore": 150
+    }
+  ],
+  "dims": [
+    {
+      "id": "d_segment_1",
+      "kind": "segment",
+      "start": [0, 0, 0],
+      "end": [800, 0, 0],
+      "length": 800,
+      "text": "800"
+    },
+    {
+      "id": "d_segment_2",
+      "kind": "segment",
+      "start": [800, 0, 0],
+      "end": [800, 600, 0],
+      "length": 600,
+      "text": "600"
+    },
+    {
+      "id": "d_segment_3",
+      "kind": "segment",
+      "start": [800, 600, 0],
+      "end": [1800, 600, 0],
+      "length": 1000,
+      "text": "1000"
+    },
+    {
+      "id": "d_segment_4",
+      "kind": "segment",
+      "start": [1800, 600, 0],
+      "end": [1950, 600, 0],
+      "length": 150,
+      "text": "150"
+    },
+    {
+      "id": "d_segment_5",
+      "kind": "segment",
+      "start": [1950, 600, 0],
+      "end": [2850, 600, 0],
+      "length": 900,
+      "text": "900"
+    },
+    {
+      "id": "d_chain_1",
+      "kind": "chain",
+      "group_id": "chain_test",
+      "seq": 1,
+      "start": [0, 0, 0],
+      "end": [800, 0, 0],
+      "length": 800,
+      "text": "800"
+    },
+    {
+      "id": "d_chain_2",
+      "kind": "chain",
+      "group_id": "chain_test",
+      "seq": 2,
+      "start": [800, 0, 0],
+      "end": [800, 600, 0],
+      "length": 600,
+      "text": "600"
+    },
+    {
+      "id": "d_chain_3",
+      "kind": "chain",
+      "group_id": "chain_test",
+      "seq": 3,
+      "start": [800, 600, 0],
+      "end": [1800, 600, 0],
+      "length": 1000,
+      "text": "1000"
+    },
+    {
+      "id": "d_chain_4",
+      "kind": "chain",
+      "group_id": "chain_test",
+      "seq": 4,
+      "start": [1800, 600, 0],
+      "end": [1950, 600, 0],
+      "length": 150,
+      "text": "150"
+    },
+    {
+      "id": "d_chain_5",
+      "kind": "chain",
+      "group_id": "chain_test",
+      "seq": 5,
+      "start": [1950, 600, 0],
+      "end": [2850, 600, 0],
+      "length": 900,
+      "text": "900"
+    },
+    {
+      "id": "d_overall",
+      "kind": "overall",
+      "start": [0, 0, 0],
+      "end": [2850, 600, 0],
+      "length": 3450,
+      "text": "L=3450"
+    },
+    {
+      "id": "d_port_1",
+      "kind": "port",
+      "start": [0, 0, 0],
+      "end": [800, 0, 0],
+      "length": 800,
+      "text": "P1→P2: 800"
+    },
+    {
+      "id": "d_port_2",
+      "kind": "port",
+      "start": [800, 0, 0],
+      "end": [2850, 600, 0],
+      "length": 2650,
+      "text": "P2→P3: 2650"
+    }
+  ],
+  "welds": [
+    {
+      "id": "w_test_1",
+      "position": [800, 0, 0],
+      "weld_type": "Butt",
+      "is_shop": false,
+      "label": "WT1",
+      "left_refno": "S:T1",
+      "right_refno": "S:T2"
+    },
+    {
+      "id": "w_test_2",
+      "position": [800, 600, 0],
+      "weld_type": "Butt",
+      "is_shop": true,
+      "label": "WT2",
+      "left_refno": "S:T2",
+      "right_refno": "S:T3"
+    },
+    {
+      "id": "w_test_3",
+      "position": [1800, 600, 0],
+      "weld_type": "Butt",
+      "is_shop": false,
+      "label": "WT3",
+      "left_refno": "S:T3",
+      "right_refno": "S:T4"
+    },
+    {
+      "id": "w_test_4",
+      "position": [1950, 600, 0],
+      "weld_type": "Fillet",
+      "is_shop": false,
+      "label": "WT4",
+      "left_refno": "S:T4",
+      "right_refno": "S:T5"
+    }
+  ],
+  "slopes": [
+    {
+      "id": "slope_test_1",
+      "start": [0, 0, 0],
+      "end": [800, 0, 0],
+      "slope": 0.005,
+      "text": "0.5%"
+    },
+    {
+      "id": "slope_test_2",
+      "start": [800, 600, 0],
+      "end": [1800, 600, 0],
+      "slope": 0.01,
+      "text": "1.0%"
+    }
+  ],
+  "bends": [
+    {
+      "id": "bend_test_1",
+      "refno": "BEND:T1",
+      "noun": "BEND",
+      "angle": 45.0,
+      "radius": 200.0,
+      "work_point": [800, 300, 0],
+      "face_center_1": [800, 100, 0],
+      "face_center_2": [900, 300, 0]
+    }
+  ],
+  "cut_tubis": [
+    {
+      "id": "cut_t1",
+      "segment_id": "seg_t3",
+      "refno": "CUT:T1",
+      "start": [800, 600, 0],
+      "end": [1300, 600, 0],
+      "length": 500,
+      "text": "500"
+    },
+    {
+      "id": "cut_t2",
+      "segment_id": "seg_t3",
+      "refno": "CUT:T2",
+      "start": [1300, 600, 0],
+      "end": [1800, 600, 0],
+      "length": 500,
+      "text": "500"
+    }
+  ],
+  "fittings": [
+    {
+      "id": "fit_elbow_1",
+      "refno": "ELBO:T1",
+      "noun": "ELBO",
+      "kind": "elbo",
+      "anchor_point": [800, 0, 0],
+      "angle": 90.0,
+      "radius": 150.0
+    },
+    {
+      "id": "fit_tee_1",
+      "refno": "TEE:T1",
+      "noun": "TEE",
+      "kind": "tee",
+      "anchor_point": [1400, 600, 0]
+    },
+    {
+      "id": "fit_flange_1",
+      "refno": "FLAN:T1",
+      "noun": "FLAN",
+      "kind": "flan",
+      "anchor_point": [2850, 600, 0]
+    }
+  ],
+  "tags": [
+    {
+      "id": "tag_elbow_1",
+      "refno": "ELBO:T1",
+      "noun": "ELBO",
+      "role": "fitting_elbow",
+      "text": "90°LR",
+      "position": [800, 0, 0]
+    },
+    {
+      "id": "tag_tee_1",
+      "refno": "TEE:T1",
+      "noun": "TEE",
+      "role": "fitting_branch",
+      "text": "TEE",
+      "position": [1400, 600, 0]
+    },
+    {
+      "id": "tag_flange_1",
+      "refno": "FLAN:T1",
+      "noun": "FLAN",
+      "role": "fitting_flange",
+      "text": "RF-150",
+      "position": [2850, 600, 0]
+    }
+  ],
+  "stats": {
+    "segments_count": 5,
+    "dims_count": 13,
+    "welds_count": 4,
+    "slopes_count": 2,
+    "bends_count": 1,
+    "cut_tubis_count": 2,
+    "fittings_count": 3,
+    "tags_count": 3
+  },
+  "debug_info": {
+    "source": "mock",
+    "notes": [
+      "Comprehensive BRAN test fixture",
+      "Includes all dimension types: segment, chain, overall, port",
+      "Includes welds (shop and field), slopes, bends",
+      "Includes cut tubis for split segment validation",
+      "Includes fittings and tags for complete annotation coverage",
+      "Contains short segment (150mm) to test crowded annotation layout"
+    ]
+  }
+}

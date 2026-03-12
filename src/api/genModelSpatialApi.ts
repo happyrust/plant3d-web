@@ -34,10 +34,12 @@ export type SpatialQueryResultItem = {
   /** "dbnum_refno" 格式的字符串 */
   refno: string;
   noun: string;
+  spec_value: number;
   aabb?: {
     min: { x: number; y: number; z: number };
     max: { x: number; y: number; z: number };
   };
+  distance?: number;
 };
 
 export type SpatialQueryResult = {
@@ -54,8 +56,12 @@ export type SpatialQueryResult = {
 };
 
 export type SpatialQueryParams = {
-  mode?: 'bbox' | 'refno';
+  mode?: 'bbox' | 'refno' | 'position';
   refno?: string;
+  x?: number;
+  y?: number;
+  z?: number;
+  radius?: number;
   /** 外扩距离（毫米） */
   distance?: number;
   minx?: number;
@@ -145,6 +151,28 @@ export async function queryNearbyByCenter(
     maxx: cx + radius,
     maxy: cy + radius,
     maxz: cz + radius,
+    max_results: options?.max_results,
+    nouns: options?.nouns,
+    shape: options?.shape,
+  });
+}
+
+/**
+ * 便捷方法：按坐标点 + 半径查询周边构件（position 模式）
+ */
+export async function queryNearbyByPosition(
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+  options?: { nouns?: string; max_results?: number; shape?: 'cube' | 'sphere' },
+): Promise<SpatialQueryResult> {
+  return querySpatialIndex({
+    mode: 'position',
+    x,
+    y,
+    z,
+    radius,
     max_results: options?.max_results,
     nouns: options?.nouns,
     shape: options?.shape,

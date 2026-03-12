@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test';
 
 type MbdPipeResponse = {
   success: boolean
@@ -8,11 +8,11 @@ type MbdPipeResponse = {
     branch_refno: string
     branch_name: string
     branch_attrs: Record<string, unknown>
-    segments: Array<Record<string, unknown>>
-    dims: Array<Record<string, unknown>>
-    welds: Array<Record<string, unknown>>
-    slopes: Array<Record<string, unknown>>
-    bends: Array<Record<string, unknown>>
+    segments: Record<string, unknown>[]
+    dims: Record<string, unknown>[]
+    welds: Record<string, unknown>[]
+    slopes: Record<string, unknown>[]
+    bends: Record<string, unknown>[]
     stats: {
       segments_count: number
       dims_count: number
@@ -63,28 +63,28 @@ function buildMbdResponse(refno: string): MbdPipeResponse {
         bends_count: 0,
       },
     },
-  }
+  };
 }
 
 test('mbd pipe race: should keep latest request result', async ({ page }) => {
-  const firstRefno = '24381_145018'
-  const secondRefno = '24381_145019'
+  const firstRefno = '24381_145018';
+  const secondRefno = '24381_145019';
 
-  let firstHit = 0
-  let secondHit = 0
-  const malformedQueryUrls: string[] = []
+  let firstHit = 0;
+  let secondHit = 0;
+  const malformedQueryUrls: string[] = [];
 
   await page.route('**/api/mbd/pipe/**', async (route) => {
-    const url = new URL(route.request().url())
-    const refno = decodeURIComponent(url.pathname.split('/').pop() || '')
-    const mode = url.searchParams.get('mode')
-    const includeChainDims = url.searchParams.get('include_chain_dims')
-    const includeOverallDim = url.searchParams.get('include_overall_dim')
-    const includePortDims = url.searchParams.get('include_port_dims')
-    const includeWelds = url.searchParams.get('include_welds')
-    const includeSlopes = url.searchParams.get('include_slopes')
-    const includeBends = url.searchParams.get('include_bends')
-    const bendMode = url.searchParams.get('bend_mode')
+    const url = new URL(route.request().url());
+    const refno = decodeURIComponent(url.pathname.split('/').pop() || '');
+    const mode = url.searchParams.get('mode');
+    const includeChainDims = url.searchParams.get('include_chain_dims');
+    const includeOverallDim = url.searchParams.get('include_overall_dim');
+    const includePortDims = url.searchParams.get('include_port_dims');
+    const includeWelds = url.searchParams.get('include_welds');
+    const includeSlopes = url.searchParams.get('include_slopes');
+    const includeBends = url.searchParams.get('include_bends');
+    const bendMode = url.searchParams.get('bend_mode');
 
     if (
       mode !== 'construction' ||
@@ -96,71 +96,71 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
       includeBends !== 'false' ||
       bendMode !== 'facecenter'
     ) {
-      malformedQueryUrls.push(url.toString())
+      malformedQueryUrls.push(url.toString());
     }
 
     if (refno === firstRefno) {
-      firstHit += 1
-      await new Promise<void>((resolve) => setTimeout(resolve, 600))
+      firstHit += 1;
+      await new Promise<void>((resolve) => setTimeout(resolve, 600));
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(buildMbdResponse(firstRefno)),
-      })
-      return
+      });
+      return;
     }
 
     if (refno === secondRefno) {
-      secondHit += 1
-      await new Promise<void>((resolve) => setTimeout(resolve, 80))
+      secondHit += 1;
+      await new Promise<void>((resolve) => setTimeout(resolve, 80));
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(buildMbdResponse(secondRefno)),
-      })
-      return
+      });
+      return;
     }
 
     await route.fulfill({
       status: 404,
       contentType: 'application/json',
       body: JSON.stringify({ success: false, error_message: `unexpected refno: ${refno}` }),
-    })
-  })
+    });
+  });
 
-  await page.goto('/?dtx_demo=primitives&dtx_demo_count=20', { waitUntil: 'domcontentloaded' })
+  await page.goto('/?dtx_demo=primitives&dtx_demo_count=20', { waitUntil: 'domcontentloaded' });
 
-  await page.waitForFunction(() => !!(window as any).__xeokitViewer?.scene, null, { timeout: 60_000 })
+  await page.waitForFunction(() => !!(window as any).__xeokitViewer?.scene, null, { timeout: 60_000 });
 
   await page.evaluate(async ({ first }) => {
-    const storeMod = await import('/src/composables/useToolStore.ts')
-    const store = storeMod.useToolStore()
-    store.requestMbdPipeAnnotation(first)
-  }, { first: firstRefno })
+    const storeMod = await import('/src/composables/useToolStore.ts');
+    const store = storeMod.useToolStore();
+    store.requestMbdPipeAnnotation(first);
+  }, { first: firstRefno });
 
   await expect
     .poll(() => firstHit, { timeout: 10_000, message: '等待首个请求发出' })
-    .toBeGreaterThan(0)
+    .toBeGreaterThan(0);
 
   await page.evaluate(async ({ second }) => {
-    const storeMod = await import('/src/composables/useToolStore.ts')
-    const store = storeMod.useToolStore()
-    store.requestMbdPipeAnnotation(second)
-  }, { second: secondRefno })
+    const storeMod = await import('/src/composables/useToolStore.ts');
+    const store = storeMod.useToolStore();
+    store.requestMbdPipeAnnotation(second);
+  }, { second: secondRefno });
 
   await expect
     .poll(
       async () =>
         await page.evaluate(async () => {
-          const ctxMod = await import('/src/composables/useViewerContext.ts')
-          const ctx = ctxMod.useViewerContext()
-          return ctx.mbdPipeVis.value?.currentData.value?.branch_refno ?? null
+          const ctxMod = await import('/src/composables/useViewerContext.ts');
+          const ctx = ctxMod.useViewerContext();
+          return ctx.mbdPipeVis.value?.currentData.value?.branch_refno ?? null;
         }),
       { timeout: 15_000, message: '等待最新请求渲染完成' },
     )
-    .toBe(secondRefno)
+    .toBe(secondRefno);
 
-  expect(firstHit).toBeGreaterThan(0)
-  expect(secondHit).toBeGreaterThan(0)
-  expect(malformedQueryUrls).toEqual([])
-})
+  expect(firstHit).toBeGreaterThan(0);
+  expect(secondHit).toBeGreaterThan(0);
+  expect(malformedQueryUrls).toEqual([]);
+});

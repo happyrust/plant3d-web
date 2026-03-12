@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { PanelLeft, PanelBottom, PanelRight } from 'lucide-vue-next';
-import { emitCommand } from '@/ribbon/commandBus';
+
 import { isZoneCollapsed } from '@/composables/usePanelZones';
+import { emitCommand } from '@/ribbon/commandBus';
 
 const leftCollapsed = isZoneCollapsed('left');
 const bottomCollapsed = isZoneCollapsed('bottom');
@@ -22,31 +23,25 @@ function onToggleRight() {
 
 <template>
   <div class="layout-toggle-group">
-    <button
-      type="button"
+    <button type="button"
       class="layout-toggle-btn layout-toggle-btn--left"
       :class="{ 'layout-toggle-btn--inactive': leftCollapsed }"
       title="左侧面板"
-      @click="onToggleLeft"
-    >
+      @click="onToggleLeft">
       <PanelLeft class="layout-toggle-icon" />
     </button>
-    <button
-      type="button"
+    <button type="button"
       class="layout-toggle-btn layout-toggle-btn--bottom"
       :class="{ 'layout-toggle-btn--inactive': bottomCollapsed }"
       title="底部面板"
-      @click="onToggleBottom"
-    >
+      @click="onToggleBottom">
       <PanelBottom class="layout-toggle-icon" />
     </button>
-    <button
-      type="button"
+    <button type="button"
       class="layout-toggle-btn layout-toggle-btn--right"
       :class="{ 'layout-toggle-btn--inactive': rightCollapsed }"
       title="右侧面板"
-      @click="onToggleRight"
-    >
+      @click="onToggleRight">
       <PanelRight class="layout-toggle-icon" />
     </button>
   </div>

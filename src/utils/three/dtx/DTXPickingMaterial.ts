@@ -135,7 +135,7 @@ void main() {
 
 // ========== DTXPickingMaterial options ==========
 
-export interface DTXPickingMaterialOptions {
+export type DTXPickingMaterialOptions = {
   positionsTexture: DataTexture | null;
   indicesTexture: DataTexture | null;
   matricesTexture: DataTexture | null;

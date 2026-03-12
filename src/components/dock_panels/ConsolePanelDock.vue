@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, watch } from 'vue';
+
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { usePdmsConsoleCommands } from '@/composables/usePdmsConsoleCommands';
 
@@ -75,14 +76,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div 
-    class="flex h-full w-full flex-col bg-white text-sm font-mono text-gray-900"
-    @click="handleContainerClick"
-  >
+  <div class="flex h-full w-full flex-col bg-white text-sm font-mono text-gray-900"
+    @click="handleContainerClick">
     <!-- Logs & Input Area -->
     <div ref="scrollContainer" class="flex-1 overflow-y-auto p-3 cursor-text">
       <div v-if="store.logs.value.length === 0" class="text-gray-500 italic mb-2">
-        Plant3D Web Console [Version 1.0.0] <br>
+        Plant3D Web Console [Version 1.0.0] <br />
         输入 'help' 查看可用命令。
       </div>
       
@@ -107,8 +106,7 @@ onMounted(() => {
       <!-- Active Input Line -->
       <div class="flex items-center mt-1">
         <span class="text-blue-600 mr-2 shrink-0 select-none font-bold">&gt;</span>
-        <input
-          ref="inputRef"
+        <input ref="inputRef"
           v-model="inputValue"
           type="text"
           class="flex-1 bg-transparent outline-none border-none text-gray-900 placeholder-gray-400 min-w-0"
@@ -117,8 +115,7 @@ onMounted(() => {
           autocomplete="off"
           @keydown.enter="handleEnter"
           @keydown.up.prevent="handleUp"
-          @keydown.down.prevent="handleDown"
-        />
+          @keydown.down.prevent="handleDown" />
       </div>
     </div>
   </div>

@@ -2,9 +2,12 @@
 // 提供 3D 视图截图功能，支持上传到服务器
 
 import { ref } from 'vue';
+
 import { useViewerContext } from './useViewerContext';
-import { reviewAttachmentUploadWithProgress } from '@/api/reviewApi';
+
 import type { ReviewAttachment } from '@/types/auth';
+
+import { reviewAttachmentUploadWithProgress } from '@/api/reviewApi';
 
 export function useScreenshot() {
   const { viewerRef } = useViewerContext();

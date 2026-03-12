@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, type Ref } from 'vue';
 
+import type { InstanceManifest } from '@/utils/instances/instanceManifest';
+
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
-import type { InstanceManifest } from '@/utils/instances/instanceManifest';
 import { formatLengthMeters, formatVec3Meters } from '@/utils/unitFormat';
 
 type ToolsApi = {
@@ -320,8 +321,8 @@ function clearAll() {
       <div class="mt-3 grid grid-cols-1 gap-2 text-sm">
         <label class="flex items-center justify-between gap-3">
           <span class="text-xs text-muted-foreground">模型单位（DTX 源数据）</span>
-          <select class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm"
-            v-model="modelUnitModel">
+          <select v-model="modelUnitModel"
+            class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm">
             <option value="mm">毫米(mm) → 归一化到米</option>
             <option value="m">米(m) → 原样</option>
             <option value="raw">原始(raw) → 原样</option>
@@ -330,8 +331,8 @@ function clearAll() {
 
         <label class="flex items-center justify-between gap-3">
           <span class="text-xs text-muted-foreground">显示单位</span>
-          <select class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm"
-            v-model="displayUnitModel">
+          <select v-model="displayUnitModel"
+            class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm">
             <option value="m">米(m)</option>
             <option value="cm">厘米(cm)</option>
             <option value="mm">毫米(mm)</option>
@@ -340,31 +341,31 @@ function clearAll() {
 
         <label class="flex items-center justify-between gap-3">
           <span class="text-xs text-muted-foreground">小数位</span>
-          <input type="number"
-            class="h-9 w-44 rounded-md border border-input bg-background px-3 text-sm"
-            min="0" max="6" step="1"
-            v-model.number="precisionModel" />
+          <input v-model.number="precisionModel"
+            type="number"
+            class="h-9 w-44 rounded-md border border-input bg-background px-3 text-sm" min="0" max="6"
+            step="1" />
         </label>
 
         <div class="flex flex-wrap items-center gap-4 pt-1 text-xs">
           <label class="inline-flex items-center gap-2">
-            <input type="checkbox" v-model="recenterModel" />
+            <input v-model="recenterModel" type="checkbox" />
             <span>重心归位(recenter)</span>
           </label>
           <label class="inline-flex items-center gap-2">
-            <input type="checkbox" v-model="clipModel" />
+            <input v-model="clipModel" type="checkbox" />
             <span>裁剪面自适应(clip)</span>
           </label>
           <label class="inline-flex items-center gap-2">
-            <input type="checkbox" v-model="autoFitOnLoadModel" />
+            <input v-model="autoFitOnLoadModel" type="checkbox" />
             <span>加载后自动适配(auto-fit)</span>
           </label>
         </div>
 
         <label class="flex items-center justify-between gap-3">
           <span class="text-xs text-muted-foreground">点集显示策略</span>
-          <select class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm"
-            v-model="ptsetPolicyModel">
+          <select v-model="ptsetPolicyModel"
+            class="h-9 w-44 rounded-md border border-input bg-background px-2 text-sm">
             <option value="use_display_unit">使用显示单位</option>
             <option value="follow_backend">跟随后端 unit_info</option>
           </select>
@@ -424,7 +425,7 @@ function clearAll() {
       </div>
     </div>
 
-    <div class="rounded-md border border-border bg-background p-3" v-if="isDev">
+    <div v-if="isDev" class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">DTX / Instances 导入（开发用）</div>
       <div class="mt-2 text-xs text-muted-foreground">
         说明：把本地 instances_*.json 注入到前端缓存，然后复用现有 DTX 加载链路渲染（不写回后端）。

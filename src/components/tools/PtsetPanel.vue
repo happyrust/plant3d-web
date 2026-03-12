@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+
 import { Eye, EyeOff, X, MapPin, Tag, ArrowRight, Focus } from 'lucide-vue-next';
+
+import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 
 import Badge from '@/components/ui/Badge.vue';
 import ScrollArea from '@/components/ui/ScrollArea.vue';
-import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat';
 
@@ -95,13 +97,11 @@ function formatBore(pbore: number): string {
           <Badge v-if="refno" variant="outline" class="font-mono text-[10px]">
             {{ refno }}
           </Badge>
-          <button
-            v-if="refno"
+          <button v-if="refno"
             type="button"
             class="rounded p-0.5 hover:bg-muted"
             title="关闭"
-            @click="emit('close')"
-          >
+            @click="emit('close')">
             <X class="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         </div>
@@ -126,13 +126,11 @@ function formatBore(pbore: number): string {
       <div class="flex-shrink-0 border-b border-border px-2 py-1.5">
         <div class="flex items-center gap-1">
           <!-- 整体显示开关 -->
-          <button
-            type="button"
+          <button type="button"
             class="inline-flex h-7 items-center gap-1 rounded px-2 text-xs transition-colors"
             :class="isVisible ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'"
             :title="isVisible ? '隐藏点集' : '显示点集'"
-            @click="emit('toggleVisible', !isVisible)"
-          >
+            @click="emit('toggleVisible', !isVisible)">
             <component :is="isVisible ? Eye : EyeOff" class="h-3.5 w-3.5" />
             <span>{{ isVisible ? '显示' : '隐藏' }}</span>
           </button>
@@ -140,50 +138,42 @@ function formatBore(pbore: number): string {
           <div class="mx-1 h-4 w-px bg-border" />
 
           <!-- 十字星显示 -->
-          <button
-            type="button"
+          <button type="button"
             class="inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
             :class="showCrosses ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground'"
             :disabled="!isVisible"
             title="显示/隐藏标记点"
-            @click="emit('toggleCrosses', !showCrosses)"
-          >
+            @click="emit('toggleCrosses', !showCrosses)">
             <MapPin class="h-3.5 w-3.5" />
           </button>
 
           <!-- 标签显示 -->
-          <button
-            type="button"
+          <button type="button"
             class="inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
             :class="showLabels ? 'bg-blue-500/10 text-blue-600' : 'bg-muted text-muted-foreground'"
             :disabled="!isVisible"
             title="显示/隐藏坐标标签"
-            @click="emit('toggleLabels', !showLabels)"
-          >
+            @click="emit('toggleLabels', !showLabels)">
             <Tag class="h-3.5 w-3.5" />
           </button>
 
           <!-- 箭头显示 -->
-          <button
-            type="button"
+          <button type="button"
             class="inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
             :class="showArrows ? 'bg-orange-500/10 text-orange-600' : 'bg-muted text-muted-foreground'"
             :disabled="!isVisible"
             title="显示/隐藏方向箭头"
-            @click="emit('toggleArrows', !showArrows)"
-          >
+            @click="emit('toggleArrows', !showArrows)">
             <ArrowRight class="h-3.5 w-3.5" />
           </button>
 
           <div class="mx-1 h-4 w-px bg-border" />
 
           <!-- 飞行到视图 -->
-          <button
-            type="button"
+          <button type="button"
             class="inline-flex h-7 w-7 items-center justify-center rounded bg-muted transition-colors hover:bg-accent"
             title="飞行到点集视图"
-            @click="emit('flyTo')"
-          >
+            @click="emit('flyTo')">
             <Focus class="h-3.5 w-3.5" />
           </button>
         </div>
@@ -198,11 +188,9 @@ function formatBore(pbore: number): string {
       <!-- 点集列表 -->
       <ScrollArea class="min-h-0 flex-1">
         <div class="divide-y divide-border/50">
-          <div
-            v-for="point in points"
+          <div v-for="point in points"
             :key="point.number"
-            class="px-3 py-2 hover:bg-accent/50"
-          >
+            class="px-3 py-2 hover:bg-accent/50">
             <!-- 点编号行 -->
             <div class="flex items-center justify-between">
               <span class="text-xs font-medium text-green-600">#{{ point.number }}</span>

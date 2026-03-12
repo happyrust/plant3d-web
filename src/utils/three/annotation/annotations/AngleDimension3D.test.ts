@@ -1,14 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import * as THREE from "three";
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-describe("AngleDimension3D", () => {
+import * as THREE from 'three';
+
+describe('AngleDimension3D', () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it("should compute angle text by default", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { AngleDimension3D } = await import("./AngleDimension3D");
+  it('should compute angle text by default', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { AngleDimension3D } = await import('./AngleDimension3D');
 
     const materials = new AnnotationMaterials();
     const v = new THREE.Vector3(0, 0, 0);
@@ -24,12 +25,12 @@ describe("AngleDimension3D", () => {
     });
     const angle = dim.getAngleDegrees();
     expect(angle).toBeCloseTo(90, 5);
-    expect(dim.getDisplayText()).toBe("90°");
+    expect(dim.getDisplayText()).toBe('90°');
   });
 
-  it("should use dashed materials for reference dimensions", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { AngleDimension3D } = await import("./AngleDimension3D");
+  it('should use dashed materials for reference dimensions', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { AngleDimension3D } = await import('./AngleDimension3D');
 
     const materials = new AnnotationMaterials();
     materials.setResolution(800, 600);
@@ -47,7 +48,7 @@ describe("AngleDimension3D", () => {
     const arcLine = (dim as any).arcLine;
     const arrow1 = (dim as any).arrow1;
 
-    const spy = vi.spyOn(ray1, "computeLineDistances");
+    const spy = vi.spyOn(ray1, 'computeLineDistances');
 
     const camera = new THREE.PerspectiveCamera(60, 800 / 600, 0.1, 100);
     camera.position.set(0, 0, 5);
@@ -63,9 +64,9 @@ describe("AngleDimension3D", () => {
     expect(spy).toHaveBeenCalled();
   });
 
-  it("should use camera annotation viewport for wpp scaling", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { AngleDimension3D } = await import("./AngleDimension3D");
+  it('should use camera annotation viewport for wpp scaling', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { AngleDimension3D } = await import('./AngleDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new AngleDimension3D(materials, {
@@ -73,7 +74,7 @@ describe("AngleDimension3D", () => {
       point1: new THREE.Vector3(1, 0, 0),
       point2: new THREE.Vector3(0, 1, 0),
       arcRadius: 1,
-      text: "90°",
+      text: '90°',
     });
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
@@ -96,9 +97,9 @@ describe("AngleDimension3D", () => {
     expect(scaleSmallViewport).toBeGreaterThan(scaleLargeViewport);
   });
 
-  it("should keep angle label world scale stable under parent global scaling", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { AngleDimension3D } = await import("./AngleDimension3D");
+  it('should keep angle label world scale stable under parent global scaling', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { AngleDimension3D } = await import('./AngleDimension3D');
 
     const materials = new AnnotationMaterials();
     const createDim = () =>
@@ -107,7 +108,7 @@ describe("AngleDimension3D", () => {
         point1: new THREE.Vector3(1, 0, 0),
         point2: new THREE.Vector3(0, 1, 0),
         arcRadius: 1,
-        text: "90°",
+        text: '90°',
       });
 
     const dimNoScale = createDim();

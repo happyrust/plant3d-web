@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue';
 
 export type LengthUnit = 'm' | 'cm' | 'mm'
 export type ModelUnit = 'mm' | 'm' | 'raw'
@@ -15,12 +15,12 @@ type PersistedStateV1 = {
   ptsetDisplayPolicy: PtsetDisplayPolicy
 }
 
-const STORAGE_KEY = 'plant3d-web-unit-settings-v1'
+const STORAGE_KEY = 'plant3d-web-unit-settings-v1';
 
 function clampInt(n: number, min: number, max: number): number {
-  const v = Math.floor(Number(n))
-  if (!Number.isFinite(v)) return min
-  return Math.max(min, Math.min(max, v))
+  const v = Math.floor(Number(n));
+  if (!Number.isFinite(v)) return min;
+  return Math.max(min, Math.min(max, v));
 }
 
 function loadPersisted(): PersistedStateV1 {
@@ -35,22 +35,22 @@ function loadPersisted(): PersistedStateV1 {
     clip: true,
     autoFitOnLoad: true,
     ptsetDisplayPolicy: 'use_display_unit',
-  }
+  };
 
-  if (typeof localStorage === 'undefined') return defaults
+  if (typeof localStorage === 'undefined') return defaults;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return defaults
-    const parsed = JSON.parse(raw) as Partial<PersistedStateV1>
-    if (parsed.version !== 1) return defaults
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<PersistedStateV1>;
+    if (parsed.version !== 1) return defaults;
 
-    const modelUnit: ModelUnit = parsed.modelUnit === 'm' || parsed.modelUnit === 'raw' ? parsed.modelUnit : 'mm'
-    const displayUnit: LengthUnit = parsed.displayUnit === 'cm' || parsed.displayUnit === 'mm' ? parsed.displayUnit : 'm'
-    const precision = clampInt(parsed.precision ?? defaults.precision, 0, 6)
-    const recenter = parsed.recenter ?? defaults.recenter
-    const clip = parsed.clip ?? defaults.clip
-    const autoFitOnLoad = parsed.autoFitOnLoad ?? defaults.autoFitOnLoad
-    const ptsetDisplayPolicy: PtsetDisplayPolicy = parsed.ptsetDisplayPolicy === 'follow_backend' ? 'follow_backend' : 'use_display_unit'
+    const modelUnit: ModelUnit = parsed.modelUnit === 'm' || parsed.modelUnit === 'raw' ? parsed.modelUnit : 'mm';
+    const displayUnit: LengthUnit = parsed.displayUnit === 'cm' || parsed.displayUnit === 'mm' ? parsed.displayUnit : 'm';
+    const precision = clampInt(parsed.precision ?? defaults.precision, 0, 6);
+    const recenter = parsed.recenter ?? defaults.recenter;
+    const clip = parsed.clip ?? defaults.clip;
+    const autoFitOnLoad = parsed.autoFitOnLoad ?? defaults.autoFitOnLoad;
+    const ptsetDisplayPolicy: PtsetDisplayPolicy = parsed.ptsetDisplayPolicy === 'follow_backend' ? 'follow_backend' : 'use_display_unit';
 
     return {
       version: 1,
@@ -61,21 +61,21 @@ function loadPersisted(): PersistedStateV1 {
       clip,
       autoFitOnLoad,
       ptsetDisplayPolicy,
-    }
+    };
   } catch {
-    return defaults
+    return defaults;
   }
 }
 
 // 全局状态（单例 store）
-const persisted = loadPersisted()
-const modelUnit = ref<ModelUnit>(persisted.modelUnit)
-const displayUnit = ref<LengthUnit>(persisted.displayUnit)
-const precision = ref<number>(persisted.precision)
-const recenter = ref<boolean>(persisted.recenter)
-const clip = ref<boolean>(persisted.clip)
-const autoFitOnLoad = ref<boolean>(persisted.autoFitOnLoad)
-const ptsetDisplayPolicy = ref<PtsetDisplayPolicy>(persisted.ptsetDisplayPolicy)
+const persisted = loadPersisted();
+const modelUnit = ref<ModelUnit>(persisted.modelUnit);
+const displayUnit = ref<LengthUnit>(persisted.displayUnit);
+const precision = ref<number>(persisted.precision);
+const recenter = ref<boolean>(persisted.recenter);
+const clip = ref<boolean>(persisted.clip);
+const autoFitOnLoad = ref<boolean>(persisted.autoFitOnLoad);
+const ptsetDisplayPolicy = ref<PtsetDisplayPolicy>(persisted.ptsetDisplayPolicy);
 
 watch(
   () => ({
@@ -89,51 +89,51 @@ watch(
     ptsetDisplayPolicy: ptsetDisplayPolicy.value,
   }),
   (state) => {
-    if (typeof localStorage === 'undefined') return
+    if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // ignore
     }
   },
   { deep: true }
-)
+);
 
 export function useUnitSettingsStore() {
-  const modelUnitValue = computed(() => modelUnit.value)
-  const displayUnitValue = computed(() => displayUnit.value)
-  const precisionValue = computed(() => clampInt(precision.value, 0, 6))
-  const recenterValue = computed(() => recenter.value)
-  const clipValue = computed(() => clip.value)
-  const autoFitOnLoadValue = computed(() => autoFitOnLoad.value)
-  const ptsetDisplayPolicyValue = computed(() => ptsetDisplayPolicy.value)
+  const modelUnitValue = computed(() => modelUnit.value);
+  const displayUnitValue = computed(() => displayUnit.value);
+  const precisionValue = computed(() => clampInt(precision.value, 0, 6));
+  const recenterValue = computed(() => recenter.value);
+  const clipValue = computed(() => clip.value);
+  const autoFitOnLoadValue = computed(() => autoFitOnLoad.value);
+  const ptsetDisplayPolicyValue = computed(() => ptsetDisplayPolicy.value);
 
   function setModelUnit(v: ModelUnit) {
-    modelUnit.value = v
+    modelUnit.value = v;
   }
 
   function setDisplayUnit(v: LengthUnit) {
-    displayUnit.value = v
+    displayUnit.value = v;
   }
 
   function setPrecision(v: number) {
-    precision.value = clampInt(v, 0, 6)
+    precision.value = clampInt(v, 0, 6);
   }
 
   function setRecenter(v: boolean) {
-    recenter.value = v
+    recenter.value = v;
   }
 
   function setClip(v: boolean) {
-    clip.value = v
+    clip.value = v;
   }
 
   function setAutoFitOnLoad(v: boolean) {
-    autoFitOnLoad.value = v
+    autoFitOnLoad.value = v;
   }
 
   function setPtsetDisplayPolicy(v: PtsetDisplayPolicy) {
-    ptsetDisplayPolicy.value = v
+    ptsetDisplayPolicy.value = v;
   }
 
   return {
@@ -151,6 +151,6 @@ export function useUnitSettingsStore() {
     setClip,
     setAutoFitOnLoad,
     setPtsetDisplayPolicy,
-  }
+  };
 }
 

@@ -1,12 +1,13 @@
-import * as THREE from "three";
+import * as THREE from 'three';
 
-import type { AnnotationInteractionState } from "../core/AnnotationBase";
 import {
   getSolveSpaceBuiltinVectorFont,
   SolveSpaceVectorFont,
-} from "./SolveSpaceVectorFont";
+} from './SolveSpaceVectorFont';
 
-export type SolveSpaceLabelRenderStyle = "solvespace" | "rebarviz";
+import type { AnnotationInteractionState } from '../core/AnnotationBase';
+
+export type SolveSpaceLabelRenderStyle = 'solvespace' | 'rebarviz';
 
 type LabelStylePreset = {
   minCapHeightPx: number;
@@ -46,8 +47,8 @@ const LABEL_STYLE_PRESETS: Record<
     textRenderOrder: 910,
     bgRenderOrder: 909,
     haloRenderOrder: 909,
-    haloOpacity: 0.68,
-    haloScale: 1.06,
+    haloOpacity: 0.85,
+    haloScale: 1.12,
     forceTextDepthOff: false,
   },
   rebarviz: {
@@ -56,8 +57,8 @@ const LABEL_STYLE_PRESETS: Record<
     textRenderOrder: 922,
     bgRenderOrder: 909,
     haloRenderOrder: 921,
-    haloOpacity: 0.72,
-    haloScale: 1.08,
+    haloOpacity: 0.28,
+    haloScale: 1.15,
     forceTextDepthOff: true,
   },
 };
@@ -78,8 +79,8 @@ export class SolveSpaceBillboardVectorText {
   private materialHovered: THREE.LineBasicMaterial;
   private materialSelected: THREE.LineBasicMaterial;
 
-  private _interactionState: AnnotationInteractionState = "normal";
-  private _text = "";
+  private _interactionState: AnnotationInteractionState = 'normal';
+  private _text = '';
   private _worldPerPixel = 1;
 
   private font: SolveSpaceVectorFont | null = null;
@@ -123,7 +124,7 @@ export class SolveSpaceBillboardVectorText {
   private readonly tmpMatrix = new THREE.Matrix4();
 
   constructor(params: SolveSpaceBillboardVectorTextParams) {
-    this.renderStyle = params.renderStyle ?? "solvespace";
+    this.renderStyle = params.renderStyle ?? 'solvespace';
     this.baseCapHeightPx = params.capHeightPx ?? 11.5;
     this.capHeightPx = this.resolveCapHeightPx(this.renderStyle);
     this.materialNormal = params.materialNormal;
@@ -321,9 +322,9 @@ export class SolveSpaceBillboardVectorText {
       return;
     }
 
-    if (this._interactionState === "selected") {
+    if (this._interactionState === 'selected') {
       this.line.material = this.materialSelected;
-    } else if (this._interactionState === "hovered") {
+    } else if (this._interactionState === 'hovered') {
       this.line.material = this.materialHovered;
     } else {
       this.line.material = this.materialNormal;
@@ -337,11 +338,11 @@ export class SolveSpaceBillboardVectorText {
     this.line.visible = hasText;
 
     if (this.haloLine) {
-      this.haloLine.visible = hasText && this.renderStyle === "rebarviz";
+      this.haloLine.visible = false; // Disable halo for all styles
     }
 
     if (this.bgMesh) {
-      this.bgMesh.visible = hasText && this.renderStyle === "solvespace";
+      this.bgMesh.visible = hasText && this.renderStyle === 'solvespace';
     }
   }
 
@@ -364,8 +365,8 @@ export class SolveSpaceBillboardVectorText {
   }
 
   private resolveStateMaterial(): THREE.LineBasicMaterial {
-    if (this._interactionState === "selected") return this.materialSelected;
-    if (this._interactionState === "hovered") return this.materialHovered;
+    if (this._interactionState === 'selected') return this.materialSelected;
+    if (this._interactionState === 'hovered') return this.materialHovered;
     return this.materialNormal;
   }
 
@@ -442,7 +443,7 @@ export class SolveSpaceBillboardVectorText {
   }
 
   private _rebuild(): void {
-    const text = this._text ?? "";
+    const text = this._text ?? '';
     if (!text) {
       this.widthPx = 0;
       this.heightPx = this.capHeightPx;
@@ -460,10 +461,10 @@ export class SolveSpaceBillboardVectorText {
       return;
     }
 
-    const lines = text.split("\n");
+    const lines = text.split('\n');
     const capHeight = this.font.getCapHeight(this.capHeightPx);
     const fontHeight =
-      typeof (this.font as any).getHeight === "function"
+      typeof (this.font as any).getHeight === 'function'
         ? (this.font as any).getHeight(this.capHeightPx)
         : capHeight;
     const lineHeight = Math.max(capHeight, fontHeight * 1.15);
@@ -476,7 +477,7 @@ export class SolveSpaceBillboardVectorText {
 
     const positions: number[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i] ?? "";
+      const line = lines[i] ?? '';
       if (!line) continue;
       const lineWidth = lineWidths[i] ?? 0;
       const originX = -lineWidth / 2;
@@ -494,13 +495,13 @@ export class SolveSpaceBillboardVectorText {
 
     if (positions.length >= 6) {
       this.lineGeometry.setAttribute(
-        "position",
+        'position',
         new THREE.Float32BufferAttribute(positions, 3),
       );
       this.lineHasGeometry = true;
     } else {
       this.lineGeometry.setAttribute(
-        "position",
+        'position',
         new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3),
       );
       this.lineHasGeometry = false;

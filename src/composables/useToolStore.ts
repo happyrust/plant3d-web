@@ -13,7 +13,8 @@ export type ToolMode =
   | 'annotation_cloud'
   | 'annotation_rect'
   | 'annotation_obb'
-  | 'pick_query_center';
+  | 'pick_query_center'
+  | 'pick_refno';
 
 export type AttributeDisplayMode = 'all' | 'general' | 'component' | 'uda';
 
@@ -331,6 +332,11 @@ const ptsetVisualizationRequest = ref<PtsetVisualizationRequest | null>(null);
 // MBD 管道标注请求
 const mbdPipeAnnotationRequest = ref<MbdPipeAnnotationRequest | null>(null);
 
+// ── 通用 refno 拾取模式 ──
+const pickRefnoFilter = ref<string[]>([]);       // noun 过滤列表（如 ['BRAN']），空=不过滤
+const pickedRefnos = ref<string[]>([]);           // 已拾取的 refno 列表
+const pickRefnoCallback = ref<((refnos: string[]) => void) | null>(null); // 确认回调
+
 const pendingObbEditId = ref<string | null>(null);
 const pendingTextAnnotationEditId = ref<string | null>(null);
 const pendingDimensionEditId = ref<string | null>(null);
@@ -366,6 +372,47 @@ watch(
 
 function setToolMode(mode: ToolMode) {
   toolMode.value = mode;
+  // 退出 pick_refno 时清理状态
+  if (mode !== 'pick_refno') {
+    pickRefnoFilter.value = [];
+    pickRefnoCallback.value = null;
+    // 注意：pickedRefnos 不在此处清理，由调用方决定
+  }
+}
+
+/**
+ * 启动通用 refno 拾取模式
+ * @param nounFilter noun 类型过滤数组（如 ['BRAN']），空数组=不过滤
+ * @param onConfirm  用户按 Enter 确认后的回调
+ */
+function startPickRefno(nounFilter: string[], onConfirm?: (refnos: string[]) => void) {
+  pickedRefnos.value = [];
+  pickRefnoFilter.value = nounFilter.map(n => n.toUpperCase());
+  pickRefnoCallback.value = onConfirm ?? null;
+  toolMode.value = 'pick_refno';
+}
+
+function addPickedRefno(refno: string) {
+  if (!pickedRefnos.value.includes(refno)) {
+    pickedRefnos.value = [...pickedRefnos.value, refno];
+  }
+}
+
+function removePickedRefno(refno: string) {
+  pickedRefnos.value = pickedRefnos.value.filter(r => r !== refno);
+}
+
+function confirmPickRefno() {
+  const cb = pickRefnoCallback.value;
+  const result = [...pickedRefnos.value];
+  toolMode.value = 'none';
+  // 回调在重置后执行，避免副作用干扰
+  cb?.(result);
+}
+
+function cancelPickRefno() {
+  pickedRefnos.value = [];
+  toolMode.value = 'none';
 }
 
 function setAttributeDisplayMode(mode: AttributeDisplayMode) {
@@ -909,5 +956,15 @@ export function useToolStore() {
     clearMbdPipeAnnotationRequest: () => {
       mbdPipeAnnotationRequest.value = null;
     },
+
+    // ── 通用 refno 拾取 ──
+    pickRefnoFilter,
+    pickedRefnos,
+    pickRefnoCallback,
+    startPickRefno,
+    addPickedRefno,
+    removePickedRefno,
+    confirmPickRefno,
+    cancelPickRefno,
   };
 }

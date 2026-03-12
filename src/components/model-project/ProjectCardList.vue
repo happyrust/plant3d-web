@@ -10,19 +10,15 @@
     </div>
 
     <div v-else class="cards-grid">
-      <v-card
-        v-for="project in projects"
+      <v-card v-for="project in projects"
         :key="project.id"
         class="project-card"
         hover
-        @click="$emit('select', project.id)"
-      >
-        <v-img
-          :src="project.thumbnail || '/favicon.ico'"
+        @click="$emit('select', project.id)">
+        <v-img :src="project.thumbnail || '/favicon.ico'"
           height="200"
           cover
-          class="card-image"
-        />
+          class="card-image" />
         <v-card-title>{{ project.name }}</v-card-title>
         <v-card-text>
           <p class="description">{{ project.description }}</p>

@@ -9,6 +9,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 import { useModelProjects } from '@/composables/useModelProjects';
+import { reviewGetEmbedUrl } from '@/api/reviewApi';
 
 const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
 const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
@@ -22,6 +23,21 @@ const { currentProject, selectProject } = useModelProjects();
 
 function handleProjectSelect(projectId: string) {
   selectProject(projectId);
+}
+
+const embedLoading = ref(false);
+
+async function handleEmbedTest() {
+  if (!currentProject.value) return;
+  embedLoading.value = true;
+  try {
+    const { url } = await reviewGetEmbedUrl(currentProject.value.id, 'SJ');
+    window.open(url, '_blank');
+  } catch (e: unknown) {
+    alert('获取校审地址失败: ' + (e instanceof Error ? e.message : String(e)));
+  } finally {
+    embedLoading.value = false;
+  }
 }
 </script>
 
@@ -39,6 +55,15 @@ function handleProjectSelect(projectId: string) {
           <RibbonBar ref="ribbonBarRef" class="w-full">
             <template #header-right>
               <div class="flex items-center gap-2 px-2">
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  color="info"
+                  :loading="embedLoading"
+                  @click="handleEmbedTest"
+                >
+                  校审测试
+                </v-btn>
                 <LayoutToggleButtons />
                 <AboutDialog />
                 <UserAvatar />

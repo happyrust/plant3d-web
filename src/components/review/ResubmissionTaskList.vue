@@ -3,24 +3,20 @@ import { computed, onMounted, ref } from 'vue';
 
 import {
   Calendar,
-  CheckCircle,
-  Clock,
   Eye,
-  FileText,
   Package,
   RefreshCw,
   RotateCcw,
   Search,
-  User,
-  XCircle,
 } from 'lucide-vue-next';
+
+import { getResubmissionLatestReturnTime, getResubmissionSubmissionCount, isDesignerResubmissionTask } from './reviewTaskFilters';
+import TaskReviewDetail from './TaskReviewDetail.vue';
 
 import type { ReviewTask } from '@/types/auth';
 
 import { useUserStore } from '@/composables/useUserStore';
-import { reviewTaskGetHistory, type ReviewHistoryItem } from '@/api/reviewApi';
 import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
-import TaskReviewDetail from './TaskReviewDetail.vue';
 
 const userStore = useUserStore();
 
@@ -28,44 +24,13 @@ const searchTerm = ref('');
 const priorityFilter = ref<string>('all');
 const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
-const taskHistories = ref<Map<string, ReviewHistoryItem[]>>(new Map());
 
-// 当前用户的待审核任务
-const tasks = computed(() => userStore.pendingReviewTasks.value);
-
-// 判断任务是否为复审任务
-function isResubmissionTask(taskId: string): boolean {
-  const history = taskHistories.value.get(taskId);
-  if (!history) return false;
-  
-  // 检查历史中是否有 rejected 记录
-  return history.some(h => h.action === 'rejected');
-}
-
-// 计算提交次数
-function getSubmissionCount(taskId: string): number {
-  const history = taskHistories.value.get(taskId);
-  if (!history) return 1;
-  
-  // 统计 submitted 的次数
-  return history.filter(h => h.action === 'submitted').length;
-}
-
-// 获取最近驳回时间
-function getLastRejectionTime(taskId: string): number | null {
-  const history = taskHistories.value.get(taskId);
-  if (!history) return null;
-  
-  const rejections = history.filter(h => h.action === 'rejected');
-  if (rejections.length === 0) return null;
-  
-  // 返回最新的驳回时间
-  return Math.max(...rejections.map(r => r.timestamp));
-}
+// 当前用户发起且被退回的任务
+const tasks = computed(() => userStore.myInitiatedTasks.value);
 
 // 筛选出复审任务
 const resubmissionTasks = computed(() => {
-  return tasks.value.filter(task => isResubmissionTask(task.id));
+  return tasks.value.filter((task) => isDesignerResubmissionTask(task));
 });
 
 const filteredTasks = computed(() => {
@@ -87,8 +52,8 @@ const filteredTasks = computed(() => {
 
   // 按最近驳回时间倒序排列
   return result.sort((a, b) => {
-    const aTime = getLastRejectionTime(a.id) || 0;
-    const bTime = getLastRejectionTime(b.id) || 0;
+    const aTime = getResubmissionLatestReturnTime(a.workflowHistory || []) || 0;
+    const bTime = getResubmissionLatestReturnTime(b.workflowHistory || []) || 0;
     return bTime - aTime;
   });
 });
@@ -105,28 +70,13 @@ const taskStats = computed(() => {
   };
 });
 
-async function loadTaskHistories() {
+async function refreshTasks() {
   isLoading.value = true;
   try {
-    const promises = tasks.value.map(async (task) => {
-      try {
-        const response = await reviewTaskGetHistory(task.id);
-        if (response.success) {
-          taskHistories.value.set(task.id, response.history);
-        }
-      } catch (e) {
-        console.error(`Failed to load history for task ${task.id}:`, e);
-      }
-    });
-    await Promise.all(promises);
+    await userStore.loadReviewTasks();
   } finally {
     isLoading.value = false;
   }
-}
-
-async function refreshTasks() {
-  await userStore.loadReviewTasks();
-  await loadTaskHistories();
 }
 
 function clearFilters() {
@@ -150,14 +100,12 @@ function closeTaskDetail() {
   selectedTask.value = null;
 }
 
-function handleStartReview(task: ReviewTask) {
-  // 与 ReviewerTaskList 相同的逻辑
-  userStore.updateTaskStatus(task.id, 'in_review');
+function handleResumeEditing(task: ReviewTask) {
   handleViewTask(task);
 }
 
 onMounted(() => {
-  loadTaskHistories();
+  refreshTasks();
 });
 </script>
 
@@ -168,9 +116,9 @@ onMounted(() => {
       <div>
         <h3 class="text-lg font-semibold flex items-center gap-2">
           <RotateCcw class="h-5 w-5 text-orange-500" />
-          复审任务
+          退回待修改
         </h3>
-        <p class="text-sm text-gray-500">审核人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个待复审任务</p>
+        <p class="text-sm text-gray-500">设计人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个待修改任务</p>
       </div>
       <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
         :disabled="isLoading"
@@ -184,7 +132,7 @@ onMounted(() => {
     <div class="grid grid-cols-3 gap-3">
       <div class="p-3 rounded-lg bg-orange-50 border border-orange-200">
         <div class="text-2xl font-bold text-orange-600">{{ taskStats.total }}</div>
-        <div class="text-xs text-orange-600">复审任务</div>
+        <div class="text-xs text-orange-600">待修改任务</div>
       </div>
       <div class="p-3 rounded-lg bg-red-50 border border-red-200">
         <div class="text-2xl font-bold text-red-600">{{ taskStats.urgent }}</div>
@@ -202,7 +150,7 @@ onMounted(() => {
         <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <input v-model="searchTerm"
           type="text"
-          placeholder="搜索任务名称、描述或模型..."
+          placeholder="搜索退回任务名称、描述或模型..."
           class="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" />
       </div>
       <select v-model="priorityFilter" class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -238,10 +186,10 @@ onMounted(() => {
                 <h4 class="font-medium text-base">{{ task.title }}</h4>
                 <!-- 提交次数徽章 -->
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                  第{{ getSubmissionCount(task.id) }}次提交
+                  第{{ getResubmissionSubmissionCount(task.workflowHistory || []) }}次提交
                 </span>
-                <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getTaskStatusDisplayName(task.status).color]">
-                  {{ getTaskStatusDisplayName(task.status).label }}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                  退回待修改
                 </span>
                 <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getPriorityDisplayName(task.priority).color]">
                   {{ getPriorityDisplayName(task.priority).label }}
@@ -254,25 +202,17 @@ onMounted(() => {
                   <span>{{ task.modelName }}</span>
                 </div>
                 <div class="flex items-center gap-1">
-                  <User class="h-3 w-3" />
-                  <span>发起人: {{ task.requesterName }}</span>
+                  <span>退回原因: {{ task.returnReason || '未填写' }}</span>
                 </div>
-                <div v-if="getLastRejectionTime(task.id)" class="flex items-center gap-1">
-                  <XCircle class="h-3 w-3 text-red-500" />
-                  <span class="text-red-600">驳回于: {{ formatDateTime(getLastRejectionTime(task.id)!) }}</span>
+                <div v-if="getResubmissionLatestReturnTime(task.workflowHistory || [])" class="flex items-center gap-1">
+                  <span class="text-red-600">退回于: {{ formatDateTime(getResubmissionLatestReturnTime(task.workflowHistory || [])!) }}</span>
                 </div>
               </div>
             </div>
             <div class="flex flex-col gap-2 ml-4">
-              <button v-if="task.status === 'submitted'"
-                class="px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-                @click.stop="handleStartReview(task)">
-                开始复审
-              </button>
-              <button v-else-if="task.status === 'in_review'"
-                class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                @click.stop="handleStartReview(task)">
-                继续复审
+              <button class="px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                @click.stop="handleResumeEditing(task)">
+                继续修改
               </button>
               <button class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1" 
                 @click.stop="handleViewTask(task)">
@@ -286,9 +226,9 @@ onMounted(() => {
 
       <div v-else class="bg-white border rounded-lg p-8 text-center">
         <RotateCcw class="h-12 w-12 mx-auto mb-4 text-gray-300" />
-        <h4 class="font-medium mb-2">暂无复审任务</h4>
+        <h4 class="font-medium mb-2">暂无退回任务</h4>
         <p class="text-sm text-gray-500 mb-4">
-          {{ searchTerm || priorityFilter !== 'all' ? '没有符合筛选条件的复审任务' : '当前没有需要复审的任务' }}
+          {{ searchTerm || priorityFilter !== 'all' ? '没有符合筛选条件的退回任务' : '当前没有需要修改的退回任务' }}
         </p>
         <button v-if="searchTerm || priorityFilter !== 'all'"
           class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
@@ -300,11 +240,9 @@ onMounted(() => {
 
     <!-- 任务详情弹窗 -->
     <Teleport to="body">
-      <TaskReviewDetail
-        v-if="selectedTask"
+      <TaskReviewDetail v-if="selectedTask"
         :task="selectedTask"
-        @close="closeTaskDetail"
-      />
+        @close="closeTaskDetail" />
     </Teleport>
   </div>
 </template>

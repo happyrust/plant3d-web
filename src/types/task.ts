@@ -60,6 +60,29 @@ export type ModelExportParameters = {
 /** 任务参数联合类型 */
 export type TaskParameters = ParseTaskParameters | ModelGenParameters | ModelExportParameters;
 
+export type TaskConfig = {
+  name: string;
+  manual_db_nums: number[];
+  manual_refnos: string[];
+  project_name: string;
+  project_path: string;
+  project_code: number;
+  mdb_name: string;
+  module: string;
+  db_type: string;
+  surreal_ns: number;
+  db_ip: string;
+  db_port: string;
+  db_user: string;
+  db_password: string;
+  gen_model: boolean;
+  gen_mesh: boolean;
+  gen_spatial_tree: boolean;
+  apply_boolean_operation: boolean;
+  mesh_tol_ratio: number;
+  room_keyword: string;
+};
+
 // ============ 任务实体 ============
 
 /** 任务实体 */
@@ -82,7 +105,7 @@ export type Task = {
   parameters?: TaskParameters;
   result?: TaskResult;
   error?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 /** 任务执行结果 */
@@ -120,9 +143,10 @@ export type SystemMetrics = {
 export type TaskCreationRequest = {
   name: string;
   task_type: TaskType;
-  priority: TaskPriority;
+  priority?: TaskPriority;
   description?: string;
-  parameters: TaskParameters;
+  parameters?: TaskParameters;
+  config?: TaskConfig;
 };
 
 /** 任务创建响应 */

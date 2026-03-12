@@ -37,19 +37,15 @@ function handleClickOutside() {
 
 <template>
   <div class="relative">
-    <button
-      type="button"
+    <button type="button"
       class="flex w-full items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs hover:bg-muted transition-colors"
-      @click="open = !open"
-    >
+      @click="open = !open">
       <User class="h-3.5 w-3.5 text-muted-foreground" />
       <span class="flex-1 text-left">
         <span class="font-medium">{{ currentUser?.name || '未登录' }}</span>
-        <span
-          v-if="currentUser"
+        <span v-if="currentUser"
           class="ml-1.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium"
-          :class="getRoleColor(currentUser.role)"
-        >
+          :class="getRoleColor(currentUser.role)">
           {{ getRoleDisplayName(currentUser.role) }}
         </span>
       </span>
@@ -60,13 +56,10 @@ function handleClickOutside() {
     <Teleport to="body">
       <div v-if="open" class="fixed inset-0 z-40" @click="handleClickOutside" />
     </Teleport>
-    <div
-      v-if="open"
-      class="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-background shadow-lg"
-    >
+    <div v-if="open"
+      class="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-background shadow-lg">
       <div class="max-h-48 overflow-y-auto py-1">
-        <button
-          v-for="user in availableUsers"
+        <button v-for="user in availableUsers"
           :key="user.id"
           type="button"
           class="flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors"
@@ -75,14 +68,11 @@ function handleClickOutside() {
               ? 'bg-blue-50 dark:bg-blue-950'
               : 'hover:bg-muted'
           "
-          @click="handleSwitch(user.id)"
-        >
+          @click="handleSwitch(user.id)">
           <User class="h-3 w-3 text-muted-foreground" />
           <span class="flex-1 text-left">{{ user.name }}</span>
-          <span
-            class="rounded px-1.5 py-0.5 text-[10px] font-medium"
-            :class="getRoleColor(user.role)"
-          >
+          <span class="rounded px-1.5 py-0.5 text-[10px] font-medium"
+            :class="getRoleColor(user.role)">
             {{ getRoleDisplayName(user.role) }}
           </span>
         </button>

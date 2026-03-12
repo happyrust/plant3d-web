@@ -1,0 +1,1037 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "bi8Au",
+      "x": 0,
+      "y": 0,
+      "name": "Frame",
+      "clip": true,
+      "width": 800,
+      "height": 600,
+      "fill": "#FFFFFF",
+      "layout": "none"
+    },
+    {
+      "type": "frame",
+      "id": "xituq",
+      "x": 0,
+      "y": 0,
+      "name": "Distance Panel",
+      "width": 340,
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "#E5E7EB"
+      },
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#0000000f",
+        "offset": {
+          "x": 0,
+          "y": 4
+        },
+        "blur": 16
+      },
+      "layout": "vertical",
+      "gap": 24,
+      "padding": 24,
+      "children": [
+        {
+          "type": "frame",
+          "id": "WNi9X",
+          "name": "header",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "JgntA",
+              "name": "title",
+              "fill": "#111827",
+              "content": "距离标注控制",
+              "fontFamily": "Fira Sans",
+              "fontSize": 16,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "pXTJr",
+          "name": "sec1",
+          "width": "fill_container",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "2RJsH",
+              "name": "checkboxWrapper",
+              "width": 16,
+              "height": 16,
+              "fill": "#FF6B00",
+              "cornerRadius": 4,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "fpDIo",
+                  "x": 2,
+                  "y": 2,
+                  "name": "checkIcon",
+                  "width": 12,
+                  "height": 12,
+                  "iconFontName": "check",
+                  "iconFontFamily": "lucide",
+                  "fill": "#FFFFFF"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "CfE0s",
+              "name": "cbLabel",
+              "fill": "#111827",
+              "content": "显示管道间距离标注",
+              "fontFamily": "Fira Sans",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Njbl1",
+          "name": "pickBtnWrapper",
+          "width": "fill_container",
+          "fill": "#00000000",
+          "cornerRadius": 6,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1.5,
+            "fill": "#FF6B00"
+          },
+          "gap": 8,
+          "padding": [
+            9,
+            14
+          ],
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon_font",
+              "id": "vxuUP",
+              "name": "pickIcon",
+              "width": 14,
+              "height": 14,
+              "iconFontName": "mouse-pointer-2",
+              "iconFontFamily": "lucide",
+              "fill": "#FF6B00"
+            },
+            {
+              "type": "text",
+              "id": "LJEA0",
+              "name": "pickText",
+              "fill": "#FF6B00",
+              "content": "框选 BRAN 管道",
+              "fontFamily": "Fira Sans",
+              "fontSize": 13,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "mYKyB",
+          "name": "divider",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": {
+            "align": "center",
+            "thickness": 1,
+            "fill": "#E5E7EB"
+          }
+        },
+        {
+          "type": "frame",
+          "id": "LavnP",
+          "name": "paramSec",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "ZcPiT",
+              "name": "distGroup",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Gzu6j",
+                  "name": "distLabel",
+                  "fill": "#111827",
+                  "content": "最大距离",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "frame",
+                  "id": "NuddH",
+                  "name": "distInputBox",
+                  "width": "fill_container",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "dKzxW",
+                      "name": "distVal",
+                      "fill": "#111827",
+                      "content": "500",
+                      "fontFamily": "Fira Code",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "LltTt",
+                      "name": "distSuffix",
+                      "fill": "#6B7280",
+                      "content": "mm",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "5c7HQ",
+              "name": "angleGroup",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "bIwoq",
+                  "name": "angleLabel",
+                  "fill": "#111827",
+                  "content": "最大夹角",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "frame",
+                  "id": "fzVLf",
+                  "name": "angleInputBox",
+                  "width": "fill_container",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "6pFIG",
+                      "name": "angleVal",
+                      "fill": "#111827",
+                      "content": "5",
+                      "fontFamily": "Fira Code",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "dXPBn",
+                      "name": "angleSuffix",
+                      "fill": "#6B7280",
+                      "content": "°",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "TbGUc",
+          "name": "btnWrapper",
+          "width": "fill_container",
+          "fill": "#FF6B00",
+          "cornerRadius": 6,
+          "gap": 8,
+          "padding": [
+            10,
+            16
+          ],
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon_font",
+              "id": "LOHda",
+              "name": "btnIcon",
+              "width": 14,
+              "height": 14,
+              "iconFontName": "refresh-cw",
+              "iconFontFamily": "lucide",
+              "fill": "#FFFFFF"
+            },
+            {
+              "type": "text",
+              "id": "s2T0o",
+              "name": "btnText",
+              "fill": "#FFFFFF",
+              "content": "重新检测",
+              "fontFamily": "Fira Sans",
+              "fontSize": 14,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "7sHb0",
+          "name": "divider2",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": {
+            "align": "center",
+            "thickness": 1,
+            "fill": "#E5E7EB"
+          }
+        },
+        {
+          "type": "frame",
+          "id": "YjZL8",
+          "name": "resultSec",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "children": [
+            {
+              "type": "frame",
+              "id": "Msavs",
+              "name": "resHeader",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "l8hhz",
+                  "name": "resTitle",
+                  "fill": "#111827",
+                  "content": "检测结果 (3)",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Wxsa9",
+              "name": "listContainer",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "O9rum",
+                  "name": "item1",
+                  "width": "fill_container",
+                  "fill": "#FFF0E6",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#FF6B00"
+                  },
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "rCP01",
+                      "name": "dist1",
+                      "fill": "#FF6B00",
+                      "content": "125 mm",
+                      "fontFamily": "Fira Code",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "WGfcE",
+                      "name": "pipe1",
+                      "fill": "#111827",
+                      "content": "Pipe-A <-> Pipe-B",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Q5Z0z",
+                  "name": "item2",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "OA44X",
+                      "name": "dist2",
+                      "fill": "#FF6B00",
+                      "content": "340 mm",
+                      "fontFamily": "Fira Code",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "s026H",
+                      "name": "pipe2",
+                      "fill": "#6B7280",
+                      "content": "Line-38 <-> Eq-Valve-2",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OxvDm",
+                  "name": "item3",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": 6,
+                  "gap": 12,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "JCxPe",
+                      "name": "dist3",
+                      "fill": "#FF6B00",
+                      "content": "482 mm",
+                      "fontFamily": "Fira Code",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Habxs",
+                      "name": "pipe3",
+                      "fill": "#6B7280",
+                      "content": "Main-Pipe-1 <-> Main-Pipe-2",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ckhtw",
+      "x": 0,
+      "y": 0,
+      "name": "管道间距离标注控制面板",
+      "width": 340,
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "#E5E7EB"
+      },
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#0000000f",
+        "offset": {
+          "x": 0,
+          "y": 4
+        },
+        "blur": 16
+      },
+      "layout": "vertical",
+      "gap": 24,
+      "padding": 24,
+      "children": [
+        {
+          "type": "frame",
+          "id": "Rg0fx",
+          "name": "header",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "2iQV7",
+              "name": "title",
+              "fill": "#111827",
+              "content": "距离标注控制",
+              "fontFamily": "Fira Sans",
+              "fontSize": 16,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Vs8ii",
+          "name": "sec1",
+          "width": "fill_container",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "c3Sh5",
+              "name": "checkboxWrapper",
+              "width": 16,
+              "height": 16,
+              "fill": "#FF6B00",
+              "cornerRadius": 4,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "x67Nc",
+                  "x": 2,
+                  "y": 2,
+                  "name": "checkIcon",
+                  "width": 12,
+                  "height": 12,
+                  "iconFontName": "check",
+                  "iconFontFamily": "lucide",
+                  "fill": "#FFFFFF"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "dcAy2",
+              "name": "cbLabel",
+              "fill": "#111827",
+              "content": "显示管道间距离标注",
+              "fontFamily": "Fira Sans",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "4RyrT",
+          "name": "pickBtnWrapper",
+          "width": "fill_container",
+          "fill": "#00000000",
+          "cornerRadius": 6,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1.5,
+            "fill": "#FF6B00"
+          },
+          "gap": 8,
+          "padding": [
+            9,
+            14
+          ],
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon_font",
+              "id": "wVvFO",
+              "name": "pickIcon",
+              "width": 14,
+              "height": 14,
+              "iconFontName": "mouse-pointer-2",
+              "iconFontFamily": "lucide",
+              "fill": "#FF6B00"
+            },
+            {
+              "type": "text",
+              "id": "Sfrcw",
+              "name": "pickText",
+              "fill": "#FF6B00",
+              "content": "框选 BRAN 管道",
+              "fontFamily": "Fira Sans",
+              "fontSize": 13,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "MydHk",
+          "name": "divider",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": {
+            "align": "center",
+            "thickness": 1,
+            "fill": "#E5E7EB"
+          }
+        },
+        {
+          "type": "frame",
+          "id": "jTN71",
+          "name": "paramSec",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "V2k11",
+              "name": "distGroup",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "TR7nU",
+                  "name": "distLabel",
+                  "fill": "#111827",
+                  "content": "最大距离",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "frame",
+                  "id": "d32FR",
+                  "name": "distInputBox",
+                  "width": "fill_container",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "7dksh",
+                      "name": "distVal",
+                      "fill": "#111827",
+                      "content": "500",
+                      "fontFamily": "Fira Code",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "vvhjL",
+                      "name": "distSuffix",
+                      "fill": "#6B7280",
+                      "content": "mm",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "HjPWo",
+              "name": "angleGroup",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "zPyrj",
+                  "name": "angleLabel",
+                  "fill": "#111827",
+                  "content": "最大夹角",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "frame",
+                  "id": "VXEjr",
+                  "name": "angleInputBox",
+                  "width": "fill_container",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "fpZuQ",
+                      "name": "angleVal",
+                      "fill": "#111827",
+                      "content": "5",
+                      "fontFamily": "Fira Code",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "GSGnE",
+                      "name": "angleSuffix",
+                      "fill": "#6B7280",
+                      "content": "°",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "eKHX7",
+          "name": "btnWrapper",
+          "width": "fill_container",
+          "fill": "#FF6B00",
+          "cornerRadius": 6,
+          "gap": 8,
+          "padding": [
+            10,
+            16
+          ],
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon_font",
+              "id": "VoJUC",
+              "name": "btnIcon",
+              "width": 14,
+              "height": 14,
+              "iconFontName": "refresh-cw",
+              "iconFontFamily": "lucide",
+              "fill": "#FFFFFF"
+            },
+            {
+              "type": "text",
+              "id": "KG18Z",
+              "name": "btnText",
+              "fill": "#FFFFFF",
+              "content": "重新检测",
+              "fontFamily": "Fira Sans",
+              "fontSize": 14,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "a5em4",
+          "name": "divider2",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": {
+            "align": "center",
+            "thickness": 1,
+            "fill": "#E5E7EB"
+          }
+        },
+        {
+          "type": "frame",
+          "id": "v2Mh7",
+          "name": "resultSec",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "children": [
+            {
+              "type": "frame",
+              "id": "ASOfw",
+              "name": "resHeader",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "HYxZ6",
+                  "name": "resTitle",
+                  "fill": "#111827",
+                  "content": "检测结果 (3)",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "IzLG9",
+              "name": "scrollArea",
+              "width": "fill_container",
+              "height": 140,
+              "cornerRadius": 6,
+              "stroke": {
+                "align": "inside",
+                "thickness": 1,
+                "fill": "$--border"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "lewjb",
+                  "name": "listContainer",
+                  "clip": true,
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "#FAFAFA",
+                  "stroke": {
+                    "thickness": 0
+                  },
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "z2V3D",
+                      "name": "item1",
+                      "width": "fill_container",
+                      "fill": "#FFF0E6",
+                      "stroke": {
+                        "thickness": 0
+                      },
+                      "gap": 12,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "K8m9W",
+                          "name": "dist1",
+                          "fill": "#FF6B00",
+                          "content": "125 mm",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QMbFr",
+                          "name": "pipe1",
+                          "fill": "#111827",
+                          "content": "Pipe-A <-> Pipe-B",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MrjIK",
+                      "name": "item2",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "gap": 12,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "2BBGF",
+                          "name": "dist2",
+                          "fill": "#FF6B00",
+                          "content": "340 mm",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "fcfug",
+                          "name": "pipe2",
+                          "fill": "#6B7280",
+                          "content": "Line-38 <-> Eq-Valve-2",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "hZC9Y",
+                      "name": "item3",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "gap": 12,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ZN2fv",
+                          "name": "dist3",
+                          "fill": "#FF6B00",
+                          "content": "482 mm",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "0IJxS",
+                          "name": "pipe3",
+                          "fill": "#6B7280",
+                          "content": "Main-Pipe-1 <-> Main-Pipe-2",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "S5SgB",
+                  "name": "scrollTrack",
+                  "width": 8,
+                  "height": "fill_container",
+                  "fill": "#F3F4F6",
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "pUAH9",
+                      "name": "scrollThumb",
+                      "width": 8,
+                      "height": 48,
+                      "fill": "#D1D5DB",
+                      "cornerRadius": 4
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "--bg-panel": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "--border": {
+      "type": "color",
+      "value": "#E5E7EB"
+    },
+    "--fg-muted": {
+      "type": "color",
+      "value": "#6B7280"
+    },
+    "--fg-primary": {
+      "type": "color",
+      "value": "#111827"
+    },
+    "--font-mono": {
+      "type": "string",
+      "value": "Fira Code"
+    },
+    "--font-ui": {
+      "type": "string",
+      "value": "Fira Sans"
+    },
+    "--orange-light": {
+      "type": "color",
+      "value": "#FFF0E6"
+    },
+    "--orange-primary": {
+      "type": "color",
+      "value": "#FF6B00"
+    }
+  }
+}

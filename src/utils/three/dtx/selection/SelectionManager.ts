@@ -6,6 +6,7 @@
  */
 
 import { Color } from 'three';
+
 import { EventEmitter } from './EventEmitter';
 
 // ========== 类型定义 ==========
@@ -13,7 +14,7 @@ import { EventEmitter } from './EventEmitter';
 /**
  * 选中管理器配置
  */
-export interface SelectionManagerOptions {
+export type SelectionManagerOptions = {
   /** 选中颜色 (默认橙色 #ff8800) */
   selectionColor?: Color | number | string;
   /** 高亮颜色 (悬停效果) */
@@ -25,7 +26,7 @@ export interface SelectionManagerOptions {
 /**
  * 选中变化事件数据
  */
-export interface SelectionChangedEvent {
+export type SelectionChangedEvent = {
   /** 当前选中的对象 ID 列表 */
   selected: string[];
   /** 新增选中的对象 ID 列表 */
@@ -46,7 +47,7 @@ export type ColorUpdateCallback = (objectId: string, color: Color | null) => voi
  */
 export class SelectionManager extends EventEmitter {
   /** 当前选中的对象 ID 集合 */
-  private _selected: Set<string> = new Set();
+  private _selected = new Set<string>();
   /** 当前高亮的对象 ID */
   private _highlighted: string | null = null;
   /** 选中颜色 */
@@ -78,7 +79,7 @@ export class SelectionManager extends EventEmitter {
    * @param objectIds 要选中的对象 ID (单个或数组)
    * @param additive 是否追加选中 (默认 false，会清除之前的选中)
    */
-  select(objectIds: string | string[], additive: boolean = false): void {
+  select(objectIds: string | string[], additive = false): void {
     const ids = Array.isArray(objectIds) ? objectIds : [objectIds];
     const added: string[] = [];
     const removed: string[] = [];

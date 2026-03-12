@@ -1,9 +1,10 @@
-import { getBaseUrl } from '@/api/genModelTaskApi'
-import type { InstanceEntry } from '@/utils/instances/instanceManifest'
+import type { InstanceEntry } from '@/utils/instances/instanceManifest';
+
+import { getBaseUrl } from '@/api/genModelTaskApi';
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = getBaseUrl().replace(/\/$/, '')
-  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`
+  const base = getBaseUrl().replace(/\/$/, '');
+  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
 
   const resp = await fetch(url, {
     ...init,
@@ -11,14 +12,14 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
       'Content-Type': 'application/json',
       ...(init?.headers || {}),
     },
-  })
+  });
 
   if (!resp.ok) {
-    const text = await resp.text().catch(() => '')
-    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`)
+    const text = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
   }
 
-  return (await resp.json()) as T
+  return (await resp.json()) as T;
 }
 
 export type RealtimeInstancesByRefnosResponse = {
@@ -65,7 +66,7 @@ export async function realtimeInstancesByRefnos(
       include_tubings: options?.includeTubings ?? true,
       enable_holes: options?.enableHoles ?? true,
     }),
-  })
+  });
 }
 
 export async function enqueueParquetIncremental(
@@ -78,9 +79,9 @@ export async function enqueueParquetIncremental(
       dbnum: dbno,
       refnos,
     }),
-  })
+  });
 }
 
 export async function getParquetVersion(dbno: number): Promise<ParquetVersionResponse> {
-  return await fetchJson<ParquetVersionResponse>(`/api/model/parquet-version/${encodeURIComponent(String(dbno))}`)
+  return await fetchJson<ParquetVersionResponse>(`/api/model/parquet-version/${encodeURIComponent(String(dbno))}`);
 }

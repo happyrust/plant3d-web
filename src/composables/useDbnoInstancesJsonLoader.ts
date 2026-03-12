@@ -1,13 +1,14 @@
-import type { InstanceManifest } from '@/utils/instances/instanceManifest'
-import { getBaseUrl } from '@/api/genModelTaskApi'
-import { buildFilesOutputUrl } from '@/lib/filesOutput'
+import type { InstanceManifest } from '@/utils/instances/instanceManifest';
+
+import { getBaseUrl } from '@/api/genModelTaskApi';
+import { buildFilesOutputUrl } from '@/lib/filesOutput';
 
 export class InstancesJsonNotFoundError extends Error {
-  readonly dbno: number
+  readonly dbno: number;
   constructor(dbno: number) {
-    super(`instances_${dbno}.json not found`)
-    this.name = 'InstancesJsonNotFoundError'
-    this.dbno = dbno
+    super(`instances_${dbno}.json not found`);
+    this.name = 'InstancesJsonNotFoundError';
+    this.dbno = dbno;
   }
 }
 
@@ -20,29 +21,29 @@ export type StreamGenerateSseUpdate = {
   percent?: number
 }
 
-const manifestCache = new Map<number, InstanceManifest>()
-const metaCache = new Map<number, unknown>()
+const manifestCache = new Map<number, InstanceManifest>();
+const metaCache = new Map<number, unknown>();
 
 async function fetchInstancesManifest(dbno: number): Promise<InstanceManifest> {
-  const cached = manifestCache.get(dbno)
-  if (cached) return cached
+  const cached = manifestCache.get(dbno);
+  if (cached) return cached;
 
-  const url = buildFilesOutputUrl(`instances/instances_${dbno}.json`)
-  const resp = await fetch(url)
+  const url = buildFilesOutputUrl(`instances/instances_${dbno}.json`);
+  const resp = await fetch(url);
   if (resp.status === 404) {
-    throw new InstancesJsonNotFoundError(dbno)
+    throw new InstancesJsonNotFoundError(dbno);
   }
   if (!resp.ok) {
-    throw new Error(`加载 instances 失败: HTTP ${resp.status} ${resp.statusText}`)
+    throw new Error(`加载 instances 失败: HTTP ${resp.status} ${resp.statusText}`);
   }
 
-  const json = (await resp.json()) as InstanceManifest
-  manifestCache.set(dbno, json)
-  return json
+  const json = (await resp.json()) as InstanceManifest;
+  manifestCache.set(dbno, json);
+  return json;
 }
 
 export async function getDbnoInstancesManifest(dbno: number): Promise<InstanceManifest> {
-  return await fetchInstancesManifest(dbno)
+  return await fetchInstancesManifest(dbno);
 }
 
 /**
@@ -50,19 +51,19 @@ export async function getDbnoInstancesManifest(dbno: number): Promise<InstanceMa
  * - 404：返回 null（不抛错，便于旧数据集兼容）
  */
 export async function getDbnoInstancesMeta<T = any>(dbno: number): Promise<T | null> {
-  const cached = metaCache.get(dbno)
-  if (cached) return cached as T
+  const cached = metaCache.get(dbno);
+  if (cached) return cached as T;
 
-  const url = buildFilesOutputUrl(`instances/meta_${dbno}.json`)
-  const resp = await fetch(url)
-  if (resp.status === 404) return null
+  const url = buildFilesOutputUrl(`instances/meta_${dbno}.json`);
+  const resp = await fetch(url);
+  if (resp.status === 404) return null;
   if (!resp.ok) {
-    throw new Error(`加载 meta 失败: HTTP ${resp.status} ${resp.statusText}`)
+    throw new Error(`加载 meta 失败: HTTP ${resp.status} ${resp.statusText}`);
   }
 
-  const json = (await resp.json()) as unknown
-  metaCache.set(dbno, json)
-  return json as T
+  const json = (await resp.json()) as unknown;
+  metaCache.set(dbno, json);
+  return json as T;
 }
 
 /**
@@ -71,20 +72,20 @@ export async function getDbnoInstancesMeta<T = any>(dbno: number): Promise<T | n
  * - 注入后，`getDbnoInstancesManifest(dbno)` 将直接命中该缓存
  */
 export function setDbnoInstancesManifest(dbno: number, manifest: InstanceManifest): void {
-  manifestCache.set(dbno, manifest)
+  manifestCache.set(dbno, manifest);
 }
 
 export function invalidateDbnoInstancesManifestCache(dbno: number): void {
-  manifestCache.delete(dbno)
+  manifestCache.delete(dbno);
 }
 
 async function triggerDbnoGenerate(dbno: number): Promise<void> {
-  const apiBase = getBaseUrl().replace(/\/$/, '')
-  const url = `${apiBase}/api/database/${dbno}/generate`
-  const resp = await fetch(url, { method: 'POST' })
+  const apiBase = getBaseUrl().replace(/\/$/, '');
+  const url = `${apiBase}/api/database/${dbno}/generate`;
+  const resp = await fetch(url, { method: 'POST' });
   if (!resp.ok) {
-    const text = await resp.text().catch(() => '')
-    throw new Error(`触发生成任务失败: HTTP ${resp.status} ${resp.statusText}: ${text}`)
+    const text = await resp.text().catch(() => '');
+    throw new Error(`触发生成任务失败: HTTP ${resp.status} ${resp.statusText}: ${text}`);
   }
 }
 
@@ -97,57 +98,57 @@ export async function triggerSubtreeGenerateSse(
     timeoutMs?: number
   }
 ): Promise<void> {
-  const apiBase = getBaseUrl().replace(/\/$/, '')
-  const batchSize = options?.batchSize ?? 50
-  const maxDepth = options?.maxDepth ?? 0
-  const timeoutMs = options?.timeoutMs ?? 30 * 60 * 1000
+  const apiBase = getBaseUrl().replace(/\/$/, '');
+  const batchSize = options?.batchSize ?? 50;
+  const maxDepth = options?.maxDepth ?? 0;
+  const timeoutMs = options?.timeoutMs ?? 30 * 60 * 1000;
 
-  const qs = new URLSearchParams()
-  qs.set('expandChildren', 'true')
-  qs.set('batchSize', String(batchSize))
-  qs.set('maxDepth', String(maxDepth))
-  qs.set('forceRegenerate', 'false')
-  qs.set('applyBoolean', 'false')
-  qs.set('exportInstances', 'true')
-  qs.set('mergeInstances', 'true')
+  const qs = new URLSearchParams();
+  qs.set('expandChildren', 'true');
+  qs.set('batchSize', String(batchSize));
+  qs.set('maxDepth', String(maxDepth));
+  qs.set('forceRegenerate', 'false');
+  qs.set('applyBoolean', 'false');
+  qs.set('exportInstances', 'true');
+  qs.set('mergeInstances', 'true');
 
-  const url = `${apiBase}/api/model/stream-generate-by-root/${encodeURIComponent(rootRefno)}?${qs.toString()}`
+  const url = `${apiBase}/api/model/stream-generate-by-root/${encodeURIComponent(rootRefno)}?${qs.toString()}`;
 
   await new Promise<void>((resolve, reject) => {
-    const es = new EventSource(url)
-    let done = false
+    const es = new EventSource(url);
+    let done = false;
 
     const timer = window.setTimeout(() => {
-      if (done) return
-      done = true
-      es.close()
-      reject(new Error(`SSE 超时: ${timeoutMs}ms`))
-    }, timeoutMs)
+      if (done) return;
+      done = true;
+      es.close();
+      reject(new Error(`SSE 超时: ${timeoutMs}ms`));
+    }, timeoutMs);
 
     function finishOk() {
-      if (done) return
-      done = true
-      window.clearTimeout(timer)
-      es.close()
-      resolve()
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      es.close();
+      resolve();
     }
 
     function finishErr(err: unknown) {
-      if (done) return
-      done = true
-      window.clearTimeout(timer)
-      es.close()
-      reject(err instanceof Error ? err : new Error(String(err)))
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      es.close();
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
 
     es.addEventListener('message', (ev) => {
       try {
-        const data = JSON.parse((ev as MessageEvent).data || '{}') as any
-        const type = String(data?.type || '')
+        const data = JSON.parse((ev as MessageEvent).data || '{}') as any;
+        const type = String(data?.type || '');
 
         if (type === 'started') {
-          options?.onUpdate?.({ stage: 'generate', message: data?.message })
-          return
+          options?.onUpdate?.({ stage: 'generate', message: data?.message });
+          return;
         }
         if (type === 'expandComplete') {
           options?.onUpdate?.({
@@ -156,8 +157,8 @@ export async function triggerSubtreeGenerateSse(
             completed: 0,
             total: Number(data?.expandedCount ?? 0),
             percent: 0,
-          })
-          return
+          });
+          return;
         }
         if (type === 'batchComplete') {
           options?.onUpdate?.({
@@ -167,67 +168,67 @@ export async function triggerSubtreeGenerateSse(
             total: Number(data?.totalCount ?? 0),
             percent: Number(data?.progress ?? 0),
             message: data?.warning ? String(data.warning) : undefined,
-          })
-          return
+          });
+          return;
         }
         if (type === 'batchFailed') {
-          finishErr(new Error(`SSE 批次失败: ${data?.error || 'unknown'}`))
-          return
+          finishErr(new Error(`SSE 批次失败: ${data?.error || 'unknown'}`));
+          return;
         }
         if (type === 'exportInstancesStarted') {
-          options?.onUpdate?.({ stage: 'exportInstances', message: data?.message })
-          return
+          options?.onUpdate?.({ stage: 'exportInstances', message: data?.message });
+          return;
         }
         if (type === 'exportInstancesFinished') {
-          options?.onUpdate?.({ stage: 'finished', message: 'instances 导出完成' })
-          finishOk()
-          return
+          options?.onUpdate?.({ stage: 'finished', message: 'instances 导出完成' });
+          finishOk();
+          return;
         }
         if (type === 'error') {
-          finishErr(new Error(String(data?.message || 'SSE error')))
+          finishErr(new Error(String(data?.message || 'SSE error')));
         }
       } catch (e) {
-        finishErr(e)
+        finishErr(e);
       }
-    })
+    });
 
     es.onerror = () => {
-      finishErr(new Error('SSE 连接失败/中断'))
-    }
-  })
+      finishErr(new Error('SSE 连接失败/中断'));
+    };
+  });
 }
 
 async function waitForInstancesFile(dbno: number, timeoutMs = 10 * 60 * 1000): Promise<void> {
-  const url = buildFilesOutputUrl(`instances/instances_${dbno}.json`)
-  const start = Date.now()
+  const url = buildFilesOutputUrl(`instances/instances_${dbno}.json`);
+  const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const resp = await fetch(url, { method: 'GET' })
-    if (resp.ok) return
+    const resp = await fetch(url, { method: 'GET' });
+    if (resp.ok) return;
     if (resp.status !== 404) {
-      const text = await resp.text().catch(() => '')
-      throw new Error(`等待 instances 文件失败: HTTP ${resp.status} ${resp.statusText}: ${text}`)
+      const text = await resp.text().catch(() => '');
+      throw new Error(`等待 instances 文件失败: HTTP ${resp.status} ${resp.statusText}: ${text}`);
     }
-    await new Promise((r) => setTimeout(r, 2000))
+    await new Promise((r) => setTimeout(r, 2000));
   }
-  throw new Error(`等待 instances_${dbno}.json 超时`)
+  throw new Error(`等待 instances_${dbno}.json 超时`);
 }
 
 export async function waitForDbnoInstancesFile(dbno: number, timeoutMs?: number): Promise<void> {
-  await waitForInstancesFile(dbno, timeoutMs)
-  invalidateDbnoInstancesManifestCache(dbno)
+  await waitForInstancesFile(dbno, timeoutMs);
+  invalidateDbnoInstancesManifestCache(dbno);
 }
 
 export async function ensureDbnoInstancesAvailable(dbno: number, options?: { autoGenerate?: boolean; timeoutMs?: number }): Promise<void> {
   try {
-    await fetchInstancesManifest(dbno)
-    return
+    await fetchInstancesManifest(dbno);
+    return;
   } catch (e) {
-    if (!(e instanceof InstancesJsonNotFoundError)) throw e
-    if (!options?.autoGenerate) throw e
-    await triggerDbnoGenerate(dbno)
-    await waitForInstancesFile(dbno, options?.timeoutMs)
-    invalidateDbnoInstancesManifestCache(dbno)
-    await fetchInstancesManifest(dbno)
+    if (!(e instanceof InstancesJsonNotFoundError)) throw e;
+    if (!options?.autoGenerate) throw e;
+    await triggerDbnoGenerate(dbno);
+    await waitForInstancesFile(dbno, options?.timeoutMs);
+    invalidateDbnoInstancesManifestCache(dbno);
+    await fetchInstancesManifest(dbno);
   }
 }
 
@@ -260,19 +261,19 @@ export type BatchGenerateBatchDone = {
 }
 
 function normalizeRefnoKeyForBatch(refno: string): string {
-  return String(refno || '').trim().replace('/', '_')
+  return String(refno || '').trim().replace('/', '_');
 }
 
 function uniqRefnos(list: string[]): string[] {
-  const out: string[] = []
-  const seen = new Set<string>()
+  const out: string[] = [];
+  const seen = new Set<string>();
   for (const raw of list) {
-    const key = normalizeRefnoKeyForBatch(raw)
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    out.push(key)
+    const key = normalizeRefnoKeyForBatch(raw);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
   }
-  return out
+  return out;
 }
 
 /**
@@ -293,26 +294,26 @@ export async function triggerBatchGenerateSse(
     mergeInstances?: boolean
   }
 ): Promise<{ successRefnos: string[]; failedRefnos: string[] }> {
-  const normalizedRefnos = uniqRefnos(refnos)
-  const total = normalizedRefnos.length
+  const normalizedRefnos = uniqRefnos(refnos);
+  const total = normalizedRefnos.length;
   if (total === 0) {
-    return { successRefnos: [], failedRefnos: [] }
+    return { successRefnos: [], failedRefnos: [] };
   }
 
-  const timeoutMs = options?.timeoutMs ?? 10 * 60 * 1000
-  const skipOnError = options?.skipOnError ?? true
-  const batchSize = Math.max(1, options?.batchSize ?? 50)
-  const exportInstances = options?.exportInstances ?? true
-  const mergeInstances = options?.mergeInstances ?? true
+  const timeoutMs = options?.timeoutMs ?? 10 * 60 * 1000;
+  const skipOnError = options?.skipOnError ?? true;
+  const batchSize = Math.max(1, options?.batchSize ?? 50);
+  const exportInstances = options?.exportInstances ?? true;
+  const mergeInstances = options?.mergeInstances ?? true;
 
-  const apiBase = getBaseUrl().replace(/\/$/, '')
-  const url = `${apiBase}/api/model/stream-generate`
+  const apiBase = getBaseUrl().replace(/\/$/, '');
+  const url = `${apiBase}/api/model/stream-generate`;
 
-  const controller = new AbortController()
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
-  const decoder = new TextDecoder()
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const decoder = new TextDecoder();
 
-  const successSet = new Set<string>()
+  const successSet = new Set<string>();
 
   options?.onUpdate?.({
     stage: 'generating',
@@ -320,7 +321,7 @@ export async function triggerBatchGenerateSse(
     completedCount: 0,
     totalCount: total,
     percent: 0,
-  })
+  });
 
   try {
     const resp = await fetch(url, {
@@ -340,38 +341,38 @@ export async function triggerBatchGenerateSse(
         mergeInstances,
       }),
       signal: controller.signal,
-    })
+    });
 
     if (!resp.ok) {
-      const text = await resp.text().catch(() => '')
-      throw new Error(`SSE 请求失败: HTTP ${resp.status} ${resp.statusText}: ${text}`)
+      const text = await resp.text().catch(() => '');
+      throw new Error(`SSE 请求失败: HTTP ${resp.status} ${resp.statusText}: ${text}`);
     }
     if (!resp.body) {
-      throw new Error('SSE 响应体为空')
+      throw new Error('SSE 响应体为空');
     }
 
-    const reader = resp.body.getReader()
-    let buffer = ''
+    const reader = resp.body.getReader();
+    let buffer = '';
 
     const handleEvent = async (rawBlock: string): Promise<void> => {
-      const block = rawBlock.replace(/\r/g, '')
-      if (!block.trim()) return
+      const block = rawBlock.replace(/\r/g, '');
+      if (!block.trim()) return;
 
-      const lines = block.split('\n')
+      const lines = block.split('\n');
       const dataLines = lines
         .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart())
-      if (dataLines.length === 0) return
+        .map((line) => line.slice(5).trimStart());
+      if (dataLines.length === 0) return;
 
-      let data: any
+      let data: any;
       try {
-        data = JSON.parse(dataLines.join('\n'))
+        data = JSON.parse(dataLines.join('\n'));
       } catch {
-        return
+        return;
       }
 
-      const type = String(data?.type || '')
-      if (!type) return
+      const type = String(data?.type || '');
+      if (!type) return;
 
       if (type === 'started') {
         options?.onUpdate?.({
@@ -380,35 +381,35 @@ export async function triggerBatchGenerateSse(
           completedCount: 0,
           totalCount: total,
           percent: 0,
-        })
-        return
+        });
+        return;
       }
 
       if (type === 'expandComplete') {
-        const expanded = Number(data?.expandedCount ?? total)
+        const expanded = Number(data?.expandedCount ?? total);
         options?.onUpdate?.({
           stage: 'generating',
           message: `请求集确认: ${expanded} 个`,
           completedCount: 0,
           totalCount: expanded > 0 ? expanded : total,
           percent: 0,
-        })
-        return
+        });
+        return;
       }
 
       if (type === 'batchComplete') {
-        const generatedRefnos = uniqRefnos(Array.isArray(data?.generatedRefnos) ? data.generatedRefnos : [])
-        const skippedRefnos = uniqRefnos(Array.isArray(data?.skippedRefnos) ? data.skippedRefnos : [])
-        const readyRefnos = uniqRefnos([...generatedRefnos, ...skippedRefnos])
+        const generatedRefnos = uniqRefnos(Array.isArray(data?.generatedRefnos) ? data.generatedRefnos : []);
+        const skippedRefnos = uniqRefnos(Array.isArray(data?.skippedRefnos) ? data.skippedRefnos : []);
+        const readyRefnos = uniqRefnos([...generatedRefnos, ...skippedRefnos]);
 
         for (const refno of readyRefnos) {
-          successSet.add(refno)
+          successSet.add(refno);
         }
 
-        const completedCount = Number(data?.completedCount ?? successSet.size)
-        const totalCount = Number(data?.totalCount ?? total)
-        const percent = Number(data?.progress ?? (totalCount > 0 ? (completedCount / totalCount) * 100 : 100))
-        const currentRefno = data?.currentRefno ? normalizeRefnoKeyForBatch(String(data.currentRefno)) : undefined
+        const completedCount = Number(data?.completedCount ?? successSet.size);
+        const totalCount = Number(data?.totalCount ?? total);
+        const percent = Number(data?.progress ?? (totalCount > 0 ? (completedCount / totalCount) * 100 : 100));
+        const currentRefno = data?.currentRefno ? normalizeRefnoKeyForBatch(String(data.currentRefno)) : undefined;
 
         options?.onUpdate?.({
           stage: 'generating',
@@ -417,7 +418,7 @@ export async function triggerBatchGenerateSse(
           completedCount,
           totalCount,
           percent,
-        })
+        });
 
         await options?.onBatchDone?.({
           generatedRefnos,
@@ -427,7 +428,7 @@ export async function triggerBatchGenerateSse(
           totalCount,
           percent,
           currentRefno,
-        })
+        });
 
         if (options?.onItemDone) {
           for (const refno of readyRefnos) {
@@ -437,21 +438,21 @@ export async function triggerBatchGenerateSse(
               completedCount,
               totalCount,
               percent,
-            })
+            });
           }
         }
-        return
+        return;
       }
 
       if (type === 'batchFailed') {
-        const skippedRefnos = uniqRefnos(Array.isArray(data?.skippedRefnos) ? data.skippedRefnos : [])
+        const skippedRefnos = uniqRefnos(Array.isArray(data?.skippedRefnos) ? data.skippedRefnos : []);
         for (const refno of skippedRefnos) {
-          successSet.add(refno)
+          successSet.add(refno);
         }
 
-        const completedCount = Number(data?.completedCount ?? successSet.size)
-        const totalCount = Number(data?.totalCount ?? total)
-        const percent = Number(data?.progress ?? (totalCount > 0 ? (completedCount / totalCount) * 100 : 100))
+        const completedCount = Number(data?.completedCount ?? successSet.size);
+        const totalCount = Number(data?.totalCount ?? total);
+        const percent = Number(data?.progress ?? (totalCount > 0 ? (completedCount / totalCount) * 100 : 100));
 
         if (skippedRefnos.length > 0) {
           await options?.onBatchDone?.({
@@ -461,7 +462,7 @@ export async function triggerBatchGenerateSse(
             completedCount,
             totalCount,
             percent,
-          })
+          });
         }
 
         if (options?.onItemDone) {
@@ -472,13 +473,13 @@ export async function triggerBatchGenerateSse(
               completedCount,
               totalCount,
               percent,
-            })
+            });
           }
         }
 
-        const errMsg = String(data?.error || 'SSE 批次失败')
+        const errMsg = String(data?.error || 'SSE 批次失败');
         if (!skipOnError) {
-          throw new Error(errMsg)
+          throw new Error(errMsg);
         }
 
         options?.onUpdate?.({
@@ -487,8 +488,8 @@ export async function triggerBatchGenerateSse(
           completedCount,
           totalCount,
           percent,
-        })
-        return
+        });
+        return;
       }
 
       if (type === 'exportInstancesStarted') {
@@ -498,8 +499,8 @@ export async function triggerBatchGenerateSse(
           completedCount: successSet.size,
           totalCount: total,
           percent: Math.min(99, Math.max(0, (successSet.size / Math.max(total, 1)) * 100)),
-        })
-        return
+        });
+        return;
       }
 
       if (type === 'finished') {
@@ -509,8 +510,8 @@ export async function triggerBatchGenerateSse(
           completedCount: total,
           totalCount: total,
           percent: 100,
-        })
-        return
+        });
+        return;
       }
 
       if (type === 'exportInstancesFinished') {
@@ -520,36 +521,36 @@ export async function triggerBatchGenerateSse(
           completedCount: total,
           totalCount: total,
           percent: 100,
-        })
-        return
+        });
+        return;
       }
 
       if (type === 'error') {
-        throw new Error(String(data?.message || 'SSE error'))
+        throw new Error(String(data?.message || 'SSE error'));
       }
-    }
+    };
 
     while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      buffer = buffer.replace(/\r\n/g, '\n')
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, '\n');
 
       while (true) {
-        const sep = buffer.indexOf('\n\n')
-        if (sep < 0) break
-        const block = buffer.slice(0, sep)
-        buffer = buffer.slice(sep + 2)
-        await handleEvent(block)
+        const sep = buffer.indexOf('\n\n');
+        if (sep < 0) break;
+        const block = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        await handleEvent(block);
       }
     }
 
     if (buffer.trim()) {
-      await handleEvent(buffer)
+      await handleEvent(buffer);
     }
 
-    const successRefnos = Array.from(successSet)
-    const failedRefnos = normalizedRefnos.filter((r) => !successSet.has(r))
+    const successRefnos = Array.from(successSet);
+    const failedRefnos = normalizedRefnos.filter((r) => !successSet.has(r));
 
     if (options?.onItemDone) {
       for (const refno of failedRefnos) {
@@ -559,7 +560,7 @@ export async function triggerBatchGenerateSse(
           completedCount: total,
           totalCount: total,
           percent: 100,
-        })
+        });
       }
     }
 
@@ -570,15 +571,15 @@ export async function triggerBatchGenerateSse(
       totalCount: total,
       percent: 100,
       failedRefnos,
-    })
+    });
 
-    return { successRefnos, failedRefnos }
+    return { successRefnos, failedRefnos };
   } catch (e) {
     if (controller.signal.aborted) {
-      throw new Error(`SSE 超时: ${timeoutMs}ms`)
+      throw new Error(`SSE 超时: ${timeoutMs}ms`);
     }
-    throw e
+    throw e;
   } finally {
-    window.clearTimeout(timer)
+    window.clearTimeout(timer);
   }
 }

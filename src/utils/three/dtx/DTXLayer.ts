@@ -38,16 +38,16 @@ import {
   Triangle
 } from 'three';
 
+import { DTXGeometry } from './DTXGeometry';
 import { DTXMaterial } from './DTXMaterial';
 import { DTXPickingMaterial } from './DTXPickingMaterial';
-import { DTXGeometry } from './DTXGeometry';
 
 // ========== 类型定义 ==========
 
 /**
  * 几何体句柄 - 添加几何体后返回
  */
-export interface GeometryHandle {
+export type GeometryHandle = {
   geoHash: string;
   vertexBase: number;
   vertexCount: number;
@@ -58,7 +58,7 @@ export interface GeometryHandle {
 /**
  * 对象句柄 - 添加对象后返回
  */
-export interface ObjectHandle {
+export type ObjectHandle = {
   objectId: string;
   objectIndex: number;
   geoHash: string;
@@ -67,7 +67,7 @@ export interface ObjectHandle {
 /**
  * DTX 对象内部数据
  */
-interface DTXObject {
+type DTXObject = {
   objectId: string;
   geoHash: string;
   objectIndex: number;
@@ -93,20 +93,20 @@ interface DTXObject {
 /**
  * PBR 材质参数
  */
-export interface PBRParams {
+export type PBRParams = {
   metalness?: number;
   roughness?: number;
   opacity?: number;
 }
 
-export interface MaterialParams extends PBRParams {
+export type MaterialParams = {
   color?: Color;
-}
+} & PBRParams
 
 /**
  * 材质调色板条目
  */
-export interface MaterialPaletteEntry {
+export type MaterialPaletteEntry = {
   color: Color;
   metalness: number;
   roughness: number;
@@ -116,7 +116,7 @@ export interface MaterialPaletteEntry {
 /**
  * 材质调色板配置
  */
-export interface MaterialPaletteConfig {
+export type MaterialPaletteConfig = {
   /** 最大材质数量 (默认 256) */
   maxMaterials?: number;
 }
@@ -124,7 +124,7 @@ export interface MaterialPaletteConfig {
 /**
  * DTXLayer 配置选项
  */
-export interface DTXLayerOptions {
+export type DTXLayerOptions = {
   /** 预估的最大顶点数 */
   maxVertices?: number;
   /** 预估的最大索引数 */
@@ -205,7 +205,7 @@ export class DTXLayer {
   // ========== 材质调色板 ==========
 
   /** 材质调色板: key -> index */
-  private _materialPalette: Map<string, number> = new Map();
+  private _materialPalette = new Map<string, number>();
   /** 材质调色板数据 (每材质 8 floats: r,g,b,metalness,roughness,opacity,0,0) */
   private _materialPaletteBuffer: Float32Array;
   /** 当前材质数量 */
@@ -214,9 +214,9 @@ export class DTXLayer {
   // ========== 几何注册表 ==========
 
   /** 几何体映射: geoHash -> GeometryHandle */
-  private _geometries: Map<string, GeometryHandle> = new Map();
+  private _geometries = new Map<string, GeometryHandle>();
   /** Outline 几何体缓存（LRU），避免反复从缓冲区拷贝 */
-  private _outlineGeometryCache: Map<string, BufferGeometry> = new Map();
+  private _outlineGeometryCache = new Map<string, BufferGeometry>();
   private _outlineGeometryCacheLimit = 128;
   /** 当前顶点偏移 */
   private _currentVertexOffset = 0;
@@ -230,7 +230,7 @@ export class DTXLayer {
   // ========== 对象注册表 ==========
 
   /** 对象映射: objectId -> DTXObject */
-  private _objects: Map<string, DTXObject> = new Map();
+  private _objects = new Map<string, DTXObject>();
   /** 对象索引数组 (用于快速按索引查找) */
   private _objectsArray: DTXObject[] = [];
   /** 当前对象数量 */
@@ -296,7 +296,7 @@ export class DTXLayer {
   /** 场景世界包围盒 (用于对外暴露) */
   private _sceneBoundingBox: Box3 = new Box3();
   /** 几何体局部包围盒缓存 */
-  private _geometryLocalBBoxes: Map<string, Box3> = new Map();
+  private _geometryLocalBBoxes = new Map<string, Box3>();
 
   // ========== 构造函数 ==========
 
@@ -321,7 +321,7 @@ export class DTXLayer {
     this._materialPaletteBuffer = new Float32Array(MAX_MATERIAL_PALETTE_SIZE * 8);
 
     if (this._debug) {
-      console.log(`🏗️ DTXLayer 初始化:`, {
+      console.log('🏗️ DTXLayer 初始化:', {
         maxVertices,
         maxIndices,
         maxObjects,
@@ -676,7 +676,7 @@ export class DTXLayer {
     this._totalObjects = this._objectCount;
 
     if (this._debug) {
-      console.log(`🔧 DTXLayer 编译:`, {
+      console.log('🔧 DTXLayer 编译:', {
         totalVertices: this._totalVertices,
         totalIndices: this._totalIndices,
         drawIndexCount: this._drawIndexCount,
@@ -705,7 +705,7 @@ export class DTXLayer {
     this._compiled = true;
 
     if (this._debug) {
-      console.log(`✅ DTXLayer 编译完成`);
+      console.log('✅ DTXLayer 编译完成');
     }
   }
 
@@ -1819,8 +1819,8 @@ export class DTXLayer {
       };
     };
 
-    const problems: Array<Record<string, any>> = [];
-    const summaries: Array<Record<string, any>> = [];
+    const problems: Record<string, any>[] = [];
+    const summaries: Record<string, any>[] = [];
 
     for (const objectId of objectIds) {
       const obj = this._objects.get(objectId);
@@ -2015,63 +2015,63 @@ export class DTXLayer {
     objectId: string,
     point: Vector3
   ): { point: Vector3; distance: number; triangle: [Vector3, Vector3, Vector3] } | null {
-    const data = this.getObjectGeometryData(objectId)
-    if (!data) return null
+    const data = this.getObjectGeometryData(objectId);
+    if (!data) return null;
 
-    const { geometry, matrix } = data
-    const posAttr = geometry.getAttribute('position') as BufferAttribute | undefined
-    const idxAttr = geometry.getIndex() as BufferAttribute | null
-    if (!posAttr) return null
+    const { geometry, matrix } = data;
+    const posAttr = geometry.getAttribute('position') as BufferAttribute | undefined;
+    const idxAttr = geometry.getIndex() as BufferAttribute | null;
+    if (!posAttr) return null;
 
-    const tri = new Triangle()
-    const a = new Vector3()
-    const b = new Vector3()
-    const c = new Vector3()
-    const tmp = new Vector3()
+    const tri = new Triangle();
+    const a = new Vector3();
+    const b = new Vector3();
+    const c = new Vector3();
+    const tmp = new Vector3();
 
-    let bestDistSq = Infinity
-    const bestPoint = new Vector3()
-    const bestA = new Vector3()
-    const bestB = new Vector3()
-    const bestC = new Vector3()
+    let bestDistSq = Infinity;
+    const bestPoint = new Vector3();
+    const bestA = new Vector3();
+    const bestB = new Vector3();
+    const bestC = new Vector3();
 
-    const indexCount = idxAttr ? idxAttr.count : posAttr.count
+    const indexCount = idxAttr ? idxAttr.count : posAttr.count;
     for (let i = 0; i + 2 < indexCount; i += 3) {
-      const ia = idxAttr ? idxAttr.getX(i) : i
-      const ib = idxAttr ? idxAttr.getX(i + 1) : i + 1
-      const ic = idxAttr ? idxAttr.getX(i + 2) : i + 2
+      const ia = idxAttr ? idxAttr.getX(i) : i;
+      const ib = idxAttr ? idxAttr.getX(i + 1) : i + 1;
+      const ic = idxAttr ? idxAttr.getX(i + 2) : i + 2;
 
-      a.fromBufferAttribute(posAttr, ia).applyMatrix4(matrix)
-      b.fromBufferAttribute(posAttr, ib).applyMatrix4(matrix)
-      c.fromBufferAttribute(posAttr, ic).applyMatrix4(matrix)
+      a.fromBufferAttribute(posAttr, ia).applyMatrix4(matrix);
+      b.fromBufferAttribute(posAttr, ib).applyMatrix4(matrix);
+      c.fromBufferAttribute(posAttr, ic).applyMatrix4(matrix);
 
-      tri.set(a, b, c)
-      tri.closestPointToPoint(point, tmp)
+      tri.set(a, b, c);
+      tri.closestPointToPoint(point, tmp);
 
-      const d2 = tmp.distanceToSquared(point)
+      const d2 = tmp.distanceToSquared(point);
       if (d2 < bestDistSq) {
-        bestDistSq = d2
-        bestPoint.copy(tmp)
-        bestA.copy(a)
-        bestB.copy(b)
-        bestC.copy(c)
+        bestDistSq = d2;
+        bestPoint.copy(tmp);
+        bestA.copy(a);
+        bestB.copy(b);
+        bestC.copy(c);
       }
     }
 
-    if (!Number.isFinite(bestDistSq)) return null
+    if (!Number.isFinite(bestDistSq)) return null;
 
     return {
       point: bestPoint.clone(),
       distance: Math.sqrt(bestDistSq),
       triangle: [bestA.clone(), bestB.clone(), bestC.clone()],
-    }
+    };
   }
 
   /**
    * 获取所有对象及其包围盒 (用于构建 K-D 树)
    */
-  getAllObjectsWithBounds(): Array<{ objectId: string; boundingBox: Box3 }> {
-    const result: Array<{ objectId: string; boundingBox: Box3 }> = [];
+  getAllObjectsWithBounds(): { objectId: string; boundingBox: Box3 }[] {
+    const result: { objectId: string; boundingBox: Box3 }[] = [];
     for (const [objectId, obj] of this._objects) {
       result.push({
         objectId,
@@ -2114,7 +2114,7 @@ export class DTXLayer {
     uniqueGeometries: number;
     uniqueMaterials: number;
     compiled: boolean;
-  } {
+    } {
     return {
       totalVertices: this._totalVertices,
       totalIndices: this._totalIndices,

@@ -1,15 +1,15 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test';
 
 const DEMO_BASE =
-  "/?dtx_demo=mbd_pipe&mbd_pipe_case=rebarviz_beam&mbd_dim_mode=rebarviz&mbd_arrow_size=34&mbd_arrow_angle=24&mbd_line_width=4";
+  '/?dtx_demo=mbd_pipe&mbd_pipe_case=rebarviz_beam&mbd_dim_mode=rebarviz&mbd_arrow_size=34&mbd_arrow_angle=24&mbd_line_width=4';
 
-test("mbd pipe arrow style gallery", async ({ page }) => {
+test('mbd pipe arrow style gallery', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
 
-  const styles = ["open", "filled", "tick"] as const;
+  const styles = ['open', 'filled', 'tick'] as const;
   for (const style of styles) {
     await page.goto(`${DEMO_BASE}&mbd_arrow_style=${style}`, {
-      waitUntil: "domcontentloaded",
+      waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
 

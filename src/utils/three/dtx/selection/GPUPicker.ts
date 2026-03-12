@@ -29,7 +29,7 @@ import {
 /**
  * 拾取结果
  */
-export interface PickResult {
+export type PickResult = {
   /** 对象 ID */
   objectId: string;
   /** 对象索引 */
@@ -146,7 +146,7 @@ export class GPUPicker {
         const size = this._pickRadius * 2 + 1;
         const centerIdx = Math.floor(size * size / 2) * 4;
         const rgba = Array.from(this._pixelBuffer.slice(centerIdx, centerIdx + 4));
-        // eslint-disable-next-line no-console
+         
         console.debug('[AIOS][GPUPicker] center RGBA:', rgba, { canvasPos, size });
       }
 

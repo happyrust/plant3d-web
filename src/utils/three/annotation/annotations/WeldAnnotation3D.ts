@@ -1,16 +1,18 @@
-import * as THREE from "three";
-import { AnnotationBase, type AnnotationOptions } from "../core/AnnotationBase";
-import type {
-  AnnotationMaterials,
-  AnnotationMaterialSet,
-} from "../core/AnnotationMaterials";
+import * as THREE from 'three';
+
+import { AnnotationBase, type AnnotationOptions } from '../core/AnnotationBase';
 import {
   SolveSpaceBillboardVectorText,
   type SolveSpaceLabelRenderStyle,
-} from "../text/SolveSpaceBillboardVectorText";
-import { worldPerPixelAt } from "../utils/solvespaceLike";
+} from '../text/SolveSpaceBillboardVectorText';
+import { worldPerPixelAt } from '../utils/solvespaceLike';
 
-export interface WeldAnnotation3DParams {
+import type {
+  AnnotationMaterials,
+  AnnotationMaterialSet,
+} from '../core/AnnotationMaterials';
+
+export type WeldAnnotation3DParams = {
   /** 焊缝位置 */
   position: THREE.Vector3;
   /** 焊缝标签 */
@@ -30,7 +32,7 @@ export interface WeldAnnotation3DParams {
 // 十字标记：两条独立线段（避免 Line2 折线连线导致出现斜线）
 export class WeldAnnotation3D extends AnnotationBase {
   private params: Required<
-    Omit<WeldAnnotation3DParams, "labelOffsetWorld" | "labelRenderStyle">
+    Omit<WeldAnnotation3DParams, 'labelOffsetWorld' | 'labelRenderStyle'>
   > & {
     labelOffsetWorld: THREE.Vector3 | null;
     labelRenderStyle?: SolveSpaceLabelRenderStyle;
@@ -73,18 +75,18 @@ export class WeldAnnotation3D extends AnnotationBase {
     this.lineGeometryV = new THREE.BufferGeometry();
     this.crossLineH = new THREE.Line(this.lineGeometryH, this.materialSet.line);
     this.crossLineV = new THREE.Line(this.lineGeometryV, this.materialSet.line);
-    this.crossLineH.userData.dragRole = "offset";
-    this.crossLineV.userData.dragRole = "offset";
+    this.crossLineH.userData.dragRole = 'offset';
+    this.crossLineV.userData.dragRole = 'offset';
     this.add(this.crossLineH, this.crossLineV);
 
     this.textLabel = new SolveSpaceBillboardVectorText({
-      text: "",
+      text: '',
       materialNormal: this.materialSet.line,
       materialHovered: materials.ssHovered.line,
       materialSelected: materials.ssSelected.line,
       renderStyle: this.params.labelRenderStyle,
     });
-    this.textLabel.object3d.userData.dragRole = "label";
+    this.textLabel.object3d.userData.dragRole = 'label';
     this.add(this.textLabel.object3d);
 
     this.rebuild();
@@ -142,11 +144,11 @@ export class WeldAnnotation3D extends AnnotationBase {
   setParams(params: Partial<WeldAnnotation3DParams>): void {
     if (params.position) this.params.position.copy(params.position);
     if (params.label !== undefined) this.params.label = params.label;
-    if ("subtitle" in params) this.params.subtitle = params.subtitle ?? null;
+    if ('subtitle' in params) this.params.subtitle = params.subtitle ?? null;
     if (params.isShop !== undefined) this.params.isShop = params.isShop;
     if (params.crossSize !== undefined)
       this.params.crossSize = params.crossSize;
-    if ("labelOffsetWorld" in params) {
+    if ('labelOffsetWorld' in params) {
       this.params.labelOffsetWorld = params.labelOffsetWorld?.clone() ?? null;
     }
     if (params.labelRenderStyle !== undefined) {
@@ -186,11 +188,11 @@ export class WeldAnnotation3D extends AnnotationBase {
     this.position.copy(position);
 
     this.lineGeometryH.setAttribute(
-      "position",
+      'position',
       new THREE.Float32BufferAttribute([-s, 0, 0, s, 0, 0], 3),
     );
     this.lineGeometryV.setAttribute(
-      "position",
+      'position',
       new THREE.Float32BufferAttribute([0, -s, 0, 0, s, 0], 3),
     );
 
@@ -198,8 +200,8 @@ export class WeldAnnotation3D extends AnnotationBase {
       subtitle !== null && subtitle !== undefined
         ? String(subtitle)
         : isShop
-          ? "车间焊"
-          : "现场焊";
+          ? '车间焊'
+          : '现场焊';
     this.textLabel.setText(
       subtitleText.trim().length > 0 ? `${label}\n${subtitleText}` : label,
     );
@@ -214,9 +216,9 @@ export class WeldAnnotation3D extends AnnotationBase {
     // SolveSpace 风格：selected > hovered > normal
     const state = this.interactionState;
     let lineMat: any;
-    if (state === "selected") {
+    if (state === 'selected') {
       lineMat = this.materials.ssSelected.line;
-    } else if (state === "hovered") {
+    } else if (state === 'hovered') {
       lineMat = this.materials.ssHovered.line;
     } else {
       lineMat = this._highlighted

@@ -12,7 +12,7 @@ import {
 } from 'lucide-vue-next';
 
 // 关联文件类型定义
-export interface AssociatedFile {
+export type AssociatedFile = {
   id: string;
   name: string;
   path: string;
@@ -21,7 +21,7 @@ export interface AssociatedFile {
   size?: string;
 }
 
-export interface FileCategory {
+export type FileCategory = {
   id: string;
   name: string;
   icon: string;
@@ -31,7 +31,7 @@ export interface FileCategory {
 }
 
 // Props
-interface Props {
+type Props = {
   modelRefNo?: string;
 }
 
@@ -237,27 +237,19 @@ function openFile(file: AssociatedFile) {
 
     <!-- 文件分类列表 -->
     <div class="space-y-2">
-      <div
-        v-for="category in fileCategories"
+      <div v-for="category in fileCategories"
         :key="category.id"
-        class="border rounded-lg overflow-hidden"
-      >
+        class="border rounded-lg overflow-hidden">
         <!-- 分类头部 -->
-        <button
-          class="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors text-left"
-          @click="toggleCategory(category.id)"
-        >
+        <button class="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors text-left"
+          @click="toggleCategory(category.id)">
           <!-- 展开/折叠图标 -->
-          <component
-            :is="category.expanded ? ChevronDown : ChevronRight"
-            class="h-4 w-4 text-gray-400 flex-shrink-0"
-          />
+          <component :is="category.expanded ? ChevronDown : ChevronRight"
+            class="h-4 w-4 text-gray-400 flex-shrink-0" />
 
           <!-- 分类图标 -->
-          <component
-            :is="getCategoryIcon(category.icon)"
-            class="h-5 w-5 text-blue-600 flex-shrink-0"
-          />
+          <component :is="getCategoryIcon(category.icon)"
+            class="h-5 w-5 text-blue-600 flex-shrink-0" />
 
           <!-- 分类名称 -->
           <div class="flex-1 min-w-0">
@@ -267,16 +259,12 @@ function openFile(file: AssociatedFile) {
 
           <!-- 状态汇总徽章 -->
           <div class="flex items-center gap-1 flex-shrink-0">
-            <span
-              v-if="getCategorySummary(category.files).error > 0"
-              class="px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700"
-            >
+            <span v-if="getCategorySummary(category.files).error > 0"
+              class="px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700">
               {{ getCategorySummary(category.files).error }}
             </span>
-            <span
-              v-if="getCategorySummary(category.files).warning > 0"
-              class="px-1.5 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700"
-            >
+            <span v-if="getCategorySummary(category.files).warning > 0"
+              class="px-1.5 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700">
               {{ getCategorySummary(category.files).warning }}
             </span>
             <span class="text-xs text-gray-500">
@@ -286,16 +274,12 @@ function openFile(file: AssociatedFile) {
         </button>
 
         <!-- 文件列表（展开时显示） -->
-        <div
-          v-if="category.expanded"
-          class="border-t bg-gray-50"
-        >
-          <div
-            v-for="file in category.files"
+        <div v-if="category.expanded"
+          class="border-t bg-gray-50">
+          <div v-for="file in category.files"
             :key="file.id"
             class="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-            @click="openFile(file)"
-          >
+            @click="openFile(file)">
             <!-- 文件图标 -->
             <FileSpreadsheet class="h-4 w-4 text-gray-400 flex-shrink-0" />
 
@@ -308,13 +292,11 @@ function openFile(file: AssociatedFile) {
             </div>
 
             <!-- 状态标签 -->
-            <span
-              :class="[
-                'px-2 py-0.5 text-xs rounded flex-shrink-0',
-                getStatusStyle(file.status).bg,
-                getStatusStyle(file.status).text,
-              ]"
-            >
+            <span :class="[
+              'px-2 py-0.5 text-xs rounded flex-shrink-0',
+              getStatusStyle(file.status).bg,
+              getStatusStyle(file.status).text,
+            ]">
               {{ getStatusStyle(file.status).label }}
             </span>
 
@@ -326,10 +308,8 @@ function openFile(file: AssociatedFile) {
     </div>
 
     <!-- 无文件提示 -->
-    <div
-      v-if="fileCategories.length === 0"
-      class="text-center py-6 text-gray-400 text-sm"
-    >
+    <div v-if="fileCategories.length === 0"
+      class="text-center py-6 text-gray-400 text-sm">
       暂无关联的校验文件
     </div>
   </div>

@@ -2,6 +2,7 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { chromium } from 'playwright';
 
 const __filename = fileURLToPath(import.meta.url);

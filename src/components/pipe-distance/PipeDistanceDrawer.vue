@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, watch, onUnmounted } from 'vue';
 
 import {
   Check,
@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-vue-next';
 
+import { usePipeDistanceAnnotationThree } from '@/composables/usePipeDistanceAnnotationThree';
 import { usePipeDistanceStore, type PipeDistanceResult } from '@/composables/usePipeDistanceStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -22,6 +23,17 @@ const toolStore = useToolStore();
 const ctx = useViewerContext();
 
 const isPicking = computed(() => toolStore.toolMode.value === 'pick_refno');
+
+// 3D 标注渲染
+const annotationVis = usePipeDistanceAnnotationThree(
+  computed(() => ctx.viewerRef.value),
+  store.results,
+  store.showAnnotations
+);
+
+onUnmounted(() => {
+  annotationVis.clearAnnotations();
+});
 
 // --- pick BRAN pipe ---
 function startPickBran() {
@@ -96,7 +108,6 @@ const clampedMaxAngle = computed({
 
 <template>
   <div>
-
     <!-- drawer panel -->
     <Transition name="pd-drawer-slide">
       <div v-if="open"
@@ -105,7 +116,6 @@ const clampedMaxAngle = computed({
         @pointerdown.stop
         @wheel.stop
         @click.stop>
-
         <!-- header -->
         <div class="flex items-center justify-between border-b border-border/60 px-4 py-3">
           <div class="text-sm font-semibold">距离标注控制</div>
@@ -118,12 +128,10 @@ const clampedMaxAngle = computed({
 
         <!-- scrollable content -->
         <div class="flex-1 overflow-auto">
-
           <!-- 1. 显示控制 -->
           <div class="border-b border-border/60 px-4 py-3">
             <label class="flex cursor-pointer items-center gap-2">
-              <span
-                class="flex h-4 w-4 items-center justify-center rounded"
+              <span class="flex h-4 w-4 items-center justify-center rounded"
                 :class="store.showAnnotations.value
                   ? 'bg-[#FF6B00]'
                   : 'border border-gray-300 bg-white'">

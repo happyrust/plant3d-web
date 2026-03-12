@@ -8,40 +8,34 @@
       </div>
       <div class="header-right">
         <!-- 连接状态 -->
-        <v-chip
-          :color="isWsConnected ? 'success' : 'warning'"
+        <v-chip :color="isWsConnected ? 'success' : 'warning'"
           size="small"
           variant="tonal"
-          class="mr-2"
-        >
+          class="mr-2">
           <v-icon start size="12">
             {{ isWsConnected ? 'mdi-wifi' : 'mdi-wifi-off' }}
           </v-icon>
           {{ isWsConnected ? '实时' : '轮询' }}
         </v-chip>
         <!-- 刷新按钮 -->
-        <v-btn
-          icon
+        <v-btn icon
           size="small"
           variant="text"
           :loading="loading"
-          @click="refresh"
-        >
+          @click="refresh">
           <v-icon size="18">mdi-refresh</v-icon>
         </v-btn>
       </div>
     </div>
 
     <!-- 错误提示 -->
-    <v-alert
-      v-if="error"
+    <v-alert v-if="error"
       type="error"
       variant="tonal"
       density="compact"
       closable
       class="mx-2 mt-2"
-      @click:close="error = null"
-    >
+      @click:close="error = null">
       {{ error }}
     </v-alert>
 
@@ -49,22 +43,18 @@
     <div v-if="systemMetrics" class="system-metrics">
       <div class="metric-item">
         <span class="metric-label">CPU</span>
-        <v-progress-linear
-          :model-value="systemMetrics.cpuUsage"
+        <v-progress-linear :model-value="systemMetrics.cpuUsage"
           :color="getMetricColor(systemMetrics.cpuUsage)"
           height="6"
-          rounded
-        />
+          rounded />
         <span class="metric-value">{{ systemMetrics.cpuUsage.toFixed(0) }}%</span>
       </div>
       <div class="metric-item">
         <span class="metric-label">内存</span>
-        <v-progress-linear
-          :model-value="systemMetrics.memoryUsage"
+        <v-progress-linear :model-value="systemMetrics.memoryUsage"
           :color="getMetricColor(systemMetrics.memoryUsage)"
           height="6"
-          rounded
-        />
+          rounded />
         <span class="metric-value">{{ systemMetrics.memoryUsage.toFixed(0) }}%</span>
       </div>
       <div class="metric-item">
@@ -79,27 +69,21 @@
         <span class="stat-count">{{ tasks.length }}</span>
         <span class="stat-label">全部</span>
       </div>
-      <div
-        class="stat-item"
+      <div class="stat-item"
         :class="{ active: filterStatus === 'running' }"
-        @click="filterStatus = 'running'"
-      >
+        @click="filterStatus = 'running'">
         <span class="stat-count running">{{ runningTaskCount }}</span>
         <span class="stat-label">运行中</span>
       </div>
-      <div
-        class="stat-item"
+      <div class="stat-item"
         :class="{ active: filterStatus === 'pending' }"
-        @click="filterStatus = 'pending'"
-      >
+        @click="filterStatus = 'pending'">
         <span class="stat-count pending">{{ pendingTaskCount }}</span>
         <span class="stat-label">等待中</span>
       </div>
-      <div
-        class="stat-item"
+      <div class="stat-item"
         :class="{ active: filterStatus === 'failed' }"
-        @click="filterStatus = 'failed'"
-      >
+        @click="filterStatus = 'failed'">
         <span class="stat-count failed">{{ tasksByStatus.failed.length }}</span>
         <span class="stat-label">失败</span>
       </div>
@@ -119,11 +103,9 @@
 
       <template v-else>
         <!-- 批量任务组（按 batch_id 聚合） -->
-        <div
-          v-for="batch in batchGroups"
+        <div v-for="batch in batchGroups"
           :key="batch.batchId"
-          class="batch-group"
-        >
+          class="batch-group">
           <div class="batch-header" @click="toggleBatch(batch.batchId)">
             <div class="batch-info">
               <v-icon size="16" class="mr-1">
@@ -134,23 +116,19 @@
               <v-chip size="x-small" variant="tonal" class="ml-2">
                 {{ batch.completedCount }}/{{ batch.totalCount }}
               </v-chip>
-              <v-chip
-                size="x-small"
+              <v-chip size="x-small"
                 :color="getBatchStatusColor(batch)"
                 variant="tonal"
-                class="ml-1"
-              >
+                class="ml-1">
                 {{ getBatchStatusLabel(batch) }}
               </v-chip>
             </div>
             <div class="batch-actions">
-              <v-btn
-                v-if="batch.pendingCount > 0"
+              <v-btn v-if="batch.pendingCount > 0"
                 size="x-small"
                 color="primary"
                 variant="tonal"
-                @click.stop="handleStartAllBatch(batch)"
-              >
+                @click.stop="handleStartAllBatch(batch)">
                 <v-icon start size="14">mdi-play-circle-outline</v-icon>
                 启动全部
               </v-btn>
@@ -158,12 +136,10 @@
           </div>
           <!-- 批量聚合进度条 -->
           <div class="batch-progress">
-            <v-progress-linear
-              :model-value="batch.aggregateProgress"
+            <v-progress-linear :model-value="batch.aggregateProgress"
               :color="getBatchStatusColor(batch)"
               height="6"
-              rounded
-            />
+              rounded />
             <span class="batch-progress-text">
               {{ Math.round(batch.aggregateProgress) }}%
               · 完成 {{ batch.completedCount }}/{{ batch.totalCount }}
@@ -171,30 +147,26 @@
           </div>
           <!-- 展开的子任务列表 -->
           <div v-if="expandedBatches.has(batch.batchId)" class="batch-children">
-            <TaskStatusCard
-              v-for="task in batch.tasks"
+            <TaskStatusCard v-for="task in batch.tasks"
               :key="task.id"
               :task="task"
               @start="handleStartTask"
               @stop="handleStopTask"
               @restart="handleRestartTask"
               @delete="handleDeleteTask"
-              @detail="handleDetailTask"
-            />
+              @detail="handleDetailTask" />
           </div>
         </div>
 
         <!-- 独立任务（无 batch_id 的） -->
-        <TaskStatusCard
-          v-for="task in standaloneTasks"
+        <TaskStatusCard v-for="task in standaloneTasks"
           :key="task.id"
           :task="task"
           @start="handleStartTask"
           @stop="handleStopTask"
           @restart="handleRestartTask"
           @delete="handleDeleteTask"
-          @detail="handleDetailTask"
-        />
+          @detail="handleDetailTask" />
       </template>
     </div>
 
@@ -204,23 +176,24 @@
     </div>
 
     <!-- 任务详情弹窗 -->
-    <TaskDetailModal
-      v-model="detailDialogOpen"
+    <TaskDetailModal v-model="detailDialogOpen"
       :task="detailTask"
       @start="handleStartTask"
       @stop="handleStopTask"
-      @restart="handleRestartTask"
-    />
+      @restart="handleRestartTask" />
   </div>
 </template>
 
 <!-- @ts-nocheck -->
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useTaskMonitor } from '@/composables/useTaskMonitor';
-import type { Task } from '@/types/task';
-import TaskStatusCard from './TaskStatusCard.vue';
+
 import TaskDetailModal from './TaskDetailModal.vue';
+import TaskStatusCard from './TaskStatusCard.vue';
+
+import type { Task } from '@/types/task';
+
+import { useTaskMonitor } from '@/composables/useTaskMonitor';
 
 // ============ 任务监控 ============
 // 后端支持的操作：start, stop, restart, delete

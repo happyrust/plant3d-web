@@ -4,6 +4,7 @@ import { computed, ref } from 'vue';
 import { ArrowLeft, CornerDownLeft, X } from 'lucide-vue-next';
 
 import type { WorkflowNode } from '@/types/auth';
+
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 const props = defineProps<{
@@ -49,11 +50,9 @@ function handleClose() {
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="visible"
+    <div v-if="visible"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      @click.self="handleClose"
-    >
+      @click.self="handleClose">
       <div class="w-full max-w-md rounded-lg bg-white shadow-xl dark:bg-gray-900">
         <!-- 头部 -->
         <div class="flex items-center justify-between border-b px-5 py-4">
@@ -83,8 +82,7 @@ function handleClose() {
           <div>
             <label class="mb-1.5 block text-sm text-gray-600 dark:text-gray-400">驳回目标节点</label>
             <div class="flex gap-2">
-              <button
-                v-for="node in availableTargetNodes"
+              <button v-for="node in availableTargetNodes"
                 :key="node.value"
                 type="button"
                 class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors"
@@ -93,8 +91,7 @@ function handleClose() {
                     ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
                     : 'border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800'
                 "
-                @click="targetNode = node.value"
-              >
+                @click="targetNode = node.value">
                 {{ node.label }}
               </button>
             </div>
@@ -106,31 +103,25 @@ function handleClose() {
               驳回原因
               <span class="text-red-500">*</span>
             </label>
-            <textarea
-              v-model="reason"
+            <textarea v-model="reason"
               class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-gray-700 dark:bg-gray-800"
               rows="3"
-              placeholder="请输入驳回原因（必填）..."
-            />
+              placeholder="请输入驳回原因（必填）..." />
             <p v-if="reason.length === 0" class="mt-1 text-xs text-red-500">驳回原因为必填项</p>
           </div>
         </div>
 
         <!-- 底部按钮 -->
         <div class="flex justify-end gap-2 border-t px-5 py-3">
-          <button
-            type="button"
+          <button type="button"
             class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-            @click="handleClose"
-          >
+            @click="handleClose">
             取消
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="flex items-center gap-1.5 rounded-md bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600 disabled:opacity-50"
             :disabled="!canConfirm || loading"
-            @click="handleConfirm"
-          >
+            @click="handleConfirm">
             <CornerDownLeft class="h-4 w-4" />
             确认驳回
           </button>

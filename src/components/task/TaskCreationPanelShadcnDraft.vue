@@ -37,18 +37,18 @@ const form = reactive({
   },
 });
 
-const taskTypeOptions: Array<{ label: string; value: TaskType }> = [
+const taskTypeOptions: { label: string; value: TaskType }[] = [
   { label: 'DataParsingWizard', value: 'DataParsingWizard' },
   { label: 'DataGeneration', value: 'DataGeneration' },
 ];
 
-const parseModeOptions: Array<{ label: string; value: ParseMode }> = [
+const parseModeOptions: { label: string; value: ParseMode }[] = [
   { label: 'All', value: 'all' },
   { label: 'DBNum', value: 'dbnum' },
   { label: 'RefNo', value: 'refno' },
 ];
 
-const actionGroups: Array<{ key: ActionKey; label: string }> = [
+const actionGroups: { key: ActionKey; label: string }[] = [
   { key: 'generateModels', label: 'Generate Models' },
   { key: 'generateMesh', label: 'Generate Mesh' },
   { key: 'generateSpatialTree', label: 'Generate SpatialTree' },
@@ -124,8 +124,7 @@ function handleStartTask() {
             <Input v-model="form.name" placeholder="例如：PARSE-BATCH-20260223" />
           </div>
           <div class="flex flex-wrap gap-2">
-            <button
-              v-for="typeOption in taskTypeOptions"
+            <button v-for="typeOption in taskTypeOptions"
               :key="typeOption.value"
               type="button"
               class="rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors"
@@ -134,8 +133,7 @@ function handleStartTask() {
                   ? 'border-foreground bg-foreground text-background'
                   : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               "
-              @click="setTaskType(typeOption.value)"
-            >
+              @click="setTaskType(typeOption.value)">
               {{ typeOption.label }}
             </button>
           </div>
@@ -144,8 +142,7 @@ function handleStartTask() {
         <section class="space-y-2 rounded-md border border-border bg-card p-3">
           <h3 class="text-xs font-semibold tracking-wide">解析目标区</h3>
           <div class="flex flex-wrap gap-2">
-            <button
-              v-for="modeOption in parseModeOptions"
+            <button v-for="modeOption in parseModeOptions"
               :key="modeOption.value"
               type="button"
               class="rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors"
@@ -154,16 +151,13 @@ function handleStartTask() {
                   ? 'border-foreground bg-foreground text-background'
                   : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               "
-              @click="setParseMode(modeOption.value)"
-            >
+              @click="setParseMode(modeOption.value)">
               {{ modeOption.label }}
             </button>
           </div>
-          <Input
-            v-if="form.parseMode !== 'all'"
+          <Input v-if="form.parseMode !== 'all'"
             v-model="form.targets"
-            :placeholder="form.parseMode === 'dbnum' ? '输入 DBNum，逗号分隔' : '输入 RefNo，逗号分隔'"
-          />
+            :placeholder="form.parseMode === 'dbnum' ? '输入 DBNum，逗号分隔' : '输入 RefNo，逗号分隔'" />
           <p class="text-[11px] text-emerald-700">将创建 {{ estimatedSubtasks }} 个子任务（预估）</p>
         </section>
 
@@ -171,13 +165,11 @@ function handleStartTask() {
           <h3 class="text-xs font-semibold tracking-wide">解析动作区</h3>
           <p class="text-[11px] text-muted-foreground">基础解析 + 高级重构（高密度开关矩阵）</p>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button
-              v-for="action in actionGroups"
+            <button v-for="action in actionGroups"
               :key="action.key"
               type="button"
               class="flex items-center justify-between rounded-md border border-border px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-accent"
-              @click="toggleAction(action.key)"
-            >
+              @click="toggleAction(action.key)">
               <span class="truncate pr-2">{{ action.label }}</span>
               <Badge :variant="form.actions[action.key] ? 'default' : 'secondary'" class="text-[10px]">
                 {{ form.actions[action.key] ? 'ON' : 'OFF' }}
@@ -194,15 +186,13 @@ function handleStartTask() {
               <span class="text-muted-foreground">Mesh Tol Ratio</span>
               <span class="font-medium">{{ form.meshTolRatio.toFixed(3) }}</span>
             </div>
-            <input
-              :value="form.meshTolRatio"
+            <input :value="form.meshTolRatio"
               type="range"
               min="0.001"
               max="0.2"
               step="0.001"
               class="w-full"
-              @input="updateMeshTolRatio(($event.target as HTMLInputElement).value)"
-            />
+              @input="updateMeshTolRatio(($event.target as HTMLInputElement).value)" />
           </div>
 
           <div class="space-y-1">
@@ -210,15 +200,13 @@ function handleStartTask() {
               <span class="text-muted-foreground">Max Concurrent</span>
               <span class="font-medium">{{ form.maxConcurrent }}</span>
             </div>
-            <input
-              :value="form.maxConcurrent"
+            <input :value="form.maxConcurrent"
               type="range"
               min="1"
               max="32"
               step="1"
               class="w-full"
-              @input="updateMaxConcurrent(($event.target as HTMLInputElement).value)"
-            />
+              @input="updateMaxConcurrent(($event.target as HTMLInputElement).value)" />
           </div>
         </section>
       </div>
@@ -228,8 +216,7 @@ function handleStartTask() {
       <p class="mb-2 text-[11px] text-muted-foreground">
         {{ canStart ? '配置检查通过，可直接启动任务' : '请至少填写任务名称' }}
       </p>
-      <button
-        type="button"
+      <button type="button"
         class="w-full rounded-md px-3 py-2 text-sm font-semibold transition-opacity"
         :class="
           canStart
@@ -237,8 +224,7 @@ function handleStartTask() {
             : 'cursor-not-allowed bg-muted text-muted-foreground opacity-60'
         "
         :disabled="!canStart"
-        @click="handleStartTask"
-      >
+        @click="handleStartTask">
         启动任务 (Start Task)
       </button>
     </div>

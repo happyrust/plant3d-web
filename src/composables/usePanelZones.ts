@@ -37,7 +37,7 @@ export function getZoneForPanel(panelId: string): ZoneName | undefined {
 // Per-zone collapsed state
 // ---------------------------------------------------------------------------
 
-interface ZoneState {
+type ZoneState = {
   /** Whether the zone is currently collapsed by the toggle button */
   collapsed: boolean;
   /** Panel IDs that were open when the zone was collapsed (used for restore) */

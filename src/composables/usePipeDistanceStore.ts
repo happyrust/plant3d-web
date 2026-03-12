@@ -6,6 +6,7 @@
 import { ref } from 'vue';
 
 import type { Vec3 } from '@/api/mbdPipeApi';
+
 import { getMbdPipeAnnotations } from '@/api/mbdPipeApi';
 import { detectPipeClearances } from '@/utils/three/geometry/clearance/detectPipeClearances';
 

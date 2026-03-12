@@ -4,32 +4,28 @@
     <div class="card-header">
       <div class="task-info">
         <span class="task-name">{{ task.name }}</span>
-        <v-chip
-          :color="statusDisplay.color"
+        <v-chip :color="statusDisplay.color"
           size="x-small"
           variant="tonal"
-          class="status-chip"
-        >
+          class="status-chip">
           {{ statusDisplay.label }}
         </v-chip>
       </div>
       <div class="task-type">
-	        <v-icon size="14" class="mr-1">
-	          {{ task.type === 'DataParsingWizard' ? 'mdi-database-search' : 'mdi-cube-outline' }}
-	        </v-icon>
+        <v-icon size="14" class="mr-1">
+          {{ task.type === 'DataParsingWizard' ? 'mdi-database-search' : 'mdi-cube-outline' }}
+        </v-icon>
         {{ typeDisplay }}
       </div>
     </div>
 
     <!-- 进度条 -->
     <div class="card-progress">
-      <v-progress-linear
-        :model-value="task.progress"
+      <v-progress-linear :model-value="task.progress"
         :color="progressColor"
         height="4"
         rounded
-        :indeterminate="task.status === 'running' && task.progress === 0"
-      />
+        :indeterminate="task.status === 'running' && task.progress === 0" />
       <span class="progress-text">
         {{ Math.round(task.progress) }}%
         <template v-if="task.totalItems && task.totalItems > 0">
@@ -70,13 +66,11 @@
         <v-chip size="x-small" color="primary" variant="flat" class="mr-1 mb-1">
           总数: {{ task.metadata.stats.total_generated }}
         </v-chip>
-        <v-chip
-          v-for="(count, noun) in task.metadata.stats.noun_counts"
+        <v-chip v-for="(count, noun) in task.metadata.stats.noun_counts"
           :key="noun"
           size="x-small"
           variant="tonal"
-          class="mr-1 mb-1"
-        >
+          class="mr-1 mb-1">
           {{ noun }}: {{ count }}
         </v-chip>
       </div>
@@ -99,68 +93,56 @@
     <div class="card-actions" @click.stop>
       <!-- 等待中：启动、删除 -->
       <template v-if="task.status === 'pending'">
-        <v-btn
-          size="x-small"
+        <v-btn size="x-small"
           color="primary"
           variant="tonal"
-          @click="$emit('start', task.id)"
-        >
+          @click="$emit('start', task.id)">
           <v-icon start size="14">mdi-play</v-icon>
           启动
         </v-btn>
-        <v-btn
-          size="x-small"
+        <v-btn size="x-small"
           color="error"
           variant="text"
-          @click="$emit('delete', task.id)"
-        >
+          @click="$emit('delete', task.id)">
           <v-icon start size="14">mdi-delete</v-icon>
           删除
         </v-btn>
       </template>
 
       <!-- 运行中：停止 -->
-      <v-btn
-        v-if="task.status === 'running'"
+      <v-btn v-if="task.status === 'running'"
         size="x-small"
         color="error"
         variant="tonal"
-        @click="$emit('stop', task.id)"
-      >
+        @click="$emit('stop', task.id)">
         <v-icon start size="14">mdi-stop</v-icon>
         停止
       </v-btn>
 
       <!-- 失败：重启、删除 -->
       <template v-if="task.status === 'failed'">
-        <v-btn
-          size="x-small"
+        <v-btn size="x-small"
           color="warning"
           variant="tonal"
-          @click="$emit('restart', task.id)"
-        >
+          @click="$emit('restart', task.id)">
           <v-icon start size="14">mdi-refresh</v-icon>
           重启
         </v-btn>
-        <v-btn
-          size="x-small"
+        <v-btn size="x-small"
           color="error"
           variant="text"
-          @click="$emit('delete', task.id)"
-        >
+          @click="$emit('delete', task.id)">
           <v-icon start size="14">mdi-delete</v-icon>
           删除
         </v-btn>
       </template>
 
       <!-- 已完成/已取消：删除 -->
-      <v-btn
-        v-if="task.status === 'completed' || task.status === 'cancelled'"
+      <v-btn v-if="task.status === 'completed' || task.status === 'cancelled'"
         size="x-small"
         color="error"
         variant="text"
-        @click="$emit('delete', task.id)"
-      >
+        @click="$emit('delete', task.id)">
         <v-icon start size="14">mdi-delete</v-icon>
         删除
       </v-btn>
@@ -171,7 +153,9 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed } from 'vue';
+
 import type { Task } from '@/types/task';
+
 import {
   getTaskTypeDisplayName,
   getTaskStatusDisplay,

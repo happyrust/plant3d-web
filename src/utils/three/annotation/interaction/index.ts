@@ -8,4 +8,4 @@ export {
   type AnnotationHitResult,
   type AnnotationInteractionEvent,
   type AnnotationInteractionCallback,
-} from './AnnotationInteractionController'
+} from './AnnotationInteractionController';

@@ -2,34 +2,26 @@
   <div v-if="projects.length > 1" class="model-project-selector">
     <div class="flex items-center gap-2">
       <Package class="h-4 w-4 text-muted-foreground" />
-      <select
-        v-model="selectedProjectId"
+      <select v-model="selectedProjectId"
         class="flex-1 h-8 px-2 text-sm border rounded bg-background"
         :disabled="isLoading"
-        @change="handleProjectChange"
-      >
+        @change="handleProjectChange">
         <option value="" disabled>选择模型项目</option>
-        <option
-          v-for="project in projects"
+        <option v-for="project in projects"
           :key="project.id"
-          :value="project.id"
-        >
+          :value="project.id">
           {{ project.name }}
         </option>
       </select>
-      <button
-        v-if="isLoading"
+      <button v-if="isLoading"
         class="h-8 w-8 rounded border bg-background animate-spin"
-        disabled
-      >
+        disabled>
         <RefreshCw class="h-4 w-4" />
       </button>
-      <button
-        v-else
+      <button v-else
         class="h-8 w-8 rounded border bg-background hover:bg-muted"
         title="刷新项目列表"
-        @click="loadProjects"
-      >
+        @click="loadProjects">
         <RefreshCw class="h-4 w-4" />
       </button>
     </div>

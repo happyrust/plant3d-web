@@ -10,46 +10,46 @@ const debugMode = ref(import.meta.env.DEV); // 开发环境默认开启
 const regenModelEnabled = ref(false); // 默认关闭，即使在开发环境下也是如此
 
 export function useModelSettingsStore() {
-    /**
+  /**
      * 是否为调试模式
      */
-    const isDebugMode = computed(() => debugMode.value);
+  const isDebugMode = computed(() => debugMode.value);
 
-    /**
+  /**
      * 是否开启 regen-model（强制重新生成模型）
      */
-    const isRegenModelEnabled = computed(() => regenModelEnabled.value);
+  const isRegenModelEnabled = computed(() => regenModelEnabled.value);
 
-    /**
+  /**
      * 设置调试模式
      */
-    function setDebugMode(enabled: boolean) {
-        debugMode.value = enabled;
-        // 调试模式关闭时，同步关闭 regen-model
-        if (!enabled) {
-            regenModelEnabled.value = false;
-        }
+  function setDebugMode(enabled: boolean) {
+    debugMode.value = enabled;
+    // 调试模式关闭时，同步关闭 regen-model
+    if (!enabled) {
+      regenModelEnabled.value = false;
     }
+  }
 
-    /**
+  /**
      * 设置 regen-model 选项
      */
-    function setRegenModelEnabled(enabled: boolean) {
-        regenModelEnabled.value = enabled;
-    }
+  function setRegenModelEnabled(enabled: boolean) {
+    regenModelEnabled.value = enabled;
+  }
 
-    /**
+  /**
      * 切换 regen-model 选项
      */
-    function toggleRegenModel() {
-        regenModelEnabled.value = !regenModelEnabled.value;
-    }
+  function toggleRegenModel() {
+    regenModelEnabled.value = !regenModelEnabled.value;
+  }
 
-    return {
-        isDebugMode,
-        isRegenModelEnabled,
-        setDebugMode,
-        setRegenModelEnabled,
-        toggleRegenModel,
-    };
+  return {
+    isDebugMode,
+    isRegenModelEnabled,
+    setDebugMode,
+    setRegenModelEnabled,
+    toggleRegenModel,
+  };
 }

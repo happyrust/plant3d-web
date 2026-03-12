@@ -1,12 +1,13 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 import { AlertCircle, ArrowRight, Calendar, FileText, Link, Paperclip, Plus, Users, X } from 'lucide-vue-next';
 
 import AssociatedFilesList from './AssociatedFilesList.vue';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
 import FileUploadSection from './FileUploadSection.vue';
+import { buildReviewAttachments } from './reviewAttachmentFlow';
 
 import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
@@ -65,7 +66,12 @@ async function addSelectedComponent() {
 }
 
 const uploadedFiles = ref<UploadedFile[]>([]);
+const uploadSectionRef = ref<{
+  startUpload: (lineage?: { taskId?: string | null; formId?: string | null }) => Promise<void>;
+    } | null>(null);
 const showExternalReview = ref(false);
+const createdTaskId = ref<string | null>(null);
+const createdTaskFormId = ref<string | null>(null);
 
 const isSubmitting = ref(false);
 const notification = ref<{ type: 'success' | 'error' | null; message: string; details?: string }>({
@@ -123,6 +129,10 @@ const formId = computed(() => {
   return embedModeParams.value.isEmbedMode ? embedModeParams.value.formId : null;
 });
 
+const activeUploadTaskId = computed(() => createdTaskId.value);
+const activeUploadFormId = computed(() => formId.value || createdTaskFormId.value);
+const canAutoUploadAttachments = computed(() => !!(activeUploadTaskId.value || activeUploadFormId.value));
+
 const currentProjectId = computed<string>(() => {
   // 优先使用嵌入模式的 projectId
   if (embedModeParams.value.projectId) {
@@ -173,6 +183,20 @@ function removeComponent(id: string) {
   selectedComponents.value = selectedComponents.value.filter((c) => c.id !== id);
 }
 
+function getUploadedAttachments() {
+  return buildReviewAttachments(uploadedFiles.value);
+}
+
+async function syncTaskAttachments(taskId: string) {
+  await userStore.updateTaskAttachments(taskId, getUploadedAttachments());
+}
+
+async function handleAttachmentUploadComplete() {
+  if (!createdTaskId.value) return;
+  await nextTick();
+  await syncTaskAttachments(createdTaskId.value);
+}
+
 async function handleSubmit() {
   if (!canSubmit.value) return;
 
@@ -180,15 +204,7 @@ async function handleSubmit() {
   isSubmitting.value = true;
 
   try {
-    const attachments = uploadedFiles.value
-      .filter((f) => f.status === 'success' && f.serverAttachmentId)
-      .map((f) => ({
-        id: f.serverAttachmentId!,
-        name: f.name,
-        url: f.serverUrl || '',
-        size: f.size,
-        mimeType: f.type || undefined,
-      }));
+    const attachments = getUploadedAttachments();
 
     const task = await userStore.createReviewTask({
       title: packageName.value,
@@ -203,13 +219,31 @@ async function handleSubmit() {
       attachments: attachments.length > 0 ? attachments : undefined,
     });
 
+    createdTaskId.value = task.id;
+    createdTaskFormId.value = task.formId || null;
+
+    const hasPendingUploads = uploadedFiles.value.some((f) => f.status === 'pending');
+    if (hasPendingUploads) {
+      await nextTick();
+      await uploadSectionRef.value?.startUpload({
+        taskId: task.id,
+        formId: task.formId || activeUploadFormId.value,
+      });
+      await nextTick();
+    }
+
+    await syncTaskAttachments(task.id);
+
+    const uploadedAttachmentCount = getUploadedAttachments().length;
+    const failedAttachmentCount = uploadedFiles.value.filter((f) => f.status === 'error').length;
+
     const checker = availableCheckers.value.find((r) => r.id === checkerId.value);
     const approver = availableApprovers.value.find((r) => r.id === approverId.value);
 
     notification.value = {
       type: 'success',
       message: '提资单创建成功！',
-      details: `数据包「${task.title}」已创建，校核人：${checker?.name}，审核人：${approver?.name}，包含 ${selectedComponents.value.length} 个构件`,
+      details: `数据包「${task.title}」已创建，校核人：${checker?.name}，审核人：${approver?.name}，包含 ${selectedComponents.value.length} 个构件，附件成功 ${uploadedAttachmentCount} 个${failedAttachmentCount > 0 ? `，失败 ${failedAttachmentCount} 个` : ''}`,
     };
 
     // 重置表单
@@ -221,6 +255,8 @@ async function handleSubmit() {
     dueDate.value = '';
     selectedComponents.value = [];
     uploadedFiles.value = [];
+    createdTaskId.value = null;
+    createdTaskFormId.value = null;
   } catch (error) {
     notification.value = {
       type: 'error',
@@ -328,12 +364,20 @@ function clearNotification() {
         <Paperclip class="h-4 w-4" />
         附件文件
       </label>
-      <FileUploadSection v-model="uploadedFiles"
+      <FileUploadSection ref="uploadSectionRef"
+        v-model="uploadedFiles"
         :max-files="10"
         :max-size="50"
-        accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg" />
+        :task-id="activeUploadTaskId"
+        :form-id="activeUploadFormId"
+        :auto-upload="canAutoUploadAttachments"
+        accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
+        @upload-complete="handleAttachmentUploadComplete" />
       <p class="text-xs text-gray-500">
         支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB
+      </p>
+      <p v-if="!canAutoUploadAttachments" class="text-xs text-amber-600">
+        当前将在创建提资单后自动上传附件，避免缺少 lineage 导致上传失败。
       </p>
     </div>
 

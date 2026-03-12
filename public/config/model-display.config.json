@@ -47,7 +47,7 @@
     },
     "TUBI": {
       "name": "管道",
-      "color": "#c9cdd3",
+      "color": "#315CF2",
       "metalness": 0.06,
       "roughness": 0.62,
       "clearcoat": 0.2

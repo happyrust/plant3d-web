@@ -5,7 +5,7 @@
 
 const API_BASE = 'http://localhost:8080';
 
-interface VisibleInstsResponse {
+type VisibleInstsResponse = {
   success: boolean;
   refno: string;
   refnos: string[];
@@ -29,9 +29,9 @@ async function queryVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
 }
 
 async function testQueryVisibleInsts(refno: string) {
-  console.log(`\n========================================`);
+  console.log('\n========================================');
   console.log(`测试 refno: ${refno}`);
-  console.log(`========================================\n`);
+  console.log('========================================\n');
 
   const startTime = Date.now();
 
@@ -51,7 +51,7 @@ async function testQueryVisibleInsts(refno: string) {
     }
 
     if (!resp.refnos || resp.refnos.length === 0) {
-      console.log(`⚠️ 没有返回可见实例`);
+      console.log('⚠️ 没有返回可见实例');
       return;
     }
 
@@ -59,24 +59,24 @@ async function testQueryVisibleInsts(refno: string) {
     const seen = new Set(resp.refnos);
     const duplicateCount = resp.refnos.length - seen.size;
 
-    console.log(`\n========================================`);
-    console.log(`测试完成`);
-    console.log(`========================================`);
+    console.log('\n========================================');
+    console.log('测试完成');
+    console.log('========================================');
     console.log(`总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
     console.log(`返回记录数: ${resp.refnos.length}`);
     console.log(`去重后记录数: ${seen.size}`);
     console.log(`重复记录数: ${duplicateCount}`);
 
     // 打印前 20 个和后 20 个 refnos
-    console.log(`\n前 20 个 refnos:`);
+    console.log('\n前 20 个 refnos:');
     console.log(resp.refnos.slice(0, 20).join('\n'));
 
     if (resp.refnos.length > 20) {
-      console.log(`\n后 20 个 refnos:`);
+      console.log('\n后 20 个 refnos:');
       console.log(resp.refnos.slice(-20).join('\n'));
     }
   } catch (e) {
-    console.error(`\n❌ 请求出错:`, e);
+    console.error('\n❌ 请求出错:', e);
   }
 }
 

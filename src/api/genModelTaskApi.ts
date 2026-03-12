@@ -11,6 +11,7 @@ import type {
   TaskActionResponse,
   SystemMetricsResponse,
 } from '@/types/task';
+
 import { useConsoleStore } from '@/composables/useConsoleStore';
 
 // ============ 后端配置类型 ============
@@ -156,7 +157,7 @@ export async function taskGetError(
 export async function taskGetLogs(
   taskId: string,
   options?: { level?: string; search?: string }
-): Promise<{ success: boolean; logs?: Array<{ level: string; message: string; timestamp: string }>; error_message?: string }> {
+): Promise<{ success: boolean; logs?: { level: string; message: string; timestamp: string }[]; error_message?: string }> {
   let path = `/api/tasks/${encodeURIComponent(taskId)}/logs`;
   const params = new URLSearchParams();
   if (options?.level) params.set('level', options.level);

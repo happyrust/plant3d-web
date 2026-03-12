@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
@@ -14,6 +16,16 @@ function inferBackendPortFromApiBase(apiBase: string | undefined): string {
   } catch {
     return '';
   }
+}
+
+function shouldServeLocalFiles(url: string | undefined): boolean {
+  if (!url) return false;
+
+  const pathname = url.split('?')[0] || '';
+  const relPath = pathname.replace(/^\/files\/?/, 'files/');
+  if (!relPath.startsWith('files/')) return false;
+
+  return existsSync(join(process.cwd(), 'public', decodeURIComponent(relPath)));
 }
 
 // https://vitejs.dev/config/
@@ -45,6 +57,12 @@ export default defineConfig(({ mode }) => {
         '/files': {
           target: backendTarget,
           changeOrigin: true,
+          bypass(req) {
+            if (shouldServeLocalFiles(req.url)) {
+              return req.url;
+            }
+            return undefined;
+          },
         },
       },
     },

@@ -2,7 +2,6 @@ import { computed, ref, shallowRef, watch } from 'vue';
 
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
-import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 
 import {
   roomTreeGetAncestors,
@@ -11,6 +10,7 @@ import {
   roomTreeSearch,
   type RoomTreeNodeDto,
 } from '@/api/genModelRoomTreeApi';
+import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 
 function dtoToTreeNode(dto: RoomTreeNodeDto, parentId: string | null): TreeNode {
   return {

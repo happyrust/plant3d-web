@@ -45,6 +45,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         label: '模型查询',
         items: [
           { kind: 'button', id: 'panel.query', label: '模型查询', icon: 'search', commandId: 'panel.query' },
+          { kind: 'button', id: 'panel.nearbyQuery', label: '周边查询', icon: 'map_marker_radius', commandId: 'panel.nearbyQuery' },
         ],
       },
       {
@@ -278,6 +279,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         items: [
           { kind: 'button', id: 'panel.mbdPipe', label: '管道标注', icon: 'ruler', commandId: 'panel.mbdPipe' },
           { kind: 'button', id: 'mbd.generate', label: '生成标注', icon: 'plus', commandId: 'mbd.generate' },
+          { kind: 'button', id: 'panel.pipeDistance', label: '管道距离', icon: 'activity', commandId: 'panel.pipeDistance' },
         ],
       },
       {

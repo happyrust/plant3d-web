@@ -162,6 +162,17 @@ export type MbdTagDto = {
   layout_hint?: MbdLayoutHint | null
 }
 
+export type MbdPipeClearanceDto = {
+  id: string
+  pipe1_refno: string
+  pipe2_refno: string
+  start: Vec3
+  end: Vec3
+  distance: number
+  text: string
+  layout_hint?: MbdLayoutHint | null
+}
+
 export type MbdPipeData = {
   input_refno: string
   branch_refno: string
@@ -175,6 +186,7 @@ export type MbdPipeData = {
   cut_tubis?: MbdCutTubiDto[]
   fittings?: MbdFittingDto[]
   tags?: MbdTagDto[]
+  pipe_clearances?: MbdPipeClearanceDto[]
   stats: MbdPipeStats
   debug_info?: MbdPipeDebugInfo
 }
@@ -221,24 +233,24 @@ export type MbdPipeQueryParams = {
 
 function getBaseUrl(): string {
   const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
-    .VITE_GEN_MODEL_API_BASE_URL
-  return (envBase && envBase.trim()) || ''
+    .VITE_GEN_MODEL_API_BASE_URL;
+  return (envBase && envBase.trim()) || '';
 }
 
 function toQueryString(params: Record<string, unknown>): string {
-  const sp = new URLSearchParams()
+  const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null) continue
-    if (typeof v === 'boolean') sp.set(k, v ? 'true' : 'false')
-    else sp.set(k, String(v))
+    if (v === undefined || v === null) continue;
+    if (typeof v === 'boolean') sp.set(k, v ? 'true' : 'false');
+    else sp.set(k, String(v));
   }
-  const s = sp.toString()
-  return s ? `?${s}` : ''
+  const s = sp.toString();
+  return s ? `?${s}` : '';
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = getBaseUrl().replace(/\/$/, '')
-  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`
+  const base = getBaseUrl().replace(/\/$/, '');
+  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
 
   const resp = await fetch(url, {
     ...init,
@@ -246,17 +258,17 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
       'Content-Type': 'application/json',
       ...(init?.headers || {}),
     },
-  })
+  });
 
   if (!resp.ok) {
-    const text = await resp.text().catch(() => '')
-    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`)
+    const text = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
   }
 
-  return (await resp.json()) as T
+  return (await resp.json()) as T;
 }
 
 export async function getMbdPipeAnnotations(refno: string, params: MbdPipeQueryParams = {}): Promise<MbdPipeResponse> {
-  const q = toQueryString(params as Record<string, unknown>)
-  return await fetchJson<MbdPipeResponse>(`/api/mbd/pipe/${encodeURIComponent(refno)}${q}`)
+  const q = toQueryString(params as Record<string, unknown>);
+  return await fetchJson<MbdPipeResponse>(`/api/mbd/pipe/${encodeURIComponent(refno)}${q}`);
 }

@@ -2,7 +2,7 @@
  * 性能分析：模拟隐藏操作，找出卡死原因
  */
 
-interface PerformanceStep {
+type PerformanceStep = {
   name: string;
   startTime: number;
   endTime?: number;
@@ -53,7 +53,7 @@ class PerformanceAnalyzer {
       const percentage = totalTime > 0 ? ((duration / totalTime) * 100).toFixed(1) : '0';
       console.log(`${step.name.padEnd(40)} ${duration.toFixed(2).padStart(10)}ms (${percentage}%)`);
       if (step.data) {
-        console.log(`  └─ 数据:`, step.data);
+        console.log('  └─ 数据:', step.data);
       }
     }
     
@@ -62,7 +62,7 @@ class PerformanceAnalyzer {
     // 找出最慢的步骤
     const sorted = [...this.steps].sort((a, b) => (b.duration || 0) - (a.duration || 0));
     if (sorted.length > 0) {
-      console.log(`\n最慢的步骤:`);
+      console.log('\n最慢的步骤:');
       sorted.slice(0, 5).forEach((step, i) => {
         console.log(`  ${i + 1}. ${step.name}: ${step.duration?.toFixed(2)}ms`);
       });
@@ -128,10 +128,10 @@ function simulateSetVisibleBatch(refnoCount: number, batchSize: number): number 
 async function simulateHideOperation(refno: string, refnoCount: number) {
   const analyzer = new PerformanceAnalyzer();
   
-  console.log(`\n========================================`);
+  console.log('\n========================================');
   console.log(`模拟隐藏操作: ${refno}`);
   console.log(`预计处理 ${refnoCount} 个 refnos`);
-  console.log(`========================================\n`);
+  console.log('========================================\n');
   
   // 1. 查询子树 refnos
   analyzer.start('1. 查询子树 refnos (API 调用)', { refno });

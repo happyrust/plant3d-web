@@ -1,6 +1,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+
 import { Surreal } from 'surrealdb';
 
 const remoteUrl = ref('ws://localhost:8020');
@@ -20,7 +21,7 @@ async function runBenchmark() {
   isRunning.value = true;
   logs.value = [];
   
-  appendLog(`🚀 Starting SurrealDB Sync Benchmark`);
+  appendLog('🚀 Starting SurrealDB Sync Benchmark');
   appendLog(`Remote: ${remoteUrl.value}`);
   appendLog(`Local:  ${localDbUrl.value}`);
   appendLog(`DBNum:  ${dbnum.value}`);
@@ -30,23 +31,23 @@ async function runBenchmark() {
 
   try {
     // 1. Connect
-    appendLog(`[1/5] Connecting to databases...`);
+    appendLog('[1/5] Connecting to databases...');
     await remote.connect(remoteUrl.value);
     await remote.signin({ username: 'root', password: 'root' });
     await remote.use({ namespace: '1516', database: 'AvevaMarineSample' });
-    appendLog(` ✅ Remote connected.`);
+    appendLog(' ✅ Remote connected.');
 
     await local.connect(localDbUrl.value);
     await local.use({ namespace: '1516', database: 'AvevaMarineSample' });
-    appendLog(` ✅ Local (IndexedDB) connected.`);
+    appendLog(' ✅ Local (IndexedDB) connected.');
 
     // 2. Clear Local Data
     appendLog(`[2/5] Cleaning local data for dbnum ${dbnum.value}...`);
     await local.query(`DELETE pe WHERE dbnum = ${dbnum.value}`);
-    appendLog(` ✅ Local clean-up done.`);
+    appendLog(' ✅ Local clean-up done.');
 
     // 3. Fetch Data from Remote
-    appendLog(`[3/5] Fetching data from remote...`);
+    appendLog('[3/5] Fetching data from remote...');
     const startTimeFetch = performance.now();
     
     // Fetch PE
@@ -56,7 +57,7 @@ async function runBenchmark() {
 
     // Fetch InstRelate
     const refnos = pes.map(p => p.id);
-    const instRelateResult = await remote.query<any>(`SELECT * FROM inst_relate WHERE id IN $ids`, { ids: refnos });
+    const instRelateResult = await remote.query<any>('SELECT * FROM inst_relate WHERE id IN $ids', { ids: refnos });
     const insts = instRelateResult[0] as any[];
     appendLog(` 📦 Fetched ${insts.length} inst_relate records.`);
 
@@ -64,20 +65,20 @@ async function runBenchmark() {
     appendLog(` ⏱️  Fetching took: ${((endTimeFetch - startTimeFetch) / 1000).toFixed(2)}s`);
 
     // 4. Sync to Local
-    appendLog(`[4/5] Syncing to local IndexedDB...`);
+    appendLog('[4/5] Syncing to local IndexedDB...');
     const startTimeSync = performance.now();
 
     const batchSize = 100;
     
     // Sync PE
-	    appendLog(`  -> Syncing PE...`);
+	    appendLog('  -> Syncing PE...');
 	    for (let i = 0; i < pes.length; i += batchSize) {
 	      const batch = pes.slice(i, i + batchSize);
 	      await Promise.all(batch.map(p => local.create(p.id).content(p)));
 	    }
 
     // Sync InstRelate
-	    appendLog(`  -> Syncing InstRelate...`);
+	    appendLog('  -> Syncing InstRelate...');
 	    for (let i = 0; i < insts.length; i += batchSize) {
 	      const batch = insts.slice(i, i + batchSize);
 	      await Promise.all(batch.map(ins => local.create(ins.id).content(ins)));
@@ -91,12 +92,12 @@ async function runBenchmark() {
     appendLog(` 📈 Speed: ${(totalRecords / syncDuration).toFixed(2)} records/s`);
 
     // 5. Verification
-    appendLog(`[5/5] Verifying local data...`);
+    appendLog('[5/5] Verifying local data...');
     const verifyResult = await local.query<any>(`SELECT count() FROM pe WHERE dbnum = ${dbnum.value} GROUP ALL`);
     const count = (verifyResult[0] as any[])[0]?.count || 0;
     appendLog(` ✅ Local count for dbnum ${dbnum.value}: ${count}`);
 
-    appendLog(`\n🎉 Benchmark Completed Successfully!`);
+    appendLog('\n🎉 Benchmark Completed Successfully!');
 
   } catch (err) {
     appendLog(`❌ Error: ${err instanceof Error ? err.message : String(err)}`);

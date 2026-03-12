@@ -3,11 +3,11 @@ import { computed, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 
 import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 
+import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import {
   applyEmbedLandingState,
   resolveEmbedLandingTarget,
 } from '@/components/review/embedRoleLanding';
-import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import {
@@ -283,6 +283,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'nearbyQuery') {
+    return dockApi.addPanel({
+      id: 'nearbyQuery',
+      component: 'NearbyQueryPanel',
+      title: '周边查询',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'modelQuery') {
     return dockApi.addPanel({
       id: 'modelQuery',
@@ -544,6 +556,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.query':
       togglePanel('modelQuery');
+      return;
+    case 'panel.nearbyQuery':
+      togglePanel('nearbyQuery');
       return;
     case 'panel.ptset':
       togglePanel('ptset');

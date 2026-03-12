@@ -6,11 +6,15 @@ const STORAGE_KEY = 'viewer_display_theme';
 const DEFAULT_THEME: DisplayTheme = 'design3d';
 
 function loadPersistedTheme(): DisplayTheme {
-  if (typeof window === 'undefined' || !window.localStorage) return DEFAULT_THEME;
+  if (typeof window === 'undefined' || !window.localStorage || typeof window.localStorage.getItem !== 'function') {
+    return DEFAULT_THEME;
+  }
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (raw === 'design3d') return 'design3d';
   if (raw === 'default') {
-    window.localStorage.setItem(STORAGE_KEY, DEFAULT_THEME);
+    if (typeof window.localStorage.setItem === 'function') {
+      window.localStorage.setItem(STORAGE_KEY, DEFAULT_THEME);
+    }
   }
   return DEFAULT_THEME;
 }
@@ -22,7 +26,11 @@ export function useDisplayThemeStore() {
 
   function setDisplayTheme(theme: DisplayTheme) {
     currentTheme.value = theme;
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (
+      typeof window !== 'undefined'
+      && window.localStorage
+      && typeof window.localStorage.setItem === 'function'
+    ) {
       window.localStorage.setItem(STORAGE_KEY, theme);
     }
   }

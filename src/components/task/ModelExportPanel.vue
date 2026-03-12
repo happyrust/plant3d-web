@@ -15,45 +15,37 @@
     <div class="panel-content">
       <div class="form-group">
         <label class="form-label required">参考号 (RefNo)</label>
-        <v-text-field
-          v-model="formData.refno"
+        <v-text-field v-model="formData.refno"
           placeholder="请输入参考号，如: 17496_106028"
           variant="outlined"
           density="compact"
           :error-messages="errors.refno"
-          @blur="validateRefno"
-        />
+          @blur="validateRefno" />
         <div class="hint-text">格式: DBNUM_REFNUM</div>
       </div>
 
       <div class="form-group">
         <label class="form-label">导出选项</label>
         <div class="checkbox-group">
-          <v-checkbox
-            v-model="formData.regenModel"
+          <v-checkbox v-model="formData.regenModel"
             label="重新生成模型 (--regen-model)"
             density="compact"
-            hide-details
-          />
-          <v-checkbox
-            v-model="formData.exportObj"
+            hide-details />
+          <v-checkbox v-model="formData.exportObj"
             label="导出 OBJ 文件 (--export-obj)"
             density="compact"
-            hide-details
-          />
+            hide-details />
         </div>
       </div>
 
       <div class="form-group">
         <label class="form-label">优先级</label>
-        <v-select
-          v-model="formData.priority"
+        <v-select v-model="formData.priority"
           :items="priorityOptions"
           item-title="label"
           item-value="value"
           variant="outlined"
-          density="compact"
-        />
+          density="compact" />
       </div>
 
       <!-- 命令预览 -->
@@ -65,45 +57,37 @@
       </div>
 
       <!-- 错误提示 -->
-      <v-alert
-        v-if="submitError"
+      <v-alert v-if="submitError"
         type="error"
         variant="tonal"
         density="compact"
-        class="mt-4"
-      >
+        class="mt-4">
         {{ submitError }}
       </v-alert>
 
       <!-- 成功提示 -->
-      <v-alert
-        v-if="createdTaskId"
+      <v-alert v-if="createdTaskId"
         type="success"
         variant="tonal"
         density="compact"
-        class="mt-4"
-      >
+        class="mt-4">
         <div class="success-content">
           <span>任务创建成功！ID: {{ createdTaskId }}</span>
-          <v-btn
-            v-if="taskCompleted"
+          <v-btn v-if="taskCompleted"
             size="small"
             color="primary"
             variant="tonal"
             class="ml-2"
             :loading="downloading"
-            @click="handleDownload"
-          >
+            @click="handleDownload">
             <v-icon size="16" class="mr-1">mdi-download</v-icon>
             下载
           </v-btn>
-          <v-chip
-            v-else
+          <v-chip v-else
             size="small"
             :color="taskStatusColor"
             variant="tonal"
-            class="ml-2"
-          >
+            class="ml-2">
             {{ taskStatusLabel }}
           </v-chip>
         </div>
@@ -116,20 +100,16 @@
         重置
       </v-btn>
       <v-spacer />
-      <v-btn
-        v-if="!createdTaskId"
+      <v-btn v-if="!createdTaskId"
         color="primary"
         :loading="loading"
         :disabled="!canSubmit"
-        @click="handleSubmit"
-      >
+        @click="handleSubmit">
         创建任务
       </v-btn>
-      <v-btn
-        v-else
+      <v-btn v-else
         color="primary"
-        @click="handleCreateAnother"
-      >
+        @click="handleCreateAnother">
         继续创建
       </v-btn>
     </div>
@@ -139,8 +119,10 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue';
-import { taskCreate, taskGetById, taskDownloadExport } from '@/api/genModelTaskApi';
+
 import type { TaskPriority, TaskStatus } from '@/types/task';
+
+import { taskCreate, taskGetById, taskDownloadExport } from '@/api/genModelTaskApi';
 
 // ============ Emits ============
 const emit = defineEmits<{

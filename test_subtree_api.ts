@@ -4,7 +4,7 @@
 
 const API_BASE = 'http://localhost:8080';
 
-interface SubtreeRefnosResponse {
+type SubtreeRefnosResponse = {
   success: boolean;
   refnos: string[];
   truncated: boolean;
@@ -30,9 +30,9 @@ async function querySubtreeRefnos(refno: string, limit?: number): Promise<Subtre
 }
 
 async function test(refno: string) {
-  console.log(`\n========================================`);
+  console.log('\n========================================');
   console.log(`测试 refno: ${refno}`);
-  console.log(`========================================\n`);
+  console.log('========================================\n');
 
   try {
     const startTime = Date.now();
@@ -49,15 +49,15 @@ async function test(refno: string) {
       return;
     }
 
-    console.log(`\n前 20 个 refnos:`);
+    console.log('\n前 20 个 refnos:');
     console.log(resp.refnos.slice(0, 20).join('\n'));
 
     if (resp.refnos.length > 20) {
-      console.log(`\n后 20 个 refnos:`);
+      console.log('\n后 20 个 refnos:');
       console.log(resp.refnos.slice(-20).join('\n'));
     }
   } catch (e) {
-    console.error(`\n❌ 请求出错:`, e);
+    console.error('\n❌ 请求出错:', e);
   }
 }
 

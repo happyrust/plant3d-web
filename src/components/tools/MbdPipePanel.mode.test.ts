@@ -1,28 +1,28 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { createApp, nextTick, ref } from "vue";
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApp, nextTick, ref } from 'vue';
 
-vi.mock("@/composables/useUnitSettingsStore", () => ({
+vi.mock('@/composables/useUnitSettingsStore', () => ({
   useUnitSettingsStore: () => ({
-    displayUnit: ref("mm"),
+    displayUnit: ref('mm'),
     precision: ref(1),
     setDisplayUnit: vi.fn(),
     setPrecision: vi.fn(),
   }),
 }));
 
-import MbdPipePanel from "./MbdPipePanel.vue";
+import MbdPipePanel from './MbdPipePanel.vue';
 
 function createVisStub() {
   return {
-    uiTab: ref("settings"),
-    mbdViewMode: ref("construction"),
-    dimTextMode: ref("backend"),
+    uiTab: ref('settings'),
+    mbdViewMode: ref('construction'),
+    dimTextMode: ref('backend'),
     dimOffsetScale: ref(1),
     dimLabelT: ref(0.5),
-    dimMode: ref("classic"),
+    dimMode: ref('classic'),
     rebarvizArrowSizePx: ref(16),
     rebarvizArrowAngleDeg: ref(18),
-    rebarvizArrowStyle: ref("open"),
+    rebarvizArrowStyle: ref('open'),
     rebarvizLineWidthPx: ref(2.2),
     isVisible: ref(true),
     showDims: ref(true),
@@ -65,7 +65,7 @@ function createVisStub() {
   } as any;
 }
 
-describe("MbdPipePanel mode controls", () => {
+describe('MbdPipePanel mode controls', () => {
   let host: HTMLDivElement | null = null;
 
   afterEach(() => {
@@ -73,9 +73,9 @@ describe("MbdPipePanel mode controls", () => {
     host = null;
   });
 
-  it("应展示当前模式并支持切换与重置", async () => {
+  it('应展示当前模式并支持切换与重置', async () => {
     const vis = createVisStub();
-    host = document.createElement("div");
+    host = document.createElement('div');
     document.body.appendChild(host);
 
     const app = createApp(MbdPipePanel, { vis });
@@ -86,13 +86,13 @@ describe("MbdPipePanel mode controls", () => {
       '[data-testid="mbd-view-mode"]',
     ) as HTMLSelectElement | null;
     expect(modeSelect).toBeTruthy();
-    expect(modeSelect?.value).toBe("construction");
+    expect(modeSelect?.value).toBe('construction');
 
-    modeSelect!.value = "inspection";
-    modeSelect!.dispatchEvent(new Event("change"));
+    modeSelect!.value = 'inspection';
+    modeSelect!.dispatchEvent(new Event('change'));
     await nextTick();
 
-    expect(vis.mbdViewMode.value).toBe("inspection");
+    expect(vis.mbdViewMode.value).toBe('inspection');
 
     const resetButton = host.querySelector(
       '[data-testid="mbd-view-mode-reset"]',
@@ -105,12 +105,12 @@ describe("MbdPipePanel mode controls", () => {
     app.unmount();
   });
 
-  it("应基于 fittings.kind 统计弯头、支管和法兰分类", async () => {
+  it('应基于 fittings.kind 统计弯头、支管和法兰分类', async () => {
     const vis = createVisStub();
     vis.currentData.value = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -119,10 +119,10 @@ describe("MbdPipePanel mode controls", () => {
       bends: [],
       cut_tubis: [],
       fittings: [
-        { id: "f1", refno: "f1", noun: "FITT", kind: "elbo", anchor_point: [0, 0, 0] },
-        { id: "f2", refno: "f2", noun: "FITT", kind: "tee", anchor_point: [1, 0, 0] },
-        { id: "f3", refno: "f3", noun: "FITT", kind: "flan", anchor_point: [2, 0, 0] },
-        { id: "f4", refno: "f4", noun: "FITT", kind: "bend", anchor_point: [3, 0, 0] },
+        { id: 'f1', refno: 'f1', noun: 'FITT', kind: 'elbo', anchor_point: [0, 0, 0] },
+        { id: 'f2', refno: 'f2', noun: 'FITT', kind: 'tee', anchor_point: [1, 0, 0] },
+        { id: 'f3', refno: 'f3', noun: 'FITT', kind: 'flan', anchor_point: [2, 0, 0] },
+        { id: 'f4', refno: 'f4', noun: 'FITT', kind: 'bend', anchor_point: [3, 0, 0] },
       ],
       tags: [],
       stats: {
@@ -137,16 +137,16 @@ describe("MbdPipePanel mode controls", () => {
       },
     } as any;
 
-    host = document.createElement("div");
+    host = document.createElement('div');
     document.body.appendChild(host);
 
     const app = createApp(MbdPipePanel, { vis });
     app.mount(host);
     await nextTick();
 
-    expect(host.textContent).toContain("elbows=2");
-    expect(host.textContent).toContain("branches=1");
-    expect(host.textContent).toContain("flanges=1");
+    expect(host.textContent).toContain('elbows=2');
+    expect(host.textContent).toContain('branches=1');
+    expect(host.textContent).toContain('flanges=1');
 
     app.unmount();
   });

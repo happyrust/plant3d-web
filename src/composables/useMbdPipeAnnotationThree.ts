@@ -7,7 +7,8 @@
  * - 缩放独立（装饰件/文字）
  */
 
-import { ref, type Ref, watch, shallowRef, markRaw, toRaw } from "vue";
+import { ref, type Ref, watch, shallowRef, markRaw, toRaw } from 'vue';
+
 import {
   Box3,
   BufferGeometry,
@@ -21,10 +22,9 @@ import {
   Matrix4,
   Scene,
   Vector3,
-} from "three";
-import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+} from 'three';
+import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
-import type { DtxViewer } from "@/viewer/dtx/DtxViewer";
 import type {
   MbdPipeData,
   MbdCutTubiDto,
@@ -39,34 +39,34 @@ import type {
   MbdPipeSegmentDto,
   MbdPipeViewMode,
   Vec3 as ApiVec3,
-} from "@/api/mbdPipeApi";
+} from '@/api/mbdPipeApi';
+import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
-import { computeMbdDimOffset } from "@/composables/mbd/computeMbdDimOffset";
+import { computeMbdDimOffset } from '@/composables/mbd/computeMbdDimOffset';
 import {
   computePipeAlignedOffsetDirs,
   findSegmentOffsetDir,
-} from "@/composables/mbd/computePipeAlignedOffsetDirs";
+} from '@/composables/mbd/computePipeAlignedOffsetDirs';
 import {
   getMbdDimensionModeConfig,
   resolveMbdDimensionMaterialSet,
   type MbdDimensionMode,
   type MbdDimensionModeConfig,
-} from "@/composables/mbd/mbdDimensionMode";
-import { useUnitSettingsStore } from "@/composables/useUnitSettingsStore";
+} from '@/composables/mbd/mbdDimensionMode';
 import {
   useBackgroundStore,
   getPreset,
-} from "@/composables/useBackgroundStore";
-
+} from '@/composables/useBackgroundStore';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import {
   AnnotationMaterials,
   LinearDimension3D,
   WeldAnnotation3D,
   SlopeAnnotation3D,
   AngleDimension3D,
-} from "@/utils/three/annotation";
-import { computeDimensionOffsetDirInLocal } from "@/utils/three/annotation/utils/computeDimensionOffsetDirInLocal";
-import { formatLengthMeters } from "@/utils/unitFormat";
+} from '@/utils/three/annotation';
+import { computeDimensionOffsetDirInLocal } from '@/utils/three/annotation/utils/computeDimensionOffsetDirInLocal';
+import { formatLengthMeters } from '@/utils/unitFormat';
 
 export type UseMbdPipeAnnotationThreeReturn = {
   /** MBD 面板当前页签（仅 UI 状态） */
@@ -75,7 +75,7 @@ export type UseMbdPipeAnnotationThreeReturn = {
   mbdViewMode: Ref<MbdPipeViewMode>;
 
   /** 尺寸文字来源：backend=用后端 text；auto=按当前单位/精度自动计算 */
-  dimTextMode: Ref<"backend" | "auto">;
+  dimTextMode: Ref<'backend' | 'auto'>;
   /** 尺寸偏移倍率（作用于 computeMbdDimOffset 结果；仅对未手动拖拽覆盖的尺寸生效） */
   dimOffsetScale: Ref<number>;
   /** 尺寸标签位置比例（0..1；仅对未手动拖拽覆盖的尺寸生效） */
@@ -87,7 +87,7 @@ export type UseMbdPipeAnnotationThreeReturn = {
   /** RebarViz 模式：箭头半角（deg） */
   rebarvizArrowAngleDeg: Ref<number>;
   /** RebarViz 模式：箭头样式（open/filled/tick） */
-  rebarvizArrowStyle: Ref<"open" | "filled" | "tick">;
+  rebarvizArrowStyle: Ref<'open' | 'filled' | 'tick'>;
   /** RebarViz 模式：尺寸线宽（px） */
   rebarvizLineWidthPx: Ref<number>;
 
@@ -101,6 +101,8 @@ export type UseMbdPipeAnnotationThreeReturn = {
   showDimOverall: Ref<boolean>;
   /** 元件端口间距（kind=port） */
   showDimPort: Ref<boolean>;
+  /** 管道间平行距离标注 */
+  showPipeClearances: Ref<boolean>;
   showCutTubis: Ref<boolean>;
   showElbows: Ref<boolean>;
   showBranches: Ref<boolean>;
@@ -164,13 +166,13 @@ export type MbdDimOverride = {
 };
 
 export type MbdPipeUiTab =
-  | "dims"
-  | "welds"
-  | "slopes"
-  | "bends"
-  | "attrs"
-  | "segments"
-  | "settings";
+  | 'dims'
+  | 'welds'
+  | 'slopes'
+  | 'bends'
+  | 'attrs'
+  | 'segments'
+  | 'settings';
 
 function clamp01(n: number, fallback: number): number {
   const v = Number(n);
@@ -216,7 +218,7 @@ function resolveDimDisplayText(
   unit: string,
   precision: number,
 ): string {
-  const backend = String(backendText ?? "").trim();
+  const backend = String(backendText ?? '').trim();
   if (useBackendText && backend.length > 0) return backend;
 
   const a = startLocal.clone().applyMatrix4(globalMatrix);
@@ -257,24 +259,24 @@ function resolveLayeredDimOffset(
 
 function resolveSemanticDimOffset(
   baseOffset: number,
-  role: "segment" | "chain" | "overall" | "port" | "cut_tubi",
+  role: 'segment' | 'chain' | 'overall' | 'port' | 'cut_tubi',
   hint?: MbdLayoutHint | null,
 ): number {
   const layered = resolveLayeredDimOffset(baseOffset, hint);
-  if (role === "chain") {
+  if (role === 'chain') {
     return layered + Math.max(baseOffset * 0.55, 420);
   }
-  if (role === "overall") {
+  if (role === 'overall') {
     return layered + Math.max(baseOffset * 0.75, 520);
   }
-  if (role === "cut_tubi") {
+  if (role === 'cut_tubi') {
     return layered + Math.max(baseOffset * 0.12, 80);
   }
   return layered;
 }
 
 function stableAlternatingSign(seed?: string | null): number {
-  const raw = String(seed ?? "").trim();
+  const raw = String(seed ?? '').trim();
   if (!raw) return 1;
   let hash = 0;
   for (let i = 0; i < raw.length; i++) {
@@ -311,7 +313,7 @@ function resolveFloatingLabelOffset(
   if (
     primaryAxis &&
     primaryAxis.lengthSq() >= 1e-9 &&
-    `${hint?.label_role ?? ""}`.includes("tubi")
+    `${hint?.label_role ?? ''}`.includes('tubi')
   ) {
     const axialGap = clampNumber(baseOffset * 0.2, 24, 96, 40);
     offset.addScaledVector(
@@ -329,57 +331,57 @@ function recordSuppressedAnnotation(
   counter.value += 1;
 }
 
-type MbdFittingKind = "elbow" | "branch" | "flange";
-type MbdTagKind = MbdFittingKind | "tubi" | "other";
+type MbdFittingKind = 'elbow' | 'branch' | 'flange';
+type MbdTagKind = MbdFittingKind | 'tubi' | 'other';
 
 function classifyFitting(fitting: MbdFittingDto): MbdFittingKind {
-  const raw = `${fitting.kind ?? ""} ${fitting.noun ?? ""}`.toUpperCase();
+  const raw = `${fitting.kind ?? ''} ${fitting.noun ?? ''}`.toUpperCase();
   if (
-    raw.includes("TEE") ||
-    raw.includes("BRANCH") ||
-    raw.includes("OLET")
+    raw.includes('TEE') ||
+    raw.includes('BRANCH') ||
+    raw.includes('OLET')
   ) {
-    return "branch";
+    return 'branch';
   }
-  if (raw.includes("FLAN")) return "flange";
-  return "elbow";
+  if (raw.includes('FLAN')) return 'flange';
+  return 'elbow';
 }
 
 function classifyTag(tag: MbdTagDto): MbdTagKind {
-  const raw = `${tag.role ?? ""} ${tag.noun ?? ""}`.toUpperCase();
-  if (raw.includes("TUBI")) return "tubi";
-  if (raw.includes("TEE") || raw.includes("BRANCH") || raw.includes("OLET")) {
-    return "branch";
+  const raw = `${tag.role ?? ''} ${tag.noun ?? ''}`.toUpperCase();
+  if (raw.includes('TUBI')) return 'tubi';
+  if (raw.includes('TEE') || raw.includes('BRANCH') || raw.includes('OLET')) {
+    return 'branch';
   }
-  if (raw.includes("FLAN")) return "flange";
-  if (raw.includes("ELBO") || raw.includes("BEND")) return "elbow";
-  return "other";
+  if (raw.includes('FLAN')) return 'flange';
+  if (raw.includes('ELBO') || raw.includes('BEND')) return 'elbow';
+  return 'other';
 }
 
 function canRenderFittingGeometry(fitting: MbdFittingDto): boolean {
   const kind = classifyFitting(fitting);
   if (
-    kind === "elbow" &&
+    kind === 'elbow' &&
     fitting.angle != null &&
     fitting.face_center_1 &&
     fitting.face_center_2
   ) {
     return true;
   }
-  return String(fitting.text ?? "").trim().length > 0;
+  return String(fitting.text ?? '').trim().length > 0;
 }
 
 function shouldSuppressTag(tag: MbdTagDto, data: MbdPipeData): boolean {
   const tagKind = classifyTag(tag);
-  if (tagKind === "tubi" && (data.cut_tubis?.length ?? 0) > 0) {
+  if (tagKind === 'tubi' && (data.cut_tubis?.length ?? 0) > 0) {
     return true;
   }
   if (
-    tagKind === "elbow" &&
+    tagKind === 'elbow' &&
     (data.fittings ?? []).some(
       (fitting) =>
         fitting.refno === tag.refno &&
-        classifyFitting(fitting) === "elbow" &&
+        classifyFitting(fitting) === 'elbow' &&
         canRenderFittingGeometry(fitting),
     )
   ) {
@@ -389,10 +391,10 @@ function shouldSuppressTag(tag: MbdTagDto, data: MbdPipeData): boolean {
 }
 
 function resolveTagPriority(kind: MbdTagKind): number {
-  if (kind === "branch") return 0;
-  if (kind === "flange") return 1;
-  if (kind === "elbow") return 2;
-  if (kind === "tubi") return 3;
+  if (kind === 'branch') return 0;
+  if (kind === 'flange') return 1;
+  if (kind === 'elbow') return 2;
+  if (kind === 'tubi') return 3;
   return 4;
 }
 
@@ -420,17 +422,17 @@ export function useMbdPipeAnnotationThree(
   const unitSettings = useUnitSettingsStore();
 
   // UI 状态（MbdPipePanel 使用）
-  const uiTab = ref<MbdPipeUiTab>("dims");
-  const mbdViewMode = ref<MbdPipeViewMode>("construction");
+  const uiTab = ref<MbdPipeUiTab>('dims');
+  const mbdViewMode = ref<MbdPipeViewMode>('construction');
 
   // MBD 尺寸显示配置
-  const dimTextMode = ref<"backend" | "auto">("backend");
+  const dimTextMode = ref<'backend' | 'auto'>('backend');
   const dimOffsetScale = ref<number>(1);
   const dimLabelT = ref<number>(0.5);
-  const dimMode = ref<MbdDimensionMode>("rebarviz");
-  const rebarvizDefaults = getMbdDimensionModeConfig("rebarviz");
-  const rebarvizArrowStyle = ref<"open" | "filled" | "tick">(
-    rebarvizDefaults.arrowStyle === "filled" ? "filled" : "open",
+  const dimMode = ref<MbdDimensionMode>('rebarviz');
+  const rebarvizDefaults = getMbdDimensionModeConfig('rebarviz');
+  const rebarvizArrowStyle = ref<'open' | 'filled' | 'tick'>(
+    rebarvizDefaults.arrowStyle === 'filled' ? 'filled' : 'open',
   );
   const rebarvizArrowSizePx = ref<number>(rebarvizDefaults.arrowSizePx);
   const rebarvizArrowAngleDeg = ref<number>(rebarvizDefaults.arrowAngleDeg);
@@ -442,6 +444,7 @@ export function useMbdPipeAnnotationThree(
   const showDimChain = ref(true);
   const showDimOverall = ref(false);
   const showDimPort = ref(false);
+  const showPipeClearances = ref(true);
   const showCutTubis = ref(true);
   const showElbows = ref(true);
   const showBranches = ref(true);
@@ -460,7 +463,7 @@ export function useMbdPipeAnnotationThree(
 
   // 标注组
   const group = markRaw(new Group());
-  group.name = "dtx-mbd-pipe-v2";
+  group.name = 'dtx-mbd-pipe-v2';
   group.renderOrder = 981;
   group.matrixAutoUpdate = false;
 
@@ -481,6 +484,7 @@ export function useMbdPipeAnnotationThree(
     AngleDimension3D | WeldAnnotation3D
   >();
   const tagAnnotations = new Map<string, WeldAnnotation3D>();
+  const pipeClearanceAnnotations = new Map<string, LinearDimension3D>();
   const anchorDebugMarkers = new Map<string, LineSegments>();
   const ownerSegmentDebugLines = new Map<string, Line>();
 
@@ -512,8 +516,8 @@ export function useMbdPipeAnnotationThree(
   function applyModeDefaults(mode: MbdPipeViewMode): void {
     mbdViewMode.value = mode;
     showDims.value = true;
-    if (mode === "inspection") {
-      dimMode.value = "rebarviz";
+    if (mode === 'inspection') {
+      dimMode.value = 'rebarviz';
       showDimSegment.value = false;
       showDimChain.value = false;
       showDimOverall.value = false;
@@ -531,7 +535,7 @@ export function useMbdPipeAnnotationThree(
       return;
     }
 
-    dimMode.value = "rebarviz";
+    dimMode.value = 'rebarviz';
     showDimSegment.value = false;
     showDimChain.value = true;
     showDimOverall.value = false;
@@ -554,12 +558,12 @@ export function useMbdPipeAnnotationThree(
 
   function getRuntimeModeConfig(): MbdDimensionModeConfig {
     const base = getMbdDimensionModeConfig(dimMode.value);
-    if (dimMode.value !== "rebarviz") return base;
+    if (dimMode.value !== 'rebarviz') return base;
     const arrowStyle =
-      rebarvizArrowStyle.value === "filled" ||
-      rebarvizArrowStyle.value === "tick"
+      rebarvizArrowStyle.value === 'filled' ||
+      rebarvizArrowStyle.value === 'tick'
         ? rebarvizArrowStyle.value
-        : "open";
+        : 'open';
     return {
       ...base,
       arrowStyle,
@@ -586,7 +590,7 @@ export function useMbdPipeAnnotationThree(
     void container;
     if (!legacyCss2dRenderer) {
       legacyCss2dRenderer = new CSS2DRenderer();
-      legacyCss2dRenderer.domElement.style.display = "none";
+      legacyCss2dRenderer.domElement.style.display = 'none';
     }
     legacyCss2dRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
     return legacyCss2dRenderer;
@@ -655,6 +659,12 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).dispose();
     }
     slopeAnnotations.clear();
+
+    // 清理管道间距离标注
+    for (const annotation of pipeClearanceAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    pipeClearanceAnnotations.clear();
 
     // 清理弯头标注
     for (const annotation of bendAnnotations.values()) {
@@ -749,13 +759,13 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of dimAnnotations.values()) {
       const ann = asRaw(annotation);
       const kind = ((ann.userData as any)?.mbdDimKind ??
-        "segment") as MbdDimKind;
+        'segment') as MbdDimKind;
       const declutterHidden = !!(ann.userData as any)?.mbdDeclutterHidden;
       const kindVisible =
-        (kind === "segment" && showDimSegment.value) ||
-        (kind === "chain" && showDimChain.value) ||
-        (kind === "overall" && showDimOverall.value) ||
-        (kind === "port" && showDimPort.value);
+        (kind === 'segment' && showDimSegment.value) ||
+        (kind === 'chain' && showDimChain.value) ||
+        (kind === 'overall' && showDimOverall.value) ||
+        (kind === 'port' && showDimPort.value);
       ann.visible =
         isVisible.value && showDims.value && kindVisible && !declutterHidden;
     }
@@ -774,6 +784,11 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).visible = isVisible.value && showSlopes.value;
     }
 
+    // 管道间距离标注可见性
+    for (const annotation of pipeClearanceAnnotations.values()) {
+      asRaw(annotation).visible = isVisible.value && showPipeClearances.value;
+    }
+
     // 弯头标注可见性
     for (const annotation of bendAnnotations.values()) {
       asRaw(annotation).visible = isVisible.value && showBends.value;
@@ -781,27 +796,27 @@ export function useMbdPipeAnnotationThree(
 
     for (const annotation of fittingAnnotations.values()) {
       const kind = ((asRaw(annotation).userData as any)?.mbdFittingKind ??
-        "elbow") as MbdFittingKind;
+        'elbow') as MbdFittingKind;
       const visible =
-        (kind === "elbow" && showElbows.value) ||
-        (kind === "branch" && showBranches.value) ||
-        (kind === "flange" && showFlanges.value);
+        (kind === 'elbow' && showElbows.value) ||
+        (kind === 'branch' && showBranches.value) ||
+        (kind === 'flange' && showFlanges.value);
       asRaw(annotation).visible = isVisible.value && visible;
     }
 
     for (const annotation of tagAnnotations.values()) {
       const raw = asRaw(annotation);
       const kind = ((raw.userData as any)?.mbdTagKind ??
-        "other") as MbdTagKind;
+        'other') as MbdTagKind;
       const declutterHidden = !!(raw.userData as any)?.mbdDeclutterHidden;
       const visible =
-        kind === "tubi"
+        kind === 'tubi'
           ? showCutTubis.value
-          : kind === "elbow"
+          : kind === 'elbow'
             ? showElbows.value
-            : kind === "branch"
+            : kind === 'branch'
               ? showBranches.value
-            : kind === "flange"
+              : kind === 'flange'
                 ? showFlanges.value
                 : true;
       raw.visible = isVisible.value && visible && !declutterHidden;
@@ -917,7 +932,7 @@ export function useMbdPipeAnnotationThree(
     for (const d of dims) {
       const start = new Vector3(d.start[0], d.start[1], d.start[2]);
       const end = new Vector3(d.end[0], d.end[1], d.end[2]);
-      const kind = (d.kind ?? "segment") as MbdDimKind;
+      const kind = (d.kind ?? 'segment') as MbdDimKind;
 
       // 计算偏移方向：优先 layout_hint，其次管道拓扑，再次相机方向；都失败则抑制该错误线
       const hintedDir = resolveLayoutDirection(d.layout_hint);
@@ -957,16 +972,16 @@ export function useMbdPipeAnnotationThree(
       const finalLabelT = ov?.labelT ?? 0.5;
       const finalLabelOffsetWorld = ov?.labelOffsetWorld
         ? new Vector3(
-            ov.labelOffsetWorld[0],
-            ov.labelOffsetWorld[1],
-            ov.labelOffsetWorld[2],
-          )
+          ov.labelOffsetWorld[0],
+          ov.labelOffsetWorld[1],
+          ov.labelOffsetWorld[2],
+        )
         : null;
       const finalIsReference = ov?.isReference ?? false;
 
-      dimTextById.value.set(d.id, String(d.text ?? ""));
+      dimTextById.value.set(d.id, String(d.text ?? ''));
 
-      const useBackendText = dimTextMode.value === "backend";
+      const useBackendText = dimTextMode.value === 'backend';
       const text = resolveDimDisplayText(
         d.text,
         useBackendText,
@@ -1018,10 +1033,10 @@ export function useMbdPipeAnnotationThree(
   }
 
   function applyPortDimLabelDeclutter(): void {
-    const portAnnotations: Array<[string, LinearDimension3D]> = [];
+    const portAnnotations: [string, LinearDimension3D][] = [];
     for (const [dimId, dim] of dimAnnotations.entries()) {
-      const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? "segment") as MbdDimKind;
-      if (kind === "port") portAnnotations.push([dimId, asRaw(dim)]);
+      const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
+      if (kind === 'port') portAnnotations.push([dimId, asRaw(dim)]);
     }
     if (portAnnotations.length <= 1) return;
 
@@ -1108,8 +1123,8 @@ export function useMbdPipeAnnotationThree(
 
     for (const dim of dimAnnotations.values()) {
       if (!dim.visible) continue;
-      const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? "segment") as MbdDimKind;
-      if (kind !== "chain" && kind !== "overall") continue;
+      const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
+      if (kind !== 'chain' && kind !== 'overall') continue;
       placed.push(getAnnotationLabelWorldPos(asRaw(dim)));
     }
 
@@ -1165,15 +1180,15 @@ export function useMbdPipeAnnotationThree(
     if (tagAnnotations.size <= 0) return;
 
     const occupied: Vector3[] = [];
-    const placedTagMeta: Array<{ kind: MbdTagKind; text: string; pos: Vector3 }> = [];
+    const placedTagMeta: { kind: MbdTagKind; text: string; pos: Vector3 }[] = [];
     const minGap = 0.7;
     const duplicateElbowGap = 1.35;
 
     for (const dim of dimAnnotations.values()) {
       const rawDim = asRaw(dim);
       if (!rawDim.visible) continue;
-      const kind = ((rawDim.userData as any)?.mbdDimKind ?? "segment") as MbdDimKind;
-      if (kind !== "chain" && kind !== "overall") continue;
+      const kind = ((rawDim.userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
+      if (kind !== 'chain' && kind !== 'overall') continue;
       occupied.push(getAnnotationLabelWorldPos(rawDim).clone());
     }
 
@@ -1184,8 +1199,8 @@ export function useMbdPipeAnnotationThree(
     }
 
     const sortedTags = [...tagAnnotations.values()].sort((a, b) => {
-      const kindA = (((asRaw(a).userData as any)?.mbdTagKind ?? "other") as MbdTagKind);
-      const kindB = (((asRaw(b).userData as any)?.mbdTagKind ?? "other") as MbdTagKind);
+      const kindA = (((asRaw(a).userData as any)?.mbdTagKind ?? 'other') as MbdTagKind);
+      const kindB = (((asRaw(b).userData as any)?.mbdTagKind ?? 'other') as MbdTagKind);
       return resolveTagPriority(kindA) - resolveTagPriority(kindB);
     });
 
@@ -1196,7 +1211,7 @@ export function useMbdPipeAnnotationThree(
 
       const params = rawTag.getParams();
       const userData = (rawTag.userData as any) ?? {};
-      const tagKind = ((userData.mbdTagKind ?? "other") as MbdTagKind);
+      const tagKind = ((userData.mbdTagKind ?? 'other') as MbdTagKind);
       const hint = (userData.mbdLayoutHint ?? null) as MbdLayoutHint | null;
       const baseOffset =
         toVector3(userData.mbdBaseLabelOffset ?? null) ??
@@ -1245,20 +1260,20 @@ export function useMbdPipeAnnotationThree(
 
       const duplicateElbow = placedTagMeta.some(
         (item) =>
-          tagKind === "elbow" &&
-          item.kind === "elbow" &&
+          tagKind === 'elbow' &&
+          item.kind === 'elbow' &&
           item.text === params.label &&
           item.pos.distanceTo(chosenPos) < duplicateElbowGap,
       );
       const duplicateElbowCount = placedTagMeta.filter(
         (item) =>
-          tagKind === "elbow" &&
-          item.kind === "elbow" &&
+          tagKind === 'elbow' &&
+          item.kind === 'elbow' &&
           item.text === params.label,
       ).length;
 
       if (!foundCandidate || duplicateElbow || duplicateElbowCount >= 2) {
-        if (tagKind === "elbow" || tagKind === "other") {
+        if (tagKind === 'elbow' || tagKind === 'other') {
           (rawTag.userData as any).mbdDeclutterHidden = true;
           rawTag.visible = false;
           continue;
@@ -1278,14 +1293,14 @@ export function useMbdPipeAnnotationThree(
   function buildTextOnlyFittingAnnotation(
     fitting: MbdFittingDto,
     anchor: Vector3,
-    labelRenderStyle: MbdDimensionModeConfig["labelRenderStyle"],
+    labelRenderStyle: MbdDimensionModeConfig['labelRenderStyle'],
   ): WeldAnnotation3D | null {
-    const text = String(fitting.text ?? "").trim();
+    const text = String(fitting.text ?? '').trim();
     if (!text) return null;
     const annotation = new WeldAnnotation3D(materials, {
       position: anchor,
       label: text,
-      subtitle: "",
+      subtitle: '',
       isShop: true,
       crossSize: 0,
       labelOffsetWorld: resolveFloatingLabelOffset(fitting.layout_hint, 120),
@@ -1298,8 +1313,8 @@ export function useMbdPipeAnnotationThree(
     annotation: WeldAnnotation3D | AngleDimension3D,
     fittingKind: MbdFittingKind,
   ): void {
-    if (fittingKind === "flange") annotation.setMaterialSet(materials.blue);
-    else if (fittingKind === "branch") annotation.setMaterialSet(materials.orange);
+    if (fittingKind === 'flange') annotation.setMaterialSet(materials.blue);
+    else if (fittingKind === 'branch') annotation.setMaterialSet(materials.orange);
     else annotation.setMaterialSet(materials.yellow);
   }
 
@@ -1309,7 +1324,7 @@ export function useMbdPipeAnnotationThree(
     annotation: WeldAnnotation3D | AngleDimension3D,
   ): void {
     const rawAnnotation = markRaw(annotation);
-    (rawAnnotation.userData as any).mbdAuxKind = "fitting";
+    (rawAnnotation.userData as any).mbdAuxKind = 'fitting';
     (rawAnnotation.userData as any).mbdFittingKind = fittingKind;
     group.add(rawAnnotation);
     fittingAnnotations.set(fitting.id, rawAnnotation as any);
@@ -1323,12 +1338,12 @@ export function useMbdPipeAnnotationThree(
         toVector3(fitting.anchor_point) ??
         toVector3(fitting.layout_hint?.anchor_point ?? null);
       if (!anchor) {
-        recordSuppressedAnnotation(suppressedWrongLineCount, "fitting_missing_anchor");
+        recordSuppressedAnnotation(suppressedWrongLineCount, 'fitting_missing_anchor');
         continue;
       }
 
       if (
-        fittingKind === "elbow" &&
+        fittingKind === 'elbow' &&
         fitting.angle != null &&
         fitting.face_center_1 &&
         fitting.face_center_2
@@ -1341,7 +1356,7 @@ export function useMbdPipeAnnotationThree(
             point1,
             point2,
             text:
-              `${fitting.noun ?? "ELBO"} ${Number(fitting.angle).toFixed(1)}°`,
+              `${fitting.noun ?? 'ELBO'} ${Number(fitting.angle).toFixed(1)}°`,
             labelRenderStyle,
           });
           applyFittingMaterial(angleDim, fittingKind);
@@ -1358,7 +1373,7 @@ export function useMbdPipeAnnotationThree(
       if (!textOnly) {
         recordSuppressedAnnotation(
           suppressedWrongLineCount,
-          "fitting_missing_renderable_geometry",
+          'fitting_missing_renderable_geometry',
         );
         continue;
       }
@@ -1395,7 +1410,7 @@ export function useMbdPipeAnnotationThree(
   function renderWelds(welds: MbdWeldDto[]): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
     const weldMaterial =
-      mbdViewMode.value === "construction" ? materials.black : materials.orange;
+      mbdViewMode.value === 'construction' ? materials.black : materials.orange;
     for (const w of welds) {
       const position = new Vector3(w.position[0], w.position[1], w.position[2]);
 
@@ -1423,7 +1438,7 @@ export function useMbdPipeAnnotationThree(
   function renderSlopes(slopes: MbdSlopeDto[]): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
     const slopeMaterial =
-      mbdViewMode.value === "construction" ? materials.black : materials.blue;
+      mbdViewMode.value === 'construction' ? materials.black : materials.blue;
     for (const s of slopes) {
       const start = new Vector3(s.start[0], s.start[1], s.start[2]);
       const end = new Vector3(s.end[0], s.end[1], s.end[2]);
@@ -1449,6 +1464,38 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function renderPipeClearances(clearances: MbdPipeClearanceDto[]): void {
+    const modeConfig = getRuntimeModeConfig();
+    for (const c of clearances) {
+      const start = new Vector3(c.start[0], c.start[1], c.start[2]);
+      const end = new Vector3(c.end[0], c.end[1], c.end[2]);
+      const dist = start.distanceTo(end);
+      const offset = computeMbdDimOffset(dist) * 0.5;
+
+      const dim = new LinearDimension3D(
+        materials,
+        {
+          start,
+          end,
+          offset,
+          text: c.text,
+          arrowStyle: modeConfig.arrowStyle,
+          arrowSizePx: modeConfig.arrowSizePx,
+          arrowAngleDeg: modeConfig.arrowAngleDeg,
+          extensionOvershootPx: modeConfig.extensionOvershootPx,
+          labelRenderStyle: modeConfig.labelRenderStyle,
+        },
+        { depthTest: modeConfig.depthTest },
+      );
+
+      dim.setMaterialSet(materials.orange);
+      dim.setLineWidthPx(modeConfig.lineWidthPx);
+      const rawDim = markRaw(dim);
+      group.add(rawDim);
+      pipeClearanceAnnotations.set(c.id, rawDim);
+    }
+  }
+
   function renderCutTubis(cutTubis: MbdCutTubiDto[]): void {
     const viewer = dtxViewerRef.value;
     const gm = getGlobalModelMatrix?.() || identityMatrix;
@@ -1457,7 +1504,7 @@ export function useMbdPipeAnnotationThree(
       const start = toVector3(cutTubi.start);
       const end = toVector3(cutTubi.end);
       if (!start || !end) {
-        recordSuppressedAnnotation(suppressedWrongLineCount, "cut_tubi_invalid_endpoint");
+        recordSuppressedAnnotation(suppressedWrongLineCount, 'cut_tubi_invalid_endpoint');
         continue;
       }
 
@@ -1470,17 +1517,17 @@ export function useMbdPipeAnnotationThree(
           gm,
         );
       if (!direction || direction.lengthSq() < 1e-9) {
-        recordSuppressedAnnotation(suppressedWrongLineCount, "cut_tubi_invalid_direction");
+        recordSuppressedAnnotation(suppressedWrongLineCount, 'cut_tubi_invalid_direction');
         continue;
       }
 
       const label = String(
-        cutTubi.text ?? cutTubi.refno ?? "CUT",
+        cutTubi.text ?? cutTubi.refno ?? 'CUT',
       );
       const cutBaseOffset = computeMbdDimOffset(start.distanceTo(end));
       const finalCutOffset = resolveSemanticDimOffset(
         cutBaseOffset,
-        "cut_tubi",
+        'cut_tubi',
         cutTubi.layout_hint,
       );
       const dim = new LinearDimension3D(
@@ -1506,7 +1553,7 @@ export function useMbdPipeAnnotationThree(
       dim.setMaterialSet(materials.black);
       dim.setLineWidthPx(modeConfig.lineWidthPx);
       const rawDim = markRaw(dim);
-      (rawDim.userData as any).mbdAuxKind = "cut_tubi";
+      (rawDim.userData as any).mbdAuxKind = 'cut_tubi';
       (rawDim.userData as any).mbdBaseOffset = finalCutOffset;
       group.add(rawDim);
       cutTubiAnnotations.set(cutTubi.id, rawDim);
@@ -1524,13 +1571,13 @@ export function useMbdPipeAnnotationThree(
         toVector3(tag.position) ??
         toVector3(tag.layout_hint?.anchor_point ?? null);
       if (!anchor) {
-        recordSuppressedAnnotation(suppressedWrongLineCount, "tag_missing_anchor");
+        recordSuppressedAnnotation(suppressedWrongLineCount, 'tag_missing_anchor');
         continue;
       }
       const annotation = new WeldAnnotation3D(materials, {
         position: anchor,
         label: tag.text,
-        subtitle: "",
+        subtitle: '',
         isShop: true,
         crossSize: 0,
         labelOffsetWorld: resolveFloatingLabelOffset(tag.layout_hint, 120),
@@ -1538,7 +1585,7 @@ export function useMbdPipeAnnotationThree(
       });
       annotation.setMaterialSet(materials.black);
       const rawTag = markRaw(annotation);
-      (rawTag.userData as any).mbdAuxKind = "tag";
+      (rawTag.userData as any).mbdAuxKind = 'tag';
       (rawTag.userData as any).mbdTagKind = classifyTag(tag);
       (rawTag.userData as any).mbdLayoutHint = tag.layout_hint ?? null;
       const baseLabelOffset = annotation.getParams().labelOffsetWorld;
@@ -1572,7 +1619,7 @@ export function useMbdPipeAnnotationThree(
         b.face_center_2[2],
       );
 
-      const angleText = b.angle != null ? `${b.angle.toFixed(1)}°` : "";
+      const angleText = b.angle != null ? `${b.angle.toFixed(1)}°` : '';
 
       const angleDim = new AngleDimension3D(materials, {
         vertex: wp,
@@ -1595,7 +1642,7 @@ export function useMbdPipeAnnotationThree(
     if (isDev && bends.length > 0) {
       const rendered = bends.length - skippedMissingFaceCenter;
       // 帮助联调定位“统计里有 bends 但场景没渲染”的来源。
-      console.info("[mbd-bends] render stats", {
+      console.info('[mbd-bends] render stats', {
         total: bends.length,
         rendered,
         skippedMissingFaceCenter,
@@ -1615,7 +1662,7 @@ export function useMbdPipeAnnotationThree(
         s.leave[1],
         s.leave[2],
       ]);
-      geom.setAttribute("position", new Float32BufferAttribute(pos, 3));
+      geom.setAttribute('position', new Float32BufferAttribute(pos, 3));
       const line = new Line(geom, segmentMaterial);
       line.name = `mbd-seg:${s.id}`;
       const rawLine = markRaw(line);
@@ -1638,10 +1685,10 @@ export function useMbdPipeAnnotationThree(
       point.x, point.y, point.z - size,
       point.x, point.y, point.z + size,
     ]);
-    geom.setAttribute("position", new Float32BufferAttribute(points, 3));
+    geom.setAttribute('position', new Float32BufferAttribute(points, 3));
     const marker = new LineSegments(geom, anchorDebugMaterial);
     marker.name = `mbd-debug-anchor:${id}`;
-    (marker.userData as any).mbdAuxKind = "debug-anchor";
+    (marker.userData as any).mbdAuxKind = 'debug-anchor';
     (marker.userData as any).mbdDebugId = id;
     const rawMarker = markRaw(marker);
     group.add(rawMarker);
@@ -1660,10 +1707,10 @@ export function useMbdPipeAnnotationThree(
       segment.leave[1],
       segment.leave[2],
     ]);
-    geom.setAttribute("position", new Float32BufferAttribute(pos, 3));
+    geom.setAttribute('position', new Float32BufferAttribute(pos, 3));
     const line = new Line(geom, ownerSegmentDebugMaterial);
     line.name = `mbd-debug-owner:${segment.id}`;
-    (line.userData as any).mbdAuxKind = "debug-owner-segment";
+    (line.userData as any).mbdAuxKind = 'debug-owner-segment';
     (line.userData as any).mbdDebugId = segment.id;
     const rawLine = markRaw(line);
     group.add(rawLine);
@@ -1673,7 +1720,7 @@ export function useMbdPipeAnnotationThree(
 
   function renderDebugOverlays(data: MbdPipeData): void {
     const ownerSegments = new Set<string>();
-    const anchorEntries: Array<{ id: string; point: ApiVec3 | null | undefined }> = [];
+    const anchorEntries: { id: string; point: ApiVec3 | null | undefined }[] = [];
 
     const collectOwnerAndAnchor = (
       id: string,
@@ -1746,6 +1793,7 @@ export function useMbdPipeAnnotationThree(
       renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
     if (data.welds?.length) renderWelds(data.welds);
     if (data.slopes?.length) renderSlopes(data.slopes);
+    if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
     if (data.bends?.length) renderBends(data.bends);
     if (data.cut_tubis?.length) renderCutTubis(data.cut_tubis);
     applyCutTubiLabelDeclutter();
@@ -1767,9 +1815,9 @@ export function useMbdPipeAnnotationThree(
 
   function renderDemoDims(): void {
     const data: MbdPipeData = {
-      input_refno: "demo-input",
-      branch_refno: "demo-branch",
-      branch_name: "Demo Branch",
+      input_refno: 'demo-input',
+      branch_refno: 'demo-branch',
+      branch_name: 'Demo Branch',
       branch_attrs: {},
       segments: [],
       welds: [],
@@ -1778,39 +1826,39 @@ export function useMbdPipeAnnotationThree(
       dims: [
         // 1. 正常长管段
         {
-          id: "dim-normal",
-          kind: "segment",
+          id: 'dim-normal',
+          kind: 'segment',
           start: [0, 0, 0],
           end: [2.0, 0, 0],
           length: 2.0,
-          text: "2000",
+          text: '2000',
         },
         // 2. 稍短管段
         {
-          id: "dim-short-1",
-          kind: "segment",
+          id: 'dim-short-1',
+          kind: 'segment',
           start: [2.0, 0, 0],
           end: [2.5, 0, 0],
           length: 0.5,
-          text: "500",
+          text: '500',
         },
         // 3. 极短管段 (触发自动箭头外置翻转)
         {
-          id: "dim-short-2",
-          kind: "segment",
+          id: 'dim-short-2',
+          kind: 'segment',
           start: [2.5, 0, 0],
           end: [2.6, 0, 0],
           length: 0.1,
-          text: "100",
+          text: '100',
         },
         // 4. 重叠密集极短管段连段
         {
-          id: "dim-short-3",
-          kind: "segment",
+          id: 'dim-short-3',
+          kind: 'segment',
           start: [2.6, 0, 0],
           end: [2.65, 0, 0],
           length: 0.05,
-          text: "50",
+          text: '50',
         },
       ],
       stats: {
@@ -1957,13 +2005,13 @@ export function useMbdPipeAnnotationThree(
           merged.direction[2],
         );
       if (merged.labelT !== undefined) p.labelT = merged.labelT;
-      if ("labelOffsetWorld" in merged) {
+      if ('labelOffsetWorld' in merged) {
         p.labelOffsetWorld = merged.labelOffsetWorld
           ? new Vector3(
-              merged.labelOffsetWorld[0],
-              merged.labelOffsetWorld[1],
-              merged.labelOffsetWorld[2],
-            )
+            merged.labelOffsetWorld[0],
+            merged.labelOffsetWorld[1],
+            merged.labelOffsetWorld[2],
+          )
           : null;
       }
       if (merged.isReference !== undefined) p.isReference = merged.isReference;
@@ -2025,6 +2073,7 @@ export function useMbdPipeAnnotationThree(
       showDimChain,
       showDimOverall,
       showDimPort,
+      showPipeClearances,
       showCutTubis,
       showElbows,
       showBranches,
@@ -2069,7 +2118,7 @@ export function useMbdPipeAnnotationThree(
       // 仅当 dims 已存在时，按配置刷新文字/布局（不重建全部；保留 session overrides）
       try {
         const gm = getGlobalModelMatrix?.() || identityMatrix;
-        const useBackendText = dimTextMode.value === "backend";
+        const useBackendText = dimTextMode.value === 'backend';
         const offsetScale = clampNumber(dimOffsetScale.value, 0.05, 50, 1);
         const modeConfig = getRuntimeModeConfig();
 
@@ -2080,7 +2129,7 @@ export function useMbdPipeAnnotationThree(
             currentData.value?.dims?.find((item) => item.id === dimId) ?? null;
           const kind = (((rawDim.userData as any)?.mbdDimKind ??
             sourceDim?.kind ??
-            "segment") as MbdDimKind);
+            'segment') as MbdDimKind);
 
           // 距离与默认 offset 以“局部坐标”计算（与几何保持一致）
           const p = rawDim.getParams();
@@ -2092,19 +2141,19 @@ export function useMbdPipeAnnotationThree(
           );
           const nextOffset = ov.offset ?? baseOffset;
           const nextLabelOffset =
-            "labelOffsetWorld" in ov
+            'labelOffsetWorld' in ov
               ? ov.labelOffsetWorld
                 ? new Vector3(
-                    ov.labelOffsetWorld[0],
-                    ov.labelOffsetWorld[1],
-                    ov.labelOffsetWorld[2],
-                  )
+                  ov.labelOffsetWorld[0],
+                  ov.labelOffsetWorld[1],
+                  ov.labelOffsetWorld[2],
+                )
                 : null
               : null;
 
           // 若用户拖拽过文字（labelOffsetWorld!=null），避免全局 labelT 影响其基准位置
           const hasManualLabel =
-            "labelOffsetWorld" in ov && ov.labelOffsetWorld != null;
+            'labelOffsetWorld' in ov && ov.labelOffsetWorld != null;
           const nextLabelT =
             ov.labelT ??
             (hasManualLabel ? (p.labelT ?? 0.5) : 0.5);
@@ -2180,6 +2229,7 @@ export function useMbdPipeAnnotationThree(
     showDimChain,
     showDimOverall,
     showDimPort,
+    showPipeClearances,
     showCutTubis,
     showElbows,
     showBranches,

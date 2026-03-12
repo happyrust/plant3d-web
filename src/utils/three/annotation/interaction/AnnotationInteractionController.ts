@@ -7,11 +7,13 @@
  * - 拖拽编辑（可选）
  */
 
-import * as THREE from 'three'
-import { ref, shallowRef, type Ref, type ShallowRef } from 'vue'
-import type { AnnotationBase } from './core/AnnotationBase'
+import { ref, shallowRef, type Ref, type ShallowRef } from 'vue';
 
-export interface AnnotationInteractionOptions {
+import * as THREE from 'three';
+
+import type { AnnotationBase } from './core/AnnotationBase';
+
+export type AnnotationInteractionOptions = {
   /** 是否启用悬停高亮 */
   enableHover?: boolean
   /** 是否启用点击选中 */
@@ -22,7 +24,7 @@ export interface AnnotationInteractionOptions {
   pickingTolerance?: number
 }
 
-export interface AnnotationHitResult {
+export type AnnotationHitResult = {
   /** 命中的标注 */
   annotation: AnnotationBase
   /** 标注 ID */
@@ -49,218 +51,218 @@ export type AnnotationInteractionEvent = {
 export type AnnotationInteractionCallback = (event: AnnotationInteractionEvent) => void
 
 export class AnnotationInteractionController {
-  private annotations: Map<string, AnnotationBase>
-  private camera: THREE.Camera | null = null
-  private domElement: HTMLElement | null = null
-  private raycaster = new THREE.Raycaster()
-  private mouse = new THREE.Vector2()
+  private annotations: Map<string, AnnotationBase>;
+  private camera: THREE.Camera | null = null;
+  private domElement: HTMLElement | null = null;
+  private raycaster = new THREE.Raycaster();
+  private mouse = new THREE.Vector2();
 
-  private options: Required<AnnotationInteractionOptions>
-  private callbacks: AnnotationInteractionCallback[] = []
+  private options: Required<AnnotationInteractionOptions>;
+  private callbacks: AnnotationInteractionCallback[] = [];
 
   // 为拖拽提供“全局 mouseup/move”兜底：避免鼠标移出 canvas 松手导致卡死。
   // (runtime 可被测试通过 (as any) 读取)
-  private windowDragAttached = false
+  private windowDragAttached = false;
 
   // 状态
-  private _hoveredId = ref<string | null>(null)
-  private _selectedId = ref<string | null>(null)
-  private _isDragging = ref(false)
+  private _hoveredId = ref<string | null>(null);
+  private _selectedId = ref<string | null>(null);
+  private _isDragging = ref(false);
 
   // 拖拽状态
-  private dragStartPoint: THREE.Vector3 | null = null
-  private dragAnnotation: AnnotationBase | null = null
-  private dragAnnotationId: string | null = null
+  private dragStartPoint: THREE.Vector3 | null = null;
+  private dragAnnotation: AnnotationBase | null = null;
+  private dragAnnotationId: string | null = null;
 
   constructor(
     annotations: Map<string, AnnotationBase>,
     options: AnnotationInteractionOptions = {}
   ) {
-    this.annotations = annotations
+    this.annotations = annotations;
     this.options = {
       enableHover: options.enableHover ?? true,
       enableClick: options.enableClick ?? true,
       enableDrag: options.enableDrag ?? false,
       pickingTolerance: options.pickingTolerance ?? 10,
-    }
+    };
 
     // 绑定事件处理器
-    this.onMouseMove = this.onMouseMove.bind(this)
-    this.onMouseDown = this.onMouseDown.bind(this)
-    this.onMouseUp = this.onMouseUp.bind(this)
-    this.onClick = this.onClick.bind(this)
-    this.onContextMenu = this.onContextMenu.bind(this)
+    this.onMouseMove = this.onMouseMove.bind(this);
+    this.onMouseDown = this.onMouseDown.bind(this);
+    this.onMouseUp = this.onMouseUp.bind(this);
+    this.onClick = this.onClick.bind(this);
+    this.onContextMenu = this.onContextMenu.bind(this);
   }
 
   private attachWindowDragListeners(): void {
-    if (this.windowDragAttached) return
-    this.windowDragAttached = true
+    if (this.windowDragAttached) return;
+    this.windowDragAttached = true;
     // 拖拽中依赖 mousemove 发 drag 事件；mouseup 结束拖拽并恢复 controls
-    window.addEventListener('mousemove', this.onMouseMove)
-    window.addEventListener('mouseup', this.onMouseUp)
+    window.addEventListener('mousemove', this.onMouseMove);
+    window.addEventListener('mouseup', this.onMouseUp);
   }
 
   private detachWindowDragListeners(): void {
-    if (!this.windowDragAttached) return
-    this.windowDragAttached = false
-    window.removeEventListener('mousemove', this.onMouseMove)
-    window.removeEventListener('mouseup', this.onMouseUp)
+    if (!this.windowDragAttached) return;
+    this.windowDragAttached = false;
+    window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mouseup', this.onMouseUp);
   }
 
   /** 当前悬停的标注 ID */
   get hoveredId(): Ref<string | null> {
-    return this._hoveredId
+    return this._hoveredId;
   }
 
   /** 当前选中的标注 ID */
   get selectedId(): Ref<string | null> {
-    return this._selectedId
+    return this._selectedId;
   }
 
   /** 是否正在拖拽 */
   get isDragging(): Ref<boolean> {
-    return this._isDragging
+    return this._isDragging;
   }
 
   /** 设置相机 */
   setCamera(camera: THREE.Camera): void {
-    this.camera = camera
+    this.camera = camera;
   }
 
   /** 更新标注集合引用 */
   setAnnotations(annotations: Map<string, AnnotationBase>): void {
-    this.annotations = annotations
+    this.annotations = annotations;
   }
 
   /** 附加到 DOM 元素 */
   attach(domElement: HTMLElement): void {
-    this.detach()
-    this.domElement = domElement
+    this.detach();
+    this.domElement = domElement;
 
     if (this.options.enableHover) {
-      domElement.addEventListener('mousemove', this.onMouseMove)
+      domElement.addEventListener('mousemove', this.onMouseMove);
     }
     if (this.options.enableClick) {
-      domElement.addEventListener('click', this.onClick)
+      domElement.addEventListener('click', this.onClick);
     }
     if (this.options.enableDrag) {
-      domElement.addEventListener('mousedown', this.onMouseDown)
-      domElement.addEventListener('mouseup', this.onMouseUp)
+      domElement.addEventListener('mousedown', this.onMouseDown);
+      domElement.addEventListener('mouseup', this.onMouseUp);
     }
     // 右键菜单（始终注册，以便 contextmenu hit-test + 事件发出）
-    domElement.addEventListener('contextmenu', this.onContextMenu)
+    domElement.addEventListener('contextmenu', this.onContextMenu);
   }
 
   /** 从 DOM 元素分离 */
   detach(): void {
     // detach 时必须清理全局拖拽监听器，避免泄漏与“卡拖拽”状态
-    this.detachWindowDragListeners()
+    this.detachWindowDragListeners();
     if (this.domElement) {
-      this.domElement.removeEventListener('mousemove', this.onMouseMove)
-      this.domElement.removeEventListener('click', this.onClick)
-      this.domElement.removeEventListener('mousedown', this.onMouseDown)
-      this.domElement.removeEventListener('mouseup', this.onMouseUp)
-      this.domElement.removeEventListener('contextmenu', this.onContextMenu)
-      this.domElement = null
+      this.domElement.removeEventListener('mousemove', this.onMouseMove);
+      this.domElement.removeEventListener('click', this.onClick);
+      this.domElement.removeEventListener('mousedown', this.onMouseDown);
+      this.domElement.removeEventListener('mouseup', this.onMouseUp);
+      this.domElement.removeEventListener('contextmenu', this.onContextMenu);
+      this.domElement = null;
     }
   }
 
   /** 添加事件监听器 */
   on(callback: AnnotationInteractionCallback): () => void {
-    this.callbacks.push(callback)
+    this.callbacks.push(callback);
     return () => {
-      const index = this.callbacks.indexOf(callback)
-      if (index >= 0) this.callbacks.splice(index, 1)
-    }
+      const index = this.callbacks.indexOf(callback);
+      if (index >= 0) this.callbacks.splice(index, 1);
+    };
   }
 
   /** 选中标注（SolveSpace: selected=红色，优先级高于 hovered） */
   select(id: string | null): void {
-    const prevId = this._selectedId.value
-    if (prevId === id) return
+    const prevId = this._selectedId.value;
+    if (prevId === id) return;
 
     // 取消之前的选中
     if (prevId) {
-      const prev = this.annotations.get(prevId)
+      const prev = this.annotations.get(prevId);
       if (prev) {
-        prev.selected = false
+        prev.selected = false;
         // 如果不再被 hover，也清除 hovered
-        if (this._hoveredId.value !== prevId) prev.hovered = false
+        if (this._hoveredId.value !== prevId) prev.hovered = false;
       }
-      this.emit({ type: 'deselect', annotation: prev ?? null, id: prevId })
+      this.emit({ type: 'deselect', annotation: prev ?? null, id: prevId });
     }
 
     // 设置新的选中
-    this._selectedId.value = id
+    this._selectedId.value = id;
     if (id) {
-      const annotation = this.annotations.get(id)
+      const annotation = this.annotations.get(id);
       if (annotation) {
-        annotation.selected = true
-        this.emit({ type: 'select', annotation, id })
+        annotation.selected = true;
+        this.emit({ type: 'select', annotation, id });
       }
     }
   }
 
   /** 清除选中 */
   clearSelection(): void {
-    this.select(null)
+    this.select(null);
   }
 
   /** 销毁 */
   dispose(): void {
-    this.detach()
-    this.callbacks = []
-    this._hoveredId.value = null
-    this._selectedId.value = null
-    this._isDragging.value = false
+    this.detach();
+    this.callbacks = [];
+    this._hoveredId.value = null;
+    this._selectedId.value = null;
+    this._isDragging.value = false;
   }
 
   private emit(event: AnnotationInteractionEvent): void {
     for (const callback of this.callbacks) {
-      callback(event)
+      callback(event);
     }
   }
 
   private updateMousePosition(event: MouseEvent): void {
-    if (!this.domElement) return
-    const rect = this.domElement.getBoundingClientRect()
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    if (!this.domElement) return;
+    const rect = this.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
   private hitTest(): AnnotationHitResult | null {
-    if (!this.camera || this.annotations.size === 0) return null
+    if (!this.camera || this.annotations.size === 0) return null;
 
-    this.raycaster.setFromCamera(this.mouse, this.camera)
+    this.raycaster.setFromCamera(this.mouse, this.camera);
 
     // 设置拾取精度
-    const prevThreshold = this.raycaster.params.Line?.threshold
+    const prevThreshold = this.raycaster.params.Line?.threshold;
     if (this.raycaster.params.Line) {
-      this.raycaster.params.Line.threshold = this.options.pickingTolerance / 100
+      this.raycaster.params.Line.threshold = this.options.pickingTolerance / 100;
     }
 
-    let closest: AnnotationHitResult | null = null
+    let closest: AnnotationHitResult | null = null;
 
     for (const [id, annotation] of this.annotations) {
-      if (!annotation.visible) continue
-      const ud = (annotation as any).userData as any
-      if (ud && (ud.pickable === false || ud.noPick === true)) continue
+      if (!annotation.visible) continue;
+      const ud = (annotation as any).userData as any;
+      if (ud && (ud.pickable === false || ud.noPick === true)) continue;
 
-      let intersects: THREE.Intersection<THREE.Object3D>[]
+      let intersects: THREE.Intersection<THREE.Object3D>[];
       try {
-        intersects = this.raycaster.intersectObject(annotation, true)
+        intersects = this.raycaster.intersectObject(annotation, true);
       } catch {
-        continue
+        continue;
       }
       if (intersects.length > 0) {
-        let hit: THREE.Intersection<THREE.Object3D> | null = null
+        let hit: THREE.Intersection<THREE.Object3D> | null = null;
         for (const it of intersects) {
-          const hud = (it.object as any)?.userData as any
-          if (hud && (hud.noPick === true || hud.pickable === false)) continue
-          hit = it as any
-          break
+          const hud = (it.object as any)?.userData as any;
+          if (hud && (hud.noPick === true || hud.pickable === false)) continue;
+          hit = it as any;
+          break;
         }
-        if (!hit) continue
+        if (!hit) continue;
         if (!closest || hit.distance < closest.distance) {
           closest = {
             annotation,
@@ -268,25 +270,25 @@ export class AnnotationInteractionController {
             hitObject: hit.object,
             point: hit.point.clone(),
             distance: hit.distance,
-          }
+          };
         }
       }
     }
 
     // 恢复精度
     if (this.raycaster.params.Line && prevThreshold !== undefined) {
-      this.raycaster.params.Line.threshold = prevThreshold
+      this.raycaster.params.Line.threshold = prevThreshold;
     }
 
-    return closest
+    return closest;
   }
 
   private onMouseMove(event: MouseEvent): void {
-    this.updateMousePosition(event)
+    this.updateMousePosition(event);
 
     if (this._isDragging.value && this.dragAnnotation) {
       // 拖拽中
-      const hit = this.hitTest()
+      const hit = this.hitTest();
       this.emit({
         type: 'drag',
         annotation: this.dragAnnotation,
@@ -294,25 +296,25 @@ export class AnnotationInteractionController {
         originalEvent: event,
         point: hit?.point,
         hitObject: hit?.hitObject,
-      })
-      return
+      });
+      return;
     }
 
     // 悬停检测（SolveSpace 风格：hovered=黄，selected 优先级更高）
-    const hit = this.hitTest()
-    const prevHovered = this._hoveredId.value
+    const hit = this.hitTest();
+    const prevHovered = this._hoveredId.value;
 
     if (hit) {
       if (prevHovered !== hit.id) {
         // 取消之前的悬停
         if (prevHovered) {
-          const prev = this.annotations.get(prevHovered)
-          if (prev) prev.hovered = false
+          const prev = this.annotations.get(prevHovered);
+          if (prev) prev.hovered = false;
         }
 
         // 设置新的悬停
-        this._hoveredId.value = hit.id
-        hit.annotation.hovered = true
+        this._hoveredId.value = hit.id;
+        hit.annotation.hovered = true;
 
         this.emit({
           type: 'hover',
@@ -321,25 +323,25 @@ export class AnnotationInteractionController {
           originalEvent: event,
           point: hit.point,
           hitObject: hit.hitObject,
-        })
+        });
       }
     } else {
       // 清除悬停
       if (prevHovered) {
-        const prev = this.annotations.get(prevHovered)
-        if (prev) prev.hovered = false
-        this._hoveredId.value = null
-        this.emit({ type: 'hover', annotation: null, id: null, originalEvent: event })
+        const prev = this.annotations.get(prevHovered);
+        if (prev) prev.hovered = false;
+        this._hoveredId.value = null;
+        this.emit({ type: 'hover', annotation: null, id: null, originalEvent: event });
       }
     }
   }
 
   private onClick(event: MouseEvent): void {
-    this.updateMousePosition(event)
-    const hit = this.hitTest()
+    this.updateMousePosition(event);
+    const hit = this.hitTest();
 
     if (hit) {
-      this.select(hit.id)
+      this.select(hit.id);
       this.emit({
         type: 'click',
         annotation: hit.annotation,
@@ -347,35 +349,35 @@ export class AnnotationInteractionController {
         originalEvent: event,
         point: hit.point,
         hitObject: hit.hitObject,
-      })
+      });
     } else {
       // 点击空白区域取消选中
-      this.select(null)
+      this.select(null);
       this.emit({
         type: 'click',
         annotation: null,
         id: null,
         originalEvent: event,
-      })
+      });
     }
   }
 
   private onMouseDown(event: MouseEvent): void {
-    if (!this.options.enableDrag) return
+    if (!this.options.enableDrag) return;
 
-    this.updateMousePosition(event)
-    const hit = this.hitTest()
+    this.updateMousePosition(event);
+    const hit = this.hitTest();
 
     if (hit && hit.id === this._selectedId.value) {
-      const ud = (hit.annotation as any).userData as any
-      if (!ud || ud.draggable !== true) return
+      const ud = (hit.annotation as any).userData as any;
+      if (!ud || ud.draggable !== true) return;
 
-      this._isDragging.value = true
-      this.dragAnnotation = hit.annotation
-      this.dragAnnotationId = hit.id
-      this.dragStartPoint = hit.point.clone()
+      this._isDragging.value = true;
+      this.dragAnnotation = hit.annotation;
+      this.dragAnnotationId = hit.id;
+      this.dragStartPoint = hit.point.clone();
       // 绑定 window 级监听器：避免拖拽过程中鼠标移出 domElement 后无法收到 mouseup
-      this.attachWindowDragListeners()
+      this.attachWindowDragListeners();
 
       this.emit({
         type: 'drag-start',
@@ -384,18 +386,18 @@ export class AnnotationInteractionController {
         originalEvent: event,
         point: hit.point,
         hitObject: hit.hitObject,
-      })
+      });
     }
   }
 
   private onContextMenu(event: MouseEvent): void {
-    this.updateMousePosition(event)
-    const hit = this.hitTest()
+    this.updateMousePosition(event);
+    const hit = this.hitTest();
     if (hit) {
       // 阻止浏览器默认右键菜单，由上层组件展示自定义菜单
-      event.preventDefault()
-      event.stopPropagation()
-      this.select(hit.id)
+      event.preventDefault();
+      event.stopPropagation();
+      this.select(hit.id);
       this.emit({
         type: 'contextmenu',
         annotation: hit.annotation,
@@ -404,7 +406,7 @@ export class AnnotationInteractionController {
         point: hit.point,
         hitObject: hit.hitObject,
         screenPos: { x: event.clientX, y: event.clientY },
-      })
+      });
     }
   }
 
@@ -415,13 +417,13 @@ export class AnnotationInteractionController {
         annotation: this.dragAnnotation,
         id: this.dragAnnotationId,
         originalEvent: event,
-      })
+      });
 
-      this._isDragging.value = false
-      this.dragAnnotation = null
-      this.dragAnnotationId = null
-      this.dragStartPoint = null
-      this.detachWindowDragListeners()
+      this._isDragging.value = false;
+      this.dragAnnotation = null;
+      this.dragAnnotationId = null;
+      this.dragStartPoint = null;
+      this.detachWindowDragListeners();
     }
   }
 }

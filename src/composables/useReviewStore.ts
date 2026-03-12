@@ -8,6 +8,7 @@ import type {
   RectAnnotationRecord,
 } from './useToolStore';
 import type { ReviewTask } from '@/types/auth';
+
 import {
   reviewRecordCreate,
   reviewRecordDelete,
@@ -320,11 +321,31 @@ function clearCurrentTask() {
 
 // ============ WebSocket 连接 ============
 
+const WS_HEARTBEAT_INTERVAL = 30_000; // 30秒心跳间隔
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+// comment_added 事件回调（由外部组件注册）
+type CommentAddedCallback = (data: unknown) => void;
+const commentAddedCallbacks: CommentAddedCallback[] = [];
+
+function onCommentAdded(callback: CommentAddedCallback) {
+  commentAddedCallbacks.push(callback);
+  return () => {
+    const idx = commentAddedCallbacks.indexOf(callback);
+    if (idx >= 0) commentAddedCallbacks.splice(idx, 1);
+  };
+}
+
 function connectWebSocket(userId: string) {
   if (!USE_BACKEND.value) return;
   if (ws) return;
 
   const url = getReviewUserWebSocketUrl(userId);
+  if (!url) {
+    wsConnected.value = false;
+    wsError.value = null;
+    return;
+  }
 
   try {
     ws = new WebSocket(url);
@@ -334,6 +355,14 @@ function connectWebSocket(userId: string) {
       wsError.value = null;
       reconnectCount = 0;
       console.log('[ReviewStore] WebSocket connected');
+
+      // 启动心跳
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(() => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, WS_HEARTBEAT_INTERVAL);
     };
 
     ws.onmessage = (event) => {
@@ -370,6 +399,10 @@ function connectWebSocket(userId: string) {
 }
 
 function disconnectWebSocket() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -404,8 +437,15 @@ function handleWebSocketMessage(message: {
       break;
     }
     case 'comment_added': {
-      // 新评论，可以触发通知
+      // 新评论，通知已注册的回调
       console.log('[ReviewStore] New comment:', message.data);
+      for (const cb of commentAddedCallbacks) {
+        try { cb(message.data); } catch { /* ignore */ }
+      }
+      break;
+    }
+    case 'pong': {
+      // 心跳响应，忽略
       break;
     }
   }
@@ -501,5 +541,6 @@ export function useReviewStore() {
     // WebSocket
     connectWebSocket,
     disconnectWebSocket,
+    onCommentAdded,
   };
 }

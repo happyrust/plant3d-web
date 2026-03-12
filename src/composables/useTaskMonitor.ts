@@ -3,7 +3,11 @@
 // 注意：后端不支持 pause/resume 功能
 
 import { ref, computed, watch, onMounted, onUnmounted, type ComputedRef, type Ref } from 'vue';
+
+import { useWebSocket } from './useWebSocket';
+
 import type { Task, SystemMetrics, WebSocketMessage } from '@/types/task';
+
 import {
   taskGetList,
   taskGetSystemMetrics,
@@ -14,7 +18,6 @@ import {
   getTaskWebSocketUrl,
   normalizeTask,
 } from '@/api/genModelTaskApi';
-import { useWebSocket } from './useWebSocket';
 
 export type UseTaskMonitorOptions = {
   /** 是否启用 WebSocket 实时更新 */

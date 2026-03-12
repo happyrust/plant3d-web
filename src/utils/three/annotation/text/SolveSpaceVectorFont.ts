@@ -135,14 +135,14 @@ function readFloatDecimal(
   let i = i0;
   const start = i;
   const sign = s[i];
-  if (sign === "+" || sign === "-") i++;
+  if (sign === '+' || sign === '-') i++;
 
   let hasDigit = false;
   while (isDigit(s[i])) {
     i++;
     hasDigit = true;
   }
-  if (s[i] === ".") {
+  if (s[i] === '.') {
     i++;
     while (isDigit(s[i])) {
       i++;
@@ -151,10 +151,10 @@ function readFloatDecimal(
   }
 
   // optional exponent
-  if (s[i] === "e" || s[i] === "E") {
+  if (s[i] === 'e' || s[i] === 'E') {
     let j = i + 1;
     const es = s[j];
-    if (es === "+" || es === "-") j++;
+    if (es === '+' || es === '-') j++;
     let hasExp = false;
     while (isDigit(s[j])) {
       j++;
@@ -179,17 +179,17 @@ function readHex16(s: string, i0: number): { value: number; next: number } {
 
 function skipUntilEol(s: string, i0: number): number {
   let i = i0;
-  while (i < s.length && s[i] !== "\n") i++;
+  while (i < s.length && s[i] !== '\n') i++;
   return i;
 }
 
 function isGlyphLineStart(s: string, i: number): boolean {
-  if (s[i] !== "[") return false;
-  return i === 0 || s[i - 1] === "\n";
+  if (s[i] !== '[') return false;
+  return i === 0 || s[i - 1] === '\n';
 }
 
 export class SolveSpaceVectorFont {
-  private lffData = "";
+  private lffData = '';
   private rightSideBearing = 0.0;
   private glyphs = new Map<number, Glyph>();
   private firstGlyphIndex = -1;
@@ -199,7 +199,7 @@ export class SolveSpaceVectorFont {
   private descender = 0.0;
 
   static async loadFromGzipUrl(
-    url = "/fonts/unicode.lff.gz",
+    url = '/fonts/unicode.lff.gz',
   ): Promise<SolveSpaceVectorFont> {
     const resp = await fetch(url);
     if (!resp.ok)
@@ -216,39 +216,39 @@ export class SolveSpaceVectorFont {
 
   loadFromLffText(lffText: string): void {
     // normalize CRLF
-    this.lffData = lffText.replace(/\r\n/g, "\n");
-    this.firstGlyphIndex = this.lffData.indexOf("[");
+    this.lffData = lffText.replace(/\r\n/g, '\n');
+    this.firstGlyphIndex = this.lffData.indexOf('[');
     if (this.firstGlyphIndex < 0)
-      throw new Error("Vector font contains no glyphs");
+      throw new Error('Vector font contains no glyphs');
 
     // Parse header directives like SolveSpace: "# wordspacing: ..." etc
     const re = /#\s*(\w+)\s*:\s*(.+?)\n/g;
     for (const m of this.lffData.matchAll(re)) {
-      const name = String(m[1] ?? "").toLowerCase();
-      const value = String(m[2] ?? "").trim();
-      if (name === "letterspacing") {
+      const name = String(m[1] ?? '').toLowerCase();
+      const value = String(m[2] ?? '').trim();
+      if (name === 'letterspacing') {
         this.rightSideBearing = Number(value);
-      } else if (name === "wordspacing") {
+      } else if (name === 'wordspacing') {
         const space: Glyph = {
           contours: [],
           leftSideBearing: 0,
           boundingWidth: 0,
           advanceWidth: Number(value),
         };
-        this.glyphs.set(" ".codePointAt(0)!, space);
+        this.glyphs.set(' '.codePointAt(0)!, space);
       }
     }
 
     // Compute font metrics (capHeight/ascender/descender) using A/h/p like SolveSpace
-    const glyphA = this.getGlyph("A".codePointAt(0)!);
+    const glyphA = this.getGlyph('A'.codePointAt(0)!);
     this.capHeight = getGlyphBBox(glyphA).maxy;
-    const glyphH = this.getGlyph("h".codePointAt(0)!);
+    const glyphH = this.getGlyph('h'.codePointAt(0)!);
     this.ascender = getGlyphBBox(glyphH).maxy;
-    const glyphp = this.getGlyph("p".codePointAt(0)!);
+    const glyphp = this.getGlyph('p'.codePointAt(0)!);
     this.descender = getGlyphBBox(glyphp).miny;
 
     if (!Number.isFinite(this.capHeight) || Math.abs(this.capHeight) < 1e-9) {
-      throw new Error("SolveSpaceVectorFont: invalid capHeight");
+      throw new Error('SolveSpaceVectorFont: invalid capHeight');
     }
   }
 
@@ -318,7 +318,7 @@ export class SolveSpaceVectorFont {
     const off = this.findGlyphOffset(codepoint);
     if (off === null) {
       if (codepoint === 0xfffd) {
-        const q = this.glyphs.get("?".codePointAt(0)!);
+        const q = this.glyphs.get('?'.codePointAt(0)!);
         if (q) return q;
         return {
           contours: [],
@@ -357,7 +357,7 @@ export class SolveSpaceVectorFont {
       const h = readHex16(s, mid + 1);
       const found = h.value;
       const close = s[h.next];
-      if (close !== "]") return null;
+      if (close !== ']') return null;
 
       if (found > codepoint) {
         last = mid - 1;
@@ -377,15 +377,15 @@ export class SolveSpaceVectorFont {
   private parseGlyphAt(offset: number): Glyph {
     const s = this.lffData;
     let i = offset;
-    if (s[i] !== "[") throw new Error(`Expected '[' at ${offset}`);
+    if (s[i] !== '[') throw new Error(`Expected '[' at ${offset}`);
     i++;
     const h = readHex16(s, i);
     void h.value;
     i = h.next;
-    if (s[i] !== "]") throw new Error(`Expected ']' at ${i}`);
+    if (s[i] !== ']') throw new Error(`Expected ']' at ${i}`);
     i++;
     i = skipUntilEol(s, i);
-    if (s[i] === "\n") i++;
+    if (s[i] === '\n') i++;
 
     const glyph: Glyph = {
       contours: [],
@@ -396,18 +396,18 @@ export class SolveSpaceVectorFont {
 
     while (i < s.length) {
       const ch = s[i];
-      if (ch === "\n") {
+      if (ch === '\n') {
         i++;
         continue;
       }
-      if (ch === "[" && isGlyphLineStart(s, i)) break;
+      if (ch === '[' && isGlyphLineStart(s, i)) break;
 
-      if (ch === "C") {
+      if (ch === 'C') {
         i++;
         const base = readHex16(s, i);
         i = base.next;
         i = skipUntilEol(s, i);
-        if (s[i] === "\n") i++;
+        if (s[i] === '\n') i++;
         const baseGlyph = this.getGlyph(base.value);
         for (const c0 of baseGlyph.contours) {
           glyph.contours.push({
@@ -421,15 +421,15 @@ export class SolveSpaceVectorFont {
       while (i < s.length) {
         const fx = readFloatDecimal(s, i);
         i = fx.next;
-        if (s[i] !== ",") throw new Error(`Expected ',' at ${i}`);
+        if (s[i] !== ',') throw new Error(`Expected ',' at ${i}`);
         i++;
         const fy = readFloatDecimal(s, i);
         i = fy.next;
 
         const p: Vec2 = { x: fx.value, y: fy.value };
-        if (s[i] === ",") {
+        if (s[i] === ',') {
           i++;
-          if (s[i] !== "A") throw new Error(`Expected 'A' at ${i}`);
+          if (s[i] !== 'A') throw new Error(`Expected 'A' at ${i}`);
           i++;
           const fb = readFloatDecimal(s, i);
           i = fb.next;
@@ -438,21 +438,21 @@ export class SolveSpaceVectorFont {
           contour.points.push(p);
         }
 
-        if (s[i] === ";") {
+        if (s[i] === ';') {
           i++;
           continue;
         }
-        if (s[i] === "\n") {
+        if (s[i] === '\n') {
           i++;
           break;
         }
-        if (s[i] === "\r" && s[i + 1] === "\n") {
+        if (s[i] === '\r' && s[i + 1] === '\n') {
           i += 2;
           break;
         }
 
         i = skipUntilEol(s, i);
-        if (s[i] === "\n") i++;
+        if (s[i] === '\n') i++;
         break;
       }
       glyph.contours.push(contour);
@@ -472,7 +472,7 @@ let _builtinFontUrl: string | null = null;
 
 /** Load (and cache) SolveSpace `unicode.lff.gz` from `public/fonts/`. */
 export function getSolveSpaceBuiltinVectorFont(
-  url = "/fonts/unicode.lff.gz",
+  url = '/fonts/unicode.lff.gz',
 ): Promise<SolveSpaceVectorFont> {
   if (!_builtinFontPromise || _builtinFontUrl !== url) {
     _builtinFontUrl = url;
@@ -496,7 +496,7 @@ async function decodeLffPayload(data: Uint8Array): Promise<string> {
   // 某些服务器会对 .gz 文件自动解压（响应头仍可能含 content-encoding:gzip），
   // 浏览器拿到的可能已经是纯文本；此时不能再 gunzip。
   if (!isGzipBytes(data)) {
-    return new TextDecoder("utf-8").decode(data);
+    return new TextDecoder('utf-8').decode(data);
   }
   return await gunzipToText(data);
 }
@@ -505,10 +505,10 @@ async function gunzipToText(data: Uint8Array): Promise<string> {
   const DS: any = (globalThis as any).DecompressionStream;
   if (!DS) {
     throw new Error(
-      "DecompressionStream is not available; please run in a modern Chromium-based browser",
+      'DecompressionStream is not available; please run in a modern Chromium-based browser',
     );
   }
-  const ds = new DS("gzip");
+  const ds = new DS('gzip');
   const stream = new Blob([data]).stream().pipeThrough(ds);
   return await new Response(stream).text();
 }

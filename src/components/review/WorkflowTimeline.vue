@@ -2,6 +2,7 @@
 import { CheckCircle, Clock, CornerDownLeft, Send } from 'lucide-vue-next';
 
 import type { WorkflowNode } from '@/types/auth';
+
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 export type TimelineStep = {
@@ -77,25 +78,19 @@ function getActionIcon(action: string) {
       <!-- 竖线 -->
       <div class="absolute left-0 top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700" />
 
-      <div
-        v-for="(step, idx) in history"
+      <div v-for="(step, idx) in history"
         :key="idx"
-        class="relative flex gap-3 pb-3 last:pb-0"
-      >
+        class="relative flex gap-3 pb-3 last:pb-0">
         <!-- 圆点 -->
-        <div
-          class="relative z-10 mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white dark:ring-gray-900"
-          :class="getActionColor(step.action).dot"
-        />
+        <div class="relative z-10 mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white dark:ring-gray-900"
+          :class="getActionColor(step.action).dot" />
 
         <!-- 内容 -->
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 text-xs">
             <component :is="getActionIcon(step.action)" class="h-3 w-3" :class="getActionColor(step.action).text" />
-            <span
-              class="rounded px-1.5 py-0.5 text-xs font-medium"
-              :class="[getActionColor(step.action).bg, getActionColor(step.action).text]"
-            >
+            <span class="rounded px-1.5 py-0.5 text-xs font-medium"
+              :class="[getActionColor(step.action).bg, getActionColor(step.action).text]">
               {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getActionLabel(step.action) }}
             </span>
           </div>
@@ -104,10 +99,8 @@ function getActionIcon(action: string) {
             <span>·</span>
             <span>{{ formatDateTime(step.timestamp) }}</span>
           </div>
-          <div
-            v-if="step.comment"
-            class="mt-1 rounded border-l-2 border-gray-300 bg-muted/30 px-2 py-1 text-xs text-muted-foreground dark:border-gray-600"
-          >
+          <div v-if="step.comment"
+            class="mt-1 rounded border-l-2 border-gray-300 bg-muted/30 px-2 py-1 text-xs text-muted-foreground dark:border-gray-600">
             {{ step.comment }}
           </div>
         </div>

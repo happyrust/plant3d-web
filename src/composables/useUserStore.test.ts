@@ -1,11 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { UserRole } from '@/types/auth';
+
 import {
+  buildSwitchUserTokenRequest,
   isCheckerRole,
   isApproverRole,
   getNextWorkflowNode,
+  resolveReviewProjectIdFromSession,
   statusFromNode,
+  normalizeBackendUser,
 } from './useUserStore';
+
+import { UserRole, UserStatus } from '@/types/auth';
 
 describe('isCheckerRole', () => {
   it('returns true for PROOFREADER', () => {
@@ -44,8 +49,12 @@ describe('getNextWorkflowNode', () => {
     expect(getNextWorkflowNode('jd')).toBe('sh');
   });
 
-  it('returns null for sh (last node in WORKFLOW_NODE_ORDER)', () => {
-    expect(getNextWorkflowNode('sh')).toBeNull();
+  it('returns pz for sh', () => {
+    expect(getNextWorkflowNode('sh')).toBe('pz');
+  });
+
+  it('returns null for pz (last node in WORKFLOW_NODE_ORDER)', () => {
+    expect(getNextWorkflowNode('pz')).toBeNull();
   });
 
   it('defaults to sj -> jd when no node provided', () => {
@@ -73,5 +82,75 @@ describe('statusFromNode', () => {
 
   it('returns in_review for pz', () => {
     expect(statusFromNode('pz')).toBe('in_review');
+  });
+});
+
+describe('normalizeBackendUser', () => {
+  it('maps backend workflow role codes to frontend roles', () => {
+    const user = normalizeBackendUser({
+      id: 'u-1',
+      username: 'checker',
+      email: 'checker@example.com',
+      name: '校核员',
+      role: 'jd',
+    });
+
+    expect(user.role).toBe(UserRole.PROOFREADER);
+    expect(user.id).toBe('u-1');
+    expect(user.name).toBe('校核员');
+  });
+
+  it('preserves existing frontend roles', () => {
+    const user = normalizeBackendUser({
+      id: 'u-2',
+      username: 'reviewer',
+      email: 'reviewer@example.com',
+      name: '审核员',
+      role: 'reviewer',
+    });
+
+    expect(user.role).toBe(UserRole.REVIEWER);
+  });
+});
+
+describe('switch user auth helpers', () => {
+  it('builds a token request using backend workflow role codes', () => {
+    const request = buildSwitchUserTokenRequest(
+      {
+        id: 'reviewer_001',
+        username: 'reviewer',
+        email: 'reviewer@example.com',
+        name: '审核员',
+        role: UserRole.REVIEWER,
+        status: UserStatus.ACTIVE,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      'project-123',
+    );
+
+    expect(request).toEqual({
+      projectId: 'project-123',
+      userId: 'reviewer_001',
+      role: 'sh',
+    });
+  });
+
+  it('prefers embed project id from session storage when present', () => {
+    const projectId = resolveReviewProjectIdFromSession({
+      getItem: (key: string) => key === 'embed_mode_params'
+        ? JSON.stringify({ projectId: 'embed-project-1' })
+        : null,
+    });
+
+    expect(projectId).toBe('embed-project-1');
+  });
+
+  it('falls back to debug-project when session storage is empty', () => {
+    const projectId = resolveReviewProjectIdFromSession({
+      getItem: () => null,
+    });
+
+    expect(projectId).toBe('debug-project');
   });
 });

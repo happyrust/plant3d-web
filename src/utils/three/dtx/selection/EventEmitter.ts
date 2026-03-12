@@ -7,7 +7,7 @@
 export type EventCallback = (...args: any[]) => void;
 
 export class EventEmitter {
-  private _listeners: Map<string, Set<EventCallback>> = new Map();
+  private _listeners = new Map<string, Set<EventCallback>>();
 
   /**
    * 订阅事件

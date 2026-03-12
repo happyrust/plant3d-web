@@ -66,18 +66,29 @@ export function useModelProjects() {
     
     isLoading.value = true;
     try {
-      const response = await fetch(`${import.meta.env.BASE_URL}bundles/projects.json`);
+      // 从后端 API 加载项目列表（通过 Vite proxy 转发到 plant-model-gen）
+      const response = await fetch('/api/projects');
       if (!response.ok) {
         throw new Error(`Failed to load projects: ${response.status} ${response.statusText}`);
       }
       
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Projects endpoint did not return JSON');
-      }
-      
       const data = await response.json();
-      projects.value = data;
+      // 后端返回 {items: ProjectItem[], total, page, per_page}
+      const items: Record<string, unknown>[] = data.items || [];
+      
+      // 将后端 ProjectItem 映射为前端 ModelProject
+      // 后端字段: name, version, url, env, status, owner, ...
+      // name 同时作为 output 目录名（path）
+      projects.value = items.map((item) => ({
+        id: String(item.id || item.name || ''),
+        name: String(item.name || ''),
+        description: String(item.notes || item.env || ''),
+        path: String(item.name || ''),
+        showDbnum: typeof item.show_dbnum === 'number' ? item.show_dbnum : undefined,
+        thumbnail: '/favicon.ico',
+        updatedAt: item.updated_at ? String(item.updated_at) : undefined,
+        default: false,
+      }));
 
       const requested = readRequestedProject();
       const matchedProject = projects.value.find((project) =>
@@ -88,11 +99,27 @@ export function useModelProjects() {
       );
       if (matchedProject) {
         applyProject(matchedProject, false);
+      } else if (requested.projectPath || requested.projectId) {
+        // 后端项目列表中没有匹配项（可能未注册），
+        // 但 URL 明确指定了项目，直接根据 URL 参数构造项目
+        const projectPath = requested.projectPath || requested.projectId!;
+        const urlParams = new URLSearchParams(window.location.search);
+        const showDbnum = urlParams.get('show_dbnum');
+        const autoProject: ModelProject = {
+          id: projectPath,
+          name: projectPath,
+          description: '',
+          path: projectPath,
+          showDbnum: showDbnum ? Number(showDbnum) : undefined,
+          default: false,
+        };
+        projects.value = [...projects.value, autoProject];
+        applyProject(autoProject, false);
       }
     } catch (error) {
-      console.error('Failed to load model projects:', error);
+      console.error('Failed to load model projects from API:', error);
       projects.value = [];
-      // 设置默认项目以防加载失败
+      // 设置默认项目以防后端不可达
       const fallbackProject = {
         id: 'ams-model',
         name: 'AMS 项目',

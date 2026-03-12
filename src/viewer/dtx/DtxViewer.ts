@@ -11,9 +11,9 @@ import {
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
-} from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { ViewportGizmo } from "three-viewport-gizmo";
+} from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { ViewportGizmo } from 'three-viewport-gizmo';
 
 export type FlyToOptions = {
   duration?: number; // ms
@@ -31,15 +31,15 @@ export type DtxViewerOptions = {
 export type ViewportGizmoOptions = {
   enabled?: boolean;
   placement?:
-  | "top-left"
-  | "top-right"
-  | "top-center"
-  | "center-right"
-  | "center-left"
-  | "center-center"
-  | "bottom-left"
-  | "bottom-right"
-  | "bottom-center";
+  | 'top-left'
+  | 'top-right'
+  | 'top-center'
+  | 'center-right'
+  | 'center-left'
+  | 'center-center'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'bottom-center';
   size?: number;
   offset?: { left?: number; top?: number; right?: number; bottom?: number };
 };
@@ -67,13 +67,13 @@ export class DtxViewer {
       // ignore
     }
 
-    const gl = this.canvas.getContext("webgl2", {
+    const gl = this.canvas.getContext('webgl2', {
       alpha: false,
       antialias: true,
       depth: true,
       stencil: false,
       preserveDrawingBuffer: false,
-      powerPreference: "high-performance",
+      powerPreference: 'high-performance',
     });
     if (!gl) {
       throw new Error('需要 WebGL2（canvas.getContext("webgl2") 失败）');
@@ -133,16 +133,16 @@ export class DtxViewer {
 
   private _parseGizmoOptions(
     gizmoOption?: boolean | ViewportGizmoOptions,
-  ): Omit<ViewportGizmoOptions, "enabled"> & { enabled: boolean } {
+  ): Omit<ViewportGizmoOptions, 'enabled'> & { enabled: boolean } {
     if (gizmoOption === false) {
-      return { enabled: false, placement: "top-right", size: 100, offset: {} };
+      return { enabled: false, placement: 'top-right', size: 100, offset: {} };
     }
     if (gizmoOption === true || gizmoOption === undefined) {
-      return { enabled: true, placement: "top-right", size: 100, offset: {} };
+      return { enabled: true, placement: 'top-right', size: 100, offset: {} };
     }
     return {
       enabled: gizmoOption.enabled !== false,
-      placement: gizmoOption.placement ?? "top-right",
+      placement: gizmoOption.placement ?? 'top-right',
       size: gizmoOption.size ?? 100,
       offset: gizmoOption.offset ?? {},
     };
@@ -150,17 +150,17 @@ export class DtxViewer {
 
   private _setupDefaultLights(): void {
     const ambient = new AmbientLight(0xffffff, 0.4);
-    ambient.name = "DtxAmbientLight";
+    ambient.name = 'DtxAmbientLight';
     this.scene.add(ambient);
 
     const dir0 = new DirectionalLight(0xffffff, 1.2);
     dir0.position.set(0.9, 1.3, 1.1);
-    dir0.name = "DtxDirectionalLight0";
+    dir0.name = 'DtxDirectionalLight0';
     this.scene.add(dir0);
 
     const dir1 = new DirectionalLight(0xffffff, 0.55);
     dir1.position.set(-0.8, 0.2, -0.9);
-    dir1.name = "DtxDirectionalLight1";
+    dir1.name = 'DtxDirectionalLight1';
     this.scene.add(dir1);
   }
 
@@ -250,8 +250,8 @@ export class DtxViewer {
       if (t < 1) {
         window.requestAnimationFrame(step);
       } else if (this._debug) {
-        // eslint-disable-next-line no-console
-        console.log("[DtxViewer] flyTo done", { duration });
+         
+        console.log('[DtxViewer] flyTo done', { duration });
       }
     };
 
@@ -265,10 +265,10 @@ export class DtxViewer {
   setGradientBackground(topColor: string, bottomColor: string): void {
     const w = 2;
     const h = 512;
-    const cvs = document.createElement("canvas");
+    const cvs = document.createElement('canvas');
     cvs.width = w;
     cvs.height = h;
-    const ctx = cvs.getContext("2d");
+    const ctx = cvs.getContext('2d');
     if (!ctx) return;
 
     const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -301,7 +301,7 @@ export class DtxViewer {
 
   loadCrossSkybox(url: string): void {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    img.crossOrigin = 'anonymous';
 
     img.onload = () => {
       // 十字形展开图: 4列 x 3行
@@ -319,14 +319,14 @@ export class DtxViewer {
         nz: { col: 3, row: 1 }, // 后
       };
 
-      const faceOrder = ["px", "nx", "py", "ny", "pz", "nz"];
+      const faceOrder = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
       const faceCanvases: HTMLCanvasElement[] = [];
 
       faceOrder.forEach((face) => {
-        const canvas = document.createElement("canvas");
+        const canvas = document.createElement('canvas');
         canvas.width = faceWidth;
         canvas.height = faceHeight;
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext('2d');
 
         if (ctx) {
           const pos = facePositions[face];
@@ -363,14 +363,14 @@ export class DtxViewer {
       });
 
       if (this._debug) {
-        // eslint-disable-next-line no-console
-        console.log("🌌 Skybox 加载完成，已应用到背景与环境映射");
+         
+        console.log('🌌 Skybox 加载完成，已应用到背景与环境映射');
       }
     };
 
     img.onerror = (err) => {
-      // eslint-disable-next-line no-console
-      console.warn("🌌 Skybox 纹理加载失败:", err);
+       
+      console.warn('🌌 Skybox 纹理加载失败:', err);
     };
 
     img.src = url;

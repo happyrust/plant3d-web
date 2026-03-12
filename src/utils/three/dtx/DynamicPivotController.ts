@@ -7,12 +7,13 @@
  * 3. 变换中心：所有平移、旋转、缩放操作都围绕这个 pivot 点进行
  */
 
-import { Vector2, Vector3, Scene, Sprite, SpriteMaterial, CanvasTexture } from 'three'
-import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { DTXSelectionController } from './selection/DTXSelectionController'
-import type { DTXLayer } from './DTXLayer'
+import { Vector2, Vector3, Scene, Sprite, SpriteMaterial, CanvasTexture } from 'three';
 
-export interface DynamicPivotConfig {
+import type { DTXLayer } from './DTXLayer';
+import type { DTXSelectionController } from './selection/DTXSelectionController';
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
+export type DynamicPivotConfig = {
   /** 是否启用动态 pivot */
   enabled?: boolean
   /** 长按触发时间（毫秒，默认 300） */
@@ -24,20 +25,20 @@ export interface DynamicPivotConfig {
 }
 
 export class DynamicPivotController {
-  private controls: OrbitControls
-  private selectionController: DTXSelectionController
-  private dtxLayer: DTXLayer
-  private scene: Scene
-  private config: Required<DynamicPivotConfig>
+  private controls: OrbitControls;
+  private selectionController: DTXSelectionController;
+  private dtxLayer: DTXLayer;
+  private scene: Scene;
+  private config: Required<DynamicPivotConfig>;
 
-  private currentPivot: Vector3 | null = null
-  private isMouseDown = false
-  private mouseDownPos: Vector2 | null = null
-  private longPressTimer: number | null = null
+  private currentPivot: Vector3 | null = null;
+  private isMouseDown = false;
+  private mouseDownPos: Vector2 | null = null;
+  private longPressTimer: number | null = null;
 
   // 图钉 Gizmo
-  private pinSprite: Sprite | null = null
-  private isPinVisible = false
+  private pinSprite: Sprite | null = null;
+  private isPinVisible = false;
 
   constructor(
     controls: OrbitControls,
@@ -46,102 +47,102 @@ export class DynamicPivotController {
     scene: Scene,
     config: DynamicPivotConfig = {}
   ) {
-    this.controls = controls
-    this.selectionController = selectionController
-    this.dtxLayer = dtxLayer
-    this.scene = scene
+    this.controls = controls;
+    this.selectionController = selectionController;
+    this.dtxLayer = dtxLayer;
+    this.scene = scene;
 
     this.config = {
       enabled: config.enabled ?? true,
       longPressDelay: config.longPressDelay ?? 300,
       pinColor: config.pinColor ?? '#FF6B35',
       pinSize: config.pinSize ?? 32,
-    }
+    };
 
-    this.createPinGizmo()
+    this.createPinGizmo();
   }
 
   /**
    * 创建图钉 Gizmo
    */
   private createPinGizmo(): void {
-    const canvas = document.createElement('canvas')
-    const size = 128
-    canvas.width = size
-    canvas.height = size
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const canvas = document.createElement('canvas');
+    const size = 128;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     // 绘制图钉形状
-    ctx.clearRect(0, 0, size, size)
+    ctx.clearRect(0, 0, size, size);
 
     // 图钉针尖（下方的尖）
-    ctx.fillStyle = this.config.pinColor
-    ctx.beginPath()
-    ctx.moveTo(size / 2, size * 0.9) // 底部尖端
-    ctx.lineTo(size / 2 - 8, size * 0.6) // 左侧
-    ctx.lineTo(size / 2 + 8, size * 0.6) // 右侧
-    ctx.closePath()
-    ctx.fill()
+    ctx.fillStyle = this.config.pinColor;
+    ctx.beginPath();
+    ctx.moveTo(size / 2, size * 0.9); // 底部尖端
+    ctx.lineTo(size / 2 - 8, size * 0.6); // 左侧
+    ctx.lineTo(size / 2 + 8, size * 0.6); // 右侧
+    ctx.closePath();
+    ctx.fill();
 
     // 图钉头部（圆形）
-    ctx.beginPath()
-    ctx.arc(size / 2, size * 0.35, size * 0.25, 0, Math.PI * 2)
-    ctx.fillStyle = this.config.pinColor
-    ctx.fill()
+    ctx.beginPath();
+    ctx.arc(size / 2, size * 0.35, size * 0.25, 0, Math.PI * 2);
+    ctx.fillStyle = this.config.pinColor;
+    ctx.fill();
 
     // 添加高光效果
-    ctx.beginPath()
-    ctx.arc(size / 2 - 8, size * 0.3, size * 0.1, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
-    ctx.fill()
+    ctx.beginPath();
+    ctx.arc(size / 2 - 8, size * 0.3, size * 0.1, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fill();
 
     // 添加阴影轮廓
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.arc(size / 2, size * 0.35, size * 0.25, 0, Math.PI * 2)
-    ctx.stroke()
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(size / 2, size * 0.35, size * 0.25, 0, Math.PI * 2);
+    ctx.stroke();
 
-    const texture = new CanvasTexture(canvas)
+    const texture = new CanvasTexture(canvas);
     const material = new SpriteMaterial({
       map: texture,
       transparent: true,
       depthTest: false,
       depthWrite: false,
-    })
+    });
 
-    this.pinSprite = new Sprite(material)
-    this.pinSprite.scale.set(this.config.pinSize / 10, this.config.pinSize / 10, 1)
-    this.pinSprite.visible = false
-    this.scene.add(this.pinSprite)
+    this.pinSprite = new Sprite(material);
+    this.pinSprite.scale.set(this.config.pinSize / 10, this.config.pinSize / 10, 1);
+    this.pinSprite.visible = false;
+    this.scene.add(this.pinSprite);
   }
 
   /**
    * 处理鼠标按下事件
    */
   handleMouseDown(mousePos: Vector2): void {
-    if (!this.config.enabled) return
+    if (!this.config.enabled) return;
     
-    this.isMouseDown = true
-    this.mouseDownPos = mousePos.clone()
+    this.isMouseDown = true;
+    this.mouseDownPos = mousePos.clone();
     
     // 启动长按计时器
     this.longPressTimer = window.setTimeout(() => {
-      this.onLongPress(mousePos)
-    }, this.config.longPressDelay)
+      this.onLongPress(mousePos);
+    }, this.config.longPressDelay);
   }
 
   /**
    * 处理鼠标移动事件
    */
   handleMouseMove(mousePos: Vector2): void {
-    if (!this.isMouseDown || !this.mouseDownPos) return
+    if (!this.isMouseDown || !this.mouseDownPos) return;
     
     // 如果鼠标移动超过一定距离，取消长按
-    const distance = mousePos.distanceTo(this.mouseDownPos)
+    const distance = mousePos.distanceTo(this.mouseDownPos);
     if (distance > 10) {
-      this.cancelLongPress()
+      this.cancelLongPress();
     }
   }
 
@@ -149,30 +150,30 @@ export class DynamicPivotController {
    * 处理鼠标释放事件
    */
   handleMouseUp(): void {
-    this.isMouseDown = false
-    this.mouseDownPos = null
-    this.cancelLongPress()
+    this.isMouseDown = false;
+    this.mouseDownPos = null;
+    this.cancelLongPress();
   }
 
   /**
    * 长按触发
    */
   private onLongPress(mousePos: Vector2): void {
-    this.longPressTimer = null
+    this.longPressTimer = null;
     
     // 使用 CPU 精确拾取获取表面交点
-    const precisePick = this.selectionController.pickPoint(mousePos)
+    const precisePick = this.selectionController.pickPoint(mousePos);
     if (!precisePick) {
-      return
+      return;
     }
 
     // 设置 pivot 点
-    this.currentPivot = precisePick.point.clone()
-    this.controls.target.copy(this.currentPivot)
-    this.controls.update()
+    this.currentPivot = precisePick.point.clone();
+    this.controls.target.copy(this.currentPivot);
+    this.controls.update();
 
     // 显示图钉 Gizmo
-    this.showPinGizmo(this.currentPivot)
+    this.showPinGizmo(this.currentPivot);
   }
 
   /**
@@ -180,8 +181,8 @@ export class DynamicPivotController {
    */
   private cancelLongPress(): void {
     if (this.longPressTimer !== null) {
-      window.clearTimeout(this.longPressTimer)
-      this.longPressTimer = null
+      window.clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
     }
   }
 
@@ -189,53 +190,53 @@ export class DynamicPivotController {
    * 显示图钉 Gizmo
    */
   private showPinGizmo(position: Vector3): void {
-    if (!this.pinSprite) return
+    if (!this.pinSprite) return;
     
-    this.pinSprite.position.copy(position)
-    this.pinSprite.visible = true
-    this.isPinVisible = true
+    this.pinSprite.position.copy(position);
+    this.pinSprite.visible = true;
+    this.isPinVisible = true;
   }
 
   /**
    * 隐藏图钉 Gizmo
    */
   private hidePinGizmo(): void {
-    if (!this.pinSprite) return
+    if (!this.pinSprite) return;
     
-    this.pinSprite.visible = false
-    this.isPinVisible = false
+    this.pinSprite.visible = false;
+    this.isPinVisible = false;
   }
 
   /**
    * 清除 pivot 点
    */
   clearPivot(): void {
-    this.currentPivot = null
-    this.hidePinGizmo()
+    this.currentPivot = null;
+    this.hidePinGizmo();
   }
 
   /**
    * 获取当前 pivot 点
    */
   getCurrentPivot(): Vector3 | null {
-    return this.currentPivot
+    return this.currentPivot;
   }
 
   /**
    * 图钉是否可见
    */
   isPinGizmoVisible(): boolean {
-    return this.isPinVisible
+    return this.isPinVisible;
   }
 
   /**
    * 设置是否启用
    */
   setEnabled(enabled: boolean): void {
-    this.config.enabled = enabled
+    this.config.enabled = enabled;
     if (!enabled) {
-      this.clearPivot()
-      this.cancelLongPress()
+      this.clearPivot();
+      this.cancelLongPress();
     }
   }
 
@@ -250,19 +251,19 @@ export class DynamicPivotController {
    * 释放资源
    */
   dispose(): void {
-    this.cancelLongPress()
+    this.cancelLongPress();
     
     if (this.pinSprite) {
-      this.scene.remove(this.pinSprite)
-      this.pinSprite.material.dispose()
+      this.scene.remove(this.pinSprite);
+      this.pinSprite.material.dispose();
       if (this.pinSprite.material.map) {
-        this.pinSprite.material.map.dispose()
+        this.pinSprite.material.map.dispose();
       }
-      this.pinSprite = null
+      this.pinSprite = null;
     }
     
-    this.currentPivot = null
-    this.mouseDownPos = null
-    this.isMouseDown = false
+    this.currentPivot = null;
+    this.mouseDownPos = null;
+    this.isMouseDown = false;
   }
 }

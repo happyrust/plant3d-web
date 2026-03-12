@@ -34,8 +34,7 @@ function closePanel() {
 
 <template>
   <div class="h-full w-full overflow-auto p-2">
-    <PtsetPanel
-      v-if="ptsetVis"
+    <PtsetPanel v-if="ptsetVis"
       :refno="refno"
       :response="response"
       :is-visible="isVisible"
@@ -47,8 +46,7 @@ function closePanel() {
       @toggle-crosses="ptsetVis.setCrossesVisible"
       @toggle-labels="ptsetVis.setLabelsVisible"
       @toggle-arrows="ptsetVis.setArrowsVisible"
-      @fly-to="ptsetVis.flyToPtset"
-    />
+      @fly-to="ptsetVis.flyToPtset" />
     <div v-else class="text-muted-foreground p-4">等待 Viewer 初始化...</div>
   </div>
 </template>

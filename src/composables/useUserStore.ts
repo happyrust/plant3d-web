@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue';
 
 import {
+  authGetToken,
   reviewTaskCreate,
   reviewTaskGetList,
   reviewTaskGetById,
@@ -12,6 +13,7 @@ import {
   reviewTaskSubmitToNext,
   reviewTaskReturn,
   reviewTaskGetWorkflow,
+  type TokenRequest,
   type WorkflowHistoryResponse,
   userGetList,
   userGetCurrent,
@@ -20,6 +22,7 @@ import {
   type ReviewTaskCreateRequest,
 } from '@/api/reviewApi';
 import {
+  fromBackendRole,
   type ReviewComponent,
   type ReviewAttachment,
   type ReviewTask,
@@ -28,6 +31,7 @@ import {
   type WorkflowStep,
   UserRole,
   UserStatus,
+  toBackendRole,
 } from '@/types/auth';
 
 type UserPersistedState = {
@@ -40,12 +44,82 @@ type UserPersistedState = {
 const STORAGE_KEY = 'plant3d-web-user-v3';
 const STORAGE_KEY_V2 = 'plant3d-web-user-v2';
 const STORAGE_KEY_V1 = 'plant3d-web-user-v1';
+const DEFAULT_REVIEW_PROJECT_ID = 'debug-project';
 
 // 配置：是否使用后端 API
 const USE_BACKEND = ref(true);
 
-// 三段角色：编制(sj) -> 校核(jd) -> 审核(sh)
-const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh'];
+// 四段角色：编制(sj) -> 校核(jd) -> 审核(sh) -> 批准(pz)
+const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
+
+function isKnownUserRole(role: string): role is UserRole {
+  return (Object.values(UserRole) as string[]).includes(role);
+}
+
+function normalizeUserStatus(status: unknown): UserStatus {
+  const value = typeof status === 'string' ? status : UserStatus.ACTIVE;
+  return (Object.values(UserStatus) as string[]).includes(value)
+    ? (value as UserStatus)
+    : UserStatus.ACTIVE;
+}
+
+function normalizeUserDate(value: unknown): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return value;
+
+  const parsed = new Date(value as string | number);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+export function normalizeBackendUser(raw: Partial<User> & Record<string, unknown>): User {
+  const id = String(raw.id || raw.username || '');
+  const username = String(raw.username || raw.id || '');
+  const email = String(raw.email || `${username || id || 'user'}@example.com`);
+  const name = String(raw.name || raw.username || raw.id || '未命名用户');
+  const rawRole = String(raw.role || UserRole.VIEWER).toLowerCase();
+  const role = isKnownUserRole(rawRole) ? rawRole : fromBackendRole(rawRole);
+
+  return {
+    id,
+    username,
+    email,
+    name,
+    role,
+    department: typeof raw.department === 'string' ? raw.department : undefined,
+    phone: typeof raw.phone === 'string' ? raw.phone : undefined,
+    status: normalizeUserStatus(raw.status),
+    createdAt: normalizeUserDate(raw.createdAt || raw.created_at) || new Date(),
+    updatedAt: normalizeUserDate(raw.updatedAt || raw.updated_at) || new Date(),
+    lastLoginAt: normalizeUserDate(raw.lastLoginAt || raw.last_login_at),
+  };
+}
+
+export function resolveReviewProjectIdFromSession(
+  sessionStorageLike?: Pick<Storage, 'getItem'>,
+): string {
+  const storage = sessionStorageLike ?? (typeof sessionStorage !== 'undefined' ? sessionStorage : undefined);
+  if (!storage) return DEFAULT_REVIEW_PROJECT_ID;
+
+  try {
+    const raw = storage.getItem('embed_mode_params');
+    if (!raw) return DEFAULT_REVIEW_PROJECT_ID;
+    const parsed = JSON.parse(raw) as { projectId?: string | null };
+    return parsed.projectId?.trim() || DEFAULT_REVIEW_PROJECT_ID;
+  } catch {
+    return DEFAULT_REVIEW_PROJECT_ID;
+  }
+}
+
+export function buildSwitchUserTokenRequest(
+  user: Pick<User, 'id' | 'role'>,
+  projectId: string,
+): TokenRequest {
+  return {
+    projectId,
+    userId: user.id,
+    role: toBackendRole(user.role),
+  };
+}
 
 export function isCheckerRole(role: UserRole | undefined): boolean {
   return role === UserRole.PROOFREADER;
@@ -281,7 +355,9 @@ const pendingReviewTasks = computed(() => {
       return checkerId === uid && node === 'jd' && (t.status === 'submitted' || t.status === 'in_review');
     }
     if (isApprover.value) {
-      return approverId === uid && node === 'sh' && (t.status === 'submitted' || t.status === 'in_review');
+      return approverId === uid
+        && (node === 'sh' || node === 'pz')
+        && (t.status === 'submitted' || t.status === 'in_review');
     }
     return false;
   });
@@ -333,7 +409,7 @@ async function loadUsers(): Promise<void> {
   try {
     const response = await userGetList();
     if (response.success && response.users) {
-      users.value = response.users;
+      users.value = response.users.map((user) => normalizeBackendUser(user as Partial<User> & Record<string, unknown>));
     } else {
       throw new Error(response.error_message || '加载用户列表失败');
     }
@@ -355,7 +431,7 @@ async function loadReviewers(): Promise<void> {
   try {
     const response = await userGetReviewers();
     if (response.success && response.users) {
-      reviewerUsers.value = response.users;
+      reviewerUsers.value = response.users.map((user) => normalizeBackendUser(user as Partial<User> & Record<string, unknown>));
     } else {
       reviewerUsers.value = mockReviewerUsers;
     }
@@ -373,13 +449,14 @@ async function loadCurrentUser(): Promise<void> {
   try {
     const response = await userGetCurrent();
     if (response.success && response.user) {
-      currentUserId.value = response.user.id;
+      const normalizedUser = normalizeBackendUser(response.user as Partial<User> & Record<string, unknown>);
+      currentUserId.value = normalizedUser.id;
       // 确保用户在列表中
-      const existingIndex = users.value.findIndex((u) => u.id === response.user!.id);
+      const existingIndex = users.value.findIndex((u) => u.id === normalizedUser.id);
       if (existingIndex >= 0) {
-        users.value[existingIndex] = response.user;
+        users.value[existingIndex] = normalizedUser;
       } else {
-        users.value.push(response.user);
+        users.value.push(normalizedUser);
       }
     }
   } catch (e) {
@@ -387,16 +464,27 @@ async function loadCurrentUser(): Promise<void> {
   }
 }
 
-function switchUser(userId: string): void {
+async function switchUser(userId: string): Promise<void> {
   const user = users.value.find((u) => u.id === userId);
-  if (user) {
+  if (!user) return;
+
+  if (USE_BACKEND.value) {
+    try {
+      const projectId = resolveReviewProjectIdFromSession();
+      await authGetToken(buildSwitchUserTokenRequest(user, projectId));
+      await loadCurrentUser();
+    } catch (e) {
+      console.warn('[useUserStore] Failed to switch backend auth user:', e);
+      return;
+    }
+  } else {
     currentUserId.value = userId;
-    console.log(`[useUserStore] Switched to user: ${user.name} (${user.role})`);
-    // 重新加载任务
-    loadReviewTasks();
-    // 重新连接 WebSocket
-    connectWebSocket();
   }
+
+  currentUserId.value = userId;
+  console.log(`[useUserStore] Switched to user: ${user.name} (${user.role})`);
+  await loadReviewTasks();
+  connectWebSocket();
 }
 
 // ============ 任务管理 ============
@@ -785,6 +873,11 @@ function connectWebSocket() {
   if (ws) return;
 
   const url = getReviewWebSocketUrl();
+  if (!url) {
+    wsConnected.value = false;
+    wsError.value = null;
+    return;
+  }
 
   try {
     ws = new WebSocket(url);
@@ -863,12 +956,10 @@ function handleWebSocketMessage(message: {
 
 async function initialize(): Promise<void> {
   if (USE_BACKEND.value) {
-    await Promise.all([
-      loadUsers(),
-      loadReviewers(),
-      loadCurrentUser(),
-      loadReviewTasks(),
-    ]);
+    await loadUsers();
+    await loadReviewers();
+    await loadCurrentUser();
+    await loadReviewTasks();
     connectWebSocket();
   }
 }

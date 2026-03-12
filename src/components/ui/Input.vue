@@ -41,12 +41,10 @@ function onInput(e: Event) {
 </script>
 
 <template>
-  <input
-    :type="type"
+  <input :type="type"
     :value="modelValue"
     :placeholder="placeholder"
     :disabled="disabled"
     :class="inputClass"
-    @input="onInput"
-  />
+    @input="onInput" />
 </template>

@@ -87,7 +87,7 @@ async function startTask(taskId) {
   log('START', `启动任务 ${taskId}...`);
   const resp = await fetchJson(`/api/tasks/${taskId}/start`, { method: 'POST' });
   if (resp.success) {
-    log('START', `✅ 任务已启动`);
+    log('START', '✅ 任务已启动');
   } else {
     log('START', `⚠ 启动响应: ${JSON.stringify(resp)}`);
   }
@@ -122,11 +122,11 @@ async function pollTaskStatus(taskId, maxWaitSec = 30) {
 
       if (['Completed', 'completed', 'Failed', 'failed', 'Cancelled', 'cancelled'].includes(status)) {
         if (status.toLowerCase() === 'completed') {
-          log('POLL', `✅ 任务完成！`);
+          log('POLL', '✅ 任务完成！');
         } else if (status.toLowerCase() === 'failed') {
           log('POLL', `❌ 任务失败: ${task.error || '未知错误'}`);
         } else {
-          log('POLL', `⚠ 任务已取消`);
+          log('POLL', '⚠ 任务已取消');
         }
         return status.toLowerCase();
       }
@@ -233,7 +233,7 @@ async function testModelGenerationTask(serverConfig) {
 
 async function main() {
   console.log('='.repeat(60));
-  log('MAIN', `🚀 任务 API 测试脚本`);
+  log('MAIN', '🚀 任务 API 测试脚本');
   log('MAIN', `后端地址: ${BASE_URL}`);
   console.log('='.repeat(60));
 

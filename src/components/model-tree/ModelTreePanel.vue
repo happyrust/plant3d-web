@@ -3,18 +3,19 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 
 import { useVirtualizer } from '@tanstack/vue-virtual';
 import { Filter, Plus, Search, X } from 'lucide-vue-next';
+
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import { pdmsSearch, type PdmsSearchItem } from '@/api/genModelSearchApi';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
+import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
-import { setModelTreeInstance } from '@/composables/useModelTreeStore';
-import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { cn } from '@/lib/utils';
 
 const props = defineProps<{
@@ -44,7 +45,6 @@ const roomTree = useRoomTree(roomViewerRef, computed(() => activeTree.value === 
 
 // Register the global tree instance for console commands
 setModelTreeInstance(pdmsTree);
-
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();
@@ -975,7 +975,7 @@ function viewProperties() {
 }
 
 // MBD 标注：右键菜单可用的 noun 类型
-const MBD_NOUNS = new Set(['BRAN', 'HANG', 'PIPE'])
+const MBD_NOUNS = new Set(['BRAN', 'HANG', 'PIPE']);
 
 const contextNodeCanMbd = computed(() => {
   if (isRoomTree.value) return false;
@@ -983,7 +983,7 @@ const contextNodeCanMbd = computed(() => {
   if (!id || !isRefnoLike(id)) return false;
   const node = pdmsTree.nodesById.value[id];
   return !!node && MBD_NOUNS.has(node.type);
-})
+});
 
 function generateMbd() {
   if (!contextNodeId.value) return;
@@ -1181,9 +1181,9 @@ function onSearchEnter(value: string) {
           <!-- 应用：打开“过滤结果分组”面板（筛选本身已即时生效） -->
           <div v-if="!isRoomTree" class="mt-2 flex items-center justify-between border-t border-border pt-2">
             <label class="flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox"
-                class="h-4 w-4"
-                v-model="filterResultsGroupBySite" />
+              <input v-model="filterResultsGroupBySite"
+                type="checkbox"
+                class="h-4 w-4" />
               按 SITE 分组
             </label>
             <button type="button"
@@ -1385,8 +1385,7 @@ function onSearchEnter(value: string) {
     </Teleport>
 
     <!-- Model Generation Progress Modal -->
-    <ModelGenerationProgressModal 
-      v-if="modelGenerationState"
+    <ModelGenerationProgressModal v-if="modelGenerationState"
       :open="modelGenerationState.isGenerating.value && modelGenerationState.showProgressModal.value"
       :progress="modelGenerationState.progress.value"
       :status="modelGenerationState.statusMessage.value"
@@ -1394,7 +1393,6 @@ function onSearchEnter(value: string) {
       :total-count="modelGenerationState.totalCount.value"
       :current-index="modelGenerationState.currentIndex.value"
       :current-refno="modelGenerationState.currentRefno.value"
-      @close="modelGenerationState.showProgressModal.value = false"
-    />
+      @close="modelGenerationState.showProgressModal.value = false" />
   </div>
 </template>

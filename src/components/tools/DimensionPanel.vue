@@ -183,14 +183,12 @@ watch(
 
           <div v-if="editingId === d.id" class="mt-2 rounded-md border border-border bg-muted/20 p-2">
             <div class="text-xs text-muted-foreground">自定义文字（留空=恢复自动显示）</div>
-            <input
-              v-model="editingText"
+            <input v-model="editingText"
               type="text"
               class="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
               placeholder="例如：100mm"
               @keydown.enter.prevent="saveEdit()"
-              @keydown.esc.prevent="cancelEdit()"
-            />
+              @keydown.esc.prevent="cancelEdit()" />
             <div class="mt-2 flex items-center justify-end gap-2">
               <button type="button"
                 class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"

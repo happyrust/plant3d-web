@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 import { FileText, Trash2, Upload, X, AlertCircle, CheckCircle, Loader2, RefreshCw } from 'lucide-vue-next';
+
+import { hasAttachmentLineage, shouldAutoUploadAttachments } from './reviewAttachmentFlow';
+
 import { reviewAttachmentUploadWithProgress } from '@/api/reviewApi';
 
 // 上传文件类型定义
-export interface UploadedFile {
+export type UploadedFile = {
   id: string;
   file: File;
   name: string;
@@ -19,7 +22,7 @@ export interface UploadedFile {
 }
 
 // Props
-interface Props {
+type Props = {
   modelValue: UploadedFile[];
   maxFiles?: number;
   maxSize?: number; // MB
@@ -27,6 +30,7 @@ interface Props {
   disabled?: boolean;
   autoUpload?: boolean; // 是否自动上传
   taskId?: string | null; // 关联的任务ID（创建任务前可为空）
+  formId?: string | null; // 可选的稳定单据号，创建任务前可先用于附件归档
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -36,6 +40,7 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   autoUpload: true,
   taskId: null,
+  formId: null,
 });
 
 // Emits
@@ -108,18 +113,29 @@ function updateFileStatus(id: string, updates: Partial<UploadedFile>) {
 }
 
 // 上传单个文件
-async function uploadFile(uploadedFile: UploadedFile) {
+async function uploadFile(
+  uploadedFile: UploadedFile,
+  lineage: { taskId?: string | null; formId?: string | null } = {},
+) {
+  const taskId = lineage.taskId ?? props.taskId;
+  const formId = lineage.formId ?? props.formId;
+
+  if (!hasAttachmentLineage(taskId, formId)) {
+    return;
+  }
+
   // 更新状态为上传中
   updateFileStatus(uploadedFile.id, { status: 'uploading', progress: 0 });
 
   try {
     const result = await reviewAttachmentUploadWithProgress(
-      props.taskId,
+      taskId || null,
       uploadedFile.file,
       (percent) => {
         // 进度回调
         updateFileStatus(uploadedFile.id, { progress: percent });
-      }
+      },
+      formId ? { formId } : undefined,
     );
 
     if (result.success && result.attachment) {
@@ -194,7 +210,7 @@ function addFiles(files: FileList | File[]) {
     emit('update:modelValue', [...props.modelValue, ...newFiles]);
     
     // 如果开启自动上传，立即开始上传
-    if (props.autoUpload) {
+    if (shouldAutoUploadAttachments(props.autoUpload, props.taskId, props.formId)) {
       // 使用 nextTick 确保状态已更新
       setTimeout(() => {
         newFiles
@@ -206,10 +222,18 @@ function addFiles(files: FileList | File[]) {
 }
 
 // 手动触发上传（用于非自动上传模式）
-function startUpload() {
-  props.modelValue
-    .filter((f) => f.status === 'pending')
-    .forEach((f) => uploadFile(f));
+async function startUpload(lineage: { taskId?: string | null; formId?: string | null } = {}) {
+  const taskId = lineage.taskId ?? props.taskId;
+  const formId = lineage.formId ?? props.formId;
+  if (!hasAttachmentLineage(taskId, formId)) {
+    return;
+  }
+
+  await Promise.all(
+    props.modelValue
+      .filter((f) => f.status === 'pending')
+      .map((f) => uploadFile(f, { taskId, formId }))
+  );
 }
 
 // 重试上传失败的文件
@@ -313,21 +337,19 @@ defineExpose({
 <template>
   <div class="file-upload-section">
     <!-- 拖拽上传区域 -->
-    <div
-      :class="[
-        'border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer',
-        isDragging
-          ? 'border-blue-500 bg-blue-50'
-          : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50',
-        disabled && 'opacity-50 cursor-not-allowed',
-        !canAddMore && 'opacity-50',
-      ]"
+    <div :class="[
+           'border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer',
+           isDragging
+             ? 'border-blue-500 bg-blue-50'
+             : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50',
+           disabled && 'opacity-50 cursor-not-allowed',
+           !canAddMore && 'opacity-50',
+         ]"
       @dragenter="handleDragEnter"
       @dragleave="handleDragLeave"
       @dragover="handleDragOver"
       @drop="handleDrop"
-      @click="triggerFileInput"
-    >
+      @click="triggerFileInput">
       <Upload class="h-8 w-8 mx-auto mb-2 text-gray-400" />
       <p class="text-sm text-gray-600">
         <span v-if="canAddMore"> 拖拽文件到此处，或 <span class="text-blue-600">点击上传</span> </span>
@@ -339,15 +361,13 @@ defineExpose({
     </div>
 
     <!-- 隐藏的文件输入 -->
-    <input
-      ref="fileInputRef"
+    <input ref="fileInputRef"
       type="file"
       multiple
       :accept="acceptTypes"
       :disabled="disabled || !canAddMore"
       class="hidden"
-      @change="handleFileInputChange"
-    />
+      @change="handleFileInputChange" />
 
     <!-- 文件列表 -->
     <div v-if="modelValue.length > 0" class="mt-4 space-y-2">
@@ -359,25 +379,20 @@ defineExpose({
           </span>
         </span>
         <div class="flex gap-2">
-          <button
-            v-if="!autoUpload && pendingCount > 0"
+          <button v-if="!autoUpload && pendingCount > 0"
             class="text-xs text-blue-500 hover:text-blue-700"
-            @click.stop="startUpload"
-          >
+            @click.stop="startUpload">
             开始上传
           </button>
-          <button
-            v-if="!disabled"
+          <button v-if="!disabled"
             class="text-xs text-red-500 hover:text-red-700"
-            @click.stop="clearAll"
-          >
+            @click.stop="clearAll">
             清空全部
           </button>
         </div>
       </div>
 
-      <div
-        v-for="file in modelValue"
+      <div v-for="file in modelValue"
         :key="file.id"
         :class="[
           'flex items-center gap-3 p-3 rounded-lg border',
@@ -385,14 +400,11 @@ defineExpose({
           file.status === 'success' ? 'bg-green-50 border-green-200' :
           file.status === 'uploading' ? 'bg-blue-50 border-blue-200' :
           'bg-gray-50 border-gray-200',
-        ]"
-      >
+        ]">
         <!-- 文件图标/状态 -->
-        <component
-          :is="getStatusIcon(file.status)"
+        <component :is="getStatusIcon(file.status)"
           class="h-5 w-5 flex-shrink-0"
-          :class="getStatusClass(file.status)"
-        />
+          :class="getStatusClass(file.status)" />
 
         <!-- 文件信息 -->
         <div class="flex-1 min-w-0">
@@ -411,10 +423,8 @@ defineExpose({
           <!-- 上传进度条 -->
           <div v-if="file.status === 'uploading'" class="mt-1">
             <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                class="h-full bg-blue-500 transition-all duration-300"
-                :style="{ width: `${file.progress}%` }"
-              />
+              <div class="h-full bg-blue-500 transition-all duration-300"
+                :style="{ width: `${file.progress}%` }" />
             </div>
           </div>
         </div>
@@ -422,21 +432,17 @@ defineExpose({
         <!-- 操作按钮 -->
         <div class="flex items-center gap-1">
           <!-- 重试按钮（失败时显示） -->
-          <button
-            v-if="file.status === 'error'"
+          <button v-if="file.status === 'error'"
             class="p-1 hover:bg-red-100 rounded text-red-400 hover:text-red-600"
             title="重试上传"
-            @click.stop="retryUpload(file.id)"
-          >
+            @click.stop="retryUpload(file.id)">
             <RefreshCw class="h-4 w-4" />
           </button>
           
           <!-- 删除按钮 -->
-          <button
-            v-if="!disabled && file.status !== 'uploading'"
+          <button v-if="!disabled && file.status !== 'uploading'"
             class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
-            @click.stop="removeFile(file.id)"
-          >
+            @click.stop="removeFile(file.id)">
             <X class="h-4 w-4" />
           </button>
         </div>

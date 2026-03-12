@@ -1,4 +1,5 @@
 import {
+  Activity,
   Box,
   Bug,
   Calculator,
@@ -47,6 +48,7 @@ import {
 } from 'lucide-vue-next';
 
 export const ribbonIcons = {
+  activity: Activity,
   bug: Bug,
   calculator: Calculator,
   check_circle: CheckCircle,

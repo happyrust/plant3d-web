@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="dialog" max-width="500">
-    <template v-slot:activator="{ props }">
+    <template #activator="{ props }">
       <v-btn v-bind="props" icon="mdi-information-outline" size="small" />
     </template>
     <v-card>
@@ -28,25 +28,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted } from 'vue';
 
-const dialog = ref(false)
-const frontendVersion = ref({ version: 'unknown', commit: 'unknown', buildDate: 'unknown' })
-const backendVersion = ref({ version: 'unknown', commit: 'unknown', buildDate: 'unknown' })
+const dialog = ref(false);
+const frontendVersion = ref({ version: 'unknown', commit: 'unknown', buildDate: 'unknown' });
+const backendVersion = ref({ version: 'unknown', commit: 'unknown', buildDate: 'unknown' });
 
 onMounted(async () => {
   try {
-    const res = await fetch('/version.json')
-    frontendVersion.value = await res.json()
+    const res = await fetch('/version.json');
+    frontendVersion.value = await res.json();
   } catch (e) {
-    console.warn('Failed to load frontend version', e)
+    console.warn('Failed to load frontend version', e);
   }
   
   try {
-    const res = await fetch('/api/version')
-    backendVersion.value = await res.json()
+    const res = await fetch('/api/version');
+    backendVersion.value = await res.json();
   } catch (e) {
-    console.warn('Failed to load backend version', e)
+    console.warn('Failed to load backend version', e);
   }
-})
+});
 </script>

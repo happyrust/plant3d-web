@@ -1,14 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import * as THREE from "three";
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-describe("LinearDimension3D", () => {
+import * as THREE from 'three';
+
+describe('LinearDimension3D', () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it("should construct and expose params", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should construct and expose params', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const start = new THREE.Vector3(0, 0, 0);
@@ -19,12 +20,12 @@ describe("LinearDimension3D", () => {
     expect(dim.getParams().start.x).toBe(0);
     expect(dim).toBeInstanceOf(THREE.Object3D);
     expect(dim.getDistance()).toBeCloseTo(1, 8);
-    expect(dim.getDisplayText()).toBe("1.0");
+    expect(dim.getDisplayText()).toBe('1.0');
   });
 
-  it("should use dashed materials for reference dimensions", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should use dashed materials for reference dimensions', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     materials.setResolution(800, 600);
@@ -40,7 +41,7 @@ describe("LinearDimension3D", () => {
     const ext1 = (dim as any).extensionLine1;
     const arrow1 = (dim as any).arrow1;
 
-    const spy = vi.spyOn(lineA, "computeLineDistances");
+    const spy = vi.spyOn(lineA, 'computeLineDistances');
 
     const camera = new THREE.PerspectiveCamera(60, 800 / 600, 0.1, 100);
     camera.position.set(0, 0, 5);
@@ -56,9 +57,9 @@ describe("LinearDimension3D", () => {
     expect(spy).toHaveBeenCalled();
   });
 
-  it("should forward setBackgroundColor to textLabel", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should forward setBackgroundColor to textLabel', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
@@ -68,15 +69,15 @@ describe("LinearDimension3D", () => {
     });
 
     const textLabel = (dim as any).textLabel;
-    const spy = vi.spyOn(textLabel, "setBackgroundColor");
+    const spy = vi.spyOn(textLabel, 'setBackgroundColor');
 
     dim.setBackgroundColor(0xff0000);
     expect(spy).toHaveBeenCalledWith(0xff0000);
   });
 
-  it("should preserve depthTest=false after setMaterialSet in all interaction states", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should preserve depthTest=false after setMaterialSet in all interaction states', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(
@@ -105,9 +106,9 @@ describe("LinearDimension3D", () => {
     expectDepthTestOff();
   });
 
-  it("should have extension lines that overshoot by 10px worth of world units", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should have extension lines that overshoot beyond dimension line endpoint', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
@@ -125,32 +126,29 @@ describe("LinearDimension3D", () => {
 
     dim.update(camera);
 
-    // Extension line geometry should have 2 points
+    // Extension line geometry endpoint (in local space)
+    // LineGeometry stores positions as instanceStart/instanceEnd pairs
     const ext1Geom = (dim as any).ext1Geometry as THREE.BufferGeometry;
-    const pos = ext1Geom.getAttribute("position");
-    const instanceStart = ext1Geom.getAttribute("instanceStart");
-    expect(pos).toBeTruthy();
-    expect(instanceStart).toBeTruthy();
-    expect(instanceStart.count).toBe(1);
+    const instanceEnd = ext1Geom.getAttribute('instanceEnd');
+    expect(instanceEnd).toBeTruthy();
 
     // The extension line should extend beyond the dim endpoint (overshoot)
-    // Start point is near (0,0,0), end point should be beyond (0,2,0)
-    const endY = pos.getY(1);
-    // In local coords, dimStart.y = 2 (offset=2, direction=(0,1,0))
+    // Start point is at (0,0,0), dimension line is at (0,2,0)
     // Extension should overshoot past 2
-    expect(endY).toBeGreaterThanOrEqual(2);
+    const endY = instanceEnd.getY(0);
+    expect(endY).toBeGreaterThan(2);
   });
 
-  it("should use camera annotation viewport for wpp scaling", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should use camera annotation viewport for wpp scaling', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
       start: new THREE.Vector3(0, 0, 0),
       end: new THREE.Vector3(2, 0, 0),
       offset: 0.6,
-      text: "2000",
+      text: '2000',
     });
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
@@ -173,9 +171,9 @@ describe("LinearDimension3D", () => {
     expect(scaleSmallViewport).toBeGreaterThan(scaleLargeViewport);
   });
 
-  it("should keep label centered on the dimension line even when labelOffsetWorld is provided", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should keep label centered on the dimension line even when labelOffsetWorld is provided', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
@@ -184,7 +182,7 @@ describe("LinearDimension3D", () => {
       offset: 3,
       direction: new THREE.Vector3(0, 1, 0),
       labelOffsetWorld: new THREE.Vector3(5, 9, 0),
-      text: "10000",
+      text: '10000',
     });
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
@@ -203,9 +201,9 @@ describe("LinearDimension3D", () => {
     expect(labelPos.distanceTo(expected)).toBeLessThan(0.1);
   });
 
-  it("should keep label world scale stable under parent global scaling", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should keep label world scale stable under parent global scaling', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const createDim = () =>
@@ -213,7 +211,7 @@ describe("LinearDimension3D", () => {
         start: new THREE.Vector3(0, 0, 0),
         end: new THREE.Vector3(2, 0, 0),
         offset: 0.6,
-        text: "2000",
+        text: '2000',
       });
 
     const dimNoScale = createDim();
@@ -243,16 +241,16 @@ describe("LinearDimension3D", () => {
     expect(w2 / w1).toBeCloseTo(1, 2);
   });
 
-  it("should render open arrow style with V-line geometry", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should render open arrow style with V-line geometry', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
       start: new THREE.Vector3(0, 0, 0),
       end: new THREE.Vector3(4, 0, 0),
       offset: 1,
-      arrowStyle: "open",
+      arrowStyle: 'open',
       arrowSizePx: 12,
       arrowAngleDeg: 18,
     });
@@ -271,21 +269,21 @@ describe("LinearDimension3D", () => {
 
     expect(arrowMesh1.visible).toBe(false);
     expect(arrowOpen1.visible).toBe(true);
-    const instanceStart = openGeom1.getAttribute("instanceStart");
+    const instanceStart = openGeom1.getAttribute('instanceStart');
     expect(instanceStart).toBeTruthy();
     expect(instanceStart.count).toBe(2);
   });
 
-  it("should render tick arrow style with single slash segments", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should render tick arrow style with single slash segments', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
       start: new THREE.Vector3(0, 0, 0),
       end: new THREE.Vector3(4, 0, 0),
       offset: 1,
-      arrowStyle: "tick",
+      arrowStyle: 'tick',
       arrowSizePx: 12,
       arrowAngleDeg: 18,
     });
@@ -304,21 +302,21 @@ describe("LinearDimension3D", () => {
 
     expect(arrowMesh1.visible).toBe(false);
     expect(arrowOpen1.visible).toBe(true);
-    const instanceStart = openGeom1.getAttribute("instanceStart");
+    const instanceStart = openGeom1.getAttribute('instanceStart');
     expect(instanceStart).toBeTruthy();
     expect(instanceStart.count).toBe(1);
   });
 
-  it("should apply custom line width to dimension lines and open arrows", async () => {
-    const { AnnotationMaterials } = await import("../core/AnnotationMaterials");
-    const { LinearDimension3D } = await import("./LinearDimension3D");
+  it('should apply custom line width to dimension lines and open arrows', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
       start: new THREE.Vector3(0, 0, 0),
       end: new THREE.Vector3(4, 0, 0),
       offset: 1,
-      arrowStyle: "open",
+      arrowStyle: 'open',
     });
 
     dim.setLineWidthPx(2.5);

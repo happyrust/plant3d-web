@@ -8,12 +8,10 @@
             {{ task.type === 'DataParsingWizard' ? 'mdi-database-search' : 'mdi-cube-outline' }}
           </v-icon>
           <span>{{ task.name }}</span>
-          <v-chip
-            :color="statusDisplay.color"
+          <v-chip :color="statusDisplay.color"
             size="small"
             variant="tonal"
-            class="ml-2"
-          >
+            class="ml-2">
             {{ statusDisplay.label }}
           </v-chip>
         </div>
@@ -36,12 +34,10 @@
               </template>
             </span>
           </div>
-          <v-progress-linear
-            :model-value="task.progress"
+          <v-progress-linear :model-value="task.progress"
             color="primary"
             height="6"
-            rounded
-          />
+            rounded />
         </div>
 
         <!-- 基本信息 -->
@@ -83,13 +79,11 @@
         <div v-if="task.metadata?.bundle_url" class="detail-section">
           <div class="section-title">模型产物</div>
           <div class="pa-3">
-            <v-btn
-              size="small"
+            <v-btn size="small"
               color="primary"
               variant="tonal"
               :href="bundleFullUrl"
-              target="_blank"
-            >
+              target="_blank">
               <v-icon start size="16">mdi-open-in-new</v-icon>
               查看模型包
             </v-btn>
@@ -104,13 +98,11 @@
             <v-chip size="small" color="primary" variant="flat" class="mr-1 mb-1">
               总数: {{ task.metadata.stats.total_generated }}
             </v-chip>
-            <v-chip
-              v-for="(count, noun) in task.metadata.stats.noun_counts"
+            <v-chip v-for="(count, noun) in task.metadata.stats.noun_counts"
               :key="String(noun)"
               size="small"
               variant="tonal"
-              class="mr-1 mb-1"
-            >
+              class="mr-1 mb-1">
               {{ noun }}: {{ count }}
             </v-chip>
           </div>
@@ -147,8 +139,7 @@
           <div class="section-title d-flex align-center justify-space-between">
             <span>执行日志</span>
             <div class="d-flex align-center">
-              <v-select
-                v-model="logLevelFilter"
+              <v-select v-model="logLevelFilter"
                 :items="logLevelOptions"
                 item-title="label"
                 item-value="value"
@@ -156,9 +147,8 @@
                 density="compact"
                 hide-details
                 style="max-width: 120px;"
-                class="mr-2"
-              />
-              <v-btn size="x-small" variant="text" @click="loadLogs" :loading="logsLoading">
+                class="mr-2" />
+              <v-btn size="x-small" variant="text" :loading="logsLoading" @click="loadLogs">
                 <v-icon size="14">mdi-refresh</v-icon>
               </v-btn>
             </div>
@@ -171,19 +161,15 @@
               暂无日志
             </div>
             <div v-else class="log-list">
-              <div
-                v-for="(log, i) in logs"
+              <div v-for="(log, i) in logs"
                 :key="i"
                 class="log-entry"
-                :class="`log-${(log.level || 'info').toLowerCase()}`"
-              >
+                :class="`log-${(log.level || 'info').toLowerCase()}`">
                 <span class="log-time">{{ formatLogTime(log.timestamp) }}</span>
-                <v-chip
-                  size="x-small"
+                <v-chip size="x-small"
                   :color="getLogLevelColor(log.level)"
                   variant="flat"
-                  class="log-level-chip"
-                >
+                  class="log-level-chip">
                   {{ log.level }}
                 </v-chip>
                 <span class="log-message">{{ log.message }}</span>
@@ -197,33 +183,27 @@
 
       <!-- 底部操作 -->
       <v-card-actions class="pa-3">
-        <v-btn
-          v-if="task.status === 'pending'"
+        <v-btn v-if="task.status === 'pending'"
           size="small"
           color="primary"
           variant="tonal"
-          @click="$emit('start', task.id)"
-        >
+          @click="$emit('start', task.id)">
           <v-icon start size="16">mdi-play</v-icon>
           启动
         </v-btn>
-        <v-btn
-          v-if="task.status === 'running'"
+        <v-btn v-if="task.status === 'running'"
           size="small"
           color="error"
           variant="tonal"
-          @click="$emit('stop', task.id)"
-        >
+          @click="$emit('stop', task.id)">
           <v-icon start size="16">mdi-stop</v-icon>
           停止
         </v-btn>
-        <v-btn
-          v-if="task.status === 'failed'"
+        <v-btn v-if="task.status === 'failed'"
           size="small"
           color="warning"
           variant="tonal"
-          @click="$emit('restart', task.id)"
-        >
+          @click="$emit('restart', task.id)">
           <v-icon start size="16">mdi-refresh</v-icon>
           重启
         </v-btn>
@@ -237,9 +217,11 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+
 import type { Task } from '@/types/task';
-import { getTaskTypeDisplayName, getTaskStatusDisplay, formatDuration } from '@/types/task';
+
 import { taskGetError, taskGetLogs, getBaseUrl } from '@/api/genModelTaskApi';
+import { getTaskTypeDisplayName, getTaskStatusDisplay, formatDuration } from '@/types/task';
 
 // ============ Props & Emits ============
 const props = defineProps<{
@@ -255,7 +237,7 @@ const emit = defineEmits<{
 }>();
 
 // ============ 状态 ============
-const logs = ref<Array<{ level: string; message: string; timestamp: string | number }>>([]);
+const logs = ref<{ level: string; message: string; timestamp: string | number }[]>([]);
 const logsLoading = ref(false);
 const errorDetails = ref<any>(null);
 const logLevelFilter = ref('all');

@@ -4,56 +4,56 @@ export type MbdPipeAnnotationRequestLike = {
 }
 
 export function createLatestOnlyGate() {
-  let currentSeq = 0
+  let currentSeq = 0;
   return {
     issue(): number {
-      currentSeq += 1
-      return currentSeq
+      currentSeq += 1;
+      return currentSeq;
     },
     isLatest(seq: number): boolean {
-      return seq === currentSeq
+      return seq === currentSeq;
     },
-  }
+  };
 }
 
 export function shouldClearMbdRequest(
   current: MbdPipeAnnotationRequestLike | null,
   handled: MbdPipeAnnotationRequestLike
 ): boolean {
-  if (!current) return false
-  return current.refno === handled.refno && current.timestamp === handled.timestamp
+  if (!current) return false;
+  return current.refno === handled.refno && current.timestamp === handled.timestamp;
 }
 
 export class ExternalAnnotationRegistry {
-  private readonly ids = new Set<string>()
+  private readonly ids = new Set<string>();
 
   sync(
     nextIds: Iterable<string>,
     register: (id: string) => void,
     unregister: (id: string) => void
   ): void {
-    const next = new Set(nextIds)
+    const next = new Set(nextIds);
     for (const id of this.ids) {
       if (!next.has(id)) {
-        unregister(id)
-        this.ids.delete(id)
+        unregister(id);
+        this.ids.delete(id);
       }
     }
     for (const id of next) {
-      if (this.ids.has(id)) continue
-      register(id)
-      this.ids.add(id)
+      if (this.ids.has(id)) continue;
+      register(id);
+      this.ids.add(id);
     }
   }
 
   clear(unregister: (id: string) => void): void {
     for (const id of this.ids) {
-      unregister(id)
+      unregister(id);
     }
-    this.ids.clear()
+    this.ids.clear();
   }
 
   values(): Set<string> {
-    return new Set(this.ids)
+    return new Set(this.ids);
   }
 }

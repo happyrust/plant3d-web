@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { ArrowRight, Send, X } from 'lucide-vue-next';
 
 import type { WorkflowNode } from '@/types/auth';
+
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 const props = defineProps<{
@@ -33,11 +34,9 @@ function handleClose() {
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="visible"
+    <div v-if="visible"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      @click.self="handleClose"
-    >
+      @click.self="handleClose">
       <div class="w-full max-w-md rounded-lg bg-white shadow-xl dark:bg-gray-900">
         <!-- 头部 -->
         <div class="flex items-center justify-between border-b px-5 py-4">
@@ -66,30 +65,24 @@ function handleClose() {
           <!-- 备注 -->
           <div>
             <label class="mb-1.5 block text-sm text-gray-600 dark:text-gray-400">提交备注（可选）</label>
-            <textarea
-              v-model="comment"
+            <textarea v-model="comment"
               class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800"
               rows="3"
-              placeholder="输入提交备注..."
-            />
+              placeholder="输入提交备注..." />
           </div>
         </div>
 
         <!-- 底部按钮 -->
         <div class="flex justify-end gap-2 border-t px-5 py-3">
-          <button
-            type="button"
+          <button type="button"
             class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-            @click="handleClose"
-          >
+            @click="handleClose">
             取消
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="flex items-center gap-1.5 rounded-md bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:opacity-50"
             :disabled="loading"
-            @click="handleConfirm"
-          >
+            @click="handleConfirm">
             <Send class="h-4 w-4" />
             确认提交
           </button>

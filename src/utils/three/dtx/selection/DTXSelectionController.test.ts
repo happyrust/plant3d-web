@@ -1,14 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   BufferAttribute,
   BufferGeometry,
   Matrix4,
   PerspectiveCamera,
   Scene,
-} from "three";
+} from 'three';
 
 const { outlineHelpers, MockOutlineHelper } = vi.hoisted(() => {
-  const helpers: Array<{
+  const helpers: {
     outlinedObjects: string[];
     init: ReturnType<typeof vi.fn>;
     setGeometryGetter: ReturnType<typeof vi.fn>;
@@ -19,7 +20,7 @@ const { outlineHelpers, MockOutlineHelper } = vi.hoisted(() => {
     dispose: ReturnType<typeof vi.fn>;
     setOutlinedObjects: ReturnType<typeof vi.fn>;
     getOutlinedObjects: ReturnType<typeof vi.fn>;
-  }> = [];
+  }[] = [];
 
   class OutlineHelper {
     outlinedObjects: string[] = [];
@@ -48,11 +49,11 @@ const { outlineHelpers, MockOutlineHelper } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../outline/DTXOutlineHelper", () => ({
+vi.mock('../outline/DTXOutlineHelper', () => ({
   DTXOutlineHelper: MockOutlineHelper,
 }));
 
-vi.mock("./GPUPicker", () => ({
+vi.mock('./GPUPicker', () => ({
   GPUPicker: class MockGPUPicker {
     setObjectIndexMapper() {}
     pick() {
@@ -62,12 +63,12 @@ vi.mock("./GPUPicker", () => ({
   },
 }));
 
-import { DTXSelectionController } from "./DTXSelectionController";
+import { DTXSelectionController } from './DTXSelectionController';
 
 function createQuadGeometry(): BufferGeometry {
   const geometry = new BufferGeometry();
   geometry.setAttribute(
-    "position",
+    'position',
     new BufferAttribute(
       new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]),
       3,
@@ -77,17 +78,17 @@ function createQuadGeometry(): BufferGeometry {
   return geometry;
 }
 
-describe("DTXSelectionController", () => {
+describe('DTXSelectionController', () => {
   beforeEach(() => {
     outlineHelpers.length = 0;
     vi.clearAllMocks();
   });
 
-  it("highlightMode=both 且 overlay.showEdges=false 时只渲染填充并保留 outline", () => {
+  it('highlightMode=both 且 overlay.showEdges=false 时只渲染填充并保留 outline', () => {
     const scene = new Scene();
     const geometry = createQuadGeometry();
-    const container = document.createElement("div");
-    Object.defineProperty(container, "getBoundingClientRect", {
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'getBoundingClientRect', {
       value: () => ({ width: 800, height: 600, left: 0, top: 0 }),
     });
 
@@ -109,7 +110,7 @@ describe("DTXSelectionController", () => {
       renderer: {} as any,
       container,
       enableOutline: true,
-      highlightMode: "both",
+      highlightMode: 'both',
       overlayStyle: {
         showEdges: false,
         showFill: true,
@@ -117,25 +118,25 @@ describe("DTXSelectionController", () => {
       },
     });
 
-    controller.select("o:demo:0");
+    controller.select('o:demo:0');
 
-    const overlayGroup = scene.getObjectByName("DTXSelectionOverlay");
+    const overlayGroup = scene.getObjectByName('DTXSelectionOverlay');
     expect(overlayGroup?.children.map((child) => child.name)).toEqual([
-      "sel_fill_o:demo:0",
+      'sel_fill_o:demo:0',
     ]);
     expect(controller.hasOutline()).toBe(true);
     expect(outlineHelpers).toHaveLength(1);
     expect(outlineHelpers[0]?.setOutlinedObjects).toHaveBeenCalledWith([
-      "o:demo:0",
+      'o:demo:0',
     ]);
-    expect(outlineHelpers[0]?.getOutlinedObjects()).toEqual(["o:demo:0"]);
+    expect(outlineHelpers[0]?.getOutlinedObjects()).toEqual(['o:demo:0']);
   });
 
-  it("允许通过 options 自定义 outline 样式", () => {
+  it('允许通过 options 自定义 outline 样式', () => {
     const scene = new Scene();
     const geometry = createQuadGeometry();
-    const container = document.createElement("div");
-    Object.defineProperty(container, "getBoundingClientRect", {
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'getBoundingClientRect', {
       value: () => ({ width: 800, height: 600, left: 0, top: 0 }),
     });
 
@@ -157,7 +158,7 @@ describe("DTXSelectionController", () => {
       renderer: {} as any,
       container,
       enableOutline: true,
-      highlightMode: "both",
+      highlightMode: 'both',
       outlineStyle: {
         edgeColor: 0x36f97b,
         edgeStrength: 3.2,

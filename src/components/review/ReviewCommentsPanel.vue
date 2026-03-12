@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import { Edit3, MessageSquare, Plus, Reply, Trash2 } from 'lucide-vue-next';
 
 import type { AnnotationType } from '@/composables/useToolStore';
+
+import {
+  reviewCommentCreate,
+  reviewCommentDelete,
+  reviewCommentGetByAnnotation,
+  reviewCommentUpdate,
+} from '@/api/reviewApi';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { type AnnotationComment, getRoleDisplayName, UserRole } from '@/types/auth';
@@ -15,6 +22,42 @@ const props = defineProps<{
 
 const store = useToolStore();
 const userStore = useUserStore();
+const commentLoading = ref(false);
+const commentError = ref<string | null>(null);
+
+// 从后端加载评论
+async function loadCommentsFromBackend() {
+  if (!props.annotationType || !props.annotationId) return;
+  commentLoading.value = true;
+  commentError.value = null;
+  try {
+    const resp = await reviewCommentGetByAnnotation(props.annotationId, props.annotationType);
+    if (resp.success && resp.comments) {
+      // 将后端评论同步到本地 store（避免重复添加）
+      for (const comment of resp.comments) {
+        const existing = store.getAnnotationComments(props.annotationType!, props.annotationId!);
+        if (!existing.find((c) => c.id === comment.id)) {
+          store.addCommentToAnnotation(props.annotationType!, props.annotationId!, {
+            ...comment,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    commentError.value = e instanceof Error ? e.message : '加载评论失败';
+    console.error('[ReviewCommentsPanel] Failed to load comments:', e);
+  } finally {
+    commentLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  loadCommentsFromBackend();
+});
+
+watch(() => [props.annotationId, props.annotationType], () => {
+  loadCommentsFromBackend();
+});
 
 // 获取当前批注的所有评论
 const allComments = computed<AnnotationComment[]>(() => {
@@ -34,7 +77,7 @@ const columnRoles = [
   },
   {
     key: 'proofreader',
-    label: '校对',
+    label: '校核',
     roles: [UserRole.PROOFREADER],
     colorClass: 'border-green-300 bg-green-50 dark:bg-green-950',
     headerClass: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
@@ -79,7 +122,7 @@ const editingCommentId = ref<string | null>(null);
 const editingCommentContent = ref('');
 
 // 添加评论
-function addComment(columnKey: string) {
+async function addComment(columnKey: string) {
   const content = newCommentContents.value[columnKey]?.trim();
   if (!content) return;
   if (!props.annotationType || !props.annotationId) return;
@@ -87,13 +130,42 @@ function addComment(columnKey: string) {
   const user = userStore.currentUser.value;
   if (!user) return;
 
-  store.addCommentToAnnotation(props.annotationType, props.annotationId, {
-    authorId: user.id,
-    authorName: user.name,
-    authorRole: user.role,
-    content: content,
-    replyToId: replyToColumnKey.value === columnKey ? replyToCommentId.value || undefined : undefined,
-  });
+  const replyToId = replyToColumnKey.value === columnKey ? replyToCommentId.value || undefined : undefined;
+
+  // 先尝试后端持久化
+  try {
+    const resp = await reviewCommentCreate({
+      annotationId: props.annotationId,
+      annotationType: props.annotationType,
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: user.role,
+      content,
+      replyToId,
+    });
+    if (resp.success && resp.comment) {
+      // 用后端返回的带 ID 的评论更新本地 store
+      store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment);
+    } else {
+      // 后端失败时仍然保存到本地
+      store.addCommentToAnnotation(props.annotationType, props.annotationId, {
+        authorId: user.id,
+        authorName: user.name,
+        authorRole: user.role,
+        content,
+        replyToId,
+      });
+    }
+  } catch {
+    // 网络异常降级到本地保存
+    store.addCommentToAnnotation(props.annotationType, props.annotationId, {
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: user.role,
+      content,
+      replyToId,
+    });
+  }
 
   newCommentContents.value[columnKey] = '';
   if (replyToColumnKey.value === columnKey) {
@@ -109,9 +181,15 @@ function startEditComment(comment: AnnotationComment) {
 }
 
 // 保存编辑的评论
-function saveEditComment() {
+async function saveEditComment() {
   if (!editingCommentId.value || !editingCommentContent.value.trim()) return;
   if (!props.annotationType || !props.annotationId) return;
+
+  try {
+    await reviewCommentUpdate(editingCommentId.value, editingCommentContent.value.trim());
+  } catch {
+    // 后端失败时仍然更新本地
+  }
 
   store.updateAnnotationComment(
     props.annotationType,
@@ -131,8 +209,15 @@ function cancelEditComment() {
 }
 
 // 删除评论
-function deleteComment(commentId: string) {
+async function deleteComment(commentId: string) {
   if (!props.annotationType || !props.annotationId) return;
+
+  try {
+    await reviewCommentDelete(commentId);
+  } catch {
+    // 后端失败时仍然删除本地
+  }
+
   store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
 }
 
@@ -190,25 +275,19 @@ function formatCommentTime(timestamp: number): string {
 
     <div v-else class="grid grid-cols-3 gap-3">
       <!-- 三栏布局 -->
-      <div
-        v-for="column in columnRoles"
+      <div v-for="column in columnRoles"
         :key="column.key"
         class="flex flex-col rounded-lg border"
-        :class="column.colorClass"
-      >
+        :class="column.colorClass">
         <!-- 栏目头部 -->
-        <div
-          class="flex items-center justify-between px-3 py-2 rounded-t-lg"
-          :class="column.headerClass"
-        >
+        <div class="flex items-center justify-between px-3 py-2 rounded-t-lg"
+          :class="column.headerClass">
           <div class="flex items-center gap-2">
             <MessageSquare class="h-4 w-4" />
             <span class="text-sm font-semibold">{{ column.label }}</span>
           </div>
-          <span
-            class="px-1.5 py-0.5 rounded text-xs font-medium"
-            :class="column.badgeClass"
-          >
+          <span class="px-1.5 py-0.5 rounded text-xs font-medium"
+            :class="column.badgeClass">
             {{ getCommentsForColumn(column.roles).length }}
           </span>
         </div>
@@ -216,16 +295,12 @@ function formatCommentTime(timestamp: number): string {
         <!-- 评论列表 -->
         <div class="flex-1 overflow-y-auto p-2 space-y-2 min-h-32 max-h-64">
           <template v-if="getCommentsForColumn(column.roles).length > 0">
-            <div
-              v-for="comment in getCommentsForColumn(column.roles)"
+            <div v-for="comment in getCommentsForColumn(column.roles)"
               :key="comment.id"
-              class="rounded-md bg-white/80 dark:bg-black/20 p-2 text-sm shadow-sm"
-            >
+              class="rounded-md bg-white/80 dark:bg-black/20 p-2 text-sm shadow-sm">
               <!-- 回复引用 -->
-              <div
-                v-if="comment.replyToId"
-                class="mb-1.5 border-l-2 border-gray-300 pl-2 text-xs text-muted-foreground"
-              >
+              <div v-if="comment.replyToId"
+                class="mb-1.5 border-l-2 border-gray-300 pl-2 text-xs text-muted-foreground">
                 <template v-if="getReplyToComment(comment.replyToId)">
                   <Reply class="inline h-3 w-3 mr-1" />
                   回复 {{ getReplyToComment(comment.replyToId)?.authorName }}:
@@ -235,24 +310,18 @@ function formatCommentTime(timestamp: number): string {
 
               <!-- 评论内容（编辑模式） -->
               <div v-if="editingCommentId === comment.id" class="flex flex-col gap-2">
-                <textarea
-                  v-model="editingCommentContent"
+                <textarea v-model="editingCommentContent"
                   class="min-h-14 w-full rounded border border-input bg-background px-2 py-1 text-sm resize-none"
-                  @keyup.enter.ctrl="saveEditComment"
-                />
+                  @keyup.enter.ctrl="saveEditComment" />
                 <div class="flex gap-1">
-                  <button
-                    type="button"
+                  <button type="button"
                     class="h-6 rounded bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90"
-                    @click="saveEditComment"
-                  >
+                    @click="saveEditComment">
                     保存
                   </button>
-                  <button
-                    type="button"
+                  <button type="button"
                     class="h-6 rounded border border-input px-2 text-xs hover:bg-muted"
-                    @click="cancelEditComment"
-                  >
+                    @click="cancelEditComment">
                     取消
                   </button>
                 </div>
@@ -269,29 +338,23 @@ function formatCommentTime(timestamp: number): string {
                   </div>
 
                   <div class="flex gap-0.5">
-                    <button
-                      type="button"
+                    <button type="button"
                       class="h-5 w-5 rounded p-0.5 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
                       title="回复"
-                      @click="setReplyTo(comment, column.key)"
-                    >
+                      @click="setReplyTo(comment, column.key)">
                       <Reply class="h-full w-full" />
                     </button>
                     <template v-if="canEditComment(comment)">
-                      <button
-                        type="button"
+                      <button type="button"
                         class="h-5 w-5 rounded p-0.5 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
                         title="编辑"
-                        @click="startEditComment(comment)"
-                      >
+                        @click="startEditComment(comment)">
                         <Edit3 class="h-full w-full" />
                       </button>
-                      <button
-                        type="button"
+                      <button type="button"
                         class="h-5 w-5 rounded p-0.5 text-destructive hover:bg-red-100 dark:hover:bg-red-900"
                         title="删除"
-                        @click="deleteComment(comment.id)"
-                      >
+                        @click="deleteComment(comment.id)">
                         <Trash2 class="h-full w-full" />
                       </button>
                     </template>
@@ -309,36 +372,28 @@ function formatCommentTime(timestamp: number): string {
         <!-- 添加意见区域 -->
         <div class="border-t p-2">
           <!-- 回复提示 -->
-          <div
-            v-if="replyToColumnKey === column.key && replyToCommentId"
-            class="mb-2 flex items-center gap-2 rounded bg-muted/50 px-2 py-1 text-xs"
-          >
+          <div v-if="replyToColumnKey === column.key && replyToCommentId"
+            class="mb-2 flex items-center gap-2 rounded bg-muted/50 px-2 py-1 text-xs">
             <Reply class="h-3 w-3" />
             <span class="text-muted-foreground truncate flex-1">
               回复 {{ getReplyToComment(replyToCommentId)?.authorName }}
             </span>
-            <button
-              type="button"
+            <button type="button"
               class="text-muted-foreground hover:text-foreground"
-              @click="cancelReply"
-            >
+              @click="cancelReply">
               ×
             </button>
           </div>
 
           <template v-if="canAddToColumn(column.key)">
-            <textarea
-              v-model="newCommentContents[column.key]"
+            <textarea v-model="newCommentContents[column.key]"
               class="min-h-12 w-full rounded border border-input bg-background px-2 py-1.5 text-sm resize-none"
               :placeholder="`添加${column.label}意见...`"
-              @keyup.enter.ctrl="addComment(column.key)"
-            />
-            <button
-              type="button"
+              @keyup.enter.ctrl="addComment(column.key)" />
+            <button type="button"
               class="mt-1.5 flex h-7 w-full items-center justify-center gap-1 rounded bg-primary text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               :disabled="!newCommentContents[column.key]?.trim()"
-              @click="addComment(column.key)"
-            >
+              @click="addComment(column.key)">
               <Plus class="h-3 w-3" />
               提交意见
             </button>

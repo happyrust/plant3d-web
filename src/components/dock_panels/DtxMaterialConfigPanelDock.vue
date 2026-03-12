@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DtxMaterialConfigPanel from '@/components/tools/DtxMaterialConfigPanel.vue'
+import DtxMaterialConfigPanel from '@/components/tools/DtxMaterialConfigPanel.vue';
 </script>
 
 <template>

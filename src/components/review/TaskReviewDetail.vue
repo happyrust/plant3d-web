@@ -15,11 +15,13 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
+import { mapWorkflowHistoryToTaskDetailItems, type TaskDetailHistoryItem } from './reviewPanelActions';
+
 import type { ReviewTask, AnnotationComment } from '@/types/auth';
+
 import {
-  reviewTaskGetHistory,
+  reviewTaskGetWorkflow,
   reviewCommentGetByAnnotation,
-  type ReviewHistoryItem,
 } from '@/api/reviewApi';
 import { getRoleDisplayName, getPriorityDisplayName, getTaskStatusDisplayName, UserRole } from '@/types/auth';
 
@@ -27,22 +29,20 @@ const props = defineProps<{
   task: ReviewTask;
 }>();
 
-const emit = defineEmits<{
-  (e: 'close'): void;
-}>();
+const emit = defineEmits<(e: 'close') => void>();
 
 const activeTab = ref<'info' | 'history' | 'comments'>('info');
 const isLoading = ref(false);
-const history = ref<ReviewHistoryItem[]>([]);
+const history = ref<TaskDetailHistoryItem[]>([]);
 const comments = ref<AnnotationComment[]>([]);
 
 // 加载审核历史
 async function loadHistory() {
   isLoading.value = true;
   try {
-    const response = await reviewTaskGetHistory(props.task.id);
+    const response = await reviewTaskGetWorkflow(props.task.id);
     if (response.success) {
-      history.value = response.history;
+      history.value = mapWorkflowHistoryToTaskDetailItems(response.history);
     }
   } catch (e) {
     console.error('[TaskReviewDetail] Failed to load history:', e);
@@ -81,8 +81,11 @@ function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('zh-CN');
 }
 
-function getHistoryActionLabel(action: ReviewHistoryItem['action']): string {
-  const labels: Record<ReviewHistoryItem['action'], string> = {
+function getHistoryActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    submit: '提交流转',
+    return: '驳回到设计',
+    approve: '最终批准',
     created: '创建任务',
     submitted: '提交审核',
     in_review: '开始审核',
@@ -93,8 +96,11 @@ function getHistoryActionLabel(action: ReviewHistoryItem['action']): string {
   return labels[action] || action;
 }
 
-function getHistoryActionColor(action: ReviewHistoryItem['action']): string {
-  const colors: Record<ReviewHistoryItem['action'], string> = {
+function getHistoryActionColor(action: string): string {
+  const colors: Record<string, string> = {
+    submit: 'bg-blue-100 text-blue-700',
+    return: 'bg-red-100 text-red-700',
+    approve: 'bg-green-100 text-green-700',
     created: 'bg-gray-100 text-gray-700',
     submitted: 'bg-yellow-100 text-yellow-700',
     in_review: 'bg-blue-100 text-blue-700',
@@ -167,27 +173,21 @@ onMounted(() => {
 
       <!-- Tab 切换 -->
       <div class="flex border-b">
-        <button 
-          class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
+        <button class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
           :class="activeTab === 'info' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          @click="activeTab = 'info'"
-        >
+          @click="activeTab = 'info'">
           <FileText class="h-4 w-4 inline mr-1" />
           基本信息
         </button>
-        <button 
-          class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
+        <button class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
           :class="activeTab === 'history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          @click="activeTab = 'history'"
-        >
+          @click="activeTab = 'history'">
           <History class="h-4 w-4 inline mr-1" />
           审核历史
         </button>
-        <button 
-          class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
+        <button class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
           :class="activeTab === 'comments' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          @click="activeTab = 'comments'"
-        >
+          @click="activeTab = 'comments'">
           <MessageSquare class="h-4 w-4 inline mr-1" />
           批注意见
         </button>
@@ -290,7 +290,7 @@ onMounted(() => {
         <!-- 审核历史 Tab -->
         <div v-else-if="activeTab === 'history'" class="space-y-4">
           <div v-if="isLoading" class="text-center py-8">
-            <div class="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+            <div class="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
             <p class="text-sm text-gray-500">加载中...</p>
           </div>
 
@@ -301,17 +301,17 @@ onMounted(() => {
 
           <div v-else class="relative">
             <!-- 时间线 -->
-            <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+            <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
 
-            <div v-for="(item, index) in history" :key="item.id" class="relative pl-10 pb-6">
+            <div v-for="(item, index) in history" :key="`${item.action}-${item.timestamp}-${index}`" class="relative pl-10 pb-6">
               <!-- 时间线节点 -->
               <div class="absolute left-2.5 w-3 h-3 rounded-full bg-white border-2"
                 :class="{
-                  'border-green-500': item.action === 'approved',
-                  'border-red-500': item.action === 'rejected',
-                  'border-blue-500': item.action === 'in_review' || item.action === 'submitted',
+                  'border-green-500': item.action === 'approved' || item.action === 'approve',
+                  'border-red-500': item.action === 'rejected' || item.action === 'return',
+                  'border-blue-500': item.action === 'in_review' || item.action === 'submitted' || item.action === 'submit',
                   'border-gray-400': item.action === 'created' || item.action === 'cancelled',
-                }"></div>
+                }" />
 
               <div class="bg-white border rounded-lg p-3">
                 <div class="flex items-center justify-between mb-2">

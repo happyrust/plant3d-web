@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore'
+import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 
-const dialog = useConfirmDialogStore()
+const dialog = useConfirmDialogStore();
 </script>
 
 <template>
@@ -27,13 +27,11 @@ const dialog = useConfirmDialogStore()
           <v-btn variant="text" @click="dialog.cancelChoice()">
             {{ dialog.cancelText.value }}
           </v-btn>
-          <v-btn
-            v-for="c in dialog.choices.value"
+          <v-btn v-for="c in dialog.choices.value"
             :key="c.id"
             :color="c.color || 'primary'"
             :variant="c.variant || 'flat'"
-            @click="dialog.choose(c.id)"
-          >
+            @click="dialog.choose(c.id)">
             {{ c.text }}
           </v-btn>
         </template>

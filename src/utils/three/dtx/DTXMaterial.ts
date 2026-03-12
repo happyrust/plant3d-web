@@ -275,7 +275,7 @@ void main() {
 
 // ========== DTXMaterial 配置接口 ==========
 
-export interface DTXMaterialOptions {
+export type DTXMaterialOptions = {
   positionsTexture: DataTexture | null;
   indicesTexture: DataTexture | null;
   normalsTexture: DataTexture | null;

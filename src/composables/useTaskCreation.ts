@@ -1,5 +1,7 @@
 // 任务创建 composable
 import { ref, computed, reactive, onMounted, type Ref } from 'vue';
+
+import type { DatabaseConfig } from '@/api/genModelTaskApi';
 import type {
   TaskType,
   TaskPriority,
@@ -7,8 +9,8 @@ import type {
   ParseTaskParameters,
   ModelGenParameters,
 } from '@/types/task';
+
 import { taskCreate, taskValidateName, taskStart, getServerConfig } from '@/api/genModelTaskApi';
-import type { DatabaseConfig } from '@/api/genModelTaskApi';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 
 // ============ 表单数据类型 ============

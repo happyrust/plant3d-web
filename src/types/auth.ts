@@ -70,7 +70,7 @@ export type WorkflowStep = {
 // 工作流节点显示名称
 export const WORKFLOW_NODE_NAMES: Record<WorkflowNode, string> = {
   sj: '编制',
-  jd: '校对',
+  jd: '校核',
   sh: '审核',
   pz: '批准',
 };
@@ -93,10 +93,11 @@ export type ReviewTask = {
   approverId?: string;
   approverName?: string;
   /**
-   * 兼容旧字段：历史数据中 reviewer 语义等同校核人。
-   * 新流程请优先使用 checker/approver。
+   * @deprecated 兼容旧字段：历史数据中 reviewer 语义等同校核人。
+   * 新流程请优先使用 checkerId/approverId。
    */
   reviewerId: string;
+  /** @deprecated 请使用 checkerName/approverName */
   reviewerName: string;
   components: ReviewComponent[];
   attachments?: ReviewAttachment[];

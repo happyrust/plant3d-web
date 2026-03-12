@@ -34,6 +34,7 @@ describe('DtxCompatScene', () => {
     tryGetDbnumByRefnoMock.mockReset();
     tryGetDbnumByRefnoMock.mockReturnValue(100);
   });
+
   it('能从已加载 objectId 推导当前可框选的 refno 列表', () => {
     const layer = new DTXLayer({
       maxVertices: 128,

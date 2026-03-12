@@ -6,10 +6,10 @@
  * - `setResolution()` 对这套材质是 no-op，但保留统一接口，方便调用方无差别更新。
  */
 
-import * as THREE from "three";
-import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
-export interface AnnotationMaterialSet {
+export type AnnotationMaterialSet = {
   line: THREE.LineBasicMaterial;
   lineHover: THREE.LineBasicMaterial;
   mesh: THREE.MeshBasicMaterial;
@@ -83,14 +83,14 @@ export class AnnotationMaterials {
       fatLine: new LineMaterial({
         color: normalColor,
         transparent: true,
-        linewidth: 2,
+        linewidth: 3.5,
         depthTest: true,
         depthWrite: true,
       }),
       fatLineHover: new LineMaterial({
         color: hoverColor,
         transparent: true,
-        linewidth: 2,
+        linewidth: 3.5,
         depthTest: true,
         depthWrite: true,
       }),

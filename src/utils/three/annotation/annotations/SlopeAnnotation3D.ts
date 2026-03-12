@@ -1,16 +1,18 @@
-import * as THREE from "three";
-import { AnnotationBase, type AnnotationOptions } from "../core/AnnotationBase";
-import type {
-  AnnotationMaterials,
-  AnnotationMaterialSet,
-} from "../core/AnnotationMaterials";
+import * as THREE from 'three';
+
+import { AnnotationBase, type AnnotationOptions } from '../core/AnnotationBase';
 import {
   SolveSpaceBillboardVectorText,
   type SolveSpaceLabelRenderStyle,
-} from "../text/SolveSpaceBillboardVectorText";
-import { worldPerPixelAt } from "../utils/solvespaceLike";
+} from '../text/SolveSpaceBillboardVectorText';
+import { worldPerPixelAt } from '../utils/solvespaceLike';
 
-export interface SlopeAnnotation3DParams {
+import type {
+  AnnotationMaterials,
+  AnnotationMaterialSet,
+} from '../core/AnnotationMaterials';
+
+export type SlopeAnnotation3DParams = {
   /** 起点 */
   start: THREE.Vector3;
   /** 终点 */
@@ -29,7 +31,7 @@ export class SlopeAnnotation3D extends AnnotationBase {
   private params: Required<
     Omit<
       SlopeAnnotation3DParams,
-      "slope" | "labelOffsetWorld" | "labelRenderStyle"
+      'slope' | 'labelOffsetWorld' | 'labelRenderStyle'
     >
   > & {
     slope?: number;
@@ -70,17 +72,17 @@ export class SlopeAnnotation3D extends AnnotationBase {
 
     this.lineGeometry = new THREE.BufferGeometry();
     this.slopeLine = new THREE.Line(this.lineGeometry, this.materialSet.line);
-    this.slopeLine.userData.dragRole = "offset";
+    this.slopeLine.userData.dragRole = 'offset';
     this.add(this.slopeLine);
 
     this.textLabel = new SolveSpaceBillboardVectorText({
-      text: "",
+      text: '',
       materialNormal: this.materialSet.line,
       materialHovered: materials.ssHovered.line,
       materialSelected: materials.ssSelected.line,
       renderStyle: this.params.labelRenderStyle,
     });
-    this.textLabel.object3d.userData.dragRole = "label";
+    this.textLabel.object3d.userData.dragRole = 'label';
     this.add(this.textLabel.object3d);
 
     this.rebuild();
@@ -139,7 +141,7 @@ export class SlopeAnnotation3D extends AnnotationBase {
     if (params.end) this.params.end.copy(params.end);
     if (params.text !== undefined) this.params.text = params.text;
     if (params.slope !== undefined) this.params.slope = params.slope;
-    if ("labelOffsetWorld" in params) {
+    if ('labelOffsetWorld' in params) {
       this.params.labelOffsetWorld = params.labelOffsetWorld?.clone() ?? null;
     }
     if (params.labelRenderStyle !== undefined) {
@@ -178,7 +180,7 @@ export class SlopeAnnotation3D extends AnnotationBase {
     this._delta.copy(end).sub(start);
 
     this.lineGeometry.setAttribute(
-      "position",
+      'position',
       new THREE.Float32BufferAttribute(
         [0, 0, 0, this._delta.x, this._delta.y, this._delta.z],
         3,
@@ -198,9 +200,9 @@ export class SlopeAnnotation3D extends AnnotationBase {
     // SolveSpace 风格：selected > hovered > normal
     const state = this.interactionState;
     let lineMat: any;
-    if (state === "selected") {
+    if (state === 'selected') {
       lineMat = this.materials.ssSelected.line;
-    } else if (state === "hovered") {
+    } else if (state === 'hovered') {
       lineMat = this.materials.ssHovered.line;
     } else {
       lineMat = this._highlighted

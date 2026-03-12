@@ -41,6 +41,7 @@ coverage
 artifacts/
 test-results/
 playwright-report/
+.worktrees/
 
 # Local sqlite caches
 deployment_sites.sqlite

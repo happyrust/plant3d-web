@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+
 import { getRoomWorkerStatus, submitRoomCompute, getRoomSystemStatus } from '@/api/genModelRoomComputeApi';
 
 // 状态
@@ -91,18 +92,14 @@ onMounted(() => {
 
     <!-- 操作按钮 -->
     <div class="flex gap-2">
-      <button
-        @click="handleSubmitCompute"
-        :disabled="isSubmitting || (workerStatus?.is_busy ?? false)"
+      <button :disabled="isSubmitting || (workerStatus?.is_busy ?? false)"
         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
+        @click="handleSubmitCompute">
         {{ isSubmitting ? '提交中...' : '构建房间关系' }}
       </button>
-      <button
-        @click="loadStatus"
-        :disabled="isLoading"
+      <button :disabled="isLoading"
         class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
-      >
+        @click="loadStatus">
         刷新状态
       </button>
     </div>

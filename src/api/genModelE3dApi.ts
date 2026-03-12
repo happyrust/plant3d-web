@@ -1,13 +1,3 @@
-import { useConsoleStore } from '@/composables/useConsoleStore';
-import {
-  e3dParquetGetAncestors,
-  e3dParquetGetChildren,
-  e3dParquetGetNode,
-  e3dParquetGetSubtreeRefnos,
-  e3dParquetGetVisibleInsts,
-  e3dParquetGetWorldRoot,
-  e3dParquetSearch,
-} from '@/api/genModelE3dParquetApi';
 import type {
   AncestorsResponse,
   ChildrenResponse,
@@ -18,6 +8,17 @@ import type {
   TreeNodeDto,
   VisibleInstsResponse,
 } from '@/api/genModelE3dTypes';
+
+import {
+  e3dParquetGetAncestors,
+  e3dParquetGetChildren,
+  e3dParquetGetNode,
+  e3dParquetGetSubtreeRefnos,
+  e3dParquetGetVisibleInsts,
+  e3dParquetGetWorldRoot,
+  e3dParquetSearch,
+} from '@/api/genModelE3dParquetApi';
+import { useConsoleStore } from '@/composables/useConsoleStore';
 
 export type {
   AncestorsResponse,
@@ -305,13 +306,13 @@ export async function e3dSearch(req: SearchRequest): Promise<SearchResponse> {
 // ========================
 
 /** AABB 包围盒 */
-export interface NodeAabb {
+export type NodeAabb = {
   min: [number, number, number];
   max: [number, number, number];
 }
 
 /** Site Node 数据 */
-export interface SiteNodeData {
+export type SiteNodeData = {
   refno: string;
   parent: string | null;
   noun: string;
@@ -321,7 +322,7 @@ export interface SiteNodeData {
 }
 
 /** Site Nodes API 响应 */
-export interface SiteNodesResponse {
+export type SiteNodesResponse = {
   success: boolean;
   nodes: SiteNodeData[];
   total: number;

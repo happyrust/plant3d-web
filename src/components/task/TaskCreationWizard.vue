@@ -13,16 +13,14 @@
 
     <!-- 步骤指示器 -->
     <div class="step-indicator">
-      <div
-        v-for="step in 3"
+      <div v-for="step in 3"
         :key="step"
         class="step-item"
         :class="{
           active: currentStep === step,
           completed: currentStep > step,
         }"
-        @click="goToStep(step)"
-      >
+        @click="goToStep(step)">
         <div class="step-number">
           <v-icon v-if="currentStep > step" size="14">mdi-check</v-icon>
           <span v-else>{{ step }}</span>
@@ -37,15 +35,13 @@
       <div v-show="currentStep === 1" class="step-content">
         <div class="form-group">
           <label class="form-label required">任务名称</label>
-          <v-text-field
-            v-model="formData.name"
+          <v-text-field v-model="formData.name"
             placeholder="请输入任务名称"
             variant="outlined"
             density="compact"
             :error-messages="errors.name"
             :loading="validatingName"
-            @blur="validateName"
-          >
+            @blur="validateName">
             <template #append-inner>
               <v-icon v-if="nameAvailable === true" color="success" size="18">
                 mdi-check-circle
@@ -81,26 +77,22 @@
 
         <div class="form-group">
           <label class="form-label">优先级</label>
-          <v-select
-            v-model="formData.priority"
+          <v-select v-model="formData.priority"
             :items="priorityOptions"
             item-title="label"
             item-value="value"
             variant="outlined"
-            density="compact"
-          />
+            density="compact" />
         </div>
 
         <div class="form-group">
           <label class="form-label">描述</label>
-          <v-textarea
-            v-model="formData.description"
+          <v-textarea v-model="formData.description"
             placeholder="请输入任务描述（可选）"
             variant="outlined"
             density="compact"
             rows="2"
-            auto-grow
-          />
+            auto-grow />
         </div>
       </div>
 
@@ -140,13 +132,11 @@
 
           <div v-if="formData.parseMode === 'dbnum'" class="form-group">
             <label class="form-label required">数据库编号</label>
-            <v-text-field
-              v-model="formData.dbnum"
+            <v-text-field v-model="formData.dbnum"
               placeholder="输入数据库编号，多个用逗号分隔，如: 7999,8000,1112"
               variant="outlined"
               density="compact"
-              :error-messages="errors.dbnum"
-            />
+              :error-messages="errors.dbnum" />
             <div v-if="parsedDbnums.length > 1" class="form-hint mt-1">
               <v-icon size="14" color="info" class="mr-1">mdi-information-outline</v-icon>
               将创建 {{ parsedDbnums.length }} 个子任务，按顺序逐个执行
@@ -155,13 +145,11 @@
 
           <div v-if="formData.parseMode === 'refno'" class="form-group">
             <label class="form-label required">参考号</label>
-            <v-text-field
-              v-model="formData.refno"
+            <v-text-field v-model="formData.refno"
               placeholder="请输入参考号，格式如: 12345_67890"
               variant="outlined"
               density="compact"
-              :error-messages="errors.refno"
-            />
+              :error-messages="errors.refno" />
           </div>
         </template>
 
@@ -170,24 +158,18 @@
           <div class="form-group">
             <label class="form-label required">生成内容</label>
             <div class="checkbox-group">
-              <v-checkbox
-                v-model="formData.generateModels"
+              <v-checkbox v-model="formData.generateModels"
                 label="生成模型"
                 density="compact"
-                hide-details
-              />
-              <v-checkbox
-                v-model="formData.generateMesh"
+                hide-details />
+              <v-checkbox v-model="formData.generateMesh"
                 label="生成网格"
                 density="compact"
-                hide-details
-              />
-              <v-checkbox
-                v-model="formData.generateSpatialTree"
+                hide-details />
+              <v-checkbox v-model="formData.generateSpatialTree"
                 label="生成空间树"
                 density="compact"
-                hide-details
-              />
+                hide-details />
             </div>
             <div v-if="errors.generateModels" class="error-message">
               {{ errors.generateModels }}
@@ -195,49 +177,41 @@
           </div>
 
           <div class="form-group">
-            <v-checkbox
-              v-model="formData.applyBooleanOperation"
+            <v-checkbox v-model="formData.applyBooleanOperation"
               label="应用布尔运算"
               density="compact"
-              hide-details
-            />
+              hide-details />
           </div>
 
           <div class="form-group">
-            <v-checkbox
-              v-model="formData.exportWebBundle"
+            <v-checkbox v-model="formData.exportWebBundle"
               label="导出 Web 数据包"
               density="compact"
               hide-details
-              hint="自动生成 export-all-relates 数据包用于 Web 查看器"
-            />
+              hint="自动生成 export-all-relates 数据包用于 Web 查看器" />
           </div>
 
           <div class="form-row">
             <div class="form-group flex-1">
               <label class="form-label">网格容差比例</label>
-              <v-text-field
-                v-model.number="formData.meshTolRatio"
+              <v-text-field v-model.number="formData.meshTolRatio"
                 variant="outlined"
                 density="compact"
                 type="number"
                 step="0.001"
                 min="0.001"
                 max="1"
-                :error-messages="errors.meshTolRatio"
-              />
+                :error-messages="errors.meshTolRatio" />
             </div>
             <div class="form-group flex-1">
               <label class="form-label">最大并发数</label>
-              <v-text-field
-                v-model.number="formData.maxConcurrent"
+              <v-text-field v-model.number="formData.maxConcurrent"
                 variant="outlined"
                 density="compact"
                 type="number"
                 min="1"
                 max="16"
-                :error-messages="errors.maxConcurrent"
-              />
+                :error-messages="errors.maxConcurrent" />
             </div>
           </div>
         </template>
@@ -311,24 +285,20 @@
         </div>
 
         <!-- 提交错误 -->
-        <v-alert
-          v-if="submitError"
+        <v-alert v-if="submitError"
           type="error"
           variant="tonal"
           density="compact"
-          class="mt-4"
-        >
+          class="mt-4">
           {{ submitError }}
         </v-alert>
 
         <!-- 提交成功 -->
-        <v-alert
-          v-if="createdTaskId"
+        <v-alert v-if="createdTaskId"
           type="success"
           variant="tonal"
           density="compact"
-          class="mt-4"
-        >
+          class="mt-4">
           任务创建成功！任务ID: {{ createdTaskId }}
         </v-alert>
       </div>
@@ -336,37 +306,29 @@
 
     <!-- 底部按钮 -->
     <div class="wizard-footer">
-      <v-btn
-        v-if="currentStep > 1"
+      <v-btn v-if="currentStep > 1"
         variant="text"
-        @click="prevStep"
-      >
+        @click="prevStep">
         上一步
       </v-btn>
       <v-spacer />
-      <v-btn
-        v-if="currentStep < 3"
+      <v-btn v-if="currentStep < 3"
         color="primary"
         :disabled="!isCurrentStepValid"
         :loading="stepProcessing"
-        @click="nextStep"
-      >
+        @click="nextStep">
         下一步
       </v-btn>
-      <v-btn
-        v-if="currentStep === 3 && !createdTaskId"
+      <v-btn v-if="currentStep === 3 && !createdTaskId"
         color="primary"
         :loading="loading"
         :disabled="!canSubmit"
-        @click="handleSubmit"
-      >
+        @click="handleSubmit">
         创建任务
       </v-btn>
-      <v-btn
-        v-if="createdTaskId"
+      <v-btn v-if="createdTaskId"
         color="primary"
-        @click="handleCreateAnother"
-      >
+        @click="handleCreateAnother">
         继续创建
       </v-btn>
     </div>
@@ -376,8 +338,10 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
-import { useTaskCreation } from '@/composables/useTaskCreation';
+
 import type { TaskPriority } from '@/types/task';
+
+import { useTaskCreation } from '@/composables/useTaskCreation';
 
 // ============ Emits ============
 const emit = defineEmits<{

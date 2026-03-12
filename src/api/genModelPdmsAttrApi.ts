@@ -10,7 +10,7 @@ export type PdmsUiAttrResponse = {
 /**
  * 点集(ptset)中单个点的信息
  */
-export interface PtsetPoint {
+export type PtsetPoint = {
   /** 点编号 */
   number: number;
   /** 3D 坐标 [x, y, z] */
@@ -34,7 +34,7 @@ export interface PtsetPoint {
 /**
  * ptset 查询响应
  */
-export interface PtsetResponse {
+export type PtsetResponse = {
   success: boolean;
   refno: string;
   /** 点集数据列表 */
@@ -103,7 +103,7 @@ export async function pdmsGetPtsetWithContext(
 /**
  * 变换矩阵查询响应
  */
-export interface TransformResponse {
+export type TransformResponse = {
   success: boolean;
   refno: string;
   /** 世界变换矩阵 (4x4 列主序) */
@@ -126,7 +126,7 @@ export async function pdmsGetTransform(refno: string): Promise<TransformResponse
 // PDMS 模型查询辅助（后端 SurrealDB）
 // ========================
 
-export interface PdmsTypeInfoResponse {
+export type PdmsTypeInfoResponse = {
   success: boolean;
   refno: string;
   noun?: string | null;
@@ -135,7 +135,7 @@ export interface PdmsTypeInfoResponse {
   error_message?: string | null;
 }
 
-export interface PdmsChildrenResponse {
+export type PdmsChildrenResponse = {
   success: boolean;
   refno: string;
   children: string[];

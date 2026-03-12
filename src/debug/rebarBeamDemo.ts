@@ -4,13 +4,15 @@
  * 展示混凝土梁 + 钢筋 + 三维尺寸标注
  */
 
-import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
+import type { AnnotationMaterialSet } from '@/utils/three/annotation/core/AnnotationMaterials';
+
 import {
   AnnotationMaterials,
   LinearDimension3D,
-} from "@/utils/three/annotation";
-import type { AnnotationMaterialSet } from "@/utils/three/annotation/core/AnnotationMaterials";
+} from '@/utils/three/annotation';
 
 declare global {
   interface Window {
@@ -18,19 +20,19 @@ declare global {
   }
 }
 
-const status = document.getElementById("status")!;
+const status = document.getElementById('status')!;
 
 function setStatus(msg: string): void {
   status.textContent = msg;
-  console.log("[rebar-demo]", msg);
+  console.log('[rebar-demo]', msg);
 }
 
-type ViewPresetName = "front" | "side" | "top" | "persp" | "match";
+type ViewPresetName = 'front' | 'side' | 'top' | 'persp' | 'match';
 
 async function main(): Promise<void> {
-  setStatus("初始化场景...");
+  setStatus('初始化场景...');
 
-  const container = document.getElementById("canvas-container")!;
+  const container = document.getElementById('canvas-container')!;
   const width = container.clientWidth;
   const height = container.clientHeight;
 
@@ -51,8 +53,8 @@ async function main(): Promise<void> {
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
   } catch (error) {
-    console.error("[rebar-demo] WebGL 初始化失败", error);
-    setStatus("当前环境不支持 WebGL，无法渲染演示场景。");
+    console.error('[rebar-demo] WebGL 初始化失败', error);
+    setStatus('当前环境不支持 WebGL，无法渲染演示场景。');
     window.__rebarBeamDemoReady = true;
     return;
   }
@@ -91,11 +93,11 @@ async function main(): Promise<void> {
 
   // 统一标注样式参数（偏工程图）
   const dimStyle = {
-    arrowStyle: "open" as const,
+    arrowStyle: 'open' as const,
     arrowSizePx: 11,
     arrowAngleDeg: 18,
     extensionOvershootPx: 10,
-    labelRenderStyle: "rebarviz" as const,
+    labelRenderStyle: 'rebarviz' as const,
   };
 
   // ─── 梁参数（复刻目标图语义）─────────────────────────
@@ -260,7 +262,7 @@ async function main(): Promise<void> {
         text,
         labelT,
         labelOffsetWorld: labelWorldOffset,
-        unit: "",
+        unit: '',
         decimals: 0,
         ...dimStyle,
       },
@@ -279,7 +281,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, -1, 0),
     `ln=${beamLength}mm`,
     materials.blue,
-    "#3468d7",
+    '#3468d7',
     new THREE.Vector3(0, -32, 0),
   );
 
@@ -291,7 +293,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, -1, 0),
     `hc=${supportWidth}`,
     materials.black,
-    "#66778f",
+    '#66778f',
     new THREE.Vector3(0, -12, 0),
   );
   addDim(
@@ -301,7 +303,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, -1, 0),
     `hc=${supportWidth}`,
     materials.black,
-    "#66778f",
+    '#66778f',
     new THREE.Vector3(0, -12, 0),
   );
 
@@ -313,7 +315,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `ln/3=${lnThird}`,
     materials.ssDimensionDefault,
-    "#6c43c1",
+    '#6c43c1',
     new THREE.Vector3(0, 26, 0),
   );
   addDim(
@@ -323,7 +325,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `ln/3=${lnThird}`,
     materials.ssDimensionDefault,
-    "#6c43c1",
+    '#6c43c1',
     new THREE.Vector3(0, 26, 0),
   );
 
@@ -335,7 +337,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `加密区 ${denseZoneLen}`,
     materials.orange,
-    "#bc7c2c",
+    '#bc7c2c',
     new THREE.Vector3(0, 36, 0),
   );
   addDim(
@@ -345,7 +347,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `加密区 ${denseZoneLen}`,
     materials.orange,
-    "#bc7c2c",
+    '#bc7c2c',
     new THREE.Vector3(0, 36, 0),
   );
 
@@ -357,7 +359,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `搭接${lapLen}mm(≥${lapLen})`,
     materials.orange,
-    "#bc7c2c",
+    '#bc7c2c',
     new THREE.Vector3(0, 46, 0),
   );
   addDim(
@@ -367,7 +369,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `搭接${lapLen}mm(≥${lapLen})`,
     materials.orange,
-    "#bc7c2c",
+    '#bc7c2c',
     new THREE.Vector3(0, 46, 0),
   );
 
@@ -379,7 +381,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `支座筋弯锚 0.4laE=${anchorPart}`,
     materials.ssDimensionDefault,
-    "#6c43c1",
+    '#6c43c1',
     new THREE.Vector3(-26, 22, 0),
     0.35,
   );
@@ -390,7 +392,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(-1, 0, 0),
     `15d=${fifteenD}`,
     materials.ssDimensionDefault,
-    "#6c43c1",
+    '#6c43c1',
     new THREE.Vector3(-18, 0, 0),
   );
 
@@ -402,7 +404,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, 1, 0),
     `上部筋弯锚 0.4laE=${anchorPart}`,
     materials.ssSelected,
-    "#c44646",
+    '#c44646',
     new THREE.Vector3(-20, 20, 0),
     0.5,
   );
@@ -413,7 +415,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(0, -1, 0),
     `下部筋弯锚 0.4laE=${anchorPart}`,
     materials.ssSelected,
-    "#c44646",
+    '#c44646',
     new THREE.Vector3(-20, -20, 0),
     0.5,
   );
@@ -424,7 +426,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(1, 0, 0),
     `15d=${fifteenD}`,
     materials.ssSelected,
-    "#c44646",
+    '#c44646',
     new THREE.Vector3(18, 0, 0),
   );
   addDim(
@@ -432,9 +434,9 @@ async function main(): Promise<void> {
     new THREE.Vector3(beamRight - 6, beamBottom, beamWidth / 2 + 12),
     130,
     new THREE.Vector3(1, 0, 0),
-    "15d=3h=600",
+    '15d=3h=600',
     materials.black,
-    "#61708a",
+    '#61708a',
     new THREE.Vector3(18, 0, 0),
   );
 
@@ -446,7 +448,7 @@ async function main(): Promise<void> {
     new THREE.Vector3(-1, 0, 0),
     `c=${cover}`,
     materials.black,
-    "#61708a",
+    '#61708a',
     new THREE.Vector3(-12, 0, 0),
   );
 
@@ -478,10 +480,10 @@ async function main(): Promise<void> {
   };
 
   const viewButtons = Array.from(
-    document.querySelectorAll<HTMLButtonElement>(".view-btn[data-view]"),
+    document.querySelectorAll<HTMLButtonElement>('.view-btn[data-view]'),
   );
   const opacitySlider = document.getElementById(
-    "opacity-slider",
+    'opacity-slider',
   ) as HTMLInputElement | null;
   const concreteMats = [beamMat, supportMat];
 
@@ -492,22 +494,22 @@ async function main(): Promise<void> {
     camera.lookAt(preset.target);
     controls.update();
     for (const btn of viewButtons) {
-      btn.classList.toggle("active", btn.dataset.view === name);
+      btn.classList.toggle('active', btn.dataset.view === name);
     }
   };
 
   for (const btn of viewButtons) {
-    btn.addEventListener("click", () => {
+    btn.addEventListener('click', () => {
       const v = btn.dataset.view as ViewPresetName | undefined;
       if (!v || !(v in viewPresets)) return;
       applyPreset(v);
     });
   }
 
-  applyPreset("match");
+  applyPreset('match');
 
   if (opacitySlider) {
-    opacitySlider.addEventListener("input", () => {
+    opacitySlider.addEventListener('input', () => {
       const ratio = Math.max(
         0.2,
         Math.min(0.9, Number(opacitySlider.value) / 100),
@@ -529,7 +531,7 @@ async function main(): Promise<void> {
     materials.setResolution(w, h);
   }
   resize();
-  window.addEventListener("resize", resize);
+  window.addEventListener('resize', resize);
 
   // 渲染循环
   let frame = 0;

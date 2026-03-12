@@ -2,8 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   canFinalizeAtCurrentNode,
+  canReturnAtCurrentNode,
+  canSubmitAtCurrentNode,
   confirmCurrentDataSafely,
   finalizeTaskDecisionSafely,
+  getSubmitActionLabel,
+  mapWorkflowHistoryToTaskDetailItems,
 } from './reviewPanelActions';
 
 function deferred<T>() {
@@ -23,6 +27,55 @@ describe('reviewPanelActions', () => {
     expect(canFinalizeAtCurrentNode('jd')).toBe(false);
     expect(canFinalizeAtCurrentNode('sh')).toBe(false);
     expect(canFinalizeAtCurrentNode('pz')).toBe(true);
+  });
+
+  it('canSubmitAtCurrentNode 在四段工作流节点都允许执行提交动作', () => {
+    expect(canSubmitAtCurrentNode(undefined)).toBe(true);
+    expect(canSubmitAtCurrentNode('sj')).toBe(true);
+    expect(canSubmitAtCurrentNode('jd')).toBe(true);
+    expect(canSubmitAtCurrentNode('sh')).toBe(true);
+    expect(canSubmitAtCurrentNode('pz')).toBe(true);
+  });
+
+  it('canReturnAtCurrentNode 仅在非 sj 节点允许驳回', () => {
+    expect(canReturnAtCurrentNode(undefined)).toBe(false);
+    expect(canReturnAtCurrentNode('sj')).toBe(false);
+    expect(canReturnAtCurrentNode('jd')).toBe(true);
+    expect(canReturnAtCurrentNode('sh')).toBe(true);
+    expect(canReturnAtCurrentNode('pz')).toBe(true);
+  });
+
+  it('getSubmitActionLabel 返回与节点匹配的主操作文案', () => {
+    expect(getSubmitActionLabel('sj')).toBe('提交到校核');
+    expect(getSubmitActionLabel('jd')).toBe('提交到审核');
+    expect(getSubmitActionLabel('sh')).toBe('提交到批准');
+    expect(getSubmitActionLabel('pz')).toBe('最终批准');
+  });
+
+  it('mapWorkflowHistoryToTaskDetailItems 将工作流历史映射为详情面板可展示的数据', () => {
+    const items = mapWorkflowHistoryToTaskDetailItems([
+      {
+        node: 'sh',
+        action: 'submit',
+        operatorId: 'reviewer-1',
+        operatorName: '审核员小王',
+        comment: '提交批准',
+        timestamp: 1700000000000,
+      },
+      {
+        node: 'pz',
+        action: 'approve',
+        operatorId: 'manager-1',
+        operatorName: '项目负责人',
+        comment: '同意',
+        timestamp: 1700000001000,
+      },
+    ]);
+
+    expect(items).toEqual([
+      expect.objectContaining({ action: 'submit', userName: '审核员小王', comment: '提交批准' }),
+      expect.objectContaining({ action: 'approve', userName: '项目负责人', comment: '同意' }),
+    ]);
   });
 
   it('confirmCurrentDataSafely 应等待保存成功后再清理工具数据', async () => {

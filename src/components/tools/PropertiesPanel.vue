@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, watch } from 'vue';
+
 import { Search, ChevronDown, ChevronRight } from 'lucide-vue-next';
 
 import Badge from '@/components/ui/Badge.vue';
@@ -251,12 +252,10 @@ function handleBlur(row: PropertyRow) {
     <div v-if="sel.propertiesData.value" class="flex-shrink-0 border-b border-border px-2 py-1.5">
       <div class="relative">
         <Search class="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          v-model="searchQuery"
+        <Input v-model="searchQuery"
           type="text"
           placeholder="筛选属性..."
-          class="h-7 pl-7 text-xs"
-        />
+          class="h-7 pl-7 text-xs" />
       </div>
       <div v-if="stats.total > 0" class="mt-1 text-[10px] text-muted-foreground">
         {{ stats.filtered }}/{{ stats.total }}
@@ -290,14 +289,10 @@ function handleBlur(row: PropertyRow) {
       <div class="divide-y divide-border">
         <div v-for="group in groups" :key="group.id">
           <!-- 分组头部 -->
-          <button
-            class="flex w-full items-center gap-1.5 bg-muted/50 px-2 py-1.5 text-left transition-colors hover:bg-muted"
-            @click="toggleGroup(group.id)"
-          >
-            <component
-              :is="isGroupCollapsed(group.id) ? ChevronRight : ChevronDown"
-              class="h-3.5 w-3.5 text-muted-foreground"
-            />
+          <button class="flex w-full items-center gap-1.5 bg-muted/50 px-2 py-1.5 text-left transition-colors hover:bg-muted"
+            @click="toggleGroup(group.id)">
+            <component :is="isGroupCollapsed(group.id) ? ChevronRight : ChevronDown"
+              class="h-3.5 w-3.5 text-muted-foreground" />
             <span class="text-xs font-medium text-foreground">{{ group.name }}</span>
             <Badge variant="secondary" class="ml-auto text-[10px]">
               {{ group.rows.length }}
@@ -307,39 +302,32 @@ function handleBlur(row: PropertyRow) {
           <!-- 分组内容 -->
           <table v-if="!isGroupCollapsed(group.id)" class="w-full">
             <tbody>
-              <tr
-                v-for="row in group.rows"
+              <tr v-for="row in group.rows"
                 :key="row.key"
                 :class="cn(
                   'group border-b border-border/30 last:border-b-0',
                   'hover:bg-accent/50',
                   editingKey === row.key && 'bg-accent'
-                )"
-              >
+                )">
                 <!-- 属性名 -->
-                <td
-                  class="w-[45%] truncate border-r border-border/30 px-2 py-1 align-top text-xs text-muted-foreground"
-                  :title="row.key"
-                >
+                <td class="w-[45%] truncate border-r border-border/30 px-2 py-1 align-top text-xs text-muted-foreground"
+                  :title="row.key">
                   {{ row.key }}
                 </td>
 
                 <!-- 属性值 -->
                 <td class="px-2 py-1 align-top">
                   <!-- 编辑模式 -->
-                  <input
-                    v-if="editingKey === row.key"
+                  <input v-if="editingKey === row.key"
                     ref="editInputRef"
                     v-model="editValue"
                     :type="row.type === 'number' ? 'number' : 'text'"
                     class="h-5 w-full rounded border border-ring bg-background px-1 text-xs focus:outline-none"
                     @keydown="(e) => handleKeydown(e, row)"
-                    @blur="handleBlur(row)"
-                  />
+                    @blur="handleBlur(row)" />
 
                   <!-- 显示模式 -->
-                  <div
-                    v-else
+                  <div v-else
                     :class="cn(
                       'min-h-[20px] cursor-text truncate rounded px-1 text-xs leading-5',
                       'transition-colors',
@@ -351,8 +339,7 @@ function handleBlur(row: PropertyRow) {
                       row.type === 'object' && 'cursor-default text-muted-foreground'
                     )"
                     :title="row.displayValue"
-                    @click="startEditing(row)"
-                  >
+                    @click="startEditing(row)">
                     {{ row.displayValue }}
                   </div>
                 </td>

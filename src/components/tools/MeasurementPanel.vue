@@ -118,8 +118,7 @@ watch(
       </div>
 
       <div v-else class="mt-2 flex flex-col gap-2">
-        <div
-          v-for="m in sorted"
+        <div v-for="m in sorted"
           :key="m.id"
           :data-testid="`measurement-row-${m.id}`"
           :data-selected="store.activeMeasurementId.value === m.id ? 'true' : 'false'"
@@ -129,8 +128,7 @@ watch(
           tabindex="0"
           @click="selectMeasurement(m.id)"
           @keydown.enter.prevent="selectMeasurement(m.id)"
-          @keydown.space.prevent="selectMeasurement(m.id)"
-        >
+          @keydown.space.prevent="selectMeasurement(m.id)">
           <div class="flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm">
@@ -164,12 +162,10 @@ watch(
       </div>
 
       <div class="mt-3 flex justify-end">
-        <button
-          type="button"
+        <button type="button"
           data-testid="measurement-clear-all"
           class="h-9 rounded-md border border-input bg-background px-3 text-sm text-destructive hover:bg-muted"
-          @click="clearMeasurements()"
-        >
+          @click="clearMeasurements()">
           清空测量
         </button>
       </div>

@@ -1,17 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Matrix4, PerspectiveCamera, Scene } from "three";
-import { nextTick, ref, shallowRef } from "vue";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick, ref, shallowRef } from 'vue';
 
-import type { MbdPipeData } from "@/api/mbdPipeApi";
+import { Matrix4, PerspectiveCamera, Scene } from 'three';
 
-import { useMbdPipeAnnotationThree } from "./useMbdPipeAnnotationThree";
+import { useMbdPipeAnnotationThree } from './useMbdPipeAnnotationThree';
 
-describe("useMbdPipeAnnotationThree.flyTo", () => {
+import type { MbdPipeData } from '@/api/mbdPipeApi';
+
+describe('useMbdPipeAnnotationThree.flyTo', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("默认显示施工视图相关标注", () => {
+  it('默认显示施工视图相关标注', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -27,8 +28,8 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
-    expect(vis.mbdViewMode.value).toBe("construction");
-    expect(vis.dimMode.value).toBe("rebarviz");
+    expect(vis.mbdViewMode.value).toBe('construction');
+    expect(vis.dimMode.value).toBe('rebarviz');
     expect(vis.showDimSegment.value).toBe(false);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(false);
@@ -43,7 +44,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(vis.showSegments.value).toBe(false);
   });
 
-  it("applyModeDefaults 应切换 construction 与 inspection 的默认显示映射", () => {
+  it('applyModeDefaults 应切换 construction 与 inspection 的默认显示映射', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -59,9 +60,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
-    vis.applyModeDefaults("inspection");
-    expect(vis.mbdViewMode.value).toBe("inspection");
-    expect(vis.dimMode.value).toBe("rebarviz");
+    vis.applyModeDefaults('inspection');
+    expect(vis.mbdViewMode.value).toBe('inspection');
+    expect(vis.dimMode.value).toBe('rebarviz');
     expect(vis.showDimSegment.value).toBe(false);
     expect(vis.showDimChain.value).toBe(false);
     expect(vis.showDimOverall.value).toBe(false);
@@ -71,9 +72,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(vis.showBends.value).toBe(false);
     expect(vis.showSegments.value).toBe(false);
 
-    vis.applyModeDefaults("construction");
-    expect(vis.mbdViewMode.value).toBe("construction");
-    expect(vis.dimMode.value).toBe("rebarviz");
+    vis.applyModeDefaults('construction');
+    expect(vis.mbdViewMode.value).toBe('construction');
+    expect(vis.dimMode.value).toBe('rebarviz');
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(false);
     expect(vis.showDimPort.value).toBe(false);
@@ -82,7 +83,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(vis.showSlopes.value).toBe(true);
   });
 
-  it("resetToCurrentModeDefaults 应回到当前模式默认态", () => {
+  it('resetToCurrentModeDefaults 应回到当前模式默认态', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -98,21 +99,21 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
-    vis.mbdViewMode.value = "inspection";
+    vis.mbdViewMode.value = 'inspection';
     vis.showDimPort.value = false;
     vis.showWelds.value = true;
-    vis.dimMode.value = "classic";
+    vis.dimMode.value = 'classic';
 
     vis.resetToCurrentModeDefaults();
 
-    expect(vis.mbdViewMode.value).toBe("inspection");
-    expect(vis.dimMode.value).toBe("rebarviz");
+    expect(vis.mbdViewMode.value).toBe('inspection');
+    expect(vis.dimMode.value).toBe('rebarviz');
     expect(vis.showDimPort.value).toBe(true);
     expect(vis.showWelds.value).toBe(false);
     expect(vis.showSlopes.value).toBe(false);
   });
 
-  it("密集端口尺寸应自动错位排布标签", () => {
+  it('密集端口尺寸应自动错位排布标签', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -129,9 +130,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       welds: [],
@@ -139,28 +140,28 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       dims: [
         {
-          id: "port-1",
-          kind: "port",
+          id: 'port-1',
+          kind: 'port',
           start: [0, 0, 0],
           end: [220, 0, 0],
           length: 220,
-          text: "220",
+          text: '220',
         },
         {
-          id: "port-2",
-          kind: "port",
+          id: 'port-2',
+          kind: 'port',
           start: [260, 20, 0],
           end: [480, 20, 0],
           length: 220,
-          text: "220",
+          text: '220',
         },
         {
-          id: "port-3",
-          kind: "port",
+          id: 'port-3',
+          kind: 'port',
           start: [520, 40, 0],
           end: [740, 40, 0],
           length: 220,
-          text: "220",
+          text: '220',
         },
       ],
       stats: {
@@ -174,9 +175,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    const p1 = vis.getDimAnnotations().get("port-1")?.getParams();
-    const p2 = vis.getDimAnnotations().get("port-2")?.getParams();
-    const p3 = vis.getDimAnnotations().get("port-3")?.getParams();
+    const p1 = vis.getDimAnnotations().get('port-1')?.getParams();
+    const p2 = vis.getDimAnnotations().get('port-2')?.getParams();
+    const p3 = vis.getDimAnnotations().get('port-3')?.getParams();
 
     expect(p1).toBeTruthy();
     expect(p2).toBeTruthy();
@@ -185,7 +186,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(p2?.labelT).not.toBeCloseTo(p3?.labelT ?? 0.5, 6);
   });
 
-  it("密集端口尺寸应自动稀疏显示", () => {
+  it('密集端口尺寸应自动稀疏显示', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -203,19 +204,19 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.showDimPort.value = true;
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       welds: [],
       slopes: [],
       bends: [],
       dims: [
-        { id: "p1", kind: "port", start: [0, 0, 0], end: [210, 0, 0], length: 210, text: "210" },
-        { id: "p2", kind: "port", start: [15, 10, 0], end: [225, 10, 0], length: 210, text: "210" },
-        { id: "p3", kind: "port", start: [30, 20, 0], end: [240, 20, 0], length: 210, text: "210" },
-        { id: "p4", kind: "port", start: [45, 30, 0], end: [255, 30, 0], length: 210, text: "210" },
+        { id: 'p1', kind: 'port', start: [0, 0, 0], end: [210, 0, 0], length: 210, text: '210' },
+        { id: 'p2', kind: 'port', start: [15, 10, 0], end: [225, 10, 0], length: 210, text: '210' },
+        { id: 'p3', kind: 'port', start: [30, 20, 0], end: [240, 20, 0], length: 210, text: '210' },
+        { id: 'p4', kind: 'port', start: [45, 30, 0], end: [255, 30, 0], length: 210, text: '210' },
       ],
       stats: {
         segments_count: 0,
@@ -235,7 +236,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(visibleCount).toBeGreaterThan(0);
   });
 
-  it("带 layout_hint 的尺寸文字应固定在线中点并随 offsetScale 更新线层", async () => {
+  it('带 layout_hint 的尺寸文字应固定在线中点并随 offsetScale 更新线层', async () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -252,9 +253,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       welds: [],
@@ -262,20 +263,20 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       dims: [
         {
-          id: "seg-layout-1",
-          kind: "segment",
+          id: 'seg-layout-1',
+          kind: 'segment',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             anchor_point: [500, 0, 0],
             primary_axis: [1, 0, 0],
             offset_dir: [0, 1, 0],
             char_dir: [0, 0, 1],
-            label_role: "segment",
+            label_role: 'segment',
             avoid_line_of_sight: true,
-            owner_segment_id: "seg-layout-owner",
+            owner_segment_id: 'seg-layout-owner',
             offset_level: 1,
           },
         },
@@ -291,7 +292,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    const before = vis.getDimAnnotations().get("seg-layout-1")?.getParams();
+    const before = vis.getDimAnnotations().get('seg-layout-1')?.getParams();
     expect(before?.labelT).toBe(0.5);
     expect(before?.labelOffsetWorld).toBeNull();
     expect(before?.offset ?? 0).toBeGreaterThan(150);
@@ -299,13 +300,13 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.dimOffsetScale.value = 2;
     await nextTick();
 
-    const after = vis.getDimAnnotations().get("seg-layout-1")?.getParams();
+    const after = vis.getDimAnnotations().get('seg-layout-1')?.getParams();
     expect(after?.labelT).toBe(0.5);
     expect(after?.labelOffsetWorld).toBeNull();
     expect(after?.offset ?? 0).toBeGreaterThan(before?.offset ?? 0);
   });
 
-  it("chain 与 cut_tubi 同区域时应强制分层，避免文字挤在一起", () => {
+  it('chain 与 cut_tubi 同区域时应强制分层，避免文字挤在一起', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -328,22 +329,22 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       primary_axis: [1, 0, 0] as [number, number, number],
       offset_dir: [0, 1, 0] as [number, number, number],
       char_dir: [0, 0, 1] as [number, number, number],
-      label_role: "chain",
+      label_role: 'chain',
       avoid_line_of_sight: true,
-      owner_segment_id: "seg-1",
+      owner_segment_id: 'seg-1',
       offset_level: 1,
     };
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [
         {
-          id: "seg-1",
-          refno: "seg-1",
-          noun: "TUBI",
+          id: 'seg-1',
+          refno: 'seg-1',
+          noun: 'TUBI',
           arrive: [0, 0, 0],
           leave: [1000, 0, 0],
           length: 1000,
@@ -352,12 +353,12 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ],
       dims: [
         {
-          id: "chain-1",
-          kind: "chain",
+          id: 'chain-1',
+          kind: 'chain',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: hint,
         },
       ],
@@ -366,16 +367,16 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       cut_tubis: [
         {
-          id: "cut-1",
-          segment_id: "seg-1",
-          refno: "seg-1",
+          id: 'cut-1',
+          segment_id: 'seg-1',
+          refno: 'seg-1',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             ...hint,
-            label_role: "cut_tubi",
+            label_role: 'cut_tubi',
           },
         },
       ],
@@ -395,12 +396,12 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    const chain = vis.getDimAnnotations().get("chain-1");
+    const chain = vis.getDimAnnotations().get('chain-1');
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const cut = root?.children?.find(
-      (child: any) => child?.userData?.mbdAuxKind === "cut_tubi",
+      (child: any) => child?.userData?.mbdAuxKind === 'cut_tubi',
     );
 
     const chainPos = chain?.getLabelWorldPos();
@@ -413,7 +414,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(chainPos!.distanceTo(cutPos)).toBeGreaterThan(0.35);
   });
 
-  it("tag_tubi 应按 layout_hint 偏移且不附带焊缝副标题", () => {
+  it('tag_tubi 应按 layout_hint 偏移且不附带焊缝副标题', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -430,9 +431,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       welds: [],
@@ -441,20 +442,20 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       dims: [],
       tags: [
         {
-          id: "tag-layout-1",
-          refno: "24381_145018",
-          noun: "TUBI",
-          role: "tubi",
-          text: "L=1683",
+          id: 'tag-layout-1',
+          refno: '24381_145018',
+          noun: 'TUBI',
+          role: 'tubi',
+          text: 'L=1683',
           position: [500, 0, 0],
           layout_hint: {
             anchor_point: [500, 0, 0],
             primary_axis: [1, 0, 0],
             offset_dir: [0, 1, 0],
             char_dir: [0, 0, 1],
-            label_role: "tag_tubi",
+            label_role: 'tag_tubi',
             avoid_line_of_sight: true,
-            owner_segment_id: "seg-tag-owner",
+            owner_segment_id: 'seg-tag-owner',
             offset_level: 1,
           },
         },
@@ -470,16 +471,16 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    const tag = vis.getTagAnnotations().get("tag-layout-1");
+    const tag = vis.getTagAnnotations().get('tag-layout-1');
     const params = tag?.getParams();
     expect(params?.crossSize).toBe(0);
-    expect(params?.subtitle).toBe("");
+    expect(params?.subtitle).toBe('');
     expect(Math.abs(params?.labelOffsetWorld?.x ?? 0)).toBeGreaterThan(20);
     expect(params?.labelOffsetWorld?.y ?? 0).toBeGreaterThan(120);
     expect(params?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
   });
 
-  it("重叠的 fitting tags 应自动错开文字位置", () => {
+  it('重叠的 fitting tags 应自动错开文字位置', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -500,16 +501,16 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       primary_axis: [1, 0, 0] as [number, number, number],
       offset_dir: [0, 1, 0] as [number, number, number],
       char_dir: [0, 0, 1] as [number, number, number],
-      label_role: "fitting_bend",
+      label_role: 'fitting_bend',
       avoid_line_of_sight: true,
-      owner_segment_id: "seg-tag-overlap",
+      owner_segment_id: 'seg-tag-overlap',
       offset_level: 0,
     };
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -520,20 +521,20 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       fittings: [],
       tags: [
         {
-          id: "tag-elbow-a",
-          refno: "elbow-a",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO A",
+          id: 'tag-elbow-a',
+          refno: 'elbow-a',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO A',
           position: [500, 0, 0],
           layout_hint: hint,
         },
         {
-          id: "tag-elbow-b",
-          refno: "elbow-b",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO B",
+          id: 'tag-elbow-b',
+          refno: 'elbow-b',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO B',
           position: [500, 0, 0],
           layout_hint: hint,
         },
@@ -552,8 +553,8 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    const tagA = vis.getTagAnnotations().get("tag-elbow-a");
-    const tagB = vis.getTagAnnotations().get("tag-elbow-b");
+    const tagA = vis.getTagAnnotations().get('tag-elbow-a');
+    const tagB = vis.getTagAnnotations().get('tag-elbow-b');
     const posA = tagA?.getLabelWorldPos();
     const posB = tagB?.getLabelWorldPos();
     const paramsA = tagA?.getParams();
@@ -569,7 +570,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     ).toBeGreaterThan(0.1);
   });
 
-  it("短段附近重复的 elbow tags 在无法拉开时应抑制低优先级项", () => {
+  it('短段附近重复的 elbow tags 在无法拉开时应抑制低优先级项', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -590,22 +591,22 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       primary_axis: [1, 0, 0] as [number, number, number],
       offset_dir: [0, 1, 0] as [number, number, number],
       char_dir: [0, 0, 1] as [number, number, number],
-      label_role: "fitting_bend",
+      label_role: 'fitting_bend',
       avoid_line_of_sight: true,
-      owner_segment_id: "seg-tag-cluster",
+      owner_segment_id: 'seg-tag-cluster',
       offset_level: 0,
     };
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [
         {
-          id: "seg-1",
-          refno: "seg-1",
-          noun: "TUBI",
+          id: 'seg-1',
+          refno: 'seg-1',
+          noun: 'TUBI',
           arrive: [0, 0, 0],
           leave: [1000, 0, 0],
           length: 1000,
@@ -614,15 +615,15 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ],
       dims: [
         {
-          id: "chain-1",
-          kind: "chain",
+          id: 'chain-1',
+          kind: 'chain',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             ...hint,
-            label_role: "chain",
+            label_role: 'chain',
             offset_level: 1,
           },
         },
@@ -632,58 +633,58 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       cut_tubis: [
         {
-          id: "cut-1",
-          segment_id: "seg-1",
-          refno: "seg-1",
+          id: 'cut-1',
+          segment_id: 'seg-1',
+          refno: 'seg-1',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             ...hint,
-            label_role: "cut_tubi",
+            label_role: 'cut_tubi',
           },
         },
       ],
       fittings: [],
       tags: [
         {
-          id: "tag-branch",
-          refno: "branch-1",
-          noun: "OLET",
-          role: "fitting_branch",
-          text: "OLET",
+          id: 'tag-branch',
+          refno: 'branch-1',
+          noun: 'OLET',
+          role: 'fitting_branch',
+          text: 'OLET',
           position: [500, 0, 0],
           layout_hint: {
             ...hint,
-            label_role: "fitting_branch",
+            label_role: 'fitting_branch',
             offset_level: 2,
           },
         },
         {
-          id: "tag-elbow-a",
-          refno: "elbow-a",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO 89.7° R0",
+          id: 'tag-elbow-a',
+          refno: 'elbow-a',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO 89.7° R0',
           position: [500, 0, 0],
           layout_hint: hint,
         },
         {
-          id: "tag-elbow-b",
-          refno: "elbow-b",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO 89.7° R0",
+          id: 'tag-elbow-b',
+          refno: 'elbow-b',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO 89.7° R0',
           position: [500, 0, 0],
           layout_hint: hint,
         },
         {
-          id: "tag-elbow-c",
-          refno: "elbow-c",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO 89.7° R0",
+          id: 'tag-elbow-c',
+          refno: 'elbow-c',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO 89.7° R0',
           position: [500, 0, 0],
           layout_hint: hint,
         },
@@ -703,21 +704,21 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const visibleTagTexts = root.children
       .filter(
         (child: any) =>
-          child?.userData?.mbdAuxKind === "tag" && child.visible,
+          child?.userData?.mbdAuxKind === 'tag' && child.visible,
       )
-      .map((child: any) => child.getParams?.().label ?? "")
-      .filter((text: string) => text.includes("ELBO 89.7° R0"));
+      .map((child: any) => child.getParams?.().label ?? '')
+      .filter((text: string) => text.includes('ELBO 89.7° R0'));
 
     expect(visibleTagTexts.length).toBeLessThan(3);
     expect(visibleTagTexts.length).toBeGreaterThan(0);
   });
 
-  it("branch tag 在短段簇内应与 cut_tubi 保持更大间距", () => {
+  it('branch tag 在短段簇内应与 cut_tubi 保持更大间距', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -742,22 +743,22 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       primary_axis: [1, 0, 0] as [number, number, number],
       offset_dir: [0, 1, 0] as [number, number, number],
       char_dir: [0, 0, 1] as [number, number, number],
-      label_role: "segment",
+      label_role: 'segment',
       avoid_line_of_sight: true,
-      owner_segment_id: "seg-branch-cut",
+      owner_segment_id: 'seg-branch-cut',
       offset_level: 0,
     };
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [
         {
-          id: "seg-1",
-          refno: "seg-1",
-          noun: "TUBI",
+          id: 'seg-1',
+          refno: 'seg-1',
+          noun: 'TUBI',
           arrive: [0, 0, 0],
           leave: [1000, 0, 0],
           length: 1000,
@@ -766,15 +767,15 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ],
       dims: [
         {
-          id: "chain-1",
-          kind: "chain",
+          id: 'chain-1',
+          kind: 'chain',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             ...hint,
-            label_role: "chain",
+            label_role: 'chain',
             offset_level: 1,
           },
         },
@@ -784,49 +785,49 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       cut_tubis: [
         {
-          id: "cut-1",
-          segment_id: "seg-1",
-          refno: "seg-1",
+          id: 'cut-1',
+          segment_id: 'seg-1',
+          refno: 'seg-1',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             ...hint,
-            label_role: "cut_tubi",
+            label_role: 'cut_tubi',
           },
         },
       ],
       fittings: [],
       tags: [
         {
-          id: "tag-branch-1",
-          refno: "branch-1",
-          noun: "OLET",
-          role: "fitting_branch",
-          text: "OLET",
+          id: 'tag-branch-1',
+          refno: 'branch-1',
+          noun: 'OLET',
+          role: 'fitting_branch',
+          text: 'OLET',
           position: [500, 0, 0],
           layout_hint: {
             ...hint,
-            label_role: "fitting_branch",
+            label_role: 'fitting_branch',
             offset_level: 2,
           },
         },
         {
-          id: "tag-elbow-a",
-          refno: "elbow-a",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO 89.7° R0",
+          id: 'tag-elbow-a',
+          refno: 'elbow-a',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO 89.7° R0',
           position: [500, 0, 0],
           layout_hint: hint,
         },
         {
-          id: "tag-elbow-b",
-          refno: "elbow-b",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO 90.0° R0",
+          id: 'tag-elbow-b',
+          refno: 'elbow-b',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO 90.0° R0',
           position: [500, 0, 0],
           layout_hint: hint,
         },
@@ -846,12 +847,12 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const cut = root?.children?.find(
-      (child: any) => child?.userData?.mbdAuxKind === "cut_tubi",
+      (child: any) => child?.userData?.mbdAuxKind === 'cut_tubi',
     );
-    const tag = vis.getTagAnnotations().get("tag-branch-1");
+    const tag = vis.getTagAnnotations().get('tag-branch-1');
 
     const cutPos = cut?.getLabelWorldPos?.();
     const tagPos = tag?.getLabelWorldPos();
@@ -860,7 +861,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(cutPos!.distanceTo(tagPos!)).toBeGreaterThan(1.1);
   });
 
-  it("存在 cut_tubis 时不应重复渲染 tubi tags", () => {
+  it('存在 cut_tubis 时不应重复渲染 tubi tags', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -877,9 +878,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -888,23 +889,23 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       cut_tubis: [
         {
-          id: "cut-1",
-          segment_id: "seg-1",
-          refno: "24381_145018",
+          id: 'cut-1',
+          segment_id: 'seg-1',
+          refno: '24381_145018',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
         },
       ],
       fittings: [],
       tags: [
         {
-          id: "tag-tubi-1",
-          refno: "24381_145018",
-          noun: "TUBI",
-          role: "tubi",
-          text: "L=1000",
+          id: 'tag-tubi-1',
+          refno: '24381_145018',
+          noun: 'TUBI',
+          role: 'tubi',
+          text: 'L=1000',
           position: [500, 0, 0],
         },
       ],
@@ -922,10 +923,10 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    expect(vis.getTagAnnotations().has("tag-tubi-1")).toBe(false);
+    expect(vis.getTagAnnotations().has('tag-tubi-1')).toBe(false);
   });
 
-  it("branch fitting 缺少可渲染几何时不应再默认画十字锚点", () => {
+  it('branch fitting 缺少可渲染几何时不应再默认画十字锚点', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -942,9 +943,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -954,20 +955,20 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       cut_tubis: [],
       fittings: [
         {
-          id: "fit-branch-1",
-          refno: "fit-branch-1",
-          noun: "TEE",
-          kind: "tee",
+          id: 'fit-branch-1',
+          refno: 'fit-branch-1',
+          noun: 'TEE',
+          kind: 'tee',
           anchor_point: [100, 0, 0],
         },
       ],
       tags: [
         {
-          id: "tag-branch-1",
-          refno: "fit-branch-1",
-          noun: "TEE",
-          role: "fitting_branch",
-          text: "TEE",
+          id: 'tag-branch-1',
+          refno: 'fit-branch-1',
+          noun: 'TEE',
+          role: 'fitting_branch',
+          text: 'TEE',
           position: [100, 0, 0],
         },
       ],
@@ -986,17 +987,17 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const fittingObject = root?.children?.find(
-      (child: any) => child?.userData?.mbdAuxKind === "fitting",
+      (child: any) => child?.userData?.mbdAuxKind === 'fitting',
     ) as any;
     expect(fittingObject).toBeFalsy();
-    expect(vis.getTagAnnotations().has("tag-branch-1")).toBe(true);
+    expect(vis.getTagAnnotations().has('tag-branch-1')).toBe(true);
     expect(vis.suppressedWrongLineCount.value).toBe(1);
   });
 
-  it("缺少弯头几何时不应压制 elbow tag", () => {
+  it('缺少弯头几何时不应压制 elbow tag', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1013,9 +1014,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -1025,21 +1026,21 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       cut_tubis: [],
       fittings: [
         {
-          id: "fit-elbow-1",
-          refno: "fit-elbow-1",
-          noun: "ELBO",
-          kind: "elbo",
+          id: 'fit-elbow-1',
+          refno: 'fit-elbow-1',
+          noun: 'ELBO',
+          kind: 'elbo',
           anchor_point: [100, 0, 0],
           angle: 90,
         },
       ],
       tags: [
         {
-          id: "tag-elbow-1",
-          refno: "fit-elbow-1",
-          noun: "ELBO",
-          role: "fitting_bend",
-          text: "ELBO 90°",
+          id: 'tag-elbow-1',
+          refno: 'fit-elbow-1',
+          noun: 'ELBO',
+          role: 'fitting_bend',
+          text: 'ELBO 90°',
           position: [100, 0, 0],
         },
       ],
@@ -1057,17 +1058,17 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    expect(vis.getTagAnnotations().has("tag-elbow-1")).toBe(true);
+    expect(vis.getTagAnnotations().has('tag-elbow-1')).toBe(true);
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const fittingObject = root?.children?.find(
-      (child: any) => child?.userData?.mbdAuxKind === "fitting",
+      (child: any) => child?.userData?.mbdAuxKind === 'fitting',
     ) as any;
     expect(fittingObject).toBeFalsy();
   });
 
-  it("仅有 bends 数据时也应触发 flyTo", () => {
+  it('仅有 bends 数据时也应触发 flyTo', () => {
     const flyTo = vi.fn();
     const viewer = {
       canvas: {
@@ -1085,9 +1086,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -1095,9 +1096,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       slopes: [],
       bends: [
         {
-          id: "bend-1",
-          refno: "24381_145019",
-          noun: "ELBO",
+          id: 'bend-1',
+          refno: '24381_145019',
+          noun: 'ELBO',
           angle: 90,
           radius: 250,
           work_point: [0, 0, 0],
@@ -1120,7 +1121,7 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     expect(flyTo).toHaveBeenCalledTimes(1);
   });
 
-  it("construction 下 tags 应默认可见", () => {
+  it('construction 下 tags 应默认可见', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1137,9 +1138,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -1150,11 +1151,11 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       fittings: [],
       tags: [
         {
-          id: "tag-1",
-          refno: "tag-1",
-          noun: "TUBI",
-          role: "spec",
-          text: "DN50",
+          id: 'tag-1',
+          refno: 'tag-1',
+          noun: 'TUBI',
+          role: 'spec',
+          text: 'DN50',
           position: [100, 0, 0],
         },
       ],
@@ -1173,17 +1174,17 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const tagObject = root?.children?.find(
-      (child: any) => child?.userData?.mbdAuxKind === "tag",
+      (child: any) => child?.userData?.mbdAuxKind === 'tag',
     );
 
     expect(tagObject).toBeTruthy();
     expect(tagObject?.visible).toBe(true);
   });
 
-  it("fitting 缺少合法锚点时应抑制并计数", () => {
+  it('fitting 缺少合法锚点时应抑制并计数', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1200,9 +1201,9 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [],
@@ -1212,10 +1213,10 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       cut_tubis: [],
       fittings: [
         {
-          id: "fit-1",
-          refno: "fit-1",
-          noun: "TEE",
-          kind: "tee",
+          id: 'fit-1',
+          refno: 'fit-1',
+          noun: 'TEE',
+          kind: 'tee',
           anchor_point: [Number.NaN, 0, 0] as any,
         },
       ],
@@ -1235,17 +1236,17 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const fittingObject = root?.children?.find(
-      (child: any) => child?.userData?.mbdAuxKind === "fitting",
+      (child: any) => child?.userData?.mbdAuxKind === 'fitting',
     );
 
     expect(fittingObject).toBeFalsy();
     expect(vis.suppressedWrongLineCount.value).toBe(1);
   });
 
-  it("开启 showAnchorDebug 后应显示锚点调试几何", async () => {
+  it('开启 showAnchorDebug 后应显示锚点调试几何', async () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1262,27 +1263,27 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       dims: [
         {
-          id: "dim-1",
-          kind: "chain",
+          id: 'dim-1',
+          kind: 'chain',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             anchor_point: [200, 100, 0],
             offset_dir: [0, 1, 0],
             primary_axis: [1, 0, 0],
             char_dir: [0, 0, 1],
-            label_role: "chain",
+            label_role: 'chain',
             avoid_line_of_sight: true,
-            owner_segment_id: "seg-1",
+            owner_segment_id: 'seg-1',
             offset_level: 1,
             suppress_reason: null,
           },
@@ -1309,10 +1310,10 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const debugBefore = root?.children?.filter(
-      (child: any) => child?.userData?.mbdAuxKind === "debug-anchor",
+      (child: any) => child?.userData?.mbdAuxKind === 'debug-anchor',
     ) ?? [];
     expect(debugBefore.length).toBeGreaterThan(0);
     expect(debugBefore.every((child: any) => child.visible === false)).toBe(true);
@@ -1321,13 +1322,13 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     await nextTick();
 
     const debugAfter = root?.children?.filter(
-      (child: any) => child?.userData?.mbdAuxKind === "debug-anchor",
+      (child: any) => child?.userData?.mbdAuxKind === 'debug-anchor',
     ) ?? [];
     expect(debugAfter.length).toBeGreaterThan(0);
     expect(debugAfter.every((child: any) => child.visible === true)).toBe(true);
   });
 
-  it("开启 showOwnerSegmentDebug 后应显示所属段调试几何", async () => {
+  it('开启 showOwnerSegmentDebug 后应显示所属段调试几何', async () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1344,15 +1345,15 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [
         {
-          id: "seg-1",
-          refno: "seg-1",
-          noun: "TUBI",
+          id: 'seg-1',
+          refno: 'seg-1',
+          noun: 'TUBI',
           arrive: [0, 0, 0],
           leave: [1000, 0, 0],
           length: 1000,
@@ -1361,20 +1362,20 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ],
       dims: [
         {
-          id: "dim-1",
-          kind: "chain",
+          id: 'dim-1',
+          kind: 'chain',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
           layout_hint: {
             anchor_point: [200, 100, 0],
             offset_dir: [0, 1, 0],
             primary_axis: [1, 0, 0],
             char_dir: [0, 0, 1],
-            label_role: "chain",
+            label_role: 'chain',
             avoid_line_of_sight: true,
-            owner_segment_id: "seg-1",
+            owner_segment_id: 'seg-1',
             offset_level: 1,
             suppress_reason: null,
           },
@@ -1401,10 +1402,10 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     vis.renderBranch(data);
 
     const root = viewer.scene.children.find(
-      (child: any) => child?.name === "dtx-mbd-pipe-v2",
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
     ) as any;
     const debugBefore = root?.children?.filter(
-      (child: any) => child?.userData?.mbdAuxKind === "debug-owner-segment",
+      (child: any) => child?.userData?.mbdAuxKind === 'debug-owner-segment',
     ) ?? [];
     expect(debugBefore.length).toBe(1);
     expect(debugBefore[0]?.visible).toBe(false);
@@ -1413,13 +1414,13 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     await nextTick();
 
     const debugAfter = root?.children?.filter(
-      (child: any) => child?.userData?.mbdAuxKind === "debug-owner-segment",
+      (child: any) => child?.userData?.mbdAuxKind === 'debug-owner-segment',
     ) ?? [];
     expect(debugAfter.length).toBe(1);
     expect(debugAfter[0]?.visible).toBe(true);
   });
 
-  it("切换 dimMode 重建后应保持当前高亮项", async () => {
+  it('切换 dimMode 重建后应保持当前高亮项', async () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1434,14 +1435,14 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ref<HTMLElement | null>(null),
       { getGlobalModelMatrix: () => new Matrix4() },
     );
-    vis.dimMode.value = "rebarviz";
+    vis.dimMode.value = 'rebarviz';
     await nextTick();
     await nextTick();
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       welds: [],
@@ -1449,12 +1450,12 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       dims: [
         {
-          id: "dim-1",
-          kind: "segment",
+          id: 'dim-1',
+          kind: 'segment',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
         },
       ],
       stats: {
@@ -1467,23 +1468,23 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     };
 
     vis.renderBranch(data);
-    vis.highlightItem("dim-1");
+    vis.highlightItem('dim-1');
 
-    const before = vis.getDimAnnotations().get("dim-1");
+    const before = vis.getDimAnnotations().get('dim-1');
     expect(before).toBeTruthy();
     expect(before?.highlighted).toBe(true);
 
-    vis.dimMode.value = "classic";
+    vis.dimMode.value = 'classic';
     await nextTick();
     await nextTick();
 
-    const after = vis.getDimAnnotations().get("dim-1");
+    const after = vis.getDimAnnotations().get('dim-1');
     expect(after).toBeTruthy();
     expect(after).not.toBe(before);
     expect(after?.highlighted).toBe(true);
   });
 
-  it("切换 dimMode 时 dim/weld/slope/bend 文字样式应同步切换", async () => {
+  it('切换 dimMode 时 dim/weld/slope/bend 文字样式应同步切换', async () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1500,15 +1501,15 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     );
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [
         {
-          id: "s1",
-          refno: "S:1",
-          noun: "STRA",
+          id: 's1',
+          refno: 'S:1',
+          noun: 'STRA',
           arrive: [0, 0, 0],
           leave: [1000, 0, 0],
           length: 1000,
@@ -1517,39 +1518,39 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ],
       dims: [
         {
-          id: "dim-1",
-          kind: "segment",
+          id: 'dim-1',
+          kind: 'segment',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
         },
       ],
       welds: [
         {
-          id: "weld-1",
+          id: 'weld-1',
           position: [1000, 0, 0],
-          weld_type: "BW",
+          weld_type: 'BW',
           is_shop: false,
-          label: "W1",
-          left_refno: "S:1",
-          right_refno: "S:2",
+          label: 'W1',
+          left_refno: 'S:1',
+          right_refno: 'S:2',
         },
       ],
       slopes: [
         {
-          id: "slope-1",
+          id: 'slope-1',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           slope: 0.01,
-          text: "1%",
+          text: '1%',
         },
       ],
       bends: [
         {
-          id: "bend-1",
-          refno: "B:1",
-          noun: "ELBO",
+          id: 'bend-1',
+          refno: 'B:1',
+          noun: 'ELBO',
           angle: 90,
           radius: 250,
           work_point: [1000, 0, 0],
@@ -1571,55 +1572,55 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
 
     vis.renderBranch(data);
 
-    expect(getLabelStyle(vis.getDimAnnotations().get("dim-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getDimAnnotations().get('dim-1'))).toBe(
+      'rebarviz',
     );
-    expect(getLabelStyle(vis.getWeldAnnotations().get("weld-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getWeldAnnotations().get('weld-1'))).toBe(
+      'rebarviz',
     );
-    expect(getLabelStyle(vis.getSlopeAnnotations().get("slope-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getSlopeAnnotations().get('slope-1'))).toBe(
+      'rebarviz',
     );
-    expect(getLabelStyle(vis.getBendAnnotations().get("bend-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getBendAnnotations().get('bend-1'))).toBe(
+      'rebarviz',
     );
 
-    vis.dimMode.value = "classic";
+    vis.dimMode.value = 'classic';
     await nextTick();
     await nextTick();
 
-    expect(getLabelStyle(vis.getDimAnnotations().get("dim-1"))).toBe(
-      "solvespace",
+    expect(getLabelStyle(vis.getDimAnnotations().get('dim-1'))).toBe(
+      'solvespace',
     );
-    expect(getLabelStyle(vis.getWeldAnnotations().get("weld-1"))).toBe(
-      "solvespace",
+    expect(getLabelStyle(vis.getWeldAnnotations().get('weld-1'))).toBe(
+      'solvespace',
     );
-    expect(getLabelStyle(vis.getSlopeAnnotations().get("slope-1"))).toBe(
-      "solvespace",
+    expect(getLabelStyle(vis.getSlopeAnnotations().get('slope-1'))).toBe(
+      'solvespace',
     );
-    expect(getLabelStyle(vis.getBendAnnotations().get("bend-1"))).toBe(
-      "solvespace",
+    expect(getLabelStyle(vis.getBendAnnotations().get('bend-1'))).toBe(
+      'solvespace',
     );
 
-    vis.dimMode.value = "rebarviz";
+    vis.dimMode.value = 'rebarviz';
     await nextTick();
     await nextTick();
 
-    expect(getLabelStyle(vis.getDimAnnotations().get("dim-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getDimAnnotations().get('dim-1'))).toBe(
+      'rebarviz',
     );
-    expect(getLabelStyle(vis.getWeldAnnotations().get("weld-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getWeldAnnotations().get('weld-1'))).toBe(
+      'rebarviz',
     );
-    expect(getLabelStyle(vis.getSlopeAnnotations().get("slope-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getSlopeAnnotations().get('slope-1'))).toBe(
+      'rebarviz',
     );
-    expect(getLabelStyle(vis.getBendAnnotations().get("bend-1"))).toBe(
-      "rebarviz",
+    expect(getLabelStyle(vis.getBendAnnotations().get('bend-1'))).toBe(
+      'rebarviz',
     );
   });
 
-  it("rebarviz 箭头参数调整后应即时刷新已渲染尺寸", async () => {
+  it('rebarviz 箭头参数调整后应即时刷新已渲染尺寸', async () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1634,14 +1635,14 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       ref<HTMLElement | null>(null),
       { getGlobalModelMatrix: () => new Matrix4() },
     );
-    vis.dimMode.value = "rebarviz";
+    vis.dimMode.value = 'rebarviz';
     await nextTick();
     await nextTick();
 
     const data: MbdPipeData = {
-      input_refno: "24381_145018",
-      branch_refno: "24381_145018",
-      branch_name: "BRAN-TEST",
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
       branch_attrs: {},
       segments: [],
       welds: [],
@@ -1649,12 +1650,12 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
       bends: [],
       dims: [
         {
-          id: "dim-1",
-          kind: "segment",
+          id: 'dim-1',
+          kind: 'segment',
           start: [0, 0, 0],
           end: [1000, 0, 0],
           length: 1000,
-          text: "1000",
+          text: '1000',
         },
       ],
       stats: {
@@ -1667,17 +1668,17 @@ describe("useMbdPipeAnnotationThree.flyTo", () => {
     };
 
     vis.renderBranch(data);
-    expect(vis.getDimAnnotations().get("dim-1")).toBeTruthy();
+    expect(vis.getDimAnnotations().get('dim-1')).toBeTruthy();
 
-    (vis as any).rebarvizArrowStyle.value = "tick";
+    (vis as any).rebarvizArrowStyle.value = 'tick';
     (vis as any).rebarvizArrowSizePx.value = 20;
     (vis as any).rebarvizArrowAngleDeg.value = 24;
     (vis as any).rebarvizLineWidthPx.value = 3;
     await nextTick();
     await nextTick();
 
-    const updated = vis.getDimAnnotations().get("dim-1");
-    expect(updated?.getParams().arrowStyle).toBe("tick");
+    const updated = vis.getDimAnnotations().get('dim-1');
+    expect(updated?.getParams().arrowStyle).toBe('tick');
     expect(updated?.getParams().arrowSizePx).toBe(20);
     expect(updated?.getParams().arrowAngleDeg).toBe(24);
     expect((updated as any)?.materialSet?.fatLine?.linewidth).toBe(3);

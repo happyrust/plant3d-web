@@ -3,13 +3,15 @@ import { computed, ref } from 'vue';
 
 import { Calendar, CheckCircle, Clock, Eye, FileText, Package, RefreshCw, Search, User, XCircle } from 'lucide-vue-next';
 
+import { refreshReviewerTasksSafely } from './reviewerTaskListActions';
+import { getSubmitActionLabel } from './reviewPanelActions';
+
 import type { ReviewTask } from '@/types/auth';
 
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
-import { refreshReviewerTasksSafely } from './reviewerTaskListActions';
 
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
@@ -19,6 +21,8 @@ const statusFilter = ref<string>('all');
 const priorityFilter = ref<string>('all');
 const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
+const showRejectForm = ref(false);
+const rejectReason = ref('');
 
 const tasks = computed(() => userStore.pendingReviewTasks.value);
 const reviewStageLabel = computed(() => {
@@ -72,11 +76,9 @@ function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('zh-CN');
 }
 
-function handleStartReview(task: ReviewTask) {
+async function handleStartReview(task: ReviewTask) {
   // 设置当前审核任务
-  reviewStore.setCurrentTask(task);
-  // 更新任务状态
-  userStore.updateTaskStatus(task.id, 'in_review');
+  await reviewStore.setCurrentTask(task);
   selectedTask.value = task;
   
   // 先关闭任务列表面板
@@ -88,24 +90,20 @@ function handleStartReview(task: ReviewTask) {
   }, 100);
 }
 
-function handleApprove(task: ReviewTask) {
-  const node = task.currentNode || 'sj';
-  if (node === 'jd') {
-    // 校核通过 -> 进入审核节点
-    userStore.submitTaskToNextNode(task.id, '校核通过');
-  } else {
-    // 审核通过 -> 任务结束
-    userStore.updateTaskStatus(task.id, 'approved', '审核通过');
-  }
+async function handleApprove(task: ReviewTask) {
+  await userStore.submitTaskToNextNode(task.id, getSubmitActionLabel(task.currentNode));
+  await userStore.loadReviewTasks();
   selectedTask.value = null;
 }
 
-function handleReject(task: ReviewTask) {
-  const reason = (window.prompt('请输入驳回原因（必填）', '') || '').trim();
-  if (!reason) return;
+async function handleReject(task: ReviewTask) {
+  if (!rejectReason.value.trim()) return;
   // 统一规则：驳回一律回发起设计人（sj）
-  userStore.returnTaskToNode(task.id, 'sj', reason);
+  await userStore.returnTaskToNode(task.id, 'sj', rejectReason.value.trim());
+  await userStore.loadReviewTasks();
   selectedTask.value = null;
+  showRejectForm.value = false;
+  rejectReason.value = '';
 }
 
 function handleViewTask(task: ReviewTask) {
@@ -114,17 +112,26 @@ function handleViewTask(task: ReviewTask) {
 
 function closeTaskDetail() {
   selectedTask.value = null;
+  showRejectForm.value = false;
+  rejectReason.value = '';
 }
 
 function getStartActionLabel(task: ReviewTask): string {
   const node = task.currentNode || 'sj';
   if (node === 'jd') {
-    return task.status === 'submitted' ? '开始校核' : '继续校核';
+    return '处理校核';
   }
   if (node === 'sh') {
-    return task.status === 'submitted' ? '开始审核' : '继续审核';
+    return '处理审核';
+  }
+  if (node === 'pz') {
+    return '处理批准';
   }
   return '处理任务';
+}
+
+function getApproveActionLabel(task: ReviewTask): string {
+  return getSubmitActionLabel(task.currentNode);
 }
 </script>
 
@@ -296,14 +303,34 @@ function getStartActionLabel(task: ReviewTask): string {
           </div>
           <div class="p-4 border-t flex justify-end gap-2">
             <template v-if="selectedTask.status === 'submitted' || selectedTask.status === 'in_review'">
-              <button class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
-                @click="handleReject(selectedTask)">
-                驳回
-              </button>
-              <button class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
-                @click="handleApprove(selectedTask)">
-                通过
-              </button>
+              <div v-if="!showRejectForm" class="flex gap-2">
+                <button class="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                  @click="showRejectForm = true">
+                  驳回
+                </button>
+                <button class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  @click="handleApprove(selectedTask)">
+                  {{ getApproveActionLabel(selectedTask) }}
+                </button>
+              </div>
+              <div v-else class="w-full space-y-2">
+                <label class="text-sm text-gray-600">驳回原因（必填）</label>
+                <textarea v-model="rejectReason"
+                  class="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-500"
+                  rows="2"
+                  placeholder="请输入驳回原因..." />
+                <div class="flex gap-2">
+                  <button class="flex-1 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                    :disabled="!rejectReason.trim()"
+                    @click="handleReject(selectedTask)">
+                    确认驳回
+                  </button>
+                  <button class="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                    @click="showRejectForm = false; rejectReason = ''">
+                    取消
+                  </button>
+                </div>
+              </div>
             </template>
             <button class="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50" @click="closeTaskDetail">
               关闭

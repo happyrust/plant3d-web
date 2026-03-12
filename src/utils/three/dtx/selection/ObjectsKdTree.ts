@@ -14,7 +14,7 @@ import { Box3, Vector3, Frustum, Matrix4 } from 'three';
 /**
  * K-D 树节点
  */
-interface KdTreeNode {
+type KdTreeNode = {
   /** 节点包围盒 */
   aabb: Box3;
   /** 叶子节点存储的对象 ID 列表 */
@@ -32,7 +32,7 @@ interface KdTreeNode {
 /**
  * 对象数据接口 (用于构建 K-D 树)
  */
-export interface KdTreeObject {
+export type KdTreeObject = {
   objectId: string;
   boundingBox: Box3;
 }
@@ -72,7 +72,7 @@ export class ObjectsKdTree {
   private _root: KdTreeNode | null = null;
   private _maxDepth: number;
   private _needsRebuild = true;
-  private _objects: Map<string, Box3> = new Map();
+  private _objects = new Map<string, Box3>();
 
   constructor(maxDepth: number = DEFAULT_MAX_DEPTH) {
     this._maxDepth = maxDepth;

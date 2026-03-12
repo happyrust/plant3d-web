@@ -6,9 +6,13 @@
  * 集成交互控制器用于点击、悬停、拖拽
  */
 
-import { ref, shallowRef, watch, onUnmounted, type Ref, type ShallowRef } from 'vue'
-import * as THREE from 'three'
-import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import { ref, shallowRef, watch, onUnmounted, type Ref, type ShallowRef } from 'vue';
+
+import * as THREE from 'three';
+import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+
+import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
+
 import {
   AnnotationMaterials,
   AnnotationBase,
@@ -19,10 +23,9 @@ import {
   type LeaderAnnotationParams,
   type AnnotationInteractionOptions,
   type AnnotationInteractionCallback,
-} from '@/utils/three/annotation'
-import type { DtxViewer } from '@/viewer/dtx/DtxViewer'
+} from '@/utils/three/annotation';
 
-export interface UseAnnotationThreeOptions {
+export type UseAnnotationThreeOptions = {
   /** 获取全局模型矩阵（用于坐标变换） */
   getGlobalModelMatrix?: (() => THREE.Matrix4 | null) | null
   /** 请求渲染回调 */
@@ -31,7 +34,7 @@ export interface UseAnnotationThreeOptions {
   interaction?: AnnotationInteractionOptions
 }
 
-export interface UseAnnotationThreeReturn {
+export type UseAnnotationThreeReturn = {
   /** 所有标注的 Map */
   annotations: ShallowRef<Map<string, AnnotationBase>>
   /** 标注组（添加到场景中） */
@@ -95,22 +98,22 @@ export function useAnnotationThree(
   containerRef: Ref<HTMLElement | null>,
   options: UseAnnotationThreeOptions = {}
 ): UseAnnotationThreeReturn {
-  const { getGlobalModelMatrix, requestRender, interaction } = options
+  const { getGlobalModelMatrix, requestRender, interaction } = options;
 
   // 标注集合
-  const annotations = shallowRef<Map<string, AnnotationBase>>(new Map())
+  const annotations = shallowRef<Map<string, AnnotationBase>>(new Map());
 
   // 材质管理器
-  const materials = new AnnotationMaterials()
+  const materials = new AnnotationMaterials();
 
   // 标注组
-  const annotationGroup = new THREE.Group()
-  annotationGroup.name = 'annotations-3d'
-  annotationGroup.renderOrder = 900
-  annotationGroup.matrixAutoUpdate = false
+  const annotationGroup = new THREE.Group();
+  annotationGroup.name = 'annotations-3d';
+  annotationGroup.renderOrder = 900;
+  annotationGroup.matrixAutoUpdate = false;
 
   // CSS2D 渲染器
-  let css2dRenderer: CSS2DRenderer | null = null
+  let css2dRenderer: CSS2DRenderer | null = null;
 
   // 交互控制器
   const interactionController = new AnnotationInteractionController(annotations.value, {
@@ -118,226 +121,226 @@ export function useAnnotationThree(
     enableClick: true,
     enableDrag: false,
     ...interaction,
-  })
+  });
 
   // 当前高亮的标注 ID
-  const highlightedId = ref<string | null>(null)
+  const highlightedId = ref<string | null>(null);
 
   // 单位矩阵
-  const identityMatrix = new THREE.Matrix4()
+  const identityMatrix = new THREE.Matrix4();
 
   // 交互事件触发渲染
   interactionController.on(() => {
-    requestRender?.()
-  })
+    requestRender?.();
+  });
 
   /** 初始化 CSS2DRenderer */
   function initCSS2DRenderer(container: HTMLElement, canvas: HTMLCanvasElement): CSS2DRenderer {
     if (css2dRenderer) {
-      css2dRenderer.domElement.remove()
+      css2dRenderer.domElement.remove();
     }
 
-    css2dRenderer = new CSS2DRenderer()
-    css2dRenderer.setSize(canvas.clientWidth, canvas.clientHeight)
-    css2dRenderer.domElement.style.position = 'absolute'
-    css2dRenderer.domElement.style.top = '0'
-    css2dRenderer.domElement.style.left = '0'
-    css2dRenderer.domElement.style.pointerEvents = 'none'
-    css2dRenderer.domElement.className = 'annotation-labels-container'
-    container.appendChild(css2dRenderer.domElement)
+    css2dRenderer = new CSS2DRenderer();
+    css2dRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    css2dRenderer.domElement.style.position = 'absolute';
+    css2dRenderer.domElement.style.top = '0';
+    css2dRenderer.domElement.style.left = '0';
+    css2dRenderer.domElement.style.pointerEvents = 'none';
+    css2dRenderer.domElement.className = 'annotation-labels-container';
+    container.appendChild(css2dRenderer.domElement);
 
-    return css2dRenderer
+    return css2dRenderer;
   }
 
   /** 确保标注组已添加到场景 */
   function ensureGroupAttached(): void {
-    const viewer = dtxViewerRef.value
-    if (!viewer) return
+    const viewer = dtxViewerRef.value;
+    if (!viewer) return;
     if (annotationGroup.parent !== viewer.scene) {
       try {
-        annotationGroup.parent?.remove(annotationGroup)
+        annotationGroup.parent?.remove(annotationGroup);
       } catch { /* ignore */ }
-      viewer.scene.add(annotationGroup)
+      viewer.scene.add(annotationGroup);
     }
   }
 
   /** 更新标注组矩阵 */
   function updateGroupMatrix(): void {
-    const gm = getGlobalModelMatrix?.() || identityMatrix
-    annotationGroup.matrix.copy(gm)
-    annotationGroup.updateMatrixWorld(true)
+    const gm = getGlobalModelMatrix?.() || identityMatrix;
+    annotationGroup.matrix.copy(gm);
+    annotationGroup.updateMatrixWorld(true);
   }
 
   /** 添加标注 */
   function addAnnotation(id: string, annotation: AnnotationBase): void {
     if (annotations.value.has(id)) {
-      removeAnnotation(id)
+      removeAnnotation(id);
     }
-    annotations.value.set(id, annotation)
-    annotationGroup.add(annotation)
+    annotations.value.set(id, annotation);
+    annotationGroup.add(annotation);
     // 触发响应式更新
-    annotations.value = new Map(annotations.value)
+    annotations.value = new Map(annotations.value);
     // 更新交互控制器的引用
-    interactionController.setAnnotations(annotations.value)
-    requestRender?.()
+    interactionController.setAnnotations(annotations.value);
+    requestRender?.();
   }
 
   /** 移除标注 */
   function removeAnnotation(id: string): void {
-    const annotation = annotations.value.get(id)
+    const annotation = annotations.value.get(id);
     if (annotation) {
-      annotation.dispose()
-      annotations.value.delete(id)
-      annotations.value = new Map(annotations.value)
-      interactionController.setAnnotations(annotations.value)
-      requestRender?.()
+      annotation.dispose();
+      annotations.value.delete(id);
+      annotations.value = new Map(annotations.value);
+      interactionController.setAnnotations(annotations.value);
+      requestRender?.();
     }
   }
 
   /** 获取标注 */
   function getAnnotation(id: string): AnnotationBase | undefined {
-    return annotations.value.get(id)
+    return annotations.value.get(id);
   }
 
   /** 注册外部标注（已在场景中，仅加入交互控制器的 map，不加入 annotationGroup） */
   function registerExternalAnnotation(id: string, annotation: AnnotationBase): void {
-    annotations.value.set(id, annotation)
-    annotations.value = new Map(annotations.value)
-    interactionController.setAnnotations(annotations.value)
+    annotations.value.set(id, annotation);
+    annotations.value = new Map(annotations.value);
+    interactionController.setAnnotations(annotations.value);
   }
 
   /** 取消注册外部标注（不 dispose，仅从交互 map 中移除） */
   function unregisterExternalAnnotation(id: string): void {
-    annotations.value.delete(id)
-    annotations.value = new Map(annotations.value)
-    interactionController.setAnnotations(annotations.value)
+    annotations.value.delete(id);
+    annotations.value = new Map(annotations.value);
+    interactionController.setAnnotations(annotations.value);
   }
 
   /** 清空所有标注 */
   function clearAll(): void {
     for (const annotation of annotations.value.values()) {
-      annotation.dispose()
+      annotation.dispose();
     }
-    annotations.value.clear()
-    annotations.value = new Map()
-    interactionController.setAnnotations(annotations.value)
-    interactionController.clearSelection()
-    requestRender?.()
+    annotations.value.clear();
+    annotations.value = new Map();
+    interactionController.setAnnotations(annotations.value);
+    interactionController.clearSelection();
+    requestRender?.();
   }
 
   /** 高亮标注 */
   function highlightAnnotation(id: string | null): void {
     // 取消之前的高亮
     if (highlightedId.value && highlightedId.value !== id) {
-      const prev = annotations.value.get(highlightedId.value)
-      if (prev) prev.highlighted = false
+      const prev = annotations.value.get(highlightedId.value);
+      if (prev) prev.highlighted = false;
     }
 
     // 设置新的高亮
-    highlightedId.value = id
+    highlightedId.value = id;
     if (id) {
-      const annotation = annotations.value.get(id)
-      if (annotation) annotation.highlighted = true
+      const annotation = annotations.value.get(id);
+      if (annotation) annotation.highlighted = true;
     }
 
-    requestRender?.()
+    requestRender?.();
   }
 
   /** 选中标注 */
   function selectAnnotation(id: string | null): void {
-    interactionController.select(id)
-    requestRender?.()
+    interactionController.select(id);
+    requestRender?.();
   }
 
   /** 添加交互事件监听器 */
   function onInteraction(callback: AnnotationInteractionCallback): () => void {
-    return interactionController.on(callback)
+    return interactionController.on(callback);
   }
 
   /** 每帧更新 */
   function update(camera: THREE.Camera): void {
-    updateGroupMatrix()
-    interactionController.setCamera(camera)
-    const viewer = dtxViewerRef.value
+    updateGroupMatrix();
+    interactionController.setCamera(camera);
+    const viewer = dtxViewerRef.value;
     if (viewer) {
       const rect = viewer.canvas.getBoundingClientRect()
       ;(camera as any).userData.annotationViewport = {
         width: rect.width,
         height: rect.height,
-      }
+      };
     }
     for (const annotation of annotations.value.values()) {
-      annotation.update(camera)
+      annotation.update(camera);
     }
   }
 
   /** 渲染 CSS2D 标签 */
   function renderLabels(scene: THREE.Scene, camera: THREE.Camera): void {
     // 只渲染标注子树，避免同一页面多套 CSS2DRenderer 时互相 re-parent DOM 元素。
-    void scene
-    css2dRenderer?.render(annotationGroup, camera)
+    void scene;
+    css2dRenderer?.render(annotationGroup, camera);
   }
 
   /** 更新分辨率 */
   function setResolution(width: number, height: number): void {
-    materials.setResolution(width, height)
-    css2dRenderer?.setSize(width, height)
+    materials.setResolution(width, height);
+    css2dRenderer?.setSize(width, height);
   }
 
   /** 创建线性尺寸标注 */
   function createLinearDimension(id: string, params: LinearDimensionParams): LinearDimension {
-    ensureGroupAttached()
-    const dim = new LinearDimension(materials, params)
-    addAnnotation(id, dim)
-    return dim
+    ensureGroupAttached();
+    const dim = new LinearDimension(materials, params);
+    addAnnotation(id, dim);
+    return dim;
   }
 
   /** 创建引线标注 */
   function createLeaderAnnotation(id: string, params: LeaderAnnotationParams): LeaderAnnotation {
-    ensureGroupAttached()
-    const leader = new LeaderAnnotation(materials, params)
-    addAnnotation(id, leader)
-    return leader
+    ensureGroupAttached();
+    const leader = new LeaderAnnotation(materials, params);
+    addAnnotation(id, leader);
+    return leader;
   }
 
   /** 启用交互 */
   function enableInteraction(domElement: HTMLElement): void {
-    interactionController.attach(domElement)
+    interactionController.attach(domElement);
   }
 
   /** 禁用交互 */
   function disableInteraction(): void {
-    interactionController.detach()
+    interactionController.detach();
   }
 
   /** 销毁 */
   function dispose(): void {
-    interactionController.dispose()
-    clearAll()
-    materials.dispose()
-    css2dRenderer?.domElement.remove()
-    css2dRenderer = null
-    annotationGroup.removeFromParent()
+    interactionController.dispose();
+    clearAll();
+    materials.dispose();
+    css2dRenderer?.domElement.remove();
+    css2dRenderer = null;
+    annotationGroup.removeFromParent();
   }
 
   // 监听 viewer 变化
   watch(dtxViewerRef, (viewer, prev) => {
     if (prev && annotationGroup.parent === prev.scene) {
-      prev.scene.remove(annotationGroup)
+      prev.scene.remove(annotationGroup);
     }
     if (viewer) {
-      ensureGroupAttached()
-      const container = containerRef.value
+      ensureGroupAttached();
+      const container = containerRef.value;
       if (container && !css2dRenderer) {
-        initCSS2DRenderer(container, viewer.canvas)
+        initCSS2DRenderer(container, viewer.canvas);
       }
     }
-  }, { immediate: true })
+  }, { immediate: true });
 
   // 组件卸载时清理
   onUnmounted(() => {
-    dispose()
-  })
+    dispose();
+  });
 
   return {
     annotations,
@@ -364,5 +367,5 @@ export function useAnnotationThree(
     enableInteraction,
     disableInteraction,
     dispose,
-  }
+  };
 }

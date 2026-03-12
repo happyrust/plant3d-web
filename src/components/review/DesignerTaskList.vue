@@ -15,11 +15,13 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
+import { getDesignerTaskStatusBucket, isDesignerResubmissionTask } from './reviewTaskFilters';
+import TaskReviewDetail from './TaskReviewDetail.vue';
+
 import type { ReviewTask } from '@/types/auth';
 
 import { useUserStore } from '@/composables/useUserStore';
 import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
-import TaskReviewDetail from './TaskReviewDetail.vue';
 
 const userStore = useUserStore();
 
@@ -47,7 +49,7 @@ const filteredTasks = computed(() => {
   }
 
   if (statusFilter.value !== 'all') {
-    result = result.filter((t) => t.status === statusFilter.value);
+    result = result.filter((t) => getDesignerTaskStatusBucket(t) === statusFilter.value);
   }
 
   if (priorityFilter.value !== 'all') {
@@ -65,9 +67,9 @@ const taskStats = computed(() => {
   const all = tasks.value;
   return {
     total: all.length,
-    approved: all.filter((t) => t.status === 'approved').length,
-    rejected: all.filter((t) => t.status === 'rejected').length,
-    pending: all.filter((t) => t.status === 'submitted' || t.status === 'in_review').length,
+    approved: all.filter((t) => getDesignerTaskStatusBucket(t) === 'approved').length,
+    returned: all.filter((t) => getDesignerTaskStatusBucket(t) === 'returned').length,
+    pending: all.filter((t) => getDesignerTaskStatusBucket(t) === 'pending').length,
   };
 });
 
@@ -111,7 +113,7 @@ function getStatusIcon(status: ReviewTask['status']) {
   switch (status) {
     case 'approved':
       return CheckCircle;
-    case 'rejected':
+    case 'draft':
       return XCircle;
     default:
       return Clock;
@@ -122,7 +124,7 @@ function getStatusIconClass(status: ReviewTask['status']) {
   switch (status) {
     case 'approved':
       return 'text-green-500';
-    case 'rejected':
+    case 'draft':
       return 'text-red-500';
     default:
       return 'text-blue-500';
@@ -155,8 +157,8 @@ function getStatusIconClass(status: ReviewTask['status']) {
         <div class="text-xs text-gray-500">全部</div>
       </div>
       <div class="p-3 rounded-lg bg-yellow-50 border cursor-pointer hover:bg-yellow-100"
-        :class="{ 'ring-2 ring-yellow-500': statusFilter === 'submitted' }"
-        @click="statusFilter = statusFilter === 'submitted' ? 'all' : 'submitted'">
+        :class="{ 'ring-2 ring-yellow-500': statusFilter === 'pending' }"
+        @click="statusFilter = statusFilter === 'pending' ? 'all' : 'pending'">
         <div class="text-2xl font-bold text-yellow-600">{{ taskStats.pending }}</div>
         <div class="text-xs text-yellow-600">待审核</div>
       </div>
@@ -167,10 +169,10 @@ function getStatusIconClass(status: ReviewTask['status']) {
         <div class="text-xs text-green-600">已通过</div>
       </div>
       <div class="p-3 rounded-lg bg-red-50 border cursor-pointer hover:bg-red-100"
-        :class="{ 'ring-2 ring-red-500': statusFilter === 'rejected' }"
-        @click="statusFilter = statusFilter === 'rejected' ? 'all' : 'rejected'">
-        <div class="text-2xl font-bold text-red-600">{{ taskStats.rejected }}</div>
-        <div class="text-xs text-red-600">已驳回</div>
+        :class="{ 'ring-2 ring-red-500': statusFilter === 'returned' }"
+        @click="statusFilter = statusFilter === 'returned' ? 'all' : 'returned'">
+        <div class="text-2xl font-bold text-red-600">{{ taskStats.returned }}</div>
+        <div class="text-xs text-red-600">退回待修改</div>
       </div>
     </div>
 
@@ -216,8 +218,8 @@ function getStatusIconClass(status: ReviewTask['status']) {
                 <component :is="getStatusIcon(task.status)" 
                   :class="['h-5 w-5', getStatusIconClass(task.status)]" />
                 <h4 class="font-medium text-base">{{ task.title }}</h4>
-                <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getTaskStatusDisplayName(task.status).color]">
-                  {{ getTaskStatusDisplayName(task.status).label }}
+                <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', isDesignerResubmissionTask(task) ? 'bg-red-100 text-red-700' : getTaskStatusDisplayName(task.status).color]">
+                  {{ isDesignerResubmissionTask(task) ? '退回待修改' : getTaskStatusDisplayName(task.status).label }}
                 </span>
                 <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getPriorityDisplayName(task.priority).color]">
                   {{ getPriorityDisplayName(task.priority).label }}
@@ -243,18 +245,16 @@ function getStatusIconClass(status: ReviewTask['status']) {
                 </div>
               </div>
               <!-- 审核意见预览 -->
-              <div v-if="task.reviewComment" class="mt-2 p-2 bg-gray-50 rounded text-sm">
-                <span class="text-gray-500">审核意见: </span>
-                <span class="text-gray-700">{{ task.reviewComment }}</span>
+              <div v-if="task.returnReason || task.reviewComment" class="mt-2 p-2 bg-gray-50 rounded text-sm">
+                <span class="text-gray-500">{{ task.returnReason ? '退回原因' : '审核意见' }}: </span>
+                <span class="text-gray-700">{{ task.returnReason || task.reviewComment }}</span>
               </div>
             </div>
             <div class="flex flex-col gap-2 ml-4">
-              <button
-                v-if="task.status === 'draft'"
+              <button v-if="task.status === 'draft'"
                 class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                 :disabled="!!submittingTaskId"
-                @click.stop="handleSubmitToNext(task)"
-              >
+                @click.stop="handleSubmitToNext(task)">
                 提交
               </button>
               <button class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1" 
@@ -283,11 +283,9 @@ function getStatusIconClass(status: ReviewTask['status']) {
 
     <!-- 任务详情弹窗 -->
     <Teleport to="body">
-      <TaskReviewDetail
-        v-if="selectedTask"
+      <TaskReviewDetail v-if="selectedTask"
         :task="selectedTask"
-        @close="closeTaskDetail"
-      />
+        @close="closeTaskDetail" />
     </Teleport>
   </div>
 </template>

@@ -262,7 +262,7 @@ watch(() => store.pendingObbEditId.value, (id) => {
       showObbEditDialog.value = true;
     }
   }
-});
+}, { immediate: true });
 
 watch(() => store.pendingTextAnnotationEditId.value, (id) => {
   if (id) {
@@ -273,7 +273,7 @@ watch(() => store.pendingTextAnnotationEditId.value, (id) => {
       showTextEditDialog.value = true;
     }
   }
-});
+}, { immediate: true });
 
 function confirmObbEdit() {
   const id = store.pendingObbEditId.value;
@@ -877,22 +877,18 @@ function formatCommentTime(timestamp: number): string {
         </div>
         <!-- 视图切换按钮 -->
         <div class="flex items-center gap-1 rounded-md border border-input p-0.5">
-          <button
-            type="button"
+          <button type="button"
             class="flex h-6 w-6 items-center justify-center rounded"
             :class="commentsViewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
             title="列表视图"
-            @click="commentsViewMode = 'list'"
-          >
+            @click="commentsViewMode = 'list'">
             <List class="h-3.5 w-3.5" />
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="flex h-6 w-6 items-center justify-center rounded"
             :class="commentsViewMode === 'columns' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
             title="三栏视图"
-            @click="commentsViewMode = 'columns'"
-          >
+            @click="commentsViewMode = 'columns'">
             <LayoutGrid class="h-3.5 w-3.5" />
           </button>
         </div>
@@ -904,10 +900,8 @@ function formatCommentTime(timestamp: number): string {
 
       <!-- 三栏视图 -->
       <div v-else-if="commentsViewMode === 'columns'" class="mt-3">
-        <ReviewCommentsPanel
-          :annotation-type="activeAnnotationType"
-          :annotation-id="activeAny?.id || null"
-        />
+        <ReviewCommentsPanel :annotation-type="activeAnnotationType"
+          :annotation-id="activeAny?.id || null" />
       </div>
 
       <!-- 列表视图 (原有逻辑) -->
