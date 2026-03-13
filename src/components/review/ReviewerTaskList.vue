@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 
 import { Calendar, CheckCircle, Clock, Eye, FileText, Package, RefreshCw, Search, User, XCircle } from 'lucide-vue-next';
 
-import { refreshReviewerTasksSafely } from './reviewerTaskListActions';
+import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import { getSubmitActionLabel } from './reviewPanelActions';
 
 import type { ReviewTask } from '@/types/auth';
@@ -77,17 +77,14 @@ function formatDate(timestamp: number): string {
 }
 
 async function handleStartReview(task: ReviewTask) {
-  // 设置当前审核任务
-  await reviewStore.setCurrentTask(task);
-  selectedTask.value = task;
-  
-  // 先关闭任务列表面板
-  emitCommand('panel.reviewerTasks');
-  
-  // 延迟打开审核面板，确保任务已设置
-  setTimeout(() => {
-    emitCommand('panel.review');
-  }, 100);
+  await startReviewerTask({
+    task,
+    setCurrentTask: reviewStore.setCurrentTask,
+    emitCommand,
+    onTaskSelected: (currentTask) => {
+      selectedTask.value = currentTask;
+    },
+  });
 }
 
 async function handleApprove(task: ReviewTask) {
