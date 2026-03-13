@@ -205,6 +205,57 @@ describe('reviewerTaskListActions', () => {
     expect(task.components).toHaveLength(2);
   });
 
+  it('reviewer smoke path keeps inbox visible until the review panel handoff callback runs', async () => {
+    const task = createTask({
+      id: 'task-smoke-path',
+      title: 'Smoke path task',
+      currentNode: 'jd',
+      formId: 'FORM-SMOKE-1',
+      attachments: [
+        {
+          id: 'att-1',
+          name: 'handoff.pdf',
+          url: 'http://example.test/handoff.pdf',
+          uploadedAt: 1700000000000,
+        },
+      ],
+      workflowHistory: [
+        {
+          node: 'sj',
+          action: 'submit',
+          operatorId: 'designer-1',
+          operatorName: 'Designer',
+          comment: 'ready for review',
+          timestamp: 1700000000000,
+        },
+      ],
+    });
+    const setCurrentTask = vi.fn(async () => {});
+    const emitCommand = vi.fn();
+    let openReviewPanel: (() => void) | undefined;
+
+    await startReviewerTask({
+      task,
+      setCurrentTask,
+      emitCommand,
+      scheduleOpenReviewPanel: (callback) => {
+        openReviewPanel = callback;
+      },
+    });
+
+    expect(emitCommand.mock.calls).toEqual([['panel.reviewerTasks']]);
+    expect(task.formId).toBe('FORM-SMOKE-1');
+    expect(task.attachments).toHaveLength(1);
+    expect(task.workflowHistory).toHaveLength(1);
+
+    openReviewPanel?.();
+
+    expect(emitCommand.mock.calls).toEqual([
+      ['panel.reviewerTasks'],
+      ['panel.review'],
+    ]);
+  });
+
   it('reviewer primary forward labels stay on the standard submit path for each workflow node', () => {
     expect(getSubmitActionLabel('sj')).toBe('提交到校核');
     expect(getSubmitActionLabel('jd')).toBe('提交到审核');
