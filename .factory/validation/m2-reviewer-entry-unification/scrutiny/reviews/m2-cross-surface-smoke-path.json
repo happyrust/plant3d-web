@@ -1,0 +1,39 @@
+{
+  "featureId": "m2-cross-surface-smoke-path",
+  "reviewedAt": "2026-03-13T15:20:00Z",
+  "commitId": "3a5ca0f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds smoke-path coverage and doc wording, but the new automated test does not verify the active-task handoff that INT-008 requires and the reported browser evidence stops at an empty reviewer inbox.",
+    "issues": [
+      {
+        "file": "src/components/review/reviewerTaskListActions.test.ts",
+        "line": 246,
+        "severity": "blocking",
+        "description": "The new smoke-path test only asserts panel command ordering plus unchanged fixture fields, but never proves that reviewer entry reaches an active task or that the active task preserves shared context after hydration. Because `setCurrentTask` is mocked as a no-op, the test cannot catch regressions where the actual workbench hydration drops `formId`, attachments, or workflow history, so it does not cover the feature's required app-entry -> reviewer active task evidence."
+      },
+      {
+        "file": "开发文档/三维校审/三维校审流程与代码审查报告.md",
+        "line": 101,
+        "severity": "blocking",
+        "description": "The updated M2 documentation now describes an app-entry -> reviewer inbox -> active task -> workflow action smoke path as shipped behavior, but the worker's own browser evidence recorded only an empty inbox (`暂无审核任务`) and explicitly states no real task could be opened or action executed. This is a contract mismatch: the doc presents a completed cross-surface path that was not actually demonstrated in the local smoke evidence."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Mission shared state still claims `GET /api/review/tasks` returned live review task data during planning, but both the earlier handoff-contract worker and this feature reported no usable reviewer-visible task data for live cross-surface validation. The environment notes should distinguish generic backend reachability from seeded reviewer-task readiness so workers do not assume INT-008 can be completed without extra setup.",
+      "evidence": ".factory/library/environment.md:31 says `/api/review/tasks` returned live review task data; handoff `2026-03-13T14-44-17-509Z__m1-m2-handoff-contract-baseline__2d3697b6-83ed-4242-83af-bd17c8055c3e.json` reports `curl -sf http://127.0.0.1:3100/api/review/tasks` failed; handoff `2026-03-13T15-07-24-916Z__m2-cross-surface-smoke-path__d0929d4f-2663-4af7-874c-29c39a1067e7.json` reports the reviewer inbox empty-state `暂无审核任务` and no active task available."
+    },
+    {
+      "area": "skills",
+      "observation": "The `review-entry-worker` skill requires validating at least one task selection plus one workflow action path, but it does not say what to do when the local dataset has no reviewer-visible task. This worker marked the procedure as fully followed despite stopping at the empty inbox, so the skill should explicitly require returning a blocked outcome or capturing a readiness gap when step 9 cannot reach an active reviewer task.",
+      "evidence": ".factory/skills/review-entry-worker/SKILL.md step 9 requires `validate at least one task selection plus one workflow action path`; handoff `2026-03-13T15-07-24-916Z__m2-cross-surface-smoke-path__d0929d4f-2663-4af7-874c-29c39a1067e7.json` says no reviewer-visible task was available yet `skillFeedback.followedProcedure` stayed true."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the feature improved reviewer smoke-path test coverage and documentation, but it still does not provide evidence for the required reviewer active-task handoff. The new test only checks panel sequencing with a mocked hydration call, and the updated doc overstates a live cross-surface path that the worker could not actually execute because the inbox was empty."
+}
