@@ -41,12 +41,34 @@ function createLocalStorageMock() {
   };
 }
 
+function createSessionStorageMock() {
+  const store = new Map<string, string>();
+  return {
+    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k: string, v: string) => {
+      store.set(k, String(v));
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+}
+
 describe('useUserStore.createReviewTask', () => {
   beforeEach(() => {
     reviewTaskCreateMock.mockReset();
     vi.resetModules();
     (globalThis as unknown as { localStorage: Storage }).localStorage =
       createLocalStorageMock() as unknown as Storage;
+    (globalThis as unknown as { sessionStorage: Storage }).sessionStorage =
+      createSessionStorageMock() as unknown as Storage;
   });
 
   it('后端返回失败时应抛错，不回退本地任务', async () => {
@@ -63,6 +85,8 @@ describe('useUserStore.createReviewTask', () => {
         title: 'task-1',
         description: 'desc',
         modelName: 'model',
+        checkerId: 'proofreader_001',
+        approverId: 'reviewer_001',
         reviewerId: 'reviewer_001',
         priority: 'medium',
         components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
@@ -83,6 +107,8 @@ describe('useUserStore.createReviewTask', () => {
         title: 'task-2',
         description: 'desc',
         modelName: 'model',
+        checkerId: 'proofreader_001',
+        approverId: 'reviewer_001',
         reviewerId: 'reviewer_001',
         priority: 'medium',
         components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
@@ -90,5 +116,65 @@ describe('useUserStore.createReviewTask', () => {
     ).rejects.toThrow('network broken');
 
     expect(store.reviewTasks.value).toHaveLength(0);
+  });
+
+  it('创建请求保留显式角色字段并兼容 reviewerId', async () => {
+    reviewTaskCreateMock.mockResolvedValue({
+      success: true,
+      task: {
+        id: 'task-3',
+        formId: 'FORM-3',
+        title: 'task-3',
+      },
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.createReviewTask({
+      title: 'task-3',
+      description: 'desc',
+      modelName: 'model',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      priority: 'high',
+      formId: 'FORM-3',
+      components: [
+        { id: 'c1', name: 'Comp A', refNo: '100_1', type: 'Valve' },
+        { id: 'c2', name: 'Comp B', refNo: '100_2' },
+      ],
+      dueDate: 1700000000000,
+    });
+
+    expect(reviewTaskCreateMock).toHaveBeenCalledWith({
+      title: 'task-3',
+      description: 'desc',
+      modelName: 'model',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      reviewerId: 'proofreader_001',
+      formId: 'FORM-3',
+      priority: 'high',
+      components: [
+        { id: 'c1', name: 'Comp A', refNo: '100_1', type: 'Valve' },
+        { id: 'c2', name: 'Comp B', refNo: '100_2' },
+      ],
+      dueDate: 1700000000000,
+      attachments: undefined,
+    });
+  });
+
+  it('resolveReviewProjectIdFromSession 优先读取 embed projectId', async () => {
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({ projectId: 'project-embed-1' }));
+
+    const { resolveReviewProjectIdFromSession } = await import('./useUserStore');
+
+    expect(resolveReviewProjectIdFromSession()).toBe('project-embed-1');
+  });
+
+  it('resolveReviewProjectIdFromSession 在缺省时回退到默认项目', async () => {
+    const { resolveReviewProjectIdFromSession } = await import('./useUserStore');
+
+    expect(resolveReviewProjectIdFromSession()).toBe('debug-project');
   });
 });

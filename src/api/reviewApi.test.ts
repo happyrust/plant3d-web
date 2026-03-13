@@ -238,6 +238,33 @@ describe('normalizeReviewTask', () => {
     expect(task.reviewerId).toBe('r1');
   });
 
+  it('preserves explicit checker and approver semantics with stable component payload fields', () => {
+    const task = normalizeReviewTask({
+      id: 'task-payload',
+      form_id: 'FORM-PAYLOAD',
+      checker_id: 'checker-1',
+      checker_name: 'Checker One',
+      approver_id: 'approver-1',
+      approver_name: 'Approver One',
+      reviewer_id: 'legacy-reviewer',
+      components: [
+        { id: 'comp-1', refNo: '100_1', name: 'Pump-01', type: 'Pump' },
+        { id: 'comp-2', refNo: '100_2', name: 'Valve-01' },
+      ],
+    });
+
+    expect(task.formId).toBe('FORM-PAYLOAD');
+    expect(task.checkerId).toBe('checker-1');
+    expect(task.checkerName).toBe('Checker One');
+    expect(task.approverId).toBe('approver-1');
+    expect(task.approverName).toBe('Approver One');
+    expect(task.reviewerId).toBe('checker-1');
+    expect(task.components).toEqual([
+      { id: 'comp-1', refNo: '100_1', name: 'Pump-01', type: 'Pump' },
+      { id: 'comp-2', refNo: '100_2', name: 'Valve-01' },
+    ]);
+  });
+
   it('defaults to correct values for missing fields', () => {
     const task = normalizeReviewTask({});
     expect(task.id).toBe('');
