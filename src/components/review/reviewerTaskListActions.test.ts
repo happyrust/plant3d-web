@@ -8,14 +8,27 @@ import type { ReviewTask } from '@/types/auth';
 import { normalizeReviewTask } from '@/api/reviewApi';
 import { isApproverRole, isCheckerRole } from '@/composables/useUserStore';
 
-if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
-  vi.stubGlobal('localStorage', {
-    getItem: vi.fn(() => null),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-    clear: vi.fn(),
-  });
+function createLocalStorageMock() {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
 }
+
+vi.stubGlobal('localStorage', createLocalStorageMock());
 
 function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
   return {
@@ -190,5 +203,12 @@ describe('reviewerTaskListActions', () => {
     expect(task.checkerName).toBe('Checker One');
     expect(task.approverName).toBe('Approver One');
     expect(task.components).toHaveLength(2);
+  });
+
+  it('reviewer primary forward labels stay on the standard submit path for each workflow node', () => {
+    expect(getSubmitActionLabel('sj')).toBe('提交到校核');
+    expect(getSubmitActionLabel('jd')).toBe('提交到审核');
+    expect(getSubmitActionLabel('sh')).toBe('提交到批准');
+    expect(getSubmitActionLabel('pz')).toBe('最终批准');
   });
 });

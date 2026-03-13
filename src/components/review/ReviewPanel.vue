@@ -16,12 +16,17 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
+import CollisionResultList from './CollisionResultList.vue';
+import ReviewAuxData from './ReviewAuxData.vue';
+import ReviewDataSync from './ReviewDataSync.vue';
 import {
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
   confirmCurrentDataSafely,
   getSubmitActionLabel,
 } from './reviewPanelActions';
+import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
+import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
@@ -34,9 +39,6 @@ import {
 } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
-import CollisionResultList from './CollisionResultList.vue';
-import ReviewDataSync from './ReviewDataSync.vue';
-import ReviewAuxData from './ReviewAuxData.vue';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -255,12 +257,26 @@ const workflowLoading = ref(false);
 const workflowError = ref<string | null>(null);
 const workflow = ref<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>> | null>(null);
 
-// 内联表单状态 (替代 window.prompt)
-const showSubmitForm = ref(false);
+const showSubmitDialog = ref(false);
 const submitComment = ref('');
-const showReturnForm = ref(false);
+const showReturnDialog = ref(false);
 const returnReason = ref('');
 const workflowActionLoading = ref(false);
+
+const currentNode = computed<WorkflowNode>(() => currentTask.value?.currentNode ?? 'sj');
+const submitTargetNode = computed<WorkflowNode>(() => {
+  switch (currentNode.value) {
+    case 'sj':
+      return 'jd';
+    case 'jd':
+      return 'sh';
+    case 'sh':
+    case 'pz':
+      return 'pz';
+    default:
+      return 'jd';
+  }
+});
 
 function getWorkflowActionLabel(action: string): string {
   switch (action) {
@@ -312,7 +328,7 @@ async function handleSubmitToNextNode() {
     await userStore.submitTaskToNextNode(currentTask.value.id, submitComment.value.trim() || undefined);
     await refreshCurrentTask(currentTask.value.id);
     await loadWorkflow(currentTask.value.id);
-    showSubmitForm.value = false;
+    showSubmitDialog.value = false;
     submitComment.value = '';
   } catch (e) {
     workflowError.value = e instanceof Error ? e.message : '提交失败';
@@ -330,13 +346,37 @@ async function handleReturnToNode() {
     await userStore.returnTaskToNode(currentTask.value.id, 'sj', returnReason.value.trim());
     await refreshCurrentTask(currentTask.value.id);
     await loadWorkflow(currentTask.value.id);
-    showReturnForm.value = false;
+    showReturnDialog.value = false;
     returnReason.value = '';
   } catch (e) {
     workflowError.value = e instanceof Error ? e.message : '驳回失败';
   } finally {
     workflowActionLoading.value = false;
   }
+}
+
+function toggleSubmitDialog() {
+  if (workflowLoading.value || workflowActionLoading.value || !canSubmitToNextNode.value) return;
+  showReturnDialog.value = false;
+  returnReason.value = '';
+  showSubmitDialog.value = !showSubmitDialog.value;
+}
+
+function toggleReturnDialog() {
+  if (workflowLoading.value || workflowActionLoading.value || !canReturnToPrevNode.value) return;
+  showSubmitDialog.value = false;
+  submitComment.value = '';
+  showReturnDialog.value = !showReturnDialog.value;
+}
+
+function closeSubmitDialog() {
+  showSubmitDialog.value = false;
+  submitComment.value = '';
+}
+
+function closeReturnDialog() {
+  showReturnDialog.value = false;
+  returnReason.value = '';
 }
 
 function handleClearConfirmedRecords() {
@@ -398,10 +438,18 @@ watch(currentTask, (newTask) => {
   }
 
   if (newTask) {
+    showSubmitDialog.value = false;
+    submitComment.value = '';
+    showReturnDialog.value = false;
+    returnReason.value = '';
     loadWorkflow(newTask.id);
   } else {
     workflow.value = null;
     workflowError.value = null;
+    showSubmitDialog.value = false;
+    submitComment.value = '';
+    showReturnDialog.value = false;
+    returnReason.value = '';
   }
 });
 
@@ -546,59 +594,15 @@ onUnmounted(() => {
             <div class="flex gap-2">
               <button type="button"
                 class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode || showReturnForm"
-                @click="showSubmitForm = !showSubmitForm">
+                :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
+                @click="toggleSubmitDialog">
                 {{ submitActionLabel }}
               </button>
               <button type="button"
                 class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode || showSubmitForm"
-                @click="showReturnForm = !showReturnForm">
+                :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
+                @click="toggleReturnDialog">
                 驳回到设计
-              </button>
-            </div>
-          </div>
-
-          <!-- 提交内联表单 -->
-          <div v-if="showSubmitForm" class="mt-2 space-y-2 rounded-md border border-blue-200 bg-blue-50 p-2 dark:border-blue-800 dark:bg-blue-950">
-            <label class="text-xs text-muted-foreground">{{ submitActionLabel }}备注（可选）</label>
-            <textarea v-model="submitComment"
-              class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
-              rows="2"
-              placeholder="输入备注..." />
-            <div class="flex gap-2">
-              <button type="button"
-                class="h-7 flex-1 rounded bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                :disabled="workflowActionLoading"
-                @click="handleSubmitToNextNode">
-                {{ workflowActionLoading ? '提交中...' : '确认提交' }}
-              </button>
-              <button type="button"
-                class="h-7 rounded border border-input px-2 text-xs hover:bg-muted"
-                @click="showSubmitForm = false; submitComment = ''">
-                取消
-              </button>
-            </div>
-          </div>
-
-          <!-- 驳回内联表单 -->
-          <div v-if="showReturnForm" class="mt-2 space-y-2 rounded-md border border-red-200 bg-red-50 p-2 dark:border-red-800 dark:bg-red-950">
-            <label class="text-xs text-muted-foreground">驳回原因（必填）</label>
-            <textarea v-model="returnReason"
-              class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
-              rows="2"
-              placeholder="请输入驳回原因..." />
-            <div class="flex gap-2">
-              <button type="button"
-                class="h-7 flex-1 rounded bg-red-600 px-2 text-xs text-white hover:bg-red-700 disabled:opacity-50"
-                :disabled="workflowActionLoading || !returnReason.trim()"
-                @click="handleReturnToNode">
-                {{ workflowActionLoading ? '驳回中...' : '确认驳回' }}
-              </button>
-              <button type="button"
-                class="h-7 rounded border border-input px-2 text-xs hover:bg-muted"
-                @click="showReturnForm = false; returnReason = ''">
-                取消
               </button>
             </div>
           </div>
@@ -810,6 +814,19 @@ onUnmounted(() => {
 
     <!-- 辅助校审数据 -->
     <ReviewAuxData />
+
+    <WorkflowSubmitDialog :visible="showSubmitDialog"
+      :current-node="currentNode"
+      :target-node="submitTargetNode"
+      :loading="workflowActionLoading"
+      @update:visible="(visible) => { if (!visible) closeSubmitDialog(); }"
+      @confirm="(comment) => { submitComment = comment ?? ''; void handleSubmitToNextNode(); }" />
+
+    <WorkflowReturnDialog :visible="showReturnDialog"
+      :current-node="currentNode"
+      :loading="workflowActionLoading"
+      @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"
+      @confirm="(_targetNode, reason) => { returnReason = reason; void handleReturnToNode(); }" />
 
     <!-- 确认历史 -->
     <div class="rounded-md border border-border bg-background p-3">
