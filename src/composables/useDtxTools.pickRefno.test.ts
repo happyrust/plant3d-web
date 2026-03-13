@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createRectAnnotationRecordFromObb, resolvePickedRefnoForFilter } from './useDtxTools';
+import { computeCloudLayout, createRectAnnotationRecordFromObb, resolvePickedRefnoForFilter } from './useDtxTools';
 
 import type { Obb } from './useToolStore';
 
@@ -69,5 +69,56 @@ describe('createRectAnnotationRecordFromObb', () => {
     expect(record.leaderEndWorldPos?.[2]).toBeCloseTo(9.423324163210527);
     expect(record.visible).toBe(true);
     expect(record.title).toBe('矩形批注 1');
+  });
+});
+
+describe('computeCloudLayout', () => {
+  it('keeps cloud size fixed in screen space and positions label off the cloud body', () => {
+    const layout = computeCloudLayout(
+      { x: 100, y: 80, visible: true, ndcZ: 0.2 },
+      { x: 40, y: -10 },
+      { width: 120, height: 60 },
+    );
+
+    expect(layout.markerX).toBe(140);
+    expect(layout.markerY).toBe(70);
+    expect(layout.cloudCenterX).toBe(140);
+    expect(layout.cloudCenterY).toBe(70);
+    expect(layout.labelX).toBe(218);
+    expect(layout.labelY).toBe(70);
+    expect(layout.labelAlign).toBe('left');
+    expect(layout.cloudPath).toContain('M');
+    expect(layout.cloudPath).toContain('Z');
+  });
+
+  it('falls back to a stable default offset and clamps oversized marquee dimensions', () => {
+    const layout = computeCloudLayout(
+      { x: 160, y: 90, visible: true, ndcZ: 0.3 },
+      undefined,
+      { width: 400, height: 12 },
+    );
+
+    expect(layout.markerX).toBe(296);
+    expect(layout.markerY).toBe(48);
+    expect(layout.cloudCenterX).toBe(296);
+    expect(layout.cloudCenterY).toBe(48);
+    expect(layout.labelX).toBe(424);
+    expect(layout.labelY).toBe(48);
+    expect(layout.labelAlign).toBe('left');
+    expect(layout.cloudPath).toContain('406.0 48.0');
+  });
+
+  it('supports left-side labels when the cloud is offset left of the anchor', () => {
+    const layout = computeCloudLayout(
+      { x: 200, y: 120, visible: true, ndcZ: 0.1 },
+      { x: -50, y: 20 },
+      { width: 100, height: 50 },
+    );
+
+    expect(layout.labelAlign).toBe('right');
+    expect(layout.cloudCenterX).toBe(150);
+    expect(layout.cloudCenterY).toBe(140);
+    expect(layout.labelX).toBe(82);
+    expect(layout.labelY).toBe(140);
   });
 });

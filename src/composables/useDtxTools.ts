@@ -9,6 +9,7 @@ import {
   LineBasicMaterial,
   LineSegments,
   Plane,
+  Raycaster,
   Vector2,
   Vector3,
 } from 'three';
@@ -52,11 +53,38 @@ type LabelEl = {
   el: HTMLDivElement
 }
 
+type CloudOverlayEl = {
+  id: string
+  worldPos: Vector3
+  svg: SVGSVGElement
+  path: SVGPathElement
+  leaderPath: SVGPathElement
+  record: CloudAnnotationRecord
+}
+
 type RectAnnotationVisual = {
   box: LineSegments
   pin: LineSegments
   leader: LineSegments
   labelWorldPos: Vector3
+}
+
+type ScreenPoint = {
+  x: number
+  y: number
+  visible: boolean
+  ndcZ: number
+}
+
+type CloudLayout = {
+  cloudPath: string
+  markerX: number
+  markerY: number
+  labelX: number
+  cloudCenterX: number
+  cloudCenterY: number
+  labelY: number
+  labelAlign: 'left' | 'right'
 }
 
 function nowId(prefix: string): string {
@@ -165,6 +193,114 @@ function worldToOverlay(
 
   const overlayRect = overlay.getBoundingClientRect();
   return { x: x + (rect.left - overlayRect.left), y: y + (rect.top - overlayRect.top), visible };
+}
+
+function worldToOverlayPoint(
+  camera: any,
+  canvas: HTMLCanvasElement,
+  overlay: HTMLElement,
+  worldPos: Vector3
+): ScreenPoint {
+  const rect = canvas.getBoundingClientRect();
+  const v = worldPos.clone();
+  v.project(camera);
+  const x = (v.x * 0.5 + 0.5) * rect.width;
+  const y = (-v.y * 0.5 + 0.5) * rect.height;
+  const overlayRect = overlay.getBoundingClientRect();
+  return {
+    x: x + (rect.left - overlayRect.left),
+    y: y + (rect.top - overlayRect.top),
+    visible: v.z >= -1 && v.z <= 1,
+    ndcZ: v.z,
+  };
+}
+
+function overlayToWorld(camera: any, canvas: HTMLCanvasElement, overlay: HTMLElement, x: number, y: number, ndcZ: number): Vector3 {
+  const rect = canvas.getBoundingClientRect();
+  const overlayRect = overlay.getBoundingClientRect();
+  const localX = x - (rect.left - overlayRect.left);
+  const localY = y - (rect.top - overlayRect.top);
+  const ndc = new Vector3(
+    (localX / rect.width) * 2 - 1,
+    -((localY / rect.height) * 2 - 1),
+    ndcZ,
+  );
+  return ndc.unproject(camera);
+}
+
+function createCloudPath(cx: number, cy: number, width: number, height: number): string {
+  const rx = width * 0.5;
+  const ry = height * 0.5;
+  const segments = 10;
+  const points: string[] = [];
+  for (let i = 0; i <= segments; i += 1) {
+    const t = (i / segments) * Math.PI * 2;
+    const wobble = 1 + 0.12 * Math.sin(t * 6);
+    const x = cx + Math.cos(t) * rx * wobble;
+    const y = cy + Math.sin(t) * ry * wobble;
+    points.push(`${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+  }
+  points.push('Z');
+  return points.join(' ');
+}
+
+export function computeCloudLayout(anchorScreen: ScreenPoint, screenOffset?: { x: number; y: number }, cloudSize?: { width: number; height: number }): CloudLayout {
+  const width = clamp(cloudSize?.width ?? 120, 72, 220);
+  const height = clamp(cloudSize?.height ?? 72, 48, 180);
+  const offsetX = screenOffset?.x ?? width * 0.5 + 26;
+  const offsetY = screenOffset?.y ?? -(height * 0.5 + 18);
+  const cloudCenterX = anchorScreen.x + offsetX;
+  const cloudCenterY = anchorScreen.y + offsetY;
+  const markerX = cloudCenterX;
+  const markerY = cloudCenterY;
+  const labelAlign = offsetX >= 0 ? 'left' : 'right';
+  const labelOffsetX = offsetX >= 0 ? width * 0.5 + 18 : -(width * 0.5 + 18);
+  return {
+    cloudPath: createCloudPath(cloudCenterX, cloudCenterY, width, height),
+    markerX,
+    markerY,
+    cloudCenterX,
+    cloudCenterY,
+    labelX: cloudCenterX + labelOffsetX,
+    labelY: cloudCenterY,
+    labelAlign,
+  };
+}
+
+function resolveCloudAnchorFromMarqueeCenter(
+  viewer: DtxViewer | null,
+  canvas: HTMLCanvasElement,
+  centerCanvas: { x: number; y: number },
+  selectedRefnos: string[],
+  selection: DTXSelectionController | null,
+  layer: DTXLayer | null,
+): Vector3 | null {
+  if (!viewer || !selection || !layer || selectedRefnos.length === 0) return null;
+  const hit = selection.pickPoint(new Vector2(centerCanvas.x, centerCanvas.y));
+  if (!hit) return null;
+
+  const hitRefno = parseRefnoFromDtxObjectId(hit.objectId) || hit.objectId;
+  if (selectedRefnos.includes(hitRefno)) {
+    return hit.point.clone();
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const ndc = new Vector2((centerCanvas.x / rect.width) * 2 - 1, -(centerCanvas.y / rect.height) * 2 + 1);
+  const raycaster = new Raycaster();
+  raycaster.setFromCamera(ndc, viewer.camera);
+  const origin = raycaster.ray.origin;
+  const direction = raycaster.ray.direction;
+
+  let closest: { point: Vector3; distance: number } | null = null;
+  for (const refno of selectedRefnos) {
+    const objectId = refno.startsWith('o:') ? refno : `o:${refno}:0`;
+    const picked = layer.raycastObject(objectId, origin, direction);
+    if (!picked) continue;
+    if (!closest || picked.distance < closest.distance) {
+      closest = { point: picked.point.clone(), distance: picked.distance };
+    }
+  }
+  return closest?.point ?? null;
 }
 
 function disposeObject3d(obj: any) {
@@ -416,6 +552,49 @@ function makeLabelEl(parent: HTMLElement, title: string, description: string): H
   return el;
 }
 
+function makeCloudSvgEl(parent: HTMLElement): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = document.createElementNS(ns, 'svg');
+  el.setAttribute('width', '100%');
+  el.setAttribute('height', '100%');
+  el.setAttribute('viewBox', '0 0 1 1');
+  el.style.cssText = [
+    'position:absolute',
+    'left:0',
+    'top:0',
+    'width:100%',
+    'height:100%',
+    'pointer-events:none',
+    'overflow:visible',
+    'z-index:905',
+  ].join(';');
+  return el;
+}
+
+function makeCloudPathEl(parent: SVGSVGElement): SVGPathElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('fill', 'rgba(220, 38, 38, 0.08)');
+  path.setAttribute('stroke', '#dc2626');
+  path.setAttribute('stroke-width', '3');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('stroke-linecap', 'round');
+  parent.appendChild(path);
+  return path;
+}
+
+function makeCloudLeaderPathEl(parent: SVGSVGElement): SVGPathElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', '#111827');
+  path.setAttribute('stroke-width', '2');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('stroke-linecap', 'round');
+  parent.appendChild(path);
+  return path;
+}
+
 function ensurePanelActivated(panelId: string) {
   if (dockPanelExists(panelId)) {
     dockActivatePanelIfExists(panelId);
@@ -663,7 +842,7 @@ export function useDtxTools(options: {
       return `拾取模式${filterText}：点击选择构件 [已选 ${count}] — Enter 确认 / ESC 取消`;
     }
     if (mode === 'annotation_cloud') {
-      return '云线批注：拖拽框选对象生成包围框';
+      return '云线批注：按下拖拽框选，松开后以框选中心最近可见命中创建屏幕空间云线';
     }
     if (mode === 'annotation_rect') {
       return '矩形批注：点击对象生成 OBB 包围框批注';
@@ -676,6 +855,7 @@ export function useDtxTools(options: {
 
   const labels = new Map<string, LabelEl>();
   const markers = new Map<string, LabelEl>();
+  const cloudShapes = new Map<string, CloudOverlayEl>();
 
   const marqueeState = ref<DragRect>({ active: false, pointerId: null, startClient: null, startCanvas: null, currentCanvas: null });
   const marqueeDiv = ref<HTMLDivElement | null>(null);
@@ -721,6 +901,10 @@ export function useDtxTools(options: {
       try { it.el.remove(); } catch { /* ignore */ }
     }
     markers.clear();
+    for (const it of cloudShapes.values()) {
+      try { it.svg.remove(); } catch { /* ignore */ }
+    }
+    cloudShapes.clear();
   }
 
   function ensureMarqueeDiv() {
@@ -825,32 +1009,29 @@ export function useDtxTools(options: {
       label.addEventListener('click', (ev) => { ev.stopPropagation(); onClick(); });
     }
 
-    // ---------------- Cloud annotations (3D bounding wireframe) ----------------
+    // ---------------- Cloud annotations (screen-space cloud + world anchor) ----------------
     for (const c of store.cloudAnnotations.value) {
       if (!c.visible) continue;
-
-      const refnos = (c.refnos && c.refnos.length > 0) ? c.refnos : c.objectIds;
-      if (!refnos || refnos.length === 0) continue;
-
-      const aabb = compatViewerRef.value?.scene.getAABB(refnos) || null;
-      if (!aabb) continue;
-      const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]));
-      const g = buildWireBoxGeometryFromBox3(box);
-      const mat = new LineBasicMaterial({ color: 0xdc2626 })
-        ; (mat as any).depthTest = false;
-      const wire = new LineSegments(g, mat);
-      wire.renderOrder = 900;
-      toolsGroup.add(wire);
-
       const anchor = new Vector3(...c.anchorWorldPos);
       const marker = makeMarkerEl(overlay, 'C', '#dc2626');
       markers.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: marker });
+      marker.style.transform = 'translate(-50%,-50%)';
 
-      const isActive = store.activeCloudAnnotationId.value === c.id;
-      if (isActive) {
-        const label = makeLabelEl(overlay, c.title || '云线批注', c.description || '');
-        labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: label });
-      }
+      const cloudSvg = makeCloudSvgEl(overlay);
+      const cloudPath = makeCloudPathEl(cloudSvg);
+      const leaderPath = makeCloudLeaderPathEl(cloudSvg);
+      cloudShapes.set(`cloud:${c.id}`, {
+        id: `cloud:${c.id}`,
+        worldPos: anchor,
+        svg: cloudSvg,
+        path: cloudPath,
+        leaderPath,
+        record: c,
+      });
+
+      const label = makeLabelEl(overlay, c.title || '云线批注', c.description || '');
+      label.style.transform = 'translate(0,-50%)';
+      labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: label });
 
       marker.addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -934,18 +1115,45 @@ export function useDtxTools(options: {
     const canvas = viewer?.canvas;
     if (!viewer || !overlay || !canvas) return;
 
+    const cloudScreenLayouts = new Map<string, CloudLayout>();
+    for (const [id, cloud] of cloudShapes.entries()) {
+      const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos);
+      const layout = computeCloudLayout(anchorScreen, cloud.record.screenOffset, cloud.record.cloudSize);
+      cloud.path.setAttribute('d', layout.cloudPath);
+      const leaderStartX = anchorScreen.x;
+      const leaderStartY = anchorScreen.y;
+      const elbowX = layout.labelAlign === 'left'
+        ? layout.cloudCenterX + Math.min(16, Math.abs(layout.labelX - layout.cloudCenterX) * 0.35)
+        : layout.cloudCenterX - Math.min(16, Math.abs(layout.labelX - layout.cloudCenterX) * 0.35);
+      cloud.leaderPath.setAttribute(
+        'd',
+        `M ${leaderStartX.toFixed(1)} ${leaderStartY.toFixed(1)} L ${layout.cloudCenterX.toFixed(1)} ${layout.cloudCenterY.toFixed(1)} L ${elbowX.toFixed(1)} ${layout.labelY.toFixed(1)}`,
+      );
+      cloud.svg.style.opacity = anchorScreen.visible ? '1' : '0';
+      cloudScreenLayouts.set(id, layout);
+    }
+
     for (const it of markers.values()) {
-      const p = worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
+      const cloudLayout = cloudScreenLayouts.get(it.id);
+      const p = cloudLayout
+        ? { x: cloudLayout.markerX, y: cloudLayout.markerY, visible: true }
+        : worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
       it.el.style.left = `${p.x}px`;
       it.el.style.top = `${p.y}px`;
       it.el.style.opacity = p.visible ? '1' : '0';
     }
 
     for (const it of labels.values()) {
-      const p = worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
+      const cloudLayout = cloudScreenLayouts.get(it.id);
+      const p = cloudLayout
+        ? { x: cloudLayout.labelX, y: cloudLayout.labelY, visible: true }
+        : worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
       it.el.style.left = `${p.x}px`;
       it.el.style.top = `${p.y}px`;
       it.el.style.opacity = p.visible ? '1' : '0';
+      if (cloudLayout) {
+        it.el.style.transform = cloudLayout.labelAlign === 'left' ? 'translate(0,-50%)' : 'translate(-100%,-50%)';
+      }
     }
   }
 
@@ -1281,6 +1489,10 @@ export function useDtxTools(options: {
       x2: Math.max(start.x, end.x),
       y2: Math.max(start.y, end.y),
     };
+    if (rect.x2 - rect.x1 < 6 || rect.y2 - rect.y1 < 6) {
+      hideMarquee();
+      return;
+    }
     const dx = end.x - start.x;
     const selectedRefnos = collectRefnosInScreenRect(canvas, rect, mode, dx);
     hideMarquee();
@@ -1299,11 +1511,50 @@ export function useDtxTools(options: {
 
     if (mode === 'annotation_cloud') {
       const n = store.cloudAnnotations.value.length + 1;
-      const anchor = topCenterFromBox3(box);
+      const marqueeCenter = {
+        x: (rect.x1 + rect.x2) * 0.5,
+        y: (rect.y1 + rect.y2) * 0.5,
+      };
+      const viewer = dtxViewerRef.value;
+      const overlay = overlayContainerRef.value;
+      if (!viewer || !overlay) return;
+      const anchor = resolveCloudAnchorFromMarqueeCenter(
+        viewer,
+        canvas,
+        marqueeCenter,
+        selectedRefnos,
+        selectionRef.value,
+        dtxLayerRef.value,
+      ) ?? topCenterFromBox3(box);
+      const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, anchor);
+      const cloudCenterX = marqueeCenter.x;
+      const cloudCenterY = marqueeCenter.y;
+      const cloudSize = {
+        width: clamp(rect.x2 - rect.x1, 72, 220),
+        height: clamp(rect.y2 - rect.y1, 48, 180),
+      };
+      const cloudLayout = computeCloudLayout(anchorScreen, {
+        x: cloudCenterX - anchorScreen.x,
+        y: cloudCenterY - anchorScreen.y,
+      }, cloudSize);
+      const leaderEnd = overlayToWorld(
+        viewer.camera,
+        canvas,
+        overlay,
+        cloudLayout.labelX,
+        cloudLayout.labelY,
+        anchorScreen.ndcZ,
+      );
       const rec: CloudAnnotationRecord = {
         id: nowId('cloud'),
         objectIds: [...selectedRefnos],
         anchorWorldPos: vec3ToTuple(anchor),
+        leaderEndWorldPos: vec3ToTuple(leaderEnd),
+        screenOffset: {
+          x: cloudCenterX - anchorScreen.x,
+          y: cloudCenterY - anchorScreen.y,
+        },
+        cloudSize,
         visible: true,
         title: `云线批注 ${n}`,
         description: '',
