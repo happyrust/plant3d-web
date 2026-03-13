@@ -265,6 +265,81 @@ describe('normalizeReviewTask', () => {
     ]);
   });
 
+  it('preserves shared handoff context from backend lineage payloads', () => {
+    const createdAt = '2024-06-15T12:00:00.000Z';
+    const updatedAt = '2024-06-15T13:00:00.000Z';
+    const task = normalizeReviewTask({
+      id: 'task-handoff-1',
+      form_id: 'FORM-HANDOFF-1',
+      title: 'Designer to reviewer handoff',
+      model_name: 'Pipe Rack',
+      requester_id: 'designer-1',
+      requester_name: 'Designer One',
+      checker_id: 'checker-1',
+      checker_name: 'Checker One',
+      approver_id: 'approver-1',
+      approver_name: 'Approver One',
+      status: 'submitted',
+      current_node: 'jd',
+      components: [
+        { id: 'comp-1', refNo: '100_1', name: 'Pipe-100', type: 'Pipe' },
+      ],
+      workflow_history: [
+        {
+          node: 'sj',
+          action: 'submit',
+          operatorId: 'designer-1',
+          operatorName: 'Designer One',
+          timestamp: 1718452800000,
+        },
+      ],
+      attachments: [
+        {
+          file_id: 'att-1',
+          file_name: 'handoff.pdf',
+          download_url: '/files/review_attachments/att-1.pdf',
+          file_size: 512,
+        },
+      ],
+      created_at: createdAt,
+      updated_at: updatedAt,
+    });
+
+    expect(task.id).toBe('task-handoff-1');
+    expect(task.formId).toBe('FORM-HANDOFF-1');
+    expect(task.requesterId).toBe('designer-1');
+    expect(task.checkerId).toBe('checker-1');
+    expect(task.approverId).toBe('approver-1');
+    expect(task.currentNode).toBe('jd');
+    expect(task.status).toBe('submitted');
+    expect(task.components).toEqual([
+      { id: 'comp-1', refNo: '100_1', name: 'Pipe-100', type: 'Pipe' },
+    ]);
+    expect(task.workflowHistory).toEqual([
+      {
+        node: 'sj',
+        action: 'submit',
+        operatorId: 'designer-1',
+        operatorName: 'Designer One',
+        timestamp: 1718452800000,
+      },
+    ]);
+    expect(task.attachments).toEqual([
+      {
+        id: 'att-1',
+        name: 'handoff.pdf',
+        url: '/files/review_attachments/att-1.pdf',
+        size: 512,
+        type: undefined,
+        mimeType: undefined,
+        uploadedAt: expect.any(Number),
+      },
+    ]);
+    expect(task.attachments?.[0]?.uploadedAt).toBeGreaterThan(0);
+    expect(task.createdAt).toBe(new Date(createdAt).getTime());
+    expect(task.updatedAt).toBe(new Date(updatedAt).getTime());
+  });
+
   it('defaults to correct values for missing fields', () => {
     const task = normalizeReviewTask({});
     expect(task.id).toBe('');

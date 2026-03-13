@@ -166,6 +166,76 @@ describe('useUserStore.createReviewTask', () => {
     });
   });
 
+  it('创建结果保留 reviewer handoff 所需的 shared context', async () => {
+    reviewTaskCreateMock.mockResolvedValue({
+      success: true,
+      task: {
+        id: 'task-handoff-1',
+        formId: 'FORM-HANDOFF-1',
+        title: 'task-handoff-1',
+        requesterId: 'designer_001',
+        requesterName: '王设计师',
+        checkerId: 'proofreader_001',
+        checkerName: '张校对员',
+        approverId: 'reviewer_001',
+        approverName: '李审核员',
+        reviewerId: 'proofreader_001',
+        reviewerName: '张校对员',
+        currentNode: 'jd',
+        status: 'submitted',
+        modelName: 'Hull',
+        components: [
+          { id: 'c1', name: 'Comp A', refNo: '100_1', type: 'Valve' },
+        ],
+        workflowHistory: [
+          {
+            node: 'sj',
+            action: 'submit',
+            operatorId: 'designer_001',
+            operatorName: '王设计师',
+            timestamp: 1700000000000,
+          },
+        ],
+        createdAt: 1700000000000,
+        updatedAt: 1700000005000,
+      },
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    const task = await store.createReviewTask({
+      title: 'task-handoff-1',
+      description: 'desc',
+      modelName: 'Hull',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      priority: 'high',
+      formId: 'FORM-HANDOFF-1',
+      components: [
+        { id: 'c1', name: 'Comp A', refNo: '100_1', type: 'Valve' },
+      ],
+    });
+
+    expect(task.id).toBe('task-handoff-1');
+    expect(task.formId).toBe('FORM-HANDOFF-1');
+    expect(task.requesterId).toBe('designer_001');
+    expect(task.checkerId).toBe('proofreader_001');
+    expect(task.approverId).toBe('reviewer_001');
+    expect(task.currentNode).toBe('jd');
+    expect(task.status).toBe('submitted');
+    expect(task.workflowHistory).toEqual([
+      {
+        node: 'sj',
+        action: 'submit',
+        operatorId: 'designer_001',
+        operatorName: '王设计师',
+        timestamp: 1700000000000,
+      },
+    ]);
+    expect(store.reviewTasks.value).toContainEqual(task);
+  });
+
   it('updateTaskAttachments 仅持久化成功上传的附件元数据', async () => {
     reviewTaskCreateMock.mockResolvedValue({
       success: true,
