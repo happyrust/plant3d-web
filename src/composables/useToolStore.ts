@@ -148,11 +148,15 @@ export type CloudAnnotationRecord = {
 
 export type RectAnnotationRecord = {
   id: string;
-  corners: [MeasurementPoint, MeasurementPoint, MeasurementPoint, MeasurementPoint];
+  objectIds: string[];
+  obb: Obb;
+  anchorWorldPos: Vec3;
+  leaderEndWorldPos?: Vec3;
   visible: boolean;
   title: string;
   description: string;
   createdAt: number;
+  refnos?: string[];
   comments?: AnnotationComment[]; // 多角色意见列表
 };
 
@@ -339,6 +343,7 @@ const pickRefnoCallback = ref<((refnos: string[]) => void) | null>(null); // 确
 
 const pendingObbEditId = ref<string | null>(null);
 const pendingTextAnnotationEditId = ref<string | null>(null);
+const pendingRectAnnotationEditId = ref<string | null>(null);
 const pendingDimensionEditId = ref<string | null>(null);
 
 watch(
@@ -549,6 +554,7 @@ function clearCloudAnnotations() {
 function addRectAnnotation(rec: RectAnnotationRecord) {
   rectAnnotations.value = [...rectAnnotations.value, rec];
   activeRectAnnotationId.value = rec.id;
+  pendingRectAnnotationEditId.value = rec.id;
 }
 
 function updateRectAnnotation(id: string, patch: Partial<RectAnnotationRecord>) {
@@ -564,11 +570,15 @@ function removeRectAnnotation(id: string) {
   if (activeRectAnnotationId.value === id) {
     activeRectAnnotationId.value = null;
   }
+  if (pendingRectAnnotationEditId.value === id) {
+    pendingRectAnnotationEditId.value = null;
+  }
 }
 
 function clearRectAnnotations() {
   rectAnnotations.value = [];
   activeRectAnnotationId.value = null;
+  pendingRectAnnotationEditId.value = null;
 }
 
 function clearAll() {
@@ -828,6 +838,7 @@ function importJSON(raw: string) {
   activeRectAnnotationId.value = null;
   activeMeasurementId.value = null;
   activeDimensionId.value = null;
+  pendingRectAnnotationEditId.value = null;
   pendingDimensionEditId.value = null;
   toolMode.value = 'none';
 }
@@ -862,6 +873,7 @@ export function useToolStore() {
     activeDimensionId,
     pendingObbEditId,
     pendingTextAnnotationEditId,
+    pendingRectAnnotationEditId,
     pendingDimensionEditId,
 
     measurements,

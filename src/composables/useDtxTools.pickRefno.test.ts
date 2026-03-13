@@ -1,97 +1,73 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
-import { Vector3 } from 'three';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-const findNounByRefnoAcrossAllDbnos = vi.fn();
-const findOwnerRefnoByTubi = vi.fn();
+import { createRectAnnotationRecordFromObb, resolvePickedRefnoForFilter } from './useDtxTools';
 
-vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
-  findNounByRefnoAcrossAllDbnos,
-  findOwnerRefnoByTubi,
-}));
+import type { Obb } from './useToolStore';
 
-vi.mock('@/composables/useSelectionStore', () => ({
-  useSelectionStore: () => ({
-    selectedRefno: { value: null },
-    propertiesLoading: { value: false },
-    propertiesError: { value: null },
-    propertiesData: { value: null },
-    fullName: { value: '' },
-    loadProperties: vi.fn(),
-    clearSelection: vi.fn(),
-    setSelectedRefno: vi.fn(),
-  }),
-}));
-
-describe('pick_refno BRAN fallback', () => {
+describe('resolvePickedRefnoForFilter', () => {
   beforeEach(() => {
-    findNounByRefnoAcrossAllDbnos.mockReset();
-    findOwnerRefnoByTubi.mockReset();
+    // no-op: pure function tests only
   });
 
-  function createCanvas() {
-    const canvas = document.createElement('canvas');
-    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
-    } as DOMRect);
-    return canvas;
-  }
+  it('点到 TUBI 且 noun 缺失时，仍尝试回溯 owner BRAN', () => {
+    const findNoun = () => null;
+    const findOwner = (refno: string) => refno === 'tubi_1' ? 'bran_1' : null;
 
-  async function createTools(toolStore: any, pickPoint: () => any, compatViewerValue: any = null) {
-    const { useDtxTools } = await import('./useDtxTools');
-    return useDtxTools({
-      dtxViewerRef: { value: null } as any,
-      dtxLayerRef: { value: null } as any,
-      selectionRef: { value: { pickPoint } } as any,
-      overlayContainerRef: { value: document.createElement('div') } as any,
-      store: toolStore,
-      compatViewerRef: { value: compatViewerValue } as any,
-    });
-  }
-
-  it('点到 TUBI 且 noun 缺失时，仍尝试回溯 owner BRAN 并加入 pickedRefnos', async () => {
-    const { useToolStore } = await import('./useToolStore');
-    const toolStore = useToolStore();
-    toolStore.startPickRefno(['BRAN']);
-
-    findNounByRefnoAcrossAllDbnos.mockImplementation((refno: string) => refno === 'bran_1' ? 'BRAN' : null);
-    findOwnerRefnoByTubi.mockImplementation((refno: string) => refno === 'tubi_1' ? 'bran_1' : null);
-
-    const ensureRefnos = vi.fn();
-    const setObjectsSelected = vi.fn();
-    const tools = await createTools(
-      toolStore,
-      () => ({ objectId: 'o:tubi_1:0', point: new Vector3(1, 2, 3), distance: 1, triangle: [] as any }),
-      { scene: { ensureRefnos, setObjectsSelected, selectedObjectIds: [] } },
-    );
-
-    tools.onCanvasPointerUp(createCanvas(), { button: 0, clientX: 10, clientY: 10 } as PointerEvent);
-    await nextTick();
-
-    expect(findOwnerRefnoByTubi).toHaveBeenCalledWith('tubi_1');
-    expect(toolStore.pickedRefnos.value).toEqual(['bran_1']);
-    expect(ensureRefnos).toHaveBeenCalledWith(['bran_1']);
-    expect(setObjectsSelected).toHaveBeenCalledWith(['bran_1'], true);
+    expect(resolvePickedRefnoForFilter('tubi_1', ['BRAN'], findNoun, findOwner)).toBe('bran_1');
   });
 
-  it('点到 TUBI 且无法回溯 owner BRAN 时，不加入 pickedRefnos', async () => {
-    const { useToolStore } = await import('./useToolStore');
-    const toolStore = useToolStore();
-    toolStore.startPickRefno(['BRAN']);
+  it('owner refno 可解析但 owner noun 缺失时，仍应通过 BRAN 过滤', () => {
+    const findNoun = (refno: string) => refno === 'tubi_3' ? 'TUBI' : null;
+    const findOwner = (refno: string) => refno === 'tubi_3' ? 'bran_4' : null;
 
-    findNounByRefnoAcrossAllDbnos.mockReturnValue(null);
-    findOwnerRefnoByTubi.mockReturnValue(null);
+    expect(resolvePickedRefnoForFilter('tubi_3', ['BRAN'], findNoun, findOwner)).toBe('bran_4');
+  });
 
-    const tools = await createTools(
-      toolStore,
-      () => ({ objectId: 'o:tubi_2:0', point: new Vector3(1, 2, 3), distance: 1, triangle: [] as any }),
-    );
+  it('点到 TUBI 且无法回溯 owner BRAN 时，返回 null', () => {
+    const findNoun = () => null;
+    const findOwner = () => null;
 
-    tools.onCanvasPointerUp(createCanvas(), { button: 0, clientX: 20, clientY: 20 } as PointerEvent);
-    await nextTick();
+    expect(resolvePickedRefnoForFilter('tubi_2', ['BRAN'], findNoun, findOwner)).toBeNull();
+  });
 
-    expect(findOwnerRefnoByTubi).toHaveBeenCalledWith('tubi_2');
-    expect(toolStore.pickedRefnos.value).toEqual([]);
+  it('直接点到 BRAN 时，应保留当前 refno', () => {
+    const findNoun = (refno: string) => refno === 'bran_3' ? 'BRAN' : null;
+    const findOwner = () => 'bran_should_not_be_used';
+
+    expect(resolvePickedRefnoForFilter('bran_3', ['BRAN'], findNoun, findOwner)).toBe('bran_3');
   });
 });
 
+describe('createRectAnnotationRecordFromObb', () => {
+  it('creates an OBB-backed rectangle annotation anchored at the OBB center', () => {
+    const obb: Obb = {
+      center: [5, 6, 7],
+      axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+      halfSize: [2, 3, 4],
+      corners: [
+        [3, 3, 3], [7, 3, 3], [7, 9, 3], [3, 9, 3],
+        [3, 3, 11], [7, 3, 11], [7, 9, 11], [3, 9, 11],
+      ],
+    };
+
+    const record = createRectAnnotationRecordFromObb({
+      id: 'rect-1',
+      objectIds: ['bran_1'],
+      refnos: ['bran_1'],
+      obb,
+      title: '矩形批注 1',
+      description: 'demo',
+      createdAt: 123,
+    });
+
+    expect(record.objectIds).toEqual(['bran_1']);
+    expect(record.refnos).toEqual(['bran_1']);
+    expect(record.obb).toEqual(obb);
+    expect(record.anchorWorldPos).toEqual([5, 6, 7]);
+    expect(record.leaderEndWorldPos?.[0]).toBeCloseTo(8.500357124637429);
+    expect(record.leaderEndWorldPos?.[1]).toBeCloseTo(9.500357124637429);
+    expect(record.leaderEndWorldPos?.[2]).toBeCloseTo(9.423324163210527);
+    expect(record.visible).toBe(true);
+    expect(record.title).toBe('矩形批注 1');
+  });
+});

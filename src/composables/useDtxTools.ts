@@ -52,6 +52,13 @@ type LabelEl = {
   el: HTMLDivElement
 }
 
+type RectAnnotationVisual = {
+  box: LineSegments
+  pin: LineSegments
+  leader: LineSegments
+  labelWorldPos: Vector3
+}
+
 function nowId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -104,6 +111,38 @@ function parseRefnoFromDtxObjectId(objectId: string): string | null {
   if (!objectId || !objectId.startsWith('o:')) return null;
   const parts = objectId.split(':');
   return parts.length >= 3 ? (parts[1] ?? null) : null;
+}
+
+export function resolvePickedRefnoForFilter(
+  pickedRefno: string,
+  filter: string[],
+  findNoun: (refno: string) => string | null = findNounByRefnoAcrossAllDbnos,
+  findOwner: (refno: string) => string | null = findOwnerRefnoByTubi,
+): string | null {
+  let targetRefno = pickedRefno;
+  let resolvedNoun: string | null = null;
+
+  if (filter.includes('BRAN')) {
+    const noun = findNoun(targetRefno);
+    if (noun !== 'BRAN') {
+      const branRefno = findOwner(targetRefno);
+      if (branRefno) {
+        targetRefno = branRefno;
+        // 关键：owner 由 loader 侧保证为 BRAN，但 BRAN 本体可能未加载导致 findNoun 为空；
+        // 在 BRAN 过滤下，这里直接视为满足过滤。
+        resolvedNoun = 'BRAN';
+      }
+    }
+  }
+
+  if (filter.length > 0) {
+    const noun = resolvedNoun || findNoun(targetRefno);
+    if (!noun || !filter.includes(noun.toUpperCase())) {
+      return null;
+    }
+  }
+
+  return targetRefno;
 }
 
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent): Vector2 {
@@ -205,6 +244,82 @@ function buildWireBoxGeometryFromCorners(corners: Vec3[]): BufferGeometry | null
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
   return g;
+}
+
+function buildCrossMarkerGeometry(center: Vector3, size: number): BufferGeometry {
+  const half = Math.max(size * 0.5, 1e-4);
+  const positions = new Float32Array([
+    center.x - half, center.y, center.z,
+    center.x + half, center.y, center.z,
+    center.x, center.y - half, center.z,
+    center.x, center.y + half, center.z,
+    center.x, center.y, center.z - half,
+    center.x, center.y, center.z + half,
+  ]);
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(positions, 3));
+  return g;
+}
+
+function createRectAnnotationVisual(obb: Obb, anchorWorldPos: Vec3): RectAnnotationVisual | null {
+  const boxGeometry = buildWireBoxGeometryFromCorners(obb.corners as unknown as Vec3[]);
+  if (!boxGeometry) return null;
+
+  const anchor = new Vector3(...anchorWorldPos);
+  const halfSize = new Vector3(...obb.halfSize);
+  const boxRadius = Math.max(halfSize.length(), 0.1);
+  const pinGeometry = buildCrossMarkerGeometry(anchor, boxRadius * 0.16);
+
+  const labelAnchor = anchor.clone().add(new Vector3(boxRadius * 0.65, boxRadius * 0.65, boxRadius * 0.45));
+  const leaderGeometry = new BufferGeometry();
+  leaderGeometry.setAttribute('position', new BufferAttribute(new Float32Array([
+    anchor.x, anchor.y, anchor.z,
+    labelAnchor.x, labelAnchor.y, labelAnchor.z,
+  ]), 3));
+
+  const boxMaterial = new LineBasicMaterial({ color: 0x111827 });
+  const pinMaterial = new LineBasicMaterial({ color: 0x111827 });
+  const leaderMaterial = new LineBasicMaterial({ color: 0x111827 });
+  (boxMaterial as any).depthTest = false;
+  (pinMaterial as any).depthTest = false;
+  (leaderMaterial as any).depthTest = false;
+
+  const box = new LineSegments(boxGeometry, boxMaterial);
+  const pin = new LineSegments(pinGeometry, pinMaterial);
+  const leader = new LineSegments(leaderGeometry, leaderMaterial);
+  box.renderOrder = 900;
+  pin.renderOrder = 901;
+  leader.renderOrder = 901;
+
+  return { box, pin, leader, labelWorldPos: labelAnchor };
+}
+
+export function createRectAnnotationRecordFromObb(params: {
+  id?: string
+  objectIds: string[]
+  refnos?: string[]
+  obb: Obb
+  title: string
+  description?: string
+  createdAt?: number
+}): RectAnnotationRecord {
+  const center = new Vector3(...params.obb.center);
+  const halfSize = new Vector3(...params.obb.halfSize);
+  const boxRadius = Math.max(halfSize.length(), 0.1);
+  const leaderEnd = center.clone().add(new Vector3(boxRadius * 0.65, boxRadius * 0.65, boxRadius * 0.45));
+
+  return {
+    id: params.id ?? nowId('rect'),
+    objectIds: [...params.objectIds],
+    obb: params.obb,
+    anchorWorldPos: [...params.obb.center] as Vec3,
+    leaderEndWorldPos: vec3ToTuple(leaderEnd),
+    visible: true,
+    title: params.title,
+    description: params.description ?? '',
+    createdAt: params.createdAt ?? Date.now(),
+    refnos: params.refnos ? [...params.refnos] : [...params.objectIds],
+  };
 }
 
 function computeAabbObbFromBox3(box: Box3): Obb {
@@ -327,6 +442,11 @@ export function useDtxTools(options: {
 
   let lastTextMarkerClickTime = 0;
   let lastTextMarkerClickId: string | null = null;
+
+  // pick_refno：仅在拾取会话内维护，不写入 store
+  const pickedHighlightByBran = new Map<string, string>();
+  const pickedHighlightPinned = new Set<string>(); // 已在外部选中的对象，不应被拾取会话取消选中
+  let lastAppliedPickHighlights: string[] = [];
 
   const ready = computed(() => {
     const layer = dtxLayerRef.value;
@@ -471,6 +591,44 @@ export function useDtxTools(options: {
     dim.visible = true;
   }
 
+  function applyPickHighlights(): void {
+    const viewer = compatViewerRef.value;
+    if (!viewer) return;
+
+    const next = Array.from(new Set(pickedHighlightByBran.values())).filter(Boolean);
+
+    if (lastAppliedPickHighlights.length > 0) {
+      const toDeselect = lastAppliedPickHighlights.filter((id) => !pickedHighlightPinned.has(id));
+      if (toDeselect.length > 0) {
+        viewer.scene.setObjectsSelected(toDeselect, false);
+      }
+    }
+    if (next.length > 0) {
+      // 若对象在进入/拾取前已被外部选中，则“取消拾取/删除候选”不应取消其高亮
+      const selectedNow = new Set<string>(viewer.scene.selectedObjectIds);
+      for (const id of next) {
+        if (selectedNow.has(id) && !lastAppliedPickHighlights.includes(id)) {
+          pickedHighlightPinned.add(id);
+        }
+      }
+      viewer.scene.setObjectsSelected(next, true);
+    }
+    lastAppliedPickHighlights = next;
+  }
+
+  function clearPickHighlights(): void {
+    const viewer = compatViewerRef.value;
+    if (viewer && lastAppliedPickHighlights.length > 0) {
+      const toDeselect = lastAppliedPickHighlights.filter((id) => !pickedHighlightPinned.has(id));
+      if (toDeselect.length > 0) {
+        viewer.scene.setObjectsSelected(toDeselect, false);
+      }
+    }
+    pickedHighlightByBran.clear();
+    pickedHighlightPinned.clear();
+    lastAppliedPickHighlights = [];
+  }
+
   const statusText = computed(() => {
     const mode = store.toolMode.value;
     if (mode === 'none') return '未启用工具';
@@ -508,10 +666,7 @@ export function useDtxTools(options: {
       return '云线批注：拖拽框选对象生成包围框';
     }
     if (mode === 'annotation_rect') {
-      return '矩形批注：拖拽两点对角生成';
-    }
-    if (mode === 'annotation_obb') {
-      return 'OBB 批注：拖拽框选生成（左→右=相交，右→左=包含）';
+      return '矩形批注：点击对象生成 OBB 包围框批注';
     }
     return '批注：点击模型表面创建';
   });
@@ -706,40 +861,23 @@ export function useDtxTools(options: {
       });
     }
 
-    // ---------------- Rect annotations (plane rectangle) ----------------
+    // ---------------- Rect annotations (OBB rectangle) ----------------
     for (const r of store.rectAnnotations.value) {
       if (!r.visible) continue;
 
-      const pts = r.corners.map((p) => new Vector3(...p.worldPos));
-      if (pts.length !== 4) continue;
+      const visual = createRectAnnotationVisual(r.obb, r.anchorWorldPos);
+      if (!visual) continue;
+      toolsGroup.add(visual.box, visual.pin, visual.leader);
 
-      const g = new BufferGeometry();
-      g.setAttribute(
-        'position',
-        new BufferAttribute(
-          new Float32Array([
-            pts[0]!.x, pts[0]!.y, pts[0]!.z, pts[1]!.x, pts[1]!.y, pts[1]!.z,
-            pts[1]!.x, pts[1]!.y, pts[1]!.z, pts[2]!.x, pts[2]!.y, pts[2]!.z,
-            pts[2]!.x, pts[2]!.y, pts[2]!.z, pts[3]!.x, pts[3]!.y, pts[3]!.z,
-            pts[3]!.x, pts[3]!.y, pts[3]!.z, pts[0]!.x, pts[0]!.y, pts[0]!.z,
-          ]),
-          3
-        )
-      );
-      const mat = new LineBasicMaterial({ color: 0x111827 })
-        ; (mat as any).depthTest = false;
-      const wire = new LineSegments(g, mat);
-      wire.renderOrder = 900;
-      toolsGroup.add(wire);
-
-      const center = pts[0]!.clone().add(pts[2]!).multiplyScalar(0.5);
+      const center = new Vector3(...r.anchorWorldPos);
       const marker = makeMarkerEl(overlay, 'R', '#111827');
       markers.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: center, el: marker });
 
       const isActive = store.activeRectAnnotationId.value === r.id;
       if (isActive) {
         const label = makeLabelEl(overlay, r.title || '矩形批注', r.description || '');
-        labels.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: center, el: label });
+        const labelWorldPos = r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos;
+        labels.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: labelWorldPos, el: label });
       }
 
       marker.addEventListener('click', (ev) => {
@@ -869,8 +1007,7 @@ export function useDtxTools(options: {
     if (!viewer) return;
     const rec = store.rectAnnotations.value.find((a) => a.id === id);
     if (!rec) return;
-    const pts = rec.corners.map((c) => c.worldPos);
-    const aabb = aabbFromPoints(pts as any);
+    const aabb = aabbFromPoints(rec.obb.corners as any);
     if (!aabb) return;
     viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
   }
@@ -942,7 +1079,7 @@ export function useDtxTools(options: {
     clearDimensionPreview();
     try {
       rectPreviewLine.value?.geometry.dispose()
-        ; (rectPreviewLine.value?.material as any)?.dispose?.();
+      ; (rectPreviewLine.value?.material as any)?.dispose?.();
     } catch { /* ignore */ }
     rectPreviewLine.value = null;
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
@@ -967,7 +1104,7 @@ export function useDtxTools(options: {
 
     try {
       rectPreviewLine.value?.geometry.dispose()
-        ; (rectPreviewLine.value?.material as any)?.dispose?.();
+      ; (rectPreviewLine.value?.material as any)?.dispose?.();
     } catch { /* ignore */ }
     rectPreviewLine.value = null;
   }
@@ -1033,7 +1170,7 @@ export function useDtxTools(options: {
       try {
         toolsGroup.remove(rectPreviewLine.value);
         rectPreviewLine.value.geometry.dispose()
-          ; (rectPreviewLine.value.material as any)?.dispose?.();
+        ; (rectPreviewLine.value.material as any)?.dispose?.();
       } catch { /* ignore */ }
     }
     rectPreviewLine.value = line;
@@ -1177,124 +1314,14 @@ export function useDtxTools(options: {
       return;
     }
 
-    const n = store.obbAnnotations.value.length + 1;
-    const obb = computeAabbObbFromBox3(box);
-    const labelPos = topCenterFromBox3(box);
-    const rec: ObbAnnotationRecord = {
-      id: nowId('obb'),
-      objectIds: [...selectedRefnos],
-      obb,
-      labelWorldPos: vec3ToTuple(labelPos),
-      anchor: { kind: 'top_center' },
-      visible: true,
-      title: `OBB 批注 ${n}`,
-      description: '',
-      createdAt: Date.now(),
-      refnos: [...selectedRefnos],
-    };
-    store.addObbAnnotation(rec);
-  }
-
-  function beginRectDrag(canvas: HTMLCanvasElement, e: PointerEvent) {
-    if (!ready.value) return;
-    if (e.button !== 0) return;
-    const viewer = dtxViewerRef.value;
-    if (!viewer) return;
-
-    const hit = pickSurfacePoint(canvas, e);
-    if (!hit) return;
-
-    const normal = new Vector3();
-    viewer.camera.getWorldDirection(normal).normalize();
-    const basis = computeRectPlaneBasis(viewer.camera as any, normal);
-    const plane = new Plane().setFromNormalAndCoplanarPoint(normal, hit.worldPos);
-
-    rectDrag.value = {
-      active: true,
-      pointerId: e.pointerId,
-      startCanvas: { x: getCanvasPos(canvas, e).x, y: getCanvasPos(canvas, e).y },
-      plane,
-      basisU: basis.u,
-      basisV: basis.v,
-      startWorld: hit.worldPos.clone(),
-      startEntityId: hit.entityId,
-    };
-
-    viewer.controls.enabled = false;
-    try { canvas.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-  }
-
-  function moveRectDrag(canvas: HTMLCanvasElement, e: PointerEvent) {
-    if (!rectDrag.value.active) return;
-    if (rectDrag.value.pointerId !== e.pointerId) return;
-    const plane = rectDrag.value.plane;
-    const u = rectDrag.value.basisU;
-    const v = rectDrag.value.basisV;
-    const p0 = rectDrag.value.startWorld;
-    if (!plane || !u || !v || !p0) return;
-
-    const p1 = intersectPlaneFromPointer(canvas, e, plane);
-    if (!p1) return;
-
-    const delta = p1.clone().sub(p0);
-    const du = delta.dot(u);
-    const dv = delta.dot(v);
-
-    const c0 = p0.clone();
-    const c1 = p0.clone().add(u.clone().multiplyScalar(du));
-    const c2 = c1.clone().add(v.clone().multiplyScalar(dv));
-    const c3 = p0.clone().add(v.clone().multiplyScalar(dv));
-    updateRectPreview([c0, c1, c2, c3]);
-  }
-
-  function endRectDrag(canvas: HTMLCanvasElement, e: PointerEvent) {
-    if (!rectDrag.value.active) return;
-    if (rectDrag.value.pointerId !== e.pointerId) return;
-
-    const viewer = dtxViewerRef.value;
-    if (viewer) viewer.controls.enabled = true;
-    try { canvas.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-
-    const plane = rectDrag.value.plane;
-    const u = rectDrag.value.basisU;
-    const v = rectDrag.value.basisV;
-    const p0 = rectDrag.value.startWorld;
-    const entityId = rectDrag.value.startEntityId;
-
-    rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
-
-    if (!plane || !u || !v || !p0 || !entityId) return;
-    const p1 = intersectPlaneFromPointer(canvas, e, plane);
-    if (!p1) return;
-
-    const delta = p1.clone().sub(p0);
-    const du = delta.dot(u);
-    const dv = delta.dot(v);
-
-    const c0 = p0.clone();
-    const c1 = p0.clone().add(u.clone().multiplyScalar(du));
-    const c2 = c1.clone().add(v.clone().multiplyScalar(dv));
-    const c3 = p0.clone().add(v.clone().multiplyScalar(dv));
-
     const n = store.rectAnnotations.value.length + 1;
-    const corners: RectAnnotationRecord['corners'] = [
-      { entityId, worldPos: vec3ToTuple(c0) },
-      { entityId, worldPos: vec3ToTuple(c1) },
-      { entityId, worldPos: vec3ToTuple(c2) },
-      { entityId, worldPos: vec3ToTuple(c3) },
-    ];
-
-    // 打开批注面板，便于用户立即编辑
-    ensurePanelActivated('annotation');
-
-    const rec: RectAnnotationRecord = {
-      id: nowId('rect'),
-      corners,
-      visible: true,
+    const obb = computeAabbObbFromBox3(box);
+    const rec = createRectAnnotationRecordFromObb({
+      objectIds: selectedRefnos,
+      refnos: selectedRefnos,
+      obb,
       title: `矩形批注 ${n}`,
-      description: '',
-      createdAt: Date.now(),
-    };
+    });
     store.addRectAnnotation(rec);
   }
 
@@ -1308,12 +1335,11 @@ export function useDtxTools(options: {
     clickTracker.value = { down: { x: e.clientX, y: e.clientY }, moved: false };
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
+    if (mode === 'annotation_cloud') {
       beginMarquee(canvas, e, mode);
       return;
     }
     if (mode === 'annotation_rect') {
-      beginRectDrag(canvas, e);
       return;
     }
   }
@@ -1327,12 +1353,8 @@ export function useDtxTools(options: {
     }
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
+    if (mode === 'annotation_cloud') {
       moveMarquee(canvas, e, mode);
-      return;
-    }
-    if (mode === 'annotation_rect') {
-      moveRectDrag(canvas, e);
       return;
     }
 
@@ -1352,12 +1374,29 @@ export function useDtxTools(options: {
     if (!ready.value) return;
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
+    if (mode === 'annotation_cloud') {
       endMarquee(canvas, e, mode);
       return;
     }
     if (mode === 'annotation_rect') {
-      endRectDrag(canvas, e);
+      const hit = pickSurfacePoint(canvas, e);
+      if (!hit) return;
+      const compat = compatViewerRef.value;
+      if (!compat) return;
+      const pickedRefno = parseRefnoFromDtxObjectId(hit.objectId) || hit.entityId;
+      const aabb = compat.scene.getAABB([pickedRefno]);
+      if (!aabb) return;
+      ensurePanelActivated('annotation');
+      const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]));
+      const obb = computeAabbObbFromBox3(box);
+      const n = store.rectAnnotations.value.length + 1;
+      const rec = createRectAnnotationRecordFromObb({
+        objectIds: [pickedRefno],
+        refnos: [pickedRefno],
+        obb,
+        title: `矩形批注 ${n}`,
+      });
+      store.addRectAnnotation(rec);
       return;
     }
 
@@ -1417,31 +1456,18 @@ export function useDtxTools(options: {
     if (mode === 'pick_refno') {
       const hit = pickSurfacePoint(canvas, e);
       if (!hit) return;
-      let targetRefno = hit.entityId;
       const filter = store.pickRefnoFilter.value;
-
-      // 允许直接点击 TUBI 等子件时回溯其所属 BRAN；noun 缺失时也要尝试回溯。
-      if (filter.includes('BRAN')) {
-        const noun = findNounByRefnoAcrossAllDbnos(targetRefno);
-        if (noun !== 'BRAN' && noun !== 'HANG') {
-          const branRefno = findOwnerRefnoByTubi(targetRefno);
-          if (branRefno) targetRefno = branRefno;
-        }
-      }
-
-      // noun 过滤验证
-      if (filter.length > 0) {
-        const noun = findNounByRefnoAcrossAllDbnos(targetRefno);
-        if (!noun || !filter.includes(noun.toUpperCase())) {
-          return;
-        }
-      }
+      const targetRefno = resolvePickedRefnoForFilter(hit.entityId, filter);
+      if (!targetRefno) return;
       store.addPickedRefno(targetRefno);
-      // 拾取后立即高亮选中的管道
+
+      // 拾取后立即高亮（优先 BRAN 本体；若 BRAN 无几何则回退到当前命中的 TUBI）
       const viewer = compatViewerRef.value;
       if (viewer) {
-        viewer.scene.ensureRefnos([targetRefno]);
-        viewer.scene.setObjectsSelected([targetRefno], true);
+        const hasAabb = !!viewer.scene.getAABB([targetRefno]);
+        const highlightId = hasAabb ? targetRefno : hit.entityId;
+        pickedHighlightByBran.set(targetRefno, highlightId);
+        applyPickHighlights();
       }
       return;
     }
@@ -1606,7 +1632,7 @@ export function useDtxTools(options: {
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
     try {
       rectPreviewLine.value?.geometry.dispose()
-        ; (rectPreviewLine.value?.material as any)?.dispose?.();
+      ; (rectPreviewLine.value?.material as any)?.dispose?.();
     } catch { /* ignore */ }
     rectPreviewLine.value = null;
     clickTracker.value = { down: null, moved: false };
@@ -1628,6 +1654,50 @@ export function useDtxTools(options: {
     () => {
       if (!dtxViewerRef.value || !overlayContainerRef.value) return;
       syncFromStore();
+    },
+    { deep: true }
+  );
+
+  // pick_refno：候选变化与取消拾取时同步高亮
+  watch(
+    () => ({
+      mode: store.toolMode.value,
+      picked: store.pickedRefnos.value,
+    }),
+    (next, prev) => {
+      const mode = next.mode;
+      const picked = next.picked ?? [];
+
+      if (mode === 'pick_refno') {
+        // 进入拾取模式：重置会话状态（不清除外部高亮）
+        if (prev?.mode !== 'pick_refno') {
+          pickedHighlightByBran.clear();
+          pickedHighlightPinned.clear();
+          lastAppliedPickHighlights = [];
+        }
+
+        // pickedRefnos 为空：视为取消/重置，撤销本会话高亮
+        if (!picked || picked.length === 0) {
+          clearPickHighlights();
+          return;
+        }
+
+        // 同步删除的候选
+        const pickedSet = new Set<string>(picked);
+        for (const k of Array.from(pickedHighlightByBran.keys())) {
+          if (!pickedSet.has(k)) {
+            pickedHighlightByBran.delete(k);
+          }
+        }
+        applyPickHighlights();
+        return;
+      }
+
+      // 退出拾取模式：确认场景保持当前高亮；仅清理会话内状态，避免后续误同步
+      if (prev?.mode === 'pick_refno') {
+        pickedHighlightByBran.clear();
+        lastAppliedPickHighlights = [];
+      }
     },
     { deep: true }
   );
