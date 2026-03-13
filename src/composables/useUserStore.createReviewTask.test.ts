@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const reviewTaskCreateMock = vi.fn();
+const reviewTaskUpdateMock = vi.fn();
 
 vi.mock('@/api/reviewApi', () => ({
   reviewTaskCreate: reviewTaskCreateMock,
   reviewTaskGetList: vi.fn(async () => ({ success: true, tasks: [], total: 0 })),
   reviewTaskGetById: vi.fn(),
-  reviewTaskUpdate: vi.fn(),
+  reviewTaskUpdate: reviewTaskUpdateMock,
   reviewTaskDelete: vi.fn(),
   reviewTaskStartReview: vi.fn(),
   reviewTaskApprove: vi.fn(),
@@ -64,6 +65,7 @@ function createSessionStorageMock() {
 describe('useUserStore.createReviewTask', () => {
   beforeEach(() => {
     reviewTaskCreateMock.mockReset();
+    reviewTaskUpdateMock.mockReset();
     vi.resetModules();
     (globalThis as unknown as { localStorage: Storage }).localStorage =
       createLocalStorageMock() as unknown as Storage;
@@ -161,6 +163,68 @@ describe('useUserStore.createReviewTask', () => {
       ],
       dueDate: 1700000000000,
       attachments: undefined,
+    });
+  });
+
+  it('updateTaskAttachments 仅持久化成功上传的附件元数据', async () => {
+    reviewTaskCreateMock.mockResolvedValue({
+      success: true,
+      task: {
+        id: 'task-attachment-1',
+        title: 'task-with-attachments',
+        attachments: [],
+      },
+    });
+    reviewTaskUpdateMock.mockResolvedValue({
+      success: true,
+      task: {
+        id: 'task-attachment-1',
+        title: 'task-with-attachments',
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'drawing.pdf',
+            url: '/files/review_attachments/att-1.pdf',
+            size: 128,
+            mimeType: 'application/pdf',
+          },
+        ],
+      },
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    const task = await store.createReviewTask({
+      title: 'task-with-attachments',
+      description: 'desc',
+      modelName: 'model',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      priority: 'medium',
+      components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
+    });
+
+    await store.updateTaskAttachments(task.id, [
+      {
+        id: 'att-1',
+        name: 'drawing.pdf',
+        url: '/files/review_attachments/att-1.pdf',
+        size: 128,
+        mimeType: 'application/pdf',
+      },
+    ]);
+
+    expect(reviewTaskUpdateMock).toHaveBeenCalledWith('task-attachment-1', {
+      attachments: [
+        {
+          id: 'att-1',
+          name: 'drawing.pdf',
+          url: '/files/review_attachments/att-1.pdf',
+          size: 128,
+          mimeType: 'application/pdf',
+        },
+      ],
     });
   });
 

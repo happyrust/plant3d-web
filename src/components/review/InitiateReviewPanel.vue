@@ -412,7 +412,7 @@ function clearNotification() {
         <Link class="h-4 w-4" />
         自动关联文件
       </label>
-      <AssociatedFilesList />
+      <AssociatedFilesList :selected-component-count="selectedComponents.length" />
     </div>
 
     <!-- 校核/审核人员和优先级 -->
