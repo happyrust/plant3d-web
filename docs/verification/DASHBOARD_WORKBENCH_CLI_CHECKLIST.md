@@ -5,6 +5,18 @@
 - `plant3d-web` 与 `plant-model-gen` 跨仓接口契约核查
 - 不希望新增一次性测试文件时的手工/CLI 验证
 
+推荐直接执行：
+
+```bash
+npm run verify:dashboard
+```
+
+如需复用现有二进制加速：
+
+```bash
+bash scripts/verify-dashboard-workbench.sh --skip-build
+```
+
 ## 1. 前端静态检查
 
 在 `plant3d-web` 根目录执行：
