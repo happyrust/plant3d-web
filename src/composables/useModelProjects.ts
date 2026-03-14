@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 
+import { recordRecentProject } from '@/composables/dashboardRecentProjects';
 import { setCurrentProjectPath } from '@/lib/filesOutput';
 
 export type ModelProject = {
@@ -58,6 +59,7 @@ function applyProject(project: ModelProject, emitChangeEvent: boolean): void {
   currentProject.value = project;
   setCurrentProjectPath(project.path);
   syncProjectUrl(project);
+  recordRecentProject(project);
 
   if (emitChangeEvent && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('modelProjectChanged', {

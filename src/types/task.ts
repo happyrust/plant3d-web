@@ -135,6 +135,9 @@ export type SystemMetrics = {
   memoryUsage: number;        // 内存使用率 0-100
   activeTaskCount: number;    // 活跃任务数
   queuedTaskCount: number;    // 队列中的任务数
+  databaseConnected?: boolean;
+  surrealdbConnected?: boolean;
+  uptimeSeconds?: number;
 };
 
 // ============ 任务创建 ============

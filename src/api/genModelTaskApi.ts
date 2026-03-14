@@ -173,10 +173,13 @@ export async function taskGetLogs(
  */
 export async function taskGetSystemMetrics(): Promise<SystemMetricsResponse> {
   type RawStatusResponse = {
+    uptime?: { secs: number } | number;
     cpu_usage: number;
     memory_usage: number;
     active_tasks: number;
     queued_task_count?: number;
+    database_connected?: boolean;
+    surrealdb_connected?: boolean;
   };
   const raw = await fetchJson<RawStatusResponse>('/api/status');
   return {
@@ -186,6 +189,13 @@ export async function taskGetSystemMetrics(): Promise<SystemMetricsResponse> {
       memoryUsage: raw.memory_usage,
       activeTaskCount: raw.active_tasks,
       queuedTaskCount: raw.queued_task_count ?? 0,
+      databaseConnected: raw.database_connected,
+      surrealdbConnected: raw.surrealdb_connected,
+      uptimeSeconds: typeof raw.uptime === 'number'
+        ? raw.uptime
+        : (raw.uptime && typeof raw.uptime === 'object' && 'secs' in raw.uptime
+          ? Number(raw.uptime.secs)
+          : undefined),
     },
   };
 }

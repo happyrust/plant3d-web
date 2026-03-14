@@ -39,7 +39,8 @@
 
 - 单元/集成：Vitest（`happy-dom`），匹配 `src/**/*.{test,spec}.{js,ts}`  
 - E2E：Playwright，测试文件放在 `e2e/**/*.spec.ts`  
-- 新增功能优先补 `src/` 下的 `*.test.ts`/`*.spec.ts`，避免把测试放到根目录散落脚本中
+- 默认优先使用 CLI + 真实命令 + 真实/样例数据做验证，尤其是跨仓联调、接口契约和 dashboard/workbench 这类功能；验证结果应记录具体命令、输入数据与返回结果
+- 非必要不要为一次性联调验证新增独立 `*.test.ts` / `*.spec.ts` / Rust `#[cfg(test)]` 测试；只有当 CLI 验证无法覆盖关键逻辑，且已先沟通确认时，才补最小测试
 
 ## 提交与 Pull Request 规范
 
