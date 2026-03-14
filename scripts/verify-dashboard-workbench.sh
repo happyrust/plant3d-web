@@ -15,6 +15,7 @@ SKIP_INJECT=0
 REUSE_RUNNING_SERVER=0
 JSON_OUTPUT=0
 OUTPUT_PATH=""
+QUIET=0
 
 SERVER_PID=""
 LOG_FILE=""
@@ -40,6 +41,7 @@ usage() {
                    如果目标端口已有 web_server 在运行，则直接复用
   --json           输出机器可读 JSON 摘要
   --output <path>  将 JSON 摘要写入指定文件
+  --quiet          关闭进度日志，仅保留错误和结果输出
   -h, --help       显示帮助
 
 环境变量:
@@ -50,7 +52,9 @@ EOF
 }
 
 log() {
-  printf '[dashboard-verify] %s\n' "$*"
+  if [[ "$QUIET" -eq 0 ]]; then
+    printf '[dashboard-verify] %s\n' "$*"
+  fi
 }
 
 fail() {
@@ -188,6 +192,9 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || fail "--output 需要文件路径参数"
       OUTPUT_PATH="$2"
       shift
+      ;;
+    --quiet)
+      QUIET=1
       ;;
     -h|--help)
       usage

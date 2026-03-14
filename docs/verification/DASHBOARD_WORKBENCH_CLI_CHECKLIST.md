@@ -29,6 +29,12 @@ WEB_SERVER_PORT=3100 bash scripts/verify-dashboard-workbench.sh --reuse-running-
 bash scripts/verify-dashboard-workbench.sh --skip-build --json --output ./tmp/dashboard-verify.json
 ```
 
+如需安静模式，便于脚本消费：
+
+```bash
+bash scripts/verify-dashboard-workbench.sh --skip-build --json --quiet
+```
+
 ## 1. 前端静态检查
 
 在 `plant3d-web` 根目录执行：
