@@ -12,11 +12,19 @@ CARGO_BUILD_JOBS_VALUE="${CARGO_BUILD_JOBS:-1}"
 SKIP_BUILD=0
 KEEP_SERVER=0
 SKIP_INJECT=0
+REUSE_RUNNING_SERVER=0
+JSON_OUTPUT=0
 
 SERVER_PID=""
 LOG_FILE=""
 TASK_ID=""
 INSERTED_ACTIVITY=0
+USED_EXISTING_SERVER=0
+PROJECT_COUNT=0
+HAS_SHOW_DBNUM=0
+STATUS_HAS_DATABASE_CONNECTED=0
+STATUS_HAS_SURREAL_CONNECTED=0
+INJECTION_CHECK_PASSED=0
 
 usage() {
   cat <<'EOF'
@@ -27,6 +35,9 @@ usage() {
   --skip-build     跳过后端编译，直接使用现有二进制
   --keep-server    校验完成后保留临时启动的 web_server 进程
   --skip-inject    跳过 review_workflow_history 注入/清理验证
+  --reuse-running-server
+                   如果目标端口已有 web_server 在运行，则直接复用
+  --json           输出机器可读 JSON 摘要
   -h, --help       显示帮助
 
 环境变量:
@@ -43,6 +54,39 @@ log() {
 fail() {
   printf '[dashboard-verify] 错误: %s\n' "$*" >&2
   exit 1
+}
+
+emit_json_summary() {
+  node -e "
+    const summary = {
+      success: true,
+      port: Number(process.argv[1]),
+      configPath: process.argv[2],
+      skippedBuild: process.argv[3] === '1',
+      reusedRunningServer: process.argv[4] === '1',
+      keptServer: process.argv[5] === '1',
+      skippedInject: process.argv[6] === '1',
+      checks: {
+        projectCount: Number(process.argv[7]),
+        hasShowDbnum: process.argv[8] === '1',
+        statusHasDatabaseConnected: process.argv[9] === '1',
+        statusHasSurrealdbConnected: process.argv[10] === '1',
+        injectionRoundTrip: process.argv[11] === '1',
+      },
+    };
+    process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+  " \
+    "$PORT" \
+    "$CONFIG_PATH" \
+    "$SKIP_BUILD" \
+    "$USED_EXISTING_SERVER" \
+    "$KEEP_SERVER" \
+    "$SKIP_INJECT" \
+    "$PROJECT_COUNT" \
+    "$HAS_SHOW_DBNUM" \
+    "$STATUS_HAS_DATABASE_CONNECTED" \
+    "$STATUS_HAS_SURREAL_CONNECTED" \
+    "$INJECTION_CHECK_PASSED"
 }
 
 need_command() {
@@ -122,6 +166,12 @@ while [[ $# -gt 0 ]]; do
     --skip-inject)
       SKIP_INJECT=1
       ;;
+    --reuse-running-server)
+      REUSE_RUNNING_SERVER=1
+      ;;
+    --json)
+      JSON_OUTPUT=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -146,7 +196,13 @@ fi
 [[ -d "$BACKEND_ROOT" ]] || fail "未找到后端仓库: $BACKEND_ROOT"
 
 if lsof -iTCP:"$PORT" -sTCP:LISTEN -n -P >/dev/null 2>&1; then
-  fail "端口 $PORT 已被占用，请先释放，或通过 WEB_SERVER_PORT 指定其他端口"
+  if [[ "$REUSE_RUNNING_SERVER" -eq 1 ]]; then
+    USED_EXISTING_SERVER=1
+    SKIP_BUILD=1
+    log "端口 $PORT 已有服务，复用现有 web_server"
+  else
+    fail "端口 $PORT 已被占用，请先释放，或通过 WEB_SERVER_PORT 指定其他端口；如需复用现有服务，请加 --reuse-running-server"
+  fi
 fi
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
@@ -162,13 +218,26 @@ else
   log "跳过编译，直接使用现有二进制"
 fi
 
-LOG_FILE="$(mktemp -t dashboard-workbench-verify.XXXXXX.log)"
-log "启动临时 web_server，端口: $PORT"
-(
-  cd "$BACKEND_ROOT"
-  WEB_SERVER_PORT="$PORT" ./target/debug/web_server --config "$CONFIG_PATH"
-) >"$LOG_FILE" 2>&1 &
-SERVER_PID=$!
+if [[ "$USED_EXISTING_SERVER" -eq 0 ]]; then
+  LOG_FILE="$(mktemp -t dashboard-workbench-verify.XXXXXX.log)"
+  log "启动临时 web_server，端口: $PORT"
+  if [[ "$KEEP_SERVER" -eq 1 ]]; then
+    (
+      cd "$BACKEND_ROOT"
+      nohup env WEB_SERVER_PORT="$PORT" ./target/debug/web_server --config "$CONFIG_PATH" \
+        >"$LOG_FILE" 2>&1 &
+      echo $! >"$LOG_FILE.pid"
+    )
+    SERVER_PID="$(cat "$LOG_FILE.pid")"
+    rm -f "$LOG_FILE.pid"
+  else
+    (
+      cd "$BACKEND_ROOT"
+      WEB_SERVER_PORT="$PORT" ./target/debug/web_server --config "$CONFIG_PATH"
+    ) >"$LOG_FILE" 2>&1 &
+    SERVER_PID=$!
+  fi
+fi
 
 wait_for_http "http://127.0.0.1:${PORT}/api/status" 90 \
   || fail "web_server 未在预期时间内启动成功"
@@ -179,6 +248,8 @@ assert_json "/api/projects" "$PROJECTS_JSON" "
   if (!Array.isArray(data.items) || data.items.length === 0) process.exit(1);
   if (!data.items.some((item) => Object.prototype.hasOwnProperty.call(item, 'show_dbnum'))) process.exit(1);
 "
+PROJECT_COUNT="$(printf '%s' "$PROJECTS_JSON" | node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(data.items.length));")"
+HAS_SHOW_DBNUM=1
 
 log "校验 /api/status"
 STATUS_JSON="$(curl -fsS "http://127.0.0.1:${PORT}/api/status")"
@@ -186,6 +257,8 @@ assert_json "/api/status" "$STATUS_JSON" "
   if (!Object.prototype.hasOwnProperty.call(data, 'database_connected')) process.exit(1);
   if (!Object.prototype.hasOwnProperty.call(data, 'surrealdb_connected')) process.exit(1);
 "
+STATUS_HAS_DATABASE_CONNECTED=1
+STATUS_HAS_SURREAL_CONNECTED=1
 
 log "校验 /api/dashboard/activities 空结果契约"
 ACTIVITIES_JSON="$(curl -fsS "http://127.0.0.1:${PORT}/api/dashboard/activities?limit=5")"
@@ -241,9 +314,14 @@ if [[ "$SKIP_INJECT" -eq 0 ]]; then
     if (!Array.isArray(data.data)) process.exit(1);
     if (data.data.some((entry) => entry.targetName === '${TASK_ID}')) process.exit(1);
   "
+  INJECTION_CHECK_PASSED=1
 fi
 
 log "dashboard workbench CLI 校验通过"
 if [[ "$KEEP_SERVER" -eq 1 ]]; then
-  log "临时服务已保留，PID: $SERVER_PID，日志: $LOG_FILE"
+  log "临时服务已保留，PID: ${SERVER_PID}，日志: ${LOG_FILE}"
+fi
+
+if [[ "$JSON_OUTPUT" -eq 1 ]]; then
+  emit_json_summary
 fi

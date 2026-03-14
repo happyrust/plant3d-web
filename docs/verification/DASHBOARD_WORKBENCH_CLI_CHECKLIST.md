@@ -17,6 +17,12 @@ npm run verify:dashboard
 bash scripts/verify-dashboard-workbench.sh --skip-build
 ```
 
+如需复用已经启动的 `web_server`：
+
+```bash
+WEB_SERVER_PORT=3100 bash scripts/verify-dashboard-workbench.sh --reuse-running-server --json
+```
+
 ## 1. 前端静态检查
 
 在 `plant3d-web` 根目录执行：
