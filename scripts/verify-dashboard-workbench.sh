@@ -14,6 +14,7 @@ KEEP_SERVER=0
 SKIP_INJECT=0
 REUSE_RUNNING_SERVER=0
 JSON_OUTPUT=0
+OUTPUT_PATH=""
 
 SERVER_PID=""
 LOG_FILE=""
@@ -38,6 +39,7 @@ usage() {
   --reuse-running-server
                    如果目标端口已有 web_server 在运行，则直接复用
   --json           输出机器可读 JSON 摘要
+  --output <path>  将 JSON 摘要写入指定文件
   -h, --help       显示帮助
 
 环境变量:
@@ -87,6 +89,16 @@ emit_json_summary() {
     "$STATUS_HAS_DATABASE_CONNECTED" \
     "$STATUS_HAS_SURREAL_CONNECTED" \
     "$INJECTION_CHECK_PASSED"
+}
+
+write_json_summary_file() {
+  local summary_json="$1"
+  local output_path="$2"
+  local output_dir
+
+  output_dir="$(dirname "$output_path")"
+  mkdir -p "$output_dir"
+  printf '%s\n' "$summary_json" >"$output_path"
 }
 
 need_command() {
@@ -171,6 +183,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --json)
       JSON_OUTPUT=1
+      ;;
+    --output)
+      [[ $# -ge 2 ]] || fail "--output 需要文件路径参数"
+      OUTPUT_PATH="$2"
+      shift
       ;;
     -h|--help)
       usage
@@ -323,5 +340,13 @@ if [[ "$KEEP_SERVER" -eq 1 ]]; then
 fi
 
 if [[ "$JSON_OUTPUT" -eq 1 ]]; then
-  emit_json_summary
+  SUMMARY_JSON="$(emit_json_summary)"
+  printf '%s\n' "$SUMMARY_JSON"
+else
+  SUMMARY_JSON="$(emit_json_summary)"
+fi
+
+if [[ -n "$OUTPUT_PATH" ]]; then
+  write_json_summary_file "$SUMMARY_JSON" "$OUTPUT_PATH"
+  log "JSON 摘要已写入: $OUTPUT_PATH"
 fi
