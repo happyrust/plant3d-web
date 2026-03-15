@@ -1,28 +1,21 @@
 {
   "featureId": "m2-standard-workflow-actions",
-  "reviewedAt": "2026-03-13T15:11:41.675488Z",
+  "reviewedAt": "2026-03-15T13:20:04.488956Z",
   "commitId": "eaa9f337e5da499b9acc0104c198bec783738e17",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "The workflow dialog refactor mostly aligns the forward path with the standard submit flow, but the new return dialog is not actually honored by the reviewer workbench. ReviewPanel still hard-codes every return to the designer node (`sj`), so jd/sh/pz users cannot execute the dialog's selected target-node path and the shipped UI/behavior contract diverges.",
-    "issues": [
-      {
-        "file": "src/components/review/ReviewPanel.vue",
-        "line": 346,
-        "severity": "blocking",
-        "description": "`handleReturnToNode()` always calls `userStore.returnTaskToNode(currentTask.value.id, 'sj', ...)`, and the dialog confirm handler at line 829 discards the emitted `_targetNode`. That means the new standard return dialog never returns to the user-selected previous node, despite `WorkflowReturnDialog` advertising selectable prior nodes and the feature description promising standard dialog semantics without hidden legacy behavior. From `sh` or `pz`, the UI suggests the reviewer can step back one stage, but the code always jumps all the way to design."
-      }
-    ]
+    "summary": "The feature correctly moves the reviewer workbench onto the shared submit/return dialogs, keeps currentNode-driven action gating explicit, refreshes the selected task plus workflow history after mutations, and closes the previously reported return-target bug by passing the dialog-selected node through to `returnTaskToNode`.",
+    "issues": []
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The `review-entry-worker` skill requires live reviewer browser smoke validation in step 9, but this worker still returned success after skipping it because port `3101` might belong to another checkout. The skill should either define an explicit fallback/return-to-orchestrator rule for this mission constraint or the mission docs should say automated-only completion is acceptable in that case.",
-      "evidence": ".factory/skills/review-entry-worker/SKILL.md step 9 requires opening `http://127.0.0.1:3101/` and validating a task/action path, while the handoff for session `87cd126c-0ca3-403d-9f9a-0cc05c58a550` records `followedProcedure: false` and says browser smoke was skipped due to unrelated worktree changes / possible shared 3101 ownership. `AGENTS.md` also lists this as a return-to-orchestrator condition."
+      "observation": "The worker skipped the skill's required live-browser validation step even though the feature changes the reviewer dialog path directly, so the mission shared state still lacks manual evidence for the standard submit/return flow on `3101`.",
+      "evidence": "Transcript skeleton entry 5 in `/Users/dongpengcheng/.factory/missions/4d7bd249-b8ec-4d5d-9033-77ef2ded8396/worker-transcripts.jsonl` records `followedProcedure: false` with a deviation for step 9; the skill requires manual verification at `/Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2/.factory/skills/review-entry-worker/SKILL.md:57`, and shared user-testing guidance also expects evidence for the standard submit/return dialog path at `/Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2/.factory/library/user-testing.md:45`."
     }
   ],
   "addressesFailureFrom": null,
-  "summary": "Reviewed commit `eaa9f337e5da499b9acc0104c198bec783738e17`, the worker handoff, transcript skeleton, and shared mission docs/skill guidance. Result: fail, because the new reviewer return dialog does not actually control the return target in `ReviewPanel`, so the shipped behavior still relies on an implicit always-return-to-design path."
+  "summary": "Reviewed handoff `2026-03-13T14-59-48-238Z__m2-standard-workflow-actions__87cd126c-0ca3-403d-9f9a-0cc05c58a550.json`, transcript skeleton, skill guidance, and commit `eaa9f337e5da499b9acc0104c198bec783738e17`. The code satisfies M2-004/M2-005/M2-006/M2-007/INT-005/INT-007 with no blocking or non-blocking code defects found in the reviewed diff; the only follow-up is a shared-state observation that manual browser evidence for the new workflow dialog path was skipped by the worker and remains to be captured elsewhere in the mission."
 }

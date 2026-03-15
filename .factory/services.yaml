@@ -1,11 +1,13 @@
 commands:
-  frontend_install: npm install --prefix /Volumes/DPC/work/plant-code/plant3d-web
-  frontend_test: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web test
-  frontend_typecheck: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run type-check
-  frontend_lint: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run lint
-  backend_typecheck: cargo check --manifest-path /Volumes/DPC/work/plant-code/plant-model-gen/Cargo.toml --tests --lib --bins --features web_server
-  backend_test: cargo test --manifest-path /Volumes/DPC/work/plant-code/plant-model-gen/Cargo.toml --features web_server web_server::sqlite_spatial_api::tests:: -- --nocapture
-  e2e: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run test:e2e
+  install: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 install
+  typecheck: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 run type-check
+  lint_m1: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx eslint src/components/review/InitiateReviewPanel.vue src/components/review/FileUploadSection.vue src/components/review/AssociatedFilesList.vue src/composables/useUserStore.ts src/api/reviewApi.ts
+  lint_m2: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx eslint src/components/review/ReviewerTaskList.vue src/components/review/WorkflowSubmitDialog.vue src/components/review/WorkflowReturnDialog.vue src/components/review/ReviewPanel.vue src/composables/useReviewStore.ts src/composables/useUserStore.ts src/api/reviewApi.ts
+  test_m1: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx vitest run src/api/reviewApi.test.ts src/composables/useUserStore.createReviewTask.test.ts src/components/review/reviewAttachmentFlow.test.ts
+  test_m2: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx vitest run src/components/review/reviewerTaskListActions.test.ts src/components/review/reviewPanelActions.test.ts src/api/reviewApi.test.ts src/composables/useReviewStore.websocket.test.ts
+  browser_smoke: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && node validation-test.mjs
+  browser_navigation_smoke: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && node validation-navigation-test.mjs
+  e2e_list: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx playwright test --list
 
 services:
   backend:
@@ -16,7 +18,7 @@ services:
     depends_on: []
 
   frontend:
-    start: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run dev -- --host 127.0.0.1 --port 3101 --strictPort
+    start: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 run dev -- --host 127.0.0.1 --port 3101 --strictPort
     stop: lsof -ti :3101 | xargs kill
     healthcheck: curl -sf http://127.0.0.1:3101
     port: 3101

@@ -6,7 +6,7 @@ import { getSubmitActionLabel } from './reviewPanelActions';
 import type { ReviewTask } from '@/types/auth';
 
 import { normalizeReviewTask } from '@/api/reviewApi';
-import { isApproverRole, isCheckerRole } from '@/composables/useUserStore';
+import { isApproverRole, isCheckerRole, resolveEffectiveUserId } from '@/composables/useUserStore';
 
 function createLocalStorageMock() {
   const store = new Map<string, string>();
@@ -60,18 +60,20 @@ function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
 }
 
 function filterPendingReviewTasks(tasks: ReviewTask[], userId: string, role: 'checker' | 'approver') {
+  const effectiveUserId = resolveEffectiveUserId({ id: userId });
+
   return tasks.filter((task) => {
     const node = task.currentNode ?? 'sj';
-    const checkerId = task.checkerId || task.reviewerId;
-    const approverId = task.approverId;
+    const checkerId = resolveEffectiveUserId({ id: task.checkerId || task.reviewerId });
+    const approverId = task.approverId ? resolveEffectiveUserId({ id: task.approverId }) : null;
 
     if (role === 'checker') {
-      return checkerId === userId
+      return checkerId === effectiveUserId
         && node === 'jd'
         && (task.status === 'submitted' || task.status === 'in_review');
     }
 
-    return approverId === userId
+    return approverId === effectiveUserId
       && (node === 'sh' || node === 'pz')
       && (task.status === 'submitted' || task.status === 'in_review');
   });
@@ -124,6 +126,7 @@ describe('reviewerTaskListActions', () => {
 
     expect(visible.map((task) => task.id)).toEqual(['legacy-checker', 'checker-in-review']);
     expect(isCheckerRole('proofreader' as never)).toBe(true);
+    expect(isCheckerRole('reviewer' as never)).toBe(true);
   });
 
   it('approver inbox 仅显示 sh/pz 节点且状态仍处于 reviewer 生命周期内的任务', () => {
@@ -138,7 +141,19 @@ describe('reviewerTaskListActions', () => {
     const visible = filterPendingReviewTasks(tasks, 'approver-1', 'approver');
 
     expect(visible.map((task) => task.id)).toEqual(['approver-sh', 'approver-pz']);
-    expect(isApproverRole('reviewer' as never)).toBe(true);
+    expect(isApproverRole('reviewer' as never)).toBe(false);
+  });
+
+  it('aliased reviewer inbox matches backend jd-stage checker tasks after local switching', () => {
+    const tasks = [
+      createTask({ id: 'backend-checker', checkerId: 'user-002', reviewerId: 'user-002', currentNode: 'jd', status: 'submitted' }),
+      createTask({ id: 'wrong-node', checkerId: 'user-002', reviewerId: 'user-002', currentNode: 'sh', status: 'submitted' }),
+      createTask({ id: 'other-checker', checkerId: 'user-003', reviewerId: 'user-003', currentNode: 'jd', status: 'submitted' }),
+    ];
+
+    const visible = filterPendingReviewTasks(tasks, 'reviewer_001', 'checker');
+
+    expect(visible.map((task) => task.id)).toEqual(['backend-checker']);
   });
 
   it('legacy reviewer payload normalizes into explicit checker semantics', () => {

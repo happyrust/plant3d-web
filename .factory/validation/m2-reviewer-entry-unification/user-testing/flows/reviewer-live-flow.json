@@ -1,0 +1,356 @@
+{
+  "groupId": "reviewer-live-flow",
+  "testedAt": "2026-03-15T13:32:07.323942+00:00",
+  "isolation": {
+    "surface": "web-ui-reviewer-surface",
+    "appUrl": "http://127.0.0.1:3101/",
+    "backendUrl": "http://127.0.0.1:3100/",
+    "reviewerIdentity": {
+      "backendUserId": "user-002",
+      "localUser": "reviewer_001",
+      "displayName": "李审核员"
+    },
+    "primarySeedTaskCandidate": "task-af46d596-d792-40f8-976d-bc052fb3822b",
+    "browserSession": "320dac05f925__u1"
+  },
+  "toolsUsed": [
+    "agent-browser"
+  ],
+  "assertions": [
+    {
+      "id": "M2-001",
+      "title": "Reviewer inbox filtering matches role and node semantics",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Enter app through project card and switch top-right user selector to reviewer user-002",
+          "expected": "Reviewer identity is active before judging inbox state",
+          "observed": "Header switched to U user-002 after selecting 李审核员."
+        },
+        {
+          "action": "Open 校审 -> 待审核 inbox",
+          "expected": "Inbox shows only reviewer-relevant tasks for the active reviewer/node",
+          "observed": "Inbox summary showed '校核人员: user-002 | 共 1 个任务' with a single checker task '测试提资单-1767928364' in 待审核中 state."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-identity-annotated.png",
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-inbox-annotated.png"
+        ],
+        "consoleErrors": "Console warning: Failed to load frontend version (invalid JSON response); app log shows user switched to 李审核员. No inbox-filter-specific JS error observed.",
+        "network": "No API requests captured by agent-browser during inbox load. UI text confirms reviewer queue membership."
+      },
+      "issues": null
+    },
+    {
+      "id": "M2-002",
+      "title": "Legacy reviewer compatibility remains explicit",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Inspect reviewer inbox and available task metadata",
+          "expected": "A legacy task using reviewerId compatibility can be identified and confirmed visible",
+          "observed": "Live UI exposed only one visible task and did not surface raw assignment fields such as checkerId vs reviewerId."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-inbox-annotated.png"
+        ],
+        "consoleErrors": "Same frontend-version warning as above.",
+        "network": "No captured request payload exposing assignment field mapping."
+      },
+      "issues": "Blocked because the real reviewer surface does not expose whether visibility came from checkerId or legacy reviewerId normalization, and probing backend payloads would go beyond the assigned browser-only observation path."
+    },
+    {
+      "id": "M2-003",
+      "title": "Reviewer task selection hydrates the workbench context",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "From inbox click 处理校核 on the visible reviewer task",
+          "expected": "Selected task becomes current task and workbench opens with hydrated context",
+          "observed": "Workbench opened showing 当前审核任务 测试提资单-1767928364."
+        },
+        {
+          "action": "Inspect task context in workbench",
+          "expected": "Title, requester, assignees, component count and node are visible",
+          "observed": "Workbench rendered 模型 test-model, 发起人 系统用户, 校核 审核人, 构件数 1, 当前节点 校核."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-workbench-annotated.png"
+        ],
+        "consoleErrors": "Console remained limited to app logs plus frontend-version warning.",
+        "network": "GET http://localhost:3100/api/review/records/by-task/task-af46d596-d792-40f8-976d-bc052fb3822b; GET http://localhost:3100/api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/history"
+      },
+      "issues": null
+    },
+    {
+      "id": "M2-004",
+      "title": "Primary forward action uses the standard submit path",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open current reviewer task in workbench and click 提交到审核",
+          "expected": "Standard submit dialog opens with next-node labeling",
+          "observed": "Dialog title rendered '提交到下一节点', current node 校核 and target node 审核 with optional submit note field."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/forward-dialog-annotated.png"
+        ],
+        "consoleErrors": "No submit-dialog-specific browser errors observed.",
+        "network": "No submit request was sent because confirmation was intentionally not executed to avoid mutating shared state."
+      },
+      "issues": null
+    },
+    {
+      "id": "M2-005",
+      "title": "Return flow is explicit and reason-gated",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "In workbench click 驳回到设计",
+          "expected": "Return dialog opens with explicit target-node selection and required reason",
+          "observed": "Dialog rendered target node 编制 and a required 驳回原因 field marked as mandatory."
+        },
+        {
+          "action": "Attempt to confirm return with empty reason",
+          "expected": "Confirmation stays blocked until a reason is entered",
+          "observed": "确认驳回 button remained disabled when reason textbox was empty."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/return-dialog-annotated.png",
+          "m2-reviewer-entry-unification/reviewer-live-flow/return-validation-annotated.png"
+        ],
+        "consoleErrors": "No return-dialog-specific JS error observed.",
+        "network": "No return request was sent because the confirm button stayed disabled without a reason."
+      },
+      "issues": null
+    },
+    {
+      "id": "M2-006",
+      "title": "Action availability is gated by the current node",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect hydrated workbench controls for current node 校核",
+          "expected": "Submit and return actions are available for this recognized reviewer node",
+          "observed": "Workbench showed both 提交到审核 and 驳回到设计 actions while task context displayed 当前节点: 校核."
+        },
+        {
+          "action": "Inspect return dialog validation",
+          "expected": "Conflicting/invalid action execution is blocked",
+          "observed": "确认驳回 remained disabled until required reason input is provided."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-workbench-annotated.png",
+          "m2-reviewer-entry-unification/reviewer-live-flow/return-validation-annotated.png"
+        ],
+        "consoleErrors": "No action-gating-specific browser errors observed.",
+        "network": "No workflow mutation request was issued; UI gating was confirmed visually."
+      },
+      "issues": null
+    },
+    {
+      "id": "M2-007",
+      "title": "Current task refreshes after workflow mutation",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Assess whether safe workflow mutation can be executed in shared live environment",
+          "expected": "A submit or return mutation can be triggered and post-action refresh observed",
+          "observed": "Task is shared seeded data and parent instructions explicitly warned against risky shared-state mutation."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-workbench-annotated.png"
+        ],
+        "consoleErrors": "No post-mutation console evidence because mutation was not executed.",
+        "network": "History/data GET requests were seen for initial hydration only."
+      },
+      "issues": "Blocked to avoid corrupting shared reviewer task state; could not safely confirm post-submit/return refresh in the shared live environment."
+    },
+    {
+      "id": "M2-008",
+      "title": "Workflow history remains visible after hydration",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Hydrate the reviewer workbench for the visible task",
+          "expected": "Workflow history should load and render normalized recorded steps",
+          "observed": "Workbench section labeled 确认历史 showed '暂无确认记录.' instead of visible workflow history entries."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-workbench-annotated.png"
+        ],
+        "consoleErrors": "No browser error explained the missing history; app only showed the existing frontend-version warning.",
+        "network": "GET http://localhost:3100/api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/history was issued, but the UI still rendered no visible history entries."
+      },
+      "issues": "Hydrated reviewer workbench did not display any continuous workflow history for the task."
+    },
+    {
+      "id": "INT-005",
+      "title": "Workflow history is continuous across designer and reviewer surfaces",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Inspect reviewer-side hydrated task for cross-surface history continuity",
+          "expected": "Reviewer surface should show existing workflow record continuing from earlier steps",
+          "observed": "Reviewer workbench displayed no visible history records, preventing continuity verification across surfaces."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-workbench-annotated.png"
+        ],
+        "consoleErrors": "No specific browser error beyond frontend-version warning.",
+        "network": "History endpoint GET was observed, but no visible workflow timeline rendered in the UI."
+      },
+      "issues": "Cross-surface history continuity failed from the reviewer surface because no workflow history was shown after hydration."
+    },
+    {
+      "id": "INT-006",
+      "title": "Embedded reviewer landing honors lineage handoff",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Check current entry path and URL context",
+          "expected": "Reviewer-targeted embedded landing context should be present and verifiable",
+          "observed": "Live test started from generic app root and project card entry; no reviewer-targeted embedded landing URL or handoff token was provided."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/entry-annotated.png",
+          "m2-reviewer-entry-unification/reviewer-live-flow/project-opened-annotated.png"
+        ],
+        "consoleErrors": "No embedded-entry diagnostics available.",
+        "network": "No reviewer-targeted embedded landing request was exercised."
+      },
+      "issues": "Blocked because the assigned isolation context provided only the generic app root, not a reviewer-targeted embedded landing link needed to validate lineage handoff entry behavior."
+    },
+    {
+      "id": "INT-007",
+      "title": "Reviewer actions propagate back to designer tracking surfaces",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Determine whether a reviewer workflow mutation can be safely executed and then checked on designer tracking",
+          "expected": "Mutation result should be observable back on designer tracking for same task",
+          "observed": "Shared live environment and explicit task-safety warning prevented sending submit/return mutations."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-workbench-annotated.png"
+        ],
+        "consoleErrors": "No propagation evidence because mutation was not executed.",
+        "network": "No submit/return network call was sent."
+      },
+      "issues": "Blocked because confirming designer-surface propagation requires mutating shared workflow state, which was unsafe under the task constraints."
+    },
+    {
+      "id": "INT-008",
+      "title": "Smoke path from app entry to active reviewer task is unbroken",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open app root and enter workspace through a project card",
+          "expected": "Main UI loads through the documented project-card entry path",
+          "observed": "Root page listed projects and AvevaMarineSample opened the main workspace."
+        },
+        {
+          "action": "Switch to reviewer identity and open reviewer inbox",
+          "expected": "Reviewer can discover an active handoff task",
+          "observed": "Reviewer inbox showed a single visible task for user-002."
+        },
+        {
+          "action": "Open the task in reviewer workbench and inspect available workflow actions",
+          "expected": "Workbench opens without losing task context and exposes workflow action path",
+          "observed": "Workbench opened with hydrated task context and both forward/return dialog entry points."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m2-reviewer-entry-unification/reviewer-live-flow/entry-annotated.png",
+          "m2-reviewer-entry-unification/reviewer-live-flow/project-opened-annotated.png",
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-inbox-annotated.png",
+          "m2-reviewer-entry-unification/reviewer-live-flow/reviewer-workbench-annotated.png"
+        ],
+        "consoleErrors": "App remained usable despite frontend-version warning and WebGL2 viewer failure in this environment.",
+        "network": "Workbench hydration triggered review-record and history GET requests for task-af46d596-d792-40f8-976d-bc052fb3822b."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The 3D viewer fails in this environment with '需要 WebGL2（canvas.getContext(\"webgl2\") 失败）', so validation had to rely on panel/task UI rather than rendered model context.",
+      "resolved": true,
+      "resolution": "Continued validating reviewer inbox/workbench dialogs and task metadata from the surrounding UI.",
+      "affectedAssertions": [
+        "M2-003",
+        "M2-006",
+        "INT-008"
+      ]
+    },
+    {
+      "description": "Browser console consistently warned 'Failed to load frontend version' because a JSON fetch returned HTML.",
+      "resolved": true,
+      "resolution": "Noted as ambient console noise and continued when it did not block the reviewer path.",
+      "affectedAssertions": [
+        "M2-001",
+        "M2-003",
+        "M2-008",
+        "INT-005",
+        "INT-008"
+      ]
+    },
+    {
+      "description": "The seeded task id task-af46d596-d792-40f8-976d-bc052fb3822b was not discoverable by inbox search even though one reviewer-visible task existed.",
+      "resolved": true,
+      "resolution": "Validated the visible live task instead and recorded the mismatch as an observation.",
+      "affectedAssertions": [
+        "M2-001",
+        "M2-002"
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Shared live environment made it unsafe to confirm post-mutation assertions by actually submitting or returning the reviewer task.",
+      "affectedAssertions": [
+        "M2-007",
+        "INT-007"
+      ],
+      "quickFixAttempted": "Opened the standard submit/return dialogs and validated non-mutating UI gating only; intentionally did not confirm either action."
+    },
+    {
+      "description": "No reviewer-targeted embedded landing URL/context was provided, so embedded handoff entry could not be exercised.",
+      "affectedAssertions": [
+        "INT-006"
+      ],
+      "quickFixAttempted": "Checked the live URL and app entry path; only generic root entry through project card was available."
+    },
+    {
+      "description": "The reviewer UI does not expose raw assignment-field lineage, so legacy reviewerId compatibility could not be distinguished from normal checkerId mapping by browser observation alone.",
+      "affectedAssertions": [
+        "M2-002"
+      ],
+      "quickFixAttempted": "Inspected visible task metadata and search behavior, but no field-level assignment provenance was surfaced."
+    }
+  ],
+  "summary": "Tested 12 assigned assertions through the live reviewer UI: 6 passed, 2 failed, and 4 were blocked. Failures were concentrated around missing visible workflow history after task hydration; blocked items required unsafe shared-state mutation or unavailable embedded entry context."
+}
