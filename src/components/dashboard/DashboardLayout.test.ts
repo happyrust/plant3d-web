@@ -1,5 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
+
+const selectProjectMock = vi.fn();
 
 vi.mock('./DashboardOverview.vue', () => ({
   default: defineComponent({
@@ -55,6 +57,12 @@ vi.mock('@/composables/useUserStore', () => ({
   }),
 }));
 
+vi.mock('@/composables/useModelProjects', () => ({
+  useModelProjects: () => ({
+    selectProject: selectProjectMock,
+  }),
+}));
+
 import DashboardLayout from './DashboardLayout.vue';
 
 function mountDashboardLayout(onSelect = vi.fn()) {
@@ -76,6 +84,10 @@ function mountDashboardLayout(onSelect = vi.fn()) {
 
 afterEach(() => {
   document.body.innerHTML = '';
+});
+
+beforeEach(() => {
+  selectProjectMock.mockReset();
 });
 
 describe('DashboardLayout', () => {
@@ -142,9 +154,8 @@ describe('DashboardLayout', () => {
     expect(host.querySelector('[data-testid="dashboard-reviews-panel"]')).toBeTruthy();
   });
 
-  it('handles child content navigation and forwards select events from page slots', async () => {
-    const onSelect = vi.fn();
-    const { host } = mountDashboardLayout(onSelect);
+  it('handles child content navigation and selects projects from page content', async () => {
+    const { host } = mountDashboardLayout();
 
     (host.querySelector('[data-testid="overview-navigate-projects"]') as HTMLButtonElement).click();
     await nextTick();
@@ -158,7 +169,9 @@ describe('DashboardLayout', () => {
     (host.querySelector('[data-testid="overview-select-project"]') as HTMLButtonElement).click();
     await nextTick();
 
-    expect(onSelect).toHaveBeenCalledWith('project-from-overview');
+    expect(selectProjectMock).toHaveBeenCalledWith('project-from-overview');
+    expect(host.querySelector('header h1')?.textContent).toBe('模型工程');
+    expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
 
     (host.querySelectorAll('aside button')[1] as HTMLButtonElement).click();
     await nextTick();
@@ -166,6 +179,6 @@ describe('DashboardLayout', () => {
     (host.querySelector('[data-testid="project-list-select"]') as HTMLButtonElement).click();
     await nextTick();
 
-    expect(onSelect).toHaveBeenCalledWith('project-from-list');
+    expect(selectProjectMock).toHaveBeenLastCalledWith('project-from-list');
   });
 });

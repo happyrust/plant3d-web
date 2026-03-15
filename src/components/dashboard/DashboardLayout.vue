@@ -42,8 +42,7 @@
             <span class="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-blue-500" />
           </button>
 
-          <div
-            class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white"
+          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white"
             :aria-label="currentUserName">
             {{ userInitial }}
           </div>
@@ -53,8 +52,8 @@
       <main class="min-h-0 flex-1 overflow-y-auto">
         <DashboardOverview v-if="activeMenu === 'dashboard'"
           @navigate="activeMenu = $event"
-          @select="$emit('select', $event)" />
-        <ProjectCardList v-else-if="activeMenu === 'projects'" @select="$emit('select', $event)" />
+          @select="handleProjectSelect" />
+        <ProjectCardList v-else-if="activeMenu === 'projects'" @select="handleProjectSelect" />
         <DashboardReviewsPanel v-else />
       </main>
 
@@ -87,6 +86,7 @@ import DashboardOverview from './DashboardOverview.vue';
 
 import DashboardReviewsPanel from '@/components/dashboard/DashboardReviewsPanel.vue';
 import ProjectCardList from '@/components/model-project/ProjectCardList.vue';
+import { useModelProjects } from '@/composables/useModelProjects';
 import { useUserStore } from '@/composables/useUserStore';
 
 defineEmits<{
@@ -96,6 +96,7 @@ defineEmits<{
 type MenuId = 'dashboard' | 'projects' | 'reviews';
 
 const activeMenu = ref<MenuId>('dashboard');
+const { selectProject } = useModelProjects();
 const userStore = useUserStore();
 
 const navItems: {
@@ -131,4 +132,9 @@ const navItems: {
 const activePage = computed(() => navItems.find((item) => item.id === activeMenu.value) ?? navItems[0]);
 const currentUserName = computed(() => userStore.currentUser.value?.name ?? '协作用户');
 const userInitial = computed(() => currentUserName.value.charAt(0).toUpperCase());
+
+function handleProjectSelect(projectId: string) {
+  selectProject(projectId);
+  activeMenu.value = 'projects';
+}
 </script>
