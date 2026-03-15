@@ -1,0 +1,140 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApp, h, nextTick, ref } from 'vue';
+
+import Dialog from './Dialog.vue';
+
+function mount(component: ReturnType<typeof createApp>) {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  component.mount(host);
+  return host;
+}
+
+afterEach(() => {
+  document.body.innerHTML = '';
+  document.body.style.overflow = '';
+});
+
+describe('Dialog', () => {
+  it('renders overlay, title and slots when open', async () => {
+    const host = mount(
+      createApp({
+        render: () =>
+          h(Dialog, { open: true, title: 'Review task' }, {
+            default: () => h('p', { 'data-testid': 'body' }, 'Dialog content'),
+            footer: () => h('button', { 'data-testid': 'footer' }, 'Confirm'),
+          }),
+      })
+    );
+
+    await nextTick();
+
+    const overlay = document.body.querySelector('[data-testid="dialog-overlay"]');
+    const panel = document.body.querySelector('[role="dialog"]');
+
+    expect(host.innerHTML).toContain('teleport');
+    expect(overlay?.className).toContain('bg-black/50');
+    expect(panel?.className).toContain('rounded-[12px]');
+    expect(panel?.textContent).toContain('Review task');
+    expect(document.body.querySelector('[data-testid="body"]')?.textContent).toBe('Dialog content');
+    expect(document.body.querySelector('[data-testid="footer"]')?.textContent).toBe('Confirm');
+  });
+
+  it('supports v-model:open updates from overlay and close button', async () => {
+    const open = ref(true);
+    const host = mount(
+      createApp({
+        setup() {
+          return { open };
+        },
+        render() {
+          return h(Dialog, {
+            open: this.open,
+            title: 'Closable',
+            'onUpdate:open': (value: boolean) => {
+              this.open = value;
+            },
+          }, {
+            default: () => 'Closable content',
+          });
+        },
+      })
+    );
+
+    await nextTick();
+
+    const overlay = document.body.querySelector('[data-testid="dialog-overlay"]') as HTMLDivElement | null;
+    overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    expect(open.value).toBe(false);
+
+    open.value = true;
+    await nextTick();
+
+    const closeButton = document.body.querySelector('[data-testid="dialog-close"]') as HTMLButtonElement | null;
+    closeButton?.click();
+    await nextTick();
+
+    expect(open.value).toBe(false);
+    expect(host.innerHTML).toContain('teleport');
+  });
+
+  it('does not close from overlay when persistent', async () => {
+    const onUpdate = vi.fn();
+
+    mount(
+      createApp({
+        render: () =>
+          h(Dialog, {
+            open: true,
+            persistent: true,
+            'onUpdate:open': onUpdate,
+          }, {
+            default: () => 'Persistent content',
+          }),
+      })
+    );
+
+    const overlay = document.body.querySelector('[data-testid="dialog-overlay"]') as HTMLDivElement | null;
+    overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
+  });
+
+  it('locks and restores body scroll while open state changes', async () => {
+    const open = ref(false);
+    document.body.style.overflow = 'auto';
+
+    mount(
+      createApp({
+        setup() {
+          return { open };
+        },
+        render() {
+          return h(Dialog, {
+            open: this.open,
+            'onUpdate:open': (value: boolean) => {
+              this.open = value;
+            },
+          }, {
+            default: () => 'Scroll lock content',
+          });
+        },
+      })
+    );
+
+    await nextTick();
+    expect(document.body.style.overflow).toBe('auto');
+
+    open.value = true;
+    await nextTick();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    open.value = false;
+    await nextTick();
+    expect(document.body.style.overflow).toBe('auto');
+  });
+});
