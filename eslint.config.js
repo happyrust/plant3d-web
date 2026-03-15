@@ -11,6 +11,7 @@ const ignores = [
   'dist',
   'doc/**/*',
   'docs/**/*',
+  '.worktrees/**',
   'eslint.config.js',
   'public',
   'node_modules/**/*',
