@@ -109,6 +109,7 @@ const isFilteringByTask = ref(false);
 const canSubmitToNextNode = computed(() => canSubmitAtCurrentNode(currentTask.value?.currentNode));
 const canReturnToPrevNode = computed(() => canReturnAtCurrentNode(currentTask.value?.currentNode));
 const submitActionLabel = computed(() => getSubmitActionLabel(currentTask.value?.currentNode));
+const returnTargetNode = ref<WorkflowNode>('sj');
 // ============ 同步（后端） ============
 
 const syncExporting = ref(false);
@@ -343,11 +344,12 @@ async function handleReturnToNode() {
   workflowActionLoading.value = true;
   workflowError.value = null;
   try {
-    await userStore.returnTaskToNode(currentTask.value.id, 'sj', returnReason.value.trim());
+    await userStore.returnTaskToNode(currentTask.value.id, returnTargetNode.value, returnReason.value.trim());
     await refreshCurrentTask(currentTask.value.id);
     await loadWorkflow(currentTask.value.id);
     showReturnDialog.value = false;
     returnReason.value = '';
+    returnTargetNode.value = 'sj';
   } catch (e) {
     workflowError.value = e instanceof Error ? e.message : '驳回失败';
   } finally {
@@ -366,6 +368,7 @@ function toggleReturnDialog() {
   if (workflowLoading.value || workflowActionLoading.value || !canReturnToPrevNode.value) return;
   showSubmitDialog.value = false;
   submitComment.value = '';
+  returnTargetNode.value = 'sj';
   showReturnDialog.value = !showReturnDialog.value;
 }
 
@@ -377,6 +380,7 @@ function closeSubmitDialog() {
 function closeReturnDialog() {
   showReturnDialog.value = false;
   returnReason.value = '';
+  returnTargetNode.value = 'sj';
 }
 
 function handleClearConfirmedRecords() {
@@ -442,6 +446,7 @@ watch(currentTask, (newTask) => {
     submitComment.value = '';
     showReturnDialog.value = false;
     returnReason.value = '';
+    returnTargetNode.value = 'sj';
     loadWorkflow(newTask.id);
   } else {
     workflow.value = null;
@@ -450,6 +455,7 @@ watch(currentTask, (newTask) => {
     submitComment.value = '';
     showReturnDialog.value = false;
     returnReason.value = '';
+    returnTargetNode.value = 'sj';
   }
 });
 
@@ -826,15 +832,52 @@ onUnmounted(() => {
       :current-node="currentNode"
       :loading="workflowActionLoading"
       @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"
-      @confirm="(_targetNode, reason) => { returnReason = reason; void handleReturnToNode(); }" />
+      @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
 
-    <!-- 确认历史 -->
+    <!-- 工作流历史 -->
     <div class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">确认历史</div>
 
-      <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"
+      <div v-if="workflowLoading" class="mt-2 text-sm text-muted-foreground">
+        正在加载工作流...
+      </div>
+
+      <div v-else-if="workflowError" class="mt-2 text-sm text-red-600">
+        {{ workflowError }}
+      </div>
+
+      <div v-else-if="!workflow || workflow.history.length === 0"
         class="mt-2 text-sm text-muted-foreground">
         暂无确认记录。
+      </div>
+
+      <div v-else class="mt-2 flex max-h-64 flex-col gap-2 overflow-y-auto">
+        <div v-for="(step, idx) in workflow.history"
+          :key="`${step.operatorId}-${step.timestamp}-${idx}`"
+          class="rounded-md border border-border p-2 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-medium text-foreground">
+              {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
+            </span>
+            <span class="text-muted-foreground">{{ formatDate(step.timestamp) }}</span>
+          </div>
+          <div class="mt-1 text-muted-foreground">
+            操作人: {{ step.operatorName || step.operatorId || '-' }}
+          </div>
+          <div v-if="step.comment" class="mt-1 text-muted-foreground">
+            说明: {{ step.comment }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 已确认数据 -->
+    <div class="rounded-md border border-border bg-background p-3">
+      <div class="text-sm font-semibold">已确认数据明细</div>
+
+      <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"
+        class="mt-2 text-sm text-muted-foreground">
+        暂无已确认数据。
       </div>
 
       <div v-else class="mt-2 flex max-h-64 flex-col gap-2 overflow-y-auto">
