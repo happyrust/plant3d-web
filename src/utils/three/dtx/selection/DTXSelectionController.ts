@@ -12,7 +12,7 @@
  * - 不依赖 DTXPrepackLoader；如需 refno 级定位，由外部注入 resolver。
  */
 
-import { Box3, Camera, Color, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from 'three';
+import { Box3, Camera, Color, Frustum, Matrix4, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from 'three';
 
 import { DTXLayer } from '../DTXLayer';
 import { DTXOutlineHelper, type OutlineStyle } from '../outline/DTXOutlineHelper';
@@ -294,8 +294,7 @@ export class DTXSelectionController extends EventEmitter {
     return selected;
   }
 
-  private _createSelectionFrustum(rect: { startX: number; startY: number; endX: number; endY: number }): import('three').Frustum {
-    const { Frustum, Matrix4, Vector3 } = require('three');
+  private _createSelectionFrustum(rect: { startX: number; startY: number; endX: number; endY: number }): Frustum {
     const frustum = new Frustum();
     
     const canvas = this._container;
