@@ -31,7 +31,7 @@ const cardClass = computed(() =>
 
 const headerClass = computed(() =>
   cn(
-    'min-w-0 border-b border-[#F3F4F6] px-5 py-4',
+    'min-w-0 border-b border-[#F3F4F6] p-5',
     props.headerClass
   )
 );

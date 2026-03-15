@@ -34,6 +34,9 @@ describe('Card', () => {
 
     expect(header).toBeTruthy();
     expect(header?.textContent).toContain('Pipeline Summary');
+    expect(header?.className).toContain('p-5');
+    expect(header?.className).not.toContain('px-5');
+    expect(header?.className).not.toContain('py-4');
   });
 
   it('supports a custom header slot', () => {
