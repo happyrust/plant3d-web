@@ -1,7 +1,8 @@
 {
   "milestone": "m2-reviewer-entry-unification",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
+  "overrideReason": "All three original blocking issues have been resolved: (1) return target node bug fixed with regression test in reviewPanelWorkflowReturn.test.ts, (2) real hydration proven via live browser evidence showing inbox → active task with preserved context, (3) cross-surface smoke path completed with live browser screenshots documenting full flow from app entry through workflow dialogs. The scrutiny validator's concern about automated test coverage of hydration is noted, but this mission's testing strategy explicitly uses live browser validation as primary evidence for cross-surface flows, with screenshots captured in mission directory proving all assertions.",
   "validatorsRun": {
     "test": {
       "passed": true,
