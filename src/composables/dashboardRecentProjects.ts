@@ -26,13 +26,20 @@ function readStorage(): Storage | null {
   return localStorage;
 }
 
+function hasStorageMethod<K extends keyof Pick<Storage, 'getItem' | 'setItem'>>(
+  storage: Storage | null,
+  method: K,
+): storage is Storage {
+  return typeof storage?.[method] === 'function';
+}
+
 function getProjectIdentity(project: Pick<RecentProjectBase, 'id' | 'path'>): string {
   return `${project.id}::${project.path}`;
 }
 
 export function readRecentProjects(): RecentProjectRecord[] {
   const storage = readStorage();
-  if (!storage) return [];
+  if (!hasStorageMethod(storage, 'getItem')) return [];
 
   try {
     const raw = storage.getItem(DASHBOARD_RECENT_PROJECTS_KEY);
@@ -51,7 +58,7 @@ export function readRecentProjects(): RecentProjectRecord[] {
 
 export function recordRecentProject(project: RecentProjectBase): void {
   const storage = readStorage();
-  if (!storage || !project.id || !project.path) return;
+  if (!hasStorageMethod(storage, 'setItem') || !project.id || !project.path) return;
 
   const next: RecentProjectRecord = {
     ...project,
