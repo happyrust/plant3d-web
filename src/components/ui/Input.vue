@@ -36,7 +36,7 @@ const attrs = useAttrs();
 
 const wrapperClass = computed(() =>
   cn(
-    'flex h-10 w-full items-center rounded-lg border bg-white px-3 text-sm text-[#111827] shadow-sm transition-colors duration-150',
+    'flex w-full items-center rounded-lg border bg-white px-3 py-2 text-sm text-[#111827] shadow-sm transition-colors duration-150',
     'focus-within:border-[#3B82F6]',
     props.error
       ? 'border-[#EF4444] focus-within:border-[#EF4444]'
@@ -48,7 +48,7 @@ const wrapperClass = computed(() =>
 
 const fieldClass = computed(() =>
   cn(
-    'h-full w-full border-0 bg-transparent p-0 text-sm text-inherit outline-none ring-0',
+    'w-full border-0 bg-transparent p-0 text-sm leading-5 text-inherit outline-none ring-0',
     'placeholder:text-[#9CA3AF]',
     'disabled:cursor-not-allowed',
     props.inputClass

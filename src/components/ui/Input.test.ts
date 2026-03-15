@@ -103,4 +103,21 @@ describe('Input', () => {
     expect(icon).toBeTruthy();
     expect(input?.value).toBe('Filter');
   });
+
+  it('allows wrapper and input height classes to be overridden by consumers', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    createApp({
+      render: () => h(Input, { class: 'h-7', inputClass: 'h-7', modelValue: 'Compact' }),
+    }).mount(host);
+
+    const wrapper = host.querySelector('label');
+    const input = host.querySelector('input');
+
+    expect(wrapper?.className).not.toContain('h-10');
+    expect(wrapper?.className).toContain('h-7');
+    expect(input?.className).not.toContain('h-full');
+    expect(input?.className).toContain('h-7');
+  });
 });
