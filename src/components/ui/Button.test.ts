@@ -111,14 +111,14 @@ describe('Button', () => {
 
     expect(button?.disabled).toBe(true);
     expect(button?.getAttribute('aria-busy')).toBe('true');
-    expect(button?.getAttribute('aria-label')).toBe('加载中');
+    expect(button?.hasAttribute('aria-label')).toBe(false);
     expect(host.querySelector('svg')).toBeTruthy();
     expect(host.querySelector('.sr-only')?.textContent).toBe('加载中');
     expect(button?.getAttribute('data-loading')).toBe('true');
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('keeps loading state accessible when there is no visible label', () => {
+  it('adds aria-label for loading buttons without visible text', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -131,6 +131,19 @@ describe('Button', () => {
     expect(button?.textContent).toContain('加载中');
     expect(button?.getAttribute('aria-label')).toBe('加载中');
     expect(host.querySelector('.sr-only')).toBeTruthy();
+  });
+
+  it('preserves icon-only labels provided by aria-label while loading', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    createApp({
+      render: () => h(Button, { loading: true, 'aria-label': '刷新数据' }),
+    }).mount(host);
+
+    const button = host.querySelector('button');
+
+    expect(button?.getAttribute('aria-label')).toBe('刷新数据');
   });
 
   it('emits click when interactive', async () => {

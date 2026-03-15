@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useSlots } from 'vue';
 
 import { Loader2 } from 'lucide-vue-next';
 
@@ -31,6 +31,8 @@ const emit = defineEmits<{
   click: [event: MouseEvent];
 }>();
 
+const slots = useSlots();
+
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-[#FF6B00] text-white shadow-sm hover:opacity-90 focus-visible:ring-[#FF6B00]/30',
   secondary: 'border border-[#D1D5DB] bg-white text-[#1F2937] shadow-sm hover:bg-[#F9FAFB] hover:opacity-90 focus-visible:ring-[#D1D5DB]/60',
@@ -45,7 +47,35 @@ const sizeClasses: Record<ButtonSize, string> = {
 
 const isDisabled = computed(() => props.disabled || props.loading);
 
-const loadingAriaLabel = computed(() => (props.loading ? '加载中' : undefined));
+function hasVisibleTextContent(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => hasVisibleTextContent(item));
+  }
+
+  if (value && typeof value === 'object') {
+    const vnode = value as { children?: unknown };
+    return hasVisibleTextContent(vnode.children);
+  }
+
+  return false;
+}
+
+const hasVisibleLabel = computed(() => {
+  const content = slots.default?.() ?? [];
+  return hasVisibleTextContent(content);
+});
+
+const loadingAriaLabel = computed(() => {
+  if (!props.loading || hasVisibleLabel.value) {
+    return undefined;
+  }
+
+  return '加载中';
+});
 
 const buttonClass = computed(() =>
   cn(
