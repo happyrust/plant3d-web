@@ -1,5 +1,9 @@
 import { chromium } from 'playwright';
 
+const ignoreNetworkIdleTimeout = () => {
+  // Some app flows keep background requests alive, so networkidle can time out harmlessly.
+};
+
 async function validateNavigation() {
   console.log('🚀 Starting navigation validation...');
   
@@ -41,7 +45,7 @@ async function validateNavigation() {
       console.log('\n🖱️  Clicking first project...');
       await projectCards[0].click();
       await page.waitForTimeout(3000);
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(ignoreNetworkIdleTimeout);
       
       await page.screenshot({ path: '/tmp/app-after-project-click.png', fullPage: true });
       console.log('📸 Screenshot saved: /tmp/app-after-project-click.png');

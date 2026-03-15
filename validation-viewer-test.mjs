@@ -1,5 +1,9 @@
 import { chromium } from 'playwright';
 
+const ignoreNetworkIdleTimeout = () => {
+  // The viewer may keep polling or streaming, so missing networkidle is not fatal here.
+};
+
 async function validateViewer() {
   console.log('🚀 Starting viewer validation...');
   
@@ -26,7 +30,7 @@ async function validateViewer() {
       console.log('🖱️  Clicking AMS project (card #2)...');
       await projectCards[1].click();
       await page.waitForTimeout(5000);
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(ignoreNetworkIdleTimeout);
       
       await page.screenshot({ path: '/tmp/app-viewer.png', fullPage: true });
       console.log('📸 Screenshot saved: /tmp/app-viewer.png');
