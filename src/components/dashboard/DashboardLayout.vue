@@ -27,10 +27,7 @@
 
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <header class="flex h-20 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5 sm:px-8">
-        <div class="min-w-0">
-          <p class="text-xs font-medium uppercase tracking-[0.18em] text-gray-400">Dashboard</p>
-          <h1 class="truncate text-2xl font-bold text-gray-800">{{ activePage.title }}</h1>
-        </div>
+        <h1 class="min-w-0 truncate text-2xl font-bold text-gray-800">{{ activePage.title }}</h1>
 
         <div class="flex items-center gap-3 sm:gap-4">
           <button type="button"
@@ -45,14 +42,10 @@
             <span class="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-blue-500" />
           </button>
 
-          <div class="flex items-center gap-3 rounded-full bg-gray-50 px-2 py-2 sm:pl-2 sm:pr-4">
-            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white">
-              {{ userInitial }}
-            </div>
-            <div class="hidden min-w-0 sm:block">
-              <p class="truncate text-sm font-semibold text-gray-800">{{ currentUserName }}</p>
-              <p class="truncate text-xs text-gray-400">当前协作用户</p>
-            </div>
+          <div
+            class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white"
+            :aria-label="currentUserName">
+            {{ userInitial }}
           </div>
         </div>
       </header>
