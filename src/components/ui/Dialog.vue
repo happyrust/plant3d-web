@@ -38,9 +38,12 @@ const emit = defineEmits<{
 
 const slots = useSlots();
 const instanceScrollLockId = useId();
+const titleId = useId();
 
-const hasHeader = computed(() => Boolean(props.title || slots.title || props.showClose));
+const hasTitle = computed(() => Boolean(props.title || slots.title));
+const hasHeader = computed(() => Boolean(hasTitle.value || props.showClose));
 const hasFooter = computed(() => Boolean(slots.footer));
+const dialogAriaLabelledby = computed(() => (hasTitle.value ? titleId : undefined));
 
 const overlayClass = computed(() =>
   cn(
@@ -198,12 +201,13 @@ if (import.meta.env.MODE === 'test') {
       <section :class="panelClass"
         role="dialog"
         aria-modal="true"
-        :aria-label="title || undefined"
+        :aria-labelledby="dialogAriaLabelledby"
+        :aria-label="!hasTitle && title ? title : undefined"
         @click.stop>
         <header v-if="hasHeader" :class="headerClass">
           <div class="min-w-0 flex-1">
-            <slot name="title">
-              <h2 v-if="title" class="text-lg font-semibold text-[#111827]">{{ title }}</h2>
+            <slot name="title" :title-id="titleId">
+              <h2 v-if="title" :id="titleId" class="text-lg font-semibold text-[#111827]">{{ title }}</h2>
             </slot>
           </div>
           <button v-if="showClose"

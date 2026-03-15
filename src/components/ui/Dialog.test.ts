@@ -52,6 +52,39 @@ describe('Dialog', () => {
     expect(document.body.querySelector('[data-testid="footer"]')?.textContent).toBe('Confirm');
   });
 
+  it('binds aria-labelledby to the rendered title heading for title prop and title slot', async () => {
+    mount(
+      createApp({
+        render: () =>
+          h('div', [
+            h(Dialog, { open: true, title: 'Prop title' }, {
+              default: () => 'Prop content',
+            }),
+            h(Dialog, { open: true }, {
+              title: ({ titleId }: { titleId: string }) => h('h3', { id: titleId }, 'Slotted title'),
+              default: () => 'Slot content',
+            }),
+          ]),
+      })
+    );
+
+    await nextTick();
+
+    const dialogs = Array.from(document.body.querySelectorAll('[role="dialog"]'));
+    const propDialog = dialogs[0];
+    const slotDialog = dialogs[1];
+    const propHeading = propDialog?.querySelector('h2');
+    const slottedHeading = slotDialog?.querySelector('h3');
+
+    expect(propHeading?.id).toBeTruthy();
+    expect(propDialog?.getAttribute('aria-labelledby')).toBe(propHeading?.id ?? null);
+    expect(propDialog?.hasAttribute('aria-label')).toBe(false);
+
+    expect(slottedHeading?.id).toBeTruthy();
+    expect(slotDialog?.getAttribute('aria-labelledby')).toBe(slottedHeading?.id ?? null);
+    expect(slotDialog?.hasAttribute('aria-label')).toBe(false);
+  });
+
   it('supports v-model:open updates from overlay and close button', async () => {
     const open = ref(true);
     const host = mount(
