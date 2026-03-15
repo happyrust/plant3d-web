@@ -3,6 +3,12 @@ import { createApp, h, nextTick, ref } from 'vue';
 
 import Dialog from './Dialog.vue';
 
+declare global {
+  type DialogTestWindow = Window & {
+    __dialogScrollLockTestReset__?: () => void;
+  };
+}
+
 function mount(component: ReturnType<typeof createApp>) {
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -13,6 +19,7 @@ function mount(component: ReturnType<typeof createApp>) {
 afterEach(() => {
   document.body.innerHTML = '';
   document.body.style.overflow = '';
+  (window as DialogTestWindow).__dialogScrollLockTestReset__?.();
 });
 
 describe('Dialog', () => {
@@ -136,5 +143,54 @@ describe('Dialog', () => {
     open.value = false;
     await nextTick();
     expect(document.body.style.overflow).toBe('auto');
+  });
+
+  it('keeps body scroll locked while any dialog remains open and restores it after the last close', async () => {
+    const firstOpen = ref(true);
+    const secondOpen = ref(false);
+    document.body.style.overflow = 'scroll';
+
+    mount(
+      createApp({
+        setup() {
+          return { firstOpen, secondOpen };
+        },
+        render() {
+          return h('div', [
+            h(Dialog, {
+              open: this.firstOpen,
+              'onUpdate:open': (value: boolean) => {
+                this.firstOpen = value;
+              },
+            }, {
+              default: () => 'First dialog',
+            }),
+            h(Dialog, {
+              open: this.secondOpen,
+              'onUpdate:open': (value: boolean) => {
+                this.secondOpen = value;
+              },
+            }, {
+              default: () => 'Second dialog',
+            }),
+          ]);
+        },
+      })
+    );
+
+    await nextTick();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    secondOpen.value = true;
+    await nextTick();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    firstOpen.value = false;
+    await nextTick();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    secondOpen.value = false;
+    await nextTick();
+    expect(document.body.style.overflow).toBe('hidden');
   });
 });

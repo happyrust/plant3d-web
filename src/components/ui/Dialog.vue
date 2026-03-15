@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, useSlots, watch } from 'vue';
+import { computed, onBeforeUnmount, useId, useSlots, watch } from 'vue';
 
 import { X } from 'lucide-vue-next';
 
@@ -37,6 +37,7 @@ const emit = defineEmits<{
 }>();
 
 const slots = useSlots();
+const instanceScrollLockId = useId();
 
 const hasHeader = computed(() => Boolean(props.title || slots.title || props.showClose));
 const hasFooter = computed(() => Boolean(slots.footer));
@@ -78,8 +79,15 @@ const footerClass = computed(() =>
   )
 );
 
-let previousBodyOverflow = '';
-let scrollLocked = false;
+let scrollLockCount = 0;
+let lockedBodyOverflow = '';
+const activeScrollLocks = new Set<string>();
+
+function resetScrollLockState() {
+  scrollLockCount = 0;
+  lockedBodyOverflow = '';
+  activeScrollLocks.clear();
+}
 
 function setOpen(value: boolean) {
   if (!props.open && !value) {
@@ -99,20 +107,39 @@ function handleOverlayClick() {
 }
 
 function lockBodyScroll() {
-  if (typeof document === 'undefined' || scrollLocked) {
+  if (typeof document === 'undefined') {
     return;
   }
-  previousBodyOverflow = document.body.style.overflow;
-  document.body.style.overflow = 'hidden';
-  scrollLocked = true;
+
+  if (activeScrollLocks.has(instanceScrollLockId)) {
+    return;
+  }
+
+  if (scrollLockCount > 0 && document.body.style.overflow !== 'hidden') {
+    resetScrollLockState();
+  }
+
+  if (scrollLockCount === 0) {
+    lockedBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+
+  activeScrollLocks.add(instanceScrollLockId);
+  scrollLockCount += 1;
 }
 
 function unlockBodyScroll() {
-  if (typeof document === 'undefined' || !scrollLocked) {
+  if (typeof document === 'undefined' || !activeScrollLocks.has(instanceScrollLockId)) {
     return;
   }
-  document.body.style.overflow = previousBodyOverflow;
-  scrollLocked = false;
+
+  activeScrollLocks.delete(instanceScrollLockId);
+  scrollLockCount -= 1;
+
+  if (scrollLockCount === 0) {
+    document.body.style.overflow = lockedBodyOverflow;
+    lockedBodyOverflow = '';
+  }
 }
 
 watch(
@@ -130,6 +157,10 @@ watch(
 onBeforeUnmount(() => {
   unlockBodyScroll();
 });
+
+if (import.meta.env.MODE === 'test') {
+  window.__dialogScrollLockTestReset__ = resetScrollLockState;
+}
 </script>
 
 <template>
