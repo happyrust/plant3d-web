@@ -112,20 +112,17 @@ describe('DashboardLayout', () => {
     expect(host.querySelector('[data-testid="dashboard-reviews-panel"]')).toBeNull();
   });
 
-  it('renders the top bar title, utility icons, and current user avatar', () => {
+  it('renders the top bar title and current user avatar without extra action buttons', () => {
     const { host } = mountDashboardLayout();
 
     const header = host.querySelector('header');
     const title = header?.querySelector('h1');
-    const searchButton = host.querySelector('button[aria-label="搜索"]');
-    const notificationButton = host.querySelector('button[aria-label="通知"]');
     const avatar = header?.querySelector('div[aria-label="李审核员"]');
 
     expect(header?.className).toContain('h-20');
     expect(title?.textContent).toBe('概览');
-    expect(searchButton).toBeTruthy();
-    expect(notificationButton).toBeTruthy();
-    expect(notificationButton?.querySelector('span')?.className).toContain('bg-blue-500');
+    expect(host.querySelector('button[aria-label="搜索"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="通知"]')).toBeNull();
     expect(avatar?.textContent).toBe('李');
     expect(avatar?.className).toContain('h-9');
     expect(avatar?.className).toContain('w-9');

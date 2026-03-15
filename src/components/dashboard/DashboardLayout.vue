@@ -29,19 +29,7 @@
       <header class="flex h-20 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5 sm:px-8">
         <h1 class="min-w-0 truncate text-2xl font-bold text-gray-800">{{ activePage.title }}</h1>
 
-        <div class="flex items-center gap-3 sm:gap-4">
-          <button type="button"
-            aria-label="搜索"
-            class="flex h-10 w-10 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800">
-            <SearchIcon class="h-5 w-5" />
-          </button>
-          <button type="button"
-            aria-label="通知"
-            class="relative flex h-10 w-10 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800">
-            <BellIcon class="h-5 w-5" />
-            <span class="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-blue-500" />
-          </button>
-
+        <div class="flex items-center">
           <div class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white"
             :aria-label="currentUserName">
             {{ userInitial }}
@@ -75,11 +63,9 @@
 import { computed, ref } from 'vue';
 
 import {
-  BellIcon,
   CheckSquareIcon,
   FolderIcon,
   LayoutDashboardIcon,
-  SearchIcon,
 } from 'lucide-vue-next';
 
 import DashboardOverview from './DashboardOverview.vue';
