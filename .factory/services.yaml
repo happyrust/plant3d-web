@@ -1,25 +1,20 @@
 commands:
-  install: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 install
-  typecheck: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 run type-check
-  lint_m1: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx eslint src/components/review/InitiateReviewPanel.vue src/components/review/FileUploadSection.vue src/components/review/AssociatedFilesList.vue src/composables/useUserStore.ts src/api/reviewApi.ts
-  lint_m2: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx eslint src/components/review/ReviewerTaskList.vue src/components/review/WorkflowSubmitDialog.vue src/components/review/WorkflowReturnDialog.vue src/components/review/ReviewPanel.vue src/composables/useReviewStore.ts src/composables/useUserStore.ts src/api/reviewApi.ts
-  test_m1: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx vitest run src/api/reviewApi.test.ts src/composables/useUserStore.createReviewTask.test.ts src/components/review/reviewAttachmentFlow.test.ts
-  test_m2: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx vitest run src/components/review/reviewerTaskListActions.test.ts src/components/review/reviewPanelActions.test.ts src/api/reviewApi.test.ts src/composables/useReviewStore.websocket.test.ts
-  browser_smoke: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && node validation-test.mjs
-  browser_navigation_smoke: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && node validation-navigation-test.mjs
-  e2e_list: cd /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 && npx playwright test --list
+  install: npm install
+  typecheck: npm run type-check
+  test: npm test
+  lint: npm run lint
 
 services:
-  backend:
-    start: DB_OPTION_FILE=/Volumes/DPC/work/plant-code/plant-model-gen/db_options/DbOption-mac.toml WEB_SERVER_PORT=3100 cargo run --manifest-path /Volumes/DPC/work/plant-code/plant-model-gen/Cargo.toml --bin web_server --features web_server
-    stop: lsof -ti :3100 | xargs kill
-    healthcheck: curl -sf http://127.0.0.1:3100/api/health
-    port: 3100
+  frontend:
+    start: npm run dev
+    stop: lsof -ti :3101 | xargs kill
+    healthcheck: curl -sf http://localhost:3101
+    port: 3101
     depends_on: []
 
-  frontend:
-    start: npm --prefix /Volumes/DPC/work/plant-code/plant3d-web/.worktrees/mission-review-m1-m2 run dev -- --host 127.0.0.1 --port 3101 --strictPort
-    stop: lsof -ti :3101 | xargs kill
-    healthcheck: curl -sf http://127.0.0.1:3101
-    port: 3101
-    depends_on: [backend]
+  backend:
+    start: echo "Backend already running on 3100"
+    stop: echo "Do not stop backend - shared service"
+    healthcheck: curl -sf http://localhost:3100/api/health
+    port: 3100
+    depends_on: []

@@ -1,0 +1,29 @@
+{
+  "featureId": "m1-m2-handoff-contract-baseline",
+  "status": "fail",
+  "summary": "Fail: the feature only added regression tests and left the required live handoff validation gap unresolved because the backend smoke surface remained unavailable, so the baseline contract is not fully validated against the mission acceptance criteria.",
+  "findings": [
+    {
+      "severity": "blocking",
+      "file": "src/api/reviewApi.test.ts",
+      "description": "The feature change is test-only and does not provide the required live `/api/review/tasks` handoff verification promised by the milestone. The worker handoff explicitly records `curl -sf http://127.0.0.1:3100/api/review/tasks` failing, so INT-001/INT-003 remain unvalidated against a real backend payload and reviewer-visible handoff sample."
+    },
+    {
+      "severity": "non_blocking",
+      "file": "src/composables/useUserStore.createReviewTask.test.ts",
+      "description": "The new store regression covers create-task continuity but still stops at local store insertion. It does not assert reviewer queue materialization or `reviewTaskGetList` consumption, so INT-002 role-and-node visibility remains dependent on separate reviewer-side coverage rather than this baseline feature's own tests."
+    }
+  ],
+  "sharedStateObservations": [
+    {
+      "target": "services.yaml",
+      "observation": "Mission validation for this feature depended on the local backend smoke surface at `http://127.0.0.1:3100/api/review/tasks`, but the recorded run could not connect to it.",
+      "why": "Scrutiny synthesis should track this as shared environment state because multiple cross-surface and reviewer-entry validations rely on the same backend readiness."
+    },
+    {
+      "target": "library",
+      "observation": "Mission docs require a minimal designer-to-reviewer handoff smoke proof, but this feature completed with automated assertions only and no live payload sample or manual evidence.",
+      "why": "This discrepancy affects milestone-level confidence and may need synthesis-level triage if other features also deferred live evidence."
+    }
+  ]
+}

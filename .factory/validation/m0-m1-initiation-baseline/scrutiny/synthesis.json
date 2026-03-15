@@ -1,0 +1,73 @@
+{
+  "milestone": "m0-m1-initiation-baseline",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "cd /Volumes/DPC/work/plant-code/plant3d-web && npx vitest run src/api/reviewApi.test.ts src/composables/useUserStore.createReviewTask.test.ts src/components/review/reviewAttachmentFlow.test.ts",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "cd /Volumes/DPC/work/plant-code/plant3d-web && npx eslint src/components/review/InitiateReviewPanel.vue src/components/review/FileUploadSection.vue src/components/review/AssociatedFilesList.vue src/composables/useUserStore.ts src/api/reviewApi.ts",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 0,
+    "failed": 3,
+    "failedFeatures": [
+      "m1-attachment-lineage-and-associated-files",
+      "m1-initiation-context-and-payload",
+      "m1-m2-handoff-contract-baseline"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m1-attachment-lineage-and-associated-files",
+      "severity": "blocking",
+      "description": "The summary badge/count is derived from the hard-coded placeholder catalog, so the fresh initiation form reports associated files as already linked (for example `已关联 12 个文件`) even though the M1 baseline is supposed to stay explainable as a placeholder until real lineage-backed data exists."
+    },
+    {
+      "featureId": "m1-initiation-context-and-payload",
+      "severity": "blocking",
+      "description": "`resolveProjectId()` falls back to `demo-project`, but the shared session resolver in `useUserStore.ts` and its tests standardize the default review project to `debug-project`. This creates two competing defaults for the same initiation context contract. In the common path where selected component names do not encode a project segment and embed mode omits `projectId`, the panel passes `demo-project` into `ExternalReviewViewer` and related embed requests, which can target a different backend project than the rest of the initiation/reviewer flow expects. The added tests only cover embed-project preference and store-side fallback, so this UI-side divergence is currently untested."
+    },
+    {
+      "featureId": "m1-m2-handoff-contract-baseline",
+      "severity": "blocking",
+      "description": "The feature change is test-only and does not provide the required live `/api/review/tasks` handoff verification promised by the milestone. The worker handoff explicitly records `curl -sf http://127.0.0.1:3100/api/review/tasks` failing, so INT-001/INT-003 remain unvalidated against a real backend payload and reviewer-visible handoff sample."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "The `review-initiation-worker` procedure requires live browser verification on 3101, but the worker still returned success after skipping that step.",
+      "evidence": "This review had to treat the missing browser smoke as an outstanding validation gap even though the feature handoff was marked successful, so scrutiny synthesis may need to align worker success criteria with the documented procedure.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Mission artifacts and store tests treat `debug-project` as the canonical default review project, but `InitiateReviewPanel.vue` still hardcodes `demo-project` for its local project-context fallback.",
+      "reason": "ambiguous-or-not-safe-to-apply"
+    },
+    {
+      "observation": "Mission validation for this feature depended on the local backend smoke surface at `http://127.0.0.1:3100/api/review/tasks`, but the recorded run could not connect to it.",
+      "reason": "ambiguous-or-not-safe-to-apply"
+    },
+    {
+      "observation": "Mission docs require a minimal designer-to-reviewer handoff smoke proof, but this feature completed with automated assertions only and no live payload sample or manual evidence.",
+      "reason": "ambiguous-or-not-safe-to-apply"
+    }
+  ],
+  "previousRound": null
+}

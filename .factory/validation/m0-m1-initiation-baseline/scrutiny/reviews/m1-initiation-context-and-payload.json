@@ -1,0 +1,19 @@
+{
+  "featureId": "m1-initiation-context-and-payload",
+  "status": "fail",
+  "summary": "Review failed: initiation-side project-context fallback is internally inconsistent and can send `demo-project` into the external review/embed path when no embed projectId is present, while the shared session resolver and tests use `debug-project`, leaving the baseline initiation context contract unstable for continued integration.",
+  "findings": [
+    {
+      "severity": "blocking",
+      "file": "src/components/review/InitiateReviewPanel.vue:67",
+      "description": "`resolveProjectId()` falls back to `demo-project`, but the shared session resolver in `useUserStore.ts` and its tests standardize the default review project to `debug-project`. This creates two competing defaults for the same initiation context contract. In the common path where selected component names do not encode a project segment and embed mode omits `projectId`, the panel passes `demo-project` into `ExternalReviewViewer` and related embed requests, which can target a different backend project than the rest of the initiation/reviewer flow expects. The added tests only cover embed-project preference and store-side fallback, so this UI-side divergence is currently untested."
+    }
+  ],
+  "sharedStateObservations": [
+    {
+      "target": "library",
+      "observation": "Mission artifacts and store tests treat `debug-project` as the canonical default review project, but `InitiateReviewPanel.vue` still hardcodes `demo-project` for its local project-context fallback.",
+      "why": "Scrutiny synthesis may need to decide whether the canonical fallback belongs in shared library/session logic and should be consumed by the initiation panel instead of duplicating an inconsistent literal."
+    }
+  ]
+}
