@@ -79,14 +79,40 @@ const footerClass = computed(() =>
   )
 );
 
-let scrollLockCount = 0;
-let lockedBodyOverflow = '';
-const activeScrollLocks = new Set<string>();
+type DialogScrollLockState = {
+  count: number;
+  lockedOverflow: string;
+  activeIds: Set<string>;
+};
+
+const scrollLockState: DialogScrollLockState = (() => {
+  if (typeof window === 'undefined') {
+    return {
+      count: 0,
+      lockedOverflow: '',
+      activeIds: new Set<string>(),
+    };
+  }
+
+  const dialogWindow = window as Window & {
+    __dialogScrollLockState__?: DialogScrollLockState;
+  };
+
+  if (!dialogWindow.__dialogScrollLockState__) {
+    dialogWindow.__dialogScrollLockState__ = {
+      count: 0,
+      lockedOverflow: '',
+      activeIds: new Set<string>(),
+    };
+  }
+
+  return dialogWindow.__dialogScrollLockState__;
+})();
 
 function resetScrollLockState() {
-  scrollLockCount = 0;
-  lockedBodyOverflow = '';
-  activeScrollLocks.clear();
+  scrollLockState.count = 0;
+  scrollLockState.lockedOverflow = '';
+  scrollLockState.activeIds.clear();
 }
 
 function setOpen(value: boolean) {
@@ -111,34 +137,34 @@ function lockBodyScroll() {
     return;
   }
 
-  if (activeScrollLocks.has(instanceScrollLockId)) {
+  if (scrollLockState.activeIds.has(instanceScrollLockId)) {
     return;
   }
 
-  if (scrollLockCount > 0 && document.body.style.overflow !== 'hidden') {
+  if (scrollLockState.count > 0 && document.body.style.overflow !== 'hidden') {
     resetScrollLockState();
   }
 
-  if (scrollLockCount === 0) {
-    lockedBodyOverflow = document.body.style.overflow;
+  if (scrollLockState.count === 0) {
+    scrollLockState.lockedOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
   }
 
-  activeScrollLocks.add(instanceScrollLockId);
-  scrollLockCount += 1;
+  scrollLockState.activeIds.add(instanceScrollLockId);
+  scrollLockState.count += 1;
 }
 
 function unlockBodyScroll() {
-  if (typeof document === 'undefined' || !activeScrollLocks.has(instanceScrollLockId)) {
+  if (typeof document === 'undefined' || !scrollLockState.activeIds.has(instanceScrollLockId)) {
     return;
   }
 
-  activeScrollLocks.delete(instanceScrollLockId);
-  scrollLockCount -= 1;
+  scrollLockState.activeIds.delete(instanceScrollLockId);
+  scrollLockState.count = Math.max(0, scrollLockState.count - 1);
 
-  if (scrollLockCount === 0) {
-    document.body.style.overflow = lockedBodyOverflow;
-    lockedBodyOverflow = '';
+  if (scrollLockState.count === 0) {
+    document.body.style.overflow = scrollLockState.lockedOverflow;
+    scrollLockState.lockedOverflow = '';
   }
 }
 

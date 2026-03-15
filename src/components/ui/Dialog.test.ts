@@ -6,6 +6,11 @@ import Dialog from './Dialog.vue';
 declare global {
   type DialogTestWindow = Window & {
     __dialogScrollLockTestReset__?: () => void;
+    __dialogScrollLockState__?: {
+      count: number;
+      lockedOverflow: string;
+      activeIds: Set<string>;
+    };
   };
 }
 
@@ -191,6 +196,6 @@ describe('Dialog', () => {
 
     secondOpen.value = false;
     await nextTick();
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.body.style.overflow).toBe('scroll');
   });
 });
