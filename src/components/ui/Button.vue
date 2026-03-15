@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useSlots } from 'vue';
+import { computed, useAttrs, useSlots } from 'vue';
 
 import { Loader2 } from 'lucide-vue-next';
 
@@ -31,6 +31,7 @@ const emit = defineEmits<{
   click: [event: MouseEvent];
 }>();
 
+const attrs = useAttrs();
 const slots = useSlots();
 
 const variantClasses: Record<ButtonVariant, string> = {
@@ -69,8 +70,10 @@ const hasVisibleLabel = computed(() => {
   return hasVisibleTextContent(content);
 });
 
+const hasExplicitAriaLabel = computed(() => typeof attrs['aria-label'] === 'string' && attrs['aria-label'].trim().length > 0);
+
 const loadingAriaLabel = computed(() => {
-  if (!props.loading || hasVisibleLabel.value) {
+  if (!props.loading || hasVisibleLabel.value || hasExplicitAriaLabel.value) {
     return undefined;
   }
 

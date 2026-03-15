@@ -146,6 +146,19 @@ describe('Button', () => {
     expect(button?.getAttribute('aria-label')).toBe('刷新数据');
   });
 
+  it('preserves caller aria-label when loading button content is empty', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    createApp({
+      render: () => h(Button, { loading: true, 'aria-label': '打开筛选器' }, { default: () => '' }),
+    }).mount(host);
+
+    const button = host.querySelector('button');
+
+    expect(button?.getAttribute('aria-label')).toBe('打开筛选器');
+  });
+
   it('emits click when interactive', async () => {
     const onClick = vi.fn();
     const host = document.createElement('div');
