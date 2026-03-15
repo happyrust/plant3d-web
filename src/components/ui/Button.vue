@@ -5,6 +5,10 @@ import { Loader2 } from 'lucide-vue-next';
 
 import { cn } from '@/lib/utils';
 
+defineOptions({
+  inheritAttrs: false,
+});
+
 type ButtonVariant = 'primary' | 'secondary' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
@@ -33,6 +37,13 @@ const emit = defineEmits<{
 
 const attrs = useAttrs();
 const slots = useSlots();
+
+const forwardedAttrs = computed(() => {
+  const { class: _class, ...rest } = attrs;
+  return rest;
+});
+
+const resolvedAriaLabel = computed(() => loadingAriaLabel.value ?? attrs['aria-label']);
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-[#FF6B00] text-white shadow-sm hover:opacity-90 focus-visible:ring-[#FF6B00]/30',
@@ -104,9 +115,10 @@ function handleClick(event: MouseEvent) {
 
 <template>
   <button :type="type"
+    v-bind="forwardedAttrs"
     :class="buttonClass"
     :disabled="isDisabled"
-    :aria-label="loadingAriaLabel"
+    :aria-label="resolvedAriaLabel"
     :aria-busy="loading ? 'true' : 'false'"
     :data-loading="loading ? 'true' : 'false'"
     @click="handleClick">

@@ -79,6 +79,23 @@ describe('Button', () => {
     expect(button?.className).toContain('justify-between');
   });
 
+  it('merges consumer classes once without duplicating fallthrough class attrs', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    createApp({
+      render: () => h(Button, { class: 'w-full w-full justify-between' }, { default: () => 'Wide' }),
+    }).mount(host);
+
+    const button = host.querySelector('button');
+    const classNames = button?.className.split(/\s+/u).filter(Boolean) ?? [];
+    const uniqueClassNames = new Set(classNames);
+
+    expect(classNames).toEqual(Array.from(uniqueClassNames));
+    expect(classNames.filter((className) => className === 'w-full')).toHaveLength(1);
+    expect(classNames.filter((className) => className === 'justify-between')).toHaveLength(1);
+  });
+
   it('disables interaction when disabled is true', async () => {
     const onClick = vi.fn();
     const host = document.createElement('div');
