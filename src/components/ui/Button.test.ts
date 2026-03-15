@@ -111,9 +111,26 @@ describe('Button', () => {
 
     expect(button?.disabled).toBe(true);
     expect(button?.getAttribute('aria-busy')).toBe('true');
+    expect(button?.getAttribute('aria-label')).toBe('加载中');
     expect(host.querySelector('svg')).toBeTruthy();
+    expect(host.querySelector('.sr-only')?.textContent).toBe('加载中');
     expect(button?.getAttribute('data-loading')).toBe('true');
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('keeps loading state accessible when there is no visible label', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    createApp({
+      render: () => h(Button, { loading: true }),
+    }).mount(host);
+
+    const button = host.querySelector('button');
+
+    expect(button?.textContent).toContain('加载中');
+    expect(button?.getAttribute('aria-label')).toBe('加载中');
+    expect(host.querySelector('.sr-only')).toBeTruthy();
   });
 
   it('emits click when interactive', async () => {

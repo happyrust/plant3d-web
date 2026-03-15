@@ -45,6 +45,8 @@ const sizeClasses: Record<ButtonSize, string> = {
 
 const isDisabled = computed(() => props.disabled || props.loading);
 
+const loadingAriaLabel = computed(() => (props.loading ? '加载中' : undefined));
+
 const buttonClass = computed(() =>
   cn(
     'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150',
@@ -71,10 +73,12 @@ function handleClick(event: MouseEvent) {
   <button :type="type"
     :class="buttonClass"
     :disabled="isDisabled"
+    :aria-label="loadingAriaLabel"
     :aria-busy="loading ? 'true' : 'false'"
     :data-loading="loading ? 'true' : 'false'"
     @click="handleClick">
     <Loader2 v-if="loading" class="h-4 w-4 animate-spin" aria-hidden="true" />
     <slot />
+    <span v-if="loading" class="sr-only">加载中</span>
   </button>
 </template>
