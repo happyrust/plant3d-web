@@ -1,0 +1,33 @@
+{
+  "featureId": "m2-cross-surface-smoke-path",
+  "reviewedAt": "2026-03-15T00:00:00Z",
+  "commitId": "3a5ca0f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The change adds a focused unit test and documentation, but it does not deliver the required smoke-path evidence through a real app-entry-to-active-task path. The new test only verifies panel command ordering around `startReviewerTask`, while the handoff and browser evidence remained blocked by an empty inbox.",
+    "issues": [
+      {
+        "file": "src/components/review/reviewerTaskListActions.test.ts",
+        "line": 208,
+        "severity": "blocking",
+        "description": "The added test only asserts panel command ordering around `startReviewerTask()` and checks that the fixture task object still carries `formId`, attachments, and workflow history. Because `setCurrentTask` is mocked as a no-op, it never verifies that the real reviewer workbench hydrates and renders that handed-off context, so it does not prove INT-008's active-task continuity requirement."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker could not complete the skill's required manual reviewer smoke path, but the handoff still marked `skillFeedback.followedProcedure` as true. The skill procedure and review expectations are clear; the gap is that the feature outcome did not acknowledge the unmet manual-validation step.",
+      "evidence": "`.factory/skills/review-entry-worker/SKILL.md` step 9 requires validating at least one task selection plus one workflow action path, while the handoff for worker session d0929d4f-2663-4af7-874c-29c39a1067e7 says the live dataset exposed no reviewer task card to select and no real workflow mutation could be exercised."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Mission shared-state docs still overstate cross-surface readiness: they mention live review task data and a full smoke path, but do not distinguish generic backend reachability from reviewer-task seed readiness needed to reach an active task in live validation.",
+      "evidence": "The handoff reports an empty reviewer inbox during live validation, while `.factory/library/environment.md` says `GET /api/review/tasks` returned live review task data during planning and `.factory/library/user-testing.md:31` prescribes opening the same task in the reviewer workspace as part of the smoke path."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the feature adds unit-level handoff coverage, but that coverage stops short of proving real active-task hydration and continuity in the reviewer workbench. INT-008 requires an unbroken smoke path from app entry to an active reviewer task; this feature's evidence remains insufficient because the new test only checks panel sequencing and fixture shape, not real active-task rendering or continuity." 
+}

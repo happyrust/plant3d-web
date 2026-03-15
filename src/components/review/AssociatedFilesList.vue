@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import {
   ChevronDown,
@@ -10,6 +10,8 @@ import {
   Cog,
   ExternalLink,
 } from 'lucide-vue-next';
+
+import { describeAssociatedFilesSurface } from './reviewAttachmentFlow';
 
 // 关联文件类型定义
 export type AssociatedFile = {
@@ -33,6 +35,7 @@ export type FileCategory = {
 // Props
 type Props = {
   modelRefNo?: string;
+  selectedComponentCount?: number;
 }
 
 const props = defineProps<Props>();
@@ -173,6 +176,17 @@ const fileCategories = ref<FileCategory[]>([
   },
 ]);
 
+const linkedFileCount = computed(() => {
+  return fileCategories.value.reduce((total, category) => total + category.files.length, 0);
+});
+
+const surfaceSummary = computed(() => {
+  return describeAssociatedFilesSurface({
+    selectedComponentCount: props.selectedComponentCount ?? 0,
+    linkedFileCount: linkedFileCount.value,
+  });
+});
+
 // 切换分类展开状态
 function toggleCategory(categoryId: string) {
   const category = fileCategories.value.find((c) => c.id === categoryId);
@@ -231,8 +245,23 @@ function openFile(file: AssociatedFile) {
 
 <template>
   <div class="associated-files-list">
+    <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="associated-files-summary">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
+          {{ surfaceSummary.badge }}
+        </span>
+        <span class="text-xs text-slate-500">M1 designer baseline</span>
+      </div>
+      <div class="mt-2 text-sm text-slate-700">
+        {{ surfaceSummary.summary }}
+      </div>
+      <div class="mt-1 text-xs text-slate-500">
+        {{ surfaceSummary.detail }}
+      </div>
+    </div>
+
     <div class="text-sm text-gray-500 mb-3">
-      以下文件根据当前选择的模型构件自动关联
+      以下文件根据当前选择的模型构件自动关联，用于发起前观察关联资料状态
     </div>
 
     <!-- 文件分类列表 -->

@@ -29,6 +29,44 @@ const dueDate = ref('');
 const selectedComponents = ref<ReviewComponent[]>([]);
 const addingComponent = ref(false);
 
+function buildStableComponentId(refNo: string): string {
+  return `comp-${refNo}`;
+}
+
+function buildReviewComponent(params: {
+  refNo: string;
+  name: string;
+  type?: string;
+}): ReviewComponent {
+  return {
+    id: buildStableComponentId(params.refNo),
+    refNo: params.refNo,
+    name: params.name.trim() || params.refNo,
+    type: params.type || '构件',
+  };
+}
+
+function inferProjectIdFromComponentName(name?: string): string | null {
+  const parts = name?.split('/') ?? [];
+  const project = parts.length > 1 ? parts[1]?.trim() : '';
+  return project || null;
+}
+
+function resolveProjectId() {
+  if (embedModeParams.value.projectId?.trim()) {
+    return embedModeParams.value.projectId.trim();
+  }
+
+  for (const component of selectedComponents.value) {
+    const inferredProjectId = inferProjectIdFromComponentName(component.name);
+    if (inferredProjectId) {
+      return inferredProjectId;
+    }
+  }
+
+  return 'demo-project';
+}
+
 async function addSelectedComponent() {
   const refno = selectionStore.selectedRefno.value;
   if (!refno) return;
@@ -43,23 +81,21 @@ async function addSelectedComponent() {
       (resp.attrs?.DESCRIPTION as string) ||
       refno;
     const type = (resp.attrs?.NOUN as string) || '构件';
-    selectedComponents.value.push({
-      id: `comp-${Date.now()}`,
+    selectedComponents.value.push(buildReviewComponent({
       refNo: refno,
-      name: String(name).trim() || refno,
+      name: String(name),
       type,
-    });
+    }));
   } catch (_e) {
     // 网络失败时使用选中时的属性作为兜底
     const attrs = selectionStore.propertiesData.value;
     const name = (attrs?.NAME || attrs?.DESCRIPTION || refno) as string;
     const type = (attrs?.NOUN || '构件') as string;
-    selectedComponents.value.push({
-      id: `comp-${Date.now()}`,
+    selectedComponents.value.push(buildReviewComponent({
       refNo: refno,
       name,
       type,
-    });
+    }));
   } finally {
     addingComponent.value = false;
   }
@@ -134,18 +170,7 @@ const activeUploadFormId = computed(() => formId.value || createdTaskFormId.valu
 const canAutoUploadAttachments = computed(() => !!(activeUploadTaskId.value || activeUploadFormId.value));
 
 const currentProjectId = computed<string>(() => {
-  // 优先使用嵌入模式的 projectId
-  if (embedModeParams.value.projectId) {
-    return embedModeParams.value.projectId;
-  }
-  // Try to extract project from first component name (e.g. /1RCV0244/...)
-  if (selectedComponents.value.length > 0) {
-    const first = selectedComponents.value[0];
-    const parts = first?.name?.split('/') ?? [];
-    const project = parts.length > 1 ? parts[1] : undefined;
-    if (project) return project;
-  }
-  return 'demo-project';
+  return resolveProjectId();
 });
 
 const availableCheckers = computed(() => {
@@ -387,7 +412,7 @@ function clearNotification() {
         <Link class="h-4 w-4" />
         自动关联文件
       </label>
-      <AssociatedFilesList />
+      <AssociatedFilesList :selected-component-count="selectedComponents.length" />
     </div>
 
     <!-- 校核/审核人员和优先级 -->

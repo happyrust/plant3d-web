@@ -46,6 +46,10 @@ const STORAGE_KEY_V2 = 'plant3d-web-user-v2';
 const STORAGE_KEY_V1 = 'plant3d-web-user-v1';
 const DEFAULT_REVIEW_PROJECT_ID = 'debug-project';
 
+const LOCAL_REVIEW_IDENTITY_ALIASES: Record<string, string> = {
+  reviewer_001: 'user-002',
+};
+
 // 配置：是否使用后端 API
 const USE_BACKEND = ref(true);
 
@@ -116,17 +120,22 @@ export function buildSwitchUserTokenRequest(
 ): TokenRequest {
   return {
     projectId,
-    userId: user.id,
+    userId: LOCAL_REVIEW_IDENTITY_ALIASES[user.id] ?? user.id,
     role: toBackendRole(user.role),
   };
 }
 
+export function resolveEffectiveUserId(user: Pick<User, 'id'> | null | undefined): string | null {
+  if (!user?.id) return null;
+  return LOCAL_REVIEW_IDENTITY_ALIASES[user.id] ?? user.id;
+}
+
 export function isCheckerRole(role: UserRole | undefined): boolean {
-  return role === UserRole.PROOFREADER;
+  return role === UserRole.PROOFREADER || role === UserRole.REVIEWER;
 }
 
 export function isApproverRole(role: UserRole | undefined): boolean {
-  return role === UserRole.REVIEWER || role === UserRole.MANAGER || role === UserRole.ADMIN;
+  return role === UserRole.MANAGER || role === UserRole.ADMIN;
 }
 
 export function getNextWorkflowNode(node?: WorkflowNode): WorkflowNode | null {
@@ -345,11 +354,12 @@ const availableApprovers = computed(() => reviewerUsers.value.filter((u) => isAp
 // 当前用户的待审核任务（作为审核人员）
 const pendingReviewTasks = computed(() => {
   if (!currentUser.value) return [];
-  const uid = currentUser.value.id;
+  const uid = resolveEffectiveUserId(currentUser.value);
+  if (!uid) return [];
   return reviewTasks.value.filter((t) => {
     const node = t.currentNode ?? 'sj';
-    const checkerId = t.checkerId || t.reviewerId;
-    const approverId = t.approverId;
+    const checkerId = resolveEffectiveUserId({ id: t.checkerId || t.reviewerId });
+    const approverId = resolveEffectiveUserId(t.approverId ? { id: t.approverId } : null);
 
     if (isChecker.value) {
       return checkerId === uid && node === 'jd' && (t.status === 'submitted' || t.status === 'in_review');
@@ -450,13 +460,27 @@ async function loadCurrentUser(): Promise<void> {
     const response = await userGetCurrent();
     if (response.success && response.user) {
       const normalizedUser = normalizeBackendUser(response.user as Partial<User> & Record<string, unknown>);
-      currentUserId.value = normalizedUser.id;
+      // Prefer the locally selected alias when the backend returns the canonical id,
+      // so computed role gates still point at the correct frontend identity.
+      const existingUser = users.value.find((u) => resolveEffectiveUserId(u) === normalizedUser.id);
+      const effectiveUserId = existingUser?.id ?? normalizedUser.id;
+      currentUserId.value = effectiveUserId;
+
+      const mergedUser = existingUser
+        ? {
+          ...existingUser,
+          ...normalizedUser,
+          id: effectiveUserId,
+          role: existingUser.role,
+        }
+        : normalizedUser;
+
       // 确保用户在列表中
-      const existingIndex = users.value.findIndex((u) => u.id === normalizedUser.id);
+      const existingIndex = users.value.findIndex((u) => u.id === effectiveUserId);
       if (existingIndex >= 0) {
-        users.value[existingIndex] = normalizedUser;
+        users.value[existingIndex] = mergedUser;
       } else {
-        users.value.push(normalizedUser);
+        users.value.push(mergedUser);
       }
     }
   } catch (e) {

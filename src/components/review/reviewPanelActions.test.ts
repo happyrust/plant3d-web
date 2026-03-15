@@ -37,12 +37,20 @@ describe('reviewPanelActions', () => {
     expect(canSubmitAtCurrentNode('pz')).toBe(true);
   });
 
+  it('unknown workflow nodes do not expose the standard submit action', () => {
+    expect(canSubmitAtCurrentNode('legacy' as never)).toBe(false);
+  });
+
   it('canReturnAtCurrentNode 仅在非 sj 节点允许驳回', () => {
     expect(canReturnAtCurrentNode(undefined)).toBe(false);
     expect(canReturnAtCurrentNode('sj')).toBe(false);
     expect(canReturnAtCurrentNode('jd')).toBe(true);
     expect(canReturnAtCurrentNode('sh')).toBe(true);
     expect(canReturnAtCurrentNode('pz')).toBe(true);
+  });
+
+  it('unknown workflow nodes do not expose return actions either', () => {
+    expect(canReturnAtCurrentNode('legacy' as never)).toBe(false);
   });
 
   it('getSubmitActionLabel 返回与节点匹配的主操作文案', () => {

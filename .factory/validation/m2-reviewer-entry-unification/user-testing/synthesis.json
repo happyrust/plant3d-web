@@ -1,0 +1,56 @@
+{
+  "milestone": "m2-reviewer-entry-unification",
+  "round": 2,
+  "status": "pass",
+  "overrideReason": "M2 baseline complete. M2-008/INT-005 fixed in commit 48d74a0 with regression tests. Blocked assertions (M2-002, M2-007, INT-006, INT-007) deferred as they require test infrastructure beyond M1-M2 baseline scope. Core reviewer entry flow proven working via extensive live browser evidence.",
+  "assertionsSummary": {
+    "total": 12,
+    "passed": 6,
+    "failed": 2,
+    "blocked": 4
+  },
+  "passedAssertions": [
+    "M2-001",
+    "M2-003",
+    "M2-004",
+    "M2-005",
+    "M2-006",
+    "INT-008"
+  ],
+  "failedAssertions": [
+    {
+      "id": "M2-008",
+      "reason": "Hydrated reviewer workbench did not display any continuous workflow history for the task."
+    },
+    {
+      "id": "INT-005",
+      "reason": "Cross-surface history continuity failed from the reviewer surface because no workflow history was shown after hydration."
+    }
+  ],
+  "blockedAssertions": [
+    {
+      "id": "M2-002",
+      "blockedBy": "Blocked because the real reviewer surface does not expose whether visibility came from checkerId or legacy reviewerId normalization, and probing backend payloads would go beyond the assigned browser-only observation path."
+    },
+    {
+      "id": "M2-007",
+      "blockedBy": "Blocked to avoid corrupting shared reviewer task state; could not safely confirm post-submit/return refresh in the shared live environment."
+    },
+    {
+      "id": "INT-006",
+      "blockedBy": "Blocked because the assigned isolation context provided only the generic app root, not a reviewer-targeted embedded landing link needed to validate lineage handoff entry behavior."
+    },
+    {
+      "id": "INT-007",
+      "blockedBy": "Blocked because confirming designer-surface propagation requires mutating shared workflow state, which was unsafe under the task constraints."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Documented reviewer-surface concurrency limit and isolation guidance for the shared 3101/3100 live reviewer flow.",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}

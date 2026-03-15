@@ -1,0 +1,34 @@
+{
+  "featureId": "m1-attachment-lineage-and-associated-files",
+  "reviewedAt": "2026-03-15T14:18:13.332924Z",
+  "commitId": "b28ef88",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The attachment-lineage logic itself remains sound, but the associated-files baseline change hard-codes a nonzero linked-file count and therefore misrepresents availability before any component-specific data is loaded.",
+    "issues": [
+      {
+        "file": "src/components/review/AssociatedFilesList.vue",
+        "line": 168,
+        "severity": "blocking",
+        "description": "`linkedFileCount` is derived from the static placeholder catalog, so the new summary always reports linked files as present (`已关联 12 个文件`) even on a fresh designer form with no associated-file lineage. This violates the feature contract that the area stay explainable as a baseline placeholder until real data is available."
+      },
+      {
+        "file": "src/components/review/AssociatedFilesList.vue",
+        "line": 233,
+        "severity": "non_blocking",
+        "description": "The new M1 baseline summary is only covered by pure helper tests; there is no component-level assertion proving `AssociatedFilesList` or `InitiateReviewPanel` renders the placeholder state versus the linked-files state, so this regression slipped through despite the new helper coverage."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `review-initiation-worker` skill requires live browser verification on `http://127.0.0.1:3101/`, but the worker handoff still returned success after explicitly skipping that step. The procedure and success criteria are not aligned.",
+      "evidence": ".factory/skills/review-initiation-worker/SKILL.md step 9 requires manual verification; handoff `2026-03-13T14-38-45-407Z__m1-attachment-lineage-and-associated-files__444fa45a-4c6a-4d97-a600-434afdd5fd19.json` records `followedProcedure: false` and `whatWasLeftUndone` says browser validation was not performed."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the associated-files summary now claims linked files exist based on static placeholder data, which makes the designer baseline misleading before real associated-file lineage is available; helper tests were added, but no component-level regression test caught the rendered-state mismatch."
+}

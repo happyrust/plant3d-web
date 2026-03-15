@@ -1,53 +1,43 @@
-# Nearby Items Architecture
+# Three-Review M1-M2 Architecture
 
 ## Mission Scope
 
-This mission implements a nearby-items flow that starts from the AMS viewer UI and ends with observable viewer focus/highlight behavior.
+This mission implements the first two three-review milestones in `plant3d-web`:
 
-It spans two repositories:
-- Frontend UI and viewer integration: `/Volumes/DPC/work/plant-code/plant3d-web`
-- Backend spatial index and query API: `/Volumes/DPC/work/plant-code/plant-model-gen`
+- `M1 发起侧闭环`
+- `M2 审核入口统一化`
+
+The mission does **not** expand into M3 designer tracking polish, M4 workbench restructuring, M5 annotation decomposition, or M6 comment formalization.
 
 ## Source-of-Truth Rules
 
-- The spatial query source of truth is the SQLite RTree index in `../plant-model-gen/output/spatial_index.sqlite`.
-- `spec_value` used for grouping must be available from the index-backed query response.
-- Do not treat SurrealDB `inst_relate` as the authoritative source for nearby-item grouping in this mission.
+- Initiation-side product baseline: `ui/三维校审/review-designer.pen`
+- Reviewer-entry product baseline: `ui/三维校审/review-reviewer.pen`
+- Cross-role handoff sanity-check only: `ui/三维校审/review-flow.pen`
+- Task creation and normalization contract: `src/api/reviewApi.ts`, `src/composables/useUserStore.ts`
+- Reviewer entry and workbench hydration contract: `src/components/review/ReviewerTaskList.vue`, `src/components/review/ReviewPanel.vue`, `src/composables/useReviewStore.ts`
+
+Workers should update the existing seams above instead of creating parallel flow logic.
 
 ## Expected Data Flow
 
-1. User opens AMS project in the frontend viewer.
-2. User opens the nearby-items entry from the left toolbar.
-3. User searches by one of:
-   - refno
-   - position `(x, y, z)`
-   - current selection in the viewer
-4. Frontend sends the nearby query to backend spatial API.
-5. Backend resolves the query against SQLite spatial index and returns:
-   - `refno`
-   - `noun`
-   - `aabb`
-   - `spec_value`
-   - `query_bbox`
-   - optional `truncated`
-6. Frontend groups results by `spec_value` bucket.
-7. Clicking a result drives viewer selection/highlight/focus for the same item.
+### M1 initiation path
+1. Designer enters the main UI and opens the initiation-side review surface.
+2. Designer selects components and fills required task metadata.
+3. The initiation flow constructs a stable review task payload with explicit role assignments.
+4. Backend returns a normalized review task context with `taskId` and, when available, `formId`.
+5. Attachment upload waits for stable lineage and then persists against the created task context.
 
-## Frontend Integration Expectations
-
-- Reuse the existing toolbar and left-panel patterns rather than inventing a new layout model.
-- Keep query-mode controls, distance controls, and result grouping state explicit and user-visible.
-- Avoid hidden coupling where the viewer reacts to a different refno than the result the user clicked.
-
-## Backend Integration Expectations
-
-- Preserve existing `mode=refno` behavior.
-- Add `mode=position` without breaking current query clients.
-- Return stable fallback values for missing `spec_value` so the frontend can render an uncategorized bucket.
+### M2 reviewer entry path
+1. Reviewer-facing inbox filters tasks by role and workflow node.
+2. Reviewer selects a task from the inbox.
+3. The app hydrates that task into the review workspace.
+4. Reviewer uses standard submit/return dialogs as the primary workflow action path.
+5. Task data and workflow history refresh after mutation so the workbench stays aligned with backend truth.
 
 ## Highest-Risk Seams
 
-- Empty or stale spatial index making the UI look finished while real nearby queries return nothing.
-- `spec_value` being present in export data but not exposed through the API contract.
-- Cross-repo AMS project context mismatches causing nearby results to target the wrong dataset.
-- Viewer focus/highlight behavior drifting from the clicked nearby result identity.
+- `reviewerId` compatibility still masquerading as checker semantics without tests that make it explicit.
+- `currentNode` and `status` both influencing reviewer behavior and producing ambiguous workflow entry rules.
+- Attachment lineage falling back to the wrong identifier when both `taskId` and `formId` are in play.
+- Existing frontend on port `3101` being served from another checkout instead of the mission worktree during validation.
