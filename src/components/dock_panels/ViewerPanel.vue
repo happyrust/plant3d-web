@@ -101,6 +101,14 @@ const displayThemeStore = useDisplayThemeStore();
 
 const initError = ref<string | null>(null);
 
+watch(
+  initError,
+  (message) => {
+    viewerContext.viewerError.value = message;
+  },
+  { immediate: true }
+);
+
 const isDev = import.meta.env.DEV;
 
 const dimensionAnnoMgrRef = shallowRef<DimensionAnnotationManager | null>(null);
@@ -2003,6 +2011,7 @@ onMounted(async () => {
     }
     ensureLayerAttached();
     selectionController.refreshSpatialIndex();
+    toolsRef.value?.refreshReadyState();
     try {
       viewCullControllerRef.value?.refreshSpatialIndex();
       viewCullControllerRef.value?.update(dtxViewer.camera);
@@ -2041,6 +2050,7 @@ onMounted(async () => {
     requestRender,
   });
   toolsRef.value = tools;
+  tools.refreshReadyState();
 
   const ptsetVis = usePtsetVisualizationThree(
     dtxViewerRef,
@@ -2819,6 +2829,8 @@ onMounted(async () => {
   if (isDev) {
     (window as any).__xeokitViewer = compat;
     (window as any).__dtxViewer = dtxViewer;
+    (window as any).__viewerContext = viewerContext;
+    (window as any).__viewerToolStore = store;
   }
 
   // show_dbnum URL 参数：按 dbno 直接走 Parquet 全量加载。
@@ -3448,6 +3460,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  viewerContext.viewerError.value = null;
   if (rafId !== null) {
     window.cancelAnimationFrame(rafId);
     rafId = null;
@@ -3568,6 +3581,8 @@ onUnmounted(() => {
     try {
       delete (window as any).__xeokitViewer;
       delete (window as any).__dtxViewer;
+      delete (window as any).__viewerContext;
+      delete (window as any).__viewerToolStore;
     } catch {
       // ignore
     }

@@ -30,21 +30,27 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 
+import { getDefaultFrontendVersion, loadVersionInfo, UNKNOWN_VERSION_INFO } from '@/utils/versionInfo';
+
 const dialog = ref(false);
-const frontendVersion = ref({ version: 'unknown', commit: 'unknown', buildDate: 'unknown' });
-const backendVersion = ref({ version: 'unknown', commit: 'unknown', buildDate: 'unknown' });
+const frontendVersion = ref(getDefaultFrontendVersion());
+const backendVersion = ref(UNKNOWN_VERSION_INFO);
 
 onMounted(async () => {
   try {
-    const res = await fetch('/version.json');
-    frontendVersion.value = await res.json();
+    const version = await loadVersionInfo('/version.json');
+    if (version) {
+      frontendVersion.value = version;
+    }
   } catch (e) {
     console.warn('Failed to load frontend version', e);
   }
   
   try {
-    const res = await fetch('/api/version');
-    backendVersion.value = await res.json();
+    const version = await loadVersionInfo('/api/version');
+    if (version) {
+      backendVersion.value = version;
+    }
   } catch (e) {
     console.warn('Failed to load backend version', e);
   }
