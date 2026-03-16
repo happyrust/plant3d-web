@@ -36,6 +36,8 @@ vi.mock('@/api/reviewApi', () => ({
 let authGetTokenMock: ReturnType<typeof vi.fn>;
 let reviewTaskGetListMock: ReturnType<typeof vi.fn>;
 let userGetCurrentMock: ReturnType<typeof vi.fn>;
+let reviewTaskCreateMock: ReturnType<typeof vi.fn>;
+let reviewTaskSubmitToNextMock: ReturnType<typeof vi.fn>;
 
 function createStorageMock() {
   const store = new Map<string, string>();
@@ -67,9 +69,13 @@ beforeEach(() => {
     authGetTokenMock = api.authGetToken as ReturnType<typeof vi.fn>;
     reviewTaskGetListMock = api.reviewTaskGetList as ReturnType<typeof vi.fn>;
     userGetCurrentMock = api.userGetCurrent as ReturnType<typeof vi.fn>;
+    reviewTaskCreateMock = api.reviewTaskCreate as ReturnType<typeof vi.fn>;
+    reviewTaskSubmitToNextMock = api.reviewTaskSubmitToNext as ReturnType<typeof vi.fn>;
     authGetTokenMock.mockReset();
     reviewTaskGetListMock.mockReset();
     userGetCurrentMock.mockReset();
+    reviewTaskCreateMock.mockReset();
+    reviewTaskSubmitToNextMock.mockReset();
   });
 });
 
@@ -246,6 +252,141 @@ describe('loadReviewTasks', () => {
       'task-rejected',
     ]);
   });
+
+  it('keeps pz-stage tasks visible for approver inbox collections', async () => {
+    userGetCurrentMock.mockResolvedValue({
+      success: true,
+      user: {
+        id: 'manager_001',
+        username: 'manager',
+        email: 'manager@example.com',
+        name: '陈经理',
+        role: 'pz',
+      },
+    });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [
+        {
+          id: 'task-pz-approved',
+          title: 'Approved at pz node',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'approved',
+          priority: 'medium',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'pz',
+          components: [],
+          createdAt: 1700000010000,
+          updatedAt: 1700000011000,
+        },
+        {
+          id: 'task-pz-rejected',
+          title: 'Rejected at pz node',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'rejected',
+          priority: 'high',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'pz',
+          components: [],
+          createdAt: 1700000012000,
+          updatedAt: 1700000013000,
+        },
+      ],
+      total: 2,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('manager_001');
+
+    expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual([
+      'task-pz-approved',
+      'task-pz-rejected',
+    ]);
+  });
+});
+
+describe('cross-role task visibility after task creation and submit', () => {
+  it('keeps a newly submitted backend task visible to the initiator after submit refresh returns reviewer-scoped data', async () => {
+    userGetCurrentMock.mockResolvedValue({ success: false });
+
+    const createdTask = {
+      id: 'task-cross-1',
+      title: '跨角色联调任务',
+      description: '用于验证发起后完整流转',
+      modelName: '主装置模型',
+      status: 'draft',
+      priority: 'medium',
+      requesterId: 'designer_001',
+      requesterName: '王设计师',
+      checkerId: 'proofreader_001',
+      checkerName: '张校对员',
+      approverId: 'reviewer_001',
+      approverName: '李审核员',
+      reviewerId: 'proofreader_001',
+      reviewerName: '张校对员',
+      components: [{ id: 'comp-1', name: 'BRAN-001', refNo: 'BRAN-001', type: 'pipe' }],
+      createdAt: 1700000000000,
+      updatedAt: 1700000000000,
+      currentNode: 'sj',
+      workflowHistory: [],
+    };
+
+    reviewTaskCreateMock.mockResolvedValue({
+      success: true,
+      task: createdTask,
+    });
+    reviewTaskSubmitToNextMock.mockResolvedValue({ success: true });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [
+        {
+          ...createdTask,
+          status: 'submitted',
+          currentNode: 'jd',
+          updatedAt: 1700000005000,
+        },
+      ],
+      total: 1,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    const task = await store.createReviewTask({
+      title: '跨角色联调任务',
+      description: '用于验证发起后完整流转',
+      modelName: '主装置模型',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      priority: 'medium',
+      components: [{ id: 'comp-1', name: 'BRAN-001', refNo: 'BRAN-001', type: 'pipe' }],
+    });
+
+    await store.submitTaskToNextNode(task.id, '发起提资');
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith(undefined);
+    expect(store.myInitiatedTasks.value.map((item) => item.id)).toContain('task-cross-1');
+    expect(store.myInitiatedTasks.value[0]?.status).toBe('submitted');
+    expect(store.myInitiatedTasks.value[0]?.currentNode).toBe('jd');
+  });
 });
 
 describe('getNextWorkflowNode', () => {
@@ -276,8 +417,8 @@ describe('getNextWorkflowNode', () => {
 });
 
 describe('statusFromNode', () => {
-  it('returns draft for sj', () => {
-    expect(statusFromNode('sj')).toBe('draft');
+  it('returns rejected for sj', () => {
+    expect(statusFromNode('sj')).toBe('rejected');
   });
 
   it('returns submitted for jd', () => {

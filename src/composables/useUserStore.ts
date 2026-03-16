@@ -149,11 +149,12 @@ export function getNextWorkflowNode(node?: WorkflowNode): WorkflowNode | null {
 export function statusFromNode(node: WorkflowNode): ReviewTask['status'] {
   switch (node) {
     case 'sj':
-      return 'draft';
+      return 'rejected';
     case 'jd':
       return 'submitted';
     case 'sh':
-    case 'pz':
+      return 'in_review';
+    default:
       return 'in_review';
   }
 }
@@ -833,6 +834,7 @@ async function returnTaskToNode(taskId: string, targetNode: WorkflowNode, reason
     currentNode: targetNode,
     workflowHistory: [...(task.workflowHistory || []), step],
     returnReason: reason,
+    reviewComment: reason,
     updatedAt: Date.now(),
   };
 
