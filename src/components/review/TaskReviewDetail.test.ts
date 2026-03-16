@@ -177,6 +177,55 @@ describe('TaskReviewDetail', () => {
     expect(document.body.textContent).toContain('请补充退回原因说明。');
   });
 
+  it('prefers the latest return step metadata over stale task-level return fields', async () => {
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'sj',
+      currentNodeName: '编制',
+      history: [
+        {
+          node: 'jd',
+          action: 'return',
+          operatorId: 'checker-1',
+          operatorName: '李校核',
+          comment: '第一次退回原因',
+          timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+        },
+        {
+          node: 'sh',
+          action: 'return',
+          operatorId: 'approver-1',
+          operatorName: '周审核',
+          comment: '最新退回原因：请补充审核节点说明。',
+          timestamp: new Date('2026-03-16T18:00:00+08:00').getTime(),
+        },
+      ],
+    });
+
+    await mountComponent(
+      createTask({
+        status: 'draft',
+        currentNode: 'sj',
+        returnReason: '旧退回原因',
+        workflowHistory: [
+          {
+            node: 'jd',
+            action: 'return',
+            operatorId: 'checker-1',
+            operatorName: '李校核',
+            comment: '第一次退回原因',
+            timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+          },
+        ],
+      })
+    );
+
+    expect(document.body.textContent).toContain('退回节点：');
+    expect(document.body.textContent).toContain('审核');
+    expect(document.body.textContent).toContain('最新退回原因：请补充审核节点说明。');
+    expect(document.body.textContent).not.toContain('旧退回原因');
+  });
+
   it('falls back to task workflow history and shows load error when workflow request fails', async () => {
     reviewTaskGetWorkflowMock.mockRejectedValue(new Error('网络异常'));
 
@@ -208,7 +257,7 @@ describe('TaskReviewDetail', () => {
     });
     submitTaskToNextNodeMock.mockResolvedValue(undefined);
 
-    await mountComponent(createTask());
+    await mountComponent(createTask({ status: 'draft', currentNode: 'sj' }));
 
     const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
     expect(button).toBeTruthy();
@@ -223,6 +272,52 @@ describe('TaskReviewDetail', () => {
     expect(emitToastMock).toHaveBeenCalledWith({ message: '任务已再次提交到审核流程' });
   });
 
+  it('shows resubmit button for canonical returned draft task', async () => {
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'sj',
+      currentNodeName: '编制',
+      history: [
+        {
+          node: 'jd',
+          action: 'return',
+          operatorId: 'checker-1',
+          operatorName: '李校核',
+          comment: '请补充碰撞说明。',
+          timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+        },
+      ],
+    });
+
+    await mountComponent(createTask({ status: 'draft', currentNode: 'sj' }));
+
+    const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    expect(button).toBeTruthy();
+  });
+
+  it('does not show resubmit button once returned task has re-entered review flow', async () => {
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'jd',
+      currentNodeName: '校核',
+      history: [
+        {
+          node: 'jd',
+          action: 'return',
+          operatorId: 'checker-1',
+          operatorName: '李校核',
+          comment: '请补充碰撞说明。',
+          timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+        },
+      ],
+    });
+
+    await mountComponent(createTask({ status: 'submitted', currentNode: 'jd' }));
+
+    const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    expect(button).toBeUndefined();
+  });
+
   it('shows resubmit failure message when resubmit request fails', async () => {
     reviewTaskGetWorkflowMock.mockResolvedValue({
       success: true,
@@ -232,7 +327,7 @@ describe('TaskReviewDetail', () => {
     });
     submitTaskToNextNodeMock.mockRejectedValue(new Error('提交失败'));
 
-    await mountComponent(createTask());
+    await mountComponent(createTask({ status: 'draft', currentNode: 'sj' }));
 
     const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

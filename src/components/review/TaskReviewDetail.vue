@@ -15,6 +15,8 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
+import { getCanonicalReturnedMetadata, isCanonicalReturnedTask } from './reviewTaskFilters';
+
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
 import { reviewTaskGetWorkflow } from '@/api/reviewApi';
@@ -55,20 +57,20 @@ const priorityDisplay = computed(() => getPriorityDisplayName(props.task.priorit
 const componentCount = computed(() => props.task.components.length);
 const attachmentCount = computed(() => props.task.attachments?.length ?? 0);
 const latestReturnStep = computed<WorkflowStep | null>(() => {
-  const latestFromHistory = [...workflowHistory.value]
-    .reverse()
-    .find((step) => step.action === 'return');
-
-  if (latestFromHistory) return latestFromHistory;
-
-  if (!props.task.returnReason) return null;
+  const historyTask: ReviewTask = {
+    ...props.task,
+    workflowHistory: workflowHistory.value,
+  };
+  const metadata = getCanonicalReturnedMetadata(historyTask);
+  if (metadata.latestReturnStep) return metadata.latestReturnStep;
+  if (!metadata.returnReason) return null;
 
   return {
-    node: props.task.currentNode ?? 'sj',
+    node: metadata.returnNode ?? props.task.currentNode ?? 'sj',
     action: 'return',
     operatorId: '',
     operatorName: props.task.approverName || props.task.checkerName || props.task.reviewerName || '系统',
-    comment: props.task.returnReason,
+    comment: metadata.returnReason,
     timestamp: props.task.updatedAt,
   };
 });
@@ -117,7 +119,8 @@ const detailRows = computed(() => [
 ]);
 
 const taskSummary = computed(() => `${componentCount.value} 个构件 · ${attachmentCount.value} 个附件`);
-const canResubmit = computed(() => props.task.status === 'rejected');
+const isReturnedTask = computed(() => isCanonicalReturnedTask(props.task));
+const canResubmit = computed(() => isReturnedTask.value && props.task.currentNode === 'sj' && props.task.status === 'draft');
 
 function formatDateTime(timestamp?: number): string {
   if (!timestamp) return '—';
@@ -245,7 +248,7 @@ onMounted(() => {
       </div>
     </template>
 
-    <div v-if="props.task.status === 'rejected' || latestReturnStep" class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+    <div v-if="isReturnedTask || latestReturnStep" class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
       <div class="flex items-start gap-3">
         <XCircle class="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
         <div class="space-y-2 text-sm text-rose-900">

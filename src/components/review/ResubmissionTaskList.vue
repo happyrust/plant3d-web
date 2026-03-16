@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 import {
   Calendar,
@@ -12,31 +12,33 @@ import {
 } from 'lucide-vue-next';
 
 import {
+  getCanonicalReturnedMetadata,
   getResubmissionLatestReturnTime,
   getResubmissionSubmissionCount,
-  isRejectedDesignerTask,
+  isCanonicalReturnedTask,
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
 
 import type { ReviewTask } from '@/types/auth';
 
+import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useUserStore } from '@/composables/useUserStore';
 import { getPriorityDisplayName } from '@/types/auth';
 
 const userStore = useUserStore();
+const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-resubmission-tasks-v1');
 
 const searchTerm = ref('');
 const priorityFilter = ref<string>('all');
 const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
+const scrollContainer = ref<HTMLElement | null>(null);
+
+navigationState.bindRef('searchTerm', searchTerm, '');
+navigationState.bindRef('priorityFilter', priorityFilter, 'all');
 
 // 当前用户发起且被退回的任务
-const tasks = computed(() => userStore.myInitiatedTasks.value);
-
-// 筛选出已驳回任务
-const resubmissionTasks = computed(() => {
-  return tasks.value.filter((task) => isRejectedDesignerTask(task));
-});
+const resubmissionTasks = computed(() => userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
 
 const filteredTasks = computed(() => {
   let result = [...resubmissionTasks.value];
@@ -89,6 +91,17 @@ function clearFilters() {
   priorityFilter.value = 'all';
 }
 
+function persistScrollPosition() {
+  navigationState.saveValue('scrollTop', scrollContainer.value?.scrollTop ?? 0);
+}
+
+function restoreScrollPosition() {
+  nextTick(() => {
+    if (!scrollContainer.value) return;
+    scrollContainer.value.scrollTop = navigationState.getValue('scrollTop', 0);
+  });
+}
+
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('zh-CN');
 }
@@ -114,13 +127,31 @@ function getRejectedTaskCardClass(task: ReviewTask): string {
   return 'border-rose-200 bg-rose-50/60';
 }
 
+function getReturnedReason(task: ReviewTask): string {
+  return getCanonicalReturnedMetadata(task).returnReason || '未填写';
+}
+
+function getReturnedNodeLabel(task: ReviewTask): string | null {
+  const node = getCanonicalReturnedMetadata(task).returnNode;
+  if (!node) return null;
+
+  if (node === 'sj') return '编制';
+  if (node === 'jd') return '校核';
+  if (node === 'sh') return '审核';
+  if (node === 'pz') return '批准';
+  return node;
+}
+
 onMounted(() => {
   refreshTasks();
+  restoreScrollPosition();
 });
 </script>
 
 <template>
-  <div class="p-4 space-y-4 overflow-auto h-full">
+  <div ref="scrollContainer"
+    class="p-4 space-y-4 overflow-auto h-full"
+    @scroll="persistScrollPosition">
     <!-- 头部 -->
     <div class="flex items-center justify-between">
       <div>
@@ -128,7 +159,7 @@ onMounted(() => {
           <XCircle class="h-5 w-5 text-rose-500" />
           退回任务
         </h3>
-        <p class="text-sm text-gray-500">设计人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个已驳回任务</p>
+        <p class="text-sm text-gray-500">设计人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个退回待处理任务</p>
       </div>
       <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
         :disabled="isLoading"
@@ -142,7 +173,7 @@ onMounted(() => {
     <div class="grid grid-cols-3 gap-3">
       <div class="p-3 rounded-lg bg-orange-50 border border-orange-200">
         <div class="text-2xl font-bold text-orange-600">{{ taskStats.total }}</div>
-        <div class="text-xs text-orange-600">已驳回任务</div>
+        <div class="text-xs text-orange-600">退回待处理</div>
       </div>
       <div class="p-3 rounded-lg bg-red-50 border border-red-200">
         <div class="text-2xl font-bold text-red-600">{{ taskStats.urgent }}</div>
@@ -196,7 +227,7 @@ onMounted(() => {
                 <XCircle class="h-5 w-5 text-rose-500" />
                 <h4 class="font-medium text-base">{{ task.title }}</h4>
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">
-                  已驳回
+                  已退回
                 </span>
                 <span v-if="getResubmissionSubmissionCount(task.workflowHistory || []) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
                   第{{ getResubmissionSubmissionCount(task.workflowHistory || []) }}次提交
@@ -212,7 +243,10 @@ onMounted(() => {
                   <span>{{ task.modelName }}</span>
                 </div>
                 <div class="flex items-center gap-1">
-                  <span>退回原因: {{ task.returnReason || '未填写' }}</span>
+                  <span>退回原因: {{ getReturnedReason(task) }}</span>
+                </div>
+                <div v-if="getReturnedNodeLabel(task)" class="flex items-center gap-1">
+                  <span>退回节点: {{ getReturnedNodeLabel(task) }}</span>
                 </div>
                 <div class="flex items-center gap-1">
                   <Calendar class="h-3 w-3" />
@@ -242,7 +276,7 @@ onMounted(() => {
         <RotateCcw class="h-12 w-12 mx-auto mb-4 text-gray-300" />
         <h4 class="font-medium mb-2">暂无退回任务</h4>
         <p class="text-sm text-gray-500 mb-4">
-          {{ searchTerm || priorityFilter !== 'all' ? '没有符合筛选条件的退回任务' : '当前没有状态为已驳回的任务' }}
+          {{ searchTerm || priorityFilter !== 'all' ? '没有符合筛选条件的退回任务' : '当前没有可再次提交的退回任务' }}
         </p>
         <button v-if="searchTerm || priorityFilter !== 'all'"
           class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
