@@ -13,6 +13,7 @@ import {
   Vector2,
   Vector3,
 } from 'three';
+import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
@@ -21,12 +22,14 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { findNounByRefnoAcrossAllDbnos, findOwnerRefnoByTubi } from '@/composables/useDbnoInstancesDtxLoader';
 import { dockActivatePanelIfExists, dockPanelExists } from '@/composables/useDockApi';
+import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
+import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
 
 type DragRect = {
   active: boolean
@@ -53,20 +56,63 @@ type LabelEl = {
   el: HTMLDivElement
 }
 
+type TextAnnotationDragState = {
+  annotationId: string | null
+  pointerId: number | null
+  anchorWorldPos: Vector3 | null
+  anchorNdcZ: number
+  moved: boolean
+};
+
+type InlineTextAnnotationDraft = {
+  title: string
+  description: string
+};
+
+type InlineOverlayAnnotationDragState = {
+  annotationId: string | null
+  annotationKind: 'cloud' | 'rect' | 'obb' | null
+  pointerId: number | null
+  anchorWorldPos: Vector3 | null
+  anchorNdcZ: number
+  moved: boolean
+};
+
 type CloudOverlayEl = {
   id: string
   worldPos: Vector3
-  svg: SVGSVGElement
-  path: SVGPathElement
-  leaderPath: SVGPathElement
+  labelWorldPos: Vector3
+  leader: AnnotationLeaderVisual
+  outline: Line
   record: CloudAnnotationRecord
+}
+
+type CloudAnnotationVisual = {
+  pin: LineSegments
+  leader: AnnotationLeaderVisual
+  outline: Line
+  labelWorldPos: Vector3
 }
 
 type RectAnnotationVisual = {
   box: LineSegments
   pin: LineSegments
-  leader: LineSegments
+  leader: AnnotationLeaderVisual
   labelWorldPos: Vector3
+}
+
+type RectOverlayEl = {
+  id: string
+  worldPos: Vector3
+  labelWorldPos: Vector3
+  leader: AnnotationLeaderVisual
+}
+
+type ObbOverlayEl = {
+  id: string
+  worldPos: Vector3
+  labelWorldPos: Vector3
+  leader: AnnotationLeaderVisual
 }
 
 type ScreenPoint = {
@@ -87,12 +133,54 @@ type CloudLayout = {
   labelAlign: 'left' | 'right'
 }
 
+export type AnnotationOverlayKind = 'text' | 'cloud' | 'rect' | 'obb';
+export type AnnotationLeaderKind = AnnotationOverlayKind;
+
+export type AnnotationLabelClickState = {
+  annotationId: string
+  annotationType: AnnotationOverlayKind
+  timestamp: number
+};
+
+export type AnnotationLabelClickResult = {
+  action: 'activate' | 'edit'
+  nextState: AnnotationLabelClickState | null
+};
+
+type AnnotationLeaderStyle = {
+  color: number
+  haloColor: number
+  linewidth: number
+  haloLinewidth: number
+  opacity: number
+  haloOpacity: number
+}
+
+type AnnotationLeaderVisual = {
+  root: Group
+  core: MeshLine
+  halo: MeshLine
+  coreGeometry: MeshLineGeometry
+  haloGeometry: MeshLineGeometry
+  coreMaterial: MeshLineMaterial
+  haloMaterial: MeshLineMaterial
+}
+
 function nowId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+function escapeAnnotationLabelText(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('\'', '&#39;');
 }
 
 function formatAngleDegrees(deg: number, precision: number): string {
@@ -244,6 +332,32 @@ function createCloudPath(cx: number, cy: number, width: number, height: number):
   return points.join(' ');
 }
 
+export function buildCloudBillboardPolyline(
+  anchor: Vector3,
+  right: Vector3,
+  up: Vector3,
+  width: number,
+  height: number,
+  segments = 18,
+): number[] {
+  const rx = Math.max(width * 0.5, 1e-4);
+  const ry = Math.max(height * 0.5, 1e-4);
+  const safeRight = right.clone().normalize();
+  const safeUp = up.clone().normalize();
+  const pts: number[] = [];
+
+  for (let i = 0; i <= segments; i += 1) {
+    const t = (i / segments) * Math.PI * 2;
+    const wobble = 1 + 0.12 * Math.sin(t * 6);
+    const p = anchor.clone()
+      .addScaledVector(safeRight, Math.cos(t) * rx * wobble)
+      .addScaledVector(safeUp, Math.sin(t) * ry * wobble);
+    pts.push(p.x, p.y, p.z);
+  }
+
+  return pts;
+}
+
 export function computeCloudLayout(anchorScreen: ScreenPoint, screenOffset?: { x: number; y: number }, cloudSize?: { width: number; height: number }): CloudLayout {
   const width = clamp(cloudSize?.width ?? 120, 72, 220);
   const height = clamp(cloudSize?.height ?? 72, 48, 180);
@@ -264,6 +378,262 @@ export function computeCloudLayout(anchorScreen: ScreenPoint, screenOffset?: { x
     labelX: cloudCenterX + labelOffsetX,
     labelY: cloudCenterY,
     labelAlign,
+  };
+}
+
+export function getDefaultTextAnnotationLabelWorldPos(worldPos: Vec3): Vec3 {
+  return [
+    worldPos[0] + 0.9,
+    worldPos[1] + 0.6,
+    worldPos[2] + 0.7,
+  ];
+}
+
+export function shouldRenderTextAnnotationCard(collapsed?: boolean): boolean {
+  return collapsed !== true;
+}
+
+export function toggleTextAnnotationCollapsed(collapsed?: boolean): boolean {
+  return collapsed !== true;
+}
+
+export function buildAnnotationLeaderStyle(kind: AnnotationLeaderKind): AnnotationLeaderStyle {
+  const { style } = useAnnotationStyleStore();
+  const leaderStyle = style[kind];
+  return {
+    color: leaderStyle.color,
+    haloColor: leaderStyle.haloColor,
+    linewidth: leaderStyle.lineWidth,
+    haloLinewidth: leaderStyle.haloLineWidth,
+    opacity: leaderStyle.opacity,
+    haloOpacity: leaderStyle.haloOpacity,
+  };
+}
+
+function buildAnnotationLeaderPositions(anchorWorldPos: Vector3, labelWorldPos: Vector3): number[] {
+  return [
+    anchorWorldPos.x, anchorWorldPos.y, anchorWorldPos.z,
+    labelWorldPos.x, labelWorldPos.y, labelWorldPos.z,
+  ];
+}
+
+function setAnnotationLeaderResolution(
+  leader: AnnotationLeaderVisual,
+  width: number,
+  height: number,
+): void {
+  const safeWidth = Number.isFinite(width) && width > 0 ? width : 1;
+  const safeHeight = Number.isFinite(height) && height > 0 ? height : 1;
+  leader.coreMaterial.resolution.set(safeWidth, safeHeight);
+  leader.haloMaterial.resolution.set(safeWidth, safeHeight);
+}
+
+function createAnnotationLeader(
+  kind: AnnotationLeaderKind,
+  anchorWorldPos: Vector3,
+  labelWorldPos: Vector3,
+  resolution?: { width: number; height: number },
+): AnnotationLeaderVisual {
+  const style = buildAnnotationLeaderStyle(kind);
+  const positions = buildAnnotationLeaderPositions(anchorWorldPos, labelWorldPos);
+  const haloGeometry = new MeshLineGeometry();
+  haloGeometry.setPoints(positions);
+  const coreGeometry = new MeshLineGeometry();
+  coreGeometry.setPoints(positions);
+  const haloMaterial = new MeshLineMaterial({
+    color: style.haloColor,
+    lineWidth: style.haloLinewidth,
+    transparent: true,
+    opacity: style.haloOpacity,
+    depthTest: false,
+    depthWrite: false,
+    sizeAttenuation: false,
+    resolution: new Vector2(1, 1),
+  });
+  const coreMaterial = new MeshLineMaterial({
+    color: style.color,
+    lineWidth: style.linewidth,
+    transparent: true,
+    opacity: style.opacity,
+    depthTest: false,
+    depthWrite: false,
+    sizeAttenuation: false,
+    resolution: new Vector2(1, 1),
+  });
+  const halo = new MeshLine(haloGeometry, haloMaterial);
+  const core = new MeshLine(coreGeometry, coreMaterial);
+  halo.renderOrder = 900;
+  core.renderOrder = 901;
+  halo.frustumCulled = false;
+  core.frustumCulled = false;
+  halo.raycast = () => {};
+  core.raycast = () => {};
+  const root = new Group();
+  root.renderOrder = 901;
+  root.add(halo, core);
+  const leader = {
+    root,
+    core,
+    halo,
+    coreGeometry,
+    haloGeometry,
+    coreMaterial,
+    haloMaterial,
+  };
+  setAnnotationLeaderResolution(leader, resolution?.width ?? 1, resolution?.height ?? 1);
+  return leader;
+}
+
+function createTextAnnotationLeader(
+  anchorWorldPos: Vector3,
+  labelWorldPos: Vector3,
+  resolution?: { width: number; height: number },
+): AnnotationLeaderVisual {
+  return createAnnotationLeader('text', anchorWorldPos, labelWorldPos, resolution);
+}
+
+function updateLeaderGeometry(
+  leader: AnnotationLeaderVisual,
+  anchorWorldPos: Vector3,
+  labelWorldPos: Vector3,
+): void {
+  const positions = buildAnnotationLeaderPositions(anchorWorldPos, labelWorldPos);
+  leader.haloGeometry.setPoints(positions);
+  leader.coreGeometry.setPoints(positions);
+}
+
+export function buildAnnotationLabelStyleText(): string {
+  return [
+    'position:absolute',
+    'transform:translate(-50%,-110%)',
+    'pointer-events:auto',
+    'cursor:pointer',
+    'user-select:none',
+    'z-index:910',
+    'max-width:280px',
+    'padding:10px 12px',
+    'border-radius:14px',
+    'border:1px solid rgba(148,163,184,0.45)',
+    'background:rgba(15,23,42,0.92)',
+    'color:#e2e8f0',
+    'box-shadow:0 14px 32px rgba(15,23,42,0.35)',
+    'backdrop-filter:blur(10px)',
+    'white-space:pre-wrap',
+    'font-family:\'Segoe UI\',\'PingFang SC\',sans-serif',
+    'line-height:1.45',
+  ].join(';');
+}
+
+export function buildAnnotationLabelHtml(title: string, description: string): string {
+  const safeTitle = escapeAnnotationLabelText(title);
+  const safeDescription = escapeAnnotationLabelText(description || '');
+  const descriptionHtml = safeDescription
+    ? `<div data-role="annotation-description" style="margin-top:6px;font-size:12px;line-height:1.5;color:rgba(226,232,240,0.9);">${safeDescription}</div>`
+    : '';
+  return [
+    `<div data-role="annotation-title" style="font-weight:700;font-size:13px;line-height:1.3;color:#f8fafc;">${safeTitle}</div>`,
+    descriptionHtml,
+  ].join('');
+}
+
+export function buildTextAnnotationMarkerStyleText(collapsed: boolean, color = '#2563eb'): string {
+  if (collapsed) {
+    return [
+      'position:absolute',
+      'transform:translate(-50%,-100%)',
+      'pointer-events:auto',
+      'user-select:none',
+      'cursor:pointer',
+      'z-index:920',
+      'width:22px',
+      'height:28px',
+      'filter:drop-shadow(0 4px 8px rgba(15,23,42,0.28))',
+      `color:${color}`,
+    ].join(';');
+  }
+  return [
+    'position:absolute',
+    'transform:translate(-50%,-100%)',
+    'pointer-events:auto',
+    'user-select:none',
+    'cursor:pointer',
+    'z-index:920',
+    'width:18px',
+    'height:24px',
+    'filter:drop-shadow(0 4px 8px rgba(15,23,42,0.24))',
+    `color:${color}`,
+  ].join(';');
+}
+
+export function buildTextAnnotationMarkerHtml(glyph: string, collapsed: boolean): string {
+  if (collapsed) {
+    return [
+      '<div data-marker-kind="location-pin" style="position:relative;width:22px;height:28px;">',
+      '<svg viewBox="0 0 24 32" width="22" height="28" aria-hidden="true">',
+      '<path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12c0 7.6 8.5 16.1 9.6 17.1a1.3 1.3 0 0 0 1.8 0c1.1-1 9.6-9.5 9.6-17.1C22.5 6.2 17.8 1.5 12 1.5Z" fill="#2563eb" stroke="#ffffff" stroke-width="1.4"/>',
+      '<circle cx="12" cy="12" r="4.2" fill="#ffffff"/>',
+      '</svg>',
+      '</div>',
+    ].join('');
+  }
+  return [
+    '<div data-marker-kind="push-pin" style="position:relative;width:18px;height:24px;">',
+    '<svg viewBox="0 0 18 24" width="18" height="24" aria-hidden="true">',
+    '<path d="M6 2.5h6l-.8 4.2 2.5 2.5v1.5H4.3V9.2l2.5-2.5L6 2.5Z" fill="#2563eb" stroke="#ffffff" stroke-width="1.1" stroke-linejoin="round"/>',
+    '<path d="M9 10.8V21.8" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>',
+    '<circle cx="9" cy="22.4" r="1.2" fill="#2563eb"/>',
+    '</svg>',
+    `<div data-role="annotation-glyph" style="position:absolute;right:-10px;top:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#0f172a;color:#f8fafc;font:700 10px/16px 'Segoe UI',sans-serif;text-align:center;">${escapeAnnotationLabelText(glyph)}</div>`,
+    '</div>',
+  ].join('');
+}
+
+export function buildInlineAnnotationCardHtml(kindLabel: string, title: string, description: string): string {
+  const safeTitle = escapeAnnotationLabelText(title);
+  const safeDescription = escapeAnnotationLabelText(description || '');
+  const safeKindLabel = escapeAnnotationLabelText(kindLabel);
+  return [
+    '<div data-role="annotation-card-shell" style="display:flex;flex-direction:column;gap:8px;">',
+    '<div data-role="annotation-drag-handle" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:grab;color:rgba(226,232,240,0.8);font-size:11px;letter-spacing:0.04em;text-transform:uppercase;">',
+    `<span>${safeKindLabel}</span>`,
+    '<span style="display:inline-flex;gap:3px;"><span style="width:4px;height:4px;border-radius:999px;background:rgba(226,232,240,0.55);"></span><span style="width:4px;height:4px;border-radius:999px;background:rgba(226,232,240,0.55);"></span><span style="width:4px;height:4px;border-radius:999px;background:rgba(226,232,240,0.55);"></span></span>',
+    '</div>',
+    `<input data-role="annotation-title-input" value="${safeTitle}" placeholder="输入批注标题" style="height:28px;border:none;outline:none;background:transparent;color:#f8fafc;font:700 13px/1.3 'Segoe UI','PingFang SC',sans-serif;padding:0;" />`,
+    `<textarea data-role="annotation-description-input" placeholder="输入批注描述（可选）" style="min-height:52px;border:none;outline:none;resize:none;background:transparent;color:rgba(226,232,240,0.92);font:400 12px/1.5 'Segoe UI','PingFang SC',sans-serif;padding:0;">${safeDescription}</textarea>`,
+    '</div>',
+  ].join('');
+}
+
+export function buildTextAnnotationCardHtml(title: string, description: string): string {
+  return buildInlineAnnotationCardHtml('批注', title, description);
+}
+
+export function resolveAnnotationLabelClickAction(
+  prevState: AnnotationLabelClickState | null,
+  annotationType: AnnotationOverlayKind,
+  annotationId: string,
+  timestamp: number,
+  thresholdMs = 400,
+): AnnotationLabelClickResult {
+  const isDoubleClick = !!prevState
+    && prevState.annotationId === annotationId
+    && prevState.annotationType === annotationType
+    && timestamp - prevState.timestamp < thresholdMs;
+
+  if (isDoubleClick) {
+    return {
+      action: 'edit',
+      nextState: null,
+    };
+  }
+
+  return {
+    action: 'activate',
+    nextState: {
+      annotationId,
+      annotationType,
+      timestamp,
+    },
   };
 }
 
@@ -305,22 +675,24 @@ function resolveCloudAnchorFromMarqueeCenter(
 
 function disposeObject3d(obj: any) {
   if (!obj) return;
-  try {
-    if (obj.geometry) obj.geometry.dispose?.();
-  } catch {
-    // ignore
-  }
-  try {
-    if (obj.material) {
-      if (Array.isArray(obj.material)) {
-        for (const m of obj.material) m?.dispose?.();
-      } else {
-        obj.material.dispose?.();
-      }
+  obj.traverse?.((node: any) => {
+    try {
+      node.geometry?.dispose?.();
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
-  }
+    try {
+      if (node.material) {
+        if (Array.isArray(node.material)) {
+          for (const m of node.material) m?.dispose?.();
+        } else {
+          node.material.dispose?.();
+        }
+      }
+    } catch {
+      // ignore
+    }
+  });
 }
 
 function clearGroup(group: Group) {
@@ -382,52 +754,128 @@ function buildWireBoxGeometryFromCorners(corners: Vec3[]): BufferGeometry | null
   return g;
 }
 
-function buildCrossMarkerGeometry(center: Vector3, size: number): BufferGeometry {
-  const half = Math.max(size * 0.5, 1e-4);
+function buildPinMarkerGeometry(anchor: Vector3, size: number): BufferGeometry {
+  const headZ = anchor.z + Math.max(size * 0.24, 0.02);
+  const radius = Math.max(size * 0.12, 0.02);
   const positions = new Float32Array([
-    center.x - half, center.y, center.z,
-    center.x + half, center.y, center.z,
-    center.x, center.y - half, center.z,
-    center.x, center.y + half, center.z,
-    center.x, center.y, center.z - half,
-    center.x, center.y, center.z + half,
+    anchor.x, anchor.y, anchor.z,
+    anchor.x, anchor.y, headZ,
+
+    anchor.x - radius, anchor.y, headZ,
+    anchor.x, anchor.y + radius, headZ,
+
+    anchor.x, anchor.y + radius, headZ,
+    anchor.x + radius, anchor.y, headZ,
+
+    anchor.x + radius, anchor.y, headZ,
+    anchor.x, anchor.y - radius, headZ,
+
+    anchor.x, anchor.y - radius, headZ,
+    anchor.x - radius, anchor.y, headZ,
   ]);
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(positions, 3));
   return g;
 }
 
-function createRectAnnotationVisual(obb: Obb, anchorWorldPos: Vec3): RectAnnotationVisual | null {
+function getCanvasResolution(canvas?: HTMLCanvasElement | null): { width: number; height: number } {
+  return {
+    width: canvas?.clientWidth || canvas?.width || 1,
+    height: canvas?.clientHeight || canvas?.height || 1,
+  };
+}
+
+function createCloudAnnotationVisual(
+  record: CloudAnnotationRecord,
+  resolution?: { width: number; height: number },
+): CloudAnnotationVisual {
+  const anchor = new Vector3(...record.anchorWorldPos);
+  const labelWorldPos = record.leaderEndWorldPos
+    ? new Vector3(...record.leaderEndWorldPos)
+    : anchor.clone().add(new Vector3(0.4, 0.4, 0.3));
+  const distance = Math.max(anchor.distanceTo(labelWorldPos), 0.12);
+  const pinGeometry = buildPinMarkerGeometry(anchor, distance);
+
+  const pinMaterial = new LineBasicMaterial({ color: 0xdc2626 });
+  const outlineMaterial = new LineBasicMaterial({ color: 0xdc2626 });
+  (pinMaterial as any).depthTest = false;
+  (outlineMaterial as any).depthTest = false;
+
+  const pin = new LineSegments(pinGeometry, pinMaterial);
+  const leader = createAnnotationLeader('cloud', anchor, labelWorldPos, resolution);
+  const outline = new Line(new BufferGeometry(), outlineMaterial);
+  pin.renderOrder = 901;
+  outline.renderOrder = 901;
+  return { pin, leader, outline, labelWorldPos };
+}
+
+function createRectAnnotationVisual(
+  obb: Obb,
+  anchorWorldPos: Vec3,
+  resolution?: { width: number; height: number },
+): RectAnnotationVisual | null {
   const boxGeometry = buildWireBoxGeometryFromCorners(obb.corners as unknown as Vec3[]);
   if (!boxGeometry) return null;
 
   const anchor = new Vector3(...anchorWorldPos);
   const halfSize = new Vector3(...obb.halfSize);
   const boxRadius = Math.max(halfSize.length(), 0.1);
-  const pinGeometry = buildCrossMarkerGeometry(anchor, boxRadius * 0.16);
+  const pinGeometry = buildPinMarkerGeometry(anchor, boxRadius);
 
   const labelAnchor = anchor.clone().add(new Vector3(boxRadius * 0.65, boxRadius * 0.65, boxRadius * 0.45));
-  const leaderGeometry = new BufferGeometry();
-  leaderGeometry.setAttribute('position', new BufferAttribute(new Float32Array([
-    anchor.x, anchor.y, anchor.z,
-    labelAnchor.x, labelAnchor.y, labelAnchor.z,
-  ]), 3));
 
   const boxMaterial = new LineBasicMaterial({ color: 0x111827 });
   const pinMaterial = new LineBasicMaterial({ color: 0x111827 });
-  const leaderMaterial = new LineBasicMaterial({ color: 0x111827 });
   (boxMaterial as any).depthTest = false;
   (pinMaterial as any).depthTest = false;
-  (leaderMaterial as any).depthTest = false;
 
   const box = new LineSegments(boxGeometry, boxMaterial);
   const pin = new LineSegments(pinGeometry, pinMaterial);
-  const leader = new LineSegments(leaderGeometry, leaderMaterial);
+  const leader = createAnnotationLeader('rect', anchor, labelAnchor, resolution);
   box.renderOrder = 900;
   pin.renderOrder = 901;
-  leader.renderOrder = 901;
 
   return { box, pin, leader, labelWorldPos: labelAnchor };
+}
+
+function resolveObbAnnotationAnchorWorldPos(record: ObbAnnotationRecord): Vector3 {
+  if (record.anchor.kind === 'corner') {
+    const corner = record.obb.corners[record.anchor.cornerIndex];
+    if (corner) {
+      return new Vector3(...corner);
+    }
+  }
+  const box = new Box3();
+  for (const corner of record.obb.corners) {
+    box.expandByPoint(new Vector3(...corner));
+  }
+  return topCenterFromBox3(box);
+}
+
+function createObbAnnotationVisual(
+  record: ObbAnnotationRecord,
+  resolution?: { width: number; height: number },
+): RectAnnotationVisual | null {
+  const anchorWorldPos = resolveObbAnnotationAnchorWorldPos(record);
+  const boxGeometry = buildWireBoxGeometryFromCorners(record.obb.corners as unknown as Vec3[]);
+  if (!boxGeometry) return null;
+  const halfSize = new Vector3(...record.obb.halfSize);
+  const boxRadius = Math.max(halfSize.length(), 0.1);
+  const pinGeometry = buildPinMarkerGeometry(anchorWorldPos, boxRadius);
+  const labelWorldPos = new Vector3(...record.labelWorldPos);
+
+  const boxMaterial = new LineBasicMaterial({ color: 0x0f766e });
+  const pinMaterial = new LineBasicMaterial({ color: 0x0f766e });
+  (boxMaterial as any).depthTest = false;
+  (pinMaterial as any).depthTest = false;
+
+  const box = new LineSegments(boxGeometry, boxMaterial);
+  const pin = new LineSegments(pinGeometry, pinMaterial);
+  const leader = createAnnotationLeader('obb', anchorWorldPos, labelWorldPos, resolution);
+  box.renderOrder = 900;
+  pin.renderOrder = 901;
+
+  return { box, pin, leader, labelWorldPos };
 }
 
 export function createRectAnnotationRecordFromObb(params: {
@@ -527,28 +975,47 @@ function makeMarkerEl(parent: HTMLElement, text: string, color: string): HTMLDiv
   return el;
 }
 
+function makeTextAnnotationMarkerEl(parent: HTMLElement, glyph: string, collapsed: boolean): HTMLDivElement {
+  const el = ensureDiv(
+    parent,
+    'dtx-anno-marker',
+    buildTextAnnotationMarkerStyleText(collapsed),
+  );
+  el.innerHTML = buildTextAnnotationMarkerHtml(glyph, collapsed);
+  if (collapsed) {
+    el.dataset.markerKind = 'location-pin';
+  } else {
+    el.dataset.markerKind = 'push-pin';
+  }
+  return el;
+}
+
 function makeLabelEl(parent: HTMLElement, title: string, description: string): HTMLDivElement {
-  // SolveSpace 风格：透明背景、纯文本
   const el = ensureDiv(
     parent,
     'dtx-anno-label',
-    [
-      'position:absolute',
-      'transform:translate(-50%,-110%)',
-      'pointer-events:auto',
-      'z-index:910',
-      'max-width:260px',
-      'padding:2px 4px',
-      'border-radius:0',
-      'background:transparent',
-      'color:#fff',
-      'box-shadow:none',
-      'white-space:pre-wrap',
-      'font-family:\'Roboto Mono\',\'Consolas\',monospace',
-      'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000',
-    ].join(';')
+    buildAnnotationLabelStyleText()
   );
-  el.innerHTML = `<div style="font-weight:700;line-height:1.2;">${title}</div><div style="margin-top:2px;font-size:12px;opacity:0.95;">${description || ''}</div>`;
+  el.innerHTML = buildAnnotationLabelHtml(title, description);
+  return el;
+}
+
+function makeTextAnnotationCardEl(parent: HTMLElement, title: string, description: string): HTMLDivElement {
+  return makeInlineAnnotationCardEl(parent, '批注', title, description);
+}
+
+function makeInlineAnnotationCardEl(
+  parent: HTMLElement,
+  kindLabel: string,
+  title: string,
+  description: string,
+): HTMLDivElement {
+  const el = ensureDiv(
+    parent,
+    'dtx-anno-label',
+    buildAnnotationLabelStyleText(),
+  );
+  el.innerHTML = buildInlineAnnotationCardHtml(kindLabel, title, description);
   return el;
 }
 
@@ -619,8 +1086,8 @@ export function useDtxTools(options: {
   const selectionStore = useSelectionStore();
   const unitSettings = useUnitSettingsStore();
 
-  let lastTextMarkerClickTime = 0;
-  let lastTextMarkerClickId: string | null = null;
+  let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
+  let lastTextMarkerClick: { annotationId: string; timestamp: number } | null = null;
 
   // pick_refno：仅在拾取会话内维护，不写入 store
   const pickedHighlightByBran = new Map<string, string>();
@@ -671,6 +1138,408 @@ export function useDtxTools(options: {
     dim.userData.draggable = false;
     sys.addAnnotation(DIMENSION_PREVIEW_ID, dim);
     return dim;
+  }
+
+  function activateAnnotation(kind: AnnotationOverlayKind, id: string) {
+    store.activeAnnotationId.value = kind === 'text' ? id : null;
+    store.activeCloudAnnotationId.value = kind === 'cloud' ? id : null;
+    store.activeRectAnnotationId.value = kind === 'rect' ? id : null;
+    store.activeObbAnnotationId.value = kind === 'obb' ? id : null;
+  }
+
+  function openAnnotationEditor(kind: AnnotationOverlayKind, id: string) {
+    if (kind === 'text') {
+      focusInlineAnnotationEditor('text', id);
+      return;
+    }
+    if (kind === 'cloud') {
+      focusInlineAnnotationEditor('cloud', id);
+      return;
+    }
+    if (kind === 'rect') {
+      focusInlineAnnotationEditor('rect', id);
+      return;
+    }
+    focusInlineAnnotationEditor('obb', id);
+  }
+
+  function getInlineAnnotationLabelKey(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string): string {
+    if (kind === 'text') return `anno:${annotationId}`;
+    if (kind === 'cloud') return `cloud:${annotationId}`;
+    if (kind === 'rect') return `rect:${annotationId}`;
+    return `obb:${annotationId}`;
+  }
+
+  function getInlineAnnotationDraftKey(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string): string {
+    return `${kind}:${annotationId}`;
+  }
+
+  function setInlineAnnotationDraft(
+    kind: 'text' | 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+    draft: InlineTextAnnotationDraft,
+  ) {
+    inlineTextAnnotationDrafts.set(getInlineAnnotationDraftKey(kind, annotationId), draft);
+  }
+
+  function getInlineTextAnnotationDraft(
+    kind: 'text' | 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+    fallback: Pick<AnnotationRecord, 'title' | 'description'>,
+  ): InlineTextAnnotationDraft {
+    return inlineTextAnnotationDrafts.get(getInlineAnnotationDraftKey(kind, annotationId)) ?? {
+      title: fallback.title || '批注',
+      description: fallback.description || '',
+    };
+  }
+
+  function pruneInlineTextAnnotationDrafts() {
+    const existingKeys = new Set<string>([
+      ...store.annotations.value.map((annotation) => getInlineAnnotationDraftKey('text', annotation.id)),
+      ...store.cloudAnnotations.value.map((annotation) => getInlineAnnotationDraftKey('cloud', annotation.id)),
+      ...store.rectAnnotations.value.map((annotation) => getInlineAnnotationDraftKey('rect', annotation.id)),
+      ...store.obbAnnotations.value.map((annotation) => getInlineAnnotationDraftKey('obb', annotation.id)),
+    ]);
+    for (const draftKey of inlineTextAnnotationDrafts.keys()) {
+      if (!existingKeys.has(draftKey)) {
+        inlineTextAnnotationDrafts.delete(draftKey);
+      }
+    }
+  }
+
+  function clearPendingInlineAnnotationEdit(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string) {
+    if (kind === 'text' && store.pendingTextAnnotationEditId.value === annotationId) {
+      store.pendingTextAnnotationEditId.value = null;
+    }
+    if (kind === 'cloud' && store.pendingCloudAnnotationEditId.value === annotationId) {
+      store.pendingCloudAnnotationEditId.value = null;
+    }
+    if (kind === 'rect' && store.pendingRectAnnotationEditId.value === annotationId) {
+      store.pendingRectAnnotationEditId.value = null;
+    }
+    if (kind === 'obb' && store.pendingObbEditId.value === annotationId) {
+      store.pendingObbEditId.value = null;
+    }
+  }
+
+  function focusInlineAnnotationEditor(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string) {
+    const label = labels.get(getInlineAnnotationLabelKey(kind, annotationId))?.el;
+    if (!label) {
+      if (kind === 'text') store.pendingTextAnnotationEditId.value = annotationId;
+      if (kind === 'cloud') store.pendingCloudAnnotationEditId.value = annotationId;
+      if (kind === 'rect') store.pendingRectAnnotationEditId.value = annotationId;
+      if (kind === 'obb') store.pendingObbEditId.value = annotationId;
+      return;
+    }
+    const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+    if (titleInput) {
+      titleInput.focus();
+      titleInput.select();
+    }
+    clearPendingInlineAnnotationEdit(kind, annotationId);
+  }
+
+  function handleAnnotationOverlayClick(kind: AnnotationOverlayKind, id: string) {
+    const result = resolveAnnotationLabelClickAction(lastAnnotationLabelClick, kind, id, Date.now());
+    lastAnnotationLabelClick = result.nextState;
+    if (result.action === 'edit') {
+      openAnnotationEditor(kind, id);
+      return;
+    }
+    activateAnnotation(kind, id);
+  }
+
+  function handleTextAnnotationMarkerClick(id: string) {
+    commitInlineAnnotationDraft('text', id);
+    const now = Date.now();
+    const isDoubleClick = !!lastTextMarkerClick
+      && lastTextMarkerClick.annotationId === id
+      && now - lastTextMarkerClick.timestamp < 400;
+
+    if (isDoubleClick) {
+      const rec = store.annotations.value.find((item) => item.id === id);
+      if (rec) {
+        store.updateAnnotation(id, { collapsed: toggleTextAnnotationCollapsed(rec.collapsed) });
+      }
+      lastTextMarkerClick = null;
+      return;
+    }
+
+    activateAnnotation('text', id);
+    lastTextMarkerClick = { annotationId: id, timestamp: now };
+  }
+
+  function commitDraggedTextAnnotation(annotationId: string, labelWorldPos: Vector3) {
+    store.updateAnnotation(annotationId, { labelWorldPos: vec3ToTuple(labelWorldPos) });
+  }
+
+  function commitDraggedOverlayAnnotation(
+    kind: 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+    labelWorldPos: Vector3,
+  ) {
+    const patch = { leaderEndWorldPos: vec3ToTuple(labelWorldPos) };
+    if (kind === 'cloud') {
+      store.updateCloudAnnotation(annotationId, patch);
+      return;
+    }
+    if (kind === 'rect') {
+      store.updateRectAnnotation(annotationId, patch);
+      return;
+    }
+    store.updateObbAnnotation(annotationId, { labelWorldPos: vec3ToTuple(labelWorldPos) });
+  }
+
+  function getInlineAnnotationRecord(
+    kind: 'text' | 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+  ): Pick<AnnotationRecord, 'title' | 'description'> | null {
+    if (kind === 'text') {
+      return store.annotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    if (kind === 'cloud') {
+      return store.cloudAnnotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    if (kind === 'rect') {
+      return store.rectAnnotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    return store.obbAnnotations.value.find((item) => item.id === annotationId) ?? null;
+  }
+
+  function updateInlineAnnotationRecord(
+    kind: 'text' | 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+    patch: { title?: string; description?: string },
+  ) {
+    if (kind === 'text') {
+      store.updateAnnotation(annotationId, patch);
+      return;
+    }
+    if (kind === 'cloud') {
+      store.updateCloudAnnotation(annotationId, patch);
+      return;
+    }
+    if (kind === 'rect') {
+      store.updateRectAnnotation(annotationId, patch);
+      return;
+    }
+    store.updateObbAnnotation(annotationId, patch);
+  }
+
+  function commitInlineAnnotationDraft(kind: 'text' | 'cloud' | 'rect' | 'obb', annotationId: string) {
+    const rec = getInlineAnnotationRecord(kind, annotationId);
+    if (!rec) return;
+    const label = labels.get(getInlineAnnotationLabelKey(kind, annotationId))?.el;
+    const titleInput = label?.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+    const descriptionInput = label?.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+    const draft = inlineTextAnnotationDrafts.get(getInlineAnnotationDraftKey(kind, annotationId));
+    const nextTitle = titleInput
+      ? (titleInput.value.trim() || '批注')
+      : (draft ? (draft.title.trim() || '批注') : rec.title);
+    const nextDescription = descriptionInput
+      ? descriptionInput.value
+      : (draft ? draft.description : rec.description);
+    const patch: Partial<AnnotationRecord> = {};
+    if (nextTitle !== rec.title) {
+      patch.title = nextTitle;
+    }
+    if (nextDescription !== rec.description) {
+      patch.description = nextDescription;
+    }
+    if (Object.keys(patch).length > 0) {
+      updateInlineAnnotationRecord(kind, annotationId, patch);
+    }
+    inlineTextAnnotationDrafts.delete(getInlineAnnotationDraftKey(kind, annotationId));
+  }
+
+  function resetTextAnnotationDrag() {
+    textAnnotationDrag.value = {
+      annotationId: null,
+      pointerId: null,
+      anchorWorldPos: null,
+      anchorNdcZ: 0,
+      moved: false,
+    };
+  }
+
+  function updateDraggedTextAnnotation(annotationId: string, nextLabelWorldPos: Vector3) {
+    const labelEntry = labels.get(`anno:${annotationId}`);
+    if (labelEntry) {
+      labelEntry.worldPos = nextLabelWorldPos.clone();
+    }
+    const leader = textLeaders.get(`anno:${annotationId}`);
+    const dragAnchor = textAnnotationDrag.value.anchorWorldPos;
+    if (leader && dragAnchor) {
+      updateLeaderGeometry(leader, dragAnchor, nextLabelWorldPos);
+    }
+    updateOverlayPositions();
+    requestRender?.();
+  }
+
+  function beginTextAnnotationDrag(
+    annotationId: string,
+    event: PointerEvent,
+    labelWorldPos: Vector3,
+    anchorWorldPos: Vector3,
+  ) {
+    const viewer = dtxViewerRef.value;
+    const overlay = overlayContainerRef.value;
+    const canvas = viewer?.canvas;
+    if (!viewer || !overlay || !canvas) return;
+    const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, anchorWorldPos);
+    const labelEntry = labels.get(`anno:${annotationId}`);
+    if (labelEntry) {
+      labelEntry.worldPos = labelWorldPos.clone();
+    }
+    textAnnotationDrag.value = {
+      annotationId,
+      pointerId: event.pointerId,
+      anchorWorldPos: anchorWorldPos.clone(),
+      anchorNdcZ: anchorScreen.ndcZ,
+      moved: false,
+    };
+  }
+
+  function continueTextAnnotationDrag(event: PointerEvent) {
+    const dragState = textAnnotationDrag.value;
+    if (!dragState.annotationId || dragState.pointerId !== event.pointerId || !dragState.anchorWorldPos) return;
+    const viewer = dtxViewerRef.value;
+    const overlay = overlayContainerRef.value;
+    const canvas = viewer?.canvas;
+    if (!viewer || !overlay || !canvas) return;
+    const overlayRect = overlay.getBoundingClientRect();
+    const nextLabelWorldPos = overlayToWorld(
+      viewer.camera,
+      canvas,
+      overlay,
+      event.clientX - overlayRect.left,
+      event.clientY - overlayRect.top,
+      dragState.anchorNdcZ,
+    );
+    dragState.moved = true;
+    updateDraggedTextAnnotation(dragState.annotationId, nextLabelWorldPos);
+  }
+
+  function endTextAnnotationDrag(event: PointerEvent) {
+    const dragState = textAnnotationDrag.value;
+    if (!dragState.annotationId || dragState.pointerId !== event.pointerId) return;
+    const labelEntry = labels.get(`anno:${dragState.annotationId}`);
+    const finalLabelWorldPos = labelEntry?.worldPos?.clone() ?? null;
+    const annotationId = dragState.annotationId;
+    const shouldCommit = dragState.moved && finalLabelWorldPos;
+    resetTextAnnotationDrag();
+    if (shouldCommit && finalLabelWorldPos) {
+      commitDraggedTextAnnotation(annotationId, finalLabelWorldPos);
+    } else {
+      updateOverlayPositions();
+      requestRender?.();
+    }
+  }
+
+  function resetInlineOverlayAnnotationDrag() {
+    inlineOverlayAnnotationDrag.value = {
+      annotationId: null,
+      annotationKind: null,
+      pointerId: null,
+      anchorWorldPos: null,
+      anchorNdcZ: 0,
+      moved: false,
+    };
+  }
+
+  function updateDraggedOverlayAnnotation(
+    kind: 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+    nextLabelWorldPos: Vector3,
+  ) {
+    const labelEntry = labels.get(getInlineAnnotationLabelKey(kind, annotationId));
+    if (labelEntry) {
+      labelEntry.worldPos = nextLabelWorldPos.clone();
+    }
+    if (kind === 'cloud') {
+      const cloud = cloudShapes.get(`cloud:${annotationId}`);
+      if (cloud) {
+        cloud.labelWorldPos = nextLabelWorldPos.clone();
+        updateLeaderGeometry(cloud.leader, cloud.worldPos, nextLabelWorldPos);
+      }
+    } else if (kind === 'rect') {
+      const rect = rectShapes.get(`rect:${annotationId}`);
+      if (rect) {
+        rect.labelWorldPos = nextLabelWorldPos.clone();
+        updateLeaderGeometry(rect.leader, rect.worldPos, nextLabelWorldPos);
+      }
+    } else {
+      const obb = obbShapes.get(`obb:${annotationId}`);
+      if (obb) {
+        obb.labelWorldPos = nextLabelWorldPos.clone();
+        updateLeaderGeometry(obb.leader, obb.worldPos, nextLabelWorldPos);
+      }
+    }
+    updateOverlayPositions();
+    requestRender?.();
+  }
+
+  function beginInlineOverlayAnnotationDrag(
+    kind: 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+    event: PointerEvent,
+    labelWorldPos: Vector3,
+    anchorWorldPos: Vector3,
+  ) {
+    const viewer = dtxViewerRef.value;
+    const overlay = overlayContainerRef.value;
+    const canvas = viewer?.canvas;
+    if (!viewer || !overlay || !canvas) return;
+    const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, anchorWorldPos);
+    const labelEntry = labels.get(getInlineAnnotationLabelKey(kind, annotationId));
+    if (labelEntry) {
+      labelEntry.worldPos = labelWorldPos.clone();
+    }
+    inlineOverlayAnnotationDrag.value = {
+      annotationId,
+      annotationKind: kind,
+      pointerId: event.pointerId,
+      anchorWorldPos: anchorWorldPos.clone(),
+      anchorNdcZ: anchorScreen.ndcZ,
+      moved: false,
+    };
+  }
+
+  function continueInlineOverlayAnnotationDrag(event: PointerEvent) {
+    const dragState = inlineOverlayAnnotationDrag.value;
+    if (!dragState.annotationId || !dragState.annotationKind || dragState.pointerId !== event.pointerId || !dragState.anchorWorldPos) return;
+    const viewer = dtxViewerRef.value;
+    const overlay = overlayContainerRef.value;
+    const canvas = viewer?.canvas;
+    if (!viewer || !overlay || !canvas) return;
+    const overlayRect = overlay.getBoundingClientRect();
+    const nextLabelWorldPos = overlayToWorld(
+      viewer.camera,
+      canvas,
+      overlay,
+      event.clientX - overlayRect.left,
+      event.clientY - overlayRect.top,
+      dragState.anchorNdcZ,
+    );
+    dragState.moved = true;
+    updateDraggedOverlayAnnotation(dragState.annotationKind, dragState.annotationId, nextLabelWorldPos);
+  }
+
+  function endInlineOverlayAnnotationDrag(event: PointerEvent) {
+    const dragState = inlineOverlayAnnotationDrag.value;
+    if (!dragState.annotationId || !dragState.annotationKind || dragState.pointerId !== event.pointerId) return;
+    const labelEntry = labels.get(getInlineAnnotationLabelKey(dragState.annotationKind, dragState.annotationId));
+    const finalLabelWorldPos = labelEntry?.worldPos?.clone() ?? null;
+    const annotationId = dragState.annotationId;
+    const annotationKind = dragState.annotationKind;
+    const shouldCommit = dragState.moved && finalLabelWorldPos;
+    resetInlineOverlayAnnotationDrag();
+    if (shouldCommit && finalLabelWorldPos) {
+      commitDraggedOverlayAnnotation(annotationKind, annotationId, finalLabelWorldPos);
+    } else {
+      updateOverlayPositions();
+      requestRender?.();
+    }
   }
 
   function ensureAnglePreview(sys: UseAnnotationThreeReturn): AngleDimension3D {
@@ -856,6 +1725,25 @@ export function useDtxTools(options: {
   const labels = new Map<string, LabelEl>();
   const markers = new Map<string, LabelEl>();
   const cloudShapes = new Map<string, CloudOverlayEl>();
+  const rectShapes = new Map<string, RectOverlayEl>();
+  const obbShapes = new Map<string, ObbOverlayEl>();
+  const textLeaders = new Map<string, AnnotationLeaderVisual>();
+  const inlineTextAnnotationDrafts = new Map<string, InlineTextAnnotationDraft>();
+  const textAnnotationDrag = ref<TextAnnotationDragState>({
+    annotationId: null,
+    pointerId: null,
+    anchorWorldPos: null,
+    anchorNdcZ: 0,
+    moved: false,
+  });
+  const inlineOverlayAnnotationDrag = ref<InlineOverlayAnnotationDragState>({
+    annotationId: null,
+    annotationKind: null,
+    pointerId: null,
+    anchorWorldPos: null,
+    anchorNdcZ: 0,
+    moved: false,
+  });
 
   const marqueeState = ref<DragRect>({ active: false, pointerId: null, startClient: null, startCanvas: null, currentCanvas: null });
   const marqueeDiv = ref<HTMLDivElement | null>(null);
@@ -901,10 +1789,9 @@ export function useDtxTools(options: {
       try { it.el.remove(); } catch { /* ignore */ }
     }
     markers.clear();
-    for (const it of cloudShapes.values()) {
-      try { it.svg.remove(); } catch { /* ignore */ }
-    }
     cloudShapes.clear();
+    rectShapes.clear();
+    obbShapes.clear();
   }
 
   function ensureMarqueeDiv() {
@@ -973,131 +1860,373 @@ export function useDtxTools(options: {
     const viewer = dtxViewerRef.value;
     const overlay = overlayContainerRef.value;
     if (!viewer || !overlay) return;
+    const resolution = getCanvasResolution(viewer.canvas);
 
     ensureToolsGroupAttached();
     clearGroup(toolsGroup);
     clearOverlayEls();
+    textLeaders.clear();
+    pruneInlineTextAnnotationDrafts();
 
     // ---------------- Text annotations ----------------
     for (const a of store.annotations.value) {
       if (!a.visible) continue;
 
       const wp = new Vector3(...a.worldPos);
-      const marker = makeMarkerEl(overlay, a.glyph || 'A', '#2563eb');
-      const label = makeLabelEl(overlay, a.title || '批注', a.description || '');
+      const labelWorldPos = new Vector3(...(a.labelWorldPos ?? getDefaultTextAnnotationLabelWorldPos(a.worldPos)));
+      const marker = makeTextAnnotationMarkerEl(overlay, a.glyph || 'A', a.collapsed === true);
       markers.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: wp, el: marker });
-      labels.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: wp, el: label });
+      marker.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        handleTextAnnotationMarkerClick(a.id);
+      });
 
-      const onClick = () => {
-        const now = Date.now();
-        const isDouble = lastTextMarkerClickId === a.id && now - lastTextMarkerClickTime < 400;
-        if (isDouble) {
-          store.pendingTextAnnotationEditId.value = a.id;
-          lastTextMarkerClickId = null;
-          lastTextMarkerClickTime = 0;
-        } else {
-          store.activeAnnotationId.value = a.id;
-          store.activeCloudAnnotationId.value = null;
-          store.activeRectAnnotationId.value = null;
-          store.activeObbAnnotationId.value = null;
-          lastTextMarkerClickId = a.id;
-          lastTextMarkerClickTime = now;
+      if (shouldRenderTextAnnotationCard(a.collapsed)) {
+        const leader = createTextAnnotationLeader(wp, labelWorldPos, resolution);
+        toolsGroup.add(leader.root);
+        textLeaders.set(`anno:${a.id}`, leader);
+
+        const draft = getInlineTextAnnotationDraft('text', a.id, a);
+        const label = makeTextAnnotationCardEl(overlay, draft.title, draft.description);
+        labels.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: labelWorldPos, el: label });
+
+        const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+        const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+        const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+
+        label.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('text', a.id);
+        });
+        label.addEventListener('focusout', () => {
+          queueMicrotask(() => {
+            const activeElement = label.ownerDocument?.activeElement;
+            if (activeElement && label.contains(activeElement)) return;
+            commitInlineAnnotationDraft('text', a.id);
+          });
+        });
+
+        dragHandle?.addEventListener('pointerdown', (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+          commitInlineAnnotationDraft('text', a.id);
+          dragHandle.style.cursor = 'grabbing';
+          beginTextAnnotationDrag(a.id, ev, labelWorldPos, wp);
+          try {
+            dragHandle.setPointerCapture(ev.pointerId);
+          } catch {
+            // ignore
+          }
+        });
+        dragHandle?.addEventListener('pointermove', (ev) => {
+          if (textAnnotationDrag.value.annotationId !== a.id) return;
+          continueTextAnnotationDrag(ev);
+        });
+        dragHandle?.addEventListener('pointerup', (ev) => {
+          if (textAnnotationDrag.value.annotationId !== a.id) return;
+          dragHandle.style.cursor = 'grab';
+          endTextAnnotationDrag(ev);
+        });
+        dragHandle?.addEventListener('pointercancel', (ev) => {
+          if (textAnnotationDrag.value.annotationId !== a.id) return;
+          dragHandle.style.cursor = 'grab';
+          endTextAnnotationDrag(ev);
+        });
+
+        titleInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('text', a.id);
+        });
+        titleInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('text', a.id, {
+            title: titleInput.value,
+            description: descriptionInput?.value ?? draft.description,
+          });
+        });
+
+        descriptionInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('text', a.id);
+        });
+        descriptionInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('text', a.id, {
+            title: titleInput?.value ?? draft.title,
+            description: descriptionInput.value,
+          });
+        });
+
+        if (store.pendingTextAnnotationEditId.value === a.id) {
+          queueMicrotask(() => focusInlineAnnotationEditor('text', a.id));
         }
-      };
-
-      marker.addEventListener('click', (ev) => { ev.stopPropagation(); onClick(); });
-      label.addEventListener('click', (ev) => { ev.stopPropagation(); onClick(); });
+      }
     }
 
     // ---------------- Cloud annotations (screen-space cloud + world anchor) ----------------
     for (const c of store.cloudAnnotations.value) {
       if (!c.visible) continue;
       const anchor = new Vector3(...c.anchorWorldPos);
-      const marker = makeMarkerEl(overlay, 'C', '#dc2626');
-      markers.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: marker });
-      marker.style.transform = 'translate(-50%,-50%)';
-
-      const cloudSvg = makeCloudSvgEl(overlay);
-      const cloudPath = makeCloudPathEl(cloudSvg);
-      const leaderPath = makeCloudLeaderPathEl(cloudSvg);
+      const visual = createCloudAnnotationVisual(c, resolution);
+      toolsGroup.add(visual.pin, visual.leader.root, visual.outline);
       cloudShapes.set(`cloud:${c.id}`, {
         id: `cloud:${c.id}`,
         worldPos: anchor,
-        svg: cloudSvg,
-        path: cloudPath,
-        leaderPath,
+        labelWorldPos: visual.labelWorldPos.clone(),
+        leader: visual.leader,
+        outline: visual.outline,
         record: c,
       });
 
-      const label = makeLabelEl(overlay, c.title || '云线批注', c.description || '');
-      label.style.transform = 'translate(0,-50%)';
-      labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: label });
+      const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
+      const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
+      label.style.transform = 'translate(-50%,-50%)';
+      labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: visual.labelWorldPos, el: label });
+      const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+      const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+      const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
 
-      marker.addEventListener('click', (ev) => {
+      label.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        store.activeCloudAnnotationId.value = c.id;
-        store.activeAnnotationId.value = null;
-        store.activeRectAnnotationId.value = null;
-        store.activeObbAnnotationId.value = null;
+        activateAnnotation('cloud', c.id);
       });
+      label.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+        focusInlineAnnotationEditor('cloud', c.id);
+      });
+      label.addEventListener('focusout', () => {
+        queueMicrotask(() => {
+          const activeElement = label.ownerDocument?.activeElement;
+          if (activeElement && label.contains(activeElement)) return;
+          commitInlineAnnotationDraft('cloud', c.id);
+        });
+      });
+
+      dragHandle?.addEventListener('pointerdown', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        commitInlineAnnotationDraft('cloud', c.id);
+        dragHandle.style.cursor = 'grabbing';
+        beginInlineOverlayAnnotationDrag('cloud', c.id, ev, visual.labelWorldPos, anchor);
+        try {
+          dragHandle.setPointerCapture(ev.pointerId);
+        } catch {
+          // ignore
+        }
+      });
+      dragHandle?.addEventListener('pointermove', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+        continueInlineOverlayAnnotationDrag(ev);
+      });
+      dragHandle?.addEventListener('pointerup', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+        dragHandle.style.cursor = 'grab';
+        endInlineOverlayAnnotationDrag(ev);
+      });
+      dragHandle?.addEventListener('pointercancel', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+        dragHandle.style.cursor = 'grab';
+        endInlineOverlayAnnotationDrag(ev);
+      });
+
+      titleInput?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('cloud', c.id);
+      });
+      titleInput?.addEventListener('input', () => {
+        setInlineAnnotationDraft('cloud', c.id, {
+          title: titleInput.value,
+          description: descriptionInput?.value ?? draft.description,
+        });
+      });
+      descriptionInput?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('cloud', c.id);
+      });
+      descriptionInput?.addEventListener('input', () => {
+        setInlineAnnotationDraft('cloud', c.id, {
+          title: titleInput?.value ?? draft.title,
+          description: descriptionInput.value,
+        });
+      });
+
+      if (store.pendingCloudAnnotationEditId.value === c.id) {
+        queueMicrotask(() => focusInlineAnnotationEditor('cloud', c.id));
+      }
     }
 
     // ---------------- Rect annotations (OBB rectangle) ----------------
     for (const r of store.rectAnnotations.value) {
       if (!r.visible) continue;
 
-      const visual = createRectAnnotationVisual(r.obb, r.anchorWorldPos);
+      const visual = createRectAnnotationVisual(r.obb, r.anchorWorldPos, resolution);
       if (!visual) continue;
-      toolsGroup.add(visual.box, visual.pin, visual.leader);
+      toolsGroup.add(visual.box, visual.pin, visual.leader.root);
 
-      const center = new Vector3(...r.anchorWorldPos);
-      const marker = makeMarkerEl(overlay, 'R', '#111827');
-      markers.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: center, el: marker });
-
-      const isActive = store.activeRectAnnotationId.value === r.id;
-      if (isActive) {
-        const label = makeLabelEl(overlay, r.title || '矩形批注', r.description || '');
-        const labelWorldPos = r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos;
-        labels.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: labelWorldPos, el: label });
-      }
-
-      marker.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        store.activeRectAnnotationId.value = r.id;
-        store.activeAnnotationId.value = null;
-        store.activeCloudAnnotationId.value = null;
-        store.activeObbAnnotationId.value = null;
+      const draft = getInlineTextAnnotationDraft('rect', r.id, r);
+      const label = makeInlineAnnotationCardEl(overlay, '矩形批注', draft.title, draft.description);
+      const labelWorldPos = r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos;
+      labels.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: labelWorldPos, el: label });
+      rectShapes.set(`rect:${r.id}`, {
+        id: `rect:${r.id}`,
+        worldPos: new Vector3(...r.anchorWorldPos),
+        labelWorldPos: labelWorldPos.clone(),
+        leader: visual.leader,
       });
+      const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+      const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+      const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+      label.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('rect', r.id);
+      });
+      label.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+        focusInlineAnnotationEditor('rect', r.id);
+      });
+      label.addEventListener('focusout', () => {
+        queueMicrotask(() => {
+          const activeElement = label.ownerDocument?.activeElement;
+          if (activeElement && label.contains(activeElement)) return;
+          commitInlineAnnotationDraft('rect', r.id);
+        });
+      });
+      dragHandle?.addEventListener('pointerdown', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        commitInlineAnnotationDraft('rect', r.id);
+        dragHandle.style.cursor = 'grabbing';
+        beginInlineOverlayAnnotationDrag('rect', r.id, ev, labelWorldPos, new Vector3(...r.anchorWorldPos));
+        try {
+          dragHandle.setPointerCapture(ev.pointerId);
+        } catch {
+          // ignore
+        }
+      });
+      dragHandle?.addEventListener('pointermove', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
+        continueInlineOverlayAnnotationDrag(ev);
+      });
+      dragHandle?.addEventListener('pointerup', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
+        dragHandle.style.cursor = 'grab';
+        endInlineOverlayAnnotationDrag(ev);
+      });
+      dragHandle?.addEventListener('pointercancel', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
+        dragHandle.style.cursor = 'grab';
+        endInlineOverlayAnnotationDrag(ev);
+      });
+      titleInput?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('rect', r.id);
+      });
+      titleInput?.addEventListener('input', () => {
+        setInlineAnnotationDraft('rect', r.id, {
+          title: titleInput.value,
+          description: descriptionInput?.value ?? draft.description,
+        });
+      });
+      descriptionInput?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('rect', r.id);
+      });
+      descriptionInput?.addEventListener('input', () => {
+        setInlineAnnotationDraft('rect', r.id, {
+          title: titleInput?.value ?? draft.title,
+          description: descriptionInput.value,
+        });
+      });
+
+      if (store.pendingRectAnnotationEditId.value === r.id) {
+        queueMicrotask(() => focusInlineAnnotationEditor('rect', r.id));
+      }
     }
 
     // ---------------- OBB annotations ----------------
     for (const o of store.obbAnnotations.value) {
       if (!o.visible) continue;
-      const g = buildWireBoxGeometryFromCorners(o.obb.corners as unknown as Vec3[]);
-      if (!g) continue;
-      const mat = new LineBasicMaterial({ color: 0x0f766e })
-        ; (mat as any).depthTest = false;
-      const wire = new LineSegments(g, mat);
-      wire.renderOrder = 900;
-      toolsGroup.add(wire);
+      const visual = createObbAnnotationVisual(o, resolution);
+      if (!visual) continue;
+      toolsGroup.add(visual.box, visual.pin, visual.leader.root);
 
-      const anchor = new Vector3(...o.labelWorldPos);
-      const marker = makeMarkerEl(overlay, 'O', '#0f766e');
-      markers.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: anchor, el: marker });
-
-      const isActive = store.activeObbAnnotationId.value === o.id;
-      if (isActive) {
-        const label = makeLabelEl(overlay, o.title || 'OBB 批注', o.description || '');
-        labels.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: anchor, el: label });
-      }
-
-      marker.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        store.activeObbAnnotationId.value = o.id;
-        store.activeAnnotationId.value = null;
-        store.activeCloudAnnotationId.value = null;
-        store.activeRectAnnotationId.value = null;
+      const draft = getInlineTextAnnotationDraft('obb', o.id, o);
+      const label = makeInlineAnnotationCardEl(overlay, 'OBB 批注', draft.title, draft.description);
+      const anchorWorldPos = resolveObbAnnotationAnchorWorldPos(o);
+      labels.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: visual.labelWorldPos.clone(), el: label });
+      obbShapes.set(`obb:${o.id}`, {
+        id: `obb:${o.id}`,
+        worldPos: anchorWorldPos,
+        labelWorldPos: visual.labelWorldPos.clone(),
+        leader: visual.leader,
       });
+      const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+      const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+      const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+
+      label.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('obb', o.id);
+      });
+      label.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+        focusInlineAnnotationEditor('obb', o.id);
+      });
+      label.addEventListener('focusout', () => {
+        queueMicrotask(() => {
+          const activeElement = label.ownerDocument?.activeElement;
+          if (activeElement && label.contains(activeElement)) return;
+          commitInlineAnnotationDraft('obb', o.id);
+        });
+      });
+      dragHandle?.addEventListener('pointerdown', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        commitInlineAnnotationDraft('obb', o.id);
+        dragHandle.style.cursor = 'grabbing';
+        beginInlineOverlayAnnotationDrag('obb', o.id, ev, visual.labelWorldPos.clone(), anchorWorldPos);
+        try {
+          dragHandle.setPointerCapture(ev.pointerId);
+        } catch {
+          // ignore
+        }
+      });
+      dragHandle?.addEventListener('pointermove', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
+        continueInlineOverlayAnnotationDrag(ev);
+      });
+      dragHandle?.addEventListener('pointerup', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
+        dragHandle.style.cursor = 'grab';
+        endInlineOverlayAnnotationDrag(ev);
+      });
+      dragHandle?.addEventListener('pointercancel', (ev) => {
+        if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
+        dragHandle.style.cursor = 'grab';
+        endInlineOverlayAnnotationDrag(ev);
+      });
+      titleInput?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('obb', o.id);
+      });
+      titleInput?.addEventListener('input', () => {
+        setInlineAnnotationDraft('obb', o.id, {
+          title: titleInput.value,
+          description: descriptionInput?.value ?? draft.description,
+        });
+      });
+      descriptionInput?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('obb', o.id);
+      });
+      descriptionInput?.addEventListener('input', () => {
+        setInlineAnnotationDraft('obb', o.id, {
+          title: titleInput?.value ?? draft.title,
+          description: descriptionInput.value,
+        });
+      });
+
+      if (store.pendingObbEditId.value === o.id) {
+        queueMicrotask(() => focusInlineAnnotationEditor('obb', o.id));
+      }
     }
 
     // preview rect line (if exists)
@@ -1114,46 +2243,67 @@ export function useDtxTools(options: {
     const overlay = overlayContainerRef.value;
     const canvas = viewer?.canvas;
     if (!viewer || !overlay || !canvas) return;
+    const resolution = getCanvasResolution(canvas);
 
-    const cloudScreenLayouts = new Map<string, CloudLayout>();
+    for (const leader of textLeaders.values()) {
+      setAnnotationLeaderResolution(leader, resolution.width, resolution.height);
+    }
+    for (const cloud of cloudShapes.values()) {
+      setAnnotationLeaderResolution(cloud.leader, resolution.width, resolution.height);
+    }
+    for (const rect of rectShapes.values()) {
+      setAnnotationLeaderResolution(rect.leader, resolution.width, resolution.height);
+    }
+    for (const obb of obbShapes.values()) {
+      setAnnotationLeaderResolution(obb.leader, resolution.width, resolution.height);
+    }
+
     for (const [id, cloud] of cloudShapes.entries()) {
       const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos);
-      const layout = computeCloudLayout(anchorScreen, cloud.record.screenOffset, cloud.record.cloudSize);
-      cloud.path.setAttribute('d', layout.cloudPath);
-      const leaderStartX = anchorScreen.x;
-      const leaderStartY = anchorScreen.y;
-      const elbowX = layout.labelAlign === 'left'
-        ? layout.cloudCenterX + Math.min(16, Math.abs(layout.labelX - layout.cloudCenterX) * 0.35)
-        : layout.cloudCenterX - Math.min(16, Math.abs(layout.labelX - layout.cloudCenterX) * 0.35);
-      cloud.leaderPath.setAttribute(
-        'd',
-        `M ${leaderStartX.toFixed(1)} ${leaderStartY.toFixed(1)} L ${layout.cloudCenterX.toFixed(1)} ${layout.cloudCenterY.toFixed(1)} L ${elbowX.toFixed(1)} ${layout.labelY.toFixed(1)}`,
+      const labelScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.labelWorldPos);
+      const widthPx = clamp(cloud.record.cloudSize?.width ?? 120, 72, 220);
+      const heightPx = clamp(cloud.record.cloudSize?.height ?? 72, 48, 180);
+      const worldPerPixel = worldPerPixelAt(
+        viewer.camera,
+        cloud.labelWorldPos,
+        Math.max(1, canvas.clientWidth),
+        Math.max(1, canvas.clientHeight),
       );
-      cloud.svg.style.opacity = anchorScreen.visible ? '1' : '0';
-      cloudScreenLayouts.set(id, layout);
+      const cameraDir = viewer.camera.getWorldDirection(new Vector3()).normalize();
+      let right = new Vector3().crossVectors(cameraDir, viewer.camera.up).normalize();
+      if (!Number.isFinite(right.lengthSq()) || right.lengthSq() < 1e-8) {
+        right = new Vector3(1, 0, 0);
+      }
+      const up = new Vector3().crossVectors(right, cameraDir).normalize();
+      const positions = buildCloudBillboardPolyline(
+        cloud.labelWorldPos,
+        right,
+        up,
+        widthPx * worldPerPixel,
+        heightPx * worldPerPixel,
+        18,
+      );
+      cloud.outline.geometry.setAttribute(
+        'position',
+        new BufferAttribute(new Float32Array(positions), 3),
+      );
+      cloud.outline.geometry.computeBoundingSphere();
+      cloud.outline.visible = anchorScreen.visible && labelScreen.visible;
+      void id;
     }
 
     for (const it of markers.values()) {
-      const cloudLayout = cloudScreenLayouts.get(it.id);
-      const p = cloudLayout
-        ? { x: cloudLayout.markerX, y: cloudLayout.markerY, visible: true }
-        : worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
+      const p = worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
       it.el.style.left = `${p.x}px`;
       it.el.style.top = `${p.y}px`;
       it.el.style.opacity = p.visible ? '1' : '0';
     }
 
     for (const it of labels.values()) {
-      const cloudLayout = cloudScreenLayouts.get(it.id);
-      const p = cloudLayout
-        ? { x: cloudLayout.labelX, y: cloudLayout.labelY, visible: true }
-        : worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
+      const p = worldToOverlay(viewer.camera, canvas, overlay, it.worldPos);
       it.el.style.left = `${p.x}px`;
       it.el.style.top = `${p.y}px`;
       it.el.style.opacity = p.visible ? '1' : '0';
-      if (cloudLayout) {
-        it.el.style.transform = cloudLayout.labelAlign === 'left' ? 'translate(0,-50%)' : 'translate(-100%,-50%)';
-      }
     }
   }
 
@@ -1565,8 +2715,30 @@ export function useDtxTools(options: {
       return;
     }
 
-    const n = store.rectAnnotations.value.length + 1;
     const obb = computeAabbObbFromBox3(box);
+    if (mode === 'annotation_obb') {
+      const n = store.obbAnnotations.value.length + 1;
+      const anchorWorldPos = topCenterFromBox3(box);
+      const halfSize = new Vector3(...obb.halfSize);
+      const boxRadius = Math.max(halfSize.length(), 0.1);
+      const labelWorldPos = anchorWorldPos.clone().add(new Vector3(boxRadius * 0.65, boxRadius * 0.65, boxRadius * 0.45));
+      const rec: ObbAnnotationRecord = {
+        id: nowId('obb'),
+        objectIds: selectedRefnos,
+        obb,
+        labelWorldPos: vec3ToTuple(labelWorldPos),
+        anchor: { kind: 'top_center' },
+        visible: true,
+        title: `OBB 批注 ${n}`,
+        description: '',
+        createdAt: Date.now(),
+        refnos: selectedRefnos,
+      };
+      store.addObbAnnotation(rec);
+      return;
+    }
+
+    const n = store.rectAnnotations.value.length + 1;
     const rec = createRectAnnotationRecordFromObb({
       objectIds: selectedRefnos,
       refnos: selectedRefnos,
@@ -1586,7 +2758,7 @@ export function useDtxTools(options: {
     clickTracker.value = { down: { x: e.clientX, y: e.clientY }, moved: false };
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud') {
+    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
       beginMarquee(canvas, e, mode);
       return;
     }
@@ -1604,7 +2776,7 @@ export function useDtxTools(options: {
     }
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud') {
+    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
       moveMarquee(canvas, e, mode);
       return;
     }
@@ -1625,7 +2797,7 @@ export function useDtxTools(options: {
     if (!ready.value) return;
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud') {
+    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
       endMarquee(canvas, e, mode);
       return;
     }
@@ -1859,6 +3031,8 @@ export function useDtxTools(options: {
         id: nowId('anno'),
         entityId: hit.entityId,
         worldPos: vec3ToTuple(hit.worldPos),
+        labelWorldPos: getDefaultTextAnnotationLabelWorldPos(vec3ToTuple(hit.worldPos)),
+        collapsed: false,
         visible: true,
         glyph: `A${n}`,
         title: `批注 ${n}`,
