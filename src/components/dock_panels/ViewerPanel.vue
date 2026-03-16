@@ -1051,14 +1051,6 @@ function handleRibbonCommand(commandId: string) {
       store.setToolMode('measure_point_to_object');
       requestRender();
       return;
-    case 'measurement.xeokitDistance':
-      setMeasureMode('xeokit_measure_distance');
-      requestRender();
-      return;
-    case 'measurement.xeokitAngle':
-      setMeasureMode('xeokit_measure_angle');
-      requestRender();
-      return;
     case 'measurement.pipe_to_structure':
       setAutoNearestMode('measure_pipe_to_structure');
       return;
@@ -1074,10 +1066,6 @@ function handleRibbonCommand(commandId: string) {
       } else {
         store.clearMeasurements();
       }
-      requestRender();
-      return;
-    case 'measurement.xeokitClear':
-      xeokitMeasurementToolsRef.value?.clearMeasurements();
       requestRender();
       return;
     case 'dimension.linear':
