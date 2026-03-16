@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, useAttrs } from 'vue';
 
-import { FileText, Trash2, Upload, X, AlertCircle, CheckCircle, Loader2, RefreshCw } from 'lucide-vue-next';
+import { FileText, Upload, X, AlertCircle, CheckCircle, Loader2, RefreshCw } from 'lucide-vue-next';
 
 import { hasAttachmentLineage, shouldAutoUploadAttachments } from './reviewAttachmentFlow';
 
@@ -43,6 +43,10 @@ const props = withDefaults(defineProps<Props>(), {
   formId: null,
 });
 
+defineOptions({
+  inheritAttrs: false,
+});
+
 // Emits
 const emit = defineEmits<{
   (e: 'update:modelValue', value: UploadedFile[]): void;
@@ -53,6 +57,7 @@ const emit = defineEmits<{
 // 拖拽状态
 const isDragging = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const rootAttrs = useAttrs();
 
 // 计算属性
 const canAddMore = computed(() => props.modelValue.length < props.maxFiles);
@@ -270,6 +275,13 @@ function handleDragEnter(e: DragEvent) {
 
 function handleDragLeave(e: DragEvent) {
   e.preventDefault();
+
+  const currentTarget = e.currentTarget as HTMLElement | null;
+  const relatedTarget = e.relatedTarget as Node | null;
+  if (currentTarget && relatedTarget && currentTarget.contains(relatedTarget)) {
+    return;
+  }
+
   isDragging.value = false;
 }
 
@@ -335,7 +347,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="file-upload-section">
+  <div class="file-upload-section" v-bind="rootAttrs">
     <!-- 拖拽上传区域 -->
     <div :class="[
            'border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer',
@@ -345,6 +357,8 @@ defineExpose({
            disabled && 'opacity-50 cursor-not-allowed',
            !canAddMore && 'opacity-50',
          ]"
+      data-testid="file-upload-dropzone"
+      :aria-disabled="disabled || !canAddMore ? 'true' : 'false'"
       @dragenter="handleDragEnter"
       @dragleave="handleDragLeave"
       @dragover="handleDragOver"
@@ -366,6 +380,7 @@ defineExpose({
       multiple
       :accept="acceptTypes"
       :disabled="disabled || !canAddMore"
+      data-testid="file-upload-input"
       class="hidden"
       @change="handleFileInputChange" />
 
@@ -381,6 +396,7 @@ defineExpose({
         <div class="flex gap-2">
           <button v-if="!autoUpload && pendingCount > 0"
             class="text-xs text-blue-500 hover:text-blue-700"
+            data-testid="file-upload-start-button"
             @click.stop="startUpload">
             开始上传
           </button>
@@ -424,6 +440,7 @@ defineExpose({
           <div v-if="file.status === 'uploading'" class="mt-1">
             <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
               <div class="h-full bg-blue-500 transition-all duration-300"
+                data-testid="file-upload-progress-bar"
                 :style="{ width: `${file.progress}%` }" />
             </div>
           </div>
@@ -435,6 +452,7 @@ defineExpose({
           <button v-if="file.status === 'error'"
             class="p-1 hover:bg-red-100 rounded text-red-400 hover:text-red-600"
             title="重试上传"
+            data-testid="file-upload-retry-button"
             @click.stop="retryUpload(file.id)">
             <RefreshCw class="h-4 w-4" />
           </button>
@@ -442,6 +460,7 @@ defineExpose({
           <!-- 删除按钮 -->
           <button v-if="!disabled && file.status !== 'uploading'"
             class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
+            data-testid="file-upload-remove-button"
             @click.stop="removeFile(file.id)">
             <X class="h-4 w-4" />
           </button>
