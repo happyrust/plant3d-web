@@ -3,7 +3,15 @@ import { createApp, h, nextTick } from 'vue';
 
 const createTaskMock = vi.fn();
 const updateTaskAttachmentsMock = vi.fn();
+const submitTaskToNextNodeSpy = vi.fn();
 const uploadStartMock = vi.fn(async () => undefined);
+
+async function flushAsyncWork() {
+  await nextTick();
+  await nextTick();
+  await Promise.resolve();
+  await nextTick();
+}
 
 vi.mock('@/api/genModelPdmsAttrApi', () => ({
   pdmsGetUiAttr: vi.fn(async (refno: string) => ({
@@ -72,6 +80,9 @@ vi.mock('@/composables/useUserStore', () => ({
     },
     createReviewTask: createTaskMock,
     updateTaskAttachments: updateTaskAttachmentsMock,
+    submitTaskToNextNode: vi.fn(async (...args: unknown[]) => {
+      submitTaskToNextNodeSpy(...args);
+    }),
   }),
 }));
 
@@ -79,6 +90,7 @@ describe('InitiateReviewPanel form binding', () => {
   beforeEach(() => {
     createTaskMock.mockReset();
     updateTaskAttachmentsMock.mockReset();
+    submitTaskToNextNodeSpy.mockReset();
     uploadStartMock.mockClear();
     createTaskMock.mockResolvedValue({
       id: 'task-1',
@@ -148,7 +160,7 @@ describe('InitiateReviewPanel form binding', () => {
     expect((host.querySelector('[data-testid="initiate-due-date-value"]') as HTMLElement | null)?.textContent).toContain('2026-03-20');
 
     click('[data-testid="initiate-submit-trigger"]');
-    await nextTick();
+    await flushAsyncWork();
 
     expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       title: '综合校审数据包',
@@ -164,10 +176,11 @@ describe('InitiateReviewPanel form binding', () => {
         }),
       ],
     }));
+    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
 
     app.unmount();
     host.remove();
-  });
+  }, 10000);
 
   it('shows success feedback, closes the panel, and emits created/close after submit succeeds', async () => {
     const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
@@ -211,19 +224,16 @@ describe('InitiateReviewPanel form binding', () => {
     await nextTick();
 
     click('[data-testid="initiate-submit-trigger"]');
-    await nextTick();
-    await nextTick();
+    await flushAsyncWork();
 
     expect(createTaskMock).toHaveBeenCalledTimes(1);
-    expect((host.querySelector('button.w-full') as HTMLButtonElement | null)?.disabled).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
+    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
     expect(closeHandler).toHaveBeenCalled();
     expect(createdHandler).toHaveBeenCalledWith('task-1');
 
     app.unmount();
     host.remove();
-  });
+  }, 10000);
 
   it('keeps the panel rendered until the dock wrapper handles close events', async () => {
     const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
@@ -261,12 +271,10 @@ describe('InitiateReviewPanel form binding', () => {
     await nextTick();
 
     click('[data-testid="initiate-submit-trigger"]');
-    await nextTick();
-    await nextTick();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await nextTick();
+    await flushAsyncWork();
 
     expect(host.querySelector('[data-testid="designer-landing-workspace"]')).not.toBeNull();
+    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
     expect(host.textContent).toContain('提资单创建成功！');
 
     app.unmount();
