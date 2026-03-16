@@ -120,7 +120,7 @@ describe('useUserStore.createReviewTask', () => {
     expect(store.reviewTasks.value).toHaveLength(0);
   });
 
-  it('创建请求保留显式角色字段并兼容 reviewerId', async () => {
+  it('创建请求保留显式角色字段并让 reviewerId 兼容 checker handoff', async () => {
     reviewTaskCreateMock.mockResolvedValue({
       success: true,
       task: {
