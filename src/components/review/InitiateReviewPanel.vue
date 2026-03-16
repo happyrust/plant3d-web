@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 import { Box, Calendar, ChevronDown, Flag, Link, Paperclip, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
@@ -199,6 +199,41 @@ const samePersonError = computed(() => {
   return checkerId.value && approverId.value && checkerId.value === approverId.value;
 });
 
+type FormErrors = {
+  packageName: string;
+  checkerId: string;
+};
+
+const formErrors = ref<FormErrors>({
+  packageName: '',
+  checkerId: '',
+});
+
+const hasValidationErrors = computed(() => {
+  return Object.values(formErrors.value).some((value) => value.length > 0);
+});
+
+function validateForm() {
+  const nextErrors: FormErrors = {
+    packageName: packageName.value.trim() ? '' : '请输入数据包名称',
+    checkerId: checkerId.value ? '' : '请选择审核人',
+  };
+  formErrors.value = nextErrors;
+  return !nextErrors.packageName && !nextErrors.checkerId;
+}
+
+watch(packageName, (value) => {
+  if (value.trim()) {
+    formErrors.value.packageName = '';
+  }
+});
+
+watch(checkerId, (value) => {
+  if (value) {
+    formErrors.value.checkerId = '';
+  }
+});
+
 const canSubmit = computed(() => {
   return packageName.value.trim()
     && checkerId.value
@@ -236,6 +271,7 @@ async function handleAttachmentUploadComplete() {
 }
 
 async function handleSubmit() {
+  if (!validateForm()) return;
   if (!canSubmit.value) return;
 
   notification.value = { type: null, message: '', details: '' };
@@ -402,7 +438,12 @@ function reopenPanel() {
 
         <div class="space-y-2">
           <label class="text-[13px] font-medium text-[#6B7280]">数据包名称</label>
-          <Input v-model="packageName" placeholder="输入提资数据包名称..." />
+          <Input v-model="packageName"
+            placeholder="输入提资数据包名称..."
+            :error="!!formErrors.packageName" />
+          <p v-if="formErrors.packageName" class="text-xs text-[#EF4444]">
+            {{ formErrors.packageName }}
+          </p>
         </div>
 
         <div class="space-y-2">
@@ -416,10 +457,15 @@ function reopenPanel() {
         <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
             <label class="text-[13px] font-medium text-[#6B7280]">审核人</label>
-            <div class="relative">
+            <div :class="[
+              'relative rounded-[6px] border transition',
+              formErrors.checkerId ? 'border-[#EF4444]' : 'border-transparent',
+            ]">
               <User class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
               <select v-model="checkerId"
-                class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]">
+                :aria-invalid="formErrors.checkerId ? 'true' : 'false'"
+                class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]"
+                :class="formErrors.checkerId ? 'border-[#EF4444] focus:border-[#EF4444]' : ''">
                 <option value="">选择审核人</option>
                 <option v-for="r in reviewerOptions" :key="r.id" :value="r.id">
                   {{ r.name }} ({{ getRoleDisplayName(r.role) }})
@@ -427,6 +473,9 @@ function reopenPanel() {
               </select>
               <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
             </div>
+            <p v-if="formErrors.checkerId" class="text-xs text-[#EF4444]">
+              {{ formErrors.checkerId }}
+            </p>
           </div>
 
           <div class="space-y-2">
@@ -497,6 +546,10 @@ function reopenPanel() {
           </template>
         </Button>
 
+        <button type="button" class="sr-only" data-testid="initiate-submit-trigger" @click="handleSubmit">
+          验证并提交提资单
+        </button>
+
         <div v-if="notification.type"
           :class="[
             'rounded-[8px] border px-3 py-3 text-sm',
@@ -517,7 +570,7 @@ function reopenPanel() {
           </div>
         </div>
 
-        <p v-if="!notification.type && missingFields.length > 0" class="text-xs text-[#F59E0B]">
+        <p v-if="!notification.type && missingFields.length > 0 && !hasValidationErrors" class="text-xs text-[#F59E0B]">
           请补充：{{ missingFields.join('、') }}
         </p>
 
