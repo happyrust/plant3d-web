@@ -122,6 +122,24 @@ function getPriorityBadgeClass(task: ReviewTask): string {
   return 'bg-orange-100 text-orange-700';
 }
 
+function getTaskActionFeedback(task: ReviewTask) {
+  if (task.status === 'approved') {
+    return {
+      label: '已通过',
+      className: 'border border-green-200 bg-green-50 text-green-700',
+    };
+  }
+
+  if (task.status === 'rejected') {
+    return {
+      label: '已驳回',
+      className: 'border border-red-200 bg-red-50 text-red-700',
+    };
+  }
+
+  return null;
+}
+
 async function handleStartReview(task: ReviewTask) {
   await startReviewerTask({
     task,
@@ -180,8 +198,7 @@ function getApproveActionLabel(task: ReviewTask): string {
         <span class="hidden text-[12px] text-gray-400 sm:inline">{{ reviewStageLabel }}人：{{ currentUser?.name }}</span>
         <button class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
           type="button"
-          aria-label="筛选任务"
-        >
+          aria-label="筛选任务">
           <Filter class="h-4 w-4" />
         </button>
       </div>
@@ -275,6 +292,10 @@ function getApproveActionLabel(task: ReviewTask): string {
                 <PlayCircle v-if="task.status === 'submitted'" class="h-3.5 w-3.5" />
                 <span>{{ getStartActionLabel(task) }}</span>
               </button>
+              <span v-else-if="getTaskActionFeedback(task)"
+                :class="['inline-flex shrink-0 items-center rounded-md px-3 py-1.5 text-[13px] font-medium', getTaskActionFeedback(task)?.className]">
+                {{ getTaskActionFeedback(task)?.label }}
+              </span>
             </div>
           </div>
         </div>
