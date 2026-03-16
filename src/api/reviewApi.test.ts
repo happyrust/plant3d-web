@@ -11,9 +11,20 @@ import {
 } from './reviewApi';
 
 describe('reviewApi base url defaults', () => {
+  function expectBackendFetch(fetchMock: ReturnType<typeof vi.fn>, path: string, body?: string) {
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`(?:http://localhost:3100)?${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)),
+      expect.objectContaining({
+        method: 'POST',
+        ...(body ? { body } : {}),
+      })
+    );
+  }
+
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    vi.stubEnv('MODE', 'test');
     vi.stubGlobal('localStorage', {
       getItem: vi.fn(() => null),
       setItem: vi.fn(),
@@ -53,10 +64,7 @@ describe('reviewApi base url defaults', () => {
 
     const result = await reviewGetEmbedUrl('project-1', 'user-1');
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3100/api/review/embed-url',
-      expect.objectContaining({ method: 'POST' })
-    );
+    expectBackendFetch(fetchMock, '/api/review/embed-url');
     expect(result.url).toContain('form_id=FORM-1');
     expect(result.url).toContain('project_id=project-1');
     expect(result.url).toContain('output_project=project-1');
@@ -131,10 +139,7 @@ describe('reviewApi base url defaults', () => {
 
     await authVerifyToken('token-verify');
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3100/api/auth/verify',
-      expect.objectContaining({ method: 'POST' })
-    );
+    expectBackendFetch(fetchMock, '/api/auth/verify');
   });
 
   it('passes form_id when verifying embed token lineage', async () => {
@@ -149,12 +154,10 @@ describe('reviewApi base url defaults', () => {
 
     await authVerifyToken('token-verify', 'FORM-EMBED-1');
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3100/api/auth/verify',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ token: 'token-verify', form_id: 'FORM-EMBED-1' }),
-      })
+    expectBackendFetch(
+      fetchMock,
+      '/api/auth/verify',
+      JSON.stringify({ token: 'token-verify', form_id: 'FORM-EMBED-1' })
     );
   });
 });

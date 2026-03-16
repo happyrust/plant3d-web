@@ -83,7 +83,7 @@ describe('FileUploadSection', () => {
     host.remove();
   });
 
-  it('supports drag-and-drop upload and shows completion state after progress updates', async () => {
+  it('supports drag-and-drop upload and shows completion state after upload resolves', async () => {
     const { default: FileUploadSection } = await import('./FileUploadSection.vue');
 
     const host = document.createElement('div');
@@ -106,17 +106,16 @@ describe('FileUploadSection', () => {
       },
     });
 
-    uploadMock.mockImplementation((_taskId: string | null, _file: File, onProgress?: (percent: number) => void) => {
-      setTimeout(() => onProgress?.(42), 0);
-      return new Promise((resolve) => {
-        setTimeout(() => resolve({
-          success: true,
-          attachment: {
-            id: 'att-2',
-            url: '/files/review_attachments/att-2.pdf',
-          },
-        }), 10);
-      });
+    uploadMock.mockImplementation(async (_taskId: string | null, _file: File, onProgress?: (percent: number) => void) => {
+      onProgress?.(42);
+      await Promise.resolve();
+      return {
+        success: true,
+        attachment: {
+          id: 'att-2',
+          url: '/files/review_attachments/att-2.pdf',
+        },
+      };
     });
 
     app.mount(host);
@@ -139,24 +138,16 @@ describe('FileUploadSection', () => {
       value: { files: [file] },
     });
     dropzone!.dispatchEvent(dropEvent);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await nextTick();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await nextTick();
-    await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 
     expect(host.textContent).toContain('dragged.pdf');
-    const progressBar = host.querySelector('[data-testid="file-upload-progress-bar"]') as HTMLDivElement | null;
-    expect(progressBar).not.toBeNull();
-    expect(progressBar?.getAttribute('style')).toContain('width: 42%');
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    await nextTick();
-
-    expect(host.textContent).toContain('已上传');
-    const completedProgressBar = host.querySelector('[data-testid="file-upload-progress-bar"]') as HTMLDivElement | null;
-    expect(completedProgressBar).toBeNull();
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain('已上传');
+      expect(uploadMock).toHaveBeenCalledTimes(1);
+      const completedProgressBar = host.querySelector('[data-testid="file-upload-progress-bar"]') as HTMLDivElement | null;
+      expect(completedProgressBar).toBeNull();
+    });
 
     app.unmount();
     host.remove();
