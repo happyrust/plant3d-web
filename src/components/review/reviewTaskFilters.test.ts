@@ -77,6 +77,20 @@ describe('reviewTaskFilters', () => {
     expect(isDesignerResubmissionTask(task)).toBe(false);
   });
 
+  it('stops treating sj draft tasks as canonical returned after a newer resubmit step', () => {
+    const task = createTask({
+      returnReason: '旧退回原因',
+      currentNode: 'sj',
+      status: 'draft',
+      workflowHistory: [
+        { node: 'jd', action: 'return', operatorId: 'u1', operatorName: '校核员', comment: '请补充材料', timestamp: 10 },
+        { node: 'sj', action: 'submit', operatorId: 'u2', operatorName: '设计员', comment: '重新提交', timestamp: 20 },
+      ],
+    });
+
+    expect(isCanonicalReturnedTask(task)).toBe(false);
+    expect(isDesignerResubmissionTask(task)).toBe(false);
+  });
   it('maps returned draft task to returned bucket', () => {
     const task = createTask({ returnReason: '退回', currentNode: 'sj', status: 'draft' });
     expect(getDesignerTaskStatusBucket(task)).toBe('returned');

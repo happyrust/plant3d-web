@@ -11,6 +11,17 @@ function getLatestReturnStep(task: ReviewTask): WorkflowStep | null {
   return null;
 }
 
+function getLatestSubmitStep(task: ReviewTask): WorkflowStep | null {
+  const history = task.workflowHistory || [];
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const step = history[index];
+    if (step?.action === 'submit') {
+      return step;
+    }
+  }
+  return null;
+}
+
 export function getCanonicalReturnedMetadata(task: ReviewTask): {
   latestReturnStep: WorkflowStep | null;
   returnReason: string | null;
@@ -38,9 +49,15 @@ export function isCanonicalReturnedTask(task: ReviewTask): boolean {
   if (task.status === 'rejected') return true;
   if (task.currentNode !== 'sj' || task.status !== 'draft') return false;
 
+  const latestReturnStep = getLatestReturnStep(task);
+  const latestSubmitStep = getLatestSubmitStep(task);
+  if (latestSubmitStep && latestReturnStep && latestSubmitStep.timestamp >= latestReturnStep.timestamp) {
+    return false;
+  }
+
   if (task.returnReason?.trim() || task.reviewComment?.trim()) return true;
 
-  return !!getLatestReturnStep(task);
+  return !!latestReturnStep;
 }
 
 export function isDesignerResubmissionTask(task: ReviewTask): boolean {

@@ -48,6 +48,7 @@ const workflowHistory = ref<WorkflowStep[]>([]);
 const workflowError = ref<string | null>(null);
 const resubmitLoading = ref(false);
 const resubmitError = ref<string | null>(null);
+const localTaskOverride = ref<ReviewTask | null>(null);
 
 const open = computed({
   get: () => true,
@@ -56,66 +57,83 @@ const open = computed({
   },
 });
 
-const taskStatus = computed(() => getTaskStatusDisplayName(props.task.status));
-const priorityDisplay = computed(() => getPriorityDisplayName(props.task.priority));
-const componentCount = computed(() => props.task.components.length);
-const attachmentCount = computed(() => props.task.attachments?.length ?? 0);
-const canonicalTask = computed(() => getCanonicalReturnedTaskView(props.task, workflowHistory.value));
+const taskView = computed(() => localTaskOverride.value ?? props.task);
+const taskStatus = computed(() => getTaskStatusDisplayName(taskView.value.status));
+const priorityDisplay = computed(() => getPriorityDisplayName(taskView.value.priority));
+const componentCount = computed(() => taskView.value.components.length);
+const attachmentCount = computed(() => taskView.value.attachments?.length ?? 0);
+const canonicalTask = computed(() => getCanonicalReturnedTaskView(taskView.value, workflowHistory.value));
 const returnedMetadata = computed(() => getCanonicalReturnedMetadata(canonicalTask.value));
+const latestSubmitTimestamp = computed(() => {
+  const history = canonicalTask.value.workflowHistory || [];
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const step = history[index];
+    if (step?.action === 'submit') {
+      return step.timestamp;
+    }
+  }
+  return null;
+});
+const latestReturnTimestamp = computed(() => returnedMetadata.value.latestReturnStep?.timestamp ?? null);
+const showReturnedPanel = computed(() => {
+  if (!isReturnedTask.value) return false;
+  if (!latestSubmitTimestamp.value || !latestReturnTimestamp.value) return true;
+  return latestReturnTimestamp.value > latestSubmitTimestamp.value;
+});
 const latestReturnStep = computed<WorkflowStep | null>(() => {
   const metadata = returnedMetadata.value;
   if (metadata.latestReturnStep) return metadata.latestReturnStep;
   if (!metadata.returnReason) return null;
 
   return {
-    node: metadata.returnNode ?? props.task.currentNode ?? 'sj',
+    node: metadata.returnNode ?? taskView.value.currentNode ?? 'sj',
     action: 'return',
     operatorId: '',
-    operatorName: props.task.approverName || props.task.checkerName || props.task.reviewerName || '系统',
+    operatorName: taskView.value.approverName || taskView.value.checkerName || taskView.value.reviewerName || '系统',
     comment: metadata.returnReason,
-    timestamp: props.task.updatedAt,
+    timestamp: taskView.value.updatedAt,
   };
 });
 
 const detailRows = computed(() => [
   {
     label: '模型名称',
-    value: props.task.modelName || '未提供',
+    value: taskView.value.modelName || '未提供',
     icon: Package,
   },
   {
     label: '发起人',
-    value: props.task.requesterName || '-',
+    value: taskView.value.requesterName || '-',
     icon: User,
   },
   {
     label: '校核人',
-    value: props.task.checkerName || props.task.reviewerName || '-',
+    value: taskView.value.checkerName || taskView.value.reviewerName || '-',
     icon: User,
   },
   {
     label: '审核人',
-    value: props.task.approverName || '-',
+    value: taskView.value.approverName || '-',
     icon: User,
   },
   {
     label: '当前节点',
-    value: formatWorkflowNode(props.task.currentNode),
+    value: formatWorkflowNode(taskView.value.currentNode),
     icon: GitBranch,
   },
   {
     label: '创建时间',
-    value: formatDateTime(props.task.createdAt),
+    value: formatDateTime(taskView.value.createdAt),
     icon: Calendar,
   },
   {
     label: '更新时间',
-    value: formatDateTime(props.task.updatedAt),
+    value: formatDateTime(taskView.value.updatedAt),
     icon: Clock3,
   },
   {
     label: '截止时间',
-    value: props.task.dueDate ? formatDateTime(props.task.dueDate) : '未设置',
+    value: taskView.value.dueDate ? formatDateTime(taskView.value.dueDate) : '未设置',
     icon: Calendar,
   },
 ]);
@@ -204,6 +222,7 @@ async function handleResubmit() {
 
   try {
     await userStore.submitTaskToNextNode(props.task.id);
+    localTaskOverride.value = userStore.reviewTasks.value.find((task) => task.id === props.task.id) ?? localTaskOverride.value;
     await loadWorkflowHistory();
     emitToast({ message: '任务已再次提交到审核流程' });
   } catch (error) {
@@ -216,6 +235,7 @@ async function handleResubmit() {
 watch(
   () => props.task.id,
   () => {
+    localTaskOverride.value = null;
     workflowHistory.value = [];
     void loadWorkflowHistory();
   }
@@ -250,7 +270,7 @@ onMounted(() => {
       </div>
     </template>
 
-    <div v-if="isReturnedTask || latestReturnStep" class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+    <div v-if="showReturnedPanel" class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
       <div class="flex items-start gap-3">
         <XCircle class="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
         <div class="space-y-2 text-sm text-rose-900">

@@ -8,6 +8,7 @@ import type { ReviewTask, WorkflowStep } from '@/types/auth';
 const reviewTaskGetWorkflowMock = vi.fn();
 const submitTaskToNextNodeMock = vi.fn();
 const emitToastMock = vi.fn();
+const reviewTasksRef = { value: [] as ReviewTask[] };
 
 vi.mock('@/api/reviewApi', () => ({
   reviewTaskGetWorkflow: (...args: unknown[]) => reviewTaskGetWorkflowMock(...args),
@@ -15,6 +16,7 @@ vi.mock('@/api/reviewApi', () => ({
 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
+    reviewTasks: reviewTasksRef,
     submitTaskToNextNode: (...args: unknown[]) => submitTaskToNextNodeMock(...args),
   }),
 }));
@@ -29,6 +31,7 @@ describe('TaskReviewDetail', () => {
     reviewTaskGetWorkflowMock.mockReset();
     submitTaskToNextNodeMock.mockReset();
     emitToastMock.mockReset();
+    reviewTasksRef.value = [];
   });
 
   afterEach(() => {
@@ -336,6 +339,7 @@ describe('TaskReviewDetail', () => {
       history: [],
     });
     submitTaskToNextNodeMock.mockResolvedValue(undefined);
+    reviewTasksRef.value = [createTask({ status: 'submitted', currentNode: 'jd', returnReason: undefined, reviewComment: undefined })];
 
     await mountComponent(createTask({ status: 'draft', currentNode: 'sj' }));
 
@@ -396,6 +400,69 @@ describe('TaskReviewDetail', () => {
 
     const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
     expect(button).toBeUndefined();
+  });
+
+  it('clears stale returned state UI after resubmit reload shows task back in review flow', async () => {
+    reviewTaskGetWorkflowMock
+      .mockResolvedValueOnce({
+        success: true,
+        currentNode: 'sj',
+        currentNodeName: '编制',
+        history: [
+          {
+            node: 'jd',
+            action: 'return',
+            operatorId: 'checker-1',
+            operatorName: '李校核',
+            comment: '请补充碰撞说明。',
+            timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        currentNode: 'jd',
+        currentNodeName: '校核',
+        history: [
+          {
+            node: 'jd',
+            action: 'return',
+            operatorId: 'checker-1',
+            operatorName: '李校核',
+            comment: '请补充碰撞说明。',
+            timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+          },
+          {
+            node: 'sj',
+            action: 'submit',
+            operatorId: 'designer-1',
+            operatorName: '王设计师',
+            comment: '重新提交',
+            timestamp: new Date('2026-03-16T11:00:00+08:00').getTime(),
+          },
+        ],
+      });
+    submitTaskToNextNodeMock.mockResolvedValue(undefined);
+    reviewTasksRef.value = [createTask({ status: 'submitted', currentNode: 'jd', returnReason: undefined, reviewComment: undefined })];
+
+    await mountComponent(createTask({ status: 'draft', currentNode: 'sj' }));
+
+    expect(document.body.textContent).toContain('退回信息');
+    expect(document.body.textContent).toContain('请补充碰撞说明。');
+
+    const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    expect(button).toBeTruthy();
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1');
+    expect(reviewTaskGetWorkflowMock).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent).not.toContain('退回信息');
+    const afterButton = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    expect(afterButton).toBeUndefined();
   });
 
   it('shows resubmit failure message when resubmit request fails', async () => {
