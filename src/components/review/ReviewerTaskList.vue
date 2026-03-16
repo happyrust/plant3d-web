@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { Clock, FileText, Filter, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
@@ -184,6 +184,10 @@ function getStartActionLabel(task: ReviewTask): string {
 function getApproveActionLabel(task: ReviewTask): string {
   return getSubmitActionLabel(task.currentNode);
 }
+
+onMounted(() => {
+  void refreshTasks();
+});
 </script>
 
 <template>
