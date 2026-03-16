@@ -31,6 +31,7 @@ vi.mock('@/api/reviewApi', () => ({
   userGetCurrent: vi.fn(),
   userGetReviewers: vi.fn(),
   getReviewWebSocketUrl: vi.fn(() => null),
+  getReviewUserWebSocketUrl: vi.fn(() => null),
 }));
 
 let authGetTokenMock: ReturnType<typeof vi.fn>;
@@ -38,6 +39,7 @@ let reviewTaskGetListMock: ReturnType<typeof vi.fn>;
 let userGetCurrentMock: ReturnType<typeof vi.fn>;
 let reviewTaskCreateMock: ReturnType<typeof vi.fn>;
 let reviewTaskSubmitToNextMock: ReturnType<typeof vi.fn>;
+let getReviewUserWebSocketUrlMock: ReturnType<typeof vi.fn>;
 
 function createStorageMock() {
   const store = new Map<string, string>();
@@ -71,11 +73,14 @@ beforeEach(() => {
     userGetCurrentMock = api.userGetCurrent as ReturnType<typeof vi.fn>;
     reviewTaskCreateMock = api.reviewTaskCreate as ReturnType<typeof vi.fn>;
     reviewTaskSubmitToNextMock = api.reviewTaskSubmitToNext as ReturnType<typeof vi.fn>;
+    getReviewUserWebSocketUrlMock = api.getReviewUserWebSocketUrl as ReturnType<typeof vi.fn>;
     authGetTokenMock.mockReset();
     reviewTaskGetListMock.mockReset();
     userGetCurrentMock.mockReset();
     reviewTaskCreateMock.mockReset();
     reviewTaskSubmitToNextMock.mockReset();
+    getReviewUserWebSocketUrlMock.mockReset();
+    getReviewUserWebSocketUrlMock.mockReturnValue(null);
   });
 });
 
@@ -386,6 +391,200 @@ describe('cross-role task visibility after task creation and submit', () => {
     expect(store.myInitiatedTasks.value.map((item) => item.id)).toContain('task-cross-1');
     expect(store.myInitiatedTasks.value[0]?.status).toBe('submitted');
     expect(store.myInitiatedTasks.value[0]?.currentNode).toBe('jd');
+  });
+});
+
+describe('review task websocket notifications', () => {
+  it('prefers the user-scoped websocket endpoint for the active user', async () => {
+    const onOpenHandlers: (() => void)[] = [];
+    function MockWebSocket(this: any, url: string) {
+      this.url = url;
+      this.readyState = 1;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onerror = null;
+      this.onclose = null;
+      this.close = vi.fn();
+      this.send = vi.fn();
+      onOpenHandlers.push(() => this.onopen?.());
+    }
+    const webSocketCtor = vi.fn(MockWebSocket as any);
+
+    vi.stubGlobal('WebSocket', webSocketCtor as unknown as typeof WebSocket);
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    store.connectWebSocket();
+    onOpenHandlers.forEach((handler) => handler());
+
+    expect(getReviewUserWebSocketUrlMock).toHaveBeenCalledWith('designer_001');
+    expect(webSocketCtor).toHaveBeenCalledWith('ws://localhost/ws/review/user/designer_001');
+    expect(store.wsConnected.value).toBe(true);
+  });
+
+  it('refreshes task list when receiving task_created events', async () => {
+    const sockets: {
+      onopen: null | (() => void);
+      onmessage: null | ((event: { data: string }) => void);
+      onclose: null | (() => void);
+      close: ReturnType<typeof vi.fn>;
+      send: ReturnType<typeof vi.fn>;
+    }[] = [];
+    function MockWebSocket(this: any) {
+      this.readyState = 1;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onerror = null;
+      this.onclose = null;
+      this.close = vi.fn();
+      this.send = vi.fn();
+      sockets.push(this);
+    }
+    const webSocketCtor = vi.fn(MockWebSocket as any);
+
+    vi.stubGlobal('WebSocket', webSocketCtor as unknown as typeof WebSocket);
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    reviewTaskGetListMock
+      .mockResolvedValueOnce({ success: true, tasks: [], total: 0 })
+      .mockResolvedValueOnce({
+        success: true,
+        tasks: [
+          {
+            id: 'task-created-1',
+            title: '新建任务',
+            description: 'from ws',
+            modelName: 'Model-A',
+            status: 'submitted',
+            priority: 'medium',
+            requesterId: 'designer_001',
+            requesterName: '王设计师',
+            checkerId: 'user-002',
+            checkerName: '李校核员',
+            approverId: 'manager_001',
+            approverName: '陈经理',
+            reviewerId: 'user-002',
+            reviewerName: '李校核员',
+            components: [],
+            createdAt: 1700000000000,
+            updatedAt: 1700000001000,
+            currentNode: 'jd',
+          },
+        ],
+        total: 1,
+      });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.loadReviewTasks();
+    store.connectWebSocket();
+    sockets[0]?.onmessage?.({
+      data: JSON.stringify({
+        type: 'task_created',
+        data: { id: 'task-created-1' },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    await Promise.resolve();
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledTimes(2);
+    expect(store.myInitiatedTasks.value.map((task) => task.id)).toContain('task-created-1');
+  });
+
+  it('updates existing task status in place when receiving task_updated events with payload', async () => {
+    const sockets: {
+      onmessage: null | ((event: { data: string }) => void);
+      close: ReturnType<typeof vi.fn>;
+      send: ReturnType<typeof vi.fn>;
+    }[] = [];
+    function MockWebSocket(this: any) {
+      this.readyState = 1;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onerror = null;
+      this.onclose = null;
+      this.close = vi.fn();
+      this.send = vi.fn();
+      sockets.push(this);
+    }
+    const webSocketCtor = vi.fn(MockWebSocket as any);
+
+    vi.stubGlobal('WebSocket', webSocketCtor as unknown as typeof WebSocket);
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [
+        {
+          id: 'task-update-1',
+          title: '状态待更新任务',
+          description: 'before ws update',
+          modelName: 'Model-B',
+          status: 'submitted',
+          priority: 'high',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          components: [],
+          createdAt: 1700000000000,
+          updatedAt: 1700000001000,
+          currentNode: 'jd',
+        },
+      ],
+      total: 1,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.loadReviewTasks();
+    store.connectWebSocket();
+    sockets[0]?.onmessage?.({
+      data: JSON.stringify({
+        type: 'task_updated',
+        data: {
+          task: {
+            id: 'task-update-1',
+            title: '状态待更新任务',
+            description: 'after ws update',
+            modelName: 'Model-B',
+            status: 'in_review',
+            priority: 'high',
+            requesterId: 'designer_001',
+            requesterName: '王设计师',
+            checkerId: 'user-002',
+            checkerName: '李校核员',
+            approverId: 'manager_001',
+            approverName: '陈经理',
+            reviewerId: 'user-002',
+            reviewerName: '李校核员',
+            components: [],
+            createdAt: 1700000000000,
+            updatedAt: 1700000009000,
+            currentNode: 'sh',
+          },
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledTimes(1);
+    expect(store.reviewTasks.value.find((task) => task.id === 'task-update-1')).toEqual(
+      expect.objectContaining({
+        status: 'in_review',
+        currentNode: 'sh',
+        description: 'after ws update',
+      })
+    );
   });
 });
 

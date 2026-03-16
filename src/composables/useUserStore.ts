@@ -19,6 +19,7 @@ import {
   userGetCurrent,
   userGetReviewers,
   getReviewWebSocketUrl,
+  getReviewUserWebSocketUrl,
   type ReviewTaskCreateRequest,
 } from '@/api/reviewApi';
 import {
@@ -320,6 +321,7 @@ const wsError = ref<string | null>(null);
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectCount = 0;
+let wsUserId: string | null = null;
 const MAX_RECONNECT = 5;
 const RECONNECT_DELAY = 3000;
 
@@ -908,12 +910,15 @@ function connectWebSocket() {
   if (!USE_BACKEND.value) return;
   if (ws) return;
 
-  const url = getReviewWebSocketUrl();
+  const effectiveUserId = resolveEffectiveUserId(currentUser.value);
+  const url = effectiveUserId ? getReviewUserWebSocketUrl(effectiveUserId) : getReviewWebSocketUrl();
   if (!url) {
     wsConnected.value = false;
     wsError.value = null;
     return;
   }
+
+  wsUserId = effectiveUserId;
 
   try {
     ws = new WebSocket(url);
@@ -943,7 +948,7 @@ function connectWebSocket() {
       ws = null;
 
       // 自动重连
-      if (currentUserId.value && reconnectCount < MAX_RECONNECT) {
+      if (wsUserId && reconnectCount < MAX_RECONNECT) {
         reconnectCount++;
         wsError.value = `连接断开，${RECONNECT_DELAY / 1000}秒后重试 (${reconnectCount}/${MAX_RECONNECT})`;
         reconnectTimer = setTimeout(() => {
@@ -967,6 +972,7 @@ function disconnectWebSocket() {
   }
   wsConnected.value = false;
   reconnectCount = 0;
+  wsUserId = null;
 }
 
 function handleWebSocketMessage(message: {
@@ -975,17 +981,78 @@ function handleWebSocketMessage(message: {
   timestamp: string;
 }) {
   switch (message.type) {
-    case 'task_created':
+    case 'task_created': {
+      // 新任务通常影响跨角色列表可见性，直接全量刷新。
+      loadReviewTasks();
+      break;
+    }
     case 'task_updated':
     case 'task_submitted':
     case 'task_approved':
     case 'task_rejected':
     case 'task_cancelled': {
-      // 刷新任务列表
-      loadReviewTasks();
+      const payloadTask = extractTaskFromWebSocketMessage(message.data);
+      if (payloadTask) {
+        upsertReviewTask(payloadTask);
+      } else {
+        loadReviewTasks();
+      }
       break;
     }
   }
+}
+
+function extractTaskFromWebSocketMessage(data: unknown): ReviewTask | null {
+  if (!data || typeof data !== 'object') return null;
+
+  const payload = data as Record<string, unknown>;
+  const candidate = payload.task && typeof payload.task === 'object'
+    ? payload.task as Record<string, unknown>
+    : payload;
+
+  if (typeof candidate.id !== 'string' || !candidate.id.trim()) return null;
+
+  const status = candidate.status;
+  const validStatuses: ReviewTask['status'][] = ['draft', 'submitted', 'in_review', 'approved', 'rejected', 'cancelled'];
+  if (typeof status !== 'string' || !validStatuses.includes(status as ReviewTask['status'])) {
+    return null;
+  }
+
+  const priority = candidate.priority;
+  const validPriorities: ReviewTask['priority'][] = ['low', 'medium', 'high', 'urgent'];
+  if (typeof priority !== 'string' || !validPriorities.includes(priority as ReviewTask['priority'])) {
+    return null;
+  }
+
+  return candidate as unknown as ReviewTask;
+}
+
+function upsertReviewTask(task: ReviewTask): void {
+  const currentId = currentUser.value?.id;
+  const effectiveCurrentId = resolveEffectiveUserId(currentUser.value);
+
+  const belongsToDesigner = !!currentId && task.requesterId === currentId;
+  const belongsToChecker = !!effectiveCurrentId
+    && resolveEffectiveUserId({ id: task.checkerId || task.reviewerId }) === effectiveCurrentId;
+  const belongsToApprover = !!effectiveCurrentId
+    && resolveEffectiveUserId(task.approverId ? { id: task.approverId } : null) === effectiveCurrentId;
+
+  const isRelevant = belongsToDesigner || belongsToChecker || belongsToApprover;
+  const existingIndex = reviewTasks.value.findIndex((item) => item.id === task.id);
+
+  if (!isRelevant) {
+    if (existingIndex >= 0) {
+      reviewTasks.value = reviewTasks.value.filter((item) => item.id !== task.id);
+    }
+    return;
+  }
+
+  if (existingIndex >= 0) {
+    reviewTasks.value = reviewTasks.value.map((item) => (item.id === task.id ? task : item));
+    return;
+  }
+
+  reviewTasks.value = [task, ...reviewTasks.value];
 }
 
 // ============ 初始化 ============

@@ -22,6 +22,7 @@ vi.mock('@/api/reviewApi', () => ({
   userGetCurrent: vi.fn(),
   userGetReviewers: vi.fn(),
   getReviewWebSocketUrl: vi.fn(() => null),
+  getReviewUserWebSocketUrl: vi.fn(() => null),
 }));
 
 function createLocalStorageMock() {
