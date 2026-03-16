@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
-import { ArrowLeft, CornerDownLeft, X } from 'lucide-vue-next';
+import { ArrowLeft, CornerDownLeft } from 'lucide-vue-next';
 
 import type { WorkflowNode } from '@/types/auth';
 
+import Button from '@/components/ui/Button.vue';
+import Dialog from '@/components/ui/Dialog.vue';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 const props = defineProps<{
@@ -34,6 +36,18 @@ const canConfirm = computed(() => {
   return reason.value.trim().length > 0 && availableTargetNodes.value.some((n) => n.value === targetNode.value);
 });
 
+const targetNodeLabel = computed(() => WORKFLOW_NODE_NAMES[targetNode.value]);
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (!visible) {
+      reason.value = '';
+      targetNode.value = 'sj';
+    }
+  }
+);
+
 function handleConfirm() {
   if (!canConfirm.value) return;
   emit('confirm', targetNode.value, reason.value.trim());
@@ -49,84 +63,72 @@ function handleClose() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="visible"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      @click.self="handleClose">
-      <div class="w-full max-w-md rounded-lg bg-white shadow-xl dark:bg-gray-900">
-        <!-- 头部 -->
-        <div class="flex items-center justify-between border-b px-5 py-4">
-          <div class="flex items-center gap-2">
-            <CornerDownLeft class="h-5 w-5 text-red-500" />
-            <span class="text-base font-semibold">驳回到指定节点</span>
-          </div>
-          <button class="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-800" @click="handleClose">
-            <X class="h-5 w-5 text-gray-400" />
-          </button>
+  <Dialog :open="visible"
+    title="驳回到指定节点"
+    panel-class="max-w-[30rem]"
+    body-class="space-y-5 px-6 py-5"
+    @update:open="(open) => emit('update:visible', open)">
+    <div class="flex items-center gap-2 text-sm font-medium text-[#DC2626]">
+      <CornerDownLeft class="h-4 w-4" />
+      <span>确认驳回路径并填写驳回原因</span>
+    </div>
+
+    <div class="rounded-2xl border border-[#FECACA] bg-[#FFF7F7] p-4" data-testid="workflow-return-flow">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0 flex-1 rounded-xl bg-[#DC2626] px-4 py-3 text-white shadow-sm">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-red-100">目标节点</div>
+          <div class="mt-2 text-sm font-semibold">{{ targetNodeLabel }}</div>
         </div>
-
-        <!-- 内容 -->
-        <div class="space-y-4 px-5 py-4">
-          <!-- 流程指示 -->
-          <div class="flex items-center justify-center gap-3 rounded-md bg-red-50 p-3 dark:bg-red-950">
-            <div class="rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 dark:bg-red-900 dark:text-red-300">
-              {{ WORKFLOW_NODE_NAMES[currentNode] }}
-            </div>
-            <ArrowLeft class="h-5 w-5 text-red-400" />
-            <div class="rounded-md bg-red-500 px-3 py-1.5 text-sm font-medium text-white">
-              {{ WORKFLOW_NODE_NAMES[targetNode] }}
-            </div>
-          </div>
-
-          <!-- 目标节点选择 -->
-          <div>
-            <label class="mb-1.5 block text-sm text-gray-600 dark:text-gray-400">驳回目标节点</label>
-            <div class="flex gap-2">
-              <button v-for="node in availableTargetNodes"
-                :key="node.value"
-                type="button"
-                class="flex-1 rounded-md border px-3 py-2 text-sm transition-colors"
-                :class="
-                  targetNode === node.value
-                    ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
-                    : 'border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800'
-                "
-                @click="targetNode = node.value">
-                {{ node.label }}
-              </button>
-            </div>
-          </div>
-
-          <!-- 驳回原因 -->
-          <div>
-            <label class="mb-1.5 block text-sm text-gray-600 dark:text-gray-400">
-              驳回原因
-              <span class="text-red-500">*</span>
-            </label>
-            <textarea v-model="reason"
-              class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-gray-700 dark:bg-gray-800"
-              rows="3"
-              placeholder="请输入驳回原因（必填）..." />
-            <p v-if="reason.length === 0" class="mt-1 text-xs text-red-500">驳回原因为必填项</p>
-          </div>
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FEE2E2] text-[#DC2626]">
+          <ArrowLeft class="h-4 w-4" />
         </div>
-
-        <!-- 底部按钮 -->
-        <div class="flex justify-end gap-2 border-t px-5 py-3">
-          <button type="button"
-            class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-            @click="handleClose">
-            取消
-          </button>
-          <button type="button"
-            class="flex items-center gap-1.5 rounded-md bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600 disabled:opacity-50"
-            :disabled="!canConfirm || loading"
-            @click="handleConfirm">
-            <CornerDownLeft class="h-4 w-4" />
-            确认驳回
-          </button>
+        <div class="min-w-0 flex-1 rounded-xl border border-[#FECACA] bg-white px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-[#F87171]">当前节点</div>
+          <div class="mt-2 text-sm font-semibold text-[#991B1B]">{{ WORKFLOW_NODE_NAMES[currentNode] }}</div>
         </div>
       </div>
     </div>
-  </Teleport>
+
+    <div class="space-y-2">
+      <label class="block text-sm font-medium text-[#374151]">驳回目标节点</label>
+      <div class="flex gap-2">
+        <button v-for="node in availableTargetNodes"
+          :key="node.value"
+          type="button"
+          class="flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
+          :class="
+            targetNode === node.value
+              ? 'border-[#DC2626] bg-[#FFF1F2] text-[#B91C1C]'
+              : 'border-[#D1D5DB] bg-white text-[#4B5563] hover:bg-[#F9FAFB]'
+          "
+          @click="targetNode = node.value">
+          {{ node.label }}
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <label for="workflow-return-reason" class="block text-sm font-medium text-[#374151]">
+        驳回原因输入（必填）
+      </label>
+      <textarea id="workflow-return-reason"
+        v-model="reason"
+        data-testid="workflow-return-reason"
+        class="min-h-[112px] w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#DC2626] focus:outline-none focus:ring-4 focus:ring-[#FEE2E2]"
+        rows="4"
+        placeholder="请输入驳回原因（必填）" />
+      <p v-if="reason.trim().length === 0" class="text-xs text-[#DC2626]">驳回原因为必填项</p>
+    </div>
+
+    <template #footer>
+      <Button variant="secondary" :disabled="loading" @click="handleClose">取消</Button>
+      <Button variant="danger"
+        :disabled="!canConfirm"
+        :loading="loading"
+        data-testid="workflow-return-confirm"
+        @click="handleConfirm">
+        确认驳回
+      </Button>
+    </template>
+  </Dialog>
 </template>
