@@ -15,7 +15,11 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
-import { getCanonicalReturnedMetadata, isCanonicalReturnedTask } from './reviewTaskFilters';
+import {
+  getCanonicalReturnedMetadata,
+  getCanonicalReturnedTaskView,
+  isCanonicalReturnedTask,
+} from './reviewTaskFilters';
 
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
@@ -56,12 +60,10 @@ const taskStatus = computed(() => getTaskStatusDisplayName(props.task.status));
 const priorityDisplay = computed(() => getPriorityDisplayName(props.task.priority));
 const componentCount = computed(() => props.task.components.length);
 const attachmentCount = computed(() => props.task.attachments?.length ?? 0);
+const canonicalTask = computed(() => getCanonicalReturnedTaskView(props.task, workflowHistory.value));
+const returnedMetadata = computed(() => getCanonicalReturnedMetadata(canonicalTask.value));
 const latestReturnStep = computed<WorkflowStep | null>(() => {
-  const historyTask: ReviewTask = {
-    ...props.task,
-    workflowHistory: workflowHistory.value,
-  };
-  const metadata = getCanonicalReturnedMetadata(historyTask);
+  const metadata = returnedMetadata.value;
   if (metadata.latestReturnStep) return metadata.latestReturnStep;
   if (!metadata.returnReason) return null;
 
@@ -119,8 +121,8 @@ const detailRows = computed(() => [
 ]);
 
 const taskSummary = computed(() => `${componentCount.value} 个构件 · ${attachmentCount.value} 个附件`);
-const isReturnedTask = computed(() => isCanonicalReturnedTask(props.task));
-const canResubmit = computed(() => isReturnedTask.value && props.task.currentNode === 'sj' && props.task.status === 'draft');
+const isReturnedTask = computed(() => isCanonicalReturnedTask(canonicalTask.value));
+const canResubmit = computed(() => isReturnedTask.value && canonicalTask.value.currentNode === 'sj' && canonicalTask.value.status === 'draft');
 
 function formatDateTime(timestamp?: number): string {
   if (!timestamp) return '—';
@@ -255,11 +257,11 @@ onMounted(() => {
           <p class="font-semibold">退回信息</p>
           <p>
             <span class="font-medium text-rose-700">退回节点：</span>
-            {{ formatWorkflowNode(latestReturnStep?.node || props.task.currentNode) }}
+            {{ formatWorkflowNode(returnedMetadata.returnNode || props.task.currentNode) }}
           </p>
           <p>
             <span class="font-medium text-rose-700">退回原因：</span>
-            {{ latestReturnStep?.comment || props.task.returnReason || props.task.reviewComment || '未填写' }}
+            {{ returnedMetadata.returnReason || '未填写' }}
           </p>
           <div class="flex flex-wrap items-center gap-3 pt-1">
             <button v-if="canResubmit"

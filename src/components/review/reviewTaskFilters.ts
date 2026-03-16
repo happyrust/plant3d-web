@@ -25,6 +25,15 @@ export function getCanonicalReturnedMetadata(task: ReviewTask): {
   };
 }
 
+export function getCanonicalReturnedTaskView(task: ReviewTask, workflowHistory?: WorkflowStep[]): ReviewTask {
+  if (!workflowHistory?.length) return task;
+
+  return {
+    ...task,
+    workflowHistory,
+  };
+}
+
 export function isCanonicalReturnedTask(task: ReviewTask): boolean {
   if (task.status === 'rejected') return true;
   if (task.currentNode !== 'sj' || task.status !== 'draft') return false;

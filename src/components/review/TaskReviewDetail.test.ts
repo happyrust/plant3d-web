@@ -226,6 +226,86 @@ describe('TaskReviewDetail', () => {
     expect(document.body.textContent).not.toContain('旧退回原因');
   });
 
+  it('refreshes returned header metadata after workflow history reload for the same task id', async () => {
+    reviewTaskGetWorkflowMock
+      .mockResolvedValueOnce({
+        success: true,
+        currentNode: 'sj',
+        currentNodeName: '编制',
+        history: [
+          {
+            node: 'jd',
+            action: 'return',
+            operatorId: 'checker-1',
+            operatorName: '李校核',
+            comment: '旧校核退回原因',
+            timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        currentNode: 'sj',
+        currentNodeName: '编制',
+        history: [
+          {
+            node: 'jd',
+            action: 'return',
+            operatorId: 'checker-1',
+            operatorName: '李校核',
+            comment: '旧校核退回原因',
+            timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+          },
+          {
+            node: 'sh',
+            action: 'return',
+            operatorId: 'approver-1',
+            operatorName: '周审核',
+            comment: '刷新后的最新审核退回原因',
+            timestamp: new Date('2026-03-16T18:00:00+08:00').getTime(),
+          },
+        ],
+      });
+
+    await mountComponent(
+      createTask({
+        id: 'same-task-id',
+        status: 'draft',
+        currentNode: 'sj',
+        returnReason: '任务级旧退回原因',
+        workflowHistory: [
+          {
+            node: 'jd',
+            action: 'return',
+            operatorId: 'checker-1',
+            operatorName: '李校核',
+            comment: '旧校核退回原因',
+            timestamp: new Date('2026-03-16T09:00:00+08:00').getTime(),
+          },
+        ],
+      })
+    );
+
+    expect(document.body.textContent).toContain('校核');
+    expect(document.body.textContent).toContain('旧校核退回原因');
+    expect(document.body.textContent).not.toContain('任务级旧退回原因');
+
+    const refreshButton = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('刷新'));
+    expect(refreshButton).toBeTruthy();
+
+    refreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(reviewTaskGetWorkflowMock).toHaveBeenCalledTimes(2);
+    expect(reviewTaskGetWorkflowMock).toHaveBeenNthCalledWith(1, 'same-task-id');
+    expect(reviewTaskGetWorkflowMock).toHaveBeenNthCalledWith(2, 'same-task-id');
+    expect(document.body.textContent).toContain('审核');
+    expect(document.body.textContent).toContain('刷新后的最新审核退回原因');
+    expect(document.body.textContent).not.toContain('任务级旧退回原因');
+  });
+
   it('falls back to task workflow history and shows load error when workflow request fails', async () => {
     reviewTaskGetWorkflowMock.mockRejectedValue(new Error('网络异常'));
 
