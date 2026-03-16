@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { nextTick } from 'vue';
 
+function setSearch(search: string) {
+  window.history.replaceState({}, '', search);
+}
+
 type PersistedStateV3 = {
   version: 3
   measurements: unknown[]
@@ -30,6 +34,7 @@ describe('useToolStore - dimensions', () => {
       },
     }
     ;(globalThis as any).localStorage.clear();
+    setSearch('?output_project=AvevaMarineSample&show_dbnum=7997');
     vi.resetModules();
   });
 
@@ -68,7 +73,7 @@ describe('useToolStore - dimensions', () => {
 
     await nextTick();
 
-    const raw = localStorage.getItem('plant3d-web-tools-v4');
+    const raw = localStorage.getItem('plant3d-web-tools-v4:project=AvevaMarineSample|db=7997');
     expect(raw).toBeTruthy();
     const parsed = raw ? JSON.parse(raw) : null;
     expect(parsed?.version).toBe(4);
