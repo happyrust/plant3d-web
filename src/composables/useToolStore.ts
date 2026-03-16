@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue';
 
 import type { AnnotationComment } from '@/types/auth';
+import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 
 export type ToolMode =
   | 'none'
@@ -217,6 +218,23 @@ const STORAGE_KEY_V1 = 'plant3d-web-tools-v1';
 const STORAGE_KEY_V2 = 'plant3d-web-tools-v2';
 const STORAGE_KEY_V3 = 'plant3d-web-tools-v3';
 const STORAGE_KEY_V4 = 'plant3d-web-tools-v4';
+const DEFAULT_STORAGE_SCOPE = '__default__';
+
+function getCurrentStorageScope(): string {
+  if (typeof window === 'undefined') return DEFAULT_STORAGE_SCOPE;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const project = getOutputProjectFromUrl() || params.get('project_id') || DEFAULT_STORAGE_SCOPE;
+    const dbnum = params.get('show_dbnum') || '__all__';
+    return `project=${project}|db=${dbnum}`;
+  } catch {
+    return DEFAULT_STORAGE_SCOPE;
+  }
+}
+
+function withStorageScope(storageKey: string, scope = getCurrentStorageScope()): string {
+  return `${storageKey}:${scope}`;
+}
 
 function normalizeV1(parsed: PersistedStateV1): PersistedStateV4 {
   return {
@@ -266,13 +284,13 @@ function normalizeV4(parsed: PersistedStateV4): PersistedStateV4 {
   };
 }
 
-function loadPersisted(): PersistedStateV4 {
+function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV4 {
   if (typeof localStorage === 'undefined') {
     return { version: 4, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [], dimensions: [] };
   }
 
   try {
-    const rawV4 = localStorage.getItem(STORAGE_KEY_V4);
+    const rawV4 = localStorage.getItem(withStorageScope(STORAGE_KEY_V4, scope));
     if (rawV4) {
       const parsed = JSON.parse(rawV4) as PersistedStateV4;
       if (parsed && parsed.version === 4) {
@@ -280,7 +298,7 @@ function loadPersisted(): PersistedStateV4 {
       }
     }
 
-    const rawV3 = localStorage.getItem(STORAGE_KEY_V3);
+    const rawV3 = localStorage.getItem(withStorageScope(STORAGE_KEY_V3, scope));
     if (rawV3) {
       const parsed = JSON.parse(rawV3) as PersistedStateV3;
       if (parsed && parsed.version === 3) {
@@ -288,7 +306,7 @@ function loadPersisted(): PersistedStateV4 {
       }
     }
 
-    const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
+    const rawV2 = localStorage.getItem(withStorageScope(STORAGE_KEY_V2, scope));
     if (rawV2) {
       const parsed = JSON.parse(rawV2) as PersistedStateV2;
       if (parsed && parsed.version === 2) {
@@ -296,7 +314,7 @@ function loadPersisted(): PersistedStateV4 {
       }
     }
 
-    const rawV1 = localStorage.getItem(STORAGE_KEY_V1);
+    const rawV1 = localStorage.getItem(withStorageScope(STORAGE_KEY_V1, scope));
     if (rawV1) {
       const parsed = JSON.parse(rawV1) as PersistedStateV1;
       if (parsed && parsed.version === 1) {
@@ -310,7 +328,8 @@ function loadPersisted(): PersistedStateV4 {
   return { version: 4, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [], dimensions: [] };
 }
 
-const persisted = loadPersisted();
+const storageScope = ref(getCurrentStorageScope());
+const persisted = loadPersisted(storageScope.value);
 
 const measurements = ref<MeasurementRecord[]>(persisted.measurements);
 const annotations = ref<AnnotationRecord[]>(persisted.annotations);
@@ -347,8 +366,50 @@ const pickRefnoCallback = ref<((refnos: string[]) => void) | null>(null); // 确
 
 const pendingObbEditId = ref<string | null>(null);
 const pendingTextAnnotationEditId = ref<string | null>(null);
+const pendingCloudAnnotationEditId = ref<string | null>(null);
 const pendingRectAnnotationEditId = ref<string | null>(null);
 const pendingDimensionEditId = ref<string | null>(null);
+
+function resetTransientUiState() {
+  activeAnnotationId.value = null;
+  activeObbAnnotationId.value = null;
+  activeCloudAnnotationId.value = null;
+  activeRectAnnotationId.value = null;
+  activeMeasurementId.value = null;
+  activeDimensionId.value = null;
+  pickedQueryCenter.value = null;
+  pickRefnoFilter.value = [];
+  pickedRefnos.value = [];
+  pickRefnoCallback.value = null;
+  pendingObbEditId.value = null;
+  pendingTextAnnotationEditId.value = null;
+  pendingCloudAnnotationEditId.value = null;
+  pendingRectAnnotationEditId.value = null;
+  pendingDimensionEditId.value = null;
+  toolMode.value = 'none';
+}
+
+function applyPersistedState(state: PersistedStateV4) {
+  measurements.value = state.measurements;
+  annotations.value = state.annotations;
+  obbAnnotations.value = state.obbAnnotations;
+  cloudAnnotations.value = state.cloudAnnotations;
+  rectAnnotations.value = state.rectAnnotations;
+  dimensions.value = state.dimensions;
+  resetTransientUiState();
+}
+
+function refreshPersistedScope() {
+  const nextScope = getCurrentStorageScope();
+  if (nextScope === storageScope.value) return;
+  storageScope.value = nextScope;
+  applyPersistedState(loadPersisted(nextScope));
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', refreshPersistedScope);
+  window.addEventListener('modelProjectChanged', refreshPersistedScope as EventListener);
+}
 
 watch(
   () => ({
@@ -371,7 +432,7 @@ watch(
       dimensions: state.dimensions,
     };
     try {
-      localStorage.setItem(STORAGE_KEY_V4, JSON.stringify(payload));
+      localStorage.setItem(withStorageScope(STORAGE_KEY_V4, storageScope.value), JSON.stringify(payload));
     } catch {
       // ignore
     }
@@ -533,6 +594,7 @@ function clearObbAnnotations() {
 function addCloudAnnotation(rec: CloudAnnotationRecord) {
   cloudAnnotations.value = [...cloudAnnotations.value, rec];
   activeCloudAnnotationId.value = rec.id;
+  pendingCloudAnnotationEditId.value = rec.id;
 }
 
 function updateCloudAnnotation(id: string, patch: Partial<CloudAnnotationRecord>) {
@@ -548,11 +610,15 @@ function removeCloudAnnotation(id: string) {
   if (activeCloudAnnotationId.value === id) {
     activeCloudAnnotationId.value = null;
   }
+  if (pendingCloudAnnotationEditId.value === id) {
+    pendingCloudAnnotationEditId.value = null;
+  }
 }
 
 function clearCloudAnnotations() {
   cloudAnnotations.value = [];
   activeCloudAnnotationId.value = null;
+  pendingCloudAnnotationEditId.value = null;
 }
 
 function addRectAnnotation(rec: RectAnnotationRecord) {
@@ -842,6 +908,9 @@ function importJSON(raw: string) {
   activeRectAnnotationId.value = null;
   activeMeasurementId.value = null;
   activeDimensionId.value = null;
+  pendingTextAnnotationEditId.value = null;
+  pendingCloudAnnotationEditId.value = null;
+  pendingObbEditId.value = null;
   pendingRectAnnotationEditId.value = null;
   pendingDimensionEditId.value = null;
   toolMode.value = 'none';
@@ -877,6 +946,7 @@ export function useToolStore() {
     activeDimensionId,
     pendingObbEditId,
     pendingTextAnnotationEditId,
+    pendingCloudAnnotationEditId,
     pendingRectAnnotationEditId,
     pendingDimensionEditId,
 

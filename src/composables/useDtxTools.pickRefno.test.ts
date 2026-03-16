@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { computeCloudLayout, createRectAnnotationRecordFromObb, resolvePickedRefnoForFilter } from './useDtxTools';
+import {
+  computeCloudLayout,
+  createRectAnnotationRecordFromObb,
+  isDtxInteractionReady,
+  resolvePickedRefnoForFilter,
+} from './useDtxTools';
 
 import type { Obb } from './useToolStore';
 
@@ -120,5 +125,41 @@ describe('computeCloudLayout', () => {
     expect(layout.cloudCenterY).toBe(140);
     expect(layout.labelX).toBe(82);
     expect(layout.labelY).toBe(140);
+  });
+});
+
+describe('isDtxInteractionReady', () => {
+  it('当对象已注册但 compiled 仍为 false 时，仍应允许交互工具进入 ready', () => {
+    const layer = {
+      objectCount: 3,
+      getVisibleObjectIds: () => ['o:demo:0'],
+      getStats: () => ({
+        totalVertices: 0,
+        totalIndices: 0,
+        totalObjects: 0,
+        uniqueGeometries: 1,
+        uniqueMaterials: 1,
+        compiled: false,
+      }),
+    };
+
+    expect(isDtxInteractionReady(layer as any)).toBe(true);
+  });
+
+  it('当既未编译也没有任何对象时，应保持 not ready', () => {
+    const layer = {
+      objectCount: 0,
+      getVisibleObjectIds: () => [],
+      getStats: () => ({
+        totalVertices: 0,
+        totalIndices: 0,
+        totalObjects: 0,
+        uniqueGeometries: 0,
+        uniqueMaterials: 0,
+        compiled: false,
+      }),
+    };
+
+    expect(isDtxInteractionReady(layer as any)).toBe(false);
   });
 });
