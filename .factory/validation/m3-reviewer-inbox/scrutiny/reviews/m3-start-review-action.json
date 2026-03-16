@@ -1,0 +1,33 @@
+{
+  "featureId": "m3-start-review-action",
+  "reviewedAt": "2026-03-16T04:53:11.243025+00:00",
+  "commitId": "4146a49a3d6204939848d9140721006955ad057b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature wires reviewer inbox tasks into the review workbench and persists submitted tasks through the start-review API, but it still forces the task-detail modal open during the transition, which obscures the workbench and breaks the promised direct entry flow.",
+    "issues": [
+      {
+        "file": "src/components/review/ReviewerTaskList.vue",
+        "line": 149,
+        "severity": "blocking",
+        "description": "`handleStartReview` passes `onTaskSelected` that sets `selectedTask`, and `selectedTask` drives the full-screen task-detail teleport. After a successful start-review action, the review panel opens behind that modal, so the reviewer does not actually enter the workbench directly and must manually close the dialog first. This contradicts the feature contract and reviewer-visible behavior."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The repo-level architecture notes describe the reviewer entry hydration contract but do not record the UX invariant that starting review should switch into the workbench without any blocking overlay. That gap likely allowed the worker to reuse `selectedTask` for modal state during the handoff.",
+      "evidence": ".factory/library/architecture.md states the inbox should hydrate the task into the review workspace, while src/components/review/ReviewerTaskList.vue:149 sets `selectedTask` and the modal Teleport remains visible when start review succeeds."
+    },
+    {
+      "area": "skills",
+      "observation": "The worker skipped manual UI verification for a reviewer-facing interaction even though the ui-worker skill requires browser validation for UI flows. The resulting modal-overlay regression is something the existing action-level tests did not catch.",
+      "evidence": "The handoff for worker session 8dc88a85-46f5-48c3-b6e9-b7528cf093e5 says manual validation was skipped in favor of tests, while .factory/skills/ui-worker/SKILL.md step 5 requires manual browser verification for UI interactions."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, commit 4146a49, and the reviewer inbox/workbench code paths. Found one blocking issue: starting review also selects the task for the detail modal, leaving a full-screen overlay in front of the workbench so the user does not land directly in the review workspace as required."
+}

@@ -1,0 +1,34 @@
+{
+  "featureId": "m2-initiate-form-validation",
+  "reviewedAt": "2026-03-16T02:08:25.387783+00:00",
+  "commitId": "63fb5c39053f2d432e99bf021b0c05fe2aed6e29",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds field-level validation UI for package name and checker selection, but it does not actually satisfy the contract that the submit action becomes available once all required fields are filled because approver and component selection still gate submission.",
+    "issues": [
+      {
+        "file": "src/components/review/InitiateReviewPanel.vue",
+        "line": 245,
+        "severity": "blocking",
+        "description": "The submit button remains disabled unless `approverId` is selected and at least one component is added, so the implementation does not meet the feature contract that \"所有必填字段填写后，提交按钮可用\" for the validation feature focused on package name and checker. Because the visible submit button is disabled, real users cannot trigger validation from the primary UI in the empty-form case; validation is only reachable through a hidden screen-reader-only button."
+      },
+      {
+        "file": "src/components/review/form-binding.test.ts",
+        "line": 78,
+        "severity": "non_blocking",
+        "description": "There is still no dedicated regression test covering the new validation behavior: missing package name/checker errors, error message rendering, and automatic clearing after correction. The worker handoff confirms an attempted test was removed, leaving the new logic effectively untested."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill says UI features should add tests first and then manually verify in the browser, but this worker skipped both due to perceived instability/cost and still completed successfully. The skill does not currently explain how to handle form-validation changes on complex existing panels when no stable targeted UI test exists.",
+      "evidence": "Handoff skillFeedback for worker session `eb79dff9-57a7-4612-8c9a-f93b825bec9a` says an `InitiateReviewPanel.test.ts` attempt was removed and no interactive checks were recorded, while `.factory/skills/ui-worker/SKILL.md` still presents tests-first plus manual validation as the default flow."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: field-level errors were added, but the primary submit path is still disabled by unrelated gates and the expected validation flow lacks dedicated regression coverage."
+}

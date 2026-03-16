@@ -1,0 +1,40 @@
+{
+  "milestone": "returned-task-contract",
+  "round": 2,
+  "status": "fail",
+  "validatorsRun": {
+    "test": { "passed": true, "command": "npm test", "exitCode": 0 },
+    "typecheck": { "passed": true, "command": "npm run type-check", "exitCode": 0 },
+    "lint": { "passed": true, "command": "npm run lint", "exitCode": 0 }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "failedFeatures": ["fup-m5-returned-list-and-detail"]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "fup-m5-returned-list-and-detail",
+      "severity": "blocking",
+      "description": "`src/components/review/TaskReviewDetail.vue` still derives `isReturnedTask`/`canResubmit` from stale `props.task` only, ignoring fresher canonical returned metadata loaded from workflow history. A returned task can therefore show the latest return reason while still hiding returned-state UI and the resubmit action, violating the detail contract."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": ".factory/skills/designer-tracking-worker/SKILL.md",
+      "suggestion": "Allow automated-only verification for test-only or non-UI contract features, and explicitly document the fallback when required seeded UI data is unavailable for browser validation.",
+      "evidence": "The passing review for `fup-m5-returned-contract-foundation` found the feature was test-only and reasonably verified with automated evidence, while the worker had to deviate because the current skill mandates agent-browser validation for every feature.",
+      "isSystemic": true
+    },
+    {
+      "target": ".factory/skills/designer-tracking-worker/SKILL.md",
+      "suggestion": "Clarify that repository `npm run lint` may be an auto-fixing command and workers should prefer a read-only lint invocation when the procedure requires no file mutation.",
+      "evidence": "The failing review for `fup-m5-returned-list-and-detail` noted the worker used `npm run lint`, but the skill requires a read-only lint step and the repo script is `eslint . --fix`.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/returned-task-contract/scrutiny/synthesis.json"
+}

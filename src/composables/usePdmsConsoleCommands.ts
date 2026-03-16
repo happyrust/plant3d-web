@@ -6,8 +6,8 @@ import { useViewerContext } from './useViewerContext';
 import { e3dSearch } from '@/api/genModelE3dApi';
 import { e3dParquetResolveDbnumForRefno } from '@/api/genModelE3dParquetApi';
 import { pdmsGetUiAttr, pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
-import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import { useModelProjects } from '@/composables/useModelProjects';
+import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import {

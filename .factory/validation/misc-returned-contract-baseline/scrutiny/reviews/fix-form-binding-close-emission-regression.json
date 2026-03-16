@@ -1,0 +1,28 @@
+{
+  "featureId": "fix-form-binding-close-emission-regression",
+  "reviewedAt": "2026-03-16T22:13:10.613805+00:00",
+  "commitId": "9bf6a3ee86250d92ab4172e8ac5fcc7561224ff5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The close-emission regression is fixed, but the commit also changes visible copy in InitiateReviewPanel that is outside the requested scope and breaks existing form-binding expectations.",
+    "issues": [
+      {
+        "file": "src/components/review/InitiateReviewPanel.vue",
+        "line": 185,
+        "severity": "blocking",
+        "description": "This fix changes the selected-component summary text from `已选中 N 个 BRAN 管道构件` to `已选中 N 个构件`. That unrelated UX copy change is outside the close-emission regression scope and breaks the existing binding contract still asserted by `form-binding.test.ts`, so the feature no longer cleanly satisfies its narrowly scoped requirement without collateral behavior drift."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `designer-tracking-worker` skill still requires agent-browser manual verification for every feature, but this worker reasonably skipped it for a narrow emitted-event regression and validated through focused component tests instead.",
+      "evidence": "`.factory/skills/designer-tracking-worker/SKILL.md` step 6 requires agent-browser manual verification, while the handoff for `fix-form-binding-close-emission-regression` documents skipping browser automation because the fix was fully covered by Vitest event assertions."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the worker transcript, handoff, commit `9bf6a3ee86250d92ab4172e8ac5fcc7561224ff5`, and the current `InitiateReviewPanel`/`form-binding` sources. The close event regression itself is fixed, but the same commit also changes unrelated summary copy in `InitiateReviewPanel`, creating avoidable contract drift in a feature that was supposed to only restore close emission."
+}

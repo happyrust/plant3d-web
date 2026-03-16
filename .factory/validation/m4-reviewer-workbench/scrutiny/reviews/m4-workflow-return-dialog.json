@@ -1,0 +1,21 @@
+{
+  "featureId": "m4-workflow-return-dialog",
+  "reviewedAt": "2026-03-16T05:43:14Z",
+  "commitId": "730e51c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The return dialog implementation matches the requested milestone behavior: it shows target-node context, enforces a required trimmed reason before enabling confirm, and integrates with the review panel flow without introducing feature-specific regressions in the reviewed files.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill tells workers to run `npm run lint`, but this repository script always runs ESLint with `--fix`, so the feature worker narrowed lint to specific files to avoid broad unrelated rewrites. The skill does not warn that `npm run lint -- <files>` still performs mutations because of the script definition.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` step 4 says to run `npm run lint`; `/Volumes/DPC/work/plant-code/plant3d-web/package.json` defines `lint` as `eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix`; the worker transcript for session `28cfcecc-809f-4a2e-8039-5c13228ab732` shows `npm run lint -- src/components/review/WorkflowReturnDialog.vue src/components/review/WorkflowReturnDialog.test.ts`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, and commit `730e51c` for `m4-workflow-return-dialog`. The feature satisfies the dialog UI and required-reason behavior in the milestone contract, and I found no blocking or non-blocking code issues in the reviewed scope."
+}

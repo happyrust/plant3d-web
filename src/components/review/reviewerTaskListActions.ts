@@ -3,8 +3,9 @@ type RefreshReviewerTasksOptions = {
   setLoading: (loading: boolean) => void;
 };
 
-import { reviewTaskStartReview } from '@/api/reviewApi';
 import type { ReviewTask } from '@/types/auth';
+
+import { reviewTaskStartReview } from '@/api/reviewApi';
 
 export type StartReviewerTaskOptions = {
   task: ReviewTask;

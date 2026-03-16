@@ -1,0 +1,28 @@
+{
+  "featureId": "cross-websocket-notification",
+  "reviewedAt": "2026-03-16T08:19:17Z",
+  "commitId": "971f83ab38fb5e33f1ae4657f05a41f00b99db08",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The websocket sync improves task refresh behavior, but the in-place update path trusts raw websocket payloads and can leave task objects missing normalized compatibility fields required elsewhere in the store.",
+    "issues": [
+      {
+        "file": "src/composables/useUserStore.ts",
+        "line": 1028,
+        "severity": "blocking",
+        "description": "`extractTaskFromWebSocketMessage()` returns the websocket payload as-is instead of normalizing it. If the backend sends snake_case fields (for example `requester_id`, `checker_id`, `approver_id`, `current_node`, which the REST API normalizes via `normalizeReviewTask()`), `upsertReviewTask()` will store an object whose camelCase fields like `requesterId`/`currentNode` are undefined. That immediately breaks designer/reviewer filtering (`myInitiatedTasks`, `pendingReviewTasks`) and can also cause updated tasks to disappear or remain stale after a websocket event, which violates the auto-refresh requirement."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `designer-tracking-worker` skill requires TDD, read-only lint on changed files, and manual verification with agent-browser, but this worker implemented code before any new failing tests, ran repository-wide `npm run lint`, and recorded no interactive checks.",
+      "evidence": "Transcript skeleton for session `1f24729e-6ba4-42a4-b627-521bcb0a128d` shows `ApplyPatch` calls before new websocket tests were added, then `npm run lint`, and the handoff has `interactiveChecks: []` despite SKILL.md sections 3, 5, and 6 requiring TDD, read-only lint on changed files, and manual agent-browser verification."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: websocket notifications are wired up, but `task_updated`-style events persist raw websocket payloads without REST-style normalization, so snake_case backend payloads can break task ownership/status filtering and prevent the relevant lists from refreshing correctly."
+}

@@ -1,0 +1,26 @@
+{
+  "featureId": "m4-workflow-submit-api",
+  "reviewedAt": "2026-03-16T05:44:15.679912+00:00",
+  "commitId": "ac93636",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The submit-to-next-node flow now delegates to a helper that trims remarks, calls the submit API, refreshes task and workflow data, closes the dialog only on success, and surfaces backend failures while preserving the entered note. The implementation matches the feature description and expected behavior for API integration, success feedback, and failure handling.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill's TDD step is too rigid for incremental integrations on existing UI flows. In this feature the worker reasonably inspected the existing submit path first, then added focused helper-level tests around the regression surface, and recorded that deviation in `skillFeedback`.",
+      "evidence": ".factory/skills/ui-worker/SKILL.md states to write failing tests before implementation for new UI features, while the transcript skeleton and handoff.skillFeedback for worker session `766c8735-5446-49a5-b7ae-653169015f5d` show the worker first inspected the existing submit flow and then added targeted tests in `src/components/review/reviewPanelActions.test.ts`."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Project shared-state docs do not capture the reviewer workbench submit success criteria now implemented here, including toast feedback plus task/workflow refresh after submit. This behavior is discoverable in code and validation contract, but not summarized in `.factory/library/` for future workers touching the workbench.",
+      "evidence": "`/Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/validation-contract.md` defines `VAL-WORK-003`, and commit `ac93636` implements success toast and refresh logic in `src/components/review/reviewPanelActions.ts`, but `.factory/library/` only contains `architecture.md`, `environment.md`, `review-annotations.md`, and `user-testing.md` without a reviewer workbench workflow note."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed transcript skeleton, handoff, and commit `ac93636` for `m4-workflow-submit-api`. The implementation satisfies the milestone behavior: confirm submit calls the submit API with trimmed remarks, shows success feedback, refreshes task/workflow state, closes and clears the dialog on success, and preserves dialog state while surfacing errors on failure. No blocking or non-blocking code issues found in scope."
+}

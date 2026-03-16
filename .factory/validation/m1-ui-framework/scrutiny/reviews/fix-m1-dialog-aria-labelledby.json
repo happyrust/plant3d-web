@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-m1-dialog-aria-labelledby",
+  "reviewedAt": "2026-03-16T00:13:24Z",
+  "commitId": "c0360045a5ec600e69f99c27c3e8dfd82ff3083c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix satisfies the feature contract: `Dialog.vue` now generates a stable heading id, binds `aria-labelledby` whenever a title prop or title slot is present, and exposes that id to title-slot consumers so slotted dialogs receive an accessible name without falling back to `aria-label`. The focused regression test covers both the built-in heading path and the slotted-heading path, and I did not find any blocking correctness issues in scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/m1-ui-framework/scrutiny/reviews/m1-ui-dialog-component.json",
+  "summary": "Pass: the rerun closes the dialog accessibility gap by wiring `aria-labelledby` to a generated title id for both prop-based and slotted titles, with matching regression coverage in `Dialog.test.ts`."
+}

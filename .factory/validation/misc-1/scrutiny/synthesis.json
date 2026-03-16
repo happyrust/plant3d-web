@@ -1,0 +1,49 @@
+{
+  "milestone": "misc-1",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Clarify in the `ui-worker` skill that regression-only fixes for already-correct implementations may add or replace targeted tests instead of skipping test work entirely.",
+      "evidence": "Review `fix-annotation-panel-test-failure` found the only required change was a new targeted regression test, and the worker had to document that as a deviation because `.factory/skills/ui-worker/SKILL.md` only describes baseline-test fixes as reusing or skipping tests.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Recommend AGENTS/library guidance about fallback ARIA labels on shared UI primitives.",
+      "reason": "already-documented: mission AGENTS guidance already says fallback ARIA labels should only be added when no visible text or caller-provided label exists and must not override existing accessible names."
+    },
+    {
+      "observation": "Recommend changing the `ui-worker` skill example that shows creating `Button.test.ts` for regression work.",
+      "reason": "ambiguous: the reviewed pass state does not show a systemic worker problem beyond the narrower regression-test-only clarification above."
+    }
+  ],
+  "previousRound": "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/misc-1/scrutiny/synthesis.json"
+}

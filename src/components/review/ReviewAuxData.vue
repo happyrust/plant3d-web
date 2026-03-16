@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
+import CollisionResultList from './CollisionResultList.vue';
+
 import type { CollisionItem, CollisionDataResponse } from '@/api/reviewApi';
+
 import { reviewGetAuxData, reviewGetCollisionData } from '@/api/reviewApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
-import CollisionResultList from './CollisionResultList.vue';
 
 const reviewStore = useReviewStore();
 const userStore = useUserStore();

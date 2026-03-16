@@ -1,0 +1,91 @@
+{
+  "milestone": "m3-reviewer-inbox",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 0,
+    "failed": 3,
+    "failedFeatures": [
+      "m3-reviewer-task-list-ui",
+      "m3-reviewer-task-list-data",
+      "m3-start-review-action"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m3-reviewer-task-list-ui",
+      "severity": "blocking",
+      "description": "The action CTA is now rendered only for `submitted` and `in_review` tasks, but the same component still lets users filter to `approved` and `rejected` states. Those cards now render without the required operation button, violating the feature contract that every task card shows an action button and creating a dead-end filtered view."
+    },
+    {
+      "featureId": "m3-reviewer-task-list-data",
+      "severity": "blocking",
+      "description": "The feature requires the task list component to call the list API when the component mounts and show loading/empty/error states around that request, but this component only reads `userStore.pendingReviewTasks` and exposes a manual `refreshTasks()` action. There is no `onMounted`, watcher, or initialization path in the component to invoke `userStore.loadReviewTasks()`, so opening the reviewer inbox can render stale persisted data or an immediate empty state without ever issuing the required GET request."
+    },
+    {
+      "featureId": "m3-start-review-action",
+      "severity": "blocking",
+      "description": "`startReviewerTask` only sets local store state and emits panel commands; it never invokes `reviewTaskStartReview` (or any equivalent backend mutation). Clicking `开始审核` therefore does not transition the task out of `submitted`, so the server-side workflow/history remain stale and the action is lost on refresh."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Refresh shared mission/library guidance so active reviewer-inbox behavior is documented, including expected mount-time inbox loading and start-review workflow semantics.",
+      "evidence": "All three scrutiny reviews noted reviewer-inbox behavior had to be inferred from source because `.factory/library/architecture.md` and `.factory/library/user-testing.md` still describe earlier M1/M2 or designer-tracking flows.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Clarify UI worker validation requirements for action and rendering features: targeted UI regressions should cover visible card states and required backend mutations even when broader baseline validation is noisy.",
+      "evidence": "Reviews for `m3-reviewer-task-list-ui` and `m3-start-review-action` both found missed regressions that existing helper-only tests and skipped interactive checks did not catch.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "`ui-worker` says UI features should get a red-first test unless verification steps explicitly allow static checks only, but this feature still changed a user-facing component without any focused rendering test. The worker intentionally skipped browser/manual validation after baseline test failures and returned `partial`, which suggests the skill should better document what minimum scoped verification is still expected for UI-only visual rewrites under a broken baseline.",
+      "reason": "ambiguous-or-orchestrator-owned"
+    },
+    {
+      "observation": "The repo library documents M1/M2 architecture and designer-task user testing, but nothing captures the reviewer inbox-specific rule that the same list supports status/priority filtering and reviewer-stage task cards. Reviewers had to infer behavior from `ReviewerTaskList.vue`, the pen file, and the validation contract instead of a consolidated inbox note.",
+      "reason": "ambiguous-or-orchestrator-owned"
+    },
+    {
+      "observation": "The repo-level library docs still describe the mission scope as only M1-M2 and the user-testing surface as designer tracking flows, which no longer reflects active M3 reviewer-inbox work. Review workers have to infer reviewer-inbox entry points and contracts from feature files and transcripts instead of shared docs.",
+      "reason": "ambiguous-or-orchestrator-owned"
+    },
+    {
+      "observation": "Mission guidance says the shared frontend health endpoint is `http://127.0.0.1:3101`, but the checked-in service healthcheck still uses `http://localhost:3101`, which can produce inconsistent validation behavior across environments.",
+      "reason": "ambiguous-or-orchestrator-owned"
+    },
+    {
+      "observation": "The `ui-worker` skill still tells workers to add/redrive tests before implementation unless a narrow exception applies, but this feature reused an existing action test and skipped any browser validation. The deviation was understandable for a small interaction change, yet the skill does not explicitly push workers to verify required API-side state transitions for action features.",
+      "reason": "ambiguous-or-orchestrator-owned"
+    },
+    {
+      "observation": "Project shared docs do not capture that reviewer 'start review' is expected to mutate backend workflow state via `/api/review/tasks/{id}/start-review` before opening the workbench, even though that API already exists.",
+      "reason": "ambiguous-or-orchestrator-owned"
+    }
+  ],
+  "previousRound": null
+}

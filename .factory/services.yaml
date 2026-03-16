@@ -18,3 +18,7 @@ services:
     healthcheck: curl -sf http://localhost:3100/api/health
     port: 3100
     depends_on: []
+
+# Validation note: for this follow-up mission, run browser validations serially.
+# Current machine headroom is limited (~2.68GB available observed during planning),
+# and the executable validation surface is list/detail consistency rather than high-parallel throughput.

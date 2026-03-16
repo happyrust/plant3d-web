@@ -1,0 +1,26 @@
+{
+  "featureId": "fix-lint-dtx-require",
+  "reviewedAt": "2026-03-16T00:11:49.340960+00:00",
+  "commitId": "7c1e1cf532189a015a6cc2bb440f9155df30865e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature is implemented as a narrow lint cleanup in `src/utils/three/dtx/selection/DTXSelectionController.ts`: the method-local `require('three')` is replaced with top-level `Frustum` and `Matrix4` imports, and `_createSelectionFrustum()` now uses the imported `Frustum` type directly. The committed diff matches the feature description and removes the targeted CommonJS usage without changing the surrounding selection logic.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "`DTXSelectionController` still lacks targeted regression coverage for the box-selection frustum path, so small selection-frustum edits are validated only indirectly through broader test runs.",
+      "evidence": "`src/utils/three/dtx/selection/DTXSelectionController.ts:283` defines `boxSelect()` and `src/utils/three/dtx/selection/DTXSelectionController.ts:297` defines `_createSelectionFrustum()`, but `src/utils/three/dtx/selection/DTXSelectionController.test.ts` only exercises outline/overlay initialization and contains no matches for `boxSelect` or `_createSelectionFrustum`."
+    },
+    {
+      "area": "skills",
+      "observation": "No durable skill gap found for this feature: the `ui-worker` skill already documents that pure lint or syntax fixes may skip new tests and browser validation, matching the worker's actual procedure.",
+      "evidence": "`.factory/skills/ui-worker/SKILL.md` lists \"\u7eaf lint/\u8bed\u6cd5\u4fee\u590d\" as an exception under both the TDD and manual-validation steps, and worker session `8e2a58d2-507f-4676-a9f2-7ca14171c5ed` followed that path in its transcript and handoff."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. Commit `7c1e1cf532189a015a6cc2bb440f9155df30865e` cleanly replaces the `require('three')` usage with ES imports in `DTXSelectionController`, satisfies the feature contract, and does not introduce any blocking regression in the reviewed code."
+}

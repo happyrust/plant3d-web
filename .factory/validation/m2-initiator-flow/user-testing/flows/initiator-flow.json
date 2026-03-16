@@ -1,0 +1,86 @@
+{
+  "assertions": [
+    {
+      "id": "VAL-INIT-001",
+      "status": "blocked",
+      "reason": "In the live embedded surface, triggering review mode only exposed ribbon actions like '开始校审' and task panels; the expected initiator panel titled '发起提资单' never rendered, so the open-panel assertion could not be exercised through the user surface.",
+      "evidence": [
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-review-tab.png",
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-start-review.png"
+      ]
+    },
+    {
+      "id": "VAL-INIT-002",
+      "status": "blocked",
+      "reason": "Because the initiator panel never became available in the browser session, there was no visible component summary area to verify the selected-component text.",
+      "evidence": [
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-start-review.png"
+      ]
+    },
+    {
+      "id": "VAL-INIT-003",
+      "status": "blocked",
+      "reason": "The package-name field and submit action were inaccessible in the live UI because the initiator form never opened, preventing required-field validation from being triggered.",
+      "evidence": [
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-start-review.png"
+      ]
+    },
+    {
+      "id": "VAL-INIT-004",
+      "status": "blocked",
+      "reason": "The full initiator form fields (package name, description, checker, priority, due date) were not present in the browser surface, so complete-form entry could not be validated.",
+      "evidence": [
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-start-review.png"
+      ]
+    },
+    {
+      "id": "VAL-INIT-005",
+      "status": "blocked",
+      "reason": "Without access to the initiator form, the attachment upload area never appeared, so upload progress and success list behavior could not be observed in the real UI.",
+      "evidence": [
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-start-review.png"
+      ]
+    },
+    {
+      "id": "VAL-INIT-006",
+      "status": "blocked",
+      "reason": "No user path in the live browser session reached the create-task form, so POST /api/review/tasks success behavior, success toast, panel close, and task list refresh could not be validated.",
+      "evidence": [
+        "GET http://localhost:3100/api/review/tasks observed in browser network log; no POST /api/review/tasks captured",
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-my-tasks.png"
+      ]
+    },
+    {
+      "id": "VAL-INIT-007",
+      "status": "blocked",
+      "reason": "Because task creation could not be initiated from the live UI, the failure-handling path for POST /api/review/tasks was also unreachable.",
+      "evidence": [
+        "No POST /api/review/tasks request captured in browser network log",
+        "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-my-tasks.png"
+      ]
+    }
+  ],
+  "frictions": [
+    "The browser session runs without WebGL2, so the 3D viewer fails to initialize and object-selection-dependent initiator interactions are unavailable.",
+    "The '校审测试' entry opens an external embedded page but still lands on review/task surfaces rather than the initiator form.",
+    "The live review tab exposes '开始校审', '校审面板', '待审核', '复审任务', and '我的提资', but not a visible '发起提资单' workflow entry."
+  ],
+  "blockers": [
+    "Primary blocker: the expected initiator panel never rendered in the real browser surface, so all VAL-INIT assertions remained unreachable.",
+    "Supporting blocker: the viewer shows '3D Viewer 初始化失败 / 需要 WebGL2', which likely prevents the selected-component state needed by the initiator flow.",
+    "Observed network in the embedded session was limited to GET /api/users/reviewers, GET /api/review/tasks, and POST /api/review/embed-url; no POST /api/review/tasks was triggered."
+  ],
+  "toolsUsed": [
+    "Grep",
+    "Read",
+    "agent-browser (open, screenshot --annotate, snapshot, get text, eval, network requests, console, errors, close)",
+    "curl",
+    "python3"
+  ],
+  "summary": {
+    "pass": 0,
+    "fail": 0,
+    "blocked": 7,
+    "overall": "Blocked: the live browser surface never exposed the initiator form required for VAL-INIT-001..007, and no create-task network call could be exercised."
+  }
+}

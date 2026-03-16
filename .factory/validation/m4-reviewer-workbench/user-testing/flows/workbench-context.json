@@ -1,0 +1,144 @@
+{
+  "groupId": "workbench-context",
+  "testedAt": "2026-03-16T05:58:48.016887+00:00",
+  "isolation": {
+    "surface": "http://127.0.0.1:3101",
+    "backend": "http://127.0.0.1:3100",
+    "browserSession": "361491798cc9__u1",
+    "reviewerIdentity": "reviewer_001 / reviewer user",
+    "candidateTask": "task-af46d596-d792-40f8-976d-bc052fb3822b",
+    "actualUiUser": "user-002 / 李审核员"
+  },
+  "toolsUsed": [
+    "agent-browser"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-WORK-001",
+      "title": "显示任务上下文",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open the app, switch to the reviewer role, and enter the reviewer workbench from the pending task list.",
+          "expected": "Reviewer workbench opens for the candidate task.",
+          "observed": "Workbench opened from the pending reviewer task card for task title '测试提资单-1767928364中'."
+        },
+        {
+          "action": "Inspect the workbench header/context section.",
+          "expected": "Task title, model name, requester, reviewer(s), component count, and current node are visible.",
+          "observed": "Visible text showed title '测试提资单-1767928364中', model 'test-model', requester '系统用户', reviewers '校核 / 审核人', component count '1 个构件', and current node '校核'."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-context/workbench-opened.png"
+        ],
+        "consoleErrors": "Warning: Failed to load frontend version SyntaxError: Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON. Visible page message also showed '3D Viewer 初始化失败 需要 WebGL2（canvas.getContext(\"webgl2\") 失败）'.",
+        "network": "Not captured; assertion focused on visible workbench context."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORK-002",
+      "title": "提交到下一节点对话框",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Click '提交到审核' in the workbench.",
+          "expected": "A submit dialog opens.",
+          "observed": "Dialog titled '提交到下一节点' opened."
+        },
+        {
+          "action": "Inspect submit dialog content.",
+          "expected": "Current node, target node, and comment/remark input are visible.",
+          "observed": "Dialog showed current node '校核', target node '审核', and textbox '备注输入（可选）'."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-context/submit-dialog.png"
+        ],
+        "consoleErrors": "Same console warning and WebGL2 viewer initialization failure remained present; no new dialog-specific console error observed.",
+        "network": "Not captured; dialog was only opened for inspection and not submitted."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORK-004",
+      "title": "驳回到指定节点对话框",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Close the submit dialog and click '驳回到设计'.",
+          "expected": "A return dialog opens.",
+          "observed": "Dialog titled '驳回到指定节点' opened."
+        },
+        {
+          "action": "Inspect return dialog content.",
+          "expected": "Target node and required return-reason input are visible.",
+          "observed": "Dialog showed target node button/value '编制', current node '校核', and textbox '驳回原因输入（必填）'."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-context/return-dialog-empty.png"
+        ],
+        "consoleErrors": "Same console warning and WebGL2 viewer initialization failure remained present; no new dialog-specific console error observed.",
+        "network": "Not captured; dialog was only opened for inspection and not submitted."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORK-005",
+      "title": "驳回原因必填验证",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect the return dialog with an empty reason.",
+          "expected": "'确认驳回' remains disabled until a return reason is entered.",
+          "observed": "Return dialog showed validation text '驳回原因为必填项' and the '确认驳回' button was disabled in the snapshot."
+        },
+        {
+          "action": "Enter a sample reason without submitting.",
+          "expected": "The confirm button becomes enabled after text entry.",
+          "observed": "After filling 'needs revision', the '确认驳回' button became enabled."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-context/return-dialog-empty.png",
+          "m4-reviewer-workbench/workbench-context/return-dialog-filled.png"
+        ],
+        "consoleErrors": "Same console warning and WebGL2 viewer initialization failure remained present; no new validation-specific console error observed.",
+        "network": "Not captured; button enablement was validated without submitting the return action."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The assigned reviewer identity name did not appear verbatim in the UI; the available reviewer role switch option resolved to user '李审核员' / 'user-002'.",
+      "resolved": true,
+      "resolution": "Used the available reviewer role in the shared app instance and recorded the actual UI identity in the isolation metadata.",
+      "affectedAssertions": [
+        "VAL-WORK-001",
+        "VAL-WORK-002",
+        "VAL-WORK-004",
+        "VAL-WORK-005"
+      ]
+    },
+    {
+      "description": "The candidate backend task ID was not visible in the task list/workbench UI, so validation relied on the single visible pending reviewer task and its displayed content.",
+      "resolved": true,
+      "resolution": "Validated only the visible reviewer workbench context without submitting or returning the task.",
+      "affectedAssertions": [
+        "VAL-WORK-001",
+        "VAL-WORK-002",
+        "VAL-WORK-004",
+        "VAL-WORK-005"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 4 assertions in the reviewer workbench flow; VAL-WORK-001, VAL-WORK-002, VAL-WORK-004, and VAL-WORK-005 all passed. Persistent console/runtime issues unrelated to the assertions were present: frontend version JSON parsing warning and 3D viewer WebGL2 initialization failure."
+}

@@ -496,6 +496,7 @@ const activeRectAnnotationId = ref<string | null>(null);
 const activeMeasurementId = ref<string | null>(null);
 const activeDimensionId = ref<string | null>(null);
 const activeXeokitMeasurementId = ref<string | null>(null);
+const measurementDetailsDrawerOpen = ref(false);
 
 const pickedQueryCenter = ref<PickedQueryCenter | null>(null);
 
@@ -548,6 +549,7 @@ function resetTransientUiState() {
   activeMeasurementId.value = null;
   activeDimensionId.value = null;
   activeXeokitMeasurementId.value = null;
+  measurementDetailsDrawerOpen.value = false;
   pickedQueryCenter.value = null;
   pickRefnoFilter.value = [];
   pickedRefnos.value = [];
@@ -764,6 +766,15 @@ function clearXeokitMeasurements() {
   xeokitDistanceMeasurements.value = [];
   xeokitAngleMeasurements.value = [];
   activeXeokitMeasurementId.value = null;
+  measurementDetailsDrawerOpen.value = false;
+}
+
+function setMeasurementDetailsDrawerOpen(open: boolean) {
+  measurementDetailsDrawerOpen.value = open;
+}
+
+function toggleMeasurementDetailsDrawerOpen() {
+  measurementDetailsDrawerOpen.value = !measurementDetailsDrawerOpen.value;
 }
 
 function setCurrentXeokitDistanceDraft(draft: XeokitDistanceDraft | null) {
@@ -1216,6 +1227,7 @@ function importJSON(raw: string) {
   activeMeasurementId.value = null;
   activeDimensionId.value = null;
   activeXeokitMeasurementId.value = null;
+  measurementDetailsDrawerOpen.value = false;
   pendingTextAnnotationEditId.value = null;
   pendingCloudAnnotationEditId.value = null;
   pendingObbEditId.value = null;
@@ -1260,6 +1272,7 @@ export function useToolStore() {
     activeMeasurementId,
     activeDimensionId,
     activeXeokitMeasurementId,
+    measurementDetailsDrawerOpen,
     pendingObbEditId,
     pendingTextAnnotationEditId,
     pendingCloudAnnotationEditId,
@@ -1305,6 +1318,8 @@ export function useToolStore() {
     updateXeokitMeasurementVisible,
     removeXeokitMeasurement,
     clearXeokitMeasurements,
+    setMeasurementDetailsDrawerOpen,
+    toggleMeasurementDetailsDrawerOpen,
     currentXeokitDistanceDraft,
     currentXeokitAngleDraft,
     setCurrentXeokitDistanceDraft,

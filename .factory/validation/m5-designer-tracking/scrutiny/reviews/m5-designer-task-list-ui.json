@@ -1,0 +1,28 @@
+{
+  "featureId": "m5-designer-task-list-ui",
+  "reviewedAt": "2026-03-16T08:19:38.573182+00:00",
+  "commitId": "7dc948c8754d70315df176f19ac0928c60a623c6",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds a polished designer task list and status filters, but it does not fulfill the requirement to show all tasks initiated by the current designer because cancelled tasks are omitted from both the filter model and rendered counts. This creates a real data-loss bug for VAL-TRACK-001 when initiated tasks include cancelled items.",
+    "issues": [
+      {
+        "file": "src/components/review/DesignerTaskList.vue",
+        "line": 30,
+        "severity": "blocking",
+        "description": "`DesignerTaskStatusFilter` and `statusFilterOptions` only model `draft/submitted/in_review/approved/rejected`, while `ReviewTask['status']` also includes `cancelled`. Since `filteredTasks` only returns exact matches for the selected options and there is no cancelled filter, cancelled tasks are not representable in the UI's status filtering model, so the feature does not fully satisfy the requirement to display all initiated tasks with status-based filtering across valid task states."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill says UI features should perform manual browser verification in step 5, but this worker explicitly skipped it for a user-facing list/filter change and still completed successfully. The skill may need clearer guidance on when user-testing validators can replace worker-side manual UI checks for milestone features.",
+      "evidence": ".factory/skills/ui-worker/SKILL.md step 5 requires browser verification; handoff `2026-03-16T06-13-37-996Z__m5-designer-task-list-ui__9364c0a8-b83d-404f-8366-b04ba23b5ac9.json` records `followedProcedure: false` and states no browser validation was performed."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the new designer task list/filter UI is visually richer, but it does not cover the full ReviewTask status set because cancelled tasks are not represented in the filter model, so the feature does not reliably satisfy the requirement to show all initiated tasks."
+}

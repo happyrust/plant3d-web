@@ -1,0 +1,40 @@
+{
+  "featureId": "m2-initiate-panel-ui",
+  "reviewedAt": "2026-03-16T02:08:19.770575+00:00",
+  "commitId": "b43434d5e21ed6563f5aab688569902819d61f9f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The panel shell matches much of the visual redesign, but the implementation regresses core initiate-flow behavior by allowing the user to permanently dismiss the form and by changing role-specific field semantics from the contract.",
+    "issues": [
+      {
+        "file": "src/components/review/InitiateReviewPanel.vue",
+        "line": 377,
+        "severity": "blocking",
+        "description": "The new close button hides the entire initiate form behind a `重新打开提资面板` placeholder without any route-level control, which is not part of the feature contract and can strand users away from the required submission fields. The feature expected a close icon in the panel header, but not a self-managed collapsed state that replaces the panel content and adds a new workflow branch."
+      },
+      {
+        "file": "src/components/review/InitiateReviewPanel.vue",
+        "line": 245,
+        "severity": "blocking",
+        "description": "The redesigned UI repurposes the required role fields: the design-contract field labeled `审核人` is wired to `checkerId`, while the actual approval role is moved to a new `批准人` field. This changes the semantics of the m2 initiate panel from the specified `审核人` selection to a checker/approver split, so the UI no longer matches the feature's required field contract or the design text in `review-designer.pen`."
+      },
+      {
+        "file": "src/components/review/form-binding.test.ts",
+        "line": 222,
+        "severity": "non_blocking",
+        "description": "Test coverage was updated around the new collapse/reopen behavior, but there is still no assertion that the rendered role labels and submission payload match the feature contract from `features.json`/design spec. That gap allowed the field-semantic regression to pass review despite targeted panel tests existing."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill says UI-interactive features should be browser-verified unless they are non-UI exceptions, but the worker explicitly skipped browser validation for this panel redesign and only did static code/design comparison.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` step 5 requires browser validation for UI features; handoff `2026-03-16T01-36-32-319Z__m2-initiate-panel-ui__228cf00a-585c-4818-a4c4-79ac27c45c55.json` records a deviation saying no browser verification was run."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed transcript skeleton, handoff, commit `b43434d5e21ed6563f5aab688569902819d61f9f`, current `InitiateReviewPanel` implementation, and related tests. The visual shell was redesigned, but the change introduces a blocking close/collapse path that is outside the feature contract and changes the role-field semantics from the required `审核人` field to a checker/approver split, so the feature fails review."
+}

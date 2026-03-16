@@ -1,0 +1,34 @@
+{
+  "featureId": "m5-task-detail-modal",
+  "reviewedAt": "2026-03-16T08:16:00Z",
+  "commitId": "7f17da9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The modal wiring and workflow-history rendering are in place, but the feature commit also adds rejected-task resubmission behavior that is outside this feature's scope and leaves the modal stale after a successful resubmit.",
+    "issues": [
+      {
+        "file": "src/components/review/TaskReviewDetail.vue",
+        "line": 201,
+        "severity": "blocking",
+        "description": "The detail modal now calls `userStore.submitTaskToNextNode(props.task.id)` and shows a `再次提交` CTA, which is not part of `m5-task-detail-modal`'s expected behavior (detail modal should only display task info and workflow history). This folds the later resubmission workflow into the feature commit, so the implementation exceeds the feature contract and couples review output to unrelated behavior."
+      },
+      {
+        "file": "src/components/review/TaskReviewDetail.vue",
+        "line": 203,
+        "severity": "non_blocking",
+        "description": "After a successful resubmit, the component only reloads workflow history and shows a toast; it never refreshes or replaces `props.task`, so the modal can continue showing stale rejected-state badges and return information while the task has already advanced. Users can therefore see outdated task metadata until the parent list reloads."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The shared testing notes describe this surface as a 'Task detail page', but the implementation and feature contract are a modal (`任务详情弹窗`) opened from the designer/resubmission task lists.",
+      "evidence": ".factory/library/user-testing.md:7-8,31 says 'Task detail page', while features.json:1826-1841 and src/components/review/DesignerTaskList.vue:322-326 mount `TaskReviewDetail` as a teleported dialog."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the modal display contract is mostly implemented, but this feature commit also introduces resubmission behavior outside the feature scope, and the new action leaves the dialog showing stale rejected-task metadata after success."
+}

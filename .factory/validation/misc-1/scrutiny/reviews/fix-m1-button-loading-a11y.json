@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-m1-button-loading-a11y",
+  "reviewedAt": "2026-03-15T23:22:39Z",
+  "commitId": "6cee14e9322b27af6f04b3c037cd1d4649e5ffac",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The follow-up fix resolves the original accessible-name regression. `Button.vue` now only applies the loading fallback label when the button is loading and has neither visible text nor a caller-provided `aria-label`, so text buttons and labeled icon buttons keep their original accessible names while unlabeled loading buttons still expose `加载中`.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/misc-1/scrutiny/reviews/fix-m1-button-loading-a11y.json",
+  "summary": "Reviewed the prior failed feature and the fix feature `fix-button-loading-accessible-name` via their handoffs, transcript skeletons, diffs, and current `Button` implementation/tests. The current code preserves visible-text and caller-supplied labels during loading, adds the fallback label only for unlabeled loading buttons, and includes regression coverage for all required scenarios, so the original blocking issue is fixed."
+}

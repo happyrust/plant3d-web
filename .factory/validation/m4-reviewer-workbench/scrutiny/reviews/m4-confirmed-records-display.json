@@ -1,0 +1,28 @@
+{
+  "featureId": "m4-confirmed-records-display",
+  "reviewedAt": "2026-03-16T05:44:35Z",
+  "commitId": "b546699ce6ed0efbad1ca6a604786ea7ef4ba8d5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature meets the empty-state, confirmation-time, annotation-count, and note-display requirements, but the new confirmed-record card dropped the existing per-record measurement count from the workbench. Because confirmed records are generated from a combined confirmation payload that can include measurements, this is a user-visible regression in the reviewed scope.",
+    "issues": [
+      {
+        "file": "src/components/review/ReviewPanel.vue",
+        "line": 1002,
+        "severity": "blocking",
+        "description": "The confirmed-record row no longer renders each record's measurement count. Before this change the panel showed both aggregated annotations and `record.measurements.length`; after the refactor it only shows annotation count and note. Since confirmed records are created from payloads that include measurements (`src/composables/useReviewStore.ts:153`-`src/composables/useReviewStore.ts:175`), reviewers lose visibility into whether a confirmation batch contained measurements, which regresses existing workbench behavior."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still frames step 2 as writing a new red test except for a short fixed list of exceptions, but this feature's transcript shows a realistic case where a feature-specific test file already existed in the working tree and the worker appropriately adopted it instead of duplicating coverage.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` step 2 only exempts lint/config/baseline-test/static-check cases; the handoff for session `77d5b502-1188-4bc5-811b-030d38236f89` records `followedProcedure: false` because `src/components/review/ConfirmedRecords.test.ts` already existed and was reused, with a suggested skill update to mention this case explicitly."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature metadata, worker transcript skeleton, handoff, and commit `b546699ce6ed0efbad1ca6a604786ea7ef4ba8d5`. The implementation satisfies the new confirmed-record display requirements for time, annotation count, note, and empty state, but it also removes the previously visible per-record measurement count from the confirmed-record list, so I marked the review as failing due to that regression."
+}

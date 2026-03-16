@@ -9,13 +9,16 @@ NOTE: Startup and cleanup are handled by `worker-base`. This skill defines the W
 
 ## When to Use This Skill
 
-Use this worker for features related to designer (initiator) task tracking:
+Use this worker for features related to designer (initiator) task tracking and M5 consistency repair:
 - Designer task status board (`DesignerTaskList.vue`)
 - Resubmission task list (`ResubmissionTaskList.vue`)
 - Task detail page (`TaskReviewDetail.vue`)
 - Resubmit workflow
 - Task filtering and status logic
 - Related state management in `useUserStore`
+- Returned/resubmittable task contract alignment across store, filters, and UI surfaces
+- Stale-state clearing after resubmit
+- Navigation persistence consistency for designer-facing task lists
 
 ## Work Procedure
 
@@ -27,6 +30,7 @@ Use this worker for features related to designer (initiator) task tracking:
 - Read relevant existing components and composables
 - Understand current implementation patterns
 - Identify what needs to be refactored vs built from scratch
+- When fixing consistency issues, inspect both store/composable logic and every affected UI surface before changing code
 
 ### 3. Write Tests First (TDD - RED)
 - Write failing tests BEFORE implementation
@@ -50,12 +54,14 @@ Use this worker for features related to designer (initiator) task tracking:
 - Test the complete user flow from entry to completion
 - Record specific actions and observations in `interactiveChecks`
 - Each flow = one detailed `interactiveChecks` entry
+- For consistency features, verify at least two affected surfaces in the same flow when relevant (for example: returned list + detail, or designer list + reviewer inbox)
 
 ### 7. Document What Was Done
 - Prepare thorough handoff with all verification details
 - Include specific commands run and their outputs
 - Document any issues discovered
 - Note what was left undone (if anything)
+- If a feature resolves a contract mismatch, explicitly state the canonical rule chosen and which files now share it
 
 ## Example Handoff
 

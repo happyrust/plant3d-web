@@ -1,0 +1,26 @@
+{
+  "featureId": "fix-followup-tool-store-baseline",
+  "reviewedAt": "2026-03-16T20:34:22Z",
+  "commitId": "ce42f81e7f348e2013ca2c75d268e0fcc0daeefd",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix correctly aligns the failing dimension persistence regression with the actual tool-store persistence contract. The committed diff updates the assertion to the scoped v5 storage key and `version: 5`, which matches `useToolStore.ts` load/save behavior, so the assigned blocker is addressed.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `designer-tracking-worker` skill currently requires agent-browser manual verification for every task, but this baseline-repair feature only adjusted a composable unit-test assertion and had no meaningful UI flow to validate.",
+      "evidence": "Worker transcript/handoff for session `337275ae-b219-498a-bed0-b066b3043c46` records a documented deviation from skill step 6 because the change only touched `src/composables/useToolStore.dimensions.test.ts`; no browserable user-surface behavior changed."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Shared library notes do not document the current scoped tool-store persistence contract, even though `useToolStore.ts` now persists under scoped v5 keys. That gap likely contributed to the stale v4 assertion lingering in the regression test.",
+      "evidence": "`src/composables/useToolStore.ts:306-330` defines `STORAGE_KEY_V5` plus per-project/db scoping, and `src/composables/useToolStore.ts:417-444,625-636` loads/saves scoped v5 payloads. `.factory/library/architecture.md`, `environment.md`, and `user-testing.md` contain no note about tool-store storage version/scope behavior."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/misc-followup-baseline/scrutiny/reviews/fix-followup-tool-store-baseline.json",
+  "summary": "Reviewed the rerun for `fix-followup-tool-store-baseline` against commit `ce42f81`. The worker updated the failing regression to assert the real scoped v5 persistence contract used by `useToolStore.ts`, and the diff now satisfies the feature’s goal of removing this specific full-suite blocker; the prior review concern about the stale test title is resolved in context because the feature requirement is to restore passing persistence coverage, not to preserve a v4 contract."
+}

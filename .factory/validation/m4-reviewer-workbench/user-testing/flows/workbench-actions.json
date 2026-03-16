@@ -1,0 +1,155 @@
+{
+  "groupId": "workbench-actions",
+  "testedAt": "2026-03-16T06:06:12.042420+00:00",
+  "isolation": {
+    "surface": "http://127.0.0.1:3101",
+    "backend": "http://127.0.0.1:3100",
+    "browserSession": "361491798cc9__u2",
+    "reviewerIdentity": "reviewer_001 / user-002"
+  },
+  "toolsUsed": [
+    "agent-browser",
+    "curl"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-WORK-007",
+      "title": "显示工作流历史",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Switch to reviewer role, open 待审核, and continue task task-af46d596-d792-40f8-976d-bc052fb3822b / 测试提资单-1767928364",
+          "expected": "Reviewer workbench opens for the selected task",
+          "observed": "Workbench opened and loaded workflow data via GET /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/workflow"
+        },
+        {
+          "action": "Inspect 工作流历史 section",
+          "expected": "Timeline shows actor, time, action, and remarks for each entry",
+          "observed": "UI rendered two entries with action, timestamp, operator, and remarks: system submit on 2026/03/14 23:57 with remark 'try role sj', and user-002 submit on 2026/03/16 14:02 with remark 'validator submit check'"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-actions/workbench-opened.png",
+          "m4-reviewer-workbench/workbench-actions/submit-success.png"
+        ],
+        "consoleErrors": "Warning on app boot: Failed to load frontend version SyntaxError: Unexpected token '<', \"<!DOCTYPE ...\" is not valid JSON; no workflow-specific console errors observed.",
+        "network": "GET /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/workflow -> success true, history entries rendered"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORK-008",
+      "title": "显示确认记录",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Open the same reviewer workbench and inspect 确认记录 section",
+          "expected": "Confirmed records list renders confirmation time, annotation count, and remarks if records exist",
+          "observed": "UI rendered '暂无确认记录' and backend returned an empty array from GET /api/review/records/by-task/task-af46d596-d792-40f8-976d-bc052fb3822b"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-actions/workbench-opened.png"
+        ],
+        "consoleErrors": "Warning on app boot: Failed to load frontend version SyntaxError: Unexpected token '<', \"<!DOCTYPE ...\" is not valid JSON; no confirmed-record specific console errors observed.",
+        "network": "GET /api/review/records/by-task/task-af46d596-d792-40f8-976d-bc052fb3822b -> { success: true, records: [] }"
+      },
+      "issues": "Blocked by missing backend record data for the selected task, so list rendering with time/annotation-count/remarks could not be exercised. The empty-state itself rendered correctly."
+    },
+    {
+      "id": "VAL-WORK-003",
+      "title": "提交操作成功",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open 提交到审核 dialog from the workbench",
+          "expected": "Submit dialog appears with remark input and confirm action",
+          "observed": "Dialog opened with 当前节点=校核, target action '提交到审核', optional remark input, and 确认提交 button"
+        },
+        {
+          "action": "Enter remark 'validator submit check' and confirm submit",
+          "expected": "Dialog closes, success feedback appears, and task status/context updates to the next node",
+          "observed": "POST /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/submit succeeded; dialog closed; workbench context updated from current node 校核 to 审核 and primary action changed from 提交到审核 to 提交到批准"
+        },
+        {
+          "action": "Return to reviewer inbox",
+          "expected": "Submitted task leaves the pending reviewer list or otherwise reflects updated context",
+          "observed": "待审核 list became empty with '暂无审核任务', consistent with the task moving out of this reviewer queue"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-actions/submit-dialog.png",
+          "m4-reviewer-workbench/workbench-actions/submit-success.png",
+          "m4-reviewer-workbench/workbench-actions/inbox-after-submit.png"
+        ],
+        "consoleErrors": "Warning on app boot: Failed to load frontend version SyntaxError: Unexpected token '<', \"<!DOCTYPE ...\" is not valid JSON; no submit-flow specific page errors observed.",
+        "network": "POST /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/submit observed in browser; subsequent GET /api/review/tasks?checker_id=user-002 refreshes removed the task from 待审核"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORK-006",
+      "title": "驳回操作成功",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Attempt to validate return flow after the submit mutation",
+          "expected": "A suitable task can be returned to design with a reason and show success feedback",
+          "observed": "No remaining pending reviewer task was available in the UI after submit, and direct backend validation attempt for the same task returned permission error: 权限不足：用户 debug-user 不是「审核」节点的负责人"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m4-reviewer-workbench/workbench-actions/inbox-after-submit.png",
+          "m4-reviewer-workbench/workbench-actions/review-tasks-tab.png"
+        ],
+        "consoleErrors": "Warning on app boot: Failed to load frontend version SyntaxError: Unexpected token '<', \"<!DOCTYPE ...\" is not valid JSON; no return-dialog interaction completed.",
+        "network": "No successful POST /api/review/tasks/{id}/return captured; direct POST /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/return with targetNode=sj returned success false / 权限不足"
+      },
+      "issues": "Blocked because the only suitable inbox task was advanced to the next node during VAL-WORK-003, leaving no safe UI candidate for a return flow. A backend check also indicates role/session mismatch for return permission at the new node."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Headless browser session cannot initialize WebGL2, so the 3D Viewer pane always shows '3D Viewer 初始化失败'.",
+      "resolved": false,
+      "resolution": "None; validation stayed focused on reviewer workbench panels outside the 3D surface.",
+      "affectedAssertions": [
+        "VAL-WORK-003",
+        "VAL-WORK-006",
+        "VAL-WORK-007",
+        "VAL-WORK-008"
+      ]
+    },
+    {
+      "description": "The browser network log does not expose response status/body inline, so successful responses were inferred from UI state changes and supporting curl reads against the assigned backend.",
+      "resolved": true,
+      "resolution": "Correlated UI updates with browser request capture and read-only curl calls to the local backend.",
+      "affectedAssertions": [
+        "VAL-WORK-003",
+        "VAL-WORK-007",
+        "VAL-WORK-008"
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "description": "No second safe reviewer task was available to validate a successful return-to-design flow after the submit mutation, and direct backend return attempt failed permission check for the current node owner.",
+      "affectedAssertions": [
+        "VAL-WORK-006"
+      ],
+      "quickFixAttempted": "Checked 待审核 and 复审任务 tabs, queried GET /api/review/tasks?checker_id=user-002, and attempted POST /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/return with targetNode=sj; backend rejected with 权限不足。"
+    },
+    {
+      "description": "Selected task had no confirmed records in backend data.",
+      "affectedAssertions": [
+        "VAL-WORK-008"
+      ],
+      "quickFixAttempted": "Queried GET /api/review/records/by-task/task-af46d596-d792-40f8-976d-bc052fb3822b and confirmed records array was empty."
+    }
+  ],
+  "summary": "Tested 4 assertions for reviewer workbench actions using reviewer_001/user-002 on task task-af46d596-d792-40f8-976d-bc052fb3822b (测试提资单-1767928364): 2 passed (VAL-WORK-003, VAL-WORK-007) and 2 were blocked by missing data or unavailable/safely mutable task state (VAL-WORK-006, VAL-WORK-008). The task was advanced from current node sj/校核 to sh/审核 with submit remark 'validator submit check'."
+}

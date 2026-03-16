@@ -9,6 +9,7 @@ import {
   EyeOff,
   Focus,
   GitCompare,
+  LocateFixed,
   RectangleHorizontal,
   Ruler,
   Search,
@@ -3843,7 +3844,7 @@ onUnmounted(() => {
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         title="全部隐藏"
         @click.stop="hideAll">
-        <EyeOff class="h-5 w-5" />
+        <X class="h-5 w-5" />
       </button>
       <button type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"

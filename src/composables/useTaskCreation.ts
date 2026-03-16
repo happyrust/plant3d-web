@@ -526,8 +526,8 @@ export function useTaskCreation(): UseTaskCreationReturn {
     const manualDbNums = formData.type === 'DataGeneration'
       ? (trimmedDbnum ? [Number(trimmedDbnum)] : [])
       : (formData.parseMode === 'dbnum'
-          ? formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(s => s && !isNaN(Number(s))).map(Number)
-          : []);
+        ? formData.dbnum.split(/[,，\s]+/).map(s => s.trim()).filter(s => s && !isNaN(Number(s))).map(Number)
+        : []);
     const manualRefnos = formData.type === 'DataGeneration'
       ? (trimmedRefno ? [trimmedRefno] : [])
       : (formData.parseMode === 'refno' ? [trimmedRefno] : []);

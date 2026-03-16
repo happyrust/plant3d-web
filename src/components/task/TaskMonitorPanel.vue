@@ -195,11 +195,11 @@ import TaskStatusCard from './TaskStatusCard.vue';
 
 import type { Task } from '@/types/task';
 
-import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useConsoleStore } from '@/composables/useConsoleStore';
-import { useViewerContext } from '@/composables/useViewerContext';
-import { useTaskMonitor } from '@/composables/useTaskMonitor';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
+import { useTaskMonitor } from '@/composables/useTaskMonitor';
+import { useViewerContext } from '@/composables/useViewerContext';
 
 // ============ 任务监控 ============
 // 后端支持的操作：start, stop, restart, delete
@@ -448,14 +448,14 @@ async function showPreviewByDbnum(dbnum: number, taskId: string): Promise<boolea
 async function showPreviewByRefnos(refnos: string[], taskId: string): Promise<boolean> {
   const requestId = `task-preview-${taskId}-${Date.now()}`;
 
-  const completion = await new Promise<{ ok: string[]; fail: Array<{ refno: string; error: string | null }>; error: string | null }>((resolve) => {
+  const completion = await new Promise<{ ok: string[]; fail: { refno: string; error: string | null }[]; error: string | null }>((resolve) => {
     const timeout = window.setTimeout(() => {
       window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
       resolve({ ok: [], fail: [], error: 'Viewer load timed out' });
     }, 15000);
 
     const onDone = (event: Event) => {
-      const detail = (event as CustomEvent<{ requestId?: string; ok?: string[]; fail?: Array<{ refno: string; error: string | null }>; error?: string | null }>).detail;
+      const detail = (event as CustomEvent<{ requestId?: string; ok?: string[]; fail?: { refno: string; error: string | null }[]; error?: string | null }>).detail;
       if (detail?.requestId !== requestId) {
         return;
       }

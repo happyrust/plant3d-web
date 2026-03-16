@@ -1,0 +1,21 @@
+{
+  "featureId": "fup-m5-returned-contract-foundation",
+  "reviewedAt": "2026-03-16T21:07:56.741119+00:00",
+  "commitId": "3ed3e71feedbd5b8eeb50075e9c5f81a5c8208fb",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature commit only adds regression coverage, but that coverage targets the existing canonical returned-task implementation in useUserStore/reviewTaskFilters and verifies the required snake_case websocket normalization before list membership checks. The reviewed tests materially support VAL-FUP-RETURN-001, VAL-FUP-RT-001, and the store/filter side of VAL-FUP-CROSS-001 without introducing incorrect assertions.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The designer-tracking-worker skill still mandates manual agent-browser verification for every feature, but this feature was a test-only contract-foundation change and the worker reasonably completed it with automated evidence only.",
+      "evidence": "Skill step 6 in /Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/designer-tracking-worker/SKILL.md requires agent-browser verification, while the transcript for workerSessionId 4bf48383-0102-4160-b764-659d898a595b shows only test-file edits and handoff.skillFeedback.followedProcedure=false specifically because browser validation was skipped for this non-UI change."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature handoff, transcript skeleton, commit diff, and relevant source files. The implementation is a test-only foundation pass that correctly locks in the existing canonical returned/resubmittable contract and websocket normalization behavior, so this feature review passes."
+}

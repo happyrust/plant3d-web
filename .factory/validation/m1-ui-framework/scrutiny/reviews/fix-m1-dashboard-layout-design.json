@@ -1,0 +1,33 @@
+{
+  "featureId": "fix-m1-dashboard-layout-design",
+  "reviewedAt": "2026-03-16T00:04:27.492081+00:00",
+  "commitId": "5eb9c1c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The commit correctly removes the eyebrow label and user text, but it leaves the search and notification controls in the header, so the visible top bar still does not match the feature's stated requirement of showing only the page title and 36px avatar circle.",
+    "issues": [
+      {
+        "file": "src/components/dashboard/DashboardLayout.vue",
+        "line": 33,
+        "severity": "blocking",
+        "description": "The header still renders the search and notification buttons. The feature contract and design note in `features.json` require the top bar to contain only the page title and a 36px avatar circle, so this change remains incomplete and the UI still diverges from `ui/\u4e09\u7ef4\u6821\u5ba1/dashboard.pen`."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill says to run `npm run lint` and fix all issues, but the worker committed despite not running lint and without documenting any repo-approved exception other than the feature verification steps.",
+      "evidence": ".factory/skills/ui-worker/SKILL.md requires `npm run lint`; the handoff for `fix-m1-dashboard-layout-design` lists baseline test, targeted missing test, type-check, diff review, and commit, but no lint command."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The mission guidance does not capture that the original `dashboard.pen` header includes search and bell icons, while later follow-up fixes intentionally remove them to satisfy newer design expectations. That mismatch makes it hard for workers to know which source of truth to follow for dashboard header reviews.",
+      "evidence": "`ui/\u4e09\u7ef4\u6821\u5ba1/dashboard.pen` shows `searchIcon` and `bellIcon` inside `mainHeader`, while the reviewed feature description in `features.json` says the header should contain only the title and 36px avatar circle; a later feature `fix-m1-dashboard-header-actions` was added to remove those icons entirely."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the reviewed commit removes the eyebrow label and username text, but it leaves search and notification buttons in `src/components/dashboard/DashboardLayout.vue`, so the header still does not satisfy the feature requirement of showing only the page title and avatar."
+}

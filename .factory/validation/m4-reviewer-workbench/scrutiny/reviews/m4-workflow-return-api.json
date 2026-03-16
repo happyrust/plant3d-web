@@ -1,0 +1,21 @@
+{
+  "featureId": "m4-workflow-return-api",
+  "reviewedAt": "2026-03-16T05:44:56.764063Z",
+  "commitId": "451fefa",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The change adds the missing success toast after a successful return-to-node mutation, while preserving the existing refresh and reset flow required by VAL-WORK-006. The targeted regression test covers both the selected target node payload and the new success feedback behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still treats browser-based manual verification as the default for UI features, but this mission already documents that backend availability can block live verification. The worker transcript shows a justified deviation that should be reflected in the skill so future sessions can fall back to focused automated checks without appearing procedurally non-compliant.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` step 5 requires browser validation; handoff `2026-03-16T05-19-32-097Z__m4-workflow-return-api__4b785848-47b2-47ed-bed8-c67a190e85bc.json` records `skillFeedback.followedProcedure=false` because `curl -sf http://localhost:3100/api/health` failed and the worker relied on targeted tests instead."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill guidance, and commit `451fefa`. The implementation satisfies the feature by surfacing success feedback after `/api/review/tasks/{id}/return` succeeds and the added regression test verifies both the API payload and toast behavior. No blocking or non-blocking code issues were found."
+}

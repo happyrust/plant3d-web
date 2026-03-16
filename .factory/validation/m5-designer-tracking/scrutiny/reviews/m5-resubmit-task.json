@@ -1,0 +1,28 @@
+{
+  "featureId": "m5-resubmit-task",
+  "reviewedAt": "2026-03-16T08:19:34.284060Z",
+  "commitId": "e3f9a98",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds a resubmit action and tests around the detail dialog, but the dialog never updates or closes after a successful resubmission, so the designer continues seeing a stale rejected task instead of the required submitted state.",
+    "issues": [
+      {
+        "file": "src/components/review/TaskReviewDetail.vue",
+        "line": 201,
+        "severity": "blocking",
+        "description": "After `submitTaskToNextNode` succeeds, the component only reloads workflow history and shows a toast. The dialog keeps rendering the original `props.task` object, so its status badge, return panel, and the `再次提交` button remain in the rejected state until the user manually closes and reopens the modal. This misses the feature requirement that a successful resubmission updates the task status to `submitted`."
+      },
+      {
+        "file": "src/components/review/TaskReviewDetail.test.ts",
+        "line": 202,
+        "severity": "non_blocking",
+        "description": "The new tests assert the API call and toast/error paths, but they never verify the user-visible postcondition that the rejected-state UI disappears or reflects the new submitted status after success. Because of that gap, the stale-detail bug above is not caught by the feature tests."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the resubmit API call is wired up, but the detail modal does not reflect the successful status transition to submitted, leaving stale rejected-state UI visible. Tests cover the request/feedback path but miss that required UI state change."
+}

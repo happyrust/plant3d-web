@@ -1,0 +1,21 @@
+{
+  "featureId": "fix-annotation-panel-test-failure",
+  "reviewedAt": "2026-03-15T23:21:33.520053Z",
+  "commitId": "6e9cbb9b941d946cfd785ae91b347cc604fdc385",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The change is limited to a new regression test that correctly matches the current AnnotationPanel behavior: cloud and rectangle pending edit ids no longer trigger edit dialogs, while the existing OBB-only dialog path remains unchanged.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill says fixes for already-failed baseline tests can skip adding new tests, but this feature legitimately added a new regression test because the old expectation no longer existed in the suite. The skill guidance does not explicitly cover regression-test-only fixes where implementation is already correct and coverage must be added or replaced.",
+      "evidence": "`.factory/skills/ui-worker/SKILL.md` exception list only mentions using existing tests for baseline-test fixes, while the transcript/handoff for worker session `d24495ad-d514-4bc0-918d-7345ee45aaa7` documents adding `src/components/tools/AnnotationPanel.test.ts` as the sole change."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the worker handoff, transcript skeleton, commit `6e9cbb9`, and current `AnnotationPanel` sources. The added test seeds cloud and rectangle annotations plus pending edit ids, then asserts the removed dialog copy is absent; that matches the component, which only renders an OBB edit dialog and has no cloud/rectangle edit-dialog watchers or markup. No correctness issues found."
+}

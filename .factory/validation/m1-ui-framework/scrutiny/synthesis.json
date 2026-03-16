@@ -1,0 +1,112 @@
+{
+  "milestone": "m1-ui-framework",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 16,
+    "passed": 13,
+    "failed": 3,
+    "failedFeatures": [
+      "fix-m1-dashboard-header-actions",
+      "fix-m1-dashboard-layout-design",
+      "m1-ui-dialog-component"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "fix-m1-dashboard-header-actions",
+      "severity": "blocking",
+      "description": "The feature removes the search and notification controls entirely, but the referenced design source `ui/三维校审/dashboard.pen` still defines `headerRight` with `searchIcon`, `bellIcon`, and a 36x36 avatar. This implementation therefore does not match the design it claims to follow.",
+      "file": "src/components/dashboard/DashboardLayout.vue",
+      "line": 32
+    },
+    {
+      "featureId": "fix-m1-dashboard-header-actions",
+      "severity": "blocking",
+      "description": "The updated test locks in the same incorrect assumption by asserting that the search and notification buttons must be absent, so the automated coverage now enforces behavior that conflicts with the design spec instead of protecting it.",
+      "file": "src/components/dashboard/DashboardLayout.test.ts",
+      "line": 123
+    },
+    {
+      "featureId": "fix-m1-dashboard-layout-design",
+      "severity": "blocking",
+      "description": "The header still renders the search and notification buttons. The feature contract and design note in `features.json` require the top bar to contain only the page title and a 36px avatar circle, so this change remains incomplete and the UI still diverges from `ui/三维校审/dashboard.pen`.",
+      "file": "src/components/dashboard/DashboardLayout.vue",
+      "line": 33
+    },
+    {
+      "featureId": "m1-ui-dialog-component",
+      "severity": "blocking",
+      "description": "Scroll locking is tracked per component instance with `previousBodyOverflow`/`scrollLocked`, so closing one dialog restores `document.body.style.overflow` even if another dialog is still open. This breaks body scroll lock for stacked dialogs and regresses any flow that can render more than one modal at once.",
+      "file": "src/components/ui/Dialog.vue",
+      "line": 104
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Clarify whether tracked `e2e/` specs are intentionally ignored by `.gitignore`, and if so document the required `git add -f` workflow or remove the ignore rule to avoid repeated worker confusion.",
+      "evidence": "Feature `fix-lint-e2e-ts-ignore` reported that adding `e2e/debug-show-dbnum-7997.spec.ts` required `git add -f` because `.gitignore` ignores `e2e/` even though the repo tracks specs there. Handoff verification for `fix-lint-e2e-ts-ignore` records `git add -f -- e2e/debug-show-dbnum-7997.spec.ts`; commit `42dd641121fa4fe71b7d3b3632a28663d7c35f66` adds `e2e/debug-show-dbnum-7997.spec.ts`.",
+      "isSystemic": true
+    },
+    {
+      "target": "library",
+      "suggestion": "Document the shared UI primitive pattern of using `inheritAttrs: false` and explicit attr forwarding when wrapper classes and inner-field classes need separate control.",
+      "evidence": "Features `fix-m1-button-class-inheritance` and related shared components rely on manual attr forwarding in `Button.vue`/`Input.vue`, but that convention is not captured in the architecture notes. `/Volumes/DPC/work/plant-code/plant3d-web/src/components/ui/Button.vue` now uses `defineOptions({ inheritAttrs: false })` plus `forwardedAttrs` to omit `class`; no matching guidance appears in `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/architecture.md` or `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/user-testing.md`.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document which source of truth wins when design artifacts and later feature descriptions disagree, especially for dashboard header elements.",
+      "evidence": "Features `fix-m1-dashboard-header-actions` and `fix-m1-dashboard-header-actions` found that `ui/三维校审/dashboard.pen` still shows search/bell icons while later feature descriptions required only title plus avatar. Handoff interactive check for session `150625f0-3755-4a28-8da5-9ff574b1a57a` says the design shows only a 36x36 avatar; `ui/三维校审/dashboard.pen` under `mainHeader -> headerRight` contains `searchIcon`, `bellIcon`, and `avatar`.",
+      "isSystemic": true
+    },
+    {
+      "target": "skill:ui-worker",
+      "suggestion": "Update the `ui-worker` skill to acknowledge that this repo's `npm run lint` runs the full workspace and may fail on unrelated files, with guidance for acceptable scoped verification on narrow UI or lint-only fixes.",
+      "evidence": "Multiple feature reviews (for example `fix-m1-dashboard-layout-design`) reported deviations because the skill mandated repo-wide lint even when the repository had known unrelated lint noise or when the fix scope was intentionally narrow. .factory/skills/ui-worker/SKILL.md requires `npm run lint`; the handoff for `fix-m1-dashboard-layout-design` lists baseline test, targeted missing test, type-check, diff review, and commit, but no lint command.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "No actionable skill gap found: the `ui-worker` skill already documents that config-file changes can skip new tests and browser validation, which matches how this worker executed the task.",
+      "reason": "not an actionable update"
+    },
+    {
+      "observation": "`DTXSelectionController` has no direct unit coverage for `boxSelect()` or `_createSelectionFrustum()`, so even small selection-frustum changes rely on broader baseline confidence rather than targeted regression tests.",
+      "reason": "known testing gap outside this milestone validation scope; no low-risk shared-state update identified"
+    },
+    {
+      "observation": "No skill gap found for this feature: the `ui-worker` skill already documents that pure lint or syntax fixes can skip new tests and browser validation, which is exactly how this worker handled the task.",
+      "reason": "ambiguous or duplicate; skipped to avoid applying incorrect shared-state guidance"
+    },
+    {
+      "observation": "The `ui-worker` skill still frames pre-implementation red tests as the default for UI changes, but this feature was a small regression fix implemented by extending an existing component test file. The worker explicitly deviated from the skill for that reason, suggesting the skill should document that small fixes to existing covered components may extend the current test file directly before or during the implementation step.",
+      "reason": "covered by broader ui-worker lint/scoped-verification guidance recommendation"
+    },
+    {
+      "observation": "Dialog work now depends on a window-backed singleton scroll-lock state plus a dedicated test reset hook. That shared-state requirement is important for future modal work and should remain documented because the original feature transcript and tests did not capture it.",
+      "reason": "already documented in `.factory/library/architecture.md` and current code comments"
+    }
+  ],
+  "previousRound": null
+}

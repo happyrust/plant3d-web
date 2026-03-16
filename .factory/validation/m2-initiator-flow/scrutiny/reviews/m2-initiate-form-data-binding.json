@@ -1,0 +1,34 @@
+{
+  "featureId": "m2-initiate-form-data-binding",
+  "reviewedAt": "2026-03-16T00:00:00Z",
+  "commitId": "c54d306",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature centralizes form state and adds targeted binding tests, but it introduces a blocking workflow regression by removing the urgent priority option and also leaves role terminology inconsistent between the field label and the submitted data contract.",
+    "issues": [
+      {
+        "file": "src/components/review/InitiateReviewPanel.vue",
+        "line": 35,
+        "severity": "blocking",
+        "description": "The form state and select options were narrowed from `low | medium | high | urgent` to only `low | medium | high`, so users can no longer create urgent review tasks even though `ReviewTask['priority']`, the API normalization layer, and downstream task lists still support and display `urgent` priority. This is a contract regression, not just a label change."
+      },
+      {
+        "file": "src/components/review/InitiateReviewPanel.vue",
+        "line": 486,
+        "severity": "non_blocking",
+        "description": "The checker field is labeled and validated as `审核人`/`请选择审核人`, but the bound value is submitted as `checkerId` and the rest of the review UI presents this role as `校核`. This inconsistent terminology makes the initiator form misleading and increases the chance of assigning the wrong person in a multi-stage workflow."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still instructs workers to run `npm run lint` and perform browser validation for UI interaction features, but this worker skipped both because of pre-existing baseline failures and relied only on targeted tests plus type-checking.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` step 4 requires `npm run lint` and step 5 requires manual browser validation; the handoff for `m2-initiate-form-data-binding` records only `npm test -- form-binding.test.ts` and `npm run type-check`, with `skillFeedback.deviations` explicitly noting no manual browser validation and no lint run."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, commit `c54d306`, and current source/tests for `m2-initiate-form-data-binding`. Found one blocking regression: the initiator form no longer allows `urgent` priority even though the shared task contract and downstream review lists still support it. Also found a non-blocking UX/contract mismatch where the checker field is labeled as `审核人` while the submitted field and downstream displays treat it as `校核`. Report written for scrutiny triage."
+}

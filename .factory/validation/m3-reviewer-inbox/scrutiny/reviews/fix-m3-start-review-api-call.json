@@ -1,0 +1,21 @@
+{
+  "featureId": "fix-m3-start-review-api-call",
+  "reviewedAt": "2026-03-16T04:53:49.510452+00:00",
+  "commitId": "8f2e503391f9ec4e42744097b2f2d25fe80df595",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix now persists `submitted` tasks through `reviewTaskStartReview`, refreshes the reviewer task list, and only opens the workbench after the backend accepts the transition. I did not find blocking or non-blocking defects in API persistence, failure handling, or local/server state consistency within this feature's scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still frames browser-based manual verification as the default for UI-facing work, but this feature was an action-layer API wiring change that was adequately covered by targeted unit tests and type-checks; the worker explicitly deviated for that reason.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` section '5. 手动验证' vs handoff `skillFeedback.deviations` in `/Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/handoffs/2026-03-16T04-49-08-921Z__fix-m3-start-review-api-call__ccee8e13-a0d2-43a2-ad5a-8e9e1cd50496.json`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, and commit `8f2e503391f9ec4e42744097b2f2d25fe80df595`. The implementation satisfies the intended fix: `submitted` tasks now call `POST /api/review/tasks/{id}/start-review`, backend failures prevent local workbench entry, and task list refresh keeps local inbox state aligned with server truth before continuing into the review panel."
+}

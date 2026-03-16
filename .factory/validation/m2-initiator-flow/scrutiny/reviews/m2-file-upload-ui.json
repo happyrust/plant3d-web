@@ -1,0 +1,34 @@
+{
+  "featureId": "m2-file-upload-ui",
+  "reviewedAt": "2026-03-16T02:07:31.376755+00:00",
+  "commitId": "b23f7cdb566234a86cdfbf670b54946f9273e501",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The upload UI covers click, drag-and-drop, progress, retry, and list rendering, but it mishandles attachment persistence after task creation: deleting an already uploaded file only mutates local component state and never synchronizes that removal to the backend task attachments list.",
+    "issues": [
+      {
+        "file": "src/components/review/FileUploadSection.vue",
+        "line": 247,
+        "severity": "blocking",
+        "description": "Removing a successfully uploaded attachment only filters it out of the local `modelValue`; no `reviewAttachmentDelete` call is made and no parent event is emitted for removal. In the create flow, the parent only syncs attachments on upload completion or right after submit, so deleting an uploaded file after task creation leaves the backend task record still referencing that attachment. This breaks the expected file-list/delete behavior because the UI says the file is gone while persisted task details can still show it."
+      },
+      {
+        "file": "src/components/review/FileUpload.test.ts",
+        "line": 17,
+        "severity": "non_blocking",
+        "description": "The new tests only assert local list removal before task submission and never cover the post-creation path wired through `InitiateReviewPanel`, so the regression above is currently untested."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The initiator flow now relies on a two-step attachment persistence pattern: `FileUploadSection` uploads binaries first, then `InitiateReviewPanel` calls `userStore.updateTaskAttachments()` to sync the final attachment list onto the task. This coupling is not captured in shared docs.",
+      "evidence": "src/components/review/InitiateReviewPanel.vue:279 and src/components/review/InitiateReviewPanel.vue:325 show attachment sync happens outside `FileUploadSection`; src/components/review/FileUploadSection.vue:121 handles only the binary upload."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: uploaded-file deletion is only local and is not synchronized back to persisted task attachments after task creation, causing contract-visible drift between the UI list and backend task data."
+}

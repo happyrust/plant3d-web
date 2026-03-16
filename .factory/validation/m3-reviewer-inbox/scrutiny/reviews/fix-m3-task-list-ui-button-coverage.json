@@ -1,0 +1,33 @@
+{
+  "featureId": "fix-m3-task-list-ui-button-coverage",
+  "reviewedAt": "2026-03-16T04:52:25.806636Z",
+  "commitId": "b878a6a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The change fills the previously empty action slot for approved and rejected cards, but it does not actually satisfy the intended fix because those states can never reach ReviewerTaskList under the current inbox data contract.",
+    "issues": [
+      {
+        "file": "src/composables/useUserStore.ts",
+        "line": 366,
+        "severity": "blocking",
+        "description": "`pendingReviewTasks` still filters reviewer inbox data down to `submitted` and `in_review` tasks only, so `approved` and `rejected` tasks never appear in `ReviewerTaskList`. The UI badge branch added in `src/components/review/ReviewerTaskList.vue` is therefore unreachable, which means approved/rejected filter coverage remains broken despite the new footer feedback rendering."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill allows skipping new tests for features whose verification steps only mention static checks, but this feature still required validating an end-to-end state-visibility regression across the inbox data contract. The worker followed that shortcut and only changed presentation, missing that `pendingReviewTasks` excludes approved/rejected items entirely.",
+      "evidence": "`.factory/skills/ui-worker/SKILL.md` exception says tests may be skipped when verification steps only require static checks; transcript for worker `7f3be3af-2348-4222-828d-76dd34ef8d6d` shows no review of `src/composables/useUserStore.ts`, while `src/composables/useUserStore.ts:366` still filters reviewer tasks to `submitted`/`in_review` only."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Shared architecture notes still describe M2 reviewer inbox behavior but do not record the M3 expectation that reviewer-facing filtered states must include completed tasks. That omission makes it easy to patch only the card footer while overlooking the upstream inbox query contract.",
+      "evidence": "`.factory/library/architecture.md` lists reviewer entry hydration seams but does not mention whether completed reviewer tasks should remain visible in the inbox; the reviewed feature specifically targeted approved/rejected filter coverage, yet the upstream selector in `src/composables/useUserStore.ts:366` still hides those statuses."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed commit `b878a6a` and the worker transcript/skill context. The footer now renders badges for approved and rejected states, but reviewer inbox data still excludes those statuses, so the intended fix is not functionally complete and the feature should fail review."
+}

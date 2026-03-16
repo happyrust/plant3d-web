@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-m1-dialog-scroll-lock",
+  "reviewedAt": "2026-03-16T00:13:39Z",
+  "commitId": "06595e2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The rerun fixes the stacked-dialog scroll-lock bug by moving lock ownership into a shared window-backed singleton and only restoring body overflow when the final dialog releases its lock. The updated regression test now covers the previously failing sequence and matches the feature requirements.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/handoffs/2026-03-15T19-25-38-197Z__fix-m1-dialog-scroll-lock__22ebc257-5204-4f44-8134-787826e8a938.json",
+  "summary": "Reviewed the rerun for `fix-m1-dialog-scroll-lock`: inspected the feature metadata, prior partial handoff, worker transcript skeleton, `ui-worker` skill, commit `06595e2`, and the resulting `Dialog.vue` / `Dialog.test.ts` changes. The current implementation satisfies the required global reference-counted scroll lock behavior for stacked dialogs, and I found no remaining code issues or durable shared-state guidance gaps specific to this fix."
+}

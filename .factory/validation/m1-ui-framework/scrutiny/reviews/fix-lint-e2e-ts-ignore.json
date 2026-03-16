@@ -1,0 +1,21 @@
+{
+  "featureId": "fix-lint-e2e-ts-ignore",
+  "reviewedAt": "2026-03-16T00:01:19.974204Z",
+  "commitId": "42dd641121fa4fe71b7d3b3632a28663d7c35f66",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The change replaces the two runtime-only browser import suppressions in the Playwright debug spec with documented `@ts-expect-error` comments, which satisfies the feature requirement without changing test behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "services",
+      "observation": "The worker had to use `git add -f` because `.gitignore` ignores the entire `e2e` directory, even though this repository now tracks E2E specs there.",
+      "evidence": "Handoff verification for `fix-lint-e2e-ts-ignore` records `git add -f -- e2e/debug-show-dbnum-7997.spec.ts`; commit `42dd641121fa4fe71b7d3b3632a28663d7c35f66` adds `e2e/debug-show-dbnum-7997.spec.ts`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. Reviewed the worker transcript, handoff, and commit `42dd641121fa4fe71b7d3b3632a28663d7c35f66`; the feature correctly swaps `@ts-ignore` for justified `@ts-expect-error` comments in `e2e/debug-show-dbnum-7997.spec.ts` with no functional regression found."
+}

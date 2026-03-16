@@ -1,0 +1,34 @@
+{
+  "featureId": "cross-reject-resubmit-flow",
+  "reviewedAt": "2026-03-16T08:19:40.222635+00:00",
+  "commitId": "6bafbc7e4b578c756f1527f7f2ffca11aae4d6c5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The commit fixes the store mapping so returned tasks stay visible to designers, but it does not fully cover the reject→resubmit flow contract because the resubmission filter/tests still encode the old 'draft at sj' rule and there is no evidence that reviewer inbox visibility after resubmission was validated beyond store-level refresh behavior.",
+    "issues": [
+      {
+        "file": "src/components/review/reviewTaskFilters.ts",
+        "line": 4,
+        "severity": "blocking",
+        "description": "`isDesignerResubmissionTask` still only recognizes `currentNode === 'sj' && status === 'draft' && returnReason`, but this feature changes returned tasks at the design node to `status === 'rejected'`. That leaves a stale contract in shared filtering logic and means any caller that relies on this helper will no longer identify resubmission tasks via the documented design-node rule. The feature should update the helper/tests or remove the obsolete path to keep the reject/resubmit flow internally consistent."
+      },
+      {
+        "file": "src/components/review/reviewTaskFilters.test.ts",
+        "line": 30,
+        "severity": "non_blocking",
+        "description": "The filter tests still assert that a design-node task with `status === 'draft'` and `returnReason` is the resubmission shape, which now conflicts with the new `statusFromNode('sj') === 'rejected'` behavior introduced in this feature. The test suite no longer documents a single canonical returned-task contract, making future regressions likely."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The repo now has two competing returned-task contracts for designer resubmission: `useUserStore.statusFromNode('sj')` maps returned tasks to `rejected`, while `reviewTaskFilters.isDesignerResubmissionTask` and its tests still describe returned design-node tasks as `draft` + `returnReason`.",
+      "evidence": "src/composables/useUserStore.ts:150-159 maps `sj` to `rejected`; src/components/review/reviewTaskFilters.ts:4 still requires `status === 'draft'`; src/components/review/reviewTaskFilters.test.ts:30-46 still tests the draft-based rule."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the store change fixes designer-side visibility for rejected tasks, but the feature leaves stale draft-based resubmission filter logic/tests in place, so the reject/resubmit contract is not internally consistent across the codebase."
+}

@@ -1,0 +1,34 @@
+{
+  "featureId": "m5-returned-task-list",
+  "reviewedAt": "2026-03-16T08:19:31.449040+00:00",
+  "commitId": "5ae87b2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The returned-task panel correctly retitles and filters the UI to rejected tasks, but the implementation narrows the data source to only `status === 'rejected'` tasks and drops returned draft tasks that remain the active resubmission records after later workflow fixes.",
+    "issues": [
+      {
+        "file": "src/components/review/ResubmissionTaskList.vue",
+        "line": 36,
+        "severity": "blocking",
+        "description": "The list now filters exclusively with `isRejectedDesignerTask(task)`, so tasks that are returned to the designer as editable drafts (`currentNode === 'sj'`, `status === 'draft'`, `returnReason` present) disappear from the returned-task list even though they are still the resubmittable returned tasks in the workflow. This breaks the milestone's returned-list behavior once a returned task is normalized back to draft instead of staying rejected."
+      },
+      {
+        "file": "src/components/review/reviewTaskFilters.test.ts",
+        "line": 49,
+        "severity": "non_blocking",
+        "description": "Test coverage only adds a rejected-task case and does not lock in the pre-existing returned-draft path for the actual returned-task panel, so the regression in editable returned tasks was not caught."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The meaning of 'returned task' is split between rejected records and designer-editable draft records with `returnReason`, and that workflow nuance is not documented in the shared library even though later fixes rely on preserving returned drafts for resubmission.",
+      "evidence": "`src/components/review/reviewTaskFilters.ts` distinguishes `isDesignerResubmissionTask` (draft at sj with returnReason) from `isRejectedDesignerTask`, while later commit `6bafbc7` adjusts store behavior to keep returned tasks visible for resubmission. `.factory/library/architecture.md` documents currentNode/status ambiguity generally but not this specific returned-task contract."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the feature's UI changes are present, but the core filter is too strict. By sourcing the panel only from `status='rejected'`, it hides returned draft tasks that remain the active resubmission items, so the returned-task list is not robust against the actual workflow state model."
+}

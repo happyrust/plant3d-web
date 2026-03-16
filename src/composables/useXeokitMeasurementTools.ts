@@ -1,6 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue';
 
-import { Box3, Vector2, Vector3 } from 'three';
+import { Box3, Matrix4, Vector2, Vector3 } from 'three';
 
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
 
@@ -47,6 +47,17 @@ function vec3ToTuple(v: Vector3): Vec3 {
 
 function tupleToVector(v: Vec3): Vector3 {
   return new Vector3(v[0], v[1], v[2]);
+}
+
+function worldToAnnotationLocal(world: Vec3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
+  const v = tupleToVector(world);
+  const globalModelMatrix = dtxLayerRef.value?.getGlobalModelMatrix?.();
+  if (!globalModelMatrix) return v;
+
+  const inverse = globalModelMatrix.clone();
+  if (Math.abs(inverse.determinant()) <= 1e-12) return v;
+
+  return v.applyMatrix4(inverse.invert());
 }
 
 function getCanvasPos(canvas: HTMLCanvasElement, e: PointerEvent): Vector2 {
@@ -96,6 +107,17 @@ export function useXeokitMeasurementTools(options: {
 
   const currentMeasurement = computed(() => {
     return store.currentXeokitDistanceDraft.value ?? store.currentXeokitAngleDraft.value ?? null;
+  });
+  const selectedMeasurement = computed(() => {
+    const id = store.activeXeokitMeasurementId.value;
+    if (!id) return null;
+    return store.allXeokitMeasurements.value.find((item) => item.id === id) ?? null;
+  });
+  const hasVisibleMeasurements = computed(() => {
+    return store.allXeokitMeasurements.value.some((item) => item.visible);
+  });
+  const hasHiddenMeasurements = computed(() => {
+    return store.allXeokitMeasurements.value.some((item) => !item.visible);
   });
 
   const ready = computed(() => {
@@ -346,6 +368,7 @@ export function useXeokitMeasurementTools(options: {
     if (!annotationSystem) return;
 
     const existing = annotations.get(annotationId);
+    const displayTransform = dtxLayerRef.value?.getGlobalModelMatrix?.() ?? new Matrix4();
     const visible = isDraft || record.visible === undefined ? true : record.visible;
     const common = {
       approximate: isDraft || record.approximate,
@@ -355,8 +378,9 @@ export function useXeokitMeasurementTools(options: {
 
     if (record.kind === 'distance') {
       const params: XeokitDistanceMeasurementParams = {
-        origin: tupleToVector(record.origin.worldPos),
-        target: tupleToVector(record.target.worldPos),
+        origin: worldToAnnotationLocal(record.origin.worldPos, dtxLayerRef),
+        target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
+        displayTransform,
         ...common,
         visible,
         originVisible: true,
@@ -386,9 +410,9 @@ export function useXeokitMeasurementTools(options: {
     }
 
     const params: XeokitAngleMeasurementParams = {
-      origin: tupleToVector(record.origin.worldPos),
-      corner: tupleToVector(record.corner.worldPos),
-      target: tupleToVector(record.target.worldPos),
+      origin: worldToAnnotationLocal(record.origin.worldPos, dtxLayerRef),
+      corner: worldToAnnotationLocal(record.corner.worldPos, dtxLayerRef),
+      target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
       ...common,
       visible,
       originVisible: true,
@@ -501,6 +525,18 @@ export function useXeokitMeasurementTools(options: {
 
   function clearMeasurements(): void {
     store.clearXeokitMeasurements();
+    requestRender?.();
+  }
+
+  function setMeasurementVisible(id: string, visible: boolean): void {
+    store.updateXeokitMeasurementVisible(id, visible);
+    requestRender?.();
+  }
+
+  function setAllMeasurementsVisible(visible: boolean): void {
+    for (const item of store.allXeokitMeasurements.value) {
+      store.updateXeokitMeasurementVisible(item.id, visible);
+    }
     requestRender?.();
   }
 
@@ -789,12 +825,17 @@ export function useXeokitMeasurementTools(options: {
     ready,
     statusText,
     currentMeasurement,
+    selectedMeasurement,
+    hasVisibleMeasurements,
+    hasHiddenMeasurements,
     refreshReadyState,
     syncFromStore,
     activate,
     deactivate,
     reset,
     flyToMeasurement,
+    setMeasurementVisible,
+    setAllMeasurementsVisible,
     removeMeasurement,
     clearMeasurements,
     onCanvasPointerDown,

@@ -45,7 +45,7 @@ describe('WorkflowSubmitDialog', () => {
 
   it('emits trimmed comment and clears the field after closing and reopening', async () => {
     const visible = ref(true);
-    const emittedComments: Array<string | undefined> = [];
+    const emittedComments: (string | undefined)[] = [];
 
     mount(
       createApp({

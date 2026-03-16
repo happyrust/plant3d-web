@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-button-loading-accessible-name",
+  "reviewedAt": "2026-03-15T23:21:35.888218+00:00",
+  "commitId": "6cee14e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the prior loading-name regression correctly. `Button.vue` now inspects fallthrough attrs before applying the loading fallback label, so text buttons keep their visible accessible name, icon buttons keep caller-provided `aria-label`, and unlabeled loading buttons still receive the default `aria-label=\"加载中\"` plus hidden loading text.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature metadata, handoff, transcript skeleton, `ui-worker` skill, and commit `6cee14e`. The implementation covers all three required accessible-name scenarios without breaking attribute fallthrough, and the updated Button tests exercise the regression path that previously failed scrutiny."
+}

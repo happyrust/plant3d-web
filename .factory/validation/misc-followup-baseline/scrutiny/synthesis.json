@@ -1,0 +1,51 @@
+{
+  "milestone": "misc-followup-baseline",
+  "round": 2,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": ".factory/skills/designer-tracking-worker/SKILL.md",
+      "suggestion": "Add an explicit verification-only / baseline-repair path so workers are not forced into TDD-red and agent-browser steps when a feature only changes tests or validates already-green branch state.",
+      "evidence": "All five misc-followup-baseline feature reviews recorded justified deviations from the current designer-tracking-worker procedure. Sessions `337275ae-b219-498a-bed0-b066b3043c46`, `419e83eb-fb46-433d-9a2f-f62710f199f6`, `00706867-0ad6-41da-b8ed-c57f9652f44d`, `78c1b324-8f69-4660-aef1-42139fc07984`, and `11306958-7df1-42c5-ba53-188447b90bbb` all describe baseline-only or verification-only work where browser verification was not meaningful.",
+      "isSystemic": true
+    },
+    {
+      "target": "mission feature metadata",
+      "suggestion": "Correct stale verification paths in feature definitions so reviewers and workers are pointed at the actual component/test locations.",
+      "evidence": "The review for `fix-followup-baseline-annotation-and-style` found `features.json` verification steps still reference `src/components/review/AnnotationPanel.test.ts`, while the real files live under `src/components/tools/`.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Document the scoped tool-store v5 persistence contract in shared library notes.",
+      "reason": "better handled by orchestrator or a dedicated knowledge-maintenance task; not applied during scrutiny because this run should avoid opportunistic documentation edits"
+    }
+  ],
+  "previousRound": ".factory/validation/misc-followup-baseline/scrutiny/synthesis.json"
+}

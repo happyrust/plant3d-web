@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-button-loading-aria-label-regression",
+  "reviewedAt": "2026-03-15T23:22:29.410514+00:00",
+  "commitId": "3a5deae795cdc2b435dcba653f315358d6d6219a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The regression fix is fully covered. `Button.vue` now only applies the fallback loading label when the button is loading and has neither visible text nor a caller-provided `aria-label`, so text buttons keep their accessible name while icon-only or empty buttons still announce loading.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed `src/components/ui/Button.vue`, `src/components/ui/Button.test.ts`, the worker handoff/transcript, the `ui-worker` skill, and commit `3a5deae795cdc2b435dcba653f315358d6d6219a`. The implementation matches the feature contract and the targeted tests cover both key regression paths: loading buttons with visible text keep their accessible name, while loading buttons without visible text receive the fallback `aria-label=\"加载中\"`."
+}

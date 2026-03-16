@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 import { Clock, FileText, Filter, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
@@ -8,6 +8,7 @@ import { getSubmitActionLabel } from './reviewPanelActions';
 
 import type { ReviewTask } from '@/types/auth';
 
+import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
@@ -15,6 +16,7 @@ import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
 
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
+const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-reviewer-tasks-v1');
 
 const searchTerm = ref('');
 const statusFilter = ref<string>('all');
@@ -23,6 +25,11 @@ const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
 const showRejectForm = ref(false);
 const rejectReason = ref('');
+const scrollContainer = ref<HTMLElement | null>(null);
+
+navigationState.bindRef('searchTerm', searchTerm, '');
+navigationState.bindRef('statusFilter', statusFilter, 'all');
+navigationState.bindRef('priorityFilter', priorityFilter, 'all');
 
 const tasks = computed(() => userStore.pendingReviewTasks.value);
 const reviewStageLabel = computed(() => {
@@ -71,6 +78,17 @@ function clearFilters() {
   searchTerm.value = '';
   statusFilter.value = 'all';
   priorityFilter.value = 'all';
+}
+
+function persistScrollPosition() {
+  navigationState.saveValue('scrollTop', scrollContainer.value?.scrollTop ?? 0);
+}
+
+function restoreScrollPosition() {
+  nextTick(() => {
+    if (!scrollContainer.value) return;
+    scrollContainer.value.scrollTop = navigationState.getValue('scrollTop', 0);
+  });
 }
 
 function formatDate(timestamp: number): string {
@@ -188,11 +206,14 @@ function getApproveActionLabel(task: ReviewTask): string {
 
 onMounted(() => {
   void refreshTasks();
+  restoreScrollPosition();
 });
 </script>
 
 <template>
-  <div class="h-full overflow-auto bg-white px-5 py-5 text-gray-900">
+  <div ref="scrollContainer"
+    class="h-full overflow-auto bg-white px-5 py-5 text-gray-900"
+    @scroll="persistScrollPosition">
     <!-- 头部 -->
     <div class="flex items-center justify-between gap-3">
       <div>

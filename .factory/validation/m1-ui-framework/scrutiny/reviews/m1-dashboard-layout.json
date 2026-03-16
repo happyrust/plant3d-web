@@ -1,0 +1,21 @@
+{
+  "featureId": "m1-dashboard-layout",
+  "reviewedAt": "2026-03-16T00:12:39.129496Z",
+  "commitId": "4c6c63e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Current dashboard layout implementation matches the revised design-alignment fixes and preserves project-selection behavior expected by the feature contract.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "services",
+      "observation": "The declared `vite` healthcheck only probes `/`, but the worker transcript shows port 3101 can return a blank 404 page while still passing curl connectivity checks, leaving UI validation blocked without clearer service ownership guidance.",
+      "evidence": ".factory/services.yaml:8-12 defines `healthcheck: curl -sf http://127.0.0.1:3101`; handoff `2026-03-15T17-32-13-130Z__m1-dashboard-layout__091e8239-1866-449e-b82d-a45706a5c0be.json` reports `curl -I http://127.0.0.1:3101` returned 404 and browser DOM was blank."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, commit `4c6c63e`, transcript skeleton, tests, and shared-state docs for `m1-dashboard-layout`. The current implementation now aligns with the design-fix follow-ups: sidebar width is 280px, header only shows the page title plus a 36px avatar, navigation switches content correctly, and project selections are wired into `useModelProjects`. No blocking or non-blocking code issues were identified in the reviewed scope."
+}

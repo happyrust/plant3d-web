@@ -1,0 +1,28 @@
+{
+  "featureId": "m3-reviewer-task-list-data",
+  "reviewedAt": "2026-03-16T04:52:21.250279+00:00",
+  "commitId": "7abe661",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The fix correctly scopes inbox fetches by reviewer role, but the feature still does not satisfy the loading-state assertion because `ReviewerTaskList` renders its own loading indicator from a local flag instead of the store loading state during the initial mounted fetch.",
+    "issues": [
+      {
+        "file": "src/components/review/ReviewerTaskList.vue",
+        "line": 18,
+        "severity": "blocking",
+        "description": "The component reads tasks from `userStore.pendingReviewTasks` but tracks loading with a separate local `isLoading` ref that only changes inside `refreshTasks()`. On first mount, `onMounted(() => void refreshTasks())` starts the request before `isLoading` is updated in the action helper, so the template briefly sees `filteredTasks.length === 0` and renders the empty state instead of the required loading message/skeleton. This means the feature still does not reliably meet the expectedBehavior item for showing a loading state while `GET /api/review/tasks` is in flight."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The mission architecture doc already flags reviewer/checker compatibility as a highest-risk seam, but the worker only discovered the need for role-scoped inbox queries after inspecting code/tests. There is still no shared note documenting that reviewer inbox requests must use `checker_id` for `reviewer`/`proofreader` roles and `approver_id` for `manager`/`admin` roles.",
+      "evidence": ".factory/library/architecture.md mentions reviewerId/checker compatibility risk, while commit 7abe661 changes `src/composables/useUserStore.ts:524` to send `checkerId`/`approverId` filters and adds tests in `src/composables/useUserStore.test.ts:97`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill, and commit 7abe661. The new store query logic fixes role-specific inbox API filtering and its tests cover reviewer alias and approver flows, but the overall feature remains failing because the reviewer task list still does not reliably present a loading state during the initial inbox fetch."
+}

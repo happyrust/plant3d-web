@@ -1,34 +1,39 @@
 {
   "featureId": "fix-returned-contract-baseline-persistence-and-review-timeouts",
-  "reviewedAt": "2026-03-16T21:42:21.489583+00:00",
+  "reviewedAt": "2026-03-16T22:19:23Z",
   "commitId": "1b9551f",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "fail",
   "codeReview": {
-    "summary": "The delivered commit only retuned reviewApi and FileUpload tests. It does not touch the required persistence or returned-review baseline tests and therefore does not satisfy the feature scope, even though the adjusted tests pass.",
+    "summary": "The original failure is not adequately addressed. Commit `1b9551f` changes only `src/api/reviewApi.test.ts` and `src/components/review/FileUpload.test.ts`, while the feature contract required direct fixes to the persistence and returned-review timeout baseline area (`useReviewStore.persistence.test.ts`, `useUserStore.persistence.test.ts`, `ResubmissionTaskList.test.ts`, `WorkflowReturnDialog.test.ts`, or their real dependencies) and elimination of the unexpected `localhost:3000` access driving those failures. The current workspace still contains no scoped implementation follow-up in the required files or dependencies.",
     "issues": [
       {
         "file": "src/api/reviewApi.test.ts",
-        "line": 1,
+        "line": 14,
         "severity": "blocking",
-        "description": "The feature explicitly required directly fixing or updating `useReviewStore.persistence.test.ts`, `useUserStore.persistence.test.ts`, `ResubmissionTaskList.test.ts`, and `WorkflowReturnDialog.test.ts` (or their real dependencies), but the commit only changes reviewApi/FileUpload tests. This leaves the requested persistence/review baseline work unimplemented."
+        "description": "`1b9551f` relaxes `reviewApi` URL assertions to accept either relative paths or `http://localhost:3100`, but this file is outside the feature's required persistence/review-timeout scope. The transcript, handoff, and commit diff show no direct change to `src/composables/useReviewStore.persistence.test.ts`, `src/composables/useUserStore.persistence.test.ts`, `src/components/review/ResubmissionTaskList.test.ts`, `src/components/review/WorkflowReturnDialog.test.ts`, or any implementation dependency they exercise, so the feature still does not implement the requested baseline repair."
       },
       {
         "file": "src/components/review/FileUpload.test.ts",
-        "line": 1,
+        "line": 86,
         "severity": "blocking",
-        "description": "Stabilizing `FileUpload.test.ts` is outside the assigned baseline files and does not provide evidence that the `localhost:3000` access causing the specified persistence/review test instability was actually removed from those targeted flows. The handoff still reports full-suite localhost:3000 warnings as pre-existing, contradicting the feature's required behavior."
+        "description": "The second changed file rewrites drag/drop upload assertions in `FileUpload.test.ts`, which the feature description explicitly called out as insufficient on its own. This may reduce unrelated suite flakiness, but it does not demonstrate that the returned-task persistence and review UI timeout regressions were fixed at their source, and the handoff still acknowledges residual `localhost:3000` warnings during full-suite execution."
       }
     ]
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The worker skill mandates agent-browser verification, but this baseline-fix feature only required automated test stabilization; the worker skipped browser verification and recorded that the procedure did not fit the task.",
-      "evidence": ".factory/skills/designer-tracking-worker/SKILL.md step 6 requires agent-browser; handoff.skillFeedback in /Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/handoffs/2026-03-16T21-31-38-897Z__fix-returned-contract-baseline-persistence-and-review-timeouts__bd13771d-e2d4-485f-9bb6-2c7d59e9ebb9.json says the worker skipped it because no runtime UI change was involved."
+      "observation": "The worker skipped the skill's required TDD/manual-verification flow and instead retargeted the task to unrelated tests after seeing noisy `localhost:3000` output. For narrowly scoped baseline-fix features, the current `designer-tracking-worker` procedure does not clearly force workers to prove that changed files overlap the feature's explicitly named failing surfaces before committing.",
+      "evidence": "/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/designer-tracking-worker/SKILL.md requires investigating every affected surface and verifying changed behavior; transcript entry for worker session `bd13771d-e2d4-485f-9bb6-2c7d59e9ebb9` shows only `src/api/reviewApi.test.ts` and `src/components/review/FileUpload.test.ts` were edited and agent-browser verification was skipped."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Mission/shared guidance does not document that baseline `npm test` may emit pre-existing `localhost:3000` warnings unrelated to the assigned returned-task persistence surfaces. That noise appears to have misdirected the fix toward `reviewApi` expectations instead of the explicitly scoped failing files.",
+      "evidence": "The worker handoff says full `npm test` still logs refused `localhost:3000` warnings after the fix, while `/Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/AGENTS.md` and `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/` do not record this baseline-noise caveat for the mission."
     }
   ],
-  "addressesFailureFrom": null,
-  "summary": "Review failed: commit 1b9551f improved unrelated reviewApi/FileUpload test assertions, but it did not implement the requested fixes for the specified persistence and returned-review baseline tests, nor did it eliminate the localhost:3000 accesses from the targeted failing area."
+  "addressesFailureFrom": ".factory/validation/misc-returned-contract-baseline/scrutiny/reviews/fix-returned-contract-baseline-persistence-and-review-timeouts.json",
+  "summary": "Review failed again. The new commit `1b9551f` only adjusts `src/api/reviewApi.test.ts` and `src/components/review/FileUpload.test.ts`; it does not directly repair the named persistence/returned-review timeout baseline surfaces or prove that the unexpected `localhost:3000` access affecting those tests was removed from that scope. Current workspace inspection shows no newer relevant changes in the required files, so the milestone blocker remains unresolved."
 }

@@ -949,7 +949,7 @@ onUnmounted(() => {
         <div v-for="(step, idx) in workflow.history"
           :key="`${step.operatorId}-${step.timestamp}-${idx}`"
           class="relative rounded-xl border border-slate-200 bg-slate-50/80 p-3 pl-8 text-xs before:absolute before:left-3 before:top-3 before:h-full before:w-px before:bg-slate-200 before:content-[''] first:before:top-6 last:before:h-6">
-          <span class="absolute left-[7px] top-4 h-3 w-3 rounded-full border-2 border-white bg-primary shadow-sm"></span>
+          <span class="absolute left-[7px] top-4 h-3 w-3 rounded-full border-2 border-white bg-primary shadow-sm" />
           <div class="flex items-start justify-between gap-3">
             <div>
               <div class="font-medium text-foreground">

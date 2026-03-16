@@ -1,0 +1,105 @@
+{
+  "milestone": "m5-designer-tracking",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 8,
+    "passed": 0,
+    "failed": 8,
+    "failedFeatures": [
+      "m5-designer-task-list-ui",
+      "m5-returned-task-list",
+      "m5-task-detail-modal",
+      "m5-resubmit-task",
+      "cross-complete-flow-integration",
+      "cross-reject-resubmit-flow",
+      "cross-websocket-notification",
+      "cross-navigation-state-persistence"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m5-designer-task-list-ui",
+      "severity": "blocking",
+      "description": "DesignerTaskList omits the valid `cancelled` ReviewTask status from its filter model, so the UI cannot represent all initiated tasks as required by VAL-TRACK-001/002."
+    },
+    {
+      "featureId": "m5-returned-task-list",
+      "severity": "blocking",
+      "description": "ResubmissionTaskList filters only `status === 'rejected'`, which hides returned draft tasks that remain the active resubmission records in the workflow."
+    },
+    {
+      "featureId": "m5-task-detail-modal",
+      "severity": "blocking",
+      "description": "TaskReviewDetail bundles the `再次提交` action into the detail-modal feature even though this feature contract is display-only, coupling unrelated behavior into the milestone review surface."
+    },
+    {
+      "featureId": "m5-resubmit-task",
+      "severity": "blocking",
+      "description": "After successful resubmission, TaskReviewDetail keeps rendering the stale rejected task object, so the modal does not reflect the required submitted status update."
+    },
+    {
+      "featureId": "cross-complete-flow-integration",
+      "severity": "blocking",
+      "description": "The reviewed change only adds a narrow store-level regression test and does not implement or verify the full initiator → reviewer → submit integration flow promised by VAL-CROSS-001."
+    },
+    {
+      "featureId": "cross-reject-resubmit-flow",
+      "severity": "blocking",
+      "description": "Returned-task logic is internally inconsistent: useUserStore maps returned design-node tasks to `rejected`, while reviewTaskFilters still recognizes returned tasks as `draft + returnReason`."
+    },
+    {
+      "featureId": "cross-websocket-notification",
+      "severity": "blocking",
+      "description": "WebSocket task updates are stored without REST-style normalization, so snake_case payloads can break ownership/status filters and prevent automatic list refreshes."
+    },
+    {
+      "featureId": "cross-navigation-state-persistence",
+      "severity": "blocking",
+      "description": "The cited commit/handoff evidence does not implement navigation-state persistence for reviewer task lists; it points to an unrelated websocket commit instead."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Tighten UI/integration worker skills so milestone features that fulfill user-visible assertions cannot be completed without feature-appropriate interactive verification evidence, and clarify when user-testing validators may substitute for worker-side manual checks.",
+      "evidence": "Review reports for m5-designer-task-list-ui, cross-complete-flow-integration, and cross-websocket-notification all found workers completed user-facing or cross-role features without the manual/browser verification required by their skills.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add guidance for workers operating in dirty workspaces to ensure handoff `commitId` values reference the actual feature implementation commit(s), or explicitly document when no reliable per-feature commit exists.",
+      "evidence": "Review reports for cross-complete-flow-integration and cross-navigation-state-persistence found handoffs pointing at unrelated commits, making diff-based review unreliable.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Document the current 'task detail page' wording in shared notes as-is.",
+      "reason": "ambiguous; the review surfaced a naming inconsistency, but this is a normative documentation decision for the orchestrator rather than a factual shared-state update to apply directly."
+    },
+    {
+      "observation": "Add a library note that returned tasks may be either `rejected` or `draft + returnReason`.",
+      "reason": "rejected because the competing contracts are exactly the blocking inconsistency found in this milestone; codifying both states as accepted knowledge would cement incorrect ambiguity instead of resolving it."
+    }
+  ],
+  "previousRound": null
+}

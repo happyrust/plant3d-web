@@ -18,6 +18,7 @@
 - 后端 API: http://127.0.0.1:3100
 - WebSocket: ws://127.0.0.1:3100/ws/review
 - 注意：后端必须运行才能完整测试功能
+- Follow-up consistency validation can run against the existing backend, but seeded returned/designer/reviewer tasks may be absent in some sessions
 
 ## 环境变量
 

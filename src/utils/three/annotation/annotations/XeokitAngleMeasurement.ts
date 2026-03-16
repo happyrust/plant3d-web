@@ -29,11 +29,11 @@ function createLabelElement(): HTMLDivElement {
   el.style.fontSize = '12px';
   el.style.fontWeight = '700';
   el.style.padding = '2px 8px';
-  el.style.borderRadius = '999px';
-  el.style.border = '1px solid rgba(30, 41, 59, 0.18)';
-  el.style.background = 'rgba(255, 255, 255, 0.92)';
-  el.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.12)';
-  el.style.color = '#0f172a';
+  el.style.borderRadius = '6px';
+  el.style.border = '1px solid #b45309';
+  el.style.background = '#f59e0b';
+  el.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.18)';
+  el.style.color = '#ffffff';
   return el;
 }
 
@@ -55,7 +55,10 @@ export class XeokitAngleMeasurement extends AnnotationBase {
   private readonly angleLabel: CSS2DObject;
 
   constructor(materials: AnnotationMaterials, params: XeokitAngleMeasurementParams, options?: AnnotationOptions) {
-    super(materials, options);
+    super(materials, {
+      depthTest: false,
+      ...options,
+    });
     this.params = {
       approximate: false,
       visible: true,
@@ -145,7 +148,7 @@ export class XeokitAngleMeasurement extends AnnotationBase {
     this.targetMarker.position.copy(target);
 
     const prefix = this.params.labelPrefix ? `${this.params.labelPrefix} ` : '';
-    this.angleLabelEl.textContent = `${prefix}${this.params.approximate ? '≈ ' : ''}${formatAngle(angle)}`;
+    this.angleLabelEl.textContent = `${prefix}${this.params.approximate ? '~ ' : ''}${formatAngle(angle)}`;
     this.angleLabel.position.copy(corner.clone().add(bisector.multiplyScalar(labelOffset)));
 
     const showRoot = this.params.visible;
@@ -180,7 +183,7 @@ export class XeokitAngleMeasurement extends AnnotationBase {
     this.cornerMarker.material = meshMat;
     this.targetMarker.material = meshMat;
 
-    this.angleLabelEl.style.color = state === 'selected' ? '#b91c1c' : state === 'hovered' ? '#a16207' : '#0f172a';
-    this.angleLabelEl.style.borderColor = state === 'selected' ? 'rgba(239, 68, 68, 0.4)' : state === 'hovered' ? 'rgba(234, 179, 8, 0.5)' : 'rgba(30, 41, 59, 0.18)';
+    this.angleLabelEl.style.color = '#ffffff';
+    this.angleLabelEl.style.borderColor = state === 'selected' ? '#dc2626' : state === 'hovered' ? '#eab308' : '#b45309';
   }
 }

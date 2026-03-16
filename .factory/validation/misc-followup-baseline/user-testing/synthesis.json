@@ -1,0 +1,20 @@
+{
+  "milestone": "misc-followup-baseline",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "notes": [
+    "No user-testing assertions were mapped to this milestone. All completed non-validator features in mission features.json have empty fulfills arrays, so no browser/TUI/API flows were in scope for user-surface validation.",
+    "Repo scrutiny synthesis for this milestone already passed npm test, npm run type-check, and npm run lint, confirming the baseline-repair milestone is green from code validation perspective."
+  ],
+  "previousRound": null
+}

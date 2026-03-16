@@ -10,7 +10,7 @@ const reviewMode = { value: false };
 const confirmedRecordCount = { value: 0 };
 const totalConfirmedAnnotations = { value: 0 };
 const totalConfirmedMeasurements = { value: 0 };
-const sortedConfirmedRecords = { value: [] as Array<{
+const sortedConfirmedRecords = { value: [] as {
   id: string;
   confirmedAt: number;
   note: string;
@@ -19,21 +19,21 @@ const sortedConfirmedRecords = { value: [] as Array<{
   rectAnnotations: unknown[];
   obbAnnotations: unknown[];
   measurements: unknown[];
-}> };
+}[] };
 
 const workflowResponseState = {
   value: {
     success: true,
     currentNode: 'jd',
     currentNodeName: '校核',
-    history: [] as Array<{
+    history: [] as {
       node?: string;
       action: string;
       operatorId: string;
       operatorName: string;
       comment?: string;
       timestamp: number;
-    }>,
+    }[],
   },
 };
 const loadWorkflowMock = vi.fn(async () => workflowResponseState.value);

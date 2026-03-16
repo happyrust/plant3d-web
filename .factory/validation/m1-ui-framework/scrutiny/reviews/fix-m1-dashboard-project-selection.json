@@ -1,0 +1,21 @@
+{
+  "featureId": "fix-m1-dashboard-project-selection",
+  "reviewedAt": "2026-03-16T00:06:09.742489+00:00",
+  "commitId": "8c008f5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix wires dashboard project selection directly to useModelProjects.selectProject from both the overview and project list, then forces the dashboard shell into the project workspace tab. The change matches the feature contract and the updated component test covers both entry points plus the resulting workspace view state.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still treats browser verification and `npm run lint` as the default for interactive UI work, but this transcript shows a narrow event-wiring fix was reasonably validated with component tests and type-check only.",
+      "evidence": "`.factory/skills/ui-worker/SKILL.md` section 4/5 vs handoff `skillFeedback.deviations` for worker session `121a6ee8-2b01-4a93-a28b-d5f29aa0f785`, which documents skipping lint and browser checks because the feature contract only required `DashboardLayout.test.ts` and `npm run type-check`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The implementation satisfies the feature description by updating project selection through `useModelProjects.selectProject` and switching the dashboard into the project workspace, with no blocking regressions found in the reviewed diff."
+}

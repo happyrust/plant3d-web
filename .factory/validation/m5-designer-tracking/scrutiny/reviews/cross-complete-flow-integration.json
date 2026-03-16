@@ -1,0 +1,39 @@
+{
+  "featureId": "cross-complete-flow-integration",
+  "reviewedAt": "2026-03-16T08:19:28.655065Z",
+  "commitId": "e3f9a98",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The implementation only adds a store-level regression test for designer-side visibility after submit. It does not implement or verify the end-to-end initiator→reviewer→submit flow promised by the feature, and the referenced commit id does not correspond to the actual code change for this feature.",
+    "issues": [
+      {
+        "file": "src/composables/useUserStore.test.ts",
+        "line": 341,
+        "severity": "blocking",
+        "description": "This feature claims to integrate the full initiator-to-reviewer flow for VAL-CROSS-001, but the change only adds a single unit test that exercises designer create+submit visibility. It never covers the reviewer inbox visibility, reviewer start-review/submit transition, or the full multi-role handoff required by the feature's expectedBehavior."
+      },
+      {
+        "file": "src/composables/useUserStore.ts",
+        "line": 537,
+        "severity": "blocking",
+        "description": "The code path under test still replaces `reviewTasks` wholesale with reviewer-scoped results from `loadReviewTasks()`. The added regression only proves the designer path when `reviewTaskGetList` is mocked with designer-owned data; it does not validate the actual cross-role scenario where the reviewer sees the new task or where reviewer actions propagate back to the designer list."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill is too permissive for cross-role integration features: it allowed the worker to satisfy a full-flow integration task with only a narrow unit-test regression and no end-to-end or multi-role verification evidence.",
+      "evidence": ".factory/skills/ui-worker/SKILL.md says UI features should do manual/browser validation, but the handoff for this feature reports only automated test execution and no interactive checks even though `cross-complete-flow-integration` maps to `VAL-CROSS-001` in validation-contract.md."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Mission/shared documentation does not currently warn reviewers that feature handoffs may reference a stale `commitId` from another feature when the workspace is dirty, which makes diff-based review unreliable.",
+      "evidence": "The handoff file `/Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/handoffs/2026-03-16T07-34-21-531Z__cross-complete-flow-integration__86ec94c9-be9d-4c64-a55a-e784cb5551a8.json` reports `commitId: e3f9a98`, but `git show --stat e3f9a98` is the unrelated commit `feat(review): support designer task resubmission` and does not include the tested file change."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the reviewed work does not implement or substantiate the full initiator→reviewer→submit integration flow. It adds only a limited regression test, and the handoff's commit reference points to an unrelated commit, so the claimed feature scope is not met."
+}

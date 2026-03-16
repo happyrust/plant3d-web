@@ -1,0 +1,28 @@
+{
+  "featureId": "fup-m5-returned-list-and-detail",
+  "reviewedAt": "2026-03-16T21:07:48.809102+00:00",
+  "commitId": "f1a95a2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature correctly introduced shared returned metadata for list/detail display and added focused regression coverage, but the detail view still computes returned/resubmittable state from the stale incoming task object instead of the refreshed workflow history, so a returned task can lose its return banner and resubmit action once detail is opened from a surface that has not yet received canonical returned fields.",
+    "issues": [
+      {
+        "file": "src/components/review/TaskReviewDetail.vue",
+        "line": 122,
+        "severity": "blocking",
+        "description": "`isReturnedTask`/`canResubmit` are derived from `props.task` only. When detail loads fresher workflow history via `reviewTaskGetWorkflow`, canonical returned state from that history is ignored for banner visibility and resubmit gating. A task opened from another surface with `status: 'draft'`, `currentNode: 'sj'`, but without `returnReason`/`reviewComment`/`workflowHistory` will still show the latest return reason in `latestReturnStep`, yet `isReturnedTask` remains false and the `再次提交` button never appears. This breaks the requirement that detail always show the latest returned state for the same task id."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker did not follow the skill's 'read-only lint on changed files (no --fix)' step and instead ran repository `npm run lint`, whose documented script is `eslint . --fix`.",
+      "evidence": "Handoff verification lists `npm --prefix \"/Volumes/DPC/work/plant-code/plant3d-web\" run lint`; `.factory/skills/designer-tracking-worker/SKILL.md` step 5 says 'Read-only lint on changed files (no --fix)'; `.factory/library/environment.md` notes `npm run lint` is hardcoded to `eslint . --fix`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill, mission guidance, and commit `f1a95a2`. The list surface now consumes canonical returned metadata, but detail still bases returned/resubmittable state on stale props instead of the freshly loaded workflow history, so the feature does not fully satisfy the returned-task detail contract."
+}

@@ -1,0 +1,21 @@
+{
+  "featureId": "m1-ui-dialog-component",
+  "reviewedAt": "2026-03-16T00:12:40.423197+00:00",
+  "commitId": "7c1865cbee84ed7de2709d4aeaae6858fda04b3d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The original dialog implementation now passes scrutiny in current context because its prior blocking stacked-dialog scroll-lock flaw has been fixed by `fix-m1-dialog-scroll-lock`, and the follow-up accessibility/test gaps were also addressed with `aria-labelledby` support plus regression coverage. The resulting dialog primitive satisfies the milestone contract for controlled open state, overlay/close dismissal, slots, centered styling, and body scroll locking.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still tells workers to run `npm run lint` as if feature-scoped linting is viable, but this repo's `lint` script ignores file arguments and scans the whole workspace. That mismatch already affected the original dialog worker and should be documented as accepted repo behavior or given a fallback command.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` step 4 requires `npm run lint`; handoff `/Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/handoffs/2026-03-15T18-01-38-295Z__m1-ui-dialog-component__421dea94-771b-4f9d-abdc-1a885e71d75a.json` records `npm --prefix \"/Volumes/DPC/work/plant-code/plant3d-web\" run lint -- src/components/ui/Dialog.vue src/components/ui/Dialog.test.ts` still linted the full repo and failed on unrelated files; `package.json` defines `lint` as `eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix`."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/m1-ui-framework/scrutiny/reviews/fix-m1-dialog-scroll-lock.json",
+  "summary": "Pass: the original dialog feature's previously blocking scrutiny failure is resolved by the follow-up fix commit that shares scroll-lock state across concurrent dialogs, and the current dialog implementation also covers slotted-title accessibility plus regression tests. With those fixes in place, the reusable dialog component now satisfies the milestone requirements."
+}

@@ -1,0 +1,39 @@
+{
+  "featureId": "m3-reviewer-task-list-ui",
+  "reviewedAt": "2026-03-16T04:53:31.241198+00:00",
+  "commitId": null,
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The UI refresh lands most of the reviewer inbox visuals from the pen design, but it also introduces status and priority filters that can never surface approved/rejected or high-priority tasks from the actual inbox data source.",
+    "issues": [
+      {
+        "file": "src/components/review/ReviewerTaskList.vue",
+        "line": 228,
+        "severity": "blocking",
+        "description": "The new status filter exposes `approved` and `rejected` options, but `filteredTasks` only operates on `userStore.pendingReviewTasks`, which by contract contains only `submitted` and `in_review` items for the current reviewer. Those filter options always render an empty list, so the UI advertises states that the inbox can never display."
+      },
+      {
+        "file": "src/components/review/ReviewerTaskList.vue",
+        "line": 234,
+        "severity": "blocking",
+        "description": "The priority filter offers a `high` option, but task cards only implement the design-specified badge styling for `urgent`, `medium`, and `low`, and the validation contract for this feature only calls for those three reviewer inbox priorities. This creates a user-visible path with unsupported visual treatment and diverges from the design contract."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill says UI features should perform manual browser verification, but this worker returned partial without any UI check once baseline tests failed, while the feature contract itself still required screenshot-style validation against `review-reviewer.pen`.",
+      "evidence": "`.factory/skills/ui-worker/SKILL.md` section 5 requires browser verification; handoff `2026-03-16T03-27-03-874Z__m3-reviewer-task-list-ui__524b0fb4-681a-4b7b-8004-a4c2a4967a5c.json` records no interactiveChecks and flags the missing browser validation as undone work."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The shared library currently documents designer-task user testing surfaces, but not the reviewer inbox surface or its key assertions, even though this milestone depends on validating the reviewer inbox against `review-reviewer.pen` and inbox-specific assertions.",
+      "evidence": "`.factory/library/user-testing.md` only lists designer task tracking flows; reviewer inbox assertions are instead defined in `validation-contract.md` under `VAL-INBOX-001` to `VAL-INBOX-007`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the feature’s visual refactor is incomplete from a correctness standpoint because it adds unreachable status filters and an unsupported high-priority filter path on the reviewer inbox."
+}

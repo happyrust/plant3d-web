@@ -1,0 +1,34 @@
+{
+  "featureId": "cross-navigation-state-persistence",
+  "reviewedAt": "2026-03-16T08:19:27.996908+00:00",
+  "commitId": "971f83a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature intent was to persist navigation state for task lists, but the referenced commit/handoff do not contain the claimed ReviewerTaskList or navigation persistence changes. The commit instead modifies websocket behavior in useUserStore, so the implementation evidence does not satisfy the feature requirements.",
+    "issues": [
+      {
+        "file": "src/components/review/ReviewerTaskList.vue",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The reviewed feature claims ReviewerTaskList was updated to persist search/filter and scroll state, but commit 971f83a contains no changes to ReviewerTaskList or useNavigationStatePersistence. The delivered commit therefore does not implement the required navigation-state persistence behavior for the reviewer inbox."
+      },
+      {
+        "file": "src/composables/useNavigationStatePersistence.test.ts",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The handoff says this new test was added for the feature, but commit 971f83a does not add or modify this file. The verification evidence is tied to files outside the reviewed diff, so the reported test coverage does not substantiate the reviewed implementation."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "services",
+      "observation": "The worker reported validators against changes that are not part of the referenced commit, and the handoff commitId points to an unrelated websocket feature commit. The mission process does not appear to document how workers should select the correct commit when the workspace already contains unrelated changes.",
+      "evidence": "Handoff file /Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/handoffs/2026-03-16T08-15-14-969Z__cross-navigation-state-persistence__83e5bb0b-d203-4f08-9d63-841b479699c5.json cites commitId 971f83a, while git show 971f83a only changes src/composables/useUserStore.ts, src/composables/useUserStore.test.ts, and src/composables/useUserStore.websocket.test.ts."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the provided handoff/commit evidence does not implement the navigation persistence feature it claims to review. The referenced commit is unrelated to ReviewerTaskList persistence, so the feature is not reviewable as passed."
+}

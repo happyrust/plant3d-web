@@ -1,0 +1,26 @@
+{
+  "featureId": "fix-m1-button-class-inheritance",
+  "reviewedAt": "2026-03-16T00:12:10+00:00",
+  "commitId": "ea2df9f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The Button fix correctly disables automatic fallthrough inheritance, forwards only non-class attrs to the native button, and preserves caller-provided loading labels. The regression test exercises the duplicate-class case and the existing loading accessibility tests still cover the aria-label behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still presents pre-implementation red tests as the default even for small regressions in already-covered shared components. This worker explicitly deviated by extending the existing Button test while implementing the fix, which appears to match repository reality better than the current skill wording.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/.factory/skills/ui-worker/SKILL.md` step 2 requires writing a failing test before implementation except for narrow exceptions; the handoff for session `6a740ae6-e9c8-42cf-a030-cedcf7b7d4dd` records `followedProcedure: false` because the worker first reviewed `src/components/ui/Button.test.ts` and then added the class-dedup regression case during implementation."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Shared library guidance does not currently record the Vue pattern needed for shared UI primitives that compose their own classes: disable fallthrough class inheritance and forward non-class attrs explicitly. This feature fixed a real bug caused by that missing convention.",
+      "evidence": "`/Volumes/DPC/work/plant-code/plant3d-web/src/components/ui/Button.vue` now uses `defineOptions({ inheritAttrs: false })` and a `forwardedAttrs` computed that strips `class`, but `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/architecture.md` and `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/user-testing.md` do not mention this shared-component attr-forwarding convention."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass: the implementation satisfies the button class-inheritance fix, avoids duplicate consumer classes on the root button, preserves prior loading accessibility behavior, and includes focused regression coverage."
+}

@@ -1,34 +1,45 @@
 {
   "featureId": "fix-returned-contract-baseline-measurement-and-annotation-timeouts",
-  "reviewedAt": "2026-03-16T21:42:34.587445+00:00",
+  "reviewedAt": "2026-03-16T22:19:39Z",
   "commitId": "1b9551f309a5b4b09b8a009adc6bcfad9ff56601",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "fail",
   "codeReview": {
-    "summary": "The reviewed worker validated the current branch state but did not review or land a commit that actually implements the measurement/MBD/annotation timeout fix described for this feature. The referenced commit only changes `reviewApi.test.ts` and `FileUpload.test.ts`, while the feature specifically required direct fixes or updates to the xeokit/MBD/annotation baseline files.",
+    "summary": "The original worker session still fails review because its recorded commit and handoff do not implement the scoped measurement/MBD/annotation timeout repair. Although newer branch work now updates the required measurement files and likely resolves the milestone blocker, that implementation is not traceably attached to this feature's recorded session or commit.",
     "issues": [
       {
         "file": "src/api/reviewApi.test.ts",
         "line": 13,
         "severity": "blocking",
-        "description": "Commit `1b9551f309a5b4b09b8a009adc6bcfad9ff56601` only modifies `reviewApi` test URL expectations, which is unrelated to the assigned measurement/MBD/annotation timeout baseline. None of the required files (`useXeokitMeasurementTools.test.ts`, `MbdPipePanel.mode.test.ts`, `WeldAnnotation3D.test.ts`, `XeokitAngleMeasurement.test.ts`, `XeokitDistanceMeasurement.test.ts`) are touched by this commit, so the feature's scoped fix is not represented in the reviewed implementation."
+        "description": "The reviewed worker session is tied to commit `1b9551f309a5b4b09b8a009adc6bcfad9ff56601`, but `git show --name-only` for that commit changes only `src/api/reviewApi.test.ts` and `src/components/review/FileUpload.test.ts`. Those files are outside the feature scope, which explicitly required direct fixes in `src/composables/useXeokitMeasurementTools.test.ts`, `src/components/tools/MbdPipePanel.mode.test.ts`, `src/utils/three/annotation/annotations/WeldAnnotation3D.test.ts`, `src/utils/three/annotation/annotations/XeokitAngleMeasurement.test.ts`, `src/utils/three/annotation/annotations/XeokitDistanceMeasurement.test.ts`, or their real dependencies."
       },
       {
         "file": "src/components/review/FileUpload.test.ts",
         "line": 86,
         "severity": "blocking",
-        "description": "The second changed file is an unrelated `FileUpload` test stabilization. The feature description explicitly says modifying unrelated review/file-upload tests is insufficient, so this commit does not satisfy the required behavior even though the targeted measurement tests currently pass on the branch."
+        "description": "The worker handoff claims the measurement/MBD/annotation timeout feature was complete without code changes because the current branch already passed the targeted tests, but the only commit recorded for the session is unrelated review/file-upload test stabilization. That leaves this feature without a feature-scoped implementation diff or traceable fix evidence."
+      },
+      {
+        "file": "src/composables/useXeokitMeasurementTools.test.ts",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "Current workspace history now contains a later measurement-focused commit, `39b4612 fix(measurement): restore xeokit measurement visibility and persist separate state`, which updates `src/composables/useXeokitMeasurementTools.test.ts`, `src/composables/useXeokitMeasurementTools.ts`, `src/utils/three/annotation/annotations/XeokitAngleMeasurement.test.ts`, and `src/utils/three/annotation/annotations/XeokitDistanceMeasurement.test.ts`. This suggests the milestone blocker is likely resolved on the branch, but that remediation was delivered outside the reviewed worker session and still does not cover `src/components/tools/MbdPipePanel.mode.test.ts` or `src/utils/three/annotation/annotations/WeldAnnotation3D.test.ts` in a traceable way for this feature."
       }
     ]
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The worker followed a validation-only path and ended the feature successfully without evidence of a feature-specific implementation commit. For baseline repair features, the current skill wording does not make it explicit how to handle cases where the branch already passes because the fix landed elsewhere, which can lead to handoffs pointing at unrelated HEAD commits.",
-      "evidence": "The transcript skeleton for session `3fc70c4f-6d76-44f9-9f58-14a04e0f3f04` shows no file edits and the handoff states that the current branch already contained the fixes; however, the recorded `commitId` is `1b9551f309a5b4b09b8a009adc6bcfad9ff56601`, whose diff only changes `src/api/reviewApi.test.ts` and `src/components/review/FileUpload.test.ts`."
+      "observation": "The `designer-tracking-worker` skill is a poor procedural fit for baseline-only measurement/annotation recovery work. It mandates browser-based manual verification of designer tracking surfaces, while this feature's contract and the worker's actual behavior were CLI-only targeted/full-suite test validation against low-level measurement and annotation code.",
+      "evidence": "`.factory/skills/designer-tracking-worker/SKILL.md` step 6 requires `agent-browser` verification, but transcript entry for worker session `3fc70c4f-6d76-44f9-9f58-14a04e0f3f04` explicitly says no browser verification was performed because the scope was baseline unit-test stability for measurement/annotation code."
+    },
+    {
+      "area": "feature-traceability",
+      "observation": "This milestone still lacks a reliable convention for assigning already-landed branch fixes back to the correct baseline-repair feature. The worker validated HEAD and closed the feature against commit `1b9551f`, even though the actual measurement remediation appears in later commit `39b4612`.",
+      "evidence": "The handoff for session `3fc70c4f-6d76-44f9-9f58-14a04e0f3f04` records `rev-parse HEAD` as `1b9551f309a5b4b09b8a009adc6bcfad9ff56601`; `git log --oneline -20` now shows `39b4612 fix(measurement): restore xeokit measurement visibility and persist separate state` after that commit, and `git diff --name-only 39b4612^ 39b4612` lists the scoped xeokit measurement files."
     }
   ],
-  "addressesFailureFrom": null,
-  "summary": "Review failed. The worker confirmed the targeted measurement/MBD/annotation tests pass on current HEAD, but the recorded commit for this feature does not implement or update the scoped files required by the feature description."
+  "addressesFailureFrom": ".factory/validation/misc-returned-contract-baseline/scrutiny/reviews/fix-returned-contract-baseline-measurement-and-annotation-timeouts.json",
+  "summary": "Review still fails for the recorded feature session: commit `1b9551f` does not implement the scoped measurement/MBD/annotation timeout repair. Newer branch changes in `39b4612` likely resolve most of the underlying blocker, but that fix is not traceably attached to this feature's reviewed worker session, so the feature remains failed on scrutiny traceability grounds."
 }

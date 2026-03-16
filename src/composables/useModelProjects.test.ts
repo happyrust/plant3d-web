@@ -8,7 +8,7 @@ const flushPromises = async () => {
   await nextTick();
 };
 
-const buildProjectsResponse = (items: Array<Record<string, unknown>>): Response => ({
+const buildProjectsResponse = (items: Record<string, unknown>[]): Response => ({
   ok: true,
   headers: new Headers({ 'content-type': 'application/json' }),
   json: async () => ({

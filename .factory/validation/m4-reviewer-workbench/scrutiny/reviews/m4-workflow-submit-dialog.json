@@ -1,0 +1,21 @@
+{
+  "featureId": "m4-workflow-submit-dialog",
+  "reviewedAt": "2026-03-16T05:47:10.998683+00:00",
+  "commitId": "00949925e8a2ef35bedd3f57aa1ce7499cf6ad1a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The submit dialog implementation satisfies VAL-WORK-002: it opens from the review workbench, shows current and target workflow nodes, provides an optional remark field, and preserves the existing submit action contract back into ReviewPanel.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `ui-worker` skill still treats browser-based manual validation as the default for any UI interaction feature, but this worker completed a dialog-only UI contract using focused component tests and static validation without any browser verification.",
+      "evidence": "`.factory/skills/ui-worker/SKILL.md` step 5 requires opening `http://127.0.0.1:3101`, while the transcript skeleton for session `ced4051e-0a47-4019-b7cb-03a2c2d66e70` contains no browser or agent-browser steps and only records `npm test -- WorkflowSubmitDialog.test.ts`, `npm run type-check`, and `npm run lint`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, and commit `00949925e8a2ef35bedd3f57aa1ce7499cf6ad1a`. The feature passes review with no blocking or non-blocking code issues found; the only notable process gap is that the UI worker skill over-prescribes browser verification for isolated dialog component work."
+}

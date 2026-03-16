@@ -18,14 +18,14 @@ const workflowResponseState = {
     success: true,
     currentNode: 'jd',
     currentNodeName: '校核',
-    history: [] as Array<{
+    history: [] as {
       node?: string;
       action: string;
       operatorId: string;
       operatorName: string;
       comment?: string;
       timestamp: number;
-    }>,
+    }[],
   },
 };
 const loadWorkflowMock = vi.fn(async () => workflowResponseState.value);
