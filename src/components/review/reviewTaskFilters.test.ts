@@ -100,6 +100,19 @@ describe('reviewTaskFilters', () => {
     expect(getDesignerTaskStatusBucket(task)).toBe('pending');
   });
 
+  it('maps approved tasks to approved bucket', () => {
+    const task = createTask({ currentNode: 'pz', status: 'approved' });
+
+    expect(getDesignerTaskStatusBucket(task)).toBe('approved');
+  });
+
+  it('treats cancelled tasks as non-returned designer-visible other bucket', () => {
+    const task = createTask({ currentNode: 'sj', status: 'cancelled' });
+
+    expect(isCanonicalReturnedTask(task)).toBe(false);
+    expect(getDesignerTaskStatusBucket(task)).toBe('other');
+  });
+
   it('counts submit actions in workflow history', () => {
     const count = getResubmissionSubmissionCount([
       { node: 'sj', action: 'submit', operatorId: 'u1', operatorName: 'A', timestamp: 1 },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 import {
   Calendar,
@@ -14,21 +14,28 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
-import { getDesignerTaskStatusBucket, isDesignerResubmissionTask } from './reviewTaskFilters';
+import {
+  getDesignerTaskStatusBucket,
+  isCanonicalReturnedTask,
+  isDesignerResubmissionTask,
+} from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
 
 import type { ReviewTask } from '@/types/auth';
 
+import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useUserStore } from '@/composables/useUserStore';
 import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
 
 const userStore = useUserStore();
+const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-designer-tasks-v1');
 
 const statusFilter = ref<DesignerTaskStatusFilter>('all');
 const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
+const scrollContainer = ref<HTMLElement | null>(null);
 
-type DesignerTaskStatusFilter = 'all' | 'draft' | 'submitted' | 'in_review' | 'approved' | 'rejected';
+type DesignerTaskStatusFilter = 'all' | 'draft' | 'submitted' | 'in_review' | 'approved' | 'rejected' | 'cancelled';
 
 type StatusFilterOption = {
   value: DesignerTaskStatusFilter;
@@ -74,6 +81,12 @@ const statusFilterOptions: StatusFilterOption[] = [
     badgeClass: 'bg-rose-100 text-rose-700',
     activeClass: 'border-rose-300 bg-rose-500 text-white',
   },
+  {
+    value: 'cancelled',
+    label: '已取消',
+    badgeClass: 'bg-slate-200 text-slate-600',
+    activeClass: 'border-slate-300 bg-slate-500 text-white',
+  },
 ];
 
 // 当前用户发起的任务
@@ -83,7 +96,12 @@ const sortedTasks = computed(() => [...tasks.value].sort((a, b) => b.updatedAt -
 
 const filteredTasks = computed(() => {
   if (statusFilter.value === 'all') return sortedTasks.value;
-  return sortedTasks.value.filter((task) => task.status === statusFilter.value);
+  return sortedTasks.value.filter((task) => {
+    if (statusFilter.value === 'rejected') {
+      return getDesignerTaskStatusBucket(task) === 'returned';
+    }
+    return task.status === statusFilter.value;
+  });
 });
 
 const taskCountByStatus = computed<Record<DesignerTaskStatusFilter, number>>(() => ({
@@ -92,10 +110,13 @@ const taskCountByStatus = computed<Record<DesignerTaskStatusFilter, number>>(() 
   submitted: tasks.value.filter((task) => task.status === 'submitted').length,
   in_review: tasks.value.filter((task) => task.status === 'in_review').length,
   approved: tasks.value.filter((task) => task.status === 'approved').length,
-  rejected: tasks.value.filter((task) => task.status === 'rejected').length,
+  rejected: tasks.value.filter((task) => getDesignerTaskStatusBucket(task) === 'returned').length,
+  cancelled: tasks.value.filter((task) => task.status === 'cancelled').length,
 }));
 
 const currentUser = computed(() => userStore.currentUser.value);
+
+navigationState.bindRef('statusFilter', statusFilter, 'all');
 
 const activeFilterLabel = computed(
   () => statusFilterOptions.find((option) => option.value === statusFilter.value)?.label ?? '全部'
@@ -110,6 +131,17 @@ function refreshTasks() {
 
 function clearFilters() {
   statusFilter.value = 'all';
+}
+
+function persistScrollPosition() {
+  navigationState.saveValue('scrollTop', scrollContainer.value?.scrollTop ?? 0);
+}
+
+function restoreScrollPosition() {
+  nextTick(() => {
+    if (!scrollContainer.value) return;
+    scrollContainer.value.scrollTop = navigationState.getValue('scrollTop', 0);
+  });
 }
 
 function formatDate(timestamp: number): string {
@@ -132,6 +164,8 @@ function getStatusIcon(status: ReviewTask['status']) {
   switch (status) {
     case 'approved':
       return CheckCircle;
+    case 'rejected':
+    case 'cancelled':
     case 'draft':
       return XCircle;
     default:
@@ -145,6 +179,8 @@ function getStatusIconClass(status: ReviewTask['status']) {
       return 'text-green-500';
     case 'rejected':
       return 'text-rose-500';
+    case 'cancelled':
+      return 'text-slate-400';
     case 'draft':
       return 'text-slate-500';
     case 'submitted':
@@ -164,7 +200,9 @@ function getCurrentNodeLabel(node?: ReviewTask['currentNode']): string {
 
 function getTaskCardClass(task: ReviewTask): string {
   if (task.status === 'approved') return 'border-emerald-200 bg-emerald-50/40';
+  if (isDesignerResubmissionTask(task)) return 'border-rose-200 bg-rose-50/60';
   if (task.status === 'rejected') return 'border-rose-200 bg-rose-50/60';
+  if (task.status === 'cancelled') return 'border-slate-300 bg-slate-100/80';
   if (task.status === 'in_review') return 'border-sky-200 bg-sky-50/40';
   if (task.status === 'submitted') return 'border-amber-200 bg-amber-50/50';
   return 'border-slate-200 bg-white';
@@ -172,11 +210,14 @@ function getTaskCardClass(task: ReviewTask): string {
 
 onMounted(() => {
   refreshTasks();
+  restoreScrollPosition();
 });
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-auto bg-[#F6F7FB] p-4 text-slate-900">
+  <div ref="scrollContainer"
+    class="flex h-full flex-col overflow-auto bg-[#F6F7FB] p-4 text-slate-900"
+    @scroll="persistScrollPosition">
     <div class="rounded-[24px] border border-slate-200 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur">
       <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
@@ -270,7 +311,7 @@ onMounted(() => {
                   </div>
                 </div>
                 <div v-if="task.returnReason || task.reviewComment" class="mt-3 rounded-xl bg-white/80 p-3 text-sm shadow-sm ring-1 ring-slate-100">
-                  <span class="text-slate-400">{{ task.returnReason ? '退回原因' : '审核意见' }}：</span>
+                  <span class="text-slate-400">{{ isCanonicalReturnedTask(task) ? '退回原因' : '审核意见' }}：</span>
                   <span class="text-slate-700">{{ task.returnReason || task.reviewComment }}</span>
                 </div>
               </div>
