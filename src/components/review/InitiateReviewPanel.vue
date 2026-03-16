@@ -182,7 +182,7 @@ const currentProjectId = computed<string>(() => {
 });
 
 const selectedComponentSummary = computed(() => {
-  return `已选中 ${selectedComponents.value.length} 个构件`;
+  return `已选中 ${selectedComponents.value.length} 个 BRAN 管道构件`;
 });
 
 const reviewerOptions = computed(() => {
