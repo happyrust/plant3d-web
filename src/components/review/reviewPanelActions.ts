@@ -79,3 +79,39 @@ export async function finalizeTaskDecisionSafely(
   await options.updateTaskStatus(options.taskId, options.status, options.comment);
   options.clearCurrentTask();
 }
+
+type SubmitTaskToNextNodeSafelyOptions = {
+  canSubmit: boolean;
+  taskId?: string;
+  submitComment: { value: string };
+  showSubmitDialog: { value: boolean };
+  workflowActionLoading: { value: boolean };
+  workflowError: { value: string | null };
+  submitTaskToNextNode: (taskId: string, comment?: string) => Promise<void>;
+  refreshCurrentTask: (taskId: string) => Promise<void>;
+  loadWorkflow: (taskId: string) => Promise<void>;
+  emitToast: (payload: { message: string }) => void;
+};
+
+export async function submitTaskToNextNodeSafely(
+  options: SubmitTaskToNextNodeSafelyOptions
+): Promise<void> {
+  if (!options.taskId || !options.canSubmit) return;
+
+  options.workflowActionLoading.value = true;
+  options.workflowError.value = null;
+  const trimmedComment = options.submitComment.value.trim();
+
+  try {
+    await options.submitTaskToNextNode(options.taskId, trimmedComment || undefined);
+    await options.refreshCurrentTask(options.taskId);
+    await options.loadWorkflow(options.taskId);
+    options.emitToast({ message: '任务已提交到下一节点' });
+    options.showSubmitDialog.value = false;
+    options.submitComment.value = '';
+  } catch (e) {
+    options.workflowError.value = e instanceof Error ? e.message : '提交失败';
+  } finally {
+    options.workflowActionLoading.value = false;
+  }
+}

@@ -8,6 +8,7 @@ import {
   finalizeTaskDecisionSafely,
   getSubmitActionLabel,
   mapWorkflowHistoryToTaskDetailItems,
+  submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
 
 function deferred<T>() {
@@ -166,5 +167,68 @@ describe('reviewPanelActions', () => {
     ).rejects.toThrow('api failed');
 
     expect(clearCurrentTask).not.toHaveBeenCalled();
+  });
+
+  it('submitTaskToNextNodeSafely 成功后关闭对话框并刷新任务与工作流', async () => {
+    const submitTaskToNextNode = vi.fn(async () => {});
+    const refreshCurrentTask = vi.fn(async () => {});
+    const loadWorkflow = vi.fn(async () => {});
+    const emitToast = vi.fn();
+    const showSubmitDialog = { value: true };
+    const submitComment = { value: '  ready to move  ' };
+    const workflowActionLoading = { value: false };
+    const workflowError = { value: 'stale' as string | null };
+
+    await submitTaskToNextNodeSafely({
+      canSubmit: true,
+      taskId: 'task-1',
+      submitComment,
+      showSubmitDialog,
+      workflowActionLoading,
+      workflowError,
+      submitTaskToNextNode,
+      refreshCurrentTask,
+      loadWorkflow,
+      emitToast,
+    });
+
+    expect(submitTaskToNextNode).toHaveBeenCalledWith('task-1', 'ready to move');
+    expect(refreshCurrentTask).toHaveBeenCalledWith('task-1');
+    expect(loadWorkflow).toHaveBeenCalledWith('task-1');
+    expect(emitToast).toHaveBeenCalledWith({ message: '任务已提交到下一节点' });
+    expect(showSubmitDialog.value).toBe(false);
+    expect(submitComment.value).toBe('');
+    expect(workflowError.value).toBeNull();
+    expect(workflowActionLoading.value).toBe(false);
+  });
+
+  it('submitTaskToNextNodeSafely 失败时保留对话框并显示错误', async () => {
+    const submitTaskToNextNode = vi.fn(async () => {
+      throw new Error('submit failed');
+    });
+    const emitToast = vi.fn();
+    const showSubmitDialog = { value: true };
+    const submitComment = { value: 'keep this note' };
+    const workflowActionLoading = { value: false };
+    const workflowError = { value: null as string | null };
+
+    await submitTaskToNextNodeSafely({
+      canSubmit: true,
+      taskId: 'task-2',
+      submitComment,
+      showSubmitDialog,
+      workflowActionLoading,
+      workflowError,
+      submitTaskToNextNode,
+      refreshCurrentTask: vi.fn(async () => {}),
+      loadWorkflow: vi.fn(async () => {}),
+      emitToast,
+    });
+
+    expect(workflowError.value).toBe('submit failed');
+    expect(showSubmitDialog.value).toBe(true);
+    expect(submitComment.value).toBe('keep this note');
+    expect(emitToast).not.toHaveBeenCalled();
+    expect(workflowActionLoading.value).toBe(false);
   });
 });

@@ -25,6 +25,7 @@ import {
   canSubmitAtCurrentNode,
   confirmCurrentDataSafely,
   getSubmitActionLabel,
+  submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
@@ -43,6 +44,7 @@ import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
+import { emitToast } from '@/ribbon/toastBus';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 const reviewStore = useReviewStore();
@@ -337,20 +339,18 @@ async function refreshCurrentTask(taskId: string) {
 }
 
 async function handleSubmitToNextNode() {
-  if (!currentTask.value || !canSubmitToNextNode.value) return;
-  workflowActionLoading.value = true;
-  workflowError.value = null;
-  try {
-    await userStore.submitTaskToNextNode(currentTask.value.id, submitComment.value.trim() || undefined);
-    await refreshCurrentTask(currentTask.value.id);
-    await loadWorkflow(currentTask.value.id);
-    showSubmitDialog.value = false;
-    submitComment.value = '';
-  } catch (e) {
-    workflowError.value = e instanceof Error ? e.message : '提交失败';
-  } finally {
-    workflowActionLoading.value = false;
-  }
+  await submitTaskToNextNodeSafely({
+    canSubmit: canSubmitToNextNode.value,
+    taskId: currentTask.value?.id,
+    submitComment,
+    showSubmitDialog,
+    workflowActionLoading,
+    workflowError,
+    submitTaskToNextNode: userStore.submitTaskToNextNode,
+    refreshCurrentTask,
+    loadWorkflow,
+    emitToast,
+  });
 }
 
 async function handleReturnToNode() {
