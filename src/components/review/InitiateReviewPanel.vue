@@ -1,8 +1,7 @@
-<!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 
-import { AlertCircle, ArrowRight, Calendar, FileText, Link, Paperclip, Plus, Users, X } from 'lucide-vue-next';
+import { Box, Calendar, ChevronDown, Flag, Link, Paperclip, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
 import AssociatedFilesList from './AssociatedFilesList.vue';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
@@ -13,6 +12,9 @@ import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
 
 import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import Button from '@/components/ui/Button.vue';
+import Card from '@/components/ui/Card.vue';
+import Input from '@/components/ui/Input.vue';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { getRoleDisplayName } from '@/types/auth';
@@ -28,6 +30,7 @@ const priority = ref<'low' | 'medium' | 'high' | 'urgent'>('medium');
 const dueDate = ref('');
 const selectedComponents = ref<ReviewComponent[]>([]);
 const addingComponent = ref(false);
+const panelVisible = ref(true);
 
 function buildStableComponentId(refNo: string): string {
   return `comp-${refNo}`;
@@ -173,6 +176,16 @@ const currentProjectId = computed<string>(() => {
   return resolveProjectId();
 });
 
+const selectedComponentSummary = computed(() => {
+  return `已选中 ${selectedComponents.value.length} 个 BRAN 管道构件`;
+});
+
+const reviewerOptions = computed(() => {
+  const combined = [...availableCheckers.value, ...availableApprovers.value];
+  const deduped = new Map(combined.map((user) => [user.id, user]));
+  return Array.from(deduped.values());
+});
+
 const availableCheckers = computed(() => {
   const checkers = userStore.availableCheckers.value;
   return checkers.length > 0 ? checkers : userStore.availableReviewers.value;
@@ -296,214 +309,230 @@ async function handleSubmit() {
 function clearNotification() {
   notification.value = { type: null, message: '', details: '' };
 }
+
+function closePanel() {
+  panelVisible.value = false;
+}
+
+function reopenPanel() {
+  panelVisible.value = true;
+}
 </script>
 
 <template>
-  <div class="p-4 space-y-4 overflow-auto h-full">
-    <div class="border-b pb-3 flex justify-between items-start" data-testid="designer-landing-workspace">
-      <div>
-        <h3 class="text-lg font-semibold">创建提资单</h3>
-        <p class="text-sm text-gray-500 mt-1">选择模型构件并手动指定校核/审核人员</p>
+  <div class="flex h-full items-start justify-center overflow-auto bg-[#F9FAFB] p-4">
+    <div v-if="panelVisible"
+      class="w-full max-w-[380px] rounded-[12px] bg-white p-5 shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
+      data-testid="designer-landing-workspace">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-[#111827]">发起提资单</h3>
+          <p class="mt-1 text-xs text-[#6B7280]">根据设计稿填写提资信息并提交到校审流程</p>
+        </div>
+        <button type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#9CA3AF] transition hover:bg-[#F9FAFB] hover:text-[#6B7280]"
+          aria-label="关闭发起提资单面板"
+          @click="closePanel">
+          <X class="h-5 w-5" />
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-4">
         <div v-if="embedLandingState?.target === 'designer'"
           data-testid="designer-landing-cta"
-          class="mt-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700">
+          class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
           自动进入提资/编辑工作区
         </div>
-        <!-- 嵌入模式显示 form_id -->
-        <div v-if="embedModeParams.isEmbedMode" class="mt-2 flex items-center gap-2">
-          <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-            📋 表单 ID: {{ formId || '（由后端生成）' }}
-          </span>
-          <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-            🏭 项目: {{ currentProjectId }}
-          </span>
+
+        <div v-if="embedModeParams.isEmbedMode" class="flex flex-wrap gap-2 text-xs">
+          <span class="rounded-full bg-blue-100 px-2 py-1 text-blue-800">表单 ID: {{ formId || '（由后端生成）' }}</span>
+          <span class="rounded-full bg-green-100 px-2 py-1 text-green-800">项目: {{ currentProjectId }}</span>
           <span v-if="embedLandingState?.formId"
             data-testid="designer-lineage-form-id"
-            class="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
+            class="rounded-full bg-indigo-100 px-2 py-1 text-indigo-800">
             Lineage: {{ embedLandingState.formId }}
           </span>
         </div>
-      </div>
-      <button class="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-        @click="showExternalReview = true">
-        <Link class="h-4 w-4" />
-        三维校审
-      </button>
-    </div>
 
-    <!-- 模型构件选择 -->
-    <div class="space-y-2">
-      <label class="text-sm font-medium">选择模型构件 *</label>
-      <p class="text-xs text-gray-400 mt-0.5">在三维视图中选择构件后，点击下方按钮追加到列表</p>
-      <div class="border rounded-lg p-3">
-        <div class="flex justify-between items-center mb-2">
-          <span class="text-sm text-gray-600">已选择 {{ selectedComponents.length }} 个构件</span>
-          <button class="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="!selectionStore.selectedRefno || addingComponent"
-            :title="selectionStore.selectedRefno ? '将选中的构件添加到列表' : '请先在三维视图中点击选中一个构件'"
-            @click="addSelectedComponent">
-            <Plus class="h-3 w-3" />
-            {{ addingComponent ? '获取中...' : '添加构件' }}
-          </button>
-        </div>
-        <div class="space-y-2 max-h-40 overflow-y-auto">
-          <div v-for="comp in selectedComponents"
-            :key="comp.id"
-            class="flex items-center justify-between p-2 rounded bg-gray-50 hover:bg-gray-100">
-            <div class="flex items-center gap-2">
-              <FileText class="h-4 w-4 text-blue-600" />
-              <div>
-                <div class="text-sm font-medium">{{ comp.name }}</div>
-                <div class="text-xs text-gray-500">RefNo: {{ comp.refNo }}</div>
+        <Card class="border border-[#F3F4F6] shadow-none" body-class="p-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF0E6] text-[#FF6B00]">
+              <Box class="h-4 w-4" />
+            </div>
+            <div class="min-w-0">
+              <p class="text-[13px] font-medium text-[#111827]">{{ selectedComponentSummary }}</p>
+              <p class="mt-1 text-xs text-[#6B7280]">在三维视图中选中构件后，这里会同步显示发起范围。</p>
+            </div>
+          </div>
+        </Card>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-[13px] font-medium text-[#6B7280]">构件明细</label>
+            <Button variant="secondary"
+              size="sm"
+              :disabled="!selectionStore.selectedRefno || addingComponent"
+              :title="selectionStore.selectedRefno ? '将选中的构件添加到列表' : '请先在三维视图中点击选中一个构件'"
+              @click="addSelectedComponent">
+              {{ addingComponent ? '获取中...' : '添加构件' }}
+            </Button>
+          </div>
+          <div class="rounded-[8px] border border-[#E5E7EB] bg-[#FCFCFD] p-3">
+            <div v-if="selectedComponents.length === 0" class="text-xs text-[#9CA3AF]">
+              暂无已加入的构件，请先在三维视图中选中构件后点击“添加构件”。
+            </div>
+            <div v-else class="max-h-40 space-y-2 overflow-y-auto">
+              <div v-for="comp in selectedComponents"
+                :key="comp.id"
+                class="flex items-start justify-between rounded-[8px] border border-[#F3F4F6] bg-white px-3 py-2">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-[#111827]">{{ comp.name }}</p>
+                  <p class="mt-1 text-xs text-[#6B7280]">RefNo: {{ comp.refNo }}</p>
+                </div>
+                <button type="button"
+                  class="ml-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] transition hover:bg-[#F3F4F6] hover:text-[#6B7280]"
+                  :aria-label="`移除构件 ${comp.name}`"
+                  @click="removeComponent(comp.id)">
+                  <X class="h-4 w-4" />
+                </button>
               </div>
             </div>
-            <button class="p-1 hover:bg-gray-200 rounded" @click="removeComponent(comp.id)">
-              <X class="h-4 w-4 text-gray-500" />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-[13px] font-medium text-[#6B7280]">数据包名称</label>
+          <Input v-model="packageName" placeholder="输入提资数据包名称..." />
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-[13px] font-medium text-[#6B7280]">提资描述（可选）</label>
+          <textarea v-model="description"
+            rows="4"
+            placeholder="添加补充说明或设计注意事项..."
+            class="min-h-20 w-full rounded-[6px] border border-[#E5E7EB] px-3 py-[9px] text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3B82F6]" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-2">
+            <label class="text-[13px] font-medium text-[#6B7280]">审核人</label>
+            <div class="relative">
+              <User class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
+              <select v-model="checkerId"
+                class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]">
+                <option value="">选择审核人</option>
+                <option v-for="r in reviewerOptions" :key="r.id" :value="r.id">
+                  {{ r.name }} ({{ getRoleDisplayName(r.role) }})
+                </option>
+              </select>
+              <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-[13px] font-medium text-[#6B7280]">优先级</label>
+            <div class="relative">
+              <Flag class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
+              <select v-model="priority"
+                class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]">
+                <option value="low">低等级别</option>
+                <option value="medium">中等级别</option>
+                <option value="high">高等级别</option>
+                <option value="urgent">紧急等级</option>
+              </select>
+              <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-[13px] font-medium text-[#6B7280]">期望完成日期</label>
+          <div class="relative">
+            <Calendar class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
+            <input v-model="dueDate"
+              type="date"
+              class="w-full rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]" />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="flex items-center gap-1 text-[13px] font-medium text-[#6B7280]">
+            <Paperclip class="h-4 w-4" />
+            模型附件
+          </label>
+          <FileUploadSection ref="uploadSectionRef"
+            v-model="uploadedFiles"
+            :max-files="10"
+            :max-size="50"
+            :task-id="activeUploadTaskId"
+            :form-id="activeUploadFormId"
+            :auto-upload="canAutoUploadAttachments"
+            accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
+            @upload-complete="handleAttachmentUploadComplete" />
+          <div class="-mt-1 rounded-[8px] border border-dashed border-[#E5E7EB] bg-[#FCFCFD] px-4 py-6 text-center">
+            <UploadCloud class="mx-auto h-6 w-6 text-[#9CA3AF]" />
+            <p class="mt-2 text-xs text-[#6B7280]">点击或拖拽上传 PDF / CAD 文件</p>
+          </div>
+          <p class="text-xs text-[#6B7280]">支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB</p>
+          <p v-if="!canAutoUploadAttachments" class="text-xs text-[#F59E0B]">
+            当前将在创建提资单后自动上传附件，避免缺少 lineage 导致上传失败。
+          </p>
+        </div>
+
+        <div class="space-y-2">
+          <label class="flex items-center gap-1 text-[13px] font-medium text-[#6B7280]">
+            <Link class="h-4 w-4" />
+            自动关联文件
+          </label>
+          <AssociatedFilesList :selected-component-count="selectedComponents.length" />
+        </div>
+
+        <Button class="w-full" :disabled="!canSubmit || isSubmitting" @click="handleSubmit">
+          <template v-if="isSubmitting">
+            正在创建...
+          </template>
+          <template v-else>
+            <Send class="h-3.5 w-3.5" />
+            创建并提交提资单
+          </template>
+        </Button>
+
+        <div v-if="notification.type"
+          :class="[
+            'rounded-[8px] border px-3 py-3 text-sm',
+            notification.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-800'
+              : 'border-red-200 bg-red-50 text-red-800',
+          ]">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="font-medium">{{ notification.message }}</div>
+              <div v-if="notification.details" class="mt-1 text-xs opacity-90">
+                {{ notification.details }}
+              </div>
+            </div>
+            <button type="button" class="text-current/70 hover:text-current" @click="clearNotification">
+              <X class="h-4 w-4" />
             </button>
           </div>
         </div>
+
+        <p v-if="!notification.type && missingFields.length > 0" class="text-xs text-[#F59E0B]">
+          请补充：{{ missingFields.join('、') }}
+        </p>
+
+        <button type="button"
+          class="w-full text-center text-xs font-medium text-[#3B82F6] hover:text-[#2563EB]"
+          @click="showExternalReview = true">
+          打开三维校审视图
+        </button>
       </div>
     </div>
 
-    <!-- 数据包名称 -->
-    <div class="space-y-2">
-      <label class="text-sm font-medium">模型数据包名称 *</label>
-      <input v-model="packageName"
-        type="text"
-        placeholder="输入模型数据包名称"
-        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <div v-else class="flex h-full items-start pt-6">
+      <Button variant="secondary" size="sm" @click="reopenPanel">重新打开提资面板</Button>
     </div>
 
-    <!-- 描述 -->
-    <div class="space-y-2">
-      <label class="text-sm font-medium">描述</label>
-      <textarea v-model="description"
-        rows="2"
-        placeholder="输入提资单描述（可选）"
-        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-    </div>
-
-    <!-- 附件文件上传 -->
-    <div class="space-y-2">
-      <label class="text-sm font-medium flex items-center gap-1">
-        <Paperclip class="h-4 w-4" />
-        附件文件
-      </label>
-      <FileUploadSection ref="uploadSectionRef"
-        v-model="uploadedFiles"
-        :max-files="10"
-        :max-size="50"
-        :task-id="activeUploadTaskId"
-        :form-id="activeUploadFormId"
-        :auto-upload="canAutoUploadAttachments"
-        accept-types=".pdf,.dwg,.dxf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg"
-        @upload-complete="handleAttachmentUploadComplete" />
-      <p class="text-xs text-gray-500">
-        支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB
-      </p>
-      <p v-if="!canAutoUploadAttachments" class="text-xs text-amber-600">
-        当前将在创建提资单后自动上传附件，避免缺少 lineage 导致上传失败。
-      </p>
-    </div>
-
-    <!-- 自动关联文件 -->
-    <div class="space-y-2">
-      <label class="text-sm font-medium flex items-center gap-1">
-        <Link class="h-4 w-4" />
-        自动关联文件
-      </label>
-      <AssociatedFilesList :selected-component-count="selectedComponents.length" />
-    </div>
-
-    <!-- 校核/审核人员和优先级 -->
-    <div class="grid grid-cols-3 gap-4">
-      <div class="space-y-2">
-        <label class="text-sm font-medium">校核人员 *</label>
-        <select v-model="checkerId"
-          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">选择校核人员</option>
-          <option v-for="r in availableCheckers" :key="r.id" :value="r.id">
-            {{ r.name }} ({{ getRoleDisplayName(r.role) }})
-          </option>
-        </select>
-      </div>
-
-      <div class="space-y-2">
-        <label class="text-sm font-medium">审核人员 *</label>
-        <select v-model="approverId"
-          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">选择审核人员</option>
-          <option v-for="r in availableApprovers" :key="r.id" :value="r.id">
-            {{ r.name }} ({{ getRoleDisplayName(r.role) }})
-          </option>
-        </select>
-      </div>
-
-      <div class="space-y-2">
-        <label class="text-sm font-medium">优先级</label>
-        <select v-model="priority"
-          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="low">低</option>
-          <option value="medium">中</option>
-          <option value="high">高</option>
-          <option value="urgent">紧急</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- 截止日期 -->
-    <div class="space-y-2">
-      <label class="text-sm font-medium">截止时间（可选）</label>
-      <div class="relative">
-        <Calendar class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <input v-model="dueDate"
-          type="date"
-          class="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-    </div>
-
-    <!-- 提交按钮 -->
-    <button :disabled="!canSubmit || isSubmitting"
-      class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-      @click="handleSubmit">
-      <template v-if="isSubmitting">
-        <div class="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-        正在创建...
-      </template>
-      <template v-else>
-        <ArrowRight class="h-4 w-4" />
-        创建提资单
-      </template>
-    </button>
-
-    <!-- 通知 -->
-    <div v-if="notification.type"
-      :class="[
-        'flex items-start gap-3 p-3 rounded-lg',
-        notification.type === 'success'
-          ? 'bg-green-50 text-green-800 border border-green-200'
-          : 'bg-red-50 text-red-800 border border-red-200',
-      ]">
-      <div class="flex-1">
-        <div class="font-medium text-sm">{{ notification.message }}</div>
-        <div v-if="notification.details" class="text-sm mt-1 opacity-90">
-          {{ notification.details }}
-        </div>
-      </div>
-      <button class="text-gray-400 hover:text-gray-600" @click="clearNotification">
-        <X class="h-4 w-4" />
-      </button>
-    </div>
-
-    <!-- 验证提示 -->
-    <div v-if="!notification.type && missingFields.length > 0"
-      class="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 p-2 rounded-lg">
-      <AlertCircle class="h-4 w-4" />
-      <span>请填写必填字段：{{ missingFields.join('、') }}</span>
-    </div>
-
-    <!-- 外部校审浏览器 -->
-    <ExternalReviewViewer v-model="showExternalReview"
-      :project-id="currentProjectId" />
+    <ExternalReviewViewer v-model="showExternalReview" :project-id="currentProjectId" />
   </div>
 </template>
