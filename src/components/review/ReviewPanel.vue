@@ -48,6 +48,7 @@ import { emitToast } from '@/ribbon/toastBus';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
+type ConfirmedRecordEntry = typeof reviewStore.sortedConfirmedRecords.value[number];
 
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
@@ -119,6 +120,17 @@ function formatDateTime(timestamp: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function getConfirmedAnnotationCount(record: ConfirmedRecordEntry): number {
+  return record.annotations.length +
+    record.cloudAnnotations.length +
+    record.rectAnnotations.length +
+    record.obbAnnotations.length;
+}
+
+function getConfirmedRecordNote(record: ConfirmedRecordEntry): string {
+  return record.note?.trim() || '-';
 }
 
 // 下载附件
@@ -959,23 +971,26 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- 已确认数据 -->
+    <!-- 确认记录 -->
     <div class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">已确认数据明细</div>
+      <div class="text-sm font-semibold">确认记录</div>
 
       <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"
         class="mt-2 text-sm text-muted-foreground">
-        暂无已确认数据。
+        暂无确认记录
       </div>
 
       <div v-else class="mt-2 flex max-h-64 flex-col gap-2 overflow-y-auto">
         <div v-for="record in reviewStore.sortedConfirmedRecords.value"
           :key="record.id"
-          class="rounded-md border border-border p-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-muted-foreground">
-              {{ formatDate(record.confirmedAt) }}
-            </span>
+          class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+          <div class="flex items-start justify-between gap-3">
+            <div class="space-y-1">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">确认时间</div>
+              <span class="block text-sm font-semibold text-slate-900">
+                {{ formatDateTime(record.confirmedAt) }}
+              </span>
+            </div>
             <button type="button"
               class="rounded p-1 text-destructive hover:bg-muted"
               title="删除"
@@ -984,21 +999,15 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <div class="mt-1 flex gap-3 text-xs">
-            <span class="text-blue-600">
-              批注:
-              {{
-                record.annotations.length +
-                  record.cloudAnnotations.length +
-                  record.rectAnnotations.length +
-                  record.obbAnnotations.length
-              }}
-            </span>
-            <span class="text-green-600">测量: {{ record.measurements.length }}</span>
-          </div>
-
-          <div v-if="record.note" class="mt-1 truncate text-xs text-muted-foreground">
-            备注: {{ record.note }}
+          <div class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注数量</div>
+              <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
+              <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
+            </div>
           </div>
         </div>
       </div>
