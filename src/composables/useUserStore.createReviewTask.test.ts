@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const reviewTaskCreateMock = vi.fn();
 const reviewTaskUpdateMock = vi.fn();
+const reviewTaskSubmitToNextMock = vi.fn();
 
 vi.mock('@/api/reviewApi', () => ({
   reviewTaskCreate: reviewTaskCreateMock,
@@ -13,7 +14,7 @@ vi.mock('@/api/reviewApi', () => ({
   reviewTaskApprove: vi.fn(),
   reviewTaskReject: vi.fn(),
   reviewTaskCancel: vi.fn(),
-  reviewTaskSubmitToNext: vi.fn(),
+  reviewTaskSubmitToNext: reviewTaskSubmitToNextMock,
   reviewTaskReturn: vi.fn(),
   reviewTaskGetWorkflow: vi.fn(),
   userGetList: vi.fn(),
@@ -66,6 +67,7 @@ describe('useUserStore.createReviewTask', () => {
   beforeEach(() => {
     reviewTaskCreateMock.mockReset();
     reviewTaskUpdateMock.mockReset();
+    reviewTaskSubmitToNextMock.mockReset();
     vi.resetModules();
     (globalThis as unknown as { localStorage: Storage }).localStorage =
       createLocalStorageMock() as unknown as Storage;
@@ -98,26 +100,104 @@ describe('useUserStore.createReviewTask', () => {
     expect(store.reviewTasks.value).toHaveLength(0);
   });
 
-  it('后端请求异常时应抛错，不回退本地任务', async () => {
+  it('后端网络异常时应回退到本地任务', async () => {
     reviewTaskCreateMock.mockRejectedValue(new Error('network broken'));
 
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await expect(
-      store.createReviewTask({
-        title: 'task-2',
-        description: 'desc',
-        modelName: 'model',
-        checkerId: 'proofreader_001',
-        approverId: 'reviewer_001',
-        reviewerId: 'reviewer_001',
-        priority: 'medium',
-        components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
-      })
-    ).rejects.toThrow('network broken');
+    const task = await store.createReviewTask({
+      title: 'task-2',
+      description: 'desc',
+      modelName: 'model',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      reviewerId: 'reviewer_001',
+      priority: 'medium',
+      components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
+    });
 
-    expect(store.reviewTasks.value).toHaveLength(0);
+    expect(task.title).toBe('task-2');
+    expect(task.status).toBe('draft');
+    expect(store.reviewTasks.value).toHaveLength(1);
+    expect(store.reviewTasks.value[0]).toMatchObject({
+      title: 'task-2',
+      status: 'draft',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+    });
+  });
+
+  it('后端提交下一节点网络异常时应回退到本地流程并转入jd', async () => {
+    reviewTaskCreateMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    reviewTaskSubmitToNextMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    const task = await store.createReviewTask({
+      title: 'task-submit-fallback',
+      description: 'desc',
+      modelName: 'model',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      reviewerId: 'reviewer_001',
+      priority: 'medium',
+      components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
+    });
+
+    await expect(store.submitTaskToNextNode(task.id, '发起提资')).resolves.toBeUndefined();
+
+    const updated = store.reviewTasks.value.find((item) => item.id === task.id);
+    expect(updated).toMatchObject({
+      id: task.id,
+      currentNode: 'jd',
+      status: 'submitted',
+    });
+    expect(updated?.workflowHistory).toHaveLength(1);
+    expect(updated?.workflowHistory?.[0]?.action).toBe('submit');
+  });
+
+  it('后端附件更新网络异常时应回退到本地附件更新', async () => {
+    reviewTaskCreateMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    reviewTaskUpdateMock.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    const task = await store.createReviewTask({
+      title: 'task-attachment-fallback',
+      description: 'desc',
+      modelName: 'model',
+      checkerId: 'proofreader_001',
+      approverId: 'reviewer_001',
+      reviewerId: 'reviewer_001',
+      priority: 'medium',
+      components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
+    });
+
+    await expect(
+      store.updateTaskAttachments(task.id, [
+        {
+          id: 'att-1',
+          name: 'offline.dwg',
+          url: '/files/review_attachments/att-1.dwg',
+          size: 128,
+          mimeType: 'application/dwg',
+        },
+      ])
+    ).resolves.toBeUndefined();
+
+    const updated = store.reviewTasks.value.find((item) => item.id === task.id);
+    expect(updated?.attachments).toEqual([
+      {
+        id: 'att-1',
+        name: 'offline.dwg',
+        url: '/files/review_attachments/att-1.dwg',
+        size: 128,
+        mimeType: 'application/dwg',
+      },
+    ]);
   });
 
   it('创建请求保留显式角色字段并让 reviewerId 兼容 checker handoff', async () => {

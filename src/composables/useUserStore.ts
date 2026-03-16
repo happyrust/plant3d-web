@@ -198,6 +198,50 @@ function normalizeWorkflowStep(raw: unknown): WorkflowStep | null {
   };
 }
 
+function isNetworkFailure(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+
+  const message = typeof error === 'string'
+    ? error
+    : error instanceof Error
+      ? error.message
+      : '';
+
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('failed to fetch') ||
+    normalized.includes('network') ||
+    normalized.includes('networkerror')
+  );
+}
+
+function applyLocalSubmitTransition(task: ReviewTask, comment?: string): ReviewTask {
+  const fromNode = task.currentNode ?? 'sj';
+  const nextNode = getNextWorkflowNode(fromNode);
+  if (!nextNode) return task;
+
+  const operatorId = currentUser.value?.id || 'local';
+  const operatorName = currentUser.value?.name || '本地用户';
+
+  const step: WorkflowStep = {
+    node: fromNode,
+    action: 'submit',
+    operatorId,
+    operatorName,
+    comment,
+    timestamp: Date.now(),
+  };
+
+  return {
+    ...task,
+    status: statusFromNode(nextNode),
+    currentNode: nextNode,
+    workflowHistory: [...(task.workflowHistory || []), step],
+    returnReason: undefined,
+    updatedAt: Date.now(),
+  };
+}
+
 export function normalizeReviewTask(raw: unknown): ReviewTask | null {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -727,6 +771,38 @@ async function createReviewTask(data: {
   const user = currentUser.value;
   if (!user) throw new Error('No user logged in');
 
+  const buildLocalTask = (): ReviewTask => {
+    const checker = users.value.find((u) => u.id === data.checkerId);
+    if (!checker) throw new Error('Checker not found');
+    const approver = users.value.find((u) => u.id === data.approverId);
+    if (!approver) throw new Error('Approver not found');
+
+    return {
+      id: `task-${Date.now()}`,
+      formId: data.formId,
+      title: data.title,
+      description: data.description,
+      modelName: data.modelName,
+      status: 'draft',
+      priority: data.priority,
+      requesterId: user.id,
+      requesterName: user.name,
+      checkerId: data.checkerId,
+      checkerName: checker.name,
+      approverId: data.approverId,
+      approverName: approver.name,
+      reviewerId: data.checkerId,
+      reviewerName: checker.name,
+      components: data.components,
+      attachments: data.attachments,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      dueDate: data.dueDate,
+      currentNode: 'sj',
+      workflowHistory: [],
+    };
+  };
+
   if (USE_BACKEND.value) {
     loading.value = true;
     error.value = null;
@@ -758,44 +834,27 @@ async function createReviewTask(data: {
       throw new Error(response.error_message || '创建提资单失败');
     } catch (e) {
       const message = e instanceof Error ? e.message : '创建提资单失败';
-      error.value = message;
-      throw e instanceof Error ? e : new Error(message);
+
+      if (!isNetworkFailure(e)) {
+        error.value = message;
+        throw e instanceof Error ? e : new Error(message);
+      }
+
+      console.warn(
+        '[useUserStore] Create review task failed, fallback to local mock data due network issue:',
+        message
+      );
+      const localTask = buildLocalTask();
+      reviewTasks.value = [...reviewTasks.value, localTask];
+      console.log('[useUserStore] Created review task (local fallback):', localTask.title);
+      return localTask;
     } finally {
       loading.value = false;
     }
   }
 
   // 本地模式
-  const checker = users.value.find((u) => u.id === data.checkerId);
-  if (!checker) throw new Error('Checker not found');
-  const approver = users.value.find((u) => u.id === data.approverId);
-  if (!approver) throw new Error('Approver not found');
-
-  const task: ReviewTask = {
-    id: `task-${Date.now()}`,
-    formId: data.formId,
-    title: data.title,
-    description: data.description,
-    modelName: data.modelName,
-    status: 'draft',
-    priority: data.priority,
-    requesterId: user.id,
-    requesterName: user.name,
-    checkerId: data.checkerId,
-    checkerName: checker.name,
-    approverId: data.approverId,
-    approverName: approver.name,
-    reviewerId: data.checkerId,
-    reviewerName: checker.name,
-    components: data.components,
-    attachments: data.attachments,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    dueDate: data.dueDate,
-    currentNode: 'sj',
-    workflowHistory: [],
-  };
-
+  const task = buildLocalTask();
   reviewTasks.value = [...reviewTasks.value, task];
   console.log('[useUserStore] Created review task (local):', task.title);
   return task;
@@ -888,8 +947,35 @@ async function updateTaskAttachments(taskId: string, attachments: ReviewAttachme
         await loadReviewTasks();
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '更新任务附件失败';
-      throw e;
+      const message = e instanceof Error ? e.message : '更新任务附件失败';
+
+      if (!isNetworkFailure(e)) {
+        error.value = message;
+        throw e instanceof Error ? e : new Error(message);
+      }
+
+      console.warn(
+        '[useUserStore] updateTaskAttachments failed, fallback to local attachments on network issue:',
+        message
+      );
+
+      const idx = reviewTasks.value.findIndex((t) => t.id === taskId);
+      const task = idx >= 0 ? reviewTasks.value[idx] : null;
+      if (!task) {
+        return;
+      }
+
+      const updated: ReviewTask = {
+        ...task,
+        attachments,
+        updatedAt: Date.now(),
+      };
+      reviewTasks.value = [
+        ...reviewTasks.value.slice(0, idx),
+        updated,
+        ...reviewTasks.value.slice(idx + 1),
+      ];
+      return;
     } finally {
       loading.value = false;
     }
@@ -924,8 +1010,38 @@ async function submitTaskToNextNode(taskId: string, comment?: string): Promise<v
       }
       await loadReviewTasks();
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '提交到下一节点失败';
-      throw e;
+      const message = e instanceof Error ? e.message : '提交到下一节点失败';
+
+      if (!isNetworkFailure(e)) {
+        error.value = message;
+        throw e instanceof Error ? e : new Error(message);
+      }
+
+      const idx = reviewTasks.value.findIndex((t) => t.id === taskId);
+      const task = idx >= 0 ? reviewTasks.value[idx] : null;
+      if (!task) {
+        console.warn(
+          '[useUserStore] Submit task fallback skipped: local task not found:',
+          taskId
+        );
+        return;
+      }
+
+      const fallback = applyLocalSubmitTransition(task, comment);
+      if (fallback === task) {
+        return;
+      }
+
+      console.warn(
+        '[useUserStore] submitTaskToNextNode failed, fallback to local state on network issue:',
+        message
+      );
+      reviewTasks.value = [
+        ...reviewTasks.value.slice(0, idx),
+        fallback,
+        ...reviewTasks.value.slice(idx + 1),
+      ];
+      return;
     } finally {
       loading.value = false;
     }
@@ -940,30 +1056,12 @@ async function submitTaskToNextNode(taskId: string, comment?: string): Promise<v
   const nextNode = getNextWorkflowNode(fromNode);
   if (!nextNode) return;
 
-  const operatorId = currentUser.value?.id || 'local';
-  const operatorName = currentUser.value?.name || '本地用户';
-
-  const step: WorkflowStep = {
-    node: fromNode,
-    action: 'submit',
-    operatorId,
-    operatorName,
-    comment,
-    timestamp: Date.now(),
-  };
-
-  const updated: ReviewTask = {
-    ...task,
-    status: statusFromNode(nextNode),
-    currentNode: nextNode,
-    workflowHistory: [...(task.workflowHistory || []), step],
-    returnReason: undefined,
-    updatedAt: Date.now(),
-  };
+  const fallback = applyLocalSubmitTransition(task, comment);
+  if (fallback === task) return;
 
   reviewTasks.value = [
     ...reviewTasks.value.slice(0, idx),
-    updated,
+    fallback,
     ...reviewTasks.value.slice(idx + 1),
   ];
 }
