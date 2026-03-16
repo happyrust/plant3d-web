@@ -114,6 +114,15 @@ function loadPersisted(): AnnotationStyleConfig {
   }
 }
 
+function persistStyle(style: AnnotationStyleConfig): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(style));
+  } catch {
+    // ignore storage failures so runtime usage and tests stay resilient
+  }
+}
+
 const state = reactive<AnnotationStyleConfig>(loadPersisted());
 
 watch(
@@ -124,12 +133,7 @@ watch(
     obb: { ...state.obb },
   }),
   (val) => {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(val));
-    } catch {
-      // ignore
-    }
+    persistStyle(val);
   },
   { deep: true },
 );
@@ -138,16 +142,19 @@ export function useAnnotationStyleStore() {
   function resetToDefaults(kind?: keyof AnnotationStyleConfig) {
     if (kind) {
       Object.assign(state[kind], DEFAULT_ANNOTATION_STYLE[kind]);
+      persistStyle(state);
       return;
     }
     Object.assign(state.text, DEFAULT_ANNOTATION_STYLE.text);
     Object.assign(state.cloud, DEFAULT_ANNOTATION_STYLE.cloud);
     Object.assign(state.rect, DEFAULT_ANNOTATION_STYLE.rect);
     Object.assign(state.obb, DEFAULT_ANNOTATION_STYLE.obb);
+    persistStyle(state);
   }
 
   function updateStyle(kind: keyof AnnotationStyleConfig, partial: Partial<AnnotationLeaderStyleConfig>) {
     Object.assign(state[kind], partial);
+    persistStyle(state);
   }
 
   function applyPreset(preset: AnnotationStylePreset) {
@@ -156,6 +163,7 @@ export function useAnnotationStyleStore() {
     Object.assign(state.cloud, next.cloud);
     Object.assign(state.rect, next.rect);
     Object.assign(state.obb, next.obb);
+    persistStyle(state);
   }
 
   return {
