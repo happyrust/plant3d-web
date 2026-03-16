@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isCanonicalReturnedTask,
   isDesignerResubmissionTask,
   isRejectedDesignerTask,
   getDesignerTaskStatusBucket,
@@ -31,6 +32,41 @@ function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
 }
 
 describe('reviewTaskFilters', () => {
+  it('treats rejected tasks as canonical returned tasks', () => {
+    const task = createTask({ currentNode: 'sh', status: 'rejected', returnReason: '需要重新处理' });
+
+    expect(isCanonicalReturnedTask(task)).toBe(true);
+  });
+
+  it('treats sj draft tasks with latest return metadata as canonical returned tasks', () => {
+    const task = createTask({
+      currentNode: 'sj',
+      status: 'draft',
+      returnReason: '请重新补充材料',
+      workflowHistory: [
+        { node: 'jd', action: 'return', operatorId: 'u1', operatorName: '校核员', comment: '请重新补充材料', timestamp: 10 },
+      ],
+    });
+
+    expect(isCanonicalReturnedTask(task)).toBe(true);
+    expect(isRejectedDesignerTask(task)).toBe(true);
+    expect(isDesignerResubmissionTask(task)).toBe(true);
+  });
+
+  it('does not treat plain drafts as canonical returned tasks', () => {
+    const task = createTask({ currentNode: 'sj', status: 'draft', returnReason: '   ' });
+
+    expect(isCanonicalReturnedTask(task)).toBe(false);
+    expect(isRejectedDesignerTask(task)).toBe(false);
+  });
+
+  it('does not treat rejected tasks outside resubmission state as designer resubmission tasks', () => {
+    const task = createTask({ currentNode: 'jd', status: 'rejected', returnReason: '流程已拒绝' });
+
+    expect(isCanonicalReturnedTask(task)).toBe(true);
+    expect(isDesignerResubmissionTask(task)).toBe(false);
+  });
+
   it('treats draft + returnReason at sj as a designer resubmission task', () => {
     const task = createTask({ returnReason: '请补充材料', currentNode: 'sj', status: 'draft' });
     expect(isDesignerResubmissionTask(task)).toBe(true);
@@ -50,6 +86,13 @@ describe('reviewTaskFilters', () => {
     const task = createTask({ currentNode: 'sh', status: 'rejected', returnReason: '需要重新处理' });
     expect(isRejectedDesignerTask(task)).toBe(true);
     expect(getDesignerTaskStatusBucket(task)).toBe('returned');
+  });
+
+  it('keeps resubmittable semantic limited to sj draft even when canonical returned is true', () => {
+    const task = createTask({ currentNode: 'jd', status: 'rejected', returnReason: '仍属于退回语义' });
+
+    expect(getDesignerTaskStatusBucket(task)).toBe('returned');
+    expect(isDesignerResubmissionTask(task)).toBe(false);
   });
 
   it('maps active workflow tasks to pending bucket', () => {

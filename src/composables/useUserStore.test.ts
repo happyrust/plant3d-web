@@ -5,6 +5,7 @@ import {
   isCheckerRole,
   isApproverRole,
   getNextWorkflowNode,
+  normalizeReviewTask,
   resolveEffectiveUserId,
   resolveReviewProjectIdFromSession,
   statusFromNode,
@@ -585,6 +586,203 @@ describe('review task websocket notifications', () => {
         description: 'after ws update',
       })
     );
+  });
+
+  it('normalizes snake_case returned websocket payloads before membership and returned-state checks', async () => {
+    const sockets: {
+      onmessage: null | ((event: { data: string }) => void);
+      close: ReturnType<typeof vi.fn>;
+      send: ReturnType<typeof vi.fn>;
+    }[] = [];
+    function MockWebSocket(this: any) {
+      this.readyState = 1;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onerror = null;
+      this.onclose = null;
+      this.close = vi.fn();
+      this.send = vi.fn();
+      sockets.push(this);
+    }
+
+    vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.loadReviewTasks();
+    store.connectWebSocket();
+    sockets[0]?.onmessage?.({
+      data: JSON.stringify({
+        type: 'task_updated',
+        data: {
+          task: {
+            id: 'task-returned-1',
+            title: '退回任务',
+            description: 'after ws update',
+            model_name: 'Model-C',
+            status: 'draft',
+            priority: 'medium',
+            requester_id: 'designer_001',
+            requester_name: '王设计师',
+            checker_id: 'user-002',
+            checker_name: '李校核员',
+            approver_id: 'manager_001',
+            approver_name: '陈经理',
+            reviewer_id: 'user-002',
+            reviewer_name: '李校核员',
+            current_node: 'sj',
+            return_reason: '请补充尺寸',
+            review_comment: '请补充尺寸',
+            created_at: 1700000000000,
+            updated_at: 1700000009000,
+            workflow_history: [
+              {
+                node: 'jd',
+                action: 'return',
+                operator_id: 'user-002',
+                operator_name: '李校核员',
+                comment: '请补充尺寸',
+                timestamp: 1700000008000,
+              },
+            ],
+            components: [],
+          },
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    expect(store.myInitiatedTasks.value.find((task) => task.id === 'task-returned-1')).toEqual(
+      expect.objectContaining({
+        modelName: 'Model-C',
+        requesterId: 'designer_001',
+        currentNode: 'sj',
+        returnReason: '请补充尺寸',
+        status: 'draft',
+      })
+    );
+    expect(store.returnedInitiatedTasks.value.map((task) => task.id)).toContain('task-returned-1');
+  });
+
+  it('normalizes rejected websocket payloads before reviewer membership checks', async () => {
+    const sockets: {
+      onmessage: null | ((event: { data: string }) => void);
+      close: ReturnType<typeof vi.fn>;
+      send: ReturnType<typeof vi.fn>;
+    }[] = [];
+    function MockWebSocket(this: any) {
+      this.readyState = 1;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onerror = null;
+      this.onclose = null;
+      this.close = vi.fn();
+      this.send = vi.fn();
+      sockets.push(this);
+    }
+
+    vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/reviewer_001');
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('reviewer_001');
+    store.connectWebSocket();
+    sockets[0]?.onmessage?.({
+      data: JSON.stringify({
+        type: 'task_rejected',
+        data: {
+          task: {
+            id: 'task-reviewer-returned-1',
+            title: '审核端退回任务',
+            description: 'reviewer scoped from ws',
+            model_name: 'Model-D',
+            status: 'rejected',
+            priority: 'high',
+            requester_id: 'designer_001',
+            requester_name: '王设计师',
+            checker_id: 'user-002',
+            checker_name: '李校核员',
+            reviewer_id: 'user-002',
+            reviewer_name: '李校核员',
+            approver_id: 'manager_001',
+            approver_name: '陈经理',
+            current_node: 'jd',
+            created_at: 1700000000000,
+            updated_at: 1700000009000,
+            return_reason: '校核退回',
+            components: [],
+          },
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    expect(store.pendingReviewTasks.value.find((task) => task.id === 'task-reviewer-returned-1')).toEqual(
+      expect.objectContaining({
+        currentNode: 'jd',
+        checkerId: 'user-002',
+        status: 'rejected',
+      })
+    );
+  });
+});
+
+describe('normalizeReviewTask', () => {
+  it('maps snake_case payloads into ReviewTask shape', () => {
+    const task = normalizeReviewTask({
+      id: 'task-normalized-1',
+      title: '规范化任务',
+      description: 'desc',
+      model_name: 'Model-N',
+      status: 'draft',
+      priority: 'medium',
+      requester_id: 'designer_001',
+      requester_name: '王设计师',
+      reviewer_id: 'user-002',
+      reviewer_name: '李校核员',
+      checker_id: 'user-002',
+      checker_name: '李校核员',
+      approver_id: 'manager_001',
+      approver_name: '陈经理',
+      current_node: 'sj',
+      return_reason: '请修改',
+      review_comment: '请修改',
+      created_at: 1700000000000,
+      updated_at: 1700000001000,
+      components: [],
+      workflow_history: [
+        {
+          node: 'jd',
+          action: 'return',
+          operator_id: 'user-002',
+          operator_name: '李校核员',
+          comment: '请修改',
+          timestamp: 1700000000500,
+        },
+      ],
+    });
+
+    expect(task).toEqual(expect.objectContaining({
+      modelName: 'Model-N',
+      requesterId: 'designer_001',
+      reviewerId: 'user-002',
+      checkerId: 'user-002',
+      approverId: 'manager_001',
+      currentNode: 'sj',
+      returnReason: '请修改',
+      reviewComment: '请修改',
+    }));
+    expect(task.workflowHistory?.[0]).toEqual(expect.objectContaining({
+      operatorId: 'user-002',
+      operatorName: '李校核员',
+    }));
   });
 });
 
