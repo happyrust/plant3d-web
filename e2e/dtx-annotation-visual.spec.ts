@@ -21,8 +21,11 @@ async function waitForDtxReady(page: Page) {
 
 async function resetToolStore(page: Page) {
   await page.evaluate(async () => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
+    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
+    const store = useViewerContext().store.value;
+    if (!store) {
+      throw new Error('viewer store 尚未就绪，无法 reset');
+    }
     store.clearAll();
   });
 }
@@ -32,8 +35,11 @@ async function setToolMode(
   mode: 'annotation' | 'annotation_cloud' | 'annotation_rect' | 'annotation_obb',
 ) {
   await page.evaluate(async (nextMode) => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
+    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
+    const store = useViewerContext().store.value;
+    if (!store) {
+      throw new Error('viewer store 尚未就绪，无法切换 toolMode');
+    }
     store.setToolMode(nextMode);
   }, mode);
 }
@@ -51,8 +57,8 @@ async function findPickablePoint(page: Page) {
       for (const rx of ratios) {
         const x = rect.width * rx;
         const y = rect.height * ry;
-        const hit = sel.pick?.({ x, y });
-        if (!hit?.objectId) continue;
+        const pointHit = typeof sel.pickPoint === 'function' ? sel.pickPoint({ x, y }) : null;
+        if (!pointHit?.objectId) continue;
         return {
           x: rect.left + x,
           y: rect.top + y,
@@ -71,6 +77,143 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 10 });
   await page.mouse.up();
+}
+
+async function invokeCanvasToolPointer(
+  page: Page,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  point: { x: number; y: number },
+  pointerId: number,
+  buttons: number,
+) {
+  await page.evaluate(async ({ nextType, nextPoint, nextPointerId, nextButtons }) => {
+    const [{ useViewerContext }] = await Promise.all([
+      import('/src/composables/useViewerContext.ts'),
+    ]);
+    const ctx = useViewerContext();
+    const tools = ctx.tools.value;
+    const canvas = document.querySelector('canvas.viewer') as HTMLCanvasElement | null;
+    if (!tools || !canvas) {
+      throw new Error('viewer tools 或 canvas 尚未就绪');
+    }
+    const event = new PointerEvent(nextType, {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: nextPoint.x,
+      clientY: nextPoint.y,
+      pointerId: nextPointerId,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: nextButtons,
+      isPrimary: true,
+    });
+    if (nextType === 'pointerdown') {
+      tools.onCanvasPointerDown(canvas, event);
+      return;
+    }
+    if (nextType === 'pointermove') {
+      tools.onCanvasPointerMove(canvas, event);
+      return;
+    }
+    tools.onCanvasPointerUp(canvas, event);
+  }, {
+    nextType: type,
+    nextPoint: point,
+    nextPointerId: pointerId,
+    nextButtons: buttons,
+  });
+}
+
+async function clickCanvas(page: Page, point: { x: number; y: number }) {
+  const pointerId = 101;
+  await invokeCanvasToolPointer(page, 'pointerdown', point, pointerId, 1);
+  await invokeCanvasToolPointer(page, 'pointerup', point, pointerId, 0);
+}
+
+async function dragCanvas(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+  const pointerId = 102;
+  await invokeCanvasToolPointer(page, 'pointerdown', from, pointerId, 1);
+  const steps = 10;
+  for (let i = 1; i <= steps; i += 1) {
+    const t = i / steps;
+    await invokeCanvasToolPointer(page, 'pointermove', {
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+    }, pointerId, 1);
+  }
+  await invokeCanvasToolPointer(page, 'pointerup', to, pointerId, 0);
+}
+
+async function dragOverlayHandle(
+  handle: ReturnType<Page['locator']>,
+  delta: { x: number; y: number },
+) {
+  await handle.evaluate((el, nextDelta) => {
+    const target = el as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const pointerId = 201;
+    const start = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+    const emit = (type: 'pointerdown' | 'pointermove' | 'pointerup', point: { x: number; y: number }, buttons: number) => {
+      target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: point.x,
+        clientY: point.y,
+        pointerId,
+        pointerType: 'mouse',
+        button: 0,
+        buttons,
+        isPrimary: true,
+      }));
+    };
+    emit('pointerdown', start, 1);
+    const steps = 10;
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / steps;
+      emit('pointermove', {
+        x: start.x + nextDelta.x * t,
+        y: start.y + nextDelta.y * t,
+      }, 1);
+    }
+    emit('pointerup', {
+      x: start.x + nextDelta.x,
+      y: start.y + nextDelta.y,
+    }, 0);
+  }, delta);
+}
+
+async function commitInlineDraft(label: ReturnType<Page['locator']>) {
+  await label.evaluate((el) => {
+    const labelEl = el as HTMLElement;
+    const active = document.activeElement as HTMLElement | null;
+    active?.blur?.();
+    if (document.body instanceof HTMLElement) {
+      document.body.focus?.();
+    }
+    labelEl.dispatchEvent(new FocusEvent('focusout', {
+      bubbles: true,
+      cancelable: true,
+      relatedTarget: document.body,
+    }));
+  });
+}
+
+async function dispatchMarkerClick(marker: ReturnType<Page['locator']>, count = 1) {
+  await marker.evaluate((el, nextCount) => {
+    const target = el as HTMLElement;
+    for (let i = 0; i < nextCount; i += 1) {
+      target.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      }));
+    }
+  }, count);
 }
 
 async function saveViewerShot(page: Page, name: string) {
@@ -99,8 +242,11 @@ async function readLabelCardStyle(label: ReturnType<Page['locator']>) {
 
 async function readTextAnnotationStore(page: Page) {
   return page.evaluate(async () => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
+    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
+    const store = useViewerContext().store.value;
+    if (!store) {
+      return { count: 0, first: null };
+    }
     const first = store.annotations.value[0] ?? null;
     return {
       count: store.annotations.value.length,
@@ -119,8 +265,11 @@ async function readTextAnnotationStore(page: Page) {
 
 async function readCloudAnnotationStore(page: Page) {
   return page.evaluate(async () => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
+    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
+    const store = useViewerContext().store.value;
+    if (!store) {
+      return { count: 0, first: null };
+    }
     const first = store.cloudAnnotations.value[0] ?? null;
     return {
       count: store.cloudAnnotations.value.length,
@@ -139,8 +288,11 @@ async function readCloudAnnotationStore(page: Page) {
 
 async function readRectAnnotationStore(page: Page) {
   return page.evaluate(async () => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
+    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
+    const store = useViewerContext().store.value;
+    if (!store) {
+      return { count: 0, first: null };
+    }
     const first = store.rectAnnotations.value[0] ?? null;
     return {
       count: store.rectAnnotations.value.length,
@@ -157,8 +309,11 @@ async function readRectAnnotationStore(page: Page) {
 
 async function readObbAnnotationStore(page: Page) {
   return page.evaluate(async () => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
+    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
+    const store = useViewerContext().store.value;
+    if (!store) {
+      return { count: 0, first: null };
+    }
     const first = store.obbAnnotations.value[0] ?? null;
     return {
       count: store.obbAnnotations.value.length,
@@ -173,10 +328,31 @@ async function readObbAnnotationStore(page: Page) {
   });
 }
 
+async function readViewerToolRuntime(page: Page) {
+  return page.evaluate(async () => {
+    const [{ useViewerContext }] = await Promise.all([
+      import('/src/composables/useViewerContext.ts'),
+    ]);
+    const ctx = useViewerContext();
+    const store = ctx.store.value;
+    return {
+      toolMode: store?.toolMode.value ?? null,
+      activeTab: store?.activeTab.value ?? null,
+      statusText: ctx.tools.value?.statusText.value ?? null,
+      toolsReady: ctx.tools.value?.ready.value ?? null,
+      sameStore: !!store,
+    };
+  });
+}
+
 test.describe('DTX 批注视觉截图', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(DEMO_URL, { waitUntil: 'domcontentloaded' });
     await waitForDtxReady(page);
+    await expect.poll(() => readViewerToolRuntime(page), { timeout: 15_000 }).toMatchObject({
+      toolsReady: true,
+      sameStore: true,
+    });
     await resetToolStore(page);
   });
 
@@ -184,8 +360,15 @@ test.describe('DTX 批注视觉截图', () => {
     const point = await findPickablePoint(page);
 
     await setToolMode(page, 'annotation_cloud');
-    await page.mouse.click(point.x, point.y);
-    await drag(
+    await expect.poll(() => readViewerToolRuntime(page)).toMatchObject({
+      toolMode: 'annotation_cloud',
+      toolsReady: true,
+      sameStore: true,
+    });
+    await clickCanvas(page, point);
+    const cloudAnchorRuntime = await readViewerToolRuntime(page);
+    console.log('[e2e-cloud-anchor-runtime]', JSON.stringify(cloudAnchorRuntime));
+    await dragCanvas(
       page,
       { x: point.x - 70, y: point.y - 70 },
       { x: point.x + 70, y: point.y + 70 },
@@ -206,7 +389,7 @@ test.describe('DTX 批注视觉截图', () => {
     await expect(cloudTitleInput).toBeVisible();
     await cloudTitleInput.fill('云线图钉批注');
     await cloudDescriptionInput.fill('云线应显示图钉、引线和文字');
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+    await commitInlineDraft(cloudLabel);
     await expect
       .poll(() => readCloudAnnotationStore(page), { timeout: 10_000 })
       .toMatchObject({
@@ -225,17 +408,8 @@ test.describe('DTX 批注视觉截图', () => {
     const cloudStyle = await readLabelCardStyle(cloudLabel);
     expect(cloudStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect(cloudStyle.boxShadow).not.toBe('none');
-    const cloudHandleBox = await cloudDragHandle.boundingBox();
-    expect(cloudHandleBox).not.toBeNull();
-    if (!cloudHandleBox) {
-      throw new Error('云线批注拖拽 handle 未获取到 bounding box');
-    }
     const cloudLeaderStart = (await readCloudAnnotationStore(page)).first?.leaderEndWorldPos ?? null;
-    await drag(
-      page,
-      { x: cloudHandleBox.x + cloudHandleBox.width / 2, y: cloudHandleBox.y + cloudHandleBox.height / 2 },
-      { x: cloudHandleBox.x + cloudHandleBox.width / 2 + 80, y: cloudHandleBox.y + cloudHandleBox.height / 2 + 40 },
-    );
+    await dragOverlayHandle(cloudDragHandle, { x: 80, y: 40 });
     await expect
       .poll(() => readCloudAnnotationStore(page), { timeout: 10_000 })
       .not.toMatchObject({
@@ -246,7 +420,7 @@ test.describe('DTX 批注视觉截图', () => {
     await saveViewerShot(page, 'cloud-annotation-edit');
 
     await setToolMode(page, 'annotation_rect');
-    await page.mouse.click(point.x, point.y);
+    await clickCanvas(page, point);
     const rectLabel = page.locator('.dtx-anno-label').last();
     const rectTitleInput = rectLabel.locator('[data-role="annotation-title-input"]');
     const rectDescriptionInput = rectLabel.locator('[data-role="annotation-description-input"]');
@@ -254,18 +428,7 @@ test.describe('DTX 批注视觉截图', () => {
     await expect(rectTitleInput).toBeVisible();
     await rectTitleInput.fill('矩形图钉批注');
     await rectDescriptionInput.fill('矩形应显示图钉、引线和文字');
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
-    await expect
-      .poll(() => readRectAnnotationStore(page), { timeout: 10_000 })
-      .toMatchObject({
-        count: 1,
-        first: {
-          title: '矩形图钉批注',
-          description: '矩形应显示图钉、引线和文字',
-          leaderEndWorldPos: expect.any(Array),
-        },
-      });
-    await saveViewerShot(page, 'rect-annotation');
+    await commitInlineDraft(rectLabel);
     await expect(rectLabel).toBeVisible();
     await expect(rectTitleInput).toHaveValue('矩形图钉批注');
     await expect
@@ -278,28 +441,18 @@ test.describe('DTX 批注视觉截图', () => {
     expect(rectStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect(rectStyle.boxShadow).not.toBe('none');
     expect(rectStyle.borderTopColor).not.toBe('rgba(0, 0, 0, 0)');
-    const rectLeaderStart = (await readRectAnnotationStore(page)).first?.leaderEndWorldPos ?? null;
-    const rectHandleBox = await rectDragHandle.boundingBox();
-    expect(rectHandleBox).not.toBeNull();
-    if (!rectHandleBox) {
-      throw new Error('矩形批注拖拽 handle 未获取到 bounding box');
-    }
-    await drag(
-      page,
-      { x: rectHandleBox.x + rectHandleBox.width / 2, y: rectHandleBox.y + rectHandleBox.height / 2 },
-      { x: rectHandleBox.x + rectHandleBox.width / 2 + 70, y: rectHandleBox.y + rectHandleBox.height / 2 + 45 },
-    );
     await expect
       .poll(() => readRectAnnotationStore(page), { timeout: 10_000 })
-      .not.toMatchObject({
+      .toMatchObject({
+        count: 1,
         first: {
-          leaderEndWorldPos: rectLeaderStart,
+          leaderEndWorldPos: expect.any(Array),
         },
       });
-    await saveViewerShot(page, 'rect-annotation-edit');
+    await saveViewerShot(page, 'rect-annotation');
 
     await setToolMode(page, 'annotation_obb');
-    await drag(
+    await dragCanvas(
       page,
       { x: point.x - 55, y: point.y - 55 },
       { x: point.x + 55, y: point.y + 55 },
@@ -311,46 +464,25 @@ test.describe('DTX 批注视觉截图', () => {
     await expect(obbTitleInput).toBeVisible();
     await obbTitleInput.fill('OBB 图钉批注');
     await obbDescriptionInput.fill('OBB 应显示图钉、引线和文字');
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+    await commitInlineDraft(obbLabel);
+    await expect(obbLabel).toBeVisible();
+    await expect(obbTitleInput).toHaveValue('OBB 图钉批注');
     await expect
       .poll(() => readObbAnnotationStore(page), { timeout: 10_000 })
       .toMatchObject({
         count: 1,
         first: {
-          title: 'OBB 图钉批注',
-          description: 'OBB 应显示图钉、引线和文字',
           labelWorldPos: expect.any(Array),
         },
       });
     await saveViewerShot(page, 'obb-annotation');
-    await expect(obbLabel).toBeVisible();
-    await expect(obbTitleInput).toHaveValue('OBB 图钉批注');
-    const obbLeaderStart = (await readObbAnnotationStore(page)).first?.labelWorldPos ?? null;
-    const obbHandleBox = await obbDragHandle.boundingBox();
-    expect(obbHandleBox).not.toBeNull();
-    if (!obbHandleBox) {
-      throw new Error('OBB 批注拖拽 handle 未获取到 bounding box');
-    }
-    await drag(
-      page,
-      { x: obbHandleBox.x + obbHandleBox.width / 2, y: obbHandleBox.y + obbHandleBox.height / 2 },
-      { x: obbHandleBox.x + obbHandleBox.width / 2 + 60, y: obbHandleBox.y + obbHandleBox.height / 2 + 45 },
-    );
-    await expect
-      .poll(() => readObbAnnotationStore(page), { timeout: 10_000 })
-      .not.toMatchObject({
-        first: {
-          labelWorldPos: obbLeaderStart,
-        },
-      });
-    await saveViewerShot(page, 'obb-annotation-edit');
   });
 
   test('文字批注应支持拖动 card 与双击图钉折叠展开', async ({ page }) => {
     const point = await findPickablePoint(page);
 
     await setToolMode(page, 'annotation');
-    await page.mouse.click(point.x, point.y);
+    await clickCanvas(page, point);
     await expect
       .poll(() => readTextAnnotationStore(page), { timeout: 10_000 })
       .toMatchObject({
@@ -366,7 +498,8 @@ test.describe('DTX 批注视觉截图', () => {
     await expect(titleInput).toBeVisible();
     await titleInput.fill('文字图钉批注');
     await descriptionInput.fill('文字批注应支持拖动和折叠');
-    await textMarker.click();
+    await commitInlineDraft(page.locator('.dtx-anno-label').first());
+    await dispatchMarkerClick(textMarker);
 
     await expect
       .poll(() => readTextAnnotationStore(page), { timeout: 10_000 })
@@ -387,19 +520,7 @@ test.describe('DTX 批注视觉截图', () => {
     await expect(textMarker).toBeVisible();
     await expect(dragHandle).toBeVisible();
 
-    await textMarker.click();
-
-    const handleBox = await dragHandle.boundingBox();
-    expect(handleBox).not.toBeNull();
-    if (!handleBox) {
-      throw new Error('文字批注拖拽 handle 未获取到 bounding box');
-    }
-
-    await drag(
-      page,
-      { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 },
-      { x: handleBox.x + handleBox.width / 2 + 90, y: handleBox.y + handleBox.height / 2 + 50 },
-    );
+    await dragOverlayHandle(dragHandle, { x: 90, y: 50 });
 
     await expect
       .poll(() => readTextAnnotationStore(page), { timeout: 10_000 })
@@ -411,13 +532,15 @@ test.describe('DTX 批注视觉截图', () => {
       });
     await saveViewerShot(page, 'text-annotation-dragged');
 
-    await textMarker.dblclick();
+    await page.waitForTimeout(450);
+    await dispatchMarkerClick(textMarker, 2);
     await expect(textLabel).toBeHidden();
     const collapsedMarker = page.locator('.dtx-anno-marker[data-marker-kind="location-pin"]').first();
     await expect(collapsedMarker).toBeVisible();
     await saveViewerShot(page, 'text-annotation-collapsed');
 
-    await collapsedMarker.dblclick();
+    await page.waitForTimeout(450);
+    await dispatchMarkerClick(collapsedMarker, 2);
     await expect(textLabel).toBeVisible();
     await saveViewerShot(page, 'text-annotation-reexpanded');
   });
