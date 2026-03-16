@@ -19,6 +19,8 @@ import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
 import { reviewTaskGetWorkflow } from '@/api/reviewApi';
 import Dialog from '@/components/ui/Dialog.vue';
+import { useUserStore } from '@/composables/useUserStore';
+import { emitToast } from '@/ribbon/toastBus';
 import {
   WORKFLOW_NODE_NAMES,
   getPriorityDisplayName,
@@ -33,9 +35,13 @@ const emit = defineEmits<{
   close: [];
 }>();
 
+const userStore = useUserStore();
+
 const isLoadingHistory = ref(false);
 const workflowHistory = ref<WorkflowStep[]>([]);
 const workflowError = ref<string | null>(null);
+const resubmitLoading = ref(false);
+const resubmitError = ref<string | null>(null);
 
 const open = computed({
   get: () => true,
@@ -111,6 +117,7 @@ const detailRows = computed(() => [
 ]);
 
 const taskSummary = computed(() => `${componentCount.value} 个构件 · ${attachmentCount.value} 个附件`);
+const canResubmit = computed(() => props.task.status === 'rejected');
 
 function formatDateTime(timestamp?: number): string {
   if (!timestamp) return '—';
@@ -184,6 +191,23 @@ async function loadWorkflowHistory() {
   }
 }
 
+async function handleResubmit() {
+  if (!canResubmit.value || resubmitLoading.value) return;
+
+  resubmitLoading.value = true;
+  resubmitError.value = null;
+
+  try {
+    await userStore.submitTaskToNextNode(props.task.id);
+    await loadWorkflowHistory();
+    emitToast({ message: '任务已再次提交到审核流程' });
+  } catch (error) {
+    resubmitError.value = error instanceof Error ? error.message : '再次提交失败';
+  } finally {
+    resubmitLoading.value = false;
+  }
+}
+
 watch(
   () => props.task.id,
   () => {
@@ -234,6 +258,17 @@ onMounted(() => {
             <span class="font-medium text-rose-700">退回原因：</span>
             {{ latestReturnStep?.comment || props.task.returnReason || props.task.reviewComment || '未填写' }}
           </p>
+          <div class="flex flex-wrap items-center gap-3 pt-1">
+            <button v-if="canResubmit"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
+              :disabled="resubmitLoading"
+              @click="handleResubmit">
+              <RefreshCw :class="['h-4 w-4', resubmitLoading && 'animate-spin']" />
+              {{ resubmitLoading ? '再次提交中...' : '再次提交' }}
+            </button>
+            <span v-if="resubmitError" class="text-sm text-rose-700">{{ resubmitError }}</span>
+          </div>
         </div>
       </div>
     </div>

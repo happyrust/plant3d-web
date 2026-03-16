@@ -6,15 +6,29 @@ import TaskReviewDetail from './TaskReviewDetail.vue';
 import type { ReviewTask, WorkflowStep } from '@/types/auth';
 
 const reviewTaskGetWorkflowMock = vi.fn();
+const submitTaskToNextNodeMock = vi.fn();
+const emitToastMock = vi.fn();
 
 vi.mock('@/api/reviewApi', () => ({
   reviewTaskGetWorkflow: (...args: unknown[]) => reviewTaskGetWorkflowMock(...args),
+}));
+
+vi.mock('@/composables/useUserStore', () => ({
+  useUserStore: () => ({
+    submitTaskToNextNode: (...args: unknown[]) => submitTaskToNextNodeMock(...args),
+  }),
+}));
+
+vi.mock('@/ribbon/toastBus', () => ({
+  emitToast: (...args: unknown[]) => emitToastMock(...args),
 }));
 
 describe('TaskReviewDetail', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     reviewTaskGetWorkflowMock.mockReset();
+    submitTaskToNextNodeMock.mockReset();
+    emitToastMock.mockReset();
   });
 
   afterEach(() => {
@@ -183,5 +197,50 @@ describe('TaskReviewDetail', () => {
 
     expect(document.body.textContent).toContain('网络异常');
     expect(document.body.textContent).toContain('使用本地历史兜底。');
+  });
+
+  it('shows resubmit button for rejected task and resubmits successfully', async () => {
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'sj',
+      currentNodeName: '编制',
+      history: [],
+    });
+    submitTaskToNextNodeMock.mockResolvedValue(undefined);
+
+    await mountComponent(createTask());
+
+    const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    expect(button).toBeTruthy();
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1');
+    expect(reviewTaskGetWorkflowMock).toHaveBeenCalledTimes(2);
+    expect(emitToastMock).toHaveBeenCalledWith({ message: '任务已再次提交到审核流程' });
+  });
+
+  it('shows resubmit failure message when resubmit request fails', async () => {
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'sj',
+      currentNodeName: '编制',
+      history: [],
+    });
+    submitTaskToNextNodeMock.mockRejectedValue(new Error('提交失败'));
+
+    await mountComponent(createTask());
+
+    const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(document.body.textContent).toContain('提交失败');
+    expect(emitToastMock).not.toHaveBeenCalled();
   });
 });
