@@ -1,0 +1,34 @@
+{
+  "featureId": "fix-returned-contract-baseline-measurement-and-annotation-timeouts",
+  "reviewedAt": "2026-03-16T21:42:34.587445+00:00",
+  "commitId": "1b9551f309a5b4b09b8a009adc6bcfad9ff56601",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The reviewed worker validated the current branch state but did not review or land a commit that actually implements the measurement/MBD/annotation timeout fix described for this feature. The referenced commit only changes `reviewApi.test.ts` and `FileUpload.test.ts`, while the feature specifically required direct fixes or updates to the xeokit/MBD/annotation baseline files.",
+    "issues": [
+      {
+        "file": "src/api/reviewApi.test.ts",
+        "line": 13,
+        "severity": "blocking",
+        "description": "Commit `1b9551f309a5b4b09b8a009adc6bcfad9ff56601` only modifies `reviewApi` test URL expectations, which is unrelated to the assigned measurement/MBD/annotation timeout baseline. None of the required files (`useXeokitMeasurementTools.test.ts`, `MbdPipePanel.mode.test.ts`, `WeldAnnotation3D.test.ts`, `XeokitAngleMeasurement.test.ts`, `XeokitDistanceMeasurement.test.ts`) are touched by this commit, so the feature's scoped fix is not represented in the reviewed implementation."
+      },
+      {
+        "file": "src/components/review/FileUpload.test.ts",
+        "line": 86,
+        "severity": "blocking",
+        "description": "The second changed file is an unrelated `FileUpload` test stabilization. The feature description explicitly says modifying unrelated review/file-upload tests is insufficient, so this commit does not satisfy the required behavior even though the targeted measurement tests currently pass on the branch."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker followed a validation-only path and ended the feature successfully without evidence of a feature-specific implementation commit. For baseline repair features, the current skill wording does not make it explicit how to handle cases where the branch already passes because the fix landed elsewhere, which can lead to handoffs pointing at unrelated HEAD commits.",
+      "evidence": "The transcript skeleton for session `3fc70c4f-6d76-44f9-9f58-14a04e0f3f04` shows no file edits and the handoff states that the current branch already contained the fixes; however, the recorded `commitId` is `1b9551f309a5b4b09b8a009adc6bcfad9ff56601`, whose diff only changes `src/api/reviewApi.test.ts` and `src/components/review/FileUpload.test.ts`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed. The worker confirmed the targeted measurement/MBD/annotation tests pass on current HEAD, but the recorded commit for this feature does not implement or update the scoped files required by the feature description."
+}

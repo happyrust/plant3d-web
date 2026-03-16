@@ -1,0 +1,73 @@
+{
+  "milestone": "misc-returned-contract-baseline",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "failedFeatures": [
+      "fix-returned-contract-baseline-persistence-and-review-timeouts",
+      "fix-returned-contract-baseline-measurement-and-annotation-timeouts"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "fix-returned-contract-baseline-persistence-and-review-timeouts",
+      "severity": "blocking",
+      "description": "This change only relaxes fetch expectations in `reviewApi` tests to allow either a relative URL or `http://localhost:3100`, but the feature was supposed to fix persistence and returned-list/review-dialog baseline failures in other test files. No production code or assigned failing tests were updated, so the claimed baseline repair is not implemented by this commit."
+    },
+    {
+      "featureId": "fix-returned-contract-baseline-persistence-and-review-timeouts",
+      "severity": "blocking",
+      "description": "The second changed file stabilizes `FileUploadSection` timing, which is outside the scoped failures described for this feature. While the test rewrite may reduce unrelated flakiness, it does not demonstrate that `ResubmissionTaskList.test.ts`, `WorkflowReturnDialog.test.ts`, or the persistence baselines were fixed, leaving the assigned issue unaddressed."
+    },
+    {
+      "featureId": "fix-returned-contract-baseline-measurement-and-annotation-timeouts",
+      "severity": "blocking",
+      "description": "The feature claims to fix timeout failures in `useXeokitMeasurementTools.test.ts`, `MbdPipePanel.mode.test.ts`, `WeldAnnotation3D.test.ts`, `XeokitAngleMeasurement.test.ts`, and `XeokitDistanceMeasurement.test.ts`, but commit `1b9551f` changes only `src/api/reviewApi.test.ts` and `src/components/review/FileUpload.test.ts`. None of the targeted measurement/MBD/annotation files were modified, so this feature does not provide evidence that it addressed the stated baseline failures."
+    },
+    {
+      "featureId": "fix-returned-contract-baseline-measurement-and-annotation-timeouts",
+      "severity": "blocking",
+      "description": "The committed drag-and-drop upload test stabilization is unrelated to measurement, MBD mode, or three-annotation timeout coverage. This means the feature description, expected behavior, and verification narrative are misaligned with the actual code delivered."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Split baseline-only test-recovery work from designer-tracking flow work, or allow the designer-tracking-worker skill to skip browser/manual verification when the feature scope is strictly CLI test stabilization.",
+      "evidence": "`.factory/skills/designer-tracking-worker/SKILL.md` step 6 requires manual verification with agent-browser, while the reviewed transcript's `skillFeedback.deviations` explicitly says browser automation was skipped for this test-only stabilization task.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "The `designer-tracking-worker` skill is a poor fit for baseline-only test recovery work in measurement/annotation code. Its procedure requires TDD and browser-based manual verification of designer tracking flows, but this worker only re-ran CLI tests on unrelated files and explicitly skipped the skill's UI verification step.",
+      "reason": "duplicate"
+    },
+    {
+      "observation": "Residual `localhost:3000` noise is already explained by the repo's API base fallback logic and existing review API tests, but the worker recorded it only as a generic discovered issue instead of connecting it to the actual files governing that behavior.",
+      "reason": "already-documented"
+    }
+  ],
+  "previousRound": null
+}
