@@ -8,15 +8,20 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  XCircle,
 } from 'lucide-vue-next';
 
-import { getResubmissionLatestReturnTime, getResubmissionSubmissionCount, isDesignerResubmissionTask } from './reviewTaskFilters';
+import {
+  getResubmissionLatestReturnTime,
+  getResubmissionSubmissionCount,
+  isRejectedDesignerTask,
+} from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
 
 import type { ReviewTask } from '@/types/auth';
 
 import { useUserStore } from '@/composables/useUserStore';
-import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
+import { getPriorityDisplayName } from '@/types/auth';
 
 const userStore = useUserStore();
 
@@ -28,9 +33,9 @@ const selectedTask = ref<ReviewTask | null>(null);
 // 当前用户发起且被退回的任务
 const tasks = computed(() => userStore.myInitiatedTasks.value);
 
-// 筛选出复审任务
+// 筛选出已驳回任务
 const resubmissionTasks = computed(() => {
-  return tasks.value.filter((task) => isDesignerResubmissionTask(task));
+  return tasks.value.filter((task) => isRejectedDesignerTask(task));
 });
 
 const filteredTasks = computed(() => {
@@ -104,6 +109,11 @@ function handleResumeEditing(task: ReviewTask) {
   handleViewTask(task);
 }
 
+function getRejectedTaskCardClass(task: ReviewTask): string {
+  if (task.priority === 'urgent') return 'border-red-300 bg-red-50/70';
+  return 'border-rose-200 bg-rose-50/60';
+}
+
 onMounted(() => {
   refreshTasks();
 });
@@ -115,10 +125,10 @@ onMounted(() => {
     <div class="flex items-center justify-between">
       <div>
         <h3 class="text-lg font-semibold flex items-center gap-2">
-          <RotateCcw class="h-5 w-5 text-orange-500" />
-          退回待修改
+          <XCircle class="h-5 w-5 text-rose-500" />
+          退回任务
         </h3>
-        <p class="text-sm text-gray-500">设计人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个待修改任务</p>
+        <p class="text-sm text-gray-500">设计人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个已驳回任务</p>
       </div>
       <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
         :disabled="isLoading"
@@ -132,7 +142,7 @@ onMounted(() => {
     <div class="grid grid-cols-3 gap-3">
       <div class="p-3 rounded-lg bg-orange-50 border border-orange-200">
         <div class="text-2xl font-bold text-orange-600">{{ taskStats.total }}</div>
-        <div class="text-xs text-orange-600">待修改任务</div>
+        <div class="text-xs text-orange-600">已驳回任务</div>
       </div>
       <div class="p-3 rounded-lg bg-red-50 border border-red-200">
         <div class="text-2xl font-bold text-red-600">{{ taskStats.urgent }}</div>
@@ -177,25 +187,25 @@ onMounted(() => {
       <template v-else-if="filteredTasks.length > 0">
         <div v-for="task in filteredTasks"
           :key="task.id"
-          class="bg-white border-2 border-orange-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+          class="border-2 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+          :class="getRejectedTaskCardClass(task)"
           @click="handleViewTask(task)">
           <div class="flex items-start justify-between">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-2">
-                <RotateCcw class="h-5 w-5 text-orange-500" />
+                <XCircle class="h-5 w-5 text-rose-500" />
                 <h4 class="font-medium text-base">{{ task.title }}</h4>
-                <!-- 提交次数徽章 -->
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                  第{{ getResubmissionSubmissionCount(task.workflowHistory || []) }}次提交
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">
+                  已驳回
                 </span>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                  退回待修改
+                <span v-if="getResubmissionSubmissionCount(task.workflowHistory || []) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                  第{{ getResubmissionSubmissionCount(task.workflowHistory || []) }}次提交
                 </span>
                 <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getPriorityDisplayName(task.priority).color]">
                   {{ getPriorityDisplayName(task.priority).label }}
                 </span>
               </div>
-              <p class="text-sm text-gray-600 mb-3 line-clamp-2">{{ task.description }}</p>
+              <p class="text-sm text-gray-600 mb-3 line-clamp-2">{{ task.description || '暂无描述' }}</p>
               <div class="flex items-center gap-4 text-xs text-gray-500">
                 <div class="flex items-center gap-1">
                   <Package class="h-3 w-3" />
@@ -203,6 +213,10 @@ onMounted(() => {
                 </div>
                 <div class="flex items-center gap-1">
                   <span>退回原因: {{ task.returnReason || '未填写' }}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <Calendar class="h-3 w-3" />
+                  <span>创建于: {{ formatDate(task.createdAt) }}</span>
                 </div>
                 <div v-if="getResubmissionLatestReturnTime(task.workflowHistory || [])" class="flex items-center gap-1">
                   <span class="text-red-600">退回于: {{ formatDateTime(getResubmissionLatestReturnTime(task.workflowHistory || [])!) }}</span>
@@ -228,7 +242,7 @@ onMounted(() => {
         <RotateCcw class="h-12 w-12 mx-auto mb-4 text-gray-300" />
         <h4 class="font-medium mb-2">暂无退回任务</h4>
         <p class="text-sm text-gray-500 mb-4">
-          {{ searchTerm || priorityFilter !== 'all' ? '没有符合筛选条件的退回任务' : '当前没有需要修改的退回任务' }}
+          {{ searchTerm || priorityFilter !== 'all' ? '没有符合筛选条件的退回任务' : '当前没有状态为已驳回的任务' }}
         </p>
         <button v-if="searchTerm || priorityFilter !== 'all'"
           class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"

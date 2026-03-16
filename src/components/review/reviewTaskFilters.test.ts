@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isDesignerResubmissionTask,
+  isRejectedDesignerTask,
   getDesignerTaskStatusBucket,
   getResubmissionSubmissionCount,
   getResubmissionLatestReturnTime,
@@ -42,6 +43,12 @@ describe('reviewTaskFilters', () => {
 
   it('maps returned draft task to returned bucket', () => {
     const task = createTask({ returnReason: '退回', currentNode: 'sj', status: 'draft' });
+    expect(getDesignerTaskStatusBucket(task)).toBe('returned');
+  });
+
+  it('treats rejected tasks as returned tasks', () => {
+    const task = createTask({ currentNode: 'sh', status: 'rejected', returnReason: '需要重新处理' });
+    expect(isRejectedDesignerTask(task)).toBe(true);
     expect(getDesignerTaskStatusBucket(task)).toBe('returned');
   });
 

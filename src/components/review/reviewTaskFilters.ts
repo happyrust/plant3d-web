@@ -4,7 +4,12 @@ export function isDesignerResubmissionTask(task: ReviewTask): boolean {
   return task.currentNode === 'sj' && task.status === 'draft' && !!task.returnReason?.trim();
 }
 
+export function isRejectedDesignerTask(task: ReviewTask): boolean {
+  return task.status === 'rejected';
+}
+
 export function getDesignerTaskStatusBucket(task: ReviewTask): 'returned' | 'pending' | 'approved' | 'other' {
+  if (isRejectedDesignerTask(task)) return 'returned';
   if (isDesignerResubmissionTask(task)) return 'returned';
   if (task.status === 'submitted' || task.status === 'in_review') return 'pending';
   if (task.status === 'approved') return 'approved';
