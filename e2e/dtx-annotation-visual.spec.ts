@@ -366,8 +366,6 @@ test.describe('DTX 批注视觉截图', () => {
       sameStore: true,
     });
     await clickCanvas(page, point);
-    const cloudAnchorRuntime = await readViewerToolRuntime(page);
-    console.log('[e2e-cloud-anchor-runtime]', JSON.stringify(cloudAnchorRuntime));
     await dragCanvas(
       page,
       { x: point.x - 70, y: point.y - 70 },
