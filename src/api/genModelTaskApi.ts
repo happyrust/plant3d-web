@@ -13,6 +13,7 @@ import type {
 } from '@/types/task';
 
 import { useConsoleStore } from '@/composables/useConsoleStore';
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 // ============ 后端配置类型 ============
 
@@ -48,10 +49,7 @@ export type DatabaseConfig = {
 
 // 暴露基础地址构造，便于其他模块复用同一配置
 export function getBaseUrl(): string {
-  const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
-    .VITE_GEN_MODEL_API_BASE_URL;
-  // Default to localhost:3100 if not specified
-  return (envBase && envBase.trim()) || 'http://localhost:3100';
+  return getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' });
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

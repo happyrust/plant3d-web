@@ -1,9 +1,8 @@
 import { type TreeNodeDto } from './genModelE3dApi';
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 function getBaseUrl(): string {
-  const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
-    .VITE_GEN_MODEL_API_BASE_URL;
-  return (envBase && envBase.trim()) || '';
+  return getBackendApiBaseUrl();
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

@@ -1,3 +1,5 @@
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
+
 /**
  * Dashboard (工作台概览) 相关的后端 API 定义
  * 当前仅保留后端缺失的活动流聚合接口。
@@ -23,9 +25,7 @@ export interface DashboardActivitiesResponse {
 }
 
 function getBaseUrl(): string {
-  const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
-    .VITE_GEN_MODEL_API_BASE_URL;
-  return (envBase && envBase.trim()) || '';
+  return getBackendApiBaseUrl();
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

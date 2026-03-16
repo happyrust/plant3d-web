@@ -10,13 +10,12 @@ import {
   type User,
   UserRole,
 } from '@/types/auth';
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 // ============ 基础配置 ============
 
 function getBaseUrl(): string {
-  const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
-    .VITE_GEN_MODEL_API_BASE_URL;
-  return (envBase && envBase.trim()) || 'http://localhost:3100';
+  return getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' });
 }
 
 function getReviewWebBaseUrl(): string {

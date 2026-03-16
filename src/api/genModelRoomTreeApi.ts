@@ -1,3 +1,5 @@
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
+
 export type RoomTreeNodeDto = {
   id: string;
   name: string;
@@ -38,9 +40,7 @@ export type RoomTreeSearchResponse = {
 };
 
 function getBaseUrl(): string {
-  const envBase = (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
-    .VITE_GEN_MODEL_API_BASE_URL;
-  return (envBase && envBase.trim()) || '';
+  return getBackendApiBaseUrl();
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
