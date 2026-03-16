@@ -83,14 +83,14 @@ type CloudOverlayEl = {
   worldPos: Vector3
   labelWorldPos: Vector3
   leader: AnnotationLeaderVisual
-  outline: Line
+  outline: MeshLine
   record: CloudAnnotationRecord
 }
 
 type CloudAnnotationVisual = {
   pin: LineSegments
   leader: AnnotationLeaderVisual
-  outline: Line
+  outline: MeshLine
   labelWorldPos: Vector3
 }
 
@@ -962,15 +962,28 @@ function createCloudAnnotationVisual(
   const pinGeometry = buildPinMarkerGeometry(anchor, distance);
 
   const pinMaterial = new LineBasicMaterial({ color: 0xdc2626 });
-  const outlineMaterial = new LineBasicMaterial({ color: 0xdc2626 });
+  const outlineGeometry = new MeshLineGeometry();
+  const outlineMaterial = new MeshLineMaterial({
+    color: 0xdc2626,
+    lineWidth: 3.5,
+    transparent: true,
+    opacity: 0.95,
+    depthTest: false,
+    depthWrite: false,
+    sizeAttenuation: false,
+    resolution: new Vector2(resolution?.width ?? 1, resolution?.height ?? 1),
+  });
   (pinMaterial as any).depthTest = false;
-  (outlineMaterial as any).depthTest = false;
+  const outline = new MeshLine(outlineGeometry, outlineMaterial);
+  outline.frustumCulled = false;
+  outline.renderOrder = 901;
 
   const pin = new LineSegments(pinGeometry, pinMaterial);
   const leader = createAnnotationLeader('cloud', anchor, labelWorldPos, resolution);
-  const outline = new Line(new BufferGeometry(), outlineMaterial);
   pin.renderOrder = 901;
-  outline.renderOrder = 901;
+
+  outlineGeometry.setPoints([0, 0, 0, 0, 0, 0]);
+
   return { pin, leader, outline, labelWorldPos };
 }
 
@@ -2467,9 +2480,11 @@ export function useDtxTools(options: {
         16,
         worldPerPixel,
       );
-      cloud.outline.geometry.setAttribute(
-        'position',
-        new BufferAttribute(new Float32Array(positions), 3),
+      const outlineGeometry = cloud.outline.geometry as MeshLineGeometry;
+      outlineGeometry.setPoints(positions);
+      (cloud.outline.material as MeshLineMaterial).resolution.set(
+        resolution.width,
+        resolution.height,
       );
       cloud.outline.geometry.computeBoundingSphere();
       cloud.outline.visible = anchorScreen.visible && labelScreen.visible;

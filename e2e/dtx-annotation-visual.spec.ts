@@ -20,9 +20,11 @@ async function waitForDtxReady(page: Page) {
 }
 
 async function resetToolStore(page: Page) {
-  await page.evaluate(async () => {
-    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
-    const store = useViewerContext().store.value;
+  await page.evaluate(() => {
+    const win = window as any;
+    const store = win.__viewerToolStore
+      || win.__viewer?.store
+      || win.__viewerContext?.store?.value;
     if (!store) {
       throw new Error('viewer store 尚未就绪，无法 reset');
     }
@@ -34,9 +36,11 @@ async function setToolMode(
   page: Page,
   mode: 'annotation' | 'annotation_cloud' | 'annotation_rect' | 'annotation_obb',
 ) {
-  await page.evaluate(async (nextMode) => {
-    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
-    const store = useViewerContext().store.value;
+  await page.evaluate((nextMode) => {
+    const win = window as any;
+    const store = win.__viewerToolStore
+      || win.__viewer?.store
+      || win.__viewerContext?.store?.value;
     if (!store) {
       throw new Error('viewer store 尚未就绪，无法切换 toolMode');
     }
@@ -87,11 +91,10 @@ async function invokeCanvasToolPointer(
   buttons: number,
 ) {
   await page.evaluate(async ({ nextType, nextPoint, nextPointerId, nextButtons }) => {
-    const [{ useViewerContext }] = await Promise.all([
-      import('/src/composables/useViewerContext.ts'),
-    ]);
-    const ctx = useViewerContext();
-    const tools = ctx.tools.value;
+    const win = window as any;
+    const tools = win.__viewerTools
+      || win.__viewer?.tools
+      || win.__viewerContext?.tools?.value;
     const canvas = document.querySelector('canvas.viewer') as HTMLCanvasElement | null;
     if (!tools || !canvas) {
       throw new Error('viewer tools 或 canvas 尚未就绪');
@@ -248,9 +251,11 @@ async function readLabelCardStyle(label: ReturnType<Page['locator']>) {
 }
 
 async function readTextAnnotationStore(page: Page) {
-  return page.evaluate(async () => {
-    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
-    const store = useViewerContext().store.value;
+  return page.evaluate(() => {
+    const win = window as any;
+    const store = win.__viewerToolStore
+      || win.__viewer?.store
+      || win.__viewerContext?.store?.value;
     if (!store) {
       return { count: 0, first: null };
     }
@@ -271,9 +276,11 @@ async function readTextAnnotationStore(page: Page) {
 }
 
 async function readCloudAnnotationStore(page: Page) {
-  return page.evaluate(async () => {
-    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
-    const store = useViewerContext().store.value;
+  return page.evaluate(() => {
+    const win = window as any;
+    const store = win.__viewerToolStore
+      || win.__viewer?.store
+      || win.__viewerContext?.store?.value;
     if (!store) {
       return { count: 0, first: null };
     }
@@ -294,9 +301,11 @@ async function readCloudAnnotationStore(page: Page) {
 }
 
 async function readRectAnnotationStore(page: Page) {
-  return page.evaluate(async () => {
-    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
-    const store = useViewerContext().store.value;
+  return page.evaluate(() => {
+    const win = window as any;
+    const store = win.__viewerToolStore
+      || win.__viewer?.store
+      || win.__viewerContext?.store?.value;
     if (!store) {
       return { count: 0, first: null };
     }
@@ -315,9 +324,11 @@ async function readRectAnnotationStore(page: Page) {
 }
 
 async function readObbAnnotationStore(page: Page) {
-  return page.evaluate(async () => {
-    const { useViewerContext } = await import('/src/composables/useViewerContext.ts');
-    const store = useViewerContext().store.value;
+  return page.evaluate(() => {
+    const win = window as any;
+    const store = win.__viewerToolStore
+      || win.__viewer?.store
+      || win.__viewerContext?.store?.value;
     if (!store) {
       return { count: 0, first: null };
     }
@@ -336,30 +347,46 @@ async function readObbAnnotationStore(page: Page) {
 }
 
 async function readViewerToolRuntime(page: Page) {
-  return page.evaluate(async () => {
-    const [{ useViewerContext }] = await Promise.all([
-      import('/src/composables/useViewerContext.ts'),
-    ]);
-    const ctx = useViewerContext();
-    const store = ctx.store.value;
+  return page.evaluate(() => {
+    const win = window as any;
+    const store = win.__viewerToolStore
+      || win.__viewer?.store
+      || win.__viewerContext?.store?.value;
+    const tools = win.__viewerTools
+      || win.__viewer?.tools
+      || win.__viewerContext?.tools?.value;
     return {
       toolMode: store?.toolMode.value ?? null,
       activeTab: store?.activeTab.value ?? null,
-      statusText: ctx.tools.value?.statusText.value ?? null,
-      toolsReady: ctx.tools.value?.ready.value ?? null,
+      statusText: tools?.statusText?.value ?? null,
+      toolsReady: tools?.ready?.value ?? null,
       sameStore: !!store,
     };
   });
+}
+
+async function waitForViewerRuntimeReady(page: Page) {
+  await page.waitForFunction(
+    () => {
+      const win = window as any;
+      const store = win.__viewerToolStore
+        || win.__viewer?.store
+        || win.__viewerContext?.store?.value;
+      const tools = win.__viewerTools
+        || win.__viewer?.tools
+        || win.__viewerContext?.tools?.value;
+      return !!store && !!tools && tools.ready?.value === true;
+    },
+    null,
+    { timeout: 15_000 },
+  );
 }
 
 test.describe('DTX 批注视觉截图', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(DEMO_URL, { waitUntil: 'domcontentloaded' });
     await waitForDtxReady(page);
-    await expect.poll(() => readViewerToolRuntime(page), { timeout: 15_000 }).toMatchObject({
-      toolsReady: true,
-      sameStore: true,
-    });
+    await waitForViewerRuntimeReady(page);
     await resetToolStore(page);
   });
 

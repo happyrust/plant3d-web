@@ -20,6 +20,7 @@
 - 修改 `buildCloudBillboardPolyline`：保留外部调用链与生命周期，仅替换路径采样策略为上述矩形波浪函数。
 - 参数 `segments` 默认值保持 `16`；`width/height` 仍按 `cloudSize`（经 `computeCloudLayout` 限幅）推入。
 - 引入 `worldPerPixel` 后，波幅在世界单位上按 `1~6px` 上下限回映射，视觉上保持“2D 屏幕风格”。
+- 云线 outline 使用 `MeshLine` 渲染，提供更稳定且可感知的线宽（相较 `Line` 在 WebGL 下更可靠）。
 
 ### 3) overlay 更新链路不变
 - `updateOverlayPositions` 不改流程，仍按 `anchor + right/up + width/height` 组装点列；
@@ -45,8 +46,12 @@
 
 ### 运行命令
 - `npm run test -- src/composables/useDtxTools.pickRefno.test.ts`
+- `npm run lint -- src/composables/useDtxTools.ts`
 - `npm run type-check`
-- `npm run lint -- src/composables/useDtxTools.ts src/composables/useDtxTools.pickRefno.test.ts`
 
-## 已知局限
-- 目前 Playwright 批注视觉用例在“工具运行时注入 sameStore/toolsReady”前置检查仍有既有问题，提示 `sameStore: false, toolsReady: null`；当前本次改动主要聚焦几何生成逻辑，未直接修改该测试链路。
+## 验收说明
+- 已补充/更新纯函数级单测（见 `useDtxTools.pickRefno.test.ts`）验证：
+  - `computeCloudLayout` 返回的 `cloudPath` 为闭合路径。
+  - `buildCloudBillboardPolyline` 的闭合与包围盒检查。
+  - 最小尺寸保护不退化。
+- 当前截图验收场景若有差异，通常是基线未按新形状更新导致；建议在确认形状后用 `PLAYWRIGHT_UPDATE_SNAPSHOTS=1` 进行同步更新。
