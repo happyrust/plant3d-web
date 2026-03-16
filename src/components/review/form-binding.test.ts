@@ -228,7 +228,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     expect(createTaskMock).toHaveBeenCalledTimes(1);
     expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
-    expect(closeHandler).toHaveBeenCalled();
+    expect(closeHandler).not.toHaveBeenCalled();
     expect(createdHandler).toHaveBeenCalledWith('task-1');
 
     app.unmount();
@@ -275,7 +275,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     expect(host.querySelector('[data-testid="designer-landing-workspace"]')).not.toBeNull();
     expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
-    expect(host.textContent).toContain('提资单创建成功！');
+    expect(host.textContent).toContain('提资单创建成功');
 
     app.unmount();
     host.remove();

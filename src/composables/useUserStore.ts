@@ -743,9 +743,27 @@ async function loadReviewTasks(): Promise<void> {
           : undefined
     );
     if (response.success) {
-      reviewTasks.value = (response.tasks || [])
+      const normalizedTasks = (response.tasks || [])
         .map((task) => normalizeReviewTask(task))
         .filter((task): task is ReviewTask => task !== null);
+
+      // Preserve designer-owned tasks when a reviewer-scoped refresh returns only the inbox slice.
+      if (currentUser.value?.role === UserRole.DESIGNER) {
+        const preservedDesignerTasks = reviewTasks.value.filter((task) => task.requesterId === currentUser.value?.id);
+        const mergedTasks = new Map<string, ReviewTask>();
+
+        for (const task of preservedDesignerTasks) {
+          mergedTasks.set(task.id, task);
+        }
+        for (const task of normalizedTasks) {
+          const existingTask = mergedTasks.get(task.id);
+          mergedTasks.set(task.id, existingTask ? { ...existingTask, ...task } : task);
+        }
+
+        reviewTasks.value = Array.from(mergedTasks.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+      } else {
+        reviewTasks.value = normalizedTasks;
+      }
     } else {
       throw new Error(response.error_message || '加载任务列表失败');
     }
