@@ -1,12 +1,15 @@
 import { computed, ref, watch } from 'vue';
 
 import type { AnnotationComment } from '@/types/auth';
+
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 
 export type ToolMode =
   | 'none'
   | 'measure_distance'
   | 'measure_angle'
+  | 'xeokit_measure_distance'
+  | 'xeokit_measure_angle'
   | 'measure_point_to_object'
   | 'dimension_linear'
   | 'dimension_angle'
@@ -48,6 +51,82 @@ export type AngleMeasurementRecord = {
 };
 
 export type MeasurementRecord = DistanceMeasurementRecord | AngleMeasurementRecord;
+
+export type XeokitMeasurementKind = 'distance' | 'angle';
+
+export type XeokitDistanceMeasurementRecord = {
+  id: string;
+  kind: 'distance';
+  origin: MeasurementPoint;
+  target: MeasurementPoint;
+  visible: boolean;
+  approximate: boolean;
+  createdAt: number;
+};
+
+export type XeokitAngleMeasurementRecord = {
+  id: string;
+  kind: 'angle';
+  origin: MeasurementPoint;
+  corner: MeasurementPoint;
+  target: MeasurementPoint;
+  visible: boolean;
+  approximate: boolean;
+  createdAt: number;
+};
+
+export type XeokitMeasurementRecord = XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord;
+
+export type XeokitDistanceDraft = {
+  id: string;
+  kind: 'distance';
+  origin: MeasurementPoint;
+  target: MeasurementPoint;
+  visible: boolean;
+  approximate: true;
+  createdAt: number;
+};
+
+export type XeokitAngleDraftStage = 'finding_corner' | 'finding_target';
+
+export type XeokitAngleDraft = {
+  id: string;
+  kind: 'angle';
+  origin: MeasurementPoint;
+  corner: MeasurementPoint;
+  target: MeasurementPoint;
+  stage: XeokitAngleDraftStage;
+  visible: boolean;
+  approximate: true;
+  createdAt: number;
+};
+
+export type XeokitHoverState = {
+  visible: boolean;
+  snapped: boolean;
+  entityId: string | null;
+  objectId: string | null;
+  worldPos: Vec3 | null;
+  canvasPos: { x: number; y: number } | null;
+};
+
+export type XeokitMarkerRole = 'origin' | 'corner' | 'target' | 'hover';
+
+export type XeokitMarkerState = {
+  visible: boolean;
+  snapped: boolean;
+  role: XeokitMarkerRole;
+  worldPos: Vec3 | null;
+  canvasPos: { x: number; y: number } | null;
+};
+
+export type XeokitPointerLensState = {
+  visible: boolean;
+  snapped: boolean;
+  title: string;
+  subtitle: string;
+  canvasPos: { x: number; y: number } | null;
+};
 
 export type DimensionKind = 'linear_distance' | 'angle';
 
@@ -214,10 +293,23 @@ type PersistedStateV4 = {
   dimensions: DimensionRecord[];
 };
 
+type PersistedStateV5 = {
+  version: 5;
+  measurements: MeasurementRecord[];
+  annotations: AnnotationRecord[];
+  obbAnnotations: ObbAnnotationRecord[];
+  cloudAnnotations: CloudAnnotationRecord[];
+  rectAnnotations: RectAnnotationRecord[];
+  dimensions: DimensionRecord[];
+  xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
+  xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
+};
+
 const STORAGE_KEY_V1 = 'plant3d-web-tools-v1';
 const STORAGE_KEY_V2 = 'plant3d-web-tools-v2';
 const STORAGE_KEY_V3 = 'plant3d-web-tools-v3';
 const STORAGE_KEY_V4 = 'plant3d-web-tools-v4';
+const STORAGE_KEY_V5 = 'plant3d-web-tools-v5';
 const DEFAULT_STORAGE_SCOPE = '__default__';
 
 function getCurrentStorageScope(): string {
@@ -236,60 +328,100 @@ function withStorageScope(storageKey: string, scope = getCurrentStorageScope()):
   return `${storageKey}:${scope}`;
 }
 
-function normalizeV1(parsed: PersistedStateV1): PersistedStateV4 {
+function normalizeV1(parsed: PersistedStateV1): PersistedStateV5 {
   return {
-    version: 4,
+    version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
     obbAnnotations: [],
     cloudAnnotations: [],
     rectAnnotations: [],
     dimensions: [],
+    xeokitDistanceMeasurements: [],
+    xeokitAngleMeasurements: [],
   };
 }
 
-function normalizeV2(parsed: PersistedStateV2): PersistedStateV4 {
+function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
   return {
-    version: 4,
+    version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: [],
     rectAnnotations: [],
     dimensions: [],
+    xeokitDistanceMeasurements: [],
+    xeokitAngleMeasurements: [],
   };
 }
 
-function normalizeV3(parsed: PersistedStateV3): PersistedStateV4 {
+function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
   return {
-    version: 4,
+    version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
     dimensions: [],
+    xeokitDistanceMeasurements: [],
+    xeokitAngleMeasurements: [],
   };
 }
 
-function normalizeV4(parsed: PersistedStateV4): PersistedStateV4 {
+function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
   return {
-    version: 4,
+    version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
     dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
+    xeokitDistanceMeasurements: [],
+    xeokitAngleMeasurements: [],
   };
 }
 
-function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV4 {
+function normalizeV5(parsed: PersistedStateV5): PersistedStateV5 {
+  return {
+    version: 5,
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
+    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
+    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
+    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
+    dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
+    xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements) ? parsed.xeokitDistanceMeasurements : [],
+    xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements) ? parsed.xeokitAngleMeasurements : [],
+  };
+}
+
+function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV5 {
   if (typeof localStorage === 'undefined') {
-    return { version: 4, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [], dimensions: [] };
+    return {
+      version: 5,
+      measurements: [],
+      annotations: [],
+      obbAnnotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      dimensions: [],
+      xeokitDistanceMeasurements: [],
+      xeokitAngleMeasurements: [],
+    };
   }
 
   try {
+    const rawV5 = localStorage.getItem(withStorageScope(STORAGE_KEY_V5, scope));
+    if (rawV5) {
+      const parsed = JSON.parse(rawV5) as PersistedStateV5;
+      if (parsed && parsed.version === 5) {
+        return normalizeV5(parsed);
+      }
+    }
+
     const rawV4 = localStorage.getItem(withStorageScope(STORAGE_KEY_V4, scope));
     if (rawV4) {
       const parsed = JSON.parse(rawV4) as PersistedStateV4;
@@ -325,7 +457,17 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV4 {
     // ignore
   }
 
-  return { version: 4, measurements: [], annotations: [], obbAnnotations: [], cloudAnnotations: [], rectAnnotations: [], dimensions: [] };
+  return {
+    version: 5,
+    measurements: [],
+    annotations: [],
+    obbAnnotations: [],
+    cloudAnnotations: [],
+    rectAnnotations: [],
+    dimensions: [],
+    xeokitDistanceMeasurements: [],
+    xeokitAngleMeasurements: [],
+  };
 }
 
 const storageScope = ref(getCurrentStorageScope());
@@ -337,6 +479,8 @@ const obbAnnotations = ref<ObbAnnotationRecord[]>(persisted.obbAnnotations);
 const cloudAnnotations = ref<CloudAnnotationRecord[]>(persisted.cloudAnnotations);
 const rectAnnotations = ref<RectAnnotationRecord[]>(persisted.rectAnnotations);
 const dimensions = ref<DimensionRecord[]>(persisted.dimensions);
+const xeokitDistanceMeasurements = ref<XeokitDistanceMeasurementRecord[]>(persisted.xeokitDistanceMeasurements);
+const xeokitAngleMeasurements = ref<XeokitAngleMeasurementRecord[]>(persisted.xeokitAngleMeasurements);
 
 const activeTab = ref<'tree' | 'measurement' | 'annotation' | 'obb_annotation' | 'manager' | 'properties'>('tree');
 const toolMode = ref<ToolMode>('none');
@@ -351,6 +495,7 @@ const activeCloudAnnotationId = ref<string | null>(null);
 const activeRectAnnotationId = ref<string | null>(null);
 const activeMeasurementId = ref<string | null>(null);
 const activeDimensionId = ref<string | null>(null);
+const activeXeokitMeasurementId = ref<string | null>(null);
 
 const pickedQueryCenter = ref<PickedQueryCenter | null>(null);
 
@@ -370,6 +515,31 @@ const pendingCloudAnnotationEditId = ref<string | null>(null);
 const pendingRectAnnotationEditId = ref<string | null>(null);
 const pendingDimensionEditId = ref<string | null>(null);
 
+const currentXeokitDistanceDraft = ref<XeokitDistanceDraft | null>(null);
+const currentXeokitAngleDraft = ref<XeokitAngleDraft | null>(null);
+const xeokitHoverState = ref<XeokitHoverState>({
+  visible: false,
+  snapped: false,
+  entityId: null,
+  objectId: null,
+  worldPos: null,
+  canvasPos: null,
+});
+const xeokitMarkerState = ref<XeokitMarkerState>({
+  visible: false,
+  snapped: false,
+  role: 'hover',
+  worldPos: null,
+  canvasPos: null,
+});
+const xeokitPointerLensState = ref<XeokitPointerLensState>({
+  visible: false,
+  snapped: false,
+  title: '',
+  subtitle: '',
+  canvasPos: null,
+});
+
 function resetTransientUiState() {
   activeAnnotationId.value = null;
   activeObbAnnotationId.value = null;
@@ -377,6 +547,7 @@ function resetTransientUiState() {
   activeRectAnnotationId.value = null;
   activeMeasurementId.value = null;
   activeDimensionId.value = null;
+  activeXeokitMeasurementId.value = null;
   pickedQueryCenter.value = null;
   pickRefnoFilter.value = [];
   pickedRefnos.value = [];
@@ -386,16 +557,42 @@ function resetTransientUiState() {
   pendingCloudAnnotationEditId.value = null;
   pendingRectAnnotationEditId.value = null;
   pendingDimensionEditId.value = null;
+  currentXeokitDistanceDraft.value = null;
+  currentXeokitAngleDraft.value = null;
+  xeokitHoverState.value = {
+    visible: false,
+    snapped: false,
+    entityId: null,
+    objectId: null,
+    worldPos: null,
+    canvasPos: null,
+  };
+  xeokitMarkerState.value = {
+    visible: false,
+    snapped: false,
+    role: 'hover',
+    worldPos: null,
+    canvasPos: null,
+  };
+  xeokitPointerLensState.value = {
+    visible: false,
+    snapped: false,
+    title: '',
+    subtitle: '',
+    canvasPos: null,
+  };
   toolMode.value = 'none';
 }
 
-function applyPersistedState(state: PersistedStateV4) {
+function applyPersistedState(state: PersistedStateV5) {
   measurements.value = state.measurements;
   annotations.value = state.annotations;
   obbAnnotations.value = state.obbAnnotations;
   cloudAnnotations.value = state.cloudAnnotations;
   rectAnnotations.value = state.rectAnnotations;
   dimensions.value = state.dimensions;
+  xeokitDistanceMeasurements.value = state.xeokitDistanceMeasurements;
+  xeokitAngleMeasurements.value = state.xeokitAngleMeasurements;
   resetTransientUiState();
 }
 
@@ -419,20 +616,24 @@ watch(
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
     dimensions: dimensions.value,
+    xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
+    xeokitAngleMeasurements: xeokitAngleMeasurements.value,
   }),
   (state) => {
     if (typeof localStorage === 'undefined') return;
-    const payload: PersistedStateV4 = {
-      version: 4,
+    const payload: PersistedStateV5 = {
+      version: 5,
       measurements: state.measurements,
       annotations: state.annotations,
       obbAnnotations: state.obbAnnotations,
       cloudAnnotations: state.cloudAnnotations,
       rectAnnotations: state.rectAnnotations,
       dimensions: state.dimensions,
+      xeokitDistanceMeasurements: state.xeokitDistanceMeasurements,
+      xeokitAngleMeasurements: state.xeokitAngleMeasurements,
     };
     try {
-      localStorage.setItem(withStorageScope(STORAGE_KEY_V4, storageScope.value), JSON.stringify(payload));
+      localStorage.setItem(withStorageScope(STORAGE_KEY_V5, storageScope.value), JSON.stringify(payload));
     } catch {
       // ignore
     }
@@ -512,6 +713,82 @@ function removeMeasurement(id: string) {
 function clearMeasurements() {
   measurements.value = [];
   activeMeasurementId.value = null;
+}
+
+function addXeokitDistanceMeasurement(rec: XeokitDistanceMeasurementRecord) {
+  xeokitDistanceMeasurements.value = [...xeokitDistanceMeasurements.value, rec];
+  activeXeokitMeasurementId.value = rec.id;
+}
+
+function updateXeokitDistanceMeasurement(id: string, patch: Partial<XeokitDistanceMeasurementRecord>) {
+  xeokitDistanceMeasurements.value = xeokitDistanceMeasurements.value.map((m) => (m.id === id ? { ...m, ...patch } : m));
+}
+
+function addXeokitAngleMeasurement(rec: XeokitAngleMeasurementRecord) {
+  xeokitAngleMeasurements.value = [...xeokitAngleMeasurements.value, rec];
+  activeXeokitMeasurementId.value = rec.id;
+}
+
+function updateXeokitAngleMeasurement(id: string, patch: Partial<XeokitAngleMeasurementRecord>) {
+  xeokitAngleMeasurements.value = xeokitAngleMeasurements.value.map((m) => (m.id === id ? { ...m, ...patch } : m));
+}
+
+function updateXeokitMeasurementVisible(id: string, visible: boolean) {
+  let updated = false;
+  xeokitDistanceMeasurements.value = xeokitDistanceMeasurements.value.map((m) => {
+    if (m.id !== id) return m;
+    updated = true;
+    return { ...m, visible };
+  });
+  if (updated) return;
+  xeokitAngleMeasurements.value = xeokitAngleMeasurements.value.map((m) => (m.id === id ? { ...m, visible } : m));
+}
+
+function removeXeokitMeasurement(id: string) {
+  const prevDistanceLength = xeokitDistanceMeasurements.value.length;
+  xeokitDistanceMeasurements.value = xeokitDistanceMeasurements.value.filter((m) => m.id !== id);
+  if (xeokitDistanceMeasurements.value.length !== prevDistanceLength) {
+    if (activeXeokitMeasurementId.value === id) {
+      activeXeokitMeasurementId.value = null;
+    }
+    return;
+  }
+
+  xeokitAngleMeasurements.value = xeokitAngleMeasurements.value.filter((m) => m.id !== id);
+  if (activeXeokitMeasurementId.value === id) {
+    activeXeokitMeasurementId.value = null;
+  }
+}
+
+function clearXeokitMeasurements() {
+  xeokitDistanceMeasurements.value = [];
+  xeokitAngleMeasurements.value = [];
+  activeXeokitMeasurementId.value = null;
+}
+
+function setCurrentXeokitDistanceDraft(draft: XeokitDistanceDraft | null) {
+  currentXeokitDistanceDraft.value = draft ? { ...draft } : null;
+}
+
+function setCurrentXeokitAngleDraft(draft: XeokitAngleDraft | null) {
+  currentXeokitAngleDraft.value = draft ? { ...draft } : null;
+}
+
+function clearCurrentXeokitDraft() {
+  currentXeokitDistanceDraft.value = null;
+  currentXeokitAngleDraft.value = null;
+}
+
+function setXeokitHoverState(state: XeokitHoverState) {
+  xeokitHoverState.value = { ...state };
+}
+
+function setXeokitMarkerState(state: XeokitMarkerState) {
+  xeokitMarkerState.value = { ...state };
+}
+
+function setXeokitPointerLensState(state: XeokitPointerLensState) {
+  xeokitPointerLensState.value = { ...state };
 }
 
 function addDimension(rec: DimensionRecord) {
@@ -653,11 +930,35 @@ function clearRectAnnotations() {
 
 function clearAll() {
   clearMeasurements();
+  clearXeokitMeasurements();
   clearDimensions();
   clearAnnotations();
   clearObbAnnotations();
   clearCloudAnnotations();
   clearRectAnnotations();
+  clearCurrentXeokitDraft();
+  setXeokitHoverState({
+    visible: false,
+    snapped: false,
+    entityId: null,
+    objectId: null,
+    worldPos: null,
+    canvasPos: null,
+  });
+  setXeokitMarkerState({
+    visible: false,
+    snapped: false,
+    role: 'hover',
+    worldPos: null,
+    canvasPos: null,
+  });
+  setXeokitPointerLensState({
+    visible: false,
+    snapped: false,
+    title: '',
+    subtitle: '',
+    canvasPos: null,
+  });
   toolMode.value = 'none';
 }
 
@@ -868,39 +1169,45 @@ function getAnnotationComments(
 }
 
 function exportJSON(): string {
-  const payload: PersistedStateV4 = {
-    version: 4,
+  const payload: PersistedStateV5 = {
+    version: 5,
     measurements: measurements.value,
     annotations: annotations.value,
     obbAnnotations: obbAnnotations.value,
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
     dimensions: dimensions.value,
+    xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
+    xeokitAngleMeasurements: xeokitAngleMeasurements.value,
   };
   return JSON.stringify(payload, null, 2);
 }
 
 function importJSON(raw: string) {
-  const parsed = JSON.parse(raw) as PersistedStateV1 | PersistedStateV2 | PersistedStateV3 | PersistedStateV4;
-  if (!parsed || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4)) {
+  const parsed = JSON.parse(raw) as PersistedStateV1 | PersistedStateV2 | PersistedStateV3 | PersistedStateV4 | PersistedStateV5;
+  if (!parsed || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4 && parsed.version !== 5)) {
     throw new Error('Unsupported tools JSON format');
   }
 
-  const v4 =
+  const v5 =
     parsed.version === 1
       ? normalizeV1(parsed)
       : parsed.version === 2
         ? normalizeV2(parsed)
         : parsed.version === 3
           ? normalizeV3(parsed)
-          : normalizeV4(parsed);
+          : parsed.version === 4
+            ? normalizeV4(parsed)
+            : normalizeV5(parsed);
 
-  measurements.value = v4.measurements;
-  annotations.value = v4.annotations;
-  obbAnnotations.value = v4.obbAnnotations;
-  cloudAnnotations.value = v4.cloudAnnotations;
-  rectAnnotations.value = v4.rectAnnotations;
-  dimensions.value = v4.dimensions;
+  measurements.value = v5.measurements;
+  annotations.value = v5.annotations;
+  obbAnnotations.value = v5.obbAnnotations;
+  cloudAnnotations.value = v5.cloudAnnotations;
+  rectAnnotations.value = v5.rectAnnotations;
+  dimensions.value = v5.dimensions;
+  xeokitDistanceMeasurements.value = v5.xeokitDistanceMeasurements;
+  xeokitAngleMeasurements.value = v5.xeokitAngleMeasurements;
 
   activeAnnotationId.value = null;
   activeObbAnnotationId.value = null;
@@ -908,11 +1215,13 @@ function importJSON(raw: string) {
   activeRectAnnotationId.value = null;
   activeMeasurementId.value = null;
   activeDimensionId.value = null;
+  activeXeokitMeasurementId.value = null;
   pendingTextAnnotationEditId.value = null;
   pendingCloudAnnotationEditId.value = null;
   pendingObbEditId.value = null;
   pendingRectAnnotationEditId.value = null;
   pendingDimensionEditId.value = null;
+  clearCurrentXeokitDraft();
   toolMode.value = 'none';
 }
 
@@ -922,6 +1231,10 @@ const obbAnnotationCount = computed(() => obbAnnotations.value.length);
 const cloudAnnotationCount = computed(() => cloudAnnotations.value.length);
 const rectAnnotationCount = computed(() => rectAnnotations.value.length);
 const dimensionCount = computed(() => dimensions.value.length);
+const xeokitMeasurementCount = computed(() => xeokitDistanceMeasurements.value.length + xeokitAngleMeasurements.value.length);
+const allXeokitMeasurements = computed<XeokitMeasurementRecord[]>(() => {
+  return [...xeokitDistanceMeasurements.value, ...xeokitAngleMeasurements.value];
+});
 
 const allItems = computed(() => {
   return {
@@ -931,6 +1244,8 @@ const allItems = computed(() => {
     obbAnnotations: obbAnnotations.value,
     cloudAnnotations: cloudAnnotations.value,
     rectAnnotations: rectAnnotations.value,
+    xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
+    xeokitAngleMeasurements: xeokitAngleMeasurements.value,
   };
 });
 
@@ -944,6 +1259,7 @@ export function useToolStore() {
     activeRectAnnotationId,
     activeMeasurementId,
     activeDimensionId,
+    activeXeokitMeasurementId,
     pendingObbEditId,
     pendingTextAnnotationEditId,
     pendingCloudAnnotationEditId,
@@ -951,6 +1267,8 @@ export function useToolStore() {
     pendingDimensionEditId,
 
     measurements,
+    xeokitDistanceMeasurements,
+    xeokitAngleMeasurements,
     dimensions,
     annotations,
     obbAnnotations,
@@ -958,12 +1276,14 @@ export function useToolStore() {
     rectAnnotations,
 
     measurementCount,
+    xeokitMeasurementCount,
     dimensionCount,
     annotationCount,
     obbAnnotationCount,
     cloudAnnotationCount,
     rectAnnotationCount,
     allItems,
+    allXeokitMeasurements,
 
     setToolMode,
 
@@ -977,6 +1297,25 @@ export function useToolStore() {
     updateMeasurementVisible,
     removeMeasurement,
     clearMeasurements,
+
+    addXeokitDistanceMeasurement,
+    updateXeokitDistanceMeasurement,
+    addXeokitAngleMeasurement,
+    updateXeokitAngleMeasurement,
+    updateXeokitMeasurementVisible,
+    removeXeokitMeasurement,
+    clearXeokitMeasurements,
+    currentXeokitDistanceDraft,
+    currentXeokitAngleDraft,
+    setCurrentXeokitDistanceDraft,
+    setCurrentXeokitAngleDraft,
+    clearCurrentXeokitDraft,
+    xeokitHoverState,
+    setXeokitHoverState,
+    xeokitMarkerState,
+    setXeokitMarkerState,
+    xeokitPointerLensState,
+    setXeokitPointerLensState,
 
     addDimension,
     updateDimension,

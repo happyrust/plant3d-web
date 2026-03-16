@@ -4038,7 +4038,7 @@ onUnmounted(() => {
       style="z-index: 950">
       <div class="max-w-[520px] rounded-lg border border-border bg-background p-4 text-sm shadow">
         <div class="font-medium text-destructive">
-          3D Viewer 初始化失败
+          三维查看器初始化失败
         </div>
         <div class="mt-2 text-muted-foreground">{{ initError }}</div>
       </div>

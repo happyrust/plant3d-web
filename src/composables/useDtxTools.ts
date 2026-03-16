@@ -1854,7 +1854,7 @@ export function useDtxTools(options: {
   const statusText = computed(() => {
     const mode = store.toolMode.value;
     if (mode === 'none') return '未启用工具';
-    if (!dtxViewerRef.value) return '3D Viewer 未初始化';
+    if (!dtxViewerRef.value) return '三维查看器未初始化';
     if (!dtxLayerRef.value) return 'DTX 图层未初始化';
     if (!selectionRef.value) return '拾取控制器未就绪';
     if (!ready.value) return '等待模型加载完成…';

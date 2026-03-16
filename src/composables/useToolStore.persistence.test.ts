@@ -1,5 +1,5 @@
-import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
 
 function createLocalStorageMock() {
   const store = new Map<string, string>();
@@ -167,5 +167,52 @@ describe('useToolStore - persistence', () => {
     expect(store.annotations.value).toHaveLength(0);
     expect(store.cloudAnnotations.value).toHaveLength(0);
     expect(store.rectAnnotations.value).toHaveLength(0);
+  });
+
+  it('should persist xeokit measurements without polluting classic measurements', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addXeokitDistanceMeasurement({
+      id: 'x-dist-1',
+      kind: 'distance',
+      origin: { entityId: 'o:1', worldPos: [0, 0, 0] },
+      target: { entityId: 'o:2', worldPos: [1, 2, 3] },
+      visible: true,
+      approximate: false,
+      createdAt: 1,
+    });
+    store.addXeokitAngleMeasurement({
+      id: 'x-ang-1',
+      kind: 'angle',
+      origin: { entityId: 'o:1', worldPos: [0, 0, 0] },
+      corner: { entityId: 'o:2', worldPos: [1, 0, 0] },
+      target: { entityId: 'o:3', worldPos: [1, 1, 0] },
+      visible: true,
+      approximate: false,
+      createdAt: 2,
+    });
+
+    store.setCurrentXeokitDistanceDraft({
+      id: 'draft-1',
+      kind: 'distance',
+      origin: { entityId: 'o:4', worldPos: [0, 0, 0] },
+      target: { entityId: 'o:4', worldPos: [0, 0, 0] },
+      visible: true,
+      approximate: true,
+      createdAt: 3,
+    });
+    await nextTick();
+
+    expect(store.measurements.value).toHaveLength(0);
+    expect(store.xeokitDistanceMeasurements.value).toHaveLength(1);
+    expect(store.xeokitAngleMeasurements.value).toHaveLength(1);
+
+    vi.resetModules();
+    const reloaded = await loadStore();
+    expect(reloaded.measurements.value).toHaveLength(0);
+    expect(reloaded.xeokitDistanceMeasurements.value).toHaveLength(1);
+    expect(reloaded.xeokitAngleMeasurements.value).toHaveLength(1);
+    expect(reloaded.currentXeokitDistanceDraft.value).toBeNull();
   });
 });

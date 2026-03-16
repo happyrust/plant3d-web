@@ -117,7 +117,7 @@ function createDefaultLayout(dockApi: DockApi) {
   const viewerPanel = dockApi.addPanel({
     id: 'viewer',
     component: 'ViewerPanel',
-    title: '3D Viewer',
+    title: '三维查看器',
     renderer: 'always',
   });
 

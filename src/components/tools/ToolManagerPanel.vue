@@ -202,7 +202,7 @@ async function importInstancesAndLoadDtx() {
 
   const viewer = ctx.viewerRef.value;
   if (!viewer) {
-    instancesImportError.value = 'Viewer 未就绪，请先等待 3D Viewer 初始化完成';
+    instancesImportError.value = 'Viewer 未就绪，请先等待三维查看器初始化完成';
     return;
   }
   const manifest = instancesManifest.value;
@@ -378,7 +378,7 @@ function clearAll() {
             <div>distance: {{ formatLengthMeters(cameraSnapshot.distance, unitSettings.displayUnit.value, unitSettings.precision.value) }}</div>
             <div>clip: {{ cameraSnapshot.near.toFixed(3) }} .. {{ cameraSnapshot.far.toFixed(3) }}</div>
           </div>
-          <div v-else>未获取到视角信息（请先打开 3D Viewer 并点击“刷新视角”）</div>
+          <div v-else>未获取到视角信息（请先打开三维查看器并点击“刷新视角”）</div>
         </div>
 
         <div class="mt-1 text-xs text-muted-foreground">

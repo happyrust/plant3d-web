@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import { reviewGetEmbedUrl } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import ProjectCardList from '@/components/model-project/ProjectCardList.vue';
@@ -9,7 +10,6 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 import { useModelProjects } from '@/composables/useModelProjects';
-import { reviewGetEmbedUrl } from '@/api/reviewApi';
 
 const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
 const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
@@ -55,13 +55,11 @@ async function handleEmbedTest() {
           <RibbonBar ref="ribbonBarRef" class="w-full">
             <template #header-right>
               <div class="flex items-center gap-2 px-2">
-                <v-btn
-                  size="small"
+                <v-btn size="small"
                   variant="tonal"
                   color="info"
                   :loading="embedLoading"
-                  @click="handleEmbedTest"
-                >
+                  @click="handleEmbedTest">
                   校审测试
                 </v-btn>
                 <LayoutToggleButtons />
