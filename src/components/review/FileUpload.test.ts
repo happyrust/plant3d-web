@@ -139,9 +139,11 @@ describe('FileUploadSection', () => {
       value: { files: [file] },
     });
     dropzone!.dispatchEvent(dropEvent);
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 
     expect(host.textContent).toContain('dragged.pdf');

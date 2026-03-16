@@ -47,6 +47,8 @@ import { useViewerContext } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
+type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
+
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
@@ -107,6 +109,16 @@ function formatFileSize(bytes?: number): string {
 // 格式化日期
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('zh-CN');
+}
+
+function formatDateTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 // 下载附件
@@ -299,16 +311,45 @@ const submitTargetNode = computed<WorkflowNode>(() => {
 function getWorkflowActionLabel(action: string): string {
   switch (action) {
     case 'submit':
+    case 'submitted':
       return '提交';
     case 'return':
+    case 'returned':
       return '驳回';
     case 'approve':
+    case 'approved':
       return '批准';
     case 'reject':
+    case 'rejected':
       return '拒绝';
+    case 'created':
+      return '创建';
+    case 'in_review':
+      return '开始审核';
+    case 'cancelled':
+      return '取消';
     default:
       return action;
   }
+}
+
+function getWorkflowNodeLabel(step: WorkflowHistoryEntry): string {
+  const explicitNode = step.node;
+  if (explicitNode && explicitNode in WORKFLOW_NODE_NAMES) {
+    return WORKFLOW_NODE_NAMES[explicitNode as WorkflowNode];
+  }
+
+  const fallbackMap: Record<string, WorkflowNode> = {
+    created: 'sj',
+    submitted: 'sj',
+    in_review: 'jd',
+    approved: 'pz',
+    rejected: 'sh',
+    cancelled: 'sj',
+  };
+
+  const fallbackNode = fallbackMap[step.action];
+  return fallbackNode ? WORKFLOW_NODE_NAMES[fallbackNode] : '未知节点';
 }
 
 async function loadWorkflow(taskId: string) {
@@ -473,7 +514,7 @@ watch(currentTask, (newTask) => {
     returnReason.value = '';
     returnTargetNode.value = 'sj';
   }
-});
+}, { immediate: true });
 
 const pendingAnnotationCount = computed(() => {
   return (
@@ -877,7 +918,7 @@ onUnmounted(() => {
 
     <!-- 工作流历史 -->
     <div class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">确认历史</div>
+      <div class="text-sm font-semibold">工作流历史</div>
 
       <div v-if="workflowLoading" class="mt-2 text-sm text-muted-foreground">
         正在加载工作流...
@@ -889,24 +930,30 @@ onUnmounted(() => {
 
       <div v-else-if="!workflow || workflow.history.length === 0"
         class="mt-2 text-sm text-muted-foreground">
-        暂无确认记录。
+        暂无历史记录
       </div>
 
       <div v-else class="mt-2 flex max-h-64 flex-col gap-2 overflow-y-auto">
         <div v-for="(step, idx) in workflow.history"
           :key="`${step.operatorId}-${step.timestamp}-${idx}`"
-          class="rounded-md border border-border p-2 text-xs">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-medium text-foreground">
-              {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
-            </span>
-            <span class="text-muted-foreground">{{ formatDate(step.timestamp) }}</span>
+          class="relative rounded-xl border border-slate-200 bg-slate-50/80 p-3 pl-8 text-xs before:absolute before:left-3 before:top-3 before:h-full before:w-px before:bg-slate-200 before:content-[''] first:before:top-6 last:before:h-6">
+          <span class="absolute left-[7px] top-4 h-3 w-3 rounded-full border-2 border-white bg-primary shadow-sm"></span>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="font-medium text-foreground">
+                {{ getWorkflowNodeLabel(step) }}
+              </div>
+              <div class="mt-1 text-muted-foreground">
+                动作：{{ getWorkflowActionLabel(step.action) }}
+              </div>
+            </div>
+            <span class="text-right text-muted-foreground">{{ formatDateTime(step.timestamp) }}</span>
           </div>
           <div class="mt-1 text-muted-foreground">
             操作人: {{ step.operatorName || step.operatorId || '-' }}
           </div>
-          <div v-if="step.comment" class="mt-1 text-muted-foreground">
-            说明: {{ step.comment }}
+          <div class="mt-1 text-muted-foreground">
+            备注: {{ step.comment?.trim() || '-' }}
           </div>
         </div>
       </div>
