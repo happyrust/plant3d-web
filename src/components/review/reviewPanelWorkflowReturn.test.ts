@@ -13,6 +13,7 @@ function createReturnHandler(deps: {
   showReturnDialog: { value: boolean };
   workflowActionLoading: { value: boolean };
   workflowError: { value: string | null };
+  emitToast: (payload: { message: string }) => void;
 }) {
   return async function handleReturnToNode() {
     if (!deps.taskId || !deps.canReturn) return;
@@ -23,6 +24,7 @@ function createReturnHandler(deps: {
       await deps.returnTaskToNode(deps.taskId, deps.returnTargetNode.value, deps.returnReason.value.trim());
       await deps.refreshCurrentTask(deps.taskId);
       await deps.loadWorkflow(deps.taskId);
+      deps.emitToast({ message: '任务已驳回到指定节点' });
       deps.showReturnDialog.value = false;
       deps.returnReason.value = '';
       deps.returnTargetNode.value = 'sj';
@@ -44,6 +46,7 @@ describe('ReviewPanel workflow return', () => {
     const workflowError = { value: 'stale' as string | null };
     const returnTargetNode = { value: 'jd' as WorkflowNode };
     const returnReason = { value: 'Need design rework' };
+    const emitToast = vi.fn();
 
     await createReturnHandler({
       canReturn: true,
@@ -56,11 +59,13 @@ describe('ReviewPanel workflow return', () => {
       showReturnDialog,
       workflowActionLoading,
       workflowError,
+      emitToast,
     })();
 
     expect(returnTaskToNode).toHaveBeenCalledWith('task-1', 'jd', 'Need design rework');
     expect(refreshCurrentTask).toHaveBeenCalledWith('task-1');
     expect(loadWorkflow).toHaveBeenCalledWith('task-1');
+    expect(emitToast).toHaveBeenCalledWith({ message: '任务已驳回到指定节点' });
     expect(showReturnDialog.value).toBe(false);
     expect(returnReason.value).toBe('');
     expect(returnTargetNode.value).toBe('sj');
@@ -82,6 +87,7 @@ describe('ReviewPanel workflow return', () => {
       showReturnDialog: { value: true },
       workflowActionLoading: { value: false },
       workflowError: { value: null },
+      emitToast: vi.fn(),
     })();
 
     expect(returnTaskToNode).not.toHaveBeenCalled();

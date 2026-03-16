@@ -362,6 +362,7 @@ async function handleReturnToNode() {
     await userStore.returnTaskToNode(currentTask.value.id, returnTargetNode.value, returnReason.value.trim());
     await refreshCurrentTask(currentTask.value.id);
     await loadWorkflow(currentTask.value.id);
+    emitToast({ message: '任务已驳回到指定节点' });
     showReturnDialog.value = false;
     returnReason.value = '';
     returnTargetNode.value = 'sj';
