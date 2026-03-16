@@ -145,6 +145,107 @@ describe('loadReviewTasks', () => {
 
     expect(reviewTaskGetListMock).toHaveBeenCalledWith({ approverId: 'manager_001' });
   });
+
+  it('keeps approved and rejected tasks visible in reviewer inbox collections', async () => {
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [
+        {
+          id: 'task-submitted',
+          title: 'Submitted reviewer task',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'submitted',
+          priority: 'high',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'jd',
+          components: [],
+          createdAt: 1700000000000,
+          updatedAt: 1700000001000,
+        },
+        {
+          id: 'task-approved',
+          title: 'Approved reviewer task',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'approved',
+          priority: 'medium',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'jd',
+          components: [],
+          createdAt: 1700000002000,
+          updatedAt: 1700000003000,
+        },
+        {
+          id: 'task-rejected',
+          title: 'Rejected reviewer task',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'rejected',
+          priority: 'low',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'jd',
+          components: [],
+          createdAt: 1700000004000,
+          updatedAt: 1700000005000,
+        },
+        {
+          id: 'task-draft',
+          title: 'Draft task',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'draft',
+          priority: 'low',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'jd',
+          components: [],
+          createdAt: 1700000006000,
+          updatedAt: 1700000007000,
+        },
+      ],
+      total: 4,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('reviewer_001');
+
+    expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual([
+      'task-submitted',
+      'task-approved',
+      'task-rejected',
+    ]);
+  });
 });
 
 describe('getNextWorkflowNode', () => {

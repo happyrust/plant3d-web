@@ -351,6 +351,8 @@ const availableReviewers = computed(() => reviewerUsers.value);
 const availableCheckers = computed(() => reviewerUsers.value.filter((u) => isCheckerRole(u.role)));
 const availableApprovers = computed(() => reviewerUsers.value.filter((u) => isApproverRole(u.role)));
 
+const reviewerInboxStatuses: ReviewTask['status'][] = ['submitted', 'in_review', 'approved', 'rejected'];
+
 // 当前用户的待审核任务（作为审核人员）
 const pendingReviewTasks = computed(() => {
   if (!currentUser.value) return [];
@@ -362,12 +364,12 @@ const pendingReviewTasks = computed(() => {
     const approverId = resolveEffectiveUserId(t.approverId ? { id: t.approverId } : null);
 
     if (isChecker.value) {
-      return checkerId === uid && node === 'jd' && (t.status === 'submitted' || t.status === 'in_review');
+      return checkerId === uid && node === 'jd' && reviewerInboxStatuses.includes(t.status);
     }
     if (isApprover.value) {
       return approverId === uid
         && (node === 'sh' || node === 'pz')
-        && (t.status === 'submitted' || t.status === 'in_review');
+        && reviewerInboxStatuses.includes(t.status);
     }
     return false;
   });
