@@ -22,6 +22,7 @@ import {
   getReviewUserWebSocketUrl,
   type ReviewTaskCreateRequest,
 } from '@/api/reviewApi';
+import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import {
   fromBackendRole,
   type ReviewComponent,
@@ -158,6 +159,168 @@ export function statusFromNode(node: WorkflowNode): ReviewTask['status'] {
     default:
       return 'in_review';
   }
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function normalizeWorkflowStep(raw: unknown): WorkflowStep | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const record = raw as Record<string, unknown>;
+  const node = typeof record.node === 'string' ? record.node : undefined;
+  const action = typeof record.action === 'string' ? record.action : undefined;
+  const timestamp = toNumber(record.timestamp);
+
+  if (!node || !action || !timestamp) return null;
+
+  return {
+    node: node as WorkflowNode,
+    action: action as WorkflowStep['action'],
+    operatorId: typeof record.operatorId === 'string'
+      ? record.operatorId
+      : typeof record.operator_id === 'string'
+        ? record.operator_id
+        : '',
+    operatorName: typeof record.operatorName === 'string'
+      ? record.operatorName
+      : typeof record.operator_name === 'string'
+        ? record.operator_name
+        : '',
+    comment: typeof record.comment === 'string' ? record.comment : undefined,
+    timestamp,
+  };
+}
+
+export function normalizeReviewTask(raw: unknown): ReviewTask | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const record = raw as Record<string, unknown>;
+  const id = typeof record.id === 'string' ? record.id.trim() : '';
+  const title = typeof record.title === 'string' ? record.title : '';
+  const description = typeof record.description === 'string' ? record.description : '';
+  const modelName = typeof record.modelName === 'string'
+    ? record.modelName
+    : typeof record.model_name === 'string'
+      ? record.model_name
+      : '';
+  const status = typeof record.status === 'string' ? record.status : 'draft';
+  const priority = typeof record.priority === 'string' ? record.priority : 'medium';
+  const requesterId = typeof record.requesterId === 'string'
+    ? record.requesterId
+    : typeof record.requester_id === 'string'
+      ? record.requester_id
+      : '';
+  const requesterName = typeof record.requesterName === 'string'
+    ? record.requesterName
+    : typeof record.requester_name === 'string'
+      ? record.requester_name
+      : '';
+  const reviewerId = typeof record.reviewerId === 'string'
+    ? record.reviewerId
+    : typeof record.reviewer_id === 'string'
+      ? record.reviewer_id
+      : typeof record.checkerId === 'string'
+        ? record.checkerId
+        : typeof record.checker_id === 'string'
+          ? record.checker_id
+          : '';
+  const reviewerName = typeof record.reviewerName === 'string'
+    ? record.reviewerName
+    : typeof record.reviewer_name === 'string'
+      ? record.reviewer_name
+      : typeof record.checkerName === 'string'
+        ? record.checkerName
+        : typeof record.checker_name === 'string'
+          ? record.checker_name
+          : '';
+  const fallbackReviewerId = currentUser.value?.id ?? 'unknown-reviewer';
+  const fallbackReviewerName = currentUser.value?.name ?? '未知用户';
+  const createdAt = toNumber(record.createdAt ?? record.created_at) ?? Date.now();
+  const updatedAt = toNumber(record.updatedAt ?? record.updated_at) ?? createdAt;
+  const checkerId = typeof record.checkerId === 'string'
+    ? record.checkerId
+    : typeof record.checker_id === 'string'
+      ? record.checker_id
+      : reviewerId;
+  const checkerName = typeof record.checkerName === 'string'
+    ? record.checkerName
+    : typeof record.checker_name === 'string'
+      ? record.checker_name
+      : reviewerName;
+  const approverId = typeof record.approverId === 'string'
+    ? record.approverId
+    : typeof record.approver_id === 'string'
+      ? record.approver_id
+      : undefined;
+  const approverName = typeof record.approverName === 'string'
+    ? record.approverName
+    : typeof record.approver_name === 'string'
+      ? record.approver_name
+      : undefined;
+
+  const validStatuses: ReviewTask['status'][] = ['draft', 'submitted', 'in_review', 'approved', 'rejected', 'cancelled'];
+  const validPriorities: ReviewTask['priority'][] = ['low', 'medium', 'high', 'urgent'];
+  if (!id || !title) {
+    return null;
+  }
+  if (!validStatuses.includes(status as ReviewTask['status'])) return null;
+  if (!validPriorities.includes(priority as ReviewTask['priority'])) return null;
+
+  const workflowHistory = Array.isArray(record.workflowHistory ?? record.workflow_history)
+    ? (record.workflowHistory ?? record.workflow_history as unknown[])
+      .map((item) => normalizeWorkflowStep(item))
+      .filter((item): item is WorkflowStep => item !== null)
+    : undefined;
+
+  return {
+    id,
+    formId: typeof record.formId === 'string'
+      ? record.formId
+      : typeof record.form_id === 'string'
+        ? record.form_id
+        : undefined,
+    title,
+    description,
+    modelName: modelName || title,
+    status: status as ReviewTask['status'],
+    priority: priority as ReviewTask['priority'],
+    requesterId: requesterId || currentUser.value?.id || 'unknown-requester',
+    requesterName: requesterName || currentUser.value?.name || '未知用户',
+    checkerId,
+    checkerName,
+    approverId,
+    approverName,
+    reviewerId: reviewerId || checkerId || fallbackReviewerId,
+    reviewerName: reviewerName || checkerName || fallbackReviewerName,
+    components: Array.isArray(record.components) ? record.components as ReviewComponent[] : [],
+    attachments: Array.isArray(record.attachments) ? record.attachments as ReviewAttachment[] : undefined,
+    reviewComment: typeof record.reviewComment === 'string'
+      ? record.reviewComment
+      : typeof record.review_comment === 'string'
+        ? record.review_comment
+        : undefined,
+    createdAt,
+    updatedAt,
+    dueDate: toNumber(record.dueDate ?? record.due_date),
+    currentNode: (typeof record.currentNode === 'string'
+      ? record.currentNode
+      : typeof record.current_node === 'string'
+        ? record.current_node
+        : undefined) as WorkflowNode | undefined,
+    workflowHistory,
+    returnReason: typeof record.returnReason === 'string'
+      ? record.returnReason
+      : typeof record.return_reason === 'string'
+        ? record.return_reason
+        : undefined,
+  };
 }
 
 // 模拟用户数据（后端不可用时使用）
@@ -384,6 +547,8 @@ const myInitiatedTasks = computed(() => {
   return reviewTasks.value.filter((t) => t.requesterId === currentUser.value!.id);
 });
 
+const returnedInitiatedTasks = computed(() => myInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
+
 // 持久化 currentUserId
 watch(
   currentUserId,
@@ -534,7 +699,9 @@ async function loadReviewTasks(): Promise<void> {
           : undefined
     );
     if (response.success) {
-      reviewTasks.value = response.tasks;
+      reviewTasks.value = (response.tasks || [])
+        .map((task) => normalizeReviewTask(task))
+        .filter((task): task is ReviewTask => task !== null);
     } else {
       throw new Error(response.error_message || '加载任务列表失败');
     }
@@ -580,9 +747,13 @@ async function createReviewTask(data: {
 
       const response = await reviewTaskCreate(request);
       if (response.success && response.task) {
-        reviewTasks.value = [...reviewTasks.value, response.task];
-        console.log('[useUserStore] Created review task:', response.task.title);
-        return response.task;
+        const normalizedTask = normalizeReviewTask(response.task);
+        if (!normalizedTask) {
+          throw new Error('创建提资单返回了无效任务数据');
+        }
+        reviewTasks.value = [...reviewTasks.value, normalizedTask];
+        console.log('[useUserStore] Created review task:', normalizedTask.title);
+        return normalizedTask;
       }
       throw new Error(response.error_message || '创建提资单失败');
     } catch (e) {
@@ -709,7 +880,10 @@ async function updateTaskAttachments(taskId: string, attachments: ReviewAttachme
       }
 
       if (response.task) {
-        reviewTasks.value = reviewTasks.value.map((t) => (t.id === taskId ? response.task! : t));
+        const normalizedTask = normalizeReviewTask(response.task);
+        if (normalizedTask) {
+          reviewTasks.value = reviewTasks.value.map((t) => (t.id === taskId ? normalizedTask : t));
+        }
       } else {
         await loadReviewTasks();
       }
@@ -1010,21 +1184,7 @@ function extractTaskFromWebSocketMessage(data: unknown): ReviewTask | null {
     ? payload.task as Record<string, unknown>
     : payload;
 
-  if (typeof candidate.id !== 'string' || !candidate.id.trim()) return null;
-
-  const status = candidate.status;
-  const validStatuses: ReviewTask['status'][] = ['draft', 'submitted', 'in_review', 'approved', 'rejected', 'cancelled'];
-  if (typeof status !== 'string' || !validStatuses.includes(status as ReviewTask['status'])) {
-    return null;
-  }
-
-  const priority = candidate.priority;
-  const validPriorities: ReviewTask['priority'][] = ['low', 'medium', 'high', 'urgent'];
-  if (typeof priority !== 'string' || !validPriorities.includes(priority as ReviewTask['priority'])) {
-    return null;
-  }
-
-  return candidate as unknown as ReviewTask;
+  return normalizeReviewTask(candidate);
 }
 
 function upsertReviewTask(task: ReviewTask): void {
@@ -1105,6 +1265,7 @@ export function useUserStore() {
     reviewTasks,
     pendingReviewTasks,
     myInitiatedTasks,
+    returnedInitiatedTasks,
     loading,
     error,
 
