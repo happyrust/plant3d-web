@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 
 import { Box, Calendar, ChevronDown, Flag, Link, Paperclip, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
@@ -22,12 +22,14 @@ import { getRoleDisplayName } from '@/types/auth';
 const userStore = useUserStore();
 const selectionStore = useSelectionStore();
 
-const packageName = ref('');
-const description = ref('');
-const checkerId = ref('');
-const approverId = ref('');
-const priority = ref<'low' | 'medium' | 'high' | 'urgent'>('medium');
-const dueDate = ref('');
+const formData = reactive({
+  packageName: '',
+  description: '',
+  checkerId: '',
+  approverId: '',
+  priority: 'medium' as 'low' | 'medium' | 'high',
+  dueDate: '',
+});
 const selectedComponents = ref<ReviewComponent[]>([]);
 const addingComponent = ref(false);
 const panelVisible = ref(true);
@@ -196,7 +198,7 @@ const availableApprovers = computed(() => {
 });
 
 const samePersonError = computed(() => {
-  return checkerId.value && approverId.value && checkerId.value === approverId.value;
+  return formData.checkerId && formData.approverId && formData.checkerId === formData.approverId;
 });
 
 type FormErrors = {
@@ -215,29 +217,29 @@ const hasValidationErrors = computed(() => {
 
 function validateForm() {
   const nextErrors: FormErrors = {
-    packageName: packageName.value.trim() ? '' : '请输入数据包名称',
-    checkerId: checkerId.value ? '' : '请选择审核人',
+    packageName: formData.packageName.trim() ? '' : '请输入数据包名称',
+    checkerId: formData.checkerId ? '' : '请选择审核人',
   };
   formErrors.value = nextErrors;
   return !nextErrors.packageName && !nextErrors.checkerId;
 }
 
-watch(packageName, (value) => {
+watch(() => formData.packageName, (value) => {
   if (value.trim()) {
     formErrors.value.packageName = '';
   }
 });
 
-watch(checkerId, (value) => {
+watch(() => formData.checkerId, (value) => {
   if (value) {
     formErrors.value.checkerId = '';
   }
 });
 
 const canSubmit = computed(() => {
-  return packageName.value.trim()
-    && checkerId.value
-    && approverId.value
+  return formData.packageName.trim()
+    && formData.checkerId
+    && formData.approverId
     && !samePersonError.value
     && selectedComponents.value.length > 0;
 });
@@ -245,11 +247,19 @@ const canSubmit = computed(() => {
 const missingFields = computed(() => {
   const fields: string[] = [];
   if (selectedComponents.value.length === 0) fields.push('选择模型构件');
-  if (!packageName.value.trim()) fields.push('数据包名称');
-  if (!checkerId.value) fields.push('校核人员');
-  if (!approverId.value) fields.push('审核人员');
+  if (!formData.packageName.trim()) fields.push('数据包名称');
+  if (!formData.checkerId) fields.push('校核人员');
+  if (!formData.approverId) fields.push('审核人员');
   if (samePersonError.value) fields.push('校核人和审核人不能为同一人');
   return fields;
+});
+
+const selectedChecker = computed(() => {
+  return reviewerOptions.value.find((user) => user.id === formData.checkerId) ?? null;
+});
+
+const selectedApprover = computed(() => {
+  return reviewerOptions.value.find((user) => user.id === formData.approverId) ?? null;
 });
 
 function removeComponent(id: string) {
@@ -281,15 +291,15 @@ async function handleSubmit() {
     const attachments = getUploadedAttachments();
 
     const task = await userStore.createReviewTask({
-      title: packageName.value,
-      description: description.value || `模型数据包：${packageName.value}`,
-      modelName: packageName.value,
-      checkerId: checkerId.value,
-      approverId: approverId.value,
+      title: formData.packageName,
+      description: formData.description || `模型数据包：${formData.packageName}`,
+      modelName: formData.packageName,
+      checkerId: formData.checkerId,
+      approverId: formData.approverId,
       formId: embedModeParams.value.isEmbedMode ? (embedModeParams.value.formId || undefined) : undefined,
-      priority: priority.value,
+      priority: formData.priority,
       components: [...selectedComponents.value],
-      dueDate: dueDate.value ? new Date(dueDate.value).getTime() : undefined,
+      dueDate: formData.dueDate ? new Date(formData.dueDate).getTime() : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
     });
 
@@ -311,8 +321,8 @@ async function handleSubmit() {
     const uploadedAttachmentCount = getUploadedAttachments().length;
     const failedAttachmentCount = uploadedFiles.value.filter((f) => f.status === 'error').length;
 
-    const checker = availableCheckers.value.find((r) => r.id === checkerId.value);
-    const approver = availableApprovers.value.find((r) => r.id === approverId.value);
+    const checker = availableCheckers.value.find((r) => r.id === formData.checkerId);
+    const approver = availableApprovers.value.find((r) => r.id === formData.approverId);
 
     notification.value = {
       type: 'success',
@@ -321,12 +331,12 @@ async function handleSubmit() {
     };
 
     // 重置表单
-    packageName.value = '';
-    description.value = '';
-    checkerId.value = '';
-    approverId.value = '';
-    priority.value = 'medium';
-    dueDate.value = '';
+    formData.packageName = '';
+    formData.description = '';
+    formData.checkerId = '';
+    formData.approverId = '';
+    formData.priority = 'medium';
+    formData.dueDate = '';
     selectedComponents.value = [];
     uploadedFiles.value = [];
     createdTaskId.value = null;
@@ -438,7 +448,7 @@ function reopenPanel() {
 
         <div class="space-y-2">
           <label class="text-[13px] font-medium text-[#6B7280]">数据包名称</label>
-          <Input v-model="packageName"
+          <Input v-model="formData.packageName"
             placeholder="输入提资数据包名称..."
             :error="!!formErrors.packageName" />
           <p v-if="formErrors.packageName" class="text-xs text-[#EF4444]">
@@ -448,7 +458,7 @@ function reopenPanel() {
 
         <div class="space-y-2">
           <label class="text-[13px] font-medium text-[#6B7280]">提资描述（可选）</label>
-          <textarea v-model="description"
+          <textarea v-model="formData.description"
             rows="4"
             placeholder="添加补充说明或设计注意事项..."
             class="min-h-20 w-full rounded-[6px] border border-[#E5E7EB] px-3 py-[9px] text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3B82F6]" />
@@ -462,8 +472,9 @@ function reopenPanel() {
               formErrors.checkerId ? 'border-[#EF4444]' : 'border-transparent',
             ]">
               <User class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
-              <select v-model="checkerId"
+              <select v-model="formData.checkerId"
                 :aria-invalid="formErrors.checkerId ? 'true' : 'false'"
+                data-testid="initiate-checker-select"
                 class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]"
                 :class="formErrors.checkerId ? 'border-[#EF4444] focus:border-[#EF4444]' : ''">
                 <option value="">选择审核人</option>
@@ -473,6 +484,9 @@ function reopenPanel() {
               </select>
               <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
             </div>
+            <p v-if="selectedChecker" class="text-xs text-[#6B7280]" data-testid="initiate-checker-value">
+              已选择：{{ selectedChecker.name }}
+            </p>
             <p v-if="formErrors.checkerId" class="text-xs text-[#EF4444]">
               {{ formErrors.checkerId }}
             </p>
@@ -482,12 +496,12 @@ function reopenPanel() {
             <label class="text-[13px] font-medium text-[#6B7280]">优先级</label>
             <div class="relative">
               <Flag class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
-              <select v-model="priority"
+              <select v-model="formData.priority"
+                data-testid="initiate-priority-select"
                 class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]">
-                <option value="low">低等级别</option>
-                <option value="medium">中等级别</option>
-                <option value="high">高等级别</option>
-                <option value="urgent">紧急等级</option>
+                <option value="high">高</option>
+                <option value="medium">中</option>
+                <option value="low">低</option>
               </select>
               <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
             </div>
@@ -495,13 +509,39 @@ function reopenPanel() {
         </div>
 
         <div class="space-y-2">
+          <label class="text-[13px] font-medium text-[#6B7280]">批准人</label>
+          <div class="relative">
+            <User class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
+            <select v-model="formData.approverId"
+              data-testid="initiate-approver-select"
+              class="w-full appearance-none rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-9 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]">
+              <option value="">选择批准人</option>
+              <option v-for="r in availableApprovers" :key="r.id" :value="r.id">
+                {{ r.name }} ({{ getRoleDisplayName(r.role) }})
+              </option>
+            </select>
+            <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+          </div>
+          <p v-if="selectedApprover" class="text-xs text-[#6B7280]" data-testid="initiate-approver-value">
+            已选择：{{ selectedApprover.name }}
+          </p>
+          <p v-if="samePersonError" class="text-xs text-[#EF4444]">
+            校核人和审核人不能为同一人
+          </p>
+        </div>
+
+        <div class="space-y-2">
           <label class="text-[13px] font-medium text-[#6B7280]">期望完成日期</label>
           <div class="relative">
             <Calendar class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" />
-            <input v-model="dueDate"
+            <input v-model="formData.dueDate"
               type="date"
+              data-testid="initiate-due-date"
               class="w-full rounded-[6px] border border-[#E5E7EB] bg-white py-[9px] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#3B82F6]" />
           </div>
+          <p v-if="formData.dueDate" class="text-xs text-[#6B7280]" data-testid="initiate-due-date-value">
+            已选择：{{ formData.dueDate }}
+          </p>
         </div>
 
         <div class="space-y-2">
