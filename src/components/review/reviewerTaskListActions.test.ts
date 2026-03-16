@@ -1,10 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/api/reviewApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/reviewApi')>();
+  return {
+    ...actual,
+    reviewTaskStartReview: vi.fn(),
+  };
+});
 
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import { getSubmitActionLabel } from './reviewPanelActions';
 
 import type { ReviewTask } from '@/types/auth';
 
+import { reviewTaskStartReview } from '@/api/reviewApi';
 import { normalizeReviewTask } from '@/api/reviewApi';
 import { isApproverRole, isCheckerRole, resolveEffectiveUserId } from '@/composables/useUserStore';
 
@@ -29,6 +38,12 @@ function createLocalStorageMock() {
 }
 
 vi.stubGlobal('localStorage', createLocalStorageMock());
+
+const reviewTaskStartReviewMock = vi.mocked(reviewTaskStartReview);
+
+beforeEach(() => {
+  reviewTaskStartReviewMock.mockReset();
+});
 
 function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
   return {
@@ -80,6 +95,90 @@ function filterPendingReviewTasks(tasks: ReviewTask[], userId: string, role: 'ch
 }
 
 describe('reviewerTaskListActions', () => {
+  it('submitted task starts review via backend before opening the workbench', async () => {
+    reviewTaskStartReviewMock.mockResolvedValueOnce({ success: true, message: 'ok' });
+
+    const task = createTask({
+      id: 'task-start-review',
+      status: 'submitted',
+      currentNode: 'jd',
+    });
+    const setCurrentTask = vi.fn(async () => {});
+    const loadReviewTasks = vi.fn(async () => {});
+    const emitCommand = vi.fn();
+    const selected: ReviewTask[] = [];
+
+    await startReviewerTask({
+      task,
+      setCurrentTask,
+      emitCommand,
+      loadReviewTasks,
+      scheduleOpenReviewPanel: (callback) => callback(),
+      onTaskSelected: (selectedTask) => {
+        selected.push(selectedTask);
+      },
+    });
+
+    expect(reviewTaskStartReviewMock).toHaveBeenCalledWith('task-start-review');
+    expect(loadReviewTasks).toHaveBeenCalledTimes(1);
+    expect(setCurrentTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task-start-review',
+      status: 'in_review',
+    }));
+    expect(selected).toEqual([
+      expect.objectContaining({ id: 'task-start-review', status: 'in_review' }),
+    ]);
+    expect(emitCommand.mock.calls).toEqual([
+      ['panel.reviewerTasks'],
+      ['panel.review'],
+    ]);
+  });
+
+  it('in_review task reopens workbench without calling start-review again', async () => {
+    const task = createTask({
+      id: 'task-continue-review',
+      status: 'in_review',
+      currentNode: 'jd',
+    });
+    const setCurrentTask = vi.fn(async () => {});
+    const loadReviewTasks = vi.fn(async () => {});
+    const emitCommand = vi.fn();
+
+    await startReviewerTask({
+      task,
+      setCurrentTask,
+      emitCommand,
+      loadReviewTasks,
+      scheduleOpenReviewPanel: (callback) => callback(),
+    });
+
+    expect(reviewTaskStartReviewMock).not.toHaveBeenCalled();
+    expect(loadReviewTasks).toHaveBeenCalledTimes(1);
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+  });
+
+  it('bubbles backend start-review failures without opening the workbench', async () => {
+    reviewTaskStartReviewMock.mockResolvedValueOnce({
+      success: false,
+      error_message: 'cannot start review',
+    });
+
+    const task = createTask({ id: 'task-start-review-failure', status: 'submitted' });
+    const setCurrentTask = vi.fn(async () => {});
+    const emitCommand = vi.fn();
+
+    await expect(
+      startReviewerTask({
+        task,
+        setCurrentTask,
+        emitCommand,
+      })
+    ).rejects.toThrow('cannot start review');
+
+    expect(setCurrentTask).not.toHaveBeenCalled();
+    expect(emitCommand).not.toHaveBeenCalled();
+  });
+
   it('refreshReviewerTasksSafely 应调用后端刷新并正确切换 loading', async () => {
     const loadingTrace: boolean[] = [];
     const loadReviewTasks = vi.fn(async () => {});
@@ -176,6 +275,8 @@ describe('reviewerTaskListActions', () => {
   });
 
   it('task selection hydrates reviewer workspace and preserves node-derived submit label', async () => {
+    reviewTaskStartReviewMock.mockResolvedValueOnce({ success: true, message: 'ok' });
+
     const task = createTask({
       id: 'task-hydrate',
       title: 'Hydrate me',
@@ -189,6 +290,7 @@ describe('reviewerTaskListActions', () => {
       ],
     });
     const setCurrentTask = vi.fn(async () => {});
+    const loadReviewTasks = vi.fn(async () => {});
     const emitCommand = vi.fn();
     const selected: ReviewTask[] = [];
     const scheduled: (() => void)[] = [];
@@ -197,6 +299,7 @@ describe('reviewerTaskListActions', () => {
       task,
       setCurrentTask,
       emitCommand,
+      loadReviewTasks,
       scheduleOpenReviewPanel: (callback) => {
         scheduled.push(callback);
       },
@@ -205,10 +308,11 @@ describe('reviewerTaskListActions', () => {
       },
     });
 
-    expect(setCurrentTask).toHaveBeenCalledWith(task);
-    expect(selected).toEqual([task]);
+    expect(setCurrentTask).toHaveBeenCalledWith(expect.objectContaining({ id: task.id, status: 'in_review' }));
+    expect(selected).toEqual([expect.objectContaining({ id: task.id, status: 'in_review' })]);
     expect(emitCommand).toHaveBeenCalledWith('panel.reviewerTasks');
     expect(scheduled).toHaveLength(1);
+    expect(loadReviewTasks).toHaveBeenCalledTimes(1);
 
     scheduled[0]?.();
 
@@ -221,6 +325,8 @@ describe('reviewerTaskListActions', () => {
   });
 
   it('reviewer smoke path keeps inbox visible until the review panel handoff callback runs', async () => {
+    reviewTaskStartReviewMock.mockResolvedValueOnce({ success: true, message: 'ok' });
+
     const task = createTask({
       id: 'task-smoke-path',
       title: 'Smoke path task',
@@ -246,6 +352,7 @@ describe('reviewerTaskListActions', () => {
       ],
     });
     const setCurrentTask = vi.fn(async () => {});
+    const loadReviewTasks = vi.fn(async () => {});
     const emitCommand = vi.fn();
     let openReviewPanel: (() => void) | undefined;
 
@@ -253,6 +360,7 @@ describe('reviewerTaskListActions', () => {
       task,
       setCurrentTask,
       emitCommand,
+      loadReviewTasks,
       scheduleOpenReviewPanel: (callback) => {
         openReviewPanel = callback;
       },
