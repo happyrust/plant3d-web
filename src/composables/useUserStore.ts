@@ -519,7 +519,15 @@ async function loadReviewTasks(): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    const response = await reviewTaskGetList();
+    const effectiveUserId = resolveEffectiveUserId(currentUser.value);
+    const queryRole = currentUser.value?.role;
+    const response = await reviewTaskGetList(
+      isCheckerRole(queryRole)
+        ? { checkerId: effectiveUserId ?? undefined }
+        : isApproverRole(queryRole)
+          ? { approverId: effectiveUserId ?? undefined }
+          : undefined
+    );
     if (response.success) {
       reviewTasks.value = response.tasks;
     } else {

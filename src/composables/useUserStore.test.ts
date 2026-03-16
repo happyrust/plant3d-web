@@ -104,6 +104,49 @@ describe('isApproverRole', () => {
   });
 });
 
+describe('loadReviewTasks', () => {
+  it('queries checker inbox tasks with checkerId when switched into reviewer alias', async () => {
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [],
+      total: 0,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('reviewer_001');
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ checkerId: 'user-002' });
+  });
+
+  it('queries approver inbox tasks with approverId for manager roles', async () => {
+    userGetCurrentMock.mockResolvedValue({
+      success: true,
+      user: {
+        id: 'manager_001',
+        username: 'manager',
+        email: 'manager@example.com',
+        name: '陈经理',
+        role: 'pz',
+      },
+    });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [],
+      total: 0,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('manager_001');
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ approverId: 'manager_001' });
+  });
+});
+
 describe('getNextWorkflowNode', () => {
   it('returns jd for sj', () => {
     expect(getNextWorkflowNode('sj')).toBe('jd');
