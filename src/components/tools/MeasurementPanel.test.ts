@@ -37,7 +37,9 @@ describe('MeasurementPanel', () => {
         viewerRef: shallowRef(null),
         overlayContainerRef: shallowRef(null),
         tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef(null),
         store: shallowRef(null),
+        viewerError: shallowRef(null),
         ptsetVis: shallowRef(null),
         mbdPipeVis: shallowRef(null),
         annotationSystem: shallowRef({

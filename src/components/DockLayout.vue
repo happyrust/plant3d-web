@@ -510,6 +510,9 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.measurement':
       togglePanel('measurement');
       return;
+    case 'panel.xeokitMeasurement':
+      togglePanel('measurement');
+      return;
     case 'panel.dimension':
       togglePanel('dimension');
       return;

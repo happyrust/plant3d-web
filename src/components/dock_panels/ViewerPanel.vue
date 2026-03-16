@@ -54,6 +54,7 @@ import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore, type DimensionKind } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
+import { useXeokitMeasurementTools } from '@/composables/useXeokitMeasurementTools';
 import {
   branCameraPresets,
   demoMbdPipeData,
@@ -437,7 +438,29 @@ const leftToolbarOpenMeasureMenu = ref(false);
 const hasSelectedRefno = computed(() => !!selectionStore.selectedRefno.value);
 const isMeasureModeActive = computed(() => {
   const mode = store.toolMode.value;
-  return mode === 'measure_distance' || mode === 'measure_angle';
+  return (
+    mode === 'measure_distance' ||
+    mode === 'measure_angle' ||
+    mode === 'xeokit_measure_distance' ||
+    mode === 'xeokit_measure_angle'
+  );
+});
+const isXeokitMeasureMode = computed(() => {
+  return (
+    store.toolMode.value === 'xeokit_measure_distance' ||
+    store.toolMode.value === 'xeokit_measure_angle'
+  );
+});
+const activeMeasureTools = computed(() => {
+  return isXeokitMeasureMode.value ? xeokitMeasurementToolsRef.value : toolsRef.value;
+});
+const activeMeasureStatusText = computed(() => {
+  const tools = activeMeasureTools.value;
+  return tools ? tools.statusText.value : '';
+});
+const activeMeasureHoverText = computed(() => {
+  if (isXeokitMeasureMode.value) return '';
+  return toolsRef.value?.hoverText?.value ?? '';
 });
 
 // 右侧竖直工具栏（查看/快捷）
@@ -455,6 +478,7 @@ const cadGridRef = shallowRef<CadGrid | null>(null);
 const compatViewerRef = shallowRef<DtxCompatViewer | null>(null);
 const tileLodControllerRef = shallowRef<DTXTileLodController | null>(null);
 const toolsRef = shallowRef<ReturnType<typeof useDtxTools> | null>(null);
+const xeokitMeasurementToolsRef = shallowRef<ReturnType<typeof useXeokitMeasurementTools> | null>(null);
 const ptsetVisRef = shallowRef<ReturnType<
     typeof usePtsetVisualizationThree
 > | null>(null);
@@ -502,6 +526,7 @@ let rafId: number | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
+let offXeokitToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offMbdPipeWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
@@ -885,11 +910,28 @@ function locateShowSelected(): void {
   requestRender();
 }
 
-function setMeasureMode(next: 'measure_distance' | 'measure_angle'): void {
-  if (store.toolMode.value === next) {
+type MeasureMode = 'measure_distance' | 'measure_angle' | 'xeokit_measure_distance' | 'xeokit_measure_angle' | 'none';
+
+function setMeasureMode(next: MeasureMode): void {
+  const mappedMode =
+    next === 'measure_distance' ? 'xeokit_measure_distance' : next === 'measure_angle' ? 'xeokit_measure_angle' : next;
+
+  if (mappedMode === 'none') {
+    store.setToolMode('none');
+    return;
+  }
+
+  if (store.toolMode.value === mappedMode) {
     store.setToolMode('none');
   } else {
-    store.setToolMode(next);
+    if (mappedMode === 'xeokit_measure_distance' || mappedMode === 'xeokit_measure_angle') {
+      xeokitMeasurementToolsRef.value?.activate(mappedMode);
+      if (!xeokitMeasurementToolsRef.value) {
+        store.setToolMode(mappedMode);
+      }
+    } else {
+      store.setToolMode(mappedMode);
+    }
   }
   requestRender();
 }
@@ -913,12 +955,12 @@ function toggleLeftMeasureMenu(): void {
 }
 
 function onLeftMeasureDistanceClick(): void {
-  setMeasureMode('measure_distance');
+  setMeasureMode('xeokit_measure_distance');
   leftToolbarOpenMeasureMenu.value = false;
 }
 
 function onLeftMeasureAngleClick(): void {
-  setMeasureMode('measure_angle');
+  setMeasureMode('xeokit_measure_angle');
   leftToolbarOpenMeasureMenu.value = false;
 }
 
@@ -1000,13 +1042,21 @@ function handleRibbonCommand(commandId: string) {
       locateShowSelected();
       return;
     case 'measurement.distance':
-      setMeasureMode('measure_distance');
+      setMeasureMode('xeokit_measure_distance');
       return;
     case 'measurement.angle':
-      setMeasureMode('measure_angle');
+      setMeasureMode('xeokit_measure_angle');
       return;
     case 'measurement.point_to_mesh':
       store.setToolMode('measure_point_to_object');
+      requestRender();
+      return;
+    case 'measurement.xeokitDistance':
+      setMeasureMode('xeokit_measure_distance');
+      requestRender();
+      return;
+    case 'measurement.xeokitAngle':
+      setMeasureMode('xeokit_measure_angle');
       requestRender();
       return;
     case 'measurement.pipe_to_structure':
@@ -1016,7 +1066,18 @@ function handleRibbonCommand(commandId: string) {
       setAutoNearestMode('measure_pipe_to_pipe');
       return;
     case 'measurement.clear':
-      store.clearMeasurements();
+      if (
+        store.toolMode.value === 'xeokit_measure_distance' ||
+        store.toolMode.value === 'xeokit_measure_angle'
+      ) {
+        xeokitMeasurementToolsRef.value?.clearMeasurements();
+      } else {
+        store.clearMeasurements();
+      }
+      requestRender();
+      return;
+    case 'measurement.xeokitClear':
+      xeokitMeasurementToolsRef.value?.clearMeasurements();
       requestRender();
       return;
     case 'dimension.linear':
@@ -1998,6 +2059,7 @@ onMounted(async () => {
     ensureLayerAttached();
     selectionController.refreshSpatialIndex();
     toolsRef.value?.refreshReadyState();
+    xeokitMeasurementToolsRef.value?.refreshReadyState();
     try {
       viewCullControllerRef.value?.refreshSpatialIndex();
       viewCullControllerRef.value?.update(dtxViewer.camera);
@@ -2037,6 +2099,19 @@ onMounted(async () => {
   });
   toolsRef.value = tools;
   tools.refreshReadyState();
+
+  const xeokitMeasurementTools = useXeokitMeasurementTools({
+    dtxViewerRef,
+    dtxLayerRef,
+    selectionRef: selectionControllerRef,
+    overlayContainerRef: overlayContainer,
+    annotationSystemRef,
+    store,
+    compatViewerRef,
+    requestRender,
+  });
+  xeokitMeasurementToolsRef.value = xeokitMeasurementTools;
+  xeokitMeasurementTools.refreshReadyState();
 
   const ptsetVis = usePtsetVisualizationThree(
     dtxViewerRef,
@@ -2811,12 +2886,20 @@ onMounted(async () => {
   viewerContext.overlayContainerRef.value = overlayContainer.value;
   viewerContext.store.value = store;
   viewerContext.tools.value = tools as any;
+  viewerContext.xeokitMeasurementTools.value = xeokitMeasurementTools as any;
 
-  if (isDev) {
+  if (typeof window !== 'undefined') {
     (window as any).__xeokitViewer = compat;
     (window as any).__dtxViewer = dtxViewer;
     (window as any).__viewerContext = viewerContext;
     (window as any).__viewerToolStore = store;
+    (window as any).__xeokitMeasurementTools = xeokitMeasurementTools;
+    (window as any).__viewerTools = tools;
+    (window as any).__viewer = {
+      store,
+      tools,
+      xeokitMeasurementTools,
+    };
   }
 
   // show_dbnum URL 参数：按 dbno 直接走 Parquet 全量加载。
@@ -3075,6 +3158,31 @@ onMounted(async () => {
     canvas.removeEventListener('pointermove', onCanvasMouseMove);
     canvas.removeEventListener('pointerup', onCanvasMouseUp);
     canvas.removeEventListener('pointercancel', onCanvasMouseUp);
+  };
+
+  const onXeokitToolsPointerDown = (e: PointerEvent) => {
+    xeokitMeasurementToolsRef.value?.onCanvasPointerDown(canvas, e);
+  };
+  const onXeokitToolsPointerMove = (e: PointerEvent) => {
+    xeokitMeasurementToolsRef.value?.onCanvasPointerMove(canvas, e);
+  };
+  const onXeokitToolsPointerUp = (e: PointerEvent) => {
+    xeokitMeasurementToolsRef.value?.onCanvasPointerUp(canvas, e);
+  };
+  const onXeokitToolsPointerCancel = (e: PointerEvent) => {
+    xeokitMeasurementToolsRef.value?.onCanvasPointerCancel(canvas, e);
+  };
+
+  canvas.addEventListener('pointerdown', onXeokitToolsPointerDown);
+  canvas.addEventListener('pointermove', onXeokitToolsPointerMove);
+  canvas.addEventListener('pointerup', onXeokitToolsPointerUp);
+  canvas.addEventListener('pointercancel', onXeokitToolsPointerCancel);
+
+  offXeokitToolsInput = () => {
+    canvas.removeEventListener('pointerdown', onXeokitToolsPointerDown);
+    canvas.removeEventListener('pointermove', onXeokitToolsPointerMove);
+    canvas.removeEventListener('pointerup', onXeokitToolsPointerUp);
+    canvas.removeEventListener('pointercancel', onXeokitToolsPointerCancel);
   };
 
   // 兼容：批注/脚本会 dispatch showModelByRefnos，Viewer 侧统一接住并按需加载
@@ -3395,6 +3503,14 @@ onMounted(async () => {
         store.cancelPickRefno();
         return;
       }
+      if (
+        store.toolMode.value === 'xeokit_measure_distance' ||
+        store.toolMode.value === 'xeokit_measure_angle'
+      ) {
+        xeokitMeasurementToolsRef.value?.reset();
+        requestRender();
+        return;
+      }
       try {
         toolsRef.value?.cancelMeasurementInteraction?.();
       } catch {
@@ -3413,6 +3529,17 @@ onMounted(async () => {
     }
 
     if (ev.key === 'Delete' || ev.key === 'Backspace') {
+      const xeokitMid = store.activeXeokitMeasurementId.value;
+      if (xeokitMid) {
+        try {
+          xeokitMeasurementToolsRef.value?.removeMeasurement(xeokitMid);
+        } catch {
+          // ignore
+        }
+        requestRender();
+        return;
+      }
+
       const mid = store.activeMeasurementId.value;
       if (mid) {
         try {
@@ -3455,6 +3582,8 @@ onUnmounted(() => {
   }
   detachPicking();
   detachToolsInput();
+  offXeokitToolsInput?.();
+  offXeokitToolsInput = null;
 
   offControlsChange?.();
   offControlsChange = null;
@@ -3497,6 +3626,13 @@ onUnmounted(() => {
 
   // 仅清理引用（useAnnotationThree 内部已注册 onUnmounted 执行 dispose）
   annotationSystemRef.value = null;
+
+  try {
+    xeokitMeasurementToolsRef.value?.dispose();
+  } catch {
+    // ignore
+  }
+  xeokitMeasurementToolsRef.value = null;
 
   try {
     toolsRef.value?.dispose();
@@ -3568,19 +3704,21 @@ onUnmounted(() => {
   dtxViewerRef.value = null;
 
   compatViewerRef.value = null;
-  if (isDev) {
-    try {
-      delete (window as any).__xeokitViewer;
-      delete (window as any).__dtxViewer;
-      delete (window as any).__viewerContext;
-      delete (window as any).__viewerToolStore;
-    } catch {
-      // ignore
-    }
+  try {
+    delete (window as any).__xeokitViewer;
+    delete (window as any).__dtxViewer;
+    delete (window as any).__viewerContext;
+    delete (window as any).__viewerToolStore;
+    delete (window as any).__xeokitMeasurementTools;
+    delete (window as any).__viewerTools;
+    delete (window as any).__viewer;
+  } catch {
+    // ignore
   }
   viewerContext.viewerRef.value = null;
   viewerContext.overlayContainerRef.value = null;
   viewerContext.tools.value = null;
+  viewerContext.xeokitMeasurementTools.value = null;
   viewerContext.ptsetVis.value = null;
   viewerContext.mbdPipeVis.value = null;
   viewerContext.annotationSystem.value = null;
@@ -3684,12 +3822,12 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="store.toolMode.value !== 'none' && toolsRef"
+    <div v-if="store.toolMode.value !== 'none' && activeMeasureTools"
       class="pointer-events-none absolute bottom-2 right-2 rounded-md border border-border bg-background/85 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur"
       style="z-index: 940">
-      <div>{{ toolsRef.statusText.value }}</div>
-      <div v-if="toolsRef.hoverText?.value" class="mt-1 text-muted-foreground">
-        {{ toolsRef.hoverText.value }}
+      <div>{{ activeMeasureStatusText }}</div>
+      <div v-if="activeMeasureHoverText" class="mt-1 text-muted-foreground">
+        {{ activeMeasureHoverText }}
       </div>
     </div>
 
@@ -3742,14 +3880,14 @@ onUnmounted(() => {
           style="z-index: 941">
           <button type="button"
             class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-            :class="store.toolMode.value === 'measure_distance' ? 'bg-muted' : ''"
+            :class="store.toolMode.value === 'xeokit_measure_distance' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureDistanceClick">
             <Ruler class="h-4 w-4" />
             <span>长度测量</span>
           </button>
           <button type="button"
             class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-            :class="store.toolMode.value === 'measure_angle' ? 'bg-muted' : ''"
+            :class="store.toolMode.value === 'xeokit_measure_angle' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureAngleClick">
             <Ruler class="h-4 w-4" />
             <span>角度测量</span>
