@@ -529,6 +529,7 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectCount = 0;
 let wsUserId: string | null = null;
+let refreshPromise: Promise<void> | null = null;
 const MAX_RECONNECT = 5;
 const RECONNECT_DELAY = 3000;
 
@@ -728,50 +729,57 @@ async function switchUser(userId: string): Promise<void> {
 // ============ 任务管理 ============
 
 async function loadReviewTasks(): Promise<void> {
-  if (!USE_BACKEND.value) return;
+  if (refreshPromise) return refreshPromise;
 
-  loading.value = true;
-  error.value = null;
-  try {
-    const effectiveUserId = resolveEffectiveUserId(currentUser.value);
-    const queryRole = currentUser.value?.role;
-    const response = await reviewTaskGetList(
-      isCheckerRole(queryRole)
-        ? { checkerId: effectiveUserId ?? undefined }
-        : isApproverRole(queryRole)
-          ? { approverId: effectiveUserId ?? undefined }
-          : undefined
-    );
-    if (response.success) {
-      const normalizedTasks = (response.tasks || [])
-        .map((task) => normalizeReviewTask(task))
-        .filter((task): task is ReviewTask => task !== null);
+  refreshPromise = (async () => {
+    if (!USE_BACKEND.value) return;
 
-      // Preserve designer-owned tasks when a reviewer-scoped refresh returns only the inbox slice.
-      if (currentUser.value?.role === UserRole.DESIGNER) {
-        const preservedDesignerTasks = reviewTasks.value.filter((task) => task.requesterId === currentUser.value?.id);
-        const mergedTasks = new Map<string, ReviewTask>();
+    loading.value = true;
+    error.value = null;
+    try {
+      const effectiveUserId = resolveEffectiveUserId(currentUser.value);
+      const queryRole = currentUser.value?.role;
+      const response = await reviewTaskGetList(
+        isCheckerRole(queryRole)
+          ? { checkerId: effectiveUserId ?? undefined }
+          : isApproverRole(queryRole)
+            ? { approverId: effectiveUserId ?? undefined }
+            : undefined
+      );
+      if (response.success) {
+        const normalizedTasks = (response.tasks || [])
+          .map((task) => normalizeReviewTask(task))
+          .filter((task): task is ReviewTask => task !== null);
 
-        for (const task of preservedDesignerTasks) {
-          mergedTasks.set(task.id, task);
+        // Preserve designer-owned tasks when a reviewer-scoped refresh returns only the inbox slice.
+        if (currentUser.value?.role === UserRole.DESIGNER) {
+          const preservedDesignerTasks = reviewTasks.value.filter((task) => task.requesterId === currentUser.value?.id);
+          const mergedTasks = new Map<string, ReviewTask>();
+
+          for (const task of preservedDesignerTasks) {
+            mergedTasks.set(task.id, task);
+          }
+          for (const task of normalizedTasks) {
+            const existingTask = mergedTasks.get(task.id);
+            mergedTasks.set(task.id, existingTask ? { ...existingTask, ...task } : task);
+          }
+
+          reviewTasks.value = Array.from(mergedTasks.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+        } else {
+          reviewTasks.value = normalizedTasks;
         }
-        for (const task of normalizedTasks) {
-          const existingTask = mergedTasks.get(task.id);
-          mergedTasks.set(task.id, existingTask ? { ...existingTask, ...task } : task);
-        }
-
-        reviewTasks.value = Array.from(mergedTasks.values()).sort((a, b) => b.updatedAt - a.updatedAt);
       } else {
-        reviewTasks.value = normalizedTasks;
+        throw new Error(response.error_message || '加载任务列表失败');
       }
-    } else {
-      throw new Error(response.error_message || '加载任务列表失败');
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '加载任务列表失败';
+    } finally {
+      loading.value = false;
+      refreshPromise = null;
     }
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '加载任务列表失败';
-  } finally {
-    loading.value = false;
-  }
+  })();
+
+  return refreshPromise;
 }
 
 async function createReviewTask(data: {

@@ -497,6 +497,91 @@ describe('review task websocket notifications', () => {
     expect(store.myInitiatedTasks.value.map((task) => task.id)).toContain('task-created-1');
   });
 
+  it('deduplicates concurrent task_created refreshes so the new task appears after one reload', async () => {
+    const sockets: {
+      onmessage: null | ((event: { data: string }) => void);
+      close: ReturnType<typeof vi.fn>;
+      send: ReturnType<typeof vi.fn>;
+    }[] = [];
+    function MockWebSocket(this: any) {
+      this.readyState = 1;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onerror = null;
+      this.onclose = null;
+      this.close = vi.fn();
+      this.send = vi.fn();
+      sockets.push(this);
+    }
+
+    vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+
+    let resolveRefresh: ((value: { success: true; tasks: any[]; total: number }) => void) | null = null;
+    reviewTaskGetListMock
+      .mockResolvedValueOnce({ success: true, tasks: [], total: 0 })
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          resolveRefresh = resolve;
+        })
+      );
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.loadReviewTasks();
+    store.connectWebSocket();
+
+    sockets[0]?.onmessage?.({
+      data: JSON.stringify({
+        type: 'task_created',
+        data: { id: 'task-created-dedupe' },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+    sockets[0]?.onmessage?.({
+      data: JSON.stringify({
+        type: 'task_created',
+        data: { id: 'task-created-dedupe' },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledTimes(2);
+
+    resolveRefresh?.({
+      success: true,
+      tasks: [
+        {
+          id: 'task-created-dedupe',
+          title: '并发创建任务',
+          description: 'from deduped refresh',
+          modelName: 'Model-Dedupe',
+          status: 'submitted',
+          priority: 'medium',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          components: [],
+          createdAt: 1700000000000,
+          updatedAt: 1700000002000,
+          currentNode: 'jd',
+        },
+      ],
+      total: 1,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.myInitiatedTasks.value.map((task) => task.id)).toContain('task-created-dedupe');
+  });
+
   it('updates existing task status in place when receiving task_updated events with payload', async () => {
     const sockets: {
       onmessage: null | ((event: { data: string }) => void);
@@ -586,6 +671,150 @@ describe('review task websocket notifications', () => {
         description: 'after ws update',
       })
     );
+  });
+
+  it('keeps a resubmitted task converged to one reviewer inbox record across refresh and websocket paths', async () => {
+    const sockets: {
+      onmessage: null | ((event: { data: string }) => void);
+      close: ReturnType<typeof vi.fn>;
+      send: ReturnType<typeof vi.fn>;
+    }[] = [];
+    function MockWebSocket(this: any) {
+      this.readyState = 1;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onerror = null;
+      this.onclose = null;
+      this.close = vi.fn();
+      this.send = vi.fn();
+      sockets.push(this);
+    }
+
+    vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/reviewer_001');
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock
+      .mockResolvedValueOnce({ success: true, tasks: [], total: 0 })
+      .mockResolvedValueOnce({
+        success: true,
+        tasks: [
+          {
+            id: 'task-resubmit-1',
+            title: '重新提交流转任务',
+            description: 'after refresh',
+            modelName: 'Model-Resubmit',
+            status: 'submitted',
+            priority: 'high',
+            requesterId: 'designer_001',
+            requesterName: '王设计师',
+            checkerId: 'user-002',
+            checkerName: '李校核员',
+            approverId: 'manager_001',
+            approverName: '陈经理',
+            reviewerId: 'user-002',
+            reviewerName: '李校核员',
+            currentNode: 'jd',
+            createdAt: 1700000000000,
+            updatedAt: 1700000010000,
+            workflowHistory: [
+              {
+                node: 'jd',
+                action: 'return',
+                operatorId: 'user-002',
+                operatorName: '李校核员',
+                comment: '请补充材料',
+                timestamp: 1700000005000,
+              },
+              {
+                node: 'sj',
+                action: 'submit',
+                operatorId: 'designer_001',
+                operatorName: '王设计师',
+                comment: '已补充后重新提交',
+                timestamp: 1700000009000,
+              },
+            ],
+            components: [],
+          },
+        ],
+        total: 1,
+      });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('reviewer_001');
+    store.connectWebSocket();
+
+    sockets[0]?.onmessage?.({
+      data: JSON.stringify({
+        type: 'task_updated',
+        data: {
+          task: {
+            id: 'task-resubmit-1',
+            title: '重新提交流转任务',
+            description: 'after websocket',
+            model_name: 'Model-Resubmit',
+            status: 'submitted',
+            priority: 'high',
+            requester_id: 'designer_001',
+            requester_name: '王设计师',
+            checker_id: 'user-002',
+            checker_name: '李校核员',
+            approver_id: 'manager_001',
+            approver_name: '陈经理',
+            reviewer_id: 'user-002',
+            reviewer_name: '李校核员',
+            current_node: 'jd',
+            created_at: 1700000000000,
+            updated_at: 1700000009500,
+            workflow_history: [
+              {
+                node: 'jd',
+                action: 'return',
+                operator_id: 'user-002',
+                operator_name: '李校核员',
+                comment: '请补充材料',
+                timestamp: 1700000005000,
+              },
+              {
+                node: 'sj',
+                action: 'submit',
+                operator_id: 'designer_001',
+                operator_name: '王设计师',
+                comment: '已补充后重新提交',
+                timestamp: 1700000009000,
+              },
+            ],
+            components: [],
+          },
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual(['task-resubmit-1']);
+    expect(store.pendingReviewTasks.value[0]).toEqual(
+      expect.objectContaining({
+        id: 'task-resubmit-1',
+        currentNode: 'jd',
+        status: 'submitted',
+        description: 'after websocket',
+      })
+    );
+
+    await store.loadReviewTasks();
+
+    expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual(['task-resubmit-1']);
+    expect(store.pendingReviewTasks.value[0]).toEqual(
+      expect.objectContaining({
+        id: 'task-resubmit-1',
+        currentNode: 'jd',
+        status: 'submitted',
+        description: 'after refresh',
+      })
+    );
+    expect(store.reviewTasks.value.filter((task) => task.id === 'task-resubmit-1')).toHaveLength(1);
   });
 
   it('normalizes snake_case returned websocket payloads before membership and returned-state checks', async () => {
