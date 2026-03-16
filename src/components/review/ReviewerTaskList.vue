@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import { Calendar, CheckCircle, Clock, Eye, FileText, Package, RefreshCw, Search, User, XCircle } from 'lucide-vue-next';
+import { Clock, FileText, Filter, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import { getSubmitActionLabel } from './reviewPanelActions';
@@ -56,6 +56,7 @@ const filteredTasks = computed(() => {
 });
 
 const currentUser = computed(() => userStore.currentUser.value);
+const hasFilters = computed(() => searchTerm.value || statusFilter.value !== 'all' || priorityFilter.value !== 'all');
 
 async function refreshTasks() {
   await refreshReviewerTasksSafely({
@@ -74,6 +75,51 @@ function clearFilters() {
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('zh-CN');
+}
+
+function formatRelativeSubmitTime(timestamp: number): string {
+  const now = new Date();
+  const date = new Date(timestamp);
+  const sameYear = now.getFullYear() === date.getFullYear();
+  const diffDays = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86400000);
+  const timeText = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+
+  if (diffDays === 0) return `今天 ${timeText}`;
+  if (diffDays === 1) return `昨天 ${timeText}`;
+  return sameYear
+    ? `${date.getMonth() + 1}-${date.getDate()} ${timeText}`
+    : `${formatDate(timestamp)} ${timeText}`;
+}
+
+function getStatusPresentation(task: ReviewTask) {
+  const status = getTaskStatusDisplayName(task.status);
+  if (task.status === 'submitted') {
+    return {
+      label: status.label,
+      textClass: 'text-amber-600',
+      dotClass: 'bg-amber-500',
+    };
+  }
+  if (task.status === 'in_review') {
+    return {
+      label: status.label,
+      textClass: 'text-blue-600',
+      dotClass: 'bg-blue-500',
+    };
+  }
+
+  return {
+    label: status.label,
+    textClass: 'text-gray-600',
+    dotClass: 'bg-gray-400',
+  };
+}
+
+function getPriorityBadgeClass(task: ReviewTask): string {
+  if (task.priority === 'urgent') return 'bg-red-100 text-red-700';
+  if (task.priority === 'medium') return 'bg-blue-100 text-blue-700';
+  if (task.priority === 'low') return 'bg-gray-100 text-gray-600';
+  return 'bg-orange-100 text-orange-700';
 }
 
 async function handleStartReview(task: ReviewTask) {
@@ -114,17 +160,7 @@ function closeTaskDetail() {
 }
 
 function getStartActionLabel(task: ReviewTask): string {
-  const node = task.currentNode || 'sj';
-  if (node === 'jd') {
-    return '处理校核';
-  }
-  if (node === 'sh') {
-    return '处理审核';
-  }
-  if (node === 'pz') {
-    return '处理批准';
-  }
-  return '处理任务';
+  return task.status === 'in_review' ? '继续审核' : '开始审核';
 }
 
 function getApproveActionLabel(task: ReviewTask): string {
@@ -133,14 +169,23 @@ function getApproveActionLabel(task: ReviewTask): string {
 </script>
 
 <template>
-  <div class="p-4 space-y-4 overflow-auto h-full">
+  <div class="h-full overflow-auto bg-white px-5 py-5 text-gray-900">
     <!-- 头部 -->
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between gap-3">
       <div>
-        <h3 class="text-lg font-semibold">我的{{ reviewStageLabel }}任务</h3>
-        <p class="text-sm text-gray-500">{{ reviewStageLabel }}人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个任务</p>
+        <h3 class="text-base font-semibold text-gray-900">待处理提资任务</h3>
+        <p class="mt-1 text-[13px] text-gray-500">共 {{ filteredTasks.length }} 条</p>
       </div>
-      <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
+      <div class="flex items-center gap-2">
+        <span class="hidden text-[12px] text-gray-400 sm:inline">{{ reviewStageLabel }}人：{{ currentUser?.name }}</span>
+        <button class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
+          type="button"
+          aria-label="筛选任务"
+        >
+          <Filter class="h-4 w-4" />
+        </button>
+      </div>
+      <button class="hidden items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50"
         :disabled="isLoading"
         @click="refreshTasks">
         <RefreshCw :class="['h-4 w-4', isLoading && 'animate-spin']" />
@@ -149,28 +194,32 @@ function getApproveActionLabel(task: ReviewTask): string {
     </div>
 
     <!-- 筛选条件 -->
-    <div class="flex flex-wrap gap-3 p-3 bg-gray-50 rounded-lg">
-      <div class="flex-1 min-w-[200px] relative">
-        <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+    <div class="flex flex-wrap gap-3 rounded-xl bg-gray-50 p-3">
+      <div class="min-w-[200px] flex-1 relative">
         <input v-model="searchTerm"
           type="text"
-          placeholder="搜索任务名称、描述或模型..."
-          class="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          placeholder="搜索任务名称或发起人..."
+          class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
-      <select v-model="statusFilter" class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <select v-model="statusFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
         <option value="all">全部状态</option>
         <option value="submitted">待审核</option>
         <option value="in_review">审核中</option>
         <option value="approved">已通过</option>
         <option value="rejected">未通过</option>
       </select>
-      <select v-model="priorityFilter" class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <select v-model="priorityFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
         <option value="all">全部优先级</option>
         <option value="urgent">紧急</option>
         <option value="high">高</option>
         <option value="medium">中</option>
         <option value="low">低</option>
       </select>
+      <button v-if="hasFilters"
+        class="rounded-lg px-3 py-2 text-sm text-gray-500 transition hover:bg-white hover:text-gray-700"
+        @click="clearFilters">
+        清除筛选
+      </button>
     </div>
 
     <!-- 任务列表 -->
@@ -183,64 +232,61 @@ function getApproveActionLabel(task: ReviewTask): string {
       <template v-else-if="filteredTasks.length > 0">
         <div v-for="task in filteredTasks"
           :key="task.id"
-          class="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+          class="cursor-pointer rounded-lg border p-4 transition-shadow hover:shadow-md"
+          :class="task.status === 'in_review' ? 'border-orange-200 bg-white' : 'border-gray-200 bg-gray-50'"
           @click="handleViewTask(task)">
-          <div class="flex items-start justify-between">
-            <div class="flex-1">
-              <div class="flex items-center gap-2 mb-2">
-                <h4 class="font-medium text-base">{{ task.title }}</h4>
-                <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getTaskStatusDisplayName(task.status).color]">
-                  {{ getTaskStatusDisplayName(task.status).label }}
-                </span>
-                <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getPriorityDisplayName(task.priority).color]">
-                  {{ getPriorityDisplayName(task.priority).label }}
-                </span>
+          <div class="space-y-3">
+            <div class="flex items-start justify-between gap-3">
+              <h4 class="pr-2 text-sm font-semibold leading-5 text-gray-900">{{ task.title }}</h4>
+              <span :class="['inline-flex shrink-0 items-center rounded px-2 py-1 text-xs font-medium', getPriorityBadgeClass(task)]">
+                {{ getPriorityDisplayName(task.priority).label }}
+              </span>
+            </div>
+
+            <div class="space-y-1.5 text-xs text-gray-500">
+              <div class="flex items-center gap-1.5">
+                <User class="h-3.5 w-3.5 text-gray-400" />
+                <span>发起人: {{ task.requesterName }} ({{ task.requesterId || 'sj' }})</span>
               </div>
-              <p class="text-sm text-gray-600 mb-3 line-clamp-2">{{ task.description }}</p>
-              <div class="flex items-center gap-4 text-xs text-gray-500">
-                <div class="flex items-center gap-1">
-                  <Package class="h-3 w-3" />
-                  <span>{{ task.modelName }}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <User class="h-3 w-3" />
-                  <span>发起人: {{ task.requesterName }}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <User class="h-3 w-3" />
-                  <span>校核: {{ task.checkerName || task.reviewerName || '-' }} / 审核: {{ task.approverName || '-' }}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <Calendar class="h-3 w-3" />
-                  <span>创建: {{ formatDate(task.createdAt) }}</span>
-                </div>
-                <div v-if="task.dueDate" class="flex items-center gap-1">
-                  <Clock class="h-3 w-3" />
-                  <span>截止: {{ formatDate(task.dueDate) }}</span>
-                </div>
+              <div class="flex items-center gap-1.5">
+                <Clock class="h-3.5 w-3.5 text-gray-400" />
+                <span>提交于: {{ formatRelativeSubmitTime(task.createdAt) }}</span>
+              </div>
+              <div v-if="task.modelName" class="text-[11px] text-gray-400">
+                <span>{{ task.modelName }}</span>
               </div>
             </div>
-            <div class="flex flex-col gap-2 ml-4">
+
+            <div class="flex items-center justify-between gap-3 border-t border-gray-200/80 pt-3">
+              <div class="flex min-w-0 items-center gap-2">
+                <span :class="['h-2 w-2 shrink-0 rounded-full', getStatusPresentation(task).dotClass]" />
+                <span :class="['text-xs', getStatusPresentation(task).textClass]">
+                  {{ getStatusPresentation(task).label }}
+                </span>
+              </div>
+
               <button v-if="task.status === 'submitted' || task.status === 'in_review'"
-                class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition"
+                :class="task.status === 'in_review'
+                  ? 'border border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100'
+                  : 'bg-orange-500 text-white hover:bg-orange-600'"
                 @click.stop="handleStartReview(task)">
-                {{ getStartActionLabel(task) }}
-              </button>
-              <button class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50" @click.stop="handleViewTask(task)">
-                查看详情
+                <PlayCircle v-if="task.status === 'submitted'" class="h-3.5 w-3.5" />
+                <span>{{ getStartActionLabel(task) }}</span>
               </button>
             </div>
           </div>
         </div>
       </template>
 
-      <div v-else class="bg-white border rounded-lg p-8 text-center">
+      <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
         <FileText class="h-12 w-12 mx-auto mb-4 text-gray-300" />
         <h4 class="font-medium mb-2">暂无审核任务</h4>
         <p class="text-sm text-gray-500 mb-4">
-          {{ searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' ? '没有符合筛选条件的任务' : '还没有分配给您的审核任务' }}
+          {{ hasFilters ? '没有符合筛选条件的任务' : '还没有分配给您的审核任务' }}
         </p>
-        <button v-if="searchTerm || statusFilter !== 'all' || priorityFilter !== 'all'"
+        <button v-if="hasFilters"
           class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
           @click="clearFilters">
           清除筛选条件
