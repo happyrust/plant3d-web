@@ -83,7 +83,7 @@ describe('FileUploadSection', () => {
     host.remove();
   });
 
-  it('supports drag-and-drop upload and shows progress updates', async () => {
+  it('supports drag-and-drop upload and shows completion state after progress updates', async () => {
     const { default: FileUploadSection } = await import('./FileUploadSection.vue');
 
     const host = document.createElement('div');
@@ -145,14 +145,16 @@ describe('FileUploadSection', () => {
     await nextTick();
 
     expect(host.textContent).toContain('dragged.pdf');
-    expect(host.textContent).toContain('42%');
+    const progressBar = host.querySelector('[data-testid="file-upload-progress-bar"]') as HTMLDivElement | null;
+    expect(progressBar).not.toBeNull();
+    expect(progressBar?.getAttribute('style')).toContain('width: 42%');
 
     await new Promise((resolve) => setTimeout(resolve, 20));
     await nextTick();
 
     expect(host.textContent).toContain('已上传');
-    const progressBar = host.querySelector('[data-testid="file-upload-progress-bar"]') as HTMLDivElement | null;
-    expect(progressBar).toBeNull();
+    const completedProgressBar = host.querySelector('[data-testid="file-upload-progress-bar"]') as HTMLDivElement | null;
+    expect(completedProgressBar).toBeNull();
 
     app.unmount();
     host.remove();
