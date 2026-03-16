@@ -218,8 +218,56 @@ describe('InitiateReviewPanel form binding', () => {
     expect((host.querySelector('button.w-full') as HTMLButtonElement | null)?.disabled).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(host.querySelector('[data-testid="designer-landing-workspace"]')).toBeNull();
-    expect(host.textContent).toContain('重新打开提资面板');
+    expect(closeHandler).toHaveBeenCalled();
+    expect(createdHandler).toHaveBeenCalledWith('task-1');
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('keeps the panel rendered until the dock wrapper handles close events', async () => {
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel),
+    });
+    app.mount(host);
+
+    const click = (selector: string) => {
+      const element = host.querySelector(selector) as HTMLButtonElement | null;
+      expect(element).not.toBeNull();
+      element?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    };
+
+    click('button[title="将选中的构件添加到列表"]');
+    await nextTick();
+    await nextTick();
+
+    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement;
+    packageInput.value = '保持渲染的校审包';
+    packageInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const checkerSelect = host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement;
+    checkerSelect.value = 'checker-1';
+    checkerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const approverSelect = host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement;
+    approverSelect.value = 'approver-1';
+    approverSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await nextTick();
+
+    click('[data-testid="initiate-submit-trigger"]');
+    await nextTick();
+    await nextTick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="designer-landing-workspace"]')).not.toBeNull();
+    expect(host.textContent).toContain('提资单创建成功！');
 
     app.unmount();
     host.remove();

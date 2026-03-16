@@ -645,15 +645,24 @@ function handleRibbonCommand(commandId: string) {
 
     // review commands
     case 'review.start':
+      console.log('[DockLayout] review.start role gate', {
+        currentUserId: userStore.currentUserId.value,
+        currentUserRole: userStore.currentUser.value?.role ?? null,
+        isDesigner: userStore.isDesigner.value,
+        isReviewer: userStore.isReviewer.value,
+      });
       // 根据用户角色打开不同的面板
       if (userStore.isDesigner.value) {
         // 设计人员：打开发起提资面板
+        console.log('[DockLayout] review.start opening initiator panel');
         togglePanel('initiateReview');
       } else if (userStore.isReviewer.value) {
         // 审核人员：打开待审核任务列表
+        console.log('[DockLayout] review.start opening reviewer task panel');
         togglePanel('reviewerTasks');
       } else {
         // 默认行为：切换校审模式
+        console.log('[DockLayout] review.start falling back to review mode toggle');
         reviewStore.toggleReviewMode();
       }
       return;
