@@ -102,6 +102,10 @@ export async function querySpatialIndex(params: SpatialQueryParams): Promise<Spa
 
   if (params.mode) sp.set('mode', params.mode);
   if (params.refno) sp.set('refno', params.refno);
+  if (params.x !== undefined) sp.set('x', String(params.x));
+  if (params.y !== undefined) sp.set('y', String(params.y));
+  if (params.z !== undefined) sp.set('z', String(params.z));
+  if (params.radius !== undefined) sp.set('radius', String(params.radius));
   if (params.distance !== undefined) sp.set('distance', String(params.distance));
 
   if (params.minx !== undefined) sp.set('minx', String(params.minx));

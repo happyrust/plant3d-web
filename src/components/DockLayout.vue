@@ -36,8 +36,8 @@ const embedModeParams = computed(() => {
   };
 });
 
-const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v2';
-const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v2-migrated-properties';
+const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v3';
+const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v3-migrated-properties';
 const popoutUrl = `${import.meta.env.BASE_URL}popout.html`;
 
 type DockviewGroupLike = {
@@ -109,6 +109,8 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'ptset');
   closePanelIfExists(dockApi, 'mbdPipe');
   closePanelIfExists(dockApi, 'modelTree');
+  closePanelIfExists(dockApi, 'modelQuery');
+  closePanelIfExists(dockApi, 'nearbyQuery');
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
 
@@ -159,13 +161,6 @@ function createDefaultLayout(dockApi: DockApi) {
     id: 'properties',
     component: 'PropertiesPanel',
     title: '属性',
-    position: { referencePanel: measurementPanel, direction: 'within' },
-  });
-
-  dockApi.addPanel({
-    id: 'modelQuery',
-    component: 'ModelQueryPanel',
-    title: '模型查询',
     position: { referencePanel: measurementPanel, direction: 'within' },
   });
 
@@ -276,30 +271,6 @@ function ensurePanel(panelId: string) {
       id: 'properties',
       component: 'PropertiesPanel',
       title: '属性',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (panelId === 'nearbyQuery') {
-    return dockApi.addPanel({
-      id: 'nearbyQuery',
-      component: 'NearbyQueryPanel',
-      title: '周边查询',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (panelId === 'modelQuery') {
-    return dockApi.addPanel({
-      id: 'modelQuery',
-      component: 'ModelQueryPanel',
-      title: '模型查询',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -555,10 +526,14 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('properties');
       return;
     case 'panel.query':
-      togglePanel('modelQuery');
-      return;
     case 'panel.nearbyQuery':
-      togglePanel('nearbyQuery');
+    case 'panel.spatialQuery':
+      ensurePanelAndActivate('viewer');
+      window.dispatchEvent(new CustomEvent('openSpatialQuery', {
+        detail: {
+          mode: commandId === 'panel.query' ? 'range' : 'distance',
+        },
+      }));
       return;
     case 'panel.ptset':
       togglePanel('ptset');

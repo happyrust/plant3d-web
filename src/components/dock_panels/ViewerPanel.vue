@@ -5,15 +5,13 @@ import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import {
   ArrowUpRight,
   Cloud,
-  Crosshair,
   Eye,
   EyeOff,
   Focus,
   GitCompare,
-  Layers,
-  LocateFixed,
   RectangleHorizontal,
   Ruler,
+  Search,
   Settings,
   Trash2,
   X,
@@ -23,10 +21,9 @@ import { Matrix4, Plane, Vector2, Vector3 } from 'three';
 import { e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetPtsetWithContext } from '@/api/genModelPdmsAttrApi';
 import { getMbdPipeAnnotations } from '@/api/mbdPipeApi';
-import DistanceQueryPanel from '@/components/distance-query/DistanceQueryPanel.vue';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
-import RangeQueryDrawer from '@/components/range-query/RangeQueryDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
+import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import {
   createLatestOnlyGate,
@@ -52,9 +49,8 @@ import { useMbdPipeAnnotationThree } from '@/composables/useMbdPipeAnnotationThr
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
-import { useQuickViewRequestStore } from '@/composables/useQuickViewRequestStore';
-import { useRangeQuerySettingsStore } from '@/composables/useRangeQuerySettingsStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
+import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore, type DimensionKind } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -66,7 +62,6 @@ import {
 } from '@/debug/injectMbdPipeDemo';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import { SiteSpecValue, getSpecValueName } from '@/types/spec';
 import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
@@ -95,6 +90,7 @@ const store = useToolStore();
 const consoleStore = useConsoleStore();
 const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
+const spatialQueryStore = useSpatialQuery();
 const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
@@ -446,16 +442,8 @@ const isMeasureModeActive = computed(() => {
 
 // 右侧竖直工具栏（查看/快捷）
 const rightToolbarOpenSettings = ref(false);
-const rangeDrawerOpen = ref(false);
+const spatialQueryOpen = ref(false);
 const pipeDistDrawerOpen = ref(false);
-const distanceQueryOpen = ref(false);
-const rangeSettings = useRangeQuerySettingsStore();
-const quickViewReq = useQuickViewRequestStore();
-// 避免模板对“对象属性 ref”做 v-model 赋值时覆盖 ref 本身：解构为顶层绑定
-const rangeRadiusM = rangeSettings.radiusM;
-const rangeSpecValues = rangeSettings.specValues;
-const rangeNounsText = rangeSettings.nounsText;
-const rangeNameQuery = rangeSettings.nameQuery;
 
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
@@ -517,6 +505,7 @@ let offToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offMbdPipeWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
+let offOpenSpatialQuery: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
 let offGizmoEvents: (() => void) | null = null;
@@ -1627,16 +1616,22 @@ function deleteActiveAnnotation() {
   }
 }
 
-function onRightRangeQuickViewClick(): void {
-  const refno = getSelectedRefno();
-  if (!refno) {
-    toastNeedSelection();
-    return;
+function openSpatialQueryDrawer(mode: 'range' | 'distance' = 'distance', options?: { useSelection?: boolean; autoSubmit?: boolean }): void {
+  spatialQueryStore.setMode(mode);
+  spatialQueryOpen.value = true;
+  rightToolbarOpenSettings.value = false;
+
+  if (mode === 'range' && options?.useSelection) {
+    spatialQueryStore.applyCurrentSelection();
   }
 
-  // 打开右侧抽屉面板，并通过请求触发自动查询
-  rangeDrawerOpen.value = true;
-  quickViewReq.requestRangeQueryFromSelection();
+  if (options?.autoSubmit) {
+    void spatialQueryStore.submitQuery();
+  }
+}
+
+function onRightSpatialQueryClick(): void {
+  openSpatialQueryDrawer(spatialQueryStore.draft.mode);
 }
 
 function onRightRoomShowAllClick(): void {
@@ -1652,25 +1647,16 @@ function onRightPipeNetworkClick(): void {
 function toggleRightSettings(): void {
   rightToolbarOpenSettings.value = !rightToolbarOpenSettings.value;
   if (rightToolbarOpenSettings.value) {
-    rangeDrawerOpen.value = false;
-    distanceQueryOpen.value = false;
+    spatialQueryOpen.value = false;
   }
 }
 
-function toggleRangeDrawer(): void {
-  rangeDrawerOpen.value = !rangeDrawerOpen.value;
-  if (rangeDrawerOpen.value) {
-    rightToolbarOpenSettings.value = false;
-    distanceQueryOpen.value = false;
-  }
-}
-
-function toggleDistanceQuery(): void {
-  distanceQueryOpen.value = !distanceQueryOpen.value;
-  if (distanceQueryOpen.value) {
-    rightToolbarOpenSettings.value = false;
-    rangeDrawerOpen.value = false;
-  }
+function handleOpenSpatialQueryEvent(event: Event): void {
+  const detail = (event as CustomEvent<{ mode?: 'range' | 'distance'; useSelection?: boolean; autoSubmit?: boolean }>).detail;
+  openSpatialQueryDrawer(detail?.mode ?? 'distance', {
+    useSelection: detail?.useSelection,
+    autoSubmit: detail?.autoSubmit,
+  });
 }
 
 // ── 标注右键菜单动作 ──
@@ -3354,6 +3340,8 @@ onMounted(async () => {
   );
 
   offRibbonCommand = onCommand(handleRibbonCommand);
+  window.addEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
+  offOpenSpatialQuery = () => window.removeEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
 
   // 点击工具栏外部时关闭“测量”下拉菜单（不影响当前工具模式）
   const onDocPointerDown = (ev: PointerEvent) => {
@@ -3482,6 +3470,9 @@ onUnmounted(() => {
 
   offShowModelByRefnos?.();
   offShowModelByRefnos = null;
+
+  offOpenSpatialQuery?.();
+  offOpenSpatialQuery = null;
 
   offPtsetWatch?.();
   offPtsetWatch = null;
@@ -3773,27 +3764,11 @@ onUnmounted(() => {
       @pointerdown.stop
       @wheel.stop>
       <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-        title="范围周边（以选中构件为中心）"
-        :disabled="!hasSelectedRefno"
-        @click.stop="onRightRangeQuickViewClick">
-        <Crosshair class="h-5 w-5" />
-      </button>
-
-      <button type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
-        :class="rangeDrawerOpen ? 'bg-muted' : ''"
-        title="按范围显示"
-        @click.stop="toggleRangeDrawer">
-        <Layers class="h-5 w-5" />
-      </button>
-
-      <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
-        :class="distanceQueryOpen ? 'bg-muted' : ''"
-        title="按距离查询"
-        @click.stop="toggleDistanceQuery">
-        <LocateFixed class="h-5 w-5" />
+        :class="spatialQueryOpen ? 'bg-muted' : ''"
+        title="空间查询"
+        @click.stop="onRightSpatialQueryClick">
+        <Search class="h-5 w-5" />
       </button>
 
       <button type="button"
@@ -3917,74 +3892,17 @@ onUnmounted(() => {
             </div>
 
             <div class="space-y-1">
-              <div class="flex items-center justify-between">
-                <label class="text-xs text-muted-foreground">范围半径 (m)</label>
-                <span class="text-xs tabular-nums text-foreground">{{ rangeRadiusM }}</span>
+              <label class="text-xs text-muted-foreground">空间查询</label>
+              <div class="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                查询条件、结果显隐和自动加载行为已统一移动到 Viewer 右侧“空间查询”面板中。
               </div>
-              <input v-model="rangeRadiusM" type="range" min="1" max="500" class="w-full" />
-            </div>
-
-            <div class="space-y-1">
-              <div class="flex items-center justify-between">
-                <label class="text-xs text-muted-foreground">按专业过滤</label>
-                <button type="button"
-                  class="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  @click.stop="rangeSettings.clearSpecFilter">
-                  清空
-                </button>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
-                  <input type="checkbox"
-                    :checked="rangeSpecValues.includes(SiteSpecValue.Pipe)"
-                    @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Pipe)" />
-                  <span>{{ getSpecValueName(SiteSpecValue.Pipe) }}</span>
-                </label>
-                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
-                  <input type="checkbox"
-                    :checked="rangeSpecValues.includes(SiteSpecValue.Elec)"
-                    @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Elec)" />
-                  <span>{{ getSpecValueName(SiteSpecValue.Elec) }}</span>
-                </label>
-                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
-                  <input type="checkbox"
-                    :checked="rangeSpecValues.includes(SiteSpecValue.Inst)"
-                    @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Inst)" />
-                  <span>{{ getSpecValueName(SiteSpecValue.Inst) }}</span>
-                </label>
-                <label class="flex cursor-pointer items-center gap-2 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
-                  <input type="checkbox"
-                    :checked="rangeSpecValues.includes(SiteSpecValue.Hvac)"
-                    @change="() => rangeSettings.toggleSpecValue(SiteSpecValue.Hvac)" />
-                  <span>{{ getSpecValueName(SiteSpecValue.Hvac) }}</span>
-                </label>
-              </div>
-              <div class="text-[11px] text-muted-foreground">
-                注：若模型未提供专业元数据，可能无法命中过滤。
-              </div>
-            </div>
-
-            <div class="space-y-1">
-              <label class="text-xs text-muted-foreground">按类型过滤（nouns，逗号分隔）</label>
-              <input v-model="rangeNounsText"
-                class="h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                placeholder="例如：PIPE,BRAN,TUBI" />
-            </div>
-
-            <div class="space-y-1">
-              <label class="text-xs text-muted-foreground">按名称过滤</label>
-              <input v-model="rangeNameQuery"
-                class="h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                placeholder="refno 或名称关键字" />
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 按范围显示抽屉面板 -->
-    <RangeQueryDrawer v-model:open="rangeDrawerOpen" />
-    <DistanceQueryPanel v-model:open="distanceQueryOpen" />
+    <SpatialQueryDrawer v-model:open="spatialQueryOpen" />
 
     <!-- 管道间距离标注控制面板 -->
     <PipeDistanceDrawer v-model:open="pipeDistDrawerOpen" />

@@ -42,10 +42,9 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
       },
       {
         id: 'view.panel.query',
-        label: '模型查询',
+        label: '空间查询',
         items: [
-          { kind: 'button', id: 'panel.query', label: '模型查询', icon: 'search', commandId: 'panel.query' },
-          { kind: 'button', id: 'panel.nearbyQuery', label: '周边查询', icon: 'map_marker_radius', commandId: 'panel.nearbyQuery' },
+          { kind: 'button', id: 'panel.spatialQuery', label: '空间查询', icon: 'search', commandId: 'panel.spatialQuery' },
         ],
       },
       {
@@ -224,7 +223,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         id: 'space_calc.query',
         label: '查询',
         items: [
-          { kind: 'button', id: 'space_calc.range_query', label: '范围查询', icon: 'search', commandId: 'panel.query' },
+          { kind: 'button', id: 'space_calc.range_query', label: '空间查询', icon: 'search', commandId: 'panel.spatialQuery' },
         ],
       },
       {

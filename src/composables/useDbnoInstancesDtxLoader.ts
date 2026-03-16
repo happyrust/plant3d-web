@@ -329,6 +329,14 @@ export function findNounByRefnoAcrossAllDbnos(refno: string): string | null {
   return null;
 }
 
+export function findSpecValueByRefnoAcrossAllDbnos(refno: string): number | null {
+  for (const cache of cachesByDbno.values()) {
+    const specValue = cache.refnoToSpecValue.get(refno);
+    if (typeof specValue === 'number') return specValue;
+  }
+  return null;
+}
+
 /** 查找元件所属的 BRAN/HANG refno */
 export function findOwnerRefnoByTubi(childRefno: string): string | null {
   // 优先使用缓存的 owner_refno

@@ -1,7 +1,6 @@
 import { ref } from 'vue';
 
 export type QuickViewRequest =
-  | { kind: 'range_query_from_selection'; timestamp: number }
   | { kind: 'show_selected_room_models'; timestamp: number }
 
 /**
@@ -12,9 +11,6 @@ const request = ref<QuickViewRequest | null>(null);
 export function useQuickViewRequestStore() {
   return {
     request,
-    requestRangeQueryFromSelection: () => {
-      request.value = { kind: 'range_query_from_selection', timestamp: Date.now() };
-    },
     requestShowSelectedRoomModels: () => {
       request.value = { kind: 'show_selected_room_models', timestamp: Date.now() };
     },
@@ -23,4 +19,3 @@ export function useQuickViewRequestStore() {
     },
   };
 }
-
