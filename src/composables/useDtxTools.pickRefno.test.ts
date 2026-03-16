@@ -1,13 +1,32 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick, ref } from 'vue';
+
+import { Vector3 } from 'three';
 
 import {
   computeCloudLayout,
   createRectAnnotationRecordFromObb,
+  buildCloudBillboardPolyline,
   isDtxInteractionReady,
   resolvePickedRefnoForFilter,
+  useDtxTools,
 } from './useDtxTools';
+import { useToolStore } from './useToolStore';
 
 import type { Obb } from './useToolStore';
+
+vi.mock('@/composables/useSelectionStore', () => ({
+  useSelectionStore: () => ({
+    selectedRefno: ref<string | null>(null),
+    propertiesLoading: ref(false),
+    propertiesError: ref(null),
+    propertiesData: ref(null),
+    fullName: ref(null),
+    loadProperties: vi.fn(),
+    clearSelection: vi.fn(),
+    setSelectedRefno: vi.fn(),
+  }),
+}));
 
 describe('resolvePickedRefnoForFilter', () => {
   beforeEach(() => {
@@ -94,6 +113,7 @@ describe('computeCloudLayout', () => {
     expect(layout.labelAlign).toBe('left');
     expect(layout.cloudPath).toContain('M');
     expect(layout.cloudPath).toContain('Z');
+    expect(layout.cloudPath).toContain('L');
   });
 
   it('falls back to a stable default offset and clamps oversized marquee dimensions', () => {
@@ -110,7 +130,8 @@ describe('computeCloudLayout', () => {
     expect(layout.labelX).toBe(424);
     expect(layout.labelY).toBe(48);
     expect(layout.labelAlign).toBe('left');
-    expect(layout.cloudPath).toContain('406.0 48.0');
+    expect(layout.cloudPath).toContain('L');
+    expect(layout.cloudPath).toContain('Z');
   });
 
   it('supports left-side labels when the cloud is offset left of the anchor', () => {
@@ -126,9 +147,88 @@ describe('computeCloudLayout', () => {
     expect(layout.labelX).toBe(82);
     expect(layout.labelY).toBe(140);
   });
+
+  it('buildCloudBillboardPolyline produces a closed rect-like wavy polygon', () => {
+    const anchor = new Vector3(0, 0, 0);
+    const right = new Vector3(1, 0, 0);
+    const up = new Vector3(0, 1, 0);
+    const points = buildCloudBillboardPolyline(anchor, right, up, 120, 60, 16);
+
+    expect(points.length).toBe((16 * 4 + 2) * 3);
+    expect(points.length % 3).toBe(0);
+
+    const first = [points[0], points[1], points[2]];
+    const last = [points[points.length - 3], points[points.length - 2], points[points.length - 1]];
+    expect(last[0]).toBeCloseTo(first[0]);
+    expect(last[1]).toBeCloseTo(first[1]);
+    expect(last[2]).toBeCloseTo(first[2]);
+
+    const xs = points.filter((_, index) => index % 3 === 0);
+    const ys = points.filter((_, index) => index % 3 === 1);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    expect(minX).toBeLessThan(-58);
+    expect(maxX).toBeGreaterThan(58);
+    expect(minY).toBeLessThan(-28);
+    expect(maxY).toBeGreaterThan(28);
+    expect(maxX - minX).toBeGreaterThan(120);
+    expect(maxY - minY).toBeGreaterThan(60);
+  });
+
+  it('buildCloudBillboardPolyline applies minimum rectangle size protection in fallback scenarios', () => {
+    const anchor = new Vector3(0, 0, 0);
+    const right = new Vector3(1, 0, 0);
+    const up = new Vector3(0, 1, 0);
+    const points = buildCloudBillboardPolyline(anchor, right, up, 1, 1, 16);
+
+    const xs = points.filter((_, index) => index % 3 === 0);
+    const ys = points.filter((_, index) => index % 3 === 1);
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+
+    expect(spanX).toBeGreaterThanOrEqual(12);
+    expect(spanY).toBeGreaterThanOrEqual(12);
+  });
+
+  it('createCloudPath produces a wave rectangle cloud SVG path in screen space', () => {
+    const layout = computeCloudLayout(
+      { x: 100, y: 80, visible: true, ndcZ: 0.2 },
+      { x: 40, y: -10 },
+      { width: 120, height: 60 },
+    );
+
+    const tokens = layout.cloudPath
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    expect(tokens[0]).toBe('M');
+    expect(tokens[tokens.length - 1]).toBe('Z');
+    expect(tokens.filter((t) => t === 'L').length).toBeGreaterThan(60);
+    expect(tokens.some((token) => token.includes('.'))).toBe(true);
+  });
 });
 
 describe('isDtxInteractionReady', () => {
+  it('当统计信息里 totalObjects 已大于 0 时，即使 compiled 仍为 false 也应允许交互', () => {
+    const layer = {
+      objectCount: 0,
+      getVisibleObjectIds: () => [],
+      getStats: () => ({
+        totalVertices: 1024,
+        totalIndices: 2048,
+        totalObjects: 12,
+        uniqueGeometries: 4,
+        uniqueMaterials: 2,
+        compiled: false,
+      }),
+    };
+
+    expect(isDtxInteractionReady(layer as any)).toBe(true);
+  });
+
   it('当对象已注册但 compiled 仍为 false 时，仍应允许交互工具进入 ready', () => {
     const layer = {
       objectCount: 3,
@@ -161,5 +261,56 @@ describe('isDtxInteractionReady', () => {
     };
 
     expect(isDtxInteractionReady(layer as any)).toBe(false);
+  });
+});
+
+describe('useDtxTools.ready', () => {
+  it('当 DTXLayer 只发生内部统计变化时，需要显式刷新 ready 状态', async () => {
+    const layerState = {
+      compiled: false,
+      totalObjects: 0,
+      objectCount: 0,
+      visibleObjectIds: [] as string[],
+    };
+    const layer = {
+      get objectCount() {
+        return layerState.objectCount;
+      },
+      getVisibleObjectIds: () => layerState.visibleObjectIds,
+      getStats: () => ({
+        totalVertices: 0,
+        totalIndices: 0,
+        totalObjects: layerState.totalObjects,
+        uniqueGeometries: 0,
+        uniqueMaterials: 0,
+        compiled: layerState.compiled,
+      }),
+    };
+    const store = useToolStore();
+    store.clearAll();
+
+    const tools = useDtxTools({
+      dtxViewerRef: ref(null),
+      dtxLayerRef: ref(layer as any),
+      selectionRef: ref(null),
+      overlayContainerRef: ref(null),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    expect(tools.ready.value).toBe(false);
+
+    layerState.totalObjects = 8;
+    layerState.objectCount = 8;
+    layerState.visibleObjectIds = ['o:7997_demo:0'];
+
+    await nextTick();
+    expect(tools.ready.value).toBe(false);
+
+    tools.refreshReadyState();
+    await nextTick();
+
+    expect(tools.ready.value).toBe(true);
   });
 });

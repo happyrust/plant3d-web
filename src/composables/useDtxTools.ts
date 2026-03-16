@@ -323,19 +323,32 @@ function overlayToWorld(camera: any, canvas: HTMLCanvasElement, overlay: HTMLEle
 }
 
 function createCloudPath(cx: number, cy: number, width: number, height: number): string {
-  const rx = width * 0.5;
-  const ry = height * 0.5;
-  const segments = 10;
-  const points: string[] = [];
-  for (let i = 0; i <= segments; i += 1) {
-    const t = (i / segments) * Math.PI * 2;
-    const wobble = 1 + 0.12 * Math.sin(t * 6);
-    const x = cx + Math.cos(t) * rx * wobble;
-    const y = cy + Math.sin(t) * ry * wobble;
-    points.push(`${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+  const CLOUD_WAVY_SEGMENTS_PER_EDGE = 16;
+  const CLOUD_WAVY_WAVES = 4;
+  const CLOUD_WAVY_AMPLITUDE_RATIO = 0.015;
+  const CLOUD_WAVY_AMPLITUDE_MIN_PX = 1;
+  const CLOUD_WAVY_AMPLITUDE_MAX_PX = 6;
+
+  const points = buildCloudWavyRectanglePoints2D(cx, cy, width, height, {
+    segmentsPerEdge: CLOUD_WAVY_SEGMENTS_PER_EDGE,
+    wavesPerEdge: CLOUD_WAVY_WAVES,
+    amplitude: {
+      ratio: CLOUD_WAVY_AMPLITUDE_RATIO,
+      minPx: CLOUD_WAVY_AMPLITUDE_MIN_PX,
+      maxPx: CLOUD_WAVY_AMPLITUDE_MAX_PX,
+    },
+  });
+  if (points.length === 0) {
+    return `M ${cx.toFixed(1)} ${cy.toFixed(1)} L ${cx.toFixed(1)} ${cy.toFixed(1)} Z`;
   }
-  points.push('Z');
-  return points.join(' ');
+
+  const path: string[] = [];
+  for (let i = 0; i < points.length; i += 1) {
+    const point = points[i]!;
+    path.push(`${i === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`);
+  }
+  path.push('Z');
+  return path.join(' ');
 }
 
 export function buildCloudBillboardPolyline(
@@ -344,24 +357,107 @@ export function buildCloudBillboardPolyline(
   up: Vector3,
   width: number,
   height: number,
-  segments = 18,
+  segments = 16,
+  worldPerPixel = 1,
 ): number[] {
-  const rx = Math.max(width * 0.5, 1e-4);
-  const ry = Math.max(height * 0.5, 1e-4);
   const safeRight = right.clone().normalize();
   const safeUp = up.clone().normalize();
+  const safeWorldPerPixel = Math.max(worldPerPixel, Number.EPSILON);
+  const minAmplitudeWorld = safeWorldPerPixel * 1;
+  const maxAmplitudeWorld = safeWorldPerPixel * 6;
+  const points = buildCloudWavyRectanglePoints2D(
+    0,
+    0,
+    width,
+    height,
+    {
+      segmentsPerEdge: segments,
+      wavesPerEdge: 4,
+      amplitude: {
+        ratio: 0.015,
+        minPx: minAmplitudeWorld,
+        maxPx: maxAmplitudeWorld,
+      },
+    },
+  );
   const pts: number[] = [];
-
-  for (let i = 0; i <= segments; i += 1) {
-    const t = (i / segments) * Math.PI * 2;
-    const wobble = 1 + 0.12 * Math.sin(t * 6);
+  for (const point of points) {
     const p = anchor.clone()
-      .addScaledVector(safeRight, Math.cos(t) * rx * wobble)
-      .addScaledVector(safeUp, Math.sin(t) * ry * wobble);
+      .addScaledVector(safeRight, point.x)
+      .addScaledVector(safeUp, point.y);
     pts.push(p.x, p.y, p.z);
   }
-
   return pts;
+}
+
+type CloudWavyRectangleOptions = {
+  segmentsPerEdge: number;
+  wavesPerEdge: number;
+  amplitude: {
+    ratio: number;
+    minPx: number;
+    maxPx: number;
+  };
+};
+
+type CloudPoint2D = {
+  x: number;
+  y: number;
+};
+
+function buildCloudWavyRectanglePoints2D(
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+  options: CloudWavyRectangleOptions,
+): CloudPoint2D[] {
+  const safeWidth = Math.max(width, 12);
+  const safeHeight = Math.max(height, 12);
+  const halfWidth = safeWidth * 0.5;
+  const halfHeight = safeHeight * 0.5;
+  const segmentsPerEdge = Math.max(2, Math.floor(options.segmentsPerEdge));
+  const wavesPerEdge = Math.max(1, Math.floor(options.wavesPerEdge));
+  const corners = [
+    { x: -halfWidth, y: -halfHeight }, // 上
+    { x: halfWidth, y: -halfHeight }, // 右
+    { x: halfWidth, y: halfHeight }, // 下
+    { x: -halfWidth, y: halfHeight }, // 左
+  ];
+  const edgeNormals = [
+    { x: 0, y: -1 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+  ];
+  const points: CloudPoint2D[] = [];
+
+  for (let i = 0; i < corners.length; i += 1) {
+    const start = corners[i]!;
+    const end = corners[(i + 1) % corners.length]!;
+    const normal = edgeNormals[i]!;
+    const edgeLength = Math.hypot(end.x - start.x, end.y - start.y);
+    const amp = clamp(edgeLength * options.amplitude.ratio, options.amplitude.minPx, options.amplitude.maxPx);
+    for (let step = 0; step <= segmentsPerEdge; step += 1) {
+      if (i > 0 && step === 0) {
+        continue;
+      }
+      const t = step / segmentsPerEdge;
+      const baseX = start.x + (end.x - start.x) * t;
+      const baseY = start.y + (end.y - start.y) * t;
+      const wave = Math.sin(t * Math.PI * 2 * wavesPerEdge + i * 0.35) * amp;
+      points.push({
+        x: cx + baseX + normal.x * wave,
+        y: cy + baseY + normal.y * wave,
+      });
+    }
+  }
+
+  if (points.length > 0) {
+    points.push({ ...points[0] });
+  }
+
+  return points;
 }
 
 export function computeCloudLayout(anchorScreen: ScreenPoint, screenOffset?: { x: number; y: number }, cloudSize?: { width: number; height: number }): CloudLayout {
@@ -458,6 +554,7 @@ export function isDtxInteractionReady(
   try {
     const stats = layer.getStats();
     if (stats.compiled === true) return true;
+    if (stats.totalObjects > 0) return true;
     if (layer.objectCount > 0) return true;
     return layer.getVisibleObjectIds().length > 0;
   } catch {
@@ -1153,6 +1250,7 @@ export function useDtxTools(options: {
 
   const selectionStore = useSelectionStore();
   const unitSettings = useUnitSettingsStore();
+  const readyRevision = ref(0);
 
   let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
   let lastTextMarkerClick: { annotationId: string; timestamp: number } | null = null;
@@ -1163,6 +1261,7 @@ export function useDtxTools(options: {
   let lastAppliedPickHighlights: string[] = [];
 
   const ready = computed(() => {
+    void readyRevision.value;
     return isDtxInteractionReady(dtxLayerRef.value);
   });
 
@@ -1839,6 +1938,10 @@ export function useDtxTools(options: {
     pendingCloudAnchor.value = null;
   }
 
+  function refreshReadyState() {
+    readyRevision.value += 1;
+  }
+
   function setPendingCloudAnchor(anchor: PendingCloudAnchor) {
     pendingCloudAnchor.value = {
       worldPos: [...anchor.worldPos],
@@ -2361,7 +2464,8 @@ export function useDtxTools(options: {
         up,
         widthPx * worldPerPixel,
         heightPx * worldPerPixel,
-        18,
+        16,
+        worldPerPixel,
       );
       cloud.outline.geometry.setAttribute(
         'position',
@@ -3262,6 +3366,7 @@ export function useDtxTools(options: {
   return {
     ready,
     statusText,
+    refreshReadyState,
 
     syncFromStore,
     updateOverlayPositions,
