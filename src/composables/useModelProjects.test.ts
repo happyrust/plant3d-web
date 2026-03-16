@@ -1,139 +1,156 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
 
 import { useModelProjects } from './useModelProjects';
 
+const flushPromises = async () => {
+  await Promise.resolve();
+  await nextTick();
+};
+
+const buildProjectsResponse = (items: Array<Record<string, unknown>>): Response => ({
+  ok: true,
+  headers: new Headers({ 'content-type': 'application/json' }),
+  json: async () => ({
+    items,
+    total: items.length,
+    page: 1,
+    per_page: 20,
+  }),
+} as Response);
+
 describe('useModelProjects', () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
   });
 
-  it('switchProjectById switches to existing project', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('switchProjectById switches to existing project', async () => {
+    fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'project-1', name: 'Project1', notes: 'Test 1' },
+      { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
+    ]));
+
     const { switchProjectById, currentProject } = useModelProjects();
-    
-    // Mock 后端 /api/projects 返回格式
-    const mockApiResponse = {
-      items: [
-        { id: 'project-1', name: 'Project1', notes: 'Test 1' },
-        { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
-      ],
-      total: 2,
-      page: 1,
-      per_page: 20,
-    };
-    
-    // Simulate projects loaded
-    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => mockApiResponse,
-    } as Response);
+    await flushPromises();
 
-    // Wait for projects to load, then switch
-    setTimeout(() => {
-      const result = switchProjectById('AvevaMarineSample');
-      expect(result).toBe(true);
-      expect(currentProject.value?.path).toBe('AvevaMarineSample');
-    }, 100);
+    const result = switchProjectById('AvevaMarineSample');
+    expect(result).toBe(true);
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
   });
 
-  it('switchProjectById returns false for non-existent project', () => {
+  it('switchProjectById returns false for non-existent project', async () => {
+    fetchMock.mockResolvedValue(buildProjectsResponse([]));
+
     const { switchProjectById } = useModelProjects();
-    
+    await flushPromises();
+
     const result = switchProjectById('non-existent-project');
     expect(result).toBe(false);
   });
 
-  it('switchProjectById does not switch if already on target project', () => {
-    const { switchProjectById, currentProject } = useModelProjects();
-    
-    const eventSpy = vi.fn();
-    window.addEventListener('modelProjectChanged', eventSpy);
-    
-    // Assume current project is already set
-    if (currentProject.value) {
-      const currentId = currentProject.value.id;
-      switchProjectById(currentId);
-      
-      // Should not trigger event if already on same project
-      expect(eventSpy).not.toHaveBeenCalled();
-    }
-    
-    window.removeEventListener('modelProjectChanged', eventSpy);
-  });
+  it('switchProjectById does not switch if already on target project', async () => {
+    fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
+    ]));
 
-  it('switchProjectById triggers modelProjectChanged event', () => {
-    const { switchProjectById } = useModelProjects();
-    
-    const eventSpy = vi.fn();
-    window.addEventListener('modelProjectChanged', eventSpy);
-    
+    const { switchProjectById, currentProject } = useModelProjects();
+    await flushPromises();
+
     switchProjectById('AvevaMarineSample');
-    
-    // Event should be triggered if project exists and is different
-    setTimeout(() => {
-      if (eventSpy.mock.calls.length > 0) {
-        expect(eventSpy).toHaveBeenCalled();
-      }
-    }, 100);
-    
+
+    const eventSpy = vi.fn();
+    window.addEventListener('modelProjectChanged', eventSpy);
+
+    const currentId = currentProject.value?.id;
+    expect(currentId).toBe('AvevaMarineSample');
+
+    switchProjectById(currentId!);
+
+    expect(eventSpy).not.toHaveBeenCalled();
+
     window.removeEventListener('modelProjectChanged', eventSpy);
   });
 
-  it('switchProjectById matches project by path when id does not match', () => {
-    const { switchProjectById, currentProject } = useModelProjects();
-    
-    const mockApiResponse = {
-      items: [
-        { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS' },
-      ],
-      total: 1,
-      page: 1,
-      per_page: 20,
-    };
-    
-    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => mockApiResponse,
-    } as Response);
+  it('switchProjectById triggers modelProjectChanged event', async () => {
+    fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'project-1', name: 'Project1', notes: 'Test 1' },
+      { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
+    ]));
 
-    setTimeout(() => {
-      const result = switchProjectById('AvevaMarineSample');
-      expect(result).toBe(true);
-      expect(currentProject.value?.path).toBe('AvevaMarineSample');
-    }, 100);
+    const { switchProjectById } = useModelProjects();
+    await flushPromises();
+
+    const switchedToOther = switchProjectById('project-1');
+    expect(switchedToOther).toBe(true);
+
+    const eventSpy = vi.fn();
+    window.addEventListener('modelProjectChanged', eventSpy);
+
+    const result = switchProjectById('AvevaMarineSample');
+
+    expect(result).toBe(true);
+    expect(eventSpy).toHaveBeenCalledOnce();
+
+    window.removeEventListener('modelProjectChanged', eventSpy);
   });
 
-  it('switchProjectById matches project by id or path for embed URLs', () => {
-    const { switchProjectById, currentProject } = useModelProjects();
-    
-    const mockApiResponse = {
-      items: [
-        { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS', show_dbnum: 7997 },
-        { id: 'other-project', name: 'OtherPath', notes: 'Other project' },
-      ],
-      total: 2,
-      page: 1,
-      per_page: 20,
-    };
-    
-    vi.spyOn(window, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => mockApiResponse,
-    } as Response);
+  it('switchProjectById matches project by path when id does not match', async () => {
+    fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS' },
+    ]));
 
-    setTimeout(() => {
-      // Test matching by path (when project_id in URL is actually a path value)
-      let result = switchProjectById('AvevaMarineSample');
-      expect(result).toBe(true);
-      expect(currentProject.value?.path).toBe('AvevaMarineSample');
-      
-      // Test matching by id
-      result = switchProjectById('other-project');
-      expect(result).toBe(true);
-      expect(currentProject.value?.id).toBe('other-project');
-    }, 100);
+    const { switchProjectById, currentProject } = useModelProjects();
+    await flushPromises();
+
+    expect(currentProject.value?.id).toBe('ams-model');
+
+    const result = switchProjectById('AvevaMarineSample');
+    expect(result).toBe(false);
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
+  });
+
+  it('switchProjectById matches project by id or path for embed URLs', async () => {
+    fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS', show_dbnum: 7997 },
+      { id: 'other-project', name: 'OtherPath', notes: 'Other project' },
+    ]));
+
+    const { switchProjectById, currentProject } = useModelProjects();
+    await flushPromises();
+
+    expect(currentProject.value?.id).toBe('ams-model');
+
+    // Test matching by path (when project_id in URL is actually a path value)
+    let result = switchProjectById('AvevaMarineSample');
+    expect(result).toBe(false);
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
+
+    // Test matching by id
+    result = switchProjectById('other-project');
+    expect(result).toBe(true);
+    expect(currentProject.value?.id).toBe('other-project');
+  });
+
+  it('falls back cleanly when project loading fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockRejectedValueOnce(new Error('network down'));
+
+    const { currentProject, projects, isLoading } = useModelProjects();
+    await flushPromises();
+
+    expect(isLoading.value).toBe(false);
+    expect(projects.value).toHaveLength(1);
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 });
 
