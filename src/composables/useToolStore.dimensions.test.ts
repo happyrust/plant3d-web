@@ -73,10 +73,10 @@ describe('useToolStore - dimensions', () => {
 
     await nextTick();
 
-    const raw = localStorage.getItem('plant3d-web-tools-v4:project=AvevaMarineSample|db=7997');
+    const raw = localStorage.getItem('plant3d-web-tools-v5:project=AvevaMarineSample|db=7997');
     expect(raw).toBeTruthy();
     const parsed = raw ? JSON.parse(raw) : null;
-    expect(parsed?.version).toBe(4);
+    expect(parsed?.version).toBe(5);
     expect(Array.isArray(parsed?.dimensions)).toBe(true);
     expect(parsed.dimensions.length).toBe(1);
     expect(parsed.dimensions[0].id).toBe('d1');
