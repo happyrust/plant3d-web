@@ -19,6 +19,11 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { getRoleDisplayName } from '@/types/auth';
 
+const emit = defineEmits<{
+  (e: 'created', taskId: string): void;
+  (e: 'close'): void;
+}>();
+
 const userStore = useUserStore();
 const selectionStore = useSelectionStore();
 
@@ -120,6 +125,7 @@ const notification = ref<{ type: 'success' | 'error' | null; message: string; de
   message: '',
   details: '',
 });
+const shouldCloseAfterSuccess = ref(false);
 
 // 嵌入模式参数
 const embedModeParams = ref<{
@@ -329,6 +335,8 @@ async function handleSubmit() {
       message: '提资单创建成功！',
       details: `数据包「${task.title}」已创建，校核人：${checker?.name}，审核人：${approver?.name}，包含 ${selectedComponents.value.length} 个构件，附件成功 ${uploadedAttachmentCount} 个${failedAttachmentCount > 0 ? `，失败 ${failedAttachmentCount} 个` : ''}`,
     };
+    shouldCloseAfterSuccess.value = true;
+    emit('created', task.id);
 
     // 重置表单
     formData.packageName = '';
@@ -341,7 +349,11 @@ async function handleSubmit() {
     uploadedFiles.value = [];
     createdTaskId.value = null;
     createdTaskFormId.value = null;
+
+    panelVisible.value = false;
+    emit('close');
   } catch (error) {
+    shouldCloseAfterSuccess.value = false;
     notification.value = {
       type: 'error',
       message: '提资单创建失败',
@@ -353,6 +365,11 @@ async function handleSubmit() {
 }
 
 function clearNotification() {
+  if (shouldCloseAfterSuccess.value) {
+    notification.value = { type: null, message: '', details: '' };
+    shouldCloseAfterSuccess.value = false;
+    return;
+  }
   notification.value = { type: null, message: '', details: '' };
 }
 

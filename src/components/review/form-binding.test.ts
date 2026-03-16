@@ -3,6 +3,7 @@ import { createApp, h, nextTick } from 'vue';
 
 const createTaskMock = vi.fn();
 const updateTaskAttachmentsMock = vi.fn();
+const uploadStartMock = vi.fn(async () => undefined);
 
 vi.mock('@/api/genModelPdmsAttrApi', () => ({
   pdmsGetUiAttr: vi.fn(async (refno: string) => ({
@@ -35,6 +36,12 @@ vi.mock('@/components/review/FileUploadSection.vue', () => ({
     props: ['modelValue'],
     emits: ['update:modelValue', 'upload-complete'],
     template: '<div data-testid="file-upload-section-stub" />',
+    expose: ['startUpload'],
+    setup() {
+      return {
+        startUpload: uploadStartMock,
+      };
+    },
   },
 }));
 
@@ -72,6 +79,7 @@ describe('InitiateReviewPanel form binding', () => {
   beforeEach(() => {
     createTaskMock.mockReset();
     updateTaskAttachmentsMock.mockReset();
+    uploadStartMock.mockClear();
     createTaskMock.mockResolvedValue({
       id: 'task-1',
       formId: 'FORM-1',
@@ -156,6 +164,124 @@ describe('InitiateReviewPanel form binding', () => {
         }),
       ],
     }));
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('shows success feedback, closes the panel, and emits created/close after submit succeeds', async () => {
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const createdHandler = vi.fn();
+    const closeHandler = vi.fn();
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel, {
+        onCreated: (...args: unknown[]) => createdHandler(...args),
+        onClose: () => closeHandler(),
+      }),
+    });
+    app.mount(host);
+
+    const click = (selector: string) => {
+      const element = host.querySelector(selector) as HTMLButtonElement | null;
+      expect(element).not.toBeNull();
+      element?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    };
+
+    click('button[title="将选中的构件添加到列表"]');
+    await nextTick();
+    await nextTick();
+
+    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement;
+    packageInput.value = '成功关闭校审包';
+    packageInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const checkerSelect = host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement;
+    checkerSelect.value = 'checker-1';
+    checkerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const approverSelect = host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement;
+    approverSelect.value = 'approver-1';
+    approverSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await nextTick();
+
+    click('[data-testid="initiate-submit-trigger"]');
+    await nextTick();
+    await nextTick();
+
+    expect(createTaskMock).toHaveBeenCalledTimes(1);
+    expect((host.querySelector('button.w-full') as HTMLButtonElement | null)?.disabled).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(host.querySelector('[data-testid="designer-landing-workspace"]')).toBeNull();
+    expect(host.textContent).toContain('重新打开提资面板');
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('keeps form values and panel open when create task request fails', async () => {
+    createTaskMock.mockRejectedValueOnce(new Error('network broken'));
+
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const createdHandler = vi.fn();
+    const closeHandler = vi.fn();
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel, {
+        onCreated: (...args: unknown[]) => createdHandler(...args),
+        onClose: () => closeHandler(),
+      }),
+    });
+    app.mount(host);
+
+    const click = (selector: string) => {
+      const element = host.querySelector(selector) as HTMLButtonElement | null;
+      expect(element).not.toBeNull();
+      element?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    };
+
+    click('button[title="将选中的构件添加到列表"]');
+    await nextTick();
+    await nextTick();
+
+    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement;
+    packageInput.value = '失败保留内容';
+    packageInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const descriptionInput = host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement;
+    descriptionInput.value = '失败后应保留';
+    descriptionInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const checkerSelect = host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement;
+    checkerSelect.value = 'checker-1';
+    checkerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const approverSelect = host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement;
+    approverSelect.value = 'approver-1';
+    approverSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await nextTick();
+
+    click('[data-testid="initiate-submit-trigger"]');
+    await nextTick();
+    await nextTick();
+
+    expect(createTaskMock).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-testid="designer-landing-workspace"]')).not.toBeNull();
+    expect(host.textContent).toContain('提资单创建失败');
+    expect(host.textContent).toContain('network broken');
+    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement).value).toBe('失败保留内容');
+    expect((host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement).value).toBe('失败后应保留');
 
     app.unmount();
     host.remove();
