@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import {
+  ArrowRight,
   CheckCircle,
   ClipboardCheck,
   ClipboardList,
@@ -73,6 +74,20 @@ const showMeasurementMenu = ref(false);
 
 // 当前任务信息
 const currentTask = computed(() => reviewStore.currentTask.value);
+const currentTaskPrimaryReviewerName = computed(() => {
+  if (!currentTask.value) return '-';
+  return currentTask.value.checkerName || currentTask.value.reviewerName || '-';
+});
+
+const currentTaskApproverName = computed(() => {
+  if (!currentTask.value) return '-';
+  return currentTask.value.approverName || '-';
+});
+
+const currentTaskNodeLabel = computed(() => {
+  if (!currentTask.value) return '-';
+  return WORKFLOW_NODE_NAMES[(currentTask.value.currentNode || 'sj') as WorkflowNode];
+});
 
 // 格式化文件大小
 function formatFileSize(bytes?: number): string {
@@ -556,18 +571,24 @@ onUnmounted(() => {
   <div class="flex h-full flex-col gap-3 overflow-y-auto p-3">
     <!-- 当前任务信息 -->
     <div v-if="currentTask"
-      class="rounded-md border border-border bg-background p-3"
+      class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
       data-testid="reviewer-landing-workspace">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <ClipboardCheck class="h-5 w-5 text-primary" />
-          <span class="text-sm font-semibold">当前审核任务</span>
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="space-y-2">
+          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <ClipboardCheck class="h-5 w-5 text-primary" />
+            <span>审核工作台</span>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold leading-7 text-slate-950">{{ currentTask.title }}</h2>
+            <p class="mt-1 text-sm text-slate-500">当前任务上下文与工作流状态</p>
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <button v-if="isFilteringByTask"
             type="button"
             title="显示所有模型"
-            class="h-6 rounded px-2 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200"
+            class="h-7 rounded-full bg-orange-100 px-3 text-xs font-medium text-orange-700 hover:bg-orange-200"
             @click="clearModelFilter">
             <Filter class="h-3 w-3 inline mr-1" />
             已过滤
@@ -580,50 +601,69 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
-      <div class="mt-2 space-y-1">
-        <div class="text-sm font-medium">{{ currentTask.title }}</div>
-        <div class="text-xs text-muted-foreground">模型: {{ currentTask.modelName }}</div>
-        <div class="text-xs text-muted-foreground">
-          发起人: {{ currentTask.requesterName }} | 
-          校核: {{ currentTask.checkerName || currentTask.reviewerName || '-' }} |
-          审核: {{ currentTask.approverName || '-' }} |
-          构件数: {{ currentTask.components.length }}
+      <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">模型</div>
+          <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.modelName || '-' }}</div>
         </div>
-        <div class="mt-2 rounded-md bg-muted/50 p-2 text-xs">
-          <div class="flex items-center justify-between">
-            <div class="text-muted-foreground">
-              当前节点:
-              <span class="font-medium text-foreground">
-                {{ WORKFLOW_NODE_NAMES[(currentTask.currentNode || 'sj') as WorkflowNode] }}
-              </span>
-            </div>
-            <div class="flex gap-2">
-              <button type="button"
-                class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
-                @click="toggleSubmitDialog">
-                {{ submitActionLabel }}
-              </button>
-              <button type="button"
-                class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
-                :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
-                @click="toggleReturnDialog">
-                驳回到设计
-              </button>
-            </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">发起人</div>
+          <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.requesterName || '-' }}</div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">审核人</div>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-700">
+            <span class="rounded-full bg-white px-2.5 py-1 font-medium text-slate-700">校核 {{ currentTaskPrimaryReviewerName }}</span>
+            <span class="rounded-full bg-white px-2.5 py-1 font-medium text-slate-700">审核 {{ currentTaskApproverName }}</span>
           </div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">构件数量</div>
+          <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.components.length }} 个构件</div>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">当前节点</div>
+          <div class="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <span>{{ currentTaskNodeLabel }}</span>
+            <ArrowRight class="h-4 w-4 text-slate-400" />
+            <span class="text-slate-500">{{ submitActionLabel }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="text-slate-600">
+            当前节点:
+            <span class="font-medium text-slate-900">
+              {{ currentTaskNodeLabel }}
+            </span>
+          </div>
+          <div class="flex gap-2">
+            <button type="button"
+              class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
+              :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
+              @click="toggleSubmitDialog">
+              {{ submitActionLabel }}
+            </button>
+            <button type="button"
+              class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
+              :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
+              @click="toggleReturnDialog">
+              驳回到设计
+            </button>
+          </div>
+        </div>
 
-          <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
-          <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
-          <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
-            <div v-for="(step, idx) in workflow.history"
-              :key="idx"
-              class="flex items-center justify-between text-muted-foreground">
-              <span>
-                {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
-              </span>
-              <span>{{ formatDate(step.timestamp) }}</span>
-            </div>
+        <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
+        <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
+        <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
+          <div v-for="(step, idx) in workflow.history"
+            :key="idx"
+            class="flex items-center justify-between text-muted-foreground">
+            <span>
+              {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
+            </span>
+            <span>{{ formatDate(step.timestamp) }}</span>
           </div>
         </div>
         <div class="flex gap-2 mt-2">
