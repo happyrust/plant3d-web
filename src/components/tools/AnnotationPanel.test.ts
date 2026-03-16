@@ -79,7 +79,6 @@ describe('AnnotationPanel', () => {
       createdAt: 2,
       refnos: ['demo:2'],
     });
-    store.pendingCloudAnnotationEditId.value = 'cloud-1';
     store.pendingRectAnnotationEditId.value = 'rect-1';
 
     const app = createApp(AnnotationPanel, {

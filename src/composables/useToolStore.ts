@@ -138,6 +138,10 @@ export type CloudAnnotationRecord = {
   id: string;
   objectIds: string[];
   anchorWorldPos: Vec3;
+  anchorRefno?: string;
+  leaderEndWorldPos?: Vec3;
+  screenOffset?: { x: number; y: number };
+  cloudSize?: { width: number; height: number };
   visible: boolean;
   title: string;
   description: string;

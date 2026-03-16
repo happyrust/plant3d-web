@@ -1,5 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue';
 
+import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
 import {
   Box3,
   BufferAttribute,
@@ -13,16 +14,15 @@ import {
   Vector2,
   Vector3,
 } from 'three';
-import { MeshLine, MeshLineGeometry, MeshLineMaterial } from '@lume/three-meshline';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
+import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { findNounByRefnoAcrossAllDbnos, findOwnerRefnoByTubi } from '@/composables/useDbnoInstancesDtxLoader';
 import { dockActivatePanelIfExists, dockPanelExists } from '@/composables/useDockApi';
-import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
@@ -120,6 +120,12 @@ type ScreenPoint = {
   y: number
   visible: boolean
   ndcZ: number
+}
+
+type PendingCloudAnchor = {
+  worldPos: Vec3
+  refno?: string
+  entityId?: string
 }
 
 type CloudLayout = {
@@ -378,6 +384,54 @@ export function computeCloudLayout(anchorScreen: ScreenPoint, screenOffset?: { x
     labelX: cloudCenterX + labelOffsetX,
     labelY: cloudCenterY,
     labelAlign,
+  };
+}
+
+export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
+  id?: string
+  objectIds: string[]
+  refnos?: string[]
+  anchorWorldPos: Vec3
+  anchorRefno?: string
+  anchorScreen: ScreenPoint
+  rect: { x1: number; y1: number; x2: number; y2: number }
+  title: string
+  description?: string
+  createdAt?: number
+  projectOverlayToWorld: (x: number, y: number, ndcZ: number) => Vec3
+}): CloudAnnotationRecord {
+  const marqueeCenter = {
+    x: (params.rect.x1 + params.rect.x2) * 0.5,
+    y: (params.rect.y1 + params.rect.y2) * 0.5,
+  };
+  const cloudSize = {
+    width: clamp(params.rect.x2 - params.rect.x1, 72, 220),
+    height: clamp(params.rect.y2 - params.rect.y1, 48, 180),
+  };
+  const screenOffset = {
+    x: marqueeCenter.x - params.anchorScreen.x,
+    y: marqueeCenter.y - params.anchorScreen.y,
+  };
+  const cloudLayout = computeCloudLayout(params.anchorScreen, screenOffset, cloudSize);
+  const leaderEndWorldPos = params.projectOverlayToWorld(
+    cloudLayout.labelX,
+    cloudLayout.labelY,
+    params.anchorScreen.ndcZ,
+  );
+
+  return {
+    id: params.id ?? nowId('cloud'),
+    objectIds: [...params.objectIds],
+    anchorWorldPos: [...params.anchorWorldPos],
+    anchorRefno: params.anchorRefno,
+    leaderEndWorldPos,
+    screenOffset,
+    cloudSize,
+    visible: true,
+    title: params.title,
+    description: params.description ?? '',
+    createdAt: params.createdAt ?? Date.now(),
+    refnos: params.refnos ? [...params.refnos] : [...params.objectIds],
   };
 }
 
@@ -1711,7 +1765,9 @@ export function useDtxTools(options: {
       return `拾取模式${filterText}：点击选择构件 [已选 ${count}] — Enter 确认 / ESC 取消`;
     }
     if (mode === 'annotation_cloud') {
-      return '云线批注：按下拖拽框选，松开后以框选中心最近可见命中创建屏幕空间云线';
+      return pendingCloudAnchor.value
+        ? '云线批注：锚点已就绪，请拖拽框选关联构件并生成屏幕云线'
+        : '云线批注：请先点击模型选择锚点，再拖拽框选关联构件';
     }
     if (mode === 'annotation_rect') {
       return '矩形批注：点击对象生成 OBB 包围框批注';
@@ -1747,6 +1803,7 @@ export function useDtxTools(options: {
 
   const marqueeState = ref<DragRect>({ active: false, pointerId: null, startClient: null, startCanvas: null, currentCanvas: null });
   const marqueeDiv = ref<HTMLDivElement | null>(null);
+  const pendingCloudAnchor = ref<PendingCloudAnchor | null>(null);
 
   const rectDrag = ref<RectPlaneDrag>({
     active: false,
@@ -1765,6 +1822,18 @@ export function useDtxTools(options: {
     pointToObjectStart.value = null;
     dimensionPoints.value = [];
     clearDimensionPreview();
+  }
+
+  function clearPendingCloudAnchor() {
+    pendingCloudAnchor.value = null;
+  }
+
+  function setPendingCloudAnchor(anchor: PendingCloudAnchor) {
+    pendingCloudAnchor.value = {
+      worldPos: [...anchor.worldPos],
+      refno: anchor.refno,
+      entityId: anchor.entityId,
+    };
   }
 
   function ensureToolsGroupAttached() {
@@ -2442,6 +2511,7 @@ export function useDtxTools(options: {
     rectPreviewLine.value = null;
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
     resetProgress();
+    clearPendingCloudAnchor();
     store.clearAll();
   }
 
@@ -2591,6 +2661,7 @@ export function useDtxTools(options: {
   function beginMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb') {
     if (!ready.value) return;
     if (e.button !== 0) return;
+    if (mode === 'annotation_cloud' && !pendingCloudAnchor.value) return;
     const start = getCanvasPos(canvas, e);
     marqueeState.value = {
       active: true,
@@ -2641,6 +2712,16 @@ export function useDtxTools(options: {
     };
     if (rect.x2 - rect.x1 < 6 || rect.y2 - rect.y1 < 6) {
       hideMarquee();
+      if (mode === 'annotation_cloud') {
+        const hit = pickSurfacePoint(canvas, e);
+        if (hit) {
+          setPendingCloudAnchor({
+            worldPos: vec3ToTuple(hit.worldPos),
+            refno: hit.entityId,
+            entityId: hit.entityId,
+          });
+        }
+      }
       return;
     }
     const dx = end.x - start.x;
@@ -2660,58 +2741,30 @@ export function useDtxTools(options: {
     const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]));
 
     if (mode === 'annotation_cloud') {
-      const n = store.cloudAnnotations.value.length + 1;
-      const marqueeCenter = {
-        x: (rect.x1 + rect.x2) * 0.5,
-        y: (rect.y1 + rect.y2) * 0.5,
-      };
       const viewer = dtxViewerRef.value;
       const overlay = overlayContainerRef.value;
-      if (!viewer || !overlay) return;
-      const anchor = resolveCloudAnchorFromMarqueeCenter(
-        viewer,
-        canvas,
-        marqueeCenter,
-        selectedRefnos,
-        selectionRef.value,
-        dtxLayerRef.value,
-      ) ?? topCenterFromBox3(box);
+      const anchorState = pendingCloudAnchor.value;
+      if (!viewer || !overlay || !anchorState) return;
+      const n = store.cloudAnnotations.value.length + 1;
+      const anchor = new Vector3(...anchorState.worldPos);
       const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, anchor);
-      const cloudCenterX = marqueeCenter.x;
-      const cloudCenterY = marqueeCenter.y;
-      const cloudSize = {
-        width: clamp(rect.x2 - rect.x1, 72, 220),
-        height: clamp(rect.y2 - rect.y1, 48, 180),
-      };
-      const cloudLayout = computeCloudLayout(anchorScreen, {
-        x: cloudCenterX - anchorScreen.x,
-        y: cloudCenterY - anchorScreen.y,
-      }, cloudSize);
-      const leaderEnd = overlayToWorld(
-        viewer.camera,
-        canvas,
-        overlay,
-        cloudLayout.labelX,
-        cloudLayout.labelY,
-        anchorScreen.ndcZ,
-      );
-      const rec: CloudAnnotationRecord = {
+      const rec = createCloudAnnotationRecordFromAnchorAndMarquee({
         id: nowId('cloud'),
         objectIds: [...selectedRefnos],
-        anchorWorldPos: vec3ToTuple(anchor),
-        leaderEndWorldPos: vec3ToTuple(leaderEnd),
-        screenOffset: {
-          x: cloudCenterX - anchorScreen.x,
-          y: cloudCenterY - anchorScreen.y,
-        },
-        cloudSize,
-        visible: true,
+        refnos: [...selectedRefnos],
+        anchorWorldPos: anchorState.worldPos,
+        anchorRefno: anchorState.refno,
+        anchorScreen,
+        rect,
         title: `云线批注 ${n}`,
         description: '',
         createdAt: Date.now(),
-        refnos: [...selectedRefnos],
-      };
+        projectOverlayToWorld: (x, y, ndcZ) => vec3ToTuple(
+          overlayToWorld(viewer.camera, canvas, overlay, x, y, ndcZ),
+        ),
+      });
       store.addCloudAnnotation(rec);
+      clearPendingCloudAnchor();
       return;
     }
 
@@ -2758,8 +2811,14 @@ export function useDtxTools(options: {
     clickTracker.value = { down: { x: e.clientX, y: e.clientY }, moved: false };
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
+    if (mode === 'annotation_obb') {
       beginMarquee(canvas, e, mode);
+      return;
+    }
+    if (mode === 'annotation_cloud') {
+      if (pendingCloudAnchor.value) {
+        beginMarquee(canvas, e, mode);
+      }
       return;
     }
     if (mode === 'annotation_rect') {
@@ -2797,8 +2856,28 @@ export function useDtxTools(options: {
     if (!ready.value) return;
 
     const mode = store.toolMode.value;
-    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
+    if (mode === 'annotation_obb') {
       endMarquee(canvas, e, mode);
+      return;
+    }
+    if (mode === 'annotation_cloud') {
+      if (marqueeState.value.active) {
+        endMarquee(canvas, e, mode);
+        return;
+      }
+      if (clickTracker.value.moved) {
+        clickTracker.value = { down: null, moved: false };
+        return;
+      }
+      clickTracker.value = { down: null, moved: false };
+      const hit = pickSurfacePoint(canvas, e);
+      if (!hit) return;
+      setPendingCloudAnchor({
+        worldPos: vec3ToTuple(hit.worldPos),
+        refno: hit.entityId,
+        entityId: hit.entityId,
+      });
+      ensurePanelActivated('annotation');
       return;
     }
     if (mode === 'annotation_rect') {
@@ -3142,6 +3221,9 @@ export function useDtxTools(options: {
     (mode, prev) => {
       if (mode !== prev) {
         resetProgress();
+      }
+      if (mode !== 'annotation_cloud' && prev === 'annotation_cloud') {
+        clearPendingCloudAnchor();
       }
       if (mode === 'none' && prev !== 'none') {
         hideMarquee();
