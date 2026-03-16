@@ -3,416 +3,356 @@ import { computed, onMounted, ref, watch } from 'vue';
 
 import {
   Calendar,
-  CheckCircle,
-  Clock,
+  CheckCircle2,
+  Clock3,
   FileText,
-  History,
-  MessageSquare,
+  GitBranch,
+  Info,
   Package,
   Paperclip,
+  RefreshCw,
   User,
-  X,
   XCircle,
 } from 'lucide-vue-next';
 
-import { mapWorkflowHistoryToTaskDetailItems, type TaskDetailHistoryItem } from './reviewPanelActions';
+import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
-import type { ReviewTask, AnnotationComment } from '@/types/auth';
-
+import { reviewTaskGetWorkflow } from '@/api/reviewApi';
+import Dialog from '@/components/ui/Dialog.vue';
 import {
-  reviewTaskGetWorkflow,
-  reviewCommentGetByAnnotation,
-} from '@/api/reviewApi';
-import { getRoleDisplayName, getPriorityDisplayName, getTaskStatusDisplayName, UserRole } from '@/types/auth';
+  WORKFLOW_NODE_NAMES,
+  getPriorityDisplayName,
+  getTaskStatusDisplayName,
+} from '@/types/auth';
 
 const props = defineProps<{
   task: ReviewTask;
 }>();
 
-const emit = defineEmits<(e: 'close') => void>();
+const emit = defineEmits<{
+  close: [];
+}>();
 
-const activeTab = ref<'info' | 'history' | 'comments'>('info');
-const isLoading = ref(false);
-const history = ref<TaskDetailHistoryItem[]>([]);
-const comments = ref<AnnotationComment[]>([]);
+const isLoadingHistory = ref(false);
+const workflowHistory = ref<WorkflowStep[]>([]);
+const workflowError = ref<string | null>(null);
 
-// 加载审核历史
-async function loadHistory() {
-  isLoading.value = true;
-  try {
-    const response = await reviewTaskGetWorkflow(props.task.id);
-    if (response.success) {
-      history.value = mapWorkflowHistoryToTaskDetailItems(response.history);
-    }
-  } catch (e) {
-    console.error('[TaskReviewDetail] Failed to load history:', e);
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-// 按角色分组的评论
-const commentsByRole = computed(() => {
-  const grouped = {
-    designer: [] as AnnotationComment[],
-    proofreader: [] as AnnotationComment[],
-    reviewer: [] as AnnotationComment[],
-  };
-
-  for (const comment of comments.value) {
-    if (comment.authorRole === UserRole.DESIGNER) {
-      grouped.designer.push(comment);
-    } else if (comment.authorRole === UserRole.PROOFREADER) {
-      grouped.proofreader.push(comment);
-    } else {
-      // REVIEWER, MANAGER, ADMIN 都归入 reviewer 分栏
-      grouped.reviewer.push(comment);
-    }
-  }
-
-  return grouped;
+const open = computed({
+  get: () => true,
+  set: (value: boolean) => {
+    if (!value) emit('close');
+  },
 });
 
-function formatDateTime(timestamp: number): string {
+const taskStatus = computed(() => getTaskStatusDisplayName(props.task.status));
+const priorityDisplay = computed(() => getPriorityDisplayName(props.task.priority));
+const componentCount = computed(() => props.task.components.length);
+const attachmentCount = computed(() => props.task.attachments?.length ?? 0);
+const latestReturnStep = computed<WorkflowStep | null>(() => {
+  const latestFromHistory = [...workflowHistory.value]
+    .reverse()
+    .find((step) => step.action === 'return');
+
+  if (latestFromHistory) return latestFromHistory;
+
+  if (!props.task.returnReason) return null;
+
+  return {
+    node: props.task.currentNode ?? 'sj',
+    action: 'return',
+    operatorId: '',
+    operatorName: props.task.approverName || props.task.checkerName || props.task.reviewerName || '系统',
+    comment: props.task.returnReason,
+    timestamp: props.task.updatedAt,
+  };
+});
+
+const detailRows = computed(() => [
+  {
+    label: '模型名称',
+    value: props.task.modelName || '未提供',
+    icon: Package,
+  },
+  {
+    label: '发起人',
+    value: props.task.requesterName || '-',
+    icon: User,
+  },
+  {
+    label: '校核人',
+    value: props.task.checkerName || props.task.reviewerName || '-',
+    icon: User,
+  },
+  {
+    label: '审核人',
+    value: props.task.approverName || '-',
+    icon: User,
+  },
+  {
+    label: '当前节点',
+    value: formatWorkflowNode(props.task.currentNode),
+    icon: GitBranch,
+  },
+  {
+    label: '创建时间',
+    value: formatDateTime(props.task.createdAt),
+    icon: Calendar,
+  },
+  {
+    label: '更新时间',
+    value: formatDateTime(props.task.updatedAt),
+    icon: Clock3,
+  },
+  {
+    label: '截止时间',
+    value: props.task.dueDate ? formatDateTime(props.task.dueDate) : '未设置',
+    icon: Calendar,
+  },
+]);
+
+const taskSummary = computed(() => `${componentCount.value} 个构件 · ${attachmentCount.value} 个附件`);
+
+function formatDateTime(timestamp?: number): string {
+  if (!timestamp) return '—';
   return new Date(timestamp).toLocaleString('zh-CN');
 }
 
-function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString('zh-CN');
+function formatWorkflowNode(node?: WorkflowNode): string {
+  if (!node) return '未开始';
+  return WORKFLOW_NODE_NAMES[node] || node;
 }
 
-function getHistoryActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    submit: '提交流转',
-    return: '驳回到设计',
-    approve: '最终批准',
-    created: '创建任务',
-    submitted: '提交审核',
-    in_review: '开始审核',
-    approved: '审核通过',
-    rejected: '审核驳回',
-    cancelled: '取消任务',
-  };
-  return labels[action] || action;
-}
-
-function getHistoryActionColor(action: string): string {
-  const colors: Record<string, string> = {
-    submit: 'bg-blue-100 text-blue-700',
-    return: 'bg-red-100 text-red-700',
-    approve: 'bg-green-100 text-green-700',
-    created: 'bg-gray-100 text-gray-700',
-    submitted: 'bg-yellow-100 text-yellow-700',
-    in_review: 'bg-blue-100 text-blue-700',
-    approved: 'bg-green-100 text-green-700',
-    rejected: 'bg-red-100 text-red-700',
-    cancelled: 'bg-gray-100 text-gray-500',
-  };
-  return colors[action] || 'bg-gray-100 text-gray-700';
-}
-
-function getStatusIcon(status: ReviewTask['status']) {
-  switch (status) {
-    case 'approved':
-      return CheckCircle;
-    case 'rejected':
-      return XCircle;
+function getHistoryActionLabel(action: WorkflowStep['action'] | string): string {
+  switch (action) {
+    case 'submit':
+      return '提交';
+    case 'return':
+      return '驳回';
+    case 'approve':
+      return '批准';
+    case 'reject':
+      return '拒绝';
     default:
-      return Clock;
+      return action;
   }
 }
 
-function getStatusIconClass(status: ReviewTask['status']) {
-  switch (status) {
-    case 'approved':
-      return 'text-green-500';
-    case 'rejected':
-      return 'text-red-500';
+function getHistoryActionClass(action: WorkflowStep['action'] | string): string {
+  switch (action) {
+    case 'submit':
+      return 'bg-blue-100 text-blue-700';
+    case 'return':
+      return 'bg-rose-100 text-rose-700';
+    case 'approve':
+      return 'bg-emerald-100 text-emerald-700';
+    case 'reject':
+      return 'bg-amber-100 text-amber-700';
     default:
-      return 'text-blue-500';
+      return 'bg-slate-100 text-slate-700';
   }
 }
 
-// 监听 tab 切换加载数据
-watch(activeTab, (newTab) => {
-  if (newTab === 'history' && history.value.length === 0) {
-    loadHistory();
+function getHistoryMarkerClass(action: WorkflowStep['action'] | string): string {
+  switch (action) {
+    case 'submit':
+      return 'border-blue-500 bg-blue-100';
+    case 'return':
+      return 'border-rose-500 bg-rose-100';
+    case 'approve':
+      return 'border-emerald-500 bg-emerald-100';
+    case 'reject':
+      return 'border-amber-500 bg-amber-100';
+    default:
+      return 'border-slate-300 bg-slate-100';
   }
-});
+}
+
+async function loadWorkflowHistory() {
+  isLoadingHistory.value = true;
+  workflowError.value = null;
+  try {
+    const response = await reviewTaskGetWorkflow(props.task.id);
+    if (!response.success) {
+      throw new Error(response.error_message || '加载工作流历史失败');
+    }
+    workflowHistory.value = response.history || [];
+  } catch (error) {
+    workflowHistory.value = props.task.workflowHistory || [];
+    workflowError.value = error instanceof Error ? error.message : '加载工作流历史失败';
+  } finally {
+    isLoadingHistory.value = false;
+  }
+}
+
+watch(
+  () => props.task.id,
+  () => {
+    workflowHistory.value = [];
+    void loadWorkflowHistory();
+  }
+);
 
 onMounted(() => {
-  // 默认加载历史
-  loadHistory();
+  void loadWorkflowHistory();
 });
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="emit('close')">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-      <!-- 头部 -->
-      <div class="p-4 border-b flex items-center justify-between bg-gray-50">
-        <div class="flex items-center gap-3">
-          <component :is="getStatusIcon(task.status)" 
-            :class="['h-6 w-6', getStatusIconClass(task.status)]" />
-          <div>
-            <h3 class="text-lg font-semibold">{{ task.title }}</h3>
-            <div class="flex items-center gap-2 mt-1">
-              <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getTaskStatusDisplayName(task.status).color]">
-                {{ getTaskStatusDisplayName(task.status).label }}
-              </span>
-              <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getPriorityDisplayName(task.priority).color]">
-                {{ getPriorityDisplayName(task.priority).label }}
-              </span>
-            </div>
-          </div>
+  <Dialog v-model:open="open"
+    title="任务详情"
+    panel-class="max-w-[64rem]"
+    body-class="space-y-6 max-h-[78vh] overflow-y-auto px-6 py-5"
+    @close="emit('close')">
+    <template #title="{ titleId }">
+      <div class="flex min-w-0 items-start justify-between gap-4">
+        <div class="min-w-0">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Task detail</p>
+          <h2 :id="titleId" class="mt-2 truncate text-xl font-semibold text-slate-900">{{ task.title }}</h2>
+          <p class="mt-2 text-sm text-slate-500">{{ taskSummary }}</p>
         </div>
-        <button class="p-2 hover:bg-gray-200 rounded-lg" @click="emit('close')">
-          <X class="h-5 w-5 text-gray-500" />
-        </button>
-      </div>
-
-      <!-- Tab 切换 -->
-      <div class="flex border-b">
-        <button class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
-          :class="activeTab === 'info' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          @click="activeTab = 'info'">
-          <FileText class="h-4 w-4 inline mr-1" />
-          基本信息
-        </button>
-        <button class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
-          :class="activeTab === 'history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          @click="activeTab = 'history'">
-          <History class="h-4 w-4 inline mr-1" />
-          审核历史
-        </button>
-        <button class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors"
-          :class="activeTab === 'comments' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          @click="activeTab = 'comments'">
-          <MessageSquare class="h-4 w-4 inline mr-1" />
-          批注意见
-        </button>
-      </div>
-
-      <!-- 内容区域 -->
-      <div class="flex-1 overflow-auto p-4">
-        <!-- 基本信息 Tab -->
-        <div v-if="activeTab === 'info'" class="space-y-4">
-          <!-- 任务信息 -->
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="text-sm text-gray-500">模型名称</label>
-              <div class="flex items-center gap-2 mt-1">
-                <Package class="h-4 w-4 text-gray-400" />
-                <p class="font-medium">{{ task.modelName }}</p>
-              </div>
-            </div>
-            <div>
-              <label class="text-sm text-gray-500">校审人员</label>
-              <div class="flex items-center gap-2 mt-1">
-                <User class="h-4 w-4 text-gray-400" />
-                <p class="font-medium">
-                  校核：{{ task.checkerName || task.reviewerName || '-' }} / 审核：{{ task.approverName || '-' }}
-                </p>
-              </div>
-            </div>
-            <div>
-              <label class="text-sm text-gray-500">创建时间</label>
-              <div class="flex items-center gap-2 mt-1">
-                <Calendar class="h-4 w-4 text-gray-400" />
-                <p class="font-medium">{{ formatDateTime(task.createdAt) }}</p>
-              </div>
-            </div>
-            <div>
-              <label class="text-sm text-gray-500">更新时间</label>
-              <div class="flex items-center gap-2 mt-1">
-                <Clock class="h-4 w-4 text-gray-400" />
-                <p class="font-medium">{{ formatDateTime(task.updatedAt) }}</p>
-              </div>
-            </div>
-            <div v-if="task.dueDate">
-              <label class="text-sm text-gray-500">截止时间</label>
-              <div class="flex items-center gap-2 mt-1">
-                <Calendar class="h-4 w-4 text-orange-400" />
-                <p class="font-medium">{{ formatDate(task.dueDate) }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- 描述 -->
-          <div>
-            <label class="text-sm text-gray-500">描述</label>
-            <p class="mt-1 text-gray-700">{{ task.description || '无描述' }}</p>
-          </div>
-
-          <!-- 审核意见 -->
-          <div v-if="task.reviewComment" class="p-4 rounded-lg" 
-            :class="task.status === 'approved' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'">
-            <label class="text-sm font-medium" :class="task.status === 'approved' ? 'text-green-700' : 'text-red-700'">
-              {{ task.status === 'approved' ? '通过意见' : '驳回理由' }}
-            </label>
-            <p class="mt-1" :class="task.status === 'approved' ? 'text-green-800' : 'text-red-800'">
-              {{ task.reviewComment }}
-            </p>
-          </div>
-
-          <!-- 包含构件 -->
-          <div>
-            <label class="text-sm text-gray-500">包含构件 ({{ task.components.length }})</label>
-            <div class="mt-2 space-y-1 max-h-40 overflow-auto">
-              <div v-for="comp in task.components"
-                :key="comp.id"
-                class="flex items-center gap-2 p-2 bg-gray-50 rounded text-sm">
-                <FileText class="h-4 w-4 text-blue-600" />
-                <span>{{ comp.name }}</span>
-                <span class="text-gray-500">({{ comp.refNo }})</span>
-                <span v-if="comp.type" class="text-xs text-gray-400 ml-auto">{{ comp.type }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 附件 -->
-          <div v-if="task.attachments && task.attachments.length > 0">
-            <label class="text-sm text-gray-500 flex items-center gap-1">
-              <Paperclip class="h-4 w-4" />
-              附件文件 ({{ task.attachments.length }})
-            </label>
-            <div class="mt-2 space-y-1">
-              <div v-for="attachment in task.attachments"
-                :key="attachment.id"
-                class="flex items-center gap-2 p-2 bg-gray-50 rounded text-sm hover:bg-gray-100 cursor-pointer">
-                <Paperclip class="h-4 w-4 text-gray-500" />
-                <span class="flex-1">{{ attachment.name }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 审核历史 Tab -->
-        <div v-else-if="activeTab === 'history'" class="space-y-4">
-          <div v-if="isLoading" class="text-center py-8">
-            <div class="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
-            <p class="text-sm text-gray-500">加载中...</p>
-          </div>
-
-          <div v-else-if="history.length === 0" class="text-center py-8">
-            <History class="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <p class="text-sm text-gray-500">暂无审核历史</p>
-          </div>
-
-          <div v-else class="relative">
-            <!-- 时间线 -->
-            <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
-
-            <div v-for="(item, index) in history" :key="`${item.action}-${item.timestamp}-${index}`" class="relative pl-10 pb-6">
-              <!-- 时间线节点 -->
-              <div class="absolute left-2.5 w-3 h-3 rounded-full bg-white border-2"
-                :class="{
-                  'border-green-500': item.action === 'approved' || item.action === 'approve',
-                  'border-red-500': item.action === 'rejected' || item.action === 'return',
-                  'border-blue-500': item.action === 'in_review' || item.action === 'submitted' || item.action === 'submit',
-                  'border-gray-400': item.action === 'created' || item.action === 'cancelled',
-                }" />
-
-              <div class="bg-white border rounded-lg p-3">
-                <div class="flex items-center justify-between mb-2">
-                  <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getHistoryActionColor(item.action)]">
-                    {{ getHistoryActionLabel(item.action) }}
-                  </span>
-                  <span class="text-xs text-gray-500">{{ formatDateTime(item.timestamp) }}</span>
-                </div>
-                <div class="flex items-center gap-2 text-sm text-gray-600">
-                  <User class="h-4 w-4" />
-                  <span>{{ item.userName }}</span>
-                </div>
-                <p v-if="item.comment" class="mt-2 text-sm text-gray-700 bg-gray-50 p-2 rounded">
-                  {{ item.comment }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 批注意见 Tab -->
-        <div v-else-if="activeTab === 'comments'" class="space-y-4">
-          <div v-if="comments.length === 0" class="text-center py-8">
-            <MessageSquare class="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <p class="text-sm text-gray-500">暂无批注意见</p>
-            <p class="text-xs text-gray-400 mt-1">批注意见将在审核过程中产生</p>
-          </div>
-
-          <div v-else class="grid grid-cols-3 gap-4">
-            <!-- 设计意见 -->
-            <div class="border rounded-lg">
-              <div class="px-3 py-2 bg-blue-50 border-b rounded-t-lg">
-                <h4 class="text-sm font-medium text-blue-700">设计</h4>
-                <p class="text-xs text-blue-600">{{ commentsByRole.designer.length }} 条意见</p>
-              </div>
-              <div class="p-2 space-y-2 max-h-80 overflow-auto">
-                <div v-for="comment in commentsByRole.designer" :key="comment.id"
-                  class="p-2 bg-gray-50 rounded text-sm">
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="font-medium text-xs">{{ comment.authorName }}</span>
-                    <span class="text-xs text-gray-400">{{ formatDateTime(comment.createdAt) }}</span>
-                  </div>
-                  <p class="text-gray-700">{{ comment.content }}</p>
-                </div>
-                <div v-if="commentsByRole.designer.length === 0" class="text-center py-4 text-xs text-gray-400">
-                  暂无意见
-                </div>
-              </div>
-            </div>
-
-            <!-- 校对意见 -->
-            <div class="border rounded-lg">
-              <div class="px-3 py-2 bg-yellow-50 border-b rounded-t-lg">
-                <h4 class="text-sm font-medium text-yellow-700">校对</h4>
-                <p class="text-xs text-yellow-600">{{ commentsByRole.proofreader.length }} 条意见</p>
-              </div>
-              <div class="p-2 space-y-2 max-h-80 overflow-auto">
-                <div v-for="comment in commentsByRole.proofreader" :key="comment.id"
-                  class="p-2 bg-gray-50 rounded text-sm">
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="font-medium text-xs">{{ comment.authorName }}</span>
-                    <span class="text-xs text-gray-400">{{ formatDateTime(comment.createdAt) }}</span>
-                  </div>
-                  <p class="text-gray-700">{{ comment.content }}</p>
-                </div>
-                <div v-if="commentsByRole.proofreader.length === 0" class="text-center py-4 text-xs text-gray-400">
-                  暂无意见
-                </div>
-              </div>
-            </div>
-
-            <!-- 审核意见 -->
-            <div class="border rounded-lg">
-              <div class="px-3 py-2 bg-green-50 border-b rounded-t-lg">
-                <h4 class="text-sm font-medium text-green-700">审核</h4>
-                <p class="text-xs text-green-600">{{ commentsByRole.reviewer.length }} 条意见</p>
-              </div>
-              <div class="p-2 space-y-2 max-h-80 overflow-auto">
-                <div v-for="comment in commentsByRole.reviewer" :key="comment.id"
-                  class="p-2 bg-gray-50 rounded text-sm">
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="font-medium text-xs">{{ comment.authorName }}</span>
-                    <span class="text-xs text-gray-400">{{ formatDateTime(comment.createdAt) }}</span>
-                  </div>
-                  <p class="text-gray-700">{{ comment.content }}</p>
-                </div>
-                <div v-if="commentsByRole.reviewer.length === 0" class="text-center py-4 text-xs text-gray-400">
-                  暂无意见
-                </div>
-              </div>
-            </div>
-          </div>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <span :class="['inline-flex items-center rounded-full px-3 py-1 text-xs font-medium', taskStatus.color]">
+            {{ taskStatus.label }}
+          </span>
+          <span :class="['inline-flex items-center rounded-full px-3 py-1 text-xs font-medium', priorityDisplay.color]">
+            {{ priorityDisplay.label }}
+          </span>
         </div>
       </div>
+    </template>
 
-      <!-- 底部 -->
-      <div class="p-4 border-t flex justify-end">
-        <button class="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50" @click="emit('close')">
-          关闭
-        </button>
+    <div v-if="props.task.status === 'rejected' || latestReturnStep" class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+      <div class="flex items-start gap-3">
+        <XCircle class="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+        <div class="space-y-2 text-sm text-rose-900">
+          <p class="font-semibold">退回信息</p>
+          <p>
+            <span class="font-medium text-rose-700">退回节点：</span>
+            {{ formatWorkflowNode(latestReturnStep?.node || props.task.currentNode) }}
+          </p>
+          <p>
+            <span class="font-medium text-rose-700">退回原因：</span>
+            {{ latestReturnStep?.comment || props.task.returnReason || props.task.reviewComment || '未填写' }}
+          </p>
+        </div>
       </div>
     </div>
-  </div>
+
+    <section class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div class="space-y-6">
+        <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+          <div class="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Info class="h-4 w-4 text-slate-500" />
+            完整任务信息
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div v-for="row in detailRows" :key="row.label" class="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-100">
+              <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                <component :is="row.icon" class="h-3.5 w-3.5" />
+                <span>{{ row.label }}</span>
+              </div>
+              <p class="mt-2 break-words text-sm font-medium text-slate-800">{{ row.value }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <FileText class="h-4 w-4 text-slate-500" />
+            描述
+          </div>
+          <p class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">{{ task.description || '暂无描述' }}</p>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Package class="h-4 w-4 text-slate-500" />
+            构件列表
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ componentCount }}</span>
+          </div>
+          <div v-if="task.components.length" class="space-y-2">
+            <div v-for="component in task.components"
+              :key="component.id"
+              class="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <span class="font-medium text-slate-900">{{ component.name }}</span>
+              <span class="rounded-full bg-white px-2 py-0.5 text-xs text-slate-500">{{ component.refNo }}</span>
+              <span v-if="component.type" class="text-xs text-slate-400">{{ component.type }}</span>
+            </div>
+          </div>
+          <p v-else class="text-sm text-slate-500">暂无构件信息</p>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Paperclip class="h-4 w-4 text-slate-500" />
+            附件
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{{ attachmentCount }}</span>
+          </div>
+          <div v-if="task.attachments?.length" class="space-y-2">
+            <div v-for="attachment in task.attachments"
+              :key="attachment.id"
+              class="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium text-slate-900">{{ attachment.name }}</p>
+                <p class="text-xs text-slate-500">{{ attachment.mimeType || attachment.type || '未知类型' }}</p>
+              </div>
+              <span class="shrink-0 text-xs text-slate-400">{{ formatDateTime(attachment.uploadedAt) }}</span>
+            </div>
+          </div>
+          <p v-else class="text-sm text-slate-500">暂无附件</p>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <GitBranch class="h-4 w-4 text-slate-500" />
+            工作流历史时间线
+          </div>
+          <button type="button"
+            class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+            :disabled="isLoadingHistory"
+            @click="loadWorkflowHistory">
+            <RefreshCw :class="['h-4 w-4', isLoadingHistory && 'animate-spin']" />
+            刷新
+          </button>
+        </div>
+
+        <div v-if="workflowError" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {{ workflowError }}
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div v-if="isLoadingHistory" class="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+            <RefreshCw class="h-4 w-4 animate-spin" />
+            <span>正在加载工作流历史...</span>
+          </div>
+          <div v-else-if="workflowHistory.length === 0" class="py-10 text-center text-sm text-slate-500">
+            暂无工作流历史记录
+          </div>
+          <ol v-else class="relative space-y-4 before:absolute before:bottom-2 before:left-[0.55rem] before:top-2 before:w-px before:bg-slate-200">
+            <li v-for="(step, index) in workflowHistory"
+              :key="`${step.action}-${step.timestamp}-${index}`"
+              class="relative pl-8">
+              <span class="absolute left-0 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border-2"
+                :class="getHistoryMarkerClass(step.action)" />
+              <div class="rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getHistoryActionClass(step.action)]">
+                      {{ getHistoryActionLabel(step.action) }}
+                    </span>
+                    <span class="text-sm font-medium text-slate-900">{{ formatWorkflowNode(step.node) }}</span>
+                  </div>
+                  <span class="text-xs text-slate-400">{{ formatDateTime(step.timestamp) }}</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-700">操作人：{{ step.operatorName || step.operatorId || '系统' }}</p>
+                <p v-if="step.comment" class="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-600">备注：{{ step.comment }}</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+  </Dialog>
 </template>

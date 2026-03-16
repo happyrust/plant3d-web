@@ -187,12 +187,12 @@ onMounted(() => {
           </p>
         </div>
         <button class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
-        :disabled="isLoading"
-        @click="refreshTasks">
-        <RefreshCw :class="['h-4 w-4', isLoading && 'animate-spin']" />
-        刷新
-      </button>
-    </div>
+          :disabled="isLoading"
+          @click="refreshTasks">
+          <RefreshCw :class="['h-4 w-4', isLoading && 'animate-spin']" />
+          刷新
+        </button>
+      </div>
 
       <div class="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4">
         <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -223,81 +223,81 @@ onMounted(() => {
       </div>
 
       <div class="mt-5 space-y-3">
-      <div v-if="isLoading" class="text-center py-8">
-        <RefreshCw class="h-8 w-8 animate-spin mx-auto mb-2 text-gray-400" />
-        <p class="text-sm text-gray-500">正在加载任务...</p>
-      </div>
+        <div v-if="isLoading" class="text-center py-8">
+          <RefreshCw class="h-8 w-8 animate-spin mx-auto mb-2 text-gray-400" />
+          <p class="text-sm text-gray-500">正在加载任务...</p>
+        </div>
 
-      <template v-else-if="filteredTasks.length > 0">
-        <div v-for="task in filteredTasks"
-          :key="task.id"
-          class="cursor-pointer rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg"
-          :class="getTaskCardClass(task)"
-          @click="handleViewTask(task)">
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex-1">
-              <div class="flex items-center gap-2 mb-2">
-                <component :is="getStatusIcon(task.status)" 
-                  :class="['h-5 w-5', getStatusIconClass(task.status)]" />
-                <h4 class="text-base font-semibold text-slate-900">{{ task.title }}</h4>
-                <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getTaskStatusDisplayName(task.status).color]">
-                  {{ getTaskStatusDisplayName(task.status).label }}
-                </span>
-                <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getPriorityDisplayName(task.priority).color]">
-                  {{ getPriorityDisplayName(task.priority).label }}
-                </span>
-                <span v-if="isDesignerResubmissionTask(task)" class="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
-                  已退回
-                </span>
+        <template v-else-if="filteredTasks.length > 0">
+          <div v-for="task in filteredTasks"
+            :key="task.id"
+            class="cursor-pointer rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg"
+            :class="getTaskCardClass(task)"
+            @click="handleViewTask(task)">
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2">
+                  <component :is="getStatusIcon(task.status)" 
+                    :class="['h-5 w-5', getStatusIconClass(task.status)]" />
+                  <h4 class="text-base font-semibold text-slate-900">{{ task.title }}</h4>
+                  <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getTaskStatusDisplayName(task.status).color]">
+                    {{ getTaskStatusDisplayName(task.status).label }}
+                  </span>
+                  <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getPriorityDisplayName(task.priority).color]">
+                    {{ getPriorityDisplayName(task.priority).label }}
+                  </span>
+                  <span v-if="isDesignerResubmissionTask(task)" class="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
+                    已退回
+                  </span>
+                </div>
+                <p class="mb-3 text-sm text-slate-600 line-clamp-2">{{ task.description || '暂无描述' }}</p>
+                <div class="grid gap-2 text-xs text-slate-500 sm:grid-cols-2 xl:grid-cols-4">
+                  <div class="flex items-center gap-1">
+                    <Package class="h-3 w-3" />
+                    <span>{{ task.modelName }}</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <User class="h-3 w-3" />
+                    <span>审核人 {{ task.checkerName || task.reviewerName || task.approverName || '-' }}</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <Clock class="h-3 w-3" />
+                    <span>当前节点 {{ getCurrentNodeLabel(task.currentNode) }}</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <Calendar class="h-3 w-3" />
+                    <span>创建: {{ formatDate(task.createdAt) }}</span>
+                  </div>
+                </div>
+                <div v-if="task.returnReason || task.reviewComment" class="mt-3 rounded-xl bg-white/80 p-3 text-sm shadow-sm ring-1 ring-slate-100">
+                  <span class="text-slate-400">{{ task.returnReason ? '退回原因' : '审核意见' }}：</span>
+                  <span class="text-slate-700">{{ task.returnReason || task.reviewComment }}</span>
+                </div>
               </div>
-              <p class="mb-3 text-sm text-slate-600 line-clamp-2">{{ task.description || '暂无描述' }}</p>
-              <div class="grid gap-2 text-xs text-slate-500 sm:grid-cols-2 xl:grid-cols-4">
-                <div class="flex items-center gap-1">
-                  <Package class="h-3 w-3" />
-                  <span>{{ task.modelName }}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <User class="h-3 w-3" />
-                  <span>审核人 {{ task.checkerName || task.reviewerName || task.approverName || '-' }}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <Clock class="h-3 w-3" />
-                  <span>当前节点 {{ getCurrentNodeLabel(task.currentNode) }}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <Calendar class="h-3 w-3" />
-                  <span>创建: {{ formatDate(task.createdAt) }}</span>
-                </div>
+              <div class="flex flex-col gap-2">
+                <button class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50" 
+                  @click.stop="handleViewTask(task)">
+                  <Eye class="h-4 w-4" />
+                  查看详情
+                </button>
               </div>
-              <div v-if="task.returnReason || task.reviewComment" class="mt-3 rounded-xl bg-white/80 p-3 text-sm shadow-sm ring-1 ring-slate-100">
-                <span class="text-slate-400">{{ task.returnReason ? '退回原因' : '审核意见' }}：</span>
-                <span class="text-slate-700">{{ task.returnReason || task.reviewComment }}</span>
-              </div>
-            </div>
-            <div class="flex flex-col gap-2">
-              <button class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50" 
-                @click.stop="handleViewTask(task)">
-                <Eye class="h-4 w-4" />
-                查看详情
-              </button>
             </div>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <div v-else class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center">
-        <FileText class="mx-auto mb-4 h-12 w-12 text-slate-300" />
-        <h4 class="mb-2 font-medium text-slate-900">暂无提资任务</h4>
-        <p class="mb-4 text-sm text-slate-500">
-          {{ statusFilter !== 'all' ? '当前筛选条件下没有任务' : '您还没有发起过提资单' }}
-        </p>
-        <button v-if="statusFilter !== 'all'"
-          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
-          @click="clearFilters">
-          清除筛选条件
-        </button>
+        <div v-else class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center">
+          <FileText class="mx-auto mb-4 h-12 w-12 text-slate-300" />
+          <h4 class="mb-2 font-medium text-slate-900">暂无提资任务</h4>
+          <p class="mb-4 text-sm text-slate-500">
+            {{ statusFilter !== 'all' ? '当前筛选条件下没有任务' : '您还没有发起过提资单' }}
+          </p>
+          <button v-if="statusFilter !== 'all'"
+            class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
+            @click="clearFilters">
+            清除筛选条件
+          </button>
+        </div>
       </div>
-    </div>
     </div>
 
     <!-- 任务详情弹窗 -->
