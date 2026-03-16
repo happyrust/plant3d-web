@@ -227,6 +227,13 @@ async function saveViewerShot(page: Page, name: string) {
   });
 }
 
+async function expectViewerGolden(page: Page, name: string) {
+  await expect(page.locator('.viewer-panel-container')).toHaveScreenshot(name, {
+    animations: 'disabled',
+    caret: 'hide',
+  });
+}
+
 async function readLabelCardStyle(label: ReturnType<Page['locator']>) {
   return label.evaluate((node) => {
     const style = window.getComputedStyle(node);
@@ -401,6 +408,7 @@ test.describe('DTX 批注视觉截图', () => {
         },
       });
     await saveViewerShot(page, 'cloud-annotation');
+    await expectViewerGolden(page, 'annotation-visual-cloud.png');
     await expect(cloudLabel).toBeVisible();
     await expect(cloudTitleInput).toHaveValue('云线图钉批注');
     const cloudStyle = await readLabelCardStyle(cloudLabel);
@@ -416,6 +424,7 @@ test.describe('DTX 批注视觉截图', () => {
         },
       });
     await saveViewerShot(page, 'cloud-annotation-edit');
+    await expectViewerGolden(page, 'annotation-visual-cloud-edit.png');
 
     await setToolMode(page, 'annotation_rect');
     await clickCanvas(page, point);
@@ -448,6 +457,7 @@ test.describe('DTX 批注视觉截图', () => {
         },
       });
     await saveViewerShot(page, 'rect-annotation');
+    await expectViewerGolden(page, 'annotation-visual-rect.png');
 
     await setToolMode(page, 'annotation_obb');
     await dragCanvas(
@@ -474,6 +484,7 @@ test.describe('DTX 批注视觉截图', () => {
         },
       });
     await saveViewerShot(page, 'obb-annotation');
+    await expectViewerGolden(page, 'annotation-visual-obb.png');
   });
 
   test('文字批注应支持拖动 card 与双击图钉折叠展开', async ({ page }) => {
@@ -509,6 +520,7 @@ test.describe('DTX 批注视觉截图', () => {
         },
       });
     await saveViewerShot(page, 'text-annotation-expanded');
+    await expectViewerGolden(page, 'annotation-visual-text-expanded.png');
 
     const textLabel = page.locator('.dtx-anno-label').first();
     const renderedTitleInput = textLabel.locator('[data-role="annotation-title-input"]');
@@ -529,6 +541,7 @@ test.describe('DTX 批注视觉截图', () => {
         },
       });
     await saveViewerShot(page, 'text-annotation-dragged');
+    await expectViewerGolden(page, 'annotation-visual-text-dragged.png');
 
     await page.waitForTimeout(450);
     await dispatchMarkerClick(textMarker, 2);
@@ -536,10 +549,12 @@ test.describe('DTX 批注视觉截图', () => {
     const collapsedMarker = page.locator('.dtx-anno-marker[data-marker-kind="location-pin"]').first();
     await expect(collapsedMarker).toBeVisible();
     await saveViewerShot(page, 'text-annotation-collapsed');
+    await expectViewerGolden(page, 'annotation-visual-text-collapsed.png');
 
     await page.waitForTimeout(450);
     await dispatchMarkerClick(collapsedMarker, 2);
     await expect(textLabel).toBeVisible();
     await saveViewerShot(page, 'text-annotation-reexpanded');
+    await expectViewerGolden(page, 'annotation-visual-text-reexpanded.png');
   });
 });
