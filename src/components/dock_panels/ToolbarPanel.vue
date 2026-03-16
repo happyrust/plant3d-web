@@ -34,7 +34,7 @@ function handleReset() {
 
 <template>
   <div class="flex h-full items-center gap-2 bg-background px-3">
-    <span class="text-sm font-semibold">Vue Xeokit Viewer</span>
+    <span class="text-sm font-semibold">3D 查看器</span>
     <div class="flex-1" />
     <button type="button"
       class="inline-flex h-7 items-center gap-1.5 rounded border border-input bg-background px-2 text-xs hover:bg-muted"
