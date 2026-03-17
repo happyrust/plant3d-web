@@ -229,6 +229,26 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
+  it('renders workflow history, confirmed records, aux-data, and sync inside one stable shell grouping', async () => {
+    const mounted = mountReviewPanel();
+    await settlePanel();
+
+    const shell = document.querySelector('[data-testid="review-workbench-shell-zones"]');
+    expect(shell).not.toBeNull();
+    expect(shell?.textContent).toContain('M4 工作台稳定分区');
+    expect(shell?.textContent).toContain('工作流历史');
+    expect(shell?.textContent).toContain('确认记录');
+    expect(shell?.textContent).toContain('辅助校审数据');
+    expect(shell?.textContent).toContain('数据同步（后端）');
+    expect(shell?.textContent).toContain('避免分裂为独立顶层卡片');
+
+    expect(shell?.querySelector('[data-testid="review-workbench-workflow-history-zone"]')).not.toBeNull();
+    expect(shell?.querySelector('[data-testid="review-workbench-confirmed-records-zone"]')).not.toBeNull();
+    expect(shell?.querySelector('[data-testid="review-workbench-aux-zone"]')).not.toBeNull();
+    expect(shell?.querySelector('[data-testid="review-workbench-sync-zone"]')).not.toBeNull();
+    mounted.unmount();
+  });
+
   it('shows an explicit degraded state when the active task lacks a formal formId', async () => {
     currentTask.value = createTask({ formId: undefined });
 

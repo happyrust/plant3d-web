@@ -611,6 +611,29 @@ const activeModuleDetails = computed(() =>
   optionalModules.value.filter((m) => activeOptionalModules.value.includes(m.id))
 );
 
+const stableWorkbenchZones = computed(() => [
+  {
+    id: 'workflow-history',
+    title: '工作流历史',
+    description: '保留流转节点与操作时间线，作为 M4 工作台稳定骨架的一部分。',
+  },
+  {
+    id: 'confirmed-records',
+    title: '确认记录',
+    description: '独立展示审核确认快照，与工作流历史和评论保持语义分离。',
+  },
+  {
+    id: 'aux-data',
+    title: '辅助校审数据',
+    description: '基于当前任务上下文触发外部辅助数据与碰撞查询。',
+  },
+  {
+    id: 'sync',
+    title: '数据同步（后端）',
+    description: '统一放置导入/导出能力，保持当前工作台上下文稳定。',
+  },
+]);
+
 function isModuleActive(id: string): boolean {
   return activeOptionalModules.value.includes(id);
 }
@@ -1033,12 +1056,6 @@ watch(showModuleMenu, (val) => {
       </div>
     </div>
 
-    <!-- 后端数据同步 -->
-    <ReviewDataSync />
-
-    <!-- 辅助校审数据 -->
-    <ReviewAuxData />
-
     <WorkflowSubmitDialog :visible="showSubmitDialog"
       :current-node="currentNode"
       :target-node="submitTargetNode"
@@ -1052,93 +1069,145 @@ watch(showModuleMenu, (val) => {
       @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"
       @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
 
-    <!-- 工作流历史 -->
-    <div class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">工作流历史</div>
-
-      <div v-if="workflowLoading" class="mt-2 text-sm text-muted-foreground">
-        正在加载工作流...
+    <section class="rounded-xl border border-slate-200 bg-slate-50 p-4"
+      data-testid="review-workbench-shell-zones">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <FileText class="h-4 w-4 text-primary" />
+            <span>M4 工作台稳定分区</span>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">
+            工作流历史、确认记录、辅助校审数据与同步区收拢到同一主壳层，避免分裂为独立顶层卡片。
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-[11px] text-slate-500">
+          <span v-for="zone in stableWorkbenchZones"
+            :key="zone.id"
+            class="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
+            {{ zone.title }}
+          </span>
+        </div>
       </div>
 
-      <div v-else-if="workflowError" class="mt-2 text-sm text-red-600">
-        {{ workflowError }}
-      </div>
-
-      <div v-else-if="!workflow || workflow.history.length === 0"
-        class="mt-2 text-sm text-muted-foreground">
-        暂无历史记录
-      </div>
-
-      <div v-else class="mt-2 flex max-h-64 flex-col gap-2 overflow-y-auto">
-        <div v-for="(step, idx) in workflow.history"
-          :key="`${step.operatorId}-${step.timestamp}-${idx}`"
-          class="relative rounded-xl border border-slate-200 bg-slate-50/80 p-3 pl-8 text-xs before:absolute before:left-3 before:top-3 before:h-full before:w-px before:bg-slate-200 before:content-[''] first:before:top-6 last:before:h-6">
-          <span class="absolute left-[7px] top-4 h-3 w-3 rounded-full border-2 border-white bg-primary shadow-sm" />
+      <div class="mt-4 grid gap-4 xl:grid-cols-2">
+        <section class="rounded-lg border border-slate-200 bg-white p-4"
+          data-testid="review-workbench-workflow-history-zone">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <div class="font-medium text-foreground">
-                {{ getWorkflowNodeLabel(step) }}
+              <div class="text-sm font-semibold text-slate-900">工作流历史</div>
+              <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[0]?.description }}</p>
+            </div>
+          </div>
+
+          <div v-if="workflowLoading" class="mt-3 text-sm text-muted-foreground">
+            正在加载工作流...
+          </div>
+
+          <div v-else-if="workflowError" class="mt-3 text-sm text-red-600">
+            {{ workflowError }}
+          </div>
+
+          <div v-else-if="!workflow || workflow.history.length === 0"
+            class="mt-3 text-sm text-muted-foreground">
+            暂无历史记录
+          </div>
+
+          <div v-else class="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto">
+            <div v-for="(step, idx) in workflow.history"
+              :key="`${step.operatorId}-${step.timestamp}-${idx}`"
+              class="relative rounded-xl border border-slate-200 bg-slate-50/80 p-3 pl-8 text-xs before:absolute before:left-3 before:top-3 before:h-full before:w-px before:bg-slate-200 before:content-[''] first:before:top-6 last:before:h-6">
+              <span class="absolute left-[7px] top-4 h-3 w-3 rounded-full border-2 border-white bg-primary shadow-sm" />
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="font-medium text-foreground">
+                    {{ getWorkflowNodeLabel(step) }}
+                  </div>
+                  <div class="mt-1 text-muted-foreground">
+                    动作：{{ getWorkflowActionLabel(step.action) }}
+                  </div>
+                </div>
+                <span class="text-right text-muted-foreground">{{ formatDateTime(step.timestamp) }}</span>
               </div>
               <div class="mt-1 text-muted-foreground">
-                动作：{{ getWorkflowActionLabel(step.action) }}
+                操作人: {{ step.operatorName || step.operatorId || '-' }}
+              </div>
+              <div class="mt-1 text-muted-foreground">
+                备注: {{ step.comment?.trim() || '-' }}
               </div>
             </div>
-            <span class="text-right text-muted-foreground">{{ formatDateTime(step.timestamp) }}</span>
           </div>
-          <div class="mt-1 text-muted-foreground">
-            操作人: {{ step.operatorName || step.operatorId || '-' }}
-          </div>
-          <div class="mt-1 text-muted-foreground">
-            备注: {{ step.comment?.trim() || '-' }}
-          </div>
-        </div>
-      </div>
-    </div>
+        </section>
 
-    <!-- 确认记录 -->
-    <div class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">确认记录</div>
-
-      <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"
-        class="mt-2 text-sm text-muted-foreground">
-        暂无确认记录
-      </div>
-
-      <div v-else class="mt-2 flex max-h-64 flex-col gap-2 overflow-y-auto">
-        <div v-for="record in reviewStore.sortedConfirmedRecords.value"
-          :key="record.id"
-          class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+        <section class="rounded-lg border border-slate-200 bg-white p-4"
+          data-testid="review-workbench-confirmed-records-zone">
           <div class="flex items-start justify-between gap-3">
-            <div class="space-y-1">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">确认时间</div>
-              <span class="block text-sm font-semibold text-slate-900">
-                {{ formatDateTime(record.confirmedAt) }}
-              </span>
+            <div>
+              <div class="text-sm font-semibold text-slate-900">确认记录</div>
+              <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[1]?.description }}</p>
             </div>
-            <button type="button"
-              class="rounded p-1 text-destructive hover:bg-muted"
-              title="删除"
-              @click="reviewStore.removeConfirmedRecord(record.id)">
-              <Trash2 class="h-3.5 w-3.5" />
-            </button>
           </div>
 
-          <div class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
-              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注数量</div>
-              <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
-              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">测量数量</div>
-              <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedMeasurementCount(record) }}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
-              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
-              <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
+          <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"
+            class="mt-3 text-sm text-muted-foreground">
+            暂无确认记录
+          </div>
+
+          <div v-else class="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto">
+            <div v-for="record in reviewStore.sortedConfirmedRecords.value"
+              :key="record.id"
+              class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">确认时间</div>
+                  <span class="block text-sm font-semibold text-slate-900">
+                    {{ formatDateTime(record.confirmedAt) }}
+                  </span>
+                </div>
+                <button type="button"
+                  class="rounded p-1 text-destructive hover:bg-muted"
+                  title="删除"
+                  @click="reviewStore.removeConfirmedRecord(record.id)">
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
+                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注数量</div>
+                  <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
+                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">测量数量</div>
+                  <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedMeasurementCount(record) }}</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
+                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
+                  <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
+
+        <section class="rounded-lg border border-slate-200 bg-white p-4"
+          data-testid="review-workbench-aux-zone">
+          <div class="mb-3">
+            <div class="text-sm font-semibold text-slate-900">辅助校审数据</div>
+            <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[2]?.description }}</p>
+          </div>
+          <ReviewAuxData />
+        </section>
+
+        <section class="rounded-lg border border-slate-200 bg-white p-4"
+          data-testid="review-workbench-sync-zone">
+          <div class="mb-3">
+            <div class="text-sm font-semibold text-slate-900">数据同步（后端）</div>
+            <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[3]?.description }}</p>
+          </div>
+          <ReviewDataSync />
+        </section>
       </div>
-    </div>
+    </section>
   </div>
 </template>
