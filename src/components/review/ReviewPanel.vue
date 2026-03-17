@@ -39,9 +39,6 @@ import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
-  reviewGetAuxData,
-  reviewGetCollisionData,
-  type CollisionItem,
   reviewSyncExport,
   reviewSyncImport,
 } from '@/api/reviewApi';
@@ -234,94 +231,6 @@ async function importFromFile(event: Event) {
   } finally {
     syncImporting.value = false;
     input.value = '';
-  }
-}
-
-// ============ 辅助数据（碰撞/外部辅助） ============
-
-const collisionRefno = ref('');
-const collisionLoading = ref(false);
-const collisionError = ref<string | null>(null);
-const collisionData = ref<Awaited<ReturnType<typeof reviewGetCollisionData>> | null>(null);
-
-async function queryCollision() {
-  collisionLoading.value = true;
-  collisionError.value = null;
-  try {
-    collisionData.value = await reviewGetCollisionData({
-      refno: collisionRefno.value.trim() || undefined,
-      limit: 100,
-      offset: 0,
-    });
-  } catch (e) {
-    collisionError.value = e instanceof Error ? e.message : '查询失败';
-  } finally {
-    collisionLoading.value = false;
-  }
-}
-
-function handleCollisionLocate(item: CollisionItem) {
-  // 通过构件名称定位三维视图
-  const viewer = (window as any).__xeokit_viewer;
-  if (!viewer) return;
-  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean);
-  if (objectIds.length > 0) {
-    viewer.cameraFlight?.flyTo({ aabb: viewer.scene?.getAABB(objectIds) }, () => {});
-  }
-}
-
-function handleCollisionHighlight(item: CollisionItem) {
-  const viewer = (window as any).__xeokit_viewer;
-  if (!viewer) return;
-  // 先清除旧的高亮
-  viewer.scene?.setObjectsHighlighted(viewer.scene.highlightedObjectIds, false);
-  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean);
-  if (objectIds.length > 0) {
-    viewer.scene?.setObjectsHighlighted(objectIds, true);
-  }
-}
-
-const AUX_UCODE_KEY = 'review_aux_ucode';
-const AUX_UKEY_KEY = 'review_aux_ukey';
-const auxUCode = ref(localStorage.getItem(AUX_UCODE_KEY) || '');
-const auxUKey = ref(localStorage.getItem(AUX_UKEY_KEY) || '');
-watch(auxUCode, (v) => localStorage.setItem(AUX_UCODE_KEY, v));
-watch(auxUKey, (v) => localStorage.setItem(AUX_UKEY_KEY, v));
-
-const auxProjectId = ref('');
-const auxMajor = ref('general');
-const auxFormId = ref('');
-const auxLoading = ref(false);
-const auxError = ref<string | null>(null);
-const auxData = ref<Awaited<ReturnType<typeof reviewGetAuxData>> | null>(null);
-
-async function fetchAuxDataForCurrentTask() {
-  if (!currentTask.value) return;
-  auxLoading.value = true;
-  auxError.value = null;
-  try {
-    const requesterId = userStore.currentUser.value?.id || 'guest';
-    const formId = auxFormId.value.trim() || currentTask.value.id;
-    const projectId = auxProjectId.value.trim() || 'default';
-    const refnos = currentTask.value.components.map((c) => c.refNo).filter(Boolean);
-    auxData.value = await reviewGetAuxData(
-      {
-        project_id: projectId,
-        model_refnos: refnos,
-        major: auxMajor.value.trim() || 'general',
-        requester_id: requesterId,
-        page: 1,
-        page_size: 100,
-        form_id: formId,
-        new_search: true,
-      },
-      { uCode: auxUCode.value.trim(), uKey: auxUKey.value.trim() }
-    );
-  } catch (e) {
-    auxData.value = null;
-    auxError.value = e instanceof Error ? e.message : '请求失败';
-  } finally {
-    auxLoading.value = false;
   }
 }
 
@@ -530,16 +439,6 @@ function clearModelFilter() {
 
 // 监听当前任务变化，自动应用过滤
 watch(currentTask, async (newTask) => {
-  collisionRefno.value = '';
-  collisionData.value = null;
-  collisionError.value = null;
-  collisionLoading.value = false;
-  auxData.value = null;
-  auxError.value = null;
-  auxLoading.value = false;
-  auxProjectId.value = '';
-  auxFormId.value = newTask?.formId?.trim() || '';
-
   if (newTask && newTask.components.length > 0) {
     // 有新任务时自动应用过滤
     const taskId = newTask.id;
