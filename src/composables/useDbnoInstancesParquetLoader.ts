@@ -254,6 +254,30 @@ function colsMajorToMatrixArray(row: any): number[] | null {
   return out;
 }
 
+function colsMajorToMatrixArrayWithPrefix(row: any, prefix: string): number[] | null {
+  const prefixedRow: Record<string, unknown> = {
+    m00: row?.[`${prefix}m00`],
+    m10: row?.[`${prefix}m10`],
+    m20: row?.[`${prefix}m20`],
+    m30: row?.[`${prefix}m30`],
+    m01: row?.[`${prefix}m01`],
+    m11: row?.[`${prefix}m11`],
+    m21: row?.[`${prefix}m21`],
+    m31: row?.[`${prefix}m31`],
+    m02: row?.[`${prefix}m02`],
+    m12: row?.[`${prefix}m12`],
+    m22: row?.[`${prefix}m22`],
+    m32: row?.[`${prefix}m32`],
+    m03: row?.[`${prefix}m03`],
+    m13: row?.[`${prefix}m13`],
+    m23: row?.[`${prefix}m23`],
+    m33: row?.[`${prefix}m33`],
+  };
+  const hasAnyValue = Object.values(prefixedRow).some((v) => v !== null && v !== undefined);
+  if (!hasAnyValue) return null;
+  return colsMajorToMatrixArray(prefixedRow);
+}
+
 function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null): number[] {
   // three.js Matrix4.fromArray 默认按列主序解释（与 glMatrix/OpenGL 一致）
   const mw = new Matrix4().fromArray(worldCols);
@@ -539,52 +563,58 @@ export function useDbnoInstancesParquetLoader() {
         console.log('[instances-parquet] chunk loaded', { dbno, chunk: [i, i + CHUNK], rows: rows.length });
       }
 
-      // tubings：tubings_{dbno}.parquet（TUBI 段）
-      // - 只补齐 instances 中不存在的 refno，避免同一 refno 出现 instances+tubings 双重叠加
-      // - 以 tubi_refno_str 作为 refno_str（与 instances.refno_str 一致：带 /）
-      // - matrix 仅使用 tubings.trans_hash 对应的 world matrix（无 geo_local）
       const sqlTubi = `
         WITH target(refno_str) AS (
           SELECT UNNEST(${listExpr}) AS refno_str
         ),
-        present_in_instances AS (
-          SELECT DISTINCT i.refno_str
+        tubi_candidates AS (
+          SELECT DISTINCT
+            t.refno_str AS bucket_refno_str,
+            tb.tubi_refno_str,
+            tb.owner_refno_str,
+            tb.order,
+            tb.geo_hash,
+            tb.trans_hash,
+            tb.aabb_hash,
+            tb.spec_value
           FROM target t
-          JOIN parquet_scan('${reg.files.instances}') i ON i.refno_str = t.refno_str
-        ),
-        missing_in_instances AS (
-          SELECT t.refno_str
-          FROM target t
-          LEFT JOIN present_in_instances p ON p.refno_str = t.refno_str
-          WHERE p.refno_str IS NULL
+          JOIN parquet_scan('${reg.files.tubings}') tb
+            ON tb.tubi_refno_str = t.refno_str
+            OR tb.owner_refno_str = t.refno_str
         )
         SELECT
-          t.tubi_refno_str AS refno_str,
+          c.bucket_refno_str AS refno_str,
+          c.tubi_refno_str,
           'TUBI' AS noun,
           '' AS name,
-          t.owner_refno_str,
+          c.owner_refno_str,
           '' AS owner_noun,
-          t.spec_value,
+          c.spec_value,
           false AS has_neg,
-          t.trans_hash,
-          t.aabb_hash,
-          t.order AS geo_index,
-          t.geo_hash,
+          c.trans_hash,
+          c.aabb_hash,
+          c.order AS geo_index,
+          c.geo_hash,
           '' AS geo_trans_hash,
           aw.min_x, aw.min_y, aw.min_z, aw.max_x, aw.max_y, aw.max_z,
           tw.m00, tw.m10, tw.m20, tw.m30,
           tw.m01, tw.m11, tw.m21, tw.m31,
           tw.m02, tw.m12, tw.m22, tw.m32,
           tw.m03, tw.m13, tw.m23, tw.m33,
+          iw.m00 AS iw_m00, iw.m10 AS iw_m10, iw.m20 AS iw_m20, iw.m30 AS iw_m30,
+          iw.m01 AS iw_m01, iw.m11 AS iw_m11, iw.m21 AS iw_m21, iw.m31 AS iw_m31,
+          iw.m02 AS iw_m02, iw.m12 AS iw_m12, iw.m22 AS iw_m22, iw.m32 AS iw_m32,
+          iw.m03 AS iw_m03, iw.m13 AS iw_m13, iw.m23 AS iw_m23, iw.m33 AS iw_m33,
           NULL AS g_m00, NULL AS g_m10, NULL AS g_m20, NULL AS g_m30,
           NULL AS g_m01, NULL AS g_m11, NULL AS g_m21, NULL AS g_m31,
           NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
           NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
-        FROM missing_in_instances x
-        JOIN parquet_scan('${reg.files.tubings}') t ON t.tubi_refno_str = x.refno_str
-        LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = t.aabb_hash
-        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = t.trans_hash
-        ORDER BY t.tubi_refno_str, t.order
+        FROM tubi_candidates c
+        LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = c.aabb_hash
+        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = c.trans_hash
+        LEFT JOIN parquet_scan('${reg.files.instances}') ti ON ti.refno_str = c.tubi_refno_str
+        LEFT JOIN parquet_scan('${reg.files.transforms}') iw ON iw.trans_hash = ti.trans_hash
+        ORDER BY c.bucket_refno_str, c.order, c.tubi_refno_str
       `;
 
       const tubiArrow = await conn.query(sqlTubi);
@@ -595,10 +625,11 @@ export function useDbnoInstancesParquetLoader() {
         const refnoKey = normalizeRefnoKey(refnoStr);
         if (!refnoKey) continue;
 
-        const worldCols = colsMajorToMatrixArray(row);
-        if (!worldCols) continue;
-
-        const matrix = multiplyWorldAndGeoLocal(worldCols, null);
+        // TUBI 的 trans_hash 已是世界空间完整变换矩阵（world_trans_hash），
+        // 不需要再乘以 parentWorld
+        const tubiTransform = colsMajorToMatrixArray(row);
+        if (!tubiTransform) continue;
+        const matrix = tubiTransform;
 
         const aabb =
           row.min_x !== null && row.max_x !== null
@@ -618,7 +649,7 @@ export function useDbnoInstancesParquetLoader() {
           site_name_index: 0,
           lod_mask: 1,
           uniforms: {
-            refno: refnoStr,
+            refno: row.tubi_refno_str ? String(row.tubi_refno_str) : refnoStr,
             noun,
             name: '',
             owner_refno: ownerRefno,
@@ -628,7 +659,7 @@ export function useDbnoInstancesParquetLoader() {
             trans_hash: row.trans_hash ? String(row.trans_hash) : '',
             aabb_hash: row.aabb_hash ? String(row.aabb_hash) : '',
           },
-          refno_transform: worldCols,
+          refno_transform: tubiTransform,
           aabb,
         };
 
@@ -638,6 +669,7 @@ export function useDbnoInstancesParquetLoader() {
         list.push(entry);
         resultMap.set(refnoKey, list);
       }
+
     }
 
     return resultMap;
@@ -662,6 +694,9 @@ export function useDbnoInstancesParquetLoader() {
       WITH all_refnos AS (
         SELECT refno_str AS refno
         FROM parquet_scan('${reg.files.instances}')
+        UNION
+        SELECT owner_refno_str AS refno
+        FROM parquet_scan('${reg.files.tubings}')
         UNION
         SELECT tubi_refno_str AS refno
         FROM parquet_scan('${reg.files.tubings}')
