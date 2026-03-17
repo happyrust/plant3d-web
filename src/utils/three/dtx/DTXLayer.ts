@@ -1666,6 +1666,14 @@ export class DTXLayer {
   }
 
   /**
+   * 查询指定对象是否可见
+   */
+  isObjectVisible(objectId: string): boolean {
+    const obj = this._objects.get(objectId);
+    return !!obj && obj.visible;
+  }
+
+  /**
    * 获取对象包围盒
    */
   getObjectBoundingBox(objectId: string): Box3 | null {
@@ -1931,6 +1939,7 @@ export class DTXLayer {
   ): { point: Vector3; distance: number; triangle: [Vector3, Vector3, Vector3] } | null {
     const obj = this._objects.get(objectId);
     if (!obj) return null;
+    if (!obj.visible) return null;
 
     const geoHandle = this._geometries.get(obj.geoHash);
     if (!geoHandle) return null;
