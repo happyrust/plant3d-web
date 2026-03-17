@@ -540,11 +540,23 @@ export function useDbnoInstancesParquetLoader() {
       }
 
       // tubings：tubings_{dbno}.parquet（TUBI 段）
+      // - 只补齐 instances 中不存在的 refno，避免同一 refno 出现 instances+tubings 双重叠加
       // - 以 tubi_refno_str 作为 refno_str（与 instances.refno_str 一致：带 /）
       // - matrix 仅使用 tubings.trans_hash 对应的 world matrix（无 geo_local）
       const sqlTubi = `
         WITH target(refno_str) AS (
           SELECT UNNEST(${listExpr}) AS refno_str
+        ),
+        present_in_instances AS (
+          SELECT DISTINCT i.refno_str
+          FROM target t
+          JOIN parquet_scan('${reg.files.instances}') i ON i.refno_str = t.refno_str
+        ),
+        missing_in_instances AS (
+          SELECT t.refno_str
+          FROM target t
+          LEFT JOIN present_in_instances p ON p.refno_str = t.refno_str
+          WHERE p.refno_str IS NULL
         )
         SELECT
           t.tubi_refno_str AS refno_str,
@@ -568,7 +580,7 @@ export function useDbnoInstancesParquetLoader() {
           NULL AS g_m01, NULL AS g_m11, NULL AS g_m21, NULL AS g_m31,
           NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
           NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
-        FROM target x
+        FROM missing_in_instances x
         JOIN parquet_scan('${reg.files.tubings}') t ON t.tubi_refno_str = x.refno_str
         LEFT JOIN parquet_scan('${reg.files.aabb}') aw ON aw.aabb_hash = t.aabb_hash
         LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = t.trans_hash
