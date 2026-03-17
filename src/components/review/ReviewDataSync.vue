@@ -30,6 +30,7 @@ function getImportedTasks(payload: unknown): ReviewTask[] {
 
 async function refreshWorkbenchContextAfterImport(importedTasks: ReviewTask[]) {
   const previousTaskId = currentTask.value?.id;
+  const previousTaskFormId = currentTask.value?.formId?.trim() || null;
   await userStore.loadReviewTasks();
 
   if (!previousTaskId) {
@@ -38,8 +39,8 @@ async function refreshWorkbenchContextAfterImport(importedTasks: ReviewTask[]) {
 
   const refreshedTasks = userStore.reviewTasks.value;
   const matchingById = refreshedTasks.find((task) => task.id === previousTaskId);
-  const matchingByFormId = !matchingById && currentTaskFormId.value
-    ? refreshedTasks.find((task) => task.formId?.trim() === currentTaskFormId.value)
+  const matchingByFormId = !matchingById && previousTaskFormId
+    ? refreshedTasks.find((task) => task.formId?.trim() === previousTaskFormId)
     : undefined;
   const matchingImportedTask = !matchingById && !matchingByFormId
     ? importedTasks.find((task) => task.id === previousTaskId)

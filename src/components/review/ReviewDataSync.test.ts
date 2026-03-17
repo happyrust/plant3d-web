@@ -201,4 +201,40 @@ describe('ReviewDataSync', () => {
 
     mounted.unmount();
   });
+
+  it('preserves formId rematch even if current task is cleared during task reload', async () => {
+    const selectedTask = createTask({ id: 'task-old', formId: 'FORM-STABLE', title: '导入前任务' });
+    const rematchedTask = createTask({ id: 'task-rematched', formId: 'FORM-STABLE', title: '导入后任务' });
+    currentTask.value = selectedTask;
+    reviewTasks.value = [selectedTask];
+    loadReviewTasksMock.mockImplementation(async () => {
+      currentTask.value = null;
+      reviewTasks.value = [rematchedTask];
+    });
+
+    const mounted = mountComponent();
+    await settle();
+
+    const fileInput = mounted.host.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([
+      JSON.stringify({ tasks: [createTask({ id: 'task-imported', formId: 'FORM-STABLE' })] }),
+    ], 'sync.json', { type: 'application/json' });
+
+    await Object.defineProperty(fileInput, 'files', {
+      value: [file],
+      configurable: true,
+    });
+
+    fileInput.dispatchEvent(new Event('change'));
+    await settle();
+
+    expect(loadReviewTasksMock).toHaveBeenCalledTimes(1);
+    expect(setCurrentTaskMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      id: 'task-rematched',
+      formId: 'FORM-STABLE',
+      title: '导入后任务',
+    }));
+
+    mounted.unmount();
+  });
 });
