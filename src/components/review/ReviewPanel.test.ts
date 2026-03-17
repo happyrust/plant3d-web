@@ -84,7 +84,7 @@ vi.mock('@/composables/useDockApi', () => ({
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
 
 vi.mock('./CollisionResultList.vue', () => ({ default: { template: '<div />' } }));
-vi.mock('./ReviewAuxData.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./ReviewAuxData.vue', () => ({ default: { template: '<div data-testid="review-aux-data-stub">辅助校审数据</div>' } }));
 vi.mock('./ReviewDataSync.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./WorkflowSubmitDialog.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./WorkflowReturnDialog.vue', () => ({ default: { template: '<div />' } }));
