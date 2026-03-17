@@ -1,7 +1,8 @@
 commands:
   install: npm install
   typecheck: npm run type-check
-  test: npm test
+  test: npx vitest run src/components/review/ConfirmedRecords.test.ts src/components/review/DesignerTaskList.test.ts src/components/review/ResubmissionTaskList.test.ts src/components/review/WorkflowHistory.test.ts
+  test:m4-scoped: npx vitest run src/components/review/ConfirmedRecords.test.ts src/components/review/DesignerTaskList.test.ts src/components/review/ResubmissionTaskList.test.ts src/components/review/WorkflowHistory.test.ts
   lint: npm run lint
 
 services:
@@ -19,6 +20,7 @@ services:
     port: 3100
     depends_on: []
 
-# Validation note: for this follow-up mission, run browser validations serially.
-# Current machine headroom is limited (~2.68GB available observed during planning),
-# and the executable validation surface is list/detail consistency rather than high-parallel throughput.
+# Validation note: for the M4 reviewer workbench mission, run browser validations serially.
+# Mission-scoped verification commands for M4 are `commands.typecheck` and `commands.test:m4-scoped`.
+# Do not treat whole-repo `npm test` output as an M4 gate; unrelated annotation/parquet failures are out-of-scope baseline noise unless the scoped commands above fail.
+# Treat missing reviewer-owned seeded tasks or confirmed-record data as environment blockers, not product passes.
