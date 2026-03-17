@@ -90,6 +90,32 @@ describe('useToolStore - persistence', () => {
     expect(store.rectAnnotations.value[0].obb.center).toEqual([7, 8, 9]);
   });
 
+  it('should persist text annotation labelWorldPos and collapsed state', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addAnnotation({
+      id: 'text-collapse-1',
+      entityId: 'entity-collapse-1',
+      worldPos: [1, 2, 3],
+      labelWorldPos: [4, 5, 6],
+      collapsed: true,
+      visible: true,
+      glyph: 'A1',
+      title: '文字批注',
+      description: '折叠状态',
+      createdAt: 10,
+    });
+    await nextTick();
+
+    vi.resetModules();
+    const reloaded = await loadStore();
+
+    expect(reloaded.annotations.value).toHaveLength(1);
+    expect(reloaded.annotations.value[0].labelWorldPos).toEqual([4, 5, 6]);
+    expect(reloaded.annotations.value[0].collapsed).toBe(true);
+  });
+
   it('should expose and clear pending cloud annotation editor state', async () => {
     const store = await loadStore();
     store.clearAll();
@@ -214,5 +240,198 @@ describe('useToolStore - persistence', () => {
     expect(reloaded.xeokitDistanceMeasurements.value).toHaveLength(1);
     expect(reloaded.xeokitAngleMeasurements.value).toHaveLength(1);
     expect(reloaded.currentXeokitDistanceDraft.value).toBeNull();
+  });
+
+  it('should expose active annotation context using the current active type', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addAnnotation({
+      id: 'text-active',
+      entityId: 'entity-text',
+      worldPos: [1, 2, 3],
+      visible: true,
+      glyph: 'T',
+      title: 'Text Active',
+      description: '',
+      createdAt: 1,
+    });
+    store.addCloudAnnotation({
+      id: 'cloud-active',
+      objectIds: ['cloud-1'],
+      anchorWorldPos: [2, 3, 4],
+      visible: true,
+      title: 'Cloud Active',
+      description: '',
+      createdAt: 2,
+      refnos: ['cloud-1'],
+    });
+    store.addRectAnnotation({
+      id: 'rect-active',
+      objectIds: ['rect-1'],
+      obb: {
+        center: [3, 4, 5],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [1, 1, 1],
+        corners: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+      },
+      anchorWorldPos: [3, 4, 5],
+      visible: true,
+      title: 'Rect Active',
+      description: '',
+      createdAt: 3,
+      refnos: ['rect-1'],
+    });
+    store.addObbAnnotation({
+      id: 'obb-active',
+      objectIds: ['obb-1'],
+      obb: {
+        center: [4, 5, 6],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [1, 1, 1],
+        corners: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+      },
+      labelWorldPos: [4, 5, 7],
+      anchor: { kind: 'top_center' },
+      visible: true,
+      title: 'Obb Active',
+      description: '',
+      createdAt: 4,
+      refnos: ['obb-1'],
+    });
+
+    store.activeAnnotationId.value = 'text-active';
+    store.activeCloudAnnotationId.value = null;
+    store.activeRectAnnotationId.value = null;
+    store.activeObbAnnotationId.value = null;
+    expect(store.activeAnnotationContext.value).toMatchObject({
+      type: 'text',
+      id: 'text-active',
+    });
+
+    store.activeAnnotationId.value = 'text-active';
+    store.activeCloudAnnotationId.value = 'cloud-active';
+    store.setToolMode('annotation_cloud');
+    expect(store.activeAnnotationContext.value).toMatchObject({
+      type: 'cloud',
+      id: 'cloud-active',
+    });
+
+    store.activeRectAnnotationId.value = 'rect-active';
+    store.setToolMode('none');
+    expect(store.activeAnnotationContext.value).toMatchObject({
+      type: 'text',
+      id: 'text-active',
+    });
+
+    store.activeAnnotationId.value = null;
+    store.activeCloudAnnotationId.value = null;
+    store.activeRectAnnotationId.value = 'rect-active';
+    expect(store.activeAnnotationContext.value).toMatchObject({
+      type: 'rect',
+      id: 'rect-active',
+    });
+
+    store.activeRectAnnotationId.value = null;
+    store.activeObbAnnotationId.value = 'obb-active';
+    expect(store.activeAnnotationContext.value).toMatchObject({
+      type: 'obb',
+      id: 'obb-active',
+    });
+  });
+
+  it('should support annotation batch visibility and clear helpers without touching measurements', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addMeasurement({
+      id: 'meas-1',
+      kind: 'distance',
+      origin: { entityId: 'm:1', worldPos: [0, 0, 0] },
+      target: { entityId: 'm:2', worldPos: [1, 0, 0] },
+      visible: true,
+      createdAt: 1,
+    });
+
+    store.addAnnotation({
+      id: 'text-1',
+      entityId: 'entity-1',
+      worldPos: [1, 1, 1],
+      visible: true,
+      glyph: '1',
+      title: 'Text',
+      description: '',
+      createdAt: 1,
+    });
+    store.addCloudAnnotation({
+      id: 'cloud-1',
+      objectIds: ['cloud-1'],
+      anchorWorldPos: [2, 2, 2],
+      visible: true,
+      title: 'Cloud',
+      description: '',
+      createdAt: 2,
+      refnos: ['cloud-1'],
+    });
+    store.addRectAnnotation({
+      id: 'rect-1',
+      objectIds: ['rect-1'],
+      obb: {
+        center: [3, 3, 3],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [1, 1, 1],
+        corners: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+      },
+      anchorWorldPos: [3, 3, 3],
+      visible: true,
+      title: 'Rect',
+      description: '',
+      createdAt: 3,
+      refnos: ['rect-1'],
+    });
+    store.addObbAnnotation({
+      id: 'obb-1',
+      objectIds: ['obb-1'],
+      obb: {
+        center: [4, 4, 4],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [1, 1, 1],
+        corners: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+      },
+      labelWorldPos: [4, 4, 5],
+      anchor: { kind: 'top_center' },
+      visible: true,
+      title: 'Obb',
+      description: '',
+      createdAt: 4,
+      refnos: ['obb-1'],
+    });
+
+    store.setAnnotationTypeVisible('cloud', false);
+    expect(store.annotations.value[0].visible).toBe(true);
+    expect(store.cloudAnnotations.value[0].visible).toBe(false);
+    expect(store.rectAnnotations.value[0].visible).toBe(true);
+    expect(store.obbAnnotations.value[0].visible).toBe(true);
+
+    store.setAllAnnotationsVisible(false);
+    expect(store.annotations.value[0].visible).toBe(false);
+    expect(store.cloudAnnotations.value[0].visible).toBe(false);
+    expect(store.rectAnnotations.value[0].visible).toBe(false);
+    expect(store.obbAnnotations.value[0].visible).toBe(false);
+    expect(store.measurements.value).toHaveLength(1);
+    expect(store.measurements.value[0].visible).toBe(true);
+
+    store.clearAnnotationType('rect');
+    expect(store.rectAnnotations.value).toHaveLength(0);
+    expect(store.annotations.value).toHaveLength(1);
+    expect(store.cloudAnnotations.value).toHaveLength(1);
+    expect(store.obbAnnotations.value).toHaveLength(1);
+
+    store.clearAllAnnotations();
+    expect(store.annotations.value).toHaveLength(0);
+    expect(store.cloudAnnotations.value).toHaveLength(0);
+    expect(store.rectAnnotations.value).toHaveLength(0);
+    expect(store.obbAnnotations.value).toHaveLength(0);
+    expect(store.measurements.value).toHaveLength(1);
   });
 });

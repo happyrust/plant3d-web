@@ -1,0 +1,34 @@
+{
+  "featureId": "fup-m5-reviewer-resubmission-convergence",
+  "reviewedAt": "2026-03-16T23:21:26Z",
+  "commitId": "54102e0",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The implementation only adds store-level regression coverage and a refresh dedupe guard in `useUserStore`, but it does not implement or verify the reviewer inbox surface contract promised by the feature. The core same-task-id convergence assertion is limited to `pendingReviewTasks` in the store and leaves the reviewer UI path and required manual/browser validation uncovered.",
+    "issues": [
+      {
+        "file": "src/components/review/ReviewerTaskList.test.ts",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The feature contract explicitly requires reviewer inbox behavior after resubmit, but the implementation never adds or updates reviewer inbox component coverage. Existing tests only assert that the list renders filters and uses an isolated persistence key, so there is no regression protection that a resubmitted task with the same id appears exactly once with the correct actionable stage semantics in the actual inbox UI."
+      },
+      {
+        "file": "src/composables/useUserStore.test.ts",
+        "line": 676,
+        "severity": "blocking",
+        "description": "The new regression test validates only the happy path where the websocket payload already arrives with `status: 'submitted'` and `current_node: 'jd'`. It does not exercise the feature's stated convergence requirement for designer/reviewer surfaces to settle on one truth after a real resubmit transition from returned state, so it would not catch regressions where the resubmit path emits stale `draft/sj` data or duplicates across surfaces before refresh."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker deviated from the skill's required manual `agent-browser` verification step and returned without any UI flow evidence, even though both mission AGENTS guidance and `.factory/library/user-testing.md` describe reviewer inbox / returned-task browser validation as part of this follow-up mission.",
+      "evidence": "Handoff `whatWasLeftUndone` and `skillFeedback.deviations` explicitly state manual browser verification was not run; `.factory/skills/designer-tracking-worker/SKILL.md` step 6 requires manual verification with agent-browser; `.factory/library/user-testing.md` lists 'Reviewer inbox re-visibility after resubmit' as a consistency follow-up flow."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature metadata, worker handoff, transcript skeleton, skill guidance, and commit `54102e0`. The change deduplicates concurrent refreshes and adds one store-level regression test, but it does not provide sufficient implementation or verification for the promised reviewer inbox convergence behavior after resubmit. I am marking this feature as failed because the UI-facing contract remains effectively unreviewed and partially unimplemented."
+}

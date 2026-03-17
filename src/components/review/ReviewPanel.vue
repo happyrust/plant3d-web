@@ -4,16 +4,22 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   ArrowRight,
   CheckCircle,
+  ChevronDown,
   ClipboardCheck,
   ClipboardList,
+  Database,
   Download,
+  FileCheck,
   FileText,
   Filter,
+  History,
   MessageSquare,
   Paperclip,
   Plus,
+  RefreshCw,
   Ruler,
   Trash2,
+  X,
   XCircle,
 } from 'lucide-vue-next';
 
@@ -43,12 +49,24 @@ import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { useViewerContext } from '@/composables/useViewerContext';
+import { useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
 type ConfirmedRecordEntry = typeof reviewStore.sortedConfirmedRecords.value[number];
+type NormalizedTaskContext = {
+  title: string;
+  modelName: string;
+  requesterName: string;
+  checkerName: string;
+  approverName: string;
+  currentNodeLabel: string;
+  currentNodeCode: WorkflowNode;
+  formId: string | null;
+  componentCount: number;
+  returnReason: string | null;
+};
 
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
@@ -79,20 +97,28 @@ const showMeasurementMenu = ref(false);
 
 // 当前任务信息
 const currentTask = computed(() => reviewStore.currentTask.value);
-const currentTaskPrimaryReviewerName = computed(() => {
-  if (!currentTask.value) return '-';
-  return currentTask.value.checkerName || currentTask.value.reviewerName || '-';
+const taskContext = computed<NormalizedTaskContext | null>(() => {
+  const task = currentTask.value;
+  if (!task) return null;
+
+  const currentNodeCode = (task.currentNode || 'sj') as WorkflowNode;
+  return {
+    title: task.title || '-',
+    modelName: task.modelName || '-',
+    requesterName: task.requesterName || '-',
+    checkerName: task.checkerName || task.reviewerName || '-',
+    approverName: task.approverName || '-',
+    currentNodeCode,
+    currentNodeLabel: WORKFLOW_NODE_NAMES[currentNodeCode],
+    formId: task.formId?.trim() || null,
+    componentCount: task.components.length,
+    returnReason: task.returnReason?.trim() || null,
+  };
 });
 
-const currentTaskApproverName = computed(() => {
-  if (!currentTask.value) return '-';
-  return currentTask.value.approverName || '-';
-});
-
-const currentTaskNodeLabel = computed(() => {
-  if (!currentTask.value) return '-';
-  return WORKFLOW_NODE_NAMES[(currentTask.value.currentNode || 'sj') as WorkflowNode];
-});
+const currentTaskNodeLabel = computed(() => taskContext.value?.currentNodeLabel || '-');
+const currentTaskFormId = computed(() => taskContext.value?.formId || '未绑定 formId');
+const currentTaskHasFormalFormId = computed(() => !!taskContext.value?.formId);
 
 // 格式化文件大小
 function formatFileSize(bytes?: number): string {
@@ -499,12 +525,30 @@ function clearModelFilter() {
 }
 
 // 监听当前任务变化，自动应用过滤
-watch(currentTask, (newTask) => {
+watch(currentTask, async (newTask) => {
+  collisionRefno.value = '';
+  collisionData.value = null;
+  collisionError.value = null;
+  collisionLoading.value = false;
+  auxData.value = null;
+  auxError.value = null;
+  auxLoading.value = false;
+  auxProjectId.value = '';
+  auxFormId.value = newTask?.formId?.trim() || '';
+
   if (newTask && newTask.components.length > 0) {
     // 有新任务时自动应用过滤
-    nextTick(() => {
-      filterModelByTask();
-    });
+    const taskId = newTask.id;
+    await nextTick();
+    const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
+    if (!viewerReady) {
+      console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
+      return;
+    }
+    if (currentTask.value?.id !== taskId) {
+      return;
+    }
+    filterModelByTask();
   } else {
     // 清除任务时清除过滤
     clearModelFilter();
@@ -618,6 +662,82 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
+  document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true } as EventListenerOptions);
+});
+
+// ============ Module management system ============
+
+interface ReviewModule {
+  id: string;
+  label: string;
+  icon: typeof Paperclip;
+  isDefault: boolean;
+}
+
+const REVIEW_MODULES: ReviewModule[] = [
+  { id: 'attachments', label: '\u9644\u4ef6\u6587\u4ef6', icon: Paperclip, isDefault: false },
+  { id: 'confirmedStats', label: '\u5df2\u786e\u8ba4\u6570\u636e', icon: ClipboardList, isDefault: false },
+  { id: 'dataSync', label: '\u6570\u636e\u540c\u6b65', icon: RefreshCw, isDefault: false },
+  { id: 'auxData', label: '\u8f85\u52a9\u6821\u5ba1', icon: Database, isDefault: false },
+  { id: 'workflowHistory', label: '\u5de5\u4f5c\u6d41\u5386\u53f2', icon: History, isDefault: false },
+  { id: 'confirmedRecords', label: '\u786e\u8ba4\u8bb0\u5f55', icon: FileCheck, isDefault: false },
+];
+
+const STORAGE_KEY = 'review_panel_active_modules';
+
+function loadActiveModules(): string[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
+  return [];
+}
+
+const activeOptionalModules = ref<string[]>(loadActiveModules());
+const showModuleMenu = ref(false);
+
+const optionalModules = computed(() =>
+  REVIEW_MODULES.filter((m) => !m.isDefault)
+);
+
+const inactiveModules = computed(() =>
+  optionalModules.value.filter((m) => !activeOptionalModules.value.includes(m.id))
+);
+
+const activeModuleDetails = computed(() =>
+  optionalModules.value.filter((m) => activeOptionalModules.value.includes(m.id))
+);
+
+function isModuleActive(id: string): boolean {
+  return activeOptionalModules.value.includes(id);
+}
+
+function addModule(id: string) {
+  if (!activeOptionalModules.value.includes(id)) {
+    activeOptionalModules.value = [...activeOptionalModules.value, id];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(activeOptionalModules.value));
+  }
+  showModuleMenu.value = false;
+}
+
+function removeModule(id: string) {
+  activeOptionalModules.value = activeOptionalModules.value.filter((m) => m !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(activeOptionalModules.value));
+}
+
+function handleModuleMenuClickOutside(event: MouseEvent) {
+  const target = event.target as HTMLElement;
+  if (!target.closest('.module-menu-container')) {
+    showModuleMenu.value = false;
+  }
+}
+
+watch(showModuleMenu, (val) => {
+  if (val) {
+    document.addEventListener('click', handleModuleMenuClickOutside, { capture: true });
+  } else {
+    document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true });
+  }
 });
 </script>
 
@@ -655,88 +775,141 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
-      <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">模型</div>
-          <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.modelName || '-' }}</div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">发起人</div>
-          <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.requesterName || '-' }}</div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">审核人</div>
-          <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-700">
-            <span class="rounded-full bg-white px-2.5 py-1 font-medium text-slate-700">校核 {{ currentTaskPrimaryReviewerName }}</span>
-            <span class="rounded-full bg-white px-2.5 py-1 font-medium text-slate-700">审核 {{ currentTaskApproverName }}</span>
+      <div class="mt-4 space-y-3">
+        <section class="rounded-xl border border-slate-200 bg-slate-50 p-4" data-testid="review-workbench-context-zone">
+          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <ClipboardCheck class="h-4 w-4 text-primary" />
+            <span>任务上下文</span>
           </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">构件数量</div>
-          <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.components.length }} 个构件</div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">当前节点</div>
-          <div class="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <span>{{ currentTaskNodeLabel }}</span>
-            <ArrowRight class="h-4 w-4 text-slate-400" />
-            <span class="text-slate-500">{{ submitActionLabel }}</span>
+          <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务标题</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.title || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">模型</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.modelName || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">发起人</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.requesterName || '-' }}</div>
+            </div>
+            <div class="rounded-lg border px-4 py-3"
+              :class="currentTaskHasFormalFormId ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50'">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Form ID</div>
+              <div class="mt-2 text-sm font-semibold"
+                :class="currentTaskHasFormalFormId ? 'text-slate-900' : 'text-amber-900'">
+                {{ currentTaskFormId }}
+              </div>
+              <div v-if="!currentTaskHasFormalFormId" class="mt-1 text-xs text-amber-700">
+                当前任务缺少正式业务单据号，M4 工作台仅展示降级状态，不再回落到 task.id。
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">校核人</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.checkerName || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">审核人</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.approverName || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">当前节点</div>
+              <div class="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <span>{{ taskContext?.currentNodeLabel || '-' }}</span>
+                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                  {{ taskContext?.currentNodeCode || '-' }}
+                </span>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">构件数量</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.componentCount || 0 }} 个构件</div>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="text-slate-600">
-            当前节点:
-            <span class="font-medium text-slate-900">
-              {{ currentTaskNodeLabel }}
-            </span>
+          <div v-if="taskContext?.returnReason" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <span class="font-semibold">打回原因：</span>{{ taskContext.returnReason }}
           </div>
-          <div class="flex gap-2">
-            <button type="button"
-              class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
-              :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
-              @click="toggleSubmitDialog">
-              {{ submitActionLabel }}
-            </button>
-            <button type="button"
-              class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
-              :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
-              @click="toggleReturnDialog">
-              驳回到设计
-            </button>
-          </div>
-        </div>
+        </section>
 
-        <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
-        <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
-        <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
-          <div v-for="(step, idx) in workflow.history"
-            :key="idx"
-            class="flex items-center justify-between text-muted-foreground">
-            <span>
-              {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
-            </span>
-            <span>{{ formatDate(step.timestamp) }}</span>
+        <section class="rounded-xl border border-slate-200 bg-slate-50 p-4" data-testid="review-workbench-workflow-zone">
+          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <ArrowRight class="h-4 w-4 text-primary" />
+            <span>流转区</span>
           </div>
-        </div>
-        <div class="flex gap-2 mt-2">
-          <button type="button"
-            class="flex-1 h-7 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
-            @click="filterModelByTask">
-            <Filter class="h-3 w-3 inline mr-1" />
-            只显示任务构件
-          </button>
-          <button v-if="isFilteringByTask"
-            type="button"
-            class="flex-1 h-7 text-xs border rounded hover:bg-muted"
-            @click="clearModelFilter">
-            显示全部
-          </button>
-        </div>
-        <div class="mt-3 border-t pt-3 text-xs text-muted-foreground">
-          当前操作统一走工作流流转：提交到下一节点或驳回到设计节点。
-        </div>
+          <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">流转目标</div>
+              <div class="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <span>{{ currentTaskNodeLabel }}</span>
+                <ArrowRight class="h-4 w-4 text-slate-400" />
+                <span class="text-slate-500">{{ submitActionLabel }}</span>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务状态</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.status }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务编号</div>
+              <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.id }}</div>
+            </div>
+          </div>
+          <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="text-slate-600">
+                当前节点:
+                <span class="font-medium text-slate-900">
+                  {{ currentTaskNodeLabel }}
+                </span>
+              </div>
+              <div class="flex gap-2">
+                <button type="button"
+                  class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
+                  :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
+                  @click="toggleSubmitDialog">
+                  {{ submitActionLabel }}
+                </button>
+                <button type="button"
+                  class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
+                  :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
+                  @click="toggleReturnDialog">
+                  驳回到设计
+                </button>
+              </div>
+            </div>
+
+            <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
+            <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
+            <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
+              <div v-for="(step, idx) in workflow.history"
+                :key="idx"
+                class="flex items-center justify-between text-muted-foreground">
+                <span>
+                  {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
+                </span>
+                <span>{{ formatDate(step.timestamp) }}</span>
+              </div>
+            </div>
+            <div class="flex gap-2 mt-2">
+              <button type="button"
+                class="flex-1 h-7 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                @click="filterModelByTask">
+                <Filter class="h-3 w-3 inline mr-1" />
+                只显示任务构件
+              </button>
+              <button v-if="isFilteringByTask"
+                type="button"
+                class="flex-1 h-7 text-xs border rounded hover:bg-muted"
+                @click="clearModelFilter">
+                显示全部
+              </button>
+            </div>
+            <div class="mt-3 border-t pt-3 text-xs text-muted-foreground">
+              当前操作统一走工作流流转：提交到下一节点或驳回到设计节点。
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -842,8 +1015,56 @@ onUnmounted(() => {
       <div v-if="confirmError" class="mt-2 text-xs text-red-600">{{ confirmError }}</div>
     </div>
 
+    <!-- 可选模块管理栏 -->
+    <div class="rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-slate-500">可选模块</span>
+        <div class="module-menu-container relative">
+          <button type="button"
+            class="flex h-7 items-center gap-1 rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted"
+            :class="{ 'bg-muted': showModuleMenu }"
+            :disabled="inactiveModules.length === 0"
+            @click.stop="showModuleMenu = !showModuleMenu">
+            <Plus class="h-3.5 w-3.5" />
+            添加模块
+            <ChevronDown class="h-3 w-3 text-muted-foreground" />
+          </button>
+          <div v-if="showModuleMenu"
+            class="absolute right-0 top-full z-20 mt-1 w-44 rounded-md border border-border bg-background p-1 shadow-lg">
+            <button v-for="mod in inactiveModules"
+              :key="mod.id"
+              type="button"
+              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted"
+              @click.stop="addModule(mod.id)">
+              <component :is="mod.icon" class="h-3.5 w-3.5 text-muted-foreground" />
+              {{ mod.label }}
+            </button>
+            <div v-if="inactiveModules.length === 0" class="px-2 py-1.5 text-xs text-muted-foreground">
+              所有模块已添加
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="activeModuleDetails.length > 0" class="mt-2 flex flex-wrap gap-1.5">
+        <span v-for="mod in activeModuleDetails"
+          :key="mod.id"
+          class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm">
+          <component :is="mod.icon" class="h-3 w-3 text-slate-400" />
+          {{ mod.label }}
+          <button type="button"
+            class="ml-0.5 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            @click="removeModule(mod.id)">
+            <X class="h-3 w-3" />
+          </button>
+        </span>
+      </div>
+      <div v-else class="mt-1.5 text-xs text-muted-foreground">
+        点击“添加模块”启用更多功能面板
+      </div>
+    </div>
+
     <!-- 附件列表 -->
-    <div v-if="currentTask && currentTask.attachments && currentTask.attachments.length > 0" class="rounded-md border border-border bg-background p-3">
+    <div v-if="isModuleActive('attachments') && currentTask && currentTask.attachments && currentTask.attachments.length > 0" class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">附件文件 ({{ currentTask.attachments.length }})</div>
       <div class="mt-2 space-y-2 max-h-48 overflow-y-auto">
         <div v-for="attachment in currentTask.attachments"
@@ -863,7 +1084,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 已确认统计 -->
-    <div class="rounded-md border border-border bg-background p-3">
+    <div v-if="isModuleActive('confirmedStats')" class="rounded-md border border-border bg-background p-3">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <ClipboardList class="h-5 w-5 text-green-500" />
@@ -910,10 +1131,10 @@ onUnmounted(() => {
     </div>
 
     <!-- 后端数据同步 -->
-    <ReviewDataSync />
+    <ReviewDataSync v-if="isModuleActive('dataSync')" />
 
     <!-- 辅助校审数据 -->
-    <ReviewAuxData />
+    <ReviewAuxData v-if="isModuleActive('auxData')" />
 
     <WorkflowSubmitDialog :visible="showSubmitDialog"
       :current-node="currentNode"
@@ -929,7 +1150,7 @@ onUnmounted(() => {
       @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
 
     <!-- 工作流历史 -->
-    <div class="rounded-md border border-border bg-background p-3">
+    <div v-if="isModuleActive('workflowHistory')" class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">工作流历史</div>
 
       <div v-if="workflowLoading" class="mt-2 text-sm text-muted-foreground">
@@ -972,7 +1193,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 确认记录 -->
-    <div class="rounded-md border border-border bg-background p-3">
+    <div v-if="isModuleActive('confirmedRecords')" class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">确认记录</div>
 
       <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"

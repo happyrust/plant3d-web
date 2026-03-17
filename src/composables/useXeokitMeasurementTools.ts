@@ -1,7 +1,8 @@
 import { computed, ref, watch, type Ref } from 'vue';
 
-import { Box3, Matrix4, Vector2, Vector3 } from 'three';
+import { Box3, Matrix4, Raycaster, Vector2, Vector3 } from 'three';
 
+import { useXeokitMeasurementStyleStore } from './useXeokitMeasurementStyleStore';
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
@@ -98,6 +99,7 @@ export function useXeokitMeasurementTools(options: {
     store,
   } = options;
   const requestRender = options.requestRender ?? null;
+  const measurementStyle = useXeokitMeasurementStyleStore();
 
   const readyRevision = ref(0);
   const clickTracker = ref<ClickTracker>({ down: null, moved: false });
@@ -163,16 +165,86 @@ export function useXeokitMeasurementTools(options: {
     return `${XEOKIT_PREFIX}${id}`;
   }
 
+  function pickAnnotationPoint(canvas: HTMLCanvasElement, e: PointerEvent): { entityId: string; worldPos: Vector3; objectId: string } | null {
+    const annotationSystem = options.annotationSystemRef?.value ?? null;
+    const viewer = dtxViewerRef.value;
+    const annotationsMap = annotationSystem?.annotations?.value;
+    if (!viewer?.camera || !(annotationsMap instanceof Map) || annotationsMap.size === 0) return null;
+
+    const canvasPos = getCanvasPos(canvas, e);
+    const rect = canvas.getBoundingClientRect();
+    const ndc = new Vector2((canvasPos.x / rect.width) * 2 - 1, -(canvasPos.y / rect.height) * 2 + 1);
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(ndc, viewer.camera);
+
+    const prevThreshold = raycaster.params.Line?.threshold;
+    if (raycaster.params.Line) {
+      raycaster.params.Line.threshold = 0.1;
+    }
+
+    let closest: { entityId: string; worldPos: Vector3; objectId: string; distance: number } | null = null;
+
+    for (const [id, annotation] of annotationsMap.entries()) {
+      if (!annotation?.visible) continue;
+      if (id.startsWith(XEOKIT_PREFIX)) continue;
+
+      const annotationUserData = (annotation as any).userData as Record<string, unknown> | undefined;
+      if (annotationUserData?.pickable === false || annotationUserData?.noPick === true) continue;
+
+      let intersects: { object: { userData?: Record<string, unknown> }; point: Vector3; distance: number }[] = [];
+      try {
+        intersects = raycaster.intersectObject(annotation as any, true) as {
+          object: { userData?: Record<string, unknown> };
+          point: Vector3;
+          distance: number;
+        }[];
+      } catch {
+        continue;
+      }
+
+      for (const hit of intersects) {
+        const hitUserData = hit.object?.userData;
+        if (hitUserData?.pickable === false || hitUserData?.noPick === true) continue;
+
+        if (!closest || hit.distance < closest.distance) {
+          closest = {
+            entityId: `annotation:${id}`,
+            objectId: id,
+            worldPos: hit.point.clone(),
+            distance: hit.distance,
+          };
+        }
+        break;
+      }
+    }
+
+    if (raycaster.params.Line && prevThreshold !== undefined) {
+      raycaster.params.Line.threshold = prevThreshold;
+    }
+
+    return closest
+      ? {
+        entityId: closest.entityId,
+        objectId: closest.objectId,
+        worldPos: closest.worldPos,
+      }
+      : null;
+  }
+
   function pickSurfacePoint(canvas: HTMLCanvasElement, e: PointerEvent): { entityId: string; worldPos: Vector3; objectId: string } | null {
     const selection = selectionRef.value;
-    if (!selection) return null;
-    const hit = selection.pickPoint(getCanvasPos(canvas, e));
-    if (!hit) return null;
-    return {
-      entityId: hit.objectId,
-      objectId: hit.objectId,
-      worldPos: hit.point.clone(),
-    };
+    if (selection) {
+      const hit = selection.pickPoint(getCanvasPos(canvas, e));
+      if (hit) {
+        return {
+          entityId: hit.objectId,
+          objectId: hit.objectId,
+          worldPos: hit.point.clone(),
+        };
+      }
+    }
+
+    return pickAnnotationPoint(canvas, e);
   }
 
   function ensureOverlayElements(): void {
@@ -383,11 +455,14 @@ export function useXeokitMeasurementTools(options: {
         displayTransform,
         ...common,
         visible,
-        originVisible: true,
-        targetVisible: visible,
+        originVisible: measurementStyle.state.distanceShowMarkers,
+        targetVisible: visible && measurementStyle.state.distanceShowMarkers,
         wireVisible: visible,
-        axisVisible: visible,
-        labelVisible: visible,
+        axisVisible: visible && measurementStyle.state.distanceShowAxisBreakdown,
+        xAxisVisible: measurementStyle.state.distanceShowAxisBreakdown,
+        yAxisVisible: measurementStyle.state.distanceShowAxisBreakdown,
+        zAxisVisible: measurementStyle.state.distanceShowAxisBreakdown,
+        labelVisible: visible && measurementStyle.state.distanceShowTotalLabel,
       };
 
       if (existing instanceof XeokitDistanceMeasurement) {
@@ -415,17 +490,17 @@ export function useXeokitMeasurementTools(options: {
       target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
       ...common,
       visible,
-      originVisible: true,
-      cornerVisible: isDraft && isAngleDraft(record)
+      originVisible: measurementStyle.state.angleShowMarkers,
+      cornerVisible: measurementStyle.state.angleShowMarkers && (isDraft && isAngleDraft(record)
         ? record.stage === 'finding_corner'
           ? visible
           : visible
-        : visible,
-      targetVisible: isDraft && isAngleDraft(record)
+        : visible),
+      targetVisible: measurementStyle.state.angleShowMarkers && (isDraft && isAngleDraft(record)
         ? record.stage === 'finding_target'
           ? visible
           : false
-        : visible,
+        : visible),
       originWireVisible: isDraft && isAngleDraft(record)
         ? record.stage === 'finding_target'
           ? visible
@@ -436,11 +511,11 @@ export function useXeokitMeasurementTools(options: {
           ? visible
           : false
         : visible,
-      angleVisible: isDraft && isAngleDraft(record)
+      angleVisible: measurementStyle.state.angleShowLabel && (isDraft && isAngleDraft(record)
         ? record.stage === 'finding_target'
           ? visible
           : false
-        : visible,
+        : visible),
     };
 
     if (existing instanceof XeokitAngleMeasurement) {
@@ -541,6 +616,7 @@ export function useXeokitMeasurementTools(options: {
   }
 
   function activate(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle') {
+    store.setMeasurementDetailsDrawerOpen(false);
     store.setToolMode(mode);
   }
 
@@ -817,6 +893,15 @@ export function useXeokitMeasurementTools(options: {
     () => [store.xeokitMarkerState.value, store.xeokitPointerLensState.value],
     () => {
       updateOverlayElements();
+    },
+    { deep: true },
+  );
+
+  watch(
+    () => ({ ...measurementStyle.state }),
+    () => {
+      syncFromStore();
+      requestRender?.();
     },
     { deep: true },
   );

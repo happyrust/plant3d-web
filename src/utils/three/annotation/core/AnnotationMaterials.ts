@@ -16,6 +16,8 @@ export type AnnotationMaterialSet = {
   meshHover: THREE.MeshBasicMaterial;
   fatLine: LineMaterial;
   fatLineHover: LineMaterial;
+  textFatLine: LineMaterial;
+  textFatLineHover: LineMaterial;
 }
 
 export class AnnotationMaterials {
@@ -83,14 +85,28 @@ export class AnnotationMaterials {
       fatLine: new LineMaterial({
         color: normalColor,
         transparent: true,
-        linewidth: 3.5,
+        linewidth: 5,
         depthTest: true,
         depthWrite: true,
       }),
       fatLineHover: new LineMaterial({
         color: hoverColor,
         transparent: true,
-        linewidth: 3.5,
+        linewidth: 5,
+        depthTest: true,
+        depthWrite: true,
+      }),
+      textFatLine: new LineMaterial({
+        color: normalColor,
+        transparent: true,
+        linewidth: 4,
+        depthTest: true,
+        depthWrite: true,
+      }),
+      textFatLineHover: new LineMaterial({
+        color: hoverColor,
+        transparent: true,
+        linewidth: 4,
         depthTest: true,
         depthWrite: true,
       }),
@@ -118,6 +134,8 @@ export class AnnotationMaterials {
     for (const set of this.all) {
       set.fatLine.resolution.set(this.resolutionWidth, this.resolutionHeight);
       set.fatLineHover.resolution.set(this.resolutionWidth, this.resolutionHeight);
+      set.textFatLine.resolution.set(this.resolutionWidth, this.resolutionHeight);
+      set.textFatLineHover.resolution.set(this.resolutionWidth, this.resolutionHeight);
     }
   }
 
@@ -136,6 +154,8 @@ export class AnnotationMaterials {
       set.meshHover.dispose();
       set.fatLine.dispose();
       set.fatLineHover.dispose();
+      set.textFatLine.dispose();
+      set.textFatLineHover.dispose();
     }
   }
 }

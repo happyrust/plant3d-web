@@ -153,6 +153,17 @@ export type AnnotationLabelClickResult = {
   nextState: AnnotationLabelClickState | null
 };
 
+export type TextAnnotationMarkerClickState = {
+  annotationId: string
+  timestamp: number
+};
+
+export type TextAnnotationMarkerClickResult = {
+  activate: boolean
+  nextCollapsed: boolean | null
+  nextState: TextAnnotationMarkerClickState | null
+};
+
 type AnnotationLeaderStyle = {
   color: number
   haloColor: number
@@ -545,6 +556,43 @@ export function shouldRenderTextAnnotationCard(collapsed?: boolean): boolean {
 
 export function toggleTextAnnotationCollapsed(collapsed?: boolean): boolean {
   return collapsed !== true;
+}
+
+export function resolveTextAnnotationMarkerClickAction(
+  prevState: TextAnnotationMarkerClickState | null,
+  annotationId: string,
+  timestamp: number,
+  collapsed?: boolean,
+  thresholdMs = 400,
+): TextAnnotationMarkerClickResult {
+  if (collapsed === true) {
+    return {
+      activate: true,
+      nextCollapsed: false,
+      nextState: null,
+    };
+  }
+
+  const isDoubleClick = !!prevState
+    && prevState.annotationId === annotationId
+    && timestamp - prevState.timestamp < thresholdMs;
+
+  if (isDoubleClick) {
+    return {
+      activate: false,
+      nextCollapsed: true,
+      nextState: null,
+    };
+  }
+
+  return {
+    activate: true,
+    nextCollapsed: null,
+    nextState: {
+      annotationId,
+      timestamp,
+    },
+  };
 }
 
 export function isDtxInteractionReady(
@@ -1425,22 +1473,25 @@ export function useDtxTools(options: {
 
   function handleTextAnnotationMarkerClick(id: string) {
     commitInlineAnnotationDraft('text', id);
+    const rec = store.annotations.value.find((item) => item.id === id);
+    if (!rec) return;
     const now = Date.now();
-    const isDoubleClick = !!lastTextMarkerClick
-      && lastTextMarkerClick.annotationId === id
-      && now - lastTextMarkerClick.timestamp < 400;
+    const result = resolveTextAnnotationMarkerClickAction(
+      lastTextMarkerClick,
+      id,
+      now,
+      rec.collapsed,
+    );
 
-    if (isDoubleClick) {
-      const rec = store.annotations.value.find((item) => item.id === id);
-      if (rec) {
-        store.updateAnnotation(id, { collapsed: toggleTextAnnotationCollapsed(rec.collapsed) });
-      }
-      lastTextMarkerClick = null;
-      return;
+    if (result.nextCollapsed !== null) {
+      store.updateAnnotation(id, { collapsed: result.nextCollapsed });
     }
 
-    activateAnnotation('text', id);
-    lastTextMarkerClick = { annotationId: id, timestamp: now };
+    if (result.activate) {
+      activateAnnotation('text', id);
+    }
+
+    lastTextMarkerClick = result.nextState;
   }
 
   function commitDraggedTextAnnotation(annotationId: string, labelWorldPos: Vector3) {

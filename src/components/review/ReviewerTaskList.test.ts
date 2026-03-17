@@ -1,0 +1,146 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp, h, nextTick } from 'vue';
+
+import ReviewerTaskList from './ReviewerTaskList.vue';
+
+import type { ReviewTask } from '@/types/auth';
+
+const loadReviewTasksMock = vi.fn(() => Promise.resolve());
+const setCurrentTaskMock = vi.fn();
+const persistenceState = new Map<string, unknown>();
+const persistenceStorageKeys: string[] = [];
+
+const mockUserStore = {
+  pendingReviewTasks: { value: [] as ReviewTask[] },
+  currentUser: { value: { id: 'checker-1', name: '李审核员' } },
+  isChecker: { value: true },
+  isApprover: { value: false },
+  loadReviewTasks: (...args: unknown[]) => loadReviewTasksMock(...args),
+  submitTaskToNextNode: vi.fn(() => Promise.resolve()),
+  returnTaskToNode: vi.fn(() => Promise.resolve()),
+};
+
+vi.mock('@/composables/useUserStore', () => ({
+  useUserStore: () => mockUserStore,
+}));
+
+vi.mock('@/composables/useReviewStore', () => ({
+  useReviewStore: () => ({
+    setCurrentTask: setCurrentTaskMock,
+  }),
+}));
+
+vi.mock('@/composables/useNavigationStatePersistence', () => ({
+  useNavigationStatePersistence: (storageKey: string) => {
+    persistenceStorageKeys.push(storageKey);
+    return ({
+      bindRef: (_key: string, target: { value: unknown }, defaultValue: unknown) => {
+        if (target.value === undefined) {
+          target.value = defaultValue;
+        }
+      },
+      saveValue: (key: string, value: unknown) => {
+        persistenceState.set(key, value);
+      },
+      getValue: (key: string, defaultValue: unknown) => persistenceState.get(key) ?? defaultValue,
+    });
+  },
+}));
+
+vi.mock('./reviewerTaskListActions', () => ({
+  refreshReviewerTasksSafely: async ({ loadReviewTasks, setLoading }: { loadReviewTasks: () => Promise<void>; setLoading: (loading: boolean) => void }) => {
+    setLoading(true);
+    try {
+      await loadReviewTasks();
+    } finally {
+      setLoading(false);
+    }
+  },
+  startReviewerTask: vi.fn(async ({ task, onTaskSelected }: { task: ReviewTask; onTaskSelected: (task: ReviewTask) => void }) => {
+    onTaskSelected(task);
+  }),
+}));
+
+vi.mock('@/ribbon/commandBus', () => ({
+  emitCommand: vi.fn(),
+}));
+
+describe('ReviewerTaskList', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    persistenceState.clear();
+    persistenceStorageKeys.length = 0;
+    loadReviewTasksMock.mockClear();
+    setCurrentTaskMock.mockClear();
+    mockUserStore.pendingReviewTasks.value = [];
+    mockUserStore.submitTaskToNextNode.mockClear();
+    mockUserStore.returnTaskToNode.mockClear();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
+    return {
+      id: `task-${Math.random().toString(36).slice(2)}`,
+      title: '审核任务',
+      description: '等待校核',
+      modelName: '主装置模型',
+      status: 'submitted',
+      priority: 'high',
+      requesterId: 'designer-1',
+      requesterName: '王设计师',
+      checkerId: 'checker-1',
+      checkerName: '李审核员',
+      approverId: 'approver-1',
+      approverName: '周审核',
+      reviewerId: 'checker-1',
+      reviewerName: '李审核员',
+      components: [],
+      createdAt: new Date('2026-03-15T08:00:00+08:00').getTime(),
+      updatedAt: new Date('2026-03-16T08:00:00+08:00').getTime(),
+      currentNode: 'jd',
+      ...overrides,
+    };
+  }
+
+  async function mountComponent(tasks: ReviewTask[]) {
+    mockUserStore.pendingReviewTasks.value = tasks;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    createApp({
+      render: () => h(ReviewerTaskList),
+    }).mount(host);
+
+    await vi.dynamicImportSettled();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    return host;
+  }
+
+  it('renders reviewer inbox filters and tasks', async () => {
+    await mountComponent([
+      createTask({ id: 'submitted-task', title: '待审核任务', status: 'submitted', priority: 'urgent' }),
+    ]);
+
+    expect(document.body.textContent).toContain('待处理提资任务');
+    expect(document.body.textContent).toContain('待审核任务');
+    expect(document.body.textContent).toContain('全部状态');
+    expect(document.body.textContent).toContain('全部优先级');
+  });
+
+  it('uses an isolated persistence key for the reviewer inbox surface', async () => {
+    await mountComponent([
+      createTask({ id: 'review-task', title: '审核列表任务', status: 'submitted', currentNode: 'jd' }),
+    ]);
+
+    expect(persistenceStorageKeys).toContain('plant3d-web-nav-state-reviewer-tasks-v1');
+    expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-designer-tasks-v1');
+    expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-resubmission-tasks-v1');
+  });
+});

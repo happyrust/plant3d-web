@@ -1,0 +1,21 @@
+{
+  "featureId": "revert-out-of-scope-copy-change-in-form-binding-fix",
+  "reviewedAt": "2026-03-16T22:29:14.288133+00:00",
+  "commitId": "a4bbeaaa9483a0292b82cd81efdf1994f2a729a5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Commit `a4bbeaa` is scoped to a one-line revert in `InitiateReviewPanel.vue` and cleanly restores the BRAN-specific selected-component summary without touching the close-emission fix or other submit-flow logic.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `designer-tracking-worker` procedure is heavier than needed for copy-only revert work: this worker reasonably skipped TDD, type-check/lint, and agent-browser verification because the feature was a one-line string restoration with existing regression coverage.",
+      "evidence": ".factory/skills/designer-tracking-worker/SKILL.md requires tests-first, type-check/lint, and manual browser verification, but the transcript for worker `105df676-d9af-4d8f-8365-fcd1b4de8231` documents a successful one-line copy revert validated by existing `src/components/review/form-binding.test.ts` and full `npm test` runs only."
+    }
+  ],
+  "addressesFailureFrom": "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/misc-returned-contract-baseline/scrutiny/reviews/fix-form-binding-close-emission-regression.json",
+  "summary": "Reviewed the handoff, transcript skeleton, prior failed review, and commit `a4bbeaa`. The feature does exactly one scoped copy revert in `src/components/review/InitiateReviewPanel.vue:185`, restoring the BRAN-specific summary text while leaving the earlier close-event fix intact, so the review passes."
+}

@@ -284,9 +284,9 @@ export class LinearDimension3D extends AnnotationBase {
     // 创建 SolveSpace 矢量文字标签（billboard）
     this.textLabel = new SolveSpaceBillboardVectorText({
       text: '',
-      materialNormal: this.materialSet.line,
-      materialHovered: this.hoveredMaterialSet.line,
-      materialSelected: this.selectedMaterialSet.line,
+      materialNormal: this.materialSet.textFatLine,
+      materialHovered: this.hoveredMaterialSet.textFatLine,
+      materialSelected: this.selectedMaterialSet.textFatLine,
       renderStyle: this.params.labelRenderStyle,
     });
     this.textLabel.object3d.userData.dragRole = 'label';
@@ -520,9 +520,9 @@ export class LinearDimension3D extends AnnotationBase {
     // 才能保持 depthTest=false 时的“置顶渲染”语义。
     this.materialSet = this.resolveMaterialSet(materialSet);
     this.textLabel.setMaterials({
-      normal: this.materialSet.line,
-      hovered: this.hoveredMaterialSet.line,
-      selected: this.selectedMaterialSet.line,
+      normal: this.materialSet.textFatLine,
+      hovered: this.hoveredMaterialSet.textFatLine,
+      selected: this.selectedMaterialSet.textFatLine,
     });
     this.applyMaterials();
   }
@@ -530,6 +530,7 @@ export class LinearDimension3D extends AnnotationBase {
   /** 调整当前尺寸线/开口箭头线宽（像素） */
   setLineWidthPx(lineWidthPx: number): void {
     const w = Math.max(1, Number(lineWidthPx) || 1);
+    const textW = Math.max(1, w - 1); // 文本线条通常比尺寸线稍微细一点更清晰
     for (const set of [
       this.materialSet,
       this.hoveredMaterialSet,
@@ -537,6 +538,8 @@ export class LinearDimension3D extends AnnotationBase {
     ]) {
       set.fatLine.linewidth = w;
       set.fatLineHover.linewidth = w;
+      set.textFatLine.linewidth = textW;
+      set.textFatLineHover.linewidth = textW;
     }
     this.applyMaterials();
   }

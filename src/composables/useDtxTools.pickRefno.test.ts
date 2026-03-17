@@ -9,6 +9,7 @@ import {
   buildCloudBillboardPolyline,
   isDtxInteractionReady,
   resolvePickedRefnoForFilter,
+  resolveTextAnnotationMarkerClickAction,
   useDtxTools,
 } from './useDtxTools';
 import { useToolStore } from './useToolStore';
@@ -208,6 +209,21 @@ describe('computeCloudLayout', () => {
     expect(tokens[tokens.length - 1]).toBe('Z');
     expect(tokens.filter((t) => t === 'L').length).toBeGreaterThan(60);
     expect(tokens.some((token) => token.includes('.'))).toBe(true);
+  });
+});
+
+describe('resolveTextAnnotationMarkerClickAction', () => {
+  it('已最小化的文字批注水滴图钉，单击后应恢复展开并保持选中', () => {
+    const result = resolveTextAnnotationMarkerClickAction(
+      null,
+      'anno-1',
+      1000,
+      true,
+    );
+
+    expect(result.activate).toBe(true);
+    expect(result.nextCollapsed).toBe(false);
+    expect(result.nextState).toBeNull();
   });
 });
 

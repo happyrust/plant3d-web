@@ -14,29 +14,34 @@ const mockStore = {
 };
 
 const persistenceState = new Map<string, unknown>();
+const persistenceStorageKeys: string[] = [];
 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => mockStore,
 }));
 
 vi.mock('@/composables/useNavigationStatePersistence', () => ({
-  useNavigationStatePersistence: () => ({
-    bindRef: (_key: string, target: { value: unknown }, defaultValue: unknown) => {
-      if (target.value === undefined) {
-        target.value = defaultValue;
-      }
-    },
-    saveValue: (key: string, value: unknown) => {
-      persistenceState.set(key, value);
-    },
-    getValue: (key: string, defaultValue: unknown) => persistenceState.get(key) ?? defaultValue,
-  }),
+  useNavigationStatePersistence: (storageKey: string) => {
+    persistenceStorageKeys.push(storageKey);
+    return {
+      bindRef: (_key: string, target: { value: unknown }, defaultValue: unknown) => {
+        if (target.value === undefined) {
+          target.value = defaultValue;
+        }
+      },
+      saveValue: (key: string, value: unknown) => {
+        persistenceState.set(key, value);
+      },
+      getValue: (key: string, defaultValue: unknown) => persistenceState.get(key) ?? defaultValue,
+    };
+  },
 }));
 
 describe('DesignerTaskList', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     persistenceState.clear();
+    persistenceStorageKeys.length = 0;
     loadReviewTasksMock.mockClear();
     mockStore.myInitiatedTasks.value = [];
   });
@@ -141,5 +146,13 @@ describe('DesignerTaskList', () => {
 
     expect(document.body.textContent).toContain('已取消任务');
     expect(document.body.textContent).not.toContain('待审核任务');
+  });
+
+  it('uses an isolated persistence key for the designer main list surface', async () => {
+    await mountComponent([createTask({ id: 'designer-task', status: 'submitted', currentNode: 'jd' })]);
+
+    expect(persistenceStorageKeys).toContain('plant3d-web-nav-state-designer-tasks-v1');
+    expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-resubmission-tasks-v1');
+    expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-reviewer-tasks-v1');
   });
 });

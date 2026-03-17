@@ -514,7 +514,7 @@ test.describe('DTX 批注视觉截图', () => {
     await expectViewerGolden(page, 'annotation-visual-obb.png');
   });
 
-  test('文字批注应支持拖动 card 与双击图钉折叠展开', async ({ page }) => {
+  test('文字批注应支持拖动 card、双击图钉折叠与单击水滴恢复展开', async ({ page }) => {
     const point = await findPickablePoint(page);
 
     await setToolMode(page, 'annotation');
@@ -579,8 +579,16 @@ test.describe('DTX 批注视觉截图', () => {
     await expectViewerGolden(page, 'annotation-visual-text-collapsed.png');
 
     await page.waitForTimeout(450);
-    await dispatchMarkerClick(collapsedMarker, 2);
+    await dispatchMarkerClick(collapsedMarker);
     await expect(textLabel).toBeVisible();
+    await expect
+      .poll(() => readTextAnnotationStore(page), { timeout: 10_000 })
+      .toMatchObject({
+        count: 1,
+        first: {
+          collapsed: false,
+        },
+      });
     await saveViewerShot(page, 'text-annotation-reexpanded');
     await expectViewerGolden(page, 'annotation-visual-text-reexpanded.png');
   });

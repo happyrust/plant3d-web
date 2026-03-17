@@ -105,4 +105,138 @@ describe('AnnotationPanel', () => {
     host.remove();
     host = null;
   });
+
+  it('应展示当前类型与当前选中批注摘要，并高亮对应类型卡片', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: {
+        template: '<div data-testid="review-comments-panel-stub" />',
+      },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref(null),
+      }),
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.setToolMode('annotation_cloud');
+    store.addCloudAnnotation({
+      id: 'cloud-focus-1',
+      objectIds: ['demo:cloud:1'],
+      anchorWorldPos: [1, 2, 3],
+      visible: true,
+      title: '云线焦点批注',
+      description: '用于验证当前摘要',
+      createdAt: 1,
+      refnos: ['demo:cloud:1'],
+    });
+    store.activeCloudAnnotationId.value = 'cloud-focus-1';
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('云线批注模式'),
+        flyToAnnotation: vi.fn(),
+        removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(),
+        flyToRectAnnotation: vi.fn(),
+        flyToObbAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(),
+        removeRectAnnotation: vi.fn(),
+        removeObbAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    expect((host.querySelector('[data-testid="annotation-panel-current-type-label"]') as HTMLElement | null)?.textContent).toContain('云线批注');
+    expect((host.querySelector('[data-testid="annotation-panel-current-selection-label"]') as HTMLElement | null)?.textContent).toContain('云线焦点批注');
+    expect((host.querySelector('[data-testid="annotation-panel-section-cloud"]') as HTMLElement | null)?.getAttribute('data-active')).toBe('true');
+    expect((host.querySelector('[data-testid="annotation-panel-section-text"]') as HTMLElement | null)?.getAttribute('data-active')).toBe('false');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('选中文字批注后，应提供最小化与恢复展开入口', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: {
+        template: '<div data-testid="review-comments-panel-stub" />',
+      },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref(null),
+      }),
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.addAnnotation({
+      id: 'text-min-1',
+      entityId: 'entity-min-1',
+      worldPos: [1, 2, 3],
+      labelWorldPos: [3, 4, 5],
+      collapsed: false,
+      visible: true,
+      glyph: 'A1',
+      title: '可最小化文字批注',
+      description: '测试入口',
+      createdAt: 1,
+    });
+    store.activeAnnotationId.value = 'text-min-1';
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('文字批注模式'),
+        flyToAnnotation: vi.fn(),
+        removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(),
+        flyToRectAnnotation: vi.fn(),
+        flyToObbAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(),
+        removeRectAnnotation: vi.fn(),
+        removeObbAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const toggleButton = host.querySelector('[data-testid="annotation-panel-text-collapse-toggle"]') as HTMLButtonElement | null;
+    expect(toggleButton?.textContent).toContain('最小化');
+
+    toggleButton?.click();
+    await nextTick();
+    expect(store.annotations.value[0].collapsed).toBe(true);
+
+    const expandButton = host.querySelector('[data-testid="annotation-panel-text-collapse-toggle"]') as HTMLButtonElement | null;
+    expect(expandButton?.textContent).toContain('恢复展开');
+
+    expandButton?.click();
+    await nextTick();
+    expect(store.annotations.value[0].collapsed).toBe(false);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
 });

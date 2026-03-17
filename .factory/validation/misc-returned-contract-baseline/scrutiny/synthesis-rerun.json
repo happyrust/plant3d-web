@@ -20,9 +20,9 @@
     }
   },
   "reviewsSummary": {
-    "total": 1,
-    "passed": 0,
-    "failed": 1,
+    "total": 4,
+    "passed": 1,
+    "failed": 3,
     "failedFeatures": [
       "fix-form-binding-close-emission-regression",
       "fix-returned-contract-baseline-measurement-and-annotation-timeouts",
@@ -53,7 +53,7 @@
     {
       "featureId": "fix-form-binding-close-emission-regression",
       "severity": "blocking",
-      "description": "This fix changes the selected-component summary text from `\u5df2\u9009\u4e2d N \u4e2a BRAN \u7ba1\u9053\u6784\u4ef6` to `\u5df2\u9009\u4e2d N \u4e2a\u6784\u4ef6`. That unrelated UX copy change is outside the close-emission regression scope and breaks the existing binding contract still asserted by `form-binding.test.ts`, so the feature no longer cleanly satisfies its narrowly scoped requirement without collateral behavior drift."
+      "description": "The feature changes `selectedComponentSummary` from `已选中 N 个 BRAN 管道构件` to `已选中 N 个构件`, which is unrelated to restoring the missing `close` emission. This broadens the fix beyond its stated scope and changes existing UX copy without test coverage for the summary text."
     }
   ],
   "appliedUpdates": [],
@@ -61,7 +61,19 @@
     {
       "target": "skills",
       "suggestion": "Split baseline-only test-recovery work from designer-tracking flow work, or allow the designer-tracking-worker skill to skip browser/manual verification when the feature scope is strictly CLI test stabilization.",
-      "evidence": "Prior reviewed baseline-fix workers and the form-binding regression worker all used focused CLI tests while `.factory/skills/designer-tracking-worker/SKILL.md` still requires agent-browser manual verification for every feature.",
+      "evidence": "`.factory/skills/designer-tracking-worker/SKILL.md` step 6 requires manual verification with agent-browser, while the reviewed transcript's `skillFeedback.deviations` explicitly says browser automation was skipped for this test-only stabilization task.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Split baseline-only test-recovery work from designer-tracking flow work, or allow the designer-tracking-worker skill to skip browser/manual verification when the feature scope is strictly CLI test stabilization or a tightly scoped copy/event regression.",
+      "evidence": ".factory/skills/designer-tracking-worker/SKILL.md step 6 requires manual verification; handoff.skillFeedback.deviations for worker `c33c2f43-583e-4c76-a52f-4ef956bb9a32` says browser automation was intentionally not run because the issue was an emitted-event regression already covered by tests.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Split baseline-only test-recovery work from designer-tracking flow work, or allow the designer-tracking-worker skill to skip browser/manual verification when the feature scope is strictly CLI test stabilization or a tightly scoped copy/event regression.",
+      "evidence": ".factory/skills/designer-tracking-worker/SKILL.md requires tests-first, type-check/lint, and manual browser verification, but the transcript for worker `105df676-d9af-4d8f-8365-fcd1b4de8231` documents a successful one-line copy revert validated by existing `src/components/review/form-binding.test.ts` and full `npm test` runs only.",
       "isSystemic": true
     }
   ],
@@ -75,5 +87,5 @@
       "reason": "already-documented"
     }
   ],
-  "previousRound": ".factory/validation/misc-returned-contract-baseline/scrutiny/synthesis.json"
+  "previousRound": "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/misc-returned-contract-baseline/scrutiny/synthesis.json"
 }

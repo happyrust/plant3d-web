@@ -174,6 +174,18 @@ export type MbdPipeUiTab =
   | 'segments'
   | 'settings';
 
+type PlanarDimAlignmentCandidate = {
+  id: string;
+  kind: MbdDimKind;
+  dim: LinearDimension3D;
+  hint?: MbdLayoutHint | null;
+  start: Vector3;
+  end: Vector3;
+  offsetDir: Vector3;
+  offset: number;
+  hasManualOffset: boolean;
+};
+
 function clamp01(n: number, fallback: number): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
@@ -283,6 +295,91 @@ function stableAlternatingSign(seed?: string | null): number {
     hash = (hash * 33 + raw.charCodeAt(i)) | 0;
   }
   return (hash & 1) === 0 ? 1 : -1;
+}
+
+function roundTo(value: number, step: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(step) || step <= 0) return value;
+  return Math.round(value / step) * step;
+}
+
+function canonicalizeUnitVector(input: Vector3): Vector3 | null {
+  const vec = input.clone();
+  if (vec.lengthSq() < 1e-9) return null;
+  vec.normalize();
+
+  if (
+    vec.x < -1e-6 ||
+    (Math.abs(vec.x) <= 1e-6 && vec.y < -1e-6) ||
+    (Math.abs(vec.x) <= 1e-6 &&
+      Math.abs(vec.y) <= 1e-6 &&
+      vec.z < -1e-6)
+  ) {
+    vec.negate();
+  }
+  return vec;
+}
+
+function vectorKey(vec: Vector3): string {
+  return [
+    roundTo(vec.x, 0.001).toFixed(3),
+    roundTo(vec.y, 0.001).toFixed(3),
+    roundTo(vec.z, 0.001).toFixed(3),
+  ].join(',');
+}
+
+function buildPlanarDimAlignmentGroupKey(
+  candidate: PlanarDimAlignmentCandidate,
+): string | null {
+  const segDir = candidate.end.clone().sub(candidate.start);
+  if (segDir.lengthSq() < 1e-9) return null;
+  const canonicalSeg = canonicalizeUnitVector(segDir);
+  const canonicalOffset = canonicalizeUnitVector(candidate.offsetDir);
+  if (!canonicalSeg || !canonicalOffset) return null;
+
+  const planeNormalRaw = canonicalSeg.clone().cross(canonicalOffset);
+  const canonicalPlaneNormal = canonicalizeUnitVector(planeNormalRaw);
+  if (!canonicalPlaneNormal) return null;
+
+  const mid = candidate.start.clone().add(candidate.end).multiplyScalar(0.5);
+  const planeDistance = roundTo(mid.dot(canonicalPlaneNormal), 1);
+  const offsetLevel = resolveLayoutOffsetLevel(candidate.hint);
+
+  return [
+    candidate.kind,
+    vectorKey(canonicalSeg),
+    vectorKey(canonicalOffset),
+    vectorKey(canonicalPlaneNormal),
+    planeDistance.toFixed(1),
+    String(offsetLevel),
+  ].join('|');
+}
+
+function applyPlanarDimAlignment(
+  candidates: PlanarDimAlignmentCandidate[],
+): void {
+  const groups = new Map<string, PlanarDimAlignmentCandidate[]>();
+
+  for (const candidate of candidates) {
+    if (candidate.kind !== 'chain' && candidate.kind !== 'overall') continue;
+    const key = buildPlanarDimAlignmentGroupKey(candidate);
+    if (!key) continue;
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(candidate);
+    else groups.set(key, [candidate]);
+  }
+
+  for (const bucket of groups.values()) {
+    if (bucket.length <= 1) continue;
+    const alignedOffset = Math.max(...bucket.map((item) => item.offset));
+    for (const item of bucket) {
+      if (item.hasManualOffset) continue;
+      item.dim.setParams({
+        offset: alignedOffset,
+        direction: item.offsetDir.clone(),
+      });
+    }
+  }
 }
 
 function resolveFloatingLabelOffset(
@@ -445,7 +542,7 @@ export function useMbdPipeAnnotationThree(
   const showDimOverall = ref(false);
   const showDimPort = ref(false);
   const showPipeClearances = ref(true);
-  const showCutTubis = ref(true);
+  const showCutTubis = ref(false);
   const showElbows = ref(true);
   const showBranches = ref(true);
   const showFlanges = ref(true);
@@ -540,7 +637,7 @@ export function useMbdPipeAnnotationThree(
     showDimChain.value = true;
     showDimOverall.value = false;
     showDimPort.value = false;
-    showCutTubis.value = true;
+    showCutTubis.value = false;
     showElbows.value = true;
     showBranches.value = true;
     showFlanges.value = true;
@@ -928,6 +1025,7 @@ export function useMbdPipeAnnotationThree(
     const viewer = dtxViewerRef.value;
     const gm = getGlobalModelMatrix?.() || identityMatrix;
     const modeConfig = getRuntimeModeConfig();
+    const planarAlignmentCandidates: PlanarDimAlignmentCandidate[] = [];
     dimTextById.value.clear();
     for (const d of dims) {
       const start = new Vector3(d.start[0], d.start[1], d.start[2]);
@@ -1028,7 +1126,19 @@ export function useMbdPipeAnnotationThree(
       const rawDim = markRaw(dim);
       group.add(rawDim);
       dimAnnotations.set(d.id, rawDim);
+      planarAlignmentCandidates.push({
+        id: d.id,
+        kind,
+        dim: rawDim,
+        hint: d.layout_hint,
+        start: start.clone(),
+        end: end.clone(),
+        offsetDir: finalDir.clone(),
+        offset: finalOffset,
+        hasManualOffset: ov?.offset != null,
+      });
     }
+    applyPlanarDimAlignment(planarAlignmentCandidates);
     applyPortDimLabelDeclutter();
   }
 

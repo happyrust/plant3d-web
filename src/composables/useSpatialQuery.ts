@@ -12,7 +12,7 @@ import {
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
-import { useViewerContext } from '@/composables/useViewerContext';
+import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import {
   type SpatialQueryAabb,
   type SpatialQueryCenterSource,
@@ -132,36 +132,6 @@ function toSpecName(specValue: number): string {
 
 function createRequestId(): string {
   return `spatial-query-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function waitForShowModelByRefnos(requestId: string): Promise<{ ok: string[]; fail: { refno: string; error: string | null }[]; error: string | null }> {
-  return await new Promise((resolve) => {
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
-      resolve({ ok: [], fail: [], error: '加载模型超时' });
-    }, 10_000);
-
-    const onDone = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        requestId?: string;
-        ok?: string[];
-        fail?: { refno: string; error: string | null }[];
-        error?: string | null;
-      }>).detail;
-
-      if (detail?.requestId !== requestId) return;
-
-      window.clearTimeout(timeout);
-      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
-      resolve({
-        ok: Array.isArray(detail?.ok) ? detail.ok : [],
-        fail: Array.isArray(detail?.fail) ? detail.fail : [],
-        error: detail?.error ?? null,
-      });
-    };
-
-    window.addEventListener('showModelByRefnosDone', onDone as EventListener);
-  });
 }
 
 function resolveLoadedRefnos(viewer: ViewerLike): string[] {
@@ -578,16 +548,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   async function ensureResultLoaded(item: SpatialQueryResultItem): Promise<void> {
     if (item.loaded) return;
     const requestId = nextRequestId();
-
-    window.dispatchEvent(new CustomEvent('showModelByRefnos', {
-      detail: {
-        refnos: [item.refno],
-        flyTo: false,
-        requestId,
-      },
-    }));
-
-    const result = await waitForShowModelByRefnos(requestId);
+    const result = await showModelByRefnosWithAck({
+      refnos: [item.refno],
+      flyTo: false,
+      requestId,
+      timeoutMs: 10_000,
+      ensureViewerReady: true,
+      viewerRef: viewerRef as Ref<unknown | null>,
+    });
     if (result.error || result.fail.length > 0 || result.ok.length === 0) {
       throw new Error(result.error || result.fail[0]?.error || `加载模型失败: ${item.refno}`);
     }
@@ -600,8 +568,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   }
 
   async function activateResult(item: SpatialQueryResultItem) {
+    const ready = await waitForViewerReady({ timeoutMs: 4_000, viewerRef: viewerRef as Ref<unknown | null> });
     const viewer = viewerRef.value;
-    if (!viewer) {
+    if (!ready || !viewer) {
       error.value = '查看器未就绪';
       status.value = 'error';
       return;

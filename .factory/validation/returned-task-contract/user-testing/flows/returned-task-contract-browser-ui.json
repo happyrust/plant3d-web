@@ -1,0 +1,77 @@
+{
+  "surface": "browser-ui",
+  "tool": "agent-browser",
+  "status": "blocked",
+  "assertions": [
+    {
+      "id": "VAL-FUP-CROSS-001",
+      "status": "blocked",
+      "blockedBy": "No seeded returned-task record is visible to the local designer/reviewer UI identities, so cross-surface returned-task semantics cannot be exercised through the running app.",
+      "evidence": [
+        "http://127.0.0.1:3101 reachable",
+        "http://127.0.0.1:3100/api/users/me -> debug-user (designer)",
+        "http://127.0.0.1:3100/api/users/reviewers exposes reviewer_001/proofreader_001/manager_001/admin_001",
+        "http://127.0.0.1:3100/api/review/tasks?requester_id=designer_001 returns no usable returned rows"
+      ]
+    },
+    {
+      "id": "VAL-FUP-FLOW-002",
+      "status": "blocked",
+      "blockedBy": "The live environment does not expose a reviewer-returned task that later appears in the designer returned-task flow for the same task id.",
+      "evidence": [
+        "Reviewer-scoped task samples are active/non-returned only",
+        "No task with workflow return history is available through the user-facing data set"
+      ]
+    },
+    {
+      "id": "VAL-FUP-RETURN-001",
+      "status": "blocked",
+      "blockedBy": "Canonical returned-task rule cannot be verified on the real UI without at least one returned/resubmittable task rendered in designer surfaces.",
+      "evidence": [
+        "Returned-task UI entry path is reachable but lacks matching task data"
+      ]
+    },
+    {
+      "id": "VAL-FUP-RETURN-002",
+      "status": "blocked",
+      "blockedBy": "Returned-task list remains empty in the live environment, so continued pre-resubmit visibility cannot be observed.",
+      "evidence": [
+        "Returned list surface is reachable but has no seeded returned tasks"
+      ]
+    },
+    {
+      "id": "VAL-FUP-RETURN-003",
+      "status": "blocked",
+      "blockedBy": "No returned task detail can be opened from the live UI, so latest return reason/node rendering cannot be confirmed through the user surface.",
+      "evidence": [
+        "No returned task with workflow return metadata is available to open in detail"
+      ]
+    },
+    {
+      "id": "VAL-FUP-RT-001",
+      "status": "blocked",
+      "blockedBy": "Realtime normalization behavior is only covered by automated tests right now; no live websocket-delivered returned-task update can be observed because the environment lacks suitable returned-task data.",
+      "evidence": [
+        "No live returned-task websocket scenario available for the local UI identities"
+      ]
+    }
+  ],
+  "entryPath": [
+    "Open http://127.0.0.1:3101",
+    "Select a project from the landing page",
+    "Open the top-right account switcher if needed",
+    "Use the 校审 ribbon entries: 开始校审 / 待审核 / 复审任务 / 我的提资"
+  ],
+  "frictions": [
+    "Headless browser sessions are not suitable for WebGL2 viewer validation, but list/detail navigation is reachable.",
+    "Current backend user identity (`debug-user`) does not align with the seeded designer alias (`designer_001`) expected by the returned-task validation path."
+  ],
+  "blockers": [
+    "Seed at least one task visible to the local designer identity with canonical returned semantics: either `status=rejected` or `currentNode=sj` + `status=draft` + return metadata/history.",
+    "Seed at least one reviewer-returned workflow record that reappears in designer returned-task surfaces under the same task id."
+  ],
+  "toolsUsed": [
+    "agent-browser (planned surface)",
+    "curl"
+  ]
+}

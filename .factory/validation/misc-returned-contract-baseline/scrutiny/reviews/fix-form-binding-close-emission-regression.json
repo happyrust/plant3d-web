@@ -1,28 +1,34 @@
 {
   "featureId": "fix-form-binding-close-emission-regression",
-  "reviewedAt": "2026-03-16T22:13:10.613805+00:00",
+  "reviewedAt": "2026-03-17T00:00:00Z",
   "commitId": "9bf6a3ee86250d92ab4172e8ac5fcc7561224ff5",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "fail",
   "codeReview": {
-    "summary": "The close-emission regression is fixed, but the commit also changes visible copy in InitiateReviewPanel that is outside the requested scope and breaks existing form-binding expectations.",
+    "summary": "The missing `close` emission is restored, but commit `9bf6a3e` also changes user-facing copy outside the feature scope, so the implementation does not cleanly match the assigned regression fix.",
     "issues": [
       {
         "file": "src/components/review/InitiateReviewPanel.vue",
-        "line": 185,
+        "line": 184,
         "severity": "blocking",
-        "description": "This fix changes the selected-component summary text from `已选中 N 个 BRAN 管道构件` to `已选中 N 个构件`. That unrelated UX copy change is outside the close-emission regression scope and breaks the existing binding contract still asserted by `form-binding.test.ts`, so the feature no longer cleanly satisfies its narrowly scoped requirement without collateral behavior drift."
+        "description": "The feature changes `selectedComponentSummary` from `已选中 N 个 BRAN 管道构件` to `已选中 N 个构件`, which is unrelated to restoring the missing `close` emission. This broadens the fix beyond its stated scope and changes existing UX copy without test coverage for the summary text."
+      },
+      {
+        "file": "src/components/review/InitiateReviewPanel.vue",
+        "line": 336,
+        "severity": "non_blocking",
+        "description": "The success notification details were rewritten to a generic progress hint and dropped the reviewer/approver plus attachment-count information previously shown to users. That copy change is unrelated to the close-event regression and unnecessarily increases feature scope."
       }
     ]
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The `designer-tracking-worker` skill still requires agent-browser manual verification for every feature, but this worker reasonably skipped it for a narrow emitted-event regression and validated through focused component tests instead.",
-      "evidence": "`.factory/skills/designer-tracking-worker/SKILL.md` step 6 requires agent-browser manual verification, while the handoff for `fix-form-binding-close-emission-regression` documents skipping browser automation because the fix was fully covered by Vitest event assertions."
+      "observation": "The `designer-tracking-worker` procedure requires agent-browser manual verification, but this worker explicitly skipped it for a narrow component-event regression and relied on focused Vitest coverage plus full-suite validation.",
+      "evidence": ".factory/skills/designer-tracking-worker/SKILL.md step 6 requires manual verification; handoff.skillFeedback.deviations for worker `c33c2f43-583e-4c76-a52f-4ef956bb9a32` says browser automation was intentionally not run because the issue was an emitted-event regression already covered by tests."
     }
   ],
   "addressesFailureFrom": null,
-  "summary": "Reviewed the worker transcript, handoff, commit `9bf6a3ee86250d92ab4172e8ac5fcc7561224ff5`, and the current `InitiateReviewPanel`/`form-binding` sources. The close event regression itself is fixed, but the same commit also changes unrelated summary copy in `InitiateReviewPanel`, creating avoidable contract drift in a feature that was supposed to only restore close emission."
+  "summary": "Reviewed transcript skeleton, handoff, and commit `9bf6a3e`. The commit does fix the missing `close` emission after successful submit, but it also introduces out-of-scope UX copy changes in `src/components/review/InitiateReviewPanel.vue`, including the selected-component summary string later reverted by follow-up feature `revert-out-of-scope-copy-change-in-form-binding-fix`. Because this feature should have been limited to the close-event regression, the review remains a fail."
 }

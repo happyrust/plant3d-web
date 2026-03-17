@@ -80,6 +80,7 @@ vi.mock('@/composables/useToolStore', () => ({
 
 vi.mock('@/composables/useViewerContext', () => ({
   useViewerContext: () => ({ viewerRef: { value: null } }),
+  waitForViewerReady: vi.fn(async () => true),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
@@ -148,7 +149,12 @@ describe('ConfirmedRecords', () => {
     document.body.innerHTML = '';
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
-        getItem: vi.fn(() => null),
+        getItem: vi.fn((key: string) => {
+          if (key === 'review_panel_active_modules') {
+            return JSON.stringify(['confirmedRecords', 'confirmedStats']);
+          }
+          return null;
+        }),
         setItem: vi.fn(),
         removeItem: vi.fn(),
       },

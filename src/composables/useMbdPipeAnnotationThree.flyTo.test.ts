@@ -34,7 +34,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(false);
     expect(vis.showDimPort.value).toBe(false);
-    expect(vis.showCutTubis.value).toBe(true);
+    expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showElbows.value).toBe(true);
     expect(vis.showBranches.value).toBe(true);
     expect(vis.showFlanges.value).toBe(true);
@@ -78,7 +78,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(false);
     expect(vis.showDimPort.value).toBe(false);
-    expect(vis.showCutTubis.value).toBe(true);
+    expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
   });
@@ -304,6 +304,84 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(after?.labelT).toBe(0.5);
     expect(after?.labelOffsetWorld).toBeNull();
     expect(after?.offset ?? 0).toBeGreaterThan(before?.offset ?? 0);
+  });
+
+  it('同平面同方向的紫色 chain 尺寸应统一 offset，形成共线风格', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const layoutHint = {
+      anchor_point: [500, 0, 0] as [number, number, number],
+      primary_axis: [1, 0, 0] as [number, number, number],
+      offset_dir: [0, 1, 0] as [number, number, number],
+      char_dir: [0, 0, 1] as [number, number, number],
+      label_role: 'chain',
+      avoid_line_of_sight: true,
+      owner_segment_id: 'seg-chain',
+      offset_level: 0,
+    };
+
+    const data: MbdPipeData = {
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-TEST',
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [
+        {
+          id: 'chain-short',
+          kind: 'chain',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: layoutHint,
+        },
+        {
+          id: 'chain-long',
+          kind: 'chain',
+          start: [0, 300, 0],
+          end: [2000, 300, 0],
+          length: 2000,
+          text: '2000',
+          layout_hint: {
+            ...layoutHint,
+            anchor_point: [1000, 300, 0],
+          },
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 2,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    const shortParams = vis.getDimAnnotations().get('chain-short')?.getParams();
+    const longParams = vis.getDimAnnotations().get('chain-long')?.getParams();
+
+    expect(shortParams).toBeTruthy();
+    expect(longParams).toBeTruthy();
+    expect(shortParams?.offset).toBeCloseTo(longParams?.offset ?? 0, 6);
   });
 
   it('chain 与 cut_tubi 同区域时应强制分层，避免文字挤在一起', () => {
@@ -1121,7 +1199,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(flyTo).toHaveBeenCalledTimes(1);
   });
 
-  it('construction 下 tags 应默认可见', () => {
+  it('construction 下 tubi 辅助 tag 应默认隐藏', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -1181,7 +1259,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     );
 
     expect(tagObject).toBeTruthy();
-    expect(tagObject?.visible).toBe(true);
+    expect(tagObject?.visible).toBe(false);
   });
 
   it('fitting 缺少合法锚点时应抑制并计数', () => {

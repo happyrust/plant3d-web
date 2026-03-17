@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 
 import {
   getSolveSpaceBuiltinVectorFont,
@@ -30,9 +33,9 @@ export type SolveSpaceBillboardVectorTextParams = {
   /** Provide a loaded font or leave empty to auto-load builtin `/fonts/unicode.lff.gz`. */
   font?: SolveSpaceVectorFont | Promise<SolveSpaceVectorFont>;
 
-  materialNormal: THREE.LineBasicMaterial;
-  materialHovered: THREE.LineBasicMaterial;
-  materialSelected: THREE.LineBasicMaterial;
+  materialNormal: LineMaterial;
+  materialHovered: LineMaterial;
+  materialSelected: LineMaterial;
   /** 文本风格：solvespace(默认) | rebarviz */
   renderStyle?: SolveSpaceLabelRenderStyle;
 };
@@ -75,9 +78,9 @@ export class SolveSpaceBillboardVectorText {
   private readonly baseCapHeightPx: number;
   private capHeightPx: number;
   private renderStyle: SolveSpaceLabelRenderStyle;
-  private materialNormal: THREE.LineBasicMaterial;
-  private materialHovered: THREE.LineBasicMaterial;
-  private materialSelected: THREE.LineBasicMaterial;
+  private materialNormal: LineMaterial;
+  private materialHovered: LineMaterial;
+  private materialSelected: LineMaterial;
 
   private _interactionState: AnnotationInteractionState = 'normal';
   private _text = '';
@@ -90,14 +93,14 @@ export class SolveSpaceBillboardVectorText {
     | Promise<SolveSpaceVectorFont>
     | null = null;
 
-  private readonly lineGeometry: THREE.BufferGeometry;
-  private readonly line: THREE.LineSegments;
-  private haloLine: THREE.LineSegments | null = null;
-  private haloMaterial: THREE.LineBasicMaterial | null = null;
+  private readonly lineGeometry: LineSegmentsGeometry;
+  private readonly line: LineSegments2;
+  private haloLine: LineSegments2 | null = null;
+  private haloMaterial: LineMaterial | null = null;
   private spriteMesh: THREE.Mesh | null = null;
   private readonly rebarvizMaterialCache = new Map<
     string,
-    THREE.LineBasicMaterial
+    LineMaterial
   >();
 
   private pickProxy: THREE.Mesh | null = null;
@@ -137,8 +140,8 @@ export class SolveSpaceBillboardVectorText {
 
     this.object3d = new THREE.Group();
 
-    this.lineGeometry = new THREE.BufferGeometry();
-    this.line = new THREE.LineSegments(this.lineGeometry, this.materialNormal);
+    this.lineGeometry = new LineSegmentsGeometry();
+    this.line = new LineSegments2(this.lineGeometry, this.materialNormal);
     this.line.frustumCulled = false;
     this.line.userData.noPick = true;
 
@@ -237,9 +240,9 @@ export class SolveSpaceBillboardVectorText {
    * Note: we keep SolveSpace behavior by only switching which shared LineMaterial is used.
    */
   setMaterials(materials: {
-    normal?: THREE.LineBasicMaterial;
-    hovered?: THREE.LineBasicMaterial;
-    selected?: THREE.LineBasicMaterial;
+    normal?: LineMaterial;
+    hovered?: LineMaterial;
+    selected?: LineMaterial;
   }): void {
     if (materials.normal) this.materialNormal = materials.normal;
     if (materials.hovered) this.materialHovered = materials.hovered;
@@ -347,14 +350,15 @@ export class SolveSpaceBillboardVectorText {
   }
 
   private _createHaloLine(): void {
-    this.haloMaterial = new THREE.LineBasicMaterial({
+    this.haloMaterial = new LineMaterial({
       color: 0xffffff,
       transparent: true,
+      linewidth: 6,
       opacity: 0.68,
       depthTest: false,
       depthWrite: false,
     });
-    this.haloLine = new THREE.LineSegments(
+    this.haloLine = new LineSegments2(
       this.lineGeometry,
       this.haloMaterial,
     );
@@ -364,7 +368,7 @@ export class SolveSpaceBillboardVectorText {
     this.object3d.add(this.haloLine);
   }
 
-  private resolveStateMaterial(): THREE.LineBasicMaterial {
+  private resolveStateMaterial(): LineMaterial {
     if (this._interactionState === 'selected') return this.materialSelected;
     if (this._interactionState === 'hovered') return this.materialHovered;
     return this.materialNormal;
@@ -398,8 +402,8 @@ export class SolveSpaceBillboardVectorText {
   }
 
   private getRebarvizTextMaterial(
-    base: THREE.LineBasicMaterial,
-  ): THREE.LineBasicMaterial {
+    base: LineMaterial,
+  ): LineMaterial {
     const key = base.uuid;
     const cached = this.rebarvizMaterialCache.get(key);
     if (cached) return cached;
@@ -494,16 +498,10 @@ export class SolveSpaceBillboardVectorText {
     }
 
     if (positions.length >= 6) {
-      this.lineGeometry.setAttribute(
-        'position',
-        new THREE.Float32BufferAttribute(positions, 3),
-      );
+      this.lineGeometry.setPositions(positions);
       this.lineHasGeometry = true;
     } else {
-      this.lineGeometry.setAttribute(
-        'position',
-        new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3),
-      );
+      this.lineGeometry.setPositions([0, 0, 0, 0, 0, 0]);
       this.lineHasGeometry = false;
     }
 

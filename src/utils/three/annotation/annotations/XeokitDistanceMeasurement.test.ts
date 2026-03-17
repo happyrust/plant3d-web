@@ -82,6 +82,34 @@ describe('XeokitDistanceMeasurement', () => {
     expect(measurement.zLabel.element.textContent).toContain('3.00 m');
   });
 
+  it('应使用 xeokit 风格的 2D 实线来绘制主线与分解线', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { XeokitDistanceMeasurement } = await import('./XeokitDistanceMeasurement');
+
+    const materials = new AnnotationMaterials();
+    materials.setResolution(1280, 720);
+    const measurement = new XeokitDistanceMeasurement(materials, {
+      origin: new THREE.Vector3(0, 0, 0),
+      target: new THREE.Vector3(5, 7, 3),
+      visible: true,
+    }) as any;
+
+    const camera = new THREE.PerspectiveCamera(60, 1280 / 720, 0.1, 1000);
+    camera.position.set(0, 0, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    measurement.update(camera);
+
+    expect(measurement.mainLine.type).toBe('Line2');
+    expect(measurement.xLine.type).toBe('Line2');
+    expect(measurement.yLine.type).toBe('Line2');
+    expect(measurement.zLine.type).toBe('Line2');
+    expect((measurement.mainLine.material as any).dashed).toBe(false);
+    expect((measurement.xLine.material as any).dashed).toBe(false);
+    expect((measurement.mainLine.material as any).linewidth).toBeGreaterThan(1);
+  });
+
   it('在模型缩放后仍应把标签与线段拉开，避免贴线难以阅读', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { XeokitDistanceMeasurement } = await import('./XeokitDistanceMeasurement');
@@ -142,7 +170,7 @@ describe('XeokitDistanceMeasurement', () => {
     expect(yWorld.distanceTo(mainWorld)).toBeGreaterThan(0.03);
   });
 
-  it('纯单轴测量时应隐藏冗余的零分量标签，避免结果难以阅读', async () => {
+  it('纯单轴测量时也应保留零分量标签，保持 xeokit 的 XYZ 读数完整', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { XeokitDistanceMeasurement } = await import('./XeokitDistanceMeasurement');
 
@@ -164,7 +192,37 @@ describe('XeokitDistanceMeasurement', () => {
 
     expect(measurement.mainLabel.visible).toBe(true);
     expect(measurement.xLabel.visible).toBe(true);
-    expect(measurement.yLabel.visible).toBe(false);
-    expect(measurement.zLabel.visible).toBe(false);
+    expect(measurement.yLabel.visible).toBe(true);
+    expect(measurement.zLabel.visible).toBe(true);
+    expect(measurement.yLabel.element.textContent).toContain('0.00 m');
+    expect(measurement.zLabel.element.textContent).toContain('0.00 m');
+  });
+
+  it('即使屏幕投影很小，也应继续显示 XYZ 分解标签和分量线', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { XeokitDistanceMeasurement } = await import('./XeokitDistanceMeasurement');
+
+    const materials = new AnnotationMaterials();
+    materials.setResolution(1280, 720);
+    const measurement = new XeokitDistanceMeasurement(materials, {
+      origin: new THREE.Vector3(0, 0, 0),
+      target: new THREE.Vector3(0.2, 0.3, 0.4),
+      visible: true,
+    }) as any;
+
+    const camera = new THREE.PerspectiveCamera(60, 1280 / 720, 0.1, 5000);
+    camera.position.set(0, 0, 1200);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    measurement.update(camera);
+
+    expect(measurement.xLine.visible).toBe(true);
+    expect(measurement.yLine.visible).toBe(true);
+    expect(measurement.zLine.visible).toBe(true);
+    expect(measurement.xLabel.visible).toBe(true);
+    expect(measurement.yLabel.visible).toBe(true);
+    expect(measurement.zLabel.visible).toBe(true);
   });
 });

@@ -199,7 +199,7 @@ import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useTaskMonitor } from '@/composables/useTaskMonitor';
-import { useViewerContext } from '@/composables/useViewerContext';
+import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 
 // ============ 任务监控 ============
 // 后端支持的操作：start, stop, restart, delete
@@ -378,8 +378,9 @@ async function handlePreviewTask(payload: { dbnum?: number; refno?: string; task
   }
 
   // Give the dock layout a tick to mount/focus ViewerPanel before using the shared viewer context.
-  const viewerReady = await waitForViewerReady();
+  const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
   if (!viewerReady) {
+    consoleStore.addLog('error', '[task-preview] Viewer panel did not become ready in time');
     return;
   }
 
@@ -402,24 +403,6 @@ async function handlePreviewTask(payload: { dbnum?: number; refno?: string; task
       consoleStore.addLog('info', `[task-preview] Model loaded dbnum=${dbnum} task=${payload.task.id}`);
     }
   }
-}
-
-async function waitForViewerReady(timeoutMs = 4000): Promise<boolean> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    if (viewerContext.viewerRef.value) {
-      return true;
-    }
-    await delay(50);
-  }
-
-  consoleStore.addLog('error', '[task-preview] Viewer panel did not become ready in time');
-  return false;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function showPreviewByDbnum(dbnum: number, taskId: string): Promise<boolean> {
@@ -447,35 +430,12 @@ async function showPreviewByDbnum(dbnum: number, taskId: string): Promise<boolea
 
 async function showPreviewByRefnos(refnos: string[], taskId: string): Promise<boolean> {
   const requestId = `task-preview-${taskId}-${Date.now()}`;
-
-  const completion = await new Promise<{ ok: string[]; fail: { refno: string; error: string | null }[]; error: string | null }>((resolve) => {
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
-      resolve({ ok: [], fail: [], error: 'Viewer load timed out' });
-    }, 15000);
-
-    const onDone = (event: Event) => {
-      const detail = (event as CustomEvent<{ requestId?: string; ok?: string[]; fail?: { refno: string; error: string | null }[]; error?: string | null }>).detail;
-      if (detail?.requestId !== requestId) {
-        return;
-      }
-      window.clearTimeout(timeout);
-      window.removeEventListener('showModelByRefnosDone', onDone as EventListener);
-      resolve({
-        ok: Array.isArray(detail?.ok) ? detail.ok : [],
-        fail: Array.isArray(detail?.fail) ? detail.fail : [],
-        error: detail?.error ?? null,
-      });
-    };
-
-    window.addEventListener('showModelByRefnosDone', onDone as EventListener);
-    window.dispatchEvent(new CustomEvent('showModelByRefnos', {
-      detail: {
-        refnos,
-        flyTo: true,
-        requestId,
-      },
-    }));
+  const completion = await showModelByRefnosWithAck({
+    refnos,
+    flyTo: true,
+    requestId,
+    timeoutMs: 15000,
+    ensureViewerReady: false,
   });
 
   if (completion.ok.length > 0 && completion.fail.length === 0 && !completion.error) {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ref } from 'vue';
+import { nextTick, ref } from 'vue';
 
 import { useNavigationStatePersistence } from './useNavigationStatePersistence';
 
@@ -73,6 +73,43 @@ describe('useNavigationStatePersistence', () => {
 
     expect(JSON.parse(storageMock.getItem(storageKey) ?? '{}')).toMatchObject({
       searchTerm: 'returned task',
+    });
+  });
+
+  it('keeps designer, returned, and reviewer surface keys isolated', async () => {
+    const designerStatus = ref<'all' | 'submitted'>('all');
+    const returnedSearch = ref('');
+    const reviewerPriority = ref<'all' | 'high'>('all');
+
+    const designerState = useNavigationStatePersistence('plant3d-web-nav-state-designer-tasks-v1');
+    const returnedState = useNavigationStatePersistence('plant3d-web-nav-state-resubmission-tasks-v1');
+    const reviewerState = useNavigationStatePersistence('plant3d-web-nav-state-reviewer-tasks-v1');
+
+    designerState.bindRef('statusFilter', designerStatus, 'all');
+    returnedState.bindRef('searchTerm', returnedSearch, '');
+    reviewerState.bindRef('priorityFilter', reviewerPriority, 'all');
+
+    designerStatus.value = 'submitted';
+    returnedSearch.value = 'returned term';
+    reviewerPriority.value = 'high';
+    designerState.saveValue('scrollTop', 120);
+    returnedState.saveValue('scrollTop', 340);
+    reviewerState.saveValue('scrollTop', 560);
+
+    await nextTick();
+    await nextTick();
+
+    expect(JSON.parse(storageMock.getItem('plant3d-web-nav-state-designer-tasks-v1') ?? '{}')).toEqual({
+      statusFilter: 'submitted',
+      scrollTop: 120,
+    });
+    expect(JSON.parse(storageMock.getItem('plant3d-web-nav-state-resubmission-tasks-v1') ?? '{}')).toEqual({
+      searchTerm: 'returned term',
+      scrollTop: 340,
+    });
+    expect(JSON.parse(storageMock.getItem('plant3d-web-nav-state-reviewer-tasks-v1') ?? '{}')).toEqual({
+      priorityFilter: 'high',
+      scrollTop: 560,
     });
   });
 });

@@ -17,3 +17,10 @@ SELECT * FROM inst_info:`2`
 SELECT out FROM inst_relate WHERE in.dbnum = 1112 LIMIT 5
 SELECT * FROM inst_info LIMIT 3
 SELECT * FROM review_tasks ORDER BY created_at DESC LIMIT 5;
+SELECT count() as cnt FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..] GROUP ALL;
+SELECT id[0] as owner_refno, in as leave_refno, out as arrive_refno, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans, id[1] as idx FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..];
+SELECT id[0] as owner_refno, in as leave_refno, out as arrive_refno, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans, id[1] as idx FROM tubi_relate:[pe:`24381_145565`, 0]..[pe:`24381_145565`, ..];
+SELECT refno, noun, owner, old_pe, world_transform.d as world_transform, local_transform.d as local_transform FROM pe:`24381_145712`;
+SELECT id[0] as owner_refno, in as leave_refno, out as arrive_refno, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans, id[1] as idx FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..];
+SELECT id[1] as idx, start_pt.d as start_pt, end_pt.d as end_pt, world_trans.d as world_trans FROM tubi_relate:[pe:`24381_145712`, 0]..[pe:`24381_145712`, ..];
+SELECT count() AS cnt FROM inst_relate WHERE dbnum = 7997;

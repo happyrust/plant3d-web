@@ -81,9 +81,9 @@ export class WeldAnnotation3D extends AnnotationBase {
 
     this.textLabel = new SolveSpaceBillboardVectorText({
       text: '',
-      materialNormal: this.materialSet.line,
-      materialHovered: materials.ssHovered.line,
-      materialSelected: materials.ssSelected.line,
+      materialNormal: this.materialSet.textFatLine,
+      materialHovered: this.materials.ssHovered.textFatLine,
+      materialSelected: this.materials.ssSelected.textFatLine,
       renderStyle: this.params.labelRenderStyle,
     });
     this.textLabel.object3d.userData.dragRole = 'label';

@@ -7,41 +7,49 @@
 **Tool:** agent-browser
 
 **Entry Points:**
-- Main app → Project selection → Designer role
-- Designer task list
-- Returned / resubmission task list
-- Reviewer inbox
-- Task detail modal
+- Main app -> Project selection -> Reviewer-facing review entry surface
+- Reviewer inbox / pending review list
+- Review workbench (`ReviewPanel`)
+- Auxiliary data and collision sections inside the workbench
+- Workflow submit / return dialogs
 
 ## Validation Concurrency
 
 **Max Concurrent Validators:** 1
 
 **Rationale:**
-- Machine: 16GB RAM, 10 CPU cores
-- Observed available memory during planning dry run: ~2.68GB
-- Conservative 70% usable headroom: ~1.88GB
-- agent-browser is workable, but current follow-up validation is list/detail heavy and does not benefit from parallel browser sessions
-- Dry run confirmed validation is executable, but task seed data is limited and WebGL2 is unavailable in headless flow, so serial validation is the safer choice
+- Browser validation for M4 should stay serial because reviewer-owned seed tasks and confirmed-record data are limited
+- The main validation surface is the reviewer workbench chain, not high-parallel throughput
+- WebGL2 constraints can still affect headless 3D-heavy checks, so prioritize workbench/task-context flows
+
+## Flow Validator Guidance: browser-ui
+
+- Stay on `http://127.0.0.1:3101` and backend `http://127.0.0.1:3100` only.
+- Run browser validation serially; do not open concurrent browser validators for this milestone.
+- Focus on reviewer inbox -> workbench -> workflow/records/aux-data flows.
+- Treat missing reviewer-owned seeded tasks, confirmed records, or aux-data prerequisites as blocking environment issues.
+- Use visible account-switcher entries only; do not invent hidden users or mutate backend state outside existing UI/API behavior.
 
 ## Testing Surface Details
 
-**Consistency Follow-up Flows:**
-1. Designer list vs returned list status consistency
-2. Returned task detail reason/node and resubmit action visibility
-3. Resubmit success clearing stale returned UI
-4. Reviewer inbox re-visibility after resubmit
-5. Websocket-triggered list refresh consistency
-6. Navigation away/back state restoration for designer, returned, and reviewer lists
+**M4 Reviewer Workbench Flows:**
+1. Reviewer selects a task and enters the workbench with normalized task context
+2. Reviewer opens submit/return dialogs and confirms action labels/current node are correct
+3. Workflow action refresh updates current task state and history
+4. Confirmed-record surface and workflow-history surface remain semantically separate
+5. Auxiliary data / collision behavior derives from the active task context
+6. Sync import/export keeps the current workbench context coherent after refresh
+7. M5/M6 surfaces are not required for the core M4 path
 
 **Required Test Data:**
-- Tasks in different designer-visible statuses, including returned/resubmittable cases
-- Tasks with workflow history and explicit return reason/node
-- At least one task that can be resubmitted back into reviewer inbox
+- At least one reviewer-visible task that can enter the workbench
+- Preferably one task with workflow history
+- Preferably one task with confirmed records or a reproducible way to observe the empty state
+- If auxiliary-data/collision checks are required, task components with usable `refNo` context
 
 ## Dry Run Findings
 
-- Validation path is runnable: frontend and backend both responded locally
-- Designer list and reviewer inbox entry flows are reachable in browser automation
-- Current limitation: task seed data may be missing, so some returned-task and cross-flow checks may require test data setup first
-- Headless browser currently shows WebGL2 initialization failure, so validator focus should stay on task-list/detail flows rather than 3D viewer behavior
+- Frontend and backend are reachable locally in the current environment
+- Reviewer entry into the workbench is the primary validation surface for this mission
+- Seed data availability remains the main execution risk; lack of reviewer-owned tasks or confirmed records should be reported as blockers
+- Headless WebGL constraints remain a reason to keep validation focused on workbench surfaces rather than broader 3D interaction claims

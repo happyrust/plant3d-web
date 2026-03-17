@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 import { AnnotationBase, type AnnotationOptions } from '../core/AnnotationBase';
@@ -26,11 +29,8 @@ export type XeokitDistanceMeasurementParams = {
 };
 
 const markerGeometry = new THREE.SphereGeometry(0.08, 16, 16);
-const AXIS_LINE_MIN_PX = 18;
-const AXIS_LABEL_MIN_PX = 56;
-const ZERO_AXIS_LABEL_MAIN_MIN_PX = 120;
-const LABEL_MIN_GAP_PX = 58;
-const AXIS_LABEL_MIN_GAP_PX = 44;
+const MAIN_LINE_WIDTH_PX = 2.6;
+const AXIS_LINE_WIDTH_PX = 2.2;
 
 type LabelTheme = {
   background: string;
@@ -57,50 +57,23 @@ function formatLength(value: number): string {
   return `${value.toFixed(2)} m`;
 }
 
-function projectToScreen(
-  camera: THREE.Camera,
-  world: THREE.Vector3,
-  viewportWidth: number,
-  viewportHeight: number,
-  out: THREE.Vector2,
-): THREE.Vector2 | null {
-  const ndc = world.clone().project(camera);
-  if (!Number.isFinite(ndc.x) || !Number.isFinite(ndc.y) || !Number.isFinite(ndc.z)) return null;
-  out.set((ndc.x * 0.5 + 0.5) * viewportWidth, (-ndc.y * 0.5 + 0.5) * viewportHeight);
-  return out;
-}
-
-function screenDistancePx(
-  camera: THREE.Camera,
-  aWorld: THREE.Vector3,
-  bWorld: THREE.Vector3,
-  viewportWidth: number,
-  viewportHeight: number,
-  outA: THREE.Vector2,
-  outB: THREE.Vector2,
-): number {
-  const a = projectToScreen(camera, aWorld, viewportWidth, viewportHeight, outA);
-  const b = projectToScreen(camera, bWorld, viewportWidth, viewportHeight, outB);
-  if (!a || !b) return 0;
-  return a.distanceTo(b);
-}
-
 export class XeokitDistanceMeasurement extends AnnotationBase {
   private params: Required<XeokitDistanceMeasurementParams>;
   private materialSet: AnnotationMaterialSet;
   private xMaterialSet: AnnotationMaterialSet;
   private yMaterialSet: AnnotationMaterialSet;
   private zMaterialSet: AnnotationMaterialSet;
-  private readonly mainGeometry = new THREE.BufferGeometry();
-  private readonly xGeometry = new THREE.BufferGeometry();
-  private readonly yGeometry = new THREE.BufferGeometry();
-  private readonly zGeometry = new THREE.BufferGeometry();
-  private readonly mainLine: THREE.Line;
-  private readonly xLine: THREE.Line;
-  private readonly yLine: THREE.Line;
-  private readonly zLine: THREE.Line;
+  private readonly mainGeometry = new LineGeometry();
+  private readonly xGeometry = new LineGeometry();
+  private readonly yGeometry = new LineGeometry();
+  private readonly zGeometry = new LineGeometry();
+  private readonly mainLine: Line2;
+  private readonly xLine: Line2;
+  private readonly yLine: Line2;
+  private readonly zLine: Line2;
   private readonly originMarker: THREE.Mesh;
   private readonly targetMarker: THREE.Mesh;
+  private readonly lineMaterialCache = new Map<string, LineMaterial>();
   private readonly mainLabelEl = createLabelElement('main', {
     background: '#06b6d4',
     border: '#0891b2',
@@ -142,14 +115,6 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
   private readonly tempWorldG = new THREE.Vector3();
   private readonly offsetDirLocal = new THREE.Vector3();
   private readonly sideDirLocal = new THREE.Vector3();
-  private readonly screenA = new THREE.Vector2();
-  private readonly screenB = new THREE.Vector2();
-  private readonly screenC = new THREE.Vector2();
-  private readonly screenD = new THREE.Vector2();
-  private readonly screenE = new THREE.Vector2();
-  private readonly screenF = new THREE.Vector2();
-  private readonly screenG = new THREE.Vector2();
-  private readonly screenH = new THREE.Vector2();
   private readonly wppTmp = {
     ndc: new THREE.Vector3(),
     ndc2: new THREE.Vector3(),
@@ -194,10 +159,10 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
     this.yMaterialSet = this.resolveMaterialSet(materials.green);
     this.zMaterialSet = this.resolveMaterialSet(materials.blue);
 
-    this.mainLine = new THREE.Line(this.mainGeometry, this.materialSet.line);
-    this.xLine = new THREE.Line(this.xGeometry, this.xMaterialSet.line);
-    this.yLine = new THREE.Line(this.yGeometry, this.yMaterialSet.line);
-    this.zLine = new THREE.Line(this.zGeometry, this.zMaterialSet.line);
+    this.mainLine = new Line2(this.mainGeometry, this.getLineMaterial('main-normal', this.materialSet.fatLine, MAIN_LINE_WIDTH_PX));
+    this.xLine = new Line2(this.xGeometry, this.getLineMaterial('x-normal', this.xMaterialSet.fatLine, AXIS_LINE_WIDTH_PX));
+    this.yLine = new Line2(this.yGeometry, this.getLineMaterial('y-normal', this.yMaterialSet.fatLine, AXIS_LINE_WIDTH_PX));
+    this.zLine = new Line2(this.zGeometry, this.getLineMaterial('z-normal', this.zMaterialSet.fatLine, AXIS_LINE_WIDTH_PX));
 
     this.originMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh);
     this.targetMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh);
@@ -240,6 +205,7 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
   override update(camera: THREE.Camera): void {
     super.update(camera);
     this.updateLabelLayout(camera);
+    this.updateLineStyle();
     this.mainLabel.quaternion.copy(camera.quaternion);
     this.xLabel.quaternion.copy(camera.quaternion);
     this.yLabel.quaternion.copy(camera.quaternion);
@@ -261,6 +227,10 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
     this.xGeometry.dispose();
     this.yGeometry.dispose();
     this.zGeometry.dispose();
+    for (const material of this.lineMaterialCache.values()) {
+      material.dispose();
+    }
+    this.lineMaterialCache.clear();
     this.mainLabelEl.remove();
     this.xLabelEl.remove();
     this.yLabelEl.remove();
@@ -278,10 +248,10 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
     const displayDelta = displayTarget.clone().sub(displayOrigin);
     const distance = displayOrigin.distanceTo(displayTarget);
 
-    this.mainGeometry.setFromPoints([origin, target]);
-    this.xGeometry.setFromPoints([origin, cornerX]);
-    this.yGeometry.setFromPoints([cornerX, cornerXY]);
-    this.zGeometry.setFromPoints([cornerXY, target]);
+    this.setLineGeometry(this.mainGeometry, origin, target);
+    this.setLineGeometry(this.xGeometry, origin, cornerX);
+    this.setLineGeometry(this.yGeometry, cornerX, cornerXY);
+    this.setLineGeometry(this.zGeometry, cornerXY, target);
 
     this.originMarker.position.copy(origin);
     this.targetMarker.position.copy(target);
@@ -316,13 +286,18 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
     this.zLabel.visible = showLabels && this.params.zAxisVisible;
   }
 
-  private updateLabelLayout(camera: THREE.Camera): void {
-    const viewport = (camera as any)?.userData?.annotationViewport as
-      | { width?: number; height?: number }
-      | undefined;
-    const vw = Math.max(1, Math.floor(Number(viewport?.width) || 1000));
-    const vh = Math.max(1, Math.floor(Number(viewport?.height) || 1000));
+  private setLineGeometry(geometry: LineGeometry, start: THREE.Vector3, end: THREE.Vector3): void {
+    geometry.setPositions([
+      start.x,
+      start.y,
+      start.z,
+      end.x,
+      end.y,
+      end.z,
+    ]);
+  }
 
+  private updateLabelLayout(camera: THREE.Camera): void {
     const origin = this.params.origin;
     const target = this.params.target;
     const cornerX = this.tempLocalA.set(target.x, origin.y, origin.z);
@@ -349,6 +324,11 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
 
     const lineMidLocal = this.tempLocalC.copy(origin).lerp(target, 0.5);
     const lineMidWorld = this.localToWorld(this.tempWorldA.copy(lineMidLocal));
+    const viewport = (camera as any)?.userData?.annotationViewport as
+      | { width?: number; height?: number }
+      | undefined;
+    const vw = Math.max(1, Math.floor(Number(viewport?.width) || 1000));
+    const vh = Math.max(1, Math.floor(Number(viewport?.height) || 1000));
     const wpp = worldPerPixelAt(camera, lineMidWorld, vw, vh, this.wppTmp);
     if (!Number.isFinite(wpp) || wpp <= 0) return;
 
@@ -364,9 +344,9 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
       // ignore
     }
 
-    const mainOffset = localWpp * 22;
-    const axisOffset = localWpp * 16;
-    const slotOffset = localWpp * 18;
+    const mainOffset = localWpp * 18;
+    const axisOffset = localWpp * 12;
+    const slotOffset = localWpp * 16;
     const xDir = this.tempLocalD.copy(cornerX).sub(origin).normalize();
     const zDir = this.tempLocalE.copy(target).sub(cornerXY).normalize();
     if (!Number.isFinite(xDir.lengthSq()) || xDir.lengthSq() < 1e-9) xDir.copy(this.sideDirLocal);
@@ -377,10 +357,10 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
       : this.tempLocalF.copy(origin);
     const yAnchor = hasY
       ? this.tempLocalG.copy(cornerX).lerp(cornerXY, 0.5)
-      : this.tempLocalG.copy(origin);
+      : this.tempLocalG.copy(cornerX);
     const zAnchor = hasZ
-      ? target.clone().lerp(cornerXY, 0.5)
-      : target.clone();
+      ? this.tempLocalE.copy(cornerXY).lerp(target, 0.5)
+      : this.tempLocalE.copy(cornerXY);
 
     this.mainLabel.position.copy(lineMidLocal).addScaledVector(this.offsetDirLocal, mainOffset);
     this.xLabel.position
@@ -390,119 +370,83 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
       .addScaledVector(xDir, hasX ? localWpp * 6 : 0);
     this.yLabel.position
       .copy(yAnchor)
-      .addScaledVector(this.offsetDirLocal, axisOffset * (hasY ? 1.1 : 0.85))
-      .addScaledVector(this.sideDirLocal, -slotOffset * 1.1);
+      .addScaledVector(this.offsetDirLocal, axisOffset * 1.05)
+      .addScaledVector(this.sideDirLocal, -slotOffset * 0.85);
     this.zLabel.position
       .copy(zAnchor)
       .addScaledVector(this.offsetDirLocal, axisOffset)
-      .addScaledVector(this.sideDirLocal, slotOffset * 0.35)
+      .addScaledVector(this.sideDirLocal, slotOffset * 0.3)
       .addScaledVector(zDir, hasZ ? -localWpp * 6 : 0);
-
-    const originWorld = this.localToWorld(this.tempWorldA.copy(origin));
-    const targetWorld = this.localToWorld(this.tempWorldB.copy(target));
-    const cornerXWorld = this.localToWorld(this.tempWorldC.copy(cornerX));
-    const cornerXYWorld = this.localToWorld(this.tempWorldD.copy(cornerXY));
-    const mainLengthPx = screenDistancePx(camera, originWorld, targetWorld, vw, vh, this.screenA, this.screenB);
-    const xLengthPx = screenDistancePx(camera, originWorld, cornerXWorld, vw, vh, this.screenC, this.screenD);
-    const yLengthPx = screenDistancePx(camera, cornerXWorld, cornerXYWorld, vw, vh, this.screenE, this.screenF);
-    const zLengthPx = screenDistancePx(camera, cornerXYWorld, targetWorld, vw, vh, this.screenG, this.screenH);
 
     const baseShowRoot = this.params.visible;
     const baseShowLabels = baseShowRoot && this.params.labelVisible && this.params.wireVisible;
     const baseShowAxes = baseShowRoot && this.params.showAxes && this.params.axisVisible;
-    const zeroAxisCount = Number(!hasX) + Number(!hasY) + Number(!hasZ);
 
     this.mainLabel.visible = baseShowLabels;
-    this.xLine.visible = baseShowAxes && this.params.xAxisVisible && hasX && xLengthPx >= AXIS_LINE_MIN_PX;
-    this.yLine.visible = baseShowAxes && this.params.yAxisVisible && hasY && yLengthPx >= AXIS_LINE_MIN_PX;
-    this.zLine.visible = baseShowAxes && this.params.zAxisVisible && hasZ && zLengthPx >= AXIS_LINE_MIN_PX;
+    this.xLine.visible = baseShowAxes && this.params.xAxisVisible && hasX;
+    this.yLine.visible = baseShowAxes && this.params.yAxisVisible && hasY;
+    this.zLine.visible = baseShowAxes && this.params.zAxisVisible && hasZ;
+    this.xLabel.visible = baseShowLabels && this.params.xAxisVisible;
+    this.yLabel.visible = baseShowLabels && this.params.yAxisVisible;
+    this.zLabel.visible = baseShowLabels && this.params.zAxisVisible;
+  }
 
-    const xZeroVisible = !hasX && zeroAxisCount === 1 && mainLengthPx >= ZERO_AXIS_LABEL_MAIN_MIN_PX;
-    const yZeroVisible = !hasY && zeroAxisCount === 1 && mainLengthPx >= ZERO_AXIS_LABEL_MAIN_MIN_PX;
-    const zZeroVisible = !hasZ && zeroAxisCount === 1 && mainLengthPx >= ZERO_AXIS_LABEL_MAIN_MIN_PX;
+  private updateLineStyle(): void {
+    const { width, height } = this.materials.getResolution();
+    for (const [line, lineWidth] of [
+      [this.mainLine, MAIN_LINE_WIDTH_PX],
+      [this.xLine, AXIS_LINE_WIDTH_PX],
+      [this.yLine, AXIS_LINE_WIDTH_PX],
+      [this.zLine, AXIS_LINE_WIDTH_PX],
+    ] as const) {
+      const material = line.material as LineMaterial;
+      material.resolution.set(width, height);
+      material.dashed = false;
+      material.scale = 1;
+      material.dashSize = 0;
+      material.gapSize = 0;
+      material.linewidth = lineWidth;
+    }
+  }
 
-    const axisCandidates: {
-      key: 'x' | 'y' | 'z';
-      label: CSS2DObject;
-      pos: THREE.Vector2;
-      visible: boolean;
-      priority: number;
-    }[] = [
-      {
-        key: 'x',
-        label: this.xLabel,
-        pos: this.screenC,
-        visible: baseShowLabels && this.params.xAxisVisible && (hasX ? xLengthPx >= AXIS_LABEL_MIN_PX : xZeroVisible),
-        priority: hasX ? xLengthPx + 40 : 24,
-      },
-      {
-        key: 'y',
-        label: this.yLabel,
-        pos: this.screenE,
-        visible: baseShowLabels && this.params.yAxisVisible && (hasY ? yLengthPx >= AXIS_LABEL_MIN_PX : yZeroVisible),
-        priority: hasY ? yLengthPx + 35 : 23,
-      },
-      {
-        key: 'z',
-        label: this.zLabel,
-        pos: this.screenG,
-        visible: baseShowLabels && this.params.zAxisVisible && (hasZ ? zLengthPx >= AXIS_LABEL_MIN_PX : zZeroVisible),
-        priority: hasZ ? zLengthPx + 30 : 22,
-      },
-    ];
-
-    const mainLabelScreen = projectToScreen(
-      camera,
-      this.mainLabel.getWorldPosition(this.tempWorldE),
-      vw,
-      vh,
-      this.screenH,
-    );
-    const kept: THREE.Vector2[] = [];
-    if (this.mainLabel.visible && mainLabelScreen) {
-      kept.push(mainLabelScreen.clone());
+  private getLineMaterial(key: string, solid: LineMaterial, lineWidth: number): LineMaterial {
+    const cached = this.lineMaterialCache.get(key);
+    const src = (cached as any)?.__src as LineMaterial | undefined;
+    if (cached && src === solid) {
+      cached.linewidth = lineWidth;
+      cached.dashed = false;
+      return cached;
+    }
+    if (cached) {
+      cached.dispose();
+      this.lineMaterialCache.delete(key);
     }
 
-    axisCandidates
-      .sort((a, b) => b.priority - a.priority)
-      .forEach((candidate) => {
-        if (!candidate.visible) {
-          candidate.label.visible = false;
-          return;
-        }
-        const labelScreen = projectToScreen(
-          camera,
-          candidate.label.getWorldPosition(this.tempWorldF),
-          vw,
-          vh,
-          candidate.pos,
-        );
-        if (!labelScreen) {
-          candidate.label.visible = false;
-          return;
-        }
-        const minGap = kept.length > 0 && mainLabelScreen ? LABEL_MIN_GAP_PX : AXIS_LABEL_MIN_GAP_PX;
-        const overlap = kept.some((pos) => pos.distanceTo(labelScreen) < minGap);
-        candidate.label.visible = !overlap;
-        if (!overlap) {
-          kept.push(labelScreen.clone());
-        }
-      });
+    const material = solid.clone();
+    (material as any).__src = solid;
+    material.dashed = false;
+    material.linewidth = lineWidth;
+    material.scale = 1;
+    material.dashSize = 0;
+    material.gapSize = 0;
+    material.resolution.copy(solid.resolution);
+    this.lineMaterialCache.set(key, material);
+    return material;
   }
 
   private applyVisualState(): void {
     const state = this.interactionState;
     const mainLineMat =
       state === 'selected'
-        ? this.materials.ssSelected.line
+        ? this.getLineMaterial('main-selected', this.materials.ssSelected.fatLine, MAIN_LINE_WIDTH_PX)
         : state === 'hovered'
-          ? this.materials.ssHovered.line
-          : this.materialSet.line;
+          ? this.getLineMaterial('main-hovered', this.materials.ssHovered.fatLine, MAIN_LINE_WIDTH_PX)
+          : this.getLineMaterial('main-normal', this.materialSet.fatLine, MAIN_LINE_WIDTH_PX);
     const axisLineMat =
       state === 'selected'
-        ? this.materials.ssSelected.line
+        ? this.getLineMaterial('axis-selected', this.materials.ssSelected.fatLine, AXIS_LINE_WIDTH_PX)
         : state === 'hovered'
-          ? this.materials.ssHovered.line
+          ? this.getLineMaterial('axis-hovered', this.materials.ssHovered.fatLine, AXIS_LINE_WIDTH_PX)
           : null;
     const meshMat =
       state === 'selected'
@@ -512,9 +456,9 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
           : this.materialSet.mesh;
 
     this.mainLine.material = mainLineMat;
-    this.xLine.material = axisLineMat ?? this.xMaterialSet.line;
-    this.yLine.material = axisLineMat ?? this.yMaterialSet.line;
-    this.zLine.material = axisLineMat ?? this.zMaterialSet.line;
+    this.xLine.material = axisLineMat ?? this.getLineMaterial('x-normal', this.xMaterialSet.fatLine, AXIS_LINE_WIDTH_PX);
+    this.yLine.material = axisLineMat ?? this.getLineMaterial('y-normal', this.yMaterialSet.fatLine, AXIS_LINE_WIDTH_PX);
+    this.zLine.material = axisLineMat ?? this.getLineMaterial('z-normal', this.zMaterialSet.fatLine, AXIS_LINE_WIDTH_PX);
     this.originMarker.material = meshMat;
     this.targetMarker.material = meshMat;
 

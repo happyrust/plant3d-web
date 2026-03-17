@@ -3,28 +3,25 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import {
-  ArrowUpRight,
-  Cloud,
   Eye,
   EyeOff,
   Focus,
+  Eraser,
   GitCompare,
-  LocateFixed,
-  RectangleHorizontal,
   Ruler,
   Search,
   Settings,
-  Trash2,
-  X,
 } from 'lucide-vue-next';
 import { Matrix4, Plane, Vector2, Vector3 } from 'three';
 
-import { e3dGetVisibleInsts } from '@/api/genModelE3dApi';
+import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetPtsetWithContext } from '@/api/genModelPdmsAttrApi';
 import { getMbdPipeAnnotations } from '@/api/mbdPipeApi';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
+import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
+import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import {
   createLatestOnlyGate,
@@ -859,27 +856,100 @@ function getSelectedRefno(): string | null {
   return s ? s : null;
 }
 
-function hideSelected(): void {
+/**
+ * 递归收集子孙 refno（最多 3 层、200 个），用于组节点的显示/隐藏/定位
+ */
+async function collectDescendantRefnos(rootRefno: string, maxDepth = 3, maxTotal = 200): Promise<string[]> {
+  const result: string[] = [];
+  const queue: { refno: string; depth: number }[] = [{ refno: rootRefno, depth: 0 }];
+  const visited = new Set<string>();
+
+  while (queue.length > 0 && result.length < maxTotal) {
+    const item = queue.shift()!;
+    if (visited.has(item.refno)) continue;
+    visited.add(item.refno);
+
+    result.push(item.refno);
+
+    if (item.depth >= maxDepth) continue;
+
+    try {
+      const resp = await e3dGetChildren(item.refno, 200);
+      if (resp.success && resp.children) {
+        for (const child of resp.children) {
+          const childRefno = String(child.refno || '').trim().replace('/', '_');
+          if (childRefno && !visited.has(childRefno)) {
+            queue.push({ refno: childRefno, depth: item.depth + 1 });
+          }
+        }
+      }
+    } catch {
+      // ignore children fetch errors
+    }
+  }
+
+  return result;
+}
+
+async function getTargetRefnos(refno: string): Promise<string[]> {
+  let targetRefnos = [refno];
+  try {
+    const resp = await e3dGetVisibleInsts(refno);
+    if (resp.success && resp.refnos && resp.refnos.length > 0) {
+      targetRefnos = resp.refnos.map(r => String(r));
+    }
+  } catch {
+    // ignore e3dGetVisibleInsts errors
+  }
+
+  // 检查当前 refnos 在 DTX 层是否有实际渲染对象
+  const compat = compatViewerRef.value;
+  if (compat) {
+    const aabb = compat.scene.getAABB(targetRefnos);
+    if (!aabb) {
+      // DTX 层无对象 → 递归收集子孙 refno
+      const descendants = await collectDescendantRefnos(refno);
+      if (descendants.length > 1) {
+        targetRefnos = descendants;
+      }
+    }
+  }
+
+  return targetRefnos;
+}
+
+async function hideSelected(): Promise<void> {
   const refno = getSelectedRefno();
   if (!refno) {
     toastNeedSelection();
     return;
   }
+
+  const targetRefnos = await getTargetRefnos(refno);
+
   const compat = compatViewerRef.value;
   if (!compat) return;
-  compat.scene.setObjectsVisible([refno], false);
+  compat.scene.setObjectsVisible(targetRefnos, false);
   requestRender();
 }
 
-function showSelected(): void {
+async function showSelected(): Promise<void> {
   const refno = getSelectedRefno();
   if (!refno) {
     toastNeedSelection();
     return;
   }
+
+  const targetRefnos = await getTargetRefnos(refno);
+
+  // 按需加载模型
+  if (modelGenerationRef.value) {
+    await modelGenerationRef.value.showModelByRefno(refno, { flyTo: false });
+  }
+
   const compat = compatViewerRef.value;
   if (!compat) return;
-  compat.scene.setObjectsVisible([refno], true);
+  compat.scene.setObjectsVisible(targetRefnos, true);
   requestRender();
 }
 
@@ -890,18 +960,26 @@ function hideAll(): void {
   requestRender();
 }
 
-function locateShowSelected(): void {
+async function locateShowSelected(): Promise<void> {
   const refno = getSelectedRefno();
   if (!refno) {
     toastNeedSelection();
     return;
   }
+
+  const targetRefnos = await getTargetRefnos(refno);
+
+  // 按需加载模型
+  if (modelGenerationRef.value) {
+    await modelGenerationRef.value.showModelByRefno(refno, { flyTo: false });
+  }
+
   const compat = compatViewerRef.value;
   if (!compat) return;
 
   // 先确保可见，再定位
-  compat.scene.setObjectsVisible([refno], true);
-  const aabb = compat.scene.getAABB([refno]);
+  compat.scene.setObjectsVisible(targetRefnos, true);
+  const aabb = compat.scene.getAABB(targetRefnos);
   if (!aabb) {
     emitToast({ message: '定位失败：未获取到对象包围盒' });
     requestRender();
@@ -934,6 +1012,23 @@ function setMeasureMode(next: MeasureMode): void {
       store.setToolMode(mappedMode);
     }
   }
+  requestRender();
+}
+
+function exitXeokitMeasureMode(): void {
+  if (
+    store.toolMode.value !== 'xeokit_measure_distance' &&
+    store.toolMode.value !== 'xeokit_measure_angle'
+  ) {
+    return;
+  }
+  store.setMeasurementDetailsDrawerOpen(false);
+  if (xeokitMeasurementToolsRef.value) {
+    xeokitMeasurementToolsRef.value.deactivate();
+  } else {
+    store.setToolMode('none');
+  }
+  leftToolbarOpenMeasureMenu.value = false;
   requestRender();
 }
 
@@ -1618,51 +1713,6 @@ function renderFrame() {
     }
   } finally {
     isRendering = false;
-  }
-}
-
-const showAnnotationToolbar = computed(() => {
-  const mode = store.toolMode.value;
-  return (
-    mode === 'annotation' ||
-        mode === 'annotation_cloud' ||
-        mode === 'annotation_rect' ||
-        mode === 'annotation_obb'
-  );
-});
-
-const canDeleteActiveAnnotation = computed(() => {
-  return (
-    !!store.activeAnnotationId.value ||
-        !!store.activeCloudAnnotationId.value ||
-        !!store.activeRectAnnotationId.value ||
-        !!store.activeObbAnnotationId.value
-  );
-});
-
-function deleteActiveAnnotation() {
-  const textId = store.activeAnnotationId.value;
-  if (textId) {
-    store.removeAnnotation(textId);
-    store.activeAnnotationId.value = null;
-    return;
-  }
-  const cloudId = store.activeCloudAnnotationId.value;
-  if (cloudId) {
-    store.removeCloudAnnotation(cloudId);
-    store.activeCloudAnnotationId.value = null;
-    return;
-  }
-  const rectId = store.activeRectAnnotationId.value;
-  if (rectId) {
-    store.removeRectAnnotation(rectId);
-    store.activeRectAnnotationId.value = null;
-    return;
-  }
-  const obbId = store.activeObbAnnotationId.value;
-  if (obbId) {
-    store.removeObbAnnotation(obbId);
-    store.activeObbAnnotationId.value = null;
   }
 }
 
@@ -2833,6 +2883,7 @@ onMounted(async () => {
 
   const urlParams = new URLSearchParams(window.location.search);
   const showDbnum = urlParams.get('show_dbnum');
+  const showRefno = normalizeRefnoKeyLike(urlParams.get('show_refno') || '');
 
   // 启动预拉：db_meta_info（关键，提供 refno->dbnum 映射）
   // demo 模式（primitives / mbd_pipe）不依赖后端数据，跳过预拉避免无后端时初始化失败。
@@ -2891,8 +2942,71 @@ onMounted(async () => {
     };
   }
 
+  if (showRefno && demoMode !== 'primitives') {
+    (async () => {
+      try {
+        emitToast({ message: `[show_refno] 正在加载 ${showRefno} ...` });
+        console.log(`[show_refno] refno=${showRefno}`);
+
+        await ensureDbMetaInfoLoaded();
+
+        let dbno: number;
+        try {
+          dbno = getDbnumByRefno(showRefno);
+        } catch {
+          console.error(`[show_refno] 无法解析 ${showRefno} 的 dbnum`);
+          emitToast({ message: `[show_refno] 无法解析 dbnum (refno=${showRefno})` });
+          return;
+        }
+
+        const urlDataSource = new URLSearchParams(window.location.search).get('data_source') as 'json' | 'parquet' | 'auto' | null;
+        const ds = urlDataSource || 'auto';
+        console.log(`[show_refno] refno=${showRefno} -> dbnum=${dbno}, dataSource=${ds}`);
+
+        const result = await loadDbnoInstancesForVisibleRefnosDtx(
+          dtxLayer,
+          dbno,
+          [showRefno],
+          { lodAssetKey: 'L1', debug: true, dataSource: ds }
+        );
+        (compat as any).__dtxAfterInstancesLoaded?.(dbno, [showRefno]);
+
+        requestRender();
+        const box = dtxLayer.getBoundingBox();
+        if (!box.isEmpty()) {
+          const center = new Vector3();
+          const size = new Vector3();
+          box.getCenter(center);
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const distance = Math.max(maxDim * 2.5, 5);
+          const position = new Vector3(
+            center.x + distance * 0.8,
+            center.y + distance * 0.6,
+            center.z + distance * 0.8
+          );
+          dtxViewer.flyTo(position, center, { duration: 0 });
+          requestRender();
+        }
+
+        emitToast({
+          message:
+            `[show_refno] 加载完成: ${result.loadedObjects} 个对象 (` +
+            `loaded=${result.loadedRefnos}, skipped=${result.skippedRefnos},` +
+            ` mesh缺失${result.missingBreakdown.mesh404Refnos.length},` +
+            ` 无几何${result.missingBreakdown.noGeoRowsRefnos.length})`,
+        });
+        console.log('[show_refno] ✅ 加载完成', result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[show_refno] 加载失败:', e);
+        emitToast({ message: `[show_refno] 加载失败: ${msg}` });
+      }
+    })();
+  }
+
   // show_dbnum URL 参数：按 dbno 直接走 Parquet 全量加载。
-  if (showDbnum && demoMode !== 'primitives') {
+  if (showDbnum && !showRefno && demoMode !== 'primitives') {
     const dbno = Number(showDbnum);
     if (Number.isFinite(dbno) && dbno > 0) {
       (async () => {
@@ -3010,7 +3124,7 @@ onMounted(async () => {
 
   // debug_refno URL 参数：加载指定 refno 下的可见实例（如 debug_refno=24381_145018）
   const debugRefno = urlParams.get('debug_refno');
-  if (debugRefno && !showDbnum && demoMode !== 'primitives') {
+  if (debugRefno && !showDbnum && !showRefno && demoMode !== 'primitives') {
     // 支持 24381_145018 或 24381/145018 格式
     const refnoStr = debugRefno.replace('/', '_');
     (async () => {
@@ -3493,11 +3607,20 @@ onMounted(async () => {
         return;
       }
       if (
+        store.toolMode.value === 'annotation' ||
+        store.toolMode.value === 'annotation_cloud' ||
+        store.toolMode.value === 'annotation_rect' ||
+        store.toolMode.value === 'annotation_obb'
+      ) {
+        store.setToolMode('none');
+        requestRender();
+        return;
+      }
+      if (
         store.toolMode.value === 'xeokit_measure_distance' ||
         store.toolMode.value === 'xeokit_measure_angle'
       ) {
-        xeokitMeasurementToolsRef.value?.reset();
-        requestRender();
+        exitXeokitMeasureMode();
         return;
       }
       try {
@@ -3827,16 +3950,14 @@ onUnmounted(() => {
       @pointerdown.stop
       @wheel.stop>
       <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         title="隐藏（选中对象）"
-        :disabled="!hasSelectedRefno"
         @click.stop="hideSelected">
         <EyeOff class="h-5 w-5" />
       </button>
       <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         title="显示（选中对象）"
-        :disabled="!hasSelectedRefno"
         @click.stop="showSelected">
         <Eye class="h-5 w-5" />
       </button>
@@ -3844,14 +3965,13 @@ onUnmounted(() => {
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         title="全部隐藏"
         @click.stop="hideAll">
-        <X class="h-5 w-5" />
+        <Eraser class="h-5 w-5" />
       </button>
       <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         title="定位显示（选中对象）"
-        :disabled="!hasSelectedRefno"
         @click.stop="locateShowSelected">
-        <LocateFixed class="h-5 w-5" />
+        <Focus class="h-5 w-5" />
       </button>
 
       <!-- 测量（下拉：长度/角度） -->
@@ -4098,53 +4218,9 @@ onUnmounted(() => {
       @pointerdown.stop
       @wheel.stop />
 
-    <div v-if="showAnnotationToolbar"
-      class="pointer-events-auto absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
-      style="z-index: 940"
-      @pointerdown.stop
-      @wheel.stop>
-      <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
-        :class="store.toolMode.value === 'annotation' ? 'bg-muted' : ''"
-        title="箭头批注"
-        @click.stop="store.setToolMode('annotation')">
-        <ArrowUpRight class="h-5 w-5" />
-      </button>
-      <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
-        :class="
-          store.toolMode.value === 'annotation_cloud'
-            ? 'bg-muted'
-            : ''
-        "
-        title="云线批注"
-        @click.stop="store.setToolMode('annotation_cloud')">
-        <Cloud class="h-5 w-5" />
-      </button>
-      <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
-        :class="
-          store.toolMode.value === 'annotation_rect' ? 'bg-muted' : ''
-        "
-        title="矩形批注"
-        @click.stop="store.setToolMode('annotation_rect')">
-        <RectangleHorizontal class="h-5 w-5" />
-      </button>
-      <div class="mx-1 h-6 w-px bg-border" />
-      <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-destructive hover:bg-muted disabled:opacity-50"
-        title="删除选中批注"
-        :disabled="!canDeleteActiveAnnotation"
-        @click.stop="deleteActiveAnnotation">
-        <Trash2 class="h-5 w-5" />
-      </button>
-      <button type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
-        title="退出批注模式"
-        @click.stop="store.setToolMode('none')">
-        <X class="h-5 w-5" />
-      </button>
-    </div>
+    <AnnotationOverlayBar v-if="toolsRef" :tools="toolsRef" />
+
+    <MeasurementOverlayBar v-if="isXeokitMeasureMode && xeokitMeasurementToolsRef" :tools="xeokitMeasurementToolsRef" />
 
     <ReviewConfirmation />
   </div>

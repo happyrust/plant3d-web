@@ -75,6 +75,52 @@ const activeAny = computed(() => {
   return activeText.value || activeCloud.value || activeRect.value || activeObb.value;
 });
 
+const currentFocusType = computed<AnnotationType | null>(() => {
+  switch (store.toolMode.value) {
+    case 'annotation':
+      return 'text';
+    case 'annotation_cloud':
+      return 'cloud';
+    case 'annotation_rect':
+      return 'rect';
+    case 'annotation_obb':
+      return 'obb';
+    default:
+      return store.activeAnnotationContext.value?.type ?? null;
+  }
+});
+
+const currentFocusTypeLabel = computed(() => {
+  switch (currentFocusType.value) {
+    case 'text':
+      return '文字批注';
+    case 'cloud':
+      return '云线批注';
+    case 'rect':
+      return '矩形批注';
+    case 'obb':
+      return 'OBB 批注';
+    default:
+      return '未选择';
+  }
+});
+
+const currentSelectionSummary = computed(() => {
+  const active = store.activeAnnotationContext.value;
+  if (!active) return '当前未选中批注';
+  const record = active.record as any;
+  const title = typeof record.title === 'string' && record.title.trim() ? record.title.trim() : active.id;
+  return `${currentFocusTypeLabel.value} / ${title}`;
+});
+
+const activeTextCollapsed = computed(() => activeText.value?.collapsed === true);
+
+const activeTextCollapseLabel = computed(() => (activeTextCollapsed.value ? '已最小化' : '展开中'));
+
+function isSectionFocused(type: AnnotationType): boolean {
+  return currentFocusType.value === type;
+}
+
 function setMode(mode: 'none' | 'annotation' | 'annotation_cloud' | 'annotation_rect' | 'annotation_obb') {
   store.setToolMode(mode);
 }
@@ -234,6 +280,11 @@ function updateDescription(v: string) {
   if (activeObb.value) {
     store.updateObbAnnotation(activeObb.value.id, { description: v });
   }
+}
+
+function toggleActiveTextCollapsed() {
+  if (!activeText.value) return;
+  store.updateAnnotation(activeText.value.id, { collapsed: !activeTextCollapsed.value });
 }
 
 // OBB 创建后弹窗编辑
@@ -609,9 +660,27 @@ function formatCommentTime(timestamp: number): string {
       <div class="mt-2 text-xs text-muted-foreground">
         文字/云线/矩形：点击模型表面创建。OBB框选：拖拽框选物体生成包围盒批注。
       </div>
+
+      <div class="mt-3 grid gap-2 sm:grid-cols-2">
+        <div class="rounded-md border border-border bg-muted/40 px-3 py-2">
+          <div class="text-[11px] text-muted-foreground">当前类型</div>
+          <div data-testid="annotation-panel-current-type-label" class="mt-1 text-sm font-medium text-foreground">
+            {{ currentFocusTypeLabel }}
+          </div>
+        </div>
+        <div class="rounded-md border border-border bg-muted/40 px-3 py-2">
+          <div class="text-[11px] text-muted-foreground">当前选中</div>
+          <div data-testid="annotation-panel-current-selection-label" class="mt-1 truncate text-sm font-medium text-foreground">
+            {{ currentSelectionSummary }}
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="rounded-md border border-border bg-background p-3">
+    <div data-testid="annotation-panel-section-text"
+      class="rounded-md border border-border bg-background p-3 transition-colors"
+      :data-active="isSectionFocused('text') ? 'true' : 'false'"
+      :class="isSectionFocused('text') ? 'border-ring bg-muted/20' : ''">
       <div class="flex items-center justify-between gap-2">
         <div class="text-sm font-semibold">文字批注</div>
         <div class="text-xs text-muted-foreground">共 {{ store.annotationCount }} 条</div>
@@ -634,6 +703,9 @@ function formatCommentTime(timestamp: number): string {
                 <span class="font-semibold">{{ a.glyph }}</span>
                 <span class="ml-2">{{ a.title }}</span>
                 <span v-if="a.refno" class="ml-1 inline-block rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950 dark:text-blue-400" :title="'RefNo: ' + a.refno">{{ a.refno }}</span>
+                <span v-if="a.collapsed" class="ml-1 inline-block rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                  已最小化
+                </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
             </div>
@@ -672,7 +744,10 @@ function formatCommentTime(timestamp: number): string {
       </div>
     </div>
 
-    <div class="rounded-md border border-border bg-background p-3">
+    <div data-testid="annotation-panel-section-cloud"
+      class="rounded-md border border-border bg-background p-3 transition-colors"
+      :data-active="isSectionFocused('cloud') ? 'true' : 'false'"
+      :class="isSectionFocused('cloud') ? 'border-ring bg-muted/20' : ''">
       <div class="flex items-center justify-between gap-2">
         <div class="text-sm font-semibold">云线批注</div>
         <div class="text-xs text-muted-foreground">共 {{ store.cloudAnnotationCount }} 条</div>
@@ -731,7 +806,10 @@ function formatCommentTime(timestamp: number): string {
       </div>
     </div>
 
-    <div class="rounded-md border border-border bg-background p-3">
+    <div data-testid="annotation-panel-section-rect"
+      class="rounded-md border border-border bg-background p-3 transition-colors"
+      :data-active="isSectionFocused('rect') ? 'true' : 'false'"
+      :class="isSectionFocused('rect') ? 'border-ring bg-muted/20' : ''">
       <div class="flex items-center justify-between gap-2">
         <div class="text-sm font-semibold">矩形批注</div>
         <div class="text-xs text-muted-foreground">共 {{ store.rectAnnotationCount }} 条</div>
@@ -784,7 +862,10 @@ function formatCommentTime(timestamp: number): string {
       </div>
     </div>
 
-    <div class="rounded-md border border-border bg-background p-3">
+    <div data-testid="annotation-panel-section-obb"
+      class="rounded-md border border-border bg-background p-3 transition-colors"
+      :data-active="isSectionFocused('obb') ? 'true' : 'false'"
+      :class="isSectionFocused('obb') ? 'border-ring bg-muted/20' : ''">
       <div class="flex items-center justify-between gap-2">
         <div class="text-sm font-semibold">OBB框选批注</div>
         <div class="text-xs text-muted-foreground">共 {{ store.obbAnnotationCount }} 条</div>
@@ -852,6 +933,26 @@ function formatCommentTime(timestamp: number): string {
       </div>
 
       <div v-else class="mt-2 flex flex-col gap-2">
+        <template v-if="activeText">
+          <div class="rounded-md border border-border bg-muted/40 px-3 py-2">
+            <div class="text-[11px] text-muted-foreground">显示状态</div>
+            <div class="mt-1 flex items-center justify-between gap-3">
+              <div data-testid="annotation-panel-text-collapse-state" class="text-sm font-medium text-foreground">
+                {{ activeTextCollapseLabel }}
+              </div>
+              <button data-testid="annotation-panel-text-collapse-toggle"
+                type="button"
+                class="h-8 rounded-md border border-input bg-background px-3 text-xs hover:bg-muted"
+                @click="toggleActiveTextCollapsed">
+                {{ activeTextCollapsed ? '恢复展开' : '最小化' }}
+              </button>
+            </div>
+            <div class="mt-1 text-xs text-muted-foreground">
+              最小化后，视图中的文字面板会收成锚点处的水滴图钉。
+            </div>
+          </div>
+        </template>
+
         <label class="text-xs text-muted-foreground">标题</label>
         <input class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           :value="activeAny.title"

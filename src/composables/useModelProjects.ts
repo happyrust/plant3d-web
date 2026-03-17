@@ -39,17 +39,17 @@ function syncProjectUrl(project: ModelProject): void {
   url.searchParams.set('output_project', project.path);
 
   // URL 参数透传规则：
-  // - 如果项目本身配置了 showDbnum，则用项目配置覆盖 URL（历史行为）。
-  // - 如果项目未配置 showDbnum，但 URL 已经带了 show_dbnum，则保留（用于 e2e/调试手动指定 dbno）。
-  // - 只有两者都没有时才删除 show_dbnum。
-  if (project.showDbnum != null) {
+  // - 如果 URL 中已有 show_dbnum，优先保留用户手动指定的值。
+  // - 如果 URL 中没有 show_dbnum，但项目配置了 showDbnum，则用项目配置填充。
+  // - 两者都没有时删除 show_dbnum。
+  const hasShowDbnumInUrl = new URLSearchParams(window.location.search).has('show_dbnum');
+  if (hasShowDbnumInUrl) {
+    // 保留 URL 中用户手动指定的值，不覆盖
+  } else if (project.showDbnum != null) {
     url.searchParams.set('show_dbnum', String(project.showDbnum));
     url.searchParams.delete('debug_refno');
   } else {
-    const hasShowDbnumInUrl = new URLSearchParams(window.location.search).has('show_dbnum');
-    if (!hasShowDbnumInUrl) {
-      url.searchParams.delete('show_dbnum');
-    }
+    url.searchParams.delete('show_dbnum');
   }
 
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);

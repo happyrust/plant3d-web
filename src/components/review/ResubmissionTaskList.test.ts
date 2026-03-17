@@ -14,23 +14,27 @@ const mockStore = {
 };
 
 const persistenceState = new Map<string, unknown>();
+const persistenceStorageKeys: string[] = [];
 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => mockStore,
 }));
 
 vi.mock('@/composables/useNavigationStatePersistence', () => ({
-  useNavigationStatePersistence: () => ({
-    bindRef: (_key: string, target: { value: unknown }, defaultValue: unknown) => {
-      if (target.value === undefined) {
-        target.value = defaultValue;
-      }
-    },
-    saveValue: (key: string, value: unknown) => {
-      persistenceState.set(key, value);
-    },
-    getValue: (key: string, defaultValue: unknown) => persistenceState.get(key) ?? defaultValue,
-  }),
+  useNavigationStatePersistence: (storageKey: string) => {
+    persistenceStorageKeys.push(storageKey);
+    return {
+      bindRef: (_key: string, target: { value: unknown }, defaultValue: unknown) => {
+        if (target.value === undefined) {
+          target.value = defaultValue;
+        }
+      },
+      saveValue: (key: string, value: unknown) => {
+        persistenceState.set(key, value);
+      },
+      getValue: (key: string, defaultValue: unknown) => persistenceState.get(key) ?? defaultValue,
+    };
+  },
 }));
 
 vi.mock('./TaskReviewDetail.vue', () => ({
@@ -45,6 +49,7 @@ describe('ResubmissionTaskList', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     persistenceState.clear();
+    persistenceStorageKeys.length = 0;
     loadReviewTasksMock.mockClear();
     mockStore.returnedInitiatedTasks.value = [];
   });
@@ -169,5 +174,20 @@ describe('ResubmissionTaskList', () => {
 
     const detail = document.querySelector('[data-testid="task-review-detail-stub"]');
     expect(detail?.textContent).toContain('同一任务详情');
+  });
+
+  it('uses an isolated persistence key for the returned list surface', async () => {
+    await mountComponent([
+      createTask({
+        id: 'returned-task',
+        status: 'draft',
+        currentNode: 'sj',
+        returnReason: '请补充净高说明',
+      }),
+    ]);
+
+    expect(persistenceStorageKeys).toContain('plant3d-web-nav-state-resubmission-tasks-v1');
+    expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-designer-tasks-v1');
+    expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-reviewer-tasks-v1');
   });
 });

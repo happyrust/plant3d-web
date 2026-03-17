@@ -1,0 +1,47 @@
+{
+  "milestone": "returned-task-contract",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 6,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 6
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [
+    {
+      "id": "VAL-FUP-CROSS-001",
+      "blockedBy": "No seeded returned-task record is visible to the local designer/reviewer UI identities, so cross-surface returned-task semantics cannot be exercised through the running app."
+    },
+    {
+      "id": "VAL-FUP-FLOW-002",
+      "blockedBy": "The live environment does not expose a reviewer-returned task that later appears in the designer returned-task flow for the same task id."
+    },
+    {
+      "id": "VAL-FUP-RETURN-001",
+      "blockedBy": "Canonical returned-task rule cannot be verified on the real UI without at least one returned/resubmittable task rendered in designer surfaces."
+    },
+    {
+      "id": "VAL-FUP-RETURN-002",
+      "blockedBy": "Returned-task list remains empty in the live environment, so continued pre-resubmit visibility cannot be observed."
+    },
+    {
+      "id": "VAL-FUP-RETURN-003",
+      "blockedBy": "No returned task detail can be opened from the live UI, so latest return reason/node rendering cannot be confirmed through the user surface."
+    },
+    {
+      "id": "VAL-FUP-RT-001",
+      "blockedBy": "Realtime normalization behavior is only covered by automated tests right now; no live websocket-delivered returned-task update can be observed because the environment lacks suitable returned-task data."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added browser-ui flow validator guidance for serial validation, surface boundaries, and how to treat missing returned-task seed data as an environment blocker.",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}

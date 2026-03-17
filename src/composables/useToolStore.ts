@@ -175,6 +175,8 @@ export type AnnotationRecord = {
   id: string;
   entityId: string;
   worldPos: Vec3;
+  labelWorldPos?: Vec3;
+  collapsed?: boolean;
   visible: boolean;
   glyph: string;
   title: string;
@@ -247,6 +249,18 @@ export type RectAnnotationRecord = {
 export type PickedQueryCenter = {
   entityId: string;
   worldPos: Vec3;
+};
+
+export type AnyAnnotationRecord =
+  | AnnotationRecord
+  | CloudAnnotationRecord
+  | RectAnnotationRecord
+  | ObbAnnotationRecord;
+
+export type ActiveAnnotationContext = {
+  type: AnnotationType;
+  id: string;
+  record: AnyAnnotationRecord;
 };
 
 // Ptset 可视化请求（用于跨组件通信）
@@ -328,11 +342,19 @@ function withStorageScope(storageKey: string, scope = getCurrentStorageScope()):
   return `${storageKey}:${scope}`;
 }
 
+function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
+  return {
+    ...rec,
+    labelWorldPos: Array.isArray(rec.labelWorldPos) && rec.labelWorldPos.length === 3 ? rec.labelWorldPos : undefined,
+    collapsed: rec.collapsed === true,
+  };
+}
+
 function normalizeV1(parsed: PersistedStateV1): PersistedStateV5 {
   return {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
-    annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
+    annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: [],
     cloudAnnotations: [],
     rectAnnotations: [],
@@ -346,7 +368,7 @@ function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
   return {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
-    annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
+    annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: [],
     rectAnnotations: [],
@@ -360,7 +382,7 @@ function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
   return {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
-    annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
+    annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
@@ -374,7 +396,7 @@ function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
   return {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
-    annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
+    annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
@@ -388,7 +410,7 @@ function normalizeV5(parsed: PersistedStateV5): PersistedStateV5 {
   return {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
-    annotations: Array.isArray(parsed.annotations) ? parsed.annotations : [],
+    annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
@@ -828,7 +850,7 @@ function clearDimensions() {
 }
 
 function addAnnotation(rec: AnnotationRecord) {
-  annotations.value = [...annotations.value, rec];
+  annotations.value = [...annotations.value, normalizeAnnotationRecord(rec)];
   activeAnnotationId.value = rec.id;
   pendingTextAnnotationEditId.value = rec.id;
 }
@@ -851,6 +873,7 @@ function removeAnnotation(id: string) {
 function clearAnnotations() {
   annotations.value = [];
   activeAnnotationId.value = null;
+  pendingTextAnnotationEditId.value = null;
 }
 
 function addObbAnnotation(rec: ObbAnnotationRecord) {
@@ -877,6 +900,7 @@ function removeObbAnnotation(id: string) {
 function clearObbAnnotations() {
   obbAnnotations.value = [];
   activeObbAnnotationId.value = null;
+  pendingObbEditId.value = null;
 }
 
 function addCloudAnnotation(rec: CloudAnnotationRecord) {
@@ -939,14 +963,70 @@ function clearRectAnnotations() {
   pendingRectAnnotationEditId.value = null;
 }
 
+function getAnnotationRecordsByType(type: AnnotationType): AnyAnnotationRecord[] {
+  switch (type) {
+    case 'text':
+      return annotations.value;
+    case 'cloud':
+      return cloudAnnotations.value;
+    case 'rect':
+      return rectAnnotations.value;
+    case 'obb':
+      return obbAnnotations.value;
+  }
+}
+
+function setAnnotationTypeVisible(type: AnnotationType, visible: boolean) {
+  switch (type) {
+    case 'text':
+      annotations.value.forEach((item) => updateAnnotationVisible(item.id, visible));
+      return;
+    case 'cloud':
+      cloudAnnotations.value.forEach((item) => updateCloudAnnotationVisible(item.id, visible));
+      return;
+    case 'rect':
+      rectAnnotations.value.forEach((item) => updateRectAnnotationVisible(item.id, visible));
+      return;
+    case 'obb':
+      obbAnnotations.value.forEach((item) => updateObbAnnotationVisible(item.id, visible));
+  }
+}
+
+function clearAnnotationType(type: AnnotationType) {
+  switch (type) {
+    case 'text':
+      clearAnnotations();
+      return;
+    case 'cloud':
+      clearCloudAnnotations();
+      return;
+    case 'rect':
+      clearRectAnnotations();
+      return;
+    case 'obb':
+      clearObbAnnotations();
+  }
+}
+
+function setAllAnnotationsVisible(visible: boolean) {
+  setAnnotationTypeVisible('text', visible);
+  setAnnotationTypeVisible('cloud', visible);
+  setAnnotationTypeVisible('rect', visible);
+  setAnnotationTypeVisible('obb', visible);
+}
+
+function clearAllAnnotations() {
+  clearAnnotations();
+  clearCloudAnnotations();
+  clearRectAnnotations();
+  clearObbAnnotations();
+}
+
 function clearAll() {
   clearMeasurements();
   clearXeokitMeasurements();
   clearDimensions();
-  clearAnnotations();
-  clearObbAnnotations();
-  clearCloudAnnotations();
-  clearRectAnnotations();
+  clearAllAnnotations();
   clearCurrentXeokitDraft();
   setXeokitHoverState({
     visible: false,
@@ -1244,6 +1324,45 @@ const cloudAnnotationCount = computed(() => cloudAnnotations.value.length);
 const rectAnnotationCount = computed(() => rectAnnotations.value.length);
 const dimensionCount = computed(() => dimensions.value.length);
 const xeokitMeasurementCount = computed(() => xeokitDistanceMeasurements.value.length + xeokitAngleMeasurements.value.length);
+const activeAnnotationContext = computed<ActiveAnnotationContext | null>(() => {
+  const mode = toolMode.value;
+  const byMode: { mode: ToolMode; type: AnnotationType; id: string | null; records: AnyAnnotationRecord[] }[] = [
+    { mode: 'annotation', type: 'text', id: activeAnnotationId.value, records: annotations.value },
+    { mode: 'annotation_cloud', type: 'cloud', id: activeCloudAnnotationId.value, records: cloudAnnotations.value },
+    { mode: 'annotation_rect', type: 'rect', id: activeRectAnnotationId.value, records: rectAnnotations.value },
+    { mode: 'annotation_obb', type: 'obb', id: activeObbAnnotationId.value, records: obbAnnotations.value },
+  ];
+  const currentByMode = byMode.find((item) => item.mode === mode);
+  if (currentByMode?.id) {
+    const record = currentByMode.records.find((item) => item.id === currentByMode.id);
+    if (record) {
+      return {
+        type: currentByMode.type,
+        id: currentByMode.id,
+        record,
+      };
+    }
+  }
+
+  const fallback: { type: AnnotationType; id: string | null; records: AnyAnnotationRecord[] }[] = [
+    { type: 'text', id: activeAnnotationId.value, records: annotations.value },
+    { type: 'cloud', id: activeCloudAnnotationId.value, records: cloudAnnotations.value },
+    { type: 'rect', id: activeRectAnnotationId.value, records: rectAnnotations.value },
+    { type: 'obb', id: activeObbAnnotationId.value, records: obbAnnotations.value },
+  ];
+  for (const item of fallback) {
+    if (!item.id) continue;
+    const record = item.records.find((entry) => entry.id === item.id);
+    if (record) {
+      return {
+        type: item.type,
+        id: item.id,
+        record,
+      };
+    }
+  }
+  return null;
+});
 const allXeokitMeasurements = computed<XeokitMeasurementRecord[]>(() => {
   return [...xeokitDistanceMeasurements.value, ...xeokitAngleMeasurements.value];
 });
@@ -1297,6 +1416,7 @@ export function useToolStore() {
     rectAnnotationCount,
     allItems,
     allXeokitMeasurements,
+    activeAnnotationContext,
 
     setToolMode,
 
@@ -1341,6 +1461,7 @@ export function useToolStore() {
     addAnnotation,
     updateAnnotation,
     updateAnnotationVisible,
+    setAnnotationTypeVisible,
     removeAnnotation,
     clearAnnotations,
 
@@ -1361,6 +1482,10 @@ export function useToolStore() {
     updateRectAnnotationVisible,
     removeRectAnnotation,
     clearRectAnnotations,
+    clearAnnotationType,
+    clearAllAnnotations,
+    setAllAnnotationsVisible,
+    getAnnotationRecordsByType,
 
     clearAll,
 

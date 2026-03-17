@@ -385,7 +385,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       if (loadOptions?.flyTo) {
         try {
           const anyViewer = viewer as any;
-          const aabb = anyViewer?.scene?.getAABB?.([normalizedRoot]) ?? null;
+          let aabb = anyViewer?.scene?.getAABB?.([normalizedRoot]) ?? null;
+          if (!aabb) {
+            const { refnos } = await querySubtreeRefnos(normalizedRoot);
+            if (refnos && refnos.length > 0) {
+              aabb = anyViewer?.scene?.getAABB?.(refnos) ?? null;
+            }
+          }
           if (aabb) {
             anyViewer?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
             consoleStore.addLog('info', `[model-load] flyTo 已加载 refno=${normalizedRoot}`);

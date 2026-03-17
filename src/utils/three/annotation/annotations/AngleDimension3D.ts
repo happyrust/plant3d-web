@@ -209,9 +209,9 @@ export class AngleDimension3D extends AnnotationBase {
 
     this.textLabel = new SolveSpaceBillboardVectorText({
       text: '',
-      materialNormal: this.materialSet.line,
-      materialHovered: this.materials.ssHovered.line,
-      materialSelected: this.materials.ssSelected.line,
+      materialNormal: this.materialSet.textFatLine,
+      materialHovered: this.materials.ssHovered.textFatLine,
+      materialSelected: this.materials.ssSelected.textFatLine,
       renderStyle: this.params.labelRenderStyle,
     });
     this.textLabel.object3d.userData.dragRole = 'label';
@@ -463,7 +463,11 @@ export class AngleDimension3D extends AnnotationBase {
 
   setMaterialSet(materialSet: AnnotationMaterialSet): void {
     this.materialSet = materialSet;
-    this.textLabel.setMaterials({ normal: this.materialSet.line });
+    this.textLabel.setMaterials({ 
+      normal: this.materialSet.textFatLine,
+      hovered: this.hoveredMaterialSet.textFatLine,
+      selected: this.selectedMaterialSet.textFatLine,
+    });
     this.applyMaterials();
   }
 

@@ -133,15 +133,16 @@ describe('createSpatialQueryStore', () => {
     };
 
     const activation = store.activateResult(store.resultSet.value.items[0]!);
-
-    expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'showModelByRefnos',
-      detail: expect.objectContaining({
-        refnos: ['server_only'],
-        requestId,
-      }),
-    }));
-    expect(addEventListenerSpy).toHaveBeenCalledWith('showModelByRefnosDone', expect.any(Function));
+    await vi.waitFor(() => {
+      expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'showModelByRefnos',
+        detail: expect.objectContaining({
+          refnos: ['server_only'],
+          requestId,
+        }),
+      }));
+      expect(addEventListenerSpy).toHaveBeenCalledWith('showModelByRefnosDone', expect.any(Function));
+    });
 
     const listener = addEventListenerSpy.mock.calls.find(([eventName]) => eventName === 'showModelByRefnosDone')?.[1] as EventListener;
     expect(listener).toBeTruthy();

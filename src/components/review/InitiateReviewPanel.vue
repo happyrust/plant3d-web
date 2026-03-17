@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 
-import { Box, Calendar, ChevronDown, Flag, Link, Paperclip, Send, UploadCloud, User, X } from 'lucide-vue-next';
+import { Box, Calendar, CheckCircle, ChevronDown, Flag, Link, Paperclip, Plus, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
 import AssociatedFilesList from './AssociatedFilesList.vue';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
@@ -15,6 +15,7 @@ import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import Button from '@/components/ui/Button.vue';
 import Card from '@/components/ui/Card.vue';
 import Input from '@/components/ui/Input.vue';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { getRoleDisplayName } from '@/types/auth';
@@ -119,6 +120,8 @@ const createdTaskId = ref<string | null>(null);
 const createdTaskFormId = ref<string | null>(null);
 
 const isSubmitting = ref(false);
+const submitted = ref(false);
+const lastCreatedTask = ref<{ id: string; title: string; checkerName: string; approverName: string; componentCount: number } | null>(null);
 const notification = ref<{ type: 'success' | 'error' | null; message: string; details?: string }>({
   type: null,
   message: '',
@@ -324,21 +327,20 @@ async function handleSubmit() {
     // 自动触发一次提交，令任务状态由 draft(sj) 转为 submitted(jd)
     await userStore.submitTaskToNextNode(task.id, '发起提资');
 
-    const uploadedAttachmentCount = getUploadedAttachments().length;
-    const failedAttachmentCount = uploadedFiles.value.filter((f) => f.status === 'error').length;
-
     const checker = availableCheckers.value.find((r) => r.id === formData.checkerId);
     const approver = availableApprovers.value.find((r) => r.id === formData.approverId);
 
-    notification.value = {
-      type: 'success',
-      message: '提资单创建成功！',
-      details: `数据包「${task.title}」已创建，包含 ${selectedComponents.value.length} 个构件。下一步：您可以在"我的提资单"或"任务监控"面板中查看流转进度。`,
+    lastCreatedTask.value = {
+      id: task.id,
+      title: task.title,
+      checkerName: checker?.name ?? '',
+      approverName: approver?.name ?? '',
+      componentCount: selectedComponents.value.length,
     };
+    submitted.value = true;
     emit('created', task.id);
-    emit('close');
 
-    // 重置表单
+    // 重置表单数据（为下次新建做准备）
     formData.packageName = '';
     formData.description = '';
     formData.checkerId = '';
@@ -364,6 +366,20 @@ function clearNotification() {
   notification.value = { type: null, message: '', details: '' };
 }
 
+function resetForNewTask() {
+  submitted.value = false;
+  lastCreatedTask.value = null;
+  notification.value = { type: null, message: '', details: '' };
+}
+
+function goToTaskMonitor() {
+  ensurePanelAndActivate('taskMonitor');
+}
+
+function goToReviewWorkbench() {
+  ensurePanelAndActivate('review');
+}
+
 function closePanel() {
   emit('close');
 }
@@ -384,7 +400,43 @@ function closePanel() {
       </button>
     </div>
 
-    <div class="mt-4 space-y-4">
+    <!-- 成功提交后的结果展示 -->
+    <div v-if="submitted && lastCreatedTask" class="mt-4 space-y-4">
+      <div class="rounded-xl border border-green-200 bg-green-50 p-4">
+        <div class="flex items-center gap-2 text-green-700">
+          <CheckCircle class="h-5 w-5 shrink-0" />
+          <span class="text-sm font-semibold">提资单创建成功</span>
+        </div>
+        <div class="mt-3 space-y-2 text-sm text-green-800">
+          <p>数据包「<span class="font-medium">{{ lastCreatedTask.title }}</span>」已提交到校审流程。</p>
+          <div class="rounded-lg bg-white/60 px-3 py-2 text-xs text-green-700">
+            <p>校核人：{{ lastCreatedTask.checkerName }}</p>
+            <p>审核人：{{ lastCreatedTask.approverName }}</p>
+            <p>构件数：{{ lastCreatedTask.componentCount }} 个</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
+        <p class="text-xs font-medium text-blue-700">下一步</p>
+        <p class="mt-1 text-xs text-blue-600">
+          可在「<button type="button" class="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900" @click="goToTaskMonitor">任务监控</button>」面板中查看流转进度，或在「<button type="button" class="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900" @click="goToReviewWorkbench">审核工作台</button>」中查看校审详情。
+        </p>
+      </div>
+
+      <div class="flex gap-2">
+        <Button class="flex-1" @click="resetForNewTask">
+          <Plus class="h-3.5 w-3.5" />
+          新建提资单
+        </Button>
+        <Button variant="secondary" class="flex-1" @click="closePanel">
+          关闭面板
+        </Button>
+      </div>
+    </div>
+
+    <!-- 表单区域（未提交或提交失败时显示） -->
+    <div v-else class="mt-4 space-y-4">
       <div v-if="embedLandingState?.target === 'designer'"
         data-testid="designer-landing-cta"
         class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
@@ -591,13 +643,8 @@ function closePanel() {
         验证并提交提资单
       </button>
 
-      <div v-if="notification.type"
-        :class="[
-          'rounded-[8px] border px-3 py-3 text-sm',
-          notification.type === 'success'
-            ? 'border-green-200 bg-green-50 text-green-800'
-            : 'border-red-200 bg-red-50 text-red-800',
-        ]">
+      <div v-if="notification.type === 'error'"
+        class="rounded-[8px] border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-800">
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="font-medium">{{ notification.message }}</div>

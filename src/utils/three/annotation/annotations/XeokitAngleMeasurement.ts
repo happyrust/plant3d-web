@@ -1,7 +1,11 @@
 import * as THREE from 'three';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 import { AnnotationBase, type AnnotationOptions } from '../core/AnnotationBase';
+import { worldPerPixelAt } from '../utils/solvespaceLike';
 
 import type { AnnotationMaterials, AnnotationMaterialSet } from '../core/AnnotationMaterials';
 
@@ -21,6 +25,7 @@ export type XeokitAngleMeasurementParams = {
 };
 
 const markerGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+const MEASUREMENT_LINE_WIDTH_PX = 2.6;
 
 function createLabelElement(): HTMLDivElement {
   const el = document.createElement('div');
@@ -44,15 +49,28 @@ function formatAngle(deg: number): string {
 export class XeokitAngleMeasurement extends AnnotationBase {
   private params: Required<XeokitAngleMeasurementParams>;
   private materialSet: AnnotationMaterialSet;
-  private readonly originGeometry = new THREE.BufferGeometry();
-  private readonly targetGeometry = new THREE.BufferGeometry();
-  private readonly originLine: THREE.Line;
-  private readonly targetLine: THREE.Line;
+  private readonly originGeometry = new LineGeometry();
+  private readonly targetGeometry = new LineGeometry();
+  private readonly originLine: Line2;
+  private readonly targetLine: Line2;
   private readonly originMarker: THREE.Mesh;
   private readonly cornerMarker: THREE.Mesh;
   private readonly targetMarker: THREE.Mesh;
   private readonly angleLabelEl = createLabelElement();
   private readonly angleLabel: CSS2DObject;
+  private readonly lineMaterialCache = new Map<string, LineMaterial>();
+  private readonly worldScale = new THREE.Vector3();
+  private readonly wppTmp = {
+    ndc: new THREE.Vector3(),
+    ndc2: new THREE.Vector3(),
+    p0: new THREE.Vector3(),
+    p1: new THREE.Vector3(),
+    p2: new THREE.Vector3(),
+  };
+  private readonly tempWorld = new THREE.Vector3();
+  private readonly tempLocalA = new THREE.Vector3();
+  private readonly tempLocalB = new THREE.Vector3();
+  private readonly tempLocalC = new THREE.Vector3();
 
   constructor(materials: AnnotationMaterials, params: XeokitAngleMeasurementParams, options?: AnnotationOptions) {
     super(materials, {
@@ -81,8 +99,8 @@ export class XeokitAngleMeasurement extends AnnotationBase {
     this.params.labelPrefix = this.params.labelPrefix ?? '';
     this.materialSet = this.resolveMaterialSet(materials.orange);
 
-    this.originLine = new THREE.Line(this.originGeometry, this.materialSet.line);
-    this.targetLine = new THREE.Line(this.targetGeometry, this.materialSet.line);
+    this.originLine = new Line2(this.originGeometry, this.getLineMaterial('normal', this.materialSet.fatLine));
+    this.targetLine = new Line2(this.targetGeometry, this.getLineMaterial('normal', this.materialSet.fatLine));
     this.originMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh);
     this.cornerMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh);
     this.targetMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh);
@@ -107,6 +125,8 @@ export class XeokitAngleMeasurement extends AnnotationBase {
 
   override update(camera: THREE.Camera): void {
     super.update(camera);
+    this.updateLabelLayout(camera);
+    this.updateLineStyle();
     this.angleLabel.quaternion.copy(camera.quaternion);
   }
 
@@ -124,6 +144,10 @@ export class XeokitAngleMeasurement extends AnnotationBase {
   override dispose(): void {
     this.originGeometry.dispose();
     this.targetGeometry.dispose();
+    for (const material of this.lineMaterialCache.values()) {
+      material.dispose();
+    }
+    this.lineMaterialCache.clear();
     this.angleLabelEl.remove();
     super.dispose();
   }
@@ -133,23 +157,15 @@ export class XeokitAngleMeasurement extends AnnotationBase {
     const v1 = origin.clone().sub(corner);
     const v2 = target.clone().sub(corner);
     const angle = v1.lengthSq() > 1e-9 && v2.lengthSq() > 1e-9 ? THREE.MathUtils.radToDeg(v1.angleTo(v2)) : 0;
-    const bisector = v1.clone().normalize().add(v2.clone().normalize());
-    if (bisector.lengthSq() <= 1e-9) {
-      bisector.set(0, 1, 0);
-    } else {
-      bisector.normalize();
-    }
-    const labelOffset = Math.max(0.2, Math.min(1.2, Math.min(v1.length(), v2.length()) * 0.35));
-
-    this.originGeometry.setFromPoints([corner, origin]);
-    this.targetGeometry.setFromPoints([corner, target]);
+    this.setLineGeometry(this.originGeometry, corner, origin);
+    this.setLineGeometry(this.targetGeometry, corner, target);
     this.originMarker.position.copy(origin);
     this.cornerMarker.position.copy(corner);
     this.targetMarker.position.copy(target);
 
     const prefix = this.params.labelPrefix ? `${this.params.labelPrefix} ` : '';
     this.angleLabelEl.textContent = `${prefix}${this.params.approximate ? '~ ' : ''}${formatAngle(angle)}`;
-    this.angleLabel.position.copy(corner.clone().add(bisector.multiplyScalar(labelOffset)));
+    this.angleLabel.position.copy(this.computeLabelAnchor(0.24));
 
     const showRoot = this.params.visible;
 
@@ -162,14 +178,110 @@ export class XeokitAngleMeasurement extends AnnotationBase {
     this.angleLabel.visible = showRoot && this.params.angleVisible;
   }
 
+  private setLineGeometry(geometry: LineGeometry, start: THREE.Vector3, end: THREE.Vector3): void {
+    geometry.setPositions([
+      start.x,
+      start.y,
+      start.z,
+      end.x,
+      end.y,
+      end.z,
+    ]);
+  }
+
+  private updateLabelLayout(camera: THREE.Camera): void {
+    const viewport = (camera as any)?.userData?.annotationViewport as
+      | { width?: number; height?: number }
+      | undefined;
+    const vw = Math.max(1, Math.floor(Number(viewport?.width) || Number(window?.innerWidth) || 1));
+    const vh = Math.max(1, Math.floor(Number(viewport?.height) || Number(window?.innerHeight) || 1));
+    const focusWorld = this.localToWorld(this.tempWorld.copy(this.params.corner));
+    const wpp = worldPerPixelAt(camera, focusWorld, vw, vh, this.wppTmp);
+    if (!Number.isFinite(wpp) || wpp <= 0) return;
+
+    let localWpp = wpp;
+    try {
+      this.getWorldScale(this.worldScale);
+      const scale =
+        (Math.abs(this.worldScale.x) + Math.abs(this.worldScale.y) + Math.abs(this.worldScale.z)) / 3;
+      if (Number.isFinite(scale) && scale > 1e-9) {
+        localWpp = wpp / scale;
+      }
+    } catch {
+      // ignore
+    }
+
+    const labelOffset = localWpp * 18;
+    this.angleLabel.position.copy(this.computeLabelAnchor(labelOffset));
+  }
+
+  private updateLineStyle(): void {
+    const { width, height } = this.materials.getResolution();
+    for (const line of [this.originLine, this.targetLine]) {
+      const material = line.material as LineMaterial;
+      material.resolution.set(width, height);
+      material.dashed = false;
+      material.scale = 1;
+      material.dashSize = 0;
+      material.gapSize = 0;
+      material.linewidth = MEASUREMENT_LINE_WIDTH_PX;
+    }
+  }
+
+  private getLineMaterial(key: string, solid: LineMaterial): LineMaterial {
+    const cached = this.lineMaterialCache.get(key);
+    const src = (cached as any)?.__src as LineMaterial | undefined;
+    if (cached && src === solid) {
+      cached.linewidth = MEASUREMENT_LINE_WIDTH_PX;
+      cached.dashed = false;
+      return cached;
+    }
+    if (cached) {
+      cached.dispose();
+      this.lineMaterialCache.delete(key);
+    }
+
+    const material = solid.clone();
+    (material as any).__src = solid;
+    material.dashed = false;
+    material.linewidth = MEASUREMENT_LINE_WIDTH_PX;
+    material.scale = 1;
+    material.dashSize = 0;
+    material.gapSize = 0;
+    material.resolution.copy(solid.resolution);
+    this.lineMaterialCache.set(key, material);
+    return material;
+  }
+
+  private computeLabelAnchor(offset: number): THREE.Vector3 {
+    const { origin, corner, target } = this.params;
+    const dirA = this.tempLocalA.copy(origin).sub(corner);
+    const dirB = this.tempLocalB.copy(target).sub(corner);
+    if (dirA.lengthSq() <= 1e-9 || dirB.lengthSq() <= 1e-9) {
+      return this.tempLocalC.copy(corner);
+    }
+
+    dirA.normalize();
+    dirB.normalize();
+    const bisector = dirA.add(dirB);
+    if (bisector.lengthSq() <= 1e-9) {
+      bisector.copy(dirA).cross(new THREE.Vector3(0, 0, 1));
+      if (bisector.lengthSq() <= 1e-9) {
+        bisector.set(0, 1, 0);
+      }
+    }
+
+    return this.tempLocalC.copy(corner).addScaledVector(bisector.normalize(), offset);
+  }
+
   private applyVisualState(): void {
     const state = this.interactionState;
     const lineMat =
       state === 'selected'
-        ? this.materials.ssSelected.line
+        ? this.getLineMaterial('selected', this.materials.ssSelected.fatLine)
         : state === 'hovered'
-          ? this.materials.ssHovered.line
-          : this.materialSet.line;
+          ? this.getLineMaterial('hovered', this.materials.ssHovered.fatLine)
+          : this.getLineMaterial('normal', this.materialSet.fatLine);
     const meshMat =
       state === 'selected'
         ? this.materials.ssSelected.mesh

@@ -1,0 +1,21 @@
+{
+  "featureId": "fup-m5-cross-flow-task-identity",
+  "reviewedAt": "2026-03-16T23:21:01Z",
+  "commitId": "c9addae",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The store refresh fix satisfies VAL-FUP-FLOW-001 by preserving designer-owned task records across reviewer-scoped refreshes and merging backend status/node updates into the existing task id. I did not find blocking or non-blocking implementation defects in the scoped diff.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `designer-tracking-worker` skill currently requires agent-browser manual verification for every consistency feature, but this feature fulfilled a store-level contract with reliable regression coverage and no seeded UI data requirement. The worker deviated from the skill and documented that the browser flow was not necessary for this scoped fix.",
+      "evidence": "`.factory/skills/designer-tracking-worker/SKILL.md` step 6 mandates agent-browser; handoff `skillFeedback.deviations[0]` in `/Users/dongpengcheng/.factory/missions/ed11d871-9b91-4833-a106-380682e638ec/handoffs/2026-03-16T23-06-40-922Z__fup-m5-cross-flow-task-identity__5d7c6f41-be14-49a8-bb3f-5a8c470d3906.json` explains why targeted store/unit tests were used instead."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed transcript skeleton, handoff, validation contract, and commit `c9addae`. The `loadReviewTasks()` merge logic in `src/composables/useUserStore.ts:754` now keeps designer-owned tasks keyed by the same id while applying refreshed backend fields, and existing regression coverage in `src/composables/useUserStore.test.ts:333` demonstrates the create -> submit -> reviewer-scoped load path retains `task-cross-1` with updated `submitted/jd` state. The unrelated `form-binding.test.ts` expectation alignment is baseline maintenance only and does not weaken the scoped feature behavior."
+}
