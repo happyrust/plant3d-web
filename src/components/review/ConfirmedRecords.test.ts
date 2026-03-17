@@ -201,6 +201,8 @@ describe('ConfirmedRecords', () => {
     expect(document.body.textContent).toContain('确认时间');
     expect(document.body.textContent).toContain('批注数量');
     expect(document.body.textContent).toContain('3');
+    expect(document.body.textContent).toContain('测量数量');
+    expect(document.body.textContent).toContain('1');
     expect(document.body.textContent).toContain('备注');
     expect(document.body.textContent).toContain('已核对支吊架位置');
   });

@@ -155,6 +155,10 @@ function getConfirmedAnnotationCount(record: ConfirmedRecordEntry): number {
     record.obbAnnotations.length;
 }
 
+function getConfirmedMeasurementCount(record: ConfirmedRecordEntry): number {
+  return record.measurements.length;
+}
+
 function getConfirmedRecordNote(record: ConfirmedRecordEntry): string {
   return record.note?.trim() || '-';
 }
@@ -1224,6 +1228,10 @@ watch(showModuleMenu, (val) => {
             <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
               <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注数量</div>
               <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">测量数量</div>
+              <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedMeasurementCount(record) }}</div>
             </div>
             <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
               <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
