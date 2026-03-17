@@ -33,6 +33,9 @@ const loadReviewTasksMock = vi.fn(async () => {});
 const setCurrentTaskMock = vi.fn(async (task: ReviewTask | null) => {
   currentTask.value = task;
 });
+const clearCurrentTaskMock = vi.fn(() => {
+  currentTask.value = null;
+});
 
 vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
@@ -43,7 +46,7 @@ vi.mock('@/composables/useReviewStore', () => ({
     totalConfirmedMeasurements,
     sortedConfirmedRecords,
     toggleReviewMode: vi.fn(),
-    clearCurrentTask: vi.fn(),
+    clearCurrentTask: clearCurrentTaskMock,
     addConfirmedRecord: vi.fn(),
     clearConfirmedRecords: vi.fn(),
     removeConfirmedRecord: vi.fn(),
@@ -71,7 +74,7 @@ vi.mock('@/composables/useToolStore', () => ({
 
 vi.mock('@/composables/useViewerContext', () => ({
   useViewerContext: () => ({ viewerRef: { value: null } }),
-  waitForViewerReady: vi.fn(async () => true),
+  waitForViewerReady: vi.fn(async () => false),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
@@ -135,8 +138,15 @@ async function settlePanel() {
 function mountReviewPanel() {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  createApp({ render: () => h(ReviewPanel) }).mount(host);
-  return host;
+  const app = createApp({ render: () => h(ReviewPanel) });
+  app.mount(host);
+  return {
+    host,
+    unmount: () => {
+      app.unmount();
+      host.remove();
+    },
+  };
 }
 
 describe('ReviewPanel', () => {
@@ -165,10 +175,11 @@ describe('ReviewPanel', () => {
     loadWorkflowMock.mockClear();
     loadReviewTasksMock.mockClear();
     setCurrentTaskMock.mockClear();
+    clearCurrentTaskMock.mockClear();
   });
 
   it('renders the stable M4 workbench sections and normalized context fields', async () => {
-    mountReviewPanel();
+    const mounted = mountReviewPanel();
     await settlePanel();
 
     expect(document.querySelector('[data-testid="review-workbench-context-zone"]')).not.toBeNull();
@@ -184,15 +195,66 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('校核人');
     expect(document.body.textContent).toContain('审核人');
     expect(document.body.textContent).not.toContain('旧审核字段');
+    mounted.unmount();
   });
 
   it('shows an explicit degraded state when the active task lacks a formal formId', async () => {
     currentTask.value = createTask({ formId: undefined });
 
-    mountReviewPanel();
+    const mounted = mountReviewPanel();
     await settlePanel();
 
     expect(document.body.textContent).toContain('未绑定 formId');
     expect(document.body.textContent).toContain('不再回落到 task.id');
+    mounted.unmount();
+  });
+
+  it('refreshes workflow surfaces and clears task-scoped state when switching tasks', async () => {
+    currentTask.value = createTask({
+      id: 'task-a',
+      title: '任务 A',
+      formId: 'FORM-A',
+      currentNode: 'jd',
+    });
+    workflowResponseState.value = {
+      success: true,
+      currentNode: 'jd',
+      currentNodeName: '校核',
+      history: [
+        {
+          node: 'jd',
+          action: 'submitted',
+          operatorId: 'checker-a',
+          operatorName: '校核甲',
+          timestamp: 1710000000000,
+        },
+      ],
+    };
+
+    let mounted = mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('FORM-A');
+    expect(document.body.textContent).toContain('提交');
+
+    mounted.unmount();
+
+    currentTask.value = createTask({
+      id: 'task-b',
+      title: '任务 B',
+      formId: 'FORM-B',
+      currentNode: 'sh',
+      checkerName: '校核乙',
+      approverName: '审核乙',
+    });
+    mounted = mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('FORM-B');
+    expect(document.body.textContent).toContain('审核乙');
+    expect(document.body.textContent).toContain('提交到批准');
+    expect(document.body.textContent).not.toContain('FORM-A');
+    expect(document.body.textContent).not.toContain('提交到审核');
+    mounted.unmount();
   });
 });
