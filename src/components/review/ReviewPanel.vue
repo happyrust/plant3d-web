@@ -681,10 +681,10 @@ interface ReviewModule {
 const REVIEW_MODULES: ReviewModule[] = [
   { id: 'attachments', label: '\u9644\u4ef6\u6587\u4ef6', icon: Paperclip, isDefault: false },
   { id: 'confirmedStats', label: '\u5df2\u786e\u8ba4\u6570\u636e', icon: ClipboardList, isDefault: false },
-  { id: 'dataSync', label: '\u6570\u636e\u540c\u6b65', icon: RefreshCw, isDefault: false },
-  { id: 'auxData', label: '\u8f85\u52a9\u6821\u5ba1', icon: Database, isDefault: false },
-  { id: 'workflowHistory', label: '\u5de5\u4f5c\u6d41\u5386\u53f2', icon: History, isDefault: false },
-  { id: 'confirmedRecords', label: '\u786e\u8ba4\u8bb0\u5f55', icon: FileCheck, isDefault: false },
+  { id: 'dataSync', label: '\u6570\u636e\u540c\u6b65', icon: RefreshCw, isDefault: true },
+  { id: 'auxData', label: '\u8f85\u52a9\u6821\u5ba1', icon: Database, isDefault: true },
+  { id: 'workflowHistory', label: '\u5de5\u4f5c\u6d41\u5386\u53f2', icon: History, isDefault: true },
+  { id: 'confirmedRecords', label: '\u786e\u8ba4\u8bb0\u5f55', icon: FileCheck, isDefault: true },
 ];
 
 const STORAGE_KEY = 'review_panel_active_modules';
@@ -1135,10 +1135,10 @@ watch(showModuleMenu, (val) => {
     </div>
 
     <!-- 后端数据同步 -->
-    <ReviewDataSync v-if="isModuleActive('dataSync')" />
+    <ReviewDataSync />
 
     <!-- 辅助校审数据 -->
-    <ReviewAuxData v-if="isModuleActive('auxData')" />
+    <ReviewAuxData />
 
     <WorkflowSubmitDialog :visible="showSubmitDialog"
       :current-node="currentNode"
@@ -1154,7 +1154,7 @@ watch(showModuleMenu, (val) => {
       @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
 
     <!-- 工作流历史 -->
-    <div v-if="isModuleActive('workflowHistory')" class="rounded-md border border-border bg-background p-3">
+    <div class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">工作流历史</div>
 
       <div v-if="workflowLoading" class="mt-2 text-sm text-muted-foreground">
@@ -1197,7 +1197,7 @@ watch(showModuleMenu, (val) => {
     </div>
 
     <!-- 确认记录 -->
-    <div v-if="isModuleActive('confirmedRecords')" class="rounded-md border border-border bg-background p-3">
+    <div class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">确认记录</div>
 
       <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"

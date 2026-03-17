@@ -85,7 +85,7 @@ vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
 
 vi.mock('./CollisionResultList.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./ReviewAuxData.vue', () => ({ default: { template: '<div data-testid="review-aux-data-stub">辅助校审数据</div>' } }));
-vi.mock('./ReviewDataSync.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./ReviewDataSync.vue', () => ({ default: { template: '<div data-testid="review-data-sync-stub">数据同步（后端）</div>' } }));
 vi.mock('./WorkflowSubmitDialog.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./WorkflowReturnDialog.vue', () => ({ default: { template: '<div />' } }));
 
@@ -156,7 +156,7 @@ describe('ReviewPanel', () => {
       value: {
         getItem: vi.fn((key: string) => {
           if (key === 'review_panel_active_modules') {
-            return JSON.stringify(['confirmedRecords', 'confirmedStats', 'workflowHistory']);
+            return JSON.stringify(['confirmedStats']);
           }
           return null;
         }),
@@ -184,8 +184,11 @@ describe('ReviewPanel', () => {
 
     expect(document.querySelector('[data-testid="review-workbench-context-zone"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="review-workbench-workflow-zone"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('辅助校审数据');
+    expect(document.body.textContent).toContain('数据同步（后端）');
     expect(document.body.textContent).toContain('任务上下文');
     expect(document.body.textContent).toContain('流转区');
+    expect(document.body.textContent).toContain('工作流历史');
     expect(document.body.textContent).toContain('确认记录');
     expect(document.body.textContent).toContain('校核人');
     expect(document.body.textContent).toContain('审核人');
@@ -195,6 +198,34 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('校核人');
     expect(document.body.textContent).toContain('审核人');
     expect(document.body.textContent).not.toContain('旧审核字段');
+    mounted.unmount();
+  });
+
+  it('keeps the five M4 core zones visible even when optional module storage is empty', async () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: {
+        getItem: vi.fn((key: string) => {
+          if (key === 'review_panel_active_modules') {
+            return JSON.stringify([]);
+          }
+          return null;
+        }),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+      configurable: true,
+    });
+
+    const mounted = mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('任务上下文');
+    expect(document.body.textContent).toContain('流转区');
+    expect(document.body.textContent).toContain('工作流历史');
+    expect(document.body.textContent).toContain('确认记录');
+    expect(document.body.textContent).toContain('辅助校审数据');
+    expect(document.body.textContent).toContain('数据同步（后端）');
+    expect(document.body.textContent).toContain('点击“添加模块”启用更多功能面板');
     mounted.unmount();
   });
 
