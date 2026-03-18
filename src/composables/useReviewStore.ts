@@ -4,7 +4,6 @@ import type {
   AnnotationRecord,
   CloudAnnotationRecord,
   MeasurementRecord,
-  ObbAnnotationRecord,
   RectAnnotationRecord,
 } from './useToolStore';
 import type { ReviewTask } from '@/types/auth';
@@ -23,11 +22,11 @@ import {
 export type ConfirmedRecord = {
   id: string;
   taskId?: string;
+  formId?: string;
   type: 'batch';
   annotations: AnnotationRecord[];
   cloudAnnotations: CloudAnnotationRecord[];
   rectAnnotations: RectAnnotationRecord[];
-  obbAnnotations: ObbAnnotationRecord[];
   measurements: MeasurementRecord[];
   confirmedAt: number;
   note: string;
@@ -144,6 +143,7 @@ async function addConfirmedRecord(
   record: Omit<ConfirmedRecord, 'id' | 'confirmedAt'>
 ): Promise<string> {
   const taskId = currentTask.value?.id;
+  const formId = currentTask.value?.formId?.trim() || record.formId;
 
   if (USE_BACKEND.value && taskId) {
     // 使用后端 API
@@ -152,11 +152,11 @@ async function addConfirmedRecord(
     try {
       const response = await reviewRecordCreate({
         taskId,
+        formId,
         type: record.type,
         annotations: record.annotations,
         cloudAnnotations: record.cloudAnnotations,
         rectAnnotations: record.rectAnnotations,
-        obbAnnotations: record.obbAnnotations,
         measurements: record.measurements,
         note: record.note,
       });
@@ -165,11 +165,11 @@ async function addConfirmedRecord(
         const newRecord: ConfirmedRecord = {
           id: response.record.id,
           taskId,
+          formId: response.record.formId || formId,
           type: 'batch',
           annotations: record.annotations,
           cloudAnnotations: record.cloudAnnotations,
           rectAnnotations: record.rectAnnotations,
-          obbAnnotations: record.obbAnnotations,
           measurements: record.measurements,
           confirmedAt: response.record.confirmedAt,
           note: record.note,
@@ -192,6 +192,7 @@ async function addConfirmedRecord(
     ...record,
     id: `review_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     taskId: taskId || undefined,
+    formId,
     confirmedAt: Date.now(),
   };
   confirmedRecords.value = [...confirmedRecords.value, newRecord];
@@ -254,11 +255,11 @@ async function loadConfirmedRecords(taskId: string): Promise<void> {
       confirmedRecords.value = response.records.map((r) => ({
         id: r.id,
         taskId: r.taskId,
+        formId: r.formId,
         type: 'batch' as const,
         annotations: r.annotations as AnnotationRecord[],
         cloudAnnotations: r.cloudAnnotations as CloudAnnotationRecord[],
         rectAnnotations: r.rectAnnotations as RectAnnotationRecord[],
-        obbAnnotations: r.obbAnnotations as ObbAnnotationRecord[],
         measurements: r.measurements as MeasurementRecord[],
         confirmedAt: r.confirmedAt,
         note: r.note,
@@ -473,8 +474,7 @@ const totalConfirmedAnnotations = computed(() => {
       sum +
       r.annotations.length +
       r.cloudAnnotations.length +
-      r.rectAnnotations.length +
-      r.obbAnnotations.length
+      r.rectAnnotations.length
     );
   }, 0);
 });

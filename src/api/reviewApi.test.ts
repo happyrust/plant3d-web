@@ -5,6 +5,7 @@ import {
   getReviewUserWebSocketUrl,
   getReviewWebSocketUrl,
   reviewGetEmbedUrl,
+  reviewRecordCreate,
   normalizeReviewTask,
   normalizeReviewAttachment,
   normalizeAnnotationComment,
@@ -158,6 +159,55 @@ describe('reviewApi base url defaults', () => {
       fetchMock,
       '/api/auth/verify',
       JSON.stringify({ token: 'token-verify', form_id: 'FORM-EMBED-1' })
+    );
+  });
+
+  it('includes stable form lineage when creating confirmed records', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        record: {
+          id: 'record-1',
+          taskId: 'task-1',
+          formId: 'FORM-LINEAGE-1',
+          type: 'batch',
+          annotations: [],
+          cloudAnnotations: [],
+          rectAnnotations: [],
+          measurements: [],
+          note: 'ok',
+          confirmedAt: 1700000000000,
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await reviewRecordCreate({
+      taskId: 'task-1',
+      formId: 'FORM-LINEAGE-1',
+      type: 'batch',
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      note: 'ok',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/review\/records$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          taskId: 'task-1',
+          formId: 'FORM-LINEAGE-1',
+          type: 'batch',
+          annotations: [],
+          cloudAnnotations: [],
+          rectAnnotations: [],
+          measurements: [],
+          note: 'ok',
+        }),
+      })
     );
   });
 });

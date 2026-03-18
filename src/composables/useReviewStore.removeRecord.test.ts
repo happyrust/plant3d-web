@@ -34,11 +34,12 @@ function createLocalStorageMock() {
 function makeRecord(id: string) {
   return {
     id,
+    taskId: 'task-1',
+    formId: 'FORM-1',
     type: 'batch' as const,
     annotations: [],
     cloudAnnotations: [],
     rectAnnotations: [],
-    obbAnnotations: [],
     measurements: [],
     confirmedAt: Date.now(),
     note: '',

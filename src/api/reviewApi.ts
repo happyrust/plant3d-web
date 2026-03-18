@@ -176,11 +176,11 @@ export type CachePreloadResponse = {
 export type ConfirmedRecordData = {
   id?: string;
   taskId: string;
+  formId?: string;
   type: 'batch';
   annotations: unknown[];
   cloudAnnotations: unknown[];
   rectAnnotations: unknown[];
-  obbAnnotations: unknown[];
   measurements: unknown[];
   note: string;
 };

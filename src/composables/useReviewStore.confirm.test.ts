@@ -1,4 +1,20 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('@/api/reviewApi', () => ({
+  reviewRecordCreate: vi.fn(async (record) => ({
+    success: true,
+    record: {
+      ...record,
+      id: 'record-mocked-1',
+      confirmedAt: 1700000000000,
+    },
+  })),
+  reviewRecordDelete: vi.fn(async () => ({ success: true })),
+  reviewRecordGetByTaskId: vi.fn(async () => ({ success: true, records: [] })),
+  reviewRecordClearByTaskId: vi.fn(async () => ({ success: true })),
+  reviewTaskGetHistory: vi.fn(async () => ({ success: true, history: [] })),
+  getReviewUserWebSocketUrl: vi.fn(() => null),
+}));
 
 import { useReviewStore } from './useReviewStore';
 import { useToolStore } from './useToolStore';
@@ -65,5 +81,57 @@ describe('useReviewStore - confirm without OBB', () => {
     expect(confirmed[0].cloudAnnotations).toHaveLength(1);
     expect(confirmed[0].rectAnnotations).toHaveLength(1);
     expect('obbAnnotations' in confirmed[0]).toBe(false);
+  });
+
+  it('should preserve stable task and form lineage on confirmed records', async () => {
+    const reviewStore = useReviewStore();
+    const toolStore = useToolStore();
+
+    await reviewStore.setCurrentTask({
+      id: 'task-lineage-1',
+      formId: 'FORM-LINEAGE-1',
+      title: 'Lineage task',
+      description: '',
+      modelName: 'Demo',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: 'Designer',
+      checkerId: 'checker-1',
+      checkerName: 'Checker',
+      approverId: 'approver-1',
+      approverName: 'Approver',
+      reviewerId: 'checker-1',
+      reviewerName: 'Checker',
+      components: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      currentNode: 'jd',
+    });
+
+    toolStore.addAnnotation({
+      id: 'text-lineage-1',
+      entityId: 'entity-lineage-1',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: '1',
+      title: 'Lineage text',
+      description: '',
+      createdAt: Date.now(),
+    });
+
+    await reviewStore.addConfirmedRecord({
+      type: 'batch',
+      annotations: [...toolStore.annotations.value],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      note: 'Preserve lineage',
+      formId: undefined,
+    });
+
+    const confirmed = reviewStore.confirmedRecords.value[0];
+    expect(confirmed?.taskId).toBe('task-lineage-1');
+    expect(confirmed?.formId).toBe('FORM-LINEAGE-1');
   });
 });
