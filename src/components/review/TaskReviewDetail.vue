@@ -9,6 +9,7 @@ import {
   GitBranch,
   Info,
   Package,
+  Ruler,
   Paperclip,
   RefreshCw,
   User,
@@ -21,9 +22,10 @@ import {
   isCanonicalReturnedTask,
 } from './reviewTaskFilters';
 
+import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
-import { reviewTaskGetWorkflow } from '@/api/reviewApi';
+import { reviewRecordGetByTaskId, reviewTaskGetWorkflow } from '@/api/reviewApi';
 import Dialog from '@/components/ui/Dialog.vue';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitToast } from '@/ribbon/toastBus';
@@ -46,6 +48,9 @@ const userStore = useUserStore();
 const isLoadingHistory = ref(false);
 const workflowHistory = ref<WorkflowStep[]>([]);
 const workflowError = ref<string | null>(null);
+const isLoadingConfirmedRecords = ref(false);
+const confirmedRecordsError = ref<string | null>(null);
+const confirmedRecords = ref<ConfirmedRecord[]>([]);
 const resubmitLoading = ref(false);
 const resubmitError = ref<string | null>(null);
 const localTaskOverride = ref<ReviewTask | null>(null);
@@ -139,8 +144,53 @@ const detailRows = computed(() => [
 ]);
 
 const taskSummary = computed(() => `${componentCount.value} 个构件 · ${attachmentCount.value} 个附件`);
+const measurementRecords = computed(() => {
+  return [...confirmedRecords.value]
+    .sort((a, b) => b.confirmedAt - a.confirmedAt)
+    .filter((record) => record.measurements.length > 0);
+});
 const isReturnedTask = computed(() => isCanonicalReturnedTask(canonicalTask.value));
 const canResubmit = computed(() => isReturnedTask.value && canonicalTask.value.currentNode === 'sj' && canonicalTask.value.status === 'draft');
+
+function formatMeasurementKind(kind: ConfirmedRecord['measurements'][number]['kind']): string {
+  return kind === 'distance' ? '距离测量' : '角度测量';
+}
+
+function formatMeasurementSummary(measurement: ConfirmedRecord['measurements'][number]): string {
+  if (measurement.kind === 'distance') {
+    return `起点 ${measurement.origin.entityId} -> 终点 ${measurement.target.entityId}`;
+  }
+  return `起点 ${measurement.origin.entityId} -> 拐点 ${measurement.corner.entityId} -> 终点 ${measurement.target.entityId}`;
+}
+
+async function loadConfirmedRecords() {
+  isLoadingConfirmedRecords.value = true;
+  confirmedRecordsError.value = null;
+  try {
+    const response = await reviewRecordGetByTaskId(props.task.id);
+    if (!response.success) {
+      throw new Error(response.error_message || '加载确认记录失败');
+    }
+
+    confirmedRecords.value = (response.records || []).map((record) => ({
+      id: record.id || '',
+      taskId: record.taskId,
+      formId: record.formId,
+      type: 'batch',
+      annotations: record.annotations as ConfirmedRecord['annotations'],
+      cloudAnnotations: record.cloudAnnotations as ConfirmedRecord['cloudAnnotations'],
+      rectAnnotations: record.rectAnnotations as ConfirmedRecord['rectAnnotations'],
+      measurements: record.measurements as ConfirmedRecord['measurements'],
+      confirmedAt: record.confirmedAt,
+      note: record.note,
+    }));
+  } catch (error) {
+    confirmedRecords.value = [];
+    confirmedRecordsError.value = error instanceof Error ? error.message : '加载确认记录失败';
+  } finally {
+    isLoadingConfirmedRecords.value = false;
+  }
+}
 
 function formatDateTime(timestamp?: number): string {
   if (!timestamp) return '—';
@@ -223,8 +273,10 @@ async function handleResubmit() {
   try {
     await userStore.submitTaskToNextNode(props.task.id);
     localTaskOverride.value = userStore.reviewTasks.value.find((task) => task.id === props.task.id) ?? localTaskOverride.value;
-    await loadWorkflowHistory();
+    await Promise.all([loadWorkflowHistory(), loadConfirmedRecords()]);
+    await nextTick();
     emitToast({ message: '任务已再次提交到审核流程' });
+    open.value = false;
   } catch (error) {
     resubmitError.value = error instanceof Error ? error.message : '再次提交失败';
   } finally {
@@ -237,12 +289,13 @@ watch(
   () => {
     localTaskOverride.value = null;
     workflowHistory.value = [];
-    void loadWorkflowHistory();
+    confirmedRecords.value = [];
+    void Promise.all([loadWorkflowHistory(), loadConfirmedRecords()]);
   }
 );
 
 onMounted(() => {
-  void loadWorkflowHistory();
+  void Promise.all([loadWorkflowHistory(), loadConfirmedRecords()]);
 });
 </script>
 
@@ -411,6 +464,65 @@ onMounted(() => {
               </div>
             </li>
           </ol>
+        </div>
+
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <Ruler class="h-4 w-4 text-slate-500" />
+            已确认测量回放
+          </div>
+          <button type="button"
+            class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+            :disabled="isLoadingConfirmedRecords"
+            @click="loadConfirmedRecords">
+            <RefreshCw :class="['h-4 w-4', isLoadingConfirmedRecords && 'animate-spin']" />
+            刷新
+          </button>
+        </div>
+
+        <div v-if="confirmedRecordsError" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {{ confirmedRecordsError }}
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div v-if="isLoadingConfirmedRecords" class="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+            <RefreshCw class="h-4 w-4 animate-spin" />
+            <span>正在加载确认测量...</span>
+          </div>
+          <div v-else-if="measurementRecords.length === 0" class="py-10 text-center text-sm text-slate-500">
+            暂无已确认测量记录
+          </div>
+          <div v-else class="space-y-3" data-testid="task-review-detail-measurements">
+            <div v-for="record in measurementRecords"
+              :key="record.id"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div class="text-sm font-semibold text-slate-900">{{ record.measurements.length }} 条测量</div>
+                  <div class="mt-1 text-xs text-slate-500">确认时间：{{ formatDateTime(record.confirmedAt) }}</div>
+                </div>
+                <span class="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">
+                  {{ record.formId || record.taskId || '未绑定谱系' }}
+                </span>
+              </div>
+              <div v-if="record.note?.trim()" class="mt-2 rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
+                备注：{{ record.note }}
+              </div>
+              <div class="mt-3 space-y-2">
+                <div v-for="measurement in record.measurements"
+                  :key="measurement.id"
+                  class="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                      {{ formatMeasurementKind(measurement.kind) }}
+                    </span>
+                    <span class="text-xs text-slate-400">{{ measurement.id }}</span>
+                  </div>
+                  <div class="mt-1 text-sm text-slate-700">{{ formatMeasurementSummary(measurement) }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

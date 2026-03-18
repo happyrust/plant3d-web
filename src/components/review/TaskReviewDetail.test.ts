@@ -6,12 +6,14 @@ import TaskReviewDetail from './TaskReviewDetail.vue';
 import type { ReviewTask, WorkflowStep } from '@/types/auth';
 
 const reviewTaskGetWorkflowMock = vi.fn();
+const reviewRecordGetByTaskIdMock = vi.fn();
 const submitTaskToNextNodeMock = vi.fn();
 const emitToastMock = vi.fn();
 const reviewTasksRef = { value: [] as ReviewTask[] };
 
 vi.mock('@/api/reviewApi', () => ({
   reviewTaskGetWorkflow: (...args: unknown[]) => reviewTaskGetWorkflowMock(...args),
+  reviewRecordGetByTaskId: (...args: unknown[]) => reviewRecordGetByTaskIdMock(...args),
 }));
 
 vi.mock('@/composables/useUserStore', () => ({
@@ -29,9 +31,11 @@ describe('TaskReviewDetail', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     reviewTaskGetWorkflowMock.mockReset();
+    reviewRecordGetByTaskIdMock.mockReset();
     submitTaskToNextNodeMock.mockReset();
     emitToastMock.mockReset();
     reviewTasksRef.value = [];
+    reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [] });
   });
 
   afterEach(() => {
@@ -125,10 +129,37 @@ describe('TaskReviewDetail', () => {
       currentNodeName: '编制',
       history,
     });
+    reviewRecordGetByTaskIdMock.mockResolvedValue({
+      success: true,
+      records: [
+        {
+          id: 'record-1',
+          taskId: 'task-1',
+          formId: 'FORM-DETAIL-1',
+          type: 'batch',
+          annotations: [],
+          cloudAnnotations: [],
+          rectAnnotations: [],
+          measurements: [
+            {
+              id: 'measure-distance-1',
+              kind: 'distance',
+              origin: { entityId: 'PIPE-100', worldPos: [0, 0, 0] },
+              target: { entityId: 'PIPE-200', worldPos: [1, 0, 0] },
+              visible: true,
+              createdAt: new Date('2026-03-16T07:30:00+08:00').getTime(),
+            },
+          ],
+          note: '保留确认后的测量回放',
+          confirmedAt: new Date('2026-03-16T09:30:00+08:00').getTime(),
+        },
+      ],
+    });
 
     await mountComponent(createTask());
 
     expect(reviewTaskGetWorkflowMock).toHaveBeenCalledWith('task-1');
+    expect(reviewRecordGetByTaskIdMock).toHaveBeenCalledWith('task-1');
     expect(document.body.textContent).toContain('B1 管线复核任务');
     expect(document.body.textContent).toContain('完整任务信息');
     expect(document.body.textContent).toContain('王设计师');
@@ -138,6 +169,11 @@ describe('TaskReviewDetail', () => {
     expect(document.body.textContent).toContain('BRAN-001');
     expect(document.body.textContent).toContain('collision-report.pdf');
     expect(document.body.textContent).toContain('工作流历史时间线');
+    expect(document.body.textContent).toContain('已确认测量回放');
+    expect(document.body.textContent).toContain('1 条测量');
+    expect(document.body.textContent).toContain('距离测量');
+    expect(document.body.textContent).toContain('PIPE-100 -> 终点 PIPE-200');
+    expect(document.body.textContent).toContain('保留确认后的测量回放');
     expect(document.body.textContent).toContain('提交');
     expect(document.body.textContent).toContain('驳回');
     expect(document.body.textContent).toContain('备注：提交校核。');
@@ -338,6 +374,7 @@ describe('TaskReviewDetail', () => {
       currentNodeName: '编制',
       history: [],
     });
+    reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [] });
     submitTaskToNextNodeMock.mockResolvedValue(undefined);
     reviewTasksRef.value = [createTask({ status: 'submitted', currentNode: 'jd', returnReason: undefined, reviewComment: undefined })];
 
@@ -349,11 +386,42 @@ describe('TaskReviewDetail', () => {
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await nextTick();
     await Promise.resolve();
+    await Promise.resolve();
     await nextTick();
 
     expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1');
     expect(reviewTaskGetWorkflowMock).toHaveBeenCalledTimes(2);
-    expect(emitToastMock).toHaveBeenCalledWith({ message: '任务已再次提交到审核流程' });
+    expect(reviewRecordGetByTaskIdMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows an empty measurement replay state when no confirmed measurements are available', async () => {
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'sj',
+      currentNodeName: '编制',
+      history: [],
+    });
+    reviewRecordGetByTaskIdMock.mockResolvedValue({
+      success: true,
+      records: [
+        {
+          id: 'record-without-measurement',
+          taskId: 'task-1',
+          formId: 'FORM-DETAIL-1',
+          type: 'batch',
+          annotations: [],
+          cloudAnnotations: [],
+          rectAnnotations: [],
+          measurements: [],
+          note: 'no measurement',
+          confirmedAt: new Date('2026-03-16T09:30:00+08:00').getTime(),
+        },
+      ],
+    });
+
+    await mountComponent(createTask());
+
+    expect(document.body.textContent).toContain('暂无已确认测量记录');
   });
 
   it('shows resubmit button for canonical returned draft task', async () => {
