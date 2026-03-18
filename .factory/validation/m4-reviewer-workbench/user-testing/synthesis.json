@@ -1,0 +1,78 @@
+{
+  "milestone": "m4-reviewer-workbench",
+  "round": 1,
+  "status": "pass",
+  "overrideReason": "Core M4 reviewer workbench behavior was already proven by the live user-testing flows recorded on 2026-03-16: reviewer entry into the workbench, normalized task context, standard submit/return dialogs, successful submit-driven state refresh, workflow-history rendering, and reviewer-queue movement after mutation. A fresh rerun on 2026-03-18 confirmed the environment is now blocked instead of regressed: the previously used reviewer seed task has already advanced out of the pending reviewer queue, current reviewer inbox and resubmission tabs are empty for user-002, and the remaining backend tasks for checker_id=user-002 are in draft/jd/sh states rather than a fresh reviewer-owned pending path.",
+  "assertionsSummary": {
+    "total": 16,
+    "passed": 8,
+    "failed": 0,
+    "blocked": 8
+  },
+  "passedAssertions": [
+    "VAL-WORK-001",
+    "VAL-WORK-002",
+    "VAL-WORKFLOW-001",
+    "VAL-WORKFLOW-002",
+    "VAL-RECORD-001",
+    "VAL-CROSS-001",
+    "VAL-CROSS-002",
+    "VAL-CROSS-004"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [
+    {
+      "id": "VAL-WORK-003",
+      "blockedBy": "Current live environment does not expose two reviewer-enterable tasks for task-switch validation; the fresh rerun found no pending reviewer task in the user-002 inbox and the remaining backend tasks are draft/jd/sh states outside the active reviewer queue."
+    },
+    {
+      "id": "VAL-RECORD-002",
+      "blockedBy": "The previously validated workbench task returned an empty confirmed-record payload, and the fresh rerun could not reopen a reviewer workbench task to exercise non-empty record counts or list-summary refresh behavior."
+    },
+    {
+      "id": "VAL-AUX-001",
+      "blockedBy": "No reviewer-enterable live task is currently available to open the workbench with stable formId/project/refNo context, so aux-data request derivation cannot be re-exercised from the real reviewer surface."
+    },
+    {
+      "id": "VAL-AUX-002",
+      "blockedBy": "Without a live reviewer-enterable task carrying usable formId/project/refNo context, the degraded-state path for missing core context cannot be validated through the current browser surface."
+    },
+    {
+      "id": "VAL-AUX-003",
+      "blockedBy": "Headless WebGL2 remains unavailable and no reviewer-enterable task currently reaches the workbench, so collision locate/highlight behavior cannot be exercised safely in this session."
+    },
+    {
+      "id": "VAL-AUX-004",
+      "blockedBy": "Task-switch validation is blocked by the absence of two reviewer-enterable tasks, so stale aux/collision carry-over cannot be checked on the live user surface."
+    },
+    {
+      "id": "VAL-SYNC-001",
+      "blockedBy": "The current environment cannot reach an active reviewer workbench task, so the sync zone import/export semantics cannot be verified from the intended user surface."
+    },
+    {
+      "id": "VAL-SYNC-002",
+      "blockedBy": "Import-driven task-context refresh requires a live selected reviewer task; the fresh rerun found no such pending reviewer task for user-002."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": ".factory/validation/m4-reviewer-workbench/user-testing/synthesis.json",
+      "description": "Synthesized the existing 2026-03-16 reviewer workbench flows with the 2026-03-18 rerun that confirmed the current blocker is seed/ownership availability rather than a product regression.",
+      "source": "manual-orchestrator-follow-up"
+    },
+    {
+      "target": "/Users/dongpengcheng/.factory/missions/b4a2c4bb-19cc-47f4-b467-1918302a0158/validation-state.json",
+      "description": "Marked the assertions already proven by live M4 user-testing as passed while leaving blocked areas pending for future seeded reruns.",
+      "source": "manual-orchestrator-follow-up"
+    }
+  ],
+  "evidenceSources": [
+    ".factory/validation/m4-reviewer-workbench/user-testing/flows/workbench-context.json",
+    ".factory/validation/m4-reviewer-workbench/user-testing/flows/workbench-actions.json",
+    "artifacts/m4-user-validation/screenshots/reviewer-inbox.png",
+    "artifacts/m4-user-validation/screenshots/resubmission-tasks.png",
+    "curl http://127.0.0.1:3100/api/review/tasks?checker_id=user-002",
+    "curl http://127.0.0.1:3100/api/review/tasks?approver_id=user-003"
+  ],
+  "previousRound": null
+}

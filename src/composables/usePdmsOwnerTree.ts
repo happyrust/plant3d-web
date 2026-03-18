@@ -111,6 +111,9 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
   const SUBTREE_MAX_DEPTH = 256;
   const SUBTREE_LIMIT = 200_000;
 
+  // 缓存 queryVisibleInstRefnos 结果，避免选中组节点时重复请求后端
+  const visibleInstCache = new Map<string, string[]>();
+
   function resetAllState() {
     nodesById.value = {};
     rootIds.value = [];
@@ -131,6 +134,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     childrenCountById.value = new Map();
     childrenLoadedById.clear();
     childrenLoadingById.clear();
+    visibleInstCache.clear();
   }
 
   function rebuildInitialChecks() {
@@ -689,8 +693,25 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
 
     const union = new Set<string>();
     for (const id of selectedIds.value) {
-      const ids = collectLoadedSubtreeRefnos(id);
-      for (const refno of ids) union.add(refno);
+      const localIds = collectLoadedSubtreeRefnos(id);
+
+      // 检查是否为"子节点未加载的组节点"：前端树只有自身，但后端显示有子节点
+      const node = nodesById.value[id];
+      const childrenNotLoaded = node && node.childrenIds.length === 0 && (childrenCountById.value.get(id) ?? 0) > 0;
+
+      if (localIds.length <= 1 && childrenNotLoaded) {
+        // 组节点且子节点未展开：使用缓存或后端查询可见实例 refnos
+        let cached = visibleInstCache.get(id);
+        if (!cached) {
+          cached = await queryVisibleInstRefnos(id);
+          if (cached.length > 0) visibleInstCache.set(id, cached);
+        }
+        for (const refno of cached) union.add(refno);
+        // 始终包含自身
+        union.add(id);
+      } else {
+        for (const refno of localIds) union.add(refno);
+      }
     }
 
     const list = Array.from(union);

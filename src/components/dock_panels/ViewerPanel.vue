@@ -2963,13 +2963,26 @@ onMounted(async () => {
         const ds = urlDataSource || 'auto';
         console.log(`[show_refno] refno=${showRefno} -> dbnum=${dbno}, dataSource=${ds}`);
 
+        // 先查询可见子实例（容器节点本身在 Parquet 中没有几何数据）
+        let loadRefnos = [showRefno];
+        try {
+          const visResp = await e3dGetVisibleInsts(showRefno);
+          const visRefnos = visResp?.refnos ?? [];
+          if (visRefnos.length > 0) {
+            loadRefnos = visRefnos;
+            console.log(`[show_refno] visible-insts 返回 ${visRefnos.length} 个子实例`);
+          }
+        } catch (e) {
+          console.warn('[show_refno] visible-insts 查询失败，回退直接加载', e);
+        }
+
         const result = await loadDbnoInstancesForVisibleRefnosDtx(
           dtxLayer,
           dbno,
-          [showRefno],
+          loadRefnos,
           { lodAssetKey: 'L1', debug: true, dataSource: ds }
         );
-        (compat as any).__dtxAfterInstancesLoaded?.(dbno, [showRefno]);
+        (compat as any).__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
 
         requestRender();
         const box = dtxLayer.getBoundingBox();

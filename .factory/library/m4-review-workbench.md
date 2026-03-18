@@ -34,3 +34,8 @@ Mission-specific reference for `M4：审核工作台基础版`.
 - Do not fall back to whole-repo `npm test` as the milestone gate for M4 reviewer workbench work.
 - If unrelated annotation/parquet suites fail during exploratory whole-repo validation, record them as baseline noise tied to `VAL-CROSS-005` rather than blocking M4 implementation.
 - Keep the noise note specific: list the unrelated suites or areas, then state that scoped reviewer workbench checks still passed.
+
+
+## Shell Invariants
+- The five M4 zones (context, workflow actions/history, confirmed records, aux-data, sync) are default-visible workbench structure and should read as one stable shell grouping, not scattered top-level cards or optional modules.
+- The shell must not retain a second aux-data request path with silent `task.id`, `default`, or `guest` fallbacks once `ReviewAuxData` is the compliant implementation.

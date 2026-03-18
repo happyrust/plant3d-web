@@ -567,24 +567,7 @@ export class DTXLayer {
     // 存储矩阵数据
     matrix.toArray(this._matricesBuffer, objectIndex * 16);
 
-    // 计算或使用预计算的世界包围盒
-    if (precomputedAabb && precomputedAabb.min && precomputedAabb.max) {
-      // 使用 instances.json 中预计算的 AABB，避免重复计算
-      obj.boundingBox.set(
-        new Vector3(precomputedAabb.min[0], precomputedAabb.min[1], precomputedAabb.min[2]),
-        new Vector3(precomputedAabb.max[0], precomputedAabb.max[1], precomputedAabb.max[2])
-      );
-      if (this._debug) {
-        // console.log(`📦 使用预计算 AABB: ${objectId}`, precomputedAabb);
-      }
-    } else {
-      // 动态计算对象的世界包围盒（兜底逻辑）
-      const geoBBox = this._computeGeometryLocalBBox(geoHandle);
-      obj.boundingBox.copy(geoBBox).applyMatrix4(matrix);
-      if (this._debug) {
-        // console.log(`🔧 动态计算 AABB: ${objectId}`);
-      }
-    }
+    obj.boundingBox.copy(this._resolveObjectBoundingBox(geoHandle, matrix, precomputedAabb, objectId));
     this._sceneBoundingBox.union(obj.boundingBox);
 
     // 存储颜色/标志数据 (4 pixels * 4 channels = 16 bytes)
@@ -659,6 +642,63 @@ export class DTXLayer {
     }
     this._geometryLocalBBoxes.set(handle.geoHash, bbox);
     return bbox;
+  }
+
+  private _computeDynamicObjectBoundingBox(handle: GeometryHandle, matrix: Matrix4): Box3 {
+    return this._computeGeometryLocalBBox(handle).clone().applyMatrix4(matrix);
+  }
+
+  private _resolveObjectBoundingBox(
+    handle: GeometryHandle,
+    matrix: Matrix4,
+    precomputedAabb?: { min: number[]; max: number[] } | null,
+    objectId?: string
+  ): Box3 {
+    const dynamicBox = this._computeDynamicObjectBoundingBox(handle, matrix);
+    if (!precomputedAabb?.min || !precomputedAabb?.max) {
+      return dynamicBox;
+    }
+
+    const precomputedBox = new Box3(
+      new Vector3(precomputedAabb.min[0], precomputedAabb.min[1], precomputedAabb.min[2]),
+      new Vector3(precomputedAabb.max[0], precomputedAabb.max[1], precomputedAabb.max[2]),
+    );
+
+    if (precomputedBox.isEmpty()) {
+      return dynamicBox;
+    }
+
+    const precomputedSize = precomputedBox.getSize(new Vector3());
+    const dynamicSize = dynamicBox.getSize(new Vector3());
+    const precomputedCenter = precomputedBox.getCenter(new Vector3());
+    const dynamicCenter = dynamicBox.getCenter(new Vector3());
+
+    const precomputedMaxDim = Math.max(precomputedSize.x, precomputedSize.y, precomputedSize.z);
+    const dynamicMaxDim = Math.max(dynamicSize.x, dynamicSize.y, dynamicSize.z);
+    const centerDistance = precomputedCenter.distanceTo(dynamicCenter);
+
+    const sizeRatio =
+      precomputedMaxDim > 1e-9 && dynamicMaxDim > 1e-9
+        ? Math.max(precomputedMaxDim, dynamicMaxDim) / Math.min(precomputedMaxDim, dynamicMaxDim)
+        : 1;
+
+    const suspiciousCenter = centerDistance > Math.max(precomputedMaxDim, dynamicMaxDim, 1) * 2;
+    const suspiciousScale = sizeRatio > 100;
+
+    if (suspiciousCenter || suspiciousScale) {
+      if (this._debug) {
+        console.warn('⚠️ 预计算 AABB 与实例矩阵不一致，回退到动态包围盒', {
+          objectId,
+          centerDistance,
+          precomputedMaxDim,
+          dynamicMaxDim,
+          sizeRatio,
+        });
+      }
+      return dynamicBox;
+    }
+
+    return precomputedBox;
   }
 
   /**

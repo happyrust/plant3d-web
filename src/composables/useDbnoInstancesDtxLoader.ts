@@ -569,7 +569,15 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       continue;
     }
 
-    const objectIds: string[] = [];
+    const bucketHasOwnGeometry = insts.some((inst) => {
+      const geoHash = String((inst as any).geo_hash || '');
+      if (!geoHash) return false;
+      const actualRefnoKey = normalizeRefnoKey(String((inst as any).uniforms?.refno || refnoKey));
+      const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '');
+      return actualRefnoKey === refnoKey && noun !== 'TUBI';
+    });
+
+    const objectIdsByMappedRefno = new Map<string, string[]>();
     let refnoNoun = '';
 
     for (const inst of insts) {
@@ -585,8 +593,6 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       if (matrixData.some((v: any) => v === null || v === undefined || typeof v !== 'number')) {
         continue;
       }
-
-      const objectId = `o:${refnoKey}:${cache.objectCounter++}`;
       const matrix = new Matrix4().fromArray(matrixData);
 
       const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '');
@@ -613,6 +619,13 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         continue;
       }
 
+      const actualRefnoKey = normalizeRefnoKey(String((inst as any).uniforms?.refno || refnoKey)) || refnoKey;
+      const mappedRefnoKey =
+        bucketHasOwnGeometry && actualRefnoKey !== refnoKey
+          ? actualRefnoKey
+          : refnoKey;
+      const objectId = `o:${mappedRefnoKey}:${cache.objectCounter++}`;
+
       // 获取预计算的 AABB（如果 instances.json 中提供了）
       const precomputedAabb = (inst as any).aabb ?? null;
 
@@ -629,8 +642,10 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         precomputedAabb // 传递预计算的 AABB
       );
 
-      objectIds.push(objectId);
-      cache.objectIdToRefno.set(objectId, refnoKey);
+      const mappedObjectIds = objectIdsByMappedRefno.get(mappedRefnoKey) ?? [];
+      mappedObjectIds.push(objectId);
+      objectIdsByMappedRefno.set(mappedRefnoKey, mappedObjectIds);
+      cache.objectIdToRefno.set(objectId, mappedRefnoKey);
       cache.objectIdToSpecValue.set(objectId, specValue);
       loadedObjects++;
 
@@ -638,14 +653,30 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       if (Array.isArray(refnoTransform) && refnoTransform.length === 16) {
         // 检查 refnoTransform 数组中是否包含 null 或 undefined
         const hasInvalidValue = refnoTransform.some((v: any) => v === null || v === undefined || typeof v !== 'number');
-        if (!hasInvalidValue && !cache.refnoTransform.has(refnoKey)) {
-          cache.refnoTransform.set(refnoKey, refnoTransform as number[]);
+        if (!hasInvalidValue && !cache.refnoTransform.has(mappedRefnoKey)) {
+          cache.refnoTransform.set(mappedRefnoKey, refnoTransform as number[]);
         }
       }
+      if (noun && !cache.refnoToNoun.has(mappedRefnoKey)) {
+        cache.refnoToNoun.set(mappedRefnoKey, noun);
+      }
+      if (instOwnerNoun && !cache.refnoToOwnerNoun.has(mappedRefnoKey)) {
+        cache.refnoToOwnerNoun.set(mappedRefnoKey, instOwnerNoun);
+      }
+      const ownerRef = normalizeRefnoKey(String((inst as any).uniforms?.owner_refno || ''));
+      if (ownerRef && !cache.refnoToOwnerRefno.has(mappedRefnoKey)) {
+        cache.refnoToOwnerRefno.set(mappedRefnoKey, ownerRef);
+      }
+      if (!cache.refnoToSpecValue.has(mappedRefnoKey)) {
+        cache.refnoToSpecValue.set(mappedRefnoKey, specValue);
+      }
+      cache.loadedRefnos.add(mappedRefnoKey);
     }
 
-    if (objectIds.length > 0) {
-      cache.refnoToObjectIds.set(refnoKey, objectIds);
+    for (const [mappedRefnoKey, objectIds] of objectIdsByMappedRefno.entries()) {
+      if (objectIds.length === 0) continue;
+      const existingObjectIds = cache.refnoToObjectIds.get(mappedRefnoKey) ?? [];
+      cache.refnoToObjectIds.set(mappedRefnoKey, [...existingObjectIds, ...objectIds]);
     }
     if (refnoNoun) {
       cache.refnoToNoun.set(refnoKey, refnoNoun);
