@@ -18,10 +18,8 @@ type ToolsApi = {
   highlightAnnotationTargets?: (refnos: string[]) => void;
   flyToCloudAnnotation?: (id: string) => void;
   flyToRectAnnotation?: (id: string) => void;
-  flyToObbAnnotation?: (id: string) => void;
   removeCloudAnnotation?: (id: string) => void;
   removeRectAnnotation?: (id: string) => void;
-  removeObbAnnotation?: (id: string) => void;
 };
 
 const props = defineProps<{
@@ -43,10 +41,6 @@ const sortedRect = computed(() => {
   return [...store.rectAnnotations.value].sort((a, b) => b.createdAt - a.createdAt);
 });
 
-const sortedObb = computed(() => {
-  return [...store.obbAnnotations.value].sort((a, b) => b.createdAt - a.createdAt);
-});
-
 const activeText = computed(() => {
   const id = store.activeAnnotationId.value;
   if (!id) return null;
@@ -65,14 +59,8 @@ const activeRect = computed(() => {
   return store.rectAnnotations.value.find((a) => a.id === id) || null;
 });
 
-const activeObb = computed(() => {
-  const id = store.activeObbAnnotationId.value;
-  if (!id) return null;
-  return store.obbAnnotations.value.find((a) => a.id === id) || null;
-});
-
 const activeAny = computed(() => {
-  return activeText.value || activeCloud.value || activeRect.value || activeObb.value;
+  return activeText.value || activeCloud.value || activeRect.value;
 });
 
 const currentFocusType = computed<AnnotationType | null>(() => {
@@ -83,8 +71,6 @@ const currentFocusType = computed<AnnotationType | null>(() => {
       return 'cloud';
     case 'annotation_rect':
       return 'rect';
-    case 'annotation_obb':
-      return 'obb';
     default:
       return store.activeAnnotationContext.value?.type ?? null;
   }
@@ -98,8 +84,6 @@ const currentFocusTypeLabel = computed(() => {
       return '云线批注';
     case 'rect':
       return '矩形批注';
-    case 'obb':
-      return 'OBB 批注';
     default:
       return '未选择';
   }
@@ -121,7 +105,7 @@ function isSectionFocused(type: AnnotationType): boolean {
   return currentFocusType.value === type;
 }
 
-function setMode(mode: 'none' | 'annotation' | 'annotation_cloud' | 'annotation_rect' | 'annotation_obb') {
+function setMode(mode: 'none' | 'annotation' | 'annotation_cloud' | 'annotation_rect') {
   store.setToolMode(mode);
 }
 
@@ -129,28 +113,18 @@ function setActiveText(id: string) {
   store.activeAnnotationId.value = id;
   store.activeCloudAnnotationId.value = null;
   store.activeRectAnnotationId.value = null;
-  store.activeObbAnnotationId.value = null;
 }
 
 function setActiveCloudAnno(id: string) {
   store.activeCloudAnnotationId.value = id;
   store.activeAnnotationId.value = null;
   store.activeRectAnnotationId.value = null;
-  store.activeObbAnnotationId.value = null;
 }
 
 function setActiveRectAnno(id: string) {
   store.activeRectAnnotationId.value = id;
   store.activeAnnotationId.value = null;
   store.activeCloudAnnotationId.value = null;
-  store.activeObbAnnotationId.value = null;
-}
-
-function setActiveObbAnno(id: string) {
-  store.activeObbAnnotationId.value = id;
-  store.activeAnnotationId.value = null;
-  store.activeCloudAnnotationId.value = null;
-  store.activeRectAnnotationId.value = null;
 }
 
 function toggleTextVisible(id: string, current: boolean) {
@@ -201,23 +175,6 @@ function flyRect(id: string) {
   props.tools.flyToRectAnnotation?.(id);
 }
 
-function flyObb(id: string) {
-  // 找到批注记录，获取关联的 refnos 或 objectIds
-  const annotation = store.obbAnnotations.value.find((a) => a.id === id);
-  const refnosToShow = annotation?.refnos && annotation.refnos.length > 0
-    ? annotation.refnos
-    : annotation?.objectIds || [];
-  if (refnosToShow.length > 0) {
-    // 触发模型显示事件，确保关联的模型已加载
-    window.dispatchEvent(
-      new CustomEvent('showModelByRefnos', {
-        detail: { refnos: refnosToShow, regenModel: false }
-      })
-    );
-  }
-  props.tools.flyToObbAnnotation?.(id);
-}
-
 function removeText(id: string) {
   props.tools.removeAnnotation(id);
 }
@@ -238,14 +195,6 @@ function removeRect(id: string) {
   }
 }
 
-function removeObb(id: string) {
-  if (props.tools.removeObbAnnotation) {
-    props.tools.removeObbAnnotation(id);
-  } else {
-    store.removeObbAnnotation(id);
-  }
-}
-
 function updateTitle(v: string) {
   if (activeText.value) {
     store.updateAnnotation(activeText.value.id, { title: v });
@@ -258,9 +207,6 @@ function updateTitle(v: string) {
   if (activeRect.value) {
     store.updateRectAnnotation(activeRect.value.id, { title: v });
     return;
-  }
-  if (activeObb.value) {
-    store.updateObbAnnotation(activeObb.value.id, { title: v });
   }
 }
 
@@ -277,20 +223,12 @@ function updateDescription(v: string) {
     store.updateRectAnnotation(activeRect.value.id, { description: v });
     return;
   }
-  if (activeObb.value) {
-    store.updateObbAnnotation(activeObb.value.id, { description: v });
-  }
 }
 
 function toggleActiveTextCollapsed() {
   if (!activeText.value) return;
   store.updateAnnotation(activeText.value.id, { collapsed: !activeTextCollapsed.value });
 }
-
-// OBB 创建后弹窗编辑
-const showObbEditDialog = ref(false);
-const pendingObbTitle = ref('');
-const pendingObbDescription = ref('');
 
 // 文字批注创建后弹窗编辑
 const showTextEditDialog = ref(false);
@@ -304,17 +242,6 @@ const pendingAnnotationRefno = computed(() => {
   return rec?.refno || null;
 });
 
-watch(() => store.pendingObbEditId.value, (id) => {
-  if (id) {
-    const rec = store.obbAnnotations.value.find((a) => a.id === id);
-    if (rec) {
-      pendingObbTitle.value = rec.title;
-      pendingObbDescription.value = rec.description;
-      showObbEditDialog.value = true;
-    }
-  }
-}, { immediate: true });
-
 watch(() => store.pendingTextAnnotationEditId.value, (id) => {
   if (id) {
     const rec = store.annotations.value.find((a) => a.id === id);
@@ -325,23 +252,6 @@ watch(() => store.pendingTextAnnotationEditId.value, (id) => {
     }
   }
 }, { immediate: true });
-
-function confirmObbEdit() {
-  const id = store.pendingObbEditId.value;
-  if (id) {
-    store.updateObbAnnotation(id, {
-      title: pendingObbTitle.value,
-      description: pendingObbDescription.value,
-    });
-  }
-  showObbEditDialog.value = false;
-  store.pendingObbEditId.value = null;
-}
-
-function cancelObbEdit() {
-  showObbEditDialog.value = false;
-  store.pendingObbEditId.value = null;
-}
 
 function confirmTextEdit() {
   const id = store.pendingTextAnnotationEditId.value;
@@ -372,12 +282,6 @@ function highlightCloudRefnos(refnos: string[]) {
   }
 }
 
-function highlightObbRefnos(refnos: string[]) {
-  if (props.tools.highlightAnnotationTargets && refnos.length > 0) {
-    props.tools.highlightAnnotationTargets(refnos);
-  }
-}
-
 // ==================== 评论/意见管理 ====================
 
 const newCommentContent = ref('');
@@ -393,7 +297,6 @@ const activeAnnotationType = computed<AnnotationType | null>(() => {
   if (activeText.value) return 'text';
   if (activeCloud.value) return 'cloud';
   if (activeRect.value) return 'rect';
-  if (activeObb.value) return 'obb';
   return null;
 });
 
@@ -579,43 +482,6 @@ function formatCommentTime(timestamp: number): string {
       </div>
     </div>
 
-    <!-- OBB 创建后编辑弹窗 -->
-    <div v-if="showObbEditDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="w-80 rounded-lg border border-border bg-background p-4 shadow-xl">
-        <div class="text-base font-semibold">编辑 OBB 批注</div>
-        <div class="mt-1 text-xs text-muted-foreground">框选完成，请输入批注信息</div>
-
-        <div class="mt-4 flex flex-col gap-3">
-          <div>
-            <label class="text-xs text-muted-foreground">标题</label>
-            <input v-model="pendingObbTitle"
-              class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              placeholder="输入批注标题" @keyup.enter="confirmObbEdit" />
-          </div>
-
-          <div>
-            <label class="text-xs text-muted-foreground">描述</label>
-            <textarea v-model="pendingObbDescription"
-              class="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="输入批注描述（可选）" />
-          </div>
-        </div>
-
-        <div class="mt-4 flex justify-end gap-2">
-          <button type="button"
-            class="h-9 rounded-md border border-input bg-background px-4 text-sm hover:bg-muted"
-            @click="cancelObbEdit">
-            取消
-          </button>
-          <button type="button"
-            class="h-9 rounded-md bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
-            @click="confirmObbEdit">
-            确定
-          </button>
-        </div>
-      </div>
-    </div>
-
     <div class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">工具状态</div>
       <div class="mt-1 text-xs text-muted-foreground">{{ tools.statusText }}</div>
@@ -648,17 +514,10 @@ function formatCommentTime(timestamp: number): string {
           @click="setMode('annotation_rect')">
           矩形
         </button>
-
-        <button type="button"
-          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
-          :class="store.toolMode.value === 'annotation_obb' ? 'bg-muted' : ''"
-          @click="setMode('annotation_obb')">
-          OBB框选
-        </button>
       </div>
 
       <div class="mt-2 text-xs text-muted-foreground">
-        文字/云线/矩形：点击模型表面创建。OBB框选：拖拽框选物体生成包围盒批注。
+        文字/云线/矩形：点击模型表面创建 reviewer 可见批注。
       </div>
 
       <div class="mt-3 grid gap-2 sm:grid-cols-2">
@@ -855,69 +714,6 @@ function formatCommentTime(timestamp: number): string {
             <button type="button"
               class="h-8 rounded-md border border-input bg-background px-2 text-xs text-destructive hover:bg-muted"
               @click.stop="removeRect(a.id)">
-              删除
-            </button>
-          </div>
-        </button>
-      </div>
-    </div>
-
-    <div data-testid="annotation-panel-section-obb"
-      class="rounded-md border border-border bg-background p-3 transition-colors"
-      :data-active="isSectionFocused('obb') ? 'true' : 'false'"
-      :class="isSectionFocused('obb') ? 'border-ring bg-muted/20' : ''">
-      <div class="flex items-center justify-between gap-2">
-        <div class="text-sm font-semibold">OBB框选批注</div>
-        <div class="text-xs text-muted-foreground">共 {{ store.obbAnnotationCount }} 条</div>
-      </div>
-
-      <div v-if="sortedObb.length === 0" class="mt-2 text-sm text-muted-foreground">
-        暂无OBB批注。进入OBB框选模式后拖拽框选物体即可创建。
-      </div>
-
-      <div v-else class="mt-2 flex flex-col gap-2">
-        <button v-for="a in sortedObb"
-          :key="a.id"
-          type="button"
-          class="w-full rounded-md border border-border p-2 text-left hover:bg-muted"
-          :class="store.activeObbAnnotationId.value === a.id ? 'bg-muted' : ''"
-          @click="setActiveObbAnno(a.id)">
-          <div class="flex items-center justify-between gap-2">
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm">
-                <span class="font-semibold">{{ a.title }}</span>
-                <span class="ml-2 text-xs text-muted-foreground">({{ a.objectIds.length }}个物体)</span>
-              </div>
-              <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
-            </div>
-
-            <div class="flex shrink-0 items-center gap-2">
-              <span class="text-xs text-muted-foreground">{{ new Date(a.createdAt).toLocaleString() }}</span>
-            </div>
-          </div>
-
-          <div class="mt-2 flex flex-wrap gap-2">
-            <button type="button"
-              class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-              @click.stop="flyObb(a.id)">
-              定位
-            </button>
-
-            <button v-if="(a.refnos && a.refnos.length > 0) || a.objectIds.length > 0" type="button"
-              class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-              @click.stop="highlightObbRefnos(a.refnos && a.refnos.length > 0 ? a.refnos : a.objectIds)">
-              高亮
-            </button>
-
-            <button type="button"
-              class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-              @click.stop="toggleObbVisible(a.id, a.visible)">
-              {{ a.visible ? '隐藏' : '显示' }}
-            </button>
-
-            <button type="button"
-              class="h-8 rounded-md border border-input bg-background px-2 text-xs text-destructive hover:bg-muted"
-              @click.stop="removeObb(a.id)">
               删除
             </button>
           </div>

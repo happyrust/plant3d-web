@@ -1,34 +1,41 @@
 # Environment
 
-环境变量、外部依赖和设置说明。
+Environment variables, external dependencies, and setup notes for the current mission.
 
-**What belongs here:** 必需的环境变量、外部 API 密钥/服务、依赖特性、平台特定说明。
-**What does NOT belong here:** 服务端口/命令（使用 `.factory/services.yaml`）。
+**What belongs here:** required environment variables, shared services, runtime assumptions, and mission-specific environment blockers.
+**What does NOT belong here:** service commands and ports (use `.factory/services.yaml`).
 
 ---
 
-## 开发环境
+## Local Development Environment
 
 - Node.js 18+
-- npm 或 pnpm
-- 现代浏览器（Chrome/Firefox/Safari 最新版本）
+- npm or pnpm
+- Modern browser tooling for local validation
 
-## 后端依赖
+## Shared Service Assumptions
 
-- 后端 API: http://127.0.0.1:3100
-- WebSocket: ws://127.0.0.1:3100/ws/review
-- 注意：后端必须运行才能完整测试功能
-- 对于 M4 reviewer workbench mission，部分 reviewer-owned 任务、confirmed records、aux-data seed 可能在某些会话中缺失；这种情况应记录为环境 blocker，而不是误判为产品通过/失败
+- Frontend app: http://127.0.0.1:3101
+- Backend API: http://127.0.0.1:3100
+- Review websocket path may exist, but mission success should not depend on a websocket-first rewrite
+- Shared backend on 3100 must remain running; mission workers should not stop it
 
-## 环境变量
+## Mission-Specific Environment Notes
 
-项目使用 Vite 环境变量，参考 `.env.example`（如果存在）。
+- The M6+M7 mission depends on **scripted demo data** for deterministic reviewer/designer validation.
+- Missing seeded reviewer/designer tasks are an environment blocker, not evidence that the product passes or fails.
+- Headless WebGL2 limitations may block realistic annotation/measurement replay validation even when other surfaces are reachable; record this explicitly when encountered.
+- Current browser validation concurrency is limited to 1 because machine headroom is constrained.
 
-当前不需要额外的环境变量配置。
+## Environment Variables
 
-## Lint 命令说明
+The project uses Vite environment variables. Follow `.env.example` if additional variables become necessary.
 
-`package.json` 中的 `npm run lint` 脚本硬编码为 `eslint . --fix`，会扫描整个仓库。
+No new mission-specific environment variables are required by default; if workers add any, they must document them here and keep secrets out of git.
 
-- `npm run lint -- <files>` 仍会运行全仓库 lint（参数被忽略）
-- 如需仅检查特定文件，使用：`npx eslint <files>`
+## Lint Note
+
+`npm run lint` in `package.json` uses `eslint . --fix` across the whole repository.
+
+- Use `npx eslint <files>` for focused read-only checks on mission-owned files.
+- Do not rely on whole-repo lint output as the milestone gate when focused checks already prove the changed surface.

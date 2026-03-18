@@ -148,8 +148,7 @@ function formatDateTime(timestamp: number): string {
 function getConfirmedAnnotationCount(record: ConfirmedRecordEntry): number {
   return record.annotations.length +
     record.cloudAnnotations.length +
-    record.rectAnnotations.length +
-    record.obbAnnotations.length;
+    record.rectAnnotations.length;
 }
 
 function getConfirmedMeasurementCount(record: ConfirmedRecordEntry): number {
@@ -479,8 +478,7 @@ const pendingAnnotationCount = computed(() => {
   return (
     toolStore.annotationCount.value +
     toolStore.cloudAnnotationCount.value +
-    toolStore.rectAnnotationCount.value +
-    toolStore.obbAnnotationCount.value
+    toolStore.rectAnnotationCount.value
   );
 });
 
@@ -541,7 +539,6 @@ async function confirmCurrentData() {
         annotations: [...toolStore.annotations.value],
         cloudAnnotations: [...toolStore.cloudAnnotations.value],
         rectAnnotations: [...toolStore.rectAnnotations.value],
-        obbAnnotations: [...toolStore.obbAnnotations.value],
         measurements: [...toolStore.measurements.value],
         note: confirmNote.value.trim(),
       },

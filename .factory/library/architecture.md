@@ -1,46 +1,50 @@
-# M5 Consistency Follow-up Architecture
+# M6+M7 Reviewer Annotation And Collaboration Architecture
 
 ## Mission Scope
 
-This follow-up mission repairs consistency across the already-implemented M5 designer/reviewer flows in `plant3d-web`.
+This mission delivers:
+- M6 reviewer annotation canonicalization and direct-launch tooling in the reviewer workbench
+- M7 dual-scope collaboration across reviewer and designer surfaces
+- scripted demo data for deterministic reviewer/designer validation
 
 Primary scope:
-- canonical returned-task / resubmittable-task semantics
-- designer tracking consistency across list/detail/resubmit surfaces
-- cross-flow consistency between designer and reviewer views
-- websocket payload normalization and realtime list convergence
-- navigation persistence consistency across designer/reviewer/resubmission task lists
+- reviewer workbench direct-launch for annotation and measurement
+- canonical reviewer annotation semantics: text / cloud / rectangle
+- confirmed measurement replay
+- explicit task-thread and annotation-thread collaboration
+- reviewer/designer closed-loop continuity through return / resubmit / reopen
+- seeded demo scenarios for repeatable browser validation
 
-This mission does **not** introduce new product features or change backend API contracts.
+This mission does **not** make measurements first-class comment-bearing objects, and it does **not** depend on a websocket-first architecture rewrite.
 
 ## Source-of-Truth Rules
 
-- Designer tracking surfaces: `src/components/review/DesignerTaskList.vue`, `src/components/review/ResubmissionTaskList.vue`, `src/components/review/TaskReviewDetail.vue`
-- Shared task-state/filter logic: `src/composables/useUserStore.ts`, `src/components/review/reviewTaskFilters.ts`
-- Reviewer visibility and actions: `src/components/review/ReviewerTaskList.vue`, `src/components/review/reviewerTaskListActions.ts`
-- Realtime path: `src/composables/useUserStore.ts`, `src/composables/useUserStore.websocket.test.ts`
-- Navigation persistence path: `src/composables/useNavigationStatePersistence.ts`
-
-Workers should repair these existing seams instead of adding alternate state models or parallel UI logic.
+- Workbench orchestration lives in `src/components/review/ReviewPanel.vue`
+- Reviewer annotation/tool session seams live in `src/components/tools/AnnotationPanel.vue`, `src/composables/useDtxTools.ts`, and `src/composables/useToolStore.ts`
+- Collaboration contracts and refresh behavior live in `src/components/review/ReviewCommentsPanel.vue`, `src/composables/useReviewStore.ts`, and `src/api/reviewApi.ts`
+- Designer closed-loop continuity lives in `src/components/review/DesignerTaskList.vue`, `src/components/review/ResubmissionTaskList.vue`, `src/components/review/TaskReviewDetail.vue`, and `src/composables/useUserStore.ts`
+- Demo-data bootstrap must be script-driven and reproducible
 
 ## Expected Data Flow
 
-### Returned-task consistency path
-1. Reviewer returns a task to the designer.
-2. Store normalization and filter helpers classify it with one canonical returned/resubmittable rule.
-3. Designer task lists and detail surfaces render the same task semantics.
-4. Designer resubmits the task.
-5. UI clears stale returned-state markers and the reviewer inbox receives the same task identity again.
+### M6 reviewer action path
+1. Reviewer opens a seeded task in the workbench.
+2. Reviewer launches annotation or measurement directly from the workbench.
+3. Tool sessions produce canonical annotation candidates or temporary measurement results.
+4. Reviewer confirms a candidate batch.
+5. Confirmed records reload and replay from stable task/form lineage.
 
-### Realtime and persistence path
-1. Task events arrive via REST refresh or websocket payloads.
-2. Payload fields normalize before list filtering or ownership checks.
-3. Designer/reviewer/resubmission surfaces converge to the same task truth.
-4. Each list restores only its own persisted search/filter/scroll state after navigation.
+### M7 collaboration path
+1. Reviewer opens task-thread or annotation-thread.
+2. Messages, replies, edits, resolves, mentions, and attachments persist through the collaboration contract.
+3. Designer opens the same task later and sees the same thread continuity.
+4. Return / resubmit / reopen preserve task-thread and annotation-thread lineage.
 
 ## Highest-Risk Seams
 
-- Returned-task semantics currently risk diverging between `useUserStore` and `reviewTaskFilters`.
-- Detail modal and resubmit action boundaries can drift, producing stale or contradictory UI.
-- Websocket payloads may arrive in shapes that differ from REST-normalized task objects.
-- Persistence behavior can appear implemented in one surface while lacking matching evidence or isolation in another.
+- Reviewer-visible legacy OBB semantics leaking into canonical rectangle flows
+- Annotation identity instability across confirm / reload / resubmit
+- Measurement replay diverging between reviewer and designer surfaces
+- Task-thread vs annotation-thread ambiguity in UI or payloads
+- Attachment / mention data becoming conflated with existing task attachment semantics
+- Demo data failing to create deterministic reviewer/designer validation paths

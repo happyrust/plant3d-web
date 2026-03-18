@@ -1,8 +1,9 @@
 commands:
   install: npm install
   typecheck: npm run type-check
-  test: npx vitest run src/components/review/ConfirmedRecords.test.ts src/components/review/DesignerTaskList.test.ts src/components/review/ResubmissionTaskList.test.ts src/components/review/WorkflowHistory.test.ts
-  test:m4-scoped: npx vitest run src/components/review/ConfirmedRecords.test.ts src/components/review/DesignerTaskList.test.ts src/components/review/ResubmissionTaskList.test.ts src/components/review/WorkflowHistory.test.ts
+  test: npx vitest run src/components/review/ReviewPanel.test.ts src/components/tools/AnnotationPanel.test.ts src/components/review/TaskReviewDetail.test.ts src/api/reviewApi.test.ts
+  test:m6-scoped: npx vitest run src/components/review/ReviewPanel.test.ts src/components/tools/AnnotationPanel.test.ts src/components/review/TaskReviewDetail.test.ts src/api/reviewApi.test.ts
+  test:m7-scoped: npx vitest run src/api/reviewApi.test.ts src/composables/useReviewStore.websocket.test.ts src/components/review/DesignerTaskList.test.ts src/components/review/ResubmissionTaskList.test.ts src/components/review/ReviewerTaskList.test.ts
   lint: npm run lint
 
 services:
@@ -20,7 +21,7 @@ services:
     port: 3100
     depends_on: []
 
-# Validation note: for the M4 reviewer workbench mission, run browser validations serially.
-# Mission-scoped verification commands for M4 are `commands.typecheck` and `commands.test:m4-scoped`.
-# Do not treat whole-repo `npm test` output as an M4 gate; unrelated annotation/parquet failures are out-of-scope baseline noise unless the scoped commands above fail.
-# Treat missing reviewer-owned seeded tasks or confirmed-record data as environment blockers, not product passes.
+# Validation note: for the M6+M7 reviewer annotation and collaboration mission, run browser validations serially.
+# Mission-scoped verification commands are `commands.typecheck`, `commands.test:m6-scoped`, and `commands.test:m7-scoped`.
+# Do not treat whole-repo `npm test` output as the mission gate; unrelated baseline failures outside the changed reviewer/designer/collaboration surface are out-of-scope noise unless the scoped commands above fail.
+# Seeded demo data is the primary validation source for this mission. Treat missing scripted demo tasks or headless WebGL2 limits as environment blockers rather than product passes.

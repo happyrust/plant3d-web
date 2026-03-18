@@ -597,10 +597,16 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
       const noun = normalizeNounKey((inst as any).uniforms?.noun || (inst as any)._noun || '');
       const specValue = parseSpecValue((inst as any).uniforms?.spec_value);
+      const actualRefnoKey = normalizeRefnoKey(String((inst as any).uniforms?.refno || refnoKey)) || refnoKey;
       if (noun && !refnoNoun) {
         refnoNoun = noun;
       }
       if (noun && hiddenNouns.has(noun)) {
+        continue;
+      }
+      // 某些 fitting（如 ELBO）自身已有几何时，Parquet 里还会混入一个与 fitting 同 refno 的 TUBI primitive。
+      // 这条 primitive 在选择/高亮时会表现成“连着一段直管一起被选中”，因此这里直接跳过。
+      if (bucketHasOwnGeometry && noun === 'TUBI' && actualRefnoKey === refnoKey) {
         continue;
       }
 
@@ -619,7 +625,6 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
         continue;
       }
 
-      const actualRefnoKey = normalizeRefnoKey(String((inst as any).uniforms?.refno || refnoKey)) || refnoKey;
       const mappedRefnoKey =
         bucketHasOwnGeometry && actualRefnoKey !== refnoKey
           ? actualRefnoKey

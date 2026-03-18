@@ -1,0 +1,53 @@
+{
+  "milestone": "m6-annotation-canonicalization",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 11,
+    "passed": 3,
+    "failed": 0,
+    "blocked": 8
+  },
+  "passedAssertions": [
+    "VAL-ANN-003",
+    "VAL-SEED-001",
+    "VAL-SEED-002"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [
+    {
+      "id": "VAL-ANN-001",
+      "blockedBy": "Blocked by browser environment: WebGL2 initialization failure prevents the launched annotation tool from becoming interactive, so the direct-launch affordance is visible but the runnable user flow cannot complete."
+    },
+    {
+      "id": "VAL-ANN-002",
+      "blockedBy": "Blocked by the same WebGL2 viewer initialization failure; the direct-launch UI is present, but the measurement session cannot be exercised through the user surface."
+    },
+    {
+      "id": "VAL-ANN-004",
+      "blockedBy": "Blocked because the review workbench did not bind seeded lineage, and the WebGL2 failure prevented creating/confirming annotations for reload verification."
+    },
+    {
+      "id": "VAL-MEASURE-001",
+      "blockedBy": "Blocked by the viewer environment; cannot verify temporary pre-confirm measurement behavior without an active measurement session."
+    },
+    {
+      "id": "VAL-MEASURE-002",
+      "blockedBy": "Blocked by missing bound task context plus WebGL2 failure, so replay of seeded measurement records could not be demonstrated through the UI."
+    },
+    {
+      "id": "VAL-MEASURE-003",
+      "blockedBy": "Blocked downstream of reviewer-side measurement validation; without a reviewer replay state, designer parity could not be tested meaningfully."
+    },
+    {
+      "id": "VAL-CROSS-M6-001",
+      "blockedBy": "Blocked by environment and task-binding issues; the combined flow could not advance to confirmation."
+    },
+    {
+      "id": "VAL-CROSS-M6-002",
+      "blockedBy": "Blocked because prerequisite reviewer-side record creation/replay could not be completed in the browser environment."
+    }
+  ],
+  "appliedUpdates": [],
+  "previousRound": null
+}

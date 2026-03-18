@@ -1,0 +1,55 @@
+{
+  "milestone": "m6-annotation-canonicalization",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npx vitest run src/components/review/ReviewPanel.test.ts src/components/tools/AnnotationPanel.test.ts src/components/review/TaskReviewDetail.test.ts src/api/reviewApi.test.ts",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npx eslint --max-warnings=0 src/components/review/ReviewPanel.vue src/components/review/ReviewPanel.test.ts src/components/tools/AnnotationPanel.vue src/components/tools/AnnotationPanel.test.ts src/components/review/TaskReviewDetail.vue src/components/review/TaskReviewDetail.test.ts src/api/reviewApi.ts src/composables/useReviewStore.ts src/components/review/sections/ConfirmedRecordsSection.vue",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Update validator/reviewer skill instructions to reference the tracked `debug_scripts/review_demo_seed.py` entry point instead of the ignored `scripts/` location.",
+      "evidence": "Both `m6-demo-seed-pack` and `m6-seed-discoverability-hardening` handoffs call out that the tracked seed utility lives in `debug_scripts/` and that older guidance still points workers at the ignored `scripts/` path.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Clarify that `commands.test:m6-scoped` is the required mission baseline for M6 review/annotation workers, or provide a `commands.test` alias in `.factory/services.yaml`.",
+      "evidence": "The `m6-reviewer-direct-launch-shell` handoff reports worker instructions referencing `commands.test` even though this mission manifest uses `test:m6-scoped` for milestone validation.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Requester/approver discoverability mismatch from early seed hardening runs.",
+      "reason": "superseded by later milestone state; current probe `GET /api/review/tasks?requester_id=designer_001&limit=1&offset=0` now returns the seeded loop fixture instead of an empty task list."
+    },
+    {
+      "observation": "Repeated `ReviewPanel` viewer-ready warnings during passing tests.",
+      "reason": "already known follow-up with dedicated feature `followup-reviewpanel-viewer-ready-test-harness`; not a blocker for this milestone scrutiny pass."
+    }
+  ],
+  "previousRound": null
+}

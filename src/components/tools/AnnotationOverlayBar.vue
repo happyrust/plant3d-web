@@ -6,7 +6,6 @@ import {
   Eye,
   EyeOff,
   Focus,
-  LayoutGrid,
   PanelRightOpen,
   RectangleHorizontal,
   Trash,
@@ -29,10 +28,8 @@ type ToolsApi = {
   removeAnnotation: (id: string) => void;
   flyToCloudAnnotation?: (id: string) => void;
   flyToRectAnnotation?: (id: string) => void;
-  flyToObbAnnotation?: (id: string) => void;
   removeCloudAnnotation?: (id: string) => void;
   removeRectAnnotation?: (id: string) => void;
-  removeObbAnnotation?: (id: string) => void;
 };
 
 const props = defineProps<{
@@ -45,7 +42,6 @@ const annotationModes = new Set([
   'annotation',
   'annotation_cloud',
   'annotation_rect',
-  'annotation_obb',
 ]);
 
 const isAnnotationMode = computed(() => annotationModes.has(store.toolMode.value));
@@ -66,8 +62,6 @@ const currentType = computed<AnnotationType | null>(() => {
       return 'cloud';
     case 'annotation_rect':
       return 'rect';
-    case 'annotation_obb':
-      return 'obb';
     default:
       return currentAnnotation.value?.type ?? null;
   }
@@ -86,8 +80,6 @@ const currentTypeLabel = computed(() => {
       return '云线批注';
     case 'rect':
       return '矩形批注';
-    case 'obb':
-      return 'OBB 批注';
     default:
       return '批注';
   }
@@ -97,8 +89,7 @@ const hasAnyAnnotations = computed(() => {
   return (
     store.annotations.value.length +
     store.cloudAnnotations.value.length +
-    store.rectAnnotations.value.length +
-    store.obbAnnotations.value.length
+    store.rectAnnotations.value.length
   ) > 0;
 });
 
@@ -107,7 +98,6 @@ const hasHiddenAnnotations = computed(() => {
     ...store.annotations.value,
     ...store.cloudAnnotations.value,
     ...store.rectAnnotations.value,
-    ...store.obbAnnotations.value,
   ].some((item) => !item.visible);
 });
 
@@ -133,7 +123,7 @@ const allVisibilityLabel = computed(() => {
   return hasHiddenAnnotations.value ? '全部显示' : '全部隐藏';
 });
 
-function setMode(mode: 'annotation' | 'annotation_cloud' | 'annotation_rect' | 'annotation_obb') {
+function setMode(mode: 'annotation' | 'annotation_cloud' | 'annotation_rect') {
   store.setToolMode(store.toolMode.value === mode ? 'none' : mode);
 }
 
@@ -245,7 +235,6 @@ watch(
     store.annotations.value.length,
     store.cloudAnnotations.value.length,
     store.rectAnnotations.value.length,
-    store.obbAnnotations.value.length,
   ],
   () => {
     if (currentAnnotation.value) return;
@@ -253,7 +242,6 @@ watch(
       store.activeAnnotationId.value = null;
       store.activeCloudAnnotationId.value = null;
       store.activeRectAnnotationId.value = null;
-      store.activeObbAnnotationId.value = null;
     }
   },
 );
@@ -278,7 +266,7 @@ onUnmounted(() => {
       <div class="hidden items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground md:flex">
         <span class="font-medium text-foreground">{{ currentTypeLabel }}</span>
         <span>当前类型 {{ currentTypeRecords.length }} 条</span>
-        <span>全部 {{ store.annotationCount.value + store.cloudAnnotationCount.value + store.rectAnnotationCount.value + store.obbAnnotationCount.value }} 条</span>
+        <span>全部 {{ store.annotationCount.value + store.cloudAnnotationCount.value + store.rectAnnotationCount.value }} 条</span>
       </div>
 
       <div class="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-border bg-background/90 px-3 py-2 shadow-lg backdrop-blur"
@@ -323,16 +311,6 @@ onUnmounted(() => {
             aria-label="矩形批注"
             @click="setMode('annotation_rect')">
             <RectangleHorizontal class="h-4 w-4" />
-          </button>
-
-          <button type="button"
-            data-testid="annotation-overlay-mode-obb"
-            class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-input bg-background text-sm transition-colors hover:bg-muted"
-            :class="store.toolMode.value === 'annotation_obb' ? 'border-ring bg-muted text-foreground shadow-sm' : ''"
-            title="OBB 批注"
-            aria-label="OBB 批注"
-            @click="setMode('annotation_obb')">
-            <LayoutGrid class="h-4 w-4" />
           </button>
         </div>
 

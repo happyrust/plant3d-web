@@ -24,6 +24,51 @@ describe('AnnotationPanel', () => {
     vi.resetModules();
   });
 
+  it('reviewer path hides legacy OBB affordances and terminology', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: {
+        template: '<div data-testid="review-comments-panel-stub" />',
+      },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref(null),
+      }),
+    }));
+
+    const [{ default: AnnotationPanel }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+    ]);
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        flyToAnnotation: vi.fn(),
+        removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(),
+        flyToRectAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(),
+        removeRectAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    expect(host.textContent).not.toContain('OBB');
+    expect(host.textContent).not.toContain('框选');
+    expect(host.textContent).toContain('文字');
+    expect(host.textContent).toContain('云线');
+    expect(host.textContent).toContain('矩形');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
   it('不应再为矩形和云线批注弹出编辑框', async () => {
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);

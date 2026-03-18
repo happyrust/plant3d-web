@@ -3528,7 +3528,7 @@ onMounted(async () => {
           include_dims: true,
           // 一期默认切到施工视图：链式/总长/焊口/坡度优先
           include_chain_dims: true,
-          include_overall_dim: false,
+          include_overall_dim: true,
           include_port_dims: false,
           include_cut_tubis: true,
           include_fittings: true,

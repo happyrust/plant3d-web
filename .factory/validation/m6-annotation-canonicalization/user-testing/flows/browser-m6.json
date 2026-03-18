@@ -1,0 +1,278 @@
+{
+  "groupId": "browser-m6",
+  "testedAt": "2026-03-18T16:47:48.780749+00:00",
+  "surface": "browser-ui",
+  "isolation": {
+    "appUrl": "http://127.0.0.1:3101",
+    "backendUrl": "http://127.0.0.1:3100",
+    "reviewerAlias": "reviewer_001",
+    "designerAlias": "designer_001",
+    "projectId": "AvevaMarineSample",
+    "seededTaskIds": [
+      "seed-m6-text-annotation",
+      "seed-m6-cloud-annotation",
+      "seed-m6-rectangle-annotation",
+      "seed-m6-measurement-replay",
+      "seed-m6m7-return-resubmit"
+    ]
+  },
+  "toolsUsed": [
+    "agent-browser",
+    "curl",
+    "python3"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-ANN-001",
+      "title": "Reviewer workbench directly launches annotation tools",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Open local review route for seeded form FORM-M6-TEXT-001 as reviewer_001",
+          "expected": "Review workbench loads seeded task context",
+          "observed": "Route opened but workbench showed unbound context with formId=未绑定 and a WebGL2 failure banner."
+        },
+        {
+          "action": "Open review panel from toolbar",
+          "expected": "Direct-launch controls appear in seeded review context",
+          "observed": "Direct-launch buttons for text/cloud/rectangle appeared in the panel."
+        },
+        {
+          "action": "Click text annotation launch",
+          "expected": "Annotation mode activates in reviewer task context",
+          "observed": "UI switched to “等待 Viewer 初始化...” and never reached an active annotation session."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/review-panel-attempt.png",
+          "m6-annotation-canonicalization/browser-m6/text-annotation-launch.png",
+          "m6-annotation-canonicalization/browser-m6/text-annotation-viewer-wait.png"
+        ],
+        "consoleErrors": "none reported by agent-browser; visible UI error banner states WebGL2 initialization failed.",
+        "network": "Seed data existed in localStorage reviewTasks, but live task binding did not populate formId in the workbench context."
+      },
+      "issues": "Blocked by browser environment: WebGL2 initialization failure prevents the launched annotation tool from becoming interactive, so the direct-launch affordance is visible but the runnable user flow cannot complete."
+    },
+    {
+      "id": "VAL-ANN-002",
+      "title": "Reviewer workbench directly launches measurement",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Open review panel",
+          "expected": "Measurement direct-launch control visible",
+          "observed": "“创建测量” and direct-launch cards for distance/angle measurement were visible."
+        },
+        {
+          "action": "Trigger create measurement and distance measurement",
+          "expected": "Measurement session begins from workbench",
+          "observed": "Measurement cards toggled in the panel, but no live measurement session started in the viewer."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/review-panel-attempt.png",
+          "m6-annotation-canonicalization/browser-m6/measurement-launch.png",
+          "m6-annotation-canonicalization/browser-m6/distance-measurement-session.png"
+        ],
+        "consoleErrors": "none reported by agent-browser; viewer banner still showed WebGL2 failure.",
+        "network": "No separate measurement confirmation payload observed because the viewer session never initialized."
+      },
+      "issues": "Blocked by the same WebGL2 viewer initialization failure; the direct-launch UI is present, but the measurement session cannot be exercised through the user surface."
+    },
+    {
+      "id": "VAL-ANN-003",
+      "title": "Legacy reviewer-visible OBB semantics are removed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open review panel in reviewer mode",
+          "expected": "Canonical reviewer labels appear with no OBB wording",
+          "observed": "Reviewer panel showed only 文字批注 / 云线批注 / 矩形批注 and no OBB wording in visible controls or summaries."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/review-panel-attempt.png"
+        ],
+        "consoleErrors": "none",
+        "network": "UI-only assertion; no network inspection needed."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-ANN-004",
+      "title": "Canonical annotations keep stable lineage across confirm/reload",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Load seeded review route and inspect workbench context",
+          "expected": "Seeded form/task lineage binds into the workbench for confirm/reload testing",
+          "observed": "Workbench rendered with “formId=未绑定” despite seeded tasks existing in localStorage and backend APIs."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/review-local-form.png",
+          "m6-annotation-canonicalization/browser-m6/review-panel-attempt.png"
+        ],
+        "consoleErrors": "none reported; visible WebGL2 failure banner present.",
+        "network": "Reviewer task API seeding succeeded, but the local embedded review route did not bind a concrete task/form context into the workbench."
+      },
+      "issues": "Blocked because the review workbench did not bind seeded lineage, and the WebGL2 failure prevented creating/confirming annotations for reload verification."
+    },
+    {
+      "id": "VAL-MEASURE-001",
+      "title": "Measurement remains temporary before confirmation",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Attempt to start distance measurement from the review panel",
+          "expected": "Temporary measurement session appears before confirmation",
+          "observed": "Measurement launch controls appeared, but no active session or temporary candidate state became available."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/measurement-launch.png",
+          "m6-annotation-canonicalization/browser-m6/distance-measurement-session.png"
+        ],
+        "consoleErrors": "none reported; UI continued to report WebGL2 viewer failure.",
+        "network": "No measurement session requests observed due to blocked viewer startup."
+      },
+      "issues": "Blocked by the viewer environment; cannot verify temporary pre-confirm measurement behavior without an active measurement session."
+    },
+    {
+      "id": "VAL-MEASURE-002",
+      "title": "Confirmed measurement records replay in reviewer workbench",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Inspect reviewer workbench confirmed records area",
+          "expected": "Seeded confirmed measurement replay can be surfaced for the bound task",
+          "observed": "Confirmed records section existed but task context was unbound and no replayable seeded record surfaced in the browser flow."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/review-panel-attempt.png"
+        ],
+        "consoleErrors": "none reported; viewer banner indicated WebGL2 failure.",
+        "network": "No reviewer replay payload observed because the seeded form was not bound into the workbench."
+      },
+      "issues": "Blocked by missing bound task context plus WebGL2 failure, so replay of seeded measurement records could not be demonstrated through the UI."
+    },
+    {
+      "id": "VAL-MEASURE-003",
+      "title": "Designer surfaces see the same confirmed measurement result set",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Prepare reviewer-side seeded loop for handoff to designer",
+          "expected": "Confirmed measurement result set available to compare across roles",
+          "observed": "Reviewer-side validation could not reach a confirmed or replayed measurement state."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/reviewer-role.png"
+        ],
+        "consoleErrors": "none",
+        "network": "Backend seeded tasks were discoverable, but no user-surface measurement record state was available to compare with designer views."
+      },
+      "issues": "Blocked downstream of reviewer-side measurement validation; without a reviewer replay state, designer parity could not be tested meaningfully."
+    },
+    {
+      "id": "VAL-CROSS-M6-001",
+      "title": "Reviewer can create annotations and measurements from workbench and confirm both in one flow",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Open review workbench and inspect direct-launch affordances",
+          "expected": "Create annotation and measurement actions available together",
+          "observed": "All direct-launch affordances were visible in one workbench panel."
+        },
+        {
+          "action": "Attempt to start annotation then measurement flow",
+          "expected": "Both tools can be run and included in confirmation",
+          "observed": "Neither tool could progress beyond viewer initialization blockers, and confirm remained unusable."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/review-panel-attempt.png",
+          "m6-annotation-canonicalization/browser-m6/text-annotation-viewer-wait.png",
+          "m6-annotation-canonicalization/browser-m6/measurement-launch.png"
+        ],
+        "consoleErrors": "none reported; visible WebGL2 failure banner persisted.",
+        "network": "No confirmation chain requests observed because neither tool session became active."
+      },
+      "issues": "Blocked by environment and task-binding issues; the combined flow could not advance to confirmation."
+    },
+    {
+      "id": "VAL-CROSS-M6-002",
+      "title": "Return/resubmit preserves canonical annotations and replayable measurements",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Inspect seeded closed-loop prerequisites",
+          "expected": "Reviewer can reopen a loop task with preserved records",
+          "observed": "Seeded closed-loop task exists in backend/localStorage, but the reviewer user surface did not bind it into a replayable workbench flow."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "m6-annotation-canonicalization/browser-m6/reviewer-role.png",
+          "m6-annotation-canonicalization/browser-m6/review-panel-attempt.png"
+        ],
+        "consoleErrors": "none",
+        "network": "Seeded loop task `seed-m6m7-return-resubmit` was present in discoverability APIs and localStorage, but not testable end-to-end in the browser flow."
+      },
+      "issues": "Blocked because prerequisite reviewer-side record creation/replay could not be completed in the browser environment."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The top-level “校审测试” button redirects to an external host (123.57.182.243) instead of staying on the local 127.0.0.1 environment required by mission guidance.",
+      "resolved": true,
+      "resolution": "Returned to a locally constructed /review/3d-view route for the seeded form instead of using the external jump.",
+      "affectedAssertions": [
+        "VAL-ANN-001",
+        "VAL-ANN-002",
+        "VAL-ANN-004",
+        "VAL-MEASURE-001",
+        "VAL-MEASURE-002",
+        "VAL-CROSS-M6-001",
+        "VAL-CROSS-M6-002"
+      ]
+    },
+    {
+      "description": "The embedded local review route retained seeded task inventory in localStorage but still rendered the workbench with formId=未绑定.",
+      "resolved": false,
+      "resolution": "No safe local workaround found within validator scope.",
+      "affectedAssertions": [
+        "VAL-ANN-004",
+        "VAL-MEASURE-002",
+        "VAL-CROSS-M6-002"
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "description": "The reviewer browser surface consistently shows “三维查看器初始化失败 需要 WebGL2（canvas.getContext(\"webgl2\") 失败）”, preventing annotation and measurement sessions from becoming interactive.",
+      "affectedAssertions": [
+        "VAL-ANN-001",
+        "VAL-ANN-002",
+        "VAL-ANN-004",
+        "VAL-MEASURE-001",
+        "VAL-MEASURE-002",
+        "VAL-MEASURE-003",
+        "VAL-CROSS-M6-001",
+        "VAL-CROSS-M6-002"
+      ],
+      "quickFixAttempted": "Retried locally bound review route, switched to reviewer role, reopened the workbench, and reattempted direct-launch flows; blocker persisted."
+    }
+  ],
+  "summary": "Tested 9 M6 browser assertions: 1 passed (canonical labels visible with no OBB wording) and 8 were blocked by the WebGL2 viewer initialization failure plus missing seeded form binding in the local review workbench."
+}

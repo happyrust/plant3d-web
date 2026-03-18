@@ -328,6 +328,43 @@ function vectorKey(vec: Vector3): string {
   ].join(',');
 }
 
+function buildDimSpanKey(start: Vector3, end: Vector3): string {
+  const a = [
+    roundTo(start.x, 0.01).toFixed(2),
+    roundTo(start.y, 0.01).toFixed(2),
+    roundTo(start.z, 0.01).toFixed(2),
+  ].join(',');
+  const b = [
+    roundTo(end.x, 0.01).toFixed(2),
+    roundTo(end.y, 0.01).toFixed(2),
+    roundTo(end.z, 0.01).toFixed(2),
+  ].join(',');
+  return a <= b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function collectDuplicateOverallDimIds(dims: MbdDimDto[]): Set<string> {
+  const nonOverallSpans = new Set<string>();
+  for (const dim of dims) {
+    const kind = (dim.kind ?? 'segment') as MbdDimKind;
+    if (kind === 'overall') continue;
+    const start = new Vector3(dim.start[0], dim.start[1], dim.start[2]);
+    const end = new Vector3(dim.end[0], dim.end[1], dim.end[2]);
+    nonOverallSpans.add(buildDimSpanKey(start, end));
+  }
+
+  const duplicateOverallIds = new Set<string>();
+  for (const dim of dims) {
+    const kind = (dim.kind ?? 'segment') as MbdDimKind;
+    if (kind !== 'overall') continue;
+    const start = new Vector3(dim.start[0], dim.start[1], dim.start[2]);
+    const end = new Vector3(dim.end[0], dim.end[1], dim.end[2]);
+    if (nonOverallSpans.has(buildDimSpanKey(start, end))) {
+      duplicateOverallIds.add(dim.id);
+    }
+  }
+  return duplicateOverallIds;
+}
+
 function buildPlanarDimAlignmentGroupKey(
   candidate: PlanarDimAlignmentCandidate,
 ): string | null {
@@ -537,8 +574,8 @@ export function useMbdPipeAnnotationThree(
 
   const isVisible = ref(false);
   const showDims = ref(true);
-  const showDimSegment = ref(false);
-  const showDimChain = ref(true);
+  const showDimSegment = ref(true);
+  const showDimChain = ref(false);
   const showDimOverall = ref(false);
   const showDimPort = ref(false);
   const showPipeClearances = ref(true);
@@ -633,8 +670,8 @@ export function useMbdPipeAnnotationThree(
     }
 
     dimMode.value = 'rebarviz';
-    showDimSegment.value = false;
-    showDimChain.value = true;
+    showDimSegment.value = true;
+    showDimChain.value = false;
     showDimOverall.value = false;
     showDimPort.value = false;
     showCutTubis.value = false;
@@ -1026,11 +1063,15 @@ export function useMbdPipeAnnotationThree(
     const gm = getGlobalModelMatrix?.() || identityMatrix;
     const modeConfig = getRuntimeModeConfig();
     const planarAlignmentCandidates: PlanarDimAlignmentCandidate[] = [];
+    const duplicateOverallIds = collectDuplicateOverallDimIds(dims);
     dimTextById.value.clear();
     for (const d of dims) {
       const start = new Vector3(d.start[0], d.start[1], d.start[2]);
       const end = new Vector3(d.end[0], d.end[1], d.end[2]);
       const kind = (d.kind ?? 'segment') as MbdDimKind;
+      if (kind === 'overall' && duplicateOverallIds.has(d.id)) {
+        continue;
+      }
 
       // 计算偏移方向：优先 layout_hint，其次管道拓扑，再次相机方向；都失败则抑制该错误线
       const hintedDir = resolveLayoutDirection(d.layout_hint);

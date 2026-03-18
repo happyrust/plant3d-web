@@ -186,6 +186,32 @@ describe('ReviewPanel', () => {
     dockApiMock.ensurePanelAndActivate.mockClear();
   });
 
+  it('confirmed record counts only canonical reviewer annotations', async () => {
+    sortedConfirmedRecords.value = [
+      {
+        id: 'record-canonical-1',
+        confirmedAt: new Date('2026-03-16T09:30:00+08:00').getTime(),
+        note: '只统计 reviewer 可见语义',
+        annotations: [{ id: 'a-1' }],
+        cloudAnnotations: [{ id: 'c-1' }],
+        rectAnnotations: [{ id: 'r-1' }],
+        measurements: [],
+      },
+    ] as never[];
+    confirmedRecordCount.value = 1;
+    totalConfirmedAnnotations.value = 3;
+    totalConfirmedMeasurements.value = 0;
+
+    const mounted = mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('批注数量');
+    expect(document.body.textContent).toContain('3');
+    expect(document.body.textContent).not.toContain('OBB');
+
+    mounted.unmount();
+  });
+
   it('renders the stable M4 workbench sections and normalized context fields', async () => {
     const mounted = mountReviewPanel();
     await settlePanel();

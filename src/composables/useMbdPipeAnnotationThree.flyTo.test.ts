@@ -30,8 +30,8 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
 
     expect(vis.mbdViewMode.value).toBe('construction');
     expect(vis.dimMode.value).toBe('rebarviz');
-    expect(vis.showDimSegment.value).toBe(false);
-    expect(vis.showDimChain.value).toBe(true);
+    expect(vis.showDimSegment.value).toBe(true);
+    expect(vis.showDimChain.value).toBe(false);
     expect(vis.showDimOverall.value).toBe(false);
     expect(vis.showDimPort.value).toBe(false);
     expect(vis.showCutTubis.value).toBe(false);
@@ -75,12 +75,90 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vis.applyModeDefaults('construction');
     expect(vis.mbdViewMode.value).toBe('construction');
     expect(vis.dimMode.value).toBe('rebarviz');
-    expect(vis.showDimChain.value).toBe(true);
+    expect(vis.showDimSegment.value).toBe(true);
+    expect(vis.showDimChain.value).toBe(false);
     expect(vis.showDimOverall.value).toBe(false);
     expect(vis.showDimPort.value).toBe(false);
     expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
+  });
+
+  it('应抑制与非 overall 尺寸共用同一 span 的 overall 标注', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.renderBranch({
+      input_refno: '24381_145712',
+      branch_refno: '24381_145712',
+      branch_name: 'BRAN-TEST',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-1',
+          refno: 'SEG-1',
+          noun: 'STRA',
+          arrive: [0, 0, 0],
+          leave: [0, 0, 956],
+          length: 956,
+          straight_length: 956,
+        },
+      ],
+      dims: [
+        {
+          id: 'dim-seg',
+          kind: 'segment',
+          text: '956',
+          start: [0, 0, 0],
+          end: [0, 0, 956],
+        },
+        {
+          id: 'dim-overall',
+          kind: 'overall',
+          text: '2149',
+          start: [0, 0, 0],
+          end: [0, 0, 956],
+        },
+      ],
+      cut_tubis: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 2,
+        cut_tubis_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    } as any);
+
+    const overallDims = Array.from(vis.getDimAnnotations().entries()).filter(
+      ([, dim]) => (dim.userData as any)?.mbdDimKind === 'overall',
+    );
+    const segmentDims = Array.from(vis.getDimAnnotations().entries()).filter(
+      ([, dim]) => (dim.userData as any)?.mbdDimKind === 'segment',
+    );
+
+    expect(segmentDims).toHaveLength(1);
+    expect(overallDims).toHaveLength(0);
   });
 
   it('resetToCurrentModeDefaults 应回到当前模式默认态', () => {
