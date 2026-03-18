@@ -164,6 +164,7 @@ async function handleStartReview(task: ReviewTask) {
     setCurrentTask: reviewStore.setCurrentTask,
     emitCommand,
     loadReviewTasks: userStore.loadReviewTasks,
+    getTasksSnapshot: () => userStore.pendingReviewTasks.value,
     onTaskSelected: (currentTask) => {
       selectedTask.value = currentTask;
     },

@@ -12,9 +12,22 @@ export type StartReviewerTaskOptions = {
   setCurrentTask: (task: ReviewTask) => Promise<void>;
   emitCommand: (command: string) => void;
   loadReviewTasks?: () => Promise<void>;
+  getTasksSnapshot?: () => ReviewTask[];
   scheduleOpenReviewPanel?: (callback: () => void) => void;
   onTaskSelected?: (task: ReviewTask) => void;
 };
+
+function resolveTaskToOpen(task: ReviewTask, refreshedTasks: ReviewTask[] = []): ReviewTask {
+  const taskId = task.id?.trim();
+  const formId = task.formId?.trim();
+
+  const matchedTask = refreshedTasks.find((candidate) => {
+    if (taskId && candidate.id === taskId) return true;
+    return !!formId && candidate.formId?.trim() === formId;
+  });
+
+  return matchedTask || task;
+}
 
 export async function refreshReviewerTasksSafely(
   options: RefreshReviewerTasksOptions
@@ -44,6 +57,7 @@ export async function startReviewerTask(options: StartReviewerTaskOptions): Prom
   }
 
   await options.loadReviewTasks?.();
+  taskToOpen = resolveTaskToOpen(taskToOpen, options.getTasksSnapshot?.());
   await options.setCurrentTask(taskToOpen);
   options.onTaskSelected?.(taskToOpen);
   options.emitCommand('panel.reviewerTasks');

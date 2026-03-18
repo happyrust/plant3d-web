@@ -379,6 +379,51 @@ describe('reviewerTaskListActions', () => {
     ]);
   });
 
+  it('rebinds the selected reviewer task to refreshed seeded lineage before opening the workbench', async () => {
+    reviewTaskStartReviewMock.mockResolvedValueOnce({ success: true, message: 'ok' });
+
+    const staleSeededTask = createTask({
+      id: 'seed-m6-text-annotation',
+      status: 'submitted',
+      formId: undefined,
+      currentNode: 'jd',
+      title: 'Stale seeded task',
+    });
+    const refreshedSeededTask = createTask({
+      id: 'seed-m6-text-annotation',
+      status: 'in_review',
+      formId: 'FORM-M6-TEXT-001',
+      currentNode: 'jd',
+      title: 'Fresh seeded task',
+    });
+
+    const setCurrentTask = vi.fn(async () => {});
+    const loadReviewTasks = vi.fn(async () => {});
+    const emitCommand = vi.fn();
+    const selected: ReviewTask[] = [];
+
+    await startReviewerTask({
+      task: staleSeededTask,
+      setCurrentTask,
+      emitCommand,
+      loadReviewTasks,
+      getTasksSnapshot: () => [refreshedSeededTask],
+      scheduleOpenReviewPanel: (callback) => callback(),
+      onTaskSelected: (task) => {
+        selected.push(task);
+      },
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'seed-m6-text-annotation',
+      formId: 'FORM-M6-TEXT-001',
+      title: 'Fresh seeded task',
+    }));
+    expect(selected).toEqual([
+      expect.objectContaining({ formId: 'FORM-M6-TEXT-001', title: 'Fresh seeded task' }),
+    ]);
+  });
+
   it('reviewer primary forward labels stay on the standard submit path for each workflow node', () => {
     expect(getSubmitActionLabel('sj')).toBe('提交到校核');
     expect(getSubmitActionLabel('jd')).toBe('提交到审核');
