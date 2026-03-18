@@ -158,6 +158,53 @@ describe('loadReviewTasks', () => {
     expect(reviewTaskGetListMock).toHaveBeenCalledWith({ approverId: 'manager_001' });
   });
 
+  it('queries designer initiated tasks by requesterId and keeps seeded loop tasks discoverable for designer surfaces', async () => {
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [
+        {
+          id: 'seed-loop-task',
+          title: 'M6 loop task',
+          description: 'seeded return/resubmit/reopen loop',
+          modelName: 'Loop Model',
+          status: 'submitted',
+          priority: 'urgent',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'jd',
+          formId: 'FORM-M6M7-LOOP-001',
+          components: [],
+          createdAt: 1700000000000,
+          updatedAt: 1700000001000,
+        },
+      ],
+      total: 1,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.loadReviewTasks();
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ requesterId: 'designer_001' });
+    expect(store.myInitiatedTasks.value.map((task) => task.id)).toContain('seed-loop-task');
+    expect(store.myInitiatedTasks.value[0]).toEqual(
+      expect.objectContaining({
+        id: 'seed-loop-task',
+        formId: 'FORM-M6M7-LOOP-001',
+        currentNode: 'jd',
+        status: 'submitted',
+      })
+    );
+  });
+
   it('keeps approved and rejected tasks visible in reviewer inbox collections', async () => {
     userGetCurrentMock.mockResolvedValue({ success: false });
     reviewTaskGetListMock.mockResolvedValue({
@@ -388,7 +435,7 @@ describe('cross-role task visibility after task creation and submit', () => {
 
     await store.submitTaskToNextNode(task.id, '发起提资');
 
-    expect(reviewTaskGetListMock).toHaveBeenCalledWith(undefined);
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ requesterId: 'designer_001' });
     expect(store.myInitiatedTasks.value.map((item) => item.id)).toContain('task-cross-1');
     expect(store.myInitiatedTasks.value[0]?.status).toBe('submitted');
     expect(store.myInitiatedTasks.value[0]?.currentNode).toBe('jd');

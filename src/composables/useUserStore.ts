@@ -739,19 +739,25 @@ async function loadReviewTasks(): Promise<void> {
     try {
       const effectiveUserId = resolveEffectiveUserId(currentUser.value);
       const queryRole = currentUser.value?.role;
+      const requesterId = currentUser.value?.role === UserRole.DESIGNER
+        ? resolveEffectiveUserId(currentUser.value)
+        : undefined;
       const response = await reviewTaskGetList(
         isCheckerRole(queryRole)
           ? { checkerId: effectiveUserId ?? undefined }
           : isApproverRole(queryRole)
             ? { approverId: effectiveUserId ?? undefined }
-            : undefined
+            : requesterId
+              ? { requesterId }
+              : undefined
       );
       if (response.success) {
         const normalizedTasks = (response.tasks || [])
           .map((task) => normalizeReviewTask(task))
           .filter((task): task is ReviewTask => task !== null);
 
-        // Preserve designer-owned tasks when a reviewer-scoped refresh returns only the inbox slice.
+        // Designer queries fetch the requester-scoped slice, so merge it to retain any task state
+        // that arrived via websocket or local transitions until the backend reflects it.
         if (currentUser.value?.role === UserRole.DESIGNER) {
           const preservedDesignerTasks = reviewTasks.value.filter((task) => task.requesterId === currentUser.value?.id);
           const mergedTasks = new Map<string, ReviewTask>();
