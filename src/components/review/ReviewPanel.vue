@@ -486,6 +486,42 @@ const pendingAnnotationCount = computed(() => {
 
 const pendingMeasurementCount = computed(() => toolStore.measurementCount.value);
 
+const reviewerDirectLaunchActions = computed(() => [
+  {
+    id: 'annotation-text',
+    label: '文字批注',
+    description: '在当前审核任务上下文中直接进入文字批注。',
+    onClick: startAnnotation,
+  },
+  {
+    id: 'annotation-cloud',
+    label: '云线批注',
+    description: '保持当前任务上下文，直接启动云线批注。',
+    onClick: startCloudAnnotation,
+  },
+  {
+    id: 'annotation-rect',
+    label: '矩形批注',
+    description: '保持当前任务上下文，直接启动矩形批注。',
+    onClick: startRectAnnotation,
+  },
+]);
+
+const reviewerMeasurementActions = computed(() => [
+  {
+    id: 'measurement-distance',
+    label: '距离测量',
+    description: '从审核工作台直接开始距离测量。',
+    onClick: startDistanceMeasurement,
+  },
+  {
+    id: 'measurement-angle',
+    label: '角度测量',
+    description: '从审核工作台直接开始角度测量。',
+    onClick: startAngleMeasurement,
+  },
+]);
+
 const hasPendingData = computed(() => {
   return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
 });
@@ -540,6 +576,16 @@ function exportData() {
 function startAnnotation() {
   ensurePanelAndActivate('annotation');
   toolStore.setToolMode('annotation');
+}
+
+function startCloudAnnotation() {
+  ensurePanelAndActivate('annotation');
+  toolStore.setToolMode('annotation_cloud');
+}
+
+function startRectAnnotation() {
+  ensurePanelAndActivate('annotation');
+  toolStore.setToolMode('annotation_rect');
 }
 
 function startDistanceMeasurement() {
@@ -924,6 +970,27 @@ watch(showModuleMenu, (val) => {
         </div>
       </div>
 
+      <div class="mt-2 grid grid-cols-3 gap-2">
+        <button type="button"
+          title="文字批注"
+          class="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-slate-700 hover:bg-muted"
+          @click="startAnnotation">
+          文字批注
+        </button>
+        <button type="button"
+          title="云线批注"
+          class="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-slate-700 hover:bg-muted"
+          @click="startCloudAnnotation">
+          云线批注
+        </button>
+        <button type="button"
+          title="矩形批注"
+          class="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-slate-700 hover:bg-muted"
+          @click="startRectAnnotation">
+          矩形批注
+        </button>
+      </div>
+
       <div v-if="hasPendingData" class="mt-3">
         <label class="text-xs text-muted-foreground">备注（可选）</label>
         <input v-model="confirmNote"
@@ -940,6 +1007,57 @@ watch(showModuleMenu, (val) => {
       </button>
       <div v-if="confirmError" class="mt-2 text-xs text-red-600">{{ confirmError }}</div>
     </div>
+
+    <section class="rounded-md border border-border bg-background p-3"
+      data-testid="reviewer-direct-launch-shell">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="text-sm font-semibold">审核直接发起</div>
+          <p class="mt-1 text-xs text-muted-foreground">
+            在当前 reviewer task 上下文中直接进入批注或测量，不离开工作台。
+          </p>
+        </div>
+        <div class="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+          保持当前任务上下文
+        </div>
+      </div>
+
+      <div class="mt-3 grid gap-3 xl:grid-cols-2">
+        <section class="rounded-lg border border-slate-200 bg-slate-50 p-3"
+          data-testid="reviewer-direct-launch-annotation-zone">
+          <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">批注</div>
+          <div class="mt-2 grid gap-2">
+            <button v-for="action in reviewerDirectLaunchActions"
+              :key="action.id"
+              type="button"
+              class="rounded-md border border-input bg-background px-3 py-3 text-left hover:bg-muted"
+              :data-testid="`reviewer-direct-launch-${action.id}`"
+              :title="action.label"
+              @click="action.onClick">
+              <div class="text-sm font-medium text-slate-900">{{ action.label }}</div>
+              <div class="mt-1 text-xs text-slate-500">{{ action.description }}</div>
+            </button>
+          </div>
+        </section>
+
+        <section class="rounded-lg border border-slate-200 bg-slate-50 p-3"
+          data-testid="reviewer-direct-launch-measurement-zone">
+          <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">测量</div>
+          <div class="mt-2 grid gap-2">
+            <button v-for="action in reviewerMeasurementActions"
+              :key="action.id"
+              type="button"
+              class="rounded-md border border-input bg-background px-3 py-3 text-left hover:bg-muted"
+              :data-testid="`reviewer-direct-launch-${action.id}`"
+              :title="action.label"
+              @click="action.onClick">
+              <div class="text-sm font-medium text-slate-900">{{ action.label }}</div>
+              <div class="mt-1 text-xs text-slate-500">{{ action.description }}</div>
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
 
     <!-- 可选模块管理栏 -->
     <div class="rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3">

@@ -56,20 +56,7 @@ vi.mock('@/composables/useReviewStore', () => ({
 }));
 
 vi.mock('@/composables/useToolStore', () => ({
-  useToolStore: () => ({
-    annotationCount: { value: 0 },
-    cloudAnnotationCount: { value: 0 },
-    rectAnnotationCount: { value: 0 },
-    obbAnnotationCount: { value: 0 },
-    measurementCount: { value: 0 },
-    annotations: { value: [] },
-    cloudAnnotations: { value: [] },
-    rectAnnotations: { value: [] },
-    obbAnnotations: { value: [] },
-    measurements: { value: [] },
-    clearAll: vi.fn(),
-    setToolMode: vi.fn(),
-  }),
+  useToolStore: () => toolStoreMock,
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
@@ -77,8 +64,27 @@ vi.mock('@/composables/useViewerContext', () => ({
   waitForViewerReady: vi.fn(async () => false),
 }));
 
-vi.mock('@/composables/useDockApi', () => ({
+const toolStoreMock = vi.hoisted(() => ({
+  annotationCount: { value: 0 },
+  cloudAnnotationCount: { value: 0 },
+  rectAnnotationCount: { value: 0 },
+  obbAnnotationCount: { value: 0 },
+  measurementCount: { value: 0 },
+  annotations: { value: [] },
+  cloudAnnotations: { value: [] },
+  rectAnnotations: { value: [] },
+  obbAnnotations: { value: [] },
+  measurements: { value: [] },
+  clearAll: vi.fn(),
+  setToolMode: vi.fn(),
+}));
+
+const dockApiMock = vi.hoisted(() => ({
   ensurePanelAndActivate: vi.fn(),
+}));
+
+vi.mock('@/composables/useDockApi', () => ({
+  ensurePanelAndActivate: dockApiMock.ensurePanelAndActivate,
 }));
 
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
@@ -176,6 +182,8 @@ describe('ReviewPanel', () => {
     loadReviewTasksMock.mockClear();
     setCurrentTaskMock.mockClear();
     clearCurrentTaskMock.mockClear();
+    toolStoreMock.setToolMode.mockClear();
+    dockApiMock.ensurePanelAndActivate.mockClear();
   });
 
   it('renders the stable M4 workbench sections and normalized context fields', async () => {
@@ -306,6 +314,61 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('提交到批准');
     expect(document.body.textContent).not.toContain('FORM-A');
     expect(document.body.textContent).not.toContain('提交到审核');
+    mounted.unmount();
+  });
+
+  it('launches text, cloud, rectangle, and measurement tools directly from the workbench', async () => {
+    const mounted = mountReviewPanel();
+    await settlePanel();
+
+    const directLaunchShell = document.querySelector('[data-testid="reviewer-direct-launch-shell"]');
+    expect(directLaunchShell).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-measurement-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-text"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-cloud"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-rect"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-measurement-distance"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-measurement-angle"]')).not.toBeNull();
+    expect(directLaunchShell?.textContent).toContain('保持当前任务上下文');
+
+    const buttons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
+    const findButton = (title: string) => buttons.find((button) => button.title === title);
+
+    findButton('创建批注')?.click();
+    await nextTick();
+    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
+    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation');
+
+    findButton('文字批注')?.click();
+    await nextTick();
+    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
+    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation');
+
+    findButton('云线批注')?.click();
+    await nextTick();
+    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
+    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation_cloud');
+
+    findButton('矩形批注')?.click();
+    await nextTick();
+    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
+    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation_rect');
+
+    findButton('创建测量')?.click();
+    await nextTick();
+    const distanceButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('距离测量')) as HTMLButtonElement | undefined;
+    const angleButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('角度测量')) as HTMLButtonElement | undefined;
+    distanceButton?.click();
+    await nextTick();
+    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('measure_distance');
+
+    findButton('创建测量')?.click();
+    await nextTick();
+    angleButton?.click();
+    await nextTick();
+    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('measure_angle');
+
     mounted.unmount();
   });
 });
