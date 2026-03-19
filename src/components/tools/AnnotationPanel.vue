@@ -4,6 +4,12 @@ import { computed, ref, watch, type Ref } from 'vue';
 
 import { LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
 
+import {
+  reviewCommentCreate,
+  reviewCommentDelete,
+  reviewCommentGetByAnnotation,
+  reviewCommentUpdate,
+} from '@/api/reviewApi';
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
@@ -19,8 +25,10 @@ type ToolsApi = {
   highlightAnnotationTargets?: (refnos: string[]) => void;
   flyToCloudAnnotation?: (id: string) => void;
   flyToRectAnnotation?: (id: string) => void;
+  flyToObbAnnotation?: (id: string) => void;
   removeCloudAnnotation?: (id: string) => void;
   removeRectAnnotation?: (id: string) => void;
+  removeObbAnnotation?: (id: string) => void;
 };
 
 const props = defineProps<{
@@ -60,8 +68,14 @@ const activeRect = computed(() => {
   return store.rectAnnotations.value.find((a) => a.id === id) || null;
 });
 
+const activeObb = computed(() => {
+  const id = store.activeObbAnnotationId.value;
+  if (!id) return null;
+  return store.obbAnnotations.value.find((a) => a.id === id) || null;
+});
+
 const activeAny = computed(() => {
-  return activeText.value || activeCloud.value || activeRect.value;
+  return activeText.value || activeCloud.value || activeRect.value || activeObb.value;
 });
 
 const currentFocusType = computed<AnnotationType | null>(() => {
@@ -72,6 +86,8 @@ const currentFocusType = computed<AnnotationType | null>(() => {
       return 'cloud';
     case 'annotation_rect':
       return 'rect';
+    case 'annotation_obb':
+      return 'obb';
     default:
       return store.activeAnnotationContext.value?.type ?? null;
   }
@@ -85,6 +101,8 @@ const currentFocusTypeLabel = computed(() => {
       return '云线批注';
     case 'rect':
       return '矩形批注';
+    case 'obb':
+      return '批注';
     default:
       return '未选择';
   }
@@ -106,7 +124,7 @@ function isSectionFocused(type: AnnotationType): boolean {
   return currentFocusType.value === type;
 }
 
-function setMode(mode: 'none' | 'annotation' | 'annotation_cloud' | 'annotation_rect') {
+function setMode(mode: 'none' | 'annotation' | 'annotation_cloud' | 'annotation_rect' | 'annotation_obb') {
   store.setToolMode(mode);
 }
 
@@ -114,18 +132,21 @@ function setActiveText(id: string) {
   store.activeAnnotationId.value = id;
   store.activeCloudAnnotationId.value = null;
   store.activeRectAnnotationId.value = null;
+  store.activeObbAnnotationId.value = null;
 }
 
 function setActiveCloudAnno(id: string) {
   store.activeCloudAnnotationId.value = id;
   store.activeAnnotationId.value = null;
   store.activeRectAnnotationId.value = null;
+  store.activeObbAnnotationId.value = null;
 }
 
 function setActiveRectAnno(id: string) {
   store.activeRectAnnotationId.value = id;
   store.activeAnnotationId.value = null;
   store.activeCloudAnnotationId.value = null;
+  store.activeObbAnnotationId.value = null;
 }
 
 function toggleTextVisible(id: string, current: boolean) {
@@ -138,10 +159,6 @@ function toggleCloudVisible(id: string, current: boolean) {
 
 function toggleRectVisible(id: string, current: boolean) {
   store.updateRectAnnotationVisible(id, !current);
-}
-
-function toggleObbVisible(id: string, current: boolean) {
-  store.updateObbAnnotationVisible(id, !current);
 }
 
 function flyText(id: string) {
@@ -209,6 +226,10 @@ function updateTitle(v: string) {
     store.updateRectAnnotation(activeRect.value.id, { title: v });
     return;
   }
+  if (activeObb.value) {
+    store.updateObbAnnotation(activeObb.value.id, { title: v });
+    return;
+  }
 }
 
 function updateDescription(v: string) {
@@ -222,6 +243,10 @@ function updateDescription(v: string) {
   }
   if (activeRect.value) {
     store.updateRectAnnotation(activeRect.value.id, { description: v });
+    return;
+  }
+  if (activeObb.value) {
+    store.updateObbAnnotation(activeObb.value.id, { description: v });
     return;
   }
 }
@@ -298,6 +323,7 @@ const activeAnnotationType = computed<AnnotationType | null>(() => {
   if (activeText.value) return 'text';
   if (activeCloud.value) return 'cloud';
   if (activeRect.value) return 'rect';
+  if (activeObb.value) return 'obb';
   return null;
 });
 
@@ -339,21 +365,70 @@ function getRoleInlineStyle(role: UserRole): Record<string, string> {
   };
 }
 
+// 列表视图下也要与后端同步，避免“只走本地”的数据分叉
+async function loadCommentsForListView() {
+  if (commentsViewMode.value !== 'list') return;
+  if (!activeAny.value || !activeAnnotationType.value) return;
+  try {
+    const resp = await reviewCommentGetByAnnotation(activeAny.value.id, activeAnnotationType.value);
+    if (resp.success && resp.comments) {
+      const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
+      store.setAnnotationComments(activeAnnotationType.value, activeAny.value.id, normalized);
+    }
+  } catch {
+    // 列表模式拉取失败时保留本地缓存
+  }
+}
+
+watch(
+  () => [commentsViewMode.value, activeAnnotationType.value, activeAny.value?.id],
+  () => {
+    void loadCommentsForListView();
+  },
+  { immediate: true }
+);
+
 // 添加评论
-function addComment() {
+async function addComment() {
   if (!newCommentContent.value.trim()) return;
   if (!activeAny.value || !activeAnnotationType.value) return;
 
   const user = userStore.currentUser.value;
   if (!user) return;
 
-  store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, {
-    authorId: user.id,
-    authorName: user.name,
-    authorRole: user.role,
-    content: newCommentContent.value.trim(),
-    replyToId: replyToCommentId.value || undefined,
-  });
+  const content = newCommentContent.value.trim();
+  const replyToId = replyToCommentId.value || undefined;
+
+  try {
+    const resp = await reviewCommentCreate({
+      annotationId: activeAny.value.id,
+      annotationType: activeAnnotationType.value,
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: user.role,
+      content,
+      replyToId,
+    });
+    if (resp.success && resp.comment) {
+      store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, resp.comment);
+    } else {
+      store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, {
+        authorId: user.id,
+        authorName: user.name,
+        authorRole: user.role,
+        content,
+        replyToId,
+      });
+    }
+  } catch {
+    store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, {
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: user.role,
+      content,
+      replyToId,
+    });
+  }
 
   newCommentContent.value = '';
   replyToCommentId.value = null;
@@ -366,15 +441,22 @@ function startEditComment(comment: AnnotationComment) {
 }
 
 // 保存编辑的评论
-function saveEditComment() {
+async function saveEditComment() {
   if (!editingCommentId.value || !editingCommentContent.value.trim()) return;
   if (!activeAny.value || !activeAnnotationType.value) return;
+
+  const content = editingCommentContent.value.trim();
+  try {
+    await reviewCommentUpdate(editingCommentId.value, content);
+  } catch {
+    // 后端失败降级本地
+  }
 
   store.updateAnnotationComment(
     activeAnnotationType.value,
     activeAny.value.id,
     editingCommentId.value,
-    { content: editingCommentContent.value.trim() }
+    { content }
   );
 
   editingCommentId.value = null;
@@ -388,8 +470,15 @@ function cancelEditComment() {
 }
 
 // 删除评论
-function deleteComment(commentId: string) {
+async function deleteComment(commentId: string) {
   if (!activeAny.value || !activeAnnotationType.value) return;
+
+  try {
+    await reviewCommentDelete(commentId);
+  } catch {
+    // 后端失败降级本地
+  }
+
   store.removeAnnotationComment(activeAnnotationType.value, activeAny.value.id, commentId);
 }
 

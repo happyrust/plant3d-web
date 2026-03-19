@@ -33,15 +33,8 @@ async function loadCommentsFromBackend() {
   try {
     const resp = await reviewCommentGetByAnnotation(props.annotationId, props.annotationType);
     if (resp.success && resp.comments) {
-      // 将后端评论同步到本地 store（避免重复添加）
-      for (const comment of resp.comments) {
-        const existing = store.getAnnotationComments(props.annotationType!, props.annotationId!);
-        if (!existing.find((c) => c.id === comment.id)) {
-          store.addCommentToAnnotation(props.annotationType!, props.annotationId!, {
-            ...comment,
-          });
-        }
-      }
+      const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
+      store.setAnnotationComments(props.annotationType, props.annotationId, normalized);
     }
   } catch (e) {
     commentError.value = e instanceof Error ? e.message : '加载评论失败';

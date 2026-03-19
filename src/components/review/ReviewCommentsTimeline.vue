@@ -14,6 +14,7 @@ import type { AnnotationType } from '@/composables/useToolStore';
 import {
   reviewCommentCreate,
   reviewCommentDelete,
+  reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
 import { useToolStore } from '@/composables/useToolStore';
@@ -44,12 +45,8 @@ async function loadCommentsFromBackend() {
   try {
     const resp = await reviewCommentGetByAnnotation(props.annotationId, props.annotationType);
     if (resp.success && resp.comments) {
-      for (const comment of resp.comments) {
-        const existing = store.getAnnotationComments(props.annotationType!, props.annotationId!);
-        if (!existing.find((c) => c.id === comment.id)) {
-          store.addCommentToAnnotation(props.annotationType!, props.annotationId!, { ...comment });
-        }
-      }
+      const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
+      store.setAnnotationComments(props.annotationType, props.annotationId, normalized);
     }
   } catch (e) {
     commentError.value = e instanceof Error ? e.message : '加载评论失败';
@@ -58,24 +55,17 @@ async function loadCommentsFromBackend() {
   }
 }
 
-let reviewCommentGetByAnnotation: typeof import('@/api/reviewApi').reviewCommentGetByAnnotation;
-import('@/api/reviewApi').then((mod) => {
-  reviewCommentGetByAnnotation = mod.reviewCommentGetByAnnotation;
+onMounted(() => {
   loadCommentsFromBackend();
 });
 
-onMounted(() => {
-  if (reviewCommentGetByAnnotation) loadCommentsFromBackend();
-});
-
 watch(() => [props.annotationId, props.annotationType], () => {
-  if (reviewCommentGetByAnnotation) loadCommentsFromBackend();
+  loadCommentsFromBackend();
 });
 
 const allComments = computed<AnnotationComment[]>(() => {
   if (!props.annotationType || !props.annotationId) return [];
-  return store
-    .getAnnotationComments(props.annotationType, props.annotationId)
+  return [...store.getAnnotationComments(props.annotationType, props.annotationId)]
     .sort((a, b) => a.createdAt - b.createdAt);
 });
 

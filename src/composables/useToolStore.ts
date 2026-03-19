@@ -1058,6 +1058,9 @@ function clearAll() {
 // ==================== 评论/意见管理函数 ====================
 
 export type AnnotationType = 'text' | 'cloud' | 'rect' | 'obb';
+export type AnnotationCommentInput =
+  Omit<AnnotationComment, 'id' | 'annotationId' | 'annotationType' | 'createdAt'>
+  & Partial<Pick<AnnotationComment, 'id' | 'annotationId' | 'annotationType' | 'createdAt'>>;
 
 /**
  * 为批注添加评论/意见
@@ -1065,14 +1068,15 @@ export type AnnotationType = 'text' | 'cloud' | 'rect' | 'obb';
 function addCommentToAnnotation(
   annotationType: AnnotationType,
   annotationId: string,
-  comment: Omit<AnnotationComment, 'id' | 'annotationId' | 'annotationType' | 'createdAt'>
+  comment: AnnotationCommentInput
 ): AnnotationComment | null {
+  const fallbackCreatedAt = Date.now();
   const newComment: AnnotationComment = {
-    id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ...comment,
+    id: comment.id || `comment_${fallbackCreatedAt}_${Math.random().toString(36).slice(2, 8)}`,
     annotationId,
     annotationType,
-    ...comment,
-    createdAt: Date.now(),
+    createdAt: comment.createdAt || fallbackCreatedAt,
   };
 
   switch (annotationType) {
