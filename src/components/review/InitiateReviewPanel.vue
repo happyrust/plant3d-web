@@ -386,7 +386,7 @@ function closePanel() {
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-y-auto p-3" data-testid="designer-landing-workspace">
+  <div class="flex h-full flex-col overflow-y-auto p-3" data-testid="designer-landing-workspace" data-panel="initiateReview">
     <div class="flex items-center justify-between">
       <div>
         <h3 class="text-base font-semibold text-[#111827]">发起提资单</h3>
@@ -470,6 +470,7 @@ function closePanel() {
           <label class="text-[13px] font-medium text-[#6B7280]">构件明细</label>
           <Button variant="secondary"
             size="sm"
+            data-guide="add-component-btn"
             :disabled="!selectionStore.selectedRefno || addingComponent"
             :title="selectionStore.selectedRefno ? '将选中的构件添加到列表' : '请先在三维视图中点击选中一个构件'"
             @click="addSelectedComponent">
@@ -602,7 +603,7 @@ function closePanel() {
           <Paperclip class="h-4 w-4" />
           模型附件
         </label>
-        <FileUploadSection ref="uploadSectionRef"
+        <FileUploadSection ref="uploadSectionRef" data-guide="upload-section"
           v-model="uploadedFiles"
           :max-files="10"
           :max-size="50"
@@ -629,7 +630,7 @@ function closePanel() {
         <AssociatedFilesList :selected-component-count="selectedComponents.length" />
       </div>
 
-      <Button class="w-full" :disabled="!canSubmit || isSubmitting" @click="handleSubmit">
+      <Button class="w-full" data-guide="submit-btn" :disabled="!canSubmit || isSubmitting" @click="handleSubmit">
         <template v-if="isSubmitting">
           正在创建...
         </template>

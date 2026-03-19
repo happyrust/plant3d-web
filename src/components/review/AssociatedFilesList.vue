@@ -3,349 +3,144 @@ import { computed, ref } from 'vue';
 
 import {
   ChevronDown,
-  ChevronRight,
-  FileCheck,
-  FileWarning,
-  FileSpreadsheet,
-  Cog,
+  Download,
   ExternalLink,
+  File,
+  FileText,
 } from 'lucide-vue-next';
 
-import { describeAssociatedFilesSurface } from './reviewAttachmentFlow';
+import type { ReviewAttachment } from '@/types/auth';
 
-// 关联文件类型定义
-export type AssociatedFile = {
-  id: string;
-  name: string;
-  path: string;
-  status: 'ok' | 'warning' | 'error' | 'pending';
-  updatedAt: string;
-  size?: string;
-}
+const props = defineProps<{
+  attachments: ReviewAttachment[];
+}>();
 
-export type FileCategory = {
-  id: string;
-  name: string;
-  icon: string;
-  description: string;
-  files: AssociatedFile[];
-  expanded: boolean;
-}
+type FileGroup = {
+  label: string;
+  items: ReviewAttachment[];
+};
 
-// Props
-type Props = {
-  modelRefNo?: string;
-  selectedComponentCount?: number;
-}
+const expandedGroups = ref<Set<string>>(new Set(['all']));
 
-const props = defineProps<Props>();
+const groups = computed<FileGroup[]>(() => {
+  if (props.attachments.length === 0) return [];
 
-// 模拟的文件分类数据
-const fileCategories = ref<FileCategory[]>([
-  {
-    id: 'mechanics',
-    name: '力学分析文件',
-    icon: 'mechanics',
-    description: '管道应力分析、支吊架计算等力学校验文件',
-    expanded: false,
-    files: [
-      {
-        id: 'm1',
-        name: '1RCV0244_应力分析报告.pdf',
-        path: '/analysis/mechanics/1RCV0244_stress.pdf',
-        status: 'ok',
-        updatedAt: '2025-12-20 14:30',
-        size: '2.4 MB',
-      },
-      {
-        id: 'm2',
-        name: '管道支吊架计算书.xlsx',
-        path: '/analysis/mechanics/pipe_support_calc.xlsx',
-        status: 'ok',
-        updatedAt: '2025-12-19 10:15',
-        size: '856 KB',
-      },
-      {
-        id: 'm3',
-        name: '热膨胀分析.docx',
-        path: '/analysis/mechanics/thermal_expansion.docx',
-        status: 'warning',
-        updatedAt: '2025-12-18 16:45',
-        size: '1.2 MB',
-      },
-    ],
-  },
-  {
-    id: 'collision',
-    name: '碰撞检查文件',
-    icon: 'collision',
-    description: '三维模型碰撞检测结果报告',
-    expanded: false,
-    files: [
-      {
-        id: 'c1',
-        name: '碰撞检查报告_20251220.xlsx',
-        path: '/check/collision/collision_report_20251220.xlsx',
-        status: 'warning',
-        updatedAt: '2025-12-20 09:00',
-        size: '3.1 MB',
-      },
-      {
-        id: 'c2',
-        name: '硬碰撞清单.csv',
-        path: '/check/collision/hard_clash_list.csv',
-        status: 'error',
-        updatedAt: '2025-12-20 09:00',
-        size: '125 KB',
-      },
-      {
-        id: 'c3',
-        name: '软碰撞清单.csv',
-        path: '/check/collision/soft_clash_list.csv',
-        status: 'ok',
-        updatedAt: '2025-12-20 09:00',
-        size: '89 KB',
-      },
-      {
-        id: 'c4',
-        name: '碰撞处理记录.pdf',
-        path: '/check/collision/clash_resolution.pdf',
-        status: 'pending',
-        updatedAt: '2025-12-19 17:30',
-        size: '456 KB',
-      },
-    ],
-  },
-  {
-    id: 'rules',
-    name: '规则校验文件',
-    icon: 'rules',
-    description: '设计规范合规性检查结果',
-    expanded: false,
-    files: [
-      {
-        id: 'r1',
-        name: '管道坡度校验.xlsx',
-        path: '/check/rules/pipe_slope_check.xlsx',
-        status: 'ok',
-        updatedAt: '2025-12-20 11:20',
-        size: '234 KB',
-      },
-      {
-        id: 'r2',
-        name: '阀门间距检查.csv',
-        path: '/check/rules/valve_spacing_check.csv',
-        status: 'ok',
-        updatedAt: '2025-12-20 11:20',
-        size: '67 KB',
-      },
-      {
-        id: 'r3',
-        name: '支吊架间距校验.xlsx',
-        path: '/check/rules/support_spacing_check.xlsx',
-        status: 'warning',
-        updatedAt: '2025-12-19 15:45',
-        size: '189 KB',
-      },
-    ],
-  },
-  {
-    id: 'comparison',
-    name: '二三维比对文件',
-    icon: 'comparison',
-    description: '二维图纸与三维模型一致性校验',
-    expanded: false,
-    files: [
-      {
-        id: 'p1',
-        name: '二三维比对报告.pdf',
-        path: '/check/comparison/2d3d_comparison.pdf',
-        status: 'ok',
-        updatedAt: '2025-12-20 16:00',
-        size: '5.2 MB',
-      },
-      {
-        id: 'p2',
-        name: '差异清单.xlsx',
-        path: '/check/comparison/difference_list.xlsx',
-        status: 'warning',
-        updatedAt: '2025-12-20 16:00',
-        size: '312 KB',
-      },
-    ],
-  },
-]);
+  const byType = new Map<string, ReviewAttachment[]>();
+  for (const att of props.attachments) {
+    const ext = att.name.split('.').pop()?.toLowerCase() || 'other';
+    const group = ext === 'pdf' ? 'PDF 文件' :
+      ext === 'dwg' || ext === 'dxf' ? 'CAD 图纸' :
+        ext === 'xlsx' || ext === 'xls' || ext === 'csv' ? '表格文件' :
+          ext === 'png' || ext === 'jpg' || ext === 'jpeg' ? '图片文件' :
+            '其他文件';
+    if (!byType.has(group)) byType.set(group, []);
+    byType.get(group)!.push(att);
+  }
 
-const linkedFileCount = computed(() => {
-  return fileCategories.value.reduce((total, category) => total + category.files.length, 0);
+  return Array.from(byType.entries()).map(([label, items]) => ({ label, items }));
 });
 
-const surfaceSummary = computed(() => {
-  return describeAssociatedFilesSurface({
-    selectedComponentCount: props.selectedComponentCount ?? 0,
-    linkedFileCount: linkedFileCount.value,
-  });
-});
-
-// 切换分类展开状态
-function toggleCategory(categoryId: string) {
-  const category = fileCategories.value.find((c) => c.id === categoryId);
-  if (category) {
-    category.expanded = !category.expanded;
+function toggleGroup(label: string) {
+  if (expandedGroups.value.has(label)) {
+    expandedGroups.value.delete(label);
+  } else {
+    expandedGroups.value.add(label);
   }
+  expandedGroups.value = new Set(expandedGroups.value);
 }
 
-// 获取分类图标组件
-function getCategoryIcon(iconType: string) {
-  switch (iconType) {
-    case 'mechanics':
-      return Cog;
-    case 'collision':
-      return FileWarning;
-    case 'rules':
-      return FileCheck;
-    case 'comparison':
-      return FileSpreadsheet;
-    default:
-      return FileCheck;
+function downloadFile(attachment: ReviewAttachment) {
+  const link = document.createElement('a');
+  link.href = attachment.url;
+  link.download = attachment.name;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return '-';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
   }
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
 }
 
-// 获取状态样式
-function getStatusStyle(status: AssociatedFile['status']): { bg: string; text: string; label: string } {
-  switch (status) {
-    case 'ok':
-      return { bg: 'bg-green-100', text: 'text-green-700', label: '通过' };
-    case 'warning':
-      return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '警告' };
-    case 'error':
-      return { bg: 'bg-red-100', text: 'text-red-700', label: '错误' };
-    case 'pending':
-      return { bg: 'bg-gray-100', text: 'text-gray-600', label: '待处理' };
-    default:
-      return { bg: 'bg-gray-100', text: 'text-gray-600', label: '未知' };
-  }
+function getFileIcon(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'pdf' || ext === 'doc' || ext === 'docx') return FileText;
+  return File;
 }
 
-// 计算分类状态汇总
-function getCategorySummary(files: AssociatedFile[]): { ok: number; warning: number; error: number } {
-  return {
-    ok: files.filter((f) => f.status === 'ok').length,
-    warning: files.filter((f) => f.status === 'warning').length,
-    error: files.filter((f) => f.status === 'error').length,
-  };
-}
-
-// 打开文件（模拟）
-function openFile(file: AssociatedFile) {
-  console.log('Opening file:', file.path);
-  // 实际实现时可以打开文件预览或下载
+function getSourceLabel(attachment: ReviewAttachment): string {
+  const type = attachment.type || attachment.mimeType || '';
+  if (type.includes('model')) return '模型';
+  if (type.includes('drawing')) return '图纸';
+  return '上传';
 }
 </script>
 
 <template>
-  <div class="associated-files-list">
-    <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="associated-files-summary">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
-          {{ surfaceSummary.badge }}
-        </span>
-        <span class="text-xs text-slate-500">M1 designer baseline</span>
-      </div>
-      <div class="mt-2 text-sm text-slate-700">
-        {{ surfaceSummary.summary }}
-      </div>
-      <div class="mt-1 text-xs text-slate-500">
-        {{ surfaceSummary.detail }}
-      </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-6">
+    <!-- Header -->
+    <div class="mb-4">
+      <h3 class="text-base font-semibold text-slate-900">关联校验文件</h3>
+      <p class="mt-1 text-xs text-slate-500">以下文件根据当前选择的模型构件自动关联</p>
     </div>
 
-    <div class="text-sm text-gray-500 mb-3">
-      以下文件根据当前选择的模型构件自动关联，用于发起前观察关联资料状态
+    <!-- Empty state -->
+    <div v-if="attachments.length === 0"
+      class="py-8 text-center text-sm text-slate-400">
+      暂无关联文件
     </div>
 
-    <!-- 文件分类列表 -->
-    <div class="space-y-2">
-      <div v-for="category in fileCategories"
-        :key="category.id"
-        class="border rounded-lg overflow-hidden">
-        <!-- 分类头部 -->
-        <button class="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors text-left"
-          @click="toggleCategory(category.id)">
-          <!-- 展开/折叠图标 -->
-          <component :is="category.expanded ? ChevronDown : ChevronRight"
-            class="h-4 w-4 text-gray-400 flex-shrink-0" />
-
-          <!-- 分类图标 -->
-          <component :is="getCategoryIcon(category.icon)"
-            class="h-5 w-5 text-blue-600 flex-shrink-0" />
-
-          <!-- 分类名称 -->
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-sm">{{ category.name }}</div>
-            <div class="text-xs text-gray-500 truncate">{{ category.description }}</div>
-          </div>
-
-          <!-- 状态汇总徽章 -->
-          <div class="flex items-center gap-1 flex-shrink-0">
-            <span v-if="getCategorySummary(category.files).error > 0"
-              class="px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700">
-              {{ getCategorySummary(category.files).error }}
-            </span>
-            <span v-if="getCategorySummary(category.files).warning > 0"
-              class="px-1.5 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700">
-              {{ getCategorySummary(category.files).warning }}
-            </span>
-            <span class="text-xs text-gray-500">
-              {{ category.files.length }} 个文件
-            </span>
-          </div>
+    <!-- File groups -->
+    <div v-else class="flex flex-col gap-3">
+      <div v-for="group in groups" :key="group.label"
+        class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <!-- Group header -->
+        <button type="button"
+          class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+          @click="toggleGroup(group.label)">
+          <ChevronDown class="h-4 w-4 shrink-0 text-slate-400 transition-transform"
+            :class="{ '-rotate-90': !expandedGroups.has(group.label) }" />
+          <span class="text-sm font-medium text-slate-700">{{ group.label }}</span>
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+            {{ group.items.length }}
+          </span>
         </button>
 
-        <!-- 文件列表（展开时显示） -->
-        <div v-if="category.expanded"
-          class="border-t bg-gray-50">
-          <div v-for="file in category.files"
-            :key="file.id"
-            class="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-            @click="openFile(file)">
-            <!-- 文件图标 -->
-            <FileSpreadsheet class="h-4 w-4 text-gray-400 flex-shrink-0" />
-
-            <!-- 文件信息 -->
-            <div class="flex-1 min-w-0">
-              <div class="text-sm truncate">{{ file.name }}</div>
-              <div class="text-xs text-gray-400">
-                {{ file.updatedAt }} · {{ file.size }}
-              </div>
+        <!-- Group body -->
+        <div v-show="expandedGroups.has(group.label)"
+          class="border-t border-slate-200 bg-slate-50">
+          <div v-for="item in group.items" :key="item.id"
+            class="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 last:border-b-0 hover:bg-slate-100">
+            <component :is="getFileIcon(item.name)" class="h-4 w-4 shrink-0 text-slate-400" />
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm font-medium text-slate-700">{{ item.name }}</div>
+              <div class="text-[11px] text-slate-400">{{ formatFileSize(item.size) }}</div>
             </div>
-
-            <!-- 状态标签 -->
-            <span :class="[
-              'px-2 py-0.5 text-xs rounded flex-shrink-0',
-              getStatusStyle(file.status).bg,
-              getStatusStyle(file.status).text,
-            ]">
-              {{ getStatusStyle(file.status).label }}
+            <span class="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+              {{ getSourceLabel(item) }}
             </span>
-
-            <!-- 打开链接 -->
-            <ExternalLink class="h-4 w-4 text-gray-400 flex-shrink-0" />
+            <button type="button"
+              class="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+              title="下载"
+              @click="downloadFile(item)">
+              <Download class="h-3.5 w-3.5" />
+            </button>
+            <button type="button"
+              class="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+              title="打开">
+              <ExternalLink class="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- 无文件提示 -->
-    <div v-if="fileCategories.length === 0"
-      class="text-center py-6 text-gray-400 text-sm">
-      暂无关联的校验文件
-    </div>
   </div>
 </template>
-
-<style scoped>
-.associated-files-list {
-  width: 100%;
-}
-</style>

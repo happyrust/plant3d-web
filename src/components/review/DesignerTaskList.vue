@@ -221,10 +221,9 @@ onMounted(() => {
     <div class="rounded-[24px] border border-slate-200 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur">
       <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Designer Tasks</p>
-          <h3 class="mt-2 text-xl font-semibold text-slate-900">我发起的任务</h3>
+          <h3 class="text-xl font-semibold text-slate-900">我的提资单</h3>
           <p class="mt-1 text-sm text-slate-500">
-            发起人：{{ currentUser?.name || '未登录' }} · 当前筛选 {{ activeFilterLabel }} · 共 {{ filteredTasks.length }} 条
+            设计人员：{{ currentUser?.name || '未登录' }} | 共 {{ tasks.length }} 个任务
           </p>
         </div>
         <button class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
@@ -233,6 +232,30 @@ onMounted(() => {
           <RefreshCw :class="['h-4 w-4', isLoading && 'animate-spin']" />
           刷新
         </button>
+      </div>
+
+      <!-- 统计卡片行 -->
+      <div class="mt-4 grid grid-cols-4 gap-3">
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+          @click="statusFilter = 'all'">
+          <div class="text-2xl font-bold text-emerald-700">{{ taskCountByStatus.all }}</div>
+          <div class="mt-0.5 text-xs text-emerald-600">全部</div>
+        </div>
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+          @click="statusFilter = 'submitted'">
+          <div class="text-2xl font-bold text-amber-700">{{ taskCountByStatus.submitted }}</div>
+          <div class="mt-0.5 text-xs text-amber-600">待审核</div>
+        </div>
+        <div class="rounded-xl border border-blue-200 bg-blue-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+          @click="statusFilter = 'approved'">
+          <div class="text-2xl font-bold text-blue-700">{{ taskCountByStatus.approved }}</div>
+          <div class="mt-0.5 text-xs text-blue-600">已通过</div>
+        </div>
+        <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-center cursor-pointer transition hover:shadow-sm"
+          @click="statusFilter = 'rejected'">
+          <div class="text-2xl font-bold text-red-700">{{ taskCountByStatus.rejected }}</div>
+          <div class="mt-0.5 text-xs text-red-600">退回待修改</div>
+        </div>
       </div>
 
       <div class="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4">

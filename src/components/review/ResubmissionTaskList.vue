@@ -155,11 +155,14 @@ onMounted(() => {
     <!-- 头部 -->
     <div class="flex items-center justify-between">
       <div>
-        <h3 class="text-lg font-semibold flex items-center gap-2">
-          <XCircle class="h-5 w-5 text-rose-500" />
-          退回任务
-        </h3>
-        <p class="text-sm text-gray-500">设计人员：{{ currentUser?.name }} | 共 {{ filteredTasks.length }} 个退回待处理任务</p>
+        <div class="flex items-center gap-2">
+          <h3 class="text-lg font-semibold">退回任务处理</h3>
+          <span v-if="filteredTasks.length > 0"
+            class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+            {{ filteredTasks.length }} 个待处理
+          </span>
+        </div>
+        <p class="mt-1 text-sm text-slate-500">这些任务未能通过审核，请根据退回意见修改后重新提交</p>
       </div>
       <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
         :disabled="isLoading"
@@ -258,14 +261,13 @@ onMounted(() => {
               </div>
             </div>
             <div class="flex flex-col gap-2 ml-4">
-              <button class="px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-                @click.stop="handleResumeEditing(task)">
-                继续修改
-              </button>
-              <button class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1" 
+              <button class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50" 
                 @click.stop="handleViewTask(task)">
-                <Eye class="h-4 w-4" />
-                查看详情
+                流转历史
+              </button>
+              <button class="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+                @click.stop="handleResumeEditing(task)">
+                进入模型修改
               </button>
             </div>
           </div>

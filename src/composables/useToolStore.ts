@@ -11,6 +11,8 @@ export type ToolMode =
   | 'xeokit_measure_distance'
   | 'xeokit_measure_angle'
   | 'measure_point_to_object'
+  | 'measure_pipe_to_structure'
+  | 'measure_pipe_to_pipe'
   | 'dimension_linear'
   | 'dimension_angle'
   | 'annotation'

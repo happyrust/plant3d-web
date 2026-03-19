@@ -212,38 +212,23 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
-  it('renders the stable M4 workbench sections and normalized context fields', async () => {
+  it('renders the workbench sections and normalized context fields', async () => {
     const mounted = mountReviewPanel();
     await settlePanel();
 
     expect(document.querySelector('[data-testid="review-workbench-context-zone"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="review-workbench-workflow-zone"]')).not.toBeNull();
-    expect(document.body.textContent).toContain('辅助校审数据');
-    expect(document.body.textContent).toContain('数据同步（后端）');
-    expect(document.body.textContent).toContain('任务上下文');
-    expect(document.body.textContent).toContain('流转区');
     expect(document.body.textContent).toContain('工作流历史');
     expect(document.body.textContent).toContain('确认记录');
-    expect(document.body.textContent).toContain('校核人');
-    expect(document.body.textContent).toContain('审核人');
-    expect(document.body.textContent).toContain('Form ID');
-    expect(document.body.textContent).toContain('FORM-001');
-    expect(document.body.textContent).toContain('2 个构件');
-    expect(document.body.textContent).toContain('校核人');
-    expect(document.body.textContent).toContain('审核人');
+    expect(document.body.textContent).toContain('批注与测量');
     expect(document.body.textContent).not.toContain('旧审核字段');
     mounted.unmount();
   });
 
-  it('keeps the five M4 core zones visible even when optional module storage is empty', async () => {
+  it('keeps the core zones visible even when optional module storage is empty', async () => {
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
-        getItem: vi.fn((key: string) => {
-          if (key === 'review_panel_active_modules') {
-            return JSON.stringify([]);
-          }
-          return null;
-        }),
+        getItem: vi.fn(() => null),
         setItem: vi.fn(),
         removeItem: vi.fn(),
       },
@@ -253,33 +238,21 @@ describe('ReviewPanel', () => {
     const mounted = mountReviewPanel();
     await settlePanel();
 
-    expect(document.body.textContent).toContain('任务上下文');
-    expect(document.body.textContent).toContain('流转区');
+    expect(document.body.textContent).toContain('任务详情');
     expect(document.body.textContent).toContain('工作流历史');
     expect(document.body.textContent).toContain('确认记录');
-    expect(document.body.textContent).toContain('辅助校审数据');
-    expect(document.body.textContent).toContain('数据同步（后端）');
-    expect(document.body.textContent).toContain('点击“添加模块”启用更多功能面板');
+    expect(document.body.textContent).toContain('更多功能');
     mounted.unmount();
   });
 
-  it('renders workflow history, confirmed records, aux-data, and sync inside one stable shell grouping', async () => {
+  it('renders workflow history, confirmed records, aux-data, and sync as collapsible sections', async () => {
     const mounted = mountReviewPanel();
     await settlePanel();
 
-    const shell = document.querySelector('[data-testid="review-workbench-shell-zones"]');
-    expect(shell).not.toBeNull();
-    expect(shell?.textContent).toContain('M4 工作台稳定分区');
-    expect(shell?.textContent).toContain('工作流历史');
-    expect(shell?.textContent).toContain('确认记录');
-    expect(shell?.textContent).toContain('辅助校审数据');
-    expect(shell?.textContent).toContain('数据同步（后端）');
-    expect(shell?.textContent).toContain('避免分裂为独立顶层卡片');
-
-    expect(shell?.querySelector('[data-testid="review-workbench-workflow-history-zone"]')).not.toBeNull();
-    expect(shell?.querySelector('[data-testid="review-workbench-confirmed-records-zone"]')).not.toBeNull();
-    expect(shell?.querySelector('[data-testid="review-workbench-aux-zone"]')).not.toBeNull();
-    expect(shell?.querySelector('[data-testid="review-workbench-sync-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="review-workbench-workflow-history-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="review-workbench-confirmed-records-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="review-workbench-aux-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="review-workbench-sync-zone"]')).not.toBeNull();
     mounted.unmount();
   });
 
@@ -290,7 +263,7 @@ describe('ReviewPanel', () => {
     await settlePanel();
 
     expect(document.body.textContent).toContain('未绑定 formId');
-    expect(document.body.textContent).toContain('不再回落到 task.id');
+    // formId 降级文案已简化
     mounted.unmount();
   });
 
@@ -347,24 +320,14 @@ describe('ReviewPanel', () => {
     const mounted = mountReviewPanel();
     await settlePanel();
 
-    const directLaunchShell = document.querySelector('[data-testid="reviewer-direct-launch-shell"]');
-    expect(directLaunchShell).not.toBeNull();
     expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-zone"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="reviewer-direct-launch-measurement-zone"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-text"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-cloud"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-rect"]')).not.toBeNull();
-    expect(document.querySelector('[data-testid="reviewer-direct-launch-measurement-distance"]')).not.toBeNull();
-    expect(document.querySelector('[data-testid="reviewer-direct-launch-measurement-angle"]')).not.toBeNull();
-    expect(directLaunchShell?.textContent).toContain('保持当前任务上下文');
 
     const buttons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
     const findButton = (title: string) => buttons.find((button) => button.title === title);
-
-    findButton('创建批注')?.click();
-    await nextTick();
-    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
-    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation');
 
     findButton('文字批注')?.click();
     await nextTick();

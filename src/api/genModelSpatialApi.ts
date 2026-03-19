@@ -88,6 +88,44 @@ export type SpatialStatsResult = {
   error?: string;
 };
 
+export type PipeWallDistanceRequest = {
+  dbnum: number;
+  source_refno: string;
+  target_nouns?: string[];
+  /** mm */
+  search_radius?: number;
+  max_candidates?: number;
+};
+
+export type PipeWallDistancePoint = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+export type PipeWallDistanceAabb = {
+  min: PipeWallDistancePoint;
+  max: PipeWallDistancePoint;
+};
+
+export type PipeWallDistanceCandidate = {
+  refno: string;
+  noun: string;
+  spec_value?: number | null;
+  distance_mm: number;
+  aabb: PipeWallDistanceAabb;
+};
+
+export type PipeWallDistanceResponse = {
+  status: 'success' | 'error';
+  message?: string;
+  data?: {
+    source_refno: string;
+    source_aabb: PipeWallDistanceAabb;
+    candidates: PipeWallDistanceCandidate[];
+  };
+};
+
 // ============================================================================
 // API functions
 // ============================================================================
@@ -129,6 +167,18 @@ export async function querySpatialIndex(params: SpatialQueryParams): Promise<Spa
  */
 export async function querySpatialStats(): Promise<SpatialStatsResult> {
   return await fetchJson<SpatialStatsResult>('/api/sqlite-spatial/stats');
+}
+
+/**
+ * 管道到墙/柱候选粗筛（后端仅做 AABB 级排序，不做网格精算）
+ */
+export async function queryPipeWallDistanceCandidates(
+  request: PipeWallDistanceRequest,
+): Promise<PipeWallDistanceResponse> {
+  return await fetchJson<PipeWallDistanceResponse>('/api/space/wall-distance', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
 }
 
 /**

@@ -462,11 +462,11 @@ export class AngleDimension3D extends AnnotationBase {
   }
 
   setMaterialSet(materialSet: AnnotationMaterialSet): void {
-    this.materialSet = materialSet;
-    this.textLabel.setMaterials({ 
+    this.materialSet = this.resolveMaterialSet(materialSet);
+    this.textLabel.setMaterials({
       normal: this.materialSet.textFatLine,
-      hovered: this.hoveredMaterialSet.textFatLine,
-      selected: this.selectedMaterialSet.textFatLine,
+      hovered: this.materials.ssHovered.textFatLine,
+      selected: this.materials.ssSelected.textFatLine,
     });
     this.applyMaterials();
   }

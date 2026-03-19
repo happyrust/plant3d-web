@@ -378,6 +378,7 @@ export class DtxViewer {
 }
 
 export type BackgroundMode =
+  | 'gradient_engineering_gray'
   | 'gradient_solidworks'
   | 'gradient_dark'
   | 'solid_light'
@@ -392,6 +393,7 @@ export type BackgroundPreset = {
 }
 
 export const BACKGROUND_PRESETS: BackgroundPreset[] = [
+  { mode: 'gradient_engineering_gray', label: '工程灰', topColor: '#d0d4d8', bottomColor: '#9ca3ab' },
   { mode: 'gradient_solidworks', label: 'SolidWorks', topColor: '#edf1f7', bottomColor: '#cfd7e6' },
   { mode: 'gradient_dark', label: '深色渐变', topColor: '#3a4a5c', bottomColor: '#1a202c' },
   { mode: 'solid_light', label: '浅灰纯色', topColor: '#e5e7eb', bottomColor: '#e5e7eb' },

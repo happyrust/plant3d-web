@@ -45,17 +45,17 @@ const LABEL_STYLE_PRESETS: Record<
   LabelStylePreset
 > = {
   solvespace: {
-    minCapHeightPx: 11.5,
+    minCapHeightPx: 16,
     pickPaddingPx: 8,
     textRenderOrder: 910,
     bgRenderOrder: 909,
     haloRenderOrder: 909,
-    haloOpacity: 0.85,
-    haloScale: 1.12,
+    haloOpacity: 0.92,
+    haloScale: 1.2,
     forceTextDepthOff: false,
   },
   rebarviz: {
-    minCapHeightPx: 16,
+    minCapHeightPx: 18,
     pickPaddingPx: 6,
     textRenderOrder: 922,
     bgRenderOrder: 909,
@@ -341,11 +341,11 @@ export class SolveSpaceBillboardVectorText {
     this.line.visible = hasText;
 
     if (this.haloLine) {
-      this.haloLine.visible = false; // Disable halo for all styles
+      this.haloLine.visible = false;
     }
 
     if (this.bgMesh) {
-      this.bgMesh.visible = hasText && this.renderStyle === 'solvespace';
+      this.bgMesh.visible = false;
     }
   }
 
@@ -353,8 +353,8 @@ export class SolveSpaceBillboardVectorText {
     this.haloMaterial = new LineMaterial({
       color: 0xffffff,
       transparent: true,
-      linewidth: 6,
-      opacity: 0.68,
+      linewidth: 8,
+      opacity: 0.88,
       depthTest: false,
       depthWrite: false,
     });
@@ -418,7 +418,7 @@ export class SolveSpaceBillboardVectorText {
 
   private _createBackgroundMesh(): void {
     this.bgMaterial = new THREE.MeshBasicMaterial({
-      color: 0xe5e7eb, // default scene bg; caller should update via setBackgroundColor()
+      color: 0xffffff, // default fallback; caller should update via setBackgroundColor()
       side: THREE.DoubleSide,
       depthTest: true,
       depthWrite: true,

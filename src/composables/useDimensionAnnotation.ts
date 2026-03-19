@@ -109,9 +109,18 @@ export class DimensionAnnotationManager {
   private currentIds = new Set<string>();
   private unit: 'm' | 'cm' | 'mm' = 'm';
   private precision = 2;
+  private bgColor: THREE.ColorRepresentation | null = null;
 
   constructor(annotationSystem: UseAnnotationThreeReturn) {
     this.annotationSystem = annotationSystem;
+  }
+
+  setBackgroundColor(color: THREE.ColorRepresentation): void {
+    this.bgColor = color;
+    for (const id of this.currentIds) {
+      const ann = this.annotationSystem.getAnnotation(id);
+      ann?.setBackgroundColor(color);
+    }
   }
 
   setUnit(unit: 'm' | 'cm' | 'mm'): void {
@@ -174,6 +183,10 @@ export class DimensionAnnotationManager {
         createLinearDimension(this.annotationSystem, rec, this.unit, this.precision);
       } else if (rec.kind === 'angle') {
         createAngleDimension(this.annotationSystem, rec, this.precision);
+      }
+      if (this.bgColor != null) {
+        const created = this.annotationSystem.getAnnotation(id);
+        created?.setBackgroundColor(this.bgColor);
       }
     }
 

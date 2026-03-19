@@ -2,12 +2,13 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 
-import { LayoutGrid, List } from 'lucide-vue-next';
+import { LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
 
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
+import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { type AnnotationComment, getRoleDisplayName, UserRole } from '@/types/auth';
+import { type AnnotationComment, getRoleDisplayName, getRoleTheme, UserRole } from '@/types/auth';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -289,8 +290,8 @@ const replyToCommentId = ref<string | null>(null);
 const editingCommentId = ref<string | null>(null);
 const editingCommentContent = ref('');
 
-// 意见视图模式：list = 列表视图, columns = 三栏视图
-const commentsViewMode = ref<'list' | 'columns'>('columns');
+// 意见视图模式：timeline = 时间线, columns = 三栏视图, list = 列表视图
+const commentsViewMode = ref<'timeline' | 'list' | 'columns'>('timeline');
 
 // 获取当前选中批注的类型
 const activeAnnotationType = computed<AnnotationType | null>(() => {
@@ -329,22 +330,13 @@ const commentsByRole = computed(() => {
   return groups;
 });
 
-// 获取角色对应的颜色类
-function getRoleColorClass(role: UserRole): string {
-  switch (role) {
-    case UserRole.DESIGNER:
-      return 'bg-blue-100 text-blue-700 border-blue-200';
-    case UserRole.REVIEWER:
-      return 'bg-orange-100 text-orange-700 border-orange-200';
-    case UserRole.PROOFREADER:
-      return 'bg-green-100 text-green-700 border-green-200';
-    case UserRole.MANAGER:
-      return 'bg-purple-100 text-purple-700 border-purple-200';
-    case UserRole.ADMIN:
-      return 'bg-red-100 text-red-700 border-red-200';
-    default:
-      return 'bg-gray-100 text-gray-700 border-gray-200';
-  }
+function getRoleInlineStyle(role: UserRole): Record<string, string> {
+  const theme = getRoleTheme(role);
+  return {
+    backgroundColor: theme.bgColor,
+    color: theme.textColor,
+    borderColor: theme.columnBorder,
+  };
 }
 
 // 添加评论
@@ -773,26 +765,40 @@ function formatCommentTime(timestamp: number): string {
           </span>
         </div>
         <!-- 视图切换按钮 -->
-        <div class="flex items-center gap-1 rounded-md border border-input p-0.5">
+        <div class="flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-[#F3F4F6] p-1">
           <button type="button"
-            class="flex h-6 w-6 items-center justify-center rounded"
-            :class="commentsViewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
-            title="列表视图"
-            @click="commentsViewMode = 'list'">
-            <List class="h-3.5 w-3.5" />
+            class="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
+            :class="commentsViewMode === 'timeline' ? 'bg-[#FF6B00] text-white shadow-sm' : 'text-[#6B7280] hover:bg-white'"
+            title="时间线视图"
+            @click="commentsViewMode = 'timeline'">
+            <MessageSquareMore class="h-3.5 w-3.5" />
           </button>
           <button type="button"
-            class="flex h-6 w-6 items-center justify-center rounded"
-            :class="commentsViewMode === 'columns' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
+            class="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
+            :class="commentsViewMode === 'columns' ? 'bg-[#FF6B00] text-white shadow-sm' : 'text-[#6B7280] hover:bg-white'"
             title="三栏视图"
             @click="commentsViewMode = 'columns'">
             <LayoutGrid class="h-3.5 w-3.5" />
+          </button>
+          <button type="button"
+            class="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
+            :class="commentsViewMode === 'list' ? 'bg-[#FF6B00] text-white shadow-sm' : 'text-[#6B7280] hover:bg-white'"
+            title="列表视图"
+            @click="commentsViewMode = 'list'">
+            <List class="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
       <div v-if="!activeAny" class="mt-2 text-sm text-muted-foreground">
         选择一个批注后可查看和添加意见。
+      </div>
+
+      <!-- 时间线视图 -->
+      <div v-else-if="commentsViewMode === 'timeline'" class="mt-3">
+        <ReviewCommentsTimeline :annotation-type="activeAnnotationType"
+          :annotation-id="activeAny?.id || null"
+          :annotation-label="activeAny ? currentSelectionSummary : undefined" />
       </div>
 
       <!-- 三栏视图 -->
@@ -806,7 +812,7 @@ function formatCommentTime(timestamp: number): string {
         <!-- 按角色分组显示评论 -->
         <template v-if="Object.keys(commentsByRole).length > 0">
           <div v-for="(comments, role) in commentsByRole" :key="role" class="rounded-md border p-2"
-            :class="getRoleColorClass(role as UserRole)">
+            :style="getRoleInlineStyle(role as UserRole)">
             <div class="mb-2 text-xs font-semibold">
               {{ getRoleDisplayName(role as UserRole) }}意见 ({{ comments.length }})
             </div>
@@ -887,7 +893,7 @@ function formatCommentTime(timestamp: number): string {
             <span class="text-xs font-medium">添加意见</span>
             <span v-if="userStore.currentUser.value"
               class="rounded px-1.5 py-0.5 text-xs"
-              :class="getRoleColorClass(userStore.currentUser.value.role)">
+              :style="getRoleInlineStyle(userStore.currentUser.value.role)">
               {{ getRoleDisplayName(userStore.currentUser.value.role) }}
             </span>
           </div>

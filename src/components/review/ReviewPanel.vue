@@ -25,6 +25,7 @@ import {
 
 import CollisionResultList from './CollisionResultList.vue';
 import ReviewAuxData from './ReviewAuxData.vue';
+import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
 import {
   canReturnAtCurrentNode,
@@ -34,6 +35,7 @@ import {
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
+import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
@@ -44,7 +46,7 @@ import {
 } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
-import { useToolStore } from '@/composables/useToolStore';
+import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
@@ -708,180 +710,195 @@ watch(showModuleMenu, (val) => {
     document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true });
   }
 });
+
+// ============ Tab / 折叠区域 ============
+type ReviewTab = 'records' | 'history' | 'attachments';
+const activeReviewTab = ref<ReviewTab>('records');
+const expandedTaskDetails = ref(false);
+const expandedWorkflowHistory = ref(false);
+const expandedConfirmedRecords = ref(false);
+const expandedExtras = ref(false);
+
+const workflowHistoryCount = computed(() => workflow.value?.history?.length ?? 0);
+const confirmedRecordListCount = computed(() => reviewStore.sortedConfirmedRecords.value.length);
+
+// ============ 批注列表（详情 + 评论线程） ============
+
+type AnnotationListItem = {
+  id: string;
+  type: AnnotationType;
+  title: string;
+  description: string;
+  createdAt: number;
+  visible: boolean;
+  commentCount: number;
+  refno?: string;
+};
+
+const expandedAnnotationId = ref<string | null>(null);
+const expandedAnnotationType = ref<AnnotationType | null>(null);
+
+const allAnnotationItems = computed<AnnotationListItem[]>(() => {
+  const items: AnnotationListItem[] = [];
+
+  for (const a of toolStore.annotations.value) {
+    items.push({
+      id: a.id,
+      type: 'text',
+      title: a.title?.trim() || '未命名文字批注',
+      description: a.description?.trim() || '',
+      createdAt: a.createdAt,
+      visible: a.visible,
+      commentCount: toolStore.getAnnotationComments('text', a.id).length,
+      refno: a.refno,
+    });
+  }
+
+  for (const a of toolStore.cloudAnnotations.value) {
+    items.push({
+      id: a.id,
+      type: 'cloud',
+      title: a.title?.trim() || '未命名云线批注',
+      description: a.description?.trim() || '',
+      createdAt: a.createdAt,
+      visible: a.visible,
+      commentCount: toolStore.getAnnotationComments('cloud', a.id).length,
+    });
+  }
+
+  for (const a of toolStore.rectAnnotations.value) {
+    items.push({
+      id: a.id,
+      type: 'rect',
+      title: a.title?.trim() || '未命名矩形批注',
+      description: a.description?.trim() || '',
+      createdAt: a.createdAt,
+      visible: a.visible,
+      commentCount: toolStore.getAnnotationComments('rect', a.id).length,
+    });
+  }
+
+  return items.sort((a, b) => b.createdAt - a.createdAt);
+});
+
+const totalAnnotationItemCount = computed(() => allAnnotationItems.value.length);
+
+function getAnnotationTypeBadge(type: AnnotationType): { label: string; colorClass: string } {
+  switch (type) {
+    case 'text': return { label: '文字', colorClass: 'bg-blue-100 text-blue-700' };
+    case 'cloud': return { label: '云线', colorClass: 'bg-violet-100 text-violet-700' };
+    case 'rect': return { label: '矩形', colorClass: 'bg-amber-100 text-amber-700' };
+    default: return { label: '批注', colorClass: 'bg-slate-100 text-slate-700' };
+  }
+}
+
+function formatAnnotationTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  if (diff < 60_000) return '刚刚';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`;
+  if (diff < 86_400_000) {
+    return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+  return new Date(timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) +
+    ' ' + new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function toggleAnnotationDetail(item: AnnotationListItem) {
+  if (expandedAnnotationId.value === item.id) {
+    expandedAnnotationId.value = null;
+    expandedAnnotationType.value = null;
+  } else {
+    expandedAnnotationId.value = item.id;
+    expandedAnnotationType.value = item.type;
+  }
+}
+
+function flyToAnnotationItem(item: AnnotationListItem) {
+  ensurePanelAndActivate('annotation');
+  if (item.type === 'text') {
+    toolStore.activeAnnotationId.value = item.id;
+    toolStore.activeCloudAnnotationId.value = null;
+    toolStore.activeRectAnnotationId.value = null;
+  } else if (item.type === 'cloud') {
+    toolStore.activeCloudAnnotationId.value = item.id;
+    toolStore.activeAnnotationId.value = null;
+    toolStore.activeRectAnnotationId.value = null;
+  } else if (item.type === 'rect') {
+    toolStore.activeRectAnnotationId.value = item.id;
+    toolStore.activeAnnotationId.value = null;
+    toolStore.activeCloudAnnotationId.value = null;
+  }
+}
 </script>
 
 <template>
-  <div class="flex h-full flex-col gap-3 overflow-y-auto p-3">
-    <!-- 当前任务信息 -->
+  <div class="flex h-full flex-col gap-3 overflow-y-auto p-3" data-panel="review">
+    <!-- ═══════ A. 任务头部 (紧凑) ═══════ -->
     <div v-if="currentTask"
       class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
       data-testid="reviewer-landing-workspace">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="space-y-2">
-          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <ClipboardCheck class="h-5 w-5 text-primary" />
-            <span>审核工作台</span>
-          </div>
-          <div>
-            <h2 class="text-lg font-semibold leading-7 text-slate-950">{{ currentTask.title }}</h2>
-            <p class="mt-1 text-sm text-slate-500">当前任务上下文与工作流状态</p>
-          </div>
+      <!-- 标题行: 任务名 + 节点徽章 + 操作 -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <ClipboardCheck class="h-5 w-5 shrink-0 text-primary" />
+          <h2 class="truncate text-base font-semibold text-slate-950">{{ currentTask.title }}</h2>
+          <span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+            {{ currentTaskNodeLabel }}
+            <span class="ml-0.5 text-blue-500">{{ taskContext?.currentNodeCode }}</span>
+          </span>
         </div>
-        <div class="flex items-center gap-2">
-          <button v-if="isFilteringByTask"
-            type="button"
-            title="显示所有模型"
+        <div class="flex shrink-0 items-center gap-1.5">
+          <button v-if="isFilteringByTask" type="button" title="显示所有模型"
             class="h-7 rounded-full bg-orange-100 px-3 text-xs font-medium text-orange-700 hover:bg-orange-200"
             @click="clearModelFilter">
-            <Filter class="h-3 w-3 inline mr-1" />
-            已过滤
+            <Filter class="mr-1 inline h-3 w-3" />已过滤
           </button>
-          <button type="button"
-            class="h-6 rounded px-2 text-xs hover:bg-muted"
-            title="关闭任务"
+          <button type="button" class="h-6 rounded px-2 text-xs hover:bg-muted" title="关闭任务"
             @click="reviewStore.clearCurrentTask()">
             <XCircle class="h-4 w-4" />
           </button>
         </div>
       </div>
-      <div class="mt-4 space-y-3">
-        <section class="rounded-xl border border-slate-200 bg-slate-50 p-4" data-testid="review-workbench-context-zone">
-          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <ClipboardCheck class="h-4 w-4 text-primary" />
-            <span>任务上下文</span>
-          </div>
-          <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务标题</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.title || '-' }}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">模型</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.modelName || '-' }}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">发起人</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.requesterName || '-' }}</div>
-            </div>
-            <div class="rounded-lg border px-4 py-3"
-              :class="currentTaskHasFormalFormId ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50'">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Form ID</div>
-              <div class="mt-2 text-sm font-semibold"
-                :class="currentTaskHasFormalFormId ? 'text-slate-900' : 'text-amber-900'">
-                {{ currentTaskFormId }}
-              </div>
-              <div v-if="!currentTaskHasFormalFormId" class="mt-1 text-xs text-amber-700">
-                当前任务缺少正式业务单据号，M4 工作台仅展示降级状态，不再回落到 task.id。
-              </div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">校核人</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.checkerName || '-' }}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">审核人</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.approverName || '-' }}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">当前节点</div>
-              <div class="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <span>{{ taskContext?.currentNodeLabel || '-' }}</span>
-                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                  {{ taskContext?.currentNodeCode || '-' }}
-                </span>
-              </div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">构件数量</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.componentCount || 0 }} 个构件</div>
-            </div>
-          </div>
-          <div v-if="taskContext?.returnReason" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <span class="font-semibold">打回原因：</span>{{ taskContext.returnReason }}
-          </div>
-        </section>
 
-        <section class="rounded-xl border border-slate-200 bg-slate-50 p-4" data-testid="review-workbench-workflow-zone">
-          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <ArrowRight class="h-4 w-4 text-primary" />
-            <span>流转区</span>
-          </div>
-          <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">流转目标</div>
-              <div class="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <span>{{ currentTaskNodeLabel }}</span>
-                <ArrowRight class="h-4 w-4 text-slate-400" />
-                <span class="text-slate-500">{{ submitActionLabel }}</span>
-              </div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务状态</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.status }}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务编号</div>
-              <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.id }}</div>
-            </div>
-          </div>
-          <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="text-slate-600">
-                当前节点:
-                <span class="font-medium text-slate-900">
-                  {{ currentTaskNodeLabel }}
-                </span>
-              </div>
-              <div class="flex gap-2">
-                <button type="button"
-                  class="h-7 rounded px-2 text-xs border hover:bg-muted disabled:opacity-50"
-                  :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
-                  @click="toggleSubmitDialog">
-                  {{ submitActionLabel }}
-                </button>
-                <button type="button"
-                  class="h-7 rounded px-2 text-xs border text-red-600 hover:bg-muted disabled:opacity-50"
-                  :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
-                  @click="toggleReturnDialog">
-                  驳回到设计
-                </button>
-              </div>
-            </div>
+      <!-- 流程步骤条 -->
+      <WorkflowStepBar v-if="taskContext" :current-node="taskContext.currentNodeCode" class="mt-3" data-guide="workflow-step-bar" />
 
-            <div v-if="workflowLoading" class="mt-2 text-muted-foreground">正在加载工作流...</div>
-            <div v-else-if="workflowError" class="mt-2 text-red-600">{{ workflowError }}</div>
-            <div v-else-if="workflow && workflow.history.length > 0" class="mt-2 space-y-1">
-              <div v-for="(step, idx) in workflow.history"
-                :key="idx"
-                class="flex items-center justify-between text-muted-foreground">
-                <span>
-                  {{ WORKFLOW_NODE_NAMES[(step.node || 'sj') as WorkflowNode] }} · {{ getWorkflowActionLabel(step.action) }}
-                </span>
-                <span>{{ formatDate(step.timestamp) }}</span>
-              </div>
-            </div>
-            <div class="flex gap-2 mt-2">
-              <button type="button"
-                class="flex-1 h-7 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
-                @click="filterModelByTask">
-                <Filter class="h-3 w-3 inline mr-1" />
-                只显示任务构件
-              </button>
-              <button v-if="isFilteringByTask"
-                type="button"
-                class="flex-1 h-7 text-xs border rounded hover:bg-muted"
-                @click="clearModelFilter">
-                显示全部
-              </button>
-            </div>
-            <div class="mt-3 border-t pt-3 text-xs text-muted-foreground">
-              当前操作统一走工作流流转：提交到下一节点或驳回到设计节点。
-            </div>
-          </div>
-        </section>
+      <!-- 打回原因提示 -->
+      <div v-if="taskContext?.returnReason"
+        class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <span class="font-semibold">打回原因：</span>{{ taskContext.returnReason }}
+      </div>
+
+      <!-- 核心操作按钮组 -->
+      <div class="mt-3 flex flex-wrap items-center gap-2" data-testid="review-workbench-workflow-zone" data-guide="workflow-actions">
+        <button type="button"
+          class="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
+          @click="toggleSubmitDialog">
+          {{ submitActionLabel }}
+        </button>
+        <button type="button"
+          class="h-8 rounded-md border border-red-200 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+          :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
+          @click="toggleReturnDialog">
+          驳回到设计
+        </button>
+        <button type="button"
+          class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
+          @click="filterModelByTask">
+          <Filter class="mr-1 inline h-3 w-3" />只显示任务构件
+        </button>
+        <button v-if="isFilteringByTask" type="button"
+          class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
+          @click="clearModelFilter">
+          显示全部
+        </button>
+        <div v-if="workflowError" class="text-xs text-red-600">{{ workflowError }}</div>
       </div>
     </div>
 
+    <!-- 嵌入模式落点 -->
     <div v-else-if="embedLandingState?.target === 'reviewer'"
       data-testid="reviewer-landing-workspace"
       class="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-900">
@@ -900,277 +917,219 @@ watch(showModuleMenu, (val) => {
       </div>
     </div>
 
-    <!-- 校审模式开关 -->
+    <!-- ═══════ B. 任务详情 (可折叠) ═══════ -->
+    <div v-if="currentTask" class="rounded-lg border border-slate-200 bg-slate-50"
+      data-testid="review-workbench-context-zone">
+      <button type="button"
+        class="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg"
+        @click="expandedTaskDetails = !expandedTaskDetails">
+        <div class="flex items-center gap-2">
+          <ClipboardCheck class="h-4 w-4 text-primary" />
+          <span>任务详情</span>
+          <span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-500">
+            {{ taskContext?.modelName || '-' }} · {{ taskContext?.componentCount || 0 }} 构件
+          </span>
+        </div>
+        <ChevronDown class="h-4 w-4 transition-transform" :class="{ 'rotate-180': expandedTaskDetails }" />
+      </button>
+      <div v-show="expandedTaskDetails" class="border-t border-slate-200 p-4">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">模型</div>
+            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.modelName || '-' }}</div>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">发起人</div>
+            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.requesterName || '-' }}</div>
+          </div>
+          <div class="rounded-lg border px-4 py-3"
+            :class="currentTaskHasFormalFormId ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50'">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Form ID</div>
+            <div class="mt-2 text-sm font-semibold"
+              :class="currentTaskHasFormalFormId ? 'text-slate-900' : 'text-amber-900'">
+              {{ currentTaskFormId }}
+            </div>
+            <div v-if="!currentTaskHasFormalFormId" class="mt-1 text-xs text-amber-700">
+              当前任务缺少正式业务单据号。
+            </div>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">校核人</div>
+            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.checkerName || '-' }}</div>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">审核人</div>
+            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.approverName || '-' }}</div>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">构件数量</div>
+            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.componentCount || 0 }} 个构件</div>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务状态</div>
+            <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.status }}</div>
+          </div>
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务编号</div>
+            <div class="mt-2 break-all text-sm font-semibold text-slate-900">{{ currentTask.id }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ C. 批注与测量 (合并) ═══════ -->
     <div class="rounded-md border border-border bg-background p-3">
+      <!-- 校审模式 -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <ClipboardCheck class="h-5 w-5 text-primary" />
-          <span class="text-sm font-semibold">校审模式</span>
+          <ClipboardCheck class="h-4 w-4 text-primary" />
+          <span class="text-sm font-semibold">批注与测量</span>
         </div>
         <button type="button"
-          class="h-8 rounded-md px-3 text-sm"
+          class="h-7 rounded-md px-2.5 text-xs"
           :class="
             reviewStore.reviewMode.value
               ? 'bg-primary text-primary-foreground'
               : 'border border-input bg-background hover:bg-muted'
           "
           @click="reviewStore.toggleReviewMode()">
-          {{ reviewStore.reviewMode.value ? '已启用' : '已关闭' }}
+          校审{{ reviewStore.reviewMode.value ? '已启用' : '已关闭' }}
         </button>
       </div>
-      <div class="mt-2 text-xs text-muted-foreground">
-        启用后可在三维视图中确认批注和测量数据。
-      </div>
-    </div>
 
-    <!-- 待确认数据 -->
-    <div class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">待确认数据</div>
-      <div class="mt-2 grid grid-cols-2 gap-2">
-        <div class="flex items-center gap-2 rounded-md bg-muted/50 p-2">
-          <MessageSquare class="h-4 w-4 text-blue-500" />
-          <span class="text-sm">批注</span>
-          <span class="ml-auto font-semibold">{{ pendingAnnotationCount }}</span>
-          <button type="button"
-            class="ml-2 rounded p-1 text-blue-600 hover:bg-blue-100"
-            title="创建批注"
-            @click="startAnnotation">
-            <Plus class="h-3.5 w-3.5" />
-          </button>
+      <!-- 待确认数据计数 -->
+      <div class="mt-2 flex items-center gap-3 text-sm">
+        <div class="flex items-center gap-1.5">
+          <MessageSquare class="h-3.5 w-3.5 text-blue-500" />
+          <span>批注 <strong>{{ pendingAnnotationCount }}</strong></span>
         </div>
-        <div class="relative flex items-center gap-2 rounded-md bg-muted/50 p-2">
-          <Ruler class="h-4 w-4 text-green-500" />
-          <span class="text-sm">测量</span>
-          <span class="ml-auto font-semibold">{{ pendingMeasurementCount }}</span>
+        <div class="flex items-center gap-1.5">
+          <Ruler class="h-3.5 w-3.5 text-green-500" />
+          <span>测量 <strong>{{ pendingMeasurementCount }}</strong></span>
+        </div>
+      </div>
+
+      <!-- 工具按钮 -->
+      <div class="mt-2 flex flex-wrap gap-1.5" data-testid="reviewer-direct-launch-annotation-zone">
+        <button v-for="action in reviewerDirectLaunchActions"
+          :key="action.id"
+          type="button"
+          class="h-7 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-slate-700 hover:bg-muted"
+          :data-testid="`reviewer-direct-launch-${action.id}`"
+          :title="action.label"
+          @click="action.onClick">
+          {{ action.label }}
+        </button>
+        <div class="relative" data-testid="reviewer-direct-launch-measurement-zone">
           <button type="button"
-            class="ml-2 rounded p-1 text-green-600 hover:bg-green-100"
+            class="h-7 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-slate-700 hover:bg-muted"
             title="创建测量"
             @click="showMeasurementMenu = !showMeasurementMenu">
-            <Plus class="h-3.5 w-3.5" />
+            <Plus class="mr-0.5 inline h-3 w-3" />测量
           </button>
-          
-          <!-- 测量类型下拉菜单 -->
           <div v-if="showMeasurementMenu"
-            class="absolute right-0 top-full z-10 mt-1 rounded-md border border-border bg-background p-1 shadow-md">
-            <button type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-              @click="startDistanceMeasurement">
-              <Ruler class="h-3.5 w-3.5" />
-              距离测量
-            </button>
-            <button type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-              @click="startAngleMeasurement">
-              角度测量
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="mt-2 grid grid-cols-3 gap-2">
-        <button type="button"
-          title="文字批注"
-          class="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-slate-700 hover:bg-muted"
-          @click="startAnnotation">
-          文字批注
-        </button>
-        <button type="button"
-          title="云线批注"
-          class="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-slate-700 hover:bg-muted"
-          @click="startCloudAnnotation">
-          云线批注
-        </button>
-        <button type="button"
-          title="矩形批注"
-          class="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-slate-700 hover:bg-muted"
-          @click="startRectAnnotation">
-          矩形批注
-        </button>
-      </div>
-
-      <div v-if="hasPendingData" class="mt-3">
-        <label class="text-xs text-muted-foreground">备注（可选）</label>
-        <input v-model="confirmNote"
-          class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          placeholder="输入确认备注..." />
-      </div>
-
-      <button type="button"
-        class="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        :disabled="!hasPendingData || confirmSaving"
-        @click="confirmCurrentData">
-        <CheckCircle class="h-4 w-4" />
-        {{ confirmSaving ? '保存中...' : '确认当前数据' }}
-      </button>
-      <div v-if="confirmError" class="mt-2 text-xs text-red-600">{{ confirmError }}</div>
-    </div>
-
-    <section class="rounded-md border border-border bg-background p-3"
-      data-testid="reviewer-direct-launch-shell">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div class="text-sm font-semibold">审核直接发起</div>
-          <p class="mt-1 text-xs text-muted-foreground">
-            在当前 reviewer task 上下文中直接进入批注或测量，不离开工作台。
-          </p>
-        </div>
-        <div class="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
-          保持当前任务上下文
-        </div>
-      </div>
-
-      <div class="mt-3 grid gap-3 xl:grid-cols-2">
-        <section class="rounded-lg border border-slate-200 bg-slate-50 p-3"
-          data-testid="reviewer-direct-launch-annotation-zone">
-          <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">批注</div>
-          <div class="mt-2 grid gap-2">
-            <button v-for="action in reviewerDirectLaunchActions"
-              :key="action.id"
-              type="button"
-              class="rounded-md border border-input bg-background px-3 py-3 text-left hover:bg-muted"
-              :data-testid="`reviewer-direct-launch-${action.id}`"
-              :title="action.label"
-              @click="action.onClick">
-              <div class="text-sm font-medium text-slate-900">{{ action.label }}</div>
-              <div class="mt-1 text-xs text-slate-500">{{ action.description }}</div>
-            </button>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-slate-200 bg-slate-50 p-3"
-          data-testid="reviewer-direct-launch-measurement-zone">
-          <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">测量</div>
-          <div class="mt-2 grid gap-2">
+            class="absolute left-0 top-full z-10 mt-1 rounded-md border border-border bg-background p-1 shadow-md">
             <button v-for="action in reviewerMeasurementActions"
               :key="action.id"
               type="button"
-              class="rounded-md border border-input bg-background px-3 py-3 text-left hover:bg-muted"
+              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
               :data-testid="`reviewer-direct-launch-${action.id}`"
-              :title="action.label"
               @click="action.onClick">
-              <div class="text-sm font-medium text-slate-900">{{ action.label }}</div>
-              <div class="mt-1 text-xs text-slate-500">{{ action.description }}</div>
+              {{ action.label }}
             </button>
-          </div>
-        </section>
-      </div>
-    </section>
-
-    <!-- 可选模块管理栏 -->
-    <div class="rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-medium text-slate-500">可选模块</span>
-        <div class="module-menu-container relative">
-          <button type="button"
-            class="flex h-7 items-center gap-1 rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted"
-            :class="{ 'bg-muted': showModuleMenu }"
-            :disabled="inactiveModules.length === 0"
-            @click.stop="showModuleMenu = !showModuleMenu">
-            <Plus class="h-3.5 w-3.5" />
-            添加模块
-            <ChevronDown class="h-3 w-3 text-muted-foreground" />
-          </button>
-          <div v-if="showModuleMenu"
-            class="absolute right-0 top-full z-20 mt-1 w-44 rounded-md border border-border bg-background p-1 shadow-lg">
-            <button v-for="mod in inactiveModules"
-              :key="mod.id"
-              type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted"
-              @click.stop="addModule(mod.id)">
-              <component :is="mod.icon" class="h-3.5 w-3.5 text-muted-foreground" />
-              {{ mod.label }}
-            </button>
-            <div v-if="inactiveModules.length === 0" class="px-2 py-1.5 text-xs text-muted-foreground">
-              所有模块已添加
-            </div>
           </div>
         </div>
       </div>
-      <div v-if="activeModuleDetails.length > 0" class="mt-2 flex flex-wrap gap-1.5">
-        <span v-for="mod in activeModuleDetails"
-          :key="mod.id"
-          class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm">
-          <component :is="mod.icon" class="h-3 w-3 text-slate-400" />
-          {{ mod.label }}
-          <button type="button"
-            class="ml-0.5 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            @click="removeModule(mod.id)">
-            <X class="h-3 w-3" />
-          </button>
-        </span>
-      </div>
-      <div v-else class="mt-1.5 text-xs text-muted-foreground">
-        点击“添加模块”启用更多功能面板
+
+      <!-- 确认操作 -->
+      <div v-if="hasPendingData" class="mt-3 border-t border-slate-200 pt-3">
+        <input v-model="confirmNote"
+          class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm"
+          placeholder="备注（可选）" />
+        <button type="button"
+          class="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          :disabled="confirmSaving"
+          @click="confirmCurrentData">
+          <CheckCircle class="h-4 w-4" />
+          {{ confirmSaving ? '保存中...' : '确认当前数据' }}
+        </button>
+        <div v-if="confirmError" class="mt-1 text-xs text-red-600">{{ confirmError }}</div>
       </div>
     </div>
 
-    <!-- 附件列表 -->
-    <div v-if="isModuleActive('attachments') && currentTask && currentTask.attachments && currentTask.attachments.length > 0" class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">附件文件 ({{ currentTask.attachments.length }})</div>
-      <div class="mt-2 space-y-2 max-h-48 overflow-y-auto">
-        <div v-for="attachment in currentTask.attachments"
-          :key="attachment.id"
-          class="flex items-center gap-2 p-2 rounded-md bg-muted/50 hover:bg-muted cursor-pointer"
-          @click="downloadAttachment(attachment)">
-          <Paperclip class="h-4 w-4 text-gray-500" />
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium truncate">{{ attachment.name }}</div>
-            <div class="text-xs text-muted-foreground">
-              {{ formatFileSize(attachment.size) }} · {{ formatDate(attachment.uploadedAt) }}
-            </div>
-          </div>
-          <Download class="h-4 w-4 text-gray-400" />
-        </div>
-      </div>
-    </div>
-
-    <!-- 已确认统计 -->
-    <div v-if="isModuleActive('confirmedStats')" class="rounded-md border border-border bg-background p-3">
-      <div class="flex items-center justify-between">
+    <!-- ═══════ C2. 批注列表（每条批注详情 + 评论线程） ═══════ -->
+    <div v-if="totalAnnotationItemCount > 0" class="rounded-lg border border-slate-200 bg-white">
+      <div class="flex items-center justify-between px-4 py-3">
         <div class="flex items-center gap-2">
-          <ClipboardList class="h-5 w-5 text-green-500" />
-          <span class="text-sm font-semibold">已确认数据</span>
-        </div>
-        <span class="text-xs text-muted-foreground">
-          {{ reviewStore.confirmedRecordCount }} 批次
-        </span>
-      </div>
-
-      <div class="mt-2 grid grid-cols-2 gap-2">
-        <div class="flex items-center gap-2 rounded-md bg-green-50 p-2 dark:bg-green-950">
-          <MessageSquare class="h-4 w-4 text-green-600" />
-          <span class="text-sm">批注</span>
-          <span class="ml-auto font-semibold text-green-600">
-            {{ reviewStore.totalConfirmedAnnotations }}
-          </span>
-        </div>
-        <div class="flex items-center gap-2 rounded-md bg-green-50 p-2 dark:bg-green-950">
-          <Ruler class="h-4 w-4 text-green-600" />
-          <span class="text-sm">测量</span>
-          <span class="ml-auto font-semibold text-green-600">
-            {{ reviewStore.totalConfirmedMeasurements }}
+          <FileText class="h-4 w-4 text-orange-500" />
+          <span class="text-sm font-semibold text-slate-900">批注列表</span>
+          <span class="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+            {{ totalAnnotationItemCount }}
           </span>
         </div>
       </div>
 
-      <div class="mt-3 flex gap-2">
-        <button type="button"
-          class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs hover:bg-muted disabled:opacity-50"
-          :disabled="reviewStore.confirmedRecordCount.value === 0"
-          @click="exportData">
-          <Download class="h-3.5 w-3.5" />
-          导出JSON
-        </button>
-        <button type="button"
-          class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-input bg-background text-xs text-destructive hover:bg-muted disabled:opacity-50"
-          :disabled="reviewStore.confirmedRecordCount.value === 0"
-          @click="handleClearConfirmedRecords()">
-          <Trash2 class="h-3.5 w-3.5" />
-          清空
-        </button>
+      <div class="flex flex-col gap-0.5 border-t border-slate-100 px-3 py-2">
+        <div v-for="item in allAnnotationItems" :key="item.id">
+          <!-- 批注卡片 -->
+          <div class="cursor-pointer rounded-lg border p-3 transition-colors"
+            :class="expandedAnnotationId === item.id
+              ? 'border-orange-300 bg-orange-50/50 shadow-sm'
+              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'"
+            @click="toggleAnnotationDetail(item)">
+            <!-- 头部：标题 + 类型标签 + 时间 -->
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="truncate text-sm font-semibold text-slate-900">{{ item.title }}</span>
+                  <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                    :class="getAnnotationTypeBadge(item.type).colorClass">
+                    {{ getAnnotationTypeBadge(item.type).label }}
+                  </span>
+                </div>
+                <p v-if="item.description" class="mt-0.5 truncate text-xs text-slate-500">{{ item.description }}</p>
+                <div v-if="item.refno" class="mt-1">
+                  <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] text-blue-600">{{ item.refno }}</span>
+                </div>
+              </div>
+              <span class="shrink-0 text-[11px] text-slate-400">{{ formatAnnotationTime(item.createdAt) }}</span>
+            </div>
+
+            <!-- 底部：评论数 + 操作 -->
+            <div class="mt-2 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-[11px] text-slate-400">
+                <div v-if="item.commentCount > 0" class="flex items-center gap-1 text-orange-500">
+                  <MessageSquare class="h-3 w-3" />
+                  <span class="font-medium">{{ item.commentCount }} 条意见</span>
+                </div>
+                <div v-else class="text-slate-400">暂无意见</div>
+              </div>
+              <div class="flex items-center gap-0.5">
+                <button type="button"
+                  class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-500"
+                  title="定位到批注面板"
+                  @click.stop="flyToAnnotationItem(item)">
+                  <ArrowRight class="h-3.5 w-3.5" />
+                </button>
+                <ChevronDown class="h-3.5 w-3.5 text-slate-400 transition-transform"
+                  :class="{ 'rotate-180': expandedAnnotationId === item.id }" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 展开的评论线程 -->
+          <div v-if="expandedAnnotationId === item.id && expandedAnnotationType"
+            class="mt-1 mb-2">
+            <ReviewCommentsTimeline :annotation-type="expandedAnnotationType"
+              :annotation-id="item.id"
+              :annotation-label="`${getAnnotationTypeBadge(item.type).label}批注 / ${item.title}`"
+              @close="expandedAnnotationId = null; expandedAnnotationType = null" />
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- 弹窗组件 -->
     <WorkflowSubmitDialog :visible="showSubmitDialog"
       :current-node="currentNode"
       :target-node="submitTargetNode"
@@ -1184,145 +1143,163 @@ watch(showModuleMenu, (val) => {
       @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"
       @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
 
-    <section class="rounded-xl border border-slate-200 bg-slate-50 p-4"
-      data-testid="review-workbench-shell-zones">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <FileText class="h-4 w-4 text-primary" />
-            <span>M4 工作台稳定分区</span>
-          </div>
-          <p class="mt-1 text-xs text-slate-500">
-            工作流历史、确认记录、辅助校审数据与同步区收拢到同一主壳层，避免分裂为独立顶层卡片。
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2 text-[11px] text-slate-500">
-          <span v-for="zone in stableWorkbenchZones"
-            :key="zone.id"
-            class="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
-            {{ zone.title }}
+    <!-- ═══════ D. Tab 切换区域 ═══════ -->
+    <div class="rounded-lg border border-slate-200 bg-white">
+      <!-- Tab 头部 -->
+      <div class="flex items-center gap-1 rounded-t-lg border-b border-slate-200 bg-slate-100 p-1">
+        <button type="button"
+          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+          :class="activeReviewTab === 'records'
+            ? 'bg-white text-slate-900 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700'"
+          @click="activeReviewTab = 'records'">
+          审核记录
+          <span v-if="confirmedRecordListCount > 0"
+            class="ml-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+            {{ confirmedRecordListCount }}
           </span>
+        </button>
+        <button type="button"
+          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+          :class="activeReviewTab === 'history'
+            ? 'bg-white text-slate-900 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700'"
+          @click="activeReviewTab = 'history'">
+          历史流转
+          <span v-if="workflowHistoryCount > 0"
+            class="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+            {{ workflowHistoryCount }}
+          </span>
+        </button>
+        <button type="button"
+          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+          :class="activeReviewTab === 'attachments'
+            ? 'bg-white text-slate-900 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700'"
+          @click="activeReviewTab = 'attachments'">
+          附件材料
+        </button>
+      </div>
+
+      <!-- Tab: 审核记录 -->
+      <div v-show="activeReviewTab === 'records'" class="p-4"
+        data-testid="review-workbench-confirmed-records-zone">
+        <div v-if="confirmedRecordListCount === 0" class="py-4 text-center text-sm text-muted-foreground">暂无确认记录</div>
+        <div v-else class="flex max-h-72 flex-col gap-2 overflow-y-auto">
+          <div v-for="record in reviewStore.sortedConfirmedRecords.value"
+            :key="record.id"
+            class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div class="space-y-1">
+                <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">确认时间</div>
+                <span class="block text-sm font-semibold text-slate-900">{{ formatDateTime(record.confirmedAt) }}</span>
+              </div>
+              <button type="button" class="rounded p-1 text-destructive hover:bg-muted" title="删除"
+                @click="reviewStore.removeConfirmedRecord(record.id)">
+                <Trash2 class="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div class="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+              <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注</div>
+                <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">测量</div>
+                <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedMeasurementCount(record) }}</div>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
+                <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 统计 + 操作 -->
+        <div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+          <div class="flex items-center gap-3 text-xs text-slate-500">
+            <span>{{ reviewStore.confirmedRecordCount }} 批次</span>
+            <span>批注 {{ reviewStore.totalConfirmedAnnotations }}</span>
+            <span>测量 {{ reviewStore.totalConfirmedMeasurements }}</span>
+          </div>
+          <div class="flex gap-1.5">
+            <button type="button"
+              class="h-7 rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted disabled:opacity-50"
+              :disabled="reviewStore.confirmedRecordCount.value === 0"
+              @click="exportData">
+              <Download class="mr-0.5 inline h-3 w-3" />导出
+            </button>
+            <button type="button"
+              class="h-7 rounded-md border border-input bg-background px-2.5 text-xs text-destructive hover:bg-muted disabled:opacity-50"
+              :disabled="reviewStore.confirmedRecordCount.value === 0"
+              @click="handleClearConfirmedRecords()">
+              <Trash2 class="mr-0.5 inline h-3 w-3" />清空
+            </button>
+          </div>
         </div>
       </div>
 
-      <div class="mt-4 grid gap-4 xl:grid-cols-2">
-        <section class="rounded-lg border border-slate-200 bg-white p-4"
-          data-testid="review-workbench-workflow-history-zone">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">工作流历史</div>
-              <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[0]?.description }}</p>
+      <!-- Tab: 历史流转 -->
+      <div v-show="activeReviewTab === 'history'" class="p-4"
+        data-testid="review-workbench-workflow-history-zone">
+        <div v-if="workflowLoading" class="py-4 text-center text-sm text-muted-foreground">正在加载工作流...</div>
+        <div v-else-if="workflowError" class="py-4 text-center text-sm text-red-600">{{ workflowError }}</div>
+        <div v-else-if="!workflow || workflow.history.length === 0" class="py-4 text-center text-sm text-muted-foreground">暂无历史记录</div>
+        <div v-else class="flex max-h-72 flex-col gap-2 overflow-y-auto">
+          <div v-for="(step, idx) in workflow.history"
+            :key="`${step.operatorId}-${step.timestamp}-${idx}`"
+            class="relative rounded-xl border border-slate-200 bg-slate-50/80 p-3 pl-8 text-xs before:absolute before:left-3 before:top-3 before:h-full before:w-px before:bg-slate-200 before:content-[''] first:before:top-6 last:before:h-6">
+            <span class="absolute left-[7px] top-4 h-3 w-3 rounded-full border-2 border-white bg-primary shadow-sm" />
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-medium text-foreground">{{ getWorkflowNodeLabel(step) }}</div>
+                <div class="mt-1 text-muted-foreground">动作：{{ getWorkflowActionLabel(step.action) }}</div>
+              </div>
+              <span class="text-right text-muted-foreground">{{ formatDateTime(step.timestamp) }}</span>
             </div>
+            <div class="mt-1 text-muted-foreground">操作人: {{ step.operatorName || step.operatorId || '-' }}</div>
+            <div class="mt-1 text-muted-foreground">备注: {{ step.comment?.trim() || '-' }}</div>
           </div>
+        </div>
+      </div>
 
-          <div v-if="workflowLoading" class="mt-3 text-sm text-muted-foreground">
-            正在加载工作流...
-          </div>
-
-          <div v-else-if="workflowError" class="mt-3 text-sm text-red-600">
-            {{ workflowError }}
-          </div>
-
-          <div v-else-if="!workflow || workflow.history.length === 0"
-            class="mt-3 text-sm text-muted-foreground">
-            暂无历史记录
-          </div>
-
-          <div v-else class="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto">
-            <div v-for="(step, idx) in workflow.history"
-              :key="`${step.operatorId}-${step.timestamp}-${idx}`"
-              class="relative rounded-xl border border-slate-200 bg-slate-50/80 p-3 pl-8 text-xs before:absolute before:left-3 before:top-3 before:h-full before:w-px before:bg-slate-200 before:content-[''] first:before:top-6 last:before:h-6">
-              <span class="absolute left-[7px] top-4 h-3 w-3 rounded-full border-2 border-white bg-primary shadow-sm" />
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <div class="font-medium text-foreground">
-                    {{ getWorkflowNodeLabel(step) }}
-                  </div>
-                  <div class="mt-1 text-muted-foreground">
-                    动作：{{ getWorkflowActionLabel(step.action) }}
-                  </div>
-                </div>
-                <span class="text-right text-muted-foreground">{{ formatDateTime(step.timestamp) }}</span>
-              </div>
-              <div class="mt-1 text-muted-foreground">
-                操作人: {{ step.operatorName || step.operatorId || '-' }}
-              </div>
-              <div class="mt-1 text-muted-foreground">
-                备注: {{ step.comment?.trim() || '-' }}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-slate-200 bg-white p-4"
-          data-testid="review-workbench-confirmed-records-zone">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">确认记录</div>
-              <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[1]?.description }}</p>
-            </div>
-          </div>
-
-          <div v-if="reviewStore.sortedConfirmedRecords.value.length === 0"
-            class="mt-3 text-sm text-muted-foreground">
-            暂无确认记录
-          </div>
-
-          <div v-else class="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto">
-            <div v-for="record in reviewStore.sortedConfirmedRecords.value"
-              :key="record.id"
-              class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
-              <div class="flex items-start justify-between gap-3">
-                <div class="space-y-1">
-                  <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">确认时间</div>
-                  <span class="block text-sm font-semibold text-slate-900">
-                    {{ formatDateTime(record.confirmedAt) }}
-                  </span>
-                </div>
-                <button type="button"
-                  class="rounded p-1 text-destructive hover:bg-muted"
-                  title="删除"
-                  @click="reviewStore.removeConfirmedRecord(record.id)">
-                  <Trash2 class="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <div class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
-                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注数量</div>
-                  <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
-                </div>
-                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
-                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">测量数量</div>
-                  <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedMeasurementCount(record) }}</div>
-                </div>
-                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-slate-700">
-                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
-                  <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-slate-200 bg-white p-4"
+      <!-- Tab: 附件材料 -->
+      <div v-show="activeReviewTab === 'attachments'" class="space-y-4 p-4">
+        <!-- 辅助校审数据 -->
+        <section class="rounded-lg border border-slate-200 bg-slate-50 p-4"
           data-testid="review-workbench-aux-zone">
-          <div class="mb-3">
-            <div class="text-sm font-semibold text-slate-900">辅助校审数据</div>
-            <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[2]?.description }}</p>
-          </div>
+          <div class="mb-3 text-sm font-semibold text-slate-900">辅助校审数据</div>
           <ReviewAuxData />
         </section>
 
-        <section class="rounded-lg border border-slate-200 bg-white p-4"
+        <!-- 数据同步 -->
+        <section class="rounded-lg border border-slate-200 bg-slate-50 p-4"
           data-testid="review-workbench-sync-zone">
-          <div class="mb-3">
-            <div class="text-sm font-semibold text-slate-900">数据同步（后端）</div>
-            <p class="mt-1 text-xs text-slate-500">{{ stableWorkbenchZones[3]?.description }}</p>
-          </div>
+          <div class="mb-3 text-sm font-semibold text-slate-900">数据同步（后端）</div>
           <ReviewDataSync />
         </section>
+
+        <!-- 附件列表 -->
+        <section v-if="currentTask && currentTask.attachments && currentTask.attachments.length > 0"
+          class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div class="text-sm font-semibold text-slate-900">附件文件 ({{ currentTask.attachments.length }})</div>
+          <div class="mt-2 max-h-48 space-y-2 overflow-y-auto">
+            <div v-for="attachment in currentTask.attachments"
+              :key="attachment.id"
+              class="flex cursor-pointer items-center gap-2 rounded-md bg-white p-2 hover:bg-muted"
+              @click="downloadAttachment(attachment)">
+              <Paperclip class="h-4 w-4 text-gray-500" />
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm font-medium">{{ attachment.name }}</div>
+                <div class="text-xs text-muted-foreground">
+                  {{ formatFileSize(attachment.size) }} · {{ formatDate(attachment.uploadedAt) }}
+                </div>
+              </div>
+              <Download class="h-4 w-4 text-gray-400" />
+            </div>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   </div>
 </template>

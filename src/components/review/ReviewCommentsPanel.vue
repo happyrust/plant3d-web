@@ -13,7 +13,7 @@ import {
 } from '@/api/reviewApi';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { type AnnotationComment, getRoleDisplayName, UserRole } from '@/types/auth';
+import { type AnnotationComment, getRoleDisplayName, getRoleTheme, UserRole } from '@/types/auth';
 
 const props = defineProps<{
   annotationType: AnnotationType | null;
@@ -65,31 +65,40 @@ const allComments = computed<AnnotationComment[]>(() => {
   return store.getAnnotationComments(props.annotationType, props.annotationId);
 });
 
-// 角色分栏定义
+const designerTheme = getRoleTheme(UserRole.DESIGNER);
+const proofreaderTheme = getRoleTheme(UserRole.PROOFREADER);
+const reviewerTheme = getRoleTheme(UserRole.REVIEWER);
+
 const columnRoles = [
   {
     key: 'designer',
     label: '设计',
     roles: [UserRole.DESIGNER],
-    colorClass: 'border-blue-300 bg-blue-50 dark:bg-blue-950',
-    headerClass: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-    badgeClass: 'bg-blue-500 text-white',
+    borderColor: designerTheme.columnBorder,
+    bgColor: designerTheme.columnBg,
+    headerBg: designerTheme.columnHeader,
+    headerText: designerTheme.textColor,
+    badgeBg: designerTheme.dotColor,
   },
   {
     key: 'proofreader',
     label: '校核',
     roles: [UserRole.PROOFREADER],
-    colorClass: 'border-green-300 bg-green-50 dark:bg-green-950',
-    headerClass: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-    badgeClass: 'bg-green-500 text-white',
+    borderColor: proofreaderTheme.columnBorder,
+    bgColor: proofreaderTheme.columnBg,
+    headerBg: proofreaderTheme.columnHeader,
+    headerText: proofreaderTheme.textColor,
+    badgeBg: proofreaderTheme.dotColor,
   },
   {
     key: 'reviewer',
     label: '审核',
     roles: [UserRole.REVIEWER, UserRole.MANAGER, UserRole.ADMIN],
-    colorClass: 'border-orange-300 bg-orange-50 dark:bg-orange-950',
-    headerClass: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
-    badgeClass: 'bg-orange-500 text-white',
+    borderColor: reviewerTheme.columnBorder,
+    bgColor: reviewerTheme.columnBg,
+    headerBg: reviewerTheme.columnHeader,
+    headerText: reviewerTheme.textColor,
+    badgeBg: reviewerTheme.dotColor,
   },
 ];
 
@@ -278,16 +287,16 @@ function formatCommentTime(timestamp: number): string {
       <div v-for="column in columnRoles"
         :key="column.key"
         class="flex flex-col rounded-lg border"
-        :class="column.colorClass">
+        :style="{ borderColor: column.borderColor, backgroundColor: column.bgColor }">
         <!-- 栏目头部 -->
         <div class="flex items-center justify-between px-3 py-2 rounded-t-lg"
-          :class="column.headerClass">
+          :style="{ backgroundColor: column.headerBg, color: column.headerText }">
           <div class="flex items-center gap-2">
             <MessageSquare class="h-4 w-4" />
             <span class="text-sm font-semibold">{{ column.label }}</span>
           </div>
-          <span class="px-1.5 py-0.5 rounded text-xs font-medium"
-            :class="column.badgeClass">
+          <span class="rounded px-1.5 py-0.5 text-xs font-medium text-white"
+            :style="{ backgroundColor: column.badgeBg }">
             {{ getCommentsForColumn(column.roles).length }}
           </span>
         </div>

@@ -3,7 +3,7 @@ import { reactive, watch } from 'vue';
 /**
  * 尺寸标注样式配置
  *
- * 参考图样式：深紫色、实心填充三角箭头、2px 线宽、无单位后缀、2 位小数。
+ * 默认样式：红色、实心填充三角箭头、2px 线宽、无单位后缀、2 位小数。
  */
 
 export type DimensionStyleConfig = {
@@ -37,12 +37,12 @@ export type DimensionStyleConfig = {
   showBackground: boolean;
 };
 
-const STORAGE_KEY = 'plant3d-web-dimension-style-v1';
+const STORAGE_KEY = 'plant3d-web-dimension-style-v2';
 
 export const DEFAULT_DIMENSION_STYLE: Readonly<DimensionStyleConfig> = {
-  lineColor: '#7B2FBE',
-  lineColorHover: '#A855F7',
-  lineColorSelected: '#EF4444',
+  lineColor: '#EF4444',
+  lineColorHover: '#F87171',
+  lineColorSelected: '#DC2626',
   lineWidth: 2,
   arrowStyle: 'filled',
   arrowSizePx: 10,

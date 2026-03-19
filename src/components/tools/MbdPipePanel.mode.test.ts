@@ -20,6 +20,7 @@ function createVisStub() {
     dimOffsetScale: ref(1),
     dimLabelT: ref(0.5),
     dimMode: ref('classic'),
+    bendDisplayMode: ref('size'),
     rebarvizArrowSizePx: ref(16),
     rebarvizArrowAngleDeg: ref(18),
     rebarvizArrowStyle: ref('open'),
@@ -101,6 +102,30 @@ describe('MbdPipePanel mode controls', () => {
 
     resetButton!.click();
     expect(vis.resetToCurrentModeDefaults).toHaveBeenCalledTimes(1);
+
+    app.unmount();
+  });
+
+  it('应支持切换弯头显示模式', async () => {
+    const vis = createVisStub();
+    host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp(MbdPipePanel, { vis });
+    app.mount(host);
+    await nextTick();
+
+    const bendModeSelect = host.querySelector(
+      '[data-testid="mbd-bend-display-mode"]',
+    ) as HTMLSelectElement | null;
+    expect(bendModeSelect).toBeTruthy();
+    expect(bendModeSelect?.value).toBe('size');
+
+    bendModeSelect!.value = 'angle';
+    bendModeSelect!.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    expect(vis.bendDisplayMode.value).toBe('angle');
 
     app.unmount();
   });

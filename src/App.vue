@@ -5,11 +5,13 @@ import { reviewGetEmbedUrl } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import ProjectCardList from '@/components/model-project/ProjectCardList.vue';
+import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 import { useModelProjects } from '@/composables/useModelProjects';
+import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 
 const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
 const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
@@ -25,6 +27,7 @@ function handleProjectSelect(projectId: string) {
   selectProject(projectId);
 }
 
+const onboarding = useOnboardingGuide();
 const embedLoading = ref(false);
 
 async function handleEmbedTest() {
@@ -44,6 +47,7 @@ async function handleEmbedTest() {
 <template>
   <v-app class="h-screen">
     <ConfirmDialog />
+    <OnboardingOverlay />
     
     <ProjectCardList v-if="!currentProject" @select="handleProjectSelect" />
     
@@ -61,6 +65,12 @@ async function handleEmbedTest() {
                   :loading="embedLoading"
                   @click="handleEmbedTest">
                   校审测试
+                </v-btn>
+                <v-btn size="small"
+                  variant="text"
+                  title="校审向导"
+                  @click="onboarding.startGuideForCurrentRole()">
+                  <v-icon size="18">mdi-help-circle-outline</v-icon>
                 </v-btn>
                 <LayoutToggleButtons />
                 <AboutDialog />

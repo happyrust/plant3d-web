@@ -218,6 +218,8 @@ export class DTXLayer {
   /** Outline 几何体缓存（LRU），避免反复从缓冲区拷贝 */
   private _outlineGeometryCache = new Map<string, BufferGeometry>();
   private _outlineGeometryCacheLimit = 128;
+  /** 已记录过的无效 outline 几何，避免控制台刷屏 */
+  private _invalidOutlineGeoHashes = new Set<string>();
   /** 当前顶点偏移 */
   private _currentVertexOffset = 0;
   /** 当前索引偏移 (对应几何体池) */
@@ -286,6 +288,9 @@ export class DTXLayer {
   private _compiled = false;
   /** 调试模式 */
   private _debug = false;
+  /** AABB 不一致回退计数 */
+  private _aabbFallbackCount = 0;
+  private _aabbFallbackSamples: { objectId: string; sizeRatio: number; centerDistance: number }[] = [];
 
   /** 全局模型变换（用于整体旋转/平移，默认 identity） */
   private _globalModelMatrix: Matrix4 = new Matrix4();
@@ -686,13 +691,12 @@ export class DTXLayer {
     const suspiciousScale = sizeRatio > 100;
 
     if (suspiciousCenter || suspiciousScale) {
-      if (this._debug) {
-        console.warn('⚠️ 预计算 AABB 与实例矩阵不一致，回退到动态包围盒', {
-          objectId,
-          centerDistance,
-          precomputedMaxDim,
-          dynamicMaxDim,
+      this._aabbFallbackCount++;
+      if (this._debug && this._aabbFallbackSamples.length < 3) {
+        this._aabbFallbackSamples.push({
+          objectId: objectId ?? '?',
           sizeRatio,
+          centerDistance,
         });
       }
       return dynamicBox;
@@ -725,6 +729,12 @@ export class DTXLayer {
         uniqueMaterials: this._materialCount,
         sceneBBox: this._sceneBoundingBox
       });
+      if (this._aabbFallbackCount > 0) {
+        console.warn(
+          `⚠️ 预计算 AABB 回退: ${this._aabbFallbackCount}/${this._totalObjects} 个对象使用动态包围盒`,
+          { samples: this._aabbFallbackSamples },
+        );
+      }
     }
 
     // 2. 创建几何数据纹理
@@ -1767,6 +1777,18 @@ export class DTXLayer {
       const normals = this._normalsBuffer.slice(vStart, vEnd);
       const indices = this._indicesBuffer.slice(iStart, iEnd);
 
+      if (
+        !this._isFiniteTypedArray(positions) ||
+        !this._isLocalIndicesValid(indices, geoHandle.vertexCount)
+      ) {
+        this._warnInvalidOutlineGeometry(obj.geoHash, {
+          objectId,
+          vertexCount: geoHandle.vertexCount,
+          indexCount: geoHandle.indexCount,
+        });
+        return null;
+      }
+
       geometry = new BufferGeometry();
       geometry.setAttribute('position', new BufferAttribute(positions, 3));
       geometry.setAttribute('normal', new BufferAttribute(normals, 3));
@@ -1794,6 +1816,42 @@ export class DTXLayer {
       geometry,
       matrix
     };
+  }
+
+  private _isFiniteTypedArray(values: ArrayLike<number>): boolean {
+    for (let i = 0; i < values.length; i++) {
+      if (!Number.isFinite(values[i]!)) return false;
+    }
+    return true;
+  }
+
+  private _isLocalIndicesValid(
+    indices: ArrayLike<number>,
+    vertexCount: number,
+  ): boolean {
+    for (let i = 0; i < indices.length; i++) {
+      const index = Number(indices[i]);
+      if (!Number.isInteger(index) || index < 0 || index >= vertexCount) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private _warnInvalidOutlineGeometry(
+    geoHash: string,
+    context: {
+      objectId: string;
+      vertexCount: number;
+      indexCount: number;
+    },
+  ): void {
+    if (this._invalidOutlineGeoHashes.has(geoHash)) return;
+    this._invalidOutlineGeoHashes.add(geoHash);
+    console.warn('[DTX] 跳过无效 outline 几何', {
+      geoHash,
+      ...context,
+    });
   }
 
   /**

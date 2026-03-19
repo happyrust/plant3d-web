@@ -66,6 +66,7 @@ function onTabClick(tabId: string) {
         type="button"
         class="ribbon-tab-btn"
         :class="{ 'ribbon-tab-btn--active': tab.id === activeTabId }"
+        :data-ribbon-tab="tab.id"
         @click="onTabClick(tab.id)">
         {{ tab.label }}
       </button>
@@ -92,6 +93,7 @@ function onTabClick(tabId: string) {
               type="button"
               class="ribbon-btn ribbon-btn--large"
               :disabled="item.disabled"
+              :data-command="item.commandId"
               @click="onClickCommand(item.commandId)">
               <component :is="resolveIcon(item.icon)" v-if="item.icon" class="ribbon-btn__icon--large" />
               <span class="ribbon-btn__text--large">{{ item.label }}</span>
@@ -104,6 +106,7 @@ function onTabClick(tabId: string) {
                 type="button"
                 class="ribbon-btn ribbon-btn--small"
                 :disabled="sub.disabled"
+                :data-command="sub.commandId"
                 @click="onClickCommand(sub.commandId)">
                 <component :is="resolveIcon(sub.icon)" v-if="sub.icon" class="ribbon-btn__icon--small" />
                 <span class="ribbon-btn__text--small">{{ sub.label }}</span>

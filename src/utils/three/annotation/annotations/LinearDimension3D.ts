@@ -182,7 +182,7 @@ export class LinearDimension3D extends AnnotationBase {
       extensionOvershootPx: params.extensionOvershootPx ?? 10,
       labelRenderStyle: params.labelRenderStyle,
     };
-    // 尺寸标注默认使用深紫色（由 DimensionStyleStore 驱动）
+    // 尺寸标注默认使用红色（由 DimensionStyleStore 驱动）
     this.materialSet = this.resolveMaterialSet(materials.ssDimensionDefault);
     // Hover/Selected 使用固定 SolveSpace 色，但也要尊重 depthTest 选项。
     this.hoveredMaterialSet = this.resolveMaterialSet(materials.ssHovered);
@@ -479,7 +479,8 @@ export class LinearDimension3D extends AnnotationBase {
 
   /** 获取 label 默认位置（无 labelOffsetWorld 时的基准，即 labelT 插值点） */
   getDefaultLabelWorldPos(): THREE.Vector3 {
-    return this.dimStart.clone().lerp(this.dimEnd, 0.5);
+    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
+    return this.dimStart.clone().lerp(this.dimEnd, t);
   }
 
   /** 更新参数并重建几何 */
@@ -679,7 +680,8 @@ export class LinearDimension3D extends AnnotationBase {
     const endW = this.localToWorld(this.endWorld.copy(this.params.end));
     const aeW = this.localToWorld(this.aeWorld.copy(this.dimStart));
     const beW = this.localToWorld(this.beWorld.copy(this.dimEnd));
-    const baseRefWorld = this.tmpWorldF.copy(aeW).lerp(beW, 0.5);
+    const labelAnchorLocal = this.tempLocalA.copy(this.textLabel.object3d.position);
+    const baseRefWorld = this.localToWorld(labelAnchorLocal);
     alignToPixelGrid(camera, baseRefWorld, vw, vh, this.refWorld);
     const wpp = worldPerPixelAt(camera, this.refWorld, vw, vh, this.wppTmp);
     if (!Number.isFinite(wpp) || wpp <= 0) return;
@@ -1122,9 +1124,11 @@ export class LinearDimension3D extends AnnotationBase {
     this.lastDisplayText = displayText;
     this.textLabel.setText(displayText);
 
-    // 默认布局固定把文字锚在尺寸线中点；常规避让通过抬整条尺寸线完成。
+    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
+
+    // 默认布局让文字沿尺寸线按 labelT 定位；常规避让通过抬整条尺寸线完成。
     this.textLabel.object3d.position.copy(
-      this.tempVec.copy(this.dimStart).lerp(this.dimEnd, 0.5),
+      this.tempVec.copy(this.dimStart).lerp(this.dimEnd, t),
     );
 
     // 吸附点位置

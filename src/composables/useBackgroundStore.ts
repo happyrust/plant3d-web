@@ -19,7 +19,7 @@ function loadFromStorage(): BackgroundMode {
   } catch {
     // ignore
   }
-  return 'gradient_solidworks';
+  return 'gradient_engineering_gray';
 }
 
 function saveToStorage(mode: BackgroundMode): void {

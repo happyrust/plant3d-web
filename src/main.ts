@@ -9,6 +9,7 @@ import App from '@/App.vue';
 import BenchmarkView from '@/components/debug/BenchmarkView.vue';
 import AnnotationPanelDock from '@/components/dock_panels/AnnotationPanelDock.vue';
 import ConsolePanelDock from '@/components/dock_panels/ConsolePanelDock.vue';
+import DashboardPanelDock from '@/components/dock_panels/DashboardPanelDock.vue';
 import DesignerTaskListPanelDock from '@/components/dock_panels/DesignerTaskListPanelDock.vue';
 import DimensionPanelDock from '@/components/dock_panels/DimensionPanelDock.vue';
 import DimensionStylePanelDock from '@/components/dock_panels/DimensionStylePanelDock.vue';
@@ -58,6 +59,7 @@ app.component('ParquetDebugPanel', ParquetDebugPanelDock);
 app.component('RoomStatusPanel', RoomStatusPanelDock);
 app.component('DimensionStylePanel', DimensionStylePanelDock);
 app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
+app.component('DashboardPanel', DashboardPanelDock);
 app.component('BenchmarkView', BenchmarkView);
 
 app.use(vuetify).mount('#app');

@@ -4,6 +4,7 @@ import { useToolStore } from '@/composables/useToolStore';
 const store = useToolStore();
 
 const props = defineProps<{
+  title?: string;
   statusText: string;
 }>();
 
@@ -19,7 +20,7 @@ function cancel() {
       <div class="wizard-icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ruler-combined"><path d="M21 21v-4" /><path d="M21 17h-3" /><path d="M21 12v5" /><path d="M21 7v5" /><path d="M21 12h-3" /><path d="M12 21v-4" /><path d="M12 17h-3" /><path d="M12 12v5" /><path d="M12 7v5" /><path d="M12 12h-3" /><path d="M21 7h-3" /><path d="M21 2v5" /><path d="M21 2H3v9" /><path d="M3 11v9h9" /></svg>
       </div>
-      <span class="wizard-title">点到面测量</span>
+      <span class="wizard-title">{{ props.title || '点到面测量' }}</span>
     </div>
     
     <div class="wizard-body">

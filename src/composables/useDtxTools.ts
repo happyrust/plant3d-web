@@ -20,8 +20,15 @@ import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
+import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
+import { getMbdPipeAnnotations, type MbdPipeData } from '@/api/mbdPipeApi';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
-import { findNounByRefnoAcrossAllDbnos, findOwnerRefnoByTubi } from '@/composables/useDbnoInstancesDtxLoader';
+import {
+  findNounByRefnoAcrossAllDbnos,
+  findOwnerRefnoByTubi,
+  getDtxRefnoTransform,
+  resolveDtxObjectIdsByRefno,
+} from '@/composables/useDbnoInstancesDtxLoader';
 import { dockActivatePanelIfExists, dockPanelExists } from '@/composables/useDockApi';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore';
@@ -244,6 +251,115 @@ function parseRefnoFromDtxObjectId(objectId: string): string | null {
   if (!objectId || !objectId.startsWith('o:')) return null;
   const parts = objectId.split(':');
   return parts.length >= 3 ? (parts[1] ?? null) : null;
+}
+
+const PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES = 20;
+const PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES = 5;
+const PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT = 128;
+const PIPE_STRUCTURE_DEFAULT_NOUNS = ['WALL', 'COLUMN'];
+const PIPE_STRUCTURE_MBD_CACHE_TTL_MS = 60_000;
+
+type PipeMeasureResult = {
+  sourcePoint: Vector3
+  targetPoint: Vector3
+  distance: number
+  targetObjectId: string
+  targetRefno: string
+}
+
+type PipeMeasureSeed = {
+  distance: number
+  sourcePoint: Vec3
+  targetPoint: Vec3
+}
+
+type PipeReferencePointInput = {
+  sourceRefno: string
+  segments?: {
+    refno?: string | null
+    arrive?: Vec3 | null
+    leave?: Vec3 | null
+  }[]
+  refnoPosition?: Vec3 | null
+  aabbCenter?: Vec3 | null
+}
+
+function normalizeRefnoKey(raw: string): string {
+  return String(raw || '').trim().replace(/\//g, '_');
+}
+
+function toBackendRefno(raw: string): string {
+  const normalized = normalizeRefnoKey(raw);
+  const matched = normalized.match(/^(\d+)_(\d+)$/);
+  if (!matched) return normalized;
+  return `${matched[1]}/${matched[2]}`;
+}
+
+function parseDbnumFromRefno(raw: string): number | null {
+  const normalized = normalizeRefnoKey(raw);
+  const head = normalized.split('_')[0] || '';
+  const value = Number(head);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value);
+}
+
+function asVec3(value: Vec3 | null | undefined): Vec3 | null {
+  if (!value) return null;
+  const [x, y, z] = value;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+  return [x, y, z];
+}
+
+function pushVec3Unique(target: Vec3[], candidate: Vec3 | null | undefined): void {
+  const next = asVec3(candidate);
+  if (!next) return;
+  for (const existing of target) {
+    const dx = existing[0] - next[0];
+    const dy = existing[1] - next[1];
+    const dz = existing[2] - next[2];
+    if (dx * dx + dy * dy + dz * dz < 1e-12) return;
+  }
+  target.push(next);
+}
+
+export function collectOrderedPipeReferencePointSeeds(input: PipeReferencePointInput): Vec3[] {
+  const out: Vec3[] = [];
+  const sourceRefno = normalizeRefnoKey(input.sourceRefno);
+  if (sourceRefno && Array.isArray(input.segments)) {
+    for (const segment of input.segments) {
+      const segmentRefno = normalizeRefnoKey(String(segment?.refno || ''));
+      if (!segmentRefno || segmentRefno !== sourceRefno) continue;
+      pushVec3Unique(out, segment?.arrive ?? null);
+      pushVec3Unique(out, segment?.leave ?? null);
+    }
+  }
+  pushVec3Unique(out, input.refnoPosition ?? null);
+  pushVec3Unique(out, input.aabbCenter ?? null);
+  return out;
+}
+
+export function choosePipeMeasureBetterSeed(
+  current: PipeMeasureSeed | null,
+  candidate: PipeMeasureSeed | null,
+): PipeMeasureSeed | null {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  return candidate.distance < current.distance ? candidate : current;
+}
+
+function fromSeed(seed: PipeMeasureSeed, targetObjectId: string, targetRefno: string): PipeMeasureResult {
+  return {
+    distance: seed.distance,
+    sourcePoint: new Vector3(...seed.sourcePoint),
+    targetPoint: new Vector3(...seed.targetPoint),
+    targetObjectId,
+    targetRefno,
+  };
+}
+
+function vec3ByMatrix(vec: Vec3, matrix: any): Vec3 {
+  const p = new Vector3(vec[0], vec[1], vec[2]).applyMatrix4(matrix);
+  return [p.x, p.y, p.z];
 }
 
 export function resolvePickedRefnoForFilter(
@@ -749,7 +865,7 @@ export function buildAnnotationLabelHtml(title: string, description: string): st
   ].join('');
 }
 
-export function buildTextAnnotationMarkerStyleText(collapsed: boolean, color = '#2563eb'): string {
+export function buildTextAnnotationMarkerStyleText(collapsed: boolean, color = '#ef4444'): string {
   if (collapsed) {
     return [
       'position:absolute',
@@ -783,7 +899,7 @@ export function buildTextAnnotationMarkerHtml(glyph: string, collapsed: boolean)
     return [
       '<div data-marker-kind="location-pin" style="position:relative;width:22px;height:28px;">',
       '<svg viewBox="0 0 24 32" width="22" height="28" aria-hidden="true">',
-      '<path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12c0 7.6 8.5 16.1 9.6 17.1a1.3 1.3 0 0 0 1.8 0c1.1-1 9.6-9.5 9.6-17.1C22.5 6.2 17.8 1.5 12 1.5Z" fill="#2563eb" stroke="#ffffff" stroke-width="1.4"/>',
+      '<path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12c0 7.6 8.5 16.1 9.6 17.1a1.3 1.3 0 0 0 1.8 0c1.1-1 9.6-9.5 9.6-17.1C22.5 6.2 17.8 1.5 12 1.5Z" fill="#ef4444" stroke="#ffffff" stroke-width="1.4"/>',
       '<circle cx="12" cy="12" r="4.2" fill="#ffffff"/>',
       '</svg>',
       '</div>',
@@ -792,9 +908,9 @@ export function buildTextAnnotationMarkerHtml(glyph: string, collapsed: boolean)
   return [
     '<div data-marker-kind="push-pin" style="position:relative;width:18px;height:24px;">',
     '<svg viewBox="0 0 18 24" width="18" height="24" aria-hidden="true">',
-    '<path d="M6 2.5h6l-.8 4.2 2.5 2.5v1.5H4.3V9.2l2.5-2.5L6 2.5Z" fill="#2563eb" stroke="#ffffff" stroke-width="1.1" stroke-linejoin="round"/>',
+    '<path d="M6 2.5h6l-.8 4.2 2.5 2.5v1.5H4.3V9.2l2.5-2.5L6 2.5Z" fill="#ef4444" stroke="#ffffff" stroke-width="1.1" stroke-linejoin="round"/>',
     '<path d="M9 10.8V21.8" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>',
-    '<circle cx="9" cy="22.4" r="1.2" fill="#2563eb"/>',
+    '<circle cx="9" cy="22.4" r="1.2" fill="#ef4444"/>',
     '</svg>',
     `<div data-role="annotation-glyph" style="position:absolute;right:-10px;top:-6px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#0f172a;color:#f8fafc;font:700 10px/16px 'Segoe UI',sans-serif;text-align:center;">${escapeAnnotationLabelText(glyph)}</div>`,
     '</div>',
@@ -1328,6 +1444,9 @@ export function useDtxTools(options: {
 
   const progressPoints = ref<MeasurementPoint[]>([]);
   const pointToObjectStart = ref<MeasurementPoint | null>(null);
+  const pipeMeasureBusy = ref(false);
+  const pipeMeasureStatus = ref<string>('');
+  const mbdBranchCache = new Map<string, { expiresAt: number; data: MbdPipeData | null }>();
 
   // dimensions (独立于测量)
   const dimensionPoints = ref<MeasurementPoint[]>([]);
@@ -1902,6 +2021,334 @@ export function useDtxTools(options: {
     lastAppliedPickHighlights = [];
   }
 
+  function setPipeMeasureStatus(message: string): void {
+    pipeMeasureStatus.value = message;
+  }
+
+  function resolvePipeOwnerBranchRefno(sourceRefno: string): string {
+    const sourceNoun = (findNounByRefnoAcrossAllDbnos(sourceRefno) || '').toUpperCase();
+    if (sourceNoun === 'BRAN' || sourceNoun === 'HANG') {
+      return sourceRefno;
+    }
+    return findOwnerRefnoByTubi(sourceRefno) || sourceRefno;
+  }
+
+  async function queryMbdPipeWithBranchCache(branchRefno: string): Promise<MbdPipeData | null> {
+    const normalizedBranch = normalizeRefnoKey(branchRefno);
+    const now = Date.now();
+    const cached = mbdBranchCache.get(normalizedBranch);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
+    let data: MbdPipeData | null = null;
+    try {
+      const response = await getMbdPipeAnnotations(toBackendRefno(normalizedBranch), {
+        include_dims: false,
+        include_chain_dims: false,
+        include_overall_dim: false,
+        include_port_dims: false,
+        include_welds: false,
+        include_slopes: false,
+        include_bends: false,
+        include_cut_tubis: false,
+        include_fittings: false,
+        include_tags: false,
+        include_layout_hints: false,
+      });
+      data = response.success ? (response.data || null) : null;
+    } catch {
+      data = null;
+    }
+
+    mbdBranchCache.set(normalizedBranch, {
+      expiresAt: now + PIPE_STRUCTURE_MBD_CACHE_TTL_MS,
+      data,
+    });
+    return data;
+  }
+
+  function collectPipeReferencePointsWorld(params: {
+    sourceRefno: string
+    sourceObjectId: string
+    dbnum: number
+    layer: DTXLayer
+    globalMatrix: any
+    mbdData: MbdPipeData | null
+  }): Vector3[] {
+    const { sourceRefno, sourceObjectId, dbnum, layer, globalMatrix, mbdData } = params;
+    const refnoTransform = getDtxRefnoTransform(dbnum, sourceRefno);
+    let refnoPosition: Vec3 | null = null;
+    if (Array.isArray(refnoTransform) && refnoTransform.length === 16) {
+      const tx = refnoTransform[12];
+      const ty = refnoTransform[13];
+      const tz = refnoTransform[14];
+      if (Number.isFinite(tx) && Number.isFinite(ty) && Number.isFinite(tz)) {
+        refnoPosition = vec3ByMatrix([tx, ty, tz], globalMatrix);
+      }
+    }
+
+    let aabbCenter: Vec3 | null = null;
+    const sourceAabb = layer.getObjectBoundingBox(sourceObjectId);
+    if (sourceAabb) {
+      const center = sourceAabb.getCenter(new Vector3());
+      aabbCenter = [center.x, center.y, center.z];
+    }
+
+    const mbdSegments = (mbdData?.segments || []).map((segment) => ({
+      refno: segment.refno,
+      arrive: segment.arrive ? vec3ByMatrix(segment.arrive, globalMatrix) : null,
+      leave: segment.leave ? vec3ByMatrix(segment.leave, globalMatrix) : null,
+    }));
+
+    const seeds = collectOrderedPipeReferencePointSeeds({
+      sourceRefno,
+      segments: mbdSegments,
+      refnoPosition,
+      aabbCenter,
+    });
+    return seeds.map((seed) => new Vector3(seed[0], seed[1], seed[2]));
+  }
+
+  function collectSourceSamplePointsWorld(
+    layer: DTXLayer,
+    sourceObjectId: string,
+    limit: number,
+  ): Vector3[] {
+    const data = layer.getObjectGeometryData(sourceObjectId);
+    if (!data) return [];
+    const geometry = data.geometry;
+    const matrix = data.matrix;
+    const posAttr = geometry.getAttribute('position') as BufferAttribute | undefined;
+    const indexAttr = geometry.getIndex() as BufferAttribute | null;
+    if (!posAttr || posAttr.count <= 0) return [];
+
+    const out: Vector3[] = [];
+    const maxCount = Math.max(1, Math.floor(limit));
+
+    const pushPoint = (point: Vector3) => {
+      if (out.length >= maxCount) return;
+      out.push(point.clone());
+    };
+
+    const vertexBudget = Math.max(1, Math.floor(maxCount * 0.7));
+    const vertexStep = Math.max(1, Math.floor(posAttr.count / vertexBudget));
+    const tempVertex = new Vector3();
+    for (let i = 0; i < posAttr.count && out.length < vertexBudget; i += vertexStep) {
+      tempVertex.fromBufferAttribute(posAttr, i).applyMatrix4(matrix);
+      pushPoint(tempVertex);
+    }
+
+    const remaining = maxCount - out.length;
+    if (remaining <= 0) return out;
+
+    const tempA = new Vector3();
+    const tempB = new Vector3();
+    const tempC = new Vector3();
+    const triCount = indexAttr
+      ? Math.floor(indexAttr.count / 3)
+      : Math.floor(posAttr.count / 3);
+    if (triCount <= 0) return out;
+    const triStep = Math.max(1, Math.floor(triCount / Math.max(1, remaining)));
+
+    for (let triIndex = 0; triIndex < triCount && out.length < maxCount; triIndex += triStep) {
+      const base = triIndex * 3;
+      const ia = indexAttr ? indexAttr.getX(base) : base;
+      const ib = indexAttr ? indexAttr.getX(base + 1) : base + 1;
+      const ic = indexAttr ? indexAttr.getX(base + 2) : base + 2;
+      if (ia >= posAttr.count || ib >= posAttr.count || ic >= posAttr.count) continue;
+
+      tempA.fromBufferAttribute(posAttr, ia).applyMatrix4(matrix);
+      tempB.fromBufferAttribute(posAttr, ib).applyMatrix4(matrix);
+      tempC.fromBufferAttribute(posAttr, ic).applyMatrix4(matrix);
+
+      const midAB = tempA.clone().add(tempB).multiplyScalar(0.5);
+      const midBC = tempB.clone().add(tempC).multiplyScalar(0.5);
+      const midCA = tempC.clone().add(tempA).multiplyScalar(0.5);
+      pushPoint(midAB);
+      if (out.length >= maxCount) break;
+      pushPoint(midBC);
+      if (out.length >= maxCount) break;
+      pushPoint(midCA);
+    }
+
+    return out;
+  }
+
+  function resolveTargetObjectPairs(
+    dbnum: number,
+    candidates: PipeWallDistanceCandidate[],
+  ): { targetRefno: string; targetObjectId: string }[] {
+    const out: { targetRefno: string; targetObjectId: string }[] = [];
+    const seen = new Set<string>();
+    for (const candidate of candidates) {
+      const targetRefno = normalizeRefnoKey(candidate.refno);
+      const objectIds = resolveDtxObjectIdsByRefno(dbnum, targetRefno);
+      for (const objectId of objectIds) {
+        if (!objectId || seen.has(objectId)) continue;
+        seen.add(objectId);
+        out.push({ targetRefno, targetObjectId: objectId });
+      }
+    }
+    return out;
+  }
+
+  function findBestPipeMeasureResult(
+    layer: DTXLayer,
+    sourcePoints: Vector3[],
+    targetPairs: { targetRefno: string; targetObjectId: string }[],
+  ): PipeMeasureResult | null {
+    let best: { seed: PipeMeasureSeed; targetRefno: string; targetObjectId: string } | null = null;
+
+    for (const sourcePoint of sourcePoints) {
+      const sourceTuple = vec3ToTuple(sourcePoint);
+      for (const targetPair of targetPairs) {
+        const closest = layer.closestPointToObject(targetPair.targetObjectId, sourcePoint);
+        if (!closest) continue;
+        const nextSeed: PipeMeasureSeed = {
+          distance: closest.distance,
+          sourcePoint: sourceTuple,
+          targetPoint: vec3ToTuple(closest.point),
+        };
+        const winnerSeed = choosePipeMeasureBetterSeed(best?.seed || null, nextSeed);
+        if (winnerSeed === nextSeed) {
+          best = {
+            seed: nextSeed,
+            targetObjectId: targetPair.targetObjectId,
+            targetRefno: targetPair.targetRefno,
+          };
+        }
+      }
+    }
+
+    if (!best) return null;
+    return fromSeed(best.seed, best.targetObjectId, best.targetRefno);
+  }
+
+  async function runPipeToStructureMeasurement(canvas: HTMLCanvasElement, e: PointerEvent): Promise<void> {
+    if (pipeMeasureBusy.value) {
+      setPipeMeasureStatus('正在计算上一条标注，请稍候…');
+      return;
+    }
+
+    const hit = pickSurfacePoint(canvas, e);
+    if (!hit) {
+      setPipeMeasureStatus('未拾取到有效管道对象');
+      return;
+    }
+
+    const layer = dtxLayerRef.value;
+    if (!layer) {
+      setPipeMeasureStatus('DTX 图层未就绪');
+      return;
+    }
+
+    const sourceRefno = normalizeRefnoKey(hit.entityId);
+    const dbnum = parseDbnumFromRefno(sourceRefno);
+    if (!dbnum) {
+      setPipeMeasureStatus(`无法解析 dbnum：${sourceRefno}`);
+      return;
+    }
+
+    const loadedSourceObjectIds = resolveDtxObjectIdsByRefno(dbnum, sourceRefno);
+    const sourceObjectId = hit.objectId || loadedSourceObjectIds[0];
+    if (!sourceObjectId) {
+      setPipeMeasureStatus(`源管道未加载几何：${sourceRefno}`);
+      return;
+    }
+
+    pipeMeasureBusy.value = true;
+    try {
+      setPipeMeasureStatus('正在查询墙/柱候选…');
+      const response = await queryPipeWallDistanceCandidates({
+        dbnum,
+        source_refno: toBackendRefno(sourceRefno),
+        target_nouns: PIPE_STRUCTURE_DEFAULT_NOUNS,
+        max_candidates: PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES,
+      });
+      if (response.status !== 'success' || !response.data) {
+        setPipeMeasureStatus(response.message || '候选查询失败');
+        return;
+      }
+
+      const candidates = (response.data.candidates || []).slice(0, PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES);
+      if (candidates.length === 0) {
+        setPipeMeasureStatus('未找到可用墙/柱候选');
+        return;
+      }
+
+      const targetPairs = resolveTargetObjectPairs(dbnum, candidates);
+      if (targetPairs.length === 0) {
+        setPipeMeasureStatus('候选对象未加载到当前场景');
+        return;
+      }
+
+      setPipeMeasureStatus('正在收集参考点…');
+      const globalMatrix = layer.getGlobalModelMatrix();
+      const branchRefno = resolvePipeOwnerBranchRefno(sourceRefno);
+      const mbdData = await queryMbdPipeWithBranchCache(branchRefno);
+      const referencePoints = collectPipeReferencePointsWorld({
+        sourceRefno,
+        sourceObjectId,
+        dbnum,
+        layer,
+        globalMatrix,
+        mbdData,
+      });
+      if (referencePoints.length === 0) {
+        setPipeMeasureStatus('参考点收集失败');
+        return;
+      }
+
+      setPipeMeasureStatus('阶段A：参考点最近距离计算…');
+      let best = findBestPipeMeasureResult(layer, referencePoints, targetPairs);
+
+      const samplePoints = collectSourceSamplePointsWorld(
+        layer,
+        sourceObjectId,
+        PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT,
+      );
+      if (samplePoints.length > 0) {
+        setPipeMeasureStatus('阶段B：采样点精化…');
+        const refined = findBestPipeMeasureResult(layer, samplePoints, targetPairs);
+        if (refined && (!best || refined.distance < best.distance)) {
+          best = refined;
+        }
+      }
+
+      if (!best) {
+        setPipeMeasureStatus('最近点计算失败');
+        return;
+      }
+
+      const viewer = dtxViewerRef.value;
+      const direction = viewer
+        ? computeDimensionOffsetDirectionByCamera(best.sourcePoint, best.targetPoint, viewer.camera as any)
+        : null;
+      const distance = best.sourcePoint.distanceTo(best.targetPoint);
+      const offset = Math.max(0.2, Math.min(2, distance * 0.15));
+      const rec: LinearDistanceDimensionRecord = {
+        id: nowId('dim-pipe-structure'),
+        kind: 'linear_distance',
+        origin: { entityId: sourceRefno, worldPos: vec3ToTuple(best.sourcePoint) },
+        target: { entityId: best.targetRefno, worldPos: vec3ToTuple(best.targetPoint) },
+        offset,
+        direction: direction ? vec3ToTuple(direction) : null,
+        labelT: 0.5,
+        visible: true,
+        createdAt: Date.now(),
+      };
+      store.addDimension(rec);
+      setPipeMeasureStatus(
+        `已生成标注：${best.targetRefno}，距离 ${formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value)}`,
+      );
+    } catch (error) {
+      setPipeMeasureStatus(`计算失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      pipeMeasureBusy.value = false;
+    }
+  }
+
   const statusText = computed(() => {
     const mode = store.toolMode.value;
     if (mode === 'none') return '未启用工具';
@@ -1920,6 +2367,15 @@ export function useDtxTools(options: {
     }
     if (mode === 'measure_point_to_object') {
       return pointToObjectStart.value ? '点到面测量：请点击选择目标对象（自动计算最近距离）' : '点到面测量：请点击选择起始点';
+    }
+    if (mode === 'measure_pipe_to_structure') {
+      if (pipeMeasureBusy.value) {
+        return pipeMeasureStatus.value || '管-墙/柱快速标注：正在计算…';
+      }
+      return pipeMeasureStatus.value || '管-墙/柱快速标注：点击管道，自动生成最近距离尺寸';
+    }
+    if (mode === 'measure_pipe_to_pipe') {
+      return pipeMeasureStatus.value || '管-管快速标注：当前版本仅完成模式接线（后续复用双阶段算法）';
     }
     if (mode === 'dimension_linear') {
       return dimensionPoints.value.length === 0 ? '尺寸标注（距离）：请选择起点' : '尺寸标注（距离）：请选择终点';
@@ -1995,6 +2451,8 @@ export function useDtxTools(options: {
     progressPoints.value = [];
     pointToObjectStart.value = null;
     dimensionPoints.value = [];
+    pipeMeasureBusy.value = false;
+    pipeMeasureStatus.value = '';
     clearDimensionPreview();
   }
 
@@ -2221,6 +2679,13 @@ export function useDtxTools(options: {
         leader: visual.leader,
         outline: visual.outline,
         record: c,
+      });
+
+      const cloudMarker = makeTextAnnotationMarkerEl(overlay, 'C', false);
+      markers.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: cloudMarker });
+      cloudMarker.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        activateAnnotation('cloud', c.id);
       });
 
       const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
@@ -3172,6 +3637,16 @@ export function useDtxTools(options: {
         store.addMeasurement(rec);
         progressPoints.value = [];
       }
+      return;
+    }
+
+    if (mode === 'measure_pipe_to_structure') {
+      void runPipeToStructureMeasurement(canvas, e);
+      return;
+    }
+
+    if (mode === 'measure_pipe_to_pipe') {
+      setPipeMeasureStatus('管-管快速标注尚未启用，当前版本优先支持管-墙/柱');
       return;
     }
 

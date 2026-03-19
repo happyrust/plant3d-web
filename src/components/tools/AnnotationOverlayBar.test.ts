@@ -77,6 +77,9 @@ describe('AnnotationOverlayBar', () => {
     await nextTick();
     expect(ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
 
+    // 展开抽屉后访问删除按钮
+    (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
     (host.querySelector('[data-testid="annotation-overlay-delete-current"]') as HTMLButtonElement | null)?.click();
     await nextTick();
     expect(store.annotations.value).toHaveLength(0);
@@ -153,6 +156,10 @@ describe('AnnotationOverlayBar', () => {
     expect(store.toolMode.value).toBe('none');
 
     store.setToolMode('annotation_cloud');
+    await nextTick();
+
+    // 展开抽屉后访问批量操作按钮
+    (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
     await nextTick();
 
     const typeVisibilityButton = host.querySelector('[data-testid="annotation-overlay-type-visibility"]') as HTMLButtonElement | null;

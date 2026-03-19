@@ -45,9 +45,9 @@ export class AnnotationMaterials {
     this.black = this.createMaterialSet(0x000000, 0x333333);
 
     this.ssConstraintMagenta = this.createMaterialSet(0xff00ff, 0xff44ff);
-    this.ssDimensionDefault = this.createMaterialSet(0x8b5cf6, 0xa78bfa);
+    this.ssDimensionDefault = this.createMaterialSet(0xef4444, 0xf87171);
     this.ssHovered = this.createMaterialSet(0xffff00, 0xffff44);
-    this.ssSelected = this.createMaterialSet(0xff0000, 0xff4444);
+    this.ssSelected = this.createMaterialSet(0xdc2626, 0xef4444);
   }
 
   private createMaterialSet(
@@ -99,14 +99,14 @@ export class AnnotationMaterials {
       textFatLine: new LineMaterial({
         color: normalColor,
         transparent: true,
-        linewidth: 4,
+        linewidth: 5,
         depthTest: true,
         depthWrite: true,
       }),
       textFatLineHover: new LineMaterial({
         color: hoverColor,
         transparent: true,
-        linewidth: 4,
+        linewidth: 5,
         depthTest: true,
         depthWrite: true,
       }),

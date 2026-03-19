@@ -48,44 +48,41 @@ function handleClose() {
 
 <template>
   <Dialog :open="visible"
-    title="提交到下一节点"
+    title="提交提资单"
     panel-class="max-w-[30rem]"
     body-class="space-y-5 px-6 py-5"
     @update:open="(open) => emit('update:visible', open)">
-    <div class="flex items-center gap-2 text-sm font-medium text-[#2563EB]">
-      <Send class="h-4 w-4" />
-      <span>确认当前任务流转路径</span>
-    </div>
-
-    <div class="rounded-2xl border border-[#DBEAFE] bg-[#F8FBFF] p-4" data-testid="workflow-submit-flow">
+    <div class="rounded-lg border border-green-200 bg-green-50 p-4" data-testid="workflow-submit-flow">
       <div class="flex items-center justify-between gap-3">
-        <div class="min-w-0 flex-1 rounded-xl border border-[#BFDBFE] bg-white px-4 py-3">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-[#60A5FA]">当前节点</div>
-          <div class="mt-2 text-sm font-semibold text-[#1E3A8A]">{{ currentNodeLabel }}</div>
+        <div class="min-w-0 flex-1">
+          <div class="text-xs text-slate-500">当前环节</div>
+          <div class="mt-1 text-sm font-semibold text-slate-900">{{ currentNodeLabel }}</div>
         </div>
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#DBEAFE] text-[#2563EB]">
-          <ArrowRight class="h-4 w-4" />
-        </div>
-        <div class="min-w-0 flex-1 rounded-xl bg-[#2563EB] px-4 py-3 text-white shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.16em] text-blue-100">目标节点</div>
-          <div class="mt-2 text-sm font-semibold">{{ targetNodeLabel }}</div>
+        <ArrowRight class="h-5 w-5 shrink-0 text-green-600" />
+        <div class="min-w-0 flex-1 text-right">
+          <div class="text-xs text-slate-500">下一环节</div>
+          <div class="mt-1 text-sm font-semibold text-green-700">{{ targetNodeLabel }}</div>
         </div>
       </div>
     </div>
 
     <div class="space-y-2">
-      <label for="workflow-submit-comment" class="block text-sm font-medium text-[#374151]">备注输入（可选）</label>
+      <label for="workflow-submit-comment" class="block text-sm font-semibold text-slate-900">
+        流转备注 (选填)
+      </label>
       <textarea id="workflow-submit-comment"
         v-model="comment"
         data-testid="workflow-submit-comment"
-        class="min-h-[112px] w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:outline-none focus:ring-4 focus:ring-[#DBEAFE]"
+        class="min-h-[112px] w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
         rows="4"
-        placeholder="输入本次提交说明，留空则直接流转到下一节点" />
+        placeholder="请输入需要提醒后续审核人员注意事项..." />
+      <p class="text-xs text-slate-400">提示：提交后任务将流转至选定人员，当前无法撤回。</p>
     </div>
 
     <template #footer>
       <Button variant="secondary" :disabled="loading" @click="handleClose">取消</Button>
       <Button :loading="loading" data-testid="workflow-submit-confirm" @click="handleConfirm">
+        <Send class="mr-1 h-3.5 w-3.5" />
         确认提交
       </Button>
     </template>

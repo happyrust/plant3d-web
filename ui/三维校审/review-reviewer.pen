@@ -1,5 +1,5 @@
 {
-  "version": "2.8",
+  "version": "2.9",
   "children": [
     {
       "type": "frame",
@@ -3401,8 +3401,8 @@
     {
       "type": "frame",
       "id": "rnyKq",
-      "x": 1825,
-      "y": 1608,
+      "x": 1441,
+      "y": 1165,
       "name": "WorkflowSubmitDialog",
       "width": 480,
       "fill": "#FFFFFF",
@@ -3834,8 +3834,8 @@
     {
       "type": "frame",
       "id": "gebV9",
-      "x": 2040,
-      "y": 2221,
+      "x": 2057,
+      "y": 1271,
       "name": "AssociatedFilesList",
       "width": 400,
       "fill": "#FFFFFF",

@@ -48,7 +48,7 @@ describe('SolveSpaceBillboardVectorText', () => {
     label.setRenderStyle('rebarviz');
 
     expect(label.getRenderStyle()).toBe('rebarviz');
-    expect(label.getExtentsPx().height).toBeGreaterThanOrEqual(16);
+    expect(label.getExtentsPx().height).toBeGreaterThanOrEqual(18);
     expect((label as any).bgMesh?.visible).toBe(false);
     expect((label as any).haloLine?.visible).toBe(false);
     expect((label as any).line?.visible).toBe(true);

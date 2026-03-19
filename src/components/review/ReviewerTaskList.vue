@@ -214,6 +214,7 @@ onMounted(() => {
 <template>
   <div ref="scrollContainer"
     class="h-full overflow-auto bg-white px-5 py-5 text-gray-900"
+    data-panel="reviewerTasks"
     @scroll="persistScrollPosition">
     <!-- 头部 -->
     <div class="flex items-center justify-between gap-3">

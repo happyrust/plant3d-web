@@ -14,6 +14,7 @@ import {
   BufferGeometry,
   Camera,
   Color,
+  type ColorRepresentation,
   Float32BufferAttribute,
   Group,
   Line,
@@ -65,8 +66,14 @@ import {
   SlopeAnnotation3D,
   AngleDimension3D,
 } from '@/utils/three/annotation';
+import {
+  AnnotationBase,
+  type AnnotationOptions,
+} from '@/utils/three/annotation/core/AnnotationBase';
 import { computeDimensionOffsetDirInLocal } from '@/utils/three/annotation/utils/computeDimensionOffsetDirInLocal';
 import { formatLengthMeters } from '@/utils/unitFormat';
+
+export type MbdBendDisplayMode = 'size' | 'angle';
 
 export type UseMbdPipeAnnotationThreeReturn = {
   /** MBD 面板当前页签（仅 UI 状态） */
@@ -90,6 +97,8 @@ export type UseMbdPipeAnnotationThreeReturn = {
   rebarvizArrowStyle: Ref<'open' | 'filled' | 'tick'>;
   /** RebarViz 模式：尺寸线宽（px） */
   rebarvizLineWidthPx: Ref<number>;
+  /** 弯头显示模式：size=双线性尺寸；angle=角度 */
+  bendDisplayMode: Ref<MbdBendDisplayMode>;
 
   isVisible: Ref<boolean>;
   showDims: Ref<boolean>;
@@ -151,7 +160,7 @@ export type UseMbdPipeAnnotationThreeReturn = {
   /** 获取 slope annotations map（用于外部交互控制器注册） */
   getSlopeAnnotations: () => Map<string, SlopeAnnotation3D>;
   /** 获取 bend annotations map（用于外部交互控制器注册） */
-  getBendAnnotations: () => Map<string, AngleDimension3D>;
+  getBendAnnotations: () => Map<string, BendAnnotationGroup>;
   /** 获取 tag annotations map（用于调试/测试） */
   getTagAnnotations: () => Map<string, WeldAnnotation3D>;
 };
@@ -173,6 +182,101 @@ export type MbdPipeUiTab =
   | 'attrs'
   | 'segments'
   | 'settings';
+
+type BendAnnotationMember = LinearDimension3D | AngleDimension3D;
+
+export class BendAnnotationGroup extends AnnotationBase {
+  private readonly members: BendAnnotationMember[] = [];
+  private mode: MbdBendDisplayMode;
+
+  constructor(
+    materials: AnnotationMaterials,
+    mode: MbdBendDisplayMode,
+    members: BendAnnotationMember[],
+    options?: AnnotationOptions,
+  ) {
+    super(materials, options);
+    this.mode = mode;
+    this.addMembers(members);
+  }
+
+  private addMembers(members: BendAnnotationMember[]): void {
+    this.members.length = 0;
+    for (const member of members) {
+      this.members.push(member);
+      this.add(member);
+    }
+  }
+
+  getMode(): MbdBendDisplayMode {
+    return this.mode;
+  }
+
+  getDisplayText(): string {
+    return this.getDisplayTexts().join(' / ');
+  }
+
+  getDisplayTexts(): string[] {
+    return this.members.map((member) => member.getDisplayText()).filter(Boolean);
+  }
+
+  getDistances(): number[] {
+    return this.members
+      .filter((member): member is LinearDimension3D => member instanceof LinearDimension3D)
+      .map((member) => member.getDistance());
+  }
+
+  getLabelRenderStyle(): string | null {
+    const first = this.members[0] as any;
+    return first?.textLabel?.getRenderStyle?.() ?? first?.textLabel?.renderStyle ?? null;
+  }
+
+  setLabelVisible(visible: boolean): void {
+    for (const member of this.members) {
+      member.setLabelVisible(visible);
+    }
+  }
+
+  override setBackgroundColor(color: ColorRepresentation): void {
+    for (const member of this.members) {
+      member.setBackgroundColor(color);
+    }
+  }
+
+  setLabelRenderStyle(
+    style: MbdDimensionModeConfig['labelRenderStyle'],
+  ): void {
+    for (const member of this.members) {
+      member.setLabelRenderStyle(style);
+    }
+  }
+
+  override update(camera: Camera): void {
+    super.update(camera);
+    for (const member of this.members) {
+      member.update(camera);
+    }
+  }
+
+  protected override onScaleFactorChanged(_factor: number): void {
+    // 组合标注不缩放根对象，避免子线性/角度标注发生端点漂移。
+  }
+
+  protected override onHighlightChanged(_highlighted: boolean): void {
+    for (const member of this.members) {
+      member.selected = this.selected;
+      member.hovered = !this.selected && this.hovered;
+    }
+  }
+
+  override dispose(): void {
+    for (const member of this.members) {
+      member.dispose();
+    }
+    this.members.length = 0;
+    super.dispose();
+  }
+}
 
 type PlanarDimAlignmentCandidate = {
   id: string;
@@ -363,6 +467,190 @@ function collectDuplicateOverallDimIds(dims: MbdDimDto[]): Set<string> {
     }
   }
   return duplicateOverallIds;
+}
+
+function buildPointKey(point: Vector3): string {
+  return [
+    roundTo(point.x, 0.01).toFixed(2),
+    roundTo(point.y, 0.01).toFixed(2),
+    roundTo(point.z, 0.01).toFixed(2),
+  ].join(',');
+}
+
+type BendEndpointCandidate = {
+  point: Vector3;
+  dir: Vector3;
+  distance: number;
+  segmentIndex: number;
+};
+
+function collectBendEndpointCandidatesFromSegments(
+  workPoint: Vector3,
+  segments: MbdPipeSegmentDto[],
+): BendEndpointCandidate[] {
+  const deduped = new Map<string, BendEndpointCandidate>();
+
+  for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+    const segment = segments[segmentIndex]!;
+    const endpoints = [toVector3(segment.arrive), toVector3(segment.leave)].filter(
+      (point): point is Vector3 => !!point,
+    );
+    for (const endpoint of endpoints) {
+      const delta = endpoint.clone().sub(workPoint);
+      const distance = delta.length();
+      if (distance <= 1e-3) continue;
+      const dir = delta.clone().normalize();
+      const key = buildPointKey(endpoint);
+      const prev = deduped.get(key);
+      if (!prev || distance < prev.distance) {
+        deduped.set(key, {
+          point: endpoint.clone(),
+          dir,
+          distance,
+          segmentIndex,
+        });
+      }
+    }
+  }
+
+  return Array.from(deduped.values()).sort(
+    (a, b) => a.distance - b.distance,
+  );
+}
+
+function normalizeBendDirection(point: Vector3, workPoint: Vector3): Vector3 | null {
+  const dir = point.clone().sub(workPoint);
+  if (dir.lengthSq() < 1e-9) return null;
+  return dir.normalize();
+}
+
+function buildBendPortPoint(
+  workPoint: Vector3,
+  candidate: BendEndpointCandidate | null,
+  radius: number | null,
+): Vector3 | null {
+  if (!candidate) return null;
+  if (radius != null && Number.isFinite(radius) && radius > 1e-3) {
+    return workPoint.clone().addScaledVector(candidate.dir, radius);
+  }
+  return candidate.point.clone();
+}
+
+function resolveBendPortPoints(
+  bend: MbdBendDto,
+  segments: MbdPipeSegmentDto[],
+): { point1: Vector3; point2: Vector3; inferred: boolean } | null {
+  const workPoint = new Vector3(
+    bend.work_point[0],
+    bend.work_point[1],
+    bend.work_point[2],
+  );
+  const explicitPoint1 = toVector3(bend.face_center_1 ?? null);
+  const explicitPoint2 = toVector3(bend.face_center_2 ?? null);
+  const radius =
+    typeof bend.radius === 'number' && Number.isFinite(bend.radius) && bend.radius > 1e-3
+      ? bend.radius
+      : null;
+  const candidates = collectBendEndpointCandidatesFromSegments(workPoint, segments);
+
+  const chooseCandidate = (excludedDirs: Vector3[]): BendEndpointCandidate | null => {
+    for (const candidate of candidates) {
+      const conflict = excludedDirs.some(
+        (dir) => Math.abs(dir.dot(candidate.dir)) > 0.98,
+      );
+      if (!conflict) return candidate;
+    }
+    return null;
+  };
+
+  const explicitDir1 = explicitPoint1 ? normalizeBendDirection(explicitPoint1, workPoint) : null;
+  const explicitDir2 = explicitPoint2 ? normalizeBendDirection(explicitPoint2, workPoint) : null;
+  const point1 =
+    explicitPoint1 ??
+    buildBendPortPoint(
+      workPoint,
+      chooseCandidate(explicitDir2 ? [explicitDir2] : []),
+      radius,
+    );
+  const point1Dir = point1 ? normalizeBendDirection(point1, workPoint) : null;
+  const point2 =
+    explicitPoint2 ??
+    buildBendPortPoint(
+      workPoint,
+      chooseCandidate(
+        [explicitDir1, point1Dir].filter((dir): dir is Vector3 => !!dir),
+      ),
+      radius,
+    );
+
+  if (!point1 || !point2) return null;
+  const dir1 = normalizeBendDirection(point1, workPoint);
+  const dir2 = normalizeBendDirection(point2, workPoint);
+  if (!dir1 || !dir2 || Math.abs(dir1.dot(dir2)) > 0.98) return null;
+  return {
+    point1,
+    point2,
+    inferred: !explicitPoint1 || !explicitPoint2,
+  };
+}
+
+function resolveBendSizeDirection(
+  _workPoint: Vector3,
+  _target: Vector3,
+  candidate: BendEndpointCandidate | null,
+  pipeOffsetDirs: Vector3[],
+): Vector3 | null {
+  if (!candidate) return null;
+  const offsetDir = pipeOffsetDirs[candidate.segmentIndex];
+  if (!offsetDir || offsetDir.lengthSq() < 1e-9) return null;
+  return offsetDir.clone().normalize();
+}
+
+function resolveBendEndpointCandidate(
+  workPoint: Vector3,
+  target: Vector3,
+  candidates: BendEndpointCandidate[],
+): BendEndpointCandidate | null {
+  const targetDir = normalizeBendDirection(target, workPoint);
+  if (!targetDir) return null;
+
+  let bestCandidate: BendEndpointCandidate | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const candidate of candidates) {
+    // 组合“方向相似度 + 目标点邻近度”，避免 face_center 有偏差时退化到相机兜底方向。
+    const alignScore = Math.abs(targetDir.dot(candidate.dir));
+    const proximityScore = 1 / (1 + candidate.point.distanceTo(target));
+    const score = alignScore * 0.8 + proximityScore * 0.2;
+    if (score > bestScore) {
+      bestScore = score;
+      bestCandidate = candidate;
+    }
+  }
+
+  return bestCandidate;
+}
+
+function resolveBendSizeOffset(
+  candidate: BendEndpointCandidate | null,
+  segments: MbdPipeSegmentDto[],
+  offsetScale: number,
+): number | null {
+  if (!candidate) return null;
+  const ownerSegment = segments[candidate.segmentIndex];
+  if (!ownerSegment) return null;
+  const start = toVector3(ownerSegment.arrive ?? null);
+  const end = toVector3(ownerSegment.leave ?? null);
+  const segmentDistance =
+    start && end
+      ? start.distanceTo(end)
+      : ownerSegment.straight_length ?? ownerSegment.length ?? null;
+  if (!segmentDistance || !Number.isFinite(segmentDistance) || segmentDistance <= 0) {
+    return null;
+  }
+  const scaledBaseOffset =
+    computeMbdDimOffset(segmentDistance) *
+    clampNumber(offsetScale, 0.05, 50, 1);
+  return resolveSemanticDimOffset(scaledBaseOffset, 'segment');
 }
 
 function buildPlanarDimAlignmentGroupKey(
@@ -563,7 +851,8 @@ export function useMbdPipeAnnotationThree(
   const dimTextMode = ref<'backend' | 'auto'>('backend');
   const dimOffsetScale = ref<number>(1);
   const dimLabelT = ref<number>(0.5);
-  const dimMode = ref<MbdDimensionMode>('rebarviz');
+  const dimMode = ref<MbdDimensionMode>('classic');
+  const bendDisplayMode = ref<MbdBendDisplayMode>('size');
   const rebarvizDefaults = getMbdDimensionModeConfig('rebarviz');
   const rebarvizArrowStyle = ref<'open' | 'filled' | 'tick'>(
     rebarvizDefaults.arrowStyle === 'filled' ? 'filled' : 'open',
@@ -588,7 +877,7 @@ export function useMbdPipeAnnotationThree(
   const suppressedWrongLineCount = ref(0);
   const showWelds = ref(true);
   const showSlopes = ref(true);
-  const showBends = ref(false);
+  const showBends = ref(true);
   const showSegments = ref(false);
   const showLabels = ref(true);
 
@@ -611,7 +900,7 @@ export function useMbdPipeAnnotationThree(
   const weldAnnotations = new Map<string, WeldAnnotation3D>();
   const slopeAnnotations = new Map<string, SlopeAnnotation3D>();
   const segmentLines = new Map<string, Line>();
-  const bendAnnotations = new Map<string, AngleDimension3D>();
+  const bendAnnotations = new Map<string, BendAnnotationGroup>();
   const cutTubiAnnotations = new Map<string, LinearDimension3D>();
   const fittingAnnotations = new Map<
     string,
@@ -651,7 +940,8 @@ export function useMbdPipeAnnotationThree(
     mbdViewMode.value = mode;
     showDims.value = true;
     if (mode === 'inspection') {
-      dimMode.value = 'rebarviz';
+      dimMode.value = 'classic';
+      bendDisplayMode.value = 'size';
       showDimSegment.value = false;
       showDimChain.value = false;
       showDimOverall.value = false;
@@ -669,7 +959,8 @@ export function useMbdPipeAnnotationThree(
       return;
     }
 
-    dimMode.value = 'rebarviz';
+    dimMode.value = 'classic';
+    bendDisplayMode.value = 'size';
     showDimSegment.value = true;
     showDimChain.value = false;
     showDimOverall.value = false;
@@ -682,7 +973,7 @@ export function useMbdPipeAnnotationThree(
     showOwnerSegmentDebug.value = false;
     showWelds.value = true;
     showSlopes.value = true;
-    showBends.value = false;
+    showBends.value = true;
     showSegments.value = false;
   }
 
@@ -1558,6 +1849,26 @@ export function useMbdPipeAnnotationThree(
     highlightItem(activeItemId.value);
   }
 
+  function rebuildBendsByCurrentData(): void {
+    const data = currentData.value;
+    if (!data) return;
+
+    for (const annotation of bendAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    bendAnnotations.clear();
+
+    if (data.bends?.length) {
+      renderBends(data.bends, data.segments ?? []);
+    }
+
+    const viewer = dtxViewerRef.value;
+    if (viewer) applyBackgroundColor(viewer);
+    applyVisibility();
+    applyLabelVisibility();
+    highlightItem(activeItemId.value);
+  }
+
   function renderWelds(welds: MbdWeldDto[]): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
     const weldMaterial =
@@ -1748,47 +2059,177 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
-  function renderBends(bends: MbdBendDto[]): void {
+  function buildBendSizeDimensions(
+    bend: MbdBendDto,
+    workPoint: Vector3,
+    point1: Vector3,
+    point2: Vector3,
+    segments: MbdPipeSegmentDto[],
+    pipeOffsetDirs: Vector3[],
+  ): LinearDimension3D[] {
+    const viewer = dtxViewerRef.value;
+    const gm = getGlobalModelMatrix?.() || identityMatrix;
+    const modeConfig = getRuntimeModeConfig();
+    const bendCandidates = collectBendEndpointCandidatesFromSegments(
+      workPoint,
+      segments,
+    );
+    const materialSet = resolveMbdDimensionMaterialSet(
+      materials,
+      'segment',
+      dimMode.value,
+    );
+    const resolveBendText = (start: Vector3, end: Vector3): string => {
+      if (dimTextMode.value === 'backend') {
+        return String(Math.round(start.distanceTo(end)));
+      }
+      return resolveDimDisplayText(
+        '',
+        false,
+        start,
+        end,
+        gm,
+        unitSettings.displayUnit.value,
+        unitSettings.precision.value,
+      );
+    };
+
+    const buildDirection = (start: Vector3, end: Vector3): Vector3 => {
+      const resolved = computeDimensionOffsetDirInLocal(
+        start,
+        end,
+        viewer?.camera ?? null,
+        gm,
+      );
+      if (resolved && resolved.lengthSq() >= 1e-9) return resolved.normalize();
+      const axial = end.clone().sub(start).normalize();
+      const fallback = Math.abs(axial.z) < 0.95
+        ? new Vector3(0, 0, 1).cross(axial)
+        : new Vector3(0, 1, 0).cross(axial);
+      if (fallback.lengthSq() < 1e-9) fallback.set(1, 0, 0);
+      return fallback.normalize();
+    };
+
+    const buildLinearDim = (target: Vector3): LinearDimension3D => {
+      const distance = workPoint.distanceTo(target);
+      const ownerCandidate = resolveBendEndpointCandidate(
+        workPoint,
+        target,
+        bendCandidates,
+      );
+      const baseOffset = resolveBendSizeOffset(
+        ownerCandidate,
+        segments,
+        dimOffsetScale.value,
+      ) ?? resolveSemanticDimOffset(
+        computeMbdDimOffset(distance) *
+        clampNumber(dimOffsetScale.value, 0.05, 50, 1),
+        'segment',
+      );
+      const dim = new LinearDimension3D(
+        materials,
+        {
+          start: workPoint,
+          end: target,
+          // 与直段尺寸保持同一偏移标尺，避免长段弯头被硬上限压扁导致不对齐。
+          offset: clampNumber(baseOffset, 1, 5000, 90),
+          labelT: 0.72,
+          labelOffsetWorld: null,
+          text: resolveBendText(workPoint, target),
+          direction:
+            resolveBendSizeDirection(
+              workPoint,
+              target,
+              ownerCandidate,
+              pipeOffsetDirs,
+            ) ?? buildDirection(workPoint, target),
+          arrowStyle: modeConfig.arrowStyle,
+          arrowSizePx: modeConfig.arrowSizePx,
+          arrowAngleDeg: modeConfig.arrowAngleDeg,
+          extensionOvershootPx: modeConfig.extensionOvershootPx,
+          labelRenderStyle: modeConfig.labelRenderStyle,
+        },
+        {
+          depthTest: modeConfig.depthTest,
+        },
+      );
+      dim.setMaterialSet(materialSet);
+      dim.setLineWidthPx(modeConfig.lineWidthPx);
+      (dim.userData as any).mbdBendId = bend.id;
+      return dim;
+    };
+
+    return [buildLinearDim(point1), buildLinearDim(point2)];
+  }
+
+  function renderBends(
+    bends: MbdBendDto[],
+    segments: MbdPipeSegmentDto[],
+  ): void {
     const { labelRenderStyle } = getRuntimeModeConfig();
+    const pipeOffsetDirs = segments.length
+      ? computePipeAlignedOffsetDirs(segments)
+      : [];
     let skippedMissingFaceCenter = 0;
+    let inferredFaceCenterCount = 0;
     for (const b of bends) {
       const wp = new Vector3(b.work_point[0], b.work_point[1], b.work_point[2]);
+      const resolvedPoints = resolveBendPortPoints(b, segments);
+      const p1 = resolvedPoints?.point1 ?? null;
+      const p2 = resolvedPoints?.point2 ?? null;
 
-      // face_center 作为角度的两条边端点；若缺失则跳过（无法绘制角度弧线）
-      if (!b.face_center_1 || !b.face_center_2) {
+      // face_center 缺失时尝试从相邻管段推导；仍缺失则跳过。
+      if (!p1 || !p2) {
         skippedMissingFaceCenter += 1;
         continue;
       }
-      const p1 = new Vector3(
-        b.face_center_1[0],
-        b.face_center_1[1],
-        b.face_center_1[2],
+      if (resolvedPoints?.inferred) {
+        inferredFaceCenterCount += 1;
+      }
+
+      const members: BendAnnotationMember[] = [];
+      if (bendDisplayMode.value === 'angle') {
+        const angleText = b.angle != null ? `${b.angle.toFixed(1)}°` : '';
+        const inferredRadius = Math.min(wp.distanceTo(p1), wp.distanceTo(p2)) * 0.55;
+        const arcRadius = clampNumber(b.radius ?? inferredRadius, 20, 5000, 120);
+
+        const angleDim = new AngleDimension3D(materials, {
+          vertex: wp,
+          point1: p1,
+          point2: p2,
+          arcRadius,
+          text: angleText,
+          labelRenderStyle,
+        });
+        angleDim.setMaterialSet(materials.yellow);
+        angleDim.setLabelRenderStyle(labelRenderStyle);
+        members.push(angleDim);
+      } else {
+        members.push(
+          ...buildBendSizeDimensions(
+            b,
+            wp,
+            p1,
+            p2,
+            segments,
+            pipeOffsetDirs,
+          ),
+        );
+      }
+
+      const bendGroup = new BendAnnotationGroup(
+        materials,
+        bendDisplayMode.value,
+        members,
+        { depthTest: getRuntimeModeConfig().depthTest },
       );
-      const p2 = new Vector3(
-        b.face_center_2[0],
-        b.face_center_2[1],
-        b.face_center_2[2],
-      );
-
-      const angleText = b.angle != null ? `${b.angle.toFixed(1)}°` : '';
-
-      const angleDim = new AngleDimension3D(materials, {
-        vertex: wp,
-        point1: p1,
-        point2: p2,
-        text: angleText,
-        labelRenderStyle,
-      });
-
-      angleDim.userData.pickable = true;
-      angleDim.userData.draggable = true;
-      (angleDim.userData as any).mbdBendId = b.id;
-      angleDim.setLabelRenderStyle(labelRenderStyle);
-
-      angleDim.setMaterialSet(materials.yellow);
-      const rawAngleDim = markRaw(angleDim);
-      group.add(rawAngleDim);
-      bendAnnotations.set(b.id, rawAngleDim);
+      bendGroup.userData.pickable = true;
+      bendGroup.userData.draggable = true;
+      (bendGroup.userData as any).mbdBendId = b.id;
+      bendGroup.setLabelRenderStyle(labelRenderStyle);
+      const rawBendGroup = markRaw(bendGroup);
+      group.add(rawBendGroup);
+      bendAnnotations.set(b.id, rawBendGroup);
     }
     if (isDev && bends.length > 0) {
       const rendered = bends.length - skippedMissingFaceCenter;
@@ -1796,6 +2237,7 @@ export function useMbdPipeAnnotationThree(
       console.info('[mbd-bends] render stats', {
         total: bends.length,
         rendered,
+        inferredFaceCenterCount,
         skippedMissingFaceCenter,
       });
     }
@@ -1945,7 +2387,7 @@ export function useMbdPipeAnnotationThree(
     if (data.welds?.length) renderWelds(data.welds);
     if (data.slopes?.length) renderSlopes(data.slopes);
     if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
-    if (data.bends?.length) renderBends(data.bends);
+    if (data.bends?.length) renderBends(data.bends, data.segments ?? []);
     if (data.cut_tubis?.length) renderCutTubis(data.cut_tubis);
     applyCutTubiLabelDeclutter();
     if (data.fittings?.length) renderFittings(data.fittings);
@@ -2194,7 +2636,7 @@ export function useMbdPipeAnnotationThree(
   }
 
   /** 获取 bend annotations map（用于外部将 MBD bends 注册到交互控制器） */
-  function getBendAnnotations(): Map<string, AngleDimension3D> {
+  function getBendAnnotations(): Map<string, BendAnnotationGroup> {
     return bendAnnotations;
   }
 
@@ -2256,6 +2698,7 @@ export function useMbdPipeAnnotationThree(
       dimTextMode,
       dimOffsetScale,
       dimLabelT,
+      bendDisplayMode,
       rebarvizArrowStyle,
       rebarvizArrowSizePx,
       rebarvizArrowAngleDeg,
@@ -2264,74 +2707,75 @@ export function useMbdPipeAnnotationThree(
       () => unitSettings.precision.value,
     ],
     () => {
-      if (dimAnnotations.size === 0) return;
+      if (dimAnnotations.size === 0 && bendAnnotations.size === 0) return;
 
-      // 仅当 dims 已存在时，按配置刷新文字/布局（不重建全部；保留 session overrides）
       try {
-        const gm = getGlobalModelMatrix?.() || identityMatrix;
-        const useBackendText = dimTextMode.value === 'backend';
-        const offsetScale = clampNumber(dimOffsetScale.value, 0.05, 50, 1);
-        const modeConfig = getRuntimeModeConfig();
+        if (dimAnnotations.size > 0) {
+          const gm = getGlobalModelMatrix?.() || identityMatrix;
+          const useBackendText = dimTextMode.value === 'backend';
+          const offsetScale = clampNumber(dimOffsetScale.value, 0.05, 50, 1);
+          const modeConfig = getRuntimeModeConfig();
 
-        for (const [dimId, dim] of dimAnnotations.entries()) {
-          const rawDim = asRaw(dim);
-          const ov = dimOverrides.get(dimId) ?? {};
-          const sourceDim =
-            currentData.value?.dims?.find((item) => item.id === dimId) ?? null;
-          const kind = (((rawDim.userData as any)?.mbdDimKind ??
-            sourceDim?.kind ??
-            'segment') as MbdDimKind);
+          for (const [dimId, dim] of dimAnnotations.entries()) {
+            const rawDim = asRaw(dim);
+            const ov = dimOverrides.get(dimId) ?? {};
+            const sourceDim =
+              currentData.value?.dims?.find((item) => item.id === dimId) ?? null;
+            const kind = (((rawDim.userData as any)?.mbdDimKind ??
+              sourceDim?.kind ??
+              'segment') as MbdDimKind);
 
-          // 距离与默认 offset 以“局部坐标”计算（与几何保持一致）
-          const p = rawDim.getParams();
-          const distLocal = p.start.distanceTo(p.end);
-          const baseOffset = resolveSemanticDimOffset(
-            computeMbdDimOffset(distLocal) * offsetScale,
-            kind,
-            sourceDim?.layout_hint,
-          );
-          const nextOffset = ov.offset ?? baseOffset;
-          const nextLabelOffset =
-            'labelOffsetWorld' in ov
-              ? ov.labelOffsetWorld
-                ? new Vector3(
-                  ov.labelOffsetWorld[0],
-                  ov.labelOffsetWorld[1],
-                  ov.labelOffsetWorld[2],
-                )
-                : null
-              : null;
+            const p = rawDim.getParams();
+            const distLocal = p.start.distanceTo(p.end);
+            const baseOffset = resolveSemanticDimOffset(
+              computeMbdDimOffset(distLocal) * offsetScale,
+              kind,
+              sourceDim?.layout_hint,
+            );
+            const nextOffset = ov.offset ?? baseOffset;
+            const nextLabelOffset =
+              'labelOffsetWorld' in ov
+                ? ov.labelOffsetWorld
+                  ? new Vector3(
+                    ov.labelOffsetWorld[0],
+                    ov.labelOffsetWorld[1],
+                    ov.labelOffsetWorld[2],
+                  )
+                  : null
+                : null;
+            const hasManualLabel =
+              'labelOffsetWorld' in ov && ov.labelOffsetWorld != null;
+            const nextLabelT =
+              ov.labelT ??
+              (hasManualLabel ? (p.labelT ?? 0.5) : 0.5);
 
-          // 若用户拖拽过文字（labelOffsetWorld!=null），避免全局 labelT 影响其基准位置
-          const hasManualLabel =
-            'labelOffsetWorld' in ov && ov.labelOffsetWorld != null;
-          const nextLabelT =
-            ov.labelT ??
-            (hasManualLabel ? (p.labelT ?? 0.5) : 0.5);
+            const nextText = resolveDimDisplayText(
+              dimTextById.value.get(dimId),
+              useBackendText,
+              p.start,
+              p.end,
+              gm,
+              unitSettings.displayUnit.value,
+              unitSettings.precision.value,
+            );
 
-          const nextText = resolveDimDisplayText(
-            dimTextById.value.get(dimId),
-            useBackendText,
-            p.start,
-            p.end,
-            gm,
-            unitSettings.displayUnit.value,
-            unitSettings.precision.value,
-          );
-
-          rawDim.setParams({
-            offset: nextOffset,
-            labelT: nextLabelT,
-            labelOffsetWorld: nextLabelOffset,
-            text: nextText,
-            arrowStyle: modeConfig.arrowStyle,
-            arrowSizePx: modeConfig.arrowSizePx,
-            arrowAngleDeg: modeConfig.arrowAngleDeg,
-            extensionOvershootPx: modeConfig.extensionOvershootPx,
-          });
-          rawDim.setLineWidthPx(modeConfig.lineWidthPx);
+            rawDim.setParams({
+              offset: nextOffset,
+              labelT: nextLabelT,
+              labelOffsetWorld: nextLabelOffset,
+              text: nextText,
+              arrowStyle: modeConfig.arrowStyle,
+              arrowSizePx: modeConfig.arrowSizePx,
+              arrowAngleDeg: modeConfig.arrowAngleDeg,
+              extensionOvershootPx: modeConfig.extensionOvershootPx,
+            });
+            rawDim.setLineWidthPx(modeConfig.lineWidthPx);
+          }
+          applyPortDimLabelDeclutter();
         }
-        applyPortDimLabelDeclutter();
+        if (bendAnnotations.size > 0) {
+          rebuildBendsByCurrentData();
+        }
       } catch {
         // ignore
       }
@@ -2343,6 +2787,7 @@ export function useMbdPipeAnnotationThree(
   watch(dimMode, () => {
     try {
       rebuildDimsByCurrentData();
+      rebuildBendsByCurrentData();
       applyLabelRenderStyleByMode();
       applyLabelVisibility();
     } catch {
@@ -2370,6 +2815,7 @@ export function useMbdPipeAnnotationThree(
     dimOffsetScale,
     dimLabelT,
     dimMode,
+    bendDisplayMode,
     rebarvizArrowStyle,
     rebarvizArrowSizePx,
     rebarvizArrowAngleDeg,

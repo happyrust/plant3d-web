@@ -53,6 +53,12 @@ const dimModeModel = computed({
     props.vis.dimMode.value = v === 'rebarviz' ? 'rebarviz' : 'classic';
   },
 });
+const bendDisplayModeModel = computed({
+  get: () => props.vis.bendDisplayMode.value,
+  set: (v) => {
+    props.vis.bendDisplayMode.value = v === 'angle' ? 'angle' : 'size';
+  },
+});
 const dimOffsetScaleModel = computed({
   get: () => props.vis.dimOffsetScale.value,
   set: (v) => {
@@ -666,6 +672,15 @@ function modeLabel(mode: MbdPipeViewMode): string {
               class="rounded-md border border-border bg-background px-2 py-1 text-xs">
               <option value="classic">Classic</option>
               <option value="rebarviz">RebarViz</option>
+            </select>
+          </label>
+          <label class="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1">
+            <span class="text-muted-foreground">弯头显示</span>
+            <select v-model="bendDisplayModeModel"
+              data-testid="mbd-bend-display-mode"
+              class="rounded-md border border-border bg-background px-2 py-1 text-xs">
+              <option value="size">尺寸</option>
+              <option value="angle">角度</option>
             </select>
           </label>
           <label class="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1">

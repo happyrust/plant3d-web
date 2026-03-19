@@ -201,6 +201,33 @@ describe('LinearDimension3D', () => {
     expect(labelPos.distanceTo(expected)).toBeLessThan(0.1);
   });
 
+  it('should place label at labelT position on the dimension line', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      labelT: 0.75,
+      text: '10000',
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    camera.position.set(0, 0, 30);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    dim.update(camera);
+
+    const labelPos = dim.getLabelWorldPos();
+    expect(labelPos.x).toBeCloseTo(7.5, 1);
+    expect(labelPos.y).toBeCloseTo(3, 1);
+  });
+
   it('should keep label world scale stable under parent global scaling', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { LinearDimension3D } = await import('./LinearDimension3D');

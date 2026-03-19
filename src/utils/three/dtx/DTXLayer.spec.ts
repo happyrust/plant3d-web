@@ -82,3 +82,29 @@ describe('DTXLayer bounding boxes', () => {
     expect(bbox?.max.z).toBeCloseTo(3025, 6);
   });
 });
+
+describe('DTXLayer.getObjectGeometryData', () => {
+  it('遇到包含 NaN 顶点的几何体时应跳过 outline 几何构建', () => {
+    const layer = new DTXLayer({
+      maxVertices: 16,
+      maxIndices: 16,
+      maxObjects: 4,
+    });
+
+    const geometry = new BufferGeometry();
+    geometry.setAttribute(
+      'position',
+      new BufferAttribute(new Float32Array([
+        Number.NaN, 0, 0,
+        1, 0, 0,
+        0, 1, 0,
+      ]), 3),
+    );
+    geometry.setIndex([0, 1, 2]);
+
+    layer.addGeometry('bad-tri', geometry);
+    layer.addObject('o:bad:0', 'bad-tri', new Matrix4());
+
+    expect(layer.getObjectGeometryData('o:bad:0')).toBeNull();
+  });
+});

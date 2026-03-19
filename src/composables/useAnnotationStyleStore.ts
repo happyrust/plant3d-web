@@ -22,12 +22,12 @@ const STORAGE_KEY = 'plant3d-web-annotation-style-v1';
 
 export const DEFAULT_ANNOTATION_STYLE: Readonly<AnnotationStyleConfig> = {
   text: {
-    color: 0x60a5fa,
-    haloColor: 0xbfdbfe,
-    lineWidth: 4.5,
-    haloLineWidth: 8,
-    opacity: 0.95,
-    haloOpacity: 0.5,
+    color: 0xef4444,
+    haloColor: 0xfecaca,
+    lineWidth: 4.75,
+    haloLineWidth: 8.5,
+    opacity: 0.96,
+    haloOpacity: 0.52,
   },
   cloud: {
     color: 0xef4444,
@@ -57,7 +57,7 @@ export const DEFAULT_ANNOTATION_STYLE: Readonly<AnnotationStyleConfig> = {
 
 const ANNOTATION_STYLE_PRESETS: Record<AnnotationStylePreset, AnnotationStyleConfig> = {
   soft: {
-    text: { color: 0x60a5fa, haloColor: 0xdbeafe, lineWidth: 4, haloLineWidth: 6.5, opacity: 0.92, haloOpacity: 0.34 },
+    text: { color: 0xef4444, haloColor: 0xfee2e2, lineWidth: 4.2, haloLineWidth: 6.8, opacity: 0.93, haloOpacity: 0.36 },
     cloud: { color: 0xef4444, haloColor: 0xfee2e2, lineWidth: 4.2, haloLineWidth: 6.8, opacity: 0.93, haloOpacity: 0.36 },
     rect: { color: 0x0f172a, haloColor: 0xe2e8f0, lineWidth: 4.2, haloLineWidth: 6.8, opacity: 0.92, haloOpacity: 0.3 },
     obb: { color: 0x14b8a6, haloColor: 0xccfbf1, lineWidth: 4.2, haloLineWidth: 6.8, opacity: 0.92, haloOpacity: 0.34 },
@@ -69,7 +69,7 @@ const ANNOTATION_STYLE_PRESETS: Record<AnnotationStylePreset, AnnotationStyleCon
     obb: { ...DEFAULT_ANNOTATION_STYLE.obb },
   },
   bold: {
-    text: { color: 0x3b82f6, haloColor: 0xbfdbfe, lineWidth: 6.5, haloLineWidth: 11, opacity: 1, haloOpacity: 0.58 },
+    text: { color: 0xdc2626, haloColor: 0xfecaca, lineWidth: 6.8, haloLineWidth: 11.5, opacity: 1, haloOpacity: 0.6 },
     cloud: { color: 0xdc2626, haloColor: 0xfecaca, lineWidth: 6.8, haloLineWidth: 11.5, opacity: 1, haloOpacity: 0.6 },
     rect: { color: 0x020617, haloColor: 0xcbd5e1, lineWidth: 6.8, haloLineWidth: 11.5, opacity: 1, haloOpacity: 0.5 },
     obb: { color: 0x0f766e, haloColor: 0x99f6e4, lineWidth: 6.8, haloLineWidth: 11.5, opacity: 1, haloOpacity: 0.56 },

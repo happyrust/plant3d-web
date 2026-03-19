@@ -171,6 +171,31 @@ export function isReviewer(user: User | null): boolean {
   return hasAnyRole(user, [UserRole.ADMIN, UserRole.MANAGER, UserRole.REVIEWER, UserRole.PROOFREADER]);
 }
 
+// 角色统一配色主题 — 供所有批注/意见 UI 引用
+export type RoleThemeConfig = {
+  label: string;       // 单字标签: 设/校/审/管/查
+  textColor: string;   // 标签文字色
+  bgColor: string;     // 标签底色
+  barColor: string;    // timeline 消息左侧竖条颜色
+  dotColor: string;    // 列表中的角色圆点色
+  columnBorder: string; // 三栏视图边框色
+  columnBg: string;     // 三栏视图底色
+  columnHeader: string; // 三栏视图头部底色
+};
+
+export const ROLE_THEME: Record<UserRole, RoleThemeConfig> = {
+  [UserRole.DESIGNER]:    { label: '设', textColor: '#1E3A8A', bgColor: '#EFF6FF', barColor: '#93C5FD', dotColor: '#3B82F6', columnBorder: '#93C5FD', columnBg: '#EFF6FF', columnHeader: '#DBEAFE' },
+  [UserRole.PROOFREADER]: { label: '校', textColor: '#3F6212', bgColor: '#ECFCCB', barColor: '#BEF264', dotColor: '#22C55E', columnBorder: '#BEF264', columnBg: '#ECFCCB', columnHeader: '#D9F99D' },
+  [UserRole.REVIEWER]:    { label: '审', textColor: '#9A3412', bgColor: '#FFEDD5', barColor: '#FDBA74', dotColor: '#F97316', columnBorder: '#FDBA74', columnBg: '#FFEDD5', columnHeader: '#FED7AA' },
+  [UserRole.MANAGER]:     { label: '管', textColor: '#7C2D12', bgColor: '#FFF7ED', barColor: '#FED7AA', dotColor: '#EA580C', columnBorder: '#FED7AA', columnBg: '#FFF7ED', columnHeader: '#FFEDD5' },
+  [UserRole.ADMIN]:       { label: '管', textColor: '#991B1B', bgColor: '#FEF2F2', barColor: '#FCA5A5', dotColor: '#EF4444', columnBorder: '#FCA5A5', columnBg: '#FEF2F2', columnHeader: '#FECACA' },
+  [UserRole.VIEWER]:      { label: '查', textColor: '#374151', bgColor: '#F3F4F6', barColor: '#D1D5DB', dotColor: '#6B7280', columnBorder: '#D1D5DB', columnBg: '#F3F4F6', columnHeader: '#E5E7EB' },
+};
+
+export function getRoleTheme(role: UserRole): RoleThemeConfig {
+  return ROLE_THEME[role] || ROLE_THEME[UserRole.VIEWER];
+}
+
 // 获取角色显示名称
 export function getRoleDisplayName(role: UserRole): string {
   const roleNames: Record<UserRole, string> = {

@@ -22,7 +22,7 @@ const MODE_CONFIG: Record<MbdDimensionMode, MbdDimensionModeConfig> = {
     arrowStyle: 'filled',
     arrowSizePx: 10,
     arrowAngleDeg: 20,
-    lineWidthPx: 1.5,
+    lineWidthPx: 3,
     extensionOvershootPx: 10,
     labelRenderStyle: 'solvespace',
   },
@@ -56,8 +56,5 @@ export function resolveMbdDimensionMaterialSet(
     return materials.ssDimensionDefault;
   }
 
-  if (kind === 'segment') return materials.green;
-  if (kind === 'chain') return materials.yellow;
-  if (kind === 'overall') return materials.white;
-  return materials.blue;
+  return materials.ssDimensionDefault;
 }

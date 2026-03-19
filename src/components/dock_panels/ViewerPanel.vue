@@ -17,6 +17,7 @@ import { Matrix4, Plane, Vector2, Vector3 } from 'three';
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetPtsetWithContext } from '@/api/genModelPdmsAttrApi';
 import { getMbdPipeAnnotations } from '@/api/mbdPipeApi';
+import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
 import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vue';
@@ -440,7 +441,9 @@ const isMeasureModeActive = computed(() => {
     mode === 'measure_distance' ||
     mode === 'measure_angle' ||
     mode === 'xeokit_measure_distance' ||
-    mode === 'xeokit_measure_angle'
+    mode === 'xeokit_measure_angle' ||
+    mode === 'measure_pipe_to_structure' ||
+    mode === 'measure_pipe_to_pipe'
   );
 });
 const isXeokitMeasureMode = computed(() => {
@@ -830,6 +833,8 @@ function applyBackground(mode: BackgroundMode): void {
 function onBackgroundChange(mode: BackgroundMode): void {
   backgroundStore.setMode(mode);
   applyBackground(mode);
+  const preset = backgroundStore.getPreset(mode);
+  dimensionAnnoMgrRef.value?.setBackgroundColor(preset.bottomColor);
 }
 
 const displayThemePresets: { mode: DisplayTheme; label: string; colorHint: string }[] = [
@@ -850,10 +855,11 @@ function toastNeedSelection(): void {
   emitToast({ message: '请先选择对象' });
 }
 
-function getSelectedRefno(): string | null {
-  const raw = selectionStore.selectedRefno.value;
-  const s = typeof raw === 'string' ? raw.trim() : '';
-  return s ? s : null;
+function getToolbarSelection() {
+  return resolveViewerToolbarSelection({
+    selectedRefno: selectionStore.selectedRefno.value,
+    sceneSelectedObjectIds: compatViewerRef.value?.scene.selectedObjectIds ?? [],
+  });
 }
 
 /**
@@ -919,13 +925,16 @@ async function getTargetRefnos(refno: string): Promise<string[]> {
 }
 
 async function hideSelected(): Promise<void> {
-  const refno = getSelectedRefno();
-  if (!refno) {
+  const selection = getToolbarSelection();
+  if (selection.sceneSelectedRefnos.length === 0 && !selection.primaryRefno) {
     toastNeedSelection();
     return;
   }
 
-  const targetRefnos = await getTargetRefnos(refno);
+  const targetRefnos =
+    selection.sceneSelectedRefnos.length > 0
+      ? selection.sceneSelectedRefnos
+      : await getTargetRefnos(selection.primaryRefno!);
 
   const compat = compatViewerRef.value;
   if (!compat) return;
@@ -934,17 +943,20 @@ async function hideSelected(): Promise<void> {
 }
 
 async function showSelected(): Promise<void> {
-  const refno = getSelectedRefno();
-  if (!refno) {
+  const selection = getToolbarSelection();
+  if (selection.sceneSelectedRefnos.length === 0 && !selection.primaryRefno) {
     toastNeedSelection();
     return;
   }
 
-  const targetRefnos = await getTargetRefnos(refno);
+  const targetRefnos =
+    selection.sceneSelectedRefnos.length > 0
+      ? selection.sceneSelectedRefnos
+      : await getTargetRefnos(selection.primaryRefno!);
 
   // 按需加载模型
-  if (modelGenerationRef.value) {
-    await modelGenerationRef.value.showModelByRefno(refno, { flyTo: false });
+  if (modelGenerationRef.value && selection.primaryRefno) {
+    await modelGenerationRef.value.showModelByRefno(selection.primaryRefno, { flyTo: false });
   }
 
   const compat = compatViewerRef.value;
@@ -961,17 +973,20 @@ function hideAll(): void {
 }
 
 async function locateShowSelected(): Promise<void> {
-  const refno = getSelectedRefno();
-  if (!refno) {
+  const selection = getToolbarSelection();
+  if (selection.sceneSelectedRefnos.length === 0 && !selection.primaryRefno) {
     toastNeedSelection();
     return;
   }
 
-  const targetRefnos = await getTargetRefnos(refno);
+  const targetRefnos =
+    selection.sceneSelectedRefnos.length > 0
+      ? selection.sceneSelectedRefnos
+      : await getTargetRefnos(selection.primaryRefno!);
 
   // 按需加载模型
-  if (modelGenerationRef.value) {
-    await modelGenerationRef.value.showModelByRefno(refno, { flyTo: false });
+  if (modelGenerationRef.value && selection.primaryRefno) {
+    await modelGenerationRef.value.showModelByRefno(selection.primaryRefno, { flyTo: false });
   }
 
   const compat = compatViewerRef.value;
@@ -1057,6 +1072,16 @@ function onLeftMeasureDistanceClick(): void {
 
 function onLeftMeasureAngleClick(): void {
   setMeasureMode('xeokit_measure_angle');
+  leftToolbarOpenMeasureMenu.value = false;
+}
+
+function onLeftMeasurePipeToStructureClick(): void {
+  setAutoNearestMode('measure_pipe_to_structure');
+  leftToolbarOpenMeasureMenu.value = false;
+}
+
+function onLeftMeasurePipeToPipeClick(): void {
+  setAutoNearestMode('measure_pipe_to_pipe');
   leftToolbarOpenMeasureMenu.value = false;
 }
 
@@ -1923,7 +1948,6 @@ onMounted(async () => {
       background: 0xe5e7eb,
       debug: isDev,
       gizmo: { enabled: true, placement: 'top-right', size: 100 },
-      skybox: '/texture/skybox.png',
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1932,6 +1956,7 @@ onMounted(async () => {
     return;
   }
   dtxViewerRef.value = dtxViewer;
+  applyBackground(backgroundStore.mode.value);
   applyCameraViewMode(cameraViewMode.value);
 
   // CAD Grid：Three.js 常规渲染对象（与 DTX 混合渲染）
@@ -2827,6 +2852,8 @@ onMounted(async () => {
     const mgr = new DimensionAnnotationManager(annotationSystem);
     mgr.setUnit(unitSettings.displayUnit.value as any);
     mgr.setPrecision(unitSettings.precision.value);
+    const bgPreset = backgroundStore.getPreset(backgroundStore.mode.value);
+    mgr.setBackgroundColor(bgPreset.bottomColor);
     mgr.sync(store.dimensions.value as any);
     dimensionAnnoMgrRef.value = mgr;
 
@@ -3536,7 +3563,7 @@ onMounted(async () => {
           include_layout_hints: true,
           include_welds: true,
           include_slopes: true,
-          include_bends: false,
+          include_bends: true,
           bend_mode: 'facecenter',
         });
         if (resp.success && resp.data) {
@@ -4013,6 +4040,20 @@ onUnmounted(() => {
             @click.stop="onLeftMeasureAngleClick">
             <Ruler class="h-4 w-4" />
             <span>角度测量</span>
+          </button>
+          <button type="button"
+            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            :class="store.toolMode.value === 'measure_pipe_to_structure' ? 'bg-muted' : ''"
+            @click.stop="onLeftMeasurePipeToStructureClick">
+            <Ruler class="h-4 w-4" />
+            <span>管-墙/柱</span>
+          </button>
+          <button type="button"
+            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            :class="store.toolMode.value === 'measure_pipe_to_pipe' ? 'bg-muted' : ''"
+            @click.stop="onLeftMeasurePipeToPipeClick">
+            <Ruler class="h-4 w-4" />
+            <span>管-管</span>
           </button>
         </div>
       </div>

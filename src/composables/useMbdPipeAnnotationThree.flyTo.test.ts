@@ -3,6 +3,8 @@ import { nextTick, ref, shallowRef } from 'vue';
 
 import { Matrix4, PerspectiveCamera, Scene } from 'three';
 
+import { computeMbdDimOffset } from './mbd/computeMbdDimOffset';
+import { computePipeAlignedOffsetDirs } from './mbd/computePipeAlignedOffsetDirs';
 import { useMbdPipeAnnotationThree } from './useMbdPipeAnnotationThree';
 
 import type { MbdPipeData } from '@/api/mbdPipeApi';
@@ -40,7 +42,8 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showFlanges.value).toBe(true);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
-    expect(vis.showBends.value).toBe(false);
+    expect(vis.showBends.value).toBe(true);
+    expect(vis.bendDisplayMode.value).toBe('size');
     expect(vis.showSegments.value).toBe(false);
   });
 
@@ -70,6 +73,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showWelds.value).toBe(false);
     expect(vis.showSlopes.value).toBe(false);
     expect(vis.showBends.value).toBe(false);
+    expect(vis.bendDisplayMode.value).toBe('size');
     expect(vis.showSegments.value).toBe(false);
 
     vis.applyModeDefaults('construction');
@@ -82,6 +86,8 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
+    expect(vis.showBends.value).toBe(true);
+    expect(vis.bendDisplayMode.value).toBe('size');
   });
 
   it('应抑制与非 overall 尺寸共用同一 span 的 overall 标注', () => {
@@ -1277,6 +1283,578 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(flyTo).toHaveBeenCalledTimes(1);
   });
 
+  it('bend 缺少 face_center 时应基于 radius 与相邻管段方向推导双尺寸标注', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: '24381_145712',
+      branch_refno: '24381_145712',
+      branch_name: 'BRAN-TEST',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-vertical',
+          refno: 'SEG-V',
+          noun: 'STRA',
+          arrive: [0, 0, 956],
+          leave: [0, 0, 0],
+          length: 956,
+          straight_length: 956,
+        },
+        {
+          id: 'seg-horizontal',
+          refno: 'SEG-H',
+          noun: 'STRA',
+          arrive: [229, 0, 0],
+          leave: [229, 1193, 0],
+          length: 1193,
+          straight_length: 1193,
+        },
+      ],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [
+        {
+          id: 'bend-1',
+          refno: 'ELBO-1',
+          noun: 'ELBO',
+          angle: 90,
+          radius: 229,
+          work_point: [0, 0, 0],
+          face_center_1: null,
+          face_center_2: null,
+        },
+      ],
+      stats: {
+        segments_count: 2,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 1,
+      },
+    };
+
+    vis.showBends.value = true;
+    vis.renderBranch(data);
+
+    const bend = vis.getBendAnnotations().get('bend-1');
+    expect(bend).toBeTruthy();
+    expect(bend?.getMode?.()).toBe('size');
+    const distances = bend?.getDistances?.() ?? [];
+    expect(distances).toHaveLength(2);
+    expect(distances[0]).toBeCloseTo(229, 6);
+    expect(distances[1]).toBeCloseTo(229, 6);
+    expect(bend?.getDisplayTexts?.()).toEqual(['229', '229']);
+  });
+
+  it('bend 尺寸方向应与相邻 tubi 尺寸方向一致', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const segments = [
+      {
+        id: 'seg-vertical',
+        refno: 'SEG-V',
+        noun: 'STRA',
+        arrive: [0, 0, 956],
+        leave: [0, 0, 0],
+        length: 956,
+        straight_length: 956,
+      },
+      {
+        id: 'seg-horizontal',
+        refno: 'SEG-H',
+        noun: 'STRA',
+        arrive: [229, 0, 0],
+        leave: [229, 1193, 0],
+        length: 1193,
+        straight_length: 1193,
+      },
+    ] as MbdPipeData['segments'];
+
+    vis.renderBranch({
+      input_refno: '24381_145712',
+      branch_refno: '24381_145712',
+      branch_name: 'BRAN-TEST',
+      branch_attrs: {},
+      segments,
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [
+        {
+          id: 'bend-1',
+          refno: 'ELBO-1',
+          noun: 'ELBO',
+          angle: 90,
+          radius: 229,
+          work_point: [0, 0, 0],
+          face_center_1: null,
+          face_center_2: null,
+        },
+      ],
+      stats: {
+        segments_count: 2,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 1,
+      },
+    });
+
+    const bend = vis.getBendAnnotations().get('bend-1') as any;
+    expect(bend).toBeTruthy();
+    const members = (bend?.members ?? []).filter(
+      (member: any) => typeof member?.getParams === 'function',
+    );
+    expect(members).toHaveLength(2);
+
+    const params = members.map((member: any) => member.getParams());
+    const verticalLeg = params.find((item: any) => Math.abs(item.end.z ?? 0) > 200);
+    const horizontalLeg = params.find((item: any) => Math.abs(item.end.x ?? 0) > 200);
+    expect(verticalLeg).toBeTruthy();
+    expect(horizontalLeg).toBeTruthy();
+
+    const pipeOffsetDirs = computePipeAlignedOffsetDirs(segments ?? []);
+    expect(verticalLeg.direction.angleTo(pipeOffsetDirs[0]!)).toBeLessThan(1e-6);
+    expect(horizontalLeg.direction.angleTo(pipeOffsetDirs[1]!)).toBeLessThan(1e-6);
+  });
+
+  it('bend 尺寸标签应沿各自腿向外偏移，避免在弯头根部堆叠', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.renderBranch({
+      input_refno: '24381_145712',
+      branch_refno: '24381_145712',
+      branch_name: 'BRAN-TEST',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-vertical',
+          refno: 'SEG-V',
+          noun: 'STRA',
+          arrive: [0, 0, 956],
+          leave: [0, 0, 0],
+          length: 956,
+          straight_length: 956,
+        },
+        {
+          id: 'seg-horizontal',
+          refno: 'SEG-H',
+          noun: 'STRA',
+          arrive: [229, 0, 0],
+          leave: [229, 1193, 0],
+          length: 1193,
+          straight_length: 1193,
+        },
+      ],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [
+        {
+          id: 'bend-1',
+          refno: 'ELBO-1',
+          noun: 'ELBO',
+          angle: 90,
+          radius: 229,
+          work_point: [0, 0, 0],
+          face_center_1: null,
+          face_center_2: null,
+        },
+      ],
+      stats: {
+        segments_count: 2,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 1,
+      },
+    });
+
+    const bend = vis.getBendAnnotations().get('bend-1') as any;
+    expect(bend).toBeTruthy();
+    const members = (bend?.members ?? []).filter(
+      (member: any) => typeof member?.getParams === 'function',
+    );
+    expect(members).toHaveLength(2);
+
+    for (const member of members) {
+      const params = member.getParams();
+      expect(params.labelT).toBeGreaterThan(0.65);
+      const labelPos = member.getLabelWorldPos();
+      expect(labelPos.distanceTo(params.start)).toBeGreaterThan(
+        params.start.distanceTo(params.end) * 0.65,
+      );
+    }
+  });
+
+  it('bend 尺寸线 offset 应与相邻直段尺寸保持同一偏移基线', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const segments = [
+      {
+        id: 'seg-vertical',
+        refno: 'SEG-V',
+        noun: 'STRA',
+        arrive: [0, 0, 956],
+        leave: [0, 0, 0],
+        length: 956,
+        straight_length: 956,
+      },
+      {
+        id: 'seg-horizontal',
+        refno: 'SEG-H',
+        noun: 'STRA',
+        arrive: [229, 0, 0],
+        leave: [229, 1193, 0],
+        length: 1193,
+        straight_length: 1193,
+      },
+    ] as MbdPipeData['segments'];
+
+    vis.renderBranch({
+      input_refno: '24381_145712',
+      branch_refno: '24381_145712',
+      branch_name: 'BRAN-TEST',
+      branch_attrs: {},
+      segments,
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [
+        {
+          id: 'bend-1',
+          refno: 'ELBO-1',
+          noun: 'ELBO',
+          angle: 90,
+          radius: 229,
+          work_point: [0, 0, 0],
+          face_center_1: null,
+          face_center_2: null,
+        },
+      ],
+      stats: {
+        segments_count: 2,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 1,
+      },
+    });
+
+    const bend = vis.getBendAnnotations().get('bend-1') as any;
+    const members = (bend?.members ?? []).filter(
+      (member: any) => typeof member?.getParams === 'function',
+    );
+    expect(members).toHaveLength(2);
+
+    const params = members.map((member: any) => member.getParams());
+    const verticalLeg = params.find((item: any) => Math.abs(item.end.z ?? 0) > 200);
+    const horizontalLeg = params.find((item: any) => Math.abs(item.end.x ?? 0) > 200);
+    expect(verticalLeg).toBeTruthy();
+    expect(horizontalLeg).toBeTruthy();
+
+    expect(verticalLeg.offset).toBeCloseTo(computeMbdDimOffset(956), 6);
+    expect(horizontalLeg.offset).toBeCloseTo(computeMbdDimOffset(1193), 6);
+  });
+
+  it('长直段场景下 bend 尺寸 offset 不应被硬上限截断', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const segments = [
+      {
+        id: 'seg-long-z',
+        refno: 'SEG-LZ',
+        noun: 'STRA',
+        arrive: [0, 0, 4000],
+        leave: [0, 0, 0],
+        length: 4000,
+        straight_length: 4000,
+      },
+      {
+        id: 'seg-long-x',
+        refno: 'SEG-LX',
+        noun: 'STRA',
+        arrive: [500, 0, 0],
+        leave: [4500, 0, 0],
+        length: 4000,
+        straight_length: 4000,
+      },
+    ] as MbdPipeData['segments'];
+
+    vis.renderBranch({
+      input_refno: 'LONG-BEND-CASE',
+      branch_refno: 'LONG-BEND-CASE',
+      branch_name: 'BRAN-LONG-BEND',
+      branch_attrs: {},
+      segments,
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [
+        {
+          id: 'bend-long-1',
+          refno: 'ELBO-LONG',
+          noun: 'ELBO',
+          angle: 90,
+          radius: 500,
+          work_point: [0, 0, 0],
+          face_center_1: null,
+          face_center_2: null,
+        },
+      ],
+      stats: {
+        segments_count: 2,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 1,
+      },
+    });
+
+    const bend = vis.getBendAnnotations().get('bend-long-1') as any;
+    const members = (bend?.members ?? []).filter(
+      (member: any) => typeof member?.getParams === 'function',
+    );
+    expect(members).toHaveLength(2);
+
+    const expectedOffset = computeMbdDimOffset(4000);
+    for (const member of members) {
+      const params = member.getParams();
+      expect(params.offset).toBeCloseTo(expectedOffset, 6);
+      expect(params.offset).toBeGreaterThan(260);
+    }
+  });
+
+  it('face_center 与管段端点存在偏差时，bend 尺寸方向仍应与相邻直段对齐', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const segments = [
+      {
+        id: 'seg-z',
+        refno: 'SEG-Z',
+        noun: 'STRA',
+        arrive: [0, 0, 800],
+        leave: [0, 0, 0],
+        length: 800,
+        straight_length: 800,
+      },
+      {
+        id: 'seg-x',
+        refno: 'SEG-X',
+        noun: 'STRA',
+        arrive: [800, 0, 0],
+        leave: [2000, 0, 0],
+        length: 1200,
+        straight_length: 1200,
+      },
+    ] as MbdPipeData['segments'];
+
+    vis.renderBranch({
+      input_refno: 'FACECENTER-DRIFT',
+      branch_refno: 'FACECENTER-DRIFT',
+      branch_name: 'BRAN-FACECENTER-DRIFT',
+      branch_attrs: {},
+      segments,
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [
+        {
+          id: 'bend-drift-1',
+          refno: 'ELBO-DRIFT',
+          noun: 'ELBO',
+          angle: 90,
+          radius: 400,
+          work_point: [0, 0, 0],
+          // 有意制造与真实管段端点的偏差（方向相似但并非严格共线）
+          face_center_1: [800, 400, 0],
+          face_center_2: [400, 0, 800],
+        },
+      ],
+      stats: {
+        segments_count: 2,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 1,
+      },
+    });
+
+    const bend = vis.getBendAnnotations().get('bend-drift-1') as any;
+    const members = (bend?.members ?? []).filter(
+      (member: any) => typeof member?.getParams === 'function',
+    );
+    expect(members).toHaveLength(2);
+
+    const pipeOffsetDirs = computePipeAlignedOffsetDirs(segments);
+    const params = members.map((member: any) => member.getParams());
+    const zLeg = params.find((item: any) => Math.abs(item.end.z ?? 0) > 200);
+    const xLeg = params.find((item: any) => Math.abs(item.end.x ?? 0) > 200);
+    expect(zLeg).toBeTruthy();
+    expect(xLeg).toBeTruthy();
+
+    expect(zLeg.direction.angleTo(pipeOffsetDirs[0]!)).toBeLessThan(1e-6);
+    expect(xLeg.direction.angleTo(pipeOffsetDirs[1]!)).toBeLessThan(1e-6);
+  });
+
+  it('bend 显示模式切到 angle 后应改为角度标注', async () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: '24381_145712',
+      branch_refno: '24381_145712',
+      branch_name: 'BRAN-TEST',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-vertical',
+          refno: 'SEG-V',
+          noun: 'STRA',
+          arrive: [0, 0, 229],
+          leave: [0, 0, 0],
+          length: 229,
+          straight_length: 229,
+        },
+        {
+          id: 'seg-horizontal',
+          refno: 'SEG-H',
+          noun: 'STRA',
+          arrive: [229, 0, 0],
+          leave: [1422, 0, 0],
+          length: 1193,
+          straight_length: 1193,
+        },
+      ],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [
+        {
+          id: 'bend-1',
+          refno: 'ELBO-1',
+          noun: 'ELBO',
+          angle: 90,
+          radius: 229,
+          work_point: [0, 0, 0],
+          face_center_1: null,
+          face_center_2: null,
+        },
+      ],
+      stats: {
+        segments_count: 2,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 1,
+      },
+    };
+
+    vis.renderBranch(data);
+
+    expect(vis.getBendAnnotations().get('bend-1')?.getMode?.()).toBe('size');
+
+    vis.bendDisplayMode.value = 'angle';
+    await nextTick();
+
+    const bend = vis.getBendAnnotations().get('bend-1');
+    expect(bend).toBeTruthy();
+    expect(bend?.getMode?.()).toBe('angle');
+    expect(bend?.getDisplayText()).toBe('90.0°');
+  });
+
   it('construction 下 tubi 辅助 tag 应默认隐藏', () => {
     const viewer = {
       canvas: {
@@ -1724,7 +2302,10 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     };
 
     const getLabelStyle = (a: any): string | null =>
-      a?.textLabel?.getRenderStyle?.() ?? a?.textLabel?.renderStyle ?? null;
+      a?.getLabelRenderStyle?.()
+      ?? a?.textLabel?.getRenderStyle?.()
+      ?? a?.textLabel?.renderStyle
+      ?? null;
 
     vis.renderBranch(data);
 
