@@ -422,6 +422,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'dashboard') {
+    return dockApi.addPanel({
+      id: 'dashboard',
+      component: 'DashboardPanel',
+      title: '概览',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'console') {
     return dockApi.addPanel({
       id: 'console',
@@ -556,6 +568,12 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.reviewerTasks':
       togglePanel('reviewerTasks');
       return;
+    case 'panel.initiateReview':
+      togglePanel('initiateReview');
+      return;
+    case 'panel.dashboard':
+      togglePanel('dashboard');
+      return;
     case 'panel.resubmissionTasks':
       togglePanel('resubmissionTasks');
       return;
@@ -626,19 +644,12 @@ function handleRibbonCommand(commandId: string) {
         isDesigner: userStore.isDesigner.value,
         isReviewer: userStore.isReviewer.value,
       });
-      // 根据用户角色打开不同的面板
-      if (userStore.isDesigner.value) {
-        // 设计人员：打开发起提资面板
-        console.log('[DockLayout] review.start opening initiator panel');
-        togglePanel('initiateReview');
-      } else if (userStore.isReviewer.value) {
-        // 审核人员：打开待审核任务列表
+      if (userStore.isReviewer.value && !userStore.isDesigner.value) {
         console.log('[DockLayout] review.start opening reviewer task panel');
         togglePanel('reviewerTasks');
       } else {
-        // 默认行为：切换校审模式
-        console.log('[DockLayout] review.start falling back to review mode toggle');
-        reviewStore.toggleReviewMode();
+        console.log('[DockLayout] review.start opening initiator panel');
+        togglePanel('initiateReview');
       }
       return;
     case 'review.confirm':
