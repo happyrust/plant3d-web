@@ -8,7 +8,7 @@ import {
   applyEmbedLandingState,
   resolveEmbedLandingTarget,
 } from '@/components/review/embedRoleLanding';
-import { setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
+import { ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import {
   initPanelZones,
@@ -513,6 +513,30 @@ function togglePanel(panelId: string) {
   }
 }
 
+function openPanel(panelId: string) {
+  const dockApi = api.value;
+  if (!dockApi) {
+    console.warn('[DockLayout] openPanel: dockApi is null');
+    return;
+  }
+
+  console.log(`[DockLayout] openPanel: ${panelId}`);
+  onPanelOpened(panelId);
+
+  const panel = dockApi.getPanel(panelId);
+  if (panel) {
+    panel.api.setActive();
+    return;
+  }
+
+  const created = ensurePanel(panelId);
+  if (created) {
+    created.api.setActive();
+  } else {
+    console.error(`[DockLayout] Failed to open panel ${panelId}`);
+  }
+}
+
 function resetLayout() {
   if (!api.value) return;
   resetZoneState();
@@ -591,7 +615,7 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('reviewerTasks');
       return;
     case 'panel.initiateReview':
-      togglePanel('initiateReview');
+      openPanel('initiateReview');
       return;
     case 'panel.dashboard':
       togglePanel('dashboard');
@@ -660,19 +684,11 @@ function handleRibbonCommand(commandId: string) {
 
     // review commands
     case 'review.start':
-      console.log('[DockLayout] review.start role gate', {
+      console.log('[DockLayout] review.start opening reviewer task panel', {
         currentUserId: userStore.currentUserId.value,
         currentUserRole: userStore.currentUser.value?.role ?? null,
-        isDesigner: userStore.isDesigner.value,
-        isReviewer: userStore.isReviewer.value,
       });
-      if (userStore.isReviewer.value && !userStore.isDesigner.value) {
-        console.log('[DockLayout] review.start opening reviewer task panel');
-        togglePanel('reviewerTasks');
-      } else {
-        console.log('[DockLayout] review.start opening initiator panel');
-        togglePanel('initiateReview');
-      }
+      openPanel('reviewerTasks');
       return;
     case 'review.confirm':
       if (

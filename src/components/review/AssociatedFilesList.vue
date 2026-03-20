@@ -11,9 +11,11 @@ import {
 
 import type { ReviewAttachment } from '@/types/auth';
 
-const props = defineProps<{
-  attachments: ReviewAttachment[];
-}>();
+const props = withDefaults(defineProps<{
+  attachments?: ReviewAttachment[];
+}>(), {
+  attachments: () => [],
+});
 
 type FileGroup = {
   label: string;

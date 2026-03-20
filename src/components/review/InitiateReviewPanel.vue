@@ -627,7 +627,7 @@ function closePanel() {
           <Link class="h-4 w-4" />
           自动关联文件
         </label>
-        <AssociatedFilesList :selected-component-count="selectedComponents.length" />
+        <AssociatedFilesList :attachments="[]" />
       </div>
 
       <Button class="w-full" data-guide="submit-btn" :disabled="!canSubmit || isSubmitting" @click="handleSubmit">

@@ -256,6 +256,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         label: '面板',
         items: [
           { kind: 'button', id: 'panel.dashboard', label: '概览', icon: 'layout_dashboard', commandId: 'panel.dashboard' },
+          { kind: 'button', id: 'panel.initiateReview', label: '发起提资', icon: 'plus', commandId: 'panel.initiateReview' },
           { kind: 'button', id: 'panel.review', label: '校审面板', icon: 'clipboard_list', commandId: 'panel.review' },
           { kind: 'button', id: 'panel.reviewerTasks', label: '待审核', icon: 'clipboard_check', commandId: 'panel.reviewerTasks' },
           { kind: 'button', id: 'panel.resubmissionTasks', label: '复审任务', icon: 'redo', commandId: 'panel.resubmissionTasks' },

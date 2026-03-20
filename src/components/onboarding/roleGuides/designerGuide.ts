@@ -15,10 +15,10 @@ export const designerGuide: GuideDefinition = {
       placement: 'bottom',
     },
     {
-      id: 'review-start-btn',
-      targetSelector: '[data-command="review.start"]',
-      title: '开始校审',
-      description: '点击「开始校审」按钮来发起一次设计提资。作为设计师，这将打开提资表单。',
+      id: 'initiate-review-btn',
+      targetSelector: '[data-command="panel.initiateReview"]',
+      title: '发起提资',
+      description: '点击「发起提资」按钮进入提资表单。设计师从这里填写内容并提交给后续审核流程。',
       placement: 'bottom',
     },
     {
