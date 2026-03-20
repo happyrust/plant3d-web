@@ -1,4 +1,35 @@
-import { reactive, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
+
+/** 云线轮廓：屏幕二维（锚点投影 + 像素矩形）或选中构件合并 AABB 三维波浪线 */
+export type CloudDrawMode = 'screen2d' | 'bbox3d';
+
+const CLOUD_DRAW_MODE_STORAGE_KEY = 'plant3d-web-cloud-draw-mode-v1';
+
+function loadCloudDrawMode(): CloudDrawMode {
+  if (typeof localStorage === 'undefined') return 'screen2d';
+  try {
+    const raw = localStorage.getItem(CLOUD_DRAW_MODE_STORAGE_KEY);
+    if (raw === 'bbox3d' || raw === 'screen2d') return raw;
+  } catch {
+    // ignore
+  }
+  return 'screen2d';
+}
+
+function persistCloudDrawMode(mode: CloudDrawMode): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(CLOUD_DRAW_MODE_STORAGE_KEY, mode);
+  } catch {
+    // ignore
+  }
+}
+
+const cloudDrawMode = ref<CloudDrawMode>(loadCloudDrawMode());
+
+watch(cloudDrawMode, (m) => {
+  persistCloudDrawMode(m);
+});
 
 export type AnnotationLeaderStyleConfig = {
   color: number
@@ -166,8 +197,14 @@ export function useAnnotationStyleStore() {
     persistStyle(state);
   }
 
+  function setCloudDrawMode(mode: CloudDrawMode) {
+    cloudDrawMode.value = mode;
+  }
+
   return {
     style: state,
+    cloudDrawMode,
+    setCloudDrawMode,
     resetToDefaults,
     updateStyle,
     applyPreset,

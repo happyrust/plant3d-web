@@ -314,6 +314,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'annotationStyle') {
+    return dockApi.addPanel({
+      id: 'annotationStyle',
+      component: 'AnnotationStylePanel',
+      title: '批注样式',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'materialConfig') {
     return dockApi.addPanel({
       id: 'materialConfig',
@@ -558,6 +570,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'dimension.settings':
       togglePanel('dimensionStyle');
+      return;
+    case 'annotation.settings':
+      togglePanel('annotationStyle');
       return;
     case 'panel.review':
       togglePanel('review');

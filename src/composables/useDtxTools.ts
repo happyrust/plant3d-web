@@ -91,6 +91,7 @@ type CloudOverlayEl = {
   labelWorldPos: Vector3
   leader: AnnotationLeaderVisual
   outline: MeshLine
+  bboxEdges: LineSegments
   record: CloudAnnotationRecord
 }
 
@@ -98,6 +99,7 @@ type CloudAnnotationVisual = {
   pin: LineSegments
   leader: AnnotationLeaderVisual
   outline: MeshLine
+  bboxEdges: LineSegments
   labelWorldPos: Vector3
 }
 
@@ -517,6 +519,89 @@ export function buildCloudBillboardPolyline(
   return pts;
 }
 
+const CLOUD_BBOX_EDGE_INDEX_PAIRS: readonly (readonly [number, number])[] = [
+  [0, 1], [1, 2], [2, 3], [3, 0],
+  [4, 5], [5, 6], [6, 7], [7, 4],
+  [0, 4], [1, 5], [2, 6], [3, 7],
+];
+
+function boxCornersFromMinMaxVec(min: Vector3, max: Vector3): Vector3[] {
+  return [
+    new Vector3(min.x, min.y, min.z),
+    new Vector3(max.x, min.y, min.z),
+    new Vector3(max.x, max.y, min.z),
+    new Vector3(min.x, max.y, min.z),
+    new Vector3(min.x, min.y, max.z),
+    new Vector3(max.x, min.y, max.z),
+    new Vector3(max.x, max.y, max.z),
+    new Vector3(min.x, max.y, max.z),
+  ];
+}
+
+function pushWavyEdgeLineSegmentPairs(
+  v0: Vector3,
+  v1: Vector3,
+  cameraWorldPos: Vector3,
+  segments: number,
+  waves: number,
+  out: number[],
+): void {
+  const edge = new Vector3().subVectors(v1, v0);
+  const len = edge.length();
+  if (len < 1e-9) return;
+  const edgeDir = edge.multiplyScalar(1 / len);
+  const mid = new Vector3().addVectors(v0, v1).multiplyScalar(0.5);
+  const toCam = new Vector3().subVectors(cameraWorldPos, mid);
+  const binormal = new Vector3().crossVectors(edgeDir, toCam);
+  if (binormal.lengthSq() < 1e-12) {
+    binormal.crossVectors(edgeDir, new Vector3(0, 1, 0));
+  }
+  if (binormal.lengthSq() < 1e-12) {
+    binormal.crossVectors(edgeDir, new Vector3(1, 0, 0));
+  }
+  binormal.normalize();
+  const amp = clamp(len * 0.022, len * 0.004, len * 0.12);
+
+  const base0 = new Vector3();
+  const base1 = new Vector3();
+  const p0 = new Vector3();
+  const p1 = new Vector3();
+  for (let s = 0; s < segments; s++) {
+    const t0 = s / segments;
+    const t1 = (s + 1) / segments;
+    base0.copy(v0).lerp(v1, t0);
+    base1.copy(v0).lerp(v1, t1);
+    const w0 = Math.sin(t0 * Math.PI * 2 * waves) * amp;
+    const w1 = Math.sin(t1 * Math.PI * 2 * waves) * amp;
+    p0.copy(base0).addScaledVector(binormal, w0);
+    p1.copy(base1).addScaledVector(binormal, w1);
+    out.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z);
+  }
+}
+
+function buildWavySelectionBboxLinePositions(
+  min: Vec3,
+  max: Vec3,
+  cameraWorldPos: Vector3,
+  segmentsPerEdge = 10,
+): Float32Array {
+  const mn = new Vector3(min[0], min[1], min[2]);
+  const mx = new Vector3(max[0], max[1], max[2]);
+  const corners = boxCornersFromMinMaxVec(mn, mx);
+  const waves = 3;
+  const out: number[] = [];
+  for (const [ia, ib] of CLOUD_BBOX_EDGE_INDEX_PAIRS) {
+    pushWavyEdgeLineSegmentPairs(corners[ia]!, corners[ib]!, cameraWorldPos, segmentsPerEdge, waves, out);
+  }
+  return new Float32Array(out);
+}
+
+function updateCloudBboxLineSegmentsGeometry(line: LineSegments, positions: Float32Array): void {
+  const geom = line.geometry as BufferGeometry;
+  geom.setAttribute('position', new BufferAttribute(positions, 3));
+  geom.computeBoundingSphere();
+}
+
 type CloudWavyRectangleOptions = {
   segmentsPerEdge: number;
   wavesPerEdge: number;
@@ -622,6 +707,8 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
   description?: string
   createdAt?: number
   projectOverlayToWorld: (x: number, y: number, ndcZ: number) => Vec3
+  /** 框选构件合并 AABB，供三维包围盒云线使用 */
+  selectionBbox?: { min: Vec3; max: Vec3 }
 }): CloudAnnotationRecord {
   const marqueeCenter = {
     x: (params.rect.x1 + params.rect.x2) * 0.5,
@@ -648,6 +735,9 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
     anchorWorldPos: [...params.anchorWorldPos],
     anchorRefno: params.anchorRefno,
     leaderEndWorldPos,
+    selectionBbox: params.selectionBbox
+      ? { min: [...params.selectionBbox.min] as Vec3, max: [...params.selectionBbox.max] as Vec3 }
+      : undefined,
     screenOffset,
     cloudSize,
     visible: true,
@@ -1125,13 +1215,14 @@ function createCloudAnnotationVisual(
   const distance = Math.max(anchor.distanceTo(labelWorldPos), 0.12);
   const pinGeometry = buildPinMarkerGeometry(anchor, distance);
 
-  const pinMaterial = new LineBasicMaterial({ color: 0xdc2626 });
+  const cloudSt = buildAnnotationLeaderStyle('cloud');
+  const pinMaterial = new LineBasicMaterial({ color: cloudSt.color });
   const outlineGeometry = new MeshLineGeometry();
   const outlineMaterial = new MeshLineMaterial({
-    color: 0xdc2626,
-    lineWidth: 3.5,
+    color: cloudSt.color,
+    lineWidth: cloudSt.linewidth,
     transparent: true,
-    opacity: 0.95,
+    opacity: cloudSt.opacity,
     depthTest: false,
     depthWrite: false,
     sizeAttenuation: false,
@@ -1142,13 +1233,26 @@ function createCloudAnnotationVisual(
   outline.frustumCulled = false;
   outline.renderOrder = 901;
 
+  const bboxGeom = new BufferGeometry();
+  bboxGeom.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0, 0, 0]), 3));
+  const bboxMat = new LineBasicMaterial({
+    color: cloudSt.color,
+    transparent: true,
+    opacity: cloudSt.opacity,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const bboxEdges = new LineSegments(bboxGeom, bboxMat);
+  bboxEdges.renderOrder = 902;
+  bboxEdges.frustumCulled = false;
+
   const pin = new LineSegments(pinGeometry, pinMaterial);
   const leader = createAnnotationLeader('cloud', anchor, labelWorldPos, resolution);
   pin.renderOrder = 901;
 
   outlineGeometry.setPoints([0, 0, 0, 0, 0, 0]);
 
-  return { pin, leader, outline, labelWorldPos };
+  return { pin, leader, outline, bboxEdges, labelWorldPos };
 }
 
 function createRectAnnotationVisual(
@@ -1427,6 +1531,7 @@ export function useDtxTools(options: {
 
   const selectionStore = useSelectionStore();
   const unitSettings = useUnitSettingsStore();
+  const annotationStyleStore = useAnnotationStyleStore();
   const readyRevision = ref(0);
 
   let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
@@ -2671,13 +2776,14 @@ export function useDtxTools(options: {
       if (!c.visible) continue;
       const anchor = new Vector3(...c.anchorWorldPos);
       const visual = createCloudAnnotationVisual(c, resolution);
-      toolsGroup.add(visual.pin, visual.leader.root, visual.outline);
+      toolsGroup.add(visual.pin, visual.leader.root, visual.outline, visual.bboxEdges);
       cloudShapes.set(`cloud:${c.id}`, {
         id: `cloud:${c.id}`,
         worldPos: anchor,
         labelWorldPos: visual.labelWorldPos.clone(),
         leader: visual.leader,
         outline: visual.outline,
+        bboxEdges: visual.bboxEdges,
         record: c,
       });
 
@@ -2971,13 +3077,60 @@ export function useDtxTools(options: {
     }
 
     for (const [id, cloud] of cloudShapes.entries()) {
+      const drawMode = annotationStyleStore.cloudDrawMode.value;
+      const sb = cloud.record.selectionBbox;
+      let renderBbox3d = drawMode === 'bbox3d' && !!sb?.min && !!sb?.max;
+
       const anchorScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.worldPos);
       const labelScreen = worldToOverlayPoint(viewer.camera, canvas, overlay, cloud.labelWorldPos);
+
+      const cloudStyle = annotationStyleStore.style.cloud;
+      const outlineMat = cloud.outline.material as MeshLineMaterial;
+      outlineMat.color.setHex(cloudStyle.color);
+      outlineMat.opacity = cloudStyle.opacity;
+      outlineMat.lineWidth = cloudStyle.lineWidth;
+      const bboxMat = cloud.bboxEdges.material as LineBasicMaterial;
+      bboxMat.color.setHex(cloudStyle.color);
+      bboxMat.opacity = cloudStyle.opacity;
+
+      let bboxPositions: Float32Array | null = null;
+      if (renderBbox3d && sb) {
+        const camPos = new Vector3();
+        viewer.camera.getWorldPosition(camPos);
+        bboxPositions = buildWavySelectionBboxLinePositions(sb.min, sb.max, camPos, 10);
+        if (bboxPositions.length < 6) {
+          renderBbox3d = false;
+          bboxPositions = null;
+        }
+      }
+
+      if (renderBbox3d && bboxPositions) {
+        cloud.outline.visible = false;
+        updateCloudBboxLineSegmentsGeometry(cloud.bboxEdges, bboxPositions);
+        cloud.bboxEdges.visible = anchorScreen.visible;
+        void id;
+        continue;
+      }
+
+      cloud.bboxEdges.visible = false;
+      cloud.outline.visible = true;
+
       const widthPx = clamp(cloud.record.cloudSize?.width ?? 120, 72, 220);
       const heightPx = clamp(cloud.record.cloudSize?.height ?? 72, 48, 180);
+      const off = cloud.record.screenOffset ?? { x: widthPx * 0.5 + 26, y: -(heightPx * 0.5 + 18) };
+      const centerX = anchorScreen.x + off.x;
+      const centerY = anchorScreen.y + off.y;
+      const cloudCenterWorld = overlayToWorld(
+        viewer.camera,
+        canvas,
+        overlay,
+        centerX,
+        centerY,
+        anchorScreen.ndcZ,
+      );
       const worldPerPixel = worldPerPixelAt(
         viewer.camera,
-        cloud.labelWorldPos,
+        cloudCenterWorld,
         Math.max(1, canvas.clientWidth),
         Math.max(1, canvas.clientHeight),
       );
@@ -2988,7 +3141,7 @@ export function useDtxTools(options: {
       }
       const up = new Vector3().crossVectors(right, cameraDir).normalize();
       const positions = buildCloudBillboardPolyline(
-        cloud.labelWorldPos,
+        cloudCenterWorld,
         right,
         up,
         widthPx * worldPerPixel,
@@ -3405,6 +3558,10 @@ export function useDtxTools(options: {
         title: `云线批注 ${n}`,
         description: '',
         createdAt: Date.now(),
+        selectionBbox: {
+          min: [box.min.x, box.min.y, box.min.z],
+          max: [box.max.x, box.max.y, box.max.z],
+        },
         projectOverlayToWorld: (x, y, ndcZ) => vec3ToTuple(
           overlayToWorld(viewer.camera, canvas, overlay, x, y, ndcZ),
         ),
@@ -3816,6 +3973,25 @@ export function useDtxTools(options: {
       syncFromStore();
     },
     { deep: true }
+  );
+
+  watch(
+    () => annotationStyleStore.cloudDrawMode.value,
+    () => {
+      if (!dtxViewerRef.value || !overlayContainerRef.value) return;
+      syncFromStore();
+      requestRender?.();
+    },
+  );
+
+  watch(
+    () => annotationStyleStore.style.cloud,
+    () => {
+      if (!dtxViewerRef.value || !overlayContainerRef.value) return;
+      syncFromStore();
+      requestRender?.();
+    },
+    { deep: true },
   );
 
   // pick_refno：候选变化与取消拾取时同步高亮

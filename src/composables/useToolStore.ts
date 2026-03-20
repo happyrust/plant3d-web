@@ -224,6 +224,8 @@ export type CloudAnnotationRecord = {
   anchorWorldPos: Vec3;
   anchorRefno?: string;
   leaderEndWorldPos?: Vec3;
+  /** 框选构件合并 AABB，用于「三维包围盒」云线绘制 */
+  selectionBbox?: { min: Vec3; max: Vec3 };
   screenOffset?: { x: number; y: number };
   cloudSize?: { width: number; height: number };
   visible: boolean;

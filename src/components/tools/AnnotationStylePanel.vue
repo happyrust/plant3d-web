@@ -8,7 +8,7 @@ import {
   useAnnotationStyleStore,
 } from '@/composables/useAnnotationStyleStore';
 
-const { style, resetToDefaults, applyPreset } = useAnnotationStyleStore();
+const { style, resetToDefaults, applyPreset, cloudDrawMode, setCloudDrawMode } = useAnnotationStyleStore();
 
 const styleKinds: (keyof AnnotationStyleConfig)[] = ['text', 'cloud', 'rect', 'obb'];
 
@@ -100,6 +100,39 @@ function previewHaloStyle(kind: keyof AnnotationStyleConfig): Record<string, str
 <template>
   <div class="annotation-style-panel space-y-4">
     <h3 class="mb-2 border-b pb-1 text-sm font-semibold">批注引线样式</h3>
+
+    <div class="space-y-2 rounded-md border border-border p-3"
+      data-testid="annotation-style-cloud-draw-mode">
+      <div class="text-xs font-medium uppercase tracking-wide text-gray-500">云线轮廓绘制</div>
+      <p class="text-xs leading-5 text-muted-foreground">
+        屏幕二维：轮廓锚定在拾取点投影上，尺寸为拖框像素大小，随旋转/缩放按屏幕比例重建。
+        三维包围盒：沿选中构件合并 AABB 的 12 条边绘制波浪线，参与深度测试。
+      </p>
+      <div class="flex flex-col gap-2 text-sm">
+        <label class="flex cursor-pointer items-start gap-2 rounded border border-transparent px-1 py-0.5 hover:bg-muted/40">
+          <input type="radio"
+            name="cloud-draw-mode"
+            class="mt-0.5"
+            :checked="cloudDrawMode === 'screen2d'"
+            @change="setCloudDrawMode('screen2d')" />
+          <span>
+            <span class="font-medium">屏幕二维</span>
+            <span class="block text-xs text-muted-foreground">锚点投影 + 拖框像素矩形（默认）</span>
+          </span>
+        </label>
+        <label class="flex cursor-pointer items-start gap-2 rounded border border-transparent px-1 py-0.5 hover:bg-muted/40">
+          <input type="radio"
+            name="cloud-draw-mode"
+            class="mt-0.5"
+            :checked="cloudDrawMode === 'bbox3d'"
+            @change="setCloudDrawMode('bbox3d')" />
+          <span>
+            <span class="font-medium">三维包围盒</span>
+            <span class="block text-xs text-muted-foreground">选中构件合并 AABB 波浪线框</span>
+          </span>
+        </label>
+      </div>
+    </div>
 
     <div class="space-y-2 rounded-md border border-border p-3">
       <div class="text-xs font-medium uppercase tracking-wide text-gray-500">快速预设</div>

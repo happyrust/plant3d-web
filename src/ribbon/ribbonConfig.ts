@@ -212,6 +212,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
         id: 'annotation.manage',
         label: '管理',
         items: [
+          { kind: 'button', id: 'annotation.style.settings', label: '样式设置', icon: 'settings', commandId: 'annotation.settings' },
           { kind: 'button', id: 'annotation.clear', label: '清空', icon: 'trash', commandId: 'annotation.clear' },
         ],
       },
