@@ -3,8 +3,8 @@ import { computed, ref } from 'vue';
 
 import { reviewGetEmbedUrl } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
+import DashboardLayout from '@/components/dashboard/DashboardLayout.vue';
 import DockLayout from '@/components/DockLayout.vue';
-import ProjectCardList from '@/components/model-project/ProjectCardList.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
@@ -21,11 +21,7 @@ const extensionHeight = computed(() => (ribbonCollapsed.value ? 32 : 124));
 const urlParams = new URLSearchParams(window.location.search);
 const showBenchmark = urlParams.get('benchmark') === 'true';
 
-const { currentProject, selectProject } = useModelProjects();
-
-function handleProjectSelect(projectId: string) {
-  selectProject(projectId);
-}
+const { currentProject } = useModelProjects();
 
 const onboarding = useOnboardingGuide();
 const embedLoading = ref(false);
@@ -49,7 +45,7 @@ async function handleEmbedTest() {
     <ConfirmDialog />
     <OnboardingOverlay />
     
-    <ProjectCardList v-if="!currentProject" @select="handleProjectSelect" />
+    <DashboardLayout v-if="!currentProject" />
     
     <template v-else>
       <v-app-bar class="ribbon-app-bar"

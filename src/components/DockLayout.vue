@@ -113,6 +113,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'nearbyQuery');
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
+  closePanelIfExists(dockApi, 'dashboard');
 
   const viewerPanel = dockApi.addPanel({
     id: 'viewer',
@@ -157,15 +158,21 @@ function createDefaultLayout(dockApi: DockApi) {
     position: { referencePanel: measurementPanel, direction: 'within' },
   });
 
-  const propertiesPanel = dockApi.addPanel({
+  dockApi.addPanel({
     id: 'properties',
     component: 'PropertiesPanel',
     title: '属性',
     position: { referencePanel: measurementPanel, direction: 'within' },
   });
 
-  propertiesPanel.api.setActive();
-  viewerPanel.api.setActive();
+  const dashboardPanel = dockApi.addPanel({
+    id: 'dashboard',
+    component: 'DashboardPanel',
+    title: '概览',
+    position: { referencePanel: measurementPanel, direction: 'within' },
+  });
+
+  dashboardPanel.api.setActive();
 
   const leftGroup = dockApi.getPanel('modelTree')?.group;
   const rightGroup = dockApi.getPanel('measurement')?.group;
@@ -784,8 +791,8 @@ async function applyInitialLanding() {
     }
   }
 
-  activatePanel('modelTree');
-  activatePanel('viewer');
+  ensurePanel('dashboard');
+  activatePanel('dashboard');
 }
 
 function onReady(event: DockviewReadyEvent) {
