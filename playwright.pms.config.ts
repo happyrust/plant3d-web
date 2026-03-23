@@ -7,12 +7,17 @@ import { defineConfig } from '@playwright/test';
 
 const base = process.env.PMS_E2E_BASE?.trim() || 'http://pms.powerpms.net:1801';
 
+const longPms =
+  process.env.PMS_E2E_FULL_FLOW === '1'
+  || process.env.PMS_E2E_FULL_FLOW === 'true'
+  || process.env.PMS_E2E_SUBMIT_REVIEW === '1';
+
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/pms-*.spec.ts',
   fullyParallel: false,
   workers: 1,
-  timeout: 120_000,
+  timeout: longPms ? 300_000 : 120_000,
   expect: { timeout: 25_000 },
   retries: process.env.CI ? 1 : 0,
   use: {

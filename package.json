@@ -21,6 +21,7 @@
     "test:e2e": "npx @playwright/test test",
     "test:e2e:pms": "npx @playwright/test test --config=playwright.pms.config.ts",
     "test:pms:cdp": "npx tsx scripts/pms-chrome-devtools-flow.ts",
+    "test:pms:cdp:full": "PMS_CDP_FULL_FLOW=1 npx tsx scripts/pms-chrome-devtools-flow.ts",
     "test:pms:browser": "npx tsx scripts/pms-chrome-devtools-flow.ts",
     "test:e2e:ui": "npx @playwright/test test --ui",
     "test:e2e:headed": "npx @playwright/test test --headed",

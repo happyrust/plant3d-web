@@ -32,8 +32,9 @@
 | `PMS_E2E_BASE` | 可选，默认 `http://pms.powerpms.net:1801` |
 | `PMS_E2E_OPEN_URL_SUBSTRING` | 断言「新增」后页面 URL 应包含的子串，默认 `127.0.0.1`（可按部署改为域名） |
 | `PMS_E2E_HEADLESS` | 设为 `1` 时本地也使用无头模式 |
-| `PMS_E2E_SUBMIT_REVIEW` | 设为 `1` 时，在通过 URL 断言后继续在 plant3d 内执行「创建并提交提资单」直至成功提示（与 CDP 脚本 `PMS_CDP_SUBMIT_REVIEW` 等价；需已部署含自动化钩子的前端） |
-| `PMS_E2E_FILL_PMS_DIALOG` | 设为 `1` 时尝试填写 PMS 弹窗内项目代码/名称并提交（与 `PMS_CDP_FILL_PMS_DIALOG` 一致） |
+| `PMS_E2E_SUBMIT_REVIEW` | 设为 `1` 时，在通过 URL 断言后继续在 plant3d 内执行发起提资直至「提资单创建成功」（与 CDP 的 `PMS_CDP_SUBMIT_REVIEW` 等价；需已部署含自动化钩子的前端） |
+| `PMS_E2E_FILL_PMS_DIALOG` | 设为 `1` 时，在点击「新增」后轮询填写 PMS 弹窗（项目代码/名称等）并提交 |
+| `PMS_E2E_FULL_FLOW` | 设为 `1` 时同时启用 `FILL_PMS_DIALOG` + `SUBMIT_REVIEW`；可用 `PMS_E2E_SKIP_PMS_DIALOG=1` / `PMS_E2E_SKIP_PLANT3D_SUBMIT=1` 关闭其中一步 |
 
 ### 命令示例
 
@@ -60,24 +61,45 @@ npm run test:pms:cdp
 
 不设 `PMS_EMBEDDED_SITE_SUBSTRING` / `PMS_E2E_OPEN_URL_SUBSTRING` 时，只自动化到**点击「新增」**，不校验外链 URL。
 
-### 一键：新增 → 三维页填表 → 发起提资（CDP 脚本）
+### 从 PMS 入口跑通全流程（推荐）
 
-1. **部署**：需已发布包含「`plant3d_automation_review` / `automation_review` 自动化钩子」的 plant3d-web（`InitiateReviewPanel` 在显式开启时暴露 `window.__plant3dInitiateReviewE2E.addMockComponent`）。
-2. **环境变量**（在密码、域名片段基础上）：
-   - `PMS_CDP_SUBMIT_REVIEW=1`：在打开的三维页（主文档或同源 iframe）中自动注入一条模拟构件、填写数据包名称、选择校核/批准人并点击「创建并提交提资单」，直到出现「提资单创建成功」。
-   - `PMS_MOCK_PACKAGE_NAME`：可选，自定义提资数据包名称。
-   - `PMS_CDP_FILL_PMS_DIALOG=1`：若「新增」后先出现 **PMS 站内**弹窗（项目代码/项目名称等），尝试填写并点「保存/确定/提交/发起提资」。
-3. **示例**：
+入口固定为：[PowerPMS 登录页](http://pms.powerpms.net:1801/sysin.html)（脚本内 `PMS_E2E_BASE` 默认同域，实际打开 `…/sysin.html`）。
+
+1. **部署**：plant3d-web 需已发布，且含自动化钩子（`registerPlant3dAutomationReviewInitScript` 会写入 `localStorage.plant3d_automation_review=1`，页面暴露 `window.__plant3dInitiateReviewE2E.addMockComponent`）。
+2. **外部流程模式**（默认）：三维内按钮为「**创建提资数据**」，脚本通过 `[data-guide="submit-btn"]` 点击；成功文案仍为「提资单创建成功」。
+3. **一键命令**（密码与嵌入站点片段必填）：
+
+```bash
+cd plant3d-web
+export PMS_E2E_PASSWORD='********'
+export PMS_EMBEDDED_SITE_SUBSTRING='123.57.182.243'   # 或你的 plant3d 线上域名/IP
+npm run test:pms:cdp:full
+```
+
+`test:pms:cdp:full` 等价于 `PMS_CDP_FULL_FLOW=1`：自动打开 **弹窗轮询填写** + **plant3d 发起提资**。若只需其中一步，可改用手动开关或 `PMS_CDP_SKIP_PMS_DIALOG=1` / `PMS_CDP_SKIP_PLANT3D_SUBMIT=1`。
+
+### 环境变量补充（CDP 脚本）
+
+| 变量 | 说明 |
+|------|------|
+| `PMS_CDP_FULL_FLOW` | `1`：启用 `PMS_CDP_FILL_PMS_DIALOG` + `PMS_CDP_SUBMIT_REVIEW`（可用 `SKIP` 关闭子步骤，见上） |
+| `PMS_CDP_SUBMIT_REVIEW` | `1`：注入模拟 BRAN、填数据包名、点提交，直到出现「提资单创建成功」 |
+| `PMS_CDP_FILL_PMS_DIALOG` | `1`：点击「新增」后在所有标签页轮询尝试填写 PMS 建单弹窗 |
+| `PMS_TARGET_BRAN_REFNO` | 模拟构件 RefNo，默认 `24381/145018` |
+| `PMS_MOCK_PACKAGE_NAME` / `PMS_MOCK_PROJECT_CODE` / `PMS_MOCK_PROJECT_NAME` | 提资包名、弹窗内项目代码/名称 |
+| `PMS_PLANT3D_POLL_MS` | 等待发起提资面板出现的超时（毫秒），默认 `180000` |
+
+分步示例：
 
 ```bash
 export PMS_E2E_PASSWORD='********'
 export PMS_EMBEDDED_SITE_SUBSTRING='你的-plant3d-域名'
 export PMS_CDP_SUBMIT_REVIEW=1
-# 可选：export PMS_CDP_FILL_PMS_DIALOG=1
+export PMS_CDP_FILL_PMS_DIALOG=1
 npm run test:pms:cdp
 ```
 
-说明：若三维页在 **跨域 iframe** 内，Playwright 无法操作内部 DOM，需改为新标签打开同源三维地址或调整嵌入方式。若审核人列表不足两人或后端创建接口失败，自动化会在对应步骤报错退出。
+说明：若三维页在 **跨域 iframe** 内，Playwright 无法操作内部 DOM，需改为新标签打开同源三维地址或调整嵌入方式。若后端 `createReviewTask` 失败，脚本会在提交步骤报错。
 
 - 脚本路径：`scripts/pms-chrome-devtools-flow.ts`（`npx tsx` 执行；Playwright → Chromium → **CDP**）。
 - **附加本机已打开的 Chrome**（便于同时开 DevTools 看 Network）：先启动  

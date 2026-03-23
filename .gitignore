@@ -47,5 +47,9 @@ playwright-report/
 deployment_sites.sqlite
 
 npm-cache
-e2e
-scripts
+# 本地大量 e2e 不入库；PMS 外网联调用例单独跟踪
+e2e/*
+!e2e/pms-powerpms-review-new.spec.ts
+scripts/*
+!scripts/pms-chrome-devtools-flow.ts
+!scripts/pms-plant3d-initiate-flow.ts
