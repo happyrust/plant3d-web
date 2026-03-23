@@ -53,3 +53,12 @@
 - 环境变量参考 `.env.example`；不要提交包含密钥的 `.env.*` 文件  
 - 不要提交构建产物（如 `dist/`、`coverage/`、`test-results/`），除非 PR 明确说明用途  
 - 如需复现线上问题，请在 PR 描述中注明对应环境与复现步骤（URL、数据样例、浏览器版本）
+
+## PowerPMS 联调 / 自动化测试账号（内部）
+
+用于 `http://pms.powerpms.net:1801/sysin.html` 登录及 `npm run test:pms:cdp` / `test:e2e:pms`：
+
+- **用户名（大写简写）**：`SJ`、`JH`、`SH`、`PZ`（多角色可用 `PMS_E2E_ROLES=SJ,JH,SH,PZ`）
+- **密码**：`Admin@1234`（联调环境；变更后请同步团队并更新本地 `PMS_E2E_PASSWORD`）
+
+自动化示例：`export PMS_E2E_PASSWORD='Admin@1234'`；勿将含密码的命令写入公开 PR 描述。

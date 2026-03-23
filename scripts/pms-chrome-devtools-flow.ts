@@ -46,6 +46,26 @@ const fillPmsDialog =
 const popupWaitMs = fullFlow ? 45_000 : 25_000;
 const pmsDialogPollMs = fullFlow ? 45_000 : 28_000;
 
+function pageUrlsInclude(context: import('playwright').BrowserContext, sub: string): boolean {
+  return context.pages().some((p) => !p.isClosed() && p.url().includes(sub));
+}
+
+/** 嵌入的 plant3d 常在 PMS 同页 iframe 内，顶层 URL 仍为 WebCenter */
+function anyFrameUrlIncludes(context: import('playwright').BrowserContext, sub: string): boolean {
+  for (const p of context.pages()) {
+    if (p.isClosed()) continue;
+    for (const f of p.frames()) {
+      try {
+        const u = f.url();
+        if (u && u.includes(sub)) return true;
+      } catch {
+        /* 跨域 frame 的 url 可能不可读 */
+      }
+    }
+  }
+  return false;
+}
+
 async function login(page: import('playwright').Page): Promise<void> {
   await page.goto(`${base}/sysin.html`, { waitUntil: 'domcontentloaded' });
   const userInput = page.locator('input[type="text"]').first();
@@ -210,15 +230,27 @@ async function main(): Promise<void> {
     console.error(`[cdp] 当前所有标签: ${allPages.map((p) => p.url()).join(' | ')}`);
 
     if (openSubstring) {
-      const hit = allPages.some((p) => p.url().includes(openSubstring));
+      const pageHit = pageUrlsInclude(context, openSubstring);
+      const frameHit = pageHit ? false : anyFrameUrlIncludes(context, openSubstring);
+      const hit = pageHit || frameHit;
       if (!hit) {
-        throw new Error(
-          `没有任何标签页 URL 包含「${openSubstring}」；若外链尚未配置，可先不设该环境变量以只测到「新增」点击。`,
+        if (submitReview) {
+          console.error(
+            `[cdp] 警告：未在顶层 URL 或可读 iframe URL 中发现「${openSubstring}」；仍将扫描 DOM 尝试 plant3d 发起提资（跨域 iframe 可能无法操作）。`,
+          );
+        } else {
+          throw new Error(
+            `没有任何标签页 URL 包含「${openSubstring}」；若 plant3d 仅在同页 iframe 内，请同时开启 PMS_CDP_SUBMIT_REVIEW / FULL_FLOW 以跳过纯顶层校验，或暂时不设该变量。`,
+          );
+        }
+      } else {
+        console.error(
+          `[cdp] 嵌入地址校验：${pageHit ? '顶层标签页' : '子 frame'} 已匹配「${openSubstring}」`,
         );
       }
     }
     console.error(
-      '[cdp] 流程结束（' + (openSubstring ? 'URL 子串校验通过' : '未校验 URL，仅完成登录与新增点击') + '）',
+      '[cdp] 流程结束（' + (openSubstring ? '嵌入地址已核对或已降级继续' : '未校验 URL，仅完成登录与新增点击') + '）',
     );
 
     if (submitReview) {

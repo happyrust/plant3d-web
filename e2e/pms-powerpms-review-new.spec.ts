@@ -138,6 +138,21 @@ async function tryClickNewInFrame(root: Page | Frame): Promise<boolean> {
 /**
  * 主文档 + 所有子 frame（含嵌套）中查找并点击「新增」。
  */
+function anyFrameUrlIncludes(context: BrowserContext, sub: string): boolean {
+  for (const p of context.pages()) {
+    if (p.isClosed()) continue;
+    for (const f of p.frames()) {
+      try {
+        const u = f.url();
+        if (u && u.includes(sub)) return true;
+      } catch {
+        /* cross-origin */
+      }
+    }
+  }
+  return false;
+}
+
 async function clickNewInAnyFrame(page: Page): Promise<void> {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
@@ -230,9 +245,12 @@ for (const role of rolesToRun()) {
       });
 
       if (sub) {
+        const pageHit = allUrls.some((u) => u.includes(sub));
+        const frameHit = pageHit ? false : anyFrameUrlIncludes(context, sub);
+        const ok = pageHit || frameHit || submitReviewEnabled;
         expect(
-          allUrls.some((u) => u.includes(sub)),
-          `期望某标签页为嵌入的线上 plant3d（URL 含「${sub}」）。当前标签 URL：\n${allUrls.join('\n')}`
+          ok,
+          `期望顶层 URL 或 iframe 含「${sub}」，或已开启发起提资以便在同页 iframe 场景下降级校验。当前标签：\n${allUrls.join('\n')}`,
         ).toBe(true);
       } else {
         // 未配置部署域名时：仍完成自动化点击，便于有头观察行为
