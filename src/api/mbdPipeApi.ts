@@ -116,15 +116,19 @@ export type MbdBendDto = {
 }
 
 export type MbdLayoutHint = {
-  anchor_point: Vec3
-  primary_axis: Vec3
-  offset_dir: Vec3
-  char_dir: Vec3
-  label_role: string
-  avoid_line_of_sight: boolean
+  anchor_point?: Vec3 | null
+  primary_axis?: Vec3 | null
+  offset_dir?: Vec3 | null
+  char_dir?: Vec3 | null
+  label_role?: string | null
+  avoid_line_of_sight?: boolean | null
   owner_segment_id?: string | null
-  offset_level: number
+  offset_level?: number | null
   suppress_reason?: string | null
+  layout_group_id?: string | null
+  placement_lane?: number | null
+  side_locked?: boolean | null
+  declutter_priority?: number | null
   [k: string]: unknown
 }
 
@@ -147,6 +151,7 @@ export type MbdFittingDto = {
   noun: string
   kind: MbdFittingKind
   anchor_point: Vec3
+  text?: string | null
   angle?: number | null
   radius?: number | null
   face_center_1?: Vec3 | null

@@ -43,10 +43,16 @@ import type {
 } from '@/api/mbdPipeApi';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
+import {
+  normalizeMbdLayoutHint,
+  resolveBranchLayout,
+  resolveLayeredDimOffset,
+  resolveSemanticDimOffset,
+  type NormalizedLayoutHint,
+} from '@/composables/mbd/branchLayoutEngine';
 import { computeMbdDimOffset } from '@/composables/mbd/computeMbdDimOffset';
 import {
   computePipeAlignedOffsetDirs,
-  findSegmentOffsetDir,
 } from '@/composables/mbd/computePipeAlignedOffsetDirs';
 import {
   getMbdDimensionModeConfig,
@@ -282,7 +288,7 @@ type PlanarDimAlignmentCandidate = {
   id: string;
   kind: MbdDimKind;
   dim: LinearDimension3D;
-  hint?: MbdLayoutHint | null;
+  hint?: NormalizedLayoutHint | null;
   start: Vector3;
   end: Vector3;
   offsetDir: Vector3;
@@ -348,47 +354,6 @@ function toVector3(vec?: ApiVec3 | null): Vector3 | null {
   const [x, y, z] = vec;
   if (![x, y, z].every((v) => Number.isFinite(v))) return null;
   return new Vector3(x, y, z);
-}
-
-function resolveLayoutDirection(hint?: MbdLayoutHint | null): Vector3 | null {
-  const dir = toVector3(hint?.offset_dir ?? null);
-  if (!dir || dir.lengthSq() < 1e-9) return null;
-  return dir.normalize();
-}
-
-function resolveLayoutOffsetLevel(hint?: MbdLayoutHint | null): number {
-  const raw = Number(hint?.offset_level ?? 0);
-  if (!Number.isFinite(raw)) return 0;
-  return Math.max(0, Math.floor(raw));
-}
-
-function resolveLayeredDimOffset(
-  baseOffset: number,
-  hint?: MbdLayoutHint | null,
-): number {
-  const safeBase = clampNumber(baseOffset, 1, 5000, 100);
-  const offsetLevel = resolveLayoutOffsetLevel(hint);
-  if (offsetLevel <= 0) return safeBase;
-  const layerGap = Math.max(safeBase * 0.85, 60);
-  return safeBase + offsetLevel * layerGap;
-}
-
-function resolveSemanticDimOffset(
-  baseOffset: number,
-  role: 'segment' | 'chain' | 'overall' | 'port' | 'cut_tubi',
-  hint?: MbdLayoutHint | null,
-): number {
-  const layered = resolveLayeredDimOffset(baseOffset, hint);
-  if (role === 'chain') {
-    return layered + Math.max(baseOffset * 0.55, 420);
-  }
-  if (role === 'overall') {
-    return layered + Math.max(baseOffset * 0.75, 520);
-  }
-  if (role === 'cut_tubi') {
-    return layered + Math.max(baseOffset * 0.12, 80);
-  }
-  return layered;
 }
 
 function stableAlternatingSign(seed?: string | null): number {
@@ -668,7 +633,7 @@ function buildPlanarDimAlignmentGroupKey(
 
   const mid = candidate.start.clone().add(candidate.end).multiplyScalar(0.5);
   const planeDistance = roundTo(mid.dot(canonicalPlaneNormal), 1);
-  const offsetLevel = resolveLayoutOffsetLevel(candidate.hint);
+  const offsetLevel = candidate.hint?.offsetLevel ?? 0;
 
   return [
     candidate.kind,
@@ -711,10 +676,10 @@ function resolveFloatingLabelOffset(
   hint?: MbdLayoutHint | null,
   baseOffset = 110,
 ): Vector3 | null {
-  const offsetDir = toVector3(hint?.offset_dir ?? null);
-  const charDir =
-    toVector3(hint?.char_dir ?? null) ?? toVector3(hint?.offset_dir ?? null);
-  const primaryAxis = toVector3(hint?.primary_axis ?? null);
+  const normalized = normalizeMbdLayoutHint(hint);
+  const offsetDir = normalized.offsetDir ?? null;
+  const charDir = normalized.charDir ?? normalized.offsetDir ?? null;
+  const primaryAxis = normalized.primaryAxis ?? null;
   if (
     (!offsetDir || offsetDir.lengthSq() < 1e-9) &&
     (!charDir || charDir.lengthSq() < 1e-9) &&
@@ -723,7 +688,7 @@ function resolveFloatingLabelOffset(
     return null;
   }
 
-  const resolvedOffset = resolveLayeredDimOffset(baseOffset, hint);
+  const resolvedOffset = resolveLayeredDimOffset(baseOffset, normalized);
   const textGap = clampNumber(baseOffset * 0.16, 18, 64, 28);
   const offset = new Vector3();
   if (offsetDir && offsetDir.lengthSq() >= 1e-9) {
@@ -735,12 +700,12 @@ function resolveFloatingLabelOffset(
   if (
     primaryAxis &&
     primaryAxis.lengthSq() >= 1e-9 &&
-    `${hint?.label_role ?? ''}`.includes('tubi')
+    `${normalized.labelRole ?? ''}`.includes('tubi')
   ) {
     const axialGap = clampNumber(baseOffset * 0.2, 24, 96, 40);
     offset.addScaledVector(
       primaryAxis.normalize(),
-      axialGap * stableAlternatingSign(hint?.owner_segment_id),
+      axialGap * stableAlternatingSign(normalized.ownerSegmentId),
     );
   }
   return offset.lengthSq() >= 1e-9 ? offset : null;
@@ -851,7 +816,7 @@ export function useMbdPipeAnnotationThree(
   const dimTextMode = ref<'backend' | 'auto'>('backend');
   const dimOffsetScale = ref<number>(1);
   const dimLabelT = ref<number>(0.5);
-  const dimMode = ref<MbdDimensionMode>('classic');
+  const dimMode = ref<MbdDimensionMode>('rebarviz');
   const bendDisplayMode = ref<MbdBendDisplayMode>('size');
   const rebarvizDefaults = getMbdDimensionModeConfig('rebarviz');
   const rebarvizArrowStyle = ref<'open' | 'filled' | 'tick'>(
@@ -940,7 +905,7 @@ export function useMbdPipeAnnotationThree(
     mbdViewMode.value = mode;
     showDims.value = true;
     if (mode === 'inspection') {
-      dimMode.value = 'classic';
+      dimMode.value = 'rebarviz';
       bendDisplayMode.value = 'size';
       showDimSegment.value = false;
       showDimChain.value = false;
@@ -959,7 +924,7 @@ export function useMbdPipeAnnotationThree(
       return;
     }
 
-    dimMode.value = 'classic';
+    dimMode.value = 'rebarviz';
     bendDisplayMode.value = 'size';
     showDimSegment.value = true;
     showDimChain.value = false;
@@ -1360,21 +1325,22 @@ export function useMbdPipeAnnotationThree(
       const start = new Vector3(d.start[0], d.start[1], d.start[2]);
       const end = new Vector3(d.end[0], d.end[1], d.end[2]);
       const kind = (d.kind ?? 'segment') as MbdDimKind;
+      const layoutResolution = resolveBranchLayout({
+        start,
+        end,
+        role: kind,
+        hint: d.layout_hint,
+        segments,
+        pipeOffsetDirs,
+        baseOffsetScale: dimOffsetScale.value,
+      });
       if (kind === 'overall' && duplicateOverallIds.has(d.id)) {
         continue;
       }
 
-      // 计算偏移方向：优先 layout_hint，其次管道拓扑，再次相机方向；都失败则抑制该错误线
-      const hintedDir = resolveLayoutDirection(d.layout_hint);
-      const pipeDir = findSegmentOffsetDir(
-        segments,
-        d.start,
-        d.end,
-        pipeOffsetDirs,
-      );
+      // 计算偏移方向：优先规范化 layout_hint，其次分支拓扑，再次相机方向；都失败则抑制该错误线
       const offsetDir =
-        hintedDir ??
-        pipeDir ??
+        layoutResolution.direction ??
         computeDimensionOffsetDirInLocal(
           start,
           end,
@@ -1387,11 +1353,7 @@ export function useMbdPipeAnnotationThree(
       }
       offsetDir.normalize();
 
-      const dist = start.distanceTo(end);
-      const baseOffset =
-        computeMbdDimOffset(dist) *
-        clampNumber(dimOffsetScale.value, 0.05, 50, 1);
-      const offset = resolveSemanticDimOffset(baseOffset, kind, d.layout_hint);
+      const offset = layoutResolution.offset;
 
       // 合并 session-only overrides
       const ov = dimOverrides.get(d.id);
@@ -1462,7 +1424,7 @@ export function useMbdPipeAnnotationThree(
         id: d.id,
         kind,
         dim: rawDim,
-        hint: d.layout_hint,
+        hint: layoutResolution.normalizedHint,
         start: start.clone(),
         end: end.clone(),
         offsetDir: finalDir.clone(),
@@ -1654,20 +1616,21 @@ export function useMbdPipeAnnotationThree(
       const params = rawTag.getParams();
       const userData = (rawTag.userData as any) ?? {};
       const tagKind = ((userData.mbdTagKind ?? 'other') as MbdTagKind);
-      const hint = (userData.mbdLayoutHint ?? null) as MbdLayoutHint | null;
+      const hint = normalizeMbdLayoutHint(
+        (userData.mbdLayoutHint ?? null) as MbdLayoutHint | null,
+      );
       const baseOffset =
         toVector3(userData.mbdBaseLabelOffset ?? null) ??
         params.labelOffsetWorld?.clone() ??
         new Vector3();
 
-      const offsetDir =
-        toVector3(hint?.offset_dir ?? null) ?? new Vector3(0, 1, 0);
+      const offsetDir = hint.offsetDir?.clone() ?? new Vector3(0, 1, 0);
       if (offsetDir.lengthSq() < 1e-9) offsetDir.set(0, 1, 0);
       offsetDir.normalize();
 
       const charDir =
-        toVector3(hint?.char_dir ?? null) ??
-        toVector3(hint?.primary_axis ?? null) ??
+        hint.charDir?.clone() ??
+        hint.primaryAxis?.clone() ??
         new Vector3(0, 0, 1);
       if (charDir.lengthSq() < 1e-9) charDir.set(0, 0, 1);
       charDir.normalize();
@@ -1970,8 +1933,14 @@ export function useMbdPipeAnnotationThree(
         continue;
       }
 
+      const branchLayout = resolveBranchLayout({
+        start,
+        end,
+        role: 'cut_tubi',
+        hint: cutTubi.layout_hint,
+      });
       const direction =
-        resolveLayoutDirection(cutTubi.layout_hint) ??
+        branchLayout.direction ??
         computeDimensionOffsetDirInLocal(
           start,
           end,
@@ -1986,12 +1955,7 @@ export function useMbdPipeAnnotationThree(
       const label = String(
         cutTubi.text ?? cutTubi.refno ?? 'CUT',
       );
-      const cutBaseOffset = computeMbdDimOffset(start.distanceTo(end));
-      const finalCutOffset = resolveSemanticDimOffset(
-        cutBaseOffset,
-        'cut_tubi',
-        cutTubi.layout_hint,
-      );
+      const finalCutOffset = branchLayout.offset;
       const dim = new LinearDimension3D(
         materials,
         {
@@ -2730,7 +2694,7 @@ export function useMbdPipeAnnotationThree(
             const baseOffset = resolveSemanticDimOffset(
               computeMbdDimOffset(distLocal) * offsetScale,
               kind,
-              sourceDim?.layout_hint,
+              normalizeMbdLayoutHint(sourceDim?.layout_hint),
             );
             const nextOffset = ov.offset ?? baseOffset;
             const nextLabelOffset =

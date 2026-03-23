@@ -468,6 +468,76 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(shortParams?.offset).toBeCloseTo(longParams?.offset ?? 0, 6);
   });
 
+  it('partial layout_hint 应逐字段降级到 branch-driven 方向而不是整体失效', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const segments = [
+      {
+        id: 'seg-1',
+        refno: 'seg-1',
+        noun: 'STRA',
+        arrive: [0, 0, 0],
+        leave: [1000, 0, 0],
+        length: 1000,
+        straight_length: 1000,
+      },
+    ] as MbdPipeData['segments'];
+
+    vis.renderBranch({
+      input_refno: 'partial-layout-hint',
+      branch_refno: 'partial-layout-hint',
+      branch_name: 'BRAN-PARTIAL-HINT',
+      branch_attrs: {},
+      segments,
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [
+        {
+          id: 'dim-partial-hint',
+          kind: 'segment',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: {
+            offset_dir: [NaN, 0, 0] as any,
+            primary_axis: [1, 0, 0],
+            offset_level: 2,
+          },
+        },
+      ],
+      stats: {
+        segments_count: 1,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    });
+
+    const dim = vis.getDimAnnotations().get('dim-partial-hint');
+    expect(dim).toBeTruthy();
+
+    const params = dim?.getParams();
+    const expectedDir = computePipeAlignedOffsetDirs(segments)[0]!;
+    expect(params?.direction.angleTo(expectedDir)).toBeLessThan(1e-6);
+    expect(params?.offset ?? 0).toBeGreaterThan(computeMbdDimOffset(1000));
+  });
+
   it('chain 与 cut_tubi 同区域时应强制分层，避免文字挤在一起', () => {
     const viewer = {
       canvas: {
