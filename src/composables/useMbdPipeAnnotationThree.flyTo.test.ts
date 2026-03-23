@@ -2580,6 +2580,270 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     );
   });
 
+  it('resetDimOverride 后应回到相同的自动布局结果', async () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: '24381_145717',
+      branch_refno: '24381_145717',
+      branch_name: 'BRAN-OVERRIDE-TEST',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-1',
+          refno: 'S:1',
+          noun: 'STRA',
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: 'dim-1',
+          kind: 'chain',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: {
+            owner_segment_id: 'seg-1',
+            offset_dir: [0, 1, 0],
+            offset_level: 1,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    };
+
+    vis.showDimChain.value = true;
+    vis.renderBranch(data);
+
+    const initial = vis.getDimAnnotations().get('dim-1');
+    expect(initial).toBeTruthy();
+    const initialParams = initial!.getParams();
+
+    vis.updateDimOverride('dim-1', {
+      offset: initialParams.offset + 200,
+      labelT: 0.2,
+      direction: [0, -1, 0],
+    });
+
+    const overridden = vis.getDimAnnotations().get('dim-1');
+    expect(overridden?.getParams().offset).toBe(initialParams.offset + 200);
+    expect(overridden?.getParams().labelT).toBe(0.2);
+    expect(overridden?.getParams().direction?.toArray()).toEqual([0, -1, 0]);
+
+    vis.resetDimOverride('dim-1');
+    await nextTick();
+    await nextTick();
+
+    const reset = vis.getDimAnnotations().get('dim-1');
+    expect(reset).toBeTruthy();
+    expect(reset).not.toBe(initial);
+    expect(reset?.getParams().offset).toBeCloseTo(initialParams.offset, 6);
+    expect(reset?.getParams().labelT).toBeCloseTo(initialParams.labelT ?? 0.5, 6);
+    expect(reset?.getParams().direction?.toArray()).toEqual(
+      initialParams.direction?.toArray() ?? [],
+    );
+  });
+
+  it('切换 dimMode 前后应保持相同布局解与 duplicate overall 抑制', async () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const data: MbdPipeData = {
+      input_refno: '24381_145717',
+      branch_refno: '24381_145717',
+      branch_name: 'BRAN-MODE-TEST',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-1',
+          refno: 'S:1',
+          noun: 'STRA',
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: 'chain-1',
+          kind: 'chain',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: {
+            owner_segment_id: 'seg-1',
+            offset_dir: [0, 1, 0],
+            offset_level: 0,
+          },
+        },
+        {
+          id: 'overall-duplicate',
+          kind: 'overall',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: {
+            owner_segment_id: 'seg-1',
+            offset_dir: [0, 1, 0],
+            offset_level: 0,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [
+        {
+          id: 'cut-1',
+          segment_id: 'seg-1',
+          refno: 'CUT-1',
+          start: [100, 0, 0],
+          end: [300, 0, 0],
+          length: 200,
+          text: 'CUT-1',
+          layout_hint: {
+            offset_dir: [0, 1, 0],
+            offset_level: 1,
+          },
+        },
+      ],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 2,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    };
+
+    vis.showDimChain.value = true;
+    vis.showDimOverall.value = true;
+    vis.showCutTubis.value = true;
+    vis.renderBranch(data);
+
+    const chainBefore = vis.getDimAnnotations().get('chain-1');
+    const duplicateBefore = vis.getDimAnnotations().get('overall-duplicate');
+    const cutBefore = (vis as any).getCutTubiAnnotations?.().get('cut-1');
+
+    expect(chainBefore).toBeTruthy();
+    expect(duplicateBefore).toBeFalsy();
+    expect(cutBefore).toBeTruthy();
+
+    const chainLayoutBefore = (chainBefore!.userData as any).mbdLayoutResolution;
+    const cutLayoutBefore = (cutBefore!.userData as any).mbdLayoutResolution;
+    const chainParamsBefore = chainBefore!.getParams();
+    const cutParamsBefore = cutBefore!.getParams();
+
+    vis.dimMode.value = 'classic';
+    await nextTick();
+    await nextTick();
+
+    const chainAfterClassic = vis.getDimAnnotations().get('chain-1');
+    const duplicateAfterClassic = vis.getDimAnnotations().get('overall-duplicate');
+    const cutAfterClassic = (vis as any).getCutTubiAnnotations?.().get('cut-1');
+
+    expect(chainAfterClassic).toBeTruthy();
+    expect(duplicateAfterClassic).toBeFalsy();
+    expect(cutAfterClassic).toBeTruthy();
+    expect((chainAfterClassic!.userData as any).mbdLayoutResolution).toMatchObject({
+      lane: chainLayoutBefore.lane,
+      source: chainLayoutBefore.source,
+      offset: chainLayoutBefore.offset,
+    });
+    expect((cutAfterClassic!.userData as any).mbdLayoutResolution).toMatchObject({
+      lane: cutLayoutBefore.lane,
+      source: cutLayoutBefore.source,
+      offset: cutLayoutBefore.offset,
+    });
+    expect(chainAfterClassic!.getParams().direction?.toArray()).toEqual(
+      chainParamsBefore.direction?.toArray() ?? [],
+    );
+    expect(chainAfterClassic!.getParams().offset).toBeCloseTo(
+      chainParamsBefore.offset,
+      6,
+    );
+    expect(cutAfterClassic!.getParams().direction?.toArray()).toEqual(
+      cutParamsBefore.direction?.toArray() ?? [],
+    );
+    expect(cutAfterClassic!.getParams().offset).toBeCloseTo(
+      cutParamsBefore.offset,
+      6,
+    );
+
+    vis.dimMode.value = 'rebarviz';
+    await nextTick();
+    await nextTick();
+
+    const chainAfterReset = vis.getDimAnnotations().get('chain-1');
+    const duplicateAfterReset = vis.getDimAnnotations().get('overall-duplicate');
+    const cutAfterReset = (vis as any).getCutTubiAnnotations?.().get('cut-1');
+
+    expect(chainAfterReset).toBeTruthy();
+    expect(duplicateAfterReset).toBeFalsy();
+    expect(cutAfterReset).toBeTruthy();
+    expect(chainAfterReset!.getParams().offset).toBeCloseTo(
+      chainParamsBefore.offset,
+      6,
+    );
+    expect(cutAfterReset!.getParams().offset).toBeCloseTo(
+      cutParamsBefore.offset,
+      6,
+    );
+  });
+
   it('rebarviz 箭头参数调整后应即时刷新已渲染尺寸', async () => {
     const viewer = {
       canvas: {

@@ -167,6 +167,8 @@ export type UseMbdPipeAnnotationThreeReturn = {
   getSlopeAnnotations: () => Map<string, SlopeAnnotation3D>;
   /** 获取 bend annotations map（用于外部交互控制器注册） */
   getBendAnnotations: () => Map<string, BendAnnotationGroup>;
+  /** 获取 cut tubi annotations map（用于调试/测试） */
+  getCutTubiAnnotations: () => Map<string, LinearDimension3D>;
   /** 获取 tag annotations map（用于调试/测试） */
   getTagAnnotations: () => Map<string, WeldAnnotation3D>;
 };
@@ -1420,6 +1422,12 @@ export function useMbdPipeAnnotationThree(
       const rawDim = markRaw(dim);
       group.add(rawDim);
       dimAnnotations.set(d.id, rawDim);
+      (rawDim.userData as any).mbdLayoutResolution = {
+        lane: layoutResolution.lane,
+        source: layoutResolution.source,
+        offset: offset,
+        normalizedHint: layoutResolution.normalizedHint,
+      };
       planarAlignmentCandidates.push({
         id: d.id,
         kind,
@@ -1981,6 +1989,12 @@ export function useMbdPipeAnnotationThree(
       const rawDim = markRaw(dim);
       (rawDim.userData as any).mbdAuxKind = 'cut_tubi';
       (rawDim.userData as any).mbdBaseOffset = finalCutOffset;
+      (rawDim.userData as any).mbdLayoutResolution = {
+        lane: branchLayout.lane,
+        source: branchLayout.source,
+        offset: finalCutOffset,
+        normalizedHint: branchLayout.normalizedHint,
+      };
       group.add(rawDim);
       cutTubiAnnotations.set(cutTubi.id, rawDim);
     }
@@ -2014,6 +2028,16 @@ export function useMbdPipeAnnotationThree(
       (rawTag.userData as any).mbdAuxKind = 'tag';
       (rawTag.userData as any).mbdTagKind = classifyTag(tag);
       (rawTag.userData as any).mbdLayoutHint = tag.layout_hint ?? null;
+      (rawTag.userData as any).mbdLayoutResolution = resolveBranchLayout({
+        start: anchor,
+        end:
+          anchor.clone().add(
+            normalizeMbdLayoutHint(tag.layout_hint).primaryAxis?.clone()
+            ?? new Vector3(1, 0, 0),
+          ),
+        role: 'cut_tubi',
+        hint: tag.layout_hint,
+      });
       const baseLabelOffset = annotation.getParams().labelOffsetWorld;
       (rawTag.userData as any).mbdBaseLabelOffset = baseLabelOffset
         ? [baseLabelOffset.x, baseLabelOffset.y, baseLabelOffset.z]
@@ -2580,7 +2604,9 @@ export function useMbdPipeAnnotationThree(
   /** Session-only：重置指定 MBD dim 的交互调整 */
   function resetDimOverride(dimId: string): void {
     dimOverrides.delete(dimId);
-    // 需要重建才能回到后端原始状态（简单方案：如果有 currentData 就重新渲染该 dim）
+    if (dimAnnotations.has(dimId)) {
+      rebuildDimsByCurrentData();
+    }
     requestRender?.();
   }
 
@@ -2607,6 +2633,11 @@ export function useMbdPipeAnnotationThree(
   /** 获取 tag annotations map（用于调试与测试） */
   function getTagAnnotations(): Map<string, WeldAnnotation3D> {
     return tagAnnotations;
+  }
+
+  /** 获取 cut tubi annotations map（用于调试与测试） */
+  function getCutTubiAnnotations(): Map<string, LinearDimension3D> {
+    return cutTubiAnnotations;
   }
 
   function dispose(): void {
@@ -2823,6 +2854,7 @@ export function useMbdPipeAnnotationThree(
     getWeldAnnotations,
     getSlopeAnnotations,
     getBendAnnotations,
+    getCutTubiAnnotations,
     getTagAnnotations,
   };
 }
