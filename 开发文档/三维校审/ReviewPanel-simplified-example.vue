@@ -94,22 +94,35 @@ async function handleClearAllRecords() {
 }
 
 // ============ 辅助数据处理 ============
-function handleLocate(item: any) {
-  const viewer = (window as any).__xeokit_viewer;
+type XeokitViewerStub = {
+  cameraFlight?: { flyTo: (opts: { aabb?: unknown }) => void };
+  scene?: {
+    getAABB?: (ids: string[]) => unknown;
+    setObjectsHighlighted?: (ids: string[], highlighted: boolean) => void;
+  };
+};
+
+type AuxiliaryLocateItem = {
+  ObjectOne?: string;
+  ObjectTow?: string;
+};
+
+function handleLocate(item: AuxiliaryLocateItem) {
+  const viewer = (window as Window & { __xeokit_viewer?: XeokitViewerStub }).__xeokit_viewer;
   if (!viewer) return;
-  
-  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean);
+
+  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean) as string[];
   if (objectIds.length > 0) {
-    viewer.cameraFlight?.flyTo({ aabb: viewer.scene?.getAABB(objectIds) });
+    viewer.cameraFlight?.flyTo({ aabb: viewer.scene?.getAABB?.(objectIds) });
   }
 }
 
-function handleHighlight(item: any) {
-  const viewer = (window as any).__xeokit_viewer;
+function handleHighlight(item: AuxiliaryLocateItem) {
+  const viewer = (window as Window & { __xeokit_viewer?: XeokitViewerStub }).__xeokit_viewer;
   if (!viewer) return;
-  
-  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean);
-  viewer.scene?.setObjectsHighlighted(objectIds, true);
+
+  const objectIds = [item.ObjectOne, item.ObjectTow].filter(Boolean) as string[];
+  viewer.scene?.setObjectsHighlighted?.(objectIds, true);
 }
 
 // ============ 数据同步处理 ============

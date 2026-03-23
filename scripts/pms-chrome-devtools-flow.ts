@@ -2,29 +2,65 @@
  * PowerPMS 完整入口：http://pms.powerpms.net:1801/sysin.html
  *
  * 流程：登录 → 设计交付 → 三维校审单 →「新增」→（可选）轮询填写 PMS 弹窗 →（可选）URL 断言
- * →（可选）plant3d 内注入构件 + 填数据包名 + 点击「创建提资数据」→ 等待成功提示。
+ * →（可选）plant3d 内注入构件 + 填数据包名 + 点击「创建提资数据」→ 等待成功提示
+ * →（默认）回到三维校审单，嗅探 PMS 域名下 JSON 接口响应体是否含包名/测试 BRAN（`PMS_CDP_VERIFY_PMS_API=0` 可关）。
  *
  * 通过 Playwright 驱动 Chromium，底层使用 **Chrome DevTools Protocol (CDP)**。
  *
+ * **推荐（本机 Chrome + DevTools 肉眼调试）**：先 `./scripts/launch-chrome-cdp.sh` 启动带 `--remote-debugging-port=9222` 的 Chrome，
+ * 再设 `CHROME_CDP_URL=http://127.0.0.1:9222` 后执行 `npm run test:pms:cdp:attach:full`（脚本会 `connectOverCDP` 附加到该浏览器，不会关掉你的窗口，可在 DevTools 看 Network/DOM）。
+ *
  * 运行：
- * - `npm run test:pms:cdp` — 按需用环境变量打开各阶段
- * - `npm run test:pms:cdp:full` — 等价于开启「全流程」常用开关（仍须配置密码与嵌入域名片段）
+ * - `npm run test:pms:cdp` — 按需用环境变量打开各阶段（Playwright 自启 Chrome）
+ * - `npm run test:pms:cdp:full` — 同上 + 全流程开关
+ * - `npm run test:pms:cdp:extended` — full + SJ→PMS 可见→JH 校核
+ * - `npm run test:pms:cdp:attach` / `:attach:full` / `:attach:extended` — 必须已用调试端口启动 Chrome，等价于自带 `CHROME_CDP_URL=http://127.0.0.1:9222`
  *
  * 环境变量见 docs/verification/pms-3d-review-integration-e2e.md
  */
 import { chromium } from 'playwright';
 
+import { startPmsApiSniffer } from './pms-api-sniffer';
 import {
   assertNoCaptchaBarrier,
+  PMS_DEFAULT_TEST_BRAN_REFNO,
   pollTryFillPmsDialogsInContext,
   registerPlant3dAutomationReviewInitScript,
+  runCheckerWorkflowAcrossContext,
+  runReviewerAnnotationAcrossContext,
   runSubmitReviewAcrossContext,
   tryFillPmsNewDocumentDialog,
+  tryOpenReviewEntryContainingPackage,
+  waitForSubstringInPageOrChildFrames,
 } from './pms-plant3d-initiate-flow';
 
 const base = (process.env.PMS_E2E_BASE || 'http://pms.powerpms.net:1801').replace(/\/$/, '');
 const username = (process.env.PMS_E2E_USERNAME || 'SJ').trim();
+const checkerUsername = (process.env.PMS_CHECKER_USERNAME || 'JH').trim();
 const password = process.env.PMS_E2E_PASSWORD?.trim();
+/** SJ 提资 → PMS 可见性校验 → 清 Cookie → JH 登录 → 打开条目 → plant3d 校核提交 */
+const extendedFlow =
+  process.env.PMS_CDP_EXTENDED_FLOW === '1' || process.env.PMS_CDP_EXTENDED_FLOW === 'true';
+const pmsVerifyTimeoutMs = (() => {
+  const n = Number(process.env.PMS_CDP_PMS_VERIFY_MS?.trim());
+  return Number.isFinite(n) && n >= 5000 ? n : 90_000;
+})();
+/** 嗅探 PMS 域名下 JSON 响应体是否含包名或测试 BRAN；`PMS_CDP_VERIFY_PMS_API=0` 关闭 */
+const verifyPmsApi =
+  process.env.PMS_CDP_VERIFY_PMS_API !== '0' && process.env.PMS_CDP_VERIFY_PMS_API !== 'false';
+const pmsApiVerifyTimeoutMs = (() => {
+  const n = Number(process.env.PMS_CDP_PMS_API_MS?.trim());
+  return Number.isFinite(n) && n >= 10_000 ? n : 120_000;
+})();
+
+function pmsHostnameFromBase(b: string): string {
+  try {
+    const u = b.startsWith('http://') || b.startsWith('https://') ? b : `http://${b}`;
+    return new URL(u).hostname;
+  } catch {
+    return 'pms.powerpms.net';
+  }
+}
 const openSubstringRaw =
   process.env.PMS_EMBEDDED_SITE_SUBSTRING ?? process.env.PMS_E2E_OPEN_URL_SUBSTRING;
 const openSubstring =
@@ -66,14 +102,15 @@ function anyFrameUrlIncludes(context: import('playwright').BrowserContext, sub: 
   return false;
 }
 
-async function login(page: import('playwright').Page): Promise<void> {
-  await page.goto(`${base}/sysin.html`, { waitUntil: 'domcontentloaded' });
+async function login(page: import('playwright').Page, user: string, pwd: string): Promise<void> {
+  await page.goto(`${base}/sysin.html`, { waitUntil: 'load', timeout: 60_000 });
+  await page.waitForTimeout(500);
   const userInput = page.locator('input[type="text"]').first();
   const passInput = page.locator('input[type="password"]').first();
-  await userInput.waitFor({ state: 'visible', timeout: 20_000 });
-  await passInput.waitFor({ state: 'visible', timeout: 10_000 });
-  await userInput.fill(username);
-  await passInput.fill(password!);
+  await userInput.waitFor({ state: 'visible', timeout: 30_000 });
+  await passInput.waitFor({ state: 'visible', timeout: 15_000 });
+  await userInput.fill(user);
+  await passInput.fill(pwd);
   await assertNoCaptchaBarrier(page);
 
   const loginBtn = page.getByRole('button', { name: /登录|登陆|登\s*录/ }).first();
@@ -83,28 +120,45 @@ async function login(page: import('playwright').Page): Promise<void> {
     await page.locator('button[type="submit"]').first().click();
   }
 
-  await page
+  await page.waitForLoadState('networkidle', { timeout: 45_000 }).catch(() => undefined);
+  await page.waitForTimeout(800);
+
+  const postLogin = page
     .getByText('业务中心', { exact: false })
     .or(page.getByText('设计交付', { exact: false }))
-    .first()
-    .waitFor({ state: 'visible', timeout: 45_000 });
+    .or(page.getByText('工作台', { exact: false }))
+    .first();
+  await postLogin.waitFor({ state: 'visible', timeout: 90_000 });
 }
 
 async function openReviewFormList(page: import('playwright').Page): Promise<void> {
-  await page.getByText('设计交付', { exact: false }).first().click({ timeout: 15_000 }).catch(async () => {
-    await page.getByTitle('设计交付').click();
+  const listHint = page.getByText('三维校审单', { exact: true }).first();
+  const newBtn = page.getByText('新增', { exact: false }).first();
+  const listVisible = await listHint.isVisible().catch(() => false);
+  const iframeVisible = await page.locator('iframe').first().isVisible().catch(() => false);
+  const newVisible = await newBtn.isVisible().catch(() => false);
+  const alreadyThere = listVisible && (iframeVisible || newVisible);
+  if (alreadyThere) {
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
+    return;
+  }
+
+  const designDeliver = page.getByText('设计交付', { exact: false }).first();
+  await designDeliver.waitFor({ state: 'visible', timeout: 45_000 });
+  await designDeliver.click({ timeout: 25_000 }).catch(async () => {
+    await page.locator('[title="设计交付"]').first().click({ timeout: 25_000 });
   });
   const reviewLink = page.getByRole('link', { name: '三维校审单', exact: true });
   if (await reviewLink.count()) {
-    await reviewLink.first().click({ timeout: 15_000 });
+    await reviewLink.first().click({ timeout: 20_000 });
   } else {
-    await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 20_000 });
   }
-  await page.getByText('三维校审单', { exact: true }).first().waitFor({ state: 'visible', timeout: 15_000 });
+  await listHint.waitFor({ state: 'visible', timeout: 20_000 });
 
   await Promise.race([
     page.locator('iframe').first().waitFor({ state: 'attached', timeout: 45_000 }),
-    page.getByText('新增', { exact: false }).first().waitFor({ state: 'visible', timeout: 45_000 }),
+    newBtn.waitFor({ state: 'visible', timeout: 45_000 }),
   ]).catch(() => undefined);
 
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
@@ -151,6 +205,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (!process.env.PMS_CDP_SELECTION_MODE?.trim()) {
+    console.error('[cdp] 提示：可设 PMS_CDP_SELECTION_MODE=console，让 plant3d 在发起提资时通过「控制台」命令选择 BRAN（失败则回退 mock 注入）。');
+  }
+
+  if (extendedFlow && !process.env.PMS_MOCK_PACKAGE_NAME?.trim()) {
+    process.env.PMS_MOCK_PACKAGE_NAME = `E2E-PMS-JH-${Date.now()}`;
+    console.error(`[cdp] PMS_CDP_EXTENDED_FLOW：未设 PMS_MOCK_PACKAGE_NAME，已生成 ${process.env.PMS_MOCK_PACKAGE_NAME}`);
+  }
+  if (extendedFlow && !process.env.PMS_INITIATE_CHECKER_SUBSTRING?.trim()) {
+    process.env.PMS_INITIATE_CHECKER_SUBSTRING = checkerUsername;
+    console.error(
+      `[cdp] PMS_CDP_EXTENDED_FLOW：未设 PMS_INITIATE_CHECKER_SUBSTRING，发起提资时将优先选校核下拉中含「${checkerUsername}」的项`,
+    );
+  }
+
   let browser: import('playwright').Browser;
   let context: import('playwright').BrowserContext;
   let page: import('playwright').Page;
@@ -181,10 +250,26 @@ async function main(): Promise<void> {
     console.error('[cdp] 已注册 initScript：localStorage plant3d_automation_review=1');
   }
 
+  const apiUrlSub = process.env.PMS_API_URL_SUBSTRING?.trim() || null;
+  const pmsApiSniffer =
+    submitReview && verifyPmsApi
+      ? startPmsApiSniffer(context, {
+        hostNeedle: pmsHostnameFromBase(base),
+        urlSubstring: apiUrlSub,
+      })
+      : null;
+  if (pmsApiSniffer) {
+    console.error(
+      `[cdp] 已启用 PMS 数据接口嗅探（host=*${pmsHostnameFromBase(base)}*${apiUrlSub ? ` url*${apiUrlSub}*` : ''}，${pmsApiVerifyTimeoutMs}ms 内需在 JSON 响应中出现包名或 BRAN）`,
+    );
+  }
+
   try {
     console.error(`[cdp] 入口: ${base}/sysin.html  用户: ${username}`);
-    await login(page);
+    await login(page, username, password);
     await openReviewFormList(page);
+    /** 提资后 iframe 可能抢走焦点，extended 阶段先回到此 URL 再进菜单 */
+    const pmsWebCenterUrl = page.url();
 
     const initialUrl = page.url();
     const popupPromise = context.waitForEvent('page', { timeout: popupWaitMs }).catch(() => null);
@@ -255,13 +340,111 @@ async function main(): Promise<void> {
 
     if (submitReview) {
       console.error('[cdp] PMS_CDP_SUBMIT_REVIEW=1：扫描各页/iframe 发起提资并提交…');
-      await runSubmitReviewAcrossContext(context);
+      const pkg = await runSubmitReviewAcrossContext(context);
       console.error('[cdp] plant3d：已检测到「提资单创建成功」');
+      console.error(`[cdp] 本次提资包名（用于 PMS 检索）: ${pkg}`);
+
+      if (pmsApiSniffer) {
+        const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
+        const branAlt = bran.includes('_') ? bran.replace(/_/g, '/') : bran.replace(/\//g, '_');
+        console.error('[cdp] 回到三维校审单以触发列表接口，并断言 PMS JSON 中含包名或 BRAN…');
+        await page.bringToFront().catch(() => undefined);
+        for (let i = 0; i < 5; i++) {
+          await page.keyboard.press('Escape').catch(() => undefined);
+        }
+        if (pmsWebCenterUrl.includes('WebCenter')) {
+          await page.goto(pmsWebCenterUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+        await openReviewFormList(page);
+        await pmsApiSniffer.waitForAnyNeedleInBodies([pkg, bran, branAlt], pmsApiVerifyTimeoutMs);
+        console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+      }
+
+      if (extendedFlow) {
+        let pmsListFound = false;
+        try {
+          console.error(`[cdp] PMS_CDP_EXTENDED_FLOW：在 PMS 中等待出现包名（${pmsVerifyTimeoutMs}ms）…`);
+          await page.bringToFront().catch(() => undefined);
+          for (let i = 0; i < 5; i++) {
+            await page.keyboard.press('Escape').catch(() => undefined);
+          }
+          if (pmsWebCenterUrl.includes('WebCenter')) {
+            console.error(`[cdp] 回到 PMS 壳: ${pmsWebCenterUrl}`);
+            await page.goto(pmsWebCenterUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+            await new Promise((r) => setTimeout(r, 1200));
+          }
+          await openReviewFormList(page);
+
+          const refreshDeadline = Date.now() + pmsVerifyTimeoutMs;
+          let refreshCount = 0;
+          while (Date.now() < refreshDeadline) {
+            const found = await waitForSubstringInPageOrChildFrames(page, pkg, Math.min(20_000, refreshDeadline - Date.now())).then(() => true).catch(() => false);
+            if (found) { pmsListFound = true; break; }
+            refreshCount++;
+            console.error(`[cdp] PMS 列表第 ${refreshCount} 次刷新…`);
+            for (const frame of page.frames()) {
+              if (frame === page.mainFrame() || frame.isDetached()) continue;
+              try { await frame.evaluate(() => location.reload()); } catch { /* cross-origin */ }
+            }
+            await page.keyboard.press('F5').catch(() => undefined);
+            await new Promise((r) => setTimeout(r, 3000));
+            await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
+          }
+
+          if (pmsListFound) {
+            console.error('[cdp] PMS 列表/iframe 中已可见提资包名');
+          } else {
+            throw new Error('PMS 列表刷新超时');
+          }
+        } catch {
+          console.error('[cdp] PMS 列表未刷新出包名，降级为 JH 直接从三维校审单「新增」进入 plant3d');
+        }
+
+        console.error(`[cdp] 清除会话并以校核用户 ${checkerUsername} 重新登录…`);
+        await context.clearCookies();
+        await page.evaluate(() => {
+          try { localStorage.clear(); } catch { /* ignore */ }
+          try { sessionStorage.clear(); } catch { /* ignore */ }
+        }).catch(() => undefined);
+        await page.goto('about:blank', { waitUntil: 'load', timeout: 10_000 }).catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 500));
+        if (submitReview) {
+          await registerPlant3dAutomationReviewInitScript(context);
+        }
+        await login(page, checkerUsername, password);
+
+        console.error('[cdp] 设计交付 → 三维校审单…');
+        await openReviewFormList(page);
+        let opened = false;
+        if (pmsListFound) {
+          console.error('[cdp] 尝试打开含包名的记录…');
+          opened = await tryOpenReviewEntryContainingPackage(page, pkg);
+        }
+        if (!opened) {
+          console.error('[cdp] 点击「新增」打开 plant3d 嵌入页…');
+          await clickNewInAnyFrame(page);
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+        console.error(opened ? '[cdp] 已对匹配行执行点击/双击' : '[cdp] 已通过「新增」打开 plant3d，将在嵌入页中操作批注');
+
+        console.error('[cdp] 扫描 iframe 内校审面板，自动添加批注…');
+        try {
+          const annotResult = await runReviewerAnnotationAcrossContext(context);
+          console.error(`[cdp] 校核批注：已添加 annotationId=${annotResult.annotationId}，确认记录数=${annotResult.confirmedCount}`);
+        } catch (annotErr) {
+          console.error(`[cdp] 校核批注：${annotErr instanceof Error ? annotErr.message : String(annotErr)}（不影响后续流程）`);
+        }
+
+        console.error('[cdp] 扫描 iframe 内校核工作区并点击「提交到审核」类按钮…');
+        await runCheckerWorkflowAcrossContext(context);
+        console.error('[cdp] 校核流程：已在 plant3d 内点击流程区提交按钮');
+      }
     }
   } finally {
-    if (!cdpUrl) {
-      await browser.close();
-    }
+    pmsApiSniffer?.stop();
+    // connectOverCDP 时 close() 仅断开 Playwright 与 CDP 的会话，不会退出用户已启动的 Chrome；否则 Node 会因挂着的连接无法退出。
+    await browser.close().catch(() => undefined);
   }
 }
 

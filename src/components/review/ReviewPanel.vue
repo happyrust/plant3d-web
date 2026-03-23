@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import {
   ArrowRight,
+  Box,
   CheckCircle,
   ChevronDown,
   ClipboardCheck,
@@ -606,6 +607,36 @@ function handleClickOutside(event: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
+
+  const isAutomation = localStorage.getItem('plant3d_automation_review') === '1'
+    || new URLSearchParams(window.location.search).get('automation_review') === '1';
+  if (isAutomation) {
+    (window as unknown as Record<string, unknown>).__plant3dReviewerE2E = {
+      addMockAnnotation(title?: string, description?: string) {
+        const id = `e2e-annot-${Date.now()}`;
+        toolStore.addAnnotation({
+          id,
+          title: title || `E2E 批注 ${new Date().toLocaleTimeString('zh-CN')}`,
+          description: description || '自动化测试创建的批注',
+          position: [0, 0, 0],
+          normal: [0, 1, 0],
+          visible: true,
+          createdAt: Date.now(),
+        } as Parameters<typeof toolStore.addAnnotation>[0]);
+        return id;
+      },
+      async confirmData(note?: string) {
+        confirmNote.value = note || 'E2E 自动化批注确认';
+        await confirmCurrentData();
+      },
+      getAnnotationCount() {
+        return pendingAnnotationCount.value;
+      },
+      getConfirmedRecordCount() {
+        return reviewStore.confirmedRecordCount.value;
+      },
+    };
+  }
 });
 
 onUnmounted(() => {
@@ -932,48 +963,48 @@ function flyToAnnotationItem(item: AnnotationListItem) {
         </div>
         <ChevronDown class="h-4 w-4 transition-transform" :class="{ 'rotate-180': expandedTaskDetails }" />
       </button>
-      <div v-show="expandedTaskDetails" class="border-t border-slate-200 p-4">
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div v-show="expandedTaskDetails" class="border-t border-slate-200 p-4 space-y-4">
+        <!-- 模型清单 -->
+        <section>
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 mb-2">模型清单</div>
           <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">模型</div>
-            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.modelName || '-' }}</div>
+            <div class="text-sm font-semibold text-slate-900">{{ taskContext?.modelName || '-' }}</div>
+            <div class="mt-1 text-xs text-slate-500">共 {{ taskContext?.componentCount || 0 }} 个构件</div>
           </div>
-          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">发起人</div>
-            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.requesterName || '-' }}</div>
-          </div>
-          <div class="rounded-lg border px-4 py-3"
-            :class="currentTaskHasFormalFormId ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50'">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Form ID</div>
-            <div class="mt-2 text-sm font-semibold"
-              :class="currentTaskHasFormalFormId ? 'text-slate-900' : 'text-amber-900'">
-              {{ currentTaskFormId }}
-            </div>
-            <div v-if="!currentTaskHasFormalFormId" class="mt-1 text-xs text-amber-700">
-              当前任务缺少正式业务单据号。
+          <div v-if="currentTask.components && currentTask.components.length > 0"
+            class="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
+            <div v-for="comp in currentTask.components" :key="comp.id"
+              class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+              <Box class="h-4 w-4 shrink-0 text-slate-400" />
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm font-medium text-slate-800">{{ comp.name }}</div>
+                <div class="text-xs text-slate-400">{{ comp.refNo }}{{ comp.type ? ` · ${comp.type}` : '' }}</div>
+              </div>
             </div>
           </div>
-          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">校核人</div>
-            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.checkerName || '-' }}</div>
+        </section>
+
+        <!-- 关联文件 -->
+        <section v-if="currentTask.attachments && currentTask.attachments.length > 0">
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 mb-2">
+            关联文件 ({{ currentTask.attachments.length }})
           </div>
-          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">审核人</div>
-            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.approverName || '-' }}</div>
+          <div class="max-h-48 space-y-1.5 overflow-y-auto">
+            <div v-for="attachment in currentTask.attachments" :key="attachment.id"
+              class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
+              @click="downloadAttachment(attachment)">
+              <Paperclip class="h-4 w-4 shrink-0 text-slate-400" />
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm font-medium text-slate-800">{{ attachment.name }}</div>
+                <div class="text-xs text-slate-400">
+                  {{ formatFileSize(attachment.size) }} · {{ formatDate(attachment.uploadedAt) }}
+                </div>
+              </div>
+              <Download class="h-4 w-4 shrink-0 text-slate-400" />
+            </div>
           </div>
-          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">构件数量</div>
-            <div class="mt-2 text-sm font-semibold text-slate-900">{{ taskContext?.componentCount || 0 }} 个构件</div>
-          </div>
-          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务状态</div>
-            <div class="mt-2 text-sm font-semibold text-slate-900">{{ currentTask.status }}</div>
-          </div>
-          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-            <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">任务编号</div>
-            <div class="mt-2 break-all text-sm font-semibold text-slate-900">{{ currentTask.id }}</div>
-          </div>
-        </div>
+        </section>
+        <div v-else class="text-xs text-slate-400">暂无关联文件</div>
       </div>
     </div>
 

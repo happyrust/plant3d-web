@@ -3,9 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { ChevronLeft, ChevronRight, HelpCircle, X } from 'lucide-vue-next';
 
-import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
-
 import type { StepPlacement } from './types';
+
+import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 
 const guide = useOnboardingGuide();
 
@@ -133,45 +133,37 @@ function handleOverlayClick(e: MouseEvent) {
     <Transition name="onboarding-fade">
       <div v-if="guide.active.value" class="onboarding-root">
         <!-- 遮罩层（带高亮镂空） -->
-        <div
-          class="onboarding-mask"
+        <div class="onboarding-mask"
           :style="{ clipPath: highlightClipPath }"
-          @click="handleOverlayClick"
-        />
+          @click="handleOverlayClick" />
 
         <!-- 高亮边框 -->
-        <div
-          v-if="highlightRect.width > 0"
+        <div v-if="highlightRect.width > 0"
           class="onboarding-highlight"
           :style="{
             top: highlightRect.top + 'px',
             left: highlightRect.left + 'px',
             width: highlightRect.width + 'px',
             height: highlightRect.height + 'px',
-          }"
-        />
+          }" />
 
         <!-- 提示气泡 -->
-        <div
-          ref="tooltipRef"
+        <div ref="tooltipRef"
           class="onboarding-tooltip"
           :class="{ 'opacity-0': !tooltipVisible }"
           :style="{
             top: tooltipPos.top + 'px',
             left: tooltipPos.left + 'px',
-          }"
-        >
+          }">
           <!-- 标题栏 -->
           <div class="flex items-center gap-2 mb-2">
             <HelpCircle class="h-4 w-4 text-blue-500 shrink-0" />
             <span class="text-sm font-semibold text-slate-800 flex-1">
               {{ guide.currentStep.value?.title }}
             </span>
-            <button
-              class="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            <button class="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
               title="关闭向导"
-              @click="guide.dismissGuide()"
-            >
+              @click="guide.dismissGuide()">
               <X class="h-3.5 w-3.5" />
             </button>
           </div>
@@ -183,10 +175,8 @@ function handleOverlayClick(e: MouseEvent) {
 
           <!-- 进度条 -->
           <div class="w-full h-1 bg-slate-100 rounded-full mb-3 overflow-hidden">
-            <div
-              class="h-full bg-blue-500 rounded-full transition-all duration-300"
-              :style="{ width: guide.progress.value + '%' }"
-            />
+            <div class="h-full bg-blue-500 rounded-full transition-all duration-300"
+              :style="{ width: guide.progress.value + '%' }" />
           </div>
 
           <!-- 底部操作 -->
@@ -195,25 +185,19 @@ function handleOverlayClick(e: MouseEvent) {
               {{ guide.currentStepIndex.value + 1 }} / {{ guide.totalSteps.value }}
             </span>
             <div class="flex items-center gap-1.5">
-              <button
-                v-if="guide.currentStep.value?.canSkip"
+              <button v-if="guide.currentStep.value?.canSkip"
                 class="onboarding-btn-text"
-                @click="guide.nextStep()"
-              >
+                @click="guide.nextStep()">
                 跳过
               </button>
-              <button
-                v-if="!guide.isFirstStep.value"
+              <button v-if="!guide.isFirstStep.value"
                 class="onboarding-btn-secondary"
-                @click="guide.prevStep()"
-              >
+                @click="guide.prevStep()">
                 <ChevronLeft class="h-3.5 w-3.5" />
                 上一步
               </button>
-              <button
-                class="onboarding-btn-primary"
-                @click="guide.nextStep()"
-              >
+              <button class="onboarding-btn-primary"
+                @click="guide.nextStep()">
                 {{ guide.isLastStep.value ? '完成' : '下一步' }}
                 <ChevronRight v-if="!guide.isLastStep.value" class="h-3.5 w-3.5" />
               </button>

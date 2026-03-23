@@ -1,41 +1,37 @@
 # Environment
 
-Environment variables, external dependencies, and setup notes for the current mission.
-
-**What belongs here:** required environment variables, shared services, runtime assumptions, and mission-specific environment blockers.
-**What does NOT belong here:** service commands and ports (use `.factory/services.yaml`).
-
----
+Environment variables, shared services, and setup notes for the MBD layout consistency mission.
 
 ## Local Development Environment
 
-- Node.js 18+
-- npm or pnpm
-- Modern browser tooling for local validation
+- Node.js 20+ preferred
+- npm available for dependency install and mission-scoped commands
+- Vite frontend app served locally on `http://127.0.0.1:3101`
 
 ## Shared Service Assumptions
 
-- Frontend app: http://127.0.0.1:3101
-- Backend API: http://127.0.0.1:3100
-- Review websocket path may exist, but mission success should not depend on a websocket-first rewrite
-- Shared backend on 3100 must remain running; mission workers should not stop it
+- Frontend: `http://127.0.0.1:3101`
+- Backend: `http://127.0.0.1:3100` (optional for this frontend-first mission)
+- Workers must not stop shared services they did not start
+- The repository worktree is already dirty; unrelated changes must remain untouched
 
 ## Mission-Specific Environment Notes
 
-- The M6+M7 mission depends on **scripted demo data** for deterministic reviewer/designer validation.
-- Missing seeded reviewer/designer tasks are an environment blocker, not evidence that the product passes or fails.
-- Headless WebGL2 limitations may block realistic annotation/measurement replay validation even when other surfaces are reachable; record this explicitly when encountered.
-- Current browser validation concurrency is limited to 1 because machine headroom is constrained.
+- The mission is designed to succeed without backend producer changes in other repositories.
+- The strongest evidence comes from focused unit and fixture tests, not from broad end-to-end infrastructure.
+- If a BRAN-specific spot check is performed, use BRAN `24381_145717` as the anchor target.
+- New pure-layout tests are encouraged when they strengthen deterministic behavior checks.
 
 ## Environment Variables
 
-The project uses Vite environment variables. Follow `.env.example` if additional variables become necessary.
+The project follows Vite environment conventions. No new mission-specific environment variables are required by default.
 
-No new mission-specific environment variables are required by default; if workers add any, they must document them here and keep secrets out of git.
+If a worker introduces optional debugging flags for layout comparison, they must:
+- default them off
+- document them in the handoff
+- avoid checking secrets or machine-specific values into git
 
-## Lint Note
+## Lint and Test Scope Note
 
-`npm run lint` in `package.json` uses `eslint . --fix` across the whole repository.
-
-- Use `npx eslint <files>` for focused read-only checks on mission-owned files.
-- Do not rely on whole-repo lint output as the milestone gate when focused checks already prove the changed surface.
+- Use mission-scoped commands from `.factory/services.yaml` as the gate.
+- Do not treat whole-repo `npm run lint` or `npm test` as required mission blockers unless the changed surface specifically depends on them.

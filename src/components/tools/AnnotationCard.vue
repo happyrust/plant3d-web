@@ -10,6 +10,7 @@ import {
 } from 'lucide-vue-next';
 
 import type { AnyAnnotationRecord, AnnotationType } from '@/composables/useToolStore';
+
 import { getRoleTheme, type UserRole } from '@/types/auth';
 
 const props = defineProps<{

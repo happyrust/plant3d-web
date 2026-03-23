@@ -624,11 +624,23 @@ function applyPersistedState(state: PersistedStateV5) {
   resetTransientUiState();
 }
 
-function refreshPersistedScope() {
+export type RefreshToolStorePersistedScopeOptions = { force?: boolean };
+
+/**
+ * 按当前 URL / setCurrentProjectPath 解析出的作用域，从 localStorage 载入工具状态。
+ * - 默认：仅当作用域字符串变化时重载（避免无谓覆盖）。
+ * - force：项目切换或 applyProject 后应强制重载，避免仍停留在 __default__ 等错误 key 下的内存状态。
+ */
+export function refreshToolStorePersistedScope(opts?: RefreshToolStorePersistedScopeOptions) {
+  if (typeof window === 'undefined') return;
   const nextScope = getCurrentStorageScope();
-  if (nextScope === storageScope.value) return;
+  if (!opts?.force && nextScope === storageScope.value) return;
   storageScope.value = nextScope;
   applyPersistedState(loadPersisted(nextScope));
+}
+
+function refreshPersistedScope() {
+  refreshToolStorePersistedScope();
 }
 
 if (typeof window !== 'undefined') {

@@ -118,6 +118,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   generateAndLoadModel: (refno: string) => Promise<boolean>
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number }>
   showModelByRefno: (refno: string, options?: { flyTo?: boolean }) => Promise<boolean>
+  isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
 } {
   const { viewer } = options;
@@ -376,6 +377,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     if (loadedRoots.has(refno)) return true;
     const v = viewer as any;
     return !!v?.scene?.objects?.[refno];
+  }
+
+  function isModelActuallyLoaded(refno: string): boolean {
+    const normalizedRoot = normalizeRefnoString(refno);
+    if (!normalizedRoot) return false;
+    if (loadedRoots.has(normalizedRoot)) return true;
+    const anyViewer = viewer as any;
+    const dtxLayer = anyViewer?.__dtxLayer;
+    return !!dtxLayer?.hasObject?.(normalizedRoot);
   }
 
   async function showModelByRefno(refno: string, loadOptions?: { flyTo?: boolean }): Promise<boolean> {
@@ -713,6 +723,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     generateAndLoadModel,
     showModelByDbnum,
     showModelByRefno,
+    isModelActuallyLoaded,
     checkRefnoExists,
   };
 }

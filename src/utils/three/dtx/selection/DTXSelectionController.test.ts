@@ -78,6 +78,21 @@ function createQuadGeometry(): BufferGeometry {
   return geometry;
 }
 
+function createMockDtxLayer(geometry: BufferGeometry) {
+  return {
+    getAllObjectsWithBounds: () => [],
+    getObjectIdByIndex: () => null,
+    getObjectGeometryData: () => ({
+      geometry,
+      matrix: new Matrix4(),
+    }),
+    getObjectBoundingBoxInto: () => null,
+    hasObject: () => true,
+    setObjectColor: vi.fn(),
+    resetObjectColor: vi.fn(),
+  } as any;
+}
+
 describe('DTXSelectionController', () => {
   beforeEach(() => {
     outlineHelpers.length = 0;
@@ -92,16 +107,7 @@ describe('DTXSelectionController', () => {
       value: () => ({ width: 800, height: 600, left: 0, top: 0 }),
     });
 
-    const dtxLayer = {
-      getAllObjectsWithBounds: () => [],
-      getObjectIdByIndex: () => null,
-      getObjectGeometryData: () => ({
-        geometry,
-        matrix: new Matrix4(),
-      }),
-      getObjectBoundingBoxInto: () => null,
-      hasObject: () => true,
-    } as any;
+    const dtxLayer = createMockDtxLayer(geometry);
 
     const controller = new DTXSelectionController({
       dtxLayer,
@@ -140,16 +146,7 @@ describe('DTXSelectionController', () => {
       value: () => ({ width: 800, height: 600, left: 0, top: 0 }),
     });
 
-    const dtxLayer = {
-      getAllObjectsWithBounds: () => [],
-      getObjectIdByIndex: () => null,
-      getObjectGeometryData: () => ({
-        geometry,
-        matrix: new Matrix4(),
-      }),
-      getObjectBoundingBoxInto: () => null,
-      hasObject: () => true,
-    } as any;
+    const dtxLayer = createMockDtxLayer(geometry);
 
     new DTXSelectionController({
       dtxLayer,

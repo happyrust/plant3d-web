@@ -1345,6 +1345,34 @@ function upsertReviewTask(task: ReviewTask): void {
   reviewTasks.value = [task, ...reviewTasks.value];
 }
 
+// ============ 外部用户同步（嵌入模式） ============
+
+function setEmbedUser(externalUserId: string, externalRole?: string): void {
+  if (!externalUserId) return;
+
+  const resolvedRole = externalRole ? fromBackendRole(externalRole) : undefined;
+
+  const existing = users.value.find((u) => u.id === externalUserId || u.username === externalUserId);
+  if (existing) {
+    if (resolvedRole && existing.role !== resolvedRole) {
+      existing.role = resolvedRole;
+    }
+    currentUserId.value = existing.id;
+    console.log(`[useUserStore] 嵌入模式：已切换到已有用户 ${existing.id} (${existing.name}), 角色=${existing.role}`);
+    return;
+  }
+
+  const syntheticUser = normalizeBackendUser({
+    id: externalUserId,
+    username: externalUserId,
+    name: externalUserId,
+    role: resolvedRole || UserRole.DESIGNER,
+  });
+  users.value = [...users.value, syntheticUser];
+  currentUserId.value = syntheticUser.id;
+  console.log(`[useUserStore] 嵌入模式：已创建并切换到外部用户 ${syntheticUser.id}, 角色=${syntheticUser.role}`);
+}
+
 // ============ 初始化 ============
 
 async function initialize(): Promise<void> {
@@ -1430,5 +1458,8 @@ export function useUserStore() {
 
     // 初始化
     initialize,
+
+    // 嵌入模式
+    setEmbedUser,
   };
 }

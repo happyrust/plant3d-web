@@ -80,6 +80,13 @@ export class DTXSelectionController extends EventEmitter {
       selectionColor: options.selectionColor ?? 0xff8800,
       multiSelect: true,
     });
+    this._selectionManager.setColorUpdateCallback((objectId, color) => {
+      if (color) {
+        this._dtxLayer.setObjectColor(objectId, color);
+        return;
+      }
+      this._dtxLayer.resetObjectColor(objectId);
+    });
     this._highlightMode = options.highlightMode ?? 'outline';
     this._outlineStyle = options.outlineStyle;
     this._setupSelectionManager();

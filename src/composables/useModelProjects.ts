@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 
 import { recordRecentProject } from '@/composables/dashboardRecentProjects';
+import { refreshToolStorePersistedScope } from '@/composables/useToolStore';
 import { setCurrentProjectPath } from '@/lib/filesOutput';
 
 export type ModelProject = {
@@ -44,20 +45,32 @@ function syncProjectUrl(project: ModelProject): void {
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
-function applyProject(project: ModelProject, emitChangeEvent: boolean): void {
-  currentProject.value = project;
-  setCurrentProjectPath(project.path);
-  syncProjectUrl(project);
-  recordRecentProject(project);
-
-  if (emitChangeEvent && typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('modelProjectChanged', {
-      detail: { project }
-    }));
-  }
-}
-
 export function useModelProjects() {
+  /** 每个 composable 调用独立，避免单测串扰；与当前实例上的 applyProject 闭包绑定 */
+  let lastAppliedProjectPath: string | null = null;
+
+  function applyProject(project: ModelProject, emitChangeEvent: boolean): void {
+    const pathChanged = lastAppliedProjectPath !== project.path;
+    lastAppliedProjectPath = project.path;
+
+    currentProject.value = project;
+    setCurrentProjectPath(project.path);
+    syncProjectUrl(project);
+    recordRecentProject(project);
+
+    // 与 useToolStore 的持久化作用域对齐：模块首屏导入时可能尚未 setCurrentProjectPath，
+    // 或 history.replaceState 不会触发 popstate，需在此处强制按当前项目重载对应 key 的数据。
+    if (pathChanged && typeof window !== 'undefined') {
+      refreshToolStorePersistedScope({ force: true });
+    }
+
+    if (emitChangeEvent && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('modelProjectChanged', {
+        detail: { project }
+      }));
+    }
+  }
+
   // 加载项目列表
   async function loadProjects() {
     if (isLoading.value) return;
@@ -117,6 +130,7 @@ export function useModelProjects() {
     } catch (error) {
       console.error('Failed to load model projects from API:', error);
       projects.value = [];
+      const requested = readRequestedProject();
       // 设置默认项目以防后端不可达
       const fallbackProject = {
         id: 'ams-model',
@@ -126,7 +140,9 @@ export function useModelProjects() {
         default: true
       };
       projects.value = [fallbackProject];
-      applyProject(fallbackProject, false);
+      // URL 若已指定其它项目，应避免静默落到默认 AMS；此处仍用 fallback 仅作兜底，但用 emit 让监听方与工具作用域一致
+      const shouldEmit = !!(requested.projectPath || requested.projectId);
+      applyProject(fallbackProject, shouldEmit);
     } finally {
       isLoading.value = false;
     }

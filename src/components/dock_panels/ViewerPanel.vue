@@ -117,7 +117,19 @@ function normalizeRefnoKeyLike(raw: string): string | null {
   return `${m[1]}_${m[2]}`;
 }
 
+function mergeRootRefnoWithVisibleRefnos(rootRefno: string, visibleRefnos: string[]): string[] {
+  const root = normalizeRefnoKeyLike(rootRefno);
+  const merged = new Set<string>();
+  if (root) merged.add(root);
+  for (const refno of visibleRefnos) {
+    const normalized = normalizeRefnoKeyLike(String(refno || ''));
+    if (normalized) merged.add(normalized);
+  }
+  return Array.from(merged);
+}
+
 function readMbdDimModeFromUrl(): 'classic' | 'rebarviz' | null {
+  if (typeof window === 'undefined') return null;
   try {
     const q = new URLSearchParams(window.location.search);
     const raw = String(q.get('mbd_dim_mode') || '')
@@ -2016,19 +2028,15 @@ onMounted(async () => {
     camera: dtxViewer.camera,
     renderer: dtxViewer.renderer,
     container: canvas,
+    selectionColor: 0xff4fd8,
     enableOutline: true,
-    highlightMode: 'both',
+    highlightMode: 'outline',
     outlineStyle: {
-      edgeColor: 0x36f97b,
-      edgeStrength: 3.2,
-      edgeGlow: 0.2,
-      edgeThickness: 1.4,
-    },
-    overlayStyle: {
-      showFill: true,
-      showEdges: false,
-      fillColor: 0xff4fd8,
-      fillOpacity: 0.72,
+      edgeColor: 0xff9ae8,
+      edgeStrength: 1.6,
+      edgeGlow: 0,
+      edgeThickness: 1.0,
+      pulsePeriod: 0,
     },
   });
   selectionControllerRef.value = selectionController;
@@ -2997,8 +3005,8 @@ onMounted(async () => {
           const visResp = await e3dGetVisibleInsts(showRefno);
           const visRefnos = visResp?.refnos ?? [];
           if (visRefnos.length > 0) {
-            loadRefnos = visRefnos;
-            console.log(`[show_refno] visible-insts 返回 ${visRefnos.length} 个子实例`);
+            loadRefnos = mergeRootRefnoWithVisibleRefnos(showRefno, visRefnos);
+            console.log(`[show_refno] visible-insts 返回 ${visRefnos.length} 个子实例，合并根节点后共 ${loadRefnos.length} 个 refno`);
           }
         } catch (e) {
           console.warn('[show_refno] visible-insts 查询失败，回退直接加载', e);
@@ -3187,8 +3195,8 @@ onMounted(async () => {
 
         // 2. 查询该 refno 下的可见实例
         const visResp = await e3dGetVisibleInsts(refnoStr);
-        const refnos = visResp?.refnos ?? [];
-        console.log(`[debug_refno] visible-insts 返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
+        const refnos = mergeRootRefnoWithVisibleRefnos(refnoStr, visResp?.refnos ?? []);
+        console.log(`[debug_refno] visible-insts 合并根节点后返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
         if (refnos.length === 0) {
           emitToast({ message: `[debug_refno] ${refnoStr} 下无可见实例` });
           return;

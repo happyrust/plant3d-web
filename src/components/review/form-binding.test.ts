@@ -185,6 +185,56 @@ describe('InitiateReviewPanel form binding', () => {
     host.remove();
   }, 10000);
 
+  it('allows adding components in external workflow mode', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel),
+    });
+    app.mount(host);
+    await nextTick();
+
+    const addButton = host.querySelector('button[title="将选中的构件添加到列表"]') as HTMLButtonElement | null;
+    expect(addButton).not.toBeNull();
+    addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await nextTick();
+
+    expect(host.textContent).toContain('Hull/REF-001');
+    expect(host.textContent).toContain('RefNo: REF-001');
+
+    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null;
+    expect(packageInput).not.toBeNull();
+    packageInput!.value = '外部流程提资包';
+    packageInput!.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const submitTrigger = host.querySelector('[data-testid="initiate-submit-trigger"]') as HTMLButtonElement | null;
+    expect(submitTrigger).not.toBeNull();
+    submitTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: '外部流程提资包',
+      checkerId: undefined,
+      approverId: undefined,
+      priority: undefined,
+      components: [
+        expect.objectContaining({
+          refNo: 'REF-001',
+        }),
+      ],
+    }));
+    expect(submitTaskToNextNodeSpy).not.toHaveBeenCalled();
+
+    app.unmount();
+    host.remove();
+  }, 10000);
+
   it('shows success feedback, closes the panel, and emits created/close after submit succeeds', async () => {
     const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
 

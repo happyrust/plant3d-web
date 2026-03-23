@@ -329,7 +329,6 @@ onUnmounted(() => {
       <!-- 主工具栏（跟随主题色） -->
       <div class="relative flex items-center gap-1 rounded-xl border border-border bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur"
         data-testid="annotation-overlay-bar">
-
         <!-- 打开批注面板 -->
         <button type="button"
           data-testid="annotation-overlay-details-toggle"

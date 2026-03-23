@@ -78,6 +78,28 @@ npm run test:pms:cdp:full
 
 `test:pms:cdp:full` 等价于 `PMS_CDP_FULL_FLOW=1`：自动打开 **弹窗轮询填写** + **plant3d 发起提资**。若只需其中一步，可改用手动开关或 `PMS_CDP_SKIP_PMS_DIALOG=1` / `PMS_CDP_SKIP_PLANT3D_SUBMIT=1`。
 
+### PMS → 列表可见提资包 → JH 登录 → plant3d 校核提交（extended）
+
+目标：仍以 **PMS 登录页为唯一入口**，在 `test:pms:cdp:full` 基础上增加：
+
+1. SJ（或 `PMS_E2E_USERNAME`）发起提资成功后，回到 **设计交付 → 三维校审单**，在页面或 iframe 内 **等待出现本次提资包名称**（与 `PMS_MOCK_PACKAGE_NAME` 一致；未设时脚本会自动生成 `E2E-PMS-JH-时间戳`）。
+2. `clearCookies` 后，以 **校核账号**（默认 `JH`，`PMS_CHECKER_USERNAME` 可改）再次从 `sysin.html` 登录。
+3. 再次进入三维校审单列表，**双击/点击**含包名的行（尽力而为，表格实现因 PMS 版本可能不同）。
+4. 在嵌入的 plant3d 内等待 **校核工作区**（`[data-testid="review-workbench-workflow-zone"]`），点击流程区 **「提交…」** 主按钮（如「提交到审核」），并处理可能出现的确认弹窗。
+
+一键命令：
+
+```bash
+cd plant3d-web
+export PMS_E2E_PASSWORD='********'
+export PMS_EMBEDDED_SITE_SUBSTRING='123.57.182.243'
+# 建议固定包名，便于在 PMS 列表里肉眼核对：
+# export PMS_MOCK_PACKAGE_NAME='联调-提资-001'
+npm run test:pms:cdp:extended
+```
+
+发起提资时，extended 默认会把 **`PMS_INITIATE_CHECKER_SUBSTRING` 设为与 `PMS_CHECKER_USERNAME` 相同**，以便在校核/审核人下拉里优先选到 JH（选项文案中须包含 `JH` 等子串）。若你们下拉展示的是中文姓名，请显式设置 `PMS_INITIATE_CHECKER_SUBSTRING=某姓名片段`。
+
 ### 环境变量补充（CDP 脚本）
 
 | 变量 | 说明 |
@@ -85,9 +107,18 @@ npm run test:pms:cdp:full
 | `PMS_CDP_FULL_FLOW` | `1`：启用 `PMS_CDP_FILL_PMS_DIALOG` + `PMS_CDP_SUBMIT_REVIEW`（可用 `SKIP` 关闭子步骤，见上） |
 | `PMS_CDP_SUBMIT_REVIEW` | `1`：注入模拟 BRAN、填数据包名、点提交，直到出现「提资单创建成功」 |
 | `PMS_CDP_FILL_PMS_DIALOG` | `1`：点击「新增」后在所有标签页轮询尝试填写 PMS 建单弹窗 |
-| `PMS_TARGET_BRAN_REFNO` | 模拟构件 RefNo，默认 `24381/145018` |
+| `PMS_TARGET_BRAN_REFNO` | 自动化注入的测试 BRAN RefNo，默认 **`24381_145018`**（与 PMS 数据界面展示一致，便于核对回写/列表同步）；仍可用 `24381/145018` 等其它格式 |
 | `PMS_MOCK_PACKAGE_NAME` / `PMS_MOCK_PROJECT_CODE` / `PMS_MOCK_PROJECT_NAME` | 提资包名、弹窗内项目代码/名称 |
 | `PMS_PLANT3D_POLL_MS` | 等待发起提资面板出现的超时（毫秒），默认 `180000` |
+| `PMS_CDP_EXTENDED_FLOW` | `1`：在提资成功后执行「PMS 可见包名 → 换 JH → 打开条目 → plant3d 校核提交」；`npm run test:pms:cdp:extended` 已带上 |
+| `PMS_CHECKER_USERNAME` | 校核登录账号，默认 `JH`（与 `PMS_E2E_PASSWORD` 共用密码） |
+| `PMS_CDP_PMS_VERIFY_MS` | 等待 PMS 列表出现包名的超时（毫秒），默认 `90000` |
+| `PMS_INITIATE_CHECKER_SUBSTRING` | 发起提资时校核下拉按 **option 文案** 子串匹配；extended 未设时默认等于 `PMS_CHECKER_USERNAME` |
+| `PMS_CDP_VERIFY_PMS_API` | 默认开启：`1`/`true` 或不设时，提资成功后会回到「三维校审单」并**嗅探 PMS 域名下 XHR/Fetch 的 JSON 响应体**，断言出现 **提资包名** 或 **测试 BRAN**（`PMS_TARGET_BRAN_REFNO` / 斜杠互换形式）。设为 `0`/`false` 可关闭 |
+| `PMS_CDP_PMS_API_MS` | 上述接口断言超时（毫秒），默认 `120000` |
+| `PMS_API_URL_SUBSTRING` | 可选，仅当响应 URL 还包含该子串时才记入嗅探（用于缩小到列表接口路径） |
+
+实现：`scripts/pms-api-sniffer.ts`（`BrowserContext.on('response')` 读 `content-type` 含 `json` 的 body）。
 
 分步示例：
 
@@ -102,9 +133,10 @@ npm run test:pms:cdp
 说明：若三维页在 **跨域 iframe** 内，Playwright 无法操作内部 DOM，需改为新标签打开同源三维地址或调整嵌入方式。若后端 `createReviewTask` 失败，脚本会在提交步骤报错。
 
 - 脚本路径：`scripts/pms-chrome-devtools-flow.ts`（`npx tsx` 执行；Playwright → Chromium → **CDP**）。
-- **附加本机已打开的 Chrome**（便于同时开 DevTools 看 Network）：先启动  
-  `Google Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-pms`  
-  再执行 `export CHROME_CDP_URL=http://127.0.0.1:9222` 后运行 `npm run test:pms:cdp`（脚本不会 `browser.close()` 断连）。
+- **附加本机 Chrome（推荐用 Chrome DevTools 肉眼跟流程）**：
+  1. 终端执行 `./scripts/launch-chrome-cdp.sh`（macOS 默认 Chrome；等价于带 `--remote-debugging-port=9222` 与独立 `user-data-dir`）。
+  2. 另开终端：`export PMS_E2E_PASSWORD=…`、`export PMS_EMBEDDED_SITE_SUBSTRING=…`，再运行 `npm run test:pms:cdp:attach:full` 或 `test:pms:cdp:attach:extended`（已写死 `CHROME_CDP_URL=http://127.0.0.1:9222`；换端口时自行覆盖该变量）。
+  3. 使用 `CHROME_CDP_URL` 时，脚本结束时会 **disconnect**（`browser.close()` 仅断开 Playwright 的 CDP 会话，**不会**关掉你已启动的 Chrome），可在 Chrome 里继续按 F12 看 Network / DOM。
 - 默认 **有头**；无头可加 `PMS_CDP_HEADLESS=1`（仅在不使用 `CHROME_CDP_URL` 时）。
 
 ### 限制说明
@@ -112,6 +144,15 @@ npm run test:pms:cdp
 - PMS 前端结构若升级，需调整 `e2e/pms-powerpms-review-new.spec.ts` 中的选择器（菜单文案、按钮角色等）。
 - 若登录强制验证码且无测试账号，自动化会失败，以手工步骤为准。
 - **「新增」在 iframe 内**：用例会在**主文档 + 所有子 frame** 中轮询可见的「新增」（`button` / `link` / 工具栏区域文本），并在菜单点击后等待 iframe 挂载；若仍找不到，需用浏览器开发者工具确认是否 shadow DOM 或跨域 iframe（跨域时 Playwright 仍可操作 frame，只要同源或已导航到该 frame）。
+
+## 与 PMS 数据界面联调（测试 BRAN）
+
+发起提资自动化默认向任务里写入 RefNo **`24381_145018`**（脚本常量 `PMS_DEFAULT_TEST_BRAN_REFNO`，与工程内 MBD/实例数据常用写法一致）。在 PMS 侧打开对应单据或构件列表时，可用同一 RefNo 核对：
+
+- plant3d 提资单构件明细中的 **RefNo** / 名称是否与 PMS 展示一致；
+- 回传或刷新后 PMS 是否出现该 BRAN 关联记录（以实际接口为准）。
+
+若 PMS 使用斜杠记法，可执行前设置：`export PMS_TARGET_BRAN_REFNO='24381/145018'`。
 
 ## 与编校审接口的关系（便于联调对照）
 

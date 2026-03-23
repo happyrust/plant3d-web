@@ -1,6 +1,6 @@
-import { ensurePanelAndActivate } from '@/composables/useDockApi';
-
 import type { GuideDefinition } from '../types';
+
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
 
 export const designerGuide: GuideDefinition = {
   role: 'designer',

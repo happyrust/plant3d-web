@@ -574,8 +574,7 @@ function closePanel() {
       <div class="space-y-2">
         <div class="flex items-center justify-between">
           <label class="text-[13px] font-medium text-[#6B7280]">构件明细</label>
-          <Button v-if="!externalWorkflowMode"
-            variant="secondary"
+          <Button variant="secondary"
             size="sm"
             data-guide="add-component-btn"
             :disabled="!selectionStore.selectedRefno || addingComponent"
@@ -596,8 +595,7 @@ function closePanel() {
                 <p class="truncate text-sm font-medium text-[#111827]">{{ comp.name }}</p>
                 <p class="mt-1 text-xs text-[#6B7280]">RefNo: {{ comp.refNo }}</p>
               </div>
-              <button v-if="!externalWorkflowMode"
-                type="button"
+              <button type="button"
                 class="ml-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] transition hover:bg-[#F3F4F6] hover:text-[#6B7280]"
                 :aria-label="`移除构件 ${comp.name}`"
                 @click="removeComponent(comp.id)">

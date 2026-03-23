@@ -1,27 +1,26 @@
 commands:
   install: npm install
   typecheck: npm run type-check
-  test: npx vitest run src/components/review/ReviewPanel.test.ts src/components/tools/AnnotationPanel.test.ts src/components/review/TaskReviewDetail.test.ts src/api/reviewApi.test.ts
-  test:m6-scoped: npx vitest run src/components/review/ReviewPanel.test.ts src/components/tools/AnnotationPanel.test.ts src/components/review/TaskReviewDetail.test.ts src/api/reviewApi.test.ts
-  test:m7-scoped: npx vitest run src/api/reviewApi.test.ts src/composables/useReviewStore.websocket.test.ts src/components/review/DesignerTaskList.test.ts src/components/review/ResubmissionTaskList.test.ts src/components/review/ReviewerTaskList.test.ts
-  lint: npm run lint
+  lint: npx eslint src/api/mbdPipeApi.ts src/composables/useMbdPipeAnnotationThree.ts src/composables/mbd --ext .ts --max-warnings 0
+  test: npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/fixtures/bran-test-data.test.ts
+  test:layout-regression: npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/fixtures/bran-test-data.test.ts
+  test:layout-focused: npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/fixtures/bran-test-data.test.ts
 
 services:
   frontend:
-    start: npm run dev
+    start: npm run dev -- --host 127.0.0.1 --port 3101
     stop: lsof -ti :3101 | xargs kill
-    healthcheck: curl -sf http://localhost:3101
+    healthcheck: curl -sf http://127.0.0.1:3101
     port: 3101
     depends_on: []
 
   backend:
-    start: echo "Backend already running on 3100"
-    stop: echo "Do not stop backend - shared service"
-    healthcheck: curl -sf http://localhost:3100/api/health
+    start: echo "Backend is optional for this frontend-first mission"
+    stop: echo "No backend lifecycle owned by this mission"
+    healthcheck: true
     port: 3100
     depends_on: []
 
-# Validation note: for the M6+M7 reviewer annotation and collaboration mission, run browser validations serially.
-# Mission-scoped verification commands are `commands.typecheck`, `commands.test:m6-scoped`, and `commands.test:m7-scoped`.
-# Do not treat whole-repo `npm test` output as the mission gate; unrelated baseline failures outside the changed reviewer/designer/collaboration surface are out-of-scope noise unless the scoped commands above fail.
-# Seeded demo data is the primary validation source for this mission. Treat missing scripted demo tasks or headless WebGL2 limits as environment blockers rather than product passes.
+# Mission-scoped validation commands are `commands.typecheck`, `commands.lint`, and `commands.test:layout-regression`.
+# Prefer adding focused Vitest files for new pure layout modules rather than widening to whole-repo test runs.
+# Whole-repo `npm run lint` and `npm test` are not the mission gate because unrelated baseline issues may exist outside the MBD layout surface.

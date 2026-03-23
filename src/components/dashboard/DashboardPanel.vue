@@ -12,8 +12,8 @@ import {
   Upload,
 } from 'lucide-vue-next';
 
-import { useUserStore } from '@/composables/useUserStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useUserStore } from '@/composables/useUserStore';
 import { getRoleDisplayName } from '@/types/auth';
 
 const userStore = useUserStore();
@@ -140,7 +140,6 @@ onMounted(() => {
       <!-- 滚动区域 -->
       <div class="flex-1 overflow-y-auto p-8">
         <div class="flex flex-col gap-8">
-
           <!-- 快捷操作 -->
           <section>
             <h2 class="mb-4 text-lg font-semibold text-slate-900">快捷操作</h2>
@@ -293,7 +292,6 @@ onMounted(() => {
               </div>
             </div>
           </section>
-
         </div>
       </div>
     </div>

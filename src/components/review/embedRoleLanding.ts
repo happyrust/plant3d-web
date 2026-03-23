@@ -2,6 +2,7 @@ export type EmbedModeParams = {
   formId: string | null;
   userToken: string | null;
   userId: string | null;
+  userRole: string | null;
   projectId: string | null;
   isEmbedMode: boolean;
 };

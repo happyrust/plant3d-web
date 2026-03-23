@@ -1,10 +1,11 @@
 import { computed, nextTick, ref, watch } from 'vue';
 
+import { useUserStore } from './useUserStore';
+
 import type { GuideDefinition, GuideStep, OnboardingPersistedState } from '@/components/onboarding/types';
+
 import { designerGuide } from '@/components/onboarding/roleGuides/designerGuide';
 import { managerGuide, proofreaderGuide, reviewerGuide } from '@/components/onboarding/roleGuides/reviewerGuide';
-
-import { useUserStore } from './useUserStore';
 
 const STORAGE_KEY = 'plant3d-onboarding-v1';
 

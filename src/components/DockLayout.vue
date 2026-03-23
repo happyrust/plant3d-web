@@ -19,6 +19,7 @@ import {
   type ZoneName,
 } from '@/composables/usePanelZones';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
@@ -31,6 +32,7 @@ const embedModeParams = computed(() => {
     formId: urlParams.get('form_id'),
     userToken: urlParams.get('user_token'),
     userId: urlParams.get('user_id'),
+    userRole: urlParams.get('user_role'),
     projectId: urlParams.get('project_id'),
     isEmbedMode: !!urlParams.get('form_id'),
   };
@@ -73,6 +75,106 @@ const taskCreationStore = useTaskCreationStore();
 
 let offCommand: (() => void) | null = null;
 let userStoreInitializationPromise: Promise<void> | null = null;
+const embedTokenVerified = ref(false);
+
+type SelectRefnoRequest = {
+  type: 'plant3d.select_refno';
+  requestId?: string;
+  refno: string;
+  options?: { flyTo?: boolean };
+};
+
+type PingRequest = {
+  type: 'plant3d.ping';
+  requestId?: string;
+};
+
+type Plant3dResponse = {
+  type: 'plant3d.response';
+  requestId?: string;
+  ok: boolean;
+  error?: string;
+};
+
+function normalizeRefnoUnderscore(raw: string): string {
+  return String(raw || '').trim().replace(/\//g, '_');
+}
+
+function normalizeRefnoSlash(raw: string): string {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  return s.includes('_') ? s.replace(/_/g, '/') : s;
+}
+
+let offEmbedPostMessage: (() => void) | null = null;
+
+function tryRegisterEmbedPostMessageBridge() {
+  const shouldEnable = embedModeParams.value.isEmbedMode && embedTokenVerified.value;
+  if (!shouldEnable) {
+    if (offEmbedPostMessage) {
+      offEmbedPostMessage();
+      offEmbedPostMessage = null;
+    }
+    return;
+  }
+
+  if (offEmbedPostMessage) return;
+
+  const handler = (event: MessageEvent) => {
+    const source = event.source;
+    if (!source || typeof (source as WindowProxy).postMessage !== 'function') return;
+
+    const data = event.data as unknown;
+    if (!data || typeof data !== 'object') return;
+
+    const ping = data as Partial<PingRequest>;
+    if (ping.type === 'plant3d.ping') {
+      const requestId = typeof ping.requestId === 'string' ? ping.requestId : undefined;
+      const resp: Plant3dResponse = {
+        type: 'plant3d.response',
+        requestId,
+        ok: true,
+      };
+      (source as WindowProxy).postMessage(resp, '*');
+      return;
+    }
+
+    const req = data as Partial<SelectRefnoRequest>;
+    if (req.type !== 'plant3d.select_refno') return;
+
+    const requestId = typeof req.requestId === 'string' ? req.requestId : undefined;
+    const rawRefno = typeof req.refno === 'string' ? req.refno : '';
+    const underscoreRefno = normalizeRefnoUnderscore(rawRefno);
+    const slashRefno = normalizeRefnoSlash(rawRefno);
+
+    const respond = (payload: Omit<Plant3dResponse, 'type' | 'requestId'>) => {
+      const resp: Plant3dResponse = {
+        type: 'plant3d.response',
+        requestId,
+        ...payload,
+      };
+      (source as WindowProxy).postMessage(resp, '*');
+    };
+
+    if (!underscoreRefno || !slashRefno) {
+      respond({ ok: false, error: 'invalid refno' });
+      return;
+    }
+
+    try {
+      // Ensure selectionStore updates immediately (underscore form matches console behavior).
+      setGlobalSelectedRefno(underscoreRefno);
+      // Reuse ModelTreePanel mechanism: focuses tree + optionally loads/flyTo.
+      window.dispatchEvent(new CustomEvent('autoLocateRefno', { detail: { refno: slashRefno } }));
+      respond({ ok: true });
+    } catch (e) {
+      respond({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  window.addEventListener('message', handler);
+  offEmbedPostMessage = () => window.removeEventListener('message', handler);
+}
 
 function ensureUserStoreInitialized(): Promise<void> {
   if (!userStoreInitializationPromise) {
@@ -759,6 +861,7 @@ async function bootstrapEmbedSession(): Promise<void> {
   console.log('[DockLayout] 📋 嵌入模式检测到:', embedModeParams.value);
 
   const token = embedModeParams.value.userToken;
+  embedTokenVerified.value = false;
   if (token) {
     setAuthToken(token);
 
@@ -767,14 +870,25 @@ async function bootstrapEmbedSession(): Promise<void> {
       if (!verifyResponse.data?.valid) {
         console.warn('[DockLayout] Embedded token verification failed:', verifyResponse.data?.error);
         clearAuthToken();
+        embedTokenVerified.value = false;
+      } else {
+        embedTokenVerified.value = true;
       }
     } catch (error) {
       console.warn('[DockLayout] Embedded token verification request failed:', error);
       clearAuthToken();
+      embedTokenVerified.value = false;
     }
   }
 
+  tryRegisterEmbedPostMessageBridge();
+
   await ensureUserStoreInitialized();
+
+  const externalUserId = embedModeParams.value.userId;
+  if (externalUserId) {
+    userStore.setEmbedUser(externalUserId, embedModeParams.value.userRole || undefined);
+  }
 }
 
 async function applyInitialLanding() {
@@ -859,6 +973,11 @@ onUnmounted(() => {
   if (offCommand) {
     offCommand();
     offCommand = null;
+  }
+
+  if (offEmbedPostMessage) {
+    offEmbedPostMessage();
+    offEmbedPostMessage = null;
   }
 
   disposePanelZones();

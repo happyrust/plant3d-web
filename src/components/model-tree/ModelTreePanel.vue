@@ -132,7 +132,13 @@ function toggleExpand(id: string) {
 }
 
 function getCheckState(id: string) {
-  return isRoomTree.value ? roomTree.getCheckState(id) : pdmsTree.getCheckState(id);
+  if (isRoomTree.value) return roomTree.getCheckState(id);
+  const state = pdmsTree.getCheckState(id);
+  if (state === 'unchecked') return state;
+  if (!isRefnoLike(id)) return state;
+  const modelState = modelGenerationState.value;
+  if (!modelState) return state;
+  return modelState.isModelActuallyLoaded(id) ? state : 'unchecked';
 }
 
 // Initialize model generation composable

@@ -1,50 +1,49 @@
-# M6+M7 Reviewer Annotation And Collaboration Architecture
+# MBD Layout Consistency Architecture
 
 ## Mission Scope
 
-This mission delivers:
-- M6 reviewer annotation canonicalization and direct-launch tooling in the reviewer workbench
-- M7 dual-scope collaboration across reviewer and designer surfaces
-- scripted demo data for deterministic reviewer/designer validation
+This mission delivers a frontend-first refactor for MBD pipe annotation layout in `plant3d-web`.
 
 Primary scope:
-- reviewer workbench direct-launch for annotation and measurement
-- canonical reviewer annotation semantics: text / cloud / rectangle
-- confirmed measurement replay
-- explicit task-thread and annotation-thread collaboration
-- reviewer/designer closed-loop continuity through return / resubmit / reopen
-- seeded demo scenarios for repeatable browser validation
+- extract a pure branch-level layout engine from `src/composables/useMbdPipeAnnotationThree.ts`
+- replace camera-sensitive primary placement decisions with deterministic branch/hint-driven logic
+- support the approved phase-1 annotation families: `segment`, `chain`, `overall`, `port`, `bend`, `cut_tubi`, `tag`, and fittings
+- keep the current frontend contract backward-compatible while adding optional future-facing hint fields
+- prove the behavior through focused unit and fixture tests
 
-This mission does **not** make measurements first-class comment-bearing objects, and it does **not** depend on a websocket-first architecture rewrite.
+This mission does **not** move layout authority to another repository, and it does **not** redesign unrelated viewer or Dock architecture.
 
 ## Source-of-Truth Rules
 
-- Workbench orchestration lives in `src/components/review/ReviewPanel.vue`
-- Reviewer annotation/tool session seams live in `src/components/tools/AnnotationPanel.vue`, `src/composables/useDtxTools.ts`, and `src/composables/useToolStore.ts`
-- Collaboration contracts and refresh behavior live in `src/components/review/ReviewCommentsPanel.vue`, `src/composables/useReviewStore.ts`, and `src/api/reviewApi.ts`
-- Designer closed-loop continuity lives in `src/components/review/DesignerTaskList.vue`, `src/components/review/ResubmissionTaskList.vue`, `src/components/review/TaskReviewDetail.vue`, and `src/composables/useUserStore.ts`
-- Demo-data bootstrap must be script-driven and reproducible
+- `src/composables/useMbdPipeAnnotationThree.ts` remains the public rendering entrypoint and orchestration seam
+- `src/api/mbdPipeApi.ts` is the frontend source of truth for `MbdLayoutHint`
+- New deterministic logic should live in pure functions or modules under `src/composables/mbd/` whenever possible
+- Existing session-only manual override behavior remains authoritative over auto-layout
+- Existing fixture and fly-to tests are the baseline regression surfaces; expand them rather than inventing detached ad hoc checks
 
 ## Expected Data Flow
 
-### M6 reviewer action path
-1. Reviewer opens a seeded task in the workbench.
-2. Reviewer launches annotation or measurement directly from the workbench.
-3. Tool sessions produce canonical annotation candidates or temporary measurement results.
-4. Reviewer confirms a candidate batch.
-5. Confirmed records reload and replay from stable task/form lineage.
+### Normal layout path
+1. MBD DTO data enters the existing render entrypoint.
+2. Layout hints and branch geometry are normalized into a branch-level layout context.
+3. The pure layout engine resolves side, lane, and anchor decisions before annotation objects are created.
+4. The render glue consumes those results to build dimensions and floating-label annotations.
+5. Bounded declutter/alignment helpers may clean up residual collisions, but they should no longer act as the primary placement engine.
 
-### M7 collaboration path
-1. Reviewer opens task-thread or annotation-thread.
-2. Messages, replies, edits, resolves, mentions, and attachments persist through the collaboration contract.
-3. Designer opens the same task later and sees the same thread continuity.
-4. Return / resubmit / reopen preserve task-thread and annotation-thread lineage.
+### Fallback path
+1. If layout hints are partial or missing, the frontend derives placement from deterministic branch/topology rules.
+2. Only if branch/topology data is insufficient may camera-sensitive logic participate as the last fallback.
+3. If required geometry cannot produce a safe placement, the annotation is suppressed predictably instead of rendering unstable geometry.
+
+### Override path
+1. Session-only manual overrides are merged after auto-layout is computed.
+2. Rerenders preserve those overrides for the targeted annotation id.
+3. Resetting an override returns the annotation to the deterministic auto-layout result.
 
 ## Highest-Risk Seams
 
-- Reviewer-visible legacy OBB semantics leaking into canonical rectangle flows
-- Annotation identity instability across confirm / reload / resubmit
-- Measurement replay diverging between reviewer and designer surfaces
-- Task-thread vs annotation-thread ambiguity in UI or payloads
-- Attachment / mention data becoming conflated with existing task attachment semantics
-- Demo data failing to create deterministic reviewer/designer validation paths
+- Regressions from moving logic out of the large existing composable without preserving current behavior where still intended
+- Accidentally letting optional future fields change legacy payload behavior when absent
+- Camera updates or mode toggles still mutating semantic placement after the refactor
+- Port and auxiliary declutter remaining order-dependent rather than deterministic
+- BRAN-specific regressions hiding behind tests that only assert raw numeric offsets instead of semantic layout guarantees
