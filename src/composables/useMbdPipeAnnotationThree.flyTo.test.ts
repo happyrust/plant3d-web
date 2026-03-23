@@ -2844,6 +2844,356 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     );
   });
 
+  it('BRAN 24381_145717 repeated renders should preserve same-side placement and semantic lanes', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.showDimSegment.value = true;
+    vis.showDimChain.value = true;
+    vis.showDimOverall.value = true;
+    vis.showDimPort.value = true;
+    vis.showCutTubis.value = true;
+
+    const data: MbdPipeData = {
+      input_refno: '24381_145717',
+      branch_refno: '24381_145717',
+      branch_name: 'BRAN-24381_145717-REGRESSION',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-main',
+          refno: 'S:1',
+          noun: 'STRA',
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: 'segment-1',
+          kind: 'segment',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 0,
+          },
+        },
+        {
+          id: 'port-1',
+          kind: 'port',
+          start: [100, 0, 0],
+          end: [350, 0, 0],
+          length: 250,
+          text: '250',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 0,
+          },
+        },
+        {
+          id: 'chain-1',
+          kind: 'chain',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 0,
+          },
+        },
+        {
+          id: 'overall-1',
+          kind: 'overall',
+          start: [0, 0, 0],
+          end: [1200, 0, 0],
+          length: 1200,
+          text: '1200',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 0,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [
+        {
+          id: 'cut-1',
+          segment_id: 'seg-main',
+          refno: 'CUT-1',
+          start: [150, 0, 0],
+          end: [850, 0, 0],
+          length: 700,
+          text: 'CUT',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 0,
+          },
+        },
+      ],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 4,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    };
+
+    const captureLayout = () => {
+      const segment = vis.getDimAnnotations().get('segment-1');
+      const port = vis.getDimAnnotations().get('port-1');
+      const chain = vis.getDimAnnotations().get('chain-1');
+      const overall = vis.getDimAnnotations().get('overall-1');
+      const cut = (vis as any).getCutTubiAnnotations?.().get('cut-1');
+
+      expect(segment).toBeTruthy();
+      expect(port).toBeTruthy();
+      expect(chain).toBeTruthy();
+      expect(overall).toBeTruthy();
+      expect(cut).toBeTruthy();
+
+      const directionOf = (annotation: any) =>
+        annotation?.getParams().direction?.toArray().map((value: number) => Number(value.toFixed(6))) ?? [];
+
+      const laneOf = (annotation: any) =>
+        (annotation?.userData as any)?.mbdLayoutResolution?.lane;
+
+      const offsetOf = (annotation: any) => annotation?.getParams().offset ?? 0;
+
+      return {
+        dimIds: Array.from(vis.getDimAnnotations().keys()).sort(),
+        cutIds: Array.from((vis as any).getCutTubiAnnotations?.().keys?.() ?? []).sort(),
+        directions: {
+          segment: directionOf(segment),
+          port: directionOf(port),
+          chain: directionOf(chain),
+          overall: directionOf(overall),
+          cut: directionOf(cut),
+        },
+        lanes: {
+          segment: laneOf(segment),
+          port: laneOf(port),
+          chain: laneOf(chain),
+          overall: laneOf(overall),
+          cut: laneOf(cut),
+        },
+        offsets: {
+          segment: offsetOf(segment),
+          port: offsetOf(port),
+          chain: offsetOf(chain),
+          overall: offsetOf(overall),
+          cut: offsetOf(cut),
+        },
+      };
+    };
+
+    vis.renderBranch(data);
+    const first = captureLayout();
+
+    vis.renderBranch(data);
+    const second = captureLayout();
+
+    expect(second.dimIds).toEqual(first.dimIds);
+    expect(second.cutIds).toEqual(first.cutIds);
+    expect(second.directions).toEqual(first.directions);
+    expect(second.lanes).toEqual(first.lanes);
+
+    expect(second.offsets.segment).toBeCloseTo(first.offsets.segment, 6);
+    expect(second.offsets.port).toBeCloseTo(first.offsets.port, 6);
+    expect(second.offsets.chain).toBeCloseTo(first.offsets.chain, 6);
+    expect(second.offsets.cut).toBeCloseTo(first.offsets.cut, 6);
+    expect(second.offsets.overall).toBeCloseTo(first.offsets.overall, 6);
+
+    expect(first.directions.segment).toEqual(first.directions.port);
+    expect(first.directions.port).toEqual(first.directions.chain);
+    expect(first.directions.chain).toEqual(first.directions.overall);
+    expect(first.directions.overall).toEqual(first.directions.cut);
+
+    expect(first.offsets.port).toBeLessThan(first.offsets.segment);
+    expect(first.offsets.segment).toBeLessThan(first.offsets.chain);
+    expect(first.offsets.chain).toBeLessThan(first.offsets.overall);
+    expect(first.offsets.cut).toBeGreaterThan(first.offsets.port);
+    expect(first.offsets.cut).toBeGreaterThan(first.offsets.segment);
+    expect(first.offsets.cut).toBeLessThan(first.offsets.overall);
+
+    expect(first.lanes.segment).toBe(second.lanes.segment);
+    expect(first.lanes.port).toBe(second.lanes.port);
+    expect(first.lanes.chain).toBe(second.lanes.chain);
+    expect(first.lanes.cut).toBe(second.lanes.cut);
+    expect(first.lanes.overall).toBe(second.lanes.overall);
+  });
+
+  it('BRAN 24381_145717 camera changes should not mutate semantic layout resolution', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 1280, height: 720 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(60, 1280 / 720, 0.1, 5000),
+      flyTo: vi.fn(),
+    } as any;
+
+    viewer.camera.position.set(400, 500, 1300);
+    viewer.camera.lookAt(500, 0, 0);
+    viewer.camera.updateProjectionMatrix();
+    viewer.camera.updateMatrixWorld(true);
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.showDimChain.value = true;
+    vis.showDimOverall.value = true;
+    vis.showCutTubis.value = true;
+
+    const data: MbdPipeData = {
+      input_refno: '24381_145717',
+      branch_refno: '24381_145717',
+      branch_name: 'BRAN-24381_145717-CAMERA',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-main',
+          refno: 'S:1',
+          noun: 'STRA',
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: 'chain-1',
+          kind: 'chain',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 1,
+          },
+        },
+        {
+          id: 'overall-1',
+          kind: 'overall',
+          start: [0, 0, 0],
+          end: [1200, 0, 0],
+          length: 1200,
+          text: '1200',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 1,
+          },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [
+        {
+          id: 'cut-1',
+          segment_id: 'seg-main',
+          refno: 'CUT-1',
+          start: [200, 0, 0],
+          end: [800, 0, 0],
+          length: 600,
+          text: 'CUT',
+          layout_hint: {
+            owner_segment_id: 'seg-main',
+            offset_dir: [0, 1, 0],
+            offset_level: 1,
+          },
+        },
+      ],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 2,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    };
+
+    const snapshot = () => {
+      const chain = vis.getDimAnnotations().get('chain-1');
+      const overall = vis.getDimAnnotations().get('overall-1');
+      const cut = (vis as any).getCutTubiAnnotations?.().get('cut-1');
+
+      expect(chain).toBeTruthy();
+      expect(overall).toBeTruthy();
+      expect(cut).toBeTruthy();
+
+      const summarize = (annotation: any) => ({
+        lane: (annotation?.userData as any)?.mbdLayoutResolution?.lane,
+        source: (annotation?.userData as any)?.mbdLayoutResolution?.source,
+        offset: Number((annotation?.getParams().offset ?? 0).toFixed(6)),
+        direction: annotation?.getParams().direction?.toArray().map((value: number) => Number(value.toFixed(6))) ?? [],
+      });
+
+      return {
+        chain: summarize(chain),
+        overall: summarize(overall),
+        cut: summarize(cut),
+      };
+    };
+
+    vis.renderBranch(data);
+    const before = snapshot();
+
+    viewer.camera.position.set(-800, 900, -1200);
+    viewer.camera.lookAt(500, 0, 0);
+    viewer.camera.updateProjectionMatrix();
+    viewer.camera.updateMatrixWorld(true);
+
+    vis.renderBranch(data);
+    const after = snapshot();
+
+    expect(after).toEqual(before);
+    expect(before.chain.direction).toEqual(before.overall.direction);
+    expect(before.overall.direction).toEqual(before.cut.direction);
+  });
+
   it('rebarviz 箭头参数调整后应即时刷新已渲染尺寸', async () => {
     const viewer = {
       canvas: {
