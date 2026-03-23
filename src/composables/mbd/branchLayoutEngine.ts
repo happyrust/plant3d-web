@@ -27,8 +27,17 @@ export type NormalizedLayoutHint = {
 export type BranchLayoutResolution = {
   direction: Vector3 | null;
   offset: number;
+  lane: number;
   source: 'hint' | 'branch' | 'camera-fallback' | 'none';
   normalizedHint: NormalizedLayoutHint;
+};
+
+const SEMANTIC_LANE_ORDER: Record<LayoutRole, number> = {
+  segment: 0,
+  port: 1,
+  chain: 2,
+  cut_tubi: 3,
+  overall: 4,
 };
 
 function toVector3(vec?: Vec3 | null): Vector3 | null {
@@ -103,12 +112,43 @@ export function resolveSemanticDimOffset(
   role: LayoutRole,
   hint?: NormalizedLayoutHint | MbdLayoutHint | null,
 ): number {
-  const normalized = 'offsetLevel' in (hint ?? {}) ? (hint as NormalizedLayoutHint) : normalizeMbdLayoutHint(hint as MbdLayoutHint | null | undefined);
-  const layered = resolveLayeredDimOffset(baseOffset, normalized);
-  if (role === 'chain') return layered + Math.max(baseOffset * 0.55, 420);
-  if (role === 'overall') return layered + Math.max(baseOffset * 0.75, 520);
-  if (role === 'cut_tubi') return layered + Math.max(baseOffset * 0.12, 80);
-  return layered;
+  const normalized = 'offsetLevel' in (hint ?? {})
+    ? (hint as NormalizedLayoutHint)
+    : normalizeMbdLayoutHint(hint as MbdLayoutHint | null | undefined);
+  const lane = resolveSemanticLane(role, normalized);
+  return resolveSemanticOffsetFromLane(baseOffset, lane, normalized);
+}
+
+export function resolveSemanticLane(
+  role: LayoutRole,
+  hint?: NormalizedLayoutHint | MbdLayoutHint | null,
+): number {
+  const normalized = 'offsetLevel' in (hint ?? {})
+    ? (hint as NormalizedLayoutHint)
+    : normalizeMbdLayoutHint(hint as MbdLayoutHint | null | undefined);
+  const semanticLane = SEMANTIC_LANE_ORDER[role] ?? 0;
+  const explicitLane = normalized.placementLane;
+  const lane = Number.isFinite(explicitLane)
+    ? Math.max(semanticLane, Math.floor(explicitLane as number))
+    : semanticLane + normalized.offsetLevel;
+  return Math.max(0, lane);
+}
+
+export function resolveSemanticOffsetFromLane(
+  baseOffset: number,
+  lane: number,
+  hint?: NormalizedLayoutHint | MbdLayoutHint | null,
+): number {
+  const normalized = 'offsetLevel' in (hint ?? {})
+    ? (hint as NormalizedLayoutHint)
+    : normalizeMbdLayoutHint(hint as MbdLayoutHint | null | undefined);
+  const safeBase = Number.isFinite(baseOffset) ? Math.max(1, Math.min(5000, baseOffset)) : 100;
+  const normalizedLane = Math.max(0, Math.floor(Number.isFinite(lane) ? lane : 0));
+  const layerGap = Math.max(safeBase * 0.85, 60);
+  const baseLevelOffset = normalized.offsetLevel > 0
+    ? normalized.offsetLevel * layerGap
+    : 0;
+  return safeBase + baseLevelOffset + normalizedLane * layerGap;
 }
 
 export function resolveBranchLayout(
@@ -141,10 +181,12 @@ export function resolveBranchLayout(
     : branchDirection
       ? 'branch'
       : 'none';
+  const lane = resolveSemanticLane(args.role, normalizedHint);
 
   return {
     direction: direction ? direction.clone().normalize() : null,
-    offset: resolveSemanticDimOffset(scaledBaseOffset, args.role, normalizedHint),
+    offset: resolveSemanticOffsetFromLane(scaledBaseOffset, lane, normalizedHint),
+    lane,
     source,
     normalizedHint,
   };

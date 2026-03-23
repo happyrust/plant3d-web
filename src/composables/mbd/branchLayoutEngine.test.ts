@@ -5,6 +5,7 @@ import { Vector3 } from 'three';
 import {
   normalizeMbdLayoutHint,
   resolveBranchLayout,
+  resolveSemanticLane,
   resolveSemanticDimOffset,
 } from './branchLayoutEngine';
 import { computePipeAlignedOffsetDirs } from './computePipeAlignedOffsetDirs';
@@ -90,10 +91,21 @@ describe('branchLayoutEngine', () => {
 
   it('keeps semantic lane ordering stable for equivalent inputs', () => {
     const segmentOffset = resolveSemanticDimOffset(120, 'segment');
+    const portOffset = resolveSemanticDimOffset(120, 'port');
     const chainOffset = resolveSemanticDimOffset(120, 'chain');
+    const cutTubiOffset = resolveSemanticDimOffset(120, 'cut_tubi');
     const overallOffset = resolveSemanticDimOffset(120, 'overall');
 
-    expect(segmentOffset).toBeLessThan(chainOffset);
+    expect(segmentOffset).toBeLessThan(portOffset);
+    expect(portOffset).toBeLessThan(chainOffset);
     expect(chainOffset).toBeLessThan(overallOffset);
+    expect(chainOffset).toBeLessThan(cutTubiOffset);
+    expect(cutTubiOffset).toBeLessThan(overallOffset);
+  });
+
+  it('keeps explicit placement_lane backward-compatible while preventing semantic regressions', () => {
+    expect(resolveSemanticLane('chain', { placement_lane: 0 } as MbdLayoutHint)).toBe(2);
+    expect(resolveSemanticLane('overall', { placement_lane: 3 } as MbdLayoutHint)).toBe(4);
+    expect(resolveSemanticLane('cut_tubi', { placement_lane: 6 } as MbdLayoutHint)).toBe(6);
   });
 });

@@ -712,6 +712,159 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(params?.labelOffsetWorld?.z ?? 0).toBeGreaterThan(0);
   });
 
+  it('phase-1 mixed annotations should keep stable semantic lanes across dims and auxiliaries', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.showDimChain.value = true;
+    vis.showDimOverall.value = true;
+    vis.showDimPort.value = true;
+    vis.showCutTubis.value = true;
+    vis.showBranches.value = true;
+
+    const baseHint = {
+      anchor_point: [500, 0, 0] as [number, number, number],
+      primary_axis: [1, 0, 0] as [number, number, number],
+      offset_dir: [0, 1, 0] as [number, number, number],
+      char_dir: [0, 0, 1] as [number, number, number],
+      owner_segment_id: 'seg-1',
+      side_locked: true,
+    };
+
+    vis.renderBranch({
+      input_refno: 'semantic-lanes',
+      branch_refno: 'semantic-lanes',
+      branch_name: 'BRAN-SEMANTIC-LANES',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-1',
+          refno: 'seg-1',
+          noun: 'TUBI',
+          arrive: [0, 0, 0],
+          leave: [1000, 0, 0],
+          length: 1000,
+          straight_length: 1000,
+        },
+      ],
+      dims: [
+        {
+          id: 'segment-1',
+          kind: 'segment',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: { ...baseHint, label_role: 'segment', offset_level: 0 },
+        },
+        {
+          id: 'port-1',
+          kind: 'port',
+          start: [100, 0, 0],
+          end: [320, 0, 0],
+          length: 220,
+          text: '220',
+          layout_hint: { ...baseHint, label_role: 'port', offset_level: 0 },
+        },
+        {
+          id: 'chain-1',
+          kind: 'chain',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: { ...baseHint, label_role: 'chain', offset_level: 0 },
+        },
+        {
+          id: 'overall-1',
+          kind: 'overall',
+          start: [0, 0, 0],
+          end: [1100, 0, 0],
+          length: 1100,
+          text: '1100',
+          layout_hint: { ...baseHint, label_role: 'overall', offset_level: 0 },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [
+        {
+          id: 'cut-1',
+          segment_id: 'seg-1',
+          refno: 'seg-1',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: 'CUT',
+          layout_hint: { ...baseHint, label_role: 'cut_tubi', offset_level: 0 },
+        },
+      ],
+      fittings: [],
+      tags: [
+        {
+          id: 'branch-tag',
+          refno: 'branch-1',
+          noun: 'OLET',
+          role: 'fitting_branch',
+          text: 'OLET',
+          position: [500, 0, 0],
+          layout_hint: {
+            ...baseHint,
+            anchor_point: [500, 0, 60],
+            label_role: 'fitting_branch',
+            placement_lane: 5,
+            declutter_priority: 0,
+          },
+        },
+      ],
+      stats: {
+        segments_count: 1,
+        dims_count: 4,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 1,
+      },
+    });
+
+    const segmentOffset = vis.getDimAnnotations().get('segment-1')?.getParams().offset ?? 0;
+    const portOffset = vis.getDimAnnotations().get('port-1')?.getParams().offset ?? 0;
+    const chainOffset = vis.getDimAnnotations().get('chain-1')?.getParams().offset ?? 0;
+    const overallOffset = vis.getDimAnnotations().get('overall-1')?.getParams().offset ?? 0;
+
+    const root = viewer.scene.children.find(
+      (child: any) => child?.name === 'dtx-mbd-pipe-v2',
+    ) as any;
+    const cut = root?.children?.find(
+      (child: any) => child?.userData?.mbdAuxKind === 'cut_tubi',
+    );
+    const cutOffset = cut?.getParams?.().offset ?? 0;
+    const branchTag = vis.getTagAnnotations().get('branch-tag');
+
+    expect(segmentOffset).toBeGreaterThan(0);
+    expect(portOffset).toBeLessThan(segmentOffset);
+    expect(portOffset).toBeLessThan(chainOffset);
+    expect(chainOffset).toBeLessThan(cutOffset);
+    expect(cutOffset).toBeLessThan(overallOffset);
+    expect(branchTag?.visible).toBe(true);
+    expect(branchTag?.getLabelWorldPos().distanceTo(cut.getLabelWorldPos())).toBeGreaterThan(1.1);
+  });
+
   it('重叠的 fitting tags 应自动错开文字位置', () => {
     const viewer = {
       canvas: {

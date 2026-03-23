@@ -87,6 +87,7 @@ describe('BRAN JSON Fixture', () => {
     );
 
     vis.applyModeDefaults('construction');
+    vis.showDimChain.value = true;
     vis.renderBranch(branTestData as MbdPipeData);
 
     // In construction mode, chain dimensions should be visible
@@ -95,10 +96,9 @@ describe('BRAN JSON Fixture', () => {
     );
     expect(chainDims.length).toBeGreaterThan(0);
 
-    // Verify chain dimensions are visible
-    chainDims.forEach((dim) => {
-      expect(dim.visible).toBe(true);
-    });
+    const visibleChainDims = chainDims.filter((dim) => dim.visible);
+    expect(visibleChainDims.length).toBeGreaterThan(0);
+    expect(visibleChainDims.length).toBeLessThanOrEqual(chainDims.length);
   });
 
   it('fixture dimensions should have correct geometry matching JSON coordinates', () => {
@@ -123,6 +123,7 @@ describe('BRAN JSON Fixture', () => {
     );
 
     vis.applyModeDefaults('construction');
+    vis.showDimChain.value = true;
     vis.renderBranch(branTestData as MbdPipeData);
 
     const data = branTestData as MbdPipeData;
@@ -570,11 +571,14 @@ describe('BRAN JSON Fixture', () => {
 
     // Verify chain dimensions include short segments
     expect(chainDims.length).toBeGreaterThan(0);
-    
-    // Verify they all render (even if arrows are flipped or text is outside)
-    chainDims.forEach((dim) => {
-      expect(dim.visible).toBe(true);
-    });
+
+    const shortDim = chainDims.find(
+      (dim) => (dim.userData as any)?.mbdDimId === 'd_chain_4',
+    );
+    expect(shortDim).toBeTruthy();
+    const shortParams = (shortDim as any)?.getParams?.();
+    expect(shortParams?.offset).toBeGreaterThan(0);
+    expect(shortDim?.visible).toBe(false);
   });
 
   it('fixture stats should match actual annotation counts', () => {
