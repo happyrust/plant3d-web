@@ -1,0 +1,45 @@
+{
+  "featureId": "extract-branch-layout-engine-and-normalize-hints",
+  "reviewedAt": "2026-03-23T09:34:29.084343+00:00",
+  "commitId": "0d2974e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Branch-level layout engine extraction is directionally correct (hint normalization, branch-topology-first direction, field-by-field degradation, unknown-key passthrough) and has targeted unit coverage. However, the commit also changes the default MBD dimension mode from classic to rebarviz inside the render entrypoint, which is unrelated to the feature and risks user-visible behavior changes outside the layout-engine contract.",
+    "issues": [
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.ts",
+        "line": 851,
+        "severity": "blocking",
+        "description": "Unrelated behavior change: default `dimMode` is changed from `'classic'` to `'rebarviz'` as part of this refactor. This is outside the feature scope (layout engine extraction / hint normalization) and can change default presentation and downstream expectations; it also makes it harder to attribute regressions to layout logic."
+      },
+      {
+        "file": "src/composables/mbd/branchLayoutEngine.ts",
+        "line": 92,
+        "severity": "non_blocking",
+        "description": "`normalizeOptionalNumber` uses `Number(value)` without guarding null/undefined, so `null` becomes 0. That can silently treat `placement_lane: null` or `declutter_priority: null` as 0 rather than null/absent. Given these are future optional fields, this can unintentionally activate behavior if later logic checks for 0 as meaningful."
+      },
+      {
+        "file": "src/composables/mbd/branchLayoutEngine.ts",
+        "line": 107,
+        "severity": "non_blocking",
+        "description": "`resolveLayeredDimOffset` uses a type-narrowing trick (`'offsetLevel' in (hint ?? {})`) to detect normalized hints. This is a bit fragile and may misbehave if a raw hint object happens to have an `offsetLevel` key in unknown keys. Consider explicit function overloads or a dedicated discriminator if this pattern is reused."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission boundaries emphasize staying within deterministic-layout scope; this commit bundled a user-visible default mode change (`dimMode` classic→rebarviz) into the same feature. If this is an intentional project-wide decision, it should be documented explicitly in mission guidance; otherwise it should be avoided in mission-scoped features.",
+      "evidence": "git show 0d2974e: src/composables/useMbdPipeAnnotationThree.ts changes at ~line 851 and applyModeDefaults at ~940/959"
+    },
+    {
+      "area": "skills",
+      "observation": "Skill procedure calls for TDD on pure-layout helpers and mission-scoped validators; transcript skeleton indicates the worker added a dedicated `branchLayoutEngine.test.ts` and ran type-check + focused eslint + focused vitest, matching the skill.",
+      "evidence": "worker-transcripts.jsonl skeleton for efef5098… and handoff verification commands"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: core extraction looks sound, but commit includes an out-of-scope default mode switch (classic→rebarviz) that risks unrelated behavior change."
+}

@@ -1,0 +1,22 @@
+{
+  "featureId": "integrate-layout-engine-into-render-pipeline-and-overrides",
+  "reviewedAt": "2026-03-23T00:00:00.000Z",
+  "commitId": "318492a4ca79f9b115a72a12e738a3f476cb41a8",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The change set largely meets the feature intent: it plumbs layout-engine resolution metadata into rendered dims/cut-tubis, ensures override reset triggers a deterministic rebuild, and adds regression coverage for override reset and dimMode toggles including duplicate-overall suppression. However, the tag path stores layout resolution using resolveBranchLayout with role='cut_tubi', which appears incorrect for tags and risks misclassification/semantics drift.",
+    "issues": [
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.ts",
+        "line": 2031,
+        "severity": "blocking",
+        "description": "In renderTags(), mbdLayoutResolution is computed via resolveBranchLayout({... role: 'cut_tubi' ...}). This is likely a copy/paste bug: tags are not cut-tubis, and using the wrong role can affect lane/offset semantics and any downstream consumers of userData.mbdLayoutResolution. If the intention is just to cache normalized hint + direction for debugging, it should use the correct role (e.g. 'tag') or avoid resolveBranchLayout entirely for tags."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff + diff for commit 318492a. Most requirements are satisfied with added regression tests, but a likely tag-role bug in mbdLayoutResolution storage makes this review fail pending correction/confirmation."
+}

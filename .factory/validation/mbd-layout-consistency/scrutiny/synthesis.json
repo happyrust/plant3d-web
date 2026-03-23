@@ -1,0 +1,104 @@
+{
+  "milestone": "mbd-layout-consistency",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/fixtures/bran-test-data.test.ts",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npx eslint src/api/mbdPipeApi.ts src/composables/useMbdPipeAnnotationThree.ts src/composables/mbd --ext .ts --max-warnings 0",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 1,
+    "failed": 4,
+    "failedFeatures": [
+      "extract-branch-layout-engine-and-normalize-hints",
+      "apply-semantic-lanes-across-phase-one-annotations",
+      "integrate-layout-engine-into-render-pipeline-and-overrides",
+      "add-bran-specific-regression-harness"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "extract-branch-layout-engine-and-normalize-hints",
+      "severity": "blocking",
+      "description": "Out-of-scope behavior change: default dimMode changed from 'classic' to 'rebarviz' in useMbdPipeAnnotationThree.ts during layout-engine extraction refactor."
+    },
+    {
+      "featureId": "apply-semantic-lanes-across-phase-one-annotations",
+      "severity": "blocking",
+      "description": "Offset layering appears double-counted when offset_level > 0 (offset_level included in lane index and again applied as base-level offset), risking FE-002/FE-005 semantic ordering/spacing for payloads with offset_level."
+    },
+    {
+      "featureId": "apply-semantic-lanes-across-phase-one-annotations",
+      "severity": "blocking",
+      "description": "Mixed phase-1 test assertion contradicts SEMANTIC_LANE_ORDER (portOffset < segmentOffset vs segment:0, port:1), potentially encoding wrong invariant and masking regressions."
+    },
+    {
+      "featureId": "integrate-layout-engine-into-render-pipeline-and-overrides",
+      "severity": "blocking",
+      "description": "renderTags() stores mbdLayoutResolution by calling resolveBranchLayout with role='cut_tubi' (likely copy/paste bug for tags), risking wrong semantics/metadata."
+    },
+    {
+      "featureId": "add-bran-specific-regression-harness",
+      "severity": "blocking",
+      "description": "BRAN regression harness uses a minimal synthetic inline MbdPipeData rather than BRAN 24381_145717 or an approved captured equivalent fixture, so it does not prove determinism for the motivating topology." 
+    },
+    {
+      "featureId": "add-bran-specific-regression-harness",
+      "severity": "blocking",
+      "description": "Lane checks compare values across rerenders but do not assert lanes are present/meaningful (undefined===undefined could pass), undermining INT-001/INT-002 evidence." 
+    },
+    {
+      "featureId": "add-bran-specific-regression-harness",
+      "severity": "blocking",
+      "description": "Harness relies on optional/internal getter (getCutTubiAnnotations?.()) with optional chaining; this weakens regression coverage and can mask failures." 
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "None (scrutiny validator only fixed malformed JSON in a review report file to allow synthesis).",
+      "sourceFeature": "add-bran-specific-regression-harness"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Define what qualifies as an \"approved captured equivalent\" fixture for BRAN regressions (when real BRAN payload is unavailable), and require referencing a fixture file (not inline synthetic objects) for BRAN-labeled regression harnesses.",
+      "evidence": "Review add-bran-specific-regression-harness: tests used a toy inline MbdPipeData; ambiguity makes it easy to satisfy harness without real topology coverage.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Clamp placement_lane upper bound",
+      "reason": "suggestion"
+    },
+    {
+      "observation": "normalizeOptionalNumber null->0 behavior",
+      "reason": "non_blocking"
+    },
+    {
+      "observation": "offsetLevel discriminator via 'in' check",
+      "reason": "non_blocking"
+    },
+    {
+      "observation": "Reviewer skill should include newer pure-layout tests in scoped vitest run",
+      "reason": "recommend-to-orchestrator"
+    }
+  ],
+  "previousRound": null
+}

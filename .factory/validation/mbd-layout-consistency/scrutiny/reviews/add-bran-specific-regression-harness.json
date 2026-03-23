@@ -1,0 +1,46 @@
+{
+  "featureId": "add-bran-specific-regression-harness",
+  "reviewedAt": "2026-03-23T09:24:55.000Z",
+  "commitId": "db518db83a6e875c1f0dd59feecc6b977f76f740",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The change adds two Vitest cases that exercise repeated render determinism and camera-change stability for a BRAN-labeled fixture at the public entrypoint surface (useMbdPipeAnnotationThree.renderBranch). However, the harness does not convincingly prove same-side placement and lane stability for the target BRAN (it uses a synthetic minimal branch, not a captured equivalent), and key assertions rely on internal/optional methods (cut tubi getter) and weak lane checks that could pass even if semantic lanes were not assigned.",
+    "issues": [
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.flyTo.test.ts",
+        "line": 2844,
+        "severity": "blocking",
+        "description": "The feature requirement is BRAN `24381_145717` or the closest available captured equivalent. The added tests construct an extremely minimal, synthetic `MbdPipeData` inline rather than referencing an approved captured fixture. This does not provide evidence that the real BRAN (or closest captured equivalent) remains deterministic; it only proves determinism for this toy input." 
+      },
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.flyTo.test.ts",
+        "line": 2962,
+        "severity": "blocking",
+        "description": "Lane assertions are effectively non-assertions: `expect(first.lanes.segment).toBe(second.lanes.segment)` etc only compare lane values across renders, not that lanes are set, stable in semantic ordering, or match expected lane semantics. If `mbdLayoutResolution` is undefined for all annotations, the test would still pass (undefined === undefined), undermining INT-001/INT-002 evidence." 
+      },
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.flyTo.test.ts",
+        "line": 2911,
+        "severity": "blocking",
+        "description": "The harness uses `(vis as any).getCutTubiAnnotations?.()` which is an internal/optional API and may not exist; the test assumes it returns a map and calls `.get('cut-1')`. This weakens regression coverage because failures could be masked by optional chaining or refactors, and it does not validate the public API surface for cut_tubi semantics." 
+      },
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.flyTo.test.ts",
+        "line": 3002,
+        "severity": "non_blocking",
+        "description": "\"Same-side placement\" is inferred solely via equality of direction vectors between annotations, not by comparing to expected side (e.g., sign/dot with `layout_hint.offset_dir`) nor by checking the resolved lane/source for semantic layout. Direction equality could remain true even if all labels flip sides together." 
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission feature text allows `24381_145717` or the closest available captured equivalent, but there is no clear documented convention for what qualifies as an approved captured equivalent fixture vs. a synthetic inline `MbdPipeData` object. This ambiguity makes it easy to satisfy the harness with toy data.",
+      "evidence": "Feature description/expectedBehavior in /Users/dongpengcheng/.factory/missions/f3cd2e2e-871d-42c5-8762-ebb1b942488c/features.json vs. tests in src/composables/useMbdPipeAnnotationThree.flyTo.test.ts (commit db518db) building data inline."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: tests were added, but they do not meet the BRAN/captured-equivalent evidence bar and contain lane/same-side assertions that can trivially pass even if semantic lane assignment is missing."
+}

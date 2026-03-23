@@ -1,0 +1,34 @@
+{
+  "featureId": "review-bran-regression-and-mission-verification",
+  "reviewedAt": "2026-03-23T09:34:03.320478Z",
+  "commitId": "db518db83a6e875c1f0dd59feecc6b977f76f740",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the reviewer feature handoff and the commit diff that added BRAN 24381_145717 regression coverage in useMbdPipeAnnotationThree.flyTo.test.ts. The new tests directly exercise INT-001 (repeat render determinism) and INT-002/FE-007 (camera independence) by asserting stable mbdLayoutResolution (lane/source), direction vectors, and offsets across rerenders/camera moves, aligning with validation-contract INT-007 expectations.",
+    "issues": [
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.flyTo.test.ts",
+        "line": 2844,
+        "severity": "non_blocking",
+        "description": "The BRAN 24381_145717 regression tests use a synthetic in-memory MbdPipeData (straight single segment) rather than a captured BRAN fixture payload. This is still valid evidence for INT-001/INT-002 at the render-entrypoint surface, but it may miss real-world shape/declutter interactions present in the actual BRAN topology that motivated the mission."
+      },
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.flyTo.test.ts",
+        "line": 2920,
+        "severity": "non_blocking",
+        "description": "The same-side/determinism assertions primarily compare direction vectors and offsets. They do not additionally assert invariance of any internal per-annotation anchor points or label placements, which are part of FE-001/FE-004 phrasing in the contract. Existing pure-layout tests and fixture tests likely cover broader placement behavior, but these two BRAN regression tests are focused on side/lane/offset/direction only."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The mbd-layout-reviewer skill instructs running the mission-scoped Vitest command, but it does not explicitly call out the newer pure-layout test files (e.g. computeMbdDimOffset.test.ts, computePipeAlignedOffsetDirs.test.ts) that became part of the mission evidence surface; the reviewed handoff suggests adding them to the scoped validation pass.",
+      "evidence": ".factory/skills/mbd-layout-reviewer/SKILL.md step 4 vs handoff (mission session e7c259e7-...) listing a 5-file Vitest run including those pure-layout tests."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass: the reviewer feature validated the mission against validation-contract.md with findings-first reporting, and the added BRAN 24381_145717 tests in commit db518db provide explicit repeat-render and camera-independence evidence at the useMbdPipeAnnotationThree entrypoint. Residual risks are limited to synthetic BRAN data fidelity and the absence of deeper label/anchor assertions in the BRAN-specific tests."
+}

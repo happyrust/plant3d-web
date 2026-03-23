@@ -1,0 +1,40 @@
+{
+  "featureId": "apply-semantic-lanes-across-phase-one-annotations",
+  "reviewedAt": "2026-03-23T09:34:00.000Z",
+  "commitId": "2c2f35c33bafcf3738c20a6540251a6877054c44",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Implements an explicit semantic lane index and threads it into the branch layout resolution; adds tests covering phase-1 mixed dims/auxiliaries and updates BRAN fixture expectations for deterministic declutter. However, the lane→offset mapping double-counts offset layering (offsetLevel is included in the lane index and again added as a base-level offset), and the new mixed-annotations test contains inverted assertions that do not match the stated semantic ordering (segment vs port). These issues risk violating FE-002/FE-005 determinism guarantees and can yield unexpected spacing or ordering for payloads that use offset_level.",
+    "issues": [
+      {
+        "file": "src/composables/mbd/branchLayoutEngine.ts",
+        "line": 129,
+        "severity": "blocking",
+        "description": "Offset layering is applied twice when offset_level > 0: resolveSemanticLane() adds normalized.offsetLevel into the returned lane (semanticLane + offsetLevel), and resolveSemanticOffsetFromLane() then adds baseLevelOffset = normalized.offsetLevel * layerGap again. This effectively double-counts offset_level and can inflate offsets or alter relative ordering unexpectedly for payloads that include offset_level, undermining FE-002/FE-005 stability expectations. Evidence: resolveSemanticLane() lane computation and resolveSemanticOffsetFromLane() baseLevelOffset computation in the same commit." 
+      },
+      {
+        "file": "src/composables/useMbdPipeAnnotationThree.flyTo.test.ts",
+        "line": 846,
+        "severity": "blocking",
+        "description": "The new mixed phase-1 test asserts portOffset < segmentOffset (and also checks segmentOffset > 0) which contradicts the semantic lane order encoded in SEMANTIC_LANE_ORDER (segment:0, port:1). This makes the test inconsistent with the intended semantics described by FE-002/FE-005 and may mask regressions or encode the wrong invariant. Evidence: test 'phase-1 mixed annotations...' vs SEMANTIC_LANE_ORDER in branchLayoutEngine.ts." 
+      },
+      {
+        "file": "src/composables/mbd/branchLayoutEngine.ts",
+        "line": 138,
+        "severity": "non_blocking",
+        "description": "placement_lane is normalized via Number(value) without flooring; resolveSemanticLane floors it later but does not clamp upper bounds. That is likely fine, but combined with offset calculation (normalizedLane * layerGap) can produce very large offsets if a backend sends extreme values. Consider clamping if this becomes externally sourced. Evidence: normalizeOptionalNumber() and resolveSemanticOffsetFromLane()."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The new lane concept mixes two axes (semantic family lane and offset_level layering) but the contract does not explicitly define how offset_level should interact with semantic lanes once 'lane' becomes first-class. The implementation currently double-counts, suggesting the contract wording could be clarified to avoid future regressions.",
+      "evidence": "validation-contract.md CT-005/FE-002 talk about offset_level normalization and semantic ordering separately; branchLayoutEngine.ts in this feature combines them in both resolveSemanticLane() and resolveSemanticOffsetFromLane()."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed commit 2c2f35c for semantic lane assignment. Diff and transcript skeleton reviewed. Marked FAIL due to double-counting offset_level in lane→offset mapping and inconsistent mixed-annotations test assertions relative to the lane order." 
+}
