@@ -41,6 +41,13 @@ uniform int primitiveToObjectTextureWidth;
 flat out uint vObjectIndex;
 flat out uint vVisibleFlag;
 
+// === 对数深度缓冲 + per-object depth bias（与 DTXMaterial 保持一致）===
+#ifdef USE_LOGDEPTHBUF
+  uniform float logDepthBufFC;
+  out float vFragDepth;
+  flat out float vDepthBias;
+#endif
+
 // === Helpers ===
 ivec2 getTexCoord(int index, int textureWidth) {
   return ivec2(index % textureWidth, index / textureWidth);
@@ -106,6 +113,11 @@ void main() {
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
   }
 
+  #ifdef USE_LOGDEPTHBUF
+    vFragDepth = 1.0 + gl_Position.w;
+    vDepthBias = float(objectIndex & 7u) * 1.5e-7;
+  #endif
+
   vObjectIndex = objectIndex;
   vVisibleFlag = visibleFlag;
 }
@@ -117,6 +129,13 @@ precision highp int;
 
 flat in uint vObjectIndex;
 flat in uint vVisibleFlag;
+
+// === 对数深度缓冲 + per-object depth bias ===
+#ifdef USE_LOGDEPTHBUF
+  uniform float logDepthBufFC;
+  in float vFragDepth;
+  flat in float vDepthBias;
+#endif
 
 out vec4 fragColor;
 
@@ -130,6 +149,10 @@ void main() {
   uint b = (vObjectIndex >> 16u) & 255u;
 
   fragColor = vec4(float(r) / 255.0, float(g) / 255.0, float(b) / 255.0, 1.0);
+
+  #ifdef USE_LOGDEPTHBUF
+    gl_FragDepth = log2(vFragDepth) * logDepthBufFC * 0.5 + vDepthBias;
+  #endif
 }
 `;
 
@@ -177,6 +200,6 @@ export class DTXPickingMaterial extends ShaderMaterial {
   }
 
   customProgramCacheKey(): string {
-    return 'DTXPickingMaterial_v2';
+    return 'DTXPickingMaterial_v4';
   }
 }

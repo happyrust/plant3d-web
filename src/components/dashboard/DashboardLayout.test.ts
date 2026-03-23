@@ -91,7 +91,7 @@ beforeEach(() => {
 });
 
 describe('DashboardLayout', () => {
-  it('renders the desktop shell with a 280px sidebar and dashboard content by default', () => {
+  it('renders the desktop shell with a 280px sidebar and project list by default', () => {
     const { host } = mountDashboardLayout();
 
     const root = host.firstElementChild as HTMLElement | null;
@@ -107,8 +107,8 @@ describe('DashboardLayout', () => {
       '模型工程',
       '校审批注',
     ]);
-    expect(host.querySelector('[data-testid="dashboard-overview"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="project-card-list"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dashboard-overview"]')).toBeNull();
+    expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dashboard-reviews-panel"]')).toBeNull();
   });
 
@@ -120,7 +120,7 @@ describe('DashboardLayout', () => {
     const avatar = header?.querySelector('div[aria-label="李审核员"]');
 
     expect(header?.className).toContain('h-20');
-    expect(title?.textContent).toBe('概览');
+    expect(title?.textContent).toBe('模型工程');
     expect(host.querySelector('button[aria-label="搜索"]')).toBeNull();
     expect(host.querySelector('button[aria-label="通知"]')).toBeNull();
     expect(avatar?.textContent).toBe('李');
@@ -132,13 +132,20 @@ describe('DashboardLayout', () => {
     const { host } = mountDashboardLayout();
     const navButtons = host.querySelectorAll('aside button');
 
+    expect(navButtons[1]?.className).toContain('bg-[#EFF6FF]');
+    expect(host.querySelector('header h1')?.textContent).toBe('模型工程');
+    expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
+
+    (navButtons[0] as HTMLButtonElement).click();
+    await nextTick();
+
     expect(navButtons[0]?.className).toContain('bg-[#EFF6FF]');
     expect(host.querySelector('header h1')?.textContent).toBe('概览');
+    expect(host.querySelector('[data-testid="dashboard-overview"]')).toBeTruthy();
 
     (navButtons[1] as HTMLButtonElement).click();
     await nextTick();
 
-    expect(navButtons[0]?.className).not.toContain('bg-[#EFF6FF]');
     expect(navButtons[1]?.className).toContain('bg-[#EFF6FF]');
     expect(host.querySelector('header h1')?.textContent).toBe('模型工程');
     expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
@@ -153,6 +160,9 @@ describe('DashboardLayout', () => {
 
   it('handles child content navigation and selects projects from page content', async () => {
     const { host } = mountDashboardLayout();
+
+    (host.querySelectorAll('aside button')[0] as HTMLButtonElement).click();
+    await nextTick();
 
     (host.querySelector('[data-testid="overview-navigate-projects"]') as HTMLButtonElement).click();
     await nextTick();

@@ -670,6 +670,11 @@ watch(
 );
 
 function setToolMode(mode: ToolMode) {
+  // 离开 Xeokit 测量模式时丢弃未完成的预览草稿，避免场景里残留“幽灵测量线”，
+  // 而测量面板（非 Xeokit 模式下列的是 DTX 经典 measurements）显示 0 条。
+  if (mode !== 'xeokit_measure_distance' && mode !== 'xeokit_measure_angle') {
+    clearCurrentXeokitDraft();
+  }
   toolMode.value = mode;
   // 退出 pick_refno 时清理状态
   if (mode !== 'pick_refno') {

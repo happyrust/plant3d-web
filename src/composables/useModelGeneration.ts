@@ -381,6 +381,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
   async function showModelByRefno(refno: string, loadOptions?: { flyTo?: boolean }): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
+
+    const genuinelyLoaded = loadedRoots.has(normalizedRoot);
     if (checkRefnoExists(normalizedRoot)) {
       if (loadOptions?.flyTo) {
         try {
@@ -395,6 +397,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           if (aabb) {
             anyViewer?.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
             consoleStore.addLog('info', `[model-load] flyTo 已加载 refno=${normalizedRoot}`);
+          } else if (!genuinelyLoaded) {
+            // refno 仅在 scene.objects 中有占位（来自树选择/可见性操作），
+            // 但实际几何数据未加载 → 回落到下方加载路径
+            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 占位但无几何，回落加载`);
           } else {
             consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`);
           }
@@ -405,7 +411,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           );
         }
       }
-      return true;
+      if (genuinelyLoaded) return true;
+      // 非 genuinelyLoaded 时检查 DTX 层是否真有几何
+      const anyV = viewer as any;
+      const dtxLayer = anyV?.__dtxLayer;
+      if (dtxLayer?.hasObject?.(normalizedRoot)) return true;
     }
 
     isGenerating.value = true;

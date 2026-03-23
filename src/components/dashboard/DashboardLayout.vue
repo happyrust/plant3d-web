@@ -81,7 +81,7 @@ defineEmits<{
 
 type MenuId = 'dashboard' | 'projects' | 'reviews';
 
-const activeMenu = ref<MenuId>('dashboard');
+const activeMenu = ref<MenuId>('projects');
 const { selectProject } = useModelProjects();
 const userStore = useUserStore();
 

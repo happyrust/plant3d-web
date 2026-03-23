@@ -62,6 +62,13 @@ flat out uint vFlags;
 out vec3 vWorldPosition;
 out vec3 vWorldNormal;
 
+// === 对数深度缓冲 + per-object depth bias（解决 Z-fighting）===
+#ifdef USE_LOGDEPTHBUF
+  uniform float logDepthBufFC;
+  out float vFragDepth;
+  flat out float vDepthBias;
+#endif
+
 // === 辅助函数 ===
 ivec2 getTexCoord(int index, int textureWidth) {
   return ivec2(index % textureWidth, index / textureWidth);
@@ -175,6 +182,14 @@ void main() {
 
   // 11. 投影
   gl_Position = projectionMatrix * viewMatrix * worldPosition;
+
+  // 12. 对数深度缓冲 + per-object depth bias
+  #ifdef USE_LOGDEPTHBUF
+    vFragDepth = 1.0 + gl_Position.w;
+    // 用 objectIndex 低 3 位生成 8 级微小深度偏移，
+    // 打破共面几何体（如甲板板与设备底板）的深度平局
+    vDepthBias = float(objectIndex & 7u) * 1.5e-7;
+  #endif
 }
 `;
 
@@ -198,6 +213,13 @@ uniform vec3 lightColor1;
 // 0=all, 1=opaque, 2=transparent
 uniform int renderPass;
 uniform float alphaCutoff;
+
+// === 对数深度缓冲 + per-object depth bias ===
+#ifdef USE_LOGDEPTHBUF
+  uniform float logDepthBufFC;
+  in float vFragDepth;
+  flat in float vDepthBias;
+#endif
 
 // === 输出 ===
 out vec4 fragColor;
@@ -270,6 +292,10 @@ void main() {
   vec3 finalColor = ambient + directLight0 + directLight1;
 
   fragColor = vec4(finalColor, vColor.a);
+
+  #ifdef USE_LOGDEPTHBUF
+    gl_FragDepth = log2(vFragDepth) * logDepthBufFC * 0.5 + vDepthBias;
+  #endif
 }
 `;
 
@@ -362,7 +388,7 @@ export class DTXMaterial extends ShaderMaterial {
   customProgramCacheKey(): string {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
-    return 'DTXMaterial_v8';
+    return 'DTXMaterial_v10';
   }
 
   /**

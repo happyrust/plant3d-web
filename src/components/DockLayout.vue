@@ -165,14 +165,9 @@ function createDefaultLayout(dockApi: DockApi) {
     position: { referencePanel: measurementPanel, direction: 'within' },
   });
 
-  const dashboardPanel = dockApi.addPanel({
-    id: 'dashboard',
-    component: 'DashboardPanel',
-    title: '概览',
-    position: { referencePanel: measurementPanel, direction: 'within' },
-  });
+  // 概览（Dashboard）不加入默认布局，由 Ribbon「概览」或 ensurePanel 按需打开
 
-  dashboardPanel.api.setActive();
+  viewerPanel.api.setActive();
 
   const leftGroup = dockApi.getPanel('modelTree')?.group;
   const rightGroup = dockApi.getPanel('measurement')?.group;
@@ -807,8 +802,7 @@ async function applyInitialLanding() {
     }
   }
 
-  ensurePanel('dashboard');
-  activatePanel('dashboard');
+  activatePanel('viewer');
 }
 
 function onReady(event: DockviewReadyEvent) {

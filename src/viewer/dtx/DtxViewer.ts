@@ -84,6 +84,7 @@ export class DtxViewer {
       context: gl,
       antialias: true,
       alpha: false,
+      logarithmicDepthBuffer: true,
     });
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -94,7 +95,7 @@ export class DtxViewer {
     this.scene.background = new Color(options.background ?? 0xe5e7eb);
 
     // CAD 弱透视：降低 FOV，减少近大远小夸张感
-    this.camera = new PerspectiveCamera(30, 1, 0.1, 1_000_000);
+    this.camera = new PerspectiveCamera(30, 1, 0.5, 500_000);
     this.camera.up.set(0, 0, 1);
     this.camera.position.set(-37.1, 13.0, 58.5);
 

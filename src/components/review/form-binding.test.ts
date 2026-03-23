@@ -98,6 +98,8 @@ describe('InitiateReviewPanel form binding', () => {
       title: '综合校审数据包',
     });
     sessionStorage.clear();
+    // 让 InitiateReviewPanel 的 resolveExternalWorkflowMode 返回 false（手动模式）
+    sessionStorage.setItem('plant3d_workflow_mode', 'manual');
   });
 
   it('binds all fields and submits collected reactive form data', async () => {
@@ -110,6 +112,7 @@ describe('InitiateReviewPanel form binding', () => {
       render: () => h(InitiateReviewPanel),
     });
     app.mount(host);
+    await nextTick();
 
     const click = (selector: string) => {
       const element = host.querySelector(selector) as HTMLButtonElement | null;
@@ -198,6 +201,7 @@ describe('InitiateReviewPanel form binding', () => {
       }),
     });
     app.mount(host);
+    await nextTick();
 
     const click = (selector: string) => {
       const element = host.querySelector(selector) as HTMLButtonElement | null;
@@ -245,6 +249,7 @@ describe('InitiateReviewPanel form binding', () => {
       render: () => h(InitiateReviewPanel),
     });
     app.mount(host);
+    await nextTick();
 
     const click = (selector: string) => {
       const element = host.querySelector(selector) as HTMLButtonElement | null;
@@ -299,6 +304,7 @@ describe('InitiateReviewPanel form binding', () => {
       }),
     });
     app.mount(host);
+    await nextTick();
 
     const click = (selector: string) => {
       const element = host.querySelector(selector) as HTMLButtonElement | null;

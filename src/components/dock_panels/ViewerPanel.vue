@@ -628,13 +628,14 @@ function getDefaultCadGridSizeByUnit(modelUnit: string): number {
 function computeClipPlanesByDiag(diag: number): { near: number; far: number } {
   const d = Math.max(0, Number(diag) || 0);
 
-  // 以 bbox 对角线长度为“分档”依据（单位：米）。
-  // 目标：压缩 far/near 比值，提升深度精度，降低 z-fighting。
-  if (d <= 1) return { near: 0.01, far: 50 };
-  if (d <= 10) return { near: 0.05, far: 200 };
-  if (d <= 100) return { near: 0.2, far: 2000 };
-  if (d <= 1000) return { near: 2, far: 20000 };
-  return { near: 10, far: Math.min(200000, Math.max(50000, d * 50)) };
+  // 以 bbox 对角线长度为"分档"依据（单位：米）。
+  // 配合 logarithmicDepthBuffer，收紧 far 值以提升深度精度。
+  // far 只需覆盖"最远可视距离 ≈ 相机到模型最远点 ≈ 数倍对角线"。
+  if (d <= 1) return { near: 0.01, far: 20 };
+  if (d <= 10) return { near: 0.05, far: 100 };
+  if (d <= 100) return { near: 0.1, far: 1000 };
+  if (d <= 1000) return { near: 1, far: 10000 };
+  return { near: 5, far: Math.min(100000, Math.max(20000, d * 20)) };
 }
 
 function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {

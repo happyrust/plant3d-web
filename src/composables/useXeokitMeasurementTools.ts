@@ -552,16 +552,19 @@ export function useXeokitMeasurementTools(options: {
       syncRecordAnnotation(annotationId, record, false);
     }
 
-    const draftDistance = store.currentXeokitDistanceDraft.value;
-    if (draftDistance) {
-      nextIds.add(XEOKIT_DISTANCE_DRAFT_ID);
-      syncRecordAnnotation(XEOKIT_DISTANCE_DRAFT_ID, draftDistance, true);
-    }
+    // 仅在 Xeokit 测量模式激活时渲染草稿；否则列表/工具状态已切走，草稿不应留在场景里。
+    if (isActiveMode()) {
+      const draftDistance = store.currentXeokitDistanceDraft.value;
+      if (draftDistance) {
+        nextIds.add(XEOKIT_DISTANCE_DRAFT_ID);
+        syncRecordAnnotation(XEOKIT_DISTANCE_DRAFT_ID, draftDistance, true);
+      }
 
-    const draftAngle = store.currentXeokitAngleDraft.value;
-    if (draftAngle) {
-      nextIds.add(XEOKIT_ANGLE_DRAFT_ID);
-      syncRecordAnnotation(XEOKIT_ANGLE_DRAFT_ID, draftAngle, true);
+      const draftAngle = store.currentXeokitAngleDraft.value;
+      if (draftAngle) {
+        nextIds.add(XEOKIT_ANGLE_DRAFT_ID);
+        syncRecordAnnotation(XEOKIT_ANGLE_DRAFT_ID, draftAngle, true);
+      }
     }
 
     for (const id of Array.from(annotations.keys())) {
