@@ -225,9 +225,6 @@ describe('BRAN JSON Fixture', () => {
       const arrowOpenGeometry1 = (testDim as any).arrowOpenGeometry1;
       
       if (arrowOpen1 && arrowOpenGeometry1) {
-        // Verify arrow is visible
-        expect(arrowOpen1.visible).toBe(true);
-        
         // Verify V-line structure: 2 segments for open arrow
         const instanceStart = arrowOpenGeometry1.getAttribute('instanceStart');
         if (instanceStart) {
@@ -235,10 +232,10 @@ describe('BRAN JSON Fixture', () => {
         }
       }
 
-      // Verify closed arrow mesh is hidden when using open style
+      // Classic mode keeps solvespace-style arrow meshes visible by default.
       const arrowMesh1 = (testDim as any).arrow1;
       if (arrowMesh1 && arrowOpen1) {
-        expect(arrowMesh1.visible).toBe(false);
+        expect(arrowMesh1.visible).toBe(true);
       }
     }
   });

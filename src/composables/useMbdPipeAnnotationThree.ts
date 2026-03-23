@@ -818,7 +818,7 @@ export function useMbdPipeAnnotationThree(
   const dimTextMode = ref<'backend' | 'auto'>('backend');
   const dimOffsetScale = ref<number>(1);
   const dimLabelT = ref<number>(0.5);
-  const dimMode = ref<MbdDimensionMode>('rebarviz');
+  const dimMode = ref<MbdDimensionMode>('classic');
   const bendDisplayMode = ref<MbdBendDisplayMode>('size');
   const rebarvizDefaults = getMbdDimensionModeConfig('rebarviz');
   const rebarvizArrowStyle = ref<'open' | 'filled' | 'tick'>(
@@ -926,7 +926,7 @@ export function useMbdPipeAnnotationThree(
       return;
     }
 
-    dimMode.value = 'rebarviz';
+    dimMode.value = 'classic';
     bendDisplayMode.value = 'size';
     showDimSegment.value = true;
     showDimChain.value = false;
@@ -2035,7 +2035,7 @@ export function useMbdPipeAnnotationThree(
             normalizeMbdLayoutHint(tag.layout_hint).primaryAxis?.clone()
             ?? new Vector3(1, 0, 0),
           ),
-        role: 'cut_tubi',
+        role: 'segment',
         hint: tag.layout_hint,
       });
       const baseLabelOffset = annotation.getParams().labelOffsetWorld;

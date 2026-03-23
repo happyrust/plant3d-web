@@ -103,6 +103,22 @@ describe('branchLayoutEngine', () => {
     expect(cutTubiOffset).toBeLessThan(overallOffset);
   });
 
+  it('applies offset_level once on top of semantic lane ordering', () => {
+    const segmentOffsetLevel0 = resolveSemanticDimOffset(120, 'segment', {
+      offset_level: 0,
+    } as MbdLayoutHint);
+    const segmentOffsetLevel1 = resolveSemanticDimOffset(120, 'segment', {
+      offset_level: 1,
+    } as MbdLayoutHint);
+    const portOffsetLevel1 = resolveSemanticDimOffset(120, 'port', {
+      offset_level: 1,
+    } as MbdLayoutHint);
+
+    const layerGap = Math.max(120 * 0.85, 60);
+    expect(segmentOffsetLevel1 - segmentOffsetLevel0).toBeCloseTo(layerGap, 6);
+    expect(portOffsetLevel1 - segmentOffsetLevel1).toBeCloseTo(layerGap, 6);
+  });
+
   it('keeps explicit placement_lane backward-compatible while preventing semantic regressions', () => {
     expect(resolveSemanticLane('chain', { placement_lane: 0 } as MbdLayoutHint)).toBe(2);
     expect(resolveSemanticLane('overall', { placement_lane: 3 } as MbdLayoutHint)).toBe(4);

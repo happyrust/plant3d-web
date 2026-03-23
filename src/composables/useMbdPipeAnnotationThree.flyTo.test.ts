@@ -31,7 +31,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     );
 
     expect(vis.mbdViewMode.value).toBe('construction');
-    expect(vis.dimMode.value).toBe('rebarviz');
+    expect(vis.dimMode.value).toBe('classic');
     expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(false);
     expect(vis.showDimOverall.value).toBe(false);
@@ -78,7 +78,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
 
     vis.applyModeDefaults('construction');
     expect(vis.mbdViewMode.value).toBe('construction');
-    expect(vis.dimMode.value).toBe('rebarviz');
+    expect(vis.dimMode.value).toBe('classic');
     expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(false);
     expect(vis.showDimOverall.value).toBe(false);
@@ -863,6 +863,161 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(cutOffset).toBeLessThan(overallOffset);
     expect(branchTag?.visible).toBe(true);
     expect(branchTag?.getLabelWorldPos().distanceTo(cut.getLabelWorldPos())).toBeGreaterThan(1.1);
+  });
+
+  it('non-zero offset_level should add one stable layer without changing semantic lane order', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.showDimPort.value = true;
+
+    const baseHint = {
+      anchor_point: [500, 0, 0] as [number, number, number],
+      primary_axis: [1, 0, 0] as [number, number, number],
+      offset_dir: [0, 1, 0] as [number, number, number],
+      char_dir: [0, 0, 1] as [number, number, number],
+      owner_segment_id: 'seg-1',
+    };
+
+    vis.renderBranch({
+      input_refno: 'semantic-offset-levels',
+      branch_refno: 'semantic-offset-levels',
+      branch_name: 'BRAN-OFFSET-LEVELS',
+      branch_attrs: {},
+      segments: [],
+      dims: [
+        {
+          id: 'segment-l0',
+          kind: 'segment',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: { ...baseHint, label_role: 'segment', offset_level: 0 },
+        },
+        {
+          id: 'segment-l1',
+          kind: 'segment',
+          start: [0, 50, 0],
+          end: [1000, 50, 0],
+          length: 1000,
+          text: '1000',
+          layout_hint: { ...baseHint, label_role: 'segment', offset_level: 1 },
+        },
+        {
+          id: 'port-l1',
+          kind: 'port',
+          start: [100, 0, 0],
+          end: [320, 0, 0],
+          length: 220,
+          text: '220',
+          layout_hint: { ...baseHint, label_role: 'port', offset_level: 1 },
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 0,
+        dims_count: 3,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    });
+
+    const segmentL0 = vis.getDimAnnotations().get('segment-l0')?.getParams().offset ?? 0;
+    const segmentL1 = vis.getDimAnnotations().get('segment-l1')?.getParams().offset ?? 0;
+    const portL1 = vis.getDimAnnotations().get('port-l1')?.getParams().offset ?? 0;
+    const segmentLayerGap = Number((segmentL1 - segmentL0).toFixed(6));
+    const portSemanticGap = Number((segmentL1 - portL1).toFixed(6));
+
+    expect(segmentL0).toBeGreaterThan(0);
+    expect(segmentL0).toBeLessThan(segmentL1);
+    expect(segmentLayerGap).toBeGreaterThan(0);
+    expect(portSemanticGap).toBeGreaterThan(0);
+    expect(portL1).toBeLessThan(segmentL1);
+    expect(segmentLayerGap).toBeCloseTo(127.5, 6);
+    expect(portSemanticGap).toBeCloseTo(107.5, 6);
+  });
+
+  it('tag layout metadata should resolve with tag semantics instead of cut_tubi semantics', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.renderBranch({
+      input_refno: 'tag-layout-metadata',
+      branch_refno: 'tag-layout-metadata',
+      branch_name: 'BRAN-TAG-METADATA',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [
+        {
+          id: 'tag-meta',
+          refno: 'tag-meta',
+          noun: 'OLET',
+          role: 'fitting_branch',
+          text: 'OLET',
+          position: [500, 0, 0],
+          layout_hint: {
+            anchor_point: [500, 0, 0],
+            primary_axis: [1, 0, 0],
+            offset_dir: [0, 1, 0],
+            label_role: 'fitting_branch',
+            placement_lane: 5,
+          },
+        },
+      ],
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 1,
+      },
+    });
+
+    const tag = vis.getTagAnnotations().get('tag-meta') as any;
+    expect(tag?.userData?.mbdLayoutResolution?.lane).toBe(5);
   });
 
   it('重叠的 fitting tags 应自动错开文字位置', () => {
@@ -2533,16 +2688,16 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vis.renderBranch(data);
 
     expect(getLabelStyle(vis.getDimAnnotations().get('dim-1'))).toBe(
-      'rebarviz',
+      'solvespace',
     );
     expect(getLabelStyle(vis.getWeldAnnotations().get('weld-1'))).toBe(
-      'rebarviz',
+      'solvespace',
     );
     expect(getLabelStyle(vis.getSlopeAnnotations().get('slope-1'))).toBe(
-      'rebarviz',
+      'solvespace',
     );
     expect(getLabelStyle(vis.getBendAnnotations().get('bend-1'))).toBe(
-      'rebarviz',
+      'solvespace',
     );
 
     vis.dimMode.value = 'classic';

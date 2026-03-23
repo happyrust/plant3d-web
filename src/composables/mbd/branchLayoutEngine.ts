@@ -130,7 +130,7 @@ export function resolveSemanticLane(
   const explicitLane = normalized.placementLane;
   const lane = Number.isFinite(explicitLane)
     ? Math.max(semanticLane, Math.floor(explicitLane as number))
-    : semanticLane + normalized.offsetLevel;
+    : semanticLane;
   return Math.max(0, lane);
 }
 
@@ -145,10 +145,8 @@ export function resolveSemanticOffsetFromLane(
   const safeBase = Number.isFinite(baseOffset) ? Math.max(1, Math.min(5000, baseOffset)) : 100;
   const normalizedLane = Math.max(0, Math.floor(Number.isFinite(lane) ? lane : 0));
   const layerGap = Math.max(safeBase * 0.85, 60);
-  const baseLevelOffset = normalized.offsetLevel > 0
-    ? normalized.offsetLevel * layerGap
-    : 0;
-  return safeBase + baseLevelOffset + normalizedLane * layerGap;
+  const totalLane = normalizedLane + normalized.offsetLevel;
+  return safeBase + totalLane * layerGap;
 }
 
 export function resolveBranchLayout(
