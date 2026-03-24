@@ -41,7 +41,7 @@ export async function tryFillPmsNewDocumentDialog(page: Page): Promise<void> {
   const visible = await dialog.waitFor({ state: 'visible', timeout: 12_000 }).then(() => true).catch(() => false);
   if (!visible) return;
 
-  const code = process.env.PMS_MOCK_PROJECT_CODE || 'AvevaMarineSample-E2E';
+  const code = process.env.PMS_MOCK_PROJECT_CODE || 'AvevaMarineSample';
   const name = process.env.PMS_MOCK_PROJECT_NAME || `E2E-${Date.now()}`;
   const pairs: [RegExp, string][] = [
     [/项目代码/i, code],
@@ -109,6 +109,24 @@ function resolveConsoleCommandRefno(raw: string): string {
   return s.includes('_') ? s.replace(/_/g, '/') : s;
 }
 
+function parseAddComponentReadyMs(): number {
+  const n = Number(process.env.PMS_CDP_ADD_COMPONENT_READY_MS?.trim());
+  return Number.isFinite(n) && n >= 5000 ? n : 45_000;
+}
+
+function parseAddComponentListWaitMs(): number {
+  const n = Number(process.env.PMS_CDP_ADD_COMPONENT_LIST_MS?.trim());
+  return Number.isFinite(n) && n >= 5000 ? n : 90_000;
+}
+
+/** 用于 DOM 断言：RefNo 可能为 24381/145018 或 24381_145018 */
+function refnoListNeedleRegex(rawRefno: string): RegExp {
+  const slash = resolveConsoleCommandRefno(rawRefno);
+  const under = slash.includes('/') ? slash.replace(/\//g, '_') : slash;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`RefNo:\\s*(?:${esc(slash)}|${esc(under)})`, 'i');
+}
+
 async function trySelectBranViaConsole(root: Page | Frame, rawRefno: string): Promise<boolean> {
   const refno = resolveConsoleCommandRefno(rawRefno);
   if (!refno) return false;
@@ -129,23 +147,72 @@ async function trySelectBranViaConsole(root: Page | Frame, rawRefno: string): Pr
   await input.fill(`= ${refno}`);
   await input.press('Enter');
 
-  const ok = await root
+  const ceOk = await root
     .getByText('CE set to:', { exact: false })
     .first()
     .waitFor({ state: 'visible', timeout: 12_000 })
     .then(() => true)
     .catch(() => false);
-  if (ok) return true;
 
   const addComponent = root.locator('[data-guide="add-component-btn"]').first();
-  const deadline = Date.now() + 12_000;
+  const readyMs = parseAddComponentReadyMs();
+  const deadline = Date.now() + readyMs;
   while (Date.now() < deadline) {
     const disabled = await addComponent.getAttribute('disabled').catch(() => '');
     const ariaDisabled = await addComponent.getAttribute('aria-disabled').catch(() => '');
-    if (!disabled && ariaDisabled !== 'true') return true;
+    if (!disabled && ariaDisabled !== 'true') {
+      console.error(`[cdp] plant3d：「添加构件」已可用（CE 提示=${ceOk ? '已出现' : '未出现'}，等待≤${readyMs}ms）`);
+      return true;
+    }
     await new Promise((r) => setTimeout(r, 350));
   }
+
+  console.error(`[cdp] plant3d：控制台输入「= ${refno}」后 ${readyMs}ms 内「添加构件」仍不可用`);
   return false;
+}
+
+/**
+ * 在控制台已选中 CE 的前提下：等待「添加构件」可点 → 点击 → 等待构件列表出现目标 RefNo。
+ */
+async function clickAddComponentAndWaitForRefno(root: Page | Frame, rawRefno: string): Promise<boolean> {
+  const addComponent = root.locator('[data-guide="add-component-btn"]').first();
+  const readyMs = parseAddComponentReadyMs();
+  const deadline = Date.now() + readyMs;
+  while (Date.now() < deadline) {
+    const vis = await addComponent.isVisible().catch(() => false);
+    const disabled = await addComponent.getAttribute('disabled').catch(() => '');
+    const ariaDisabled = await addComponent.getAttribute('aria-disabled').catch(() => '');
+    if (vis && !disabled && ariaDisabled !== 'true') break;
+    await new Promise((r) => setTimeout(r, 350));
+  }
+
+  const canClick = await addComponent.isVisible().catch(() => false)
+    && !(await addComponent.getAttribute('disabled').catch(() => ''))
+    && (await addComponent.getAttribute('aria-disabled').catch(() => '')) !== 'true';
+  if (!canClick) {
+    console.error('[cdp] plant3d：无法点击「添加构件」（仍禁用或不可见）');
+    return false;
+  }
+
+  console.error(`[cdp] plant3d：点击「添加构件」，将当前选中 CE 写入提资构件列表…`);
+  await addComponent.click({ timeout: 15_000 });
+
+  const listMs = parseAddComponentListWaitMs();
+  const refRe = refnoListNeedleRegex(rawRefno);
+  const ok = await root
+    .locator('div')
+    .filter({ hasText: refRe })
+    .first()
+    .waitFor({ state: 'visible', timeout: listMs })
+    .then(() => true)
+    .catch(() => false);
+
+  if (ok) {
+    console.error(`[cdp] plant3d：构件列表已出现 RefNo（与 ${rawRefno.trim()} 匹配）`);
+  } else {
+    console.error(`[cdp] plant3d：点击「添加构件」后 ${listMs}ms 内未在列表中看到匹配 RefNo`);
+  }
+  return ok;
 }
 
 type Plant3dSelectRefnoRequest = {
@@ -305,16 +372,18 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
       );
     });
 
-  const selectionMode = (process.env.PMS_CDP_SELECTION_MODE || '').trim().toLowerCase();
+  const selectionModeRaw = (process.env.PMS_CDP_SELECTION_MODE || '').trim().toLowerCase();
+  /** console / console_add：控制台 `= refno` → 等待「添加构件」→ 点击并等待列表出现 RefNo */
+  const selectionMode = selectionModeRaw === 'console_add' ? 'console' : selectionModeRaw;
   let selected = false;
   if (selectionMode === 'console') {
-    console.error(`[cdp] plant3d：PMS_CDP_SELECTION_MODE=console，尝试通过控制台选择 BRAN ${resolveConsoleCommandRefno(targetBranRefno)}…`);
+    console.error(`[cdp] plant3d：PMS_CDP_SELECTION_MODE=console，控制台输入「= ${resolveConsoleCommandRefno(targetBranRefno)}」并等待「添加构件」可用…`);
     selected = await trySelectBranViaConsole(root, targetBranRefno).catch(() => false);
-    console.error(`[cdp] plant3d：控制台选择 ${selected ? '成功' : '失败'}，将${selected ? '继续' : '回退'}到 mock 注入`);
+    console.error(`[cdp] plant3d：控制台 CE/选中 ${selected ? '就绪' : '失败'}，将${selected ? '点击「添加构件」' : '回退 mock 注入'}`);
   } else if (selectionMode === 'postmessage') {
     console.error(`[cdp] plant3d：PMS_CDP_SELECTION_MODE=postmessage，尝试 postMessage 选择 BRAN ${targetBranRefno}…`);
     selected = await trySelectBranViaPostMessage(root, targetBranRefno).catch(() => false);
-    console.error(`[cdp] plant3d：postMessage 选择 ${selected ? '成功' : '失败'}，将${selected ? '继续' : '回退'}到 mock 注入`);
+    console.error(`[cdp] plant3d：postMessage 选择 ${selected ? '成功' : '失败'}，将${selected ? '点击「添加构件」' : '回退 mock 注入'}`);
   }
 
   if (!selected) {
@@ -324,16 +393,14 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
     }, targetBranRefno);
     console.error(`[cdp] plant3d：已使用 __plant3dInitiateReviewE2E.addMockComponent 注入 BRAN ${targetBranRefno}`);
   } else {
-    const addComponent = root.locator('[data-guide="add-component-btn"]').first();
-    await addComponent.waitFor({ state: 'visible', timeout: 20_000 });
-    const deadline = Date.now() + 20_000;
-    while (Date.now() < deadline) {
-      const disabled = await addComponent.getAttribute('disabled');
-      const ariaDisabled = await addComponent.getAttribute('aria-disabled');
-      if (!disabled && ariaDisabled !== 'true') break;
-      await new Promise((r) => setTimeout(r, 350));
+    const added = await clickAddComponentAndWaitForRefno(root, targetBranRefno).catch(() => false);
+    if (!added) {
+      await root.evaluate((refNo) => {
+        const displayName = refNo.includes('_') ? `BRAN ${refNo}` : `BRAN/${refNo}`;
+        window.__plant3dInitiateReviewE2E?.addMockComponent?.(refNo, displayName);
+      }, targetBranRefno);
+      console.error('[cdp] plant3d：「添加构件」流程未确认到列表 RefNo，已回退 mock 注入');
     }
-    await addComponent.click({ timeout: 12_000 });
   }
 
   const pkg = resolveMockPackageName();

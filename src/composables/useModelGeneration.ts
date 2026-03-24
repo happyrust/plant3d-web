@@ -11,6 +11,7 @@ import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
 import { triggerBatchGenerateSse } from '@/composables/useDbnoInstancesJsonLoader';
+import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 
 /**
@@ -123,6 +124,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 } {
   const { viewer } = options;
   const consoleStore = useConsoleStore();
+  const modelLoadStatus = useModelLoadStatus();
 
   const isGenerating = ref(false);
   const showProgressModal = ref(false);
@@ -137,6 +139,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
   const loadedRoots = new Set<string>();
   const PARQUET_VERSION_POLL_INTERVAL_MS = 3000;
+
+  function syncGlobalLoadStatus() {
+    modelLoadStatus.update({
+      progress: progress.value,
+      message: statusMessage.value,
+      currentRefno: currentRefno.value,
+      error: error.value,
+    });
+  }
 
   function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -436,6 +447,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     currentRefno.value = normalizedRoot;
     totalCount.value = 1;
     currentIndex.value = 1;
+    modelLoadStatus.begin({
+      progress: progress.value,
+      message: statusMessage.value,
+      currentRefno: currentRefno.value,
+    });
 
     try {
       const startedAt = Date.now();
@@ -450,6 +466,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
       statusMessage.value = '查询可见几何子孙...';
       progress.value = 10;
+      syncGlobalLoadStatus();
       let visibleOk = false;
       let visibleErr: string | null = null;
       let visibleRefnos: string[] = [];
@@ -487,6 +504,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         consoleStore.addLog('info', `[model-load] 使用 Parquet 数据源 dbno=${dbno}`);
         statusMessage.value = `从 Parquet 加载 dbno=${dbno}...`;
         progress.value = 20;
+        syncGlobalLoadStatus();
 
         const anyViewer = viewer as unknown as {
           __dtxLayer?: unknown
@@ -503,11 +521,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         if (loadRefnos.length === 0) {
           statusMessage.value = `dbnum=${dbno} 无可加载 refno`;
           progress.value = 100;
+          syncGlobalLoadStatus();
           return false;
         }
 
         statusMessage.value = `加载 ${loadRefnos.length} 个 refno (Parquet)...`;
         progress.value = 60;
+        syncGlobalLoadStatus();
 
         const LOAD_BATCH_SIZE = VISIBLE_REFNOS_PAGE_SIZE;
         const total = loadRefnos.length;
@@ -523,6 +543,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const batchIndex = Math.floor(start / LOAD_BATCH_SIZE) + 1;
           statusMessage.value = `加载批次 ${batchIndex}/${batchTotal} (${end}/${total}) [Parquet]`;
           progress.value = Math.max(60, Math.min(95, 60 + Math.floor((end / total) * 35)));
+          syncGlobalLoadStatus();
 
           const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
             lodAssetKey: 'L1',
@@ -566,6 +587,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         }
         statusMessage.value = totalObjects > 0 ? '加载完成 (Parquet)' : '无可见几何实例';
         progress.value = 100;
+        syncGlobalLoadStatus();
         return true;
       }
 
@@ -574,10 +596,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const msg = e instanceof Error ? e.message : String(e);
       error.value = msg;
       statusMessage.value = '加载失败';
+      syncGlobalLoadStatus();
       return false;
     } finally {
       isGenerating.value = false;
       showProgressModal.value = false;
+      modelLoadStatus.finish({
+        message: statusMessage.value,
+        error: error.value,
+      });
     }
   }
 
@@ -592,6 +619,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     currentRefno.value = '';
     totalCount.value = 0;
     currentIndex.value = 0;
+    modelLoadStatus.begin({
+      progress: progress.value,
+      message: '准备按 dbnum 加载模型...',
+    });
 
     try {
       if (!Number.isFinite(dbno) || dbno <= 0) {
@@ -601,6 +632,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const parquetLoader = useDbnoInstancesParquetLoader();
       statusMessage.value = `Checking model files for dbnum=${dbno}...`;
       progress.value = 10;
+      syncGlobalLoadStatus();
 
       let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
       if (!parquetAvailable) {
@@ -612,12 +644,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
       statusMessage.value = `Loading refnos for dbnum=${dbno}...`;
       progress.value = 25;
+      syncGlobalLoadStatus();
       const loadRefnos = await parquetLoader.queryAllRefnosByDbno(dbno, { debug: false });
       const uniqueRefnos = uniqStrings(loadRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
 
       if (uniqueRefnos.length === 0) {
         statusMessage.value = 'Model is empty (0 instances)';
         progress.value = 100;
+        syncGlobalLoadStatus();
         consoleStore.addLog('info', `[model-load] Model loaded dbno=${dbno} refno_count=0 instance_count=0`);
         return { loaded: true, instanceCount: 0, refnoCount: 0 };
       }
@@ -648,6 +682,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         currentIndex.value = end;
         statusMessage.value = `Loading model batch ${Math.ceil(end / LOAD_BATCH_SIZE)}/${Math.ceil(uniqueRefnos.length / LOAD_BATCH_SIZE)}...`;
         progress.value = Math.max(35, Math.min(92, 35 + Math.floor((end / uniqueRefnos.length) * 55)));
+        syncGlobalLoadStatus();
 
         const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, batch, {
           lodAssetKey: 'L1',
@@ -684,6 +719,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
 
       progress.value = 100;
       statusMessage.value = totalLoadedObjects > 0 ? 'Model loaded' : 'Model is empty (0 instances)';
+      syncGlobalLoadStatus();
       consoleStore.addLog(
         'info',
         `[model-load] Model loaded dbno=${dbno} refno_count=${uniqueRefnos.length} loaded_refnos=${totalLoadedRefnos} skipped_refnos=${totalSkippedRefnos} instance_count=${totalLoadedObjects}`
@@ -697,10 +733,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       const msg = e instanceof Error ? e.message : String(e);
       error.value = msg;
       statusMessage.value = '加载失败';
+      syncGlobalLoadStatus();
       return { loaded: false, instanceCount: 0, refnoCount: 0 };
     } finally {
       isGenerating.value = false;
       showProgressModal.value = false;
+      modelLoadStatus.finish({
+        message: statusMessage.value,
+        error: error.value,
+      });
     }
   }
 

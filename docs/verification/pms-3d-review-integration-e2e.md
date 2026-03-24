@@ -108,6 +108,9 @@ npm run test:pms:cdp:extended
 | `PMS_CDP_SUBMIT_REVIEW` | `1`：注入模拟 BRAN、填数据包名、点提交，直到出现「提资单创建成功」 |
 | `PMS_CDP_FILL_PMS_DIALOG` | `1`：点击「新增」后在所有标签页轮询尝试填写 PMS 建单弹窗 |
 | `PMS_TARGET_BRAN_REFNO` | 自动化注入的测试 BRAN RefNo，默认 **`24381_145018`**（与 PMS 数据界面展示一致，便于核对回写/列表同步）；仍可用 `24381/145018` 等其它格式 |
+| `PMS_CDP_SELECTION_MODE` | 设为 **`console`**（或 **`console_add`**，同义）时：在 plant3d 控制台输入 `= 24381/145018` 形式选中 CE，再自动点击「添加构件」，并等待构件列表出现对应 RefNo（失败则回退 mock 注入）。`postmessage` 为父页向 iframe 发 `plant3d.select_refno` |
+| `PMS_CDP_ADD_COMPONENT_READY_MS` | `console`/`postmessage` 成功后，等待「添加构件」按钮可用的超时（毫秒），默认 **45000** |
+| `PMS_CDP_ADD_COMPONENT_LIST_MS` | 点击「添加构件」后，等待列表中出现匹配 RefNo 的超时（毫秒），默认 **90000**（含 `pdmsGetUiAttr` 等请求） |
 | `PMS_MOCK_PACKAGE_NAME` / `PMS_MOCK_PROJECT_CODE` / `PMS_MOCK_PROJECT_NAME` | 提资包名、弹窗内项目代码/名称 |
 | `PMS_PLANT3D_POLL_MS` | 等待发起提资面板出现的超时（毫秒），默认 `180000` |
 | `PMS_CDP_EXTENDED_FLOW` | `1`：在提资成功后执行「PMS 可见包名 → 换 JH → 打开条目 → plant3d 校核提交」；`npm run test:pms:cdp:extended` 已带上 |
@@ -128,6 +131,16 @@ export PMS_EMBEDDED_SITE_SUBSTRING='你的-plant3d-域名'
 export PMS_CDP_SUBMIT_REVIEW=1
 export PMS_CDP_FILL_PMS_DIALOG=1
 npm run test:pms:cdp
+```
+
+**用真实 CE +「添加构件」写入列表（不用 mock）**：
+
+```bash
+export PMS_E2E_PASSWORD='********'
+export PMS_EMBEDDED_SITE_SUBSTRING='123.57.182.243'
+export PMS_CDP_SELECTION_MODE=console
+export PMS_TARGET_BRAN_REFNO='24381_145018'
+npm run test:pms:cdp:full
 ```
 
 说明：若三维页在 **跨域 iframe** 内，Playwright 无法操作内部 DOM，需改为新标签打开同源三维地址或调整嵌入方式。若后端 `createReviewTask` 失败，脚本会在提交步骤报错。
@@ -158,3 +171,86 @@ npm run test:pms:cdp
 
 - **新增** 打开的 URL 通常由平台后端调用模型中心 **embed-url** 类能力再重定向/拼接得到；联调时对照《编校审交互接口设计》中嵌入地址与 query 约定。
 - **UCode/UKey** 用于模型中心 **主动请求** 布置平台辅助数据接口，与「新增打开页」不是同一条链路；勿混测。
+- **校审工作流同步** `POST /api/review/workflow/sync`（模型中心实现）：
+  - **`action=query`**：PMS **打开/刷新** 嵌入页或单据时拉取当前工作流与意见快照；**不**在模型中心新建 `review_opinion` 记录（即使请求里带了 `comments`）。
+  - **`active` / `agree` / `return` / `stop`**：真实审批推进；可能写入意见并返回 `models` / `opinions` / `attachments`。
+- Token：`SHA256(hex)`，盐与 `form_id`、`actor.id` 规则见《编校审交互接口设计》与 `DbOption.toml` 中 `[model_center].token_secret`。
+
+### 端到端流程图（PMS ↔ 模型中心 ↔ plant3d-web）
+
+```mermaid
+flowchart TB
+  subgraph PMS[PowerPMS 平台]
+    Login[登录 / 三维校审单]
+    New[新增 → 弹窗建单]
+    List[列表 / 双击打开单据]
+  end
+
+  subgraph MC[模型中心 plant-model-gen]
+    Embed[embed-url]
+    Sync[POST /api/review/workflow/sync]
+    Aux[辅助数据 / aux-data]
+    Api[提资与业务 API]
+  end
+
+  subgraph P3D[plant3d-web 嵌入页]
+    Panel[InitiateReviewPanel / 工作区]
+  end
+
+  subgraph Plat[布置平台 / PMS 辅助接口]
+    QAR[如 POST .../HD/QueryAssistReview]
+  end
+
+  Login --> New
+  New --> Embed
+  Embed --> P3D
+  List --> Sync
+  Sync -->|action=query 只读| MC
+  Sync -->|active/agree/... 写入| MC
+  P3D --> Api
+  P3D --> Aux
+  Aux --> QAR
+```
+
+```mermaid
+sequenceDiagram
+  participant U as 用户
+  participant PMS as PowerPMS
+  participant MC as 模型中心
+  participant P3D as plant3d-web
+
+  U->>PMS: 设计交付 → 三维校审单 → 新增
+  PMS->>MC: 获取嵌入地址
+  MC-->>PMS: URL + query（form_id、用户等）
+  PMS->>P3D: 打开嵌入页
+
+  Note over PMS,MC: 打开单据 / 刷新流程（不写意见）
+  PMS->>MC: workflow/sync action=query + token
+  MC-->>PMS: data.models / opinions / attachments
+
+  Note over PMS,MC: 审批动作
+  PMS->>MC: workflow/sync action=agree|return|...
+  MC-->>PMS: 更新后快照
+```
+
+### CDP 如何模拟「发起校审」时的关联数据
+
+自动化不替代真实三维选区时，通过 **与手工「添加构件」相同的前端状态路径** 注入一条 BRAN，使 `createReviewTask` 请求里带有构件列表。
+
+1. **开启条件**（任一即可）  
+   - Playwright：`registerPlant3dAutomationReviewInitScript` 在上下文里执行 `localStorage.setItem('plant3d_automation_review','1')`。  
+   - 或 URL 带 `?automation_review=1`。
+
+2. **页面挂载后**（`InitiateReviewPanel.vue`）  
+   - 若上述条件满足，在 `window` 上挂载 `__plant3dInitiateReviewE2E.addMockComponent(refNo?, name?)`。  
+   - 内部调用 `ensureComponentSelected`：若 `selectedComponents` 中尚无该 `refNo`，则 `push` 一条 `ReviewComponent`（与用户在面板里点「添加构件」后的列表项结构一致）。
+
+3. **CDP / Playwright 调用方式**（`scripts/pms-plant3d-initiate-flow.ts`）  
+   - 在嵌入 **plant3d** 的 frame 上 `page.evaluate`，执行 `window.__plant3dInitiateReviewE2E?.addMockComponent(targetRefNo, displayName)`。  
+   - 默认 `PMS_TARGET_BRAN_REFNO`（如 `24381_145018`）与 PMS 数据界面展示对齐，便于列表/回写核对。
+
+4. **非 mock 路径**（可选）  
+   - `PMS_CDP_SELECTION_MODE=console`：在三维控制台输入 `= 24381/145018` 等形式选中 CE，再自动点「添加构件」，等待列表出现 RefNo（走真实 `pdmsGetUiAttr` 链路）。  
+   - `postmessage`：父页向 iframe 发 `plant3d.select_refno`（视部署与同源策略而定）。
+
+**结论**：CDP 的「模拟关联」= 在已开启自动化钩子的嵌入页里，直接往 **发起提资面板** 的 `selectedComponents` 写入与手工添加等价的条目；随后脚本再填包名、点「创建提资数据」等按钮，与真实用户操作序列一致。

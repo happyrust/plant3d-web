@@ -3,9 +3,9 @@ import { computed, ref, watch } from 'vue';
 
 import CollisionResultList from './CollisionResultList.vue';
 
-import type { CollisionItem, CollisionDataResponse } from '@/api/reviewApi';
+import type { CollisionItem, CollisionDataResponse, PmsCollisionItem, PmsQualityItem, PmsOtVerificationItem, PmsRuleItem, AuxDataResponse } from '@/api/reviewApi';
 
-import { reviewGetAuxData, reviewGetCollisionData } from '@/api/reviewApi';
+import { reviewGetAuxData, reviewGetCollisionData, AUX_DATA_DEFAULT_AUTH } from '@/api/reviewApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -156,16 +156,17 @@ function handleCollisionHighlight(item: CollisionItem) {
 // 辅助数据
 const AUX_UCODE_KEY = 'review_aux_ucode';
 const AUX_UKEY_KEY = 'review_aux_ukey';
-const auxUCode = ref(localStorage.getItem(AUX_UCODE_KEY) || '');
-const auxUKey = ref(localStorage.getItem(AUX_UKEY_KEY) || '');
+const auxUCode = ref(localStorage.getItem(AUX_UCODE_KEY) || AUX_DATA_DEFAULT_AUTH.uCode);
+const auxUKey = ref(localStorage.getItem(AUX_UKEY_KEY) || AUX_DATA_DEFAULT_AUTH.uKey);
 watch(auxUCode, (v) => localStorage.setItem(AUX_UCODE_KEY, v));
 watch(auxUKey, (v) => localStorage.setItem(AUX_UKEY_KEY, v));
 
 const auxProjectId = ref('');
-const auxMajor = ref('general');
+const auxMajor = ref('BZ');
 const auxLoading = ref(false);
 const auxError = ref<string | null>(null);
-const auxData = ref<Awaited<ReturnType<typeof reviewGetAuxData>> | null>(null);
+const auxData = ref<AuxDataResponse | null>(null);
+const activeAuxTab = ref<'collision' | 'quality' | 'otverification' | 'rules'>('collision');
 
 async function fetchAuxDataForCurrentTask() {
   if (!currentTask.value) return;
@@ -289,9 +290,112 @@ watch(currentTask, () => {
         </div>
         <div v-if="auxLoading" class="mt-2 text-xs text-muted-foreground">请求中...</div>
         <div v-else-if="auxError" class="mt-2 text-xs text-red-600">{{ auxError }}</div>
-        <div v-else-if="auxData" class="mt-2 text-xs text-muted-foreground">
-          返回 collision: {{ auxData.data.collision.length }} 条，total={{ auxData.total }}
-        </div>
+        <template v-else-if="auxData">
+          <div class="mt-2 flex gap-1">
+            <button v-for="tab in (['collision', 'quality', 'otverification', 'rules'] as const)" :key="tab"
+              type="button"
+              class="rounded-md px-2 py-1 text-[11px] transition-colors"
+              :class="activeAuxTab === tab ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'"
+              @click="activeAuxTab = tab">
+              {{ { collision: '碰撞', quality: '质量', otverification: '二三维', rules: '规则' }[tab] }}
+              ({{ auxData!.data[tab]?.length || 0 }})
+            </button>
+          </div>
+          <div class="mt-2 max-h-64 overflow-auto rounded-md border text-[11px]">
+            <table v-if="activeAuxTab === 'collision' && auxData!.data.collision.length > 0" class="w-full">
+              <thead class="sticky top-0 bg-muted">
+                <tr>
+                  <th class="px-2 py-1 text-left font-medium">物项1(所属)</th>
+                  <th class="px-2 py-1 text-left font-medium">物项2(所属)</th>
+                  <th class="px-2 py-1 text-left font-medium">专业</th>
+                  <th class="px-2 py-1 text-left font-medium">碰撞类型</th>
+                  <th class="px-2 py-1 text-left font-medium">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, i) in auxData!.data.collision" :key="i" class="border-t hover:bg-muted/30">
+                  <td class="px-2 py-1">{{ (item as PmsCollisionItem).First || (item as CollisionItem).ObjectOne }}</td>
+                  <td class="px-2 py-1">{{ (item as PmsCollisionItem).Second || (item as CollisionItem).ObjectTow }}</td>
+                  <td class="px-2 py-1">{{ (item as PmsCollisionItem).FirstSpeciality || (item as CollisionItem).ObjectOneMajor }}</td>
+                  <td class="px-2 py-1">{{ (item as PmsCollisionItem).TypeDesc || (item as CollisionItem).ErrorMsg }}</td>
+                  <td class="px-2 py-1">{{ (item as PmsCollisionItem).StatusDesc || (item as CollisionItem).ErrorStatus }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table v-else-if="activeAuxTab === 'quality' && auxData!.data.quality.length > 0" class="w-full">
+              <thead class="sticky top-0 bg-muted">
+                <tr>
+                  <th class="px-2 py-1 text-left font-medium">分支</th>
+                  <th class="px-2 py-1 text-left font-medium">元素</th>
+                  <th class="px-2 py-1 text-left font-medium">规则</th>
+                  <th class="px-2 py-1 text-left font-medium">专业</th>
+                  <th class="px-2 py-1 text-left font-medium">错误信息</th>
+                  <th class="px-2 py-1 text-left font-medium">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, i) in auxData!.data.quality" :key="i" class="border-t hover:bg-muted/30">
+                  <td class="px-2 py-1">{{ item.BranchName }}</td>
+                  <td class="px-2 py-1">{{ item.ElementName }}</td>
+                  <td class="px-2 py-1">{{ item.RuleName }}</td>
+                  <td class="px-2 py-1">{{ item.ProfessionalName }}</td>
+                  <td class="px-2 py-1">{{ item.ErrorMessage }}</td>
+                  <td class="px-2 py-1">{{ item.ErrorStatus }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table v-else-if="activeAuxTab === 'otverification' && auxData!.data.otverification.length > 0" class="w-full">
+              <thead class="sticky top-0 bg-muted">
+                <tr>
+                  <th class="px-2 py-1 text-left font-medium">分支</th>
+                  <th class="px-2 py-1 text-left font-medium">E3D对象</th>
+                  <th class="px-2 py-1 text-left font-medium">PID对象</th>
+                  <th class="px-2 py-1 text-left font-medium">E3D值</th>
+                  <th class="px-2 py-1 text-left font-medium">PID值</th>
+                  <th class="px-2 py-1 text-left font-medium">错误信息</th>
+                  <th class="px-2 py-1 text-left font-medium">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, i) in auxData!.data.otverification" :key="i" class="border-t hover:bg-muted/30">
+                  <td class="px-2 py-1">{{ item.BranchName }}</td>
+                  <td class="px-2 py-1">{{ item.E3DElement }}</td>
+                  <td class="px-2 py-1">{{ item.PIDElement }}</td>
+                  <td class="px-2 py-1">{{ item.E3DValue }}</td>
+                  <td class="px-2 py-1">{{ item.PIDValue }}</td>
+                  <td class="px-2 py-1">{{ item.Message }}</td>
+                  <td class="px-2 py-1">{{ item.Status }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table v-else-if="activeAuxTab === 'rules' && auxData!.data.rules.length > 0" class="w-full">
+              <thead class="sticky top-0 bg-muted">
+                <tr>
+                  <th class="px-2 py-1 text-left font-medium">所属</th>
+                  <th class="px-2 py-1 text-left font-medium">元素</th>
+                  <th class="px-2 py-1 text-left font-medium">专业</th>
+                  <th class="px-2 py-1 text-left font-medium">错误信息</th>
+                  <th class="px-2 py-1 text-left font-medium">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, i) in auxData!.data.rules" :key="i" class="border-t hover:bg-muted/30">
+                  <td class="px-2 py-1">{{ item.ChkElmOwnerName }}</td>
+                  <td class="px-2 py-1">{{ item.ChkElmName }}</td>
+                  <td class="px-2 py-1">{{ item.Department }}</td>
+                  <td class="px-2 py-1">{{ item.Message }}</td>
+                  <td class="px-2 py-1">{{ item.Status }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="p-3 text-center text-muted-foreground">
+              该类别暂无数据
+            </div>
+          </div>
+          <div class="mt-1 text-[10px] text-muted-foreground">
+            合计：碰撞 {{ auxData!.data.collision.length }}，质量 {{ auxData!.data.quality.length }}，二三维 {{ auxData!.data.otverification.length }}，规则 {{ auxData!.data.rules.length }}
+          </div>
+        </template>
       </div>
     </div>
   </div>

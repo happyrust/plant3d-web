@@ -1,22 +1,19 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 
 import { reviewGetEmbedUrl } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
 import DashboardLayout from '@/components/dashboard/DashboardLayout.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
-import RibbonBar from '@/components/ribbon/RibbonBar.vue';
+import HierarchicalMenuBar from '@/components/ribbon/HierarchicalMenuBar.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 
-const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
-const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
-
-const extensionHeight = computed(() => (ribbonCollapsed.value ? 32 : 124));
+const extensionHeight = 48;
 
 const urlParams = new URLSearchParams(window.location.search);
 const showBenchmark = urlParams.get('benchmark') === 'true';
@@ -48,11 +45,11 @@ async function handleEmbedTest() {
     <DashboardLayout v-if="!currentProject" />
     
     <template v-else>
-      <v-app-bar class="ribbon-app-bar"
+      <v-app-bar class="ribbon-app-bar hierarchical-app-bar"
         :height="0"
         :extension-height="extensionHeight">
         <template #extension>
-          <RibbonBar ref="ribbonBarRef" class="w-full">
+          <HierarchicalMenuBar class="w-full">
             <template #header-right>
               <div class="flex items-center gap-2 px-2">
                 <v-btn size="small"
@@ -73,7 +70,7 @@ async function handleEmbedTest() {
                 <UserAvatar />
               </div>
             </template>
-          </RibbonBar>
+          </HierarchicalMenuBar>
         </template>
       </v-app-bar>
 
@@ -94,12 +91,8 @@ async function handleEmbedTest() {
   transition: height 0.2s ease;
 }
 
-.ribbon-app-bar.ribbon-collapsed {
-  height: 96px !important;
-}
-
-.ribbon-app-bar.ribbon-collapsed .v-toolbar__extension {
-  height: 32px !important;
-  min-height: 32px !important;
+.ribbon-app-bar.hierarchical-app-bar .v-toolbar__extension {
+  height: 48px !important;
+  min-height: 48px !important;
 }
 </style>

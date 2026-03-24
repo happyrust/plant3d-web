@@ -45,6 +45,7 @@ import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDispla
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
 import { useMbdPipeAnnotationThree } from '@/composables/useMbdPipeAnnotationThree';
+import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
@@ -88,6 +89,7 @@ const overlayContainer = ref<HTMLElement | null>(null);
 
 const store = useToolStore();
 const consoleStore = useConsoleStore();
+const modelLoadStatus = useModelLoadStatus();
 const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
 const spatialQueryStore = useSpatialQuery();
@@ -126,6 +128,22 @@ function mergeRootRefnoWithVisibleRefnos(rootRefno: string, visibleRefnos: strin
     if (normalized) merged.add(normalized);
   }
   return Array.from(merged);
+}
+
+function isTruthyUrlQueryFlag(raw: string | null | undefined): boolean {
+  const t = String(raw ?? '').trim().toLowerCase();
+  return t === '1' || t === 'true' || t === 'yes';
+}
+
+/** 与 GET /api/mbd/pipe 的 debug 查询参数对齐；生产包也可用 ?mbd_debug=1 拉取 debug_info */
+function isMbdApiDebugFromUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const q = new URLSearchParams(window.location.search);
+    return isTruthyUrlQueryFlag(q.get('mbd_debug'));
+  } catch {
+    return false;
+  }
 }
 
 function readMbdDimModeFromUrl(): 'classic' | 'rebarviz' | null {
@@ -298,15 +316,17 @@ function onGlobalEdgeThresholdInput(value: number | string): void {
   }
 }
 
-// URL 预加载：在现有 Viewer 页面中通过 ?mbd_pipe=... 自动触发 MBD 管道标注。
-// 示例：/?output_project=AvevaMarineSample&mbd_pipe=24381/145018
+// URL 预加载：通过 ?mbd_refno= 或 ?mbd_pipe= 自动触发 MBD 管道标注（mbd_refno 优先）。
+// 示例：/?output_project=AvevaMarineSample&mbd_refno=24381_145018
+// 兼容：/?output_project=AvevaMarineSample&mbd_pipe=24381/145018
+// 调试：加 &mbd_debug=1 可在非 dev 构建下仍请求后端 debug_info（并打印到控制台）
 (() => {
   try {
     const q = new URLSearchParams(window.location.search);
     const demo = String(q.get('dtx_demo') || '').toLowerCase();
     if (demo === 'primitives') return;
 
-    const raw = q.get('mbd_pipe');
+    const raw = q.get('mbd_refno') ?? q.get('mbd_pipe');
     const refno = raw ? String(raw).trim() : '';
     if (!refno) return;
     store.requestMbdPipeAnnotation(refno);
@@ -3553,7 +3573,7 @@ onMounted(async () => {
           mode: mbdPipeVis.mbdViewMode.value,
           // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
           source: 'db',
-          debug: isDev,
+          debug: isDev || isMbdApiDebugFromUrl(),
           dbno: dbno ?? undefined,
           batch_id: batchId,
           // 首期默认值：对齐 MBD 默认
@@ -3576,6 +3596,9 @@ onMounted(async () => {
           bend_mode: 'facecenter',
         });
         if (resp.success && resp.data) {
+          if (resp.data.debug_info && (isDev || isMbdApiDebugFromUrl())) {
+            console.info('[mbd-pipe] debug_info', resp.data.debug_info);
+          }
           mbdPipeVis.renderBranch(resp.data);
           mbdPipeVis.flyTo();
           // 将 MBD 标注注册到交互系统
@@ -3989,6 +4012,28 @@ onUnmounted(() => {
       <div>{{ activeMeasureStatusText }}</div>
       <div v-if="activeMeasureHoverText" class="mt-1 text-muted-foreground">
         {{ activeMeasureHoverText }}
+      </div>
+    </div>
+
+    <div v-if="modelLoadStatus.state.value.visible"
+      class="pointer-events-none absolute bottom-2 left-2 w-[min(28rem,calc(100%-1rem))] rounded-md border border-border bg-background/90 px-3 py-2 text-xs text-foreground shadow-sm backdrop-blur"
+      style="z-index: 940">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="truncate font-medium">
+            {{ modelLoadStatus.state.value.message || '正在加载模型...' }}
+          </div>
+          <div v-if="modelLoadStatus.state.value.currentRefno" class="truncate text-[11px] text-muted-foreground">
+            {{ modelLoadStatus.state.value.currentRefno }}
+          </div>
+        </div>
+        <div class="shrink-0 tabular-nums text-muted-foreground">
+          {{ modelLoadStatus.state.value.progress }}%
+        </div>
+      </div>
+      <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/80">
+        <div class="h-full rounded-full bg-primary transition-all duration-200"
+          :style="{ width: `${modelLoadStatus.state.value.progress}%` }" />
       </div>
     </div>
 

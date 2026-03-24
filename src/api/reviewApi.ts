@@ -1097,6 +1097,11 @@ export async function reviewSyncImport(
 
 // ============ 辅助校审数据 API ============
 
+export const AUX_DATA_DEFAULT_AUTH = {
+  uCode: 'ZY',
+  uKey: 'swbz-token-e74fbea2427981f918d314d6583c3d24',
+} as const;
+
 export type CollisionQueryParams = {
   project_id?: string;
   refno?: string;
@@ -1104,6 +1109,34 @@ export type CollisionQueryParams = {
   offset?: number;
 };
 
+/** PMS 碰撞数据（PascalCase，与 PMS /HD/QueryAssistReview 响应一致） */
+export type PmsCollisionItem = {
+  FirstOwner: string;
+  First: string;
+  SecondOwner: string;
+  Second: string;
+  FirstModTime: string;
+  SecondModTime: string;
+  FirstSpeciality: string;
+  SecondSpeciality: string;
+  TypeDesc: string;
+  Position: string;
+  FirstResSpeciality: string;
+  SecondResSpeciality: string;
+  ResPerson: string;
+  CheckTime: string;
+  Suggestion: string;
+  HandleUser: string;
+  Processing: string;
+  StatusDesc: string;
+  IsFinished: string;
+  IsInsuClashed: string;
+  Remarks: string;
+  Versions: string;
+  [key: `RedundantField${number}`]: string;
+};
+
+/** 内部碰撞数据（兼容旧格式） */
 export type CollisionItem = {
   ObjectOneLoc: string;
   ObjectOne: string;
@@ -1117,6 +1150,54 @@ export type CollisionItem = {
   UpUsr?: string;
   UpTime?: string;
   ErrorStatus: string;
+};
+
+/** PMS 质量校验数据 */
+export type PmsQualityItem = {
+  BranchName: string;
+  ElementName: string;
+  RuleName: string;
+  RuleDescription: string;
+  ProfessionalName: string;
+  RuleType: string;
+  ErrorMessage: string;
+  CheckUser: string;
+  CheckTime: string;
+  ModifyUser: string;
+  ModifyTime: string;
+  ErrorStatus: string;
+  [key: `RedundantField${number}`]: string;
+};
+
+/** PMS 二三维校验数据 */
+export type PmsOtVerificationItem = {
+  BranchName: string;
+  Department: string;
+  E3DElement: string;
+  PIDElement: string;
+  E3DValue: string;
+  PIDValue: string;
+  Message: string;
+  CheckUser: string;
+  CheckTime: string;
+  ModifyUser: string;
+  ModifyTime: string;
+  Status: string;
+  [key: `RedundantField${number}`]: string;
+};
+
+/** PMS 规则校验数据 */
+export type PmsRuleItem = {
+  ChkElmOwnerName: string;
+  ChkElmName: string;
+  Department: string;
+  Message: string;
+  CheckUser: string;
+  CheckTime: string;
+  ModifyUser: string;
+  ModifyTime: string;
+  Status: string;
+  [key: `RedundantField${number}`]: string;
 };
 
 export type CollisionDataResponse = {
@@ -1146,12 +1227,13 @@ export type AuxDataRequest = {
   model_refnos: string[];
   major: string;
   requester_id: string;
-  page: number;
-  page_size: number;
+  page: number | string;
+  page_size: number | string;
   form_id: string;
-  new_search?: boolean;
+  new_search?: boolean | string;
 };
 
+/** 后端代理响应格式 */
 export type AuxDataResponse = {
   code: number;
   message: string;
@@ -1159,20 +1241,37 @@ export type AuxDataResponse = {
   page_size: number;
   total: number;
   data: {
-    collision: CollisionItem[];
-    quality: unknown[];
-    otverification: unknown[];
-    rules: unknown[];
+    collision: (CollisionItem | PmsCollisionItem)[];
+    quality: PmsQualityItem[];
+    otverification: PmsOtVerificationItem[];
+    rules: PmsRuleItem[];
+  };
+};
+
+/** PMS 原始响应格式（POST /HD/QueryAssistReview） */
+export type PmsAuxDataResponse = {
+  code: number;
+  message: string;
+  pagination: {
+    page: number;
+    total: number;
+    page_size: number;
+  };
+  data: {
+    collision: PmsCollisionItem[];
+    quality: PmsQualityItem[];
+    otverification: PmsOtVerificationItem[];
+    rules: PmsRuleItem[];
   };
 };
 
 /**
- * 获取辅助校审数据（当前后端使用 UCode/UKey Header 做简单鉴权）
+ * 获取辅助校审数据（后端代理 → PMS /HD/QueryAssistReview）
  * POST /api/review/aux-data
  */
 export async function reviewGetAuxData(
   request: AuxDataRequest,
-  auth: { uCode: string; uKey: string }
+  auth: { uCode: string; uKey: string } = AUX_DATA_DEFAULT_AUTH,
 ): Promise<AuxDataResponse> {
   return await fetchJson<AuxDataResponse>('/api/review/aux-data', {
     method: 'POST',
@@ -1182,4 +1281,27 @@ export async function reviewGetAuxData(
     },
     body: JSON.stringify(request),
   });
+}
+
+/**
+ * 直接调用 PMS 辅助校审数据接口（跳过后端代理）
+ * 仅用于调试/联调，生产环境应走后端代理
+ */
+export async function reviewGetAuxDataFromPms(
+  pmsBaseUrl: string,
+  request: AuxDataRequest,
+  auth: { uCode: string; uKey: string } = AUX_DATA_DEFAULT_AUTH,
+): Promise<PmsAuxDataResponse> {
+  const url = `${pmsBaseUrl.replace(/\/$/, '')}/HD/QueryAssistReview`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      UCode: auth.uCode,
+      UKey: auth.uKey,
+    },
+    body: JSON.stringify(request),
+  });
+  if (!resp.ok) throw new Error(`PMS 接口返回 ${resp.status}`);
+  return await resp.json() as PmsAuxDataResponse;
 }

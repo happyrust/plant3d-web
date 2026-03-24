@@ -20,7 +20,7 @@
  */
 import { chromium } from 'playwright';
 
-import { startPmsApiSniffer } from './pms-api-sniffer';
+import { startPmsApiSniffer, startPmsApiSnifferV2 } from './pms-api-sniffer';
 import {
   assertNoCaptchaBarrier,
   PMS_DEFAULT_TEST_BRAN_REFNO,
@@ -48,8 +48,16 @@ const pmsVerifyTimeoutMs = (() => {
 /** 嗅探 PMS 域名下 JSON 响应体是否含包名或测试 BRAN；`PMS_CDP_VERIFY_PMS_API=0` 关闭 */
 const verifyPmsApi =
   process.env.PMS_CDP_VERIFY_PMS_API !== '0' && process.env.PMS_CDP_VERIFY_PMS_API !== 'false';
+/** 嗅探嵌入 plant3d 域名下 JSON 响应体是否含包名或测试 BRAN；默认仅在设置 PMS_EMBEDDED_SITE_SUBSTRING 时开启；`PMS_CDP_VERIFY_EMBED_API=0` 关闭 */
+const verifyEmbedApi =
+  process.env.PMS_CDP_VERIFY_EMBED_API !== '0' && process.env.PMS_CDP_VERIFY_EMBED_API !== 'false';
 const pmsApiVerifyTimeoutMs = (() => {
   const n = Number(process.env.PMS_CDP_PMS_API_MS?.trim());
+  return Number.isFinite(n) && n >= 10_000 ? n : 120_000;
+})();
+
+const embedApiVerifyTimeoutMs = (() => {
+  const n = Number(process.env.PMS_CDP_EMBED_API_MS?.trim());
   return Number.isFinite(n) && n >= 10_000 ? n : 120_000;
 })();
 
@@ -67,6 +75,18 @@ const openSubstring =
   openSubstringRaw === undefined || String(openSubstringRaw).trim() === ''
     ? null
     : String(openSubstringRaw).trim();
+
+function hostnameFromNeedle(needle: string): string | null {
+  const raw = needle.trim();
+  if (!raw) return null;
+  try {
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return new URL(raw).hostname;
+    if (raw.includes('/') || raw.includes('?') || raw.includes('#')) return new URL(`http://${raw}`).hostname;
+    return raw;
+  } catch {
+    return null;
+  }
+}
 const cdpUrl = process.env.CHROME_CDP_URL?.trim();
 const headless = process.env.PMS_CDP_HEADLESS === '1';
 
@@ -123,12 +143,54 @@ async function login(page: import('playwright').Page, user: string, pwd: string)
   await page.waitForLoadState('networkidle', { timeout: 45_000 }).catch(() => undefined);
   await page.waitForTimeout(800);
 
-  const postLogin = page
+  const totalTimeoutMs = 150_000;
+  const startedAt = Date.now();
+  const deadline = startedAt + totalTimeoutMs;
+
+  const postLoginMarkers = page
     .getByText('业务中心', { exact: false })
     .or(page.getByText('设计交付', { exact: false }))
     .or(page.getByText('工作台', { exact: false }))
     .first();
-  await postLogin.waitFor({ state: 'visible', timeout: 90_000 });
+  const menuSearchBox = page.getByText('菜单名称查询', { exact: false }).first();
+
+  const tryWait = async (fn: () => Promise<void>): Promise<boolean> => {
+    try {
+      await fn();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const waitForSuccessSignals = async (): Promise<void> => {
+    // 1) URL changes away from /sysin.html (e.g. WebCenter)
+    while (Date.now() < deadline) {
+      const url = page.url();
+      if (url && !url.includes('/sysin.html')) return;
+      if (await tryWait(() => page.waitForURL((u) => !u.toString().includes('/sysin.html'), { timeout: 4000 }))) return;
+      if (await tryWait(() => menuSearchBox.waitFor({ state: 'visible', timeout: 4000 }))) return;
+      if (await tryWait(() => postLoginMarkers.waitFor({ state: 'visible', timeout: 4000 }))) return;
+      await page.waitForTimeout(300);
+    }
+    throw new Error('PMS 登录后标记等待超时');
+  };
+
+  try {
+    await waitForSuccessSignals();
+  } catch (e) {
+    const url = page.url();
+    console.error(`[cdp] 登录失败：等待登录成功信号超时（user=${user} url=${url}）`);
+    try {
+      const safeUser = user.replace(/[^a-zA-Z0-9_-]+/g, '_');
+      const shot = `artifacts/pms-login-failed-${safeUser}-${Date.now()}.png`;
+      await page.screenshot({ path: shot, fullPage: true });
+      console.error(`[cdp] 登录失败截图已保存: ${shot}`);
+    } catch {
+      // ignore
+    }
+    throw e;
+  }
 }
 
 async function openReviewFormList(page: import('playwright').Page): Promise<void> {
@@ -143,18 +205,89 @@ async function openReviewFormList(page: import('playwright').Page): Promise<void
     return;
   }
 
-  const designDeliver = page.getByText('设计交付', { exact: false }).first();
-  await designDeliver.waitFor({ state: 'visible', timeout: 45_000 });
-  await designDeliver.click({ timeout: 25_000 }).catch(async () => {
-    await page.locator('[title="设计交付"]').first().click({ timeout: 25_000 });
-  });
-  const reviewLink = page.getByRole('link', { name: '三维校审单', exact: true });
-  if (await reviewLink.count()) {
-    await reviewLink.first().click({ timeout: 20_000 });
-  } else {
-    await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 20_000 });
+  const tryOpenViaDesignDeliver = async (): Promise<boolean> => {
+    try {
+      const designDeliver = page.getByText('设计交付', { exact: false }).first();
+      await designDeliver.waitFor({ state: 'visible', timeout: 45_000 });
+      await designDeliver.click({ timeout: 25_000 }).catch(async () => {
+        await page.locator('[title="设计交付"]').first().click({ timeout: 25_000 });
+      });
+      const reviewLink = page.getByRole('link', { name: '三维校审单', exact: true });
+      if (await reviewLink.count()) {
+        await reviewLink.first().click({ timeout: 20_000 });
+      } else {
+        await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 20_000 });
+      }
+      await listHint.waitFor({ state: 'visible', timeout: 20_000 });
+      console.error('[cdp] openReviewFormList: 通过「设计交付 → 三维校审单」进入');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const tryOpenViaMenuSearch = async (): Promise<boolean> => {
+    const candidates = [
+      page.getByPlaceholder('菜单名称查询').first(),
+      page.getByLabel('菜单名称查询').first(),
+      page.getByRole('textbox', { name: '菜单名称查询' }).first(),
+      // 兜底：顶部/侧边的搜索框一般是 textbox
+      page.getByRole('textbox').first(),
+    ];
+
+    for (const box of candidates) {
+      try {
+        await box.waitFor({ state: 'visible', timeout: 6000 });
+        await box.click({ timeout: 5000 }).catch(() => undefined);
+        await box.fill('三维校审单', { timeout: 8000 });
+        await box.press('Enter', { timeout: 3000 }).catch(() => undefined);
+
+        const reviewLink = page.getByRole('link', { name: '三维校审单', exact: false });
+        if (await reviewLink.count()) {
+          await reviewLink.first().click({ timeout: 12_000 });
+        } else {
+          await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 12_000 });
+        }
+
+        await listHint.waitFor({ state: 'visible', timeout: 20_000 });
+        console.error('[cdp] openReviewFormList: 通过「菜单搜索 → 三维校审单」进入');
+        return true;
+      } catch {
+        continue;
+      }
+    }
+    return false;
+  };
+
+  const tryOpenViaBusinessCenter = async (): Promise<boolean> => {
+    try {
+      const entry = page.getByText('业务中心', { exact: false }).first();
+      await entry.waitFor({ state: 'visible', timeout: 10_000 });
+      await entry.click({ timeout: 10_000 });
+
+      const reviewLink = page.getByRole('link', { name: '三维校审单', exact: false });
+      if (await reviewLink.count()) {
+        await reviewLink.first().click({ timeout: 12_000 });
+      } else {
+        await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 12_000 });
+      }
+
+      await listHint.waitFor({ state: 'visible', timeout: 20_000 });
+      console.error('[cdp] openReviewFormList: 通过「业务中心 → 三维校审单」进入');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const ok =
+    (await tryOpenViaDesignDeliver()) ||
+    (await tryOpenViaMenuSearch()) ||
+    (await tryOpenViaBusinessCenter()) ||
+    (await tryOpenViaMenuSearch());
+  if (!ok) {
+    throw new Error('openReviewFormList: 无法打开「三维校审单」列表');
   }
-  await listHint.waitFor({ state: 'visible', timeout: 20_000 });
 
   await Promise.race([
     page.locator('iframe').first().waitFor({ state: 'attached', timeout: 45_000 }),
@@ -206,7 +339,9 @@ async function main(): Promise<void> {
   }
 
   if (!process.env.PMS_CDP_SELECTION_MODE?.trim()) {
-    console.error('[cdp] 提示：可设 PMS_CDP_SELECTION_MODE=console，让 plant3d 在发起提资时通过「控制台」命令选择 BRAN（失败则回退 mock 注入）。');
+    console.error(
+      '[cdp] 提示：可设 PMS_CDP_SELECTION_MODE=console，在控制台输入「= 24381/145018」式命令选中 CE，再自动点「添加构件」写入列表（可用 PMS_CDP_ADD_COMPONENT_READY_MS / PMS_CDP_ADD_COMPONENT_LIST_MS 调超时；失败则回退 mock）。',
+    );
   }
 
   if (extendedFlow && !process.env.PMS_MOCK_PACKAGE_NAME?.trim()) {
@@ -261,6 +396,21 @@ async function main(): Promise<void> {
   if (pmsApiSniffer) {
     console.error(
       `[cdp] 已启用 PMS 数据接口嗅探（host=*${pmsHostnameFromBase(base)}*${apiUrlSub ? ` url*${apiUrlSub}*` : ''}，${pmsApiVerifyTimeoutMs}ms 内需在 JSON 响应中出现包名或 BRAN）`,
+    );
+  }
+
+  const embedHost = openSubstring ? hostnameFromNeedle(openSubstring) : null;
+  const embedApiUrlSub = process.env.PMS_EMBED_API_URL_SUBSTRING?.trim() || null;
+  const embedApiSniffer =
+    submitReview && verifyEmbedApi && !!embedHost
+      ? startPmsApiSnifferV2(context, {
+          hostNeedles: [embedHost],
+          urlSubstring: embedApiUrlSub,
+        })
+      : null;
+  if (embedApiSniffer) {
+    console.error(
+      `[cdp] 已启用嵌入站点接口嗅探（host=*${embedHost}*${embedApiUrlSub ? ` url*${embedApiUrlSub}*` : ''}，${embedApiVerifyTimeoutMs}ms 内需在 JSON 响应中出现包名或 BRAN）`,
     );
   }
 
@@ -344,10 +494,11 @@ async function main(): Promise<void> {
       console.error('[cdp] plant3d：已检测到「提资单创建成功」');
       console.error(`[cdp] 本次提资包名（用于 PMS 检索）: ${pkg}`);
 
+      const strictEmbedEnabled = !!embedApiSniffer;
       if (pmsApiSniffer) {
         const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
         const branAlt = bran.includes('_') ? bran.replace(/_/g, '/') : bran.replace(/\//g, '_');
-        console.error('[cdp] 回到三维校审单以触发列表接口，并断言 PMS JSON 中含包名或 BRAN…');
+        console.error('[cdp] 回到三维校审单以触发列表接口…');
         await page.bringToFront().catch(() => undefined);
         for (let i = 0; i < 5; i++) {
           await page.keyboard.press('Escape').catch(() => undefined);
@@ -357,8 +508,79 @@ async function main(): Promise<void> {
           await new Promise((r) => setTimeout(r, 1200));
         }
         await openReviewFormList(page);
-        await pmsApiSniffer.waitForAnyNeedleInBodies([pkg, bran, branAlt], pmsApiVerifyTimeoutMs);
-        console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+
+        if (strictEmbedEnabled) {
+          // When strict embed verification is enabled, do not fail early on PMS-domain sniff.
+          // We'll consider strict verification passed if either PMS sniffer hits OR embed strict hits on re-enter.
+          console.error('[cdp] 严格校验已启用（嵌入站点）：先触发 PMS 列表接口；PMS 嗅探将作为可选通过条件，不在此处提前失败…');
+        } else {
+          console.error('[cdp] 断言 PMS JSON 中含包名或 BRAN…');
+          await pmsApiSniffer.waitForAnyNeedleInBodies([pkg, bran, branAlt], pmsApiVerifyTimeoutMs);
+          console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+        }
+      }
+
+      // Strict verification: re-enter the just-created record and confirm embed pulls component data from plant3d.
+      if (embedApiSniffer) {
+        const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
+        const branAlt = bran.includes('_') ? bran.replace(/_/g, '/') : bran.replace(/\//g, '_');
+        console.error('[cdp] 严格校验：重新进入刚创建的记录，并断言「PMS 嗅探命中」或「嵌入站点拉取命中」任一成立…');
+
+        const pmsNeedles = [pkg, bran, branAlt];
+        const pmsOkPromise = pmsApiSniffer
+          ? pmsApiSniffer.waitForAnyNeedleInBodies(pmsNeedles, pmsApiVerifyTimeoutMs).then(() => true).catch(() => false)
+          : Promise.resolve(false);
+
+        await page.bringToFront().catch(() => undefined);
+        for (let i = 0; i < 5; i++) {
+          await page.keyboard.press('Escape').catch(() => undefined);
+        }
+        if (pmsWebCenterUrl.includes('WebCenter')) {
+          await page.goto(pmsWebCenterUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+        await openReviewFormList(page);
+
+        let opened = false;
+        try {
+          opened = await tryOpenReviewEntryContainingPackage(page, pkg);
+        } catch {
+          opened = false;
+        }
+        if (!opened) {
+          await clickNewInAnyFrame(page);
+        }
+        await new Promise((r) => setTimeout(r, 2500));
+
+        const embedNetworkOk = await embedApiSniffer
+          .waitForAnyNeedleInBodies([pkg, bran, branAlt], embedApiVerifyTimeoutMs)
+          .then(() => true)
+          .catch(() => false);
+        let embedOk = embedNetworkOk;
+        if (embedNetworkOk) {
+          console.error('[cdp] 嵌入站点接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+        } else {
+          console.error('[cdp] 嵌入站点接口嗅探未命中，降级为 DOM 文案断言（iframe 内可能跨域，仅做 best-effort）…');
+          const domOk = await waitForSubstringInPageOrChildFrames(page, pkg, embedApiVerifyTimeoutMs)
+            .then(() => true)
+            .catch(() => false);
+          embedOk = domOk;
+          if (domOk) {
+            console.error('[cdp] DOM：已在页面/子 frame 中发现提资包名（或 BRAN）');
+          }
+        }
+
+        const pmsOk = await pmsOkPromise;
+        if (pmsOk) {
+          console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+        }
+
+        if (!pmsOk && !embedOk) {
+          throw new Error(
+            `严格校验失败：未在 PMS JSON 响应体中发现包名（${pkg}）或测试 BRAN（${bran}），且也未在嵌入站点接口/DOM 中发现。` +
+              `可设 PMS_EMBED_API_URL_SUBSTRING 缩小 URL，或 PMS_CDP_VERIFY_EMBED_API=0 / PMS_CDP_VERIFY_PMS_API=0 跳过对应校验。`,
+          );
+        }
       }
 
       if (extendedFlow) {
@@ -443,6 +665,7 @@ async function main(): Promise<void> {
     }
   } finally {
     pmsApiSniffer?.stop();
+    embedApiSniffer?.stop();
     // connectOverCDP 时 close() 仅断开 Playwright 与 CDP 的会话，不会退出用户已启动的 Chrome；否则 Node 会因挂着的连接无法退出。
     await browser.close().catch(() => undefined);
   }

@@ -635,6 +635,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     // 先同步树侧 eye（子节点应跟随父节点变化），再异步应用到三维与 instances.json
     if (!DEBUG.skipTreeCascade) {
       const t2 = DEBUG.logTiming ? performance.now() : 0;
+      await ensureDescendantStateLoaded(rootId, desiredState, () => seq === setVisibleSeq);
       await setCheckStateDeep(rootId, desiredState, () => seq === setVisibleSeq);
       if (DEBUG.logTiming) {
         console.log('[pdms-tree][perf] apply tree checkState', { refno: rootId, ms: performance.now() - t2 });
@@ -674,6 +675,40 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
       await setSceneVisibleInBatches(dedup, visible);
       if (DEBUG.logTiming) {
         console.log('[pdms-tree][perf] apply scene visible', { refno: rootId, count: dedup.length, ms: performance.now() - t1 });
+      }
+    }
+  }
+
+  async function ensureDescendantStateLoaded(
+    rootId: string,
+    desiredState: CheckState,
+    shouldContinue?: () => boolean,
+  ) {
+    if (desiredState === 'indeterminate') return;
+    const queue: string[] = [rootId];
+    const visited = new Set<string>();
+
+    while (queue.length > 0) {
+      if (shouldContinue && !shouldContinue()) return;
+      const currentId = queue.shift();
+      if (!currentId || visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      const node = nodesById.value[currentId];
+      if (!node) continue;
+
+      const expectedChildren = childrenCountById.value.get(currentId) ?? 0;
+      if (node.childrenIds.length === 0 && expectedChildren > 0) {
+        await ensureChildrenLoaded(currentId);
+        if (shouldContinue && !shouldContinue()) return;
+      }
+
+      const refreshedNode = nodesById.value[currentId];
+      if (!refreshedNode) continue;
+
+      for (const childId of refreshedNode.childrenIds) {
+        checkStateById.value.set(childId, desiredState);
+        queue.push(childId);
       }
     }
   }
