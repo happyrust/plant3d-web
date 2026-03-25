@@ -398,4 +398,46 @@ describe('InitiateReviewPanel form binding', () => {
     app.unmount();
     host.remove();
   });
+
+  it('shows embed form lineage and restored task summary for designer landing', async () => {
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-DESIGNER-1',
+      userToken: 'token-1',
+      userId: 'SJ',
+      projectId: 'AvevaMarineSample',
+      isEmbedMode: true,
+    }));
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'designer',
+      formId: 'FORM-DESIGNER-1',
+      restoreStatus: 'matched',
+      restoredTaskId: 'task-embed-1',
+      restoredTaskSummary: {
+        title: '外部单据已绑定任务',
+        status: 'draft',
+        currentNode: 'sj',
+      },
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview', 'myTasks'],
+    }));
+
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel),
+    });
+    app.mount(host);
+    await nextTick();
+
+    expect(host.textContent).toContain('FORM-DESIGNER-1');
+    expect(host.textContent).toContain('外部单据已绑定任务');
+    expect(host.textContent).toContain('draft');
+    expect(host.textContent).toContain('sj');
+
+    app.unmount();
+    host.remove();
+  });
 });

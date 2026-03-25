@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue';
 
-import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-vue-next';
+import { ChevronDown, ChevronRight, Eye, EyeOff, LoaderCircle } from 'lucide-vue-next';
 
 import { type CheckState, type FlatRow } from '@/composables/useModelTree';
 import { getPdmsTypeIconUrl } from '@/lib/pdmsTypeIcon';
@@ -13,6 +13,7 @@ const props = defineProps<{
   expanded: boolean;
   selected: boolean;
   checkState: CheckState;
+  loading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -124,9 +125,10 @@ onUnmounted(() => {
         <div class="truncate" :class="isNameFallback ? 'text-muted-foreground text-xs' : 'font-medium'">{{ displayName }}</div>
       </div>
 
-      <button type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon ? 'opacity-100' : 'opacity-0'" @mousedown.stop @click="onToggleVisible">
+      <button type="button" class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus:opacity-100 transition-opacity disabled:cursor-wait disabled:opacity-100" :class="!isVisible ? 'opacity-100 text-destructive/70' : showEyeIcon || props.loading ? 'opacity-100' : 'opacity-0'" :disabled="props.loading" @mousedown.stop @click="onToggleVisible">
+        <LoaderCircle v-if="props.loading" class="h-3.5 w-3.5 animate-spin" />
         <Eye v-if="isVisible" class="h-3.5 w-3.5" />
-        <EyeOff v-else class="h-3.5 w-3.5" />
+        <EyeOff v-else-if="!props.loading" class="h-3.5 w-3.5" />
       </button>
     </div>
   </div>

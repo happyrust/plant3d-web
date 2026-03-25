@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 
-export type LogType = 'input' | 'output' | 'error' | 'info';
+export type LogType = 'input' | 'output' | 'error' | 'info' | 'warning';
 
 export type ConsoleLog = {
     id: string;

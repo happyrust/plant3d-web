@@ -14,6 +14,8 @@
 ### Changed
 
 - 默认开启 xeokit 边线显示（`scene.edgeMaterial.edges = true`），并设置边线颜色/透明度/宽度为更适合 CAD/BIM 观感的默认值。
+- 新增/优化 embed 模式启动链路：按 `form_id + 角色` 恢复工作台落点（设计侧保留发起提资，校核/审核/批准侧进入审核面板），并支持 `form_id` 无任务匹配时展示明确空态。
+- 拆分并接入 embed 恢复 helper（`embedContextRestore`），统一处理 reviewer/myTasks 任务恢复与落点激活策略，避免项目切换时误入 viewer/modelTree。
 
 ### Fixed
 
@@ -27,3 +29,6 @@
   - 背景清屏色从纯白调整为浅灰，提升对比度与层次感。
   - 预打包实例颜色 `colors` 支持自动归一化：当检测到 RGBA 分量大于 1 时，按 255 缩放到 0..1，避免颜色被 clamp 到 1 导致材质偏白。
 - 修复若干现有测距与 Vue 组件遗留验证错误
+- 优化 `useUserStore` 的 embed 用户身份收口逻辑：若后端 canonical user 已就绪，不再直接覆盖为 URL 中 `user_id`，降低 reviewer 任务查询因身份错配导致的 `form_id` 恢复失败。
+- Reviewer 与设计侧 embed 空态展示增强：`ReviewPanel` 与 `InitiateReviewPanel` 增加 form lineage、当前任务摘要与未绑定任务提示，提升打开单据时的可识别性。
+- 修正 embed 初始化时任务恢复顺序，先完成用户与任务加载再做 restore，确保 `form_id` 命中后的 `currentTask` 恢复稳定。

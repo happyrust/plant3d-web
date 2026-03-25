@@ -31,6 +31,14 @@ import type {
   MbdCutTubiDto,
   MbdDimDto,
   MbdDimKind,
+  MbdLaidOutAngleDto,
+  MbdLaidOutBendDto,
+  MbdLaidOutFittingDto,
+  MbdLaidOutLinearDimDto,
+  MbdLaidOutSlopeDto,
+  MbdLaidOutTagDto,
+  MbdLaidOutWeldDto,
+  MbdPipeLayoutResult,
   MbdFittingDto,
   MbdLayoutHint,
   MbdSlopeDto,
@@ -84,7 +92,7 @@ export type MbdBendDisplayMode = 'size' | 'angle';
 export type UseMbdPipeAnnotationThreeReturn = {
   /** MBD 面板当前页签（仅 UI 状态） */
   uiTab: Ref<MbdPipeUiTab>;
-  /** 语义模式：construction=施工表达；inspection=几何校核 */
+  /** 语义模式：layout_first=后台排版优先；construction=施工表达；inspection=几何校核 */
   mbdViewMode: Ref<MbdPipeViewMode>;
 
   /** 尺寸文字来源：backend=用后端 text；auto=按当前单位/精度自动计算 */
@@ -315,6 +323,21 @@ function clampNumber(
   return Math.max(min, Math.min(max, v));
 }
 
+function resolveLaidOutLinearGeometry(item: MbdLaidOutLinearDimDto) {
+  const dimLineStart = toVector3(item.dim_line_start ?? null);
+  const dimLineEnd = toVector3(item.dim_line_end ?? null);
+  if (!dimLineStart || !dimLineEnd) return null;
+  return {
+    dimLineStart,
+    dimLineEnd,
+    extensionLine1Start: toVector3(item.extension_line_1_start ?? null),
+    extensionLine1End: toVector3(item.extension_line_1_end ?? null),
+    extensionLine2Start: toVector3(item.extension_line_2_start ?? null),
+    extensionLine2End: toVector3(item.extension_line_2_end ?? null),
+    textAnchor: toVector3(item.text_anchor ?? null),
+  };
+}
+
 function computeFlyToPositionFromBox(box: Box3): {
   position: Vector3;
   target: Vector3;
@@ -356,6 +379,17 @@ function toVector3(vec?: ApiVec3 | null): Vector3 | null {
   const [x, y, z] = vec;
   if (![x, y, z].every((v) => Number.isFinite(v))) return null;
   return new Vector3(x, y, z);
+}
+
+function resolveLaidOutLabelOffset(vec?: ApiVec3 | null): Vector3 | null {
+  return toVector3(vec ?? null);
+}
+
+function shouldUseLayoutFirstResult(
+  mode: MbdPipeViewMode,
+  data: MbdPipeData,
+): data is MbdPipeData & { layout_result: MbdPipeLayoutResult } {
+  return mode === 'layout_first' && !!data.layout_result;
 }
 
 function stableAlternatingSign(seed?: string | null): number {
@@ -812,7 +846,7 @@ export function useMbdPipeAnnotationThree(
 
   // UI 状态（MbdPipePanel 使用）
   const uiTab = ref<MbdPipeUiTab>('dims');
-  const mbdViewMode = ref<MbdPipeViewMode>('construction');
+  const mbdViewMode = ref<MbdPipeViewMode>('layout_first');
 
   // MBD 尺寸显示配置
   const dimTextMode = ref<'backend' | 'auto'>('backend');
@@ -831,8 +865,8 @@ export function useMbdPipeAnnotationThree(
   const isVisible = ref(false);
   const showDims = ref(true);
   const showDimSegment = ref(true);
-  const showDimChain = ref(false);
-  const showDimOverall = ref(false);
+  const showDimChain = ref(true);
+  const showDimOverall = ref(true);
   const showDimPort = ref(false);
   const showPipeClearances = ref(true);
   const showCutTubis = ref(false);
@@ -922,6 +956,26 @@ export function useMbdPipeAnnotationThree(
       showWelds.value = false;
       showSlopes.value = false;
       showBends.value = false;
+      showSegments.value = false;
+      return;
+    }
+
+    if (mode === 'layout_first') {
+      dimMode.value = 'classic';
+      bendDisplayMode.value = 'size';
+      showDimSegment.value = true;
+      showDimChain.value = true;
+      showDimOverall.value = true;
+      showDimPort.value = false;
+      showCutTubis.value = false;
+      showElbows.value = true;
+      showBranches.value = true;
+      showFlanges.value = true;
+      showAnchorDebug.value = false;
+      showOwnerSegmentDebug.value = false;
+      showWelds.value = true;
+      showSlopes.value = true;
+      showBends.value = true;
       showSegments.value = false;
       return;
     }
@@ -1034,6 +1088,10 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).dispose();
     }
     dimAnnotations.clear();
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    cutTubiAnnotations.clear();
 
     for (const annotation of cutTubiAnnotations.values()) {
       asRaw(annotation).dispose();
@@ -1163,17 +1221,22 @@ export function useMbdPipeAnnotationThree(
     }
 
     for (const annotation of cutTubiAnnotations.values()) {
-      asRaw(annotation).visible = isVisible.value && showCutTubis.value;
+      const layoutHidden = !!(asRaw(annotation).userData as any)?.mbdLayoutHidden;
+      asRaw(annotation).visible =
+        isVisible.value && showCutTubis.value && !layoutHidden;
     }
 
     // 焊缝标注可见性
     for (const annotation of weldAnnotations.values()) {
-      asRaw(annotation).visible = isVisible.value && showWelds.value;
+      const layoutHidden = !!(asRaw(annotation).userData as any)?.mbdLayoutHidden;
+      asRaw(annotation).visible = isVisible.value && showWelds.value && !layoutHidden;
     }
 
     // 坡度标注可见性
     for (const annotation of slopeAnnotations.values()) {
-      asRaw(annotation).visible = isVisible.value && showSlopes.value;
+      const layoutHidden = !!(asRaw(annotation).userData as any)?.mbdLayoutHidden;
+      asRaw(annotation).visible =
+        isVisible.value && showSlopes.value && !layoutHidden;
     }
 
     // 管道间距离标注可见性
@@ -1183,7 +1246,8 @@ export function useMbdPipeAnnotationThree(
 
     // 弯头标注可见性
     for (const annotation of bendAnnotations.values()) {
-      asRaw(annotation).visible = isVisible.value && showBends.value;
+      const layoutHidden = !!(asRaw(annotation).userData as any)?.mbdLayoutHidden;
+      asRaw(annotation).visible = isVisible.value && showBends.value && !layoutHidden;
     }
 
     for (const annotation of fittingAnnotations.values()) {
@@ -1193,7 +1257,8 @@ export function useMbdPipeAnnotationThree(
         (kind === 'elbow' && showElbows.value) ||
         (kind === 'branch' && showBranches.value) ||
         (kind === 'flange' && showFlanges.value);
-      asRaw(annotation).visible = isVisible.value && visible;
+      const layoutHidden = !!(asRaw(annotation).userData as any)?.mbdLayoutHidden;
+      asRaw(annotation).visible = isVisible.value && visible && !layoutHidden;
     }
 
     for (const annotation of tagAnnotations.values()) {
@@ -1211,7 +1276,8 @@ export function useMbdPipeAnnotationThree(
               : kind === 'flange'
                 ? showFlanges.value
                 : true;
-      raw.visible = isVisible.value && visible && !declutterHidden;
+      const layoutHidden = !!(raw.userData as any)?.mbdLayoutHidden;
+      raw.visible = isVisible.value && visible && !declutterHidden && !layoutHidden;
     }
 
     for (const marker of anchorDebugMarkers.values()) {
@@ -1795,6 +1861,293 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function createLaidOutLinearAnnotation(
+    item: MbdLaidOutLinearDimDto,
+    materialSet: ReturnType<typeof resolveMbdDimensionMaterialSet>,
+  ): LinearDimension3D | null {
+    const modeConfig = getRuntimeModeConfig();
+    const start = toVector3(item.start);
+    const end = toVector3(item.end);
+    const direction = toVector3(item.direction);
+    const laidOutGeometry = resolveLaidOutLinearGeometry(item);
+    if (!start || !end || (!direction && !laidOutGeometry)) return null;
+    const dim = new LinearDimension3D(
+      materials,
+      {
+        start,
+        end,
+        offset: Number(item.offset) || 0,
+        labelT: clamp01(item.label_t, 0.5),
+        labelOffsetWorld: resolveLaidOutLabelOffset(item.label_offset_world),
+        text: String(item.text ?? ''),
+        direction: direction ?? undefined,
+        arrowStyle: modeConfig.arrowStyle,
+        arrowSizePx: modeConfig.arrowSizePx,
+        arrowAngleDeg: modeConfig.arrowAngleDeg,
+        extensionOvershootPx: modeConfig.extensionOvershootPx,
+        labelRenderStyle: modeConfig.labelRenderStyle,
+        laidOutGeometry,
+      },
+      {
+        depthTest: modeConfig.depthTest,
+      },
+    );
+    dim.setMaterialSet(materialSet);
+    dim.setLineWidthPx(modeConfig.lineWidthPx);
+    dim.setLabelRenderStyle(modeConfig.labelRenderStyle);
+    dim.userData.pickable = true;
+    dim.userData.draggable = true;
+    return dim;
+  }
+
+  function renderLaidOutLinearDims(items: MbdLaidOutLinearDimDto[]): void {
+    for (const item of items) {
+      const kind = (
+        item.kind === 'chain' ||
+        item.kind === 'overall' ||
+        item.kind === 'port'
+          ? item.kind
+          : 'segment'
+      ) as MbdDimKind;
+      const dim = createLaidOutLinearAnnotation(
+        item,
+        resolveMbdDimensionMaterialSet(materials, kind, dimMode.value),
+      );
+      if (!dim) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          item.suppressed_reason ?? 'layout_first_invalid_linear_dim',
+        );
+        continue;
+      }
+      (dim.userData as any).mbdDimId = item.id;
+      (dim.userData as any).mbdDimKind = kind;
+      (dim.userData as any).mbdLayoutHidden = item.visible === false;
+      (dim.userData as any).mbdDeclutterHidden = item.visible === false;
+      const rawDim = markRaw(dim);
+      group.add(rawDim);
+      dimAnnotations.set(item.id, rawDim);
+      dimTextById.value.set(item.id, String(item.text ?? ''));
+    }
+  }
+
+  function renderLaidOutCutTubis(items: MbdLaidOutLinearDimDto[]): void {
+    for (const item of items) {
+      const dim = createLaidOutLinearAnnotation(item, materials.black);
+      if (!dim) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          item.suppressed_reason ?? 'layout_first_invalid_cut_tubi',
+        );
+        continue;
+      }
+      (dim.userData as any).mbdAuxKind = 'cut_tubi';
+      (dim.userData as any).mbdLayoutHidden = item.visible === false;
+      (dim.userData as any).mbdBaseOffset = Number(item.offset) || 0;
+      const rawDim = markRaw(dim);
+      group.add(rawDim);
+      cutTubiAnnotations.set(item.id, rawDim);
+    }
+  }
+
+  function renderLaidOutWelds(welds: MbdLaidOutWeldDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    const weldMaterial =
+      mbdViewMode.value === 'inspection' ? materials.orange : materials.black;
+    for (const weldItem of welds) {
+      const position = toVector3(weldItem.position);
+      if (!position) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          weldItem.suppressed_reason ?? 'layout_first_invalid_weld',
+        );
+        continue;
+      }
+      const weld = new WeldAnnotation3D(materials, {
+        position,
+        label: weldItem.label,
+        subtitle: weldItem.subtitle ?? null,
+        isShop: weldItem.is_shop,
+        crossSize: clampNumber(weldItem.cross_size, 0, 5000, 50),
+        labelOffsetWorld: resolveLaidOutLabelOffset(weldItem.label_offset_world),
+        labelRenderStyle,
+      });
+      weld.userData.pickable = true;
+      weld.userData.draggable = true;
+      (weld.userData as any).mbdWeldId = weldItem.id;
+      (weld.userData as any).mbdLayoutHidden = weldItem.visible === false;
+      weld.setMaterialSet(weldMaterial);
+      const rawWeld = markRaw(weld);
+      group.add(rawWeld);
+      weldAnnotations.set(weldItem.id, rawWeld);
+    }
+  }
+
+  function renderLaidOutSlopes(slopes: MbdLaidOutSlopeDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    const slopeMaterial =
+      mbdViewMode.value === 'inspection' ? materials.blue : materials.black;
+    for (const slopeItem of slopes) {
+      const start = toVector3(slopeItem.start);
+      const end = toVector3(slopeItem.end);
+      if (!start || !end) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          slopeItem.suppressed_reason ?? 'layout_first_invalid_slope',
+        );
+        continue;
+      }
+      const slope = new SlopeAnnotation3D(materials, {
+        start,
+        end,
+        text: slopeItem.text,
+        slope: slopeItem.slope,
+        labelOffsetWorld: resolveLaidOutLabelOffset(slopeItem.label_offset_world),
+        labelRenderStyle,
+      });
+      slope.userData.pickable = true;
+      slope.userData.draggable = true;
+      (slope.userData as any).mbdSlopeId = slopeItem.id;
+      (slope.userData as any).mbdLayoutHidden = slopeItem.visible === false;
+      slope.setMaterialSet(slopeMaterial);
+      const rawSlope = markRaw(slope);
+      group.add(rawSlope);
+      slopeAnnotations.set(slopeItem.id, rawSlope);
+    }
+  }
+
+  function renderLaidOutTags(tags: MbdLaidOutTagDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    for (const tagItem of tags) {
+      const position = toVector3(tagItem.position);
+      if (!position) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          tagItem.suppressed_reason ?? 'layout_first_invalid_tag',
+        );
+        continue;
+      }
+      const tag = new WeldAnnotation3D(materials, {
+        position,
+        label: tagItem.text,
+        subtitle: '',
+        isShop: true,
+        crossSize: 0,
+        labelOffsetWorld: resolveLaidOutLabelOffset(tagItem.label_offset_world),
+        labelRenderStyle,
+      });
+      tag.setMaterialSet(materials.black);
+      (tag.userData as any).mbdAuxKind = 'tag';
+      (tag.userData as any).mbdTagKind = 'other';
+      (tag.userData as any).mbdLayoutHidden = tagItem.visible === false;
+      const rawTag = markRaw(tag);
+      group.add(rawTag);
+      tagAnnotations.set(tagItem.id, rawTag);
+    }
+  }
+
+  function renderLaidOutFittings(fittings: MbdLaidOutFittingDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    for (const fittingItem of fittings) {
+      const position = toVector3(fittingItem.position);
+      if (!position) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          fittingItem.suppressed_reason ?? 'layout_first_invalid_fitting',
+        );
+        continue;
+      }
+      const fitting = new WeldAnnotation3D(materials, {
+        position,
+        label: fittingItem.text,
+        subtitle: '',
+        isShop: true,
+        crossSize: 0,
+        labelOffsetWorld: resolveLaidOutLabelOffset(fittingItem.label_offset_world),
+        labelRenderStyle,
+      });
+      const fittingKind = fittingItem.kind === 'branch'
+        ? 'branch'
+        : fittingItem.kind === 'flange'
+          ? 'flange'
+          : 'elbow';
+      if (fittingKind === 'branch') fitting.setMaterialSet(materials.orange);
+      else if (fittingKind === 'flange') fitting.setMaterialSet(materials.blue);
+      else fitting.setMaterialSet(materials.yellow);
+      (fitting.userData as any).mbdAuxKind = 'fitting';
+      (fitting.userData as any).mbdFittingKind = fittingKind;
+      (fitting.userData as any).mbdLayoutHidden = fittingItem.visible === false;
+      const rawFitting = markRaw(fitting);
+      group.add(rawFitting);
+      fittingAnnotations.set(fittingItem.id, rawFitting);
+    }
+  }
+
+  function renderLaidOutBends(bends: MbdLaidOutBendDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    for (const bendItem of bends) {
+      if (bendItem.visible === false) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          bendItem.suppressed_reason ?? 'layout_first_hidden_bend',
+        );
+        continue;
+      }
+      const members: (LinearDimension3D | AngleDimension3D)[] = [];
+      if (bendDisplayMode.value === 'angle' && bendItem.angle) {
+        const angle = bendItem.angle;
+        const vertex = toVector3(angle.vertex);
+        const point1 = toVector3(angle.point1);
+        const point2 = toVector3(angle.point2);
+        if (vertex && point1 && point2) {
+          const angleDim = new AngleDimension3D(materials, {
+            vertex,
+            point1,
+            point2,
+            arcRadius: clampNumber(angle.arc_radius, 1, 5000, 120),
+            text: angle.text,
+            labelT: clamp01(angle.label_t, 0.5),
+            labelOffsetWorld: resolveLaidOutLabelOffset(angle.label_offset_world),
+            labelRenderStyle,
+          });
+          angleDim.setMaterialSet(materials.yellow);
+          members.push(angleDim);
+        }
+      } else {
+        for (const member of bendItem.size_dims ?? []) {
+          const dim = createLaidOutLinearAnnotation(
+            member,
+            resolveMbdDimensionMaterialSet(materials, 'segment', dimMode.value),
+          );
+          if (!dim) continue;
+          (dim.userData as any).mbdBendId = bendItem.id;
+          members.push(dim);
+        }
+      }
+      if (members.length <= 0) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          bendItem.suppressed_reason ?? 'layout_first_empty_bend',
+        );
+        continue;
+      }
+      const bendGroup = new BendAnnotationGroup(
+        materials,
+        bendDisplayMode.value,
+        members,
+        { depthTest: getRuntimeModeConfig().depthTest },
+      );
+      bendGroup.userData.pickable = true;
+      bendGroup.userData.draggable = true;
+      (bendGroup.userData as any).mbdBendId = bendItem.id;
+      (bendGroup.userData as any).mbdLayoutHidden = bendItem.visible === false;
+      bendGroup.setLabelRenderStyle(labelRenderStyle);
+      const rawBendGroup = markRaw(bendGroup);
+      group.add(rawBendGroup);
+      bendAnnotations.set(bendItem.id, rawBendGroup);
+    }
+  }
+
   function rebuildDimsByCurrentData(): void {
     const data = currentData.value;
     if (!data) return;
@@ -1804,13 +2157,20 @@ export function useMbdPipeAnnotationThree(
     }
     dimAnnotations.clear();
 
-    const pipeOffsetDirs = data.segments?.length
-      ? computePipeAlignedOffsetDirs(data.segments)
-      : [];
-    if (data.dims?.length) {
-      renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
+    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
+      renderLaidOutLinearDims(data.layout_result.linear_dims ?? []);
+      if (data.layout_result.cut_tubis?.length) {
+        renderLaidOutCutTubis(data.layout_result.cut_tubis);
+      }
+    } else {
+      const pipeOffsetDirs = data.segments?.length
+        ? computePipeAlignedOffsetDirs(data.segments)
+        : [];
+      if (data.dims?.length) {
+        renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
+      }
+      applyCutTubiLabelDeclutter();
     }
-    applyCutTubiLabelDeclutter();
 
     const viewer = dtxViewerRef.value;
     if (viewer) applyBackgroundColor(viewer);
@@ -1829,7 +2189,11 @@ export function useMbdPipeAnnotationThree(
     }
     bendAnnotations.clear();
 
-    if (data.bends?.length) {
+    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
+      if (data.layout_result.bends?.length) {
+        renderLaidOutBends(data.layout_result.bends);
+      }
+    } else if (data.bends?.length) {
       renderBends(data.bends, data.segments ?? []);
     }
 
@@ -2367,21 +2731,41 @@ export function useMbdPipeAnnotationThree(
     setResolution(rect.width, rect.height);
 
     // 渲染各类标注
-    const pipeOffsetDirs = data.segments?.length
-      ? computePipeAlignedOffsetDirs(data.segments)
-      : [];
-    if (data.dims?.length)
-      renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
-    if (data.welds?.length) renderWelds(data.welds);
-    if (data.slopes?.length) renderSlopes(data.slopes);
-    if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
-    if (data.bends?.length) renderBends(data.bends, data.segments ?? []);
-    if (data.cut_tubis?.length) renderCutTubis(data.cut_tubis);
-    applyCutTubiLabelDeclutter();
-    if (data.fittings?.length) renderFittings(data.fittings);
-    if (data.tags?.length) renderTags(data.tags);
-    applyTagLabelDeclutter();
-    applyCutTubiLabelDeclutter(true);
+    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
+      renderLaidOutLinearDims(data.layout_result.linear_dims ?? []);
+      if (data.layout_result.welds?.length) renderLaidOutWelds(data.layout_result.welds);
+      if (data.layout_result.slopes?.length) renderLaidOutSlopes(data.layout_result.slopes);
+      if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
+      if (data.layout_result.bends?.length) renderLaidOutBends(data.layout_result.bends);
+      if (data.layout_result.cut_tubis?.length) {
+        renderLaidOutCutTubis(data.layout_result.cut_tubis);
+      }
+      if (data.layout_result.fittings?.length) {
+        renderLaidOutFittings(data.layout_result.fittings);
+      }
+      if (data.layout_result.tags?.length) renderLaidOutTags(data.layout_result.tags);
+    } else {
+      if (mbdViewMode.value === 'layout_first') {
+        console.info('[mbd-layout-first] 缺少 layout_result，已回退到旧渲染路径', {
+          branch_refno: data.branch_refno,
+        });
+      }
+      const pipeOffsetDirs = data.segments?.length
+        ? computePipeAlignedOffsetDirs(data.segments)
+        : [];
+      if (data.dims?.length)
+        renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
+      if (data.welds?.length) renderWelds(data.welds);
+      if (data.slopes?.length) renderSlopes(data.slopes);
+      if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
+      if (data.bends?.length) renderBends(data.bends, data.segments ?? []);
+      if (data.cut_tubis?.length) renderCutTubis(data.cut_tubis);
+      applyCutTubiLabelDeclutter();
+      if (data.fittings?.length) renderFittings(data.fittings);
+      if (data.tags?.length) renderTags(data.tags);
+      applyTagLabelDeclutter();
+      applyCutTubiLabelDeclutter(true);
+    }
     if (data.segments?.length) renderSegments(data.segments);
     renderDebugOverlays(data);
 

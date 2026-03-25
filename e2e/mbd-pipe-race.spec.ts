@@ -87,14 +87,15 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
     const bendMode = url.searchParams.get('bend_mode');
 
     if (
-      mode !== 'construction' ||
+      mode !== 'layout_first' ||
       includeChainDims !== 'true' ||
       includeOverallDim !== 'true' ||
       includePortDims !== 'false' ||
       includeWelds !== 'true' ||
       includeSlopes !== 'true' ||
-      includeBends !== 'false' ||
-      bendMode !== 'facecenter'
+      includeBends !== 'true' ||
+      bendMode !== 'facecenter' ||
+      url.searchParams.get('include_layout_result') !== 'true'
     ) {
       malformedQueryUrls.push(url.toString());
     }

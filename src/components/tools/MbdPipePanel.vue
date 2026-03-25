@@ -44,7 +44,9 @@ const mbdViewModeModel = computed({
   set: (v) => {
     props.vis.mbdViewMode.value = v === 'inspection'
       ? 'inspection'
-      : 'construction';
+      : v === 'construction'
+        ? 'construction'
+        : 'layout_first';
   },
 });
 const dimModeModel = computed({
@@ -224,6 +226,7 @@ function setActive(id: string | null) {
 }
 
 function modeLabel(mode: MbdPipeViewMode): string {
+  if (mode === 'layout_first') return '版面优先模式';
   return mode === 'inspection' ? '校核模式' : '施工模式';
 }
 </script>
@@ -276,6 +279,7 @@ function modeLabel(mode: MbdPipeViewMode): string {
           <select v-model="mbdViewModeModel"
             data-testid="mbd-view-mode"
             class="rounded-md border border-border bg-background px-2 py-1 text-xs">
+            <option value="layout_first">版面优先模式</option>
             <option value="construction">施工模式</option>
             <option value="inspection">校核模式</option>
           </select>

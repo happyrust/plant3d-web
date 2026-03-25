@@ -4,7 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { emitCommand } from '@/ribbon/commandBus';
 import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import { ribbonIcons, type RibbonIconName } from '@/ribbon/ribbonIcons';
-import { onToast } from '@/ribbon/toastBus';
+import { onToast, type ToastLevel } from '@/ribbon/toastBus';
 
 const activeTabId = ref(RIBBON_TABS[0]?.id ?? '');
 const collapsed = ref(false);
@@ -21,11 +21,29 @@ defineExpose({ collapsed });
 
 const snackbarOpen = ref(false);
 const snackbarText = ref('');
+const snackbarColor = ref<string>('surface-variant');
+const snackbarTimeout = ref(2200);
+
+function mapToastLevel(level: ToastLevel | undefined): { color: string; timeout: number } {
+  switch (level) {
+    case 'success':
+      return { color: 'success', timeout: 2200 };
+    case 'warning':
+      return { color: 'warning', timeout: 4500 };
+    case 'error':
+      return { color: 'error', timeout: 6000 };
+    default:
+      return { color: 'primary', timeout: 2200 };
+  }
+}
 
 let offToast: (() => void) | null = null;
 
 onMounted(() => {
-  offToast = onToast(({ message }) => {
+  offToast = onToast(({ message, level }) => {
+    const m = mapToastLevel(level);
+    snackbarColor.value = m.color;
+    snackbarTimeout.value = m.timeout;
     snackbarText.value = message;
     snackbarOpen.value = true;
   });
@@ -122,7 +140,7 @@ function onTabClick(tabId: string) {
       </div>
     </div>
 
-    <v-snackbar v-model="snackbarOpen" timeout="1800">
+    <v-snackbar v-model="snackbarOpen" :timeout="snackbarTimeout" :color="snackbarColor" multi-line>
       {{ snackbarText }}
     </v-snackbar>
   </div>

@@ -131,19 +131,25 @@ describe('embed role landing', () => {
     });
   });
 
-  it('switches project and opens viewer when projectId is provided', () => {
+  it('switches project but keeps the designer landing workspace when projectId is provided', () => {
     let switchedProjectId: string | null = null;
-    const activatedPanels: string[] = [];
-    
+    let activatedPanelId: string | null = null;
+
     const mockSwitchProjectById = (projectId: string) => {
       switchedProjectId = projectId;
       return true;
     };
 
     const result = applyEmbedLandingState({
-      ensurePanel: () => ({ api: { setActive: () => undefined } }),
+      ensurePanel: (panelId: string) => ({
+        api: {
+          setActive: () => {
+            activatedPanelId = panelId;
+          },
+        },
+      }),
       activatePanel: (panelId: string) => {
-        activatedPanels.push(panelId);
+        activatedPanelId = panelId;
       },
       sessionStorageLike: sessionStorage,
       embedModeParams: {
@@ -158,9 +164,12 @@ describe('embed role landing', () => {
     });
 
     expect(switchedProjectId).toBe('AvevaMarineSample');
-    expect(activatedPanels).toContain('modelTree');
-    expect(activatedPanels).toContain('viewer');
-    expect(result?.primaryPanelId).toBe('viewer');
+    expect(activatedPanelId).toBe('initiateReview');
+    expect(result).toEqual({
+      target: 'designer',
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview', 'myTasks'],
+    });
   });
 
   it('does not switch project when projectId is null', () => {

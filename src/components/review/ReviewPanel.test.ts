@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 
-import ReviewPanel from './ReviewPanel.vue';
-
 import type { ReviewTask } from '@/types/auth';
 
 const currentTask = { value: null as ReviewTask | null };
@@ -141,7 +139,9 @@ async function settlePanel() {
   await nextTick();
 }
 
-function mountReviewPanel() {
+async function mountReviewPanel() {
+  vi.resetModules();
+  const { default: ReviewPanel } = await import('./ReviewPanel.vue');
   const host = document.createElement('div');
   document.body.appendChild(host);
   const app = createApp({ render: () => h(ReviewPanel) });
@@ -158,6 +158,7 @@ function mountReviewPanel() {
 describe('ReviewPanel', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    sessionStorage.clear();
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
         getItem: vi.fn((key: string) => {
@@ -172,6 +173,11 @@ describe('ReviewPanel', () => {
       configurable: true,
     });
     currentTask.value = createTask();
+    reviewMode.value = false;
+    confirmedRecordCount.value = 0;
+    totalConfirmedAnnotations.value = 0;
+    totalConfirmedMeasurements.value = 0;
+    sortedConfirmedRecords.value = [];
     workflowResponseState.value = {
       success: true,
       currentNode: 'jd',
@@ -202,10 +208,10 @@ describe('ReviewPanel', () => {
     totalConfirmedAnnotations.value = 3;
     totalConfirmedMeasurements.value = 0;
 
-    const mounted = mountReviewPanel();
+    const mounted = await mountReviewPanel();
     await settlePanel();
 
-    expect(document.body.textContent).toContain('批注数量');
+    expect(document.body.textContent).toContain('批注');
     expect(document.body.textContent).toContain('3');
     expect(document.body.textContent).not.toContain('OBB');
 
@@ -213,13 +219,13 @@ describe('ReviewPanel', () => {
   });
 
   it('renders the workbench sections and normalized context fields', async () => {
-    const mounted = mountReviewPanel();
+    const mounted = await mountReviewPanel();
     await settlePanel();
 
     expect(document.querySelector('[data-testid="review-workbench-context-zone"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="review-workbench-workflow-zone"]')).not.toBeNull();
-    expect(document.body.textContent).toContain('工作流历史');
-    expect(document.body.textContent).toContain('确认记录');
+    expect(document.body.textContent).toContain('历史流转');
+    expect(document.body.textContent).toContain('审核记录');
     expect(document.body.textContent).toContain('批注与测量');
     expect(document.body.textContent).not.toContain('旧审核字段');
     mounted.unmount();
@@ -235,18 +241,18 @@ describe('ReviewPanel', () => {
       configurable: true,
     });
 
-    const mounted = mountReviewPanel();
+    const mounted = await mountReviewPanel();
     await settlePanel();
 
     expect(document.body.textContent).toContain('任务详情');
-    expect(document.body.textContent).toContain('工作流历史');
-    expect(document.body.textContent).toContain('确认记录');
-    expect(document.body.textContent).toContain('更多功能');
+    expect(document.body.textContent).toContain('历史流转');
+    expect(document.body.textContent).toContain('审核记录');
+    expect(document.body.textContent).toContain('附件材料');
     mounted.unmount();
   });
 
   it('renders workflow history, confirmed records, aux-data, and sync as collapsible sections', async () => {
-    const mounted = mountReviewPanel();
+    const mounted = await mountReviewPanel();
     await settlePanel();
 
     expect(document.querySelector('[data-testid="review-workbench-workflow-history-zone"]')).not.toBeNull();
@@ -259,7 +265,7 @@ describe('ReviewPanel', () => {
   it('shows an explicit degraded state when the active task lacks a formal formId', async () => {
     currentTask.value = createTask({ formId: undefined });
 
-    const mounted = mountReviewPanel();
+    const mounted = await mountReviewPanel();
     await settlePanel();
 
     expect(document.body.textContent).toContain('未绑定 formId');
@@ -289,7 +295,7 @@ describe('ReviewPanel', () => {
       ],
     };
 
-    let mounted = mountReviewPanel();
+    let mounted = await mountReviewPanel();
     await settlePanel();
 
     expect(document.body.textContent).toContain('FORM-A');
@@ -305,7 +311,7 @@ describe('ReviewPanel', () => {
       checkerName: '校核乙',
       approverName: '审核乙',
     });
-    mounted = mountReviewPanel();
+    mounted = await mountReviewPanel();
     await settlePanel();
 
     expect(document.body.textContent).toContain('FORM-B');
@@ -317,7 +323,7 @@ describe('ReviewPanel', () => {
   });
 
   it('launches text, cloud, rectangle, and measurement tools directly from the workbench', async () => {
-    const mounted = mountReviewPanel();
+    const mounted = await mountReviewPanel();
     await settlePanel();
 
     expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-zone"]')).not.toBeNull();
@@ -357,6 +363,43 @@ describe('ReviewPanel', () => {
     angleButton?.click();
     await nextTick();
     expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('measure_angle');
+
+    mounted.unmount();
+  });
+
+  it('shows explicit missing-task embed empty state for reviewer landing', async () => {
+    currentTask.value = null;
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'reviewer',
+      formId: 'FORM-EMBED-EMPTY',
+      restoreStatus: 'missing',
+      primaryPanelId: 'review',
+      visiblePanelIds: ['review', 'reviewerTasks'],
+    }));
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('已识别 form_id，但尚未绑定内部任务，当前不可审核');
+    expect(document.body.textContent).toContain('FORM-EMBED-EMPTY');
+
+    mounted.unmount();
+  });
+
+  it('shows explicit no-form embed empty state for reviewer landing', async () => {
+    currentTask.value = null;
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'reviewer',
+      formId: null,
+      restoreStatus: 'no_form',
+      primaryPanelId: 'review',
+      visiblePanelIds: ['review', 'reviewerTasks'],
+    }));
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('当前打开的嵌入链接未提供有效 form_id');
 
     mounted.unmount();
   });

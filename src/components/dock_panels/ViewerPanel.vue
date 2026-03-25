@@ -45,9 +45,9 @@ import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDispla
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
 import { useMbdPipeAnnotationThree } from '@/composables/useMbdPipeAnnotationThree';
-import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
+import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
@@ -3001,7 +3001,7 @@ onMounted(async () => {
   if (showRefno && demoMode !== 'primitives') {
     (async () => {
       try {
-        emitToast({ message: `[show_refno] 正在加载 ${showRefno} ...` });
+        emitToast({ message: `[信息] 正在加载 ${showRefno} …`, level: 'info' });
         console.log(`[show_refno] refno=${showRefno}`);
 
         await ensureDbMetaInfoLoaded();
@@ -3011,7 +3011,10 @@ onMounted(async () => {
           dbno = getDbnumByRefno(showRefno);
         } catch {
           console.error(`[show_refno] 无法解析 ${showRefno} 的 dbnum`);
-          emitToast({ message: `[show_refno] 无法解析 dbnum (refno=${showRefno})` });
+          emitToast({
+            message: `[错误] 无法解析 dbnum（refno=${showRefno}）`,
+            level: 'error',
+          });
           return;
         }
 
@@ -3021,15 +3024,23 @@ onMounted(async () => {
 
         // 先查询可见子实例（容器节点本身在 Parquet 中没有几何数据）
         let loadRefnos = [showRefno];
+        let visibleInstsUserHint: string | null = null;
         try {
           const visResp = await e3dGetVisibleInsts(showRefno);
           const visRefnos = visResp?.refnos ?? [];
           if (visRefnos.length > 0) {
             loadRefnos = mergeRootRefnoWithVisibleRefnos(showRefno, visRefnos);
             console.log(`[show_refno] visible-insts 返回 ${visRefnos.length} 个子实例，合并根节点后共 ${loadRefnos.length} 个 refno`);
+          } else if (visResp?.success) {
+            visibleInstsUserHint =
+              `可见子实例为 0（refno=${showRefno}），仅加载根节点；若为容器可能没有几何，请检查可见性或数据`;
           }
         } catch (e) {
           console.warn('[show_refno] visible-insts 查询失败，回退直接加载', e);
+          visibleInstsUserHint = '查询可见子实例失败，已回退为仅加载根 refno';
+        }
+        if (visibleInstsUserHint) {
+          emitToast({ message: `[警告] ${visibleInstsUserHint}`, level: 'warning' });
         }
 
         const result = await loadDbnoInstancesForVisibleRefnosDtx(
@@ -3058,18 +3069,22 @@ onMounted(async () => {
           requestRender();
         }
 
-        emitToast({
-          message:
-            `[show_refno] 加载完成: ${result.loadedObjects} 个对象 (` +
-            `loaded=${result.loadedRefnos}, skipped=${result.skippedRefnos},` +
-            ` mesh缺失${result.missingBreakdown.mesh404Refnos.length},` +
-            ` 无几何${result.missingBreakdown.noGeoRowsRefnos.length})`,
-        });
+        const detail =
+          `对象 ${result.loadedObjects}（已加载 ${result.loadedRefnos}，跳过 ${result.skippedRefnos}，` +
+          `mesh 缺失 ${result.missingBreakdown.mesh404Refnos.length}，无几何 ${result.missingBreakdown.noGeoRowsRefnos.length}）`;
+        if (result.loadedObjects === 0) {
+          emitToast({
+            message: `[警告] 加载结束但未绘制实例。${detail} 请检查左侧可见性或 Parquet 数据`,
+            level: 'warning',
+          });
+        } else {
+          emitToast({ message: `[成功] ${detail}`, level: 'success' });
+        }
         console.log('[show_refno] ✅ 加载完成', result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[show_refno] 加载失败:', e);
-        emitToast({ message: `[show_refno] 加载失败: ${msg}` });
+        emitToast({ message: `[错误] 加载失败：${msg}`, level: 'error' });
       }
     })();
   }
@@ -3080,7 +3095,7 @@ onMounted(async () => {
     if (Number.isFinite(dbno) && dbno > 0) {
       (async () => {
         try {
-          emitToast({ message: `正在加载 dbnum=${dbno} 的 Parquet 模型数据...` });
+          emitToast({ message: `[信息] 正在加载 dbnum=${dbno} 的 Parquet 模型…`, level: 'info' });
           const autoFitKey = `dtx_autofit_dbno_${dbno}`;
           let shouldAutoFit = true;
           try {
@@ -3090,7 +3105,10 @@ onMounted(async () => {
           const parquetLoader = useDbnoInstancesParquetLoader();
           const available = await parquetLoader.isParquetAvailable(dbno);
           if (!available) {
-            emitToast({ message: `dbnum=${dbno} 未找到 Parquet 数据` });
+            emitToast({
+              message: `[错误] dbnum=${dbno} 未找到 Parquet 数据`,
+              level: 'error',
+            });
             return;
           }
 
@@ -3098,11 +3116,17 @@ onMounted(async () => {
             debug: isDev,
           });
           if (allRefnos.length === 0) {
-            emitToast({ message: `dbnum=${dbno} 没有可加载的 refno` });
+            emitToast({
+              message: `[警告] dbnum=${dbno} 没有可加载的 refno`,
+              level: 'warning',
+            });
             return;
           }
 
-          emitToast({ message: `发现 ${allRefnos.length} 个 refno，开始分批加载...` });
+          emitToast({
+            message: `[信息] 发现 ${allRefnos.length} 个 refno，开始分批加载…`,
+            level: 'info',
+          });
 
           const LOAD_BATCH_SIZE = 1000;
           let loadedRefnos = 0;
@@ -3177,15 +3201,21 @@ onMounted(async () => {
               sessionStorage.setItem(autoFitKey, '1');
             } catch {}
           }
-          emitToast({
-            message:
-                            `加载完成: 对象${loadedObjects} 已加载${loadedRefnos} 已跳过${skippedRefnos} 缺失${missingRefnos}` +
-                            ` (mesh缺失${missingMesh404Refnos.size}/hash${missingMesh404GeoHashes.size}, 无几何${missingNoGeoRows.size})`,
-          });
+          const summary =
+            `对象 ${loadedObjects}（已加载 ${loadedRefnos}，跳过 ${skippedRefnos}，缺失 ${missingRefnos}；` +
+            `mesh 缺失 ${missingMesh404Refnos.size}/hash ${missingMesh404GeoHashes.size}，无几何 ${missingNoGeoRows.size}）`;
+          if (loadedObjects === 0) {
+            emitToast({
+              message: `[警告] 加载结束但未绘制实例。${summary}`,
+              level: 'warning',
+            });
+          } else {
+            emitToast({ message: `[成功] ${summary}`, level: 'success' });
+          }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           console.error('[ViewerPanel] show_dbnum Parquet 加载失败:', e);
-          emitToast({ message: `加载失败: ${msg}` });
+          emitToast({ message: `[错误] 加载失败：${msg}`, level: 'error' });
         }
       })();
     }
@@ -3198,7 +3228,7 @@ onMounted(async () => {
     const refnoStr = debugRefno.replace('/', '_');
     (async () => {
       try {
-        emitToast({ message: `[debug_refno] 正在查询 ${refnoStr} 的可见实例...` });
+        emitToast({ message: `[信息] 正在查询 ${refnoStr} 的可见实例…`, level: 'info' });
         console.log(`[debug_refno] refno=${refnoStr}`);
 
         // 1. 确保 db_meta_info 已加载，解析 refno → dbnum
@@ -3208,7 +3238,10 @@ onMounted(async () => {
           dbno = getDbnumByRefno(refnoStr);
         } catch {
           console.error(`[debug_refno] 无法解析 ${refnoStr} 的 dbnum`);
-          emitToast({ message: `[debug_refno] 无法解析 dbnum (refno=${refnoStr})` });
+          emitToast({
+            message: `[错误] 无法解析 dbnum（refno=${refnoStr}）`,
+            level: 'error',
+          });
           return;
         }
         console.log(`[debug_refno] refno=${refnoStr} → dbnum=${dbno}`);
@@ -3218,10 +3251,16 @@ onMounted(async () => {
         const refnos = mergeRootRefnoWithVisibleRefnos(refnoStr, visResp?.refnos ?? []);
         console.log(`[debug_refno] visible-insts 合并根节点后返回 ${refnos.length} 个 refno`, refnos.slice(0, 10));
         if (refnos.length === 0) {
-          emitToast({ message: `[debug_refno] ${refnoStr} 下无可见实例` });
+          emitToast({
+            message: `[警告] ${refnoStr} 下无可见实例（接口未返回子 refno）`,
+            level: 'warning',
+          });
           return;
         }
-        emitToast({ message: `[debug_refno] 发现 ${refnos.length} 个实例，开始加载 (dbnum=${dbno})...` });
+        emitToast({
+          message: `[信息] 发现 ${refnos.length} 个实例，开始加载（dbnum=${dbno}）…`,
+          level: 'info',
+        });
 
         // 3. 加载实例到 DTX（优先 parquet，失败回退 json）
         const urlDataSource = new URLSearchParams(window.location.search).get('data_source') as 'json' | 'parquet' | 'auto' | null;
@@ -3252,17 +3291,19 @@ onMounted(async () => {
         dtxViewer.flyTo(position, center, { duration: 0 });
         requestRender();
 
-        emitToast({
-          message:
-                        `[debug_refno] 加载完成: ${result.loadedObjects} 个对象 (${refnos.length} refnos,` +
-                        ` mesh缺失${result.missingBreakdown.mesh404Refnos.length},` +
-                        ` 无几何${result.missingBreakdown.noGeoRowsRefnos.length})`,
-        });
+        const dbg =
+          `对象 ${result.loadedObjects}（${refnos.length} 个 refno，mesh 缺失 ${result.missingBreakdown.mesh404Refnos.length}，` +
+          `无几何 ${result.missingBreakdown.noGeoRowsRefnos.length}）`;
+        if (result.loadedObjects === 0) {
+          emitToast({ message: `[警告] 加载结束但未绘制实例。${dbg}`, level: 'warning' });
+        } else {
+          emitToast({ message: `[成功] ${dbg}`, level: 'success' });
+        }
         console.log('[debug_refno] ✅ 加载完成', result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[debug_refno] 加载失败:', e);
-        emitToast({ message: `[debug_refno] 加载失败: ${msg}` });
+        emitToast({ message: `[错误] debug_refno 加载失败：${msg}`, level: 'error' });
       }
     })();
   }
@@ -3590,6 +3631,7 @@ onMounted(async () => {
           include_fittings: true,
           include_tags: true,
           include_layout_hints: true,
+          include_layout_result: mbdPipeVis.mbdViewMode.value === 'layout_first',
           include_welds: true,
           include_slopes: true,
           include_bends: true,

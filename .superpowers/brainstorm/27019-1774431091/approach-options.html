@@ -1,0 +1,82 @@
+<h2>PMS Review Simulator 方案方向</h2>
+<p class="subtitle">我基于你的偏好整理了 3 个方向：纯 HTML、尽量贴近 PMS 老系统、且整体都要像。先看哪种取舍最符合你的预期。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A · 老系统高还原</div>
+        <div class="mockup-body">
+          <div class="mock-nav">顶部工具条 / 旧式按钮 / 面包屑</div>
+          <div style="display:flex; gap:12px;">
+            <div class="mock-content" style="flex:1;">任务表格 + 底部分栏诊断</div>
+            <div class="mock-sidebar" style="width:160px;">右侧信息块</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>高还原 PMS 老页</h3>
+      <p>重点做列表页、工具条、表格和弹窗皮肤还原，流程层级改动最保守。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B · 推荐：老系统气质 + 双层弹窗重构</div>
+        <div class="mockup-body">
+          <div class="mock-nav">PMS 旧式工具条 / 状态标签 / 快捷操作</div>
+          <div style="display:flex; gap:12px;">
+            <div class="mock-content" style="flex:1;">主弹窗：左侧三维 iframe</div>
+            <div class="mock-sidebar" style="width:180px;">右侧送审面板</div>
+          </div>
+          <div class="placeholder" style="margin-top:10px;">第二层审批弹窗悬浮在主弹窗上</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>推荐方案</h3>
+      <p>列表页和主色调维持 PMS 老系统，核心把主弹窗改成“左三维 + 右面板 + 第二层审批弹窗”。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C · 新旧混合工作台</div>
+        <div class="mockup-body">
+          <div class="mock-nav">更现代的筛选条 / 标签 / 卡片</div>
+          <div style="display:flex; gap:12px;">
+            <div class="mock-content" style="flex:1;">更强信息密度和模块化布局</div>
+            <div class="mock-sidebar" style="width:180px;">抽屉式操作区</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>现代化增强</h3>
+      <p>效率更高，但会偏离 PMS 老系统气质，不适合你这轮“整体都要尽量像”的目标。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>我推荐 B 的原因</h4>
+      <ul>
+        <li>能把两层弹窗这个核心交互一次到位</li>
+        <li>列表页仍然保留 PMS 旧系统视觉惯性</li>
+        <li>不需要把模拟器改造成正式 Vue 业务页</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>B 的代价</h4>
+      <ul>
+        <li>主弹窗和次弹窗层级、遮罩、右侧栏都要重构</li>
+        <li>底部诊断区需要弱化为辅助，而不是主操作区</li>
+      </ul>
+    </div>
+  </div>
+</div>

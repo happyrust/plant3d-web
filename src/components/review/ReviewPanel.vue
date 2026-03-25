@@ -39,6 +39,7 @@ import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
+import type { EmbedLandingState } from './embedRoleLanding';
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
@@ -73,12 +74,7 @@ const toolStore = useToolStore();
 const userStore = useUserStore();
 const viewerContext = useViewerContext();
 
-const embedLandingState = ref<{
-  target?: string;
-  formId?: string | null;
-  primaryPanelId?: string;
-  visiblePanelIds?: string[];
-} | null>(null);
+const embedLandingState = ref<EmbedLandingState | null>(null);
 
 if (typeof sessionStorage !== 'undefined') {
   const storedLandingState = sessionStorage.getItem('embed_landing_state');
@@ -119,6 +115,24 @@ const taskContext = computed<NormalizedTaskContext | null>(() => {
 const currentTaskNodeLabel = computed(() => taskContext.value?.currentNodeLabel || '-');
 const currentTaskFormId = computed(() => taskContext.value?.formId || '未绑定 formId');
 const currentTaskHasFormalFormId = computed(() => !!taskContext.value?.formId);
+const reviewerEmbedEmptyStateTitle = computed(() => {
+  if (embedLandingState.value?.restoreStatus === 'no_form') {
+    return '当前打开的嵌入链接未提供有效 form_id';
+  }
+  if (embedLandingState.value?.restoreStatus === 'missing') {
+    return '已识别 form_id，但尚未绑定内部任务，当前不可审核';
+  }
+  return '自动进入校审/待处理工作区';
+});
+const reviewerEmbedEmptyStateDesc = computed(() => {
+  if (embedLandingState.value?.restoreStatus === 'no_form') {
+    return '请从外部流程平台重新打开带 form_id 的嵌入链接，或确认当前单据是否已正确生成。';
+  }
+  if (embedLandingState.value?.restoreStatus === 'missing') {
+    return '当前单据已经被识别，但内部 review_tasks 中尚未找到对应任务，请先完成绑定或等待内部任务创建。';
+  }
+  return '审批相关角色打开同一 form-id 时，首屏将落在待处理/校审工作区，无需手动切换面板。';
+});
 
 // 格式化文件大小
 function formatFileSize(bytes?: number): string {
@@ -937,7 +951,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
         <div>
           <div class="text-sm font-semibold" data-testid="reviewer-landing-cta">自动进入校审/待处理工作区</div>
           <div class="mt-1 text-xs text-blue-700">
-            审批相关角色打开同一 form-id 时，首屏将落在待处理/校审工作区，无需手动切换面板。
+            {{ reviewerEmbedEmptyStateDesc }}
           </div>
         </div>
         <div v-if="embedLandingState.formId"
@@ -945,6 +959,9 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           class="rounded-full bg-white px-3 py-1 text-xs text-blue-700">
           Lineage: {{ embedLandingState.formId }}
         </div>
+      </div>
+      <div class="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm text-blue-900">
+        {{ reviewerEmbedEmptyStateTitle }}
       </div>
     </div>
 
@@ -960,10 +977,36 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           <span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-500">
             {{ taskContext?.modelName || '-' }} · {{ taskContext?.componentCount || 0 }} 构件
           </span>
+          <span class="rounded-full px-2 py-0.5 text-[11px]"
+            :class="currentTaskHasFormalFormId ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'">
+            {{ currentTaskFormId }}
+          </span>
         </div>
         <ChevronDown class="h-4 w-4 transition-transform" :class="{ 'rotate-180': expandedTaskDetails }" />
       </button>
       <div v-show="expandedTaskDetails" class="border-t border-slate-200 p-4 space-y-4">
+        <section>
+          <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 mb-2">流程上下文</div>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">提资人</div>
+              <div class="mt-1 text-sm font-semibold text-slate-900">{{ taskContext?.requesterName || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">校核人</div>
+              <div class="mt-1 text-sm font-semibold text-slate-900">{{ taskContext?.checkerName || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">审核人</div>
+              <div class="mt-1 text-sm font-semibold text-slate-900">{{ taskContext?.approverName || '-' }}</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">当前节点</div>
+              <div class="mt-1 text-sm font-semibold text-slate-900">{{ currentTaskNodeLabel }}</div>
+            </div>
+          </div>
+        </section>
+
         <!-- 模型清单 -->
         <section>
           <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 mb-2">模型清单</div>

@@ -256,13 +256,17 @@ async function backendE3dGetVisibleInsts(refno: string): Promise<VisibleInstsRes
     debug: debugAny || null,
   });
   const { addLog } = useConsoleStore();
-  addLog(
-    'info',
-    `[vis][api] /api/e3d/visible-insts success=${resp.success ? 1 : 0} refno=${refno} refno_count=${Array.isArray(resp.refnos) ? resp.refnos.length : 0}` +
-      (debugAny
-        ? ` candidates=${debugAny.candidates_count ?? ''} filtered=${debugAny.filtered_count ?? ''} visible=${debugAny.visible_count ?? ''} source=${debugAny.source ?? ''}`
-        : '')
-  );
+  const refnoCount = Array.isArray(resp.refnos) ? resp.refnos.length : 0;
+  const line =
+    `[vis][api] /api/e3d/visible-insts success=${resp.success ? 1 : 0} refno=${refno} refno_count=${refnoCount}` +
+    (debugAny
+      ? ` candidates=${debugAny.candidates_count ?? ''} filtered=${debugAny.filtered_count ?? ''} visible=${debugAny.visible_count ?? ''} source=${debugAny.source ?? ''}`
+      : '');
+  if (resp.success && refnoCount === 0) {
+    addLog('warning', `${line} → 可见实例为空（若为容器节点，可能需从 Parquet 或其它入口加载几何）`);
+  } else {
+    addLog('info', line);
+  }
   return resp;
 }
 

@@ -28,6 +28,8 @@ The seed key is `m6-m7-review-demo-pack-v1`. It creates or refreshes these scena
 5. `task-thread-collaboration` -> `seed-m7-task-thread` / `FORM-M7-TASK-THREAD-001`
 6. `annotation-thread-collaboration` -> `seed-m7-annotation-thread` / `FORM-M7-ANNOTATION-THREAD-001`
 7. `return-resubmit-reopen` -> `seed-m6m7-return-resubmit` / `FORM-M6M7-LOOP-001`
+8. `qa-t6-task-only-components` -> `seed-qat6-type2` / `FORM-QAT6-TYPE2`
+9. `qa-t6-no-persisted-components` -> `seed-qat6-type3` / `FORM-QAT6-TYPE3`
 
 Shared seeded identities:
 
@@ -51,7 +53,18 @@ In the frontend, switch to reviewer alias `reviewer_001` so the existing alias m
 1. Run `python3 debug_scripts/review_demo_seed_test.py` to verify the plan shape and deterministic inventory output.
 2. Run `python3 debug_scripts/review_demo_seed.py --pretty` once the backend on `3100` is reachable.
 3. Re-run the same seed command and compare the emitted `execution.seeded` inventory. The scenario keys, task IDs, and form IDs should remain unchanged.
-4. Confirm `execution.discoverability.consistency` reports `true` for reviewer/designer alignment and use the discoverability queries above or the reviewer/designer UI to confirm the seeded scenarios are visible.
+4. Check `execution.seeded[*].taskComponentsHydrated`:
+   - canonical scenarios should be `true`
+   - `qa-t6-no-persisted-components` is intentionally `false` (type3 fixture)
+5. Confirm `execution.discoverability.consistency` reports `true` for reviewer/designer alignment and use the discoverability queries above or the reviewer/designer UI to confirm the seeded scenarios are visible.
+
+## QA-T6 Diagnostic Fixtures
+
+The seeded QA-T6 fixtures are designed to map directly to the PMS simulator diagnosis hints:
+
+- **Type1** (`seed-m6-text-annotation`): `task.components > 0` and `workflow models > 0`
+- **Type2** (`seed-qat6-type2`): `task.components > 0` and `workflow models = 0`
+- **Type3** (`seed-qat6-type3`): `task.components = 0` and `workflow models = 0`
 
 ## Git Ignore Handling
 

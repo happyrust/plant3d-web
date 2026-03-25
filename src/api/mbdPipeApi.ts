@@ -10,7 +10,7 @@ import { getBackendApiBaseUrl } from '@/utils/apiBase';
 export type Vec3 = [number, number, number]
 
 export type MbdPipeSource = 'db' | 'cache'
-export type MbdPipeViewMode = 'construction' | 'inspection'
+export type MbdPipeViewMode = 'layout_first' | 'construction' | 'inspection'
 
 export type BranchAttrsDto = {
   duty?: string | null
@@ -180,6 +180,120 @@ export type MbdPipeClearanceDto = {
   layout_hint?: MbdLayoutHint | null
 }
 
+export type MbdLaidOutLinearDimDto = {
+  id: string
+  kind: string
+  start: Vec3
+  end: Vec3
+  text: string
+  offset: number
+  direction: Vec3
+  label_t: number
+  label_offset_world?: Vec3 | null
+  dim_line_start?: Vec3 | null
+  dim_line_end?: Vec3 | null
+  extension_line_1_start?: Vec3 | null
+  extension_line_1_end?: Vec3 | null
+  extension_line_2_start?: Vec3 | null
+  extension_line_2_end?: Vec3 | null
+  text_anchor?: Vec3 | null
+  visible: boolean
+  suppressed_reason?: string | null
+}
+
+export type MbdLaidOutWeldDto = {
+  id: string
+  position: Vec3
+  label: string
+  subtitle?: string | null
+  is_shop: boolean
+  cross_size: number
+  label_offset_world?: Vec3 | null
+  visible: boolean
+  suppressed_reason?: string | null
+}
+
+export type MbdLaidOutSlopeDto = {
+  id: string
+  start: Vec3
+  end: Vec3
+  text: string
+  slope: number
+  label_offset_world?: Vec3 | null
+  visible: boolean
+  suppressed_reason?: string | null
+}
+
+export type MbdLaidOutAngleDto = {
+  vertex: Vec3
+  point1: Vec3
+  point2: Vec3
+  arc_radius: number
+  text: string
+  label_t: number
+  label_offset_world?: Vec3 | null
+}
+
+export type MbdLaidOutBendDto = {
+  id: string
+  visible: boolean
+  suppressed_reason?: string | null
+  size_dims: MbdLaidOutLinearDimDto[]
+  angle?: MbdLaidOutAngleDto | null
+}
+
+export type MbdLaidOutTagDto = {
+  id: string
+  text: string
+  position: Vec3
+  label_offset_world?: Vec3 | null
+  visible: boolean
+  suppressed_reason?: string | null
+}
+
+export type MbdLaidOutFittingDto = {
+  id: string
+  kind: string
+  text: string
+  position: Vec3
+  label_offset_world?: Vec3 | null
+  visible: boolean
+  suppressed_reason?: string | null
+}
+
+export type MbdSuppressedLayoutItemDto = {
+  id: string
+  kind: string
+  reason: string
+}
+
+export type MbdPipeLayoutResult = {
+  version: number
+  mode: MbdPipeViewMode
+  stats: {
+    linear_dims_count: number
+    cut_tubis_count: number
+    welds_count: number
+    slopes_count: number
+    bends_count: number
+    tags_count: number
+    fittings_count: number
+    suppressed_count: number
+  }
+  linear_dims: MbdLaidOutLinearDimDto[]
+  cut_tubis?: MbdLaidOutLinearDimDto[]
+  welds: MbdLaidOutWeldDto[]
+  slopes: MbdLaidOutSlopeDto[]
+  bends: MbdLaidOutBendDto[]
+  tags: MbdLaidOutTagDto[]
+  fittings?: MbdLaidOutFittingDto[]
+  suppressed_items: MbdSuppressedLayoutItemDto[]
+  debug_info?: {
+    notes?: string[]
+    [k: string]: unknown
+  } | null
+}
+
 export type MbdPipeData = {
   input_refno: string
   branch_refno: string
@@ -195,6 +309,7 @@ export type MbdPipeData = {
   tags?: MbdTagDto[]
   pipe_clearances?: MbdPipeClearanceDto[]
   stats: MbdPipeStats
+  layout_result?: MbdPipeLayoutResult | null
   debug_info?: MbdPipeDebugInfo
 }
 
@@ -205,7 +320,7 @@ export type MbdPipeResponse = {
 }
 
 export type MbdPipeQueryParams = {
-  /** 语义模式：construction=施工表达（默认），inspection=几何校核 */
+  /** 语义模式：layout_first=后台排版优先（默认），construction=施工表达，inspection=几何校核 */
   mode?: MbdPipeViewMode
   /** 数据源：db=SurrealDB（默认），cache=foyer cache */
   source?: MbdPipeSource
@@ -230,6 +345,7 @@ export type MbdPipeQueryParams = {
   include_fittings?: boolean
   include_tags?: boolean
   include_layout_hints?: boolean
+  include_layout_result?: boolean
   weld_merge_threshold?: number
   include_dims?: boolean
   include_welds?: boolean

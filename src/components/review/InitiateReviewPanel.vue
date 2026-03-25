@@ -8,6 +8,7 @@ import ExternalReviewViewer from './ExternalReviewViewer.vue';
 import FileUploadSection from './FileUploadSection.vue';
 import { buildReviewAttachments } from './reviewAttachmentFlow';
 
+import type { EmbedLandingState } from './embedRoleLanding';
 import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
 
@@ -151,12 +152,7 @@ const embedModeParams = ref<{
   isEmbedMode: false,
 });
 
-const embedLandingState = ref<{
-  target?: string;
-  formId?: string | null;
-  primaryPanelId?: string;
-  visiblePanelIds?: string[];
-} | null>(null);
+const embedLandingState = ref<EmbedLandingState | null>(null);
 const externalWorkflowMode = ref(true);
 
 function resolveExternalWorkflowMode() {
@@ -241,6 +237,7 @@ onMounted(() => {
 const formId = computed(() => {
   return embedModeParams.value.isEmbedMode ? embedModeParams.value.formId : null;
 });
+const restoredTaskSummary = computed(() => embedLandingState.value?.restoredTaskSummary ?? null);
 
 const activeUploadTaskId = computed(() => createdTaskId.value);
 const activeUploadFormId = computed(() => formId.value || createdTaskFormId.value);
@@ -553,6 +550,17 @@ function closePanel() {
           class="rounded-full bg-indigo-100 px-2 py-1 text-indigo-800">
           Lineage: {{ embedLandingState.formId }}
         </span>
+      </div>
+      <div v-if="embedModeParams.isEmbedMode && restoredTaskSummary"
+        class="rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
+        data-testid="designer-restored-task-summary">
+        <p class="font-medium">当前绑定任务：{{ restoredTaskSummary.title }}</p>
+        <p class="mt-1">状态：{{ restoredTaskSummary.status }} · 当前节点：{{ restoredTaskSummary.currentNode }}</p>
+      </div>
+      <div v-else-if="embedModeParams.isEmbedMode && embedLandingState?.restoreStatus === 'missing'"
+        class="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        data-testid="designer-restored-task-missing">
+        当前 form_id 尚未绑定内部任务，可继续在此创建或补齐提资数据。
       </div>
       <div v-if="externalWorkflowMode" data-testid="external-workflow-mode-banner"
         class="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">

@@ -53,6 +53,18 @@ export type LinearDimension3DParams = {
   extensionOvershootPx?: number;
   /** 文字渲染风格（solvespace/rebarviz） */
   labelRenderStyle?: SolveSpaceLabelRenderStyle;
+  /** layout_first 已布局几何：存在时优先消费后端显式尺寸线/界线/文字锚点。 */
+  laidOutGeometry?: LinearDimension3DLaidOutGeometry | null;
+};
+
+export type LinearDimension3DLaidOutGeometry = {
+  dimLineStart: THREE.Vector3;
+  dimLineEnd: THREE.Vector3;
+  extensionLine1Start?: THREE.Vector3 | null;
+  extensionLine1End?: THREE.Vector3 | null;
+  extensionLine2Start?: THREE.Vector3 | null;
+  extensionLine2End?: THREE.Vector3 | null;
+  textAnchor?: THREE.Vector3 | null;
 };
 
 const SNAP_TS = [0, 0.25, 0.5, 0.75, 1] as const;
@@ -67,6 +79,7 @@ export class LinearDimension3D extends AnnotationBase {
       | 'labelOffsetWorld'
       | 'isReference'
       | 'labelRenderStyle'
+      | 'laidOutGeometry'
     >
   > & {
     direction?: THREE.Vector3;
@@ -74,6 +87,7 @@ export class LinearDimension3D extends AnnotationBase {
     labelOffsetWorld?: THREE.Vector3 | null;
     isReference?: boolean;
     labelRenderStyle?: SolveSpaceLabelRenderStyle;
+    laidOutGeometry?: LinearDimension3DLaidOutGeometry | null;
   };
   private materialSet: AnnotationMaterialSet;
   private hoveredMaterialSet: AnnotationMaterialSet;
@@ -90,6 +104,8 @@ export class LinearDimension3D extends AnnotationBase {
   private arrowOpen1: LineSegments2;
   private arrowOpen2: LineSegments2;
   private textLabel: SolveSpaceBillboardVectorText;
+  private labelRequestedVisible = true;
+  private labelAutoHidden = false;
   private snapGuideLine: THREE.Line;
   private snapGuideGeometry: THREE.BufferGeometry;
   private snapGuidePositions: Float32Array;
@@ -181,6 +197,7 @@ export class LinearDimension3D extends AnnotationBase {
       arrowAngleDeg: params.arrowAngleDeg ?? 20,
       extensionOvershootPx: params.extensionOvershootPx ?? 10,
       labelRenderStyle: params.labelRenderStyle,
+      laidOutGeometry: this.cloneLaidOutGeometry(params.laidOutGeometry),
     };
     // 尺寸标注默认使用红色（由 DimensionStyleStore 驱动）
     this.materialSet = this.resolveMaterialSet(materials.ssDimensionDefault);
@@ -426,7 +443,8 @@ export class LinearDimension3D extends AnnotationBase {
 
   /** 仅控制文字显隐（不影响线/箭头） */
   setLabelVisible(visible: boolean): void {
-    this.textLabel.setVisible(visible);
+    this.labelRequestedVisible = visible;
+    this.syncLabelVisibility();
   }
 
   /** 设置文字渲染风格（solvespace/rebarviz） */
@@ -474,11 +492,15 @@ export class LinearDimension3D extends AnnotationBase {
       arrowAngleDeg: this.params.arrowAngleDeg,
       extensionOvershootPx: this.params.extensionOvershootPx,
       labelRenderStyle: this.params.labelRenderStyle,
+      laidOutGeometry: this.cloneLaidOutGeometry(this.params.laidOutGeometry),
     };
   }
 
   /** 获取 label 默认位置（无 labelOffsetWorld 时的基准，即 labelT 插值点） */
   getDefaultLabelWorldPos(): THREE.Vector3 {
+    if (this.params.laidOutGeometry?.textAnchor) {
+      return this.params.laidOutGeometry.textAnchor.clone();
+    }
     const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
     return this.dimStart.clone().lerp(this.dimEnd, t);
   }
@@ -511,8 +533,28 @@ export class LinearDimension3D extends AnnotationBase {
       this.params.labelRenderStyle = params.labelRenderStyle;
       this.textLabel.setRenderStyle(params.labelRenderStyle);
     }
+    if ('laidOutGeometry' in params) {
+      this.params.laidOutGeometry = this.cloneLaidOutGeometry(
+        params.laidOutGeometry,
+      );
+    }
     this.rebuild();
     this.applyMaterials();
+  }
+
+  private cloneLaidOutGeometry(
+    geometry?: LinearDimension3DLaidOutGeometry | null,
+  ): LinearDimension3DLaidOutGeometry | null {
+    if (!geometry?.dimLineStart || !geometry?.dimLineEnd) return null;
+    return {
+      dimLineStart: geometry.dimLineStart.clone(),
+      dimLineEnd: geometry.dimLineEnd.clone(),
+      extensionLine1Start: geometry.extensionLine1Start?.clone() ?? null,
+      extensionLine1End: geometry.extensionLine1End?.clone() ?? null,
+      extensionLine2Start: geometry.extensionLine2Start?.clone() ?? null,
+      extensionLine2End: geometry.extensionLine2End?.clone() ?? null,
+      textAnchor: geometry.textAnchor?.clone() ?? null,
+    };
   }
 
   /** 设置材质颜色集 */
@@ -680,7 +722,13 @@ export class LinearDimension3D extends AnnotationBase {
     const endW = this.localToWorld(this.endWorld.copy(this.params.end));
     const aeW = this.localToWorld(this.aeWorld.copy(this.dimStart));
     const beW = this.localToWorld(this.beWorld.copy(this.dimEnd));
-    const labelAnchorLocal = this.tempLocalA.copy(this.textLabel.object3d.position);
+    // layout_first 显式几何模式下，文字锚点必须始终以后端给定的原始 textAnchor 为准。
+    // 不能再从 textLabel.object3d.position 反推下一帧 anchor，因为 setFrame() 会把
+    // object3d.position 改写成 billboard frame 下的位置；继续拿它做几何输入会导致
+    // 缩放/旋转后文字越来越偏离尺寸线。
+    const labelAnchorLocal = this.params.laidOutGeometry?.textAnchor
+      ? this.tempLocalA.copy(this.params.laidOutGeometry.textAnchor)
+      : this.tempLocalA.copy(this.textLabel.object3d.position);
     const baseRefWorld = this.localToWorld(labelAnchorLocal);
     alignToPixelGrid(camera, baseRefWorld, vw, vh, this.refWorld);
     const wpp = worldPerPixelAt(camera, this.refWorld, vw, vh, this.wppTmp);
@@ -716,9 +764,32 @@ export class LinearDimension3D extends AnnotationBase {
       this.arrow2.visible = false;
       this.arrowOpen1.visible = false;
       this.arrowOpen2.visible = false;
+      this.labelAutoHidden = false;
+      this.syncLabelVisibility();
       return;
     }
     const dirUnit = this.dimDirUnitWorld.copy(dlW).divideScalar(dlLen);
+    const laidOut = this.params.laidOutGeometry;
+    const extPx = this.textLabel.getExtentsPx();
+    const hasLabelBox = extPx.width > 0 && extPx.height > 0;
+    const dimKind = (((this.userData as any)?.mbdDimKind ?? 'segment') as string);
+    const auxKind = (((this.userData as any)?.mbdAuxKind ?? null) as string | null);
+    const hasBendId = !!((this.userData as any)?.mbdBendId);
+    const shouldAutoHideShortLabel =
+      dimKind === 'segment' ||
+      dimKind === 'port' ||
+      auxKind === 'cut_tubi' ||
+      hasBendId;
+    const lineLengthPx = dlLen / wpp;
+    this.labelAutoHidden =
+      !!laidOut?.dimLineStart &&
+      !!laidOut?.dimLineEnd &&
+      shouldAutoHideShortLabel &&
+      !this._hovered &&
+      !this._selected &&
+      hasLabelBox &&
+      lineLengthPx < Math.max(14, extPx.width * 0.45);
+    this.syncLabelVisibility();
 
     // Extension line direction (SolveSpace: out)
     // Compute as offset from original point to dimension line endpoint.
@@ -731,101 +802,125 @@ export class LinearDimension3D extends AnnotationBase {
     } else {
       outDirUnitW.copy(outDirW).normalize();
     }
-
-    // Extension lines overshoot 10px beyond dimension line (SolveSpace: out.WithMagnitude(10*pixels))
-    const ext = 10 * wpp;
     this.setLineGeometryFromWorld(
       this.ext1Geometry,
-      startW,
-      this.tmpWorldF.copy(aeW).addScaledVector(outDirUnitW, ext),
+      laidOut?.extensionLine1Start
+        ? this.localToWorld(this.tmpWorldD.copy(laidOut.extensionLine1Start))
+        : startW,
+      laidOut?.extensionLine1End
+        ? this.localToWorld(this.tmpWorldE.copy(laidOut.extensionLine1End))
+        : this.tmpWorldF.copy(aeW).addScaledVector(outDirUnitW, 10 * wpp),
       camera,
       vw,
       vh,
     );
     this.setLineGeometryFromWorld(
       this.ext2Geometry,
-      endW,
-      this.tmpWorldF.copy(beW).addScaledVector(outDirUnitW, ext),
+      laidOut?.extensionLine2Start
+        ? this.localToWorld(this.tmpWorldD.copy(laidOut.extensionLine2Start))
+        : endW,
+      laidOut?.extensionLine2End
+        ? this.localToWorld(this.tmpWorldE.copy(laidOut.extensionLine2End))
+        : this.tmpWorldC.copy(beW).addScaledVector(outDirUnitW, 10 * wpp),
       camera,
       vw,
       vh,
     );
 
-    // Label box size in world units (SolveSpace: +8px padding).
-    // 若字体尚未加载，extents 可能为 0；此时不做留白切分，避免出现错误 gap。
-    const extPx = this.textLabel.getExtentsPx();
-    const hasLabelBox = extPx.width > 0 && extPx.height > 0;
-    const swidth = hasLabelBox ? (extPx.width + 8) * wpp : 0;
-    const sheight = hasLabelBox ? (extPx.height + 8) * wpp : 0;
+    const hasExplicitLine = !!(laidOut?.dimLineStart && laidOut?.dimLineEnd);
+    let trimWithin = 0;
 
-    const trim = hasLabelBox
-      ? lineTrimmedAgainstBoxT(
-        this.refWorld,
-        aeW,
-        beW,
-        this.camRight,
-        this.camUp,
-        swidth,
-        sheight,
-        true,
-      )
-      : ({ within: 0, segmentsT: [[0, 1]] } as const);
-
-    // Main trimmed segments (0..2)
-    const segs = trim.segmentsT;
-    const toWorldAt = (t: number, out: THREE.Vector3) =>
-      out.copy(aeW).addScaledVector(dlW, t);
-
-    if (segs.length >= 1) {
-      const [t0, t1] = segs[0]!;
+    if (hasExplicitLine) {
+      // layout_first 显式几何模式：尺寸线由后端决定，前端不再按文字包围盒实时切分。
+      // 这样缩放时不会因为 billboard 文本 extents 变化而让尺寸线看起来越来越“离字更远”。
       this.dimensionLineA.visible = true;
+      this.dimensionLineB.visible = false;
+      this.dimensionLineOutside.visible = false;
       this.setLineGeometryFromWorld(
         this.dimLineGeometryA,
-        toWorldAt(t0, this.tmpWorldF),
-        toWorldAt(t1, this.tmpWorldG),
+        aeW,
+        beW,
         camera,
         vw,
         vh,
       );
     } else {
-      this.dimensionLineA.visible = false;
-    }
+      // Label box size in world units (SolveSpace: +8px padding).
+      // 若字体尚未加载，extents 可能为 0；此时不做留白切分，避免出现错误 gap。
+      const swidth = hasLabelBox ? (extPx.width + 8) * wpp : 0;
+      const sheight = hasLabelBox ? (extPx.height + 8) * wpp : 0;
 
-    if (segs.length >= 2) {
-      const [t0, t1] = segs[1]!;
-      this.dimensionLineB.visible = true;
-      this.setLineGeometryFromWorld(
-        this.dimLineGeometryB,
-        toWorldAt(t0, this.tmpWorldF),
-        toWorldAt(t1, this.tmpWorldG),
-        camera,
-        vw,
-        vh,
-      );
-    } else {
-      this.dimensionLineB.visible = false;
-    }
+      const trim = hasLabelBox
+        ? lineTrimmedAgainstBoxT(
+          this.refWorld,
+          aeW,
+          beW,
+          this.camRight,
+          this.camUp,
+          swidth,
+          sheight,
+          true,
+        )
+        : ({ within: 0, segmentsT: [[0, 1]] } as const);
 
-    // Outside extension segment when label is outside the line (SolveSpace DoLineWithArrows)
-    if (trim.within !== 0) {
-      const segLen = 18 * wpp;
-      const segVec = this.tmpWorldF.copy(dirUnit).multiplyScalar(segLen);
-      const sW = trim.within < 0 ? aeW : beW;
-      const eW =
-        trim.within < 0
-          ? this.tmpWorldG.copy(aeW).sub(segVec)
-          : this.tmpWorldG.copy(beW).add(segVec);
-      this.dimensionLineOutside.visible = true;
-      this.setLineGeometryFromWorld(
-        this.dimLineGeometryOutside,
-        sW,
-        eW,
-        camera,
-        vw,
-        vh,
-      );
-    } else {
-      this.dimensionLineOutside.visible = false;
+      trimWithin = trim.within;
+
+      // Main trimmed segments (0..2)
+      const segs = trim.segmentsT;
+      const toWorldAt = (t: number, out: THREE.Vector3) =>
+        out.copy(aeW).addScaledVector(dlW, t);
+
+      if (segs.length >= 1) {
+        const [t0, t1] = segs[0]!;
+        this.dimensionLineA.visible = true;
+        this.setLineGeometryFromWorld(
+          this.dimLineGeometryA,
+          toWorldAt(t0, this.tmpWorldF),
+          toWorldAt(t1, this.tmpWorldG),
+          camera,
+          vw,
+          vh,
+        );
+      } else {
+        this.dimensionLineA.visible = false;
+      }
+
+      if (segs.length >= 2) {
+        const [t0, t1] = segs[1]!;
+        this.dimensionLineB.visible = true;
+        this.setLineGeometryFromWorld(
+          this.dimLineGeometryB,
+          toWorldAt(t0, this.tmpWorldF),
+          toWorldAt(t1, this.tmpWorldG),
+          camera,
+          vw,
+          vh,
+        );
+      } else {
+        this.dimensionLineB.visible = false;
+      }
+
+      // Outside extension segment when label is outside the line (SolveSpace DoLineWithArrows)
+      if (trim.within !== 0) {
+        const segLen = 18 * wpp;
+        const segVec = this.tmpWorldF.copy(dirUnit).multiplyScalar(segLen);
+        const sW = trim.within < 0 ? aeW : beW;
+        const eW =
+          trim.within < 0
+            ? this.tmpWorldG.copy(aeW).sub(segVec)
+            : this.tmpWorldG.copy(beW).add(segVec);
+        this.dimensionLineOutside.visible = true;
+        this.setLineGeometryFromWorld(
+          this.dimLineGeometryOutside,
+          sW,
+          eW,
+          camera,
+          vw,
+          vh,
+        );
+      } else {
+        this.dimensionLineOutside.visible = false;
+      }
     }
 
     // Arrow heads: configurable size and angle
@@ -847,7 +942,7 @@ export class LinearDimension3D extends AnnotationBase {
     }
 
     const arrowDir = this.tmpWorldD.copy(dirUnit);
-    if (trim.within !== 0) arrowDir.multiplyScalar(-1);
+    if (!hasExplicitLine && trimWithin !== 0) arrowDir.multiplyScalar(-1);
 
     // Build arrow geometries in local space (filled triangle mesh)
     const setArrowFilled = (
@@ -1058,9 +1153,16 @@ export class LinearDimension3D extends AnnotationBase {
       this.offsetDir.normalize();
     }
 
+    const laidOut = this.params.laidOutGeometry;
+
     // 尺寸线端点（局部坐标）
-    this.dimStart.copy(start).addScaledVector(this.offsetDir, offset);
-    this.dimEnd.copy(end).addScaledVector(this.offsetDir, offset);
+    if (laidOut?.dimLineStart && laidOut.dimLineEnd) {
+      this.dimStart.copy(laidOut.dimLineStart);
+      this.dimEnd.copy(laidOut.dimLineEnd);
+    } else {
+      this.dimStart.copy(start).addScaledVector(this.offsetDir, offset);
+      this.dimEnd.copy(end).addScaledVector(this.offsetDir, offset);
+    }
 
     // 先放一个占位几何；真正 SolveSpace 像素对齐/留白/箭头在每帧 update(camera) 中更新
     this.dimLineGeometryA.setPositions([
@@ -1078,21 +1180,25 @@ export class LinearDimension3D extends AnnotationBase {
     this.dimensionLineOutside.visible = false;
 
     // 占位界线（无像素 overshoot，后续在 update(camera) 里按配置的 extensionOvershootPx 更新）
+    const ext1Start = laidOut?.extensionLine1Start ?? start;
+    const ext1End = laidOut?.extensionLine1End ?? this.dimStart;
+    const ext2Start = laidOut?.extensionLine2Start ?? end;
+    const ext2End = laidOut?.extensionLine2End ?? this.dimEnd;
     this.ext1Geometry.setPositions([
-      start.x,
-      start.y,
-      start.z,
-      this.dimStart.x,
-      this.dimStart.y,
-      this.dimStart.z,
+      ext1Start.x,
+      ext1Start.y,
+      ext1Start.z,
+      ext1End.x,
+      ext1End.y,
+      ext1End.z,
     ]);
     this.ext2Geometry.setPositions([
-      end.x,
-      end.y,
-      end.z,
-      this.dimEnd.x,
-      this.dimEnd.y,
-      this.dimEnd.z,
+      ext2Start.x,
+      ext2Start.y,
+      ext2Start.z,
+      ext2End.x,
+      ext2End.y,
+      ext2End.z,
     ]);
 
     // 占位箭头（隐藏），后续在 update(camera) 中生成实心三角
@@ -1126,10 +1232,17 @@ export class LinearDimension3D extends AnnotationBase {
 
     const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
 
-    // 默认布局让文字沿尺寸线按 labelT 定位；常规避让通过抬整条尺寸线完成。
-    this.textLabel.object3d.position.copy(
-      this.tempVec.copy(this.dimStart).lerp(this.dimEnd, t),
-    );
+    // label 基准位置 = 尺寸线上的 labelT 插值点；若存在自由偏移，则叠加偏移。
+    const baseLabelPos = laidOut?.textAnchor
+      ? this.tempVec.copy(laidOut.textAnchor)
+      : this.tempVec.copy(this.dimStart).lerp(this.dimEnd, t);
+    if (!laidOut?.textAnchor && this.params.labelOffsetWorld) {
+      this.textLabel.object3d.position
+        .copy(baseLabelPos)
+        .add(this.params.labelOffsetWorld);
+    } else {
+      this.textLabel.object3d.position.copy(baseLabelPos);
+    }
 
     // 吸附点位置
     for (let i = 0; i < this.snapMarkers.length; i++) {
@@ -1150,6 +1263,11 @@ export class LinearDimension3D extends AnnotationBase {
   protected onHighlightChanged(highlighted: boolean): void {
     this.applyMaterials();
     this.textLabel.setInteractionState(this.interactionState);
+    this.syncLabelVisibility();
+  }
+
+  private syncLabelVisibility(): void {
+    this.textLabel.setVisible(this.labelRequestedVisible && !this.labelAutoHidden);
   }
 
   override dispose(): void {

@@ -11,8 +11,9 @@ import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
 import { triggerBatchGenerateSse } from '@/composables/useDbnoInstancesJsonLoader';
-import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
+import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
+import { emitToast } from '@/ribbon/toastBus';
 
 /**
  * 全局开关：是否跳过自动生成（SSE 流式生成、弹窗选择等）
@@ -421,15 +422,18 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           } else if (!genuinelyLoaded) {
             // refno 仅在 scene.objects 中有占位（来自树选择/可见性操作），
             // 但实际几何数据未加载 → 回落到下方加载路径
-            consoleStore.addLog('info', `[model-load] refno=${normalizedRoot} 占位但无几何，回落加载`);
+            const w = `[警告] 节点 ${normalizedRoot} 仅为占位、尚无几何，正在重新加载模型数据`;
+            consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 占位但无几何，回落加载`);
+            emitToast({ message: w, level: 'warning' });
           } else {
+            const err = `[错误] 无法定位：包围盒为空（refno=${normalizedRoot}）`;
             consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`);
+            emitToast({ message: err, level: 'error' });
           }
         } catch (e) {
-          consoleStore.addLog(
-            'error',
-            `[model-load] flyTo 异常 refno=${normalizedRoot} err=${e instanceof Error ? e.message : String(e)}`
-          );
+          const em = e instanceof Error ? e.message : String(e);
+          consoleStore.addLog('error', `[model-load] flyTo 异常 refno=${normalizedRoot} err=${em}`);
+          emitToast({ message: `[错误] 定位异常：${em}`, level: 'error' });
         }
       }
       if (genuinelyLoaded) return true;
@@ -475,6 +479,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         visibleRefnos = refnos;
         if (truncated) {
           consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`);
+          emitToast({
+            message: `[错误] 子孙 refno 列表过大已被截断（${normalizedRoot}），结果可能不完整`,
+            level: 'error',
+          });
         }
 
         visibleRefnos = uniqStrings(visibleRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
@@ -490,6 +498,22 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         `[model-load] visible_refnos ok=${visibleOk ? 1 : 0} refno=${normalizedRoot} dbno=${dbno} count=${visibleRefnos.length}` +
           (visibleErr ? ` err=${visibleErr}` : '')
       );
+      if (!visibleOk && visibleErr) {
+        consoleStore.addLog('warning', `[model-load] subtree-refnos 失败，将尝试从 Parquet 加载：${visibleErr}`);
+        emitToast({
+          message: `[警告] 查询子孙 refno 失败，将尝试从 Parquet 加载：${visibleErr}`,
+          level: 'warning',
+        });
+      } else if (visibleOk && visibleRefnos.length === 0) {
+        consoleStore.addLog(
+          'warning',
+          `[model-load] 未查询到子孙 refno（${normalizedRoot}），将尝试从 Parquet 加载本库全部几何`
+        );
+        emitToast({
+          message: `[警告] 未查询到可见子孙 refno（${normalizedRoot}），将尝试从 Parquet 加载本库几何`,
+          level: 'warning',
+        });
+      }
 
       // ========== Parquet 优先路径（不可用时自动导出） ==========
       const parquetLoader = useDbnoInstancesParquetLoader();
@@ -522,6 +546,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           statusMessage.value = `dbnum=${dbno} 无可加载 refno`;
           progress.value = 100;
           syncGlobalLoadStatus();
+          consoleStore.addLog('error', `[model-load] dbnum=${dbno} 无可加载 refno`);
+          emitToast({
+            message: `[错误] dbno=${dbno} 没有可加载的 refno（请先导出 Parquet 或检查数据）`,
+            level: 'error',
+          });
           return false;
         }
 
@@ -588,6 +617,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         statusMessage.value = totalObjects > 0 ? '加载完成 (Parquet)' : '无可见几何实例';
         progress.value = 100;
         syncGlobalLoadStatus();
+        if (totalObjects === 0) {
+          emitToast({
+            message:
+              `[警告] 加载结束但未绘制任何实例（refno=${normalizedRoot}）。请检查左侧可见性（眼睛图标）或 Parquet 是否包含该范围几何`,
+            level: 'warning',
+          });
+        } else {
+          emitToast({ message: `[成功] 已加载 ${totalObjects} 个几何实例`, level: 'success' });
+        }
         return true;
       }
 
@@ -597,6 +635,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       error.value = msg;
       statusMessage.value = '加载失败';
       syncGlobalLoadStatus();
+      emitToast({ message: `[错误] 模型加载失败：${msg}`, level: 'error' });
       return false;
     } finally {
       isGenerating.value = false;
@@ -652,7 +691,11 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         statusMessage.value = 'Model is empty (0 instances)';
         progress.value = 100;
         syncGlobalLoadStatus();
-        consoleStore.addLog('info', `[model-load] Model loaded dbno=${dbno} refno_count=0 instance_count=0`);
+        consoleStore.addLog('warning', `[model-load] Model loaded dbno=${dbno} refno_count=0 instance_count=0`);
+        emitToast({
+          message: `[警告] dbno=${dbno} 的 Parquet 中没有任何 refno，无法加载模型`,
+          level: 'warning',
+        });
         return { loaded: true, instanceCount: 0, refnoCount: 0 };
       }
 
@@ -724,6 +767,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         'info',
         `[model-load] Model loaded dbno=${dbno} refno_count=${uniqueRefnos.length} loaded_refnos=${totalLoadedRefnos} skipped_refnos=${totalSkippedRefnos} instance_count=${totalLoadedObjects}`
       );
+      if (totalLoadedObjects === 0) {
+        emitToast({
+          message: `[警告] dbno=${dbno} 加载完成但未绘制实例（可能全部被跳过或几何缺失）`,
+          level: 'warning',
+        });
+      } else {
+        emitToast({ message: `[成功] dbno=${dbno} 已加载 ${totalLoadedObjects} 个实例`, level: 'success' });
+      }
       return {
         loaded: true,
         instanceCount: totalLoadedObjects,
@@ -734,6 +785,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       error.value = msg;
       statusMessage.value = '加载失败';
       syncGlobalLoadStatus();
+      emitToast({ message: `[错误] 按 dbnum 加载失败：${msg}`, level: 'error' });
       return { loaded: false, instanceCount: 0, refnoCount: 0 };
     } finally {
       isGenerating.value = false;

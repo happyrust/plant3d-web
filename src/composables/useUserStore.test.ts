@@ -374,6 +374,59 @@ describe('loadReviewTasks', () => {
       'task-pz-rejected',
     ]);
   });
+
+  it('keeps backend canonical reviewer identity when embed user id is an external actor code', async () => {
+    authGetTokenMock.mockResolvedValue({ success: true, token: 'token-reviewer' });
+    userGetCurrentMock.mockResolvedValue({
+      success: true,
+      user: {
+        id: 'user-002',
+        username: 'reviewer',
+        email: 'reviewer@example.com',
+        name: '李审核员',
+        role: 'jd',
+      },
+    });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [
+        {
+          id: 'task-form-match',
+          title: '外部单据恢复',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'submitted',
+          priority: 'medium',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李校核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李校核员',
+          currentNode: 'jd',
+          formId: 'FORM-EMBED-1',
+          components: [],
+          createdAt: 1700000000000,
+          updatedAt: 1700000001000,
+        },
+      ],
+      total: 1,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('reviewer_001');
+    store.setEmbedUser('JH', 'jd');
+    await store.loadReviewTasks();
+
+    expect(store.currentUserId.value).toBe('reviewer_001');
+    expect(store.currentUser.value?.name).toBe('李审核员');
+    expect(reviewTaskGetListMock).toHaveBeenLastCalledWith({ checkerId: 'user-002' });
+    expect(store.pendingReviewTasks.value.map((task) => task.formId)).toContain('FORM-EMBED-1');
+  });
 });
 
 describe('cross-role task visibility after task creation and submit', () => {

@@ -123,6 +123,24 @@ const customTypes = computed(() => {
   return isRoomTree.value ? [] : Array.from(pdmsTree.customTypes.value);
 });
 
+const loadingVisibleIds = ref<Set<string>>(new Set());
+
+function setNodeLoading(id: string, loading: boolean) {
+  const normalizedId = isRoomTree.value ? id : normalizeRefnoKeyLike(id);
+  if (!normalizedId) return;
+  const next = new Set(loadingVisibleIds.value);
+  if (loading) {
+    next.add(normalizedId);
+  } else {
+    next.delete(normalizedId);
+  }
+  loadingVisibleIds.value = next;
+}
+
+function isNodeLoading(id: string) {
+  return loadingVisibleIds.value.has(isRoomTree.value ? id : normalizeRefnoKeyLike(id));
+}
+
 function toggleExpand(id: string) {
   if (isRoomTree.value) {
     roomTree.toggleExpand(id);
@@ -165,13 +183,18 @@ async function setVisible(id: string, visible: boolean) {
       // eye 的“显示”也应支持 auto fit：
       // - 若已加载：showModelByRefno 会直接用 AABB flyTo
       // - 若未加载：showModelByRefno 会加载完成后 flyTo
-      const success = await modelGenerationState.value!.showModelByRefno(id, { flyTo: true });
+      setNodeLoading(id, true);
+      try {
+        const success = await modelGenerationState.value!.showModelByRefno(id, { flyTo: true });
 
-      if (success) {
-        // 模型已加载成功：同步树的勾选状态（eye 图标）并确保可见。
-        // 这样后续点击 eye 只会切换 visible，不会再次触发 show-by-refno。
-        await pdmsTree.setVisible(id, true);
-        return;
+        if (success) {
+          // 模型已加载成功：同步树的勾选状态（eye 图标）并确保可见。
+          // 这样后续点击 eye 只会切换 visible，不会再次触发 show-by-refno。
+          await pdmsTree.setVisible(id, true);
+          return;
+        }
+      } finally {
+        setNodeLoading(id, false);
       }
       // 失败时继续调用 setVisible 显示部分加载的数据
     }
@@ -1328,6 +1351,7 @@ function onSearchEnter(value: string) {
             :expanded="isExpanded(rowAt(vr.index)!.id)"
             :selected="isSelected(rowAt(vr.index)!.id)"
             :check-state="getCheckState(rowAt(vr.index)!.id)"
+            :loading="isNodeLoading(rowAt(vr.index)!.id)"
             @toggle-expand="toggleExpand"
             @toggle-visible="setVisible"
             @select="selectByRowIndex"

@@ -448,6 +448,44 @@ SCENARIOS: list[dict[str, Any]] = [
             },
         ],
     },
+    {
+        'key': 'qa-t6-task-only-components',
+        'taskId': 'seed-qat6-type2',
+        'formId': 'FORM-QAT6-TYPE2',
+        'title': 'QA-T6 Seed / Task Components Only',
+        'description': 'QA-T6 type2 fixture: task components exist but workflow models are intentionally empty.',
+        'modelName': 'QA-T6 Fixture',
+        'status': 'submitted',
+        'priority': 'medium',
+        'currentNode': 'jd',
+        # 导入阶段保持空 components，后续通过 hydration patch 制造“task 有 / workflow 空”的稳定样本。
+        'components': [],
+        'hydrateComponents': [
+            {'id': 'cmp-qat6-type2', 'refNo': 'QAT6-T2-REF', 'name': 'QA Type2 Ref', 'type': 'Pipe'},
+        ],
+        'attachments': [],
+        'confirmedRecord': None,
+        'comments': [],
+        'tags': ['qa-t6', 'type2', 'task-only-components'],
+    },
+    {
+        'key': 'qa-t6-no-persisted-components',
+        'taskId': 'seed-qat6-type3',
+        'formId': 'FORM-QAT6-TYPE3',
+        'title': 'QA-T6 Seed / No Persisted Components',
+        'description': 'QA-T6 type3 fixture: both task components and workflow models stay empty.',
+        'modelName': 'QA-T6 Fixture',
+        'status': 'submitted',
+        'priority': 'medium',
+        'currentNode': 'jd',
+        'components': [],
+        # type3 需要保持后端双视角都为空，避免 patch 回灌。
+        'skipComponentHydration': True,
+        'attachments': [],
+        'confirmedRecord': None,
+        'comments': [],
+        'tags': ['qa-t6', 'type3', 'no-persisted-components'],
+    },
 ]
 
 
@@ -553,6 +591,14 @@ class BackendClient:
         qs = urllib.parse.urlencode({query_name: query_value})
         return self.request_json('GET', f'/api/review/tasks?{qs}')
 
+    def review_task_detail(self, task_id: str) -> dict[str, Any]:
+        encoded = urllib.parse.quote(task_id, safe='')
+        return self.request_json('GET', f'/api/review/tasks/{encoded}')
+
+    def review_task_patch(self, task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        encoded = urllib.parse.quote(task_id, safe='')
+        return self.request_json('PATCH', f'/api/review/tasks/{encoded}', payload)
+
 
 @dataclass
 class SeedResult:
@@ -561,8 +607,23 @@ class SeedResult:
     title: str
     scenario_key: str
     created: bool
+    components_hydrated: bool
     synced_record: bool
     synced_comments: int
+
+
+def hydrate_task_components(client: BackendClient, scenario: dict[str, Any]) -> bool:
+    patch_payload = {
+        'components': deepcopy(scenario.get('hydrateComponents') or scenario.get('components') or []),
+    }
+    patch_response = client.review_task_patch(scenario['taskId'], patch_payload)
+    if not patch_response.get('success', False):
+        return False
+
+    detail_response = client.review_task_detail(scenario['taskId'])
+    task = detail_response.get('task') if isinstance(detail_response, dict) else None
+    components = task.get('components') if isinstance(task, dict) else None
+    return isinstance(components, list) and len(components) > 0
 
 
 def sync_task_inventory(client: BackendClient) -> tuple[list[SeedResult], list[str]]:
@@ -574,6 +635,13 @@ def sync_task_inventory(client: BackendClient) -> tuple[list[SeedResult], list[s
         response = client.request_json('POST', '/api/review/sync/import', task_payload)
         if not response.get('success', False):
             raise RuntimeError(response.get('error_message') or f"Failed to import task {scenario['taskId']}")
+
+        skip_component_hydration = bool(scenario.get('skipComponentHydration'))
+        components_hydrated = False if skip_component_hydration else hydrate_task_components(client, scenario)
+        if not skip_component_hydration and not components_hydrated:
+            warnings.append(
+                f"Task components for {scenario['taskId']} were not hydrated after sync/import; QA-T6 may miss component lineage."
+            )
 
         record_synced = False
         if scenario['confirmedRecord'] is not None:
@@ -605,6 +673,7 @@ def sync_task_inventory(client: BackendClient) -> tuple[list[SeedResult], list[s
                 title=scenario['title'],
                 scenario_key=scenario['key'],
                 created=bool(response.get('importedCount', 0)),
+                components_hydrated=components_hydrated,
                 synced_record=record_synced,
                 synced_comments=comment_count,
             )
@@ -679,6 +748,7 @@ def build_runtime_output(base_url: str, results: list[SeedResult], warnings: lis
                 'formId': result.form_id,
                 'title': result.title,
                 'createdOrUpdated': result.created,
+                'taskComponentsHydrated': result.components_hydrated,
                 'confirmedRecordSynced': result.synced_record,
                 'commentsSynced': result.synced_comments,
             }

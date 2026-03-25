@@ -1,9 +1,39 @@
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, loadEnv } from 'vite';
 
 import vuetify from 'vite-plugin-vuetify';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
+function readPkgVersion(): string {
+  try {
+    const raw = readFileSync(new URL('./package.json', import.meta.url), 'utf-8');
+    const pkg = JSON.parse(raw) as { version?: string };
+    return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+/** 与 plant-model-gen build.rs 的 `git rev-parse HEAD` 一致，便于与后端 About 信息对齐 */
+function resolveGitFullCommit(): string {
+  const fromEnv =
+    process.env.GIT_COMMIT_FULL ?? process.env.GITHUB_SHA ?? process.env.GIT_COMMIT;
+  const trimmed = fromEnv?.trim() ?? '';
+  if (trimmed && /^[0-9a-f]{7,40}$/i.test(trimmed)) return trimmed;
+  try {
+    return execSync('git rev-parse HEAD', {
+      cwd: __dirname,
+      encoding: 'utf-8',
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 function inferBackendPortFromApiBase(apiBase: string | undefined): string {
   if (!apiBase) return '';
@@ -24,9 +54,15 @@ export default defineConfig(({ mode }) => {
   const isLikelyMisconfiguredBackendPort = inferredPort === '8080' || inferredPort === '3000' || inferredPort === '3001';
   const backendPort = env.VITE_BACKEND_PORT || (isLikelyMisconfiguredBackendPort ? '3100' : inferredPort || '3100');
   const backendTarget = `http://localhost:${backendPort}`;
+  const frontendBuildIso = new Date().toISOString();
 
   return {
     base: '/',
+    define: {
+      __FRONTEND_APP_VERSION__: JSON.stringify(readPkgVersion()),
+      __FRONTEND_GIT_COMMIT__: JSON.stringify(resolveGitFullCommit()),
+      __FRONTEND_BUILD_ISO__: JSON.stringify(frontendBuildIso),
+    },
     plugins: [
       vue({
         template: { transformAssetUrls: false }

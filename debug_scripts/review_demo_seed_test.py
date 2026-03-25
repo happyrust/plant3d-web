@@ -37,6 +37,8 @@ def test_seed_script_creates_required_inventory_shape() -> None:
         'task-thread-collaboration',
         'annotation-thread-collaboration',
         'return-resubmit-reopen',
+        'qa-t6-task-only-components',
+        'qa-t6-no-persisted-components',
     }
     assert payload['roles']['reviewer']['frontendUserId'] == 'reviewer_001'
     assert payload['roles']['reviewer']['backendUserId'] == 'user-002'

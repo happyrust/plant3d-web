@@ -32,11 +32,11 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
-    expect(vis.mbdViewMode.value).toBe('construction');
+    expect(vis.mbdViewMode.value).toBe('layout_first');
     expect(vis.dimMode.value).toBe('classic');
     expect(vis.showDimSegment.value).toBe(true);
-    expect(vis.showDimChain.value).toBe(false);
-    expect(vis.showDimOverall.value).toBe(false);
+    expect(vis.showDimChain.value).toBe(true);
+    expect(vis.showDimOverall.value).toBe(true);
     expect(vis.showDimPort.value).toBe(false);
     expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showElbows.value).toBe(true);
@@ -78,18 +78,105 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.bendDisplayMode.value).toBe('size');
     expect(vis.showSegments.value).toBe(false);
 
-    vis.applyModeDefaults('construction');
-    expect(vis.mbdViewMode.value).toBe('construction');
+    vis.applyModeDefaults('layout_first');
+    expect(vis.mbdViewMode.value).toBe('layout_first');
     expect(vis.dimMode.value).toBe('classic');
     expect(vis.showDimSegment.value).toBe(true);
-    expect(vis.showDimChain.value).toBe(false);
-    expect(vis.showDimOverall.value).toBe(false);
+    expect(vis.showDimChain.value).toBe(true);
+    expect(vis.showDimOverall.value).toBe(true);
     expect(vis.showDimPort.value).toBe(false);
     expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
     expect(vis.showBends.value).toBe(true);
     expect(vis.bendDisplayMode.value).toBe('size');
+  });
+
+  it('layout_first 模式应优先消费 layout_result 的最终绘制参数', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults('layout_first' as any);
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-LAYOUT-FIRST',
+      branch_attrs: {},
+      segments: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      dims: [
+        {
+          id: 'dim-layout-first',
+          kind: 'segment',
+          start: [0, 0, 0],
+          end: [1000, 0, 0],
+          length: 1000,
+          text: '1000',
+        },
+      ],
+      layout_result: {
+        version: 1,
+        mode: 'layout_first',
+        linear_dims: [
+          {
+            id: 'dim-layout-first',
+            kind: 'segment',
+            start: [0, 0, 0],
+            end: [1000, 0, 0],
+            text: '1000',
+            offset: 320,
+            direction: [0, 1, 0],
+            label_t: 0.2,
+            label_offset_world: [30, 40, 0],
+            dim_line_start: [10, 320, 0],
+            dim_line_end: [1010, 320, 0],
+            extension_line_1_start: [0, 0, 0],
+            extension_line_1_end: [10, 320, 0],
+            extension_line_2_start: [1000, 0, 0],
+            extension_line_2_end: [1010, 320, 0],
+            text_anchor: [240, 360, 0],
+            visible: true,
+          },
+        ],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [],
+        suppressed_items: [],
+      },
+      stats: {
+        segments_count: 0,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+      },
+    } as any);
+
+    const params = vis.getDimAnnotations().get('dim-layout-first')?.getParams();
+    expect(params?.offset).toBe(320);
+    expect(params?.labelT).toBe(0.2);
+    expect(params?.direction?.toArray()).toEqual([0, 1, 0]);
+    expect(params?.labelOffsetWorld?.toArray()).toEqual([30, 40, 0]);
+    expect(params?.laidOutGeometry?.dimLineStart?.toArray()).toEqual([10, 320, 0]);
+    expect(params?.laidOutGeometry?.dimLineEnd?.toArray()).toEqual([1010, 320, 0]);
+    expect(params?.laidOutGeometry?.extensionLine1End?.toArray()).toEqual([10, 320, 0]);
+    expect(params?.laidOutGeometry?.extensionLine2End?.toArray()).toEqual([1010, 320, 0]);
+    expect(params?.laidOutGeometry?.textAnchor?.toArray()).toEqual([240, 360, 0]);
   });
 
   it('应抑制与非 overall 尺寸共用同一 span 的 overall 标注', () => {

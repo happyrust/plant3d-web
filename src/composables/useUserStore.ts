@@ -521,6 +521,7 @@ const users = ref<User[]>(mockUsers);
 const reviewerUsers = ref<User[]>(mockReviewerUsers);
 const loading = ref(false);
 const error = ref<string | null>(null);
+const backendCurrentUserResolved = ref(false);
 
 // WebSocket 连接状态
 const wsConnected = ref(false);
@@ -671,6 +672,7 @@ async function loadReviewers(): Promise<void> {
 async function loadCurrentUser(): Promise<void> {
   if (!USE_BACKEND.value) return;
 
+  backendCurrentUserResolved.value = false;
   try {
     const response = await userGetCurrent();
     if (response.success && response.user) {
@@ -697,6 +699,7 @@ async function loadCurrentUser(): Promise<void> {
       } else {
         users.value.push(mergedUser);
       }
+      backendCurrentUserResolved.value = true;
     }
   } catch (e) {
     console.warn('[useUserStore] Failed to load current user:', e);
@@ -1352,6 +1355,11 @@ function setEmbedUser(externalUserId: string, externalRole?: string): void {
 
   const resolvedRole = externalRole ? fromBackendRole(externalRole) : undefined;
 
+  if (USE_BACKEND.value && backendCurrentUserResolved.value && currentUser.value) {
+    console.log(`[useUserStore] 嵌入模式：保留后端当前用户 ${currentUser.value.id}，外部 actor=${externalUserId}, role=${resolvedRole ?? 'unknown'}`);
+    return;
+  }
+
   const existing = users.value.find((u) => u.id === externalUserId || u.username === externalUserId);
   if (existing) {
     if (resolvedRole && existing.role !== resolvedRole) {
@@ -1399,6 +1407,7 @@ function setUseBackend(use: boolean) {
   if (use) {
     initialize();
   } else {
+    backendCurrentUserResolved.value = false;
     disconnectWebSocket();
     users.value = mockUsers;
     reviewerUsers.value = mockReviewerUsers;

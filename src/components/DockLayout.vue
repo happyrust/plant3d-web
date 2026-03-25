@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 
 import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
+import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import {
   applyEmbedLandingState,
+  resolveEmbedLandingTargetFromRole,
   resolveEmbedLandingTarget,
+  type EmbedLandingState,
+  type EmbedModeParams,
 } from '@/components/review/embedRoleLanding';
 import { ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
@@ -25,8 +29,7 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { onCommand } from '@/ribbon/commandBus';
 
-// 检测 URL 参数（用于 iframe 嵌入模式）
-const embedModeParams = computed(() => {
+function readEmbedModeParamsFromUrl(): EmbedModeParams {
   const urlParams = new URLSearchParams(window.location.search);
   return {
     formId: urlParams.get('form_id'),
@@ -35,8 +38,11 @@ const embedModeParams = computed(() => {
     userRole: urlParams.get('user_role'),
     projectId: urlParams.get('project_id'),
     isEmbedMode: !!urlParams.get('form_id'),
+    verifiedClaims: null,
   };
-});
+}
+
+const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromUrl());
 
 const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v3';
 const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v3-migrated-properties';
@@ -873,6 +879,17 @@ async function bootstrapEmbedSession(): Promise<void> {
         embedTokenVerified.value = false;
       } else {
         embedTokenVerified.value = true;
+        const claims = verifyResponse.data.claims;
+        if (claims) {
+          embedModeParams.value = {
+            ...embedModeParams.value,
+            formId: claims.formId || embedModeParams.value.formId,
+            userId: claims.userId || embedModeParams.value.userId,
+            userRole: claims.role || embedModeParams.value.userRole,
+            projectId: claims.projectId || embedModeParams.value.projectId,
+            verifiedClaims: claims,
+          };
+        }
       }
     } catch (error) {
       console.warn('[DockLayout] Embedded token verification request failed:', error);
@@ -885,17 +902,32 @@ async function bootstrapEmbedSession(): Promise<void> {
 
   await ensureUserStoreInitialized();
 
-  const externalUserId = embedModeParams.value.userId;
+  const externalUserId = embedModeParams.value.verifiedClaims?.userId || embedModeParams.value.userId;
   if (externalUserId) {
-    userStore.setEmbedUser(externalUserId, embedModeParams.value.userRole || undefined);
+    userStore.setEmbedUser(
+      externalUserId,
+      embedModeParams.value.verifiedClaims?.role || embedModeParams.value.userRole || undefined,
+    );
   }
+
+  await userStore.loadReviewTasks();
+}
+
+function persistEmbedLandingState(state: EmbedLandingState | null) {
+  if (!state) return;
+
+  sessionStorage.setItem('embed_mode_params', JSON.stringify(embedModeParams.value));
+  sessionStorage.setItem('embed_landing_state', JSON.stringify(state));
 }
 
 async function applyInitialLanding() {
   await bootstrapEmbedSession();
 
   if (embedModeParams.value.isEmbedMode) {
-    const landingTarget = resolveEmbedLandingTarget({
+    const roleLandingTarget = resolveEmbedLandingTargetFromRole(
+      embedModeParams.value.verifiedClaims?.role || embedModeParams.value.userRole,
+    );
+    const landingTarget = roleLandingTarget ?? resolveEmbedLandingTarget({
       isEmbedMode: embedModeParams.value.isEmbedMode,
       isDesigner: userStore.isDesigner.value,
       isReviewer: userStore.isReviewer.value,
@@ -904,7 +936,7 @@ async function applyInitialLanding() {
     if (landingTarget) {
       console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
       const { switchProjectById } = useModelProjects();
-      applyEmbedLandingState({
+      const landingState = applyEmbedLandingState({
         ensurePanel,
         activatePanel,
         sessionStorageLike: sessionStorage,
@@ -912,6 +944,28 @@ async function applyInitialLanding() {
         target: landingTarget,
         switchProjectById,
       });
+
+      const restoreResult = await restoreEmbedWorkbenchContext({
+        target: landingTarget,
+        formId: embedModeParams.value.formId,
+        loadReviewTasks: userStore.loadReviewTasks,
+        reviewerTasks: () => userStore.pendingReviewTasks.value,
+        designerTasks: () => userStore.myInitiatedTasks.value,
+        allTasks: () => userStore.reviewTasks.value,
+        setCurrentTask: reviewStore.setCurrentTask,
+        openPanel,
+        activatePanel,
+      });
+
+      if (landingState) {
+        persistEmbedLandingState({
+          ...landingState,
+          formId: embedModeParams.value.formId,
+          restoreStatus: restoreResult.restoreStatus,
+          restoredTaskId: restoreResult.restoredTaskId,
+          restoredTaskSummary: restoreResult.restoredTaskSummary,
+        });
+      }
       return;
     }
   }

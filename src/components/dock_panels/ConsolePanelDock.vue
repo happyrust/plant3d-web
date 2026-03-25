@@ -98,6 +98,9 @@ onMounted(() => {
         
         <!-- Info line -->
         <div v-else-if="log.type === 'info'" class="text-blue-600 whitespace-pre-wrap pl-4">{{ log.content }}</div>
+
+        <!-- Warning line -->
+        <div v-else-if="log.type === 'warning'" class="text-amber-700 whitespace-pre-wrap pl-4">{{ log.content }}</div>
         
         <!-- Output line / default -->
         <div v-else class="text-gray-700 whitespace-pre-wrap pl-4">{{ log.content }}</div>

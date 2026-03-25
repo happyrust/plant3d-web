@@ -171,7 +171,85 @@ describe('LinearDimension3D', () => {
     expect(scaleSmallViewport).toBeGreaterThan(scaleLargeViewport);
   });
 
-  it('should keep label centered on the dimension line even when labelOffsetWorld is provided', async () => {
+  it('should apply labelOffsetWorld on top of the labelT anchor', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const labelOffset = new THREE.Vector3(5, 9, 0);
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      labelOffsetWorld: labelOffset,
+      text: '10000',
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    camera.position.set(0, 0, 30);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    vi.spyOn((dim as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 40,
+      height: 16,
+    });
+
+    dim.update(camera);
+
+    const dimStart = (dim as any).dimStart as THREE.Vector3;
+    const dimEnd = (dim as any).dimEnd as THREE.Vector3;
+    const expected = dimStart.clone().lerp(dimEnd, 0.5).add(labelOffset);
+    const labelPos = dim.getLabelWorldPos();
+
+    expect(labelPos.distanceTo(expected)).toBeLessThan(0.1);
+  });
+
+  it('should keep labelOffsetWorld visually stable after camera zoom changes', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const labelOffset = new THREE.Vector3(5, 9, 0);
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      labelOffsetWorld: labelOffset,
+      text: '10000',
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 200, height: 200 };
+    const expectedWorld = new THREE.Vector3(10, 12, 0);
+    const projectToPixel = (world: THREE.Vector3) => {
+      const ndc = world.clone().project(camera);
+      return new THREE.Vector2(
+        (ndc.x * 0.5 + 0.5) * 200,
+        (-ndc.y * 0.5 + 0.5) * 200,
+      );
+    };
+
+    const assertPixelAligned = (cameraZ: number) => {
+      camera.position.set(0, 0, cameraZ);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
+      dim.update(camera);
+
+      const actualPx = projectToPixel(dim.getLabelWorldPos());
+      const expectedPx = projectToPixel(expectedWorld);
+      expect(actualPx.distanceTo(expectedPx)).toBeLessThan(1.5);
+    };
+
+    assertPixelAligned(30);
+    assertPixelAligned(300);
+  });
+
+  it('should honor laidOutGeometry text anchor and explicit extension lines', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { LinearDimension3D } = await import('./LinearDimension3D');
 
@@ -181,8 +259,16 @@ describe('LinearDimension3D', () => {
       end: new THREE.Vector3(10, 0, 0),
       offset: 3,
       direction: new THREE.Vector3(0, 1, 0),
-      labelOffsetWorld: new THREE.Vector3(5, 9, 0),
       text: '10000',
+      laidOutGeometry: {
+        dimLineStart: new THREE.Vector3(0, 5, 0),
+        dimLineEnd: new THREE.Vector3(10, 5, 0),
+        extensionLine1Start: new THREE.Vector3(0, 0, 0),
+        extensionLine1End: new THREE.Vector3(0, 7, 0),
+        extensionLine2Start: new THREE.Vector3(10, 0, 0),
+        extensionLine2End: new THREE.Vector3(10, 7, 0),
+        textAnchor: new THREE.Vector3(4, 9, 0),
+      },
     });
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
@@ -193,12 +279,238 @@ describe('LinearDimension3D', () => {
 
     dim.update(camera);
 
-    const dimStart = (dim as any).dimStart as THREE.Vector3;
-    const dimEnd = (dim as any).dimEnd as THREE.Vector3;
-    const expected = dimStart.clone().lerp(dimEnd, 0.5);
     const labelPos = dim.getLabelWorldPos();
+    expect(labelPos.x).toBeCloseTo(4, 1);
+    expect(labelPos.y).toBeCloseTo(9, 1);
 
-    expect(labelPos.distanceTo(expected)).toBeLessThan(0.1);
+    const ext1Geom = (dim as any).ext1Geometry as THREE.BufferGeometry;
+    const instanceStart = ext1Geom.getAttribute('instanceStart');
+    const instanceEnd = ext1Geom.getAttribute('instanceEnd');
+    expect(instanceStart).toBeTruthy();
+    expect(instanceEnd).toBeTruthy();
+    expect(instanceStart.getX(0)).toBeCloseTo(0, 1);
+    expect(instanceStart.getY(0)).toBeCloseTo(0, 1);
+    expect(instanceEnd.getX(0)).toBeCloseTo(0, 1);
+    expect(instanceEnd.getY(0)).toBeCloseTo(7, 1);
+  });
+
+  it('should keep laidOutGeometry textAnchor visually stable after camera zoom changes', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const laidOutTextAnchor = new THREE.Vector3(4, 9, 0);
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      text: '416',
+      laidOutGeometry: {
+        dimLineStart: new THREE.Vector3(0, 5, 0),
+        dimLineEnd: new THREE.Vector3(10, 5, 0),
+        extensionLine1Start: new THREE.Vector3(0, 0, 0),
+        extensionLine1End: new THREE.Vector3(0, 7, 0),
+        extensionLine2Start: new THREE.Vector3(10, 0, 0),
+        extensionLine2End: new THREE.Vector3(10, 7, 0),
+        textAnchor: laidOutTextAnchor.clone(),
+      },
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 200, height: 200 };
+    const projectToPixel = (world: THREE.Vector3) => {
+      const ndc = world.clone().project(camera);
+      return new THREE.Vector2(
+        (ndc.x * 0.5 + 0.5) * 200,
+        (-ndc.y * 0.5 + 0.5) * 200,
+      );
+    };
+
+    const assertPixelAligned = (cameraZ: number) => {
+      camera.position.set(0, 0, cameraZ);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
+      dim.update(camera);
+
+      const actualPx = projectToPixel(dim.getLabelWorldPos());
+      const expectedPx = projectToPixel(laidOutTextAnchor);
+      expect(actualPx.distanceTo(expectedPx)).toBeLessThan(1.5);
+    };
+
+    assertPixelAligned(30);
+    assertPixelAligned(300);
+  });
+
+  it('应在 layout_first 远距离下自动隐藏过短 segment 尺寸文字，并在拉近后恢复', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      text: '416',
+      laidOutGeometry: {
+        dimLineStart: new THREE.Vector3(0, 5, 0),
+        dimLineEnd: new THREE.Vector3(10, 5, 0),
+        textAnchor: new THREE.Vector3(4, 9, 0),
+      },
+    });
+    (dim.userData as any).mbdDimKind = 'segment';
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 200, height: 200 };
+    vi.spyOn((dim as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 30,
+      height: 16,
+    });
+
+    const updateAt = (cameraZ: number) => {
+      camera.position.set(0, 0, cameraZ);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
+      dim.update(camera);
+    };
+
+    updateAt(300);
+    expect((dim as any).textLabel.object3d.visible).toBe(false);
+
+    updateAt(30);
+    expect((dim as any).textLabel.object3d.visible).toBe(true);
+  });
+
+  it('应在 layout_first 远距离下自动隐藏过短 port 尺寸文字', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      text: '151',
+      laidOutGeometry: {
+        dimLineStart: new THREE.Vector3(0, 5, 0),
+        dimLineEnd: new THREE.Vector3(10, 5, 0),
+        textAnchor: new THREE.Vector3(5, 8, 0),
+      },
+    });
+    (dim.userData as any).mbdDimKind = 'port';
+    vi.spyOn((dim as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 26,
+      height: 16,
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 200, height: 200 };
+    camera.position.set(0, 0, 300);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    dim.update(camera);
+
+    expect((dim as any).textLabel.object3d.visible).toBe(false);
+  });
+
+  it('应在 layout_first 远距离下自动隐藏过短 cut_tubi 与 bend size 文字', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const createShortDim = (text: string) =>
+      new LinearDimension3D(materials, {
+        start: new THREE.Vector3(0, 0, 0),
+        end: new THREE.Vector3(10, 0, 0),
+        offset: 3,
+        direction: new THREE.Vector3(0, 1, 0),
+        text,
+        laidOutGeometry: {
+          dimLineStart: new THREE.Vector3(0, 5, 0),
+          dimLineEnd: new THREE.Vector3(10, 5, 0),
+          textAnchor: new THREE.Vector3(5, 8, 0),
+        },
+      });
+
+    const cut = createShortDim('53');
+    (cut.userData as any).mbdAuxKind = 'cut_tubi';
+    vi.spyOn((cut as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 24,
+      height: 16,
+    });
+
+    const bend = createShortDim('152');
+    (bend.userData as any).mbdBendId = 'bend-1';
+    vi.spyOn((bend as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 24,
+      height: 16,
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 200, height: 200 };
+    camera.position.set(0, 0, 300);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    cut.update(camera);
+    bend.update(camera);
+
+    expect((cut as any).textLabel.object3d.visible).toBe(false);
+    expect((bend as any).textLabel.object3d.visible).toBe(false);
+  });
+
+  it('should not trim explicit laidOutGeometry dimension line around the text box', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(10, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      text: '10000',
+      laidOutGeometry: {
+        dimLineStart: new THREE.Vector3(0, 5, 0),
+        dimLineEnd: new THREE.Vector3(10, 5, 0),
+        textAnchor: new THREE.Vector3(5, 5, 0),
+      },
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    camera.position.set(0, 0, 30);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    const assertExplicitLinePreserved = (cameraZ: number) => {
+      camera.position.set(0, 0, cameraZ);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
+      dim.update(camera);
+
+      expect((dim as any).dimensionLineA.visible).toBe(true);
+      expect((dim as any).dimensionLineB.visible).toBe(false);
+      expect((dim as any).dimensionLineOutside.visible).toBe(false);
+
+      const lineGeom = (dim as any).dimLineGeometryA as THREE.BufferGeometry;
+      const instanceStart = lineGeom.getAttribute('instanceStart');
+      const instanceEnd = lineGeom.getAttribute('instanceEnd');
+      expect(instanceStart.getX(0)).toBeCloseTo(0, 0);
+      expect(instanceStart.getY(0)).toBeCloseTo(5, 0);
+      expect(instanceEnd.getX(0)).toBeCloseTo(10, 0);
+      expect(instanceEnd.getY(0)).toBeCloseTo(5, 0);
+    };
+
+    assertExplicitLinePreserved(30);
+    assertExplicitLinePreserved(300);
   });
 
   it('should place label at labelT position on the dimension line', async () => {

@@ -12,7 +12,7 @@ vi.mock('@/ribbon/commandBus', () => ({
 vi.mock('vuetify/components', () => ({
   VSnackbar: {
     name: 'VSnackbar',
-    props: ['modelValue', 'timeout'],
+    props: ['modelValue', 'timeout', 'color', 'multiLine'],
     template: '<div data-testid="v-snackbar"><slot /></div>',
   },
 }));

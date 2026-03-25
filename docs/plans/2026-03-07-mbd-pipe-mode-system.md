@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 为 MBD 管道标注建立 construction / inspection 模式系统，统一后端语义默认值与前端模式化显示行为，同时保持显式 `include_*` 覆盖能力。
+**Goal:** 为 MBD 管道标注建立 `layout_first / construction / inspection` 三模式系统，其中 `layout_first` 作为新的默认模式，承载“后端先版面、前端只绘制”的实现，同时保持旧模式与显式 `include_*` 覆盖能力。
 
-**Architecture:** 后端在 `/api/mbd/pipe/{refno}` 上新增 `mode` 概念，并以 `construction` 作为默认模式；前端在 MBD composable 和面板层引入对应模式状态与“重置为当前模式默认”行为。模式只提供默认基线，显式 `include_*` 参数和前端局部开关仍保留优先级。
+**Architecture:** 后端在 `/api/mbd/pipe/{refno}` 上支持 `layout_first | construction | inspection`，其中 `layout_first` 默认同时返回旧语义字段与 `layout_result`；前端在 MBD composable 和面板层引入第三模式，并在 `layout_first + layout_result` 下走独立渲染路径。旧模式继续保留当前行为，缺少 `layout_result` 时允许 fallback 到旧布局链路。
 
 **Tech Stack:** Rust, Axum, Serde, Vue 3, TypeScript, Three.js, Vitest, Playwright
 
@@ -20,7 +20,8 @@
 
 新增最小测试，验证：
 
-- 不传 `mode` 时按 `construction` 处理
+- 不传 `mode` 时按 `layout_first` 处理
+- `mode=layout_first` 能被成功解析
 - `mode=inspection` 能被成功解析
 
 **Step 2: 运行测试确认失败**
@@ -35,7 +36,7 @@ Expected: 缺少 `mode` 字段或模式解析逻辑导致失败。
 
 - 新增 `MbdPipeMode`
 - 在 `MbdPipeQuery` 中加入 `mode`
-- 提供默认值为 `construction`
+- 提供默认值为 `layout_first`
 
 **Step 4: 运行测试确认通过**
 
@@ -60,9 +61,10 @@ git commit -m "feat: add mbd pipe mode parsing"
 
 至少覆盖：
 
-- `construction` 默认 `chain/overall/weld/slope=true`, `port/bends=false`
+- `layout_first` 默认 `chain/overall/weld/slope/bends/layout_result=true`, `port=false`
+- `construction` 默认保留旧施工语义，且 `layout_result=false`
 - `inspection` 默认 `port=true`, `chain/overall/weld/slope/bends=false`
-- 显式 `include_port_dims=true` 覆盖 `construction`
+- 显式 `include_port_dims=true` 覆盖 `layout_first`
 - 显式 `include_chain_dims=true` 覆盖 `inspection`
 
 **Step 2: 运行测试确认失败**
@@ -84,7 +86,7 @@ Expected: 运行时默认组合与断言不一致。
 
 Run: `cargo test mbd_pipe -- --nocapture`
 
-Expected: construction / inspection / 显式覆盖规则全部通过。
+Expected: layout_first / construction / inspection / 显式覆盖规则全部通过。
 
 **Step 5: Commit**
 
@@ -131,7 +133,7 @@ git add src/api/mbdPipeApi.ts src/components/dock_panels/ViewerPanel.vue e2e/mbd
 git commit -m "feat: pass mbd pipe mode from frontend requests"
 ```
 
-### Task 4: 前端 composable 增加模式状态
+### Task 4: 前端 composable 增加第三模式状态与 layout-first 渲染分流
 
 **Files:**
 - Modify: `src/composables/useMbdPipeAnnotationThree.ts`
@@ -141,8 +143,9 @@ git commit -m "feat: pass mbd pipe mode from frontend requests"
 
 补最小测试，验证：
 
-- 默认 `mbdViewMode` 为 `construction`
-- 调用模式默认映射函数后，construction 与 inspection 的默认可见项和 `dimMode` 不同
+- 默认 `mbdViewMode` 为 `layout_first`
+- 调用模式默认映射函数后，`layout_first / construction / inspection` 的默认可见项和 `dimMode` 不同
+- `layout_first + layout_result` 时优先消费后端最终绘制参数
 
 **Step 2: 运行测试确认失败**
 
@@ -157,10 +160,15 @@ Expected: 缺少 `mbdViewMode` 或模式映射逻辑。
 - `mbdViewMode`
 - `applyModeDefaults(mode)`
 - `resetToCurrentModeDefaults()`
+- `layout_first` 独立渲染路径与 fallback 判断
+
+layout_first 默认映射到：
+
+- `segment/chain/overall/weld/slope/bend + classic`
 
 construction 默认映射到：
 
-- `chain/overall/weld/slope + classic`
+- 保留旧施工模式显示语义
 
 inspection 默认映射到：
 
@@ -190,7 +198,7 @@ git commit -m "feat: add mbd pipe view mode state"
 验证面板能：
 
 - 展示当前模式
-- 切换 `construction / inspection`
+- 切换 `layout_first / construction / inspection`
 - 点击“重置为当前模式默认”时调用对应方法
 
 **Step 2: 运行测试确认失败**
@@ -248,13 +256,13 @@ Expected: 通过。
 
 Run: `pnpm playwright test e2e/mbd-pipe-race.spec.ts`
 
-Expected: 请求 query 中带 `mode`，最新请求渲染逻辑不回归。
+Expected: 请求 query 中带 `mode=layout_first`，且 `include_layout_result=true`，最新请求渲染逻辑不回归。
 
 **Step 4: 手工验证**
 
 用真实 BRAN：
 
-- 初次打开默认走 construction
+- 初次打开默认走 layout_first
 - 切到 inspection 后请求与默认显示变化正确
 - 手动改显隐后，不因模式值变化被静默全量覆盖
 - 点击“重置为当前模式默认”后恢复对应模式默认态

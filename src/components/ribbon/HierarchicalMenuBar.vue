@@ -5,7 +5,7 @@ import { emitCommand } from '@/ribbon/commandBus';
 import { buildHierarchicalMenuTabs } from '@/ribbon/hierarchicalMenu';
 import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import { ribbonIcons, type RibbonIconName } from '@/ribbon/ribbonIcons';
-import { onToast } from '@/ribbon/toastBus';
+import { onToast, type ToastLevel } from '@/ribbon/toastBus';
 
 const menuTabs = computed(() => buildHierarchicalMenuTabs(RIBBON_TABS));
 const activeTabId = ref(menuTabs.value[0]?.id ?? '');
@@ -17,11 +17,29 @@ const activeTab = computed(() => {
 
 const snackbarOpen = ref(false);
 const snackbarText = ref('');
+const snackbarColor = ref<string>('surface-variant');
+const snackbarTimeout = ref(2200);
+
+function mapToastLevel(level: ToastLevel | undefined): { color: string; timeout: number } {
+  switch (level) {
+    case 'success':
+      return { color: 'success', timeout: 2200 };
+    case 'warning':
+      return { color: 'warning', timeout: 4500 };
+    case 'error':
+      return { color: 'error', timeout: 6000 };
+    default:
+      return { color: 'primary', timeout: 2200 };
+  }
+}
 
 let offToast: (() => void) | null = null;
 
 onMounted(() => {
-  offToast = onToast(({ message }) => {
+  offToast = onToast(({ message, level }) => {
+    const m = mapToastLevel(level);
+    snackbarColor.value = m.color;
+    snackbarTimeout.value = m.timeout;
     snackbarText.value = message;
     snackbarOpen.value = true;
   });
@@ -108,7 +126,7 @@ function onClickCommand(commandId: string) {
       </div>
     </div>
 
-    <v-snackbar v-model="snackbarOpen" timeout="1800">
+    <v-snackbar v-model="snackbarOpen" :timeout="snackbarTimeout" :color="snackbarColor" multi-line>
       {{ snackbarText }}
     </v-snackbar>
   </div>
