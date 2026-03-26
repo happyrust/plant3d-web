@@ -440,4 +440,157 @@ describe('InitiateReviewPanel form binding', () => {
     app.unmount();
     host.remove();
   });
+
+  it('hydrates restored designer draft data on embed reopen', async () => {
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-DESIGNER-2',
+      userToken: 'token-2',
+      userId: 'SJ',
+      projectId: 'AvevaMarineSample',
+      isEmbedMode: true,
+    }));
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'designer',
+      formId: 'FORM-DESIGNER-2',
+      restoreStatus: 'matched',
+      restoredTaskId: 'task-embed-2',
+      restoredTaskSummary: {
+        title: '已保存提资单',
+        status: 'draft',
+        currentNode: 'sj',
+      },
+      restoredTaskDraft: {
+        title: '已保存提资单',
+        description: '复开后应回填',
+        checkerId: 'checker-1',
+        approverId: 'approver-1',
+        priority: 'high',
+        dueDate: '2026-03-21',
+        components: [
+          {
+            id: 'comp-1',
+            refNo: 'REF-RESTORE-1',
+            name: 'Hull/REF-RESTORE-1',
+            type: '管道',
+          },
+        ],
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'design-note.pdf',
+            url: '/files/design-note.pdf',
+            uploadedAt: 1700000000000,
+          },
+        ],
+        taskId: 'task-embed-2',
+        formId: 'FORM-DESIGNER-2',
+      },
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview', 'myTasks'],
+    }));
+
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel),
+    });
+    app.mount(host);
+    await nextTick();
+
+    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null)?.value)
+      .toBe('已保存提资单');
+    expect((host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement | null)?.value)
+      .toBe('复开后应回填');
+    expect((host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement | null)?.value)
+      .toBe('checker-1');
+    expect((host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement | null)?.value)
+      .toBe('approver-1');
+    expect((host.querySelector('[data-testid="initiate-priority-select"]') as HTMLSelectElement | null)?.value)
+      .toBe('high');
+    expect((host.querySelector('[data-testid="initiate-due-date"]') as HTMLInputElement | null)?.value)
+      .toBe('2026-03-21');
+    expect(host.textContent).toContain('Hull/REF-RESTORE-1');
+    expect(host.textContent).toContain('RefNo: REF-RESTORE-1');
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('syncs late-arriving restored designer draft data into an already mounted panel', async () => {
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-LATE-1',
+      userToken: 'token-late',
+      userId: 'SJ',
+      projectId: 'AvevaMarineSample',
+      isEmbedMode: true,
+    }));
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'designer',
+      formId: 'FORM-LATE-1',
+      restoreStatus: 'missing',
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview', 'myTasks'],
+    }));
+
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel),
+    });
+    app.mount(host);
+    await nextTick();
+
+    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null)?.value)
+      .toBe('');
+
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'designer',
+      formId: 'FORM-LATE-1',
+      restoreStatus: 'matched',
+      restoredTaskId: 'task-late-1',
+      restoredTaskSummary: {
+        title: '晚到草稿',
+        status: 'draft',
+        currentNode: 'sj',
+      },
+      restoredTaskDraft: {
+        title: '晚到草稿',
+        description: '挂载后补写入的恢复数据',
+        checkerId: 'checker-1',
+        approverId: 'approver-1',
+        priority: 'high',
+        dueDate: '2026-03-26',
+        components: [
+          {
+            id: 'comp-late-1',
+            refNo: 'REF-LATE-1',
+            name: 'Hull/REF-LATE-1',
+            type: '管道',
+          },
+        ],
+        attachments: [],
+        taskId: 'task-late-1',
+        formId: 'FORM-LATE-1',
+      },
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview', 'myTasks'],
+    }));
+    window.dispatchEvent(new CustomEvent('plant3d:embed-landing-state-updated'));
+    await flushAsyncWork();
+
+    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null)?.value)
+      .toBe('晚到草稿');
+    expect((host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement | null)?.value)
+      .toBe('挂载后补写入的恢复数据');
+    expect(host.textContent).toContain('Hull/REF-LATE-1');
+
+    app.unmount();
+    host.remove();
+  });
 });

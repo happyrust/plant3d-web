@@ -7,6 +7,7 @@ import {
   confirmCurrentDataSafely,
   finalizeTaskDecisionSafely,
   getSubmitActionLabel,
+  getWorkflowSubmitBridgeAction,
   mapWorkflowHistoryToTaskDetailItems,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
@@ -59,6 +60,14 @@ describe('reviewPanelActions', () => {
     expect(getSubmitActionLabel('jd')).toBe('提交到审核');
     expect(getSubmitActionLabel('sh')).toBe('提交到批准');
     expect(getSubmitActionLabel('pz')).toBe('最终批准');
+  });
+
+  it('getWorkflowSubmitBridgeAction keeps SJ on active and later nodes on agree', () => {
+    expect(getWorkflowSubmitBridgeAction(undefined)).toBe('active');
+    expect(getWorkflowSubmitBridgeAction('sj')).toBe('active');
+    expect(getWorkflowSubmitBridgeAction('jd')).toBe('agree');
+    expect(getWorkflowSubmitBridgeAction('sh')).toBe('agree');
+    expect(getWorkflowSubmitBridgeAction('pz')).toBe('agree');
   });
 
   it('mapWorkflowHistoryToTaskDetailItems 将工作流历史映射为详情面板可展示的数据', () => {

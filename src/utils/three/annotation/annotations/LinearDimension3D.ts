@@ -790,6 +790,8 @@ export class LinearDimension3D extends AnnotationBase {
       hasLabelBox &&
       lineLengthPx < Math.max(14, extPx.width * 0.45);
     this.syncLabelVisibility();
+    const shouldTrimForVisibleLabel =
+      hasLabelBox && this.labelRequestedVisible && !this.labelAutoHidden;
 
     // Extension line direction (SolveSpace: out)
     // Compute as offset from original point to dimension line endpoint.
@@ -829,28 +831,61 @@ export class LinearDimension3D extends AnnotationBase {
 
     const hasExplicitLine = !!(laidOut?.dimLineStart && laidOut?.dimLineEnd);
     let trimWithin = 0;
+    const swidth = shouldTrimForVisibleLabel ? (extPx.width + 8) * wpp : 0;
+    const sheight = shouldTrimForVisibleLabel ? (extPx.height + 8) * wpp : 0;
 
     if (hasExplicitLine) {
-      // layout_first 显式几何模式：尺寸线由后端决定，前端不再按文字包围盒实时切分。
-      // 这样缩放时不会因为 billboard 文本 extents 变化而让尺寸线看起来越来越“离字更远”。
-      this.dimensionLineA.visible = true;
-      this.dimensionLineB.visible = false;
-      this.dimensionLineOutside.visible = false;
-      this.setLineGeometryFromWorld(
-        this.dimLineGeometryA,
-        aeW,
-        beW,
-        camera,
-        vw,
-        vh,
-      );
-    } else {
-      // Label box size in world units (SolveSpace: +8px padding).
-      // 若字体尚未加载，extents 可能为 0；此时不做留白切分，避免出现错误 gap。
-      const swidth = hasLabelBox ? (extPx.width + 8) * wpp : 0;
-      const sheight = hasLabelBox ? (extPx.height + 8) * wpp : 0;
+      // layout_first 显式几何模式：尺寸线总体几何由后端决定，但仍需在文字处留白，
+      // 使显示效果符合 CAD 尺寸标注（文字压线时断开尺寸线，而不是整条穿过文字）。
+      const trim = shouldTrimForVisibleLabel
+        ? lineTrimmedAgainstBoxT(
+          this.refWorld,
+          aeW,
+          beW,
+          this.camRight,
+          this.camUp,
+          swidth,
+          sheight,
+          false,
+        )
+        : ({ within: 0, segmentsT: [[0, 1]] } as const);
+      const segs = trim.segmentsT;
+      const toWorldAt = (t: number, out: THREE.Vector3) =>
+        out.copy(aeW).addScaledVector(dlW, t);
 
-      const trim = hasLabelBox
+      if (segs.length >= 1) {
+        const [t0, t1] = segs[0]!;
+        this.dimensionLineA.visible = true;
+        this.setLineGeometryFromWorld(
+          this.dimLineGeometryA,
+          toWorldAt(t0, this.tmpWorldF),
+          toWorldAt(t1, this.tmpWorldG),
+          camera,
+          vw,
+          vh,
+        );
+      } else {
+        this.dimensionLineA.visible = false;
+      }
+
+      if (segs.length >= 2) {
+        const [t0, t1] = segs[1]!;
+        this.dimensionLineB.visible = true;
+        this.setLineGeometryFromWorld(
+          this.dimLineGeometryB,
+          toWorldAt(t0, this.tmpWorldF),
+          toWorldAt(t1, this.tmpWorldG),
+          camera,
+          vw,
+          vh,
+        );
+      } else {
+        this.dimensionLineB.visible = false;
+      }
+
+      this.dimensionLineOutside.visible = false;
+    } else {
+      const trim = shouldTrimForVisibleLabel
         ? lineTrimmedAgainstBoxT(
           this.refWorld,
           aeW,

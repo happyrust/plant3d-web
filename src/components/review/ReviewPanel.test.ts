@@ -135,7 +135,7 @@ function createTask(overrides: Partial<ReviewTask> = {}): ReviewTask {
 async function settlePanel() {
   await vi.dynamicImportSettled();
   await nextTick();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await Promise.resolve();
   await nextTick();
 }
 
@@ -273,6 +273,24 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
+  it('renders SJ task submit action as the initial handoff to checker', async () => {
+    currentTask.value = createTask({
+      id: 'task-sj',
+      title: 'SJ 发起任务',
+      formId: 'FORM-SJ',
+      currentNode: 'sj',
+      status: 'draft',
+    });
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('提交到校核');
+    expect(document.body.textContent).not.toContain('提交到审核');
+
+    mounted.unmount();
+  });
+
   it('refreshes workflow surfaces and clears task-scoped state when switching tasks', async () => {
     currentTask.value = createTask({
       id: 'task-a',
@@ -397,6 +415,36 @@ describe('ReviewPanel', () => {
     }));
 
     const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('当前打开的嵌入链接未提供有效 form_id');
+
+    mounted.unmount();
+  });
+
+  it('syncs late-arriving reviewer landing state into an already mounted panel', async () => {
+    currentTask.value = null;
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'reviewer',
+      formId: 'FORM-LATE-REVIEW',
+      restoreStatus: 'missing',
+      primaryPanelId: 'review',
+      visiblePanelIds: ['review', 'reviewerTasks'],
+    }));
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('已识别 form_id，但尚未绑定内部任务，当前不可审核');
+
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'reviewer',
+      formId: null,
+      restoreStatus: 'no_form',
+      primaryPanelId: 'review',
+      visiblePanelIds: ['review', 'reviewerTasks'],
+    }));
+    window.dispatchEvent(new CustomEvent('plant3d:embed-landing-state-updated'));
     await settlePanel();
 
     expect(document.body.textContent).toContain('当前打开的嵌入链接未提供有效 form_id');

@@ -7,6 +7,9 @@ import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import {
   applyEmbedLandingState,
+  EMBED_LANDING_STATE_STORAGE_KEY,
+  EMBED_LANDING_STATE_UPDATED_EVENT,
+  EMBED_MODE_PARAMS_STORAGE_KEY,
   resolveEmbedLandingTargetFromRole,
   resolveEmbedLandingTarget,
   type EmbedLandingState,
@@ -916,8 +919,9 @@ async function bootstrapEmbedSession(): Promise<void> {
 function persistEmbedLandingState(state: EmbedLandingState | null) {
   if (!state) return;
 
-  sessionStorage.setItem('embed_mode_params', JSON.stringify(embedModeParams.value));
-  sessionStorage.setItem('embed_landing_state', JSON.stringify(state));
+  sessionStorage.setItem(EMBED_MODE_PARAMS_STORAGE_KEY, JSON.stringify(embedModeParams.value));
+  sessionStorage.setItem(EMBED_LANDING_STATE_STORAGE_KEY, JSON.stringify(state));
+  window.dispatchEvent(new CustomEvent(EMBED_LANDING_STATE_UPDATED_EVENT, { detail: state }));
 }
 
 async function applyInitialLanding() {
@@ -964,6 +968,7 @@ async function applyInitialLanding() {
           restoreStatus: restoreResult.restoreStatus,
           restoredTaskId: restoreResult.restoredTaskId,
           restoredTaskSummary: restoreResult.restoredTaskSummary,
+          restoredTaskDraft: restoreResult.restoredTaskDraft,
         });
       }
       return;

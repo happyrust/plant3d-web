@@ -7,7 +7,26 @@
     <style>
       :root {
         color-scheme: light;
-        font-family: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', sans-serif;
+        font-family: 'Microsoft YaHei', 'PingFang SC', 'SimSun', sans-serif;
+        --page-bg: #eef2f6;
+        --panel-bg: #ffffff;
+        --line-strong: #b9c7d8;
+        --line-soft: #d7e0ea;
+        --line-faint: #e7edf4;
+        --text-main: #21364d;
+        --text-muted: #6b7f95;
+        --nav-bg: #0d2740;
+        --nav-text: #d7e6f4;
+        --nav-active: #204d7a;
+        --nav-active-border: #6fa2d6;
+        --toolbar-bg: #f8fbfe;
+        --table-head: #e9eff6;
+        --primary: #2d67b2;
+        --primary-strong: #1f4f8d;
+        --success: #2f7f48;
+        --warning: #a95d10;
+        --danger: #b33d3d;
+        --dialog-mask: rgba(14, 24, 37, 0.58);
       }
 
       * {
@@ -19,54 +38,80 @@
         margin: 0;
         width: 100%;
         height: 100%;
-        background: #f2f5f9;
-        color: #1f2937;
+        background: var(--page-bg);
+        color: var(--text-main);
+      }
+
+      body.modal-open {
+        overflow: hidden;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      textarea,
+      input,
+      select,
+      button {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
       }
 
       #app {
         width: 100%;
         height: 100%;
         display: grid;
-        grid-template-columns: 220px 1fr;
+        grid-template-columns: 216px minmax(0, 1fr);
       }
 
       .sidebar {
-        background: #0f2742;
-        color: #dbe7f3;
+        background: linear-gradient(180deg, #102a43 0%, #0a2135 100%);
+        color: var(--nav-text);
+        border-right: 1px solid #071623;
         display: flex;
         flex-direction: column;
-        border-right: 1px solid #0a1a2d;
       }
 
       .brand {
         padding: 16px 18px;
-        border-bottom: 1px solid rgba(219, 231, 243, 0.16);
-        font-weight: 600;
-        letter-spacing: 0.5px;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        border-bottom: 1px solid rgba(215, 230, 244, 0.14);
       }
 
       .menu-group {
-        padding: 14px 10px;
+        padding: 16px 10px 8px;
       }
 
       .menu-title {
-        color: #8ba4be;
+        margin: 0 8px 8px;
         font-size: 12px;
-        margin: 0 10px 6px;
+        color: #86a6c3;
       }
 
       .menu-item {
-        border-radius: 4px;
+        margin: 3px 0;
         padding: 8px 10px;
-        font-size: 14px;
-        margin: 2px 0;
+        border: 1px solid transparent;
+        border-radius: 2px;
+        font-size: 13px;
         user-select: none;
       }
 
       .menu-item.active {
+        background: linear-gradient(180deg, rgba(44, 88, 136, 0.95), rgba(28, 63, 104, 0.95));
+        border-color: var(--nav-active-border);
         color: #fff;
-        background: rgba(59, 130, 246, 0.32);
-        border: 1px solid rgba(96, 165, 250, 0.6);
       }
 
       .main {
@@ -80,14 +125,14 @@
         justify-content: space-between;
         align-items: center;
         gap: 12px;
-        padding: 12px 16px;
-        border-bottom: 1px solid #d9e1ea;
-        background: #ffffff;
+        padding: 10px 16px;
+        background: var(--panel-bg);
+        border-bottom: 1px solid var(--line-soft);
       }
 
       .breadcrumbs {
         font-size: 13px;
-        color: #64748b;
+        color: var(--text-muted);
       }
 
       .header-meta {
@@ -98,115 +143,120 @@
       }
 
       .roles {
-        padding: 10px 16px;
-        border-bottom: 1px solid #d9e1ea;
-        background: #f8fbff;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--line-soft);
+        background: #f7fafc;
         display: flex;
         align-items: center;
-        gap: 10px;
         flex-wrap: wrap;
+        gap: 8px 10px;
+        font-size: 12px;
       }
 
       .role-buttons {
         display: inline-flex;
-        gap: 8px;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .role-btn,
+      .mini-btn,
+      .tool-btn,
+      .panel-btn,
+      .dialog-btn,
+      .modal-btn {
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: var(--text-main);
       }
 
       .role-btn {
-        border: 1px solid #c9d5e6;
-        border-radius: 4px;
-        background: #fff;
-        padding: 6px 12px;
+        min-width: 48px;
+        padding: 5px 10px;
         font-size: 12px;
-        cursor: pointer;
       }
 
       .role-btn.active {
-        border-color: #2563eb;
-        background: #dbeafe;
-        color: #1d4ed8;
-        font-weight: 600;
+        border-color: var(--primary);
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
+        color: var(--primary-strong);
+        font-weight: 700;
       }
 
-      .role-btn:disabled {
-        cursor: not-allowed;
-        opacity: 0.6;
+      .mini-btn {
+        padding: 4px 10px;
+        font-size: 12px;
       }
 
       .workspace {
         min-height: 0;
         display: grid;
-        grid-template-rows: auto minmax(240px, 1fr) minmax(260px, 38%);
+        grid-template-rows: auto minmax(240px, 1fr) minmax(260px, 36%);
         gap: 10px;
         padding: 10px 14px 14px;
       }
 
       .toolbar {
-        background: #fff;
-        border: 1px solid #d9e1ea;
-        border-radius: 4px;
-        padding: 10px;
+        background: var(--toolbar-bg);
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        padding: 8px 10px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 10px;
       }
 
-      .toolbar-actions {
-        display: inline-flex;
-        gap: 8px;
-      }
-
-      .tool-btn {
-        border: 1px solid #cad8e8;
-        background: linear-gradient(#fff, #f8fafc);
-        color: #334155;
-        border-radius: 4px;
-        padding: 6px 14px;
-        font-size: 12px;
-        cursor: pointer;
-      }
-
-      .tool-btn:disabled {
-        cursor: not-allowed;
-        opacity: 0.45;
-      }
-
+      .toolbar-actions,
       .toolbar-meta {
         display: flex;
         align-items: center;
         gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .tool-btn {
+        padding: 5px 14px;
+        font-size: 12px;
+      }
+
+      .toolbar-meta {
         font-size: 12px;
       }
 
       .toolbar-meta input {
-        width: 180px;
-        border: 1px solid #cad8e8;
-        border-radius: 4px;
+        width: 200px;
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: #fff;
         padding: 5px 8px;
       }
 
       .table-panel,
       .bottom-panel {
         min-height: 0;
-        background: #fff;
-        border: 1px solid #d9e1ea;
-        border-radius: 4px;
+        background: var(--panel-bg);
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
         display: grid;
         grid-template-rows: auto 1fr;
       }
 
       .panel-title {
-        border-bottom: 1px solid #e2e8f0;
         padding: 8px 10px;
+        background: linear-gradient(180deg, #f8fbfe, #eff4f9);
+        border-bottom: 1px solid var(--line-soft);
+        color: #42586f;
         font-size: 12px;
-        color: #475569;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 8px;
       }
 
-      .table-wrap {
+      .table-wrap,
+      .diag-content {
         min-height: 0;
         overflow: auto;
       }
@@ -218,15 +268,15 @@
       }
 
       thead tr {
-        background: #eff3f8;
+        background: var(--table-head);
       }
 
       th,
       td {
-        border-bottom: 1px solid #e6edf5;
-        border-right: 1px solid #eef3f8;
-        text-align: left;
         padding: 7px 8px;
+        border-right: 1px solid var(--line-faint);
+        border-bottom: 1px solid var(--line-faint);
+        text-align: left;
         white-space: nowrap;
         vertical-align: middle;
       }
@@ -241,56 +291,57 @@
       }
 
       tbody tr:hover {
-        background: #f4f8ff;
+        background: #f4f8fd;
       }
 
       tbody tr.selected {
-        background: #dbeafe;
+        background: #deebfb;
       }
 
       .status-badge {
         display: inline-flex;
-        border-radius: 999px;
+        align-items: center;
         padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid transparent;
         font-size: 11px;
         line-height: 1.4;
-        border: 1px solid transparent;
       }
 
       .status-draft {
-        background: #f1f5f9;
-        border-color: #cbd5e1;
-        color: #475569;
+        color: #5b6b7b;
+        background: #f2f4f7;
+        border-color: #ccd6e2;
       }
 
       .status-submitted {
-        background: #fef9c3;
-        border-color: #facc15;
-        color: #854d0e;
+        color: #8b5a10;
+        background: #fff5d8;
+        border-color: #e7c46b;
       }
 
       .status-in_review {
-        background: #dbeafe;
-        border-color: #93c5fd;
-        color: #1d4ed8;
+        color: #205ea5;
+        background: #e1edfb;
+        border-color: #93b9e9;
       }
 
       .status-approved {
-        background: #dcfce7;
-        border-color: #86efac;
-        color: #166534;
+        color: #256f3d;
+        background: #e1f5e7;
+        border-color: #93d3a6;
       }
 
       .status-rejected {
-        background: #fee2e2;
-        border-color: #fca5a5;
-        color: #b91c1c;
+        color: #a53a3a;
+        background: #fce7e7;
+        border-color: #ebb1b1;
       }
 
       .status-cancelled {
-        background: #f1f5f9;
-        border-color: #cbd5e1;
-        color: #64748b;
+        color: #66798f;
+        background: #eef2f6;
+        border-color: #c9d4df;
       }
 
       .empty,
@@ -301,264 +352,68 @@
       }
 
       .error {
-        color: #b91c1c;
-        background: #fef2f2;
+        color: #9f2f2f;
+        background: #fff1f1;
       }
 
-      .bottom-grid {
-        min-height: 0;
-        display: grid;
-        grid-template-columns: minmax(380px, 1fr) minmax(320px, 36%);
-      }
-
-      .iframe-box,
       .diag-box {
         min-height: 0;
         display: grid;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: auto auto 1fr;
       }
 
-      .iframe-box {
-        border-right: 1px solid #e2e8f0;
-      }
-
-      .iframe-head,
-      .diag-head {
+      .diag-head,
+      .diag-summary {
         padding: 8px 10px;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--line-soft);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 10px;
         font-size: 12px;
       }
 
-      .iframe-actions,
+      .diag-head {
+        background: #f9fbfd;
+      }
+
+      .diag-summary {
+        background: #fcfdff;
+        color: var(--text-muted);
+      }
+
       .diag-actions {
         display: inline-flex;
         gap: 6px;
       }
 
-      .mini-btn {
-        border: 1px solid #cbd5e1;
-        border-radius: 4px;
-        background: #fff;
-        padding: 4px 8px;
-        font-size: 12px;
-        cursor: pointer;
-      }
-
-      .mini-btn:disabled {
-        opacity: 0.45;
-        cursor: not-allowed;
-      }
-
-      .modal {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 1000;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .modal.show {
-        display: flex;
-      }
-
-      .modal-content {
-        background: white;
-        border-radius: 8px;
-        width: 90vw;
-        height: 85vh;
-        max-width: 1400px;
-        display: flex;
-        flex-direction: column;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-      }
-
-      .modal-header {
-        padding: 16px 20px;
-        border-bottom: 1px solid #e5e7eb;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: #f9fafb;
-        border-radius: 8px 8px 0 0;
-      }
-
-      .modal-title {
-        font-weight: 600;
-        color: #111827;
-      }
-
-      .modal-actions {
-        display: flex;
-        gap: 8px;
-      }
-
-      .modal-body {
-        flex: 1;
-        padding: 0;
-        overflow: hidden;
-      }
-
-      .modal-body iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-      }
-
-      .modal-close {
-        background: #ef4444;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-      }
-
-      .modal-close:hover {
-        background: #dc2626;
-      }
-
-      .modal-reopen {
-        background: #3b82f6;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-      }
-
-      .modal-reopen:hover {
-        background: #2563eb;
-      }
-
-      .modal-reopen:disabled {
-        background: #9ca3af;
-        cursor: not-allowed;
-      }
-
       .diag-content {
-        min-height: 0;
-        overflow: auto;
         padding: 10px;
         font-size: 12px;
-        line-height: 1.6;
-      }
-
-      .workflow-sync-controls {
-        border-bottom: 1px solid #e2e8f0;
-        padding: 10px;
-        background: #f8fafc;
-        display: grid;
-        gap: 8px;
-      }
-
-      .workflow-sync-controls label {
-        display: block;
-        font-size: 12px;
-        color: #334155;
-        font-weight: 600;
-      }
-
-      .workflow-sync-comment {
-        width: 100%;
-        min-height: 64px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        padding: 6px 8px;
-        font-size: 12px;
-        resize: vertical;
-        box-sizing: border-box;
-        font-family: inherit;
-      }
-
-      .workflow-sync-buttons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-
-      .workflow-sync-btn {
-        border: 1px solid #cbd5e1;
-        border-radius: 4px;
-        background: #fff;
-        padding: 4px 10px;
-        font-size: 12px;
-        cursor: pointer;
-      }
-
-      .workflow-sync-btn.primary {
-        background: #eff6ff;
-        border-color: #93c5fd;
-        color: #1d4ed8;
-      }
-
-      .workflow-sync-btn.success {
-        background: #ecfdf5;
-        border-color: #86efac;
-        color: #166534;
-      }
-
-      .workflow-sync-btn.warn {
-        background: #fff7ed;
-        border-color: #fdba74;
-        color: #9a3412;
-      }
-
-      .workflow-sync-btn.danger {
-        background: #fef2f2;
-        border-color: #fca5a5;
-        color: #b91c1c;
-      }
-
-      .workflow-sync-btn:disabled {
-        opacity: 0.45;
-        cursor: not-allowed;
-      }
-
-      .workflow-sync-hint {
-        font-size: 12px;
-        color: #64748b;
-      }
-
-      .workflow-sync-hint.ok {
-        color: #166534;
-      }
-
-      .workflow-sync-hint.fail {
-        color: #b91c1c;
+        line-height: 1.65;
       }
 
       .diag-card {
-        border: 1px solid #dbe3ef;
-        border-radius: 4px;
-        background: #f8fbff;
-        padding: 8px;
         margin-bottom: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: 2px;
+        background: #f8fbfe;
       }
 
       .diag-grid {
         display: grid;
-        grid-template-columns: 96px 1fr;
+        grid-template-columns: 108px 1fr;
         gap: 4px 8px;
       }
 
       .diag-key {
-        color: #64748b;
+        color: var(--text-muted);
       }
 
       .diag-value {
-        color: #111827;
-        font-weight: 500;
+        color: #1d2e40;
+        font-weight: 600;
         word-break: break-all;
       }
 
@@ -570,6 +425,425 @@
       .diag-list li {
         margin-bottom: 2px;
         word-break: break-all;
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal.show {
+        display: flex;
+      }
+
+      .modal-mask {
+        position: absolute;
+        inset: 0;
+        background: var(--dialog-mask);
+      }
+
+      .modal-window {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid #879ab0;
+        box-shadow: 0 18px 44px rgba(18, 35, 53, 0.34);
+        overflow: hidden;
+      }
+
+      .main-modal-window {
+        width: min(1480px, 94vw);
+        height: min(920px, 90vh);
+      }
+
+      .modal-header {
+        padding: 10px 14px;
+        background: linear-gradient(180deg, #f7fafc, #e8eef5);
+        border-bottom: 1px solid var(--line-soft);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .modal-title-wrap {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .modal-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #26405b;
+      }
+
+      .modal-subtitle {
+        font-size: 12px;
+        color: var(--text-muted);
+        min-height: 18px;
+      }
+
+      .modal-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .modal-btn {
+        padding: 5px 12px;
+        font-size: 12px;
+      }
+
+      .modal-btn.primary {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dce9f9);
+        color: var(--primary-strong);
+      }
+
+      .modal-btn.danger {
+        border-color: #c89b9b;
+        background: linear-gradient(180deg, #fff5f5, #f7dddd);
+        color: #973636;
+      }
+
+      .modal-body {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .simulator-layout {
+        height: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+      }
+
+      .iframe-region {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background: #dfe7ef;
+        border-right: 1px solid var(--line-soft);
+      }
+
+      .iframe-region iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #fff;
+      }
+
+      .iframe-blocker {
+        position: absolute;
+        inset: 0;
+        background: rgba(13, 21, 31, 0.22);
+        backdrop-filter: blur(1px);
+        z-index: 2;
+      }
+
+      .side-panel {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        background: linear-gradient(180deg, #f9fbfd 0%, #f1f5f9 100%);
+      }
+
+      .side-panel-header,
+      .side-panel-footer {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .side-panel-footer {
+        border-top: 1px solid var(--line-soft);
+        border-bottom: none;
+        background: #f8fbff;
+      }
+
+      .panel-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .panel-title-main {
+        font-size: 14px;
+        font-weight: 700;
+        color: #24405e;
+      }
+
+      .panel-badge {
+        font-size: 11px;
+        color: var(--primary-strong);
+        background: #dfeafb;
+        border: 1px solid #9ebbe5;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+
+      .panel-subtitle {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .panel-meta {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        gap: 6px 8px;
+        font-size: 12px;
+      }
+
+      .panel-meta-key {
+        color: var(--text-muted);
+      }
+
+      .panel-meta-value {
+        color: #17304a;
+        font-weight: 600;
+        word-break: break-all;
+      }
+
+      .side-panel-scroll {
+        min-height: 0;
+        overflow: auto;
+        padding: 12px 14px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel-section {
+        border: 1px solid var(--line-soft);
+        background: #fff;
+        border-radius: 2px;
+      }
+
+      .panel-section-header {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line-faint);
+        background: #f8fbfe;
+        font-size: 12px;
+        font-weight: 700;
+        color: #41586f;
+      }
+
+      .panel-section-body {
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .panel-field {
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+      }
+
+      .panel-field label {
+        color: #465d75;
+        font-weight: 700;
+      }
+
+      .panel-input,
+      .panel-textarea,
+      .dialog-select,
+      .dialog-textarea {
+        width: 100%;
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: #fff;
+        color: #21364d;
+      }
+
+      .panel-input,
+      .dialog-select {
+        min-height: 32px;
+        padding: 6px 8px;
+      }
+
+      .panel-textarea,
+      .dialog-textarea {
+        min-height: 88px;
+        padding: 8px;
+        resize: vertical;
+        line-height: 1.55;
+      }
+
+      .panel-textarea.readonly,
+      .dialog-textarea.readonly {
+        background: #f6f8fb;
+      }
+
+      .component-list,
+      .attachment-list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+      }
+
+      .component-list li,
+      .attachment-list li {
+        word-break: break-all;
+      }
+
+      .panel-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .panel-btn,
+      .dialog-btn {
+        padding: 6px 14px;
+        font-size: 12px;
+      }
+
+      .panel-btn.primary,
+      .dialog-btn.primary {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dbe8f8);
+        color: var(--primary-strong);
+      }
+
+      .panel-btn.success,
+      .dialog-btn.success {
+        border-color: #8fbda0;
+        background: linear-gradient(180deg, #eefaf1, #dff0e4);
+        color: #245c34;
+      }
+
+      .panel-btn.warn,
+      .dialog-btn.warn {
+        border-color: #d7b083;
+        background: linear-gradient(180deg, #fff8ef, #f8ead8);
+        color: #8c4e13;
+      }
+
+      .panel-btn.danger,
+      .dialog-btn.danger {
+        border-color: #d4a0a0;
+        background: linear-gradient(180deg, #fff3f3, #f6dddd);
+        color: #9c3737;
+      }
+
+      .panel-muted,
+      .dialog-muted {
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .panel-feedback {
+        font-size: 12px;
+        line-height: 1.6;
+        color: #41586f;
+      }
+
+      .panel-feedback.ok,
+      .dialog-feedback.ok {
+        color: var(--success);
+      }
+
+      .panel-feedback.fail,
+      .dialog-feedback.fail {
+        color: var(--danger);
+      }
+
+      .dialog-modal {
+        z-index: 1100;
+      }
+
+      .dialog-window {
+        width: min(560px, calc(100vw - 32px));
+        max-height: min(680px, calc(100vh - 32px));
+      }
+
+      .dialog-body {
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+        overflow: auto;
+      }
+
+      .dialog-warning {
+        padding: 10px 12px;
+        border: 1px solid #e0c1a0;
+        background: #fff6ea;
+        color: #8b4d16;
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .dialog-footer {
+        padding: 10px 14px;
+        border-top: 1px solid var(--line-soft);
+        background: #f8fbff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .dialog-feedback {
+        font-size: 12px;
+        line-height: 1.5;
+        color: #435970;
+        flex: 1;
+      }
+
+      .dialog-actions {
+        display: inline-flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 1180px) {
+        #app {
+          grid-template-columns: 180px minmax(0, 1fr);
+        }
+
+        .simulator-layout {
+          grid-template-columns: minmax(0, 1fr) 320px;
+        }
+      }
+
+      @media (max-width: 900px) {
+        #app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .workspace {
+          grid-template-rows: auto minmax(220px, 1fr) minmax(260px, 40%);
+          padding: 8px;
+        }
+
+        .main-modal-window {
+          width: calc(100vw - 16px);
+          height: calc(100vh - 16px);
+        }
+
+        .simulator-layout {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(260px, 1fr) minmax(280px, 44%);
+        }
+
+        .iframe-region {
+          border-right: none;
+          border-bottom: 1px solid var(--line-soft);
+        }
       }
     </style>
   </head>
@@ -642,41 +916,199 @@
                   <button id="diag-workflow-btn" class="mini-btn" disabled>查 form_id 聚合</button>
                 </div>
               </div>
-              <div class="workflow-sync-controls">
-                <label for="workflow-comment-input">workflow/sync comments（可选）</label>
-                <textarea
-                  id="workflow-comment-input"
-                  class="workflow-sync-comment"
-                  placeholder="例如：校核同意，进入下一环节"></textarea>
-                <div class="workflow-sync-buttons">
-                  <button id="workflow-action-active-btn" class="workflow-sync-btn primary" disabled>active 发起</button>
-                  <button id="workflow-action-agree-btn" class="workflow-sync-btn success" disabled>agree 同意</button>
-                  <button id="workflow-action-return-btn" class="workflow-sync-btn warn" disabled>return 驳回</button>
-                  <button id="workflow-action-stop-btn" class="workflow-sync-btn danger" disabled>stop 终止</button>
-                </div>
-                <div id="workflow-action-hint" class="workflow-sync-hint">请选择带 form_id 的记录后再执行流程动作。</div>
+              <div class="diag-summary">
+                <span>诊断区仅展示任务上下文、聚合快照、最近一次流程请求结果与后端提示。</span>
+                <span id="workflow-action-hint">请选择记录后查看诊断信息。</span>
               </div>
               <div id="diag-content" class="diag-content"></div>
             </section>
           </section>
-
-          <!-- 弹窗模式的 iframe -->
-          <div id="iframe-modal" class="modal">
-            <div class="modal-content">
-              <div class="modal-header">
-                <div id="modal-title" class="modal-title">未打开校审页面</div>
-                <div class="modal-actions">
-                  <button id="modal-reopen-btn" class="modal-reopen" disabled>刷新重开</button>
-                  <button id="modal-close-btn" class="modal-close">关闭</button>
-                </div>
-              </div>
-              <div class="modal-body">
-                <iframe id="review-iframe" title="PMS 三维校审 iframe" src="about:blank"></iframe>
-              </div>
-            </div>
-          </div>
         </section>
       </main>
+    </div>
+
+    <div id="iframe-modal" class="modal" aria-hidden="true">
+      <div class="modal-mask" data-close="iframe-modal"></div>
+      <div class="modal-window main-modal-window" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <div id="modal-title" class="modal-title">未打开校审页面</div>
+            <div id="modal-subtitle" class="modal-subtitle">请从任务列表或新增入口打开校审页面。</div>
+          </div>
+          <div class="modal-actions">
+            <button id="modal-reopen-btn" class="modal-btn primary" disabled>刷新重开</button>
+            <button id="modal-close-btn" class="modal-btn danger">关闭</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="simulator-layout">
+            <section class="iframe-region">
+              <iframe id="review-iframe" title="PMS 三维校审 iframe" src="about:blank"></iframe>
+              <div id="iframe-blocker" class="iframe-blocker" hidden></div>
+            </section>
+
+            <aside class="side-panel">
+              <div class="side-panel-header">
+                <div class="panel-heading">
+                  <span id="side-panel-title" class="panel-title-main">流程单据面板</span>
+                  <span id="side-panel-badge" class="panel-badge">只读</span>
+                </div>
+                <div id="side-panel-subtitle" class="panel-subtitle">打开单据后显示当前流程节点、意见及最近提交结果。</div>
+              </div>
+
+              <div class="side-panel-header">
+                <div class="panel-meta">
+                  <div class="panel-meta-key">任务编号</div>
+                  <div id="panel-meta-task-id" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">form_id</div>
+                  <div id="panel-meta-form-id" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">当前节点</div>
+                  <div id="panel-meta-node" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">状态</div>
+                  <div id="panel-meta-status" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">打开来源</div>
+                  <div id="panel-meta-source" class="panel-meta-value">--</div>
+                  <div class="panel-meta-key">当前角色</div>
+                  <div id="panel-meta-role" class="panel-meta-value">--</div>
+                </div>
+              </div>
+
+              <div class="side-panel-scroll">
+                <section class="panel-section">
+                  <div class="panel-section-header">包信息</div>
+                  <div class="panel-section-body panel-meta">
+                    <div class="panel-meta-key">项目号</div>
+                    <div id="panel-project-id" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">标题</div>
+                    <div id="panel-title-text" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">说明</div>
+                    <div id="panel-note-text" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">录入人</div>
+                    <div id="panel-requester-text" class="panel-meta-value">--</div>
+                    <div class="panel-meta-key">录入日期</div>
+                    <div id="panel-created-text" class="panel-meta-value">--</div>
+                  </div>
+                </section>
+
+                <section class="panel-section">
+                  <div class="panel-section-header">构件与附件</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label>构件清单</label>
+                      <ul id="panel-component-list" class="component-list"></ul>
+                    </div>
+                    <div class="panel-field">
+                      <label>附件占位</label>
+                      <ul id="panel-attachment-list" class="attachment-list"></ul>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="panel-initiate-section" class="panel-section" hidden>
+                  <div class="panel-section-header">发起信息</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label for="side-panel-comment-input">发起说明 / 意见</label>
+                      <textarea
+                        id="side-panel-comment-input"
+                        class="panel-textarea"
+                        placeholder="请输入发起说明、校审意见或补充说明"></textarea>
+                    </div>
+                    <div class="panel-actions">
+                      <button id="panel-action-active-btn" class="panel-btn primary" type="button">发起</button>
+                    </div>
+                    <div class="panel-muted">新增打开时保留发起态；若 embed-url 随后返回 form_id，仍由此处作为首个 authoritative 输入。</div>
+                  </div>
+                </section>
+
+                <section id="panel-workflow-section" class="panel-section" hidden>
+                  <div class="panel-section-header">流程处理</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label for="side-panel-comment-workflow">处理意见</label>
+                      <textarea
+                        id="side-panel-comment-workflow"
+                        class="panel-textarea"
+                        placeholder="请输入同意、退回或终止原因"></textarea>
+                    </div>
+                    <div class="panel-actions">
+                      <button id="panel-action-agree-btn" class="panel-btn success" type="button">同意</button>
+                      <button id="panel-action-return-btn" class="panel-btn warn" type="button">驳回</button>
+                      <button id="panel-action-stop-btn" class="panel-btn danger" type="button">终止</button>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="panel-readonly-section" class="panel-section" hidden>
+                  <div class="panel-section-header">只读说明</div>
+                  <div class="panel-section-body">
+                    <div class="panel-field">
+                      <label for="side-panel-readonly-comment">当前上下文</label>
+                      <textarea id="side-panel-readonly-comment" class="panel-textarea readonly" readonly></textarea>
+                    </div>
+                    <div class="panel-muted">当前状态不可直接发起流程动作，可使用关闭、刷新重开、重开当前等入口继续排查。</div>
+                  </div>
+                </section>
+
+                <section class="panel-section">
+                  <div class="panel-section-header">最近提交与结果</div>
+                  <div class="panel-section-body">
+                    <div class="panel-meta">
+                      <div class="panel-meta-key">最近动作</div>
+                      <div id="panel-last-action" class="panel-meta-value">--</div>
+                      <div class="panel-meta-key">回退目标</div>
+                      <div id="panel-last-target" class="panel-meta-value">--</div>
+                      <div class="panel-meta-key">最终 payload</div>
+                      <div id="panel-last-payload" class="panel-meta-value">--</div>
+                      <div class="panel-meta-key">最近结果</div>
+                      <div id="panel-last-result" class="panel-meta-value">--</div>
+                    </div>
+                    <div id="panel-feedback" class="panel-feedback">尚未发起 workflow/sync。</div>
+                  </div>
+                </section>
+              </div>
+
+              <div class="side-panel-footer">
+                <div id="panel-footer-text" class="panel-muted">右侧面板作为 authoritative workflow 输入，底部诊断区仅做结果镜像。</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="workflow-dialog" class="modal dialog-modal" aria-hidden="true">
+      <div class="modal-mask" data-close="workflow-dialog"></div>
+      <div class="modal-window dialog-window" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <div id="workflow-dialog-title" class="modal-title">流程确认</div>
+            <div id="workflow-dialog-subtitle" class="modal-subtitle">请确认本次 workflow/sync 提交内容。</div>
+          </div>
+        </div>
+        <div class="dialog-body">
+          <div id="workflow-dialog-warning" class="dialog-warning" hidden></div>
+          <div class="panel-field" id="workflow-dialog-target-field" hidden>
+            <label for="workflow-dialog-target-select">退回目标节点</label>
+            <select id="workflow-dialog-target-select" class="dialog-select"></select>
+          </div>
+          <div class="panel-field">
+            <label for="workflow-dialog-comment">确认意见</label>
+            <textarea id="workflow-dialog-comment" class="dialog-textarea"></textarea>
+          </div>
+          <div class="panel-field">
+            <label for="workflow-dialog-payload">最终 comments payload</label>
+            <textarea id="workflow-dialog-payload" class="dialog-textarea readonly" readonly></textarea>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <div id="workflow-dialog-feedback" class="dialog-feedback">确认后才会执行真实 workflow/sync 请求。</div>
+          <div class="dialog-actions">
+            <button id="workflow-dialog-cancel-btn" class="dialog-btn" type="button">取消</button>
+            <button id="workflow-dialog-confirm-btn" class="dialog-btn primary" type="button">确认提交</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="/src/debug/pmsReviewSimulator.ts"></script>

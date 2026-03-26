@@ -4,6 +4,7 @@ import {
   applyEmbedLandingState,
   getEmbedLandingPanelIds,
   resolveEmbedLandingTarget,
+  resolveEmbedLandingTargetFromRole,
 } from './embedRoleLanding';
 
 const localStorageMock = {
@@ -40,6 +41,16 @@ describe('embed role landing', () => {
     })).toBe('reviewer');
 
     expect(getEmbedLandingPanelIds('reviewer')).toEqual(['review', 'reviewerTasks']);
+  });
+
+  it('maps PMS role aliases to the expected landing targets', () => {
+    expect(resolveEmbedLandingTargetFromRole('sj')).toBe('designer');
+    expect(resolveEmbedLandingTargetFromRole('jd')).toBe('reviewer');
+    expect(resolveEmbedLandingTargetFromRole('jh')).toBe('reviewer');
+    expect(resolveEmbedLandingTargetFromRole('sh')).toBe('reviewer');
+    expect(resolveEmbedLandingTargetFromRole('pz')).toBe('reviewer');
+    expect(resolveEmbedLandingTargetFromRole('designer')).toBe('designer');
+    expect(resolveEmbedLandingTargetFromRole('reviewer')).toBe('reviewer');
   });
 
   it('persists a shared form lineage while recording the chosen landing target', () => {

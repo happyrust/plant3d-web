@@ -33,13 +33,18 @@ import {
   canSubmitAtCurrentNode,
   confirmCurrentDataSafely,
   getSubmitActionLabel,
+  getWorkflowSubmitBridgeAction,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
-import type { EmbedLandingState } from './embedRoleLanding';
+import {
+  EMBED_LANDING_STATE_STORAGE_KEY,
+  EMBED_LANDING_STATE_UPDATED_EVENT,
+  type EmbedLandingState,
+} from './embedRoleLanding';
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
@@ -56,6 +61,16 @@ import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
 type ConfirmedRecordEntry = typeof reviewStore.sortedConfirmedRecords.value[number];
+type WorkflowSyncBridgeAction = 'active' | 'agree' | 'return' | 'stop';
+type WorkflowSyncBridgeMessage = {
+  type: 'plant3d.workflow_action';
+  action: WorkflowSyncBridgeAction;
+  taskId?: string;
+  formId?: string;
+  comments?: string;
+  targetNode?: WorkflowNode;
+  source: 'review-panel';
+};
 type NormalizedTaskContext = {
   title: string;
   modelName: string;
@@ -76,16 +91,23 @@ const viewerContext = useViewerContext();
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
 
-if (typeof sessionStorage !== 'undefined') {
-  const storedLandingState = sessionStorage.getItem('embed_landing_state');
-  if (storedLandingState) {
-    try {
-      embedLandingState.value = JSON.parse(storedLandingState);
-    } catch {
-      console.warn('[ReviewPanel] 无法解析嵌入模式落点状态');
-    }
+function syncEmbedLandingStateFromStorage() {
+  if (typeof sessionStorage === 'undefined') return;
+  const storedLandingState = sessionStorage.getItem(EMBED_LANDING_STATE_STORAGE_KEY);
+  if (!storedLandingState) return;
+
+  try {
+    embedLandingState.value = JSON.parse(storedLandingState);
+  } catch {
+    console.warn('[ReviewPanel] 无法解析嵌入模式落点状态');
   }
 }
+
+function handleEmbedLandingStateUpdated() {
+  syncEmbedLandingStateFromStorage();
+}
+
+syncEmbedLandingStateFromStorage();
 
 const confirmNote = ref('');
 
@@ -194,6 +216,18 @@ const canSubmitToNextNode = computed(() => canSubmitAtCurrentNode(currentTask.va
 const canReturnToPrevNode = computed(() => canReturnAtCurrentNode(currentTask.value?.currentNode));
 const submitActionLabel = computed(() => getSubmitActionLabel(currentTask.value?.currentNode));
 const returnTargetNode = ref<WorkflowNode>('sj');
+
+function notifyParentWorkflowAction(payload: Omit<WorkflowSyncBridgeMessage, 'type' | 'source'>): void {
+  if (typeof window === 'undefined') return;
+  if (window.parent === window) return;
+
+  const message: WorkflowSyncBridgeMessage = {
+    type: 'plant3d.workflow_action',
+    source: 'review-panel',
+    ...payload,
+  };
+  window.parent.postMessage(message, '*');
+}
 // ============ 同步（后端） ============
 
 const syncExporting = ref(false);
@@ -347,9 +381,13 @@ async function refreshCurrentTask(taskId: string) {
 }
 
 async function handleSubmitToNextNode() {
-  await submitTaskToNextNodeSafely({
+  const taskId = currentTask.value?.id;
+  const formId = currentTask.value?.formId?.trim();
+  const comments = submitComment.value.trim();
+  const action: WorkflowSyncBridgeAction = getWorkflowSubmitBridgeAction(currentNode.value);
+  const submitted = await submitTaskToNextNodeSafely({
     canSubmit: canSubmitToNextNode.value,
-    taskId: currentTask.value?.id,
+    taskId,
     submitComment,
     showSubmitDialog,
     workflowActionLoading,
@@ -359,21 +397,41 @@ async function handleSubmitToNextNode() {
     loadWorkflow,
     emitToast,
   });
+
+  if (!submitted || !taskId) return;
+
+  notifyParentWorkflowAction({
+    action,
+    taskId,
+    formId: formId || undefined,
+    comments,
+  });
 }
 
 async function handleReturnToNode() {
   if (!currentTask.value || !canReturnToPrevNode.value) return;
-  if (!returnReason.value.trim()) return;
+  const taskId = currentTask.value.id;
+  const formId = currentTask.value.formId?.trim();
+  const reason = returnReason.value.trim();
+  if (!reason) return;
+  const targetNode = returnTargetNode.value;
   workflowActionLoading.value = true;
   workflowError.value = null;
   try {
-    await userStore.returnTaskToNode(currentTask.value.id, returnTargetNode.value, returnReason.value.trim());
-    await refreshCurrentTask(currentTask.value.id);
-    await loadWorkflow(currentTask.value.id);
+    await userStore.returnTaskToNode(taskId, targetNode, reason);
+    await refreshCurrentTask(taskId);
+    await loadWorkflow(taskId);
     emitToast({ message: '任务已驳回到指定节点' });
     showReturnDialog.value = false;
     returnReason.value = '';
     returnTargetNode.value = 'sj';
+    notifyParentWorkflowAction({
+      action: 'return',
+      taskId,
+      formId: formId || undefined,
+      comments: reason,
+      targetNode,
+    });
   } catch (e) {
     workflowError.value = e instanceof Error ? e.message : '驳回失败';
   } finally {
@@ -620,6 +678,7 @@ function handleClickOutside(event: MouseEvent) {
 }
 
 onMounted(() => {
+  window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   document.addEventListener('click', handleClickOutside);
 
   const isAutomation = localStorage.getItem('plant3d_automation_review') === '1'
@@ -654,6 +713,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   document.removeEventListener('click', handleClickOutside);
   document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true } as EventListenerOptions);
 });

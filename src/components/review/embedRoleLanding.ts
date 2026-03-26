@@ -1,4 +1,4 @@
-import type { ReviewTask, WorkflowNode } from '@/types/auth';
+import type { ReviewAttachment, ReviewComponent, ReviewTask, WorkflowNode } from '@/types/auth';
 
 export type EmbedModeParams = {
   formId: string | null;
@@ -32,6 +32,24 @@ export type EmbedLandingState = {
   restoreStatus?: EmbedRestoreStatus;
   restoredTaskId?: string | null;
   restoredTaskSummary?: EmbedLandingTaskSummary | null;
+  restoredTaskDraft?: EmbedLandingTaskDraft | null;
+};
+
+export const EMBED_LANDING_STATE_STORAGE_KEY = 'embed_landing_state';
+export const EMBED_MODE_PARAMS_STORAGE_KEY = 'embed_mode_params';
+export const EMBED_LANDING_STATE_UPDATED_EVENT = 'plant3d:embed-landing-state-updated';
+
+export type EmbedLandingTaskDraft = {
+  title: string;
+  description: string;
+  checkerId: string;
+  approverId: string;
+  priority: ReviewTask['priority'];
+  dueDate: string;
+  components: ReviewComponent[];
+  attachments: ReviewAttachment[];
+  taskId: string | null;
+  formId: string | null;
 };
 
 function normalizeEmbedRole(role?: string | null): string | null {
@@ -49,6 +67,7 @@ export function resolveEmbedLandingTargetFromRole(role?: string | null): EmbedLa
 
   if (
     normalizedRole === 'jd' ||
+    normalizedRole === 'jh' ||
     normalizedRole === 'sh' ||
     normalizedRole === 'pz' ||
     normalizedRole === 'proofreader' ||
@@ -105,9 +124,9 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
 
   const storage = options.sessionStorageLike;
   if (storage) {
-    storage.setItem('embed_mode_params', JSON.stringify(options.embedModeParams));
+    storage.setItem(EMBED_MODE_PARAMS_STORAGE_KEY, JSON.stringify(options.embedModeParams));
     storage.setItem(
-      'embed_landing_state',
+      EMBED_LANDING_STATE_STORAGE_KEY,
       JSON.stringify(({
         target: options.target,
         formId: options.embedModeParams.formId,

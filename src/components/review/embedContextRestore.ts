@@ -1,5 +1,6 @@
 import {
   getEmbedLandingPanelIds,
+  type EmbedLandingTaskDraft,
   type EmbedLandingState,
   type EmbedLandingTarget,
   type EmbedLandingTaskSummary,
@@ -10,7 +11,7 @@ import type { ReviewTask, WorkflowNode } from '@/types/auth';
 
 type EmbedRestoreResult = Pick<
   EmbedLandingState,
-  'target' | 'restoreStatus' | 'restoredTaskId' | 'restoredTaskSummary'
+  'target' | 'restoreStatus' | 'restoredTaskId' | 'restoredTaskSummary' | 'restoredTaskDraft'
 > & {
   restoredTask: ReviewTask | null;
 };
@@ -54,6 +55,29 @@ function buildTaskSummary(task: ReviewTask | null): EmbedLandingTaskSummary | nu
   };
 }
 
+function formatDueDateForDraft(task: ReviewTask | null): string {
+  if (!task?.dueDate) return '';
+  const date = new Date(task.dueDate);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function buildTaskDraft(task: ReviewTask | null): EmbedLandingTaskDraft | null {
+  if (!task) return null;
+  return {
+    title: task.title || '',
+    description: task.description || '',
+    checkerId: task.checkerId || '',
+    approverId: task.approverId || '',
+    priority: task.priority || 'medium',
+    dueDate: formatDueDateForDraft(task),
+    components: [...(task.components ?? [])],
+    attachments: [...(task.attachments ?? [])],
+    taskId: task.id ?? null,
+    formId: task.formId ?? null,
+  };
+}
+
 function createRestoreResult(
   target: EmbedLandingTarget,
   restoreStatus: EmbedRestoreStatus,
@@ -66,6 +90,7 @@ function createRestoreResult(
     restoredTask,
     restoredTaskId: restoredTask?.id ?? null,
     restoredTaskSummary,
+    restoredTaskDraft: buildTaskDraft(restoredTask),
   };
 }
 
@@ -82,12 +107,7 @@ export function resolveEmbedRestoreResult(options: ResolveEmbedRestoreOptions): 
   }
 
   const matchedTask = findTaskByFormId(options.designerTasks, normalizedFormId);
-  return createRestoreResult(
-    options.target,
-    matchedTask ? 'matched' : 'missing',
-    matchedTask,
-    buildTaskSummary(matchedTask),
-  );
+  return createRestoreResult(options.target, matchedTask ? 'matched' : 'missing', matchedTask);
 }
 
 export async function restoreEmbedWorkbenchContext(

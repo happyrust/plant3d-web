@@ -465,31 +465,36 @@ describe('LinearDimension3D', () => {
     expect((bend as any).textLabel.object3d.visible).toBe(false);
   });
 
-  it('should not trim explicit laidOutGeometry dimension line around the text box', async () => {
+  it('should trim explicit laidOutGeometry dimension line around the text box like CAD dims', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { LinearDimension3D } = await import('./LinearDimension3D');
 
     const materials = new AnnotationMaterials();
     const dim = new LinearDimension3D(materials, {
       start: new THREE.Vector3(0, 0, 0),
-      end: new THREE.Vector3(10, 0, 0),
+      end: new THREE.Vector3(30, 0, 0),
       offset: 3,
       direction: new THREE.Vector3(0, 1, 0),
       text: '10000',
       laidOutGeometry: {
         dimLineStart: new THREE.Vector3(0, 5, 0),
-        dimLineEnd: new THREE.Vector3(10, 5, 0),
-        textAnchor: new THREE.Vector3(5, 5, 0),
+        dimLineEnd: new THREE.Vector3(30, 5, 0),
+        textAnchor: new THREE.Vector3(15, 5, 0),
       },
+    });
+    vi.spyOn((dim as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 40,
+      height: 16,
     });
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 200, height: 200 };
     camera.position.set(0, 0, 30);
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
 
-    const assertExplicitLinePreserved = (cameraZ: number) => {
+    const assertExplicitLineTrimmed = (cameraZ: number) => {
       camera.position.set(0, 0, cameraZ);
       camera.lookAt(0, 0, 0);
       camera.updateProjectionMatrix();
@@ -497,20 +502,76 @@ describe('LinearDimension3D', () => {
       dim.update(camera);
 
       expect((dim as any).dimensionLineA.visible).toBe(true);
-      expect((dim as any).dimensionLineB.visible).toBe(false);
+      expect((dim as any).dimensionLineB.visible).toBe(true);
       expect((dim as any).dimensionLineOutside.visible).toBe(false);
 
-      const lineGeom = (dim as any).dimLineGeometryA as THREE.BufferGeometry;
-      const instanceStart = lineGeom.getAttribute('instanceStart');
-      const instanceEnd = lineGeom.getAttribute('instanceEnd');
-      expect(instanceStart.getX(0)).toBeCloseTo(0, 0);
-      expect(instanceStart.getY(0)).toBeCloseTo(5, 0);
-      expect(instanceEnd.getX(0)).toBeCloseTo(10, 0);
-      expect(instanceEnd.getY(0)).toBeCloseTo(5, 0);
+      const lineGeomA = (dim as any).dimLineGeometryA as THREE.BufferGeometry;
+      const lineGeomB = (dim as any).dimLineGeometryB as THREE.BufferGeometry;
+      const aStart = lineGeomA.getAttribute('instanceStart');
+      const aEnd = lineGeomA.getAttribute('instanceEnd');
+      const bStart = lineGeomB.getAttribute('instanceStart');
+      const bEnd = lineGeomB.getAttribute('instanceEnd');
+
+      expect(aStart.getX(0)).toBeCloseTo(0, 0);
+      expect(aStart.getY(0)).toBeCloseTo(5, 0);
+      expect(aEnd.getX(0)).toBeLessThan(15);
+      expect(aEnd.getY(0)).toBeCloseTo(5, 0);
+
+      expect(bStart.getX(0)).toBeGreaterThan(15);
+      expect(bStart.getY(0)).toBeCloseTo(5, 0);
+      expect(bEnd.getX(0)).toBeCloseTo(30, 0);
+      expect(bEnd.getY(0)).toBeCloseTo(5, 0);
     };
 
-    assertExplicitLinePreserved(30);
-    assertExplicitLinePreserved(300);
+    assertExplicitLineTrimmed(30);
+    assertExplicitLineTrimmed(60);
+  });
+
+  it('should keep explicit laidOutGeometry dimension line fully visible when short bend label is auto-hidden', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(8, 0, 0),
+      offset: 3,
+      direction: new THREE.Vector3(0, 1, 0),
+      text: '151',
+      laidOutGeometry: {
+        dimLineStart: new THREE.Vector3(0, 5, 0),
+        dimLineEnd: new THREE.Vector3(8, 5, 0),
+        textAnchor: new THREE.Vector3(4, 5, 0),
+      },
+    });
+    (dim.userData as any).mbdBendId = 'bend-1';
+    vi.spyOn((dim as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 28,
+      height: 16,
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 200, height: 200 };
+    camera.position.set(0, 0, 300);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    dim.update(camera);
+
+    expect((dim as any).textLabel.object3d.visible).toBe(false);
+    expect((dim as any).dimensionLineA.visible).toBe(true);
+    expect((dim as any).dimensionLineB.visible).toBe(false);
+    expect((dim as any).dimensionLineOutside.visible).toBe(false);
+
+    const lineGeomA = (dim as any).dimLineGeometryA as THREE.BufferGeometry;
+    const aStart = lineGeomA.getAttribute('instanceStart');
+    const aEnd = lineGeomA.getAttribute('instanceEnd');
+    expect(aStart.getX(0)).toBeCloseTo(0, 0);
+    expect(aStart.getY(0)).toBeCloseTo(5, 0);
+    expect(aEnd.getX(0)).toBeGreaterThan(7.5);
+    expect(aEnd.getX(0)).toBeLessThan(9.1);
+    expect(aEnd.getY(0)).toBeCloseTo(5, 0);
   });
 
   it('should place label at labelT position on the dimension line', async () => {

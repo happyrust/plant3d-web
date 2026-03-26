@@ -44,6 +44,7 @@ describe('resolveEmbedRestoreResult', () => {
     })).toEqual({
       restoreStatus: 'no_form',
       restoredTask: null,
+      restoredTaskDraft: null,
       restoredTaskId: null,
       restoredTaskSummary: null,
       target: 'reviewer',
@@ -91,6 +92,14 @@ describe('resolveEmbedRestoreResult', () => {
         title: '设计侧任务',
         status: 'draft',
         currentNode: 'sj',
+      },
+      restoredTaskDraft: {
+        title: '设计侧任务',
+        description: 'desc',
+        taskId: 'task-designer',
+        formId: 'FORM-D',
+        components: [],
+        attachments: [],
       },
     });
   });

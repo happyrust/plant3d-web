@@ -27,6 +27,10 @@ export function getSubmitActionLabel(currentNode?: WorkflowNode): string {
   }
 }
 
+export function getWorkflowSubmitBridgeAction(currentNode?: WorkflowNode): 'active' | 'agree' {
+  return (currentNode ?? 'sj') === 'sj' ? 'active' : 'agree';
+}
+
 export type TaskDetailHistoryItem = {
   action: string;
   userName: string;
@@ -95,8 +99,8 @@ type SubmitTaskToNextNodeSafelyOptions = {
 
 export async function submitTaskToNextNodeSafely(
   options: SubmitTaskToNextNodeSafelyOptions
-): Promise<void> {
-  if (!options.taskId || !options.canSubmit) return;
+): Promise<boolean> {
+  if (!options.taskId || !options.canSubmit) return false;
 
   options.workflowActionLoading.value = true;
   options.workflowError.value = null;
@@ -109,8 +113,10 @@ export async function submitTaskToNextNodeSafely(
     options.emitToast({ message: '任务已提交到下一节点' });
     options.showSubmitDialog.value = false;
     options.submitComment.value = '';
+    return true;
   } catch (e) {
     options.workflowError.value = e instanceof Error ? e.message : '提交失败';
+    return false;
   } finally {
     options.workflowActionLoading.value = false;
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
 import { Box, Calendar, CheckCircle, ChevronDown, Flag, Link, Paperclip, Plus, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
@@ -8,7 +8,12 @@ import ExternalReviewViewer from './ExternalReviewViewer.vue';
 import FileUploadSection from './FileUploadSection.vue';
 import { buildReviewAttachments } from './reviewAttachmentFlow';
 
-import type { EmbedLandingState } from './embedRoleLanding';
+import {
+  EMBED_LANDING_STATE_STORAGE_KEY,
+  EMBED_LANDING_STATE_UPDATED_EVENT,
+  EMBED_MODE_PARAMS_STORAGE_KEY,
+  type EmbedLandingState,
+} from './embedRoleLanding';
 import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
 
@@ -154,6 +159,7 @@ const embedModeParams = ref<{
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
 const externalWorkflowMode = ref(true);
+const hydratedRestoreTaskId = ref<string | null>(null);
 
 function resolveExternalWorkflowMode() {
   const isManualOrInternal = (v?: string | null) =>
@@ -188,26 +194,74 @@ function resolveExternalWorkflowMode() {
   return true;
 }
 
-// 在组件挂载时读取嵌入模式参数
-onMounted(() => {
-  const storedParams = sessionStorage.getItem('embed_mode_params');
+function toUploadedFilesFromAttachments(
+  attachments?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    size?: number;
+    type?: string;
+    mimeType?: string;
+    uploadedAt: number;
+  }>,
+): UploadedFile[] {
+  return (attachments ?? []).map((attachment) => ({
+    ...(attachment as UploadedFile),
+    status: 'uploaded' as const,
+    progress: 100,
+  }));
+}
+
+function applyRestoredTaskDraft() {
+  const draft = embedLandingState.value?.restoredTaskDraft;
+  if (!draft) return;
+
+  const draftKey = draft.taskId || draft.formId || null;
+  if (!draftKey || hydratedRestoreTaskId.value === draftKey) return;
+
+  formData.packageName = draft.title || '';
+  formData.description = draft.description || '';
+  formData.checkerId = draft.checkerId || '';
+  formData.approverId = draft.approverId || '';
+  formData.priority = draft.priority || 'medium';
+  formData.dueDate = draft.dueDate || '';
+  selectedComponents.value = [...draft.components];
+  uploadedFiles.value = toUploadedFilesFromAttachments(draft.attachments);
+  createdTaskId.value = draft.taskId || null;
+  createdTaskFormId.value = draft.formId || null;
+  hydratedRestoreTaskId.value = draftKey;
+}
+
+function syncEmbedModeStateFromStorage() {
+  const storedParams = sessionStorage.getItem(EMBED_MODE_PARAMS_STORAGE_KEY);
   if (storedParams) {
     try {
       embedModeParams.value = JSON.parse(storedParams);
-      console.log('[InitiateReviewPanel] 嵌入模式参数:', embedModeParams.value);
-    } catch (e) {
+    } catch {
       console.warn('[InitiateReviewPanel] 无法解析嵌入模式参数');
     }
   }
 
-  const storedLandingState = sessionStorage.getItem('embed_landing_state');
+  const storedLandingState = sessionStorage.getItem(EMBED_LANDING_STATE_STORAGE_KEY);
   if (storedLandingState) {
     try {
       embedLandingState.value = JSON.parse(storedLandingState);
+      applyRestoredTaskDraft();
     } catch {
       console.warn('[InitiateReviewPanel] 无法解析嵌入模式落点状态');
     }
   }
+}
+
+function handleEmbedLandingStateUpdated() {
+  syncEmbedModeStateFromStorage();
+}
+
+// 在组件挂载时读取嵌入模式参数
+onMounted(() => {
+  syncEmbedModeStateFromStorage();
+  console.log('[InitiateReviewPanel] 嵌入模式参数:', embedModeParams.value);
+  window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
 
   externalWorkflowMode.value = resolveExternalWorkflowMode();
 
@@ -231,6 +285,10 @@ onMounted(() => {
       },
     };
   }
+});
+
+onUnmounted(() => {
+  window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
 });
 
 // 表单 ID：仅在嵌入模式展示/透传；正常模式由后端生成
@@ -469,6 +527,7 @@ function resetForNewTask() {
   submitted.value = false;
   lastCreatedTask.value = null;
   notification.value = { type: null, message: '', details: '' };
+  hydratedRestoreTaskId.value = null;
 }
 
 function goToTaskMonitor() {
