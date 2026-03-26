@@ -25,6 +25,12 @@ import {
 } from 'lucide-vue-next';
 
 import CollisionResultList from './CollisionResultList.vue';
+import {
+  EMBED_LANDING_STATE_STORAGE_KEY,
+  EMBED_LANDING_STATE_UPDATED_EVENT,
+  type EmbedLandingState,
+} from './embedRoleLanding';
+import { isReviewDebugUiEnabled } from './debugUiGate';
 import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
@@ -40,11 +46,6 @@ import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
-import {
-  EMBED_LANDING_STATE_STORAGE_KEY,
-  EMBED_LANDING_STATE_UPDATED_EVENT,
-  type EmbedLandingState,
-} from './embedRoleLanding';
 import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
@@ -53,9 +54,10 @@ import {
 } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
+import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
 import { WORKFLOW_NODE_NAMES } from '@/types/auth';
 
@@ -87,9 +89,11 @@ type NormalizedTaskContext = {
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
+const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
+const showDebugUi = isReviewDebugUiEnabled();
 
 function syncEmbedLandingStateFromStorage() {
   if (typeof sessionStorage === 'undefined') return;
@@ -210,6 +214,51 @@ function downloadAttachment(attachment: ReviewAttachment) {
 
 // 模型过滤相关
 const isFilteringByTask = ref(false);
+const selectedTaskComponentRefno = ref<string | null>(null);
+
+function normalizeComponentRefno(rawRefno?: string | null): string {
+  const raw = String(rawRefno ?? '').trim();
+  if (!raw) return '';
+  const wrapped = raw.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? raw;
+  const core = wrapped.replace(/^pe:/i, '').replace(/^=/, '').trim();
+  return core.replace(/\//g, '_').replace(/,/g, '_');
+}
+
+function toSlashComponentRefno(refno: string): string {
+  const normalized = normalizeComponentRefno(refno);
+  const m = normalized.match(/^(\d+)_(\d+)$/);
+  if (m) return `${m[1]}/${m[2]}`;
+  return normalized;
+}
+
+function collectTaskComponentRefnos(task: ReviewTask | null): string[] {
+  if (!task?.components?.length) return [];
+  const refnos = new Set<string>();
+  for (const component of task.components) {
+    const normalized = normalizeComponentRefno(component.refNo);
+    if (normalized) refnos.add(normalized);
+  }
+  return Array.from(refnos);
+}
+
+async function ensureTaskComponentsLoaded(task: ReviewTask): Promise<void> {
+  const refnos = collectTaskComponentRefnos(task).map((refno) => toSlashComponentRefno(refno));
+  if (refnos.length === 0) return;
+
+  const result = await showModelByRefnosWithAck({
+    refnos,
+    flyTo: true,
+    ensureViewerReady: false,
+    timeoutMs: 15_000,
+  });
+  if (result.error) {
+    console.warn('[ReviewPanel] 加载任务构件模型失败:', {
+      taskId: task.id,
+      error: result.error,
+      fail: result.fail,
+    });
+  }
+}
 
 // 审核操作相关
 const canSubmitToNextNode = computed(() => canSubmitAtCurrentNode(currentTask.value?.currentNode));
@@ -474,26 +523,24 @@ function handleClearConfirmedRecords() {
 function filterModelByTask() {
   const viewer = viewerContext.viewerRef.value;
   if (!viewer || !currentTask.value) return;
-  
-  // 先隐藏所有模型
-  const allObjectIds = viewer.scene.objectIds;
-  if (allObjectIds && allObjectIds.length > 0) {
-    viewer.scene.setObjectsVisible(allObjectIds, false);
-  }
-  
-  // 只显示任务相关的构件
-  const taskRefNos = currentTask.value.components
-    .map(comp => String(comp.refNo || '').replace(/\//g, '_'))
-    .filter(Boolean);
 
-  if (taskRefNos.length > 0) {
-    viewer.scene.setObjectsVisible(taskRefNos, true);
-    const aabb = viewer.scene.getAABB(taskRefNos);
-    if (aabb) {
-      viewer.cameraFlight.flyTo({ aabb, duration: 1, fit: true });
-    }
+  const allObjectIds = Array.isArray(viewer.scene.objectIds) ? viewer.scene.objectIds : [];
+  if (allObjectIds.length === 0) return;
+
+  const taskRefNos = collectTaskComponentRefnos(currentTask.value);
+  if (taskRefNos.length === 0) return;
+
+  const visibleTaskRefNos = taskRefNos.filter((refno) => allObjectIds.includes(refno));
+  if (visibleTaskRefNos.length === 0) return;
+
+  // 先隐藏所有，再显示任务构件，避免无模型时误清空场景
+  viewer.scene.setObjectsVisible(allObjectIds, false);
+  viewer.scene.setObjectsVisible(visibleTaskRefNos, true);
+  const aabb = viewer.scene.getAABB(visibleTaskRefNos);
+  if (aabb) {
+    viewer.cameraFlight.flyTo({ aabb, duration: 1, fit: true });
   }
-  
+
   isFilteringByTask.value = true;
 }
 
@@ -511,8 +558,46 @@ function clearModelFilter() {
   isFilteringByTask.value = false;
 }
 
+function isTaskComponentSelected(rawRefno?: string | null): boolean {
+  const normalized = normalizeComponentRefno(rawRefno);
+  return !!normalized && normalized === selectedTaskComponentRefno.value;
+}
+
+async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void> {
+  const normalized = normalizeComponentRefno(rawRefno);
+  if (!normalized) return;
+
+  if (selectedTaskComponentRefno.value === normalized) {
+    selectedTaskComponentRefno.value = null;
+    return;
+  }
+
+  selectedTaskComponentRefno.value = normalized;
+  ensurePanelAndActivate('modelTree');
+  selectionStore.setSelectedRefno(normalized);
+
+  const result = await showModelByRefnosWithAck({
+    refnos: [toSlashComponentRefno(normalized)],
+    flyTo: true,
+    timeoutMs: 15_000,
+  });
+
+  window.dispatchEvent(new CustomEvent('autoLocateRefno', {
+    detail: { refno: toSlashComponentRefno(normalized) },
+  }));
+
+  if (result.error && result.ok.length === 0) {
+    emitToast({
+      message: `构件定位失败：${result.error}`,
+      type: 'warning',
+    });
+  }
+}
+
 // 监听当前任务变化，自动应用过滤
 watch(currentTask, async (newTask) => {
+  selectedTaskComponentRefno.value = null;
+
   if (newTask && newTask.components.length > 0) {
     // 有新任务时自动应用过滤
     const taskId = newTask.id;
@@ -522,6 +607,10 @@ watch(currentTask, async (newTask) => {
       console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
       return;
     }
+    if (currentTask.value?.id !== taskId) {
+      return;
+    }
+    await ensureTaskComponentsLoaded(newTask);
     if (currentTask.value?.id !== taskId) {
       return;
     }
@@ -1004,7 +1093,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
     </div>
 
     <!-- 嵌入模式落点 -->
-    <div v-else-if="embedLandingState?.target === 'reviewer'"
+    <div v-else-if="showDebugUi && embedLandingState?.target === 'reviewer'"
       data-testid="reviewer-landing-workspace"
       class="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-900">
       <div class="flex items-center justify-between gap-2">
@@ -1077,7 +1166,11 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           <div v-if="currentTask.components && currentTask.components.length > 0"
             class="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
             <div v-for="comp in currentTask.components" :key="comp.id"
-              class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+              class="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 transition-colors"
+              :class="isTaskComponentSelected(comp.refNo)
+                ? 'border-primary/40 bg-primary/5'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'"
+              @click="void handleTaskComponentSelect(comp.refNo)">
               <Box class="h-4 w-4 shrink-0 text-slate-400" />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-medium text-slate-800">{{ comp.name }}</div>

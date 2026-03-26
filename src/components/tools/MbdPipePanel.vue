@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import type {
   MbdDimKind,
   MbdFittingDto,
@@ -24,6 +25,7 @@ const tab = computed({
 });
 
 const unitSettings = useUnitSettingsStore();
+const showDebugUi = isReviewDebugUiEnabled();
 const displayUnitModel = computed({
   get: () => unitSettings.displayUnit.value,
   set: (v) => unitSettings.setDisplayUnit(v as any),
@@ -368,13 +370,13 @@ function modeLabel(mode: MbdPipeViewMode): string {
           @change="vis.showFlanges.value = !vis.showFlanges.value" />
         <span>法兰件</span>
       </label>
-      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+      <label v-if="showDebugUi" class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
         <input type="checkbox"
           :checked="vis.showAnchorDebug.value"
           @change="vis.showAnchorDebug.value = !vis.showAnchorDebug.value" />
         <span>锚点调试</span>
       </label>
-      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+      <label v-if="showDebugUi" class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
         <input type="checkbox"
           :checked="vis.showOwnerSegmentDebug.value"
           @change="

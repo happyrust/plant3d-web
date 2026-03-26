@@ -198,6 +198,31 @@ const IFRAME_SOURCE_LABELS: Record<IframeSource, string> = {
   'iframe-refresh-reopen': '同角色刷新重开',
 };
 
+function isSimulatorDebugUiEnabled(): boolean {
+  if (import.meta.env.DEV) return true;
+
+  try {
+    const search = new URLSearchParams(window.location.search);
+    if (search.get('debug_ui') === '1') return true;
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (localStorage.getItem('plant3d_debug_ui') === '1') return true;
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (sessionStorage.getItem('plant3d_debug_ui') === '1') return true;
+  } catch {
+    // ignore
+  }
+
+  return false;
+}
+
 function isWorkflowMutationAction(value: unknown): value is WorkflowMutationAction {
   return typeof value === 'string' && WORKFLOW_MUTATION_ACTIONS.includes(value as WorkflowMutationAction);
 }
@@ -504,11 +529,7 @@ function resolveWorkflowContext(): { taskId: string | null; formId: string | nul
 }
 
 function resolveWorkflowTitleFallback(): string {
-  const selected = getSelectedRow();
-  const detailTitle = state.diagnostics.taskDetail?.title?.trim();
-  const selectedTitle = selected?.title?.trim();
-  const panelTitle = refs?.panelTitleText?.textContent?.trim();
-  return detailTitle || selectedTitle || panelTitle || '三维校审单';
+  return '三维校审单';
 }
 
 function attachWorkflowTitle(response: WorkflowSyncResponse): WorkflowSyncResponse {
@@ -1950,6 +1971,21 @@ async function bootstrap(): Promise<void> {
     await new Promise<void>((resolve) => {
       document.addEventListener('DOMContentLoaded', () => resolve(), { once: true });
     });
+  }
+
+  if (!isSimulatorDebugUiEnabled()) {
+    document.body.innerHTML = `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#eef2f6;color:#21364d;font-family:'Microsoft YaHei','PingFang SC','SimSun',sans-serif;">
+        <div style="max-width:560px;width:100%;background:#ffffff;border:1px solid #d7e0ea;border-radius:8px;padding:28px 24px;box-shadow:0 12px 32px rgba(13,39,64,0.08);">
+          <div style="font-size:20px;font-weight:700;">PMS 调试模拟器已受限</div>
+          <div style="margin-top:12px;font-size:14px;line-height:1.7;color:#4c6278;">
+            当前环境默认不开放此调试页面。需要显式开启时，请使用 <code>?debug_ui=1</code>，
+            或在浏览器存储中设置 <code>plant3d_debug_ui=1</code> 后再访问。
+          </div>
+        </div>
+      </div>
+    `;
+    return;
   }
 
   await new Promise((resolve) => setTimeout(resolve, 100));

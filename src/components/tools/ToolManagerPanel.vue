@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, type Ref } from 'vue';
 
+import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import type { InstanceManifest } from '@/utils/instances/instanceManifest';
 
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -23,7 +24,7 @@ const props = defineProps<{
 const store = useToolStore();
 const unitSettings = useUnitSettingsStore();
 const ctx = useViewerContext();
-const isDev = import.meta.env.DEV;
+const showDebugUi = isReviewDebugUiEnabled();
 
 const exportText = computed(() => store.exportJSON());
 
@@ -425,7 +426,7 @@ function clearAll() {
       </div>
     </div>
 
-    <div v-if="isDev" class="rounded-md border border-border bg-background p-3">
+    <div v-if="showDebugUi" class="rounded-md border border-border bg-background p-3">
       <div class="text-sm font-semibold">DTX / Instances 导入（开发用）</div>
       <div class="mt-2 text-xs text-muted-foreground">
         说明：把本地 instances_*.json 注入到前端缓存，然后复用现有 DTX 加载链路渲染（不写回后端）。

@@ -4,6 +4,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { Box, Calendar, CheckCircle, ChevronDown, Flag, Link, Paperclip, Plus, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
 import AssociatedFilesList from './AssociatedFilesList.vue';
+import { isReviewDebugUiEnabled } from './debugUiGate';
 import ExternalReviewViewer from './ExternalReviewViewer.vue';
 import FileUploadSection from './FileUploadSection.vue';
 import { buildReviewAttachments } from './reviewAttachmentFlow';
@@ -18,12 +19,18 @@ import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
 
 import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import {
+  normalizeReviewDeliveryRefno,
+  resolveReviewDeliveryUnitRefno,
+  type ReviewDeliveryTypeInfo,
+} from '@/composables/useReviewDeliveryUnit';
 import Button from '@/components/ui/Button.vue';
 import Card from '@/components/ui/Card.vue';
 import Input from '@/components/ui/Input.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { showModelByRefnosWithAck } from '@/composables/useViewerContext';
 import { getRoleDisplayName } from '@/types/auth';
 
 const emit = defineEmits<{
@@ -43,7 +50,74 @@ const formData = reactive({
   dueDate: '',
 });
 const selectedComponents = ref<ReviewComponent[]>([]);
+const selectedComponentRefno = ref<string | null>(null);
 const addingComponent = ref(false);
+
+function normalizeComponentRefno(rawRefno?: string | null): string {
+  const raw = String(rawRefno ?? '').trim();
+  if (!raw) return '';
+  const wrapped = raw.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? raw;
+  const core = wrapped.replace(/^pe:/i, '').replace(/^=/, '').trim();
+  return core.replace(/\//g, '_').replace(/,/g, '_');
+}
+
+function toSlashComponentRefno(refno: string): string {
+  const normalized = normalizeComponentRefno(refno);
+  const matched = normalized.match(/^(\d+)_(\d+)$/);
+  if (matched) return `${matched[1]}/${matched[2]}`;
+  return normalized;
+}
+
+function isComponentSelected(rawRefno?: string | null): boolean {
+  const normalized = normalizeComponentRefno(rawRefno);
+  return !!normalized && normalized === selectedComponentRefno.value;
+}
+
+async function handleComponentSelect(rawRefno?: string | null): Promise<void> {
+  const normalized = normalizeComponentRefno(rawRefno);
+  if (!normalized) return;
+
+  if (selectedComponentRefno.value === normalized) {
+    selectedComponentRefno.value = null;
+    return;
+  }
+
+  selectedComponentRefno.value = normalized;
+  ensurePanelAndActivate('modelTree');
+  selectionStore.setSelectedRefno(normalized);
+
+  const slashRefno = toSlashComponentRefno(normalized);
+  const result = await showModelByRefnosWithAck({
+    refnos: [slashRefno],
+    flyTo: true,
+    timeoutMs: 15_000,
+  });
+
+  window.dispatchEvent(new CustomEvent('autoLocateRefno', {
+    detail: { refno: slashRefno },
+  }));
+
+  if (result.error && result.ok.length === 0) {
+    notification.value = {
+      type: 'error',
+      message: '构件定位失败',
+      details: result.error,
+    };
+  }
+}
+function extractTypeInfoFromSelection(refno: string): ReviewDeliveryTypeInfo {
+  const attrs = selectionStore.propertiesData.value;
+  if (!attrs) return {};
+  const normalizedRefno = normalizeReviewDeliveryRefno(refno);
+  const ownerRefno = normalizeReviewDeliveryRefno(
+    (attrs.OWNER_REFNO || attrs.OWNERREFNO || attrs.owner_refno || attrs.OWNER) as string | null | undefined,
+  );
+  return {
+    noun: (attrs.NOUN || attrs.noun) as string | null | undefined,
+    owner_noun: (attrs.OWNER_NOUN || attrs.owner_noun) as string | null | undefined,
+    owner_refno: ownerRefno && ownerRefno !== normalizedRefno ? ownerRefno : null,
+  };
+}
 
 function buildStableComponentId(refNo: string): string {
   return `comp-${refNo}`;
@@ -95,32 +169,39 @@ function resolveProjectId() {
 async function addSelectedComponent() {
   const refno = selectionStore.selectedRefno.value;
   if (!refno) return;
-  if (selectedComponents.value.some((c) => c.refNo === refno)) return;
+
+  await addComponentByRefno(refno);
+}
+
+async function addComponentByRefno(refno: string) {
+  const normalizedRefno = normalizeReviewDeliveryRefno(refno);
+  if (!normalizedRefno) return;
 
   addingComponent.value = true;
   try {
-    const resp = await pdmsGetUiAttr(refno);
+    const deliveryUnitRefno = await resolveReviewDeliveryUnitRefno(normalizedRefno, {
+      getFallbackTypeInfo: extractTypeInfoFromSelection,
+    });
+    if (selectedComponents.value.some((c) => c.refNo === deliveryUnitRefno)) return;
+
+    const resp = await pdmsGetUiAttr(deliveryUnitRefno);
     const name =
       (resp.full_name && resp.full_name.trim()) ||
       (resp.attrs?.NAME as string) ||
       (resp.attrs?.DESCRIPTION as string) ||
-      refno;
+      deliveryUnitRefno;
     const type = (resp.attrs?.NOUN as string) || '构件';
     selectedComponents.value.push(buildReviewComponent({
-      refNo: refno,
+      refNo: deliveryUnitRefno,
       name: String(name),
       type,
     }));
-  } catch (_e) {
-    // 网络失败时使用选中时的属性作为兜底
-    const attrs = selectionStore.propertiesData.value;
-    const name = (attrs?.NAME || attrs?.DESCRIPTION || refno) as string;
-    const type = (attrs?.NOUN || '构件') as string;
-    selectedComponents.value.push(buildReviewComponent({
-      refNo: refno,
-      name,
-      type,
-    }));
+  } catch (error) {
+    notification.value = {
+      type: 'error',
+      message: '添加构件失败',
+      details: error instanceof Error ? error.message : '无法归并为最小交付单元，请重试',
+    };
   } finally {
     addingComponent.value = false;
   }
@@ -160,6 +241,7 @@ const embedModeParams = ref<{
 const embedLandingState = ref<EmbedLandingState | null>(null);
 const externalWorkflowMode = ref(true);
 const hydratedRestoreTaskId = ref<string | null>(null);
+const showDebugUi = isReviewDebugUiEnabled();
 
 function resolveExternalWorkflowMode() {
   const isManualOrInternal = (v?: string | null) =>
@@ -226,6 +308,7 @@ function applyRestoredTaskDraft() {
   formData.priority = draft.priority || 'medium';
   formData.dueDate = draft.dueDate || '';
   selectedComponents.value = [...draft.components];
+  selectedComponentRefno.value = null;
   uploadedFiles.value = toUploadedFilesFromAttachments(draft.attachments);
   createdTaskId.value = draft.taskId || null;
   createdTaskFormId.value = draft.formId || null;
@@ -276,12 +359,19 @@ onMounted(() => {
   }
   if (automationReviewEnabled) {
     const w = window as Window & {
-      __plant3dInitiateReviewE2E?: { addMockComponent: (refNo?: string, name?: string) => void };
+      __plant3dInitiateReviewE2E?: { addMockComponent: (refNo?: string, name?: string) => Promise<void> };
     };
     w.__plant3dInitiateReviewE2E = {
-      addMockComponent(refNo, name) {
+      async addMockComponent(refNo, name) {
         const ref = refNo || `E2E-AUTO-${Date.now()}`;
-        ensureComponentSelected(ref, name || `BRAN/${ref}`);
+        notification.value = { type: null, message: '', details: '' };
+        try {
+          await addComponentByRefno(ref);
+        } catch {
+          if (name) {
+            ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name);
+          }
+        }
       },
     };
   }
@@ -417,7 +507,11 @@ const selectedApprover = computed(() => {
 });
 
 function removeComponent(id: string) {
+  const removed = selectedComponents.value.find((c) => c.id === id);
   selectedComponents.value = selectedComponents.value.filter((c) => c.id !== id);
+  if (removed && normalizeComponentRefno(removed.refNo) === selectedComponentRefno.value) {
+    selectedComponentRefno.value = null;
+  }
 }
 
 function getUploadedAttachments() {
@@ -505,6 +599,7 @@ async function handleSubmit() {
     formData.priority = 'medium';
     formData.dueDate = '';
     selectedComponents.value = [];
+    selectedComponentRefno.value = null;
     uploadedFiles.value = [];
     createdTaskId.value = null;
     createdTaskFormId.value = null;
@@ -528,6 +623,7 @@ function resetForNewTask() {
   lastCreatedTask.value = null;
   notification.value = { type: null, message: '', details: '' };
   hydratedRestoreTaskId.value = null;
+  selectedComponentRefno.value = null;
 }
 
 function goToTaskMonitor() {
@@ -595,13 +691,13 @@ function closePanel() {
 
     <!-- 表单区域（未提交或提交失败时显示） -->
     <div v-else class="mt-4 space-y-4">
-      <div v-if="embedLandingState?.target === 'designer'"
+      <div v-if="showDebugUi && embedLandingState?.target === 'designer'"
         data-testid="designer-landing-cta"
         class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
         自动进入提资/编辑工作区
       </div>
 
-      <div v-if="embedModeParams.isEmbedMode" class="flex flex-wrap gap-2 text-xs">
+      <div v-if="showDebugUi && embedModeParams.isEmbedMode" class="flex flex-wrap gap-2 text-xs">
         <span class="rounded-full bg-blue-100 px-2 py-1 text-blue-800">表单 ID: {{ formId || '（由后端生成）' }}</span>
         <span class="rounded-full bg-green-100 px-2 py-1 text-green-800">项目: {{ currentProjectId }}</span>
         <span v-if="embedLandingState?.formId"
@@ -610,18 +706,18 @@ function closePanel() {
           Lineage: {{ embedLandingState.formId }}
         </span>
       </div>
-      <div v-if="embedModeParams.isEmbedMode && restoredTaskSummary"
+      <div v-if="showDebugUi && embedModeParams.isEmbedMode && restoredTaskSummary"
         class="rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
         data-testid="designer-restored-task-summary">
         <p class="font-medium">当前绑定任务：{{ restoredTaskSummary.title }}</p>
         <p class="mt-1">状态：{{ restoredTaskSummary.status }} · 当前节点：{{ restoredTaskSummary.currentNode }}</p>
       </div>
-      <div v-else-if="embedModeParams.isEmbedMode && embedLandingState?.restoreStatus === 'missing'"
+      <div v-else-if="showDebugUi && embedModeParams.isEmbedMode && embedLandingState?.restoreStatus === 'missing'"
         class="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
         data-testid="designer-restored-task-missing">
         当前 form_id 尚未绑定内部任务，可继续在此创建或补齐提资数据。
       </div>
-      <div v-if="externalWorkflowMode" data-testid="external-workflow-mode-banner"
+      <div v-if="showDebugUi && externalWorkflowMode" data-testid="external-workflow-mode-banner"
         class="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
         外部流程模式 — 仅创建提资数据，流程流转与审批由外部系统驱动。
       </div>
@@ -657,10 +753,19 @@ function closePanel() {
           <div v-else class="max-h-40 space-y-2 overflow-y-auto">
             <div v-for="comp in selectedComponents"
               :key="comp.id"
-              class="flex items-start justify-between rounded-[8px] border border-[#F3F4F6] bg-white px-3 py-2">
+              class="flex items-start justify-between rounded-[8px] border px-3 py-2 transition-colors"
+              :class="isComponentSelected(comp.refNo)
+                ? 'border-[#3B82F6] bg-[#EFF6FF]'
+                : 'border-[#F3F4F6] bg-white hover:border-[#D1D5DB] hover:bg-[#F9FAFB]'">
               <div class="min-w-0">
-                <p class="truncate text-sm font-medium text-[#111827]">{{ comp.name }}</p>
-                <p class="mt-1 text-xs text-[#6B7280]">RefNo: {{ comp.refNo }}</p>
+                <button type="button"
+                  class="block min-w-0 text-left"
+                  :aria-pressed="isComponentSelected(comp.refNo) ? 'true' : 'false'"
+                  :title="isComponentSelected(comp.refNo) ? '再次点击取消选中' : '点击选中并定位到三维'"
+                  @click="void handleComponentSelect(comp.refNo)">
+                  <p class="truncate text-sm font-medium text-[#111827]">{{ comp.name }}</p>
+                  <p class="mt-1 text-xs text-[#6B7280]">RefNo: {{ comp.refNo }}</p>
+                </button>
               </div>
               <button type="button"
                 class="ml-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] transition hover:bg-[#F3F4F6] hover:text-[#6B7280]"

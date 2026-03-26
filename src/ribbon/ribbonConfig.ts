@@ -1,6 +1,10 @@
 import type { RibbonTabConfig } from '@/ribbon/ribbonTypes';
 
-export const RIBBON_TABS: RibbonTabConfig[] = [
+import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
+
+const showDebugUi = isReviewDebugUiEnabled();
+
+const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   {
     id: 'file',
     label: '文件',
@@ -406,3 +410,7 @@ export const RIBBON_TABS: RibbonTabConfig[] = [
     ],
   },
 ];
+
+export const RIBBON_TABS: RibbonTabConfig[] = showDebugUi
+  ? ALL_RIBBON_TABS
+  : ALL_RIBBON_TABS.filter((tab) => tab.id !== 'debug');
