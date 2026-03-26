@@ -3,8 +3,11 @@ import {
   clearAuthToken,
   getAuthToken,
   login,
+  reviewTaskCancel,
   reviewTaskGetById,
   reviewTaskGetList,
+  reviewTaskReturn,
+  reviewTaskSubmitToNext,
   type ReviewTask,
 } from '@/api/reviewApi';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
@@ -45,6 +48,7 @@ type EmbeddedWorkflowActionMessage = {
 type WorkflowExecuteOverrides = {
   taskId?: string | null;
   formId?: string | null;
+  skipPlatformTaskTransition?: boolean;
 };
 
 type WorkflowDialogState = {
@@ -677,10 +681,10 @@ function renderWorkflowActionHint(): void {
   const base = !hasFormId
     ? '当前记录缺少 form_id；如为新增态，可先在右侧发起面板填写说明。'
     : state.workflowAction.loading || state.workflowDialog.submitting
-      ? `正在处理 workflow/sync ${actionText || ''}...`
+      ? `正在处理平台任务流转 + workflow/sync ${actionText || ''}...`
       : state.workflowAction.lastMessage
         ? `${actionText ? `${actionText}：` : ''}${state.workflowAction.lastMessage}（${timeText}）`
-        : '右侧面板按钮仅打开确认层；真实提交在第二层确认框执行。';
+        : '右侧面板按钮仅打开确认层；确认后会先推进平台任务，再同步 workflow/sync。';
 
   refs.workflowActionHint.textContent = base;
 }
@@ -946,13 +950,13 @@ function renderWorkflowDialogState(): void {
   refs.workflowDialogTitle.textContent = dialogTitle;
   refs.workflowDialogSubtitle.textContent =
     action === 'active'
-      ? '确认以当前发起说明执行 workflow/sync active。'
+      ? '确认先推进平台任务，再以当前发起说明执行 workflow/sync active。'
       : action === 'agree'
-        ? '确认以当前意见执行 workflow/sync agree。'
+        ? '确认先推进平台任务，再以当前意见执行 workflow/sync agree。'
         : action === 'return'
-          ? '请选择回退节点并确认驳回原因；目标节点会编码进 comments。'
+          ? '请选择回退节点并确认驳回原因；会先驳回平台任务，再同步 workflow/sync，目标节点会编码进 comments。'
           : action === 'stop'
-            ? '终止属于破坏性动作，需再次确认终止原因。'
+            ? '终止属于破坏性动作；会先取消平台任务，再同步 workflow/sync stop。'
             : '请确认本次 workflow/sync 提交内容。';
 
   const warning =
@@ -1311,6 +1315,34 @@ async function fetchWorkflowQuery(formId: string): Promise<void> {
   }
 }
 
+async function applyPlatformTaskWorkflowTransition(
+  taskId: string,
+  action: WorkflowMutationAction,
+  comment: string,
+  targetNode: string | null,
+): Promise<void> {
+  let response;
+  switch (action) {
+    case 'active':
+    case 'agree':
+      response = await reviewTaskSubmitToNext(taskId, comment || undefined);
+      break;
+    case 'return':
+      response = await reviewTaskReturn(taskId, targetNode || 'sj', comment || '驳回');
+      break;
+    case 'stop':
+      response = await reviewTaskCancel(taskId, comment || '终止');
+      break;
+    default:
+      response = null;
+      break;
+  }
+
+  if (response && !response.success) {
+    throw new Error(response.error_message || '平台任务流转失败');
+  }
+}
+
 async function executeWorkflowAction(
   action: WorkflowMutationAction,
   comment: string,
@@ -1346,6 +1378,10 @@ async function executeWorkflowAction(
 
   try {
     await ensureRoleAuth();
+    if (taskId && !overrides?.skipPlatformTaskTransition) {
+      await applyPlatformTaskWorkflowTransition(taskId, action, comment, targetNode);
+      await refreshList();
+    }
     state.diagnostics.workflowSnapshot = await requestWorkflowSync(formId, action, payloadComment);
     state.workflowAction.lastOk = true;
     state.workflowAction.lastMessage = '接口调用成功';
@@ -1741,7 +1777,11 @@ async function handleEmbeddedWorkflowAction(message: EmbeddedWorkflowActionMessa
 
   renderLastOpened();
   renderSidePanelState();
-  await executeWorkflowAction(message.action, comments, targetNode, { taskId, formId });
+  await executeWorkflowAction(message.action, comments, targetNode, {
+    taskId,
+    formId,
+    skipPlatformTaskTransition: true,
+  });
 }
 
 function handleWindowMessage(event: MessageEvent): void {
