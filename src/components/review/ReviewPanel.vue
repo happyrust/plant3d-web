@@ -91,6 +91,7 @@ const toolStore = useToolStore();
 const userStore = useUserStore();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
+const lastRestoredSceneKey = ref<string | null>(null);
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
 const showDebugUi = isReviewDebugUiEnabled();
@@ -191,7 +192,8 @@ function formatDateTime(timestamp: number): string {
 function getConfirmedAnnotationCount(record: ConfirmedRecordEntry): number {
   return record.annotations.length +
     record.cloudAnnotations.length +
-    record.rectAnnotations.length;
+    record.rectAnnotations.length +
+    (record.obbAnnotations?.length ?? 0);
 }
 
 function getConfirmedMeasurementCount(record: ConfirmedRecordEntry): number {
@@ -200,6 +202,58 @@ function getConfirmedMeasurementCount(record: ConfirmedRecordEntry): number {
 
 function getConfirmedRecordNote(record: ConfirmedRecordEntry): string {
   return record.note?.trim() || '-';
+}
+
+const currentTaskConfirmedRecords = computed<ConfirmedRecordEntry[]>(() => {
+  const taskId = currentTask.value?.id;
+  if (!taskId) return [];
+  return reviewStore.sortedConfirmedRecords.value
+    .filter((record) => (record.taskId || '') === taskId)
+    .slice()
+    .sort((a, b) => a.confirmedAt - b.confirmedAt);
+});
+
+function buildConfirmedRecordsSceneKey(taskId: string | null, records: ConfirmedRecordEntry[]): string {
+  if (!taskId) return '__no-task__';
+  if (records.length === 0) return `${taskId}:empty`;
+  return `${taskId}:${records.map((record) => `${record.id}:${record.confirmedAt}`).join('|')}`;
+}
+
+function buildConfirmedRecordsReplayPayload(records: ConfirmedRecordEntry[]): string {
+  return JSON.stringify({
+    version: 5,
+    measurements: records.flatMap((record) => record.measurements ?? []),
+    annotations: records.flatMap((record) => record.annotations ?? []),
+    obbAnnotations: records.flatMap((record) => record.obbAnnotations ?? []),
+    cloudAnnotations: records.flatMap((record) => record.cloudAnnotations ?? []),
+    rectAnnotations: records.flatMap((record) => record.rectAnnotations ?? []),
+    dimensions: [],
+    xeokitDistanceMeasurements: [],
+    xeokitAngleMeasurements: [],
+  });
+}
+
+async function restoreConfirmedRecordsIntoScene(force = false): Promise<void> {
+  const taskId = currentTask.value?.id ?? null;
+  const records = currentTaskConfirmedRecords.value;
+  const restoreKey = buildConfirmedRecordsSceneKey(taskId, records);
+  if (!force && lastRestoredSceneKey.value === restoreKey) return;
+
+  const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
+  const tools = viewerContext.tools.value;
+  if (!viewerReady || !tools) return;
+  if ((currentTask.value?.id ?? null) !== taskId) return;
+
+  if (!taskId || records.length === 0) {
+    toolStore.clearAll();
+    tools.syncFromStore();
+    lastRestoredSceneKey.value = restoreKey;
+    return;
+  }
+
+  toolStore.importJSON(buildConfirmedRecordsReplayPayload(records));
+  tools.syncFromStore();
+  lastRestoredSceneKey.value = restoreKey;
 }
 
 // 下载附件
@@ -597,6 +651,7 @@ async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void
 // 监听当前任务变化，自动应用过滤
 watch(currentTask, async (newTask) => {
   selectedTaskComponentRefno.value = null;
+  lastRestoredSceneKey.value = null;
 
   if (newTask && newTask.components.length > 0) {
     // 有新任务时自动应用过滤
@@ -620,6 +675,8 @@ watch(currentTask, async (newTask) => {
     clearModelFilter();
   }
 
+  await restoreConfirmedRecordsIntoScene(true);
+
   if (newTask) {
     showSubmitDialog.value = false;
     submitComment.value = '';
@@ -638,11 +695,25 @@ watch(currentTask, async (newTask) => {
   }
 }, { immediate: true });
 
+watch(
+  () => ({
+    taskId: currentTask.value?.id ?? null,
+    recordKeys: currentTaskConfirmedRecords.value.map((record) => `${record.id}:${record.confirmedAt}`).join('|'),
+    viewerReady: !!viewerContext.viewerRef.value,
+    toolsReady: !!viewerContext.tools.value,
+  }),
+  async () => {
+    await restoreConfirmedRecordsIntoScene();
+  },
+  { immediate: true }
+);
+
 const pendingAnnotationCount = computed(() => {
   return (
     toolStore.annotationCount.value +
     toolStore.cloudAnnotationCount.value +
-    toolStore.rectAnnotationCount.value
+    toolStore.rectAnnotationCount.value +
+    toolStore.obbAnnotationCount.value
   );
 });
 
@@ -703,6 +774,7 @@ async function confirmCurrentData() {
         annotations: [...toolStore.annotations.value],
         cloudAnnotations: [...toolStore.cloudAnnotations.value],
         rectAnnotations: [...toolStore.rectAnnotations.value],
+        obbAnnotations: [...toolStore.obbAnnotations.value],
         measurements: [...toolStore.measurements.value],
         note: confirmNote.value.trim(),
       },

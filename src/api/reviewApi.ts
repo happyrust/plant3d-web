@@ -181,6 +181,7 @@ export type ConfirmedRecordData = {
   annotations: unknown[];
   cloudAnnotations: unknown[];
   rectAnnotations: unknown[];
+  obbAnnotations?: unknown[];
   measurements: unknown[];
   note: string;
 };

@@ -4,6 +4,7 @@ import type {
   AnnotationRecord,
   CloudAnnotationRecord,
   MeasurementRecord,
+  ObbAnnotationRecord,
   RectAnnotationRecord,
 } from './useToolStore';
 import type { ReviewTask } from '@/types/auth';
@@ -27,6 +28,7 @@ export type ConfirmedRecord = {
   annotations: AnnotationRecord[];
   cloudAnnotations: CloudAnnotationRecord[];
   rectAnnotations: RectAnnotationRecord[];
+  obbAnnotations?: ObbAnnotationRecord[];
   measurements: MeasurementRecord[];
   confirmedAt: number;
   note: string;
@@ -157,6 +159,7 @@ async function addConfirmedRecord(
         annotations: record.annotations,
         cloudAnnotations: record.cloudAnnotations,
         rectAnnotations: record.rectAnnotations,
+        obbAnnotations: record.obbAnnotations ?? [],
         measurements: record.measurements,
         note: record.note,
       });
@@ -170,6 +173,7 @@ async function addConfirmedRecord(
           annotations: record.annotations,
           cloudAnnotations: record.cloudAnnotations,
           rectAnnotations: record.rectAnnotations,
+          obbAnnotations: record.obbAnnotations ?? [],
           measurements: record.measurements,
           confirmedAt: response.record.confirmedAt,
           note: record.note,
@@ -260,6 +264,7 @@ async function loadConfirmedRecords(taskId: string): Promise<void> {
         annotations: r.annotations as AnnotationRecord[],
         cloudAnnotations: r.cloudAnnotations as CloudAnnotationRecord[],
         rectAnnotations: r.rectAnnotations as RectAnnotationRecord[],
+        obbAnnotations: ((r as unknown as { obbAnnotations?: unknown[] }).obbAnnotations ?? []) as ObbAnnotationRecord[],
         measurements: r.measurements as MeasurementRecord[],
         confirmedAt: r.confirmedAt,
         note: r.note,
