@@ -209,7 +209,7 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
-    location /files/ {
+    location ^~ /files/ {
         proxy_pass ${BACKEND_ORIGIN}/files/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
