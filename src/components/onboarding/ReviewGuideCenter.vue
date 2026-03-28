@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted } from 'vue';
 import { BookOpen, Compass, HelpCircle, PlayCircle, Sparkles } from 'lucide-vue-next';
 
 import Dialog from '@/components/ui/Dialog.vue';
+import { isMyTasksAvailableInWorkflowMode } from '@/components/review/workflowMode';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useOnboardingGuide, type GuideCenterTopic, type GuideRole } from '@/composables/useOnboardingGuide';
 import { useUserStore } from '@/composables/useUserStore';
@@ -11,6 +12,7 @@ import { onCommand } from '@/ribbon/commandBus';
 
 const onboarding = useOnboardingGuide();
 const userStore = useUserStore();
+const showMyTasksEntry = isMyTasksAvailableInWorkflowMode();
 
 const ROLE_LABELS: Record<GuideRole, string> = {
   designer: '设计师',
@@ -19,7 +21,18 @@ const ROLE_LABELS: Record<GuideRole, string> = {
   manager: '批准人',
 };
 
+const ROLE_SUMMARIES: Record<GuideRole, string> = {
+  designer: '负责选择构件、整理提资内容并跟踪驳回与复审任务。',
+  proofreader: '负责进入待办任务、做批注与测量、确认当前数据并提交下一节点。',
+  reviewer: '负责读取校核结果、复核三维内容、查看确认记录后做审核决策。',
+  manager: '负责查看完整校审链路、确认记录与附件，并做最终批准决策。',
+};
+
 const roleOrder: GuideRole[] = ['designer', 'proofreader', 'reviewer', 'manager'];
+
+const currentRole = computed(() => userStore.currentUser.value?.role as GuideRole | undefined);
+const currentRoleLabel = computed(() => (currentRole.value ? ROLE_LABELS[currentRole.value] : '当前角色'));
+const currentRoleSummary = computed(() => (currentRole.value ? ROLE_SUMMARIES[currentRole.value] : '请选择角色教程开始浏览。'));
 
 const roleCards = computed(() =>
   roleOrder.map((role) => ({
@@ -27,11 +40,10 @@ const roleCards = computed(() =>
     label: ROLE_LABELS[role],
     guide: onboarding.allGuides[role],
     active: userStore.currentUser.value?.role === role,
+    stepCount: onboarding.allGuides[role].steps.length,
+    summary: ROLE_SUMMARIES[role],
   }))
 );
-
-const currentRole = computed(() => userStore.currentUser.value?.role as GuideRole | undefined);
-
 
 const quickActions = computed(() => {
   const role = currentRole.value;
@@ -41,6 +53,7 @@ const quickActions = computed(() => {
     description: string;
     topic: GuideCenterTopic;
     actionLabel: string;
+    stepsHint: string;
     run: () => Promise<void> | void;
   }> = [];
 
@@ -48,10 +61,11 @@ const quickActions = computed(() => {
     id: 'role-guide',
     title: '从当前角色教程开始',
     description: role
-      ? `按${ROLE_LABELS[role]}视角，快速了解这条校审流程。`
+      ? `按${ROLE_LABELS[role]}视角，完整走一遍当前角色最常见的操作路径。`
       : '当前未识别角色时，可先从角色教程开始。',
     topic: 'currentRole',
     actionLabel: '开始角色教程',
+    stepsHint: role ? `约 ${onboarding.allGuides[role].steps.length} 步` : '完整教程',
     run: () => onboarding.startGuideForCurrentRole(),
   });
 
@@ -59,24 +73,55 @@ const quickActions = computed(() => {
     list.push({
       id: 'initiate-review',
       title: '学习如何发起提资',
-      description: '从选择构件、填写表单到提交提资，适合设计师第一次上手。',
+      description: '从选择构件、填写提资信息到提交，适合第一次发起三维校审。',
       topic: 'initiateReview',
       actionLabel: '打开提资指南',
+      stepsHint: '从提资面板开始',
       run: async () => {
         ensurePanelAndActivate('initiateReview');
         await onboarding.startGuideForRole('designer', { stepId: 'initiate-review-panel' });
       },
     });
+
+    if (showMyTasksEntry) {
+      list.push({
+        id: 'designer-my-tasks',
+        title: '查看我的提资进度',
+        description: '快速定位自己发起的提资，检查当前状态、附件和流转进度。',
+        topic: 'designer',
+        actionLabel: '打开我的提资',
+        stepsHint: '进度追踪',
+        run: async () => {
+          ensurePanelAndActivate('myTasks');
+          await onboarding.startGuideForRole('designer', { stepId: 'my-tasks-panel' });
+        },
+      });
+    }
+
+    list.push({
+      id: 'designer-resubmission',
+      title: '学习如何处理驳回与复审',
+      description: '当提资被退回时，查看复审任务、修改内容并重新提交。',
+      topic: 'designer',
+      actionLabel: '打开复审指南',
+      stepsHint: '驳回闭环',
+      run: async () => {
+        ensurePanelAndActivate('resubmissionTasks');
+        await onboarding.startGuideForRole('designer', { stepId: 'resubmission-panel' });
+      },
+    });
   } else {
+    const targetRole: GuideRole = role === 'manager' ? 'manager' : role === 'reviewer' ? 'reviewer' : 'proofreader';
+
     list.push({
       id: 'reviewer-tasks',
       title: '学习如何处理待办任务',
-      description: '从待处理提资任务列表进入，并开始你的校审/审核工作。',
+      description: '从待处理提资任务列表进入，找到当前应处理的校审 / 审核任务。',
       topic: 'reviewerTasks',
       actionLabel: '打开待办任务指南',
+      stepsHint: '从任务列表开始',
       run: async () => {
         ensurePanelAndActivate('reviewerTasks');
-        const targetRole: GuideRole = role === 'manager' ? 'manager' : role === 'reviewer' ? 'reviewer' : 'proofreader';
         await onboarding.startGuideForRole(targetRole, { stepId: 'reviewer-task-list' });
       },
     });
@@ -87,9 +132,9 @@ const quickActions = computed(() => {
       description: '重点了解批注、测量、确认当前数据、确认记录与审核动作。',
       topic: 'reviewPanel',
       actionLabel: '打开面板指南',
+      stepsHint: '批注 / 测量 / 提交',
       run: async () => {
         ensurePanelAndActivate('review');
-        const targetRole: GuideRole = role === 'manager' ? 'manager' : role === 'reviewer' ? 'reviewer' : 'proofreader';
         const stepId = targetRole === 'proofreader' ? 'review-panel-tools' : 'review-panel';
         await onboarding.startGuideForRole(targetRole, { stepId });
       },
@@ -140,10 +185,10 @@ onUnmounted(() => {
 <template>
   <Dialog :open="onboarding.guideCenterOpen.value"
     title="三维校审使用导航"
-    panel-class="relative w-full max-w-[64rem] overflow-hidden rounded-[16px] bg-white shadow-[0_24px_60px_rgba(17,24,39,0.22)]"
+    panel-class="relative w-full max-w-[68rem] overflow-hidden rounded-[16px] bg-white shadow-[0_24px_60px_rgba(17,24,39,0.22)]"
     body-class="px-0 py-0"
     @update:open="(value) => { if (!value) onboarding.closeGuideCenter(); }">
-    <div class="grid min-h-[32rem] gap-0 md:grid-cols-[18rem_minmax(0,1fr)]">
+    <div class="grid min-h-[34rem] gap-0 md:grid-cols-[20rem_minmax(0,1fr)]">
       <aside class="border-b border-slate-200 bg-slate-50 p-5 md:border-b-0 md:border-r">
         <div class="flex items-center gap-2 text-slate-900">
           <Compass class="h-5 w-5 text-blue-600" />
@@ -153,12 +198,19 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
-          <div class="flex items-center gap-2 font-medium">
-            <Sparkles class="h-4 w-4" />
-            推荐起点
+        <div class="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2 font-medium">
+              <Sparkles class="h-4 w-4" />
+              推荐起点
+            </div>
+            <span v-if="currentRole"
+              class="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+              {{ currentRoleLabel }}
+            </span>
           </div>
           <p class="mt-2 text-xs leading-5 text-blue-800">{{ topicHeadline }}</p>
+          <p class="mt-2 text-xs leading-5 text-blue-700/90">{{ currentRoleSummary }}</p>
         </div>
 
         <div class="mt-5">
@@ -175,12 +227,15 @@ onUnmounted(() => {
                 ? 'border-blue-200 bg-blue-50 text-blue-900 shadow-sm'
                 : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'"
               @click="openRoleGuide(item.role)">
-              <div class="flex items-center justify-between gap-3">
+              <div class="flex items-start justify-between gap-3">
                 <div>
                   <div class="text-sm font-semibold">{{ item.label }}</div>
-                  <div class="mt-1 text-xs text-slate-500">{{ item.guide.description }}</div>
+                  <div class="mt-1 text-xs leading-5 text-slate-500">{{ item.summary }}</div>
                 </div>
-                <span v-if="item.active" class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">当前角色</span>
+                <div class="flex flex-col items-end gap-1">
+                  <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">{{ item.stepCount }} 步</span>
+                  <span v-if="item.active" class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">当前角色</span>
+                </div>
               </div>
             </button>
           </div>
@@ -193,7 +248,7 @@ onUnmounted(() => {
             <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">任务教程</div>
             <h3 class="mt-2 text-lg font-semibold text-slate-950">从当前工作开始</h3>
             <p class="mt-1 text-sm leading-6 text-slate-500">
-              这里聚合了三维校审最常见的操作导航：进入待办、使用校审面板、发起提资。
+              这里聚合了三维校审最常见的操作导航：进入待办、使用校审面板、发起提资、查看复审与进度。
             </p>
           </div>
           <button type="button"
@@ -214,7 +269,7 @@ onUnmounted(() => {
                 <p class="mt-2 text-sm leading-6 text-slate-500">{{ item.description }}</p>
               </div>
               <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                {{ item.actionLabel }}
+                {{ item.stepsHint }}
               </span>
             </div>
             <div class="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
@@ -237,6 +292,7 @@ onUnmounted(() => {
           <ul class="mt-2 list-disc space-y-1 pl-5 leading-6">
             <li>第一次上手时，优先从“当前角色教程”完整走一遍。</li>
             <li>如果你已经在某个面板里卡住，直接点该面板顶部的“操作指南”。</li>
+            <li>设计师建议先完成“发起提资”，再查看“我的提资”或“复审任务”。</li>
             <li>涉及批注、测量、确认当前数据时，建议优先打开“校审面板”教程。</li>
           </ul>
         </div>
