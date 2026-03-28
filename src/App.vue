@@ -6,6 +6,7 @@ import AboutDialog from '@/components/AboutDialog.vue';
 import DashboardLayout from '@/components/dashboard/DashboardLayout.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
+import ReviewGuideCenter from '@/components/onboarding/ReviewGuideCenter.vue';
 import HierarchicalMenuBar from '@/components/ribbon/HierarchicalMenuBar.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
@@ -41,6 +42,7 @@ async function handleEmbedTest() {
   <v-app class="h-screen">
     <ConfirmDialog />
     <OnboardingOverlay />
+    <ReviewGuideCenter />
     
     <DashboardLayout v-if="!currentProject" />
     
@@ -61,8 +63,8 @@ async function handleEmbedTest() {
                 </v-btn>
                 <v-btn size="small"
                   variant="text"
-                  title="校审向导"
-                  @click="onboarding.startGuideForCurrentRole()">
+                  title="三维校审导航"
+                  @click="onboarding.openGuideCenter('currentRole')">
                   <v-icon size="18">mdi-help-circle-outline</v-icon>
                 </v-btn>
                 <LayoutToggleButtons />

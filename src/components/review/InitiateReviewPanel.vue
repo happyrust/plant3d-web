@@ -1,33 +1,35 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
-import { Box, Calendar, CheckCircle, ChevronDown, Flag, Link, Paperclip, Plus, Send, UploadCloud, User, X } from 'lucide-vue-next';
+import { Box, Calendar, CheckCircle, ChevronDown, Flag, HelpCircle, Link, Paperclip, Plus, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
 import AssociatedFilesList from './AssociatedFilesList.vue';
 import { isReviewDebugUiEnabled } from './debugUiGate';
-import ExternalReviewViewer from './ExternalReviewViewer.vue';
-import FileUploadSection from './FileUploadSection.vue';
-import { buildReviewAttachments } from './reviewAttachmentFlow';
-
 import {
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
   EMBED_MODE_PARAMS_STORAGE_KEY,
   type EmbedLandingState,
 } from './embedRoleLanding';
+import ExternalReviewViewer from './ExternalReviewViewer.vue';
+import FileUploadSection from './FileUploadSection.vue';
+import { buildReviewAttachments } from './reviewAttachmentFlow';
+import { resolvePassiveWorkflowMode } from './workflowMode';
+
 import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
 
 import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import Button from '@/components/ui/Button.vue';
+import Card from '@/components/ui/Card.vue';
+import Input from '@/components/ui/Input.vue';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import {
   normalizeReviewDeliveryRefno,
   resolveReviewDeliveryUnitRefno,
   type ReviewDeliveryTypeInfo,
 } from '@/composables/useReviewDeliveryUnit';
-import Button from '@/components/ui/Button.vue';
-import Card from '@/components/ui/Card.vue';
-import Input from '@/components/ui/Input.vue';
-import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck } from '@/composables/useViewerContext';
@@ -40,6 +42,7 @@ const emit = defineEmits<{
 
 const userStore = useUserStore();
 const selectionStore = useSelectionStore();
+const onboarding = useOnboardingGuide();
 
 const formData = reactive({
   packageName: '',
@@ -243,41 +246,8 @@ const externalWorkflowMode = ref(true);
 const hydratedRestoreTaskId = ref<string | null>(null);
 const showDebugUi = isReviewDebugUiEnabled();
 
-function resolveExternalWorkflowMode() {
-  const isManualOrInternal = (v?: string | null) =>
-    v === 'manual' || v === 'internal';
-
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const fromQuery = q.get('workflow_mode')?.trim().toLowerCase();
-    if (fromQuery) return !isManualOrInternal(fromQuery);
-  } catch { /* ignore */ }
-
-  try {
-    const fromSession = sessionStorage.getItem('plant3d_workflow_mode')?.trim().toLowerCase();
-    if (fromSession) return !isManualOrInternal(fromSession);
-  } catch { /* ignore */ }
-
-  try {
-    const fromLocal = localStorage.getItem('plant3d_workflow_mode')?.trim().toLowerCase();
-    if (fromLocal) return !isManualOrInternal(fromLocal);
-  } catch { /* ignore */ }
-
-  const embedParams = embedModeParams.value as unknown as {
-    workflowMode?: string | null;
-    externalWorkflowMode?: boolean | null;
-  };
-  if (typeof embedParams.externalWorkflowMode === 'boolean') {
-    return embedParams.externalWorkflowMode;
-  }
-  const fromEmbed = embedParams.workflowMode?.trim().toLowerCase();
-  if (fromEmbed) return !isManualOrInternal(fromEmbed);
-
-  return true;
-}
-
 function toUploadedFilesFromAttachments(
-  attachments?: Array<{
+  attachments?: {
     id: string;
     name: string;
     url: string;
@@ -285,7 +255,7 @@ function toUploadedFilesFromAttachments(
     type?: string;
     mimeType?: string;
     uploadedAt: number;
-  }>,
+  }[],
 ): UploadedFile[] {
   return (attachments ?? []).map((attachment) => ({
     ...(attachment as UploadedFile),
@@ -346,7 +316,9 @@ onMounted(() => {
   console.log('[InitiateReviewPanel] 嵌入模式参数:', embedModeParams.value);
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
 
-  externalWorkflowMode.value = resolveExternalWorkflowMode();
+  externalWorkflowMode.value = resolvePassiveWorkflowMode({
+    embedParams: embedModeParams.value,
+  });
 
   // E2E / CDP：在显式开启时暴露 window 钩子，便于无三维选区时注入一条模拟构件（不替代真实校审流程）
   let automationReviewEnabled = false;
@@ -498,6 +470,32 @@ const missingFields = computed(() => {
   return fields;
 });
 
+const submitButtonLabel = computed(() => (
+  externalWorkflowMode.value ? '保存提资单数据' : '创建并提交提资单'
+));
+const submitLoadingLabel = computed(() => (
+  externalWorkflowMode.value ? '正在保存...' : '正在创建...'
+));
+const attachmentUploadHint = computed(() => (
+  externalWorkflowMode.value
+    ? '当前将在保存提资单后自动上传附件，避免缺少 lineage 导致上传失败。'
+    : '当前将在创建提资单后自动上传附件，避免缺少 lineage 导致上传失败。'
+));
+const submitSuccessTitle = computed(() => (
+  externalWorkflowMode.value ? '提资单保存成功' : '提资单创建成功'
+));
+const submitSuccessDetails = computed(() => (
+  externalWorkflowMode.value ? '已保存到提资单，流程流转由外部系统继续处理。' : '已提交到校审流程。'
+));
+const submitButtonAriaLabel = computed(() => (
+  externalWorkflowMode.value ? '验证并保存提资单' : '验证并提交提资单'
+));
+const panelSubTitle = computed(() => (
+  externalWorkflowMode.value
+    ? '根据设计稿填写提资信息并保存到提资单，流程流转由外部系统驱动'
+    : '根据设计稿填写提资信息并提交到校审流程'
+));
+
 const selectedChecker = computed(() => {
   return reviewerOptions.value.find((user) => user.id === resolvedAssignees.value.checkerId) ?? null;
 });
@@ -606,7 +604,7 @@ async function handleSubmit() {
   } catch (error) {
     notification.value = {
       type: 'error',
-      message: '提资单创建失败',
+      message: externalWorkflowMode.value ? '提资单保存失败' : '提资单创建失败',
       details: error instanceof Error ? error.message : '未知错误，请重试',
     };
   } finally {
@@ -644,14 +642,23 @@ function closePanel() {
     <div class="flex items-center justify-between">
       <div>
         <h3 class="text-base font-semibold text-[#111827]">发起提资单</h3>
-        <p class="mt-1 text-xs text-[#6B7280]">根据设计稿填写提资信息并提交到校审流程</p>
+        <p class="mt-1 text-xs text-[#6B7280]">{{ panelSubTitle }}</p>
       </div>
-      <button type="button"
-        class="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#9CA3AF] transition hover:bg-[#F9FAFB] hover:text-[#6B7280]"
-        aria-label="关闭发起提资单面板"
-        @click="closePanel">
-        <X class="h-5 w-5" />
-      </button>
+      <div class="flex items-center gap-2">
+        <button type="button"
+          class="inline-flex h-8 items-center gap-1 rounded-md border border-[#E5E7EB] px-2 text-xs text-[#6B7280] transition hover:bg-[#F9FAFB] hover:text-[#374151]"
+          title="查看发起提资操作指南"
+          @click="onboarding.openGuideCenter('initiateReview')">
+          <HelpCircle class="h-4 w-4" />
+          操作指南
+        </button>
+        <button type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#9CA3AF] transition hover:bg-[#F9FAFB] hover:text-[#6B7280]"
+          aria-label="关闭发起提资单面板"
+          @click="closePanel">
+          <X class="h-5 w-5" />
+        </button>
+      </div>
     </div>
 
     <!-- 成功提交后的结果展示 -->
@@ -659,10 +666,10 @@ function closePanel() {
       <div class="rounded-xl border border-green-200 bg-green-50 p-4">
         <div class="flex items-center gap-2 text-green-700">
           <CheckCircle class="h-5 w-5 shrink-0" />
-          <span class="text-sm font-semibold">提资单创建成功</span>
+          <span class="text-sm font-semibold">{{ submitSuccessTitle }}</span>
         </div>
         <div class="mt-3 space-y-2 text-sm text-green-800">
-          <p>数据包「<span class="font-medium">{{ lastCreatedTask.title }}</span>」已提交到校审流程。</p>
+          <p>数据包「<span class="font-medium">{{ lastCreatedTask.title }}</span>」{{ submitSuccessDetails }}</p>
           <div class="rounded-lg bg-white/60 px-3 py-2 text-xs text-green-700">
             <p>校核人：{{ lastCreatedTask.checkerName }}</p>
             <p>审核人：{{ lastCreatedTask.approverName }}</p>
@@ -671,7 +678,14 @@ function closePanel() {
         </div>
       </div>
 
-      <div class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
+      <div v-if="externalWorkflowMode" class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
+        <p class="text-xs font-medium text-blue-700">流程提示</p>
+        <p class="mt-1 text-xs text-blue-600">
+          提资单已保存，后续流转将由外部系统继续处理，无需在此继续操作。
+        </p>
+      </div>
+
+      <div v-else class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
         <p class="text-xs font-medium text-blue-700">下一步</p>
         <p class="mt-1 text-xs text-blue-600">
           可在「<button type="button" class="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900" @click="goToTaskMonitor">任务监控</button>」面板中查看流转进度，或在「<button type="button" class="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900" @click="goToReviewWorkbench">审核工作台</button>」中查看校审详情。
@@ -679,7 +693,7 @@ function closePanel() {
       </div>
 
       <div class="flex gap-2">
-        <Button class="flex-1" @click="resetForNewTask">
+        <Button v-if="!externalWorkflowMode" class="flex-1" @click="resetForNewTask">
           <Plus class="h-3.5 w-3.5" />
           新建提资单
         </Button>
@@ -719,7 +733,7 @@ function closePanel() {
       </div>
       <div v-if="showDebugUi && externalWorkflowMode" data-testid="external-workflow-mode-banner"
         class="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-        外部流程模式 — 仅创建提资数据，流程流转与审批由外部系统驱动。
+        外部流程模式 — 仅保存提资数据，流程流转与审批由外部系统驱动。
       </div>
 
       <Card class="border border-[#F3F4F6] shadow-none" body-class="p-3">
@@ -898,7 +912,7 @@ function closePanel() {
         </div>
         <p class="text-xs text-[#6B7280]">支持上传 PDF、DWG、DXF、Excel、Word、图片等格式，单文件最大 50MB</p>
         <p v-if="!canAutoUploadAttachments" class="text-xs text-[#F59E0B]">
-          当前将在创建提资单后自动上传附件，避免缺少 lineage 导致上传失败。
+          {{ attachmentUploadHint }}
         </p>
       </div>
 
@@ -912,16 +926,16 @@ function closePanel() {
 
       <Button class="w-full" data-guide="submit-btn" :disabled="!canSubmit || isSubmitting" @click="handleSubmit">
         <template v-if="isSubmitting">
-          正在创建...
+          {{ submitLoadingLabel }}
         </template>
         <template v-else>
           <Send class="h-3.5 w-3.5" />
-          {{ externalWorkflowMode ? '创建提资数据' : '创建并提交提资单' }}
+          {{ submitButtonLabel }}
         </template>
       </Button>
 
       <button type="button" class="sr-only" data-testid="initiate-submit-trigger" @click="handleSubmit">
-        验证并提交提资单
+        {{ submitButtonAriaLabel }}
       </button>
 
       <div v-if="notification.type === 'error'"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 
-import { Clock, FileText, Filter, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
+import { Clock, FileText, Filter, HelpCircle, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import { getSubmitActionLabel } from './reviewPanelActions';
@@ -9,6 +9,7 @@ import { getSubmitActionLabel } from './reviewPanelActions';
 import type { ReviewTask } from '@/types/auth';
 
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
+import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
@@ -16,6 +17,7 @@ import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
 
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
+const onboarding = useOnboardingGuide();
 const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-reviewer-tasks-v1');
 
 const searchTerm = ref('');
@@ -224,6 +226,13 @@ onMounted(() => {
       </div>
       <div class="flex items-center gap-2">
         <span class="hidden text-[12px] text-gray-400 sm:inline">{{ reviewStageLabel }}人：{{ currentUser?.name }}</span>
+        <button class="inline-flex h-8 items-center gap-1 rounded-md border border-gray-200 px-2 text-xs text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+          type="button"
+          title="查看待办任务操作指南"
+          @click="onboarding.openGuideCenter('reviewerTasks')">
+          <HelpCircle class="h-4 w-4" />
+          操作指南
+        </button>
         <button class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
           type="button"
           aria-label="筛选任务">

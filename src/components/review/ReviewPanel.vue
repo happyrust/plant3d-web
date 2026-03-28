@@ -13,6 +13,7 @@ import {
   FileCheck,
   FileText,
   Filter,
+  HelpCircle,
   History,
   MessageSquare,
   Paperclip,
@@ -25,12 +26,12 @@ import {
 } from 'lucide-vue-next';
 
 import CollisionResultList from './CollisionResultList.vue';
+import { isReviewDebugUiEnabled } from './debugUiGate';
 import {
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
   type EmbedLandingState,
 } from './embedRoleLanding';
-import { isReviewDebugUiEnabled } from './debugUiGate';
 import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
@@ -42,6 +43,7 @@ import {
   getWorkflowSubmitBridgeAction,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
+import { resolvePassiveWorkflowMode } from './workflowMode';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
@@ -56,10 +58,11 @@ import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
+import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
-import { WORKFLOW_NODE_NAMES } from '@/types/auth';
+import { getTaskStatusDisplayName, WORKFLOW_NODE_NAMES } from '@/types/auth';
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
 type ConfirmedRecordEntry = typeof reviewStore.sortedConfirmedRecords.value[number];
@@ -89,6 +92,7 @@ type NormalizedTaskContext = {
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
+const onboarding = useOnboardingGuide();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
 const lastRestoredSceneKey = ref<string | null>(null);
@@ -142,6 +146,11 @@ const taskContext = computed<NormalizedTaskContext | null>(() => {
 const currentTaskNodeLabel = computed(() => taskContext.value?.currentNodeLabel || '-');
 const currentTaskFormId = computed(() => taskContext.value?.formId || '未绑定 formId');
 const currentTaskHasFormalFormId = computed(() => !!taskContext.value?.formId);
+const isPassiveWorkflow = computed(() => resolvePassiveWorkflowMode());
+const currentTaskStatusLabel = computed(() => {
+  if (!currentTask.value) return '-';
+  return getTaskStatusDisplayName(currentTask.value.status).label;
+});
 const reviewerEmbedEmptyStateTitle = computed(() => {
   if (embedLandingState.value?.restoreStatus === 'no_form') {
     return '当前打开的嵌入链接未提供有效 form_id';
@@ -484,6 +493,7 @@ async function refreshCurrentTask(taskId: string) {
 }
 
 async function handleSubmitToNextNode() {
+  if (isPassiveWorkflow.value) return;
   const taskId = currentTask.value?.id;
   const formId = currentTask.value?.formId?.trim();
   const comments = submitComment.value.trim();
@@ -512,6 +522,7 @@ async function handleSubmitToNextNode() {
 }
 
 async function handleReturnToNode() {
+  if (isPassiveWorkflow.value) return;
   if (!currentTask.value || !canReturnToPrevNode.value) return;
   const taskId = currentTask.value.id;
   const formId = currentTask.value.formId?.trim();
@@ -543,6 +554,7 @@ async function handleReturnToNode() {
 }
 
 function toggleSubmitDialog() {
+  if (isPassiveWorkflow.value) return;
   if (workflowLoading.value || workflowActionLoading.value || !canSubmitToNextNode.value) return;
   showReturnDialog.value = false;
   returnReason.value = '';
@@ -550,6 +562,7 @@ function toggleSubmitDialog() {
 }
 
 function toggleReturnDialog() {
+  if (isPassiveWorkflow.value) return;
   if (workflowLoading.value || workflowActionLoading.value || !canReturnToPrevNode.value) return;
   showSubmitDialog.value = false;
   submitComment.value = '';
@@ -566,6 +579,13 @@ function closeReturnDialog() {
   showReturnDialog.value = false;
   returnReason.value = '';
   returnTargetNode.value = 'sj';
+}
+
+async function refreshWorkflowContext() {
+  const taskId = currentTask.value?.id;
+  if (!taskId) return;
+  await refreshCurrentTask(taskId);
+  await loadWorkflow(taskId);
 }
 
 function handleClearConfirmedRecords() {
@@ -1105,7 +1125,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
       data-testid="reviewer-landing-workspace">
       <!-- 标题行: 任务名 + 节点徽章 + 操作 -->
-      <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center justify-between gap-2" data-guide="review-panel-header">
         <div class="flex items-center gap-2 min-w-0">
           <ClipboardCheck class="h-5 w-5 shrink-0 text-primary" />
           <h2 class="truncate text-base font-semibold text-slate-950">{{ currentTask.title }}</h2>
@@ -1115,6 +1135,13 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           </span>
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
+          <button type="button"
+            class="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            title="查看校审面板操作指南"
+            @click="onboarding.openGuideCenter('reviewPanel')">
+            <HelpCircle class="h-3.5 w-3.5" />
+            操作指南
+          </button>
           <button v-if="isFilteringByTask" type="button" title="显示所有模型"
             class="h-7 rounded-full bg-orange-100 px-3 text-xs font-medium text-orange-700 hover:bg-orange-200"
             @click="clearModelFilter">
@@ -1138,29 +1165,50 @@ function flyToAnnotationItem(item: AnnotationListItem) {
 
       <!-- 核心操作按钮组 -->
       <div class="mt-3 flex flex-wrap items-center gap-2" data-testid="review-workbench-workflow-zone" data-guide="workflow-actions">
-        <button type="button"
-          class="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
-          @click="toggleSubmitDialog">
-          {{ submitActionLabel }}
-        </button>
-        <button type="button"
-          class="h-8 rounded-md border border-red-200 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-          :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
-          @click="toggleReturnDialog">
-          驳回到设计
-        </button>
-        <button type="button"
-          class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
-          @click="filterModelByTask">
-          <Filter class="mr-1 inline h-3 w-3" />只显示任务构件
-        </button>
-        <button v-if="isFilteringByTask" type="button"
-          class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
-          @click="clearModelFilter">
-          显示全部
-        </button>
-        <div v-if="workflowError" class="text-xs text-red-600">{{ workflowError }}</div>
+        <template v-if="isPassiveWorkflow">
+          <div class="min-w-[18rem] flex-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            <div class="font-medium">外部流程模式</div>
+            <div class="mt-1 text-xs text-blue-700">
+              当前流程由外部平台驱动，此处仅展示状态，不提供提交、驳回等内部操作。
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-800">
+              <span>当前节点：{{ currentTaskNodeLabel }}</span>
+              <span>当前状态：{{ currentTaskStatusLabel }}</span>
+            </div>
+          </div>
+          <button type="button"
+            class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted disabled:opacity-50"
+            :disabled="workflowLoading || workflowActionLoading"
+            @click="void refreshWorkflowContext()">
+            <RefreshCw :class="['mr-1 inline h-3.5 w-3.5', (workflowLoading || workflowActionLoading) && 'animate-spin']" />
+            刷新
+          </button>
+        </template>
+        <template v-else>
+          <button type="button"
+            class="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
+            @click="toggleSubmitDialog">
+            {{ submitActionLabel }}
+          </button>
+          <button type="button"
+            class="h-8 rounded-md border border-red-200 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
+            @click="toggleReturnDialog">
+            驳回到设计
+          </button>
+          <button type="button"
+            class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
+            @click="filterModelByTask">
+            <Filter class="mr-1 inline h-3 w-3" />只显示任务构件
+          </button>
+          <button v-if="isFilteringByTask" type="button"
+            class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
+            @click="clearModelFilter">
+            显示全部
+          </button>
+          <div v-if="workflowError" class="text-xs text-red-600">{{ workflowError }}</div>
+        </template>
       </div>
     </div>
 
@@ -1309,7 +1357,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       </div>
 
       <!-- 工具按钮 -->
-      <div class="mt-2 flex flex-wrap gap-1.5" data-testid="reviewer-direct-launch-annotation-zone">
+      <div class="mt-2 flex flex-wrap gap-1.5" data-guide="review-panel-tools" data-testid="reviewer-direct-launch-annotation-zone">
         <button v-for="action in reviewerDirectLaunchActions"
           :key="action.id"
           type="button"
@@ -1346,6 +1394,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm"
           placeholder="备注（可选）" />
         <button type="button"
+          data-command="review.confirm"
           class="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           :disabled="confirmSaving"
           @click="confirmCurrentData">
@@ -1357,7 +1406,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
     </div>
 
     <!-- ═══════ C2. 批注列表（每条批注详情 + 评论线程） ═══════ -->
-    <div v-if="totalAnnotationItemCount > 0" class="rounded-lg border border-slate-200 bg-white">
+    <div v-if="totalAnnotationItemCount > 0" class="rounded-lg border border-slate-200 bg-white" data-guide="annotation-list-zone">
       <div class="flex items-center justify-between px-4 py-3">
         <div class="flex items-center gap-2">
           <FileText class="h-4 w-4 text-orange-500" />
@@ -1429,14 +1478,16 @@ function flyToAnnotationItem(item: AnnotationListItem) {
     </div>
 
     <!-- 弹窗组件 -->
-    <WorkflowSubmitDialog :visible="showSubmitDialog"
+    <WorkflowSubmitDialog v-if="!isPassiveWorkflow"
+      :visible="showSubmitDialog"
       :current-node="currentNode"
       :target-node="submitTargetNode"
       :loading="workflowActionLoading"
       @update:visible="(visible) => { if (!visible) closeSubmitDialog(); }"
       @confirm="(comment) => { submitComment = comment ?? ''; void handleSubmitToNextNode(); }" />
 
-    <WorkflowReturnDialog :visible="showReturnDialog"
+    <WorkflowReturnDialog v-if="!isPassiveWorkflow"
+      :visible="showReturnDialog"
       :current-node="currentNode"
       :loading="workflowActionLoading"
       @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"

@@ -9,7 +9,14 @@ import { managerGuide, proofreaderGuide, reviewerGuide } from '@/components/onbo
 
 const STORAGE_KEY = 'plant3d-onboarding-v1';
 
-const allGuides: Record<string, GuideDefinition> = {
+export type GuideRole = 'designer' | 'proofreader' | 'reviewer' | 'manager';
+export type GuideCenterTopic = 'currentRole' | 'designer' | 'proofreader' | 'reviewer' | 'manager' | 'initiateReview' | 'reviewerTasks' | 'reviewPanel';
+
+type StartGuideOptions = {
+  stepId?: string;
+};
+
+const allGuides: Record<GuideRole, GuideDefinition> = {
   designer: designerGuide,
   proofreader: proofreaderGuide,
   reviewer: reviewerGuide,
@@ -34,6 +41,8 @@ const active = ref(false);
 const currentStepIndex = ref(0);
 const currentGuide = ref<GuideDefinition | null>(null);
 const persistedState = ref<OnboardingPersistedState>(loadState());
+const guideCenterOpen = ref(false);
+const guideCenterTopic = ref<GuideCenterTopic>('currentRole');
 
 const currentStep = computed<GuideStep | null>(() => {
   if (!currentGuide.value) return null;
@@ -67,11 +76,14 @@ function resetGuideForUser(userId: string, role: string) {
   saveState(persistedState.value);
 }
 
-async function startGuide(guide: GuideDefinition) {
-  currentGuide.value = guide;
-  currentStepIndex.value = 0;
-  active.value = true;
+function resolveGuideStepIndex(guide: GuideDefinition, options?: StartGuideOptions): number {
+  if (!options?.stepId) return 0;
+  const index = guide.steps.findIndex((step) => step.id === options.stepId);
+  return index >= 0 ? index : 0;
+}
 
+async function openStep(index: number) {
+  currentStepIndex.value = index;
   await nextTick();
   const step = currentStep.value;
   if (step?.onBeforeShow) {
@@ -80,18 +92,17 @@ async function startGuide(guide: GuideDefinition) {
   }
 }
 
+async function startGuide(guide: GuideDefinition, options?: StartGuideOptions) {
+  guideCenterOpen.value = false;
+  currentGuide.value = guide;
+  active.value = true;
+  await openStep(resolveGuideStepIndex(guide, options));
+}
+
 async function goToStep(index: number) {
   if (!currentGuide.value) return;
   if (index < 0 || index >= totalSteps.value) return;
-
-  currentStepIndex.value = index;
-  await nextTick();
-
-  const step = currentStep.value;
-  if (step?.onBeforeShow) {
-    await step.onBeforeShow();
-    await nextTick();
-  }
+  await openStep(index);
 }
 
 async function nextStep() {
@@ -125,15 +136,28 @@ function dismissGuide() {
   finishGuide();
 }
 
-function startGuideForCurrentRole() {
-  const userStore = useUserStore();
-  const role = userStore.currentUser.value?.role;
-  if (!role) return;
+function openGuideCenter(topic: GuideCenterTopic = 'currentRole') {
+  guideCenterTopic.value = topic;
+  guideCenterOpen.value = true;
+}
 
+function closeGuideCenter() {
+  guideCenterOpen.value = false;
+}
+
+async function startGuideForRole(role: GuideRole, options?: StartGuideOptions) {
   const guide = allGuides[role];
   if (!guide) return;
+  await startGuide(guide, options);
+}
 
-  startGuide(guide);
+async function startGuideForCurrentRole(options?: StartGuideOptions) {
+  const userStore = useUserStore();
+  const role = userStore.currentUser.value?.role as GuideRole | undefined;
+  if (!role) return;
+  const guide = allGuides[role];
+  if (!guide) return;
+  await startGuide(guide, options);
 }
 
 function shouldShowGuideForCurrentUser(): boolean {
@@ -147,7 +171,7 @@ function shouldShowGuideForCurrentUser(): boolean {
 function autoStartIfNeeded() {
   if (active.value) return;
   if (!shouldShowGuideForCurrentUser()) return;
-  startGuideForCurrentRole();
+  void startGuideForCurrentRole();
 }
 
 export function useOnboardingGuide() {
@@ -159,6 +183,7 @@ export function useOnboardingGuide() {
       if (active.value) {
         dismissGuide();
       }
+      closeGuideCenter();
     },
   );
 
@@ -171,14 +196,19 @@ export function useOnboardingGuide() {
     isFirstStep,
     isLastStep,
     progress,
+    guideCenterOpen,
+    guideCenterTopic,
 
     startGuide,
+    startGuideForRole,
     startGuideForCurrentRole,
     nextStep,
     prevStep,
     goToStep,
     finishGuide,
     dismissGuide,
+    openGuideCenter,
+    closeGuideCenter,
 
     shouldShowGuideForCurrentUser,
     autoStartIfNeeded,

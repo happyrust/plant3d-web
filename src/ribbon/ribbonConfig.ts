@@ -1,8 +1,10 @@
 import type { RibbonTabConfig } from '@/ribbon/ribbonTypes';
 
 import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
+import { isMyTasksAvailableInWorkflowMode } from '@/components/review/workflowMode';
 
 const showDebugUi = isReviewDebugUiEnabled();
+const showMyTasksEntry = isMyTasksAvailableInWorkflowMode();
 
 const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   {
@@ -15,6 +17,13 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         items: [
           { kind: 'button', id: 'file.open', label: '打开', icon: 'folder_open', commandId: 'file.open' },
           { kind: 'button', id: 'file.save', label: '保存', icon: 'file', commandId: 'file.save' },
+        ],
+      },
+      {
+        id: 'file.navigation',
+        label: '导航',
+        items: [
+          { kind: 'button', id: 'file.backToDashboard', label: '返回概览', icon: 'layout_dashboard', commandId: 'file.backToDashboard' },
         ],
       },
     ],
@@ -259,7 +268,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         id: 'review.panel',
         label: '面板',
         items: [
-          { kind: 'button', id: 'panel.dashboard', label: '概览', icon: 'layout_dashboard', commandId: 'panel.dashboard' },
           { kind: 'button', id: 'panel.initiateReview', label: '发起提资', icon: 'plus', commandId: 'panel.initiateReview' },
           { kind: 'button', id: 'panel.review', label: '校审面板', icon: 'clipboard_list', commandId: 'panel.review' },
           { kind: 'button', id: 'panel.reviewerTasks', label: '待审核', icon: 'clipboard_check', commandId: 'panel.reviewerTasks' },
@@ -403,6 +411,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         id: 'help.basic',
         label: '帮助',
         items: [
+          { kind: 'button', id: 'help.reviewGuide', label: '校审导航', icon: 'help', commandId: 'help.reviewGuide' },
           { kind: 'button', id: 'help.about', label: '关于', icon: 'help', commandId: 'help.about' },
           { kind: 'button', id: 'help.docs', label: '文档', icon: 'question', commandId: 'help.docs' },
         ],
@@ -411,6 +420,29 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
   },
 ];
 
-export const RIBBON_TABS: RibbonTabConfig[] = showDebugUi
+const BASE_RIBBON_TABS: RibbonTabConfig[] = showDebugUi
   ? ALL_RIBBON_TABS
   : ALL_RIBBON_TABS.filter((tab) => tab.id !== 'debug');
+
+function filterPassiveWorkflowEntries(tabs: RibbonTabConfig[]): RibbonTabConfig[] {
+  if (showMyTasksEntry) return tabs;
+
+  return tabs.map((tab) => ({
+    ...tab,
+    groups: tab.groups.map((group) => ({
+      ...group,
+      items: group.items.flatMap((item) => {
+        if (item.kind === 'button') {
+          return item.commandId === 'panel.myTasks' ? [] : [item];
+        }
+        if (item.kind === 'stack') {
+          const nextItems = item.items.filter((subItem) => subItem.commandId !== 'panel.myTasks');
+          return nextItems.length > 0 ? [{ ...item, items: nextItems }] : [];
+        }
+        return [item];
+      }),
+    })).filter((group) => group.items.length > 0),
+  }));
+}
+
+export const RIBBON_TABS: RibbonTabConfig[] = filterPassiveWorkflowEntries(BASE_RIBBON_TABS);
