@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 function setSearch(search: string) {
   const s = String(search || '');
@@ -6,46 +6,37 @@ function setSearch(search: string) {
   window.history.pushState({}, '', next);
 }
 
-describe('isSkipAutoGeneration', () => {
-  const LS_KEY = 'skip_auto_gen';
-
+describe('isAutoGenerationEnabled', () => {
   beforeEach(() => {
-    // 兼容：部分模块使用全局 localStorage（非 window.localStorage）
-    ;(globalThis as any).localStorage = window.localStorage;
-    try {
-      window.localStorage.removeItem(LS_KEY);
-    } catch {
-      // ignore
-    }
     setSearch('');
+    vi.resetModules();
   });
 
   afterEach(() => {
-    try {
-      window.localStorage.removeItem(LS_KEY);
-    } catch {
-      // ignore
-    }
     setSearch('');
+    vi.resetModules();
   });
 
-  it('defaults to false (auto generation enabled)', async () => {
-    const { isSkipAutoGeneration } = await import('@/composables/useModelGeneration');
-    expect(isSkipAutoGeneration()).toBe(false);
+  it('defaults to false (auto generation disabled)', async () => {
+    const { isAutoGenerationEnabled } = await import('@/composables/useModelGeneration');
+    expect(isAutoGenerationEnabled()).toBe(false);
   });
 
-  it('returns true when query skip_auto_gen=1', async () => {
+  it('returns true when query dtx_enable_auto_generation=1', async () => {
+    setSearch('?dtx_enable_auto_generation=1');
+    const { isAutoGenerationEnabled } = await import('@/composables/useModelGeneration');
+    expect(isAutoGenerationEnabled()).toBe(true);
+  });
+
+  it('does not accept legacy query skip_auto_gen=1', async () => {
     setSearch('?skip_auto_gen=1');
-    const { isSkipAutoGeneration } = await import('@/composables/useModelGeneration');
-    expect(isSkipAutoGeneration()).toBe(true);
+    const { isAutoGenerationEnabled } = await import('@/composables/useModelGeneration');
+    expect(isAutoGenerationEnabled()).toBe(false);
   });
 
-  it('returns true when localStorage skip_auto_gen=1', async () => {
-    // happy-dom 在某些环境下 localStorage 可能不可写/不含 setItem；这里直接 stub 全局 localStorage。
-    ;(globalThis as any).localStorage = {
-      getItem: (k: string) => (k === LS_KEY ? '1' : null),
-    };
-    const { isSkipAutoGeneration } = await import('@/composables/useModelGeneration');
-    expect(isSkipAutoGeneration()).toBe(true);
+  it('does not accept legacy query dtx_skip_auto_generation=1', async () => {
+    setSearch('?dtx_skip_auto_generation=1');
+    const { isAutoGenerationEnabled } = await import('@/composables/useModelGeneration');
+    expect(isAutoGenerationEnabled()).toBe(false);
   });
 });
