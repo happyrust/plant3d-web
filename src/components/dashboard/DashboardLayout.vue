@@ -41,11 +41,12 @@
         <DashboardOverview v-if="activeMenu === 'dashboard'"
           @navigate="activeMenu = $event"
           @select="handleProjectSelect" />
+        <SiteDashboardPanel v-else-if="activeMenu === 'sites'" />
         <ProjectCardList v-else-if="activeMenu === 'projects'" @select="handleProjectSelect" />
         <DashboardReviewsPanel v-else />
       </main>
 
-      <nav class="grid shrink-0 grid-cols-3 border-t border-gray-200 bg-white p-2 lg:hidden">
+      <nav class="grid shrink-0 grid-cols-4 border-t border-gray-200 bg-white p-2 lg:hidden">
         <button v-for="item in navItems"
           :key="`${item.id}-mobile`"
           class="flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs transition-colors"
@@ -66,12 +67,14 @@ import {
   CheckSquareIcon,
   FolderIcon,
   LayoutDashboardIcon,
+  ServerIcon,
 } from 'lucide-vue-next';
 
 import DashboardOverview from './DashboardOverview.vue';
 
 import DashboardReviewsPanel from '@/components/dashboard/DashboardReviewsPanel.vue';
 import ProjectCardList from '@/components/model-project/ProjectCardList.vue';
+import SiteDashboardPanel from '@/components/site/SiteDashboardPanel.vue';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { useUserStore } from '@/composables/useUserStore';
 
@@ -79,7 +82,7 @@ defineEmits<{
   select: [projectId: string];
 }>();
 
-type MenuId = 'dashboard' | 'projects' | 'reviews';
+type MenuId = 'dashboard' | 'sites' | 'projects' | 'reviews';
 
 const activeMenu = ref<MenuId>('projects');
 const { selectProject } = useModelProjects();
@@ -98,6 +101,13 @@ const navItems: {
     shortLabel: '首页',
     title: '概览',
     icon: LayoutDashboardIcon,
+  },
+  {
+    id: 'sites',
+    label: '站点管理',
+    shortLabel: '站点',
+    title: '站点管理',
+    icon: ServerIcon,
   },
   {
     id: 'projects',

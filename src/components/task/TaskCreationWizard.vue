@@ -11,6 +11,12 @@
       </v-btn>
     </div>
 
+    <div v-if="siteContext" class="site-context-banner">
+      <v-icon size="16" class="mr-2">mdi-server</v-icon>
+      <span>当前站点：{{ siteContext.siteName || siteContext.siteId }}</span>
+      <span v-if="siteContext.isCurrentSite" class="site-context-tag">当前站点执行</span>
+    </div>
+
     <!-- 步骤指示器 -->
     <div class="step-indicator">
       <div v-for="step in 3"
@@ -259,8 +265,8 @@
               @update:model-value="handleNounListChange"
               @keydown.enter.prevent="handleNounEnter"
               @click:clear="clearNounInput">
-              <template #chip="{ props, item }">
-                <v-chip v-bind="props"
+              <template #chip="{ props: chipProps, item }">
+                <v-chip v-bind="chipProps"
                   size="small"
                   closable
                   @click:close="removeNoun(String(item.raw))">
@@ -422,11 +428,21 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 
+import type { DatabaseConfig } from '@/api/genModelTaskApi';
+import type { TaskCreationSiteContext } from '@/composables/useTaskCreationStore';
 import type { TaskPriority } from '@/types/task';
 
 import { useTaskCreation } from '@/composables/useTaskCreation';
 
 const DEFAULT_TASK_TYPE = 'DataParsingWizard';
+
+const props = withDefaults(defineProps<{
+  initialConfig?: DatabaseConfig | null;
+  siteContext?: TaskCreationSiteContext | null;
+}>(), {
+  initialConfig: null,
+  siteContext: null,
+});
 
 // ============ Emits ============
 const emit = defineEmits<{
@@ -455,12 +471,16 @@ const {
   resetForm,
   applyPresetType,
   serverConfig,
+  siteContext,
   addNoun,
   removeNoun,
   setEnabledNouns,
   nounInputInvalid,
   nounInputError,
-} = useTaskCreation();
+} = useTaskCreation({
+  initialConfig: props.initialConfig,
+  siteContext: props.siteContext,
+});
 
 // 组件挂载时应用预设类型
 onMounted(() => {
@@ -690,6 +710,27 @@ function handleCreateAnother() {
     align-items: center;
     font-size: 15px;
     font-weight: 500;
+  }
+}
+
+.site-context-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgba(var(--v-theme-primary), 0.06);
+  color: rgb(var(--v-theme-primary));
+  font-size: 13px;
+  font-weight: 500;
+
+  .site-context-tag {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(var(--v-theme-primary), 0.12);
+    font-size: 11px;
+    font-weight: 600;
   }
 }
 

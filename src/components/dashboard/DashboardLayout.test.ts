@@ -16,6 +16,11 @@ vi.mock('./DashboardOverview.vue', () => ({
           }, 'Go to projects'),
           h('button', {
             type: 'button',
+            'data-testid': 'overview-navigate-sites',
+            onClick: () => emit('navigate', 'sites'),
+          }, 'Go to sites'),
+          h('button', {
+            type: 'button',
             'data-testid': 'overview-select-project',
             onClick: () => emit('select', 'project-from-overview'),
           }, 'Select project'),
@@ -44,6 +49,14 @@ vi.mock('@/components/model-project/ProjectCardList.vue', () => ({
             onClick: () => emit('select', 'project-from-list'),
           }, 'Open project'),
         ]);
+    },
+  }),
+}));
+
+vi.mock('@/components/site/SiteDashboardPanel.vue', () => ({
+  default: defineComponent({
+    setup() {
+      return () => h('section', { 'data-testid': 'site-dashboard-panel' }, 'Site dashboard');
     },
   }),
 }));
@@ -101,13 +114,15 @@ describe('DashboardLayout', () => {
     expect(root?.className).toContain('bg-[#F3F4F6]');
     expect(sidebar?.className).toContain('w-[280px]');
     expect(sidebar?.textContent).toContain('Plant3D Web');
-    expect(navButtons).toHaveLength(3);
+    expect(navButtons).toHaveLength(4);
     expect(Array.from(navButtons, (button) => button.textContent?.trim())).toEqual([
       '首页 (Dashboard)',
+      '站点管理',
       '模型工程',
       '校审批注',
     ]);
     expect(host.querySelector('[data-testid="dashboard-overview"]')).toBeNull();
+    expect(host.querySelector('[data-testid="site-dashboard-panel"]')).toBeNull();
     expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dashboard-reviews-panel"]')).toBeNull();
   });
@@ -132,7 +147,7 @@ describe('DashboardLayout', () => {
     const { host } = mountDashboardLayout();
     const navButtons = host.querySelectorAll('aside button');
 
-    expect(navButtons[1]?.className).toContain('bg-[#EFF6FF]');
+    expect(navButtons[2]?.className).toContain('bg-[#EFF6FF]');
     expect(host.querySelector('header h1')?.textContent).toBe('模型工程');
     expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
 
@@ -147,19 +162,35 @@ describe('DashboardLayout', () => {
     await nextTick();
 
     expect(navButtons[1]?.className).toContain('bg-[#EFF6FF]');
-    expect(host.querySelector('header h1')?.textContent).toBe('模型工程');
-    expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
+    expect(host.querySelector('header h1')?.textContent).toBe('站点管理');
+    expect(host.querySelector('[data-testid="site-dashboard-panel"]')).toBeTruthy();
 
     (navButtons[2] as HTMLButtonElement).click();
     await nextTick();
 
     expect(navButtons[2]?.className).toContain('bg-[#EFF6FF]');
+    expect(host.querySelector('header h1')?.textContent).toBe('模型工程');
+    expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
+
+    (navButtons[3] as HTMLButtonElement).click();
+    await nextTick();
+
+    expect(navButtons[3]?.className).toContain('bg-[#EFF6FF]');
     expect(host.querySelector('header h1')?.textContent).toBe('校审批注');
     expect(host.querySelector('[data-testid="dashboard-reviews-panel"]')).toBeTruthy();
   });
 
   it('handles child content navigation and selects projects from page content', async () => {
     const { host } = mountDashboardLayout();
+
+    (host.querySelectorAll('aside button')[0] as HTMLButtonElement).click();
+    await nextTick();
+
+    (host.querySelector('[data-testid="overview-navigate-sites"]') as HTMLButtonElement).click();
+    await nextTick();
+
+    expect(host.querySelector('header h1')?.textContent).toBe('站点管理');
+    expect(host.querySelector('[data-testid="site-dashboard-panel"]')).toBeTruthy();
 
     (host.querySelectorAll('aside button')[0] as HTMLButtonElement).click();
     await nextTick();
@@ -180,7 +211,7 @@ describe('DashboardLayout', () => {
     expect(host.querySelector('header h1')?.textContent).toBe('模型工程');
     expect(host.querySelector('[data-testid="project-card-list"]')).toBeTruthy();
 
-    (host.querySelectorAll('aside button')[1] as HTMLButtonElement).click();
+    (host.querySelectorAll('aside button')[2] as HTMLButtonElement).click();
     await nextTick();
 
     (host.querySelector('[data-testid="project-list-select"]') as HTMLButtonElement).click();

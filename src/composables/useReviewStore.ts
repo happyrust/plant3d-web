@@ -88,10 +88,10 @@ function loadPersisted(): ReviewPersistedState {
 }
 
 const persisted = loadPersisted();
-USE_BACKEND.value = persisted.useBackend;
+USE_BACKEND.value = true;
 
 const reviewMode = ref<boolean>(persisted.reviewMode);
-const confirmedRecords = ref<ConfirmedRecord[]>(persisted.confirmedRecords);
+const confirmedRecords = ref<ConfirmedRecord[]>([]);
 const currentTask = ref<ReviewTask | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -147,60 +147,58 @@ async function addConfirmedRecord(
   const taskId = currentTask.value?.id;
   const formId = currentTask.value?.formId?.trim() || record.formId;
 
-  if (USE_BACKEND.value && taskId) {
-    // 使用后端 API
-    loading.value = true;
-    error.value = null;
-    try {
-      const response = await reviewRecordCreate({
+  if (!USE_BACKEND.value) {
+    const message = '校审确认记录必须保存到数据库，当前不允许切换到本地模式';
+    error.value = message;
+    throw new Error(message);
+  }
+
+  if (!taskId) {
+    const message = '当前未关联校审任务，无法将批注/测量保存到数据库';
+    error.value = message;
+    throw new Error(message);
+  }
+
+  loading.value = true;
+  error.value = null;
+  try {
+    const response = await reviewRecordCreate({
+      taskId,
+      formId,
+      type: record.type,
+      annotations: record.annotations,
+      cloudAnnotations: record.cloudAnnotations,
+      rectAnnotations: record.rectAnnotations,
+      obbAnnotations: record.obbAnnotations ?? [],
+      measurements: record.measurements,
+      note: record.note,
+    });
+
+    if (response.success && response.record) {
+      const newRecord: ConfirmedRecord = {
+        id: response.record.id,
         taskId,
-        formId,
-        type: record.type,
+        formId: response.record.formId || formId,
+        type: 'batch',
         annotations: record.annotations,
         cloudAnnotations: record.cloudAnnotations,
         rectAnnotations: record.rectAnnotations,
         obbAnnotations: record.obbAnnotations ?? [],
         measurements: record.measurements,
+        confirmedAt: response.record.confirmedAt,
         note: record.note,
-      });
-
-      if (response.success && response.record) {
-        const newRecord: ConfirmedRecord = {
-          id: response.record.id,
-          taskId,
-          formId: response.record.formId || formId,
-          type: 'batch',
-          annotations: record.annotations,
-          cloudAnnotations: record.cloudAnnotations,
-          rectAnnotations: record.rectAnnotations,
-          obbAnnotations: record.obbAnnotations ?? [],
-          measurements: record.measurements,
-          confirmedAt: response.record.confirmedAt,
-          note: record.note,
-        };
-        confirmedRecords.value = [...confirmedRecords.value, newRecord];
-        return newRecord.id;
-      } else {
-        throw new Error(response.error_message || '保存确认记录失败');
-      }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '保存确认记录失败';
-      throw e;
-    } finally {
-      loading.value = false;
+      };
+      confirmedRecords.value = [...confirmedRecords.value, newRecord];
+      return newRecord.id;
     }
-  }
 
-  // 本地模式（无任务或未启用后端）
-  const newRecord: ConfirmedRecord = {
-    ...record,
-    id: `review_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    taskId: taskId || undefined,
-    formId,
-    confirmedAt: Date.now(),
-  };
-  confirmedRecords.value = [...confirmedRecords.value, newRecord];
-  return newRecord.id;
+    throw new Error(response.error_message || '保存确认记录失败');
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '保存确认记录失败';
+    throw e;
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function removeConfirmedRecord(id: string): Promise<void> {
@@ -495,13 +493,17 @@ const sortedConfirmedRecords = computed(() => {
 // ============ 配置 ============
 
 function setUseBackend(use: boolean) {
-  USE_BACKEND.value = use;
+  if (!use) {
+    error.value = '校审确认记录必须保存到数据库，不支持切换为本地模式';
+    return;
+  }
+  USE_BACKEND.value = true;
   if (typeof localStorage !== 'undefined') {
     const payload: ReviewPersistedState = {
       version: 2,
       reviewMode: reviewMode.value,
-      confirmedRecords: use ? [] : confirmedRecords.value,
-      useBackend: use,
+      confirmedRecords: [],
+      useBackend: true,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   }

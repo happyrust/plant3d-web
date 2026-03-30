@@ -20,6 +20,7 @@ import {
   isDesignerResubmissionTask,
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
+import { resolvePassiveWorkflowMode } from './workflowMode';
 
 import type { ReviewTask } from '@/types/auth';
 
@@ -34,6 +35,7 @@ const statusFilter = ref<DesignerTaskStatusFilter>('all');
 const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
 const scrollContainer = ref<HTMLElement | null>(null);
+const isPassiveWorkflowMode = computed(() => resolvePassiveWorkflowMode());
 
 type DesignerTaskStatusFilter = 'all' | 'draft' | 'submitted' | 'in_review' | 'approved' | 'rejected' | 'cancelled';
 
@@ -123,6 +125,10 @@ const activeFilterLabel = computed(
 );
 
 function refreshTasks() {
+  if (isPassiveWorkflowMode.value) {
+    isLoading.value = false;
+    return;
+  }
   isLoading.value = true;
   userStore.loadReviewTasks().finally(() => {
     isLoading.value = false;
@@ -209,13 +215,29 @@ function getTaskCardClass(task: ReviewTask): string {
 }
 
 onMounted(() => {
-  refreshTasks();
+  if (!isPassiveWorkflowMode.value) {
+    refreshTasks();
+  }
   restoreScrollPosition();
 });
 </script>
 
 <template>
-  <div ref="scrollContainer"
+  <div v-if="isPassiveWorkflowMode"
+    class="flex h-full items-center justify-center bg-[#F6F7FB] p-4 text-slate-900">
+    <div class="w-full max-w-xl rounded-[24px] border border-blue-200 bg-white p-6 text-center shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+      <FileText class="mx-auto mb-4 h-12 w-12 text-blue-300" />
+      <h3 class="text-xl font-semibold text-slate-900">外部流程模式</h3>
+      <p class="mt-2 text-sm text-slate-500">
+        当前流程由外部平台驱动，不提供内部“我的提资单”列表界面。
+      </p>
+      <p class="mt-2 text-xs text-slate-400">
+        如需查看流程进度，请回到外部流程平台或使用当前单据的只读状态面板。
+      </p>
+    </div>
+  </div>
+  <div v-else
+    ref="scrollContainer"
     class="flex h-full flex-col overflow-auto bg-[#F6F7FB] p-4 text-slate-900"
     @scroll="persistScrollPosition">
     <div class="rounded-[24px] border border-slate-200 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur">

@@ -348,6 +348,10 @@ async function main(): Promise<void> {
     process.env.PMS_MOCK_PACKAGE_NAME = `E2E-PMS-JH-${Date.now()}`;
     console.error(`[cdp] PMS_CDP_EXTENDED_FLOW：未设 PMS_MOCK_PACKAGE_NAME，已生成 ${process.env.PMS_MOCK_PACKAGE_NAME}`);
   }
+  if (extendedFlow && !process.env.PMS_CDP_WORKFLOW_MODE?.trim()) {
+    process.env.PMS_CDP_WORKFLOW_MODE = 'manual';
+    console.error('[cdp] PMS_CDP_EXTENDED_FLOW：未设 PMS_CDP_WORKFLOW_MODE，已默认切到 manual，以便 reviewer 工作区显示内部提交流转按钮');
+  }
   if (extendedFlow && !process.env.PMS_INITIATE_CHECKER_SUBSTRING?.trim()) {
     process.env.PMS_INITIATE_CHECKER_SUBSTRING = checkerUsername;
     console.error(
@@ -404,9 +408,9 @@ async function main(): Promise<void> {
   const embedApiSniffer =
     submitReview && verifyEmbedApi && !!embedHost
       ? startPmsApiSnifferV2(context, {
-          hostNeedles: [embedHost],
-          urlSubstring: embedApiUrlSub,
-        })
+        hostNeedles: [embedHost],
+        urlSubstring: embedApiUrlSub,
+      })
       : null;
   if (embedApiSniffer) {
     console.error(
@@ -491,7 +495,7 @@ async function main(): Promise<void> {
     if (submitReview) {
       console.error('[cdp] PMS_CDP_SUBMIT_REVIEW=1：扫描各页/iframe 发起提资并提交…');
       const pkg = await runSubmitReviewAcrossContext(context);
-      console.error('[cdp] plant3d：已检测到「提资单创建成功」');
+      console.error('[cdp] plant3d：已检测到「提资单创建/保存成功」');
       console.error(`[cdp] 本次提资包名（用于 PMS 检索）: ${pkg}`);
 
       const strictEmbedEnabled = !!embedApiSniffer;
@@ -578,7 +582,7 @@ async function main(): Promise<void> {
         if (!pmsOk && !embedOk) {
           throw new Error(
             `严格校验失败：未在 PMS JSON 响应体中发现包名（${pkg}）或测试 BRAN（${bran}），且也未在嵌入站点接口/DOM 中发现。` +
-              `可设 PMS_EMBED_API_URL_SUBSTRING 缩小 URL，或 PMS_CDP_VERIFY_EMBED_API=0 / PMS_CDP_VERIFY_PMS_API=0 跳过对应校验。`,
+              '可设 PMS_EMBED_API_URL_SUBSTRING 缩小 URL，或 PMS_CDP_VERIFY_EMBED_API=0 / PMS_CDP_VERIFY_PMS_API=0 跳过对应校验。',
           );
         }
       }

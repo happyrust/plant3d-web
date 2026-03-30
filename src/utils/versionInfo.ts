@@ -33,13 +33,13 @@ function pickString(obj: Record<string, unknown>, ...keys: string[]): string | u
   return undefined;
 }
 
-/** 将构建时刻的 ISO 时间格式化为与后端相近的 UTC 文本 */
+/** 将构建时刻的 ISO 时间格式化为北京时间显示 */
 function formatBuildDateFromIso(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return iso || '未知';
   const d = new Date(t);
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} 北京时间`;
 }
 
 function normalizeVersionInfo(raw: unknown): VersionInfo | null {
@@ -48,8 +48,25 @@ function normalizeVersionInfo(raw: unknown): VersionInfo | null {
   const version = pickString(obj, 'version');
   if (!version) return null;
   const commit = pickString(obj, 'commit') ?? '未知';
-  const buildDate =
-    pickString(obj, 'buildDate', 'build_date') ?? '未知';
+  let buildDate = pickString(obj, 'buildDate', 'build_date') ?? '未知';
+  
+  // 如果后端返回的时间包含 UTC+8 或 UTC，转换为北京时间显示
+  if (buildDate !== '未知' && (buildDate.includes('UTC') || buildDate.includes('UTC+8'))) {
+    // 解析后端时间并转换为北京时间格式
+    const utcMatch = buildDate.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+    if (utcMatch) {
+      const dateStr = utcMatch[1];
+      const d = new Date(dateStr + (buildDate.includes('UTC+8') ? '' : ' UTC'));
+      const p = (n: number) => String(n).padStart(2, '0');
+      // 如果是UTC+8，直接使用；如果是UTC，转换为北京时间
+      const beijingTime = buildDate.includes('UTC+8') ? d : new Date(d.getTime() + 8 * 60 * 60 * 1000);
+      buildDate = `${beijingTime.getFullYear()}-${p(beijingTime.getMonth() + 1)}-${p(beijingTime.getDate())} ${p(beijingTime.getHours())}:${p(beijingTime.getMinutes())}:${p(beijingTime.getSeconds())} 北京时间`;
+    }
+  } else if (buildDate !== '未知' && !buildDate.includes('北京时间')) {
+    // 对于其他格式的时间，尝试解析为ISO格式转换
+    buildDate = formatBuildDateFromIso(buildDate);
+  }
+  
   return { version, commit, buildDate };
 }
 

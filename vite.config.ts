@@ -54,7 +54,10 @@ export default defineConfig(({ mode }) => {
   const isLikelyMisconfiguredBackendPort = inferredPort === '8080' || inferredPort === '3000' || inferredPort === '3001';
   const backendPort = env.VITE_BACKEND_PORT || (isLikelyMisconfiguredBackendPort ? '3100' : inferredPort || '3100');
   const backendTarget = `http://localhost:${backendPort}`;
-  const frontendBuildIso = new Date().toISOString();
+  // 使用北京时间构建前端
+  const now = new Date();
+  const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const frontendBuildIso = beijingTime.toISOString();
 
   return {
     base: '/',

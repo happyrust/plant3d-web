@@ -3,9 +3,23 @@
 
 import { ref } from 'vue';
 
+import type { DatabaseConfig } from '@/api/genModelTaskApi';
 import type { TaskType } from '@/types/task';
 
 const presetType = ref<TaskType | null>(null);
+const presetInitialConfig = ref<DatabaseConfig | null>(null);
+const presetSiteContext = ref<TaskCreationSiteContext | null>(null);
+
+export type TaskCreationSiteContext = {
+  siteId: string;
+  siteName: string;
+  isCurrentSite: boolean;
+};
+
+export type TaskCreationPresetContext = {
+  initialConfig?: DatabaseConfig | null;
+  siteContext?: TaskCreationSiteContext | null;
+};
 
 /**
  * 任务创建状态存储
@@ -29,6 +43,28 @@ export function useTaskCreationStore() {
     return type;
   }
 
+  function setPresetContext(payload: TaskCreationPresetContext | null) {
+    presetInitialConfig.value = payload?.initialConfig ?? null;
+    presetSiteContext.value = payload?.siteContext ?? null;
+  }
+
+  function consumePresetContext(): TaskCreationPresetContext {
+    const payload: TaskCreationPresetContext = {
+      initialConfig: presetInitialConfig.value,
+      siteContext: presetSiteContext.value,
+    };
+    presetInitialConfig.value = null;
+    presetSiteContext.value = null;
+    return payload;
+  }
+
+  function getPresetContext(): TaskCreationPresetContext {
+    return {
+      initialConfig: presetInitialConfig.value,
+      siteContext: presetSiteContext.value,
+    };
+  }
+
   /**
      * 获取当前预设类型（不清除）
      */
@@ -41,5 +77,8 @@ export function useTaskCreationStore() {
     setPresetType,
     consumePresetType,
     getPresetType,
+    setPresetContext,
+    consumePresetContext,
+    getPresetContext,
   };
 }

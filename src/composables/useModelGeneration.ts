@@ -614,15 +614,23 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         if (totalObjects > 0) {
           loadedRoots.add(normalizedRoot);
         }
+        const noNewRefnosLoaded = totalLoaded === 0;
         statusMessage.value = totalObjects > 0 ? '加载完成 (Parquet)' : '无可见几何实例';
         progress.value = 100;
         syncGlobalLoadStatus();
         if (totalObjects === 0) {
-          emitToast({
-            message:
-              `[警告] 加载结束但未绘制任何实例（refno=${normalizedRoot}）。请检查左侧可见性（眼睛图标）或 Parquet 是否包含该范围几何`,
-            level: 'warning',
-          });
+          if (noNewRefnosLoaded) {
+            consoleStore.addLog(
+              'info',
+              `[model-load] refno=${normalizedRoot} 本次未新增实例，已存在于场景或缓存中，跳过重复提示`
+            );
+          } else {
+            emitToast({
+              message:
+                `[警告] 加载结束但未绘制任何实例（refno=${normalizedRoot}）。请检查左侧可见性（眼睛图标）或 Parquet 是否包含该范围几何`,
+              level: 'warning',
+            });
+          }
         } else {
           emitToast({ message: `[成功] 已加载 ${totalObjects} 个几何实例`, level: 'success' });
         }

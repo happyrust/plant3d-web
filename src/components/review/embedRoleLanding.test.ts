@@ -33,6 +33,36 @@ describe('embed role landing', () => {
     expect(getEmbedLandingPanelIds('designer')).toEqual(['initiateReview', 'myTasks']);
   });
 
+  it('omits myTasks from designer landing when workflow is externally driven', () => {
+    const result = applyEmbedLandingState({
+      ensurePanel: () => ({ api: { setActive: () => undefined } }),
+      activatePanel: () => undefined,
+      sessionStorageLike: sessionStorage,
+      embedModeParams: {
+        formId: 'FORM-EXT-1',
+        userToken: 'token-ext',
+        userId: 'designer_001',
+        projectId: 'project-9',
+        isEmbedMode: true,
+        workflowMode: 'external',
+      } as never,
+      target: 'designer',
+    });
+
+    expect(result).toEqual({
+      target: 'designer',
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview'],
+    });
+
+    expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toEqual({
+      target: 'designer',
+      formId: 'FORM-EXT-1',
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview'],
+    });
+  });
+
   it('routes reviewer roles to the review workspace with a unique CTA landing', () => {
     expect(resolveEmbedLandingTarget({
       isEmbedMode: true,
@@ -108,6 +138,7 @@ describe('embed role landing', () => {
         userToken: 'token-designer',
         userId: 'designer_001',
         projectId: 'project-9',
+        workflowMode: 'manual',
         isEmbedMode: true,
       },
       target: 'designer',
@@ -168,6 +199,7 @@ describe('embed role landing', () => {
         userToken: 'token-1',
         userId: 'user_001',
         projectId: 'AvevaMarineSample',
+        workflowMode: 'manual',
         isEmbedMode: true,
       },
       target: 'designer',

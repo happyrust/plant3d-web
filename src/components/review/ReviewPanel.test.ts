@@ -85,6 +85,13 @@ vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: dockApiMock.ensurePanelAndActivate,
 }));
 
+vi.mock('@/composables/useSelectionStore', () => ({
+  useSelectionStore: () => ({
+    selectedRefno: { value: null },
+    setSelectedRefno: vi.fn(),
+  }),
+}));
+
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
 
 vi.mock('./CollisionResultList.vue', () => ({ default: { template: '<div />' } }));
@@ -159,6 +166,7 @@ describe('ReviewPanel', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     sessionStorage.clear();
+    sessionStorage.setItem('plant3d_workflow_mode', 'manual');
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
         getItem: vi.fn((key: string) => {
@@ -228,6 +236,22 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('审核记录');
     expect(document.body.textContent).toContain('批注与测量');
     expect(document.body.textContent).not.toContain('旧审核字段');
+    mounted.unmount();
+  });
+
+  it('hides internal workflow actions in passive workflow mode', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const zone = document.querySelector('[data-testid="review-workbench-workflow-zone"]');
+    expect(zone).not.toBeNull();
+    expect(zone?.textContent).toContain('外部流程');
+    expect(zone?.textContent).toContain('刷新');
+    expect(zone?.textContent).not.toContain('提交到');
+    expect(zone?.textContent).not.toContain('驳回到设计');
+
     mounted.unmount();
   });
 

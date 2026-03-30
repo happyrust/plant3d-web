@@ -1,3 +1,5 @@
+import { resolvePassiveWorkflowMode } from './workflowMode';
+
 import type { ReviewAttachment, ReviewComponent, ReviewTask, WorkflowNode } from '@/types/auth';
 
 export type EmbedModeParams = {
@@ -6,6 +8,8 @@ export type EmbedModeParams = {
   userId: string | null;
   userRole: string | null;
   projectId: string | null;
+  workflowMode?: string | null;
+  externalWorkflowMode?: boolean | null;
   isEmbedMode: boolean;
   verifiedClaims?: {
     projectId: string;
@@ -93,8 +97,15 @@ export function resolveEmbedLandingTarget(params: {
 }
 
 export function getEmbedLandingPanelIds(target: EmbedLandingTarget): string[] {
+  return getEmbedLandingPanelIdsWithOptions(target, {});
+}
+
+export function getEmbedLandingPanelIdsWithOptions(
+  target: EmbedLandingTarget,
+  options: { passiveWorkflowMode?: boolean } = {},
+): string[] {
   return target === 'designer'
-    ? ['initiateReview', 'myTasks']
+    ? (options.passiveWorkflowMode ? ['initiateReview'] : ['initiateReview', 'myTasks'])
     : ['review', 'reviewerTasks'];
 }
 
@@ -105,13 +116,18 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
   embedModeParams: EmbedModeParams;
   target: EmbedLandingTarget;
   switchProjectById?: (projectId: string) => boolean;
+  passiveWorkflowMode?: boolean;
 }) {
   // 如果有 projectId，优先准备项目上下文，但不改变 reviewer/designer 工作台落点
   if (options.embedModeParams.projectId && options.switchProjectById) {
     options.switchProjectById(options.embedModeParams.projectId);
   }
 
-  const panelIds = getEmbedLandingPanelIds(options.target);
+  const passiveWorkflowMode = options.passiveWorkflowMode
+    ?? resolvePassiveWorkflowMode({ embedParams: options.embedModeParams });
+  const panelIds = getEmbedLandingPanelIdsWithOptions(options.target, {
+    passiveWorkflowMode,
+  });
   const primaryPanelId = panelIds[0];
   if (!primaryPanelId) return null;
 

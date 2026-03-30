@@ -3,6 +3,8 @@ import { onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 
 import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 
+import type { ReviewTask } from '@/types/auth';
+
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import {
@@ -15,6 +17,7 @@ import {
   type EmbedLandingState,
   type EmbedModeParams,
 } from '@/components/review/embedRoleLanding';
+import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
 import { ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import {
@@ -30,6 +33,7 @@ import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { showModelByRefnosWithAck, waitForViewerReady } from '@/composables/useViewerContext';
 import { onCommand } from '@/ribbon/commandBus';
 
 function readEmbedModeParamsFromUrl(): EmbedModeParams {
@@ -40,6 +44,7 @@ function readEmbedModeParamsFromUrl(): EmbedModeParams {
     userId: urlParams.get('user_id'),
     userRole: urlParams.get('user_role'),
     projectId: urlParams.get('project_id'),
+    workflowMode: urlParams.get('workflow_mode'),
     isEmbedMode: !!urlParams.get('form_id'),
     verifiedClaims: null,
   };
@@ -55,9 +60,12 @@ type DockviewGroupLike = {
   api: {
     setSize: (size: { width?: number; height?: number }) => void;
   };
+  id: string;
+  panels: DockviewPanelLike[];
 };
 
 type DockviewPanelLike = {
+  id: string;
   api: {
     close: () => void;
     setActive: () => void;
@@ -68,6 +76,7 @@ type DockviewPanelLike = {
 type DockApi = {
   addPanel: (options: unknown) => DockviewPanelLike;
   getPanel: (id: string) => DockviewPanelLike | undefined;
+  getGroup: (id: string) => DockviewGroupLike | undefined;
   toJSON: () => unknown;
   fromJSON: (data: unknown) => void;
   onDidLayoutChange: (cb: () => void) => unknown;
@@ -85,6 +94,27 @@ const taskCreationStore = useTaskCreationStore();
 let offCommand: (() => void) | null = null;
 let userStoreInitializationPromise: Promise<void> | null = null;
 const embedTokenVerified = ref(false);
+
+function isPassiveWorkflowMode(): boolean {
+  return resolvePassiveWorkflowMode({
+    embedParams: embedModeParams.value,
+  });
+}
+
+function closeBlockedReviewPanels() {
+  const dockApi = api.value;
+  if (!dockApi || !isPassiveWorkflowMode()) return;
+  closePanelIfExists(dockApi, 'myTasks');
+}
+
+// 右键菜单状态
+const tabContextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  panelId: '',
+  groupId: '',
+});
 
 type SelectRefnoRequest = {
   type: 'plant3d.select_refno';
@@ -113,6 +143,59 @@ function normalizeRefnoSlash(raw: string): string {
   const s = String(raw || '').trim();
   if (!s) return '';
   return s.includes('_') ? s.replace(/_/g, '/') : s;
+}
+
+function collectTaskComponentRefnos(task: ReviewTask | null): string[] {
+  if (!task?.components?.length) return [];
+  const refnos = new Set<string>();
+  for (const component of task.components) {
+    const normalized = normalizeRefnoUnderscore(component.refNo || '');
+    if (normalized) {
+      refnos.add(normalized);
+    }
+  }
+  return Array.from(refnos);
+}
+
+async function ensureRestoredTaskModelsVisible(task: ReviewTask | null): Promise<void> {
+  if (!task) return;
+
+  const componentRefnos = collectTaskComponentRefnos(task);
+  if (componentRefnos.length === 0) return;
+
+  const viewerReady = await waitForViewerReady({ timeoutMs: 6000 });
+  if (!viewerReady) {
+    console.warn('[DockLayout] Viewer 未就绪，跳过 form_id 默认模型加载', {
+      taskId: task.id,
+      formId: task.formId,
+    });
+    return;
+  }
+
+  const result = await showModelByRefnosWithAck({
+    refnos: componentRefnos.map((refno) => normalizeRefnoSlash(refno)),
+    flyTo: true,
+    ensureViewerReady: false,
+    timeoutMs: 15_000,
+  });
+
+  if (result.error && result.ok.length === 0) {
+    console.warn('[DockLayout] form_id 默认模型加载失败', {
+      taskId: task.id,
+      formId: task.formId,
+      error: result.error,
+      fail: result.fail,
+    });
+    return;
+  }
+
+  const firstRefno = componentRefnos[0];
+  if (firstRefno) {
+    setGlobalSelectedRefno(firstRefno);
+    window.dispatchEvent(new CustomEvent('autoLocateRefno', {
+      detail: { refno: normalizeRefnoSlash(firstRefno) },
+    }));
+  }
 }
 
 let offEmbedPostMessage: (() => void) | null = null;
@@ -310,6 +393,11 @@ function ensurePanel(panelId: string) {
   if (!dockApi) return;
   const existing = dockApi.getPanel(panelId);
   if (existing) return existing;
+
+  if (panelId === 'myTasks' && isPassiveWorkflowMode()) {
+    console.info('[DockLayout] 被动流程模式下跳过创建 myTasks 面板');
+    return;
+  }
 
   const viewerPanel = dockApi.getPanel('viewer');
   const measurementPanel = dockApi.getPanel('measurement');
@@ -601,6 +689,10 @@ function togglePanel(panelId: string) {
   }
 
   console.log(`[DockLayout] togglePanel: ${panelId}`);
+  if (panelId === 'myTasks' && isPassiveWorkflowMode()) {
+    console.info('[DockLayout] 被动流程模式下忽略 myTasks 切换');
+    return;
+  }
   const panel = dockApi.getPanel(panelId);
   if (panel) {
     console.log(`[DockLayout] Panel ${panelId} exists, closing it`);
@@ -627,6 +719,10 @@ function openPanel(panelId: string) {
   }
 
   console.log(`[DockLayout] openPanel: ${panelId}`);
+  if (panelId === 'myTasks' && isPassiveWorkflowMode()) {
+    console.info('[DockLayout] 被动流程模式下忽略 myTasks 打开');
+    return;
+  }
   onPanelOpened(panelId);
 
   const panel = dockApi.getPanel(panelId);
@@ -648,6 +744,98 @@ function resetLayout() {
   resetZoneState();
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
   createDefaultLayout(api.value);
+}
+
+// 右键菜单相关函数
+function showTabContextMenu(event: MouseEvent, panelId: string, groupId: string) {
+  event.preventDefault();
+  tabContextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    panelId,
+    groupId,
+  };
+}
+
+function hideTabContextMenu() {
+  tabContextMenu.value.visible = false;
+}
+
+function closeCurrentTab() {
+  const { panelId } = tabContextMenu.value;
+  if (!panelId || !api.value) return;
+  
+  const panel = api.value.getPanel(panelId);
+  if (panel) {
+    panel.api.close();
+  }
+  hideTabContextMenu();
+}
+
+function closeOtherTabs() {
+  const { panelId, groupId } = tabContextMenu.value;
+  if (!panelId || !groupId || !api.value) return;
+  
+  const group = api.value.getGroup(groupId);
+  if (!group || !group.panels) return;
+  
+  // 关闭组内除当前面板外的所有面板
+  const panelsToClose = group.panels.filter((panel: DockviewPanelLike) => panel.id !== panelId);
+  panelsToClose.forEach((panel: DockviewPanelLike) => {
+    panel.api.close();
+  });
+  
+  hideTabContextMenu();
+}
+
+function setupTabContextMenu() {
+  if (!api.value) return;
+  
+  // 监听 DOM 事件来捕获标签页右键点击
+  const dockviewElement = document.querySelector('.dockview-root');
+  if (!dockviewElement) return;
+  
+  const handleContextMenu = (event: Event) => {
+    const mouseEvent = event as MouseEvent;
+    const target = mouseEvent.target as HTMLElement;
+    
+    // 查找最近的标签页元素
+    const tabElement = target.closest('.dockview-tab');
+    if (!tabElement) return;
+    
+    // 获取面板 ID 和组 ID
+    const panelId = tabElement.getAttribute('data-panel-id');
+    if (!panelId) return;
+    
+    // 通过 dockview API 获取组信息
+    const panel = api.value!.getPanel(panelId);
+    if (!panel || !panel.group) return;
+    
+    const groupId = panel.group.id;
+    
+    showTabContextMenu(mouseEvent, panelId, groupId);
+  };
+  
+  dockviewElement.addEventListener('contextmenu', handleContextMenu as EventListener);
+  
+  // 点击其他地方关闭右键菜单
+  const handleClickOutside = (event: Event) => {
+    if (!tabContextMenu.value.visible) return;
+    
+    const contextMenuElement = document.querySelector('.tab-context-menu');
+    if (contextMenuElement && !contextMenuElement.contains(event.target as Node)) {
+      hideTabContextMenu();
+    }
+  };
+  
+  document.addEventListener('click', handleClickOutside as EventListener);
+  
+  // 清理函数
+  return () => {
+    dockviewElement.removeEventListener('contextmenu', handleContextMenu as EventListener);
+    document.removeEventListener('click', handleClickOutside as EventListener);
+  };
 }
 
 function popoutActiveGroup() {
@@ -715,6 +903,10 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('review');
       return;
     case 'panel.myTasks':
+      if (isPassiveWorkflowMode()) {
+        console.info('[DockLayout] 当前为被动流程模式，不提供“我的提资”入口');
+        return;
+      }
       togglePanel('myTasks');
       return;
     case 'panel.reviewerTasks':
@@ -926,6 +1118,7 @@ function persistEmbedLandingState(state: EmbedLandingState | null) {
 
 async function applyInitialLanding() {
   await bootstrapEmbedSession();
+  closeBlockedReviewPanels();
 
   if (embedModeParams.value.isEmbedMode) {
     const roleLandingTarget = resolveEmbedLandingTargetFromRole(
@@ -947,6 +1140,7 @@ async function applyInitialLanding() {
         embedModeParams: embedModeParams.value,
         target: landingTarget,
         switchProjectById,
+        passiveWorkflowMode: isPassiveWorkflowMode(),
       });
 
       const restoreResult = await restoreEmbedWorkbenchContext({
@@ -959,7 +1153,10 @@ async function applyInitialLanding() {
         setCurrentTask: reviewStore.setCurrentTask,
         openPanel,
         activatePanel,
+        passiveWorkflowMode: isPassiveWorkflowMode(),
       });
+
+      await ensureRestoredTaskModelsVisible(restoreResult.restoredTask);
 
       if (landingState) {
         persistEmbedLandingState({
@@ -1012,12 +1209,17 @@ function onReady(event: DockviewReadyEvent) {
     createDefaultLayout(api.value);
   }
 
+  closeBlockedReviewPanels();
+
   event.api.onDidLayoutChange(() => {
     saveLayout();
     notifyDockLayoutChange();
   });
 
   migratePropertiesPanelOnce();
+
+  // 设置标签页右键菜单
+  setupTabContextMenu();
 
   void applyInitialLanding();
 }
@@ -1052,5 +1254,21 @@ onBeforeUnmount(() => {
 <template>
   <div class="dockview-container">
     <DockviewVue class="dockview-root" :theme="themeLight" :popout-url="popoutUrl" @ready="onReady" />
+    
+    <!-- 标签页右键菜单 -->
+    <div v-if="tabContextMenu.visible"
+      class="tab-context-menu fixed z-[1000] min-w-[120px] rounded-md border border-border bg-background py-1 text-sm shadow-lg"
+      :style="{ left: tabContextMenu.x + 'px', top: tabContextMenu.y + 'px' }"
+      @pointerdown.stop
+      @contextmenu.prevent.stop>
+      <button class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+        @click="closeCurrentTab">
+        关闭
+      </button>
+      <button class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+        @click="closeOtherTabs">
+        关闭其他
+      </button>
+    </div>
   </div>
 </template>

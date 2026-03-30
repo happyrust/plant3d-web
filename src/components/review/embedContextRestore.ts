@@ -1,5 +1,5 @@
 import {
-  getEmbedLandingPanelIds,
+  getEmbedLandingPanelIdsWithOptions,
   type EmbedLandingTaskDraft,
   type EmbedLandingState,
   type EmbedLandingTarget,
@@ -8,6 +8,8 @@ import {
 } from './embedRoleLanding';
 
 import type { ReviewTask, WorkflowNode } from '@/types/auth';
+
+import { normalizeReviewDeliveryRefno } from '@/composables/useReviewDeliveryUnit';
 
 type EmbedRestoreResult = Pick<
   EmbedLandingState,
@@ -34,6 +36,7 @@ type RestoreEmbedWorkbenchOptions = {
   setCurrentTask: (task: ReviewTask | null) => Promise<void>;
   openPanel: (panelId: string) => void;
   activatePanel: (panelId: string) => void;
+  passiveWorkflowMode?: boolean;
 };
 
 function normalizeFormId(formId?: string | null): string | null {
@@ -71,7 +74,10 @@ function buildTaskDraft(task: ReviewTask | null): EmbedLandingTaskDraft | null {
     approverId: task.approverId || '',
     priority: task.priority || 'medium',
     dueDate: formatDueDateForDraft(task),
-    components: [...(task.components ?? [])],
+    components: (task.components ?? []).map((component) => ({
+      ...component,
+      refNo: normalizeReviewDeliveryRefno(component.refNo),
+    })),
     attachments: [...(task.attachments ?? [])],
     taskId: task.id ?? null,
     formId: task.formId ?? null,
@@ -123,7 +129,9 @@ export async function restoreEmbedWorkbenchContext(
     allTasks: options.allTasks(),
   });
 
-  const panelIds = getEmbedLandingPanelIds(options.target);
+  const panelIds = getEmbedLandingPanelIdsWithOptions(options.target, {
+    passiveWorkflowMode: options.passiveWorkflowMode,
+  });
   for (const panelId of panelIds) {
     options.openPanel(panelId);
   }

@@ -103,6 +103,28 @@ describe('resolveEmbedRestoreResult', () => {
       },
     });
   });
+
+  it('normalizes restored draft component refnos for designer side reuse', () => {
+    const task = createTask({
+      id: 'task-designer',
+      formId: 'FORM-N',
+      components: [
+        { id: 'comp-1', name: '支管', refNo: '24381/145018', type: 'BRAN' },
+      ],
+    });
+
+    const result = resolveEmbedRestoreResult({
+      target: 'designer',
+      formId: 'FORM-N',
+      reviewerTasks: [],
+      designerTasks: [task],
+      allTasks: [],
+    });
+
+    expect(result.restoredTaskDraft?.components).toEqual([
+      { id: 'comp-1', name: '支管', refNo: '24381_145018', type: 'BRAN' },
+    ]);
+  });
 });
 
 describe('restoreEmbedWorkbenchContext', () => {

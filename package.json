@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "run-p type-check \"build-only {@}\" --",
+    "build": "run-p type-check \"build-only {@}\" -- && npx tsx scripts/generate-version.ts",
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --noEmit --pretty false",
@@ -46,7 +46,7 @@
     "@tanstack/vue-virtual": "^3.13.12",
     "apache-arrow": "^21.1.0",
     "clsx": "^2.1.1",
-    "dockview-vue": "^4.11.0",
+    "dockview-vue": "^5.1.0",
     "lucide-vue-next": "^0.535.0",
     "mammoth": "^1.10.0",
     "parquet-wasm": "^0.7.1",

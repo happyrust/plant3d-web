@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import type {
   MbdDimKind,
   MbdFittingDto,
@@ -9,6 +8,7 @@ import type {
 } from '@/api/mbdPipeApi';
 import type { UseMbdPipeAnnotationThreeReturn } from '@/composables/useMbdPipeAnnotationThree';
 
+import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 
 const props = defineProps<{

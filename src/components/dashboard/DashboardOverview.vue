@@ -17,7 +17,19 @@
           <h3 class="text-lg font-semibold text-gray-900">快捷操作</h3>
           <span class="text-xs text-gray-400">未选项目时的全局入口</span>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <button data-testid="dashboard-quick-action-sites"
+            class="bg-white border border-gray-200 rounded-2xl p-4 text-left hover:shadow-md transition-shadow"
+            @click="$emit('navigate', 'sites')">
+            <div class="flex items-center gap-4">
+              <div class="p-2 bg-indigo-50 rounded-lg text-indigo-600"><ServerIcon class="w-6 h-6" /></div>
+              <div>
+                <div class="font-medium text-gray-900">站点管理</div>
+                <div class="text-xs text-gray-500 mt-1">进入主站点控制台查看注册站点</div>
+              </div>
+            </div>
+          </button>
+
           <button data-testid="dashboard-quick-action-projects"
             class="bg-white border border-gray-200 rounded-2xl p-4 text-left hover:shadow-md transition-shadow"
             @click="$emit('navigate', 'projects')">
@@ -217,13 +229,14 @@ import {
   UploadCloudIcon,
   SendIcon,
   FileCheckIcon,
+  ServerIcon,
   ZapIcon,
 } from 'lucide-vue-next';
 
 import { useDashboardWorkbench } from '@/composables/useDashboardWorkbench';
 
 defineEmits<{
-  navigate: ['dashboard' | 'projects' | 'reviews'];
+  navigate: ['dashboard' | 'sites' | 'projects' | 'reviews'];
   select: [projectId: string];
 }>();
 

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, type Ref } from 'vue';
 
-import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import type { InstanceManifest } from '@/utils/instances/instanceManifest';
 
+import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useToolStore } from '@/composables/useToolStore';

@@ -87,12 +87,17 @@ npm run test:pms:cdp:full
 3. 再次进入三维校审单列表，**双击/点击**含包名的行（尽力而为，表格实现因 PMS 版本可能不同）。
 4. 在嵌入的 plant3d 内等待 **校核工作区**（`[data-testid="review-workbench-workflow-zone"]`），点击流程区 **「提交…」** 主按钮（如「提交到审核」），并处理可能出现的确认弹窗。
 
+> 注意：当前前端默认是**被动/外部流程模式**。在该模式下，reviewer 工作区只展示状态，不提供内部“提交/驳回”按钮。  
+> 因此 `extended` 自动化若要继续验证 **plant3d 内部 reviewer 提交流程**，必须显式切到 `manual/internal`。  
+> 现在脚本在 `PMS_CDP_EXTENDED_FLOW=1` 且未显式配置时，会自动注入 `PMS_CDP_WORKFLOW_MODE=manual`。
+
 一键命令：
 
 ```bash
 cd plant3d-web
 export PMS_E2E_PASSWORD='********'
 export PMS_EMBEDDED_SITE_SUBSTRING='123.57.182.243'
+export PMS_CDP_WORKFLOW_MODE='manual'
 # 建议固定包名，便于在 PMS 列表里肉眼核对：
 # export PMS_MOCK_PACKAGE_NAME='联调-提资-001'
 npm run test:pms:cdp:extended
@@ -107,6 +112,7 @@ npm run test:pms:cdp:extended
 | `PMS_CDP_FULL_FLOW` | `1`：启用 `PMS_CDP_FILL_PMS_DIALOG` + `PMS_CDP_SUBMIT_REVIEW`（可用 `SKIP` 关闭子步骤，见上） |
 | `PMS_CDP_SUBMIT_REVIEW` | `1`：注入模拟 BRAN、填数据包名、点提交，直到出现「提资单创建成功」 |
 | `PMS_CDP_FILL_PMS_DIALOG` | `1`：点击「新增」后在所有标签页轮询尝试填写 PMS 建单弹窗 |
+| `PMS_CDP_WORKFLOW_MODE` | 可选：写入嵌入页 `localStorage.plant3d_workflow_mode`。默认不设时沿用前端默认口径；若要让 reviewer 工作区出现内部提交/驳回按钮，请设为 `manual` 或 `internal`。`test:pms:cdp:extended` 未设时会自动补成 `manual` |
 | `PMS_TARGET_BRAN_REFNO` | 自动化注入的测试 BRAN RefNo，默认 **`24381_145018`**（与 PMS 数据界面展示一致，便于核对回写/列表同步）；仍可用 `24381/145018` 等其它格式 |
 | `PMS_CDP_SELECTION_MODE` | 设为 **`console`**（或 **`console_add`**，同义）时：在 plant3d 控制台输入 `= 24381/145018` 形式选中 CE，再自动点击「添加构件」，并等待构件列表出现对应 RefNo（失败则回退 mock 注入）。`postmessage` 为父页向 iframe 发 `plant3d.select_refno` |
 | `PMS_CDP_ADD_COMPONENT_READY_MS` | `console`/`postmessage` 成功后，等待「添加构件」按钮可用的超时（毫秒），默认 **45000** |

@@ -9,6 +9,11 @@ import type { BrowserContext, Frame, Page } from 'playwright';
 /** 与 PMS 列表/详情一致的联调用 BRAN RefNo；可通过 `PMS_TARGET_BRAN_REFNO` 覆盖 */
 export const PMS_DEFAULT_TEST_BRAN_REFNO = '24381_145018';
 
+function resolveAutomationWorkflowMode(): string | null {
+  const normalized = (process.env.PMS_CDP_WORKFLOW_MODE || '').trim().toLowerCase();
+  return normalized || null;
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- 与 Window 合并需 interface
   interface Window {
@@ -17,13 +22,17 @@ declare global {
 }
 
 export async function registerPlant3dAutomationReviewInitScript(context: BrowserContext): Promise<void> {
-  await context.addInitScript(() => {
+  const workflowMode = resolveAutomationWorkflowMode();
+  await context.addInitScript((automationWorkflowMode: string | null) => {
     try {
       localStorage.setItem('plant3d_automation_review', '1');
+      if (automationWorkflowMode) {
+        localStorage.setItem('plant3d_workflow_mode', automationWorkflowMode);
+      }
     } catch {
       /* ignore */
     }
-  });
+  }, workflowMode);
 }
 
 export function listPageAndFrames(page: Page): (Page | Frame)[] {
@@ -194,7 +203,7 @@ async function clickAddComponentAndWaitForRefno(root: Page | Frame, rawRefno: st
     return false;
   }
 
-  console.error(`[cdp] plant3d：点击「添加构件」，将当前选中 CE 写入提资构件列表…`);
+  console.error('[cdp] plant3d：点击「添加构件」，将当前选中 CE 写入提资构件列表…');
   await addComponent.click({ timeout: 15_000 });
 
   const listMs = parseAddComponentListWaitMs();
@@ -473,7 +482,7 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
   await submitBtn.click({ timeout: 20_000 });
 
   await root
-    .getByText('提资单创建成功', { exact: false })
+    .getByText(/提资单(创建|保存)成功/, { exact: false })
     .first()
     .waitFor({ state: 'visible', timeout: 120_000 });
   return pkg;

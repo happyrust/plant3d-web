@@ -215,6 +215,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     const submitTrigger = host.querySelector('[data-testid="initiate-submit-trigger"]') as HTMLButtonElement | null;
     expect(submitTrigger).not.toBeNull();
+    expect(submitTrigger?.textContent).toContain('保存提资单数据');
     submitTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
@@ -230,6 +231,11 @@ describe('InitiateReviewPanel form binding', () => {
       ],
     }));
     expect(submitTaskToNextNodeSpy).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('提资单保存成功');
+    expect(host.textContent).toContain('流程提示');
+    expect(host.textContent).not.toContain('新建提资单');
+    expect(host.textContent).not.toContain('任务监控');
+    expect(host.textContent).not.toContain('审核工作台');
 
     app.unmount();
     host.remove();

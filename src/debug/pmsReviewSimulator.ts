@@ -10,6 +10,7 @@ import {
   reviewTaskSubmitToNext,
   type ReviewTask,
 } from '@/api/reviewApi';
+import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 type SimulatorRole = 'SJ' | 'JH' | 'SH' | 'PZ';
@@ -189,6 +190,7 @@ const NODE_LABELS: Record<string, string> = {
 
 const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
 const WORKFLOW_MUTATION_ACTIONS: WorkflowMutationAction[] = ['active', 'agree', 'return', 'stop'];
+const PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
 
 const IFRAME_SOURCE_LABELS: Record<IframeSource, string> = {
   new: '新增打开',
@@ -585,6 +587,10 @@ function getCurrentTaskStatus(): string {
 }
 
 function deriveSidePanelMode(): SidePanelMode {
+  if (PASSIVE_WORKFLOW_MODE) {
+    return 'readonly';
+  }
+
   if (state.iframeMeta?.source === 'new') {
     return 'initiate';
   }
@@ -694,6 +700,11 @@ function renderLastOpened(): void {
 }
 
 function renderWorkflowActionHint(): void {
+  if (PASSIVE_WORKFLOW_MODE) {
+    refs.workflowActionHint.textContent = '当前为外部流程模式；本页仅镜像流程状态，不提供 workflow/sync 操作。';
+    return;
+  }
+
   const context = resolveWorkflowContext();
   const hasFormId = Boolean(context.formId);
   const action = state.workflowAction.lastAction;
@@ -722,12 +733,12 @@ function renderActionStates(): void {
   refs.diagTaskBtn.disabled = !selected;
   refs.diagWorkflowBtn.disabled = !(selected && selected.formId);
 
-  refs.sidePanelCommentInput.disabled = workflowBusy || state.sidePanelMode !== 'initiate';
-  refs.sidePanelCommentWorkflow.disabled = workflowBusy || state.sidePanelMode !== 'workflow';
-  refs.panelActionActiveBtn.disabled = workflowBusy || state.sidePanelMode !== 'initiate';
-  refs.panelActionAgreeBtn.disabled = workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
-  refs.panelActionReturnBtn.disabled = workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
-  refs.panelActionStopBtn.disabled = workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
+  refs.sidePanelCommentInput.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'initiate';
+  refs.sidePanelCommentWorkflow.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow';
+  refs.panelActionActiveBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'initiate';
+  refs.panelActionAgreeBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
+  refs.panelActionReturnBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
+  refs.panelActionStopBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
 
   renderWorkflowActionHint();
 }
@@ -886,11 +897,13 @@ function renderSidePanelState(): void {
         ? '流程态'
         : '只读';
   refs.sidePanelSubtitle.textContent =
-    state.sidePanelMode === 'initiate'
-      ? '右侧面板承载发起说明、构件概览与发起动作，点击按钮后进入确认层。'
-      : state.sidePanelMode === 'workflow'
-        ? '同意 / 驳回 / 终止均在第二层确认框中提交，右侧面板仅维护草稿意见。'
-        : '当前上下文仅展示任务与流程快照，不允许直接修改后端状态。';
+    PASSIVE_WORKFLOW_MODE
+      ? '当前页面仅展示任务与流程快照，所有推进动作均由外部流程平台处理。'
+      : state.sidePanelMode === 'initiate'
+        ? '右侧面板承载发起说明、构件概览与发起动作，点击按钮后进入确认层。'
+        : state.sidePanelMode === 'workflow'
+          ? '同意 / 驳回 / 终止均在第二层确认框中提交，右侧面板仅维护草稿意见。'
+          : '当前上下文仅展示任务与流程快照，不允许直接修改后端状态。';
 
   refs.panelMetaTaskId.textContent = context.taskId || '--';
   refs.panelMetaFormId.textContent = context.formId || state.iframeMeta?.formId || '--';
@@ -944,9 +957,11 @@ function renderSidePanelState(): void {
   }
 
   refs.panelFooterText.textContent =
-    state.sidePanelMode === 'readonly'
-      ? '当前不可变更后端状态；可关闭、刷新重开或切换角色继续排查。'
-      : '诊断区仅镜像最近提交 payload 与聚合快照，authoritative 输入位于右侧面板与确认层。';
+    PASSIVE_WORKFLOW_MODE
+      ? '当前为外部流程模式；可关闭、刷新重开或切换角色继续排查。'
+      : state.sidePanelMode === 'readonly'
+        ? '当前不可变更后端状态；可关闭、刷新重开或切换角色继续排查。'
+        : '诊断区仅镜像最近提交 payload 与聚合快照，authoritative 输入位于右侧面板与确认层。';
 
   renderActionStates();
   void currentTask;
@@ -1705,6 +1720,17 @@ async function handleRoleSwitch(role: SimulatorRole): Promise<void> {
 }
 
 function openWorkflowDialog(action: WorkflowMutationAction): void {
+  if (PASSIVE_WORKFLOW_MODE) {
+    state.workflowAction.lastAction = action;
+    state.workflowAction.lastOk = false;
+    state.workflowAction.lastMessage = '当前为外部流程模式，不提供 workflow/sync 操作。';
+    state.workflowAction.lastAt = Date.now();
+    renderActionStates();
+    renderDiagnostics();
+    renderSidePanelState();
+    return;
+  }
+
   const context = resolveWorkflowContext();
   if (action !== 'active' && !context.formId) {
     state.workflowAction.lastAction = action;

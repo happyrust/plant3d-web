@@ -11,7 +11,7 @@ import type {
 } from '@/types/task';
 
 import { taskCreate, taskValidateName, taskStart, getServerConfig } from '@/api/genModelTaskApi';
-import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
+import { useTaskCreationStore, type TaskCreationSiteContext } from '@/composables/useTaskCreationStore';
 
 // ============ 表单数据类型 ============
 
@@ -89,6 +89,8 @@ export type UseTaskCreationReturn = {
   applyPresetType: () => void;
   /** 后端服务器配置（动态加载） */
   serverConfig: Ref<DatabaseConfig | null>;
+  /** 当前站点上下文（可选） */
+  siteContext: Ref<TaskCreationSiteContext | null>;
   /** 添加单个 noun 过滤项 */
   addNoun: (rawValue: string) => boolean;
   /** 移除单个 noun 过滤项 */
@@ -101,10 +103,15 @@ export type UseTaskCreationReturn = {
   nounInputError: import('vue').ComputedRef<string>;
 };
 
+export type UseTaskCreationOptions = {
+  initialConfig?: DatabaseConfig | null;
+  siteContext?: TaskCreationSiteContext | null;
+};
+
 /**
  * 任务创建 composable
  */
-export function useTaskCreation(): UseTaskCreationReturn {
+export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreationReturn {
   // ============ 状态 ============
 
   const currentStep = ref(1);
@@ -118,9 +125,23 @@ export function useTaskCreation(): UseTaskCreationReturn {
   const taskCreationStore = useTaskCreationStore();
 
   // 后端配置（动态加载）
-  const serverConfig = ref<DatabaseConfig | null>(null);
+  const serverConfig = ref<DatabaseConfig | null>(options?.initialConfig ?? null);
+  const siteContext = ref<TaskCreationSiteContext | null>(options?.siteContext ?? null);
 
   onMounted(async () => {
+    const presetContext = taskCreationStore.consumePresetContext();
+
+    if (!serverConfig.value && presetContext.initialConfig) {
+      serverConfig.value = presetContext.initialConfig;
+    }
+    if (!siteContext.value && presetContext.siteContext) {
+      siteContext.value = presetContext.siteContext;
+    }
+
+    if (serverConfig.value) {
+      return;
+    }
+
     try {
       serverConfig.value = await getServerConfig();
     } catch (e) {
@@ -675,6 +696,7 @@ export function useTaskCreation(): UseTaskCreationReturn {
     resetForm,
     applyPresetType,
     serverConfig,
+    siteContext,
     addNoun,
     removeNoun,
     setEnabledNouns,
