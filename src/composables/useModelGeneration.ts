@@ -4,6 +4,7 @@ import type { Ref } from 'vue';
 import type { InstanceManifest } from '@/utils/instances/instanceManifest';
 
 import { e3dGetSubtreeRefnos, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
+import { pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi';
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
 import { modelShowByRefno } from '@/api/genModelTaskApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
@@ -62,10 +63,24 @@ export type ModelLoadDebugInfo = {
   refno: string
   dbno: number
   visibleInsts: { ok: boolean; count: number; error: string | null }
+  componentRefnos?: { count: number; sample: string[] }
   manifestMatch?: { candidates: number; matched: number; missing: number; missingSample: string[] }
   loadRefnos: { count: number; sample: string[] }
+  scopeDecision?: {
+    rootNoun: string | null
+    branHangRootInjected: boolean
+    typeInfoError: string | null
+  }
   result: { loadedRefnos: number; skippedRefnos: number; loadedObjects: number } | null
   ms: number
+}
+
+export type ActualModelLoadScope = {
+  componentRefnos: string[]
+  actualLoadRefnos: string[]
+  rootNoun: string | null
+  branHangRootInjected: boolean
+  typeInfoError: string | null
 }
 
 function normalizeRefnoString(refno: string): string {
@@ -133,6 +148,45 @@ export async function queryLoadScopeRefnos(refno: string): Promise<{
       refnos: subtree.refnos,
       source: 'subtree-refnos',
       truncated: subtree.truncated,
+    };
+  }
+}
+
+export async function resolveActualModelLoadScope(
+  rootRefno: string,
+  componentRefnos: string[]
+): Promise<ActualModelLoadScope> {
+  const normalizedRoot = normalizeRefnoString(rootRefno);
+  const normalizedComponents = uniqStrings(componentRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
+  if (!normalizedRoot) {
+    return {
+      componentRefnos: normalizedComponents,
+      actualLoadRefnos: normalizedComponents,
+      rootNoun: null,
+      branHangRootInjected: false,
+      typeInfoError: null,
+    };
+  }
+
+  try {
+    const resp = await pdmsGetTypeInfo(normalizedRoot);
+    const noun = resp.success ? String(resp.noun || '').trim().toUpperCase() : '';
+    const isBranHang = noun === 'BRAN' || noun === 'HANG';
+
+    return {
+      componentRefnos: normalizedComponents,
+      actualLoadRefnos: isBranHang ? uniqStrings([normalizedRoot, ...normalizedComponents]) : normalizedComponents,
+      rootNoun: noun || null,
+      branHangRootInjected: isBranHang,
+      typeInfoError: resp.success ? null : (resp.error_message || 'pdms type-info 查询失败'),
+    };
+  } catch (e) {
+    return {
+      componentRefnos: normalizedComponents,
+      actualLoadRefnos: normalizedComponents,
+      rootNoun: null,
+      branHangRootInjected: false,
+      typeInfoError: e instanceof Error ? e.message : String(e),
     };
   }
 }
@@ -543,12 +597,25 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         });
       }
 
+      const loadScope = await resolveActualModelLoadScope(normalizedRoot, visibleRefnos);
+      if (loadScope.typeInfoError) {
+        consoleStore.addLog(
+          'warning',
+          `[model-load] root type-info 查询失败，沿用 component scope refno=${normalizedRoot} err=${loadScope.typeInfoError}`
+        );
+      }
+      consoleStore.addLog(
+        'info',
+        `[model-load] resolved_load_scope refno=${normalizedRoot} dbno=${dbno} component_count=${loadScope.componentRefnos.length} actual_load_count=${loadScope.actualLoadRefnos.length} bran_hang_root_injected=${loadScope.branHangRootInjected ? 1 : 0}` +
+          (loadScope.rootNoun ? ` root_noun=${loadScope.rootNoun}` : '')
+      );
+
       // ========== Parquet 优先路径（不可用时自动导出） ==========
       const parquetLoader = useDbnoInstancesParquetLoader();
       let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
 
       if (!parquetAvailable) {
-        const exportTargets = visibleRefnos;
+        const exportTargets = loadScope.actualLoadRefnos;
         parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, exportTargets);
       }
 
@@ -565,7 +632,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const dtxLayer = anyViewer.__dtxLayer as any;
         if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型');
 
-        const loadRefnos = visibleRefnos;
+        const loadRefnos = loadScope.actualLoadRefnos;
 
         if (loadRefnos.length === 0) {
           statusMessage.value = `refno=${normalizedRoot} 无可见实例`;
@@ -628,7 +695,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           refno: normalizedRoot,
           dbno,
           visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
           loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+          scopeDecision: {
+            rootNoun: loadScope.rootNoun,
+            branHangRootInjected: loadScope.branHangRootInjected,
+            typeInfoError: loadScope.typeInfoError,
+          },
           result: { loadedRefnos: totalLoaded, skippedRefnos: totalSkipped, loadedObjects: totalObjects },
           ms: Date.now() - startedAt,
         };
