@@ -13,6 +13,13 @@ REMOTE_USER="root"
 REMOTE_PASS="Happytest123_"
 DEPLOY_PATH="/var/www/plant3d-web"
 SERVICE_NAME="nginx"
+SSH_OPTS=(
+    -o PreferredAuthentications=password
+    -o PubkeyAuthentication=no
+    -o KbdInteractiveAuthentication=no
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+)
 
 # 项目路径 (脚本所在目录的上级)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,20 +63,20 @@ echo -e "${GREEN}✅ Build successful.${NC}"
 
 # 2. Preparation on Remote
 echo -e "${YELLOW}Step 2: Preparing remote server...${NC}"
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "mkdir -p ${DEPLOY_PATH}"
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} "mkdir -p ${DEPLOY_PATH}"
 echo -e "${GREEN}✅ Remote directory prepared.${NC}"
 
 # 3. Transfer Files using rsync
 echo -e "${YELLOW}Step 3: Syncing files to server using rsync...${NC}"
 cd "$PROJECT_DIR"
 sshpass -p "${REMOTE_PASS}" rsync -avz --delete \
-    -e "ssh -o StrictHostKeyChecking=no" \
+    -e "ssh ${SSH_OPTS[*]}" \
     dist/ ${REMOTE_USER}@${REMOTE_HOST}:${DEPLOY_PATH}/
 echo -e "${GREEN}✅ Rsync completed.${NC}"
 
 # 4. Set permissions on Remote
 echo -e "${YELLOW}Step 4: Setting permissions on remote server...${NC}"
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
     # 设置权限
     chown -R www-data:www-data /var/www/plant3d-web/ 2>/dev/null || chown -R nginx:nginx /var/www/plant3d-web/ 2>/dev/null || true
     chmod -R 755 /var/www/plant3d-web/
@@ -79,10 +86,10 @@ echo -e "${GREEN}✅ Permissions set.${NC}"
 # 5. Upload and Configure Nginx
 echo -e "${YELLOW}Step 5: Configuring Nginx...${NC}"
 sshpass -p "${REMOTE_PASS}" rsync -avz \
-    -e "ssh -o StrictHostKeyChecking=no" \
+    -e "ssh ${SSH_OPTS[*]}" \
     "$SCRIPT_DIR/nginx_remote.conf" ${REMOTE_USER}@${REMOTE_HOST}:/tmp/plant3d-web.conf
 
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
     # 判断 Nginx 配置目录结构
     if [ -d "/etc/nginx/sites-available" ]; then
         # Ubuntu/Debian 风格
@@ -106,7 +113,7 @@ echo -e "${YELLOW}Step 6: Verifying deployment...${NC}"
 sleep 2
 
 # 检查 Nginx 服务状态
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "systemctl is-active nginx" && \
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} "systemctl is-active nginx" && \
     echo -e "${GREEN}✅ Nginx is active.${NC}" || \
     echo -e "${RED}❌ Nginx is not active.${NC}"
 
