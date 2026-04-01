@@ -11,6 +11,7 @@ import {
   type ReviewTask,
 } from '@/api/reviewApi';
 import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
+import { resolveSimulatorActorIdentity } from '@/debug/pmsReviewSimulatorWorkflow';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 type SimulatorRole = 'SJ' | 'JH' | 'SH' | 'PZ';
@@ -519,6 +520,14 @@ function toListRow(task: ReviewTask, index: number): ReviewListRow {
 function getSelectedRow(): ReviewListRow | null {
   if (!state.selectedTaskId) return null;
   return state.rows.find((row) => row.taskId === state.selectedTaskId) || null;
+}
+
+function resolveSimulatorActorForCurrentContext(): { userId: string; userName: string } {
+  const task = state.diagnostics.taskDetail || getSelectedRow()?.task || null;
+  return resolveSimulatorActorIdentity({
+    currentRole: state.currentRole,
+    task,
+  });
 }
 
 function resolveWorkflowContext(): { taskId: string | null; formId: string | null } {
@@ -1179,15 +1188,16 @@ function renderDiagnostics(): void {
 }
 
 async function ensureRoleAuth(): Promise<void> {
+  const actor = resolveSimulatorActorForCurrentContext();
   clearAuthToken();
   const ok = await login(
     state.projectId,
-    state.currentRole,
+    actor.userId,
     ROLE_CONTEXT[state.currentRole].node,
   );
   if (!ok) {
     throw new Error(
-      `角色 ${state.currentRole} 获取鉴权 token 失败，请检查 /api/auth/token 或项目号配置`,
+      `角色 ${state.currentRole}（actor=${actor.userId}）获取鉴权 token 失败，请检查 /api/auth/token 或项目号配置`,
     );
   }
 }
@@ -1304,6 +1314,7 @@ async function requestWorkflowSync(
   const endpoint = buildWorkflowSyncEndpoint();
   const fallbackEndpoint = buildWorkflowSyncFallbackEndpoint();
   const actorNode = ROLE_CONTEXT[state.currentRole].node;
+  const actor = resolveSimulatorActorForCurrentContext();
   const token = await resolveWorkflowSyncToken(formId);
   const authToken = getAuthToken();
   const headers: Record<string, string> = {
@@ -1318,8 +1329,8 @@ async function requestWorkflowSync(
     token,
     action,
     actor: {
-      id: state.currentRole,
-      name: state.currentRole,
+      id: actor.userId,
+      name: actor.userName,
       roles: actorNode,
     },
     comments,
@@ -1478,11 +1489,11 @@ async function refreshDiagnosticsSnapshot(params?: {
 
 async function requestEmbedUrlData(
   projectId: string,
-  userId: string,
   preferredFormId?: string | null,
 ): Promise<EmbedUrlApiResponse> {
   const base = getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' }).replace(/\/$/, '');
   const token = getAuthToken();
+  const actor = resolveSimulatorActorForCurrentContext();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -1492,7 +1503,8 @@ async function requestEmbedUrlData(
 
   const payload: Record<string, unknown> = {
     project_id: projectId,
-    user_id: userId,
+    user_id: actor.userId,
+    role: ROLE_CONTEXT[state.currentRole].node,
   };
   if (preferredFormId?.trim()) {
     payload.form_id = preferredFormId.trim();
@@ -1513,7 +1525,7 @@ async function requestEmbedUrlData(
 }
 
 async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsLaunchPlan> {
-  const response = await requestEmbedUrlData(state.projectId, state.currentRole, preferredFormId);
+  const response = await requestEmbedUrlData(state.projectId, preferredFormId);
   if (typeof response.code === 'number' && response.code !== 0 && response.code !== 200) {
     throw new Error(response.message || `embed-url code=${response.code}`);
   }
