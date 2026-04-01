@@ -78,7 +78,9 @@ echo -e "${GREEN}✅ Permissions set.${NC}"
 
 # 5. Upload and Configure Nginx
 echo -e "${YELLOW}Step 5: Configuring Nginx...${NC}"
-sshpass -p "${REMOTE_PASS}" scp -o StrictHostKeyChecking=no "$SCRIPT_DIR/nginx_remote.conf" ${REMOTE_USER}@${REMOTE_HOST}:/tmp/plant3d-web.conf
+sshpass -p "${REMOTE_PASS}" rsync -avz \
+    -e "ssh -o StrictHostKeyChecking=no" \
+    "$SCRIPT_DIR/nginx_remote.conf" ${REMOTE_USER}@${REMOTE_HOST}:/tmp/plant3d-web.conf
 
 sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
     # 判断 Nginx 配置目录结构
