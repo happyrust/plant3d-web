@@ -6,6 +6,7 @@ type WorkflowModeEmbedParams = {
 };
 
 type ResolveWorkflowModeOptions = {
+  verifiedWorkflowMode?: string | null;
   search?: string | null;
   sessionStorageLike?: StorageLike | null;
   localStorageLike?: StorageLike | null;
@@ -21,20 +22,24 @@ function isInternalWorkflowMode(mode?: string | null): boolean {
   return mode === 'manual' || mode === 'internal';
 }
 
-export function resolvePassiveWorkflowMode(options: ResolveWorkflowModeOptions = {}): boolean {
+export function resolveWorkflowMode(options: ResolveWorkflowModeOptions = {}): 'external' | 'manual' | 'internal' {
   const {
+    verifiedWorkflowMode,
     search,
     sessionStorageLike,
     localStorageLike,
     embedParams,
   } = options;
 
+  const fromVerified = normalizeWorkflowMode(verifiedWorkflowMode);
+  if (fromVerified) return isInternalWorkflowMode(fromVerified) ? 'manual' : 'external';
+
   try {
     const query = new URLSearchParams(
       search ?? (typeof window !== 'undefined' ? window.location.search : '')
     );
     const fromQuery = normalizeWorkflowMode(query.get('workflow_mode'));
-    if (fromQuery) return !isInternalWorkflowMode(fromQuery);
+    if (fromQuery) return isInternalWorkflowMode(fromQuery) ? 'manual' : 'external';
   } catch {
     // ignore
   }
@@ -46,7 +51,7 @@ export function resolvePassiveWorkflowMode(options: ResolveWorkflowModeOptions =
           ? sessionStorage.getItem('plant3d_workflow_mode')
           : null)
     );
-    if (fromSession) return !isInternalWorkflowMode(fromSession);
+    if (fromSession) return isInternalWorkflowMode(fromSession) ? 'manual' : 'external';
   } catch {
     // ignore
   }
@@ -58,19 +63,23 @@ export function resolvePassiveWorkflowMode(options: ResolveWorkflowModeOptions =
           ? localStorage.getItem('plant3d_workflow_mode')
           : null)
     );
-    if (fromLocal) return !isInternalWorkflowMode(fromLocal);
+    if (fromLocal) return isInternalWorkflowMode(fromLocal) ? 'manual' : 'external';
   } catch {
     // ignore
   }
 
   if (typeof embedParams?.externalWorkflowMode === 'boolean') {
-    return embedParams.externalWorkflowMode;
+    return embedParams.externalWorkflowMode ? 'external' : 'manual';
   }
 
   const fromEmbed = normalizeWorkflowMode(embedParams?.workflowMode);
-  if (fromEmbed) return !isInternalWorkflowMode(fromEmbed);
+  if (fromEmbed) return isInternalWorkflowMode(fromEmbed) ? 'manual' : 'external';
 
-  return true;
+  return 'external';
+}
+
+export function resolvePassiveWorkflowMode(options: ResolveWorkflowModeOptions = {}): boolean {
+  return resolveWorkflowMode(options) === 'external';
 }
 
 export function isMyTasksAvailableInWorkflowMode(options: ResolveWorkflowModeOptions = {}): boolean {

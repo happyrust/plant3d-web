@@ -58,7 +58,7 @@ type PanelStub = {
   };
 };
 
-const dockPanels: Map<string, PanelStub> = new Map();
+const dockPanels = new Map<string, PanelStub>();
 const activatedPanels: string[] = [];
 let lastDockApi: ReturnType<typeof createDockApi> | null = null;
 

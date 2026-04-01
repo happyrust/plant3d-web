@@ -260,6 +260,222 @@ export type WorkflowHistoryResponse = {
   error_message?: string;
 };
 
+export type WorkflowSyncActor = {
+  id: string;
+  name: string;
+  roles: string;
+};
+
+export type WorkflowAnnotationCommentData = {
+  id: string;
+  annotationId: string;
+  annotationType: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  replyToId?: string;
+  createdAt: string;
+};
+
+export type WorkflowRecordData = {
+  id: string;
+  taskId: string;
+  type: string;
+  annotations: unknown[];
+  cloudAnnotations: unknown[];
+  rectAnnotations: unknown[];
+  obbAnnotations: unknown[];
+  measurements: unknown[];
+  note: string;
+  confirmedAt: string;
+};
+
+export type WorkflowSyncData = {
+  title?: string;
+  models: (string | Record<string, unknown>)[];
+  taskId?: string;
+  records: WorkflowRecordData[];
+  annotationComments: WorkflowAnnotationCommentData[];
+  attachments: ReviewAttachment[];
+  formExists?: boolean;
+  formStatus?: string;
+  taskCreated?: boolean;
+  currentNode?: string;
+  taskStatus?: string;
+};
+
+export type WorkflowSyncResponse = {
+  code: number;
+  message: string;
+  title?: string;
+  data?: WorkflowSyncData;
+};
+
+export type WorkflowSyncQueryRequest = {
+  formId: string;
+  token: string;
+  actor: WorkflowSyncActor;
+};
+
+type RawWorkflowAnnotationCommentData = {
+  id?: string;
+  annotation_id?: string;
+  annotationId?: string;
+  annotation_type?: string;
+  annotationType?: string;
+  author_id?: string;
+  authorId?: string;
+  author_name?: string;
+  authorName?: string;
+  author_role?: string;
+  authorRole?: string;
+  content?: string;
+  reply_to_id?: string;
+  replyToId?: string;
+  created_at?: string;
+  createdAt?: string;
+};
+
+type RawWorkflowRecordData = {
+  id?: string;
+  task_id?: string;
+  taskId?: string;
+  type?: string;
+  annotations?: unknown[];
+  cloud_annotations?: unknown[];
+  cloudAnnotations?: unknown[];
+  rect_annotations?: unknown[];
+  rectAnnotations?: unknown[];
+  obb_annotations?: unknown[];
+  obbAnnotations?: unknown[];
+  measurements?: unknown[];
+  note?: string;
+  confirmed_at?: string;
+  confirmedAt?: string;
+};
+
+type RawWorkflowSyncData = {
+  title?: string;
+  models?: (string | Record<string, unknown>)[];
+  task_id?: string;
+  taskId?: string;
+  records?: RawWorkflowRecordData[];
+  annotation_comments?: RawWorkflowAnnotationCommentData[];
+  annotationComments?: RawWorkflowAnnotationCommentData[];
+  attachments?: (Partial<ReviewAttachment> & Record<string, unknown>)[];
+  form_exists?: boolean;
+  formExists?: boolean;
+  form_status?: string;
+  formStatus?: string;
+  task_created?: boolean;
+  taskCreated?: boolean;
+  current_node?: string;
+  currentNode?: string;
+  task_status?: string;
+  taskStatus?: string;
+};
+
+type RawWorkflowSyncResponse = {
+  code?: number;
+  message?: string;
+  title?: string;
+  data?: RawWorkflowSyncData;
+};
+
+function normalizeWorkflowAttachment(raw: Partial<ReviewAttachment> & Record<string, unknown>): ReviewAttachment {
+  return {
+    id: String(raw.id || ''),
+    name: String(raw.name || '未命名附件'),
+    url: String(raw.url || raw.public_url || raw.route_url || ''),
+    size: typeof raw.size === 'number' ? raw.size : undefined,
+    type: typeof raw.type === 'string' ? raw.type : undefined,
+    mimeType: typeof raw.mimeType === 'string'
+      ? raw.mimeType
+      : typeof raw.mime_type === 'string'
+        ? raw.mime_type
+        : undefined,
+    uploadedAt: typeof raw.uploadedAt === 'number'
+      ? raw.uploadedAt
+      : typeof raw.uploaded_at === 'number'
+        ? raw.uploaded_at
+        : Date.now(),
+  };
+}
+
+function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSyncResponse {
+  const data = raw.data;
+  return {
+    code: typeof raw.code === 'number' ? raw.code : 0,
+    message: raw.message || '',
+    title: raw.title,
+    data: data ? {
+      title: data.title,
+      models: Array.isArray(data.models) ? data.models : [],
+      taskId: data.taskId || data.task_id,
+      records: Array.isArray(data.records)
+        ? data.records.map((record) => ({
+          id: String(record.id || ''),
+          taskId: String(record.taskId || record.task_id || ''),
+          type: String(record.type || 'batch'),
+          annotations: Array.isArray(record.annotations) ? record.annotations : [],
+          cloudAnnotations: Array.isArray(record.cloudAnnotations)
+            ? record.cloudAnnotations
+            : Array.isArray(record.cloud_annotations)
+              ? record.cloud_annotations
+              : [],
+          rectAnnotations: Array.isArray(record.rectAnnotations)
+            ? record.rectAnnotations
+            : Array.isArray(record.rect_annotations)
+              ? record.rect_annotations
+              : [],
+          obbAnnotations: Array.isArray(record.obbAnnotations)
+            ? record.obbAnnotations
+            : Array.isArray(record.obb_annotations)
+              ? record.obb_annotations
+              : [],
+          measurements: Array.isArray(record.measurements) ? record.measurements : [],
+          note: String(record.note || ''),
+          confirmedAt: String(record.confirmedAt || record.confirmed_at || ''),
+        }))
+        : [],
+      annotationComments: Array.isArray(data.annotationComments)
+        ? data.annotationComments.map((comment) => ({
+          id: String(comment.id || ''),
+          annotationId: String(comment.annotationId || comment.annotation_id || ''),
+          annotationType: String(comment.annotationType || comment.annotation_type || ''),
+          authorId: String(comment.authorId || comment.author_id || ''),
+          authorName: String(comment.authorName || comment.author_name || ''),
+          authorRole: String(comment.authorRole || comment.author_role || ''),
+          content: String(comment.content || ''),
+          replyToId: comment.replyToId || comment.reply_to_id,
+          createdAt: String(comment.createdAt || comment.created_at || ''),
+        }))
+        : Array.isArray(data.annotation_comments)
+          ? data.annotation_comments.map((comment) => ({
+            id: String(comment.id || ''),
+            annotationId: String(comment.annotationId || comment.annotation_id || ''),
+            annotationType: String(comment.annotationType || comment.annotation_type || ''),
+            authorId: String(comment.authorId || comment.author_id || ''),
+            authorName: String(comment.authorName || comment.author_name || ''),
+            authorRole: String(comment.authorRole || comment.author_role || ''),
+            content: String(comment.content || ''),
+            replyToId: comment.replyToId || comment.reply_to_id,
+            createdAt: String(comment.createdAt || comment.created_at || ''),
+          }))
+          : [],
+      attachments: Array.isArray(data.attachments)
+        ? data.attachments.map((attachment) => normalizeWorkflowAttachment(attachment))
+        : [],
+      formExists: data.formExists ?? data.form_exists,
+      formStatus: data.formStatus || data.form_status,
+      taskCreated: data.taskCreated ?? data.task_created,
+      currentNode: data.currentNode || data.current_node,
+      taskStatus: data.taskStatus || data.task_status,
+    } : undefined,
+  };
+}
+
 // 用户列表响应
 export type UserListResponse = {
   success: boolean;
@@ -505,6 +721,21 @@ export async function reviewGetEmbedUrl(
       token: data.token,
     }),
   };
+}
+
+export async function reviewWorkflowSyncQuery(
+  request: WorkflowSyncQueryRequest,
+): Promise<WorkflowSyncResponse> {
+  const raw = await fetchJson<RawWorkflowSyncResponse>('/api/review/workflow/sync', {
+    method: 'POST',
+    body: JSON.stringify({
+      form_id: request.formId,
+      token: request.token,
+      action: 'query',
+      actor: request.actor,
+    }),
+  });
+  return normalizeWorkflowSyncResponse(raw);
 }
 
 export async function reviewPreloadCache(

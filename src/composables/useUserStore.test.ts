@@ -427,6 +427,63 @@ describe('loadReviewTasks', () => {
     expect(reviewTaskGetListMock).toHaveBeenLastCalledWith({ checkerId: 'user-002' });
     expect(store.pendingReviewTasks.value.map((task) => task.formId)).toContain('FORM-EMBED-1');
   });
+
+  it('prefers verified embed actor over backend debug user when claims are trusted', async () => {
+    userGetCurrentMock.mockResolvedValue({
+      success: true,
+      user: {
+        id: 'debug-user',
+        username: 'debug-user',
+        email: 'debug-user@example.com',
+        name: 'debug-user',
+        role: 'sj',
+      },
+    });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [],
+      total: 0,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.initialize();
+    store.setEmbedUser('JH', 'jd', { verified: true });
+
+    expect(store.currentUser.value?.id).toBe('JH');
+    expect(store.currentUser.value?.role).toBe(UserRole.PROOFREADER);
+  });
+
+  it('clears backend debug identity when an embed session is invalidated', async () => {
+    userGetCurrentMock.mockResolvedValue({
+      success: true,
+      user: {
+        id: 'debug-user',
+        username: 'debug-user',
+        email: 'debug-user@example.com',
+        name: 'debug-user',
+        role: 'sj',
+      },
+    });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [],
+      total: 0,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.initialize();
+    expect(store.currentUser.value?.id).toBe('debug-user');
+
+    store.clearCurrentUserSelection();
+
+    expect(store.currentUser.value).toBeNull();
+    expect(store.currentUserId.value).toBeNull();
+    expect(store.reviewTasks.value).toEqual([]);
+  });
 });
 
 describe('cross-role task visibility after task creation and submit', () => {

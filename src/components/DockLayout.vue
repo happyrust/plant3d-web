@@ -7,13 +7,18 @@ import type { ReviewTask } from '@/types/auth';
 
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
+import { restoreEmbedFormSnapshot } from '@/components/review/embedFormSnapshotRestore';
 import {
   applyEmbedLandingState,
+  buildPersistedEmbedModeParams,
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
   EMBED_MODE_PARAMS_STORAGE_KEY,
+  getVerifiedEmbedFormId,
+  getVerifiedEmbedWorkflowMode,
+  readEmbedModeParamsFromSearch,
+  resolveTrustedEmbedIdentity,
   resolveEmbedLandingTargetFromRole,
-  resolveEmbedLandingTarget,
   type EmbedLandingState,
   type EmbedModeParams,
 } from '@/components/review/embedRoleLanding';
@@ -33,24 +38,10 @@ import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
 import { useTaskCreationStore } from '@/composables/useTaskCreationStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { showModelByRefnosWithAck, waitForViewerReady } from '@/composables/useViewerContext';
+import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { onCommand } from '@/ribbon/commandBus';
 
-function readEmbedModeParamsFromUrl(): EmbedModeParams {
-  const urlParams = new URLSearchParams(window.location.search);
-  return {
-    formId: urlParams.get('form_id'),
-    userToken: urlParams.get('user_token'),
-    userId: urlParams.get('user_id'),
-    userRole: urlParams.get('user_role'),
-    projectId: urlParams.get('project_id'),
-    workflowMode: urlParams.get('workflow_mode'),
-    isEmbedMode: !!urlParams.get('form_id'),
-    verifiedClaims: null,
-  };
-}
-
-const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromUrl());
+const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
 
 const LAYOUT_STORAGE_KEY = 'plant3d-web-dock-layout-v3';
 const LAYOUT_MIGRATION_PROPERTIES_KEY = 'plant3d-web-dock-layout-v3-migrated-properties';
@@ -90,13 +81,16 @@ const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const userStore = useUserStore();
 const taskCreationStore = useTaskCreationStore();
+const viewerContext = useViewerContext();
 
 let offCommand: (() => void) | null = null;
 let userStoreInitializationPromise: Promise<void> | null = null;
 const embedTokenVerified = ref(false);
+const embedSessionError = ref<string | null>(null);
 
 function isPassiveWorkflowMode(): boolean {
   return resolvePassiveWorkflowMode({
+    verifiedWorkflowMode: getVerifiedEmbedWorkflowMode(embedModeParams.value),
     embedParams: embedModeParams.value,
   });
 }
@@ -161,13 +155,23 @@ async function ensureRestoredTaskModelsVisible(task: ReviewTask | null): Promise
   if (!task) return;
 
   const componentRefnos = collectTaskComponentRefnos(task);
+  await ensureModelRefnosVisible(componentRefnos, {
+    taskId: task.id,
+    formId: task.formId,
+  });
+}
+
+async function ensureModelRefnosVisible(
+  componentRefnos: string[],
+  context: { taskId?: string; formId?: string | null },
+): Promise<void> {
   if (componentRefnos.length === 0) return;
 
   const viewerReady = await waitForViewerReady({ timeoutMs: 6000 });
   if (!viewerReady) {
     console.warn('[DockLayout] Viewer 未就绪，跳过 form_id 默认模型加载', {
-      taskId: task.id,
-      formId: task.formId,
+      taskId: context.taskId,
+      formId: context.formId,
     });
     return;
   }
@@ -181,8 +185,8 @@ async function ensureRestoredTaskModelsVisible(task: ReviewTask | null): Promise
 
   if (result.error && result.ok.length === 0) {
     console.warn('[DockLayout] form_id 默认模型加载失败', {
-      taskId: task.id,
-      formId: task.formId,
+      taskId: context.taskId,
+      formId: context.formId,
       error: result.error,
       fail: result.fail,
     });
@@ -282,8 +286,30 @@ function closePanelIfExists(dockApi: DockApi, id: string) {
   }
 }
 
+function clearEmbedLandingPersistence() {
+  sessionStorage.removeItem(EMBED_MODE_PARAMS_STORAGE_KEY);
+  sessionStorage.removeItem(EMBED_LANDING_STATE_STORAGE_KEY);
+}
+
+function isEmbedLayoutMode(): boolean {
+  return !!embedModeParams.value.isEmbedMode;
+}
+
+function closeEmbedLandingPanels() {
+  const dockApi = api.value;
+  if (!dockApi) return;
+
+  ['initiateReview', 'review', 'reviewerTasks', 'myTasks', 'manager'].forEach((panelId) => {
+    closePanelIfExists(dockApi, panelId);
+  });
+}
+
 function saveLayout() {
   if (!api.value) return;
+  if (isEmbedLayoutMode()) {
+    console.info('[DockLayout] 嵌入模式跳过普通布局持久化');
+    return;
+  }
   try {
     const layout = api.value.toJSON();
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
@@ -378,6 +404,71 @@ function createDefaultLayout(dockApi: DockApi) {
   if (bottomGroup) bottomGroup.api.setSize({ height: 200 });
 
   console.log('[DockLayout] Default layout created');
+}
+
+function createEmbedFocusedLayout(
+  dockApi: DockApi,
+  options: { primaryPanelId?: 'review' | 'initiateReview' } = {},
+) {
+  [
+    'properties',
+    'manager',
+    'hydraulic',
+    'annotation',
+    'measurement',
+    'dimension',
+    'ptset',
+    'mbdPipe',
+    'modelTree',
+    'modelQuery',
+    'nearbyQuery',
+    'viewer',
+    'console',
+    'dashboard',
+    'review',
+    'initiateReview',
+    'reviewerTasks',
+    'myTasks',
+    'resubmissionTasks',
+    'taskMonitor',
+    'taskCreation',
+    'modelExport',
+    'materialConfig',
+    'roomStatus',
+    'parquetDebug',
+  ].forEach((panelId) => {
+    closePanelIfExists(dockApi, panelId);
+  });
+
+  const viewerPanel = dockApi.addPanel({
+    id: 'viewer',
+    component: 'ViewerPanel',
+    title: '三维查看器',
+    renderer: 'always',
+  });
+
+  dockApi.addPanel({
+    id: 'modelTree',
+    component: 'ModelTreePanel',
+    title: '模型树',
+    renderer: 'always',
+    position: { referencePanel: viewerPanel, direction: 'left' },
+  });
+
+  if (options.primaryPanelId) {
+    ensurePanel(options.primaryPanelId);
+  }
+
+  viewerPanel.api.setActive();
+
+  const leftGroup = dockApi.getPanel('modelTree')?.group;
+  const rightGroup = options.primaryPanelId ? dockApi.getPanel(options.primaryPanelId)?.group : undefined;
+  if (leftGroup) leftGroup.api.setSize({ width: 350 });
+  if (rightGroup) rightGroup.api.setSize({ width: 420 });
+
+  console.log('[DockLayout] Embed-focused layout created', {
+    primaryPanelId: options.primaryPanelId ?? null,
+  });
 }
 
 function activatePanel(panelId: string) {
@@ -743,6 +834,13 @@ function resetLayout() {
   if (!api.value) return;
   resetZoneState();
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  if (isEmbedLayoutMode()) {
+    const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.userRole);
+    createEmbedFocusedLayout(api.value, {
+      primaryPanelId: landingTarget === 'designer' ? 'initiateReview' : landingTarget === 'reviewer' ? 'review' : undefined,
+    });
+    return;
+  }
   createDefaultLayout(api.value);
 }
 
@@ -1063,6 +1161,7 @@ async function bootstrapEmbedSession(): Promise<void> {
 
   const token = embedModeParams.value.userToken;
   embedTokenVerified.value = false;
+  embedSessionError.value = null;
   if (token) {
     setAuthToken(token);
 
@@ -1072,16 +1171,48 @@ async function bootstrapEmbedSession(): Promise<void> {
         console.warn('[DockLayout] Embedded token verification failed:', verifyResponse.data?.error);
         clearAuthToken();
         embedTokenVerified.value = false;
+        embedSessionError.value = `嵌入链接校验失败：${verifyResponse.data?.error || 'token 无效'}`;
       } else {
         embedTokenVerified.value = true;
         const claims = verifyResponse.data.claims;
         if (claims) {
+          if (embedModeParams.value.launchInput?.formId && embedModeParams.value.launchInput.formId !== claims.formId) {
+            console.warn('[DockLayout] 忽略 URL form_id，改用 token claims.formId', {
+              urlFormId: embedModeParams.value.launchInput.formId,
+              claimsFormId: claims.formId,
+            });
+          }
+          if (embedModeParams.value.launchInput?.userId && embedModeParams.value.launchInput.userId !== claims.userId) {
+            console.warn('[DockLayout] 忽略 URL user_id，改用 token claims.userId', {
+              urlUserId: embedModeParams.value.launchInput.userId,
+              claimsUserId: claims.userId,
+            });
+          }
+          if (embedModeParams.value.launchInput?.projectId && embedModeParams.value.launchInput.projectId !== claims.projectId) {
+            console.warn('[DockLayout] 忽略 URL project_id，改用 token claims.projectId', {
+              urlProjectId: embedModeParams.value.launchInput.projectId,
+              claimsProjectId: claims.projectId,
+            });
+          }
+          if (embedModeParams.value.launchInput?.userRole) {
+            if (claims.role && embedModeParams.value.launchInput.userRole !== claims.role) {
+              console.warn('[DockLayout] 忽略 URL user_role，改用 token claims.role', {
+                urlUserRole: embedModeParams.value.launchInput.userRole,
+                claimsUserRole: claims.role,
+              });
+            } else if (!claims.role) {
+              console.warn('[DockLayout] token claims 缺少 role，URL user_role 不再作为可信身份源', {
+                urlUserRole: embedModeParams.value.launchInput.userRole,
+              });
+            }
+          }
           embedModeParams.value = {
             ...embedModeParams.value,
             formId: claims.formId || embedModeParams.value.formId,
-            userId: claims.userId || embedModeParams.value.userId,
-            userRole: claims.role || embedModeParams.value.userRole,
-            projectId: claims.projectId || embedModeParams.value.projectId,
+            userId: claims.userId,
+            userRole: claims.role || null,
+            projectId: claims.projectId,
+            workflowMode: claims.workflowMode || embedModeParams.value.workflowMode || null,
             verifiedClaims: claims,
           };
         }
@@ -1090,18 +1221,28 @@ async function bootstrapEmbedSession(): Promise<void> {
       console.warn('[DockLayout] Embedded token verification request failed:', error);
       clearAuthToken();
       embedTokenVerified.value = false;
+      embedSessionError.value = '嵌入链接校验失败：认证请求异常';
     }
   }
 
   tryRegisterEmbedPostMessageBridge();
 
+  const trustedEmbedIdentity = resolveTrustedEmbedIdentity(embedModeParams.value);
+  if (token && (!embedTokenVerified.value || !trustedEmbedIdentity)) {
+    if (embedTokenVerified.value && !trustedEmbedIdentity) {
+      embedSessionError.value = '嵌入链接校验失败：缺少可信身份声明';
+    }
+    userStore.clearCurrentUserSelection();
+    return;
+  }
+
   await ensureUserStoreInitialized();
 
-  const externalUserId = embedModeParams.value.verifiedClaims?.userId || embedModeParams.value.userId;
-  if (externalUserId) {
+  if (trustedEmbedIdentity) {
     userStore.setEmbedUser(
-      externalUserId,
-      embedModeParams.value.verifiedClaims?.role || embedModeParams.value.userRole || undefined,
+      trustedEmbedIdentity.userId,
+      trustedEmbedIdentity.userRole || undefined,
+      { verified: true },
     );
   }
 
@@ -1111,7 +1252,10 @@ async function bootstrapEmbedSession(): Promise<void> {
 function persistEmbedLandingState(state: EmbedLandingState | null) {
   if (!state) return;
 
-  sessionStorage.setItem(EMBED_MODE_PARAMS_STORAGE_KEY, JSON.stringify(embedModeParams.value));
+  sessionStorage.setItem(
+    EMBED_MODE_PARAMS_STORAGE_KEY,
+    JSON.stringify(buildPersistedEmbedModeParams(embedModeParams.value))
+  );
   sessionStorage.setItem(EMBED_LANDING_STATE_STORAGE_KEY, JSON.stringify(state));
   window.dispatchEvent(new CustomEvent(EMBED_LANDING_STATE_UPDATED_EVENT, { detail: state }));
 }
@@ -1120,15 +1264,22 @@ async function applyInitialLanding() {
   await bootstrapEmbedSession();
   closeBlockedReviewPanels();
 
+  const trustedEmbedIdentity = resolveTrustedEmbedIdentity(embedModeParams.value);
+
+  if (
+    embedModeParams.value.isEmbedMode
+    && embedModeParams.value.userToken
+    && (!embedTokenVerified.value || !trustedEmbedIdentity)
+  ) {
+    clearEmbedLandingPersistence();
+    closeEmbedLandingPanels();
+    activatePanel('viewer');
+    return;
+  }
+
   if (embedModeParams.value.isEmbedMode) {
-    const roleLandingTarget = resolveEmbedLandingTargetFromRole(
-      embedModeParams.value.verifiedClaims?.role || embedModeParams.value.userRole,
-    );
-    const landingTarget = roleLandingTarget ?? resolveEmbedLandingTarget({
-      isEmbedMode: embedModeParams.value.isEmbedMode,
-      isDesigner: userStore.isDesigner.value,
-      isReviewer: userStore.isReviewer.value,
-    });
+    const roleLandingTarget = resolveEmbedLandingTargetFromRole(trustedEmbedIdentity?.userRole);
+    const landingTarget = roleLandingTarget;
 
     if (landingTarget) {
       console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
@@ -1145,7 +1296,7 @@ async function applyInitialLanding() {
 
       const restoreResult = await restoreEmbedWorkbenchContext({
         target: landingTarget,
-        formId: embedModeParams.value.formId,
+        formId: getVerifiedEmbedFormId(embedModeParams.value),
         loadReviewTasks: userStore.loadReviewTasks,
         reviewerTasks: () => userStore.pendingReviewTasks.value,
         designerTasks: () => userStore.myInitiatedTasks.value,
@@ -1156,12 +1307,40 @@ async function applyInitialLanding() {
         passiveWorkflowMode: isPassiveWorkflowMode(),
       });
 
-      await ensureRestoredTaskModelsVisible(restoreResult.restoredTask);
+      let restoredModelRefnos: string[] = [];
+      const verifiedToken = embedModeParams.value.userToken;
+      if (
+        embedTokenVerified.value
+        && trustedEmbedIdentity
+        && verifiedToken
+      ) {
+        const snapshotRestore = await restoreEmbedFormSnapshot({
+          formId: trustedEmbedIdentity.formId,
+          token: verifiedToken,
+          actor: {
+            id: trustedEmbedIdentity.userId,
+            name: trustedEmbedIdentity.userId,
+            roles: trustedEmbedIdentity.userRole || 'sj',
+          },
+          importTools: (payload) => toolStore.importJSON(payload),
+          syncTools: () => viewerContext.tools.value?.syncFromStore(),
+        });
+        restoredModelRefnos = snapshotRestore.modelRefnos;
+      }
+
+      if (restoredModelRefnos.length > 0) {
+        await ensureModelRefnosVisible(restoredModelRefnos, {
+          taskId: restoreResult.restoredTaskId,
+          formId: getVerifiedEmbedFormId(embedModeParams.value),
+        });
+      } else {
+        await ensureRestoredTaskModelsVisible(restoreResult.restoredTask);
+      }
 
       if (landingState) {
         persistEmbedLandingState({
           ...landingState,
-          formId: embedModeParams.value.formId,
+          formId: getVerifiedEmbedFormId(embedModeParams.value),
           restoreStatus: restoreResult.restoreStatus,
           restoredTaskId: restoreResult.restoredTaskId,
           restoredTaskSummary: restoreResult.restoredTaskSummary,
@@ -1185,38 +1364,52 @@ function onReady(event: DockviewReadyEvent) {
     ensurePanel as (panelId: string) => { api: { setActive: () => void } } | undefined,
   );
 
-  const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);
-  let loaded = false;
+  if (isEmbedLayoutMode()) {
+    createEmbedFocusedLayout(api.value, {
+      primaryPanelId: resolveEmbedLandingTargetFromRole(embedModeParams.value.userRole) === 'designer'
+        ? 'initiateReview'
+        : resolveEmbedLandingTargetFromRole(embedModeParams.value.userRole) === 'reviewer'
+          ? 'review'
+          : undefined,
+    });
+  } else {
+    const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    let loaded = false;
 
-  if (savedLayout) {
-    try {
-      const layout = JSON.parse(savedLayout);
-      if (isValidLayout(layout)) {
-        event.api.fromJSON(layout);
-        loaded = true;
-        console.log('[DockLayout] Layout restored from localStorage');
-      } else {
-        console.warn('[DockLayout] Invalid layout data, skipping restore');
+    if (savedLayout) {
+      try {
+        const layout = JSON.parse(savedLayout);
+        if (isValidLayout(layout)) {
+          event.api.fromJSON(layout);
+          loaded = true;
+          console.log('[DockLayout] Layout restored from localStorage');
+        } else {
+          console.warn('[DockLayout] Invalid layout data, skipping restore');
+          localStorage.removeItem(LAYOUT_STORAGE_KEY);
+        }
+      } catch (e) {
+        console.warn('[DockLayout] Failed to parse layout, using default:', e);
         localStorage.removeItem(LAYOUT_STORAGE_KEY);
       }
-    } catch (e) {
-      console.warn('[DockLayout] Failed to parse layout, using default:', e);
-      localStorage.removeItem(LAYOUT_STORAGE_KEY);
     }
-  }
 
-  if (!loaded) {
-    createDefaultLayout(api.value);
+    if (!loaded) {
+      createDefaultLayout(api.value);
+    }
   }
 
   closeBlockedReviewPanels();
 
   event.api.onDidLayoutChange(() => {
-    saveLayout();
+    if (!isEmbedLayoutMode()) {
+      saveLayout();
+    }
     notifyDockLayoutChange();
   });
 
-  migratePropertiesPanelOnce();
+  if (!isEmbedLayoutMode()) {
+    migratePropertiesPanelOnce();
+  }
 
   // 设置标签页右键菜单
   setupTabContextMenu();
@@ -1246,13 +1439,20 @@ onUnmounted(() => {
 });
 
 onBeforeUnmount(() => {
-  saveLayout();
+  if (!isEmbedLayoutMode()) {
+    saveLayout();
+  }
 });
 
 </script>
 
 <template>
   <div class="dockview-container">
+    <div v-if="embedSessionError"
+      data-testid="embed-session-error"
+      class="absolute left-1/2 top-3 z-[1100] -translate-x-1/2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 shadow">
+      {{ embedSessionError }}
+    </div>
     <DockviewVue class="dockview-root" :theme="themeLight" :popout-url="popoutUrl" @ready="onReady" />
     
     <!-- 标签页右键菜单 -->
