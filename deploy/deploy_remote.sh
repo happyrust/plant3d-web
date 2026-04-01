@@ -35,6 +35,19 @@ cd "$PROJECT_DIR"
 npm install
 npm run build-only
 
+CURRENT_COMMIT="$(git rev-parse HEAD)"
+CURRENT_VERSION="$(node -p "require('./package.json').version")"
+CURRENT_BUILD_DATE="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+cat > "$PROJECT_DIR/dist/version.json" <<EOF
+{
+  "version": "${CURRENT_VERSION}",
+  "commit": "${CURRENT_COMMIT}",
+  "buildDate": "${CURRENT_BUILD_DATE}"
+}
+EOF
+echo -e "${GREEN}✅ Version metadata generated.${NC}"
+
 if [ ! -d "$PROJECT_DIR/dist" ]; then
     echo -e "${RED}❌ Build failed: dist directory does not exist${NC}"
     exit 1
