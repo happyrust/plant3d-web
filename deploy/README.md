@@ -68,6 +68,5 @@ sudo systemctl start nginx
 ```
 deploy/
 ├── README.md      # 本指南
-├── deploy_remote.sh      # 远端部署脚本
-└── deploy_frontend_bundle.sh      # 前端 bundle 部署脚本
+└── deploy_remote.sh      # 唯一官方部署脚本
 ```
