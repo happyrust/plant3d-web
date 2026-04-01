@@ -10,6 +10,9 @@ import { onToast, type ToastLevel } from '@/ribbon/toastBus';
 const menuTabs = computed(() => buildHierarchicalMenuTabs(RIBBON_TABS));
 const activeTabId = ref(menuTabs.value[0]?.id ?? '');
 const openTabId = ref<string | null>(null);
+const openMode = ref<'hover' | 'pinned' | null>(null);
+const menuRootRef = ref<HTMLElement | null>(null);
+const MENU_CLOSE_DELAY_MS = 120;
 
 const activeTab = computed(() => {
   return menuTabs.value.find((tab) => tab.id === activeTabId.value) ?? menuTabs.value[0] ?? null;
@@ -34,6 +37,34 @@ function mapToastLevel(level: ToastLevel | undefined): { color: string; timeout:
 }
 
 let offToast: (() => void) | null = null;
+let closeTimer: number | null = null;
+
+function clearCloseTimer() {
+  if (closeTimer !== null) {
+    window.clearTimeout(closeTimer);
+    closeTimer = null;
+  }
+}
+
+function applyClose(tabId?: string, force = false) {
+  if (openMode.value === 'pinned' && !force) return;
+  if (!tabId || openTabId.value === tabId) {
+    openTabId.value = null;
+    openMode.value = null;
+  }
+}
+
+function handlePointerDownOutside(event: PointerEvent) {
+  if (!openTabId.value) return;
+  const target = event.target as Node | null;
+  if (target && menuRootRef.value?.contains(target)) return;
+  closeMenu(undefined, { force: true, immediate: true });
+}
+
+function handleWindowKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !openTabId.value) return;
+  closeMenu(undefined, { force: true, immediate: true });
+}
 
 onMounted(() => {
   offToast = onToast(({ message, level }) => {
@@ -43,9 +74,14 @@ onMounted(() => {
     snackbarText.value = message;
     snackbarOpen.value = true;
   });
+  document.addEventListener('pointerdown', handlePointerDownOutside, { capture: true });
+  window.addEventListener('keydown', handleWindowKeydown);
 });
 
 onUnmounted(() => {
+  clearCloseTimer();
+  document.removeEventListener('pointerdown', handlePointerDownOutside, { capture: true });
+  window.removeEventListener('keydown', handleWindowKeydown);
   if (offToast) offToast();
   offToast = null;
 });
@@ -55,34 +91,51 @@ function resolveIcon(name?: string) {
   return ribbonIcons[name as RibbonIconName] ?? null;
 }
 
-function openTab(tabId: string) {
+function openTab(tabId: string, mode: 'hover' | 'pinned' = 'hover') {
+  clearCloseTimer();
   activeTabId.value = tabId;
   openTabId.value = tabId;
+  if (mode === 'pinned') {
+    openMode.value = 'pinned';
+    return;
+  }
+  if (openMode.value !== 'pinned') {
+    openMode.value = 'hover';
+  }
 }
 
-function closeMenu(tabId?: string) {
-  if (!tabId || openTabId.value === tabId) {
-    openTabId.value = null;
+function closeMenu(tabId?: string, options: { force?: boolean; immediate?: boolean } = {}) {
+  clearCloseTimer();
+  if (options.immediate) {
+    applyClose(tabId, options.force === true);
+    return;
   }
+  if (openMode.value === 'pinned' && options.force !== true) {
+    return;
+  }
+  closeTimer = window.setTimeout(() => {
+    applyClose(tabId, options.force === true);
+    closeTimer = null;
+  }, MENU_CLOSE_DELAY_MS);
 }
 
 function toggleTab(tabId: string) {
-  if (openTabId.value === tabId) {
-    openTabId.value = null;
+  if (openTabId.value === tabId && openMode.value === 'pinned') {
+    closeMenu(tabId, { force: true, immediate: true });
     activeTabId.value = tabId;
     return;
   }
-  openTab(tabId);
+  openTab(tabId, 'pinned');
 }
 
 function onClickCommand(commandId: string) {
   emitCommand(commandId);
-  openTabId.value = null;
+  closeMenu(undefined, { force: true, immediate: true });
 }
 </script>
 
 <template>
-  <div class="hierarchical-menu-root">
+  <div ref="menuRootRef" class="hierarchical-menu-root">
     <div class="hierarchical-menu-bar">
       <div class="hierarchical-menu-tabs" role="menubar">
         <div v-for="tab in menuTabs"
@@ -101,7 +154,9 @@ function onClickCommand(commandId: string) {
           </button>
 
           <div v-if="openTabId === tab.id"
-            class="hierarchical-menu-dropdown">
+            class="hierarchical-menu-dropdown"
+            @mouseenter="openTab(tab.id)"
+            @mouseleave="closeMenu(tab.id)">
             <section v-for="group in tab.groups"
               :key="group.id"
               class="hierarchical-menu-group">
@@ -201,7 +256,7 @@ function onClickCommand(commandId: string) {
 
 .hierarchical-menu-dropdown {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 1px);
   left: 0;
   z-index: 40;
   display: grid;

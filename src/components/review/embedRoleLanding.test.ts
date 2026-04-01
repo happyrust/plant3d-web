@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   applyEmbedLandingState,
+  buildPersistedEmbedModeParams,
   getEmbedLandingPanelIds,
+  readEmbedModeParamsFromSearch,
+  resolveTrustedEmbedIdentity,
   resolveEmbedLandingTarget,
   resolveEmbedLandingTargetFromRole,
 } from './embedRoleLanding';
@@ -23,6 +26,46 @@ describe('embed role landing', () => {
     });
   });
 
+  it('reads token-primary embed params from URL search and ignores query user/project identity fields', () => {
+    expect(readEmbedModeParamsFromSearch('?form_id=FORM-1&user_token=token-1&user_id=query-user&user_role=jd&project_id=query-project&workflow_mode=external')).toEqual({
+      formId: null,
+      userToken: 'token-1',
+      userId: null,
+      userRole: null,
+      projectId: null,
+      workflowMode: 'external',
+      isEmbedMode: true,
+      launchInput: {
+        formId: 'FORM-1',
+        userId: 'query-user',
+        userRole: 'jd',
+        projectId: 'query-project',
+        workflowMode: 'external',
+      },
+      verifiedClaims: null,
+    });
+  });
+
+  it('keeps URL identity fields only when token is absent', () => {
+    expect(readEmbedModeParamsFromSearch('?form_id=FORM-2&user_id=query-user&user_role=jd&project_id=query-project')).toEqual({
+      formId: 'FORM-2',
+      userToken: null,
+      userId: 'query-user',
+      userRole: 'jd',
+      projectId: 'query-project',
+      workflowMode: null,
+      isEmbedMode: true,
+      launchInput: {
+        formId: 'FORM-2',
+        userId: 'query-user',
+        userRole: 'jd',
+        projectId: 'query-project',
+        workflowMode: null,
+      },
+      verifiedClaims: null,
+    });
+  });
+
   it('routes designers to the initiate-review workspace with a unique CTA landing', () => {
     expect(resolveEmbedLandingTarget({
       isEmbedMode: true,
@@ -30,7 +73,7 @@ describe('embed role landing', () => {
       isReviewer: false,
     })).toBe('designer');
 
-    expect(getEmbedLandingPanelIds('designer')).toEqual(['initiateReview', 'myTasks']);
+    expect(getEmbedLandingPanelIds('designer')).toEqual(['initiateReview']);
   });
 
   it('omits myTasks from designer landing when workflow is externally driven', () => {
@@ -70,17 +113,128 @@ describe('embed role landing', () => {
       isReviewer: true,
     })).toBe('reviewer');
 
-    expect(getEmbedLandingPanelIds('reviewer')).toEqual(['review', 'reviewerTasks']);
+    expect(getEmbedLandingPanelIds('reviewer')).toEqual(['review']);
   });
 
-  it('maps PMS role aliases to the expected landing targets', () => {
+  it('maps only canonical backend roles to the expected landing targets', () => {
     expect(resolveEmbedLandingTargetFromRole('sj')).toBe('designer');
     expect(resolveEmbedLandingTargetFromRole('jd')).toBe('reviewer');
-    expect(resolveEmbedLandingTargetFromRole('jh')).toBe('reviewer');
     expect(resolveEmbedLandingTargetFromRole('sh')).toBe('reviewer');
     expect(resolveEmbedLandingTargetFromRole('pz')).toBe('reviewer');
-    expect(resolveEmbedLandingTargetFromRole('designer')).toBe('designer');
-    expect(resolveEmbedLandingTargetFromRole('reviewer')).toBe('reviewer');
+    expect(resolveEmbedLandingTargetFromRole('admin')).toBe('reviewer');
+    expect(resolveEmbedLandingTargetFromRole('jh')).toBeNull();
+    expect(resolveEmbedLandingTargetFromRole('designer')).toBeNull();
+    expect(resolveEmbedLandingTargetFromRole('reviewer')).toBeNull();
+    expect(resolveEmbedLandingTargetFromRole('proofreader')).toBeNull();
+    expect(resolveEmbedLandingTargetFromRole('manager')).toBeNull();
+  });
+
+  it('prefers verified token claims as the only trusted embed identity source', () => {
+    expect(resolveTrustedEmbedIdentity({
+      formId: 'FORM-QUERY',
+      userToken: 'token-1',
+      userId: 'query-user',
+      userRole: 'jd',
+      projectId: 'query-project',
+      isEmbedMode: true,
+      verifiedClaims: {
+        userId: 'JH',
+        formId: 'FORM-134F980BCB9C',
+        projectId: 'AvevaMarineSample',
+        role: 'sj',
+        workflowMode: 'external',
+        exp: 1774949170,
+        iat: 1774862770,
+      },
+    })).toEqual({
+      userId: 'JH',
+      userRole: 'sj',
+      formId: 'FORM-134F980BCB9C',
+      projectId: 'AvevaMarineSample',
+      workflowMode: 'external',
+    });
+  });
+
+  it('rejects verified embed identity when token claims omit role even if URL user_role is present', () => {
+    expect(resolveTrustedEmbedIdentity({
+      formId: 'FORM-QUERY',
+      userToken: 'token-1',
+      userId: 'query-user',
+      userRole: 'jd',
+      projectId: 'query-project',
+      isEmbedMode: true,
+      verifiedClaims: {
+        userId: 'JH',
+        formId: 'FORM-MOCK-PMS-1774594825',
+        projectId: 'AvevaMarineSample',
+        exp: 1775001441,
+        iat: 1774915041,
+      },
+    })).toBeNull();
+  });
+
+  it('persists token-primary embed params without legacy URL identity fields', () => {
+    expect(buildPersistedEmbedModeParams({
+      formId: 'FORM-1',
+      userToken: 'token-1',
+      userId: 'JH',
+      userRole: 'jd',
+      projectId: 'AvevaMarineSample',
+      workflowMode: 'external',
+      isEmbedMode: true,
+      launchInput: {
+        formId: 'FORM-1',
+        userId: 'query-user',
+        userRole: 'jd',
+        projectId: 'query-project',
+        workflowMode: 'external',
+      },
+      verifiedClaims: {
+        userId: 'JH',
+        formId: 'FORM-1',
+        projectId: 'AvevaMarineSample',
+        role: 'jd',
+        workflowMode: 'manual',
+        exp: 1,
+        iat: 1,
+      },
+    })).toEqual({
+      formId: 'FORM-1',
+      userToken: 'token-1',
+      userId: 'JH',
+      userRole: 'jd',
+      projectId: 'AvevaMarineSample',
+      workflowMode: 'manual',
+      isEmbedMode: true,
+      launchInput: {
+        formId: 'FORM-1',
+        userId: null,
+        userRole: null,
+        projectId: null,
+        workflowMode: 'external',
+      },
+      verifiedClaims: {
+        userId: 'JH',
+        formId: 'FORM-1',
+        projectId: 'AvevaMarineSample',
+        role: 'jd',
+        workflowMode: 'manual',
+        exp: 1,
+        iat: 1,
+      },
+    });
+  });
+
+  it('returns null when verified claims are absent even if query parameters look usable', () => {
+    expect(resolveTrustedEmbedIdentity({
+      formId: 'FORM-QUERY',
+      userToken: 'token-1',
+      userId: 'query-user',
+      userRole: 'jd',
+      projectId: 'query-project',
+      isEmbedMode: true,
+      verifiedClaims: null,
+    })).toBeNull();
   });
 
   it('persists a shared form lineage while recording the chosen landing target', () => {
@@ -113,7 +267,7 @@ describe('embed role landing', () => {
     expect(result).toEqual({
       target: 'reviewer',
       primaryPanelId: 'review',
-      visiblePanelIds: ['review', 'reviewerTasks'],
+      visiblePanelIds: ['review'],
     });
 
     expect(JSON.parse(sessionStorage.getItem('embed_mode_params') || '{}')).toMatchObject({
@@ -124,7 +278,7 @@ describe('embed role landing', () => {
       target: 'reviewer',
       formId: 'FORM-123',
       primaryPanelId: 'review',
-      visiblePanelIds: ['review', 'reviewerTasks'],
+      visiblePanelIds: ['review'],
     });
   });
 
@@ -148,7 +302,7 @@ describe('embed role landing', () => {
       target: 'designer',
       formId: 'FORM-XYZ',
       primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview', 'myTasks'],
+      visiblePanelIds: ['initiateReview'],
     });
 
     applyEmbedLandingState({
@@ -169,7 +323,7 @@ describe('embed role landing', () => {
       target: 'reviewer',
       formId: 'FORM-XYZ',
       primaryPanelId: 'review',
-      visiblePanelIds: ['review', 'reviewerTasks'],
+      visiblePanelIds: ['review'],
     });
   });
 
@@ -211,7 +365,7 @@ describe('embed role landing', () => {
     expect(result).toEqual({
       target: 'designer',
       primaryPanelId: 'initiateReview',
-      visiblePanelIds: ['initiateReview', 'myTasks'],
+      visiblePanelIds: ['initiateReview'],
     });
   });
 
