@@ -28,6 +28,40 @@ function getReviewWebBaseUrl(): string {
   return getBaseUrl();
 }
 
+const LEGACY_EMBED_IDENTITY_QUERY_KEYS = [
+  'form_id',
+  'output_project',
+  'project_id',
+  'user_id',
+  'user_role',
+  'workflow_mode',
+  'landing_role',
+];
+
+function buildTokenPrimaryEmbedUrl(options: {
+  rawUrl?: string | null;
+  relativePath?: string | null;
+  token?: string | null;
+}): string {
+  const baseUrl = getReviewWebBaseUrl().replace(/\/$/, '');
+  const fallbackPath = options.relativePath?.trim()
+    ? (options.relativePath.startsWith('/') ? options.relativePath : `/${options.relativePath}`)
+    : '/review/3d-view';
+  const url = new URL(options.rawUrl?.trim() || fallbackPath, baseUrl);
+  const params = new URLSearchParams(url.search);
+
+  for (const key of LEGACY_EMBED_IDENTITY_QUERY_KEYS) {
+    params.delete(key);
+  }
+
+  if (options.token?.trim()) {
+    params.set('user_token', options.token.trim());
+  }
+
+  url.search = params.toString();
+  return url.toString();
+}
+
 function getReviewWebSocketBaseUrl(): string | null {
   const env = import.meta.env as unknown as {
     VITE_REVIEW_WS_BASE_URL?: string;
@@ -425,14 +459,30 @@ export async function reviewTaskGetWorkflow(
 
 // ============ 外部校审集成 API ============
 
-export async function reviewGetEmbedUrl(projectId: string, userId: string): Promise<{ url: string }> {
+export async function reviewGetEmbedUrl(
+  projectId: string,
+  userId: string,
+  userRole?: string | null,
+): Promise<{ url: string }> {
+  const payload: Record<string, string> = {
+    project_id: projectId,
+    user_id: userId,
+  };
+  const normalizedRole = userRole?.trim();
+  if (normalizedRole) {
+    payload.role = normalizedRole;
+  }
   const response = await fetchJson<EmbedUrlResponse>('/api/review/embed-url', {
     method: 'POST',
-    body: JSON.stringify({ project_id: projectId, user_id: userId }),
+    body: JSON.stringify(payload),
   });
 
   if (response.url) {
-    return { url: response.url };
+    return {
+      url: buildTokenPrimaryEmbedUrl({
+        rawUrl: response.url,
+      }),
+    };
   }
 
   if (response.code !== 200 && response.code !== 0) {
@@ -449,18 +499,12 @@ export async function reviewGetEmbedUrl(projectId: string, userId: string): Prom
     throw new Error('校审地址缺少路径信息');
   }
 
-  const query = data.query || {};
-  const formId = query.form_id || query.formId || '';
-  const baseUrl = getReviewWebBaseUrl().replace(/\/$/, '');
-  const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  const params = new URLSearchParams();
-  params.set('user_token', data.token);
-  if (formId) params.set('form_id', formId);
-  params.set('user_id', userId);
-  params.set('project_id', projectId);
-  params.set('output_project', projectId);
-
-  return { url: `${baseUrl}${cleanPath}?${params.toString()}` };
+  return {
+    url: buildTokenPrimaryEmbedUrl({
+      relativePath,
+      token: data.token,
+    }),
+  };
 }
 
 export async function reviewPreloadCache(
@@ -920,6 +964,7 @@ export type TokenRequest = {
   userId: string;
   formId?: string;
   role?: string;
+  workflowMode?: string;
 };
 
 export type TokenResponse = {
@@ -941,13 +986,72 @@ export type VerifyResponse = {
       projectId: string;
       userId: string;
       formId: string;
+      userName?: string;
       role?: string;
+      workflowMode?: string;
       exp: number;
       iat: number;
     };
     error?: string;
   };
 };
+
+type RawVerifyClaims = {
+  projectId?: string;
+  project_id?: string;
+  userId?: string;
+  user_id?: string;
+  userName?: string;
+  user_name?: string;
+  formId?: string;
+  form_id?: string;
+  role?: string;
+  workflowMode?: string;
+  workflow_mode?: string;
+  exp?: number;
+  iat?: number;
+};
+
+type RawVerifyResponse = {
+  code?: number;
+  message?: string;
+  data?: {
+    valid?: boolean;
+    claims?: RawVerifyClaims | null;
+    error?: string | null;
+  };
+};
+
+function normalizeVerifyClaims(raw?: RawVerifyClaims | null): VerifyResponse['data']['claims'] | undefined {
+  if (!raw) return undefined;
+  const projectId = raw.projectId || raw.project_id;
+  const userId = raw.userId || raw.user_id;
+  const formId = raw.formId || raw.form_id;
+  if (!projectId || !userId || !formId) return undefined;
+
+  return {
+    projectId,
+    userId,
+    formId,
+    userName: raw.userName || raw.user_name,
+    role: raw.role,
+    workflowMode: raw.workflowMode || raw.workflow_mode,
+    exp: typeof raw.exp === 'number' ? raw.exp : 0,
+    iat: typeof raw.iat === 'number' ? raw.iat : 0,
+  };
+}
+
+function normalizeVerifyResponse(raw: RawVerifyResponse): VerifyResponse {
+  return {
+    code: typeof raw.code === 'number' ? raw.code : 0,
+    message: raw.message || '',
+    data: raw.data ? {
+      valid: raw.data.valid === true,
+      claims: normalizeVerifyClaims(raw.data.claims),
+      error: raw.data.error || undefined,
+    } : undefined,
+  };
+}
 
 /**
  * 获取 JWT Token
@@ -963,6 +1067,7 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
       user_id: request.userId,
       form_id: request.formId,
       role: request.role,
+      workflow_mode: request.workflowMode,
     }),
   });
 
@@ -1008,7 +1113,7 @@ export async function authVerifyToken(token?: string, formId?: string): Promise<
     throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
   }
 
-  return (await resp.json()) as VerifyResponse;
+  return normalizeVerifyResponse((await resp.json()) as RawVerifyResponse);
 }
 
 /**

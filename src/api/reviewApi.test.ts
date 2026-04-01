@@ -64,11 +64,38 @@ describe('reviewApi base url defaults', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await reviewGetEmbedUrl('project-1', 'user-1');
+    const url = new URL(result.url);
 
     expectBackendFetch(fetchMock, '/api/review/embed-url');
-    expect(result.url).toContain('form_id=FORM-1');
-    expect(result.url).toContain('project_id=project-1');
-    expect(result.url).toContain('output_project=project-1');
+    expect(url.searchParams.get('user_token')).toBe('token-1');
+    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('output_project')).toBeNull();
+    expect(url.searchParams.get('workflow_mode')).toBeNull();
+    expect(url.searchParams.get('project_id')).toBeNull();
+    expect(url.searchParams.get('user_id')).toBeNull();
+  });
+
+  it('passes backend workflow role when requesting embed url', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'ok',
+        data: {
+          token: 'token-role',
+          relative_path: '/review/embed',
+          query: { form_id: 'FORM-ROLE' },
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await reviewGetEmbedUrl('project-1', 'user-1', 'jd');
+
+    expectBackendFetch(
+      fetchMock,
+      '/api/review/embed-url',
+      JSON.stringify({ project_id: 'project-1', user_id: 'user-1', role: 'jd' })
+    );
   });
 
   it('tolerates lineage metadata in embed-url payloads for existing tasks', async () => {
@@ -99,12 +126,14 @@ describe('reviewApi base url defaults', () => {
 
     const result = await reviewGetEmbedUrl('project-2', 'user-2');
 
-    expect(result.url).toContain('form_id=FORM-LINEAGE');
-    expect(result.url).toContain('output_project=project-2');
+    const url = new URL(result.url);
+    expect(url.searchParams.get('user_token')).toBe('token-2');
+    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('output_project')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('includes output_project parameter matching project_id in embed URL', async () => {
+  it('does not leak project identity into embed URL query', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         code: 200,
@@ -120,12 +149,37 @@ describe('reviewApi base url defaults', () => {
 
     const result = await reviewGetEmbedUrl('AvevaMarineSample', 'user-ams');
 
-    expect(result.url).toContain('project_id=AvevaMarineSample');
-    expect(result.url).toContain('output_project=AvevaMarineSample');
-    
     const url = new URL(result.url);
-    expect(url.searchParams.get('project_id')).toBe('AvevaMarineSample');
-    expect(url.searchParams.get('output_project')).toBe('AvevaMarineSample');
+    expect(url.searchParams.get('project_id')).toBeNull();
+    expect(url.searchParams.get('output_project')).toBeNull();
+    expect(url.searchParams.get('user_id')).toBeNull();
+    expect(url.searchParams.get('user_role')).toBeNull();
+    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('user_token')).toBe('token-ams');
+  });
+
+  it('sanitizes direct backend embed url to token-primary query params', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'ok',
+        url: 'http://review-web.local/review/3d-view?form_id=FORM-DIRECT&user_token=token-direct&user_id=SJ&user_role=sj&project_id=legacy-project&workflow_mode=external',
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await reviewGetEmbedUrl('AvevaMarineSample', 'SJ', 'sj');
+
+    const url = new URL(result.url);
+    expect(url.origin).toBe('http://review-web.local');
+    expect(url.pathname).toBe('/review/3d-view');
+    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('user_token')).toBe('token-direct');
+    expect(url.searchParams.get('workflow_mode')).toBeNull();
+    expect(url.searchParams.get('output_project')).toBeNull();
+    expect(url.searchParams.get('user_id')).toBeNull();
+    expect(url.searchParams.get('user_role')).toBeNull();
+    expect(url.searchParams.get('project_id')).toBeNull();
   });
 
   it('uses 3100 default backend when verifying token', async () => {
@@ -160,6 +214,38 @@ describe('reviewApi base url defaults', () => {
       '/api/auth/verify',
       JSON.stringify({ token: 'token-verify', form_id: 'FORM-EMBED-1' })
     );
+  });
+
+  it('normalizes snake_case verify claims for embed trusted identity', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 0,
+        message: 'ok',
+        data: {
+          valid: true,
+          claims: {
+            project_id: 'AvevaMarineSample',
+            user_id: 'JH',
+            form_id: 'FORM-134F980BCB9C',
+            role: 'sj',
+            exp: 1774949170,
+            iat: 1774862770,
+          },
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await authVerifyToken('token-verify', 'FORM-134F980BCB9C');
+
+    expect(result.data?.claims).toEqual({
+      projectId: 'AvevaMarineSample',
+      userId: 'JH',
+      formId: 'FORM-134F980BCB9C',
+      role: 'sj',
+      exp: 1774949170,
+      iat: 1774862770,
+    });
   });
 
   it('includes stable form lineage when creating confirmed records', async () => {
