@@ -99,6 +99,11 @@ sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} <
         # CentOS/RHEL 风格
         mv /tmp/plant3d-web.conf /etc/nginx/conf.d/plant3d-web.conf
     fi
+
+    # 清理历史残留的旧配置，避免重复 server_name 导致冲突或误命中
+    rm -f /etc/nginx/sites-enabled/plant3d-web.bak_* \
+          /etc/nginx/sites-available/plant3d-web.bak_* \
+          /etc/nginx/conf.d/plant3d-web.conf.bak_* 2>/dev/null || true
     
     # 测试配置
     nginx -t

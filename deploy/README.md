@@ -54,7 +54,7 @@ sudo systemctl reload nginx
 
 服务器需要安装:
 - Nginx
-- 后端 API 服务运行在 8080 端口
+- 后端 API 服务运行在 3100 端口
 
 ### 安装 Nginx (如未安装)
 ```bash
