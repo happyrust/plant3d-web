@@ -491,30 +491,47 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
 /**
  * 在 PMS 列表/iframe 中点击包含包名的行或文本，尝试打开三维校审详情（实现因 ExtJS/表格结构而异，失败时不抛错）。
  */
-export async function tryOpenReviewEntryContainingPackage(page: Page, pkg: string): Promise<boolean> {
-  const sub = pkg.trim();
-  if (!sub) return false;
+function normalizeLookupNeedles(needles: string[]): string[] {
+  return [...new Set(needles.map((s) => s.trim()).filter(Boolean))];
+}
+
+export async function tryOpenReviewEntryByNeedles(
+  page: Page,
+  needles: string[],
+): Promise<{ opened: boolean; matchedNeedle: string | null }> {
+  const normalized = normalizeLookupNeedles(needles);
+  if (!normalized.length) return { opened: false, matchedNeedle: null };
   const frames = page.frames().filter((f) => !f.isDetached());
   const roots: (Page | Frame)[] = [page, ...frames.filter((f) => f !== page.mainFrame())];
   for (const root of roots) {
-    const hit = root.getByText(sub, { exact: false }).first();
-    const vis = await hit.isVisible().catch(() => false);
-    if (!vis) continue;
-    await hit.scrollIntoViewIfNeeded().catch(() => undefined);
-    const row = hit.locator('xpath=ancestor::tr[1]');
-    if (await row.count()) {
-      await row.dblclick({ timeout: 8000 }).catch(async () => {
-        await hit.click({ timeout: 8000 }).catch(() => undefined);
-      });
-    } else {
-      await hit.dblclick({ timeout: 8000 }).catch(async () => {
-        await hit.click({ timeout: 8000 }).catch(() => undefined);
-      });
+    for (const needle of normalized) {
+      const hit = root.getByText(needle, { exact: false }).first();
+      const vis = await hit.isVisible().catch(() => false);
+      if (!vis) continue;
+      await hit.scrollIntoViewIfNeeded().catch(() => undefined);
+      const row = hit.locator('xpath=ancestor::tr[1]');
+      if (await row.count()) {
+        await row.dblclick({ timeout: 8000 }).catch(async () => {
+          await hit.click({ timeout: 8000 }).catch(() => undefined);
+        });
+      } else {
+        await hit.dblclick({ timeout: 8000 }).catch(async () => {
+          await hit.click({ timeout: 8000 }).catch(() => undefined);
+        });
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+      return { opened: true, matchedNeedle: needle };
     }
-    await new Promise((r) => setTimeout(r, 2000));
-    return true;
   }
-  return false;
+  return { opened: false, matchedNeedle: null };
+}
+
+/**
+ * 兼容旧调用：优先按包名打开现有记录。
+ */
+export async function tryOpenReviewEntryContainingPackage(page: Page, pkg: string): Promise<boolean> {
+  const result = await tryOpenReviewEntryByNeedles(page, [pkg]);
+  return result.opened;
 }
 
 export async function waitForSubstringInPageOrChildFrames(
@@ -522,23 +539,33 @@ export async function waitForSubstringInPageOrChildFrames(
   substring: string,
   timeoutMs: number,
 ): Promise<void> {
-  const sub = substring.trim();
-  if (!sub) throw new Error('waitForSubstringInPageOrChildFrames: 空字符串');
+  await waitForAnySubstringInPageOrChildFrames(page, [substring], timeoutMs);
+}
+
+export async function waitForAnySubstringInPageOrChildFrames(
+  page: Page,
+  substrings: string[],
+  timeoutMs: number,
+): Promise<string> {
+  const normalized = normalizeLookupNeedles(substrings);
+  if (!normalized.length) throw new Error('waitForAnySubstringInPageOrChildFrames: 空字符串');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const frames = page.frames().filter((f) => !f.isDetached());
     const roots: (Page | Frame)[] = [page, ...frames.filter((f) => f !== page.mainFrame())];
     for (const root of roots) {
-      const vis = await root
-        .getByText(sub, { exact: false })
-        .first()
-        .isVisible()
-        .catch(() => false);
-      if (vis) return;
+      for (const sub of normalized) {
+        const vis = await root
+          .getByText(sub, { exact: false })
+          .first()
+          .isVisible()
+          .catch(() => false);
+        if (vis) return sub;
+      }
     }
     await new Promise((r) => setTimeout(r, 600));
   }
-  throw new Error(`超时：PMS 页面及 iframe 内均未发现「${sub}」`);
+  throw new Error(`超时：PMS 页面及 iframe 内均未发现以下任一文本：${normalized.join(' | ')}`);
 }
 
 /**
@@ -624,7 +651,7 @@ export async function runReviewerAnnotationAcrossContext(context: BrowserContext
   throw new Error('超时：未在任何标签页/iframe 内找到校审面板自动化钩子 __plant3dReviewerE2E');
 }
 
-export async function runCheckerWorkflowAcrossContext(context: BrowserContext): Promise<void> {
+export async function waitForReviewerWorkbenchAcrossContext(context: BrowserContext): Promise<{ page: Page; root: Page | Frame }> {
   const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
   const parsed = rawPoll ? Number(rawPoll) : NaN;
   const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;
@@ -641,8 +668,7 @@ export async function runCheckerWorkflowAcrossContext(context: BrowserContext): 
           .isVisible()
           .catch(() => false);
         if (!vis) continue;
-        await runPlant3dCheckerWorkflowOnRoot(root);
-        return;
+        return { page: p, root };
       }
     }
     await new Promise((r) => setTimeout(r, 600));
@@ -650,6 +676,20 @@ export async function runCheckerWorkflowAcrossContext(context: BrowserContext): 
   throw new Error(
     '超时：未在任何标签页/iframe 内找到校核工作区 [data-testid=review-workbench-workflow-zone]（请确认 JH 已从 PMS 打开含该提资的三维/校审入口）',
   );
+}
+
+export async function reloadReviewerWorkbenchAcrossContext(context: BrowserContext): Promise<void> {
+  const located = await waitForReviewerWorkbenchAcrossContext(context);
+  const pageUrl = located.page.url();
+  console.error(`[cdp] 校核刷新恢复：刷新当前 reviewer 页面 ${pageUrl || '(blank)'}`);
+  await located.page.bringToFront().catch(() => undefined);
+  await located.page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 });
+  await waitForReviewerWorkbenchAcrossContext(context);
+}
+
+export async function runCheckerWorkflowAcrossContext(context: BrowserContext): Promise<void> {
+  const located = await waitForReviewerWorkbenchAcrossContext(context);
+  await runPlant3dCheckerWorkflowOnRoot(located.root);
 }
 
 export async function runSubmitReviewAcrossContext(context: BrowserContext): Promise<string> {

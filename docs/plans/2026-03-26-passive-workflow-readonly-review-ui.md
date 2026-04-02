@@ -11,6 +11,9 @@
 
 本次改动的目标，是把“被动模式”真正收紧成 **只读观察态**，避免用户在外部驱动场景里误用内部流程入口。
 
+> 2026-04-02 补充口径：本文主要约束 **真实 plant3d 嵌入工作区** 在 passive/external 模式下的行为。  
+> 当前 **仿 PMS 调试页**（`/pms-review-simulator.html`）已经演进为：外层右侧 workflow 面板可通过 `workflow/sync active / agree / return / stop` 驱动外部流程，但该能力属于 **PMS 外层调试壳**，不等于 plant3d 内部 reviewer 工作区重新开放了内部提交流转按钮。
+
 ---
 
 ## 2. 本次决策
@@ -42,6 +45,11 @@
 - 可以刷新
 - **不能**在 plant3d 内主动推进流程
 - **不能**暴露“我的提资单”这类内部任务列表视图
+
+补充说明：
+
+- 这里的“不能主动推进流程”指的是 **plant3d 内部工作区** 不再渲染内部 submit/return 按钮。
+- 对 **仿 PMS 调试页** 而言，外层 PMS 壳仍可在满足目标处理人与终态约束时，通过独立 workflow 面板调用 `workflow/sync` 执行动作。
 
 ---
 
@@ -93,7 +101,7 @@
 - “校审 -> 面板”组不再显示“我的提资”入口
 - 设计师引导不再注入“查看我的提资”步骤
 
-### 3.4 PMS 调试模拟器改为只读观察口径
+### 3.4 PMS 调试模拟器改为“外层 workflow/sync 面板驱动”
 
 修改文件：
 
@@ -101,9 +109,22 @@
 
 被动模式下：
 
-- 右侧 workflow 面板不再提供 `active / agree / return / stop` 操作入口
-- 页面文案改为“流程状态镜像 / 外部驱动只读观察”
-- 保留节点、状态、快照、刷新/重开能力
+- plant3d 内部 reviewer 工作区继续不提供 `agree / return / stop` 等**内部**推进入口
+- 但仿 PMS 外层右侧 workflow 面板已支持：
+  - `SJ active`
+  - `JH/SH/PZ agree`
+  - `PZ return`
+  - `SH stop`
+- 上述动作统一通过 `workflow/sync` 驱动，不再先推进内部 `review_tasks/{id}/submit`
+- 外层 workflow 面板同时受以下约束：
+  - 已有单据优先按**真实任务指派**判断是否可操作
+  - 缺失真实指派时回退到**默认测试流转映射**
+  - `approved / cancelled` 终态自动只读
+- 基于固定 BRAN `24381_145018` 的真实界面点击验证还已确认：
+  - `JH` 阶段可以在 iframe 内同时添加 1 条批注、1 条距离测量、1 个截图附件
+  - `approved` reopen 时，iframe 内会恢复批注与测量
+  - iframe 内“附件材料”tab 已恢复 1 条附件条目（当前默认显示 attachment `description` / 标签）
+- 页面其余区域继续保留节点、状态、快照、刷新/重开能力
 
 ---
 
@@ -116,7 +137,13 @@
 | reviewer 提交/驳回弹窗 | 显示 | 不显示 |
 | 我的提资单 | 显示 | 不显示 |
 | Ribbon “我的提资”入口 | 显示 | 不显示 |
-| PMS 调试模拟器 workflow/sync 操作 | 可用 | 只读 |
+| PMS 调试模拟器 workflow/sync 操作 | 可用 | 由外层 workflow 面板驱动；`SJ/JH/SH/PZ` 在命中目标处理人且未终态时可执行 `active/agree/return/stop`，否则只读 |
+| BRAN `24381_145018` 数据恢复 | 不作额外区分 | `approved` reopen 时 iframe 内恢复批注/测量/附件条目，附件当前显示 description / 标签 |
+
+补充说明：
+
+- 上表中的 “reviewer 流转按钮 / reviewer 提交弹窗” 仅指 **plant3d 内部工作区**。
+- 仿 PMS 调试页的外层 workflow 面板不受此行约束，它属于外层 PMS 壳的调试能力。
 
 ---
 
@@ -162,7 +189,9 @@ npm run lint -- scripts/pms-chrome-devtools-flow.ts scripts/pms-plant3d-initiate
 1. 被动流程下 reviewer 工作区不再出现内部流转按钮
 2. 被动流程下设计角色不再自动落到 `myTasks`
 3. Ribbon 不再显示“我的提资”
-4. PMS 模拟器 workflow 面板只读化
+4. PMS 模拟器在 passive/external 下改为“外层 workflow/sync 面板 + access gate”：
+   - 命中目标处理人时可操作
+   - `approved / cancelled` 终态只读
 5. `extended` 自动化在需要 reviewer 内部提交流程时可通过 `PMS_CDP_WORKFLOW_MODE=manual` 恢复旧链路
 
 ---

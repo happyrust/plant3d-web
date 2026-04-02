@@ -4,6 +4,7 @@ import {
   getAuthToken,
   login,
   reviewTaskCancel,
+  reviewTaskDelete,
   reviewTaskGetById,
   reviewTaskGetList,
   reviewTaskReturn,
@@ -11,10 +12,27 @@ import {
   type ReviewTask,
 } from '@/api/reviewApi';
 import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
-import { resolveSimulatorActorIdentity } from '@/debug/pmsReviewSimulatorWorkflow';
+import {
+  buildTokenPrimaryPmsLaunchSearch,
+  resolveDefaultSimulatorProjectId,
+  resolvePmsLaunchFormId,
+} from '@/debug/pmsReviewSimulatorLaunchPlan';
+import {
+  buildSimulatorAuthLoginRequest,
+  buildSimulatorEmbedUrlPayload,
+  buildSimulatorRuntimeWorkflowRole,
+  buildSimulatorWorkflowSyncPayload,
+  deriveSimulatorSidePanelMode,
+  resolveSimulatorWorkflowAccess,
+  resolveSimulatorTaskAssignment,
+  resolveSimulatorWorkflowAssignment,
+  resolveSimulatorWorkflowMutationTargetRole,
+  shouldUseSyncOnlyWorkflowAction,
+  type WorkflowRole,
+} from '@/debug/pmsReviewSimulatorWorkflow';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
-type SimulatorRole = 'SJ' | 'JH' | 'SH' | 'PZ';
+type SimulatorPmsUser = 'SJ' | 'JH' | 'SH' | 'PZ';
 type SidePanelMode = 'initiate' | 'workflow' | 'readonly';
 
 type WorkflowSyncResponse = {
@@ -84,8 +102,16 @@ type TokenVerifyClaims = {
   userId?: string;
   formId?: string;
   role?: string;
+  workflowMode?: string;
   exp?: number;
   iat?: number;
+};
+
+type SimulatorProjectOption = {
+  id: string;
+  path: string;
+  name: string;
+  description: string;
 };
 
 type PmsLaunchPlan = {
@@ -124,7 +150,7 @@ type IframeMeta = {
   taskId: string | null;
   formId: string | null;
   openedAt: number;
-  role: SimulatorRole;
+  workflowRole: WorkflowRole;
 };
 
 type DiagnosticsState = {
@@ -148,12 +174,17 @@ type WorkflowResultState = {
 };
 
 type SimulatorState = {
-  currentRole: SimulatorRole;
+  currentPmsUser: SimulatorPmsUser;
   projectId: string;
+  availableProjects: SimulatorProjectOption[];
+  loadingProjects: boolean;
+  projectsError: string | null;
   loadingList: boolean;
+  deletingList: boolean;
   listError: string | null;
   rows: ReviewListRow[];
   selectedTaskId: string | null;
+  selectedTaskIds: string[];
   iframeUrl: string | null;
   iframeMeta: IframeMeta | null;
   embedToken: string | null;
@@ -166,11 +197,71 @@ type SimulatorState = {
   workflowDialog: WorkflowDialogState;
 };
 
-const ROLE_CONTEXT: Record<SimulatorRole, { label: string; node: string }> = {
-  SJ: { label: '编制', node: 'sj' },
-  JH: { label: '校核', node: 'jd' },
-  SH: { label: '审核', node: 'sh' },
-  PZ: { label: '批准', node: 'pz' },
+type SimulatorTestSnapshot = {
+  currentRole: SimulatorPmsUser;
+  currentPmsUser: SimulatorPmsUser;
+  currentWorkflowRole: WorkflowRole;
+  workflowRoleSource: string;
+  workflowNextStep: string | null;
+  taskCurrentNode: string | null;
+  defaultAssignedPmsUser: SimulatorPmsUser;
+  matchesDefaultAssignee: boolean;
+  taskAssignedUserId: string | null;
+  taskAssignmentSource: string;
+  matchesTaskAssignee: boolean;
+  canMutateWorkflow: boolean;
+  accessDecisionSource: string;
+  accessDecisionReason: string;
+  projectId: string;
+  iframeUrl: string | null;
+  lastOpenedFormId: string | null;
+  selectedTaskId: string | null;
+  rowCount: number;
+  diagnosticsError: string | null;
+  sidePanelMode: SidePanelMode;
+  workflowDialogOpen: boolean;
+  workflowDialogAction: WorkflowMutationAction | null;
+  lastAction: WorkflowMutationAction | null;
+  lastOk: boolean | null;
+  lastMessage: string | null;
+  passiveWorkflowMode: boolean;
+};
+
+type SimulatorTestApi = {
+  openNew: () => Promise<void>;
+  reopenLast: () => Promise<void>;
+  switchRole: (role: SimulatorPmsUser) => Promise<void>;
+  selectTask: (taskId: string) => void;
+  openSelected: (source?: 'task-view' | 'task-reopen') => Promise<void>;
+  setDraftComment: (comment: string) => void;
+  openWorkflowAction: (action: WorkflowMutationAction) => void;
+  setWorkflowDialogComment: (comment: string) => void;
+  confirmWorkflowDialog: () => Promise<void>;
+  getSnapshot: () => SimulatorTestSnapshot;
+};
+
+type SimulatorPersistedIframeMeta = {
+  source: IframeSource;
+  taskId: string | null;
+  formId: string | null;
+  workflowRole?: WorkflowRole | null;
+};
+
+type SimulatorPersistedSession = {
+  version: 1 | 2;
+  currentPmsUser?: SimulatorPmsUser;
+  currentRole?: SimulatorPmsUser;
+  projectId: string;
+  selectedTaskId: string | null;
+  lastOpenedFormId: string | null;
+  iframeMeta: SimulatorPersistedIframeMeta | null;
+};
+
+const PMS_USER_CONTEXT: Record<SimulatorPmsUser, { label: string }> = {
+  SJ: { label: 'SJ' },
+  JH: { label: 'JH' },
+  SH: { label: 'SH' },
+  PZ: { label: 'PZ' },
 };
 
 const STATUS_LABELS: Record<ReviewTask['status'], string> = {
@@ -192,6 +283,7 @@ const NODE_LABELS: Record<string, string> = {
 const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
 const WORKFLOW_MUTATION_ACTIONS: WorkflowMutationAction[] = ['active', 'agree', 'return', 'stop'];
 const PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
+const SIMULATOR_SESSION_STORAGE_KEY = 'pms-review-simulator-session-v1';
 
 const IFRAME_SOURCE_LABELS: Record<IframeSource, string> = {
   new: '新增打开',
@@ -230,17 +322,58 @@ function isWorkflowMutationAction(value: unknown): value is WorkflowMutationActi
   return typeof value === 'string' && WORKFLOW_MUTATION_ACTIONS.includes(value as WorkflowMutationAction);
 }
 
+function readPersistedSimulatorSession(): SimulatorPersistedSession | null {
+  if (typeof sessionStorage === 'undefined') return null;
+
+  try {
+    const raw = sessionStorage.getItem(SIMULATOR_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SimulatorPersistedSession>;
+    if (parsed.version !== 1 && parsed.version !== 2) return null;
+
+    const currentPmsUser = parsed.currentPmsUser || parsed.currentRole;
+    if (!currentPmsUser || !PMS_USER_CONTEXT[currentPmsUser]) {
+      return null;
+    }
+
+    return {
+      version: 2,
+      currentPmsUser,
+      projectId: String(parsed.projectId || '').trim() || resolveDefaultProjectId(),
+      selectedTaskId: String(parsed.selectedTaskId || '').trim() || null,
+      lastOpenedFormId: String(parsed.lastOpenedFormId || '').trim() || null,
+      iframeMeta: parsed.iframeMeta
+        ? {
+          source: parsed.iframeMeta.source || 'iframe-refresh-reopen',
+          taskId: String(parsed.iframeMeta.taskId || '').trim() || null,
+          formId: String(parsed.iframeMeta.formId || '').trim() || null,
+          workflowRole: parsed.iframeMeta.workflowRole || null,
+        }
+        : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const persistedSimulatorSession = readPersistedSimulatorSession();
+
 const state: SimulatorState = {
-  currentRole: 'SJ',
-  projectId: resolveDefaultProjectId(),
+  currentPmsUser: persistedSimulatorSession?.currentPmsUser || 'SJ',
+  projectId: persistedSimulatorSession?.projectId || resolveDefaultProjectId(),
+  availableProjects: [],
+  loadingProjects: false,
+  projectsError: null,
   loadingList: false,
+  deletingList: false,
   listError: null,
   rows: [],
-  selectedTaskId: null,
+  selectedTaskId: persistedSimulatorSession?.selectedTaskId || null,
+  selectedTaskIds: persistedSimulatorSession?.selectedTaskId ? [persistedSimulatorSession.selectedTaskId] : [],
   iframeUrl: null,
   iframeMeta: null,
   embedToken: null,
-  lastOpenedFormId: null,
+  lastOpenedFormId: persistedSimulatorSession?.lastOpenedFormId || null,
   diagnostics: {
     loadingTask: false,
     loadingWorkflow: false,
@@ -272,10 +405,36 @@ const state: SimulatorState = {
   },
 };
 
+function persistSimulatorSession(): void {
+  if (typeof sessionStorage === 'undefined') return;
+
+  const payload: SimulatorPersistedSession = {
+    version: 2,
+    currentPmsUser: state.currentPmsUser,
+    projectId: state.projectId,
+    selectedTaskId: state.selectedTaskId,
+    lastOpenedFormId: state.lastOpenedFormId,
+    iframeMeta: state.iframeMeta
+      ? {
+        source: state.iframeMeta.source,
+        taskId: state.iframeMeta.taskId,
+        formId: state.iframeMeta.formId,
+        workflowRole: state.iframeMeta.workflowRole,
+      }
+      : null,
+  };
+
+  try {
+    sessionStorage.setItem(SIMULATOR_SESSION_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore
+  }
+}
+
 let refs: {
   body: HTMLBodyElement;
   currentUserLabel: HTMLSpanElement;
-  currentRoleLabel: HTMLSpanElement;
+  currentPmsUserLabel: HTMLSpanElement;
   roleButtons: HTMLDivElement;
   reopenLastBtn: HTMLButtonElement;
   lastFormLabel: HTMLSpanElement;
@@ -285,7 +444,8 @@ let refs: {
   viewBtn: HTMLButtonElement;
   reopenBtn: HTMLButtonElement;
   refreshBtn: HTMLButtonElement;
-  projectInput: HTMLInputElement;
+  projectInput: HTMLSelectElement;
+  projectStatus: HTMLSpanElement;
   tableWrap: HTMLDivElement;
   tableSummary: HTMLSpanElement;
   modalEl: HTMLDivElement;
@@ -344,11 +504,84 @@ let refs: {
   workflowDialogConfirmBtn: HTMLButtonElement;
 };
 
+function buildSimulatorTestSnapshot(): SimulatorTestSnapshot {
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  return {
+    currentRole: state.currentPmsUser,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole: workflowRoleState.workflowRole,
+    workflowRoleSource: workflowRoleState.source,
+    workflowNextStep: deriveWorkflowNextStepRaw(),
+    taskCurrentNode: deriveTaskCurrentNodeRaw(),
+    defaultAssignedPmsUser: accessState.assignment.defaultAssignedPmsUser,
+    matchesDefaultAssignee: accessState.assignment.matchesCurrentPmsUser,
+    taskAssignedUserId: accessState.taskAssignment.assignedUserId,
+    taskAssignmentSource: accessState.taskAssignment.source,
+    matchesTaskAssignee: accessState.taskAssignment.matchesCurrentPmsUser,
+    canMutateWorkflow: accessState.access.canMutateWorkflow,
+    accessDecisionSource: accessState.access.decisionSource,
+    accessDecisionReason: accessState.access.reason,
+    projectId: state.projectId,
+    iframeUrl: state.iframeUrl,
+    lastOpenedFormId: state.lastOpenedFormId,
+    selectedTaskId: state.selectedTaskId,
+    rowCount: state.rows.length,
+    diagnosticsError: state.diagnostics.error,
+    sidePanelMode: state.sidePanelMode,
+    workflowDialogOpen: state.workflowDialog.open,
+    workflowDialogAction: state.workflowDialog.action,
+    lastAction: state.workflowAction.lastAction,
+    lastOk: state.workflowAction.lastOk,
+    lastMessage: state.workflowAction.lastMessage,
+    passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
+  };
+}
+
+function exposeSimulatorTestApi(): void {
+  const host = window as Window & {
+    __pmsReviewSimulatorTest?: SimulatorTestApi;
+  };
+
+  host.__pmsReviewSimulatorTest = {
+    openNew: async () => {
+      await openIframe({ source: 'new' });
+    },
+    reopenLast: async () => {
+      await reopenLastForm();
+    },
+    switchRole: async (role: SimulatorPmsUser) => {
+      await handleRoleSwitch(role);
+    },
+    selectTask: (taskId: string) => {
+      setSelectedTask(taskId);
+    },
+    openSelected: async (source: 'task-view' | 'task-reopen' = 'task-view') => {
+      await openBySelectedTask(source);
+    },
+    setDraftComment: (comment: string) => {
+      state.sidePanelDraftComment = comment;
+      renderSidePanelState();
+    },
+    openWorkflowAction: (action: WorkflowMutationAction) => {
+      openWorkflowDialog(action);
+    },
+    setWorkflowDialogComment: (comment: string) => {
+      state.workflowDialog.comment = comment;
+      renderWorkflowDialogState();
+    },
+    confirmWorkflowDialog: async () => {
+      await confirmWorkflowDialog();
+    },
+    getSnapshot: () => buildSimulatorTestSnapshot(),
+  };
+}
+
 function initRefs(): void {
   refs = {
     body: document.body,
     currentUserLabel: getEl<HTMLSpanElement>('current-user-label'),
-    currentRoleLabel: getEl<HTMLSpanElement>('current-role-label'),
+    currentPmsUserLabel: getEl<HTMLSpanElement>('current-role-label'),
     roleButtons: getEl<HTMLDivElement>('role-buttons'),
     reopenLastBtn: getEl<HTMLButtonElement>('reopen-last-btn'),
     lastFormLabel: getEl<HTMLSpanElement>('last-form-label'),
@@ -358,7 +591,8 @@ function initRefs(): void {
     viewBtn: getEl<HTMLButtonElement>('tool-view'),
     reopenBtn: getEl<HTMLButtonElement>('tool-reopen'),
     refreshBtn: getEl<HTMLButtonElement>('tool-refresh'),
-    projectInput: getEl<HTMLInputElement>('project-id-input'),
+    projectInput: getEl<HTMLSelectElement>('project-id-input'),
+    projectStatus: getEl<HTMLSpanElement>('project-id-status'),
     tableWrap: getEl<HTMLDivElement>('table-wrap'),
     tableSummary: getEl<HTMLSpanElement>('table-summary'),
     modalEl: getEl<HTMLDivElement>('iframe-modal'),
@@ -427,13 +661,101 @@ function getEl<T extends HTMLElement>(id: string): T {
 }
 
 function resolveDefaultProjectId(): string {
-  const search = new URLSearchParams(window.location.search);
-  return (
-    search.get('project_id')?.trim() ||
-    search.get('output_project')?.trim() ||
-    search.get('project')?.trim() ||
-    'AvevaMarineSample'
-  );
+  return resolveDefaultSimulatorProjectId(window.location.search);
+}
+
+function getAvailableProjectPaths(): string[] {
+  return state.availableProjects.map((project) => project.path);
+}
+
+function resolveEffectiveProjectId(preferredProjectId?: string | null): string {
+  const normalizedPreferred = preferredProjectId?.trim() || null;
+  const availablePaths = getAvailableProjectPaths();
+  if (normalizedPreferred && availablePaths.includes(normalizedPreferred)) {
+    return normalizedPreferred;
+  }
+  return resolveDefaultSimulatorProjectId(window.location.search, availablePaths);
+}
+
+function renderProjectOptions(): void {
+  const selectedProjectId = resolveEffectiveProjectId(state.projectId);
+  const fallbackOption = selectedProjectId
+    ? [{
+      id: selectedProjectId,
+      path: selectedProjectId,
+      name: selectedProjectId,
+      description: '',
+    }]
+    : [];
+  const options = state.availableProjects.length > 0 ? state.availableProjects : fallbackOption;
+
+  refs.projectInput.innerHTML = options
+    .map((project) => {
+      const selected = project.path === selectedProjectId ? ' selected' : '';
+      const description = project.description ? ` title="${escapeHtml(project.description)}"` : '';
+      return `<option value="${escapeHtml(project.path)}"${selected}${description}>${escapeHtml(project.name || project.path)}</option>`;
+    })
+    .join('');
+
+  refs.projectInput.disabled = state.loadingProjects || options.length === 0;
+  refs.projectInput.value = selectedProjectId;
+  state.projectId = selectedProjectId;
+
+  const selectedProject = options.find((project) => project.path === selectedProjectId) || null;
+  const statusParts: string[] = [];
+  if (state.loadingProjects) {
+    statusParts.push('项目列表加载中…');
+  } else if (state.projectsError) {
+    statusParts.push(`项目列表失败：${state.projectsError}`);
+  } else if (options.length > 0) {
+    statusParts.push(`项目列表 ${options.length} 项`);
+  }
+  if (selectedProject?.description) {
+    statusParts.push(selectedProject.description);
+  }
+  refs.projectStatus.textContent = statusParts.join(' ｜ ') || '未解析项目列表';
+  refs.projectStatus.title = refs.projectStatus.textContent;
+}
+
+function normalizeProjectOption(item: Record<string, unknown>): SimulatorProjectOption | null {
+  const path = String(item.name || '').trim();
+  if (!path) return null;
+  return {
+    id: String(item.id || path).trim() || path,
+    path,
+    name: String(item.name || path).trim() || path,
+    description: String(item.notes || item.env || '').trim(),
+  };
+}
+
+async function loadAvailableProjects(): Promise<void> {
+  state.loadingProjects = true;
+  state.projectsError = null;
+  renderProjectOptions();
+  renderActionStates();
+
+  try {
+    const response = await fetch('/api/projects');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json() as { items?: Record<string, unknown>[] };
+    const items = Array.isArray(data.items) ? data.items : [];
+    state.availableProjects = items
+      .map((item) => normalizeProjectOption(item))
+      .filter((item): item is SimulatorProjectOption => item !== null);
+  } catch (error) {
+    state.availableProjects = [];
+    state.projectsError = error instanceof Error ? error.message : String(error);
+  } finally {
+    state.loadingProjects = false;
+    state.projectId = resolveEffectiveProjectId(state.projectId);
+    persistSimulatorSession();
+    renderProjectOptions();
+    renderActionStates();
+    renderDiagnostics();
+    renderSidePanelState();
+  }
 }
 
 function toYmd(timestamp: number | undefined): string {
@@ -522,12 +844,73 @@ function getSelectedRow(): ReviewListRow | null {
   return state.rows.find((row) => row.taskId === state.selectedTaskId) || null;
 }
 
-function resolveSimulatorActorForCurrentContext(): { userId: string; userName: string } {
-  const task = state.diagnostics.taskDetail || getSelectedRow()?.task || null;
-  return resolveSimulatorActorIdentity({
-    currentRole: state.currentRole,
-    task,
+function getSelectedRows(): ReviewListRow[] {
+  if (!state.selectedTaskIds.length) return [];
+  const selectedIdSet = new Set(state.selectedTaskIds);
+  return state.rows.filter((row) => selectedIdSet.has(row.taskId));
+}
+
+function resolveCurrentWorkflowRoleState(): { workflowRole: WorkflowRole; source: string } {
+  const taskCurrentNode = deriveTaskCurrentNodeRaw();
+  const workflowNextStep = deriveWorkflowNextStepRaw();
+  const workflowCurrentNode = deriveWorkflowCurrentNodeRaw();
+  const launchPlanRole = state.iframeMeta ? state.diagnostics.launchPlan?.tokenClaims?.role || null : null;
+  const iframeRole = state.iframeMeta?.workflowRole || null;
+  return buildSimulatorRuntimeWorkflowRole({
+    currentPmsUser: state.currentPmsUser,
+    workflowNextStep,
+    workflowCurrentNode,
+    taskCurrentNode,
+    launchPlanRole,
+    iframeWorkflowRole: iframeRole,
+    iframeSource: state.iframeMeta?.source || null,
+    hasIframe: Boolean(state.iframeMeta),
   });
+}
+
+function getCurrentWorkflowRole(): WorkflowRole {
+  return resolveCurrentWorkflowRoleState().workflowRole;
+}
+
+function resolveWorkflowAccessState(
+  workflowRoleState = resolveCurrentWorkflowRoleState(),
+): {
+  assignment: ReturnType<typeof resolveSimulatorWorkflowAssignment>;
+  taskAssignment: ReturnType<typeof resolveSimulatorTaskAssignment>;
+  access: ReturnType<typeof resolveSimulatorWorkflowAccess>;
+} {
+  const currentTask = state.diagnostics.taskDetail || getSelectedRow()?.task || null;
+  const assignment = resolveSimulatorWorkflowAssignment({
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole: workflowRoleState.workflowRole,
+  });
+  const taskAssignment = resolveSimulatorTaskAssignment({
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole: workflowRoleState.workflowRole,
+    requesterId: currentTask?.requesterId,
+    checkerId: currentTask?.checkerId,
+    reviewerId: currentTask?.reviewerId,
+    approverId: currentTask?.approverId,
+  });
+  const access = resolveSimulatorWorkflowAccess({
+    iframeSource: state.iframeMeta?.source || null,
+    taskStatus: currentTask?.status || state.diagnostics.workflowSnapshot?.data?.task_status || null,
+    taskAssignedUserId: taskAssignment.assignedUserId,
+    taskAssignmentSource: taskAssignment.source,
+    matchesTaskAssignee: taskAssignment.matchesCurrentPmsUser,
+    defaultAssignedPmsUser: assignment.defaultAssignedPmsUser,
+    matchesDefaultAssignee: assignment.matchesCurrentPmsUser,
+  });
+
+  return {
+    assignment,
+    taskAssignment,
+    access,
+  };
+}
+
+function isTaskSelected(taskId: string): boolean {
+  return state.selectedTaskIds.includes(taskId);
 }
 
 function resolveWorkflowContext(): { taskId: string | null; formId: string | null } {
@@ -577,11 +960,28 @@ function getNodeLabel(raw: unknown): string {
   return text || '--';
 }
 
+function deriveTaskCurrentNodeRaw(): string | null {
+  return normalizeWorkflowNodeId(state.diagnostics.taskDetail?.currentNode)
+    || normalizeWorkflowNodeId(getSelectedRow()?.task.currentNode)
+    || null;
+}
+
+function deriveWorkflowCurrentNodeRaw(): string | null {
+  return normalizeWorkflowNodeId(state.diagnostics.workflowSnapshot?.data?.current_node)
+    || normalizeWorkflowNodeId(state.diagnostics.workflowSnapshot?.data?.currentNode)
+    || null;
+}
+
+function deriveWorkflowNextStepRaw(): string | null {
+  return normalizeWorkflowNodeId(state.diagnostics.workflowSnapshot?.data?.next_step)
+    || normalizeWorkflowNodeId(state.diagnostics.workflowSnapshot?.data?.nextStep)
+    || null;
+}
+
 function deriveWorkflowNodeRaw(): string | null {
   return (
-    normalizeWorkflowNodeId(state.diagnostics.taskDetail?.currentNode) ||
-    normalizeWorkflowNodeId(state.diagnostics.workflowSnapshot?.data?.current_node) ||
-    normalizeWorkflowNodeId(state.diagnostics.workflowSnapshot?.data?.currentNode) ||
+    deriveTaskCurrentNodeRaw() ||
+    deriveWorkflowCurrentNodeRaw() ||
     null
   );
 }
@@ -596,33 +996,19 @@ function getCurrentTaskStatus(): string {
 }
 
 function deriveSidePanelMode(): SidePanelMode {
-  if (PASSIVE_WORKFLOW_MODE) {
-    return 'readonly';
-  }
-
-  if (state.iframeMeta?.source === 'new') {
-    return 'initiate';
-  }
-
   const context = resolveWorkflowContext();
-  if (!context.taskId && state.iframeMeta) {
-    return 'readonly';
-  }
-
-  const currentNode = deriveWorkflowNodeRaw();
-  if (state.currentRole === 'SJ' && currentNode === 'sj') {
-    return 'initiate';
-  }
-
-  if (state.currentRole === 'SJ' && !context.formId) {
-    return 'initiate';
-  }
-
-  if (context.formId) {
-    return 'workflow';
-  }
-
-  return state.iframeMeta ? 'readonly' : 'readonly';
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  return deriveSimulatorSidePanelMode({
+    passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole: workflowRoleState.workflowRole,
+    canMutateWorkflow: accessState.access.canMutateWorkflow,
+    hasIframe: Boolean(state.iframeMeta),
+    iframeSource: state.iframeMeta?.source || null,
+    taskId: context.taskId,
+    formId: context.formId,
+  });
 }
 
 function getReturnTargetOptions(): { value: string; label: string }[] {
@@ -658,6 +1044,36 @@ function getSelectedReturnTargetLabel(): string {
   return normalizedTarget ? `${normalizedTarget} ${NODE_LABELS[normalizedTarget]}` : '--';
 }
 
+function resolveWorkflowMutationNextStep(
+  action: WorkflowMutationAction,
+  currentWorkflowRole: WorkflowRole,
+  targetNode: string | null,
+): {
+  assigneeId: string;
+  name: string;
+  roles: WorkflowRole;
+} | null {
+  const targetRole = resolveSimulatorWorkflowMutationTargetRole({
+    action,
+    currentWorkflowRole,
+    targetNode,
+  });
+  if (!targetRole) {
+    return null;
+  }
+
+  const assignment = resolveSimulatorWorkflowAssignment({
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole: targetRole,
+  });
+  const assigneeId = assignment.defaultAssignedPmsUser;
+  return {
+    assigneeId,
+    name: assigneeId,
+    roles: targetRole,
+  };
+}
+
 function collectComponentRefs(): string[] {
   const detail = state.diagnostics.taskDetail;
   const selected = getSelectedRow();
@@ -687,6 +1103,37 @@ function collectAttachmentLabels(): string[] {
 
 function setSelectedTask(taskId: string | null): void {
   state.selectedTaskId = taskId;
+  state.selectedTaskIds = taskId ? [taskId] : [];
+  persistSimulatorSession();
+  renderTable();
+  renderActionStates();
+  renderDiagnostics();
+  renderSidePanelState();
+}
+
+function toggleTaskSelection(taskId: string, checked: boolean): void {
+  const selectedIdSet = new Set(state.selectedTaskIds);
+  if (checked) {
+    selectedIdSet.add(taskId);
+  } else {
+    selectedIdSet.delete(taskId);
+  }
+
+  state.selectedTaskIds = state.rows
+    .map((row) => row.taskId)
+    .filter((rowTaskId) => selectedIdSet.has(rowTaskId));
+  state.selectedTaskId = state.selectedTaskIds[0] || null;
+  persistSimulatorSession();
+  renderTable();
+  renderActionStates();
+  renderDiagnostics();
+  renderSidePanelState();
+}
+
+function setAllTaskSelection(checked: boolean): void {
+  state.selectedTaskIds = checked ? state.rows.map((row) => row.taskId) : [];
+  state.selectedTaskId = state.selectedTaskIds[0] || null;
+  persistSimulatorSession();
   renderTable();
   renderActionStates();
   renderDiagnostics();
@@ -694,11 +1141,12 @@ function setSelectedTask(taskId: string | null): void {
 }
 
 function renderRoleHeader(): void {
-  refs.currentUserLabel.textContent = `当前用户：${state.currentRole}`;
-  refs.currentRoleLabel.textContent = `当前角色：${ROLE_CONTEXT[state.currentRole].label}`;
+  const workflowRole = getCurrentWorkflowRole();
+  refs.currentUserLabel.textContent = `当前 PMS 用户：${state.currentPmsUser}`;
+  refs.currentPmsUserLabel.textContent = `当前工作流角色：${workflowRole}（${NODE_LABELS[workflowRole]}）`;
   for (const btn of Array.from(refs.roleButtons.querySelectorAll<HTMLButtonElement>('button[data-role]'))) {
-    const role = btn.dataset.role as SimulatorRole | undefined;
-    btn.classList.toggle('active', role === state.currentRole);
+    const role = btn.dataset.role as SimulatorPmsUser | undefined;
+    btn.classList.toggle('active', role === state.currentPmsUser);
     btn.disabled = state.loadingList;
   }
 }
@@ -709,16 +1157,48 @@ function renderLastOpened(): void {
 }
 
 function renderWorkflowActionHint(): void {
-  if (PASSIVE_WORKFLOW_MODE) {
-    refs.workflowActionHint.textContent = '当前为外部流程模式；本页仅镜像流程状态，不提供 workflow/sync 操作。';
-    return;
-  }
-
   const context = resolveWorkflowContext();
   const hasFormId = Boolean(context.formId);
   const action = state.workflowAction.lastAction;
   const actionText = action ? `action=${action}` : '';
   const timeText = toDateTime(state.workflowAction.lastAt);
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const currentWorkflowRole = workflowRoleState.workflowRole;
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const hintAction: WorkflowMutationAction = state.sidePanelMode === 'workflow' ? 'agree' : 'active';
+  const syncDrivenAction = shouldUseSyncOnlyWorkflowAction({
+    passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole,
+    sidePanelMode: state.sidePanelMode,
+    action: action || hintAction,
+  });
+
+  if (PASSIVE_WORKFLOW_MODE) {
+    if (!accessState.access.canMutateWorkflow && state.iframeMeta?.source !== 'new') {
+      refs.workflowActionHint.textContent = accessState.access.reason;
+      return;
+    }
+
+    refs.workflowActionHint.textContent = !hasFormId
+      ? '请先在嵌入页保存提资数据，待 form_id 回填后再回到 PMS 面板执行 workflow/sync。'
+      : state.workflowAction.loading || state.workflowDialog.submitting
+        ? `正在执行 workflow/sync ${action || hintAction}...`
+        : state.workflowAction.lastMessage
+          ? `${actionText ? `${actionText}：` : ''}${state.workflowAction.lastMessage}（${timeText}）`
+          : syncDrivenAction
+            ? state.sidePanelMode === 'initiate'
+              ? '当前为外部流程模式；送审提交直接通过 workflow/sync active 驱动，不会先推进内部任务状态。'
+              : '当前为外部流程模式；同意 / 驳回 / 终止均直接通过 workflow/sync 驱动，不会先推进内部任务状态。'
+            : '当前为外部流程模式；当前上下文仅用于查看与排查。';
+    return;
+  }
+
+  if (!accessState.access.canMutateWorkflow && state.iframeMeta?.source !== 'new') {
+    refs.workflowActionHint.textContent = accessState.access.reason;
+    return;
+  }
+
   const base = !hasFormId
     ? '当前记录缺少 form_id；如为新增态，可先在右侧发起面板填写说明。'
     : state.workflowAction.loading || state.workflowDialog.submitting
@@ -732,22 +1212,59 @@ function renderWorkflowActionHint(): void {
 
 function renderActionStates(): void {
   const selected = getSelectedRow();
+  const selectedRows = getSelectedRows();
   const context = resolveWorkflowContext();
   const hasFormId = Boolean(context.formId);
   const workflowBusy = state.workflowAction.loading || state.workflowDialog.submitting;
+  const listBusy = state.loadingList || state.deletingList || state.loadingProjects;
+  const hasProject = Boolean(state.projectId);
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const currentWorkflowRole = workflowRoleState.workflowRole;
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const syncDrivenInitiate = shouldUseSyncOnlyWorkflowAction({
+    passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole,
+    sidePanelMode: state.sidePanelMode,
+    action: 'active',
+  });
 
-  refs.viewBtn.disabled = !selected;
-  refs.reopenBtn.disabled = !(selected && selected.formId);
+  refs.createBtn.disabled = listBusy || !hasProject;
+  refs.deleteBtn.disabled = listBusy || selectedRows.length === 0;
+  refs.viewBtn.disabled = listBusy || selectedRows.length !== 1 || !selected;
+  refs.reopenBtn.disabled = listBusy || selectedRows.length !== 1 || !(selected && selected.formId);
   refs.modalReopenBtn.disabled = !state.iframeMeta;
-  refs.diagTaskBtn.disabled = !selected;
-  refs.diagWorkflowBtn.disabled = !(selected && selected.formId);
+  refs.diagTaskBtn.disabled = listBusy || selectedRows.length !== 1 || !selected;
+  refs.diagWorkflowBtn.disabled = listBusy || selectedRows.length !== 1 || !(selected && selected.formId);
 
-  refs.sidePanelCommentInput.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'initiate';
-  refs.sidePanelCommentWorkflow.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow';
-  refs.panelActionActiveBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'initiate';
-  refs.panelActionAgreeBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
-  refs.panelActionReturnBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
-  refs.panelActionStopBtn.disabled = PASSIVE_WORKFLOW_MODE || workflowBusy || state.sidePanelMode !== 'workflow' || !hasFormId;
+  refs.sidePanelCommentInput.disabled =
+    workflowBusy
+    || state.sidePanelMode !== 'initiate'
+    || !accessState.access.canMutateWorkflow;
+  refs.sidePanelCommentWorkflow.disabled =
+    workflowBusy
+    || state.sidePanelMode !== 'workflow'
+    || !accessState.access.canMutateWorkflow;
+  refs.panelActionActiveBtn.disabled =
+    workflowBusy
+    || state.sidePanelMode !== 'initiate'
+    || !accessState.access.canMutateWorkflow
+    || (PASSIVE_WORKFLOW_MODE ? (!syncDrivenInitiate || !hasFormId) : false);
+  refs.panelActionAgreeBtn.disabled =
+    workflowBusy
+    || state.sidePanelMode !== 'workflow'
+    || !hasFormId
+    || !accessState.access.canMutateWorkflow;
+  refs.panelActionReturnBtn.disabled =
+    workflowBusy
+    || state.sidePanelMode !== 'workflow'
+    || !hasFormId
+    || !accessState.access.canMutateWorkflow;
+  refs.panelActionStopBtn.disabled =
+    workflowBusy
+    || state.sidePanelMode !== 'workflow'
+    || !hasFormId
+    || !accessState.access.canMutateWorkflow;
 
   renderWorkflowActionHint();
 }
@@ -774,8 +1291,12 @@ function renderTable(): void {
   const rowsHtml = state.rows
     .map((row) => {
       const selectedClass = row.taskId === state.selectedTaskId ? 'selected' : '';
+      const checkedAttr = isTaskSelected(row.taskId) ? ' checked' : '';
       return `
         <tr class="${selectedClass}" data-task-id="${escapeHtml(row.taskId)}">
+          <td class="checkbox-cell">
+            <input type="checkbox" data-select-task-id="${escapeHtml(row.taskId)}"${checkedAttr} />
+          </td>
           <td>${row.index}</td>
           <td>
             <span class="status-badge status-${escapeHtml(row.status)}">${escapeHtml(statusLabel(row.status))}</span>
@@ -797,6 +1318,9 @@ function renderTable(): void {
     <table>
       <thead>
         <tr>
+          <th style="min-width:44px;" class="checkbox-cell">
+            <input type="checkbox" id="select-all-tasks" ${state.rows.length > 0 && state.selectedTaskIds.length === state.rows.length ? 'checked' : ''} />
+          </th>
           <th style="min-width:58px;">序号</th>
           <th style="min-width:84px;">状态</th>
           <th style="min-width:110px;">项目代码</th>
@@ -813,8 +1337,23 @@ function renderTable(): void {
     </table>
   `;
 
+  const selectAll = refs.tableWrap.querySelector<HTMLInputElement>('#select-all-tasks');
+  selectAll?.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+  selectAll?.addEventListener('change', () => {
+    setAllTaskSelection(Boolean(selectAll.checked));
+  });
+
   for (const tr of refs.tableWrap.querySelectorAll<HTMLTableRowElement>('tbody tr[data-task-id]')) {
     const taskId = tr.dataset.taskId || '';
+    const checkbox = tr.querySelector<HTMLInputElement>('input[data-select-task-id]');
+    checkbox?.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+    checkbox?.addEventListener('change', () => {
+      toggleTaskSelection(taskId, Boolean(checkbox.checked));
+    });
     tr.addEventListener('click', () => {
       setSelectedTask(taskId);
     });
@@ -836,7 +1375,7 @@ function renderIframeState(): void {
     return;
   }
 
-  refs.modalTitle.textContent = `${IFRAME_SOURCE_LABELS[state.iframeMeta.source]} ｜ role=${state.iframeMeta.role}`;
+  refs.modalTitle.textContent = `${IFRAME_SOURCE_LABELS[state.iframeMeta.source]} ｜ workflow_role=${state.iframeMeta.workflowRole}`;
   refs.modalSubtitle.textContent =
     `task=${state.iframeMeta.taskId || '--'} ｜ form=${state.iframeMeta.formId || '--'} ｜ ${toDateTime(state.iframeMeta.openedAt)}`;
   refs.modalEl.classList.add('show');
@@ -872,17 +1411,25 @@ function renderListContent(target: HTMLElement, items: string[], fallback: strin
 function renderSidePanelState(): void {
   state.workflowNodeRaw = deriveWorkflowNodeRaw();
   state.sidePanelMode = state.iframeMeta ? deriveSidePanelMode() : 'readonly';
-
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const currentWorkflowRole = workflowRoleState.workflowRole;
+  const currentWorkflowRoleLabel = NODE_LABELS[currentWorkflowRole];
+  const workflowNextStep = deriveWorkflowNextStepRaw();
+  const taskCurrentNode = deriveTaskCurrentNodeRaw();
   const selected = getSelectedRow();
   const detail = state.diagnostics.taskDetail;
+  const currentTask = detail || selected?.task || null;
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const { assignment, taskAssignment, access } = accessState;
   const workflowTitle = state.diagnostics.workflowSnapshot?.data?.title || state.diagnostics.workflowSnapshot?.title;
   const context = resolveWorkflowContext();
-  const currentTask = detail || selected?.task || null;
   const title = workflowTitle || detail?.title || selected?.title || '三维校审单';
   const note = detail?.reviewComment || detail?.description || selected?.note || '--';
   const requester = detail?.requesterName || detail?.requesterId || selected?.requesterName || '--';
   const createdAt = detail?.createdAt || selected?.task.createdAt;
   const nodeLabel = getNodeLabel(state.workflowNodeRaw);
+  const taskNodeLabel = getNodeLabel(taskCurrentNode);
+  const workflowNextStepLabel = getNodeLabel(workflowNextStep);
   const statusText = statusLabel((detail?.status || selected?.status || 'draft') as ReviewTask['status']);
   const components = collectComponentRefs();
   const attachments = collectAttachmentLabels();
@@ -895,31 +1442,37 @@ function renderSidePanelState(): void {
 
   refs.sidePanelTitle.textContent =
     state.sidePanelMode === 'initiate'
-      ? '发起信息面板'
+      ? (PASSIVE_WORKFLOW_MODE ? '送审信息面板' : '发起信息面板')
       : state.sidePanelMode === 'workflow'
         ? '流程处理面板'
         : '只读上下文面板';
   refs.sidePanelBadge.textContent =
     state.sidePanelMode === 'initiate'
-      ? '发起态'
+      ? (PASSIVE_WORKFLOW_MODE ? '送审态' : '发起态')
       : state.sidePanelMode === 'workflow'
         ? '流程态'
         : '只读';
   refs.sidePanelSubtitle.textContent =
     PASSIVE_WORKFLOW_MODE
-      ? '当前页面仅展示任务与流程快照，所有推进动作均由外部流程平台处理。'
+      ? state.sidePanelMode === 'initiate'
+        ? '请先在嵌入页保存提资数据，再回到 PMS 面板执行 workflow/sync active 送审提交。'
+        : state.sidePanelMode === 'workflow'
+          ? '当前为外部流程模式；同意 / 驳回 / 终止均通过 workflow/sync 驱动，右侧面板仅维护草稿意见。'
+          : access.reason
       : state.sidePanelMode === 'initiate'
         ? '右侧面板承载发起说明、构件概览与发起动作，点击按钮后进入确认层。'
         : state.sidePanelMode === 'workflow'
           ? '同意 / 驳回 / 终止均在第二层确认框中提交，右侧面板仅维护草稿意见。'
-          : '当前上下文仅展示任务与流程快照，不允许直接修改后端状态。';
+          : access.canMutateWorkflow
+            ? '当前上下文仅展示任务与流程快照，不允许直接修改后端状态。'
+            : `${access.reason}`;
 
   refs.panelMetaTaskId.textContent = context.taskId || '--';
   refs.panelMetaFormId.textContent = context.formId || state.iframeMeta?.formId || '--';
-  refs.panelMetaNode.textContent = nodeLabel;
+  refs.panelMetaNode.textContent = `外部目标=${workflowNextStepLabel} ｜ 内部任务=${taskNodeLabel} ｜ 当前节点=${nodeLabel}`;
   refs.panelMetaStatus.textContent = statusText;
   refs.panelMetaSource.textContent = state.iframeMeta ? IFRAME_SOURCE_LABELS[state.iframeMeta.source] : '--';
-  refs.panelMetaRole.textContent = `${state.currentRole} / ${ROLE_CONTEXT[state.currentRole].label}`;
+  refs.panelMetaRole.textContent = `${state.currentPmsUser} / ${currentWorkflowRole}（${currentWorkflowRoleLabel}） ｜ role来源=${workflowRoleState.source} ｜ 默认测试用户=${assignment.defaultAssignedPmsUser} ｜ 默认指派命中=${assignment.matchesCurrentPmsUser ? '是' : '否'} ｜ 任务指派=${taskAssignment.assignedUserId || '--'}（${taskAssignment.source}） ｜ 可推进=${access.canMutateWorkflow ? '是' : '否'}（${access.decisionSource}）`;
 
   refs.panelProjectId.textContent = state.projectId || '--';
   refs.panelTitleText.textContent = title;
@@ -945,7 +1498,17 @@ function renderSidePanelState(): void {
   }
 
   refs.sidePanelReadonlyComment.value = [
-    `当前角色：${state.currentRole}（${ROLE_CONTEXT[state.currentRole].label}）`,
+    `当前 PMS 用户：${state.currentPmsUser}`,
+    `当前工作流角色：${currentWorkflowRole}（${currentWorkflowRoleLabel}）`,
+    `role 来源：${workflowRoleState.source}`,
+    `外部流程目标节点：${workflowNextStepLabel}`,
+    `内部任务当前节点：${taskNodeLabel}`,
+    `默认测试用户：${assignment.defaultAssignedPmsUser}`,
+    `默认指派命中：${assignment.matchesCurrentPmsUser ? '是' : '否'}`,
+    `任务指派：${taskAssignment.assignedUserId || '--'}（${taskAssignment.source}）`,
+    `任务指派命中：${taskAssignment.matchesCurrentPmsUser ? '是' : '否'}`,
+    `流程可推进：${access.canMutateWorkflow ? '是' : '否'}（${access.decisionSource}）`,
+    `判定原因：${access.reason}`,
     `当前节点：${nodeLabel}`,
     `任务状态：${statusText}`,
     `最近反馈：${state.workflowAction.lastMessage || state.diagnostics.error || '暂无'}`,
@@ -967,9 +1530,15 @@ function renderSidePanelState(): void {
 
   refs.panelFooterText.textContent =
     PASSIVE_WORKFLOW_MODE
-      ? '当前为外部流程模式；可关闭、刷新重开或切换角色继续排查。'
+      ? state.sidePanelMode === 'initiate'
+        ? '当前为外部流程模式；发起/送审通过 workflow/sync active 驱动，可关闭、刷新重开或切换用户继续排查。'
+        : state.sidePanelMode === 'workflow'
+          ? '当前为外部流程模式；流程推进通过 workflow/sync 驱动，可关闭、刷新重开或切换用户继续排查。'
+          : `${access.reason}`
       : state.sidePanelMode === 'readonly'
-        ? '当前不可变更后端状态；可关闭、刷新重开或切换角色继续排查。'
+        ? access.canMutateWorkflow
+          ? '当前不可变更后端状态；可关闭、刷新重开或切换角色继续排查。'
+          : `${access.reason}`
         : '诊断区仅镜像最近提交 payload 与聚合快照，authoritative 输入位于右侧面板与确认层。';
 
   renderActionStates();
@@ -979,8 +1548,20 @@ function renderSidePanelState(): void {
 function renderWorkflowDialogState(): void {
   const action = state.workflowDialog.action;
   const isReturn = action === 'return';
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const currentWorkflowRole = workflowRoleState.workflowRole;
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const syncDrivenAction = action
+    ? shouldUseSyncOnlyWorkflowAction({
+      passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
+      currentPmsUser: state.currentPmsUser,
+      currentWorkflowRole,
+      sidePanelMode: state.sidePanelMode,
+      action,
+    })
+    : false;
   const actionText: Record<WorkflowMutationAction, string> = {
-    active: '发起',
+    active: PASSIVE_WORKFLOW_MODE ? '送审提交' : '发起',
     agree: '同意',
     return: '驳回',
     stop: '终止',
@@ -994,22 +1575,34 @@ function renderWorkflowDialogState(): void {
   const dialogTitle = action ? `${actionText[action]}确认` : '流程确认';
   refs.workflowDialogTitle.textContent = dialogTitle;
   refs.workflowDialogSubtitle.textContent =
-    action === 'active'
-      ? '确认先推进平台任务，再以当前发起说明执行 workflow/sync active。'
-      : action === 'agree'
-        ? '确认先推进平台任务，再以当前意见执行 workflow/sync agree。'
-        : action === 'return'
-          ? '请选择回退节点并确认驳回原因；会先驳回平台任务，再同步 workflow/sync，目标节点会编码进 comments。'
-          : action === 'stop'
-            ? '终止属于破坏性动作；会先取消平台任务，再同步 workflow/sync stop。'
-            : '请确认本次 workflow/sync 提交内容。';
+    PASSIVE_WORKFLOW_MODE
+      ? action === 'active'
+        ? '确认以当前说明执行 workflow/sync active；本次不会先推进内部任务状态。'
+        : action === 'agree'
+          ? '确认以当前意见执行 workflow/sync agree；外部流程将通过 workflow/sync 推进。'
+          : action === 'return'
+            ? '请选择回退节点并确认驳回原因；将直接通过 workflow/sync return 驱动外部流程。'
+            : action === 'stop'
+              ? '终止属于破坏性动作；将直接通过 workflow/sync stop 驱动外部流程。'
+              : '请确认本次 workflow/sync 提交内容。'
+      : action === 'active'
+        ? '确认先推进平台任务，再以当前发起说明执行 workflow/sync active。'
+        : action === 'agree'
+          ? '确认先推进平台任务，再以当前意见执行 workflow/sync agree。'
+          : action === 'return'
+            ? '请选择回退节点并确认驳回原因；会先驳回平台任务，再同步 workflow/sync，目标节点会编码进 comments。'
+            : action === 'stop'
+              ? '终止属于破坏性动作；会先取消平台任务，再同步 workflow/sync stop。'
+              : '请确认本次 workflow/sync 提交内容。';
 
   const warning =
     action === 'stop'
       ? '终止将中断当前流程，请确认原因已填写完整，并知悉这会影响后续审签。'
       : action === 'return'
         ? '退回不新增后端字段，目标节点会编码进 comments payload。'
-        : '';
+        : PASSIVE_WORKFLOW_MODE && syncDrivenAction
+          ? `当前 ${actionText[action || 'active']} 将直接调用 workflow/sync，不再先推进内部任务状态。`
+          : '';
   refs.workflowDialogWarning.hidden = !warning;
   refs.workflowDialogWarning.textContent = warning;
 
@@ -1043,7 +1636,7 @@ function renderWorkflowDialogState(): void {
     ? buildWorkflowCommentPayload(action, state.workflowDialog.comment, state.workflowDialog.targetNode)
     : '';
   refs.workflowDialogFeedback.textContent =
-    state.workflowDialog.error || '确认后才会执行真实 workflow/sync 请求。';
+    state.workflowDialog.error || (!accessState.access.canMutateWorkflow ? accessState.access.reason : '确认后才会执行真实 workflow/sync 请求。');
   refs.workflowDialogFeedback.classList.remove('ok', 'fail');
   if (state.workflowDialog.error) {
     refs.workflowDialogFeedback.classList.add('fail');
@@ -1054,6 +1647,9 @@ function renderDiagnostics(): void {
   const selected = getSelectedRow();
   const detail = state.diagnostics.taskDetail;
   const workflow = state.diagnostics.workflowSnapshot;
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const workflowNextStep = deriveWorkflowNextStepRaw();
+  const taskCurrentNode = deriveTaskCurrentNodeRaw();
   const taskRefnos = summarizeTaskRefnos(detail || selected?.task || null);
   const workflowModels = summarizeWorkflowModels(workflow);
 
@@ -1062,14 +1658,21 @@ function renderDiagnostics(): void {
 
   const currentNodeRaw = detail?.currentNode || workflow?.data?.current_node || workflow?.data?.currentNode || '--';
   const currentNode = getNodeLabel(currentNodeRaw);
+  const workflowNextStepLabel = getNodeLabel(workflowNextStep);
+  const taskCurrentNodeLabel = getNodeLabel(taskCurrentNode);
   const statusRaw = detail?.status || workflow?.data?.task_status || workflow?.data?.taskStatus || '--';
   const workflowTitle = workflow?.data?.title || workflow?.title || detail?.title || selected?.title || '三维校审单';
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const { assignment, taskAssignment, access } = accessState;
   const launchPlan = state.diagnostics.launchPlan;
   const tokenClaimFormId = launchPlan?.tokenClaims?.formId?.trim() || null;
+  const tokenClaimProjectId = launchPlan?.tokenClaims?.projectId?.trim() || null;
   const modelUrlFormId = launchPlan?.modelUrlFormId || null;
   const queryFormId = launchPlan?.queryFormId || null;
   const queryVsModelDiff = Boolean(queryFormId && modelUrlFormId && queryFormId !== modelUrlFormId);
   const tokenVsModelDiff = Boolean(tokenClaimFormId && modelUrlFormId && tokenClaimFormId !== modelUrlFormId);
+  const availableProjectPaths = getAvailableProjectPaths();
+  const tokenProjectMatched = Boolean(tokenClaimProjectId && availableProjectPaths.includes(tokenClaimProjectId));
 
   const loadingTips = [
     state.diagnostics.loadingTask ? '任务详情查询中' : '',
@@ -1098,12 +1701,38 @@ function renderDiagnostics(): void {
   refs.diagContent.innerHTML = `
     <div class="diag-card">
       <div class="diag-grid">
-        <div class="diag-key">当前 role</div>
-        <div class="diag-value">${escapeHtml(state.currentRole)}（${escapeHtml(ROLE_CONTEXT[state.currentRole].label)}）</div>
+        <div class="diag-key">当前 PMS 用户</div>
+        <div class="diag-value">${escapeHtml(state.currentPmsUser)}</div>
+        <div class="diag-key">当前工作流角色</div>
+        <div class="diag-value">${escapeHtml(workflowRoleState.workflowRole)}（${escapeHtml(NODE_LABELS[workflowRoleState.workflowRole])} ｜ ${escapeHtml(workflowRoleState.source)}）</div>
+        <div class="diag-key">外部流程目标节点</div>
+        <div class="diag-value">${escapeHtml(workflowNextStepLabel)}</div>
+        <div class="diag-key">内部任务当前节点</div>
+        <div class="diag-value">${escapeHtml(taskCurrentNodeLabel)}</div>
+        <div class="diag-key">默认测试用户</div>
+        <div class="diag-value">${escapeHtml(assignment.defaultAssignedPmsUser)}</div>
+        <div class="diag-key">默认指派命中</div>
+        <div class="diag-value">${assignment.matchesCurrentPmsUser ? '是' : '否'}</div>
+        <div class="diag-key">任务真实指派</div>
+        <div class="diag-value">${escapeHtml(taskAssignment.assignedUserId || '--')}（${escapeHtml(taskAssignment.source)}）</div>
+        <div class="diag-key">任务指派命中</div>
+        <div class="diag-value">${taskAssignment.matchesCurrentPmsUser ? '是' : '否'}</div>
+        <div class="diag-key">流程可推进</div>
+        <div class="diag-value">${access.canMutateWorkflow ? '是' : '否'}（${escapeHtml(access.decisionSource)}）</div>
+        <div class="diag-key">判定原因</div>
+        <div class="diag-value">${escapeHtml(access.reason)}</div>
         <div class="diag-key">task_id</div>
         <div class="diag-value">${escapeHtml(detail?.id || selected?.taskId || '--')}</div>
         <div class="diag-key">form_id</div>
         <div class="diag-value">${escapeHtml(detail?.formId || selected?.formId || state.iframeMeta?.formId || '--')}</div>
+        <div class="diag-key">任务发起人</div>
+        <div class="diag-value">${escapeHtml(detail?.requesterId || selected?.task.requesterId || '--')}</div>
+        <div class="diag-key">任务校核人</div>
+        <div class="diag-value">${escapeHtml(detail?.checkerId || selected?.task.checkerId || selected?.task.reviewerId || '--')}</div>
+        <div class="diag-key">任务审核人</div>
+        <div class="diag-value">${escapeHtml(detail?.approverId || selected?.task.approverId || '--')}</div>
+        <div class="diag-key">当前模型项目</div>
+        <div class="diag-value">${escapeHtml(state.projectId || '--')}</div>
         <div class="diag-key">title</div>
         <div class="diag-value">${escapeHtml(workflowTitle)}</div>
         <div class="diag-key">task_status</div>
@@ -1135,6 +1764,8 @@ function renderDiagnostics(): void {
           <div>query form_id：${escapeHtml(queryFormId || '--')}</div>
           <div>ModelUrl form_id：${escapeHtml(modelUrlFormId || '--')}${queryVsModelDiff ? ' <strong>（与 query 不一致）</strong>' : ''}</div>
           <div>token claims form_id：${escapeHtml(tokenClaimFormId || '--')}${tokenVsModelDiff ? ' <strong>（与 ModelUrl 不一致）</strong>' : ''}</div>
+          <div>token claims project_id：${escapeHtml(tokenClaimProjectId || '--')}${tokenClaimProjectId ? tokenProjectMatched ? ' <strong>（命中项目列表）</strong>' : ' <strong>（未命中项目列表）</strong>' : ''}</div>
+          <div>可用项目列表：${escapeHtml(availableProjectPaths.join(', ') || '--')}</div>
           <div>ModelUrl 片段：${escapeHtml(launchPlan.modelUrlSummary)}</div>
           <div>token 摘要：${escapeHtml(launchPlan.tokenSummary)}</div>
           <div>最终 iframe src：${escapeHtml(launchPlan.finalUrlSummary)}</div>
@@ -1188,16 +1819,21 @@ function renderDiagnostics(): void {
 }
 
 async function ensureRoleAuth(): Promise<void> {
-  const actor = resolveSimulatorActorForCurrentContext();
+  const workflowRole = getCurrentWorkflowRole();
+  const authRequest = buildSimulatorAuthLoginRequest({
+    projectId: state.projectId,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole: workflowRole,
+  });
   clearAuthToken();
   const ok = await login(
-    state.projectId,
-    actor.userId,
-    ROLE_CONTEXT[state.currentRole].node,
+    authRequest.projectId,
+    authRequest.userId,
+    authRequest.role,
   );
   if (!ok) {
     throw new Error(
-      `角色 ${state.currentRole}（actor=${actor.userId}）获取鉴权 token 失败，请检查 /api/auth/token 或项目号配置`,
+      `PMS 用户 ${state.currentPmsUser}（workflowRole=${workflowRole}）获取鉴权 token 失败，请检查 /api/auth/token 或项目号配置`,
     );
   }
 }
@@ -1216,16 +1852,22 @@ async function refreshList(): Promise<void> {
     }
     const tasks = Array.isArray(response.tasks) ? response.tasks : [];
     state.rows = tasks.map((task, index) => toListRow(task, index + 1));
-
-    if (!state.rows.some((row) => row.taskId === state.selectedTaskId)) {
+    const availableTaskIds = new Set(state.rows.map((row) => row.taskId));
+    state.selectedTaskIds = state.selectedTaskIds.filter((taskId) => availableTaskIds.has(taskId));
+    if (state.selectedTaskId && !availableTaskIds.has(state.selectedTaskId)) {
       state.selectedTaskId = null;
+    }
+    if (!state.selectedTaskId && state.selectedTaskIds.length > 0) {
+      state.selectedTaskId = state.selectedTaskIds[0];
     }
   } catch (error) {
     state.rows = [];
     state.selectedTaskId = null;
+    state.selectedTaskIds = [];
     state.listError = error instanceof Error ? error.message : String(error);
   } finally {
     state.loadingList = false;
+    persistSimulatorSession();
     renderRoleHeader();
     renderTable();
     renderActionStates();
@@ -1242,6 +1884,59 @@ function resetDiagnosticsState(): void {
   state.diagnostics.launchPlan = null;
   state.diagnostics.error = null;
   state.diagnostics.lastRefreshedAt = null;
+}
+
+async function deleteTasks(taskIds: string[]): Promise<void> {
+  const normalizedTaskIds = Array.from(new Set(taskIds.map((taskId) => taskId.trim()).filter(Boolean)));
+  if (!normalizedTaskIds.length) return;
+
+  const taskIdSet = new Set(normalizedTaskIds);
+  const selectedRows = state.rows.filter((row) => taskIdSet.has(row.taskId));
+  const label = normalizedTaskIds.length === 1
+    ? `确认删除单据「${selectedRows[0]?.title || normalizedTaskIds[0]}」吗？`
+    : `确认删除选中的 ${normalizedTaskIds.length} 条单据吗？`;
+  const details = normalizedTaskIds.length === state.rows.length
+    ? '将清空当前列表全部记录，并同步删除数据库中的真实任务数据。'
+    : '该操作会同步删除数据库中的真实任务数据，删除后不可恢复。';
+
+  if (!window.confirm(`${label}\n${details}`)) {
+    return;
+  }
+
+  state.deletingList = true;
+  state.listError = null;
+  renderActionStates();
+  renderTable();
+
+  try {
+    await ensureRoleAuth();
+    for (const taskId of normalizedTaskIds) {
+      const response = await reviewTaskDelete(taskId);
+      if (!response.success) {
+        throw new Error(response.error_message || `删除任务失败: ${taskId}`);
+      }
+    }
+
+    if (state.iframeMeta?.taskId && taskIdSet.has(state.iframeMeta.taskId)) {
+      closeIframe();
+    }
+
+    if (state.diagnostics.taskDetail?.id && taskIdSet.has(state.diagnostics.taskDetail.id)) {
+      resetDiagnosticsState();
+    }
+
+    state.selectedTaskId = null;
+    state.selectedTaskIds = [];
+    await refreshList();
+  } catch (error) {
+    state.listError = error instanceof Error ? error.message : String(error);
+  } finally {
+    state.deletingList = false;
+    renderActionStates();
+    renderTable();
+    renderDiagnostics();
+    renderSidePanelState();
+  }
 }
 
 async function fetchTaskDetail(taskId: string): Promise<void> {
@@ -1310,11 +2005,11 @@ async function requestWorkflowSync(
   formId: string,
   action: WorkflowSyncAction,
   comments = '',
+  targetNode: string | null = null,
 ): Promise<WorkflowSyncResponse> {
   const endpoint = buildWorkflowSyncEndpoint();
   const fallbackEndpoint = buildWorkflowSyncFallbackEndpoint();
-  const actorNode = ROLE_CONTEXT[state.currentRole].node;
-  const actor = resolveSimulatorActorForCurrentContext();
+  const currentWorkflowRole = getCurrentWorkflowRole();
   const token = await resolveWorkflowSyncToken(formId);
   const authToken = getAuthToken();
   const headers: Record<string, string> = {
@@ -1324,17 +2019,15 @@ async function requestWorkflowSync(
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  const payload = {
-    form_id: formId,
+  const payload = buildSimulatorWorkflowSyncPayload({
+    formId,
     token,
     action,
-    actor: {
-      id: actor.userId,
-      name: actor.userName,
-      roles: actorNode,
-    },
     comments,
-  };
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole,
+    nextStep: action === 'query' ? null : resolveWorkflowMutationNextStep(action, currentWorkflowRole, targetNode),
+  });
 
   try {
     const response = await postWorkflowSync(endpoint, payload, headers);
@@ -1399,6 +2092,29 @@ async function executeWorkflowAction(
   const context = resolveWorkflowContext();
   const taskId = overrides?.taskId?.trim() || context.taskId;
   const formId = overrides?.formId?.trim() || context.formId?.trim();
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const currentWorkflowRole = workflowRoleState.workflowRole;
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const syncDrivenAction = shouldUseSyncOnlyWorkflowAction({
+    passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole,
+    sidePanelMode: state.sidePanelMode,
+    action,
+  });
+  if (!accessState.access.canMutateWorkflow) {
+    state.workflowAction.lastAction = action;
+    state.workflowAction.lastOk = false;
+    state.workflowAction.lastMessage = accessState.access.reason;
+    state.workflowAction.lastAt = Date.now();
+    state.workflowAction.lastSubmittedWorkflowComment = buildWorkflowCommentPayload(action, comment, targetNode);
+    state.workflowAction.lastReturnTargetNode = action === 'return' ? normalizeWorkflowNodeId(targetNode) : null;
+    state.diagnostics.error = accessState.access.reason;
+    renderActionStates();
+    renderDiagnostics();
+    renderSidePanelState();
+    throw new Error(accessState.access.reason);
+  }
   if (!formId) {
     state.workflowAction.lastAction = action;
     state.workflowAction.lastOk = false;
@@ -1425,13 +2141,15 @@ async function executeWorkflowAction(
 
   try {
     await ensureRoleAuth();
-    if (taskId && !overrides?.skipPlatformTaskTransition) {
+    if (taskId && !overrides?.skipPlatformTaskTransition && !syncDrivenAction) {
       await applyPlatformTaskWorkflowTransition(taskId, action, comment, targetNode);
       await refreshList();
     }
-    state.diagnostics.workflowSnapshot = await requestWorkflowSync(formId, action, payloadComment);
+    state.diagnostics.workflowSnapshot = await requestWorkflowSync(formId, action, payloadComment, targetNode);
     state.workflowAction.lastOk = true;
-    state.workflowAction.lastMessage = '接口调用成功';
+    state.workflowAction.lastMessage = syncDrivenAction
+      ? `workflow/sync ${action} 提交成功（外部流程驱动，未推进内部任务状态）`
+      : '接口调用成功';
     state.diagnostics.error = null;
     await refreshDiagnosticsSnapshot({ taskId, formId });
   } catch (error) {
@@ -1493,7 +2211,7 @@ async function requestEmbedUrlData(
 ): Promise<EmbedUrlApiResponse> {
   const base = getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' }).replace(/\/$/, '');
   const token = getAuthToken();
-  const actor = resolveSimulatorActorForCurrentContext();
+  const workflowRole = getCurrentWorkflowRole();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -1501,14 +2219,12 @@ async function requestEmbedUrlData(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const payload: Record<string, unknown> = {
-    project_id: projectId,
-    user_id: actor.userId,
-    role: ROLE_CONTEXT[state.currentRole].node,
-  };
-  if (preferredFormId?.trim()) {
-    payload.form_id = preferredFormId.trim();
-  }
+  const payload = buildSimulatorEmbedUrlPayload({
+    projectId,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole: workflowRole,
+    preferredFormId,
+  });
 
   const resp = await fetch(`${base}/api/review/embed-url`, {
     method: 'POST',
@@ -1539,36 +2255,39 @@ async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsL
 
   const modelUrlPath = relativePathRaw.startsWith('/') ? relativePathRaw : `/${relativePathRaw}`;
   const directQuery = directUrl ? new URLSearchParams(directUrl.search) : new URLSearchParams();
-  const modelUrlSearch = new URLSearchParams();
-  for (const [key, value] of directQuery.entries()) {
-    if (key !== 'user_token' && key !== 'user_id') {
-      modelUrlSearch.set(key, value);
-    }
-  }
 
   const query = data?.query || {};
   const queryFormId = (query.form_id || query.formId || '').trim() || null;
   const preferred = preferredFormId?.trim() || null;
   const directFormId = directQuery.get('form_id')?.trim() || null;
-  const modelUrlFormId = preferred || queryFormId || directFormId || null;
-  if (modelUrlFormId) {
-    modelUrlSearch.set('form_id', modelUrlFormId);
-  }
-  modelUrlSearch.set('project_id', state.projectId);
-  modelUrlSearch.set('output_project', state.projectId);
-  modelUrlSearch.set('user_role', ROLE_CONTEXT[state.currentRole].node);
+  const responseFormId = resolvePmsLaunchFormId({
+    preferredFormId: preferred,
+    queryFormId,
+    directFormId,
+  });
 
   const token = data?.token?.trim() || directQuery.get('user_token')?.trim() || '';
   if (!token) {
     throw new Error('embed-url 返回缺少 token');
   }
 
+  const tokenClaims = await verifyLaunchToken(token, responseFormId);
+  const tokenClaimFormId = tokenClaims?.formId?.trim() || null;
+  const modelUrlFormId = resolvePmsLaunchFormId({
+    preferredFormId: preferred,
+    queryFormId,
+    directFormId,
+    tokenClaimFormId,
+  });
+
+  const modelUrlSearch = buildTokenPrimaryPmsLaunchSearch({
+    directQuery,
+    outputProject: state.projectId,
+  });
+
   const finalUrl = new URL(modelUrlPath, window.location.origin);
   finalUrl.search = modelUrlSearch.toString();
   finalUrl.searchParams.set('user_token', token);
-  finalUrl.searchParams.set('user_id', state.currentRole);
-
-  const tokenClaims = await verifyLaunchToken(token, modelUrlFormId);
 
   return {
     modelUrlPath,
@@ -1611,6 +2330,13 @@ async function verifyLaunchToken(token: string, formId?: string | null): Promise
     if (response.data?.valid) {
       return response.data.claims || null;
     }
+
+    if (/form_id mismatch/i.test(response.data?.error || '')) {
+      const fallbackResponse = await authVerifyToken(token);
+      if (fallbackResponse.data?.valid) {
+        return fallbackResponse.data.claims || null;
+      }
+    }
   } catch (error) {
     console.warn('[pms-review-simulator] token verify failed', error);
   }
@@ -1650,11 +2376,12 @@ async function openIframe(params: {
     state.embedToken = launchPlan.token;
 
     const finalFormId = launchPlan.modelUrlFormId || formId || extractFormIdFromUrl(url);
+    const workflowRole = getCurrentWorkflowRole();
     state.iframeMeta = {
       source: params.source,
       taskId: taskId || null,
       formId: finalFormId,
-      role: state.currentRole,
+      workflowRole,
       openedAt: Date.now(),
     };
     if (finalFormId) {
@@ -1665,6 +2392,7 @@ async function openIframe(params: {
       state.sidePanelDraftComment = '';
     }
 
+    persistSimulatorSession();
     refs.iframeEl.src = url;
     renderLastOpened();
     closeWorkflowDialog();
@@ -1679,6 +2407,26 @@ async function openIframe(params: {
     renderIframeState();
     renderSidePanelState();
   }
+}
+
+async function restorePersistedIframeIfNeeded(): Promise<void> {
+  const persisted = persistedSimulatorSession?.iframeMeta;
+  if (!persisted) return;
+
+  const restoredTaskId = persisted.taskId?.trim() || null;
+  if (restoredTaskId && state.rows.some((row) => row.taskId === restoredTaskId)) {
+    state.selectedTaskId = restoredTaskId;
+  }
+  persistSimulatorSession();
+
+  const restoredFormId = persisted.formId?.trim() || state.lastOpenedFormId || null;
+  if (!restoredFormId) return;
+
+  await openIframe({
+    source: 'iframe-refresh-reopen',
+    taskId: restoredTaskId,
+    formId: restoredFormId,
+  });
 }
 
 function closeWorkflowDialog(): void {
@@ -1697,6 +2445,7 @@ function closeIframe(): void {
   state.iframeMeta = null;
   state.embedToken = null;
   state.sidePanelMode = 'readonly';
+  persistSimulatorSession();
   refs.iframeEl.src = 'about:blank';
   refs.modalEl.classList.remove('show');
   renderIframeState();
@@ -1723,20 +2472,45 @@ async function reopenLastForm(): Promise<void> {
   });
 }
 
-async function handleRoleSwitch(role: SimulatorRole): Promise<void> {
-  if (role === state.currentRole) return;
-  state.currentRole = role;
+async function handleRoleSwitch(role: SimulatorPmsUser): Promise<void> {
+  if (role === state.currentPmsUser) return;
+  state.currentPmsUser = role;
   state.sidePanelDraftComment = '';
   closeIframe();
+  persistSimulatorSession();
   await refreshList();
 }
 
 function openWorkflowDialog(action: WorkflowMutationAction): void {
-  if (PASSIVE_WORKFLOW_MODE) {
+  const workflowRoleState = resolveCurrentWorkflowRoleState();
+  const currentWorkflowRole = workflowRoleState.workflowRole;
+  const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const syncDrivenAction = shouldUseSyncOnlyWorkflowAction({
+    passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
+    currentPmsUser: state.currentPmsUser,
+    currentWorkflowRole,
+    sidePanelMode: state.sidePanelMode,
+    action,
+  });
+
+  if (!accessState.access.canMutateWorkflow) {
     state.workflowAction.lastAction = action;
     state.workflowAction.lastOk = false;
-    state.workflowAction.lastMessage = '当前为外部流程模式，不提供 workflow/sync 操作。';
+    state.workflowAction.lastMessage = accessState.access.reason;
     state.workflowAction.lastAt = Date.now();
+    state.diagnostics.error = accessState.access.reason;
+    renderActionStates();
+    renderDiagnostics();
+    renderSidePanelState();
+    return;
+  }
+
+  if (PASSIVE_WORKFLOW_MODE && !syncDrivenAction) {
+    state.workflowAction.lastAction = action;
+    state.workflowAction.lastOk = false;
+    state.workflowAction.lastMessage = '当前为外部流程模式；当前上下文未形成可执行的 workflow/sync 动作。';
+    state.workflowAction.lastAt = Date.now();
+    state.diagnostics.error = state.workflowAction.lastMessage;
     renderActionStates();
     renderDiagnostics();
     renderSidePanelState();
@@ -1744,6 +2518,18 @@ function openWorkflowDialog(action: WorkflowMutationAction): void {
   }
 
   const context = resolveWorkflowContext();
+  if (PASSIVE_WORKFLOW_MODE && syncDrivenAction && !context.formId) {
+    state.workflowAction.lastAction = action;
+    state.workflowAction.lastOk = false;
+    state.workflowAction.lastMessage = '缺少 form_id，请先在嵌入页保存提资数据后再执行 workflow/sync。';
+    state.workflowAction.lastAt = Date.now();
+    state.diagnostics.error = state.workflowAction.lastMessage;
+    renderActionStates();
+    renderDiagnostics();
+    renderSidePanelState();
+    return;
+  }
+
   if (action !== 'active' && !context.formId) {
     state.workflowAction.lastAction = action;
     state.workflowAction.lastOk = false;
@@ -1854,34 +2640,37 @@ function handleWindowMessage(event: MessageEvent): void {
 }
 
 function bindEvents(): void {
-  refs.projectInput.value = state.projectId;
+  renderProjectOptions();
   window.addEventListener('message', handleWindowMessage);
 
   for (const btn of Array.from(refs.roleButtons.querySelectorAll<HTMLButtonElement>('button[data-role]'))) {
     btn.addEventListener('click', async () => {
-      const role = btn.dataset.role as SimulatorRole | undefined;
+      const role = btn.dataset.role as SimulatorPmsUser | undefined;
       if (!role) return;
       await handleRoleSwitch(role);
     });
   }
 
   refs.projectInput.addEventListener('change', async () => {
-    state.projectId = refs.projectInput.value.trim() || resolveDefaultProjectId();
-    refs.projectInput.value = state.projectId;
-    closeIframe();
-    await refreshList();
-  });
-
-  refs.projectInput.addEventListener('keydown', async (event) => {
-    if (event.key !== 'Enter') return;
-    state.projectId = refs.projectInput.value.trim() || resolveDefaultProjectId();
-    refs.projectInput.value = state.projectId;
+    state.projectId = resolveEffectiveProjectId(refs.projectInput.value);
+    renderProjectOptions();
+    persistSimulatorSession();
     closeIframe();
     await refreshList();
   });
 
   refs.createBtn.addEventListener('click', async () => {
     await openIframe({ source: 'new' });
+  });
+
+  refs.deleteBtn.addEventListener('click', async () => {
+    const selectedTaskIds = [...state.selectedTaskIds];
+    if (!selectedTaskIds.length) {
+      if (!state.rows.length) return;
+      await deleteTasks(state.rows.map((row) => row.taskId));
+      return;
+    }
+    await deleteTasks(selectedTaskIds);
   });
 
   refs.viewBtn.addEventListener('click', async () => {
@@ -2038,8 +2827,14 @@ async function bootstrap(): Promise<void> {
   renderIframeState();
   renderSidePanelState();
   renderWorkflowDialogState();
+  await loadAvailableProjects();
   await refreshList();
-  (window as Window & { __pmsReviewSimulatorReady?: boolean }).__pmsReviewSimulatorReady = true;
+  await restorePersistedIframeIfNeeded();
+  exposeSimulatorTestApi();
+  (window as Window & {
+    __pmsReviewSimulatorReady?: boolean;
+    __pmsReviewSimulatorTest?: SimulatorTestApi;
+  }).__pmsReviewSimulatorReady = true;
 }
 
 void bootstrap();

@@ -7,7 +7,7 @@ import type { ReviewTask } from '@/types/auth';
 
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
-import { restoreEmbedFormSnapshot } from '@/components/review/embedFormSnapshotRestore';
+import { mergeSnapshotAttachmentsIntoTask, restoreEmbedFormSnapshot } from '@/components/review/embedFormSnapshotRestore';
 import {
   applyEmbedLandingState,
   buildPersistedEmbedModeParams,
@@ -1326,6 +1326,17 @@ async function applyInitialLanding() {
           syncTools: () => viewerContext.tools.value?.syncFromStore(),
         });
         restoredModelRefnos = snapshotRestore.modelRefnos;
+        if (restoreResult.restoredTask && snapshotRestore.attachments.length > 0) {
+          const mergedTask = mergeSnapshotAttachmentsIntoTask(restoreResult.restoredTask, snapshotRestore.attachments);
+          restoreResult.restoredTask = mergedTask;
+          if (restoreResult.restoredTaskDraft) {
+            restoreResult.restoredTaskDraft = {
+              ...restoreResult.restoredTaskDraft,
+              attachments: mergedTask.attachments || [],
+            };
+          }
+          await reviewStore.setCurrentTask(mergedTask);
+        }
       }
 
       if (restoredModelRefnos.length > 0) {

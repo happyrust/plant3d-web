@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { restoreEmbedFormSnapshot } from './embedFormSnapshotRestore';
+import { mergeSnapshotAttachmentsIntoTask, restoreEmbedFormSnapshot } from './embedFormSnapshotRestore';
 
-import { UserRole } from '@/types/auth';
+import { UserRole, type ReviewTask } from '@/types/auth';
 
 describe('restoreEmbedFormSnapshot', () => {
   it('按 workflow/sync 快照恢复模型 refno 与批注评论', async () => {
@@ -59,7 +59,14 @@ describe('restoreEmbedFormSnapshot', () => {
             createdAt: '2026-03-30 20:01:00',
           },
         ],
-        attachments: [],
+        attachments: [
+          {
+            id: 'att-1',
+            public_url: '/files/review_attachments/att-1.png',
+            description: '流程截图',
+            file_ext: '.png',
+          },
+        ],
       },
     });
 
@@ -87,6 +94,14 @@ describe('restoreEmbedFormSnapshot', () => {
     });
     expect(result.modelRefnos).toEqual(['24381_147608']);
     expect(result.recordCount).toBe(1);
+    expect(result.attachmentCount).toBe(1);
+    expect(result.attachments).toEqual([
+      expect.objectContaining({
+        id: 'att-1',
+        url: '/files/review_attachments/att-1.png',
+        name: '流程截图',
+      }),
+    ]);
     expect(importTools).toHaveBeenCalledTimes(1);
     expect(syncTools).toHaveBeenCalledTimes(1);
 
@@ -99,5 +114,48 @@ describe('restoreEmbedFormSnapshot', () => {
       authorRole: UserRole.PROOFREADER,
       content: '请复核',
     }));
+  });
+
+  it('merges snapshot attachments into restored task for readonly reopen surfaces', () => {
+    const task: ReviewTask = {
+      id: 'task-1',
+      formId: 'FORM-1',
+      title: '流程单',
+      description: 'desc',
+      modelName: '模型',
+      status: 'approved',
+      priority: 'medium',
+      requesterId: 'SJ',
+      requesterName: 'SJ',
+      checkerId: 'JH',
+      checkerName: 'JH',
+      approverId: 'PZ',
+      approverName: 'PZ',
+      reviewerId: 'JH',
+      reviewerName: 'JH',
+      components: [],
+      attachments: [],
+      createdAt: 1,
+      updatedAt: 1,
+      currentNode: 'pz',
+    };
+
+    const merged = mergeSnapshotAttachmentsIntoTask(task, [
+      {
+        id: 'att-2',
+        name: 'approved-shot.png',
+        url: '/files/review_attachments/att-2.png',
+        uploadedAt: 2,
+      },
+    ]);
+
+    expect(merged).not.toBe(task);
+    expect(merged.attachments).toEqual([
+      expect.objectContaining({
+        id: 'att-2',
+        name: 'approved-shot.png',
+        url: '/files/review_attachments/att-2.png',
+      }),
+    ]);
   });
 });

@@ -6,6 +6,7 @@ import {
   getReviewWebSocketUrl,
   reviewGetEmbedUrl,
   reviewRecordCreate,
+  reviewWorkflowSyncQuery,
   normalizeReviewTask,
   normalizeReviewAttachment,
   normalizeAnnotationComment,
@@ -295,6 +296,50 @@ describe('reviewApi base url defaults', () => {
         }),
       })
     );
+  });
+
+  it('uses attachment description as visible name when workflow/sync only returns description fields', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'success',
+        data: {
+          records: [],
+          annotation_comments: [],
+          attachments: [
+            {
+              id: 'att-desc-1',
+              description: 'AUTO-ATTACHMENT-LABEL',
+              route_url: '/files/review_attachments/att-desc-1.png',
+              public_url: 'http://127.0.0.1:3100/files/review_attachments/att-desc-1.png',
+              file_ext: '.png',
+            },
+          ],
+          current_node: 'pz',
+          task_status: 'approved',
+          form_status: 'approved',
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await reviewWorkflowSyncQuery({
+      formId: 'FORM-ATTACH-1',
+      token: 'token-attachment',
+      actor: {
+        id: 'PZ',
+        name: 'PZ',
+        roles: 'pz',
+      },
+    });
+
+    expect(result.data?.attachments).toEqual([
+      expect.objectContaining({
+        id: 'att-desc-1',
+        name: 'AUTO-ATTACHMENT-LABEL',
+        url: expect.stringContaining('/files/review_attachments/att-desc-1.png'),
+      }),
+    ]);
   });
 });
 

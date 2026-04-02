@@ -4,6 +4,8 @@
 
 验证在 [PowerPMS 登录页](http://pms.powerpms.net:1801/sysin.html) 使用角色账号登录后，**设计交付 → 三维校审单 → 新增** 能打开预期的三维布置 / plant3d-web 页面（新标签或当前页跳转，以实现为准）。
 
+> 2026-04-01 补充口径：若联调对象是本仓库内的 **仿 PMS 调试页**（`/pms-review-simulator.html`），当前默认项目不再沿用 `PROJECT-EMBED-001` 之类伪值，而是以后端 `/api/projects` 返回的真实模型项目为准；本地默认会回退到 `AvevaMarineSample`。
+
 ## 手工测试步骤（SOP）
 
 1. 打开 `http://pms.powerpms.net:1801/sysin.html`。
@@ -13,7 +15,10 @@
 5. 点击 **新增**，记录：
    - 是否新开浏览器标签；
    - 最终 URL 是否指向预期环境（内网 plant3d 域名或 `127.0.0.1:3101` 等）；
-   - URL 查询参数是否包含业务约定项（如 `form_id`、`project_id`、`user_token` 等，以联调文档为准）。
+   - URL 查询参数是否符合当前合同：
+     - 必须带 `user_token`
+     - 建议带 `output_project=<真实模型项目路径>`
+     - 不应再依赖 `project_id / user_id / user_role` 作为嵌入身份事实源。
 6. **换角色**（如 `SH`）重复步骤 1–5，确认权限与打开地址是否符合预期。
 
 ## 自动化（Playwright）
@@ -66,7 +71,8 @@ npm run test:pms:cdp
 入口固定为：[PowerPMS 登录页](http://pms.powerpms.net:1801/sysin.html)（脚本内 `PMS_E2E_BASE` 默认同域，实际打开 `…/sysin.html`）。
 
 1. **部署**：plant3d-web 需已发布，且含自动化钩子（`registerPlant3dAutomationReviewInitScript` 会写入 `localStorage.plant3d_automation_review=1`，页面暴露 `window.__plant3dInitiateReviewE2E.addMockComponent`）。
-2. **外部流程模式**（默认）：三维内按钮为「**创建提资数据**」，脚本通过 `[data-guide="submit-btn"]` 点击；成功文案仍为「提资单创建成功」。
+2. **外部流程模式**（默认）：三维内按钮为「**创建提资数据**」，脚本通过 `[data-guide="submit-btn"]` 点击；成功文案仍为「提资单创建成功」。设计人员若还要继续送审，需回到 **PMS 右侧面板** 再点「送审提交」，该动作触发 `workflow/sync active`。  
+   > 2026-04-02 补充口径：在本仓 **仿 PMS 调试页**（`/pms-review-simulator.html`）里，external/passive 已补齐 `workflow/sync active / agree / return / stop` 全动作链，并已拿到 `approved / cancelled / return->sj` 的真实闭环证据；本节的 CDP 脚本仍以 **真实 PowerPMS 入口** 为主，因此 reviewer 内部按钮验证仍默认走 `manual/internal`。
 3. **一键命令**（密码与嵌入站点片段必填）：
 
 ```bash
@@ -87,7 +93,8 @@ npm run test:pms:cdp:full
 3. 再次进入三维校审单列表，**双击/点击**含包名的行（尽力而为，表格实现因 PMS 版本可能不同）。
 4. 在嵌入的 plant3d 内等待 **校核工作区**（`[data-testid="review-workbench-workflow-zone"]`），点击流程区 **「提交…」** 主按钮（如「提交到审核」），并处理可能出现的确认弹窗。
 
-> 注意：当前前端默认是**被动/外部流程模式**。在该模式下，reviewer 工作区只展示状态，不提供内部“提交/驳回”按钮。  
+> 注意：当前前端默认是**被动/外部流程模式**。对 **真实 PowerPMS → 嵌入 plant3d** 这条 CDP 自动化链，reviewer 工作区仍只展示状态，不提供内部“提交/驳回”按钮；因此 `extended` 若要继续验证 plant3d 内 reviewer 提交链路，仍需显式切到 `manual/internal`。  
+> 但对 **本仓仿 PMS 调试页** 而言，external/passive 已通过右侧 workflow 面板补齐 `active / agree / return / stop`，不再局限于 `SJ` 的 `active`。  
 > 因此 `extended` 自动化若要继续验证 **plant3d 内部 reviewer 提交流程**，必须显式切到 `manual/internal`。  
 > 现在脚本在 `PMS_CDP_EXTENDED_FLOW=1` 且未显式配置时，会自动注入 `PMS_CDP_WORKFLOW_MODE=manual`。
 
@@ -98,6 +105,8 @@ cd plant3d-web
 export PMS_E2E_PASSWORD='********'
 export PMS_EMBEDDED_SITE_SUBSTRING='123.57.182.243'
 export PMS_CDP_WORKFLOW_MODE='manual'
+# 如需额外验证“reviewer 浏览器刷新后仍能恢复工作区”，再显式打开：
+# export PMS_CDP_CHECKER_REFRESH_RESTORE='1'
 # 建议固定包名，便于在 PMS 列表里肉眼核对：
 # export PMS_MOCK_PACKAGE_NAME='联调-提资-001'
 npm run test:pms:cdp:extended
@@ -121,6 +130,7 @@ npm run test:pms:cdp:extended
 | `PMS_PLANT3D_POLL_MS` | 等待发起提资面板出现的超时（毫秒），默认 `180000` |
 | `PMS_CDP_EXTENDED_FLOW` | `1`：在提资成功后执行「PMS 可见包名 → 换 JH → 打开条目 → plant3d 校核提交」；`npm run test:pms:cdp:extended` 已带上 |
 | `PMS_CHECKER_USERNAME` | 校核登录账号，默认 `JH`（与 `PMS_E2E_PASSWORD` 共用密码） |
+| `PMS_CDP_CHECKER_REFRESH_RESTORE` | 可选：设为 `1`/`true` 时，JH 进入 plant3d reviewer 工作区后，会先执行一次浏览器刷新，并等待工作区恢复，再继续提交到审核，用于验证“刷新恢复”链路 |
 | `PMS_CDP_PMS_VERIFY_MS` | 等待 PMS 列表出现包名的超时（毫秒），默认 `90000` |
 | `PMS_INITIATE_CHECKER_SUBSTRING` | 发起提资时校核下拉按 **option 文案** 子串匹配；extended 未设时默认等于 `PMS_CHECKER_USERNAME` |
 | `PMS_CDP_VERIFY_PMS_API` | 默认开启：`1`/`true` 或不设时，提资成功后会回到「三维校审单」并**嗅探 PMS 域名下 XHR/Fetch 的 JSON 响应体**，断言出现 **提资包名** 或 **测试 BRAN**（`PMS_TARGET_BRAN_REFNO` / 斜杠互换形式）。设为 `0`/`false` 可关闭 |
@@ -175,11 +185,36 @@ npm run test:pms:cdp:full
 
 ## 与编校审接口的关系（便于联调对照）
 
-- **新增** 打开的 URL 通常由平台后端调用模型中心 **embed-url** 类能力再重定向/拼接得到；联调时对照《编校审交互接口设计》中嵌入地址与 query 约定。
+- **新增** 打开的 URL 通常由平台后端调用模型中心 **embed-url** 类能力再重定向/拼接得到；当前前端已按 **token-primary** 合同消费最终地址：优先保留 `user_token + output_project`，必要时可带 `form_id`，但不再依赖 URL 中的 `user_id / user_role / project_id` 身份字段。
 - **UCode/UKey** 用于模型中心 **主动请求** 布置平台辅助数据接口，与「新增打开页」不是同一条链路；勿混测。
 - **校审工作流同步** `POST /api/review/workflow/sync`（模型中心实现）：
   - **`action=query`**：PMS **打开/刷新** 嵌入页或单据时拉取当前工作流与意见快照；**不**在模型中心新建 `review_opinion` 记录（即使请求里带了 `comments`）。
-  - **`active` / `agree` / `return` / `stop`**：真实审批推进；可能写入意见并返回 `models` / `opinions` / `attachments`。
+  - **`active` / `agree` / `return` / `stop`**：真实审批推进；当前本地模型中心实现已会更新 `review_tasks / review_forms`，并在返回快照中反映最新 `current_node / task_status / form_status`。其中：
+    - `active`：编制送审，推进到 `next_step`
+    - `agree`：同意并推进；`pz agree` 作为最终批准，进入 `approved`
+    - `return`：退回到指定前置节点，并回写 `returnReason`
+    - `stop`：终止流程，进入 `cancelled`
+- **终态对齐（2026-04-02 已验证）**：
+  - `approved`：`task_status = approved`、`form_status = approved`、`embed-url lineage.status = approved`
+  - `cancelled`：`task_status = cancelled`、`form_status = cancelled`、`embed-url lineage.status = cancelled`
+- **仿 PMS external/passive 当前闭环**：已通过真实界面点击验证
+  - `SJ active -> JH agree -> SH agree -> PZ agree -> approved`
+  - `SJ active -> JH agree -> SH stop -> cancelled`
+  - `SJ active -> JH agree -> SH agree -> PZ return -> sj -> SJ reopen initiate`
+- **基于固定 BRAN `24381_145018` 的数据证据（2026-04-02 已验证）**：
+  - `JH` 阶段可真实添加：
+    - 1 条批注
+    - 1 条距离测量
+    - 1 个截图附件
+  - `records/by-task` 已可回读：
+    - `annotations_total = 1`
+    - `measurements_total = 1`
+  - `workflow/sync?action=query` 已可回读：
+    - `attachments_len = 1`
+  - `approved` reopen 时：
+    - iframe 内已恢复批注与测量
+    - iframe 内“附件材料”tab 已出现 1 条附件
+    - 当前默认显示 attachment `description` / 标签文案，而不是原始上传文件名
 - Token：`SHA256(hex)`，盐与 `form_id`、`actor.id` 规则见《编校审交互接口设计》与 `DbOption.toml` 中 `[model_center].token_secret`。
 
 ### 端到端流程图（PMS ↔ 模型中心 ↔ plant3d-web）
@@ -227,7 +262,7 @@ sequenceDiagram
 
   U->>PMS: 设计交付 → 三维校审单 → 新增
   PMS->>MC: 获取嵌入地址
-  MC-->>PMS: URL + query（form_id、用户等）
+  MC-->>PMS: URL + query（token-primary：user_token、form_id、output_project）
   PMS->>P3D: 打开嵌入页
 
   Note over PMS,MC: 打开单据 / 刷新流程（不写意见）
@@ -235,7 +270,7 @@ sequenceDiagram
   MC-->>PMS: data.models / opinions / attachments
 
   Note over PMS,MC: 审批动作
-  PMS->>MC: workflow/sync action=agree|return|...
+  PMS->>MC: workflow/sync action=active|agree|return|stop
   MC-->>PMS: 更新后快照
 ```
 

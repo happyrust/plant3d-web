@@ -384,23 +384,7 @@ type RawWorkflowSyncResponse = {
 };
 
 function normalizeWorkflowAttachment(raw: Partial<ReviewAttachment> & Record<string, unknown>): ReviewAttachment {
-  return {
-    id: String(raw.id || ''),
-    name: String(raw.name || '未命名附件'),
-    url: String(raw.url || raw.public_url || raw.route_url || ''),
-    size: typeof raw.size === 'number' ? raw.size : undefined,
-    type: typeof raw.type === 'string' ? raw.type : undefined,
-    mimeType: typeof raw.mimeType === 'string'
-      ? raw.mimeType
-      : typeof raw.mime_type === 'string'
-        ? raw.mime_type
-        : undefined,
-    uploadedAt: typeof raw.uploadedAt === 'number'
-      ? raw.uploadedAt
-      : typeof raw.uploaded_at === 'number'
-        ? raw.uploaded_at
-        : Date.now(),
-  };
+  return normalizeReviewAttachment(raw as Record<string, unknown>);
 }
 
 function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSyncResponse {
@@ -1103,8 +1087,8 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
 export function normalizeReviewAttachment(raw: Record<string, unknown>): ReviewAttachment {
   return {
     id: String(raw.id || raw.file_id || ''),
-    name: String(raw.name || raw.file_name || ''),
-    url: String(raw.url || raw.download_url || ''),
+    name: String(raw.name || raw.file_name || raw.description || '未命名附件'),
+    url: String(raw.url || raw.download_url || raw.public_url || raw.route_url || ''),
     size: typeof raw.size === 'number'
       ? raw.size
       : (typeof raw.file_size === 'number' ? raw.file_size : undefined),

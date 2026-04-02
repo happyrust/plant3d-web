@@ -58,7 +58,10 @@ vi.mock('@/composables/useToolStore', () => ({
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
-  useViewerContext: () => ({ viewerRef: { value: null } }),
+  useViewerContext: () => ({
+    viewerRef: { value: null },
+    tools: { value: null },
+  }),
   waitForViewerReady: vi.fn(async () => false),
 }));
 
@@ -73,6 +76,8 @@ const toolStoreMock = vi.hoisted(() => ({
   rectAnnotations: { value: [] },
   obbAnnotations: { value: [] },
   measurements: { value: [] },
+  addAnnotation: vi.fn(),
+  addMeasurement: vi.fn(),
   clearAll: vi.fn(),
   setToolMode: vi.fn(),
 }));
@@ -196,6 +201,8 @@ describe('ReviewPanel', () => {
     loadReviewTasksMock.mockClear();
     setCurrentTaskMock.mockClear();
     clearCurrentTaskMock.mockClear();
+    toolStoreMock.addAnnotation.mockClear();
+    toolStoreMock.addMeasurement.mockClear();
     toolStoreMock.setToolMode.mockClear();
     dockApiMock.ensurePanelAndActivate.mockClear();
   });
@@ -409,6 +416,39 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
+  it('exposes automation hook to create mock measurements for reviewer e2e', async () => {
+    window.history.replaceState({}, '', '/?automation_review=1');
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const hook = (window as Window & {
+      __plant3dReviewerE2E?: {
+        addMockMeasurement?: (kind?: 'distance' | 'angle') => string;
+      };
+    }).__plant3dReviewerE2E;
+
+    expect(typeof hook?.addMockMeasurement).toBe('function');
+    const measurementId = hook?.addMockMeasurement?.();
+    expect(measurementId).toBeTruthy();
+    expect(toolStoreMock.addMeasurement).toHaveBeenCalledWith(expect.objectContaining({
+      id: measurementId,
+      kind: 'distance',
+      origin: expect.objectContaining({
+        entityId: expect.stringContaining('24381_145018'),
+        worldPos: [0, 0, 0],
+      }),
+      target: expect.objectContaining({
+        entityId: expect.stringContaining('24381_145018'),
+        worldPos: [1, 0, 0],
+      }),
+      visible: true,
+      createdAt: expect.any(Number),
+    }));
+
+    mounted.unmount();
+  });
+
   it('shows explicit missing-task embed empty state for reviewer landing', async () => {
     currentTask.value = null;
     sessionStorage.setItem('embed_landing_state', JSON.stringify({
@@ -416,7 +456,7 @@ describe('ReviewPanel', () => {
       formId: 'FORM-EMBED-EMPTY',
       restoreStatus: 'missing',
       primaryPanelId: 'review',
-      visiblePanelIds: ['review', 'reviewerTasks'],
+      visiblePanelIds: ['review'],
     }));
 
     const mounted = await mountReviewPanel();
@@ -435,7 +475,7 @@ describe('ReviewPanel', () => {
       formId: null,
       restoreStatus: 'no_form',
       primaryPanelId: 'review',
-      visiblePanelIds: ['review', 'reviewerTasks'],
+      visiblePanelIds: ['review'],
     }));
 
     const mounted = await mountReviewPanel();
@@ -453,7 +493,7 @@ describe('ReviewPanel', () => {
       formId: 'FORM-LATE-REVIEW',
       restoreStatus: 'missing',
       primaryPanelId: 'review',
-      visiblePanelIds: ['review', 'reviewerTasks'],
+      visiblePanelIds: ['review'],
     }));
 
     const mounted = await mountReviewPanel();
@@ -466,7 +506,7 @@ describe('ReviewPanel', () => {
       formId: null,
       restoreStatus: 'no_form',
       primaryPanelId: 'review',
-      visiblePanelIds: ['review', 'reviewerTasks'],
+      visiblePanelIds: ['review'],
     }));
     window.dispatchEvent(new CustomEvent('plant3d:embed-landing-state-updated'));
     await settlePanel();
