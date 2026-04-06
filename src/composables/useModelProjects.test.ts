@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
-import { useModelProjects } from './useModelProjects';
-
 const flushPromises = async () => {
   await Promise.resolve();
   await nextTick();
+};
+
+const createModelProjects = async () => {
+  const mod = await import('./useModelProjects');
+  return mod.useModelProjects();
 };
 
 const buildProjectsResponse = (items: Record<string, unknown>[]): Response => ({
@@ -21,15 +24,19 @@ const buildProjectsResponse = (items: Record<string, unknown>[]): Response => ({
 
 describe('useModelProjects', () => {
   const fetchMock = vi.fn<typeof fetch>();
+  const baseUrl = `${window.location.origin}/`;
 
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
+    window.history.replaceState({}, '', baseUrl);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.history.replaceState({}, '', baseUrl);
   });
 
   it('switchProjectById switches to existing project', async () => {
@@ -38,7 +45,7 @@ describe('useModelProjects', () => {
       { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
     ]));
 
-    const { switchProjectById, currentProject } = useModelProjects();
+    const { switchProjectById, currentProject } = await createModelProjects();
     await flushPromises();
 
     const result = switchProjectById('AvevaMarineSample');
@@ -49,7 +56,7 @@ describe('useModelProjects', () => {
   it('switchProjectById returns false for non-existent project', async () => {
     fetchMock.mockResolvedValue(buildProjectsResponse([]));
 
-    const { switchProjectById } = useModelProjects();
+    const { switchProjectById } = await createModelProjects();
     await flushPromises();
 
     const result = switchProjectById('non-existent-project');
@@ -61,7 +68,7 @@ describe('useModelProjects', () => {
       { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
     ]));
 
-    const { switchProjectById, currentProject } = useModelProjects();
+    const { switchProjectById, currentProject } = await createModelProjects();
     await flushPromises();
 
     switchProjectById('AvevaMarineSample');
@@ -85,7 +92,7 @@ describe('useModelProjects', () => {
       { id: 'AvevaMarineSample', name: 'AvevaMarineSample', notes: 'Marine' },
     ]));
 
-    const { switchProjectById } = useModelProjects();
+    const { switchProjectById } = await createModelProjects();
     await flushPromises();
 
     const switchedToOther = switchProjectById('project-1');
@@ -107,13 +114,14 @@ describe('useModelProjects', () => {
       { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS' },
     ]));
 
-    const { switchProjectById, currentProject } = useModelProjects();
+    const { switchProjectById, currentProject } = await createModelProjects();
     await flushPromises();
 
-    expect(currentProject.value?.id).toBe('ams-model');
+    expect(currentProject.value).toBeNull();
 
     const result = switchProjectById('AvevaMarineSample');
-    expect(result).toBe(false);
+    expect(result).toBe(true);
+    expect(currentProject.value?.id).toBe('ams-model');
     expect(currentProject.value?.path).toBe('AvevaMarineSample');
   });
 
@@ -123,14 +131,15 @@ describe('useModelProjects', () => {
       { id: 'other-project', name: 'OtherPath', notes: 'Other project' },
     ]));
 
-    const { switchProjectById, currentProject } = useModelProjects();
+    const { switchProjectById, currentProject } = await createModelProjects();
     await flushPromises();
 
-    expect(currentProject.value?.id).toBe('ams-model');
+    expect(currentProject.value).toBeNull();
 
-    // Test matching by path (when project_id in URL is actually a path value)
+    // Test matching by path（显式切换时仍支持 path）
     let result = switchProjectById('AvevaMarineSample');
-    expect(result).toBe(false);
+    expect(result).toBe(true);
+    expect(currentProject.value?.id).toBe('ams-model');
     expect(currentProject.value?.path).toBe('AvevaMarineSample');
 
     // Test matching by id
@@ -143,7 +152,7 @@ describe('useModelProjects', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchMock.mockRejectedValueOnce(new Error('network down'));
 
-    const { currentProject, projects, isLoading } = useModelProjects();
+    const { currentProject, projects, isLoading } = await createModelProjects();
     await flushPromises();
 
     expect(isLoading.value).toBe(false);
@@ -152,5 +161,39 @@ describe('useModelProjects', () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
-});
 
+  it('does not use project_id as output project path when loading projects', async () => {
+    window.history.replaceState({}, '', '/?project_id=AvevaMarineSample');
+    fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS' },
+    ]));
+
+    const { currentProject } = await createModelProjects();
+    await flushPromises();
+
+    expect(currentProject.value).toBeNull();
+  });
+
+  it('only auto-creates a project from output_project, not from project_id', async () => {
+    window.history.replaceState({}, '', '/?project_id=legacy-project-path');
+    fetchMock.mockResolvedValue(buildProjectsResponse([]));
+
+    const { currentProject, projects } = await createModelProjects();
+    await flushPromises();
+
+    expect(projects.value).toEqual([]);
+    expect(currentProject.value).toBeNull();
+  });
+
+  it('still auto-creates a project from output_project when backend list is empty', async () => {
+    window.history.replaceState({}, '', '/?output_project=OutputOnlyPath');
+    fetchMock.mockResolvedValue(buildProjectsResponse([]));
+
+    const { currentProject, projects } = await createModelProjects();
+    await flushPromises();
+
+    expect(projects.value).toHaveLength(1);
+    expect(currentProject.value?.path).toBe('OutputOnlyPath');
+    expect(currentProject.value?.id).toBe('OutputOnlyPath');
+  });
+});

@@ -13,6 +13,13 @@ REMOTE_USER="root"
 REMOTE_PASS="Happytest123_"
 DEPLOY_PATH="/var/www/plant3d-web"
 SERVICE_NAME="nginx"
+SSH_OPTS=(
+    -o PreferredAuthentications=password
+    -o PubkeyAuthentication=no
+    -o KbdInteractiveAuthentication=no
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+)
 
 # 项目路径 (脚本所在目录的上级)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,6 +42,19 @@ cd "$PROJECT_DIR"
 npm install
 npm run build-only
 
+CURRENT_COMMIT="$(git rev-parse HEAD)"
+CURRENT_VERSION="$(node -p "require('./package.json').version")"
+CURRENT_BUILD_DATE="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+cat > "$PROJECT_DIR/dist/version.json" <<EOF
+{
+  "version": "${CURRENT_VERSION}",
+  "commit": "${CURRENT_COMMIT}",
+  "buildDate": "${CURRENT_BUILD_DATE}"
+}
+EOF
+echo -e "${GREEN}✅ Version metadata generated.${NC}"
+
 if [ ! -d "$PROJECT_DIR/dist" ]; then
     echo -e "${RED}❌ Build failed: dist directory does not exist${NC}"
     exit 1
@@ -43,20 +63,20 @@ echo -e "${GREEN}✅ Build successful.${NC}"
 
 # 2. Preparation on Remote
 echo -e "${YELLOW}Step 2: Preparing remote server...${NC}"
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "mkdir -p ${DEPLOY_PATH}"
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} "mkdir -p ${DEPLOY_PATH}"
 echo -e "${GREEN}✅ Remote directory prepared.${NC}"
 
 # 3. Transfer Files using rsync
 echo -e "${YELLOW}Step 3: Syncing files to server using rsync...${NC}"
 cd "$PROJECT_DIR"
 sshpass -p "${REMOTE_PASS}" rsync -avz --delete \
-    -e "ssh -o StrictHostKeyChecking=no" \
+    -e "ssh ${SSH_OPTS[*]}" \
     dist/ ${REMOTE_USER}@${REMOTE_HOST}:${DEPLOY_PATH}/
 echo -e "${GREEN}✅ Rsync completed.${NC}"
 
 # 4. Set permissions on Remote
 echo -e "${YELLOW}Step 4: Setting permissions on remote server...${NC}"
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
     # 设置权限
     chown -R www-data:www-data /var/www/plant3d-web/ 2>/dev/null || chown -R nginx:nginx /var/www/plant3d-web/ 2>/dev/null || true
     chmod -R 755 /var/www/plant3d-web/
@@ -65,9 +85,11 @@ echo -e "${GREEN}✅ Permissions set.${NC}"
 
 # 5. Upload and Configure Nginx
 echo -e "${YELLOW}Step 5: Configuring Nginx...${NC}"
-sshpass -p "${REMOTE_PASS}" scp -o StrictHostKeyChecking=no "$SCRIPT_DIR/nginx_remote.conf" ${REMOTE_USER}@${REMOTE_HOST}:/tmp/plant3d-web.conf
+sshpass -p "${REMOTE_PASS}" rsync -avz \
+    -e "ssh ${SSH_OPTS[*]}" \
+    "$SCRIPT_DIR/nginx_remote.conf" ${REMOTE_USER}@${REMOTE_HOST}:/tmp/plant3d-web.conf
 
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} << 'REMOTE_SCRIPT'
     # 判断 Nginx 配置目录结构
     if [ -d "/etc/nginx/sites-available" ]; then
         # Ubuntu/Debian 风格
@@ -77,6 +99,11 @@ sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REM
         # CentOS/RHEL 风格
         mv /tmp/plant3d-web.conf /etc/nginx/conf.d/plant3d-web.conf
     fi
+
+    # 清理历史残留的旧配置，避免重复 server_name 导致冲突或误命中
+    rm -f /etc/nginx/sites-enabled/plant3d-web.bak_* \
+          /etc/nginx/sites-available/plant3d-web.bak_* \
+          /etc/nginx/conf.d/plant3d-web.conf.bak_* 2>/dev/null || true
     
     # 测试配置
     nginx -t
@@ -91,7 +118,7 @@ echo -e "${YELLOW}Step 6: Verifying deployment...${NC}"
 sleep 2
 
 # 检查 Nginx 服务状态
-sshpass -p "${REMOTE_PASS}" ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "systemctl is-active nginx" && \
+sshpass -p "${REMOTE_PASS}" ssh "${SSH_OPTS[@]}" ${REMOTE_USER}@${REMOTE_HOST} "systemctl is-active nginx" && \
     echo -e "${GREEN}✅ Nginx is active.${NC}" || \
     echo -e "${RED}❌ Nginx is not active.${NC}"
 

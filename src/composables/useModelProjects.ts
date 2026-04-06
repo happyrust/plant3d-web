@@ -104,16 +104,14 @@ export function useModelProjects() {
       const requested = readRequestedProject();
       const matchedProject = projects.value.find((project) =>
         project.id === requested.projectId ||
-        project.path === requested.projectId ||
-        project.id === requested.projectPath ||
         project.path === requested.projectPath
       );
       if (matchedProject) {
         applyProject(matchedProject, false);
-      } else if (requested.projectPath || requested.projectId) {
+      } else if (requested.projectPath) {
         // 后端项目列表中没有匹配项（可能未注册），
         // 但 URL 明确指定了项目，直接根据 URL 参数构造项目
-        const projectPath = requested.projectPath || requested.projectId!;
+        const projectPath = requested.projectPath;
         const urlParams = new URLSearchParams(window.location.search);
         const showDbnum = urlParams.get('show_dbnum');
         const autoProject: ModelProject = {

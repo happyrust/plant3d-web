@@ -28,6 +28,40 @@ function getReviewWebBaseUrl(): string {
   return getBaseUrl();
 }
 
+const LEGACY_EMBED_IDENTITY_QUERY_KEYS = [
+  'form_id',
+  'output_project',
+  'project_id',
+  'user_id',
+  'user_role',
+  'workflow_mode',
+  'landing_role',
+];
+
+function buildTokenPrimaryEmbedUrl(options: {
+  rawUrl?: string | null;
+  relativePath?: string | null;
+  token?: string | null;
+}): string {
+  const baseUrl = getReviewWebBaseUrl().replace(/\/$/, '');
+  const fallbackPath = options.relativePath?.trim()
+    ? (options.relativePath.startsWith('/') ? options.relativePath : `/${options.relativePath}`)
+    : '/review/3d-view';
+  const url = new URL(options.rawUrl?.trim() || fallbackPath, baseUrl);
+  const params = new URLSearchParams(url.search);
+
+  for (const key of LEGACY_EMBED_IDENTITY_QUERY_KEYS) {
+    params.delete(key);
+  }
+
+  if (options.token?.trim()) {
+    params.set('user_token', options.token.trim());
+  }
+
+  url.search = params.toString();
+  return url.toString();
+}
+
 function getReviewWebSocketBaseUrl(): string | null {
   const env = import.meta.env as unknown as {
     VITE_REVIEW_WS_BASE_URL?: string;
@@ -225,6 +259,206 @@ export type WorkflowHistoryResponse = {
   }[];
   error_message?: string;
 };
+
+export type WorkflowSyncActor = {
+  id: string;
+  name: string;
+  roles: string;
+};
+
+export type WorkflowAnnotationCommentData = {
+  id: string;
+  annotationId: string;
+  annotationType: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  replyToId?: string;
+  createdAt: string;
+};
+
+export type WorkflowRecordData = {
+  id: string;
+  taskId: string;
+  type: string;
+  annotations: unknown[];
+  cloudAnnotations: unknown[];
+  rectAnnotations: unknown[];
+  obbAnnotations: unknown[];
+  measurements: unknown[];
+  note: string;
+  confirmedAt: string;
+};
+
+export type WorkflowSyncData = {
+  title?: string;
+  models: (string | Record<string, unknown>)[];
+  taskId?: string;
+  records: WorkflowRecordData[];
+  annotationComments: WorkflowAnnotationCommentData[];
+  attachments: ReviewAttachment[];
+  formExists?: boolean;
+  formStatus?: string;
+  taskCreated?: boolean;
+  currentNode?: string;
+  taskStatus?: string;
+};
+
+export type WorkflowSyncResponse = {
+  code: number;
+  message: string;
+  title?: string;
+  data?: WorkflowSyncData;
+};
+
+export type WorkflowSyncQueryRequest = {
+  formId: string;
+  token: string;
+  actor: WorkflowSyncActor;
+};
+
+type RawWorkflowAnnotationCommentData = {
+  id?: string;
+  annotation_id?: string;
+  annotationId?: string;
+  annotation_type?: string;
+  annotationType?: string;
+  author_id?: string;
+  authorId?: string;
+  author_name?: string;
+  authorName?: string;
+  author_role?: string;
+  authorRole?: string;
+  content?: string;
+  reply_to_id?: string;
+  replyToId?: string;
+  created_at?: string;
+  createdAt?: string;
+};
+
+type RawWorkflowRecordData = {
+  id?: string;
+  task_id?: string;
+  taskId?: string;
+  type?: string;
+  annotations?: unknown[];
+  cloud_annotations?: unknown[];
+  cloudAnnotations?: unknown[];
+  rect_annotations?: unknown[];
+  rectAnnotations?: unknown[];
+  obb_annotations?: unknown[];
+  obbAnnotations?: unknown[];
+  measurements?: unknown[];
+  note?: string;
+  confirmed_at?: string;
+  confirmedAt?: string;
+};
+
+type RawWorkflowSyncData = {
+  title?: string;
+  models?: (string | Record<string, unknown>)[];
+  task_id?: string;
+  taskId?: string;
+  records?: RawWorkflowRecordData[];
+  annotation_comments?: RawWorkflowAnnotationCommentData[];
+  annotationComments?: RawWorkflowAnnotationCommentData[];
+  attachments?: (Partial<ReviewAttachment> & Record<string, unknown>)[];
+  form_exists?: boolean;
+  formExists?: boolean;
+  form_status?: string;
+  formStatus?: string;
+  task_created?: boolean;
+  taskCreated?: boolean;
+  current_node?: string;
+  currentNode?: string;
+  task_status?: string;
+  taskStatus?: string;
+};
+
+type RawWorkflowSyncResponse = {
+  code?: number;
+  message?: string;
+  title?: string;
+  data?: RawWorkflowSyncData;
+};
+
+function normalizeWorkflowAttachment(raw: Partial<ReviewAttachment> & Record<string, unknown>): ReviewAttachment {
+  return normalizeReviewAttachment(raw as Record<string, unknown>);
+}
+
+function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSyncResponse {
+  const data = raw.data;
+  return {
+    code: typeof raw.code === 'number' ? raw.code : 0,
+    message: raw.message || '',
+    title: raw.title,
+    data: data ? {
+      title: data.title,
+      models: Array.isArray(data.models) ? data.models : [],
+      taskId: data.taskId || data.task_id,
+      records: Array.isArray(data.records)
+        ? data.records.map((record) => ({
+          id: String(record.id || ''),
+          taskId: String(record.taskId || record.task_id || ''),
+          type: String(record.type || 'batch'),
+          annotations: Array.isArray(record.annotations) ? record.annotations : [],
+          cloudAnnotations: Array.isArray(record.cloudAnnotations)
+            ? record.cloudAnnotations
+            : Array.isArray(record.cloud_annotations)
+              ? record.cloud_annotations
+              : [],
+          rectAnnotations: Array.isArray(record.rectAnnotations)
+            ? record.rectAnnotations
+            : Array.isArray(record.rect_annotations)
+              ? record.rect_annotations
+              : [],
+          obbAnnotations: Array.isArray(record.obbAnnotations)
+            ? record.obbAnnotations
+            : Array.isArray(record.obb_annotations)
+              ? record.obb_annotations
+              : [],
+          measurements: Array.isArray(record.measurements) ? record.measurements : [],
+          note: String(record.note || ''),
+          confirmedAt: String(record.confirmedAt || record.confirmed_at || ''),
+        }))
+        : [],
+      annotationComments: Array.isArray(data.annotationComments)
+        ? data.annotationComments.map((comment) => ({
+          id: String(comment.id || ''),
+          annotationId: String(comment.annotationId || comment.annotation_id || ''),
+          annotationType: String(comment.annotationType || comment.annotation_type || ''),
+          authorId: String(comment.authorId || comment.author_id || ''),
+          authorName: String(comment.authorName || comment.author_name || ''),
+          authorRole: String(comment.authorRole || comment.author_role || ''),
+          content: String(comment.content || ''),
+          replyToId: comment.replyToId || comment.reply_to_id,
+          createdAt: String(comment.createdAt || comment.created_at || ''),
+        }))
+        : Array.isArray(data.annotation_comments)
+          ? data.annotation_comments.map((comment) => ({
+            id: String(comment.id || ''),
+            annotationId: String(comment.annotationId || comment.annotation_id || ''),
+            annotationType: String(comment.annotationType || comment.annotation_type || ''),
+            authorId: String(comment.authorId || comment.author_id || ''),
+            authorName: String(comment.authorName || comment.author_name || ''),
+            authorRole: String(comment.authorRole || comment.author_role || ''),
+            content: String(comment.content || ''),
+            replyToId: comment.replyToId || comment.reply_to_id,
+            createdAt: String(comment.createdAt || comment.created_at || ''),
+          }))
+          : [],
+      attachments: Array.isArray(data.attachments)
+        ? data.attachments.map((attachment) => normalizeWorkflowAttachment(attachment))
+        : [],
+      formExists: data.formExists ?? data.form_exists,
+      formStatus: data.formStatus || data.form_status,
+      taskCreated: data.taskCreated ?? data.task_created,
+      currentNode: data.currentNode || data.current_node,
+      taskStatus: data.taskStatus || data.task_status,
+    } : undefined,
+  };
+}
 
 // 用户列表响应
 export type UserListResponse = {
@@ -425,14 +659,30 @@ export async function reviewTaskGetWorkflow(
 
 // ============ 外部校审集成 API ============
 
-export async function reviewGetEmbedUrl(projectId: string, userId: string): Promise<{ url: string }> {
+export async function reviewGetEmbedUrl(
+  projectId: string,
+  userId: string,
+  userRole?: string | null,
+): Promise<{ url: string }> {
+  const payload: Record<string, string> = {
+    project_id: projectId,
+    user_id: userId,
+  };
+  const normalizedRole = userRole?.trim();
+  if (normalizedRole) {
+    payload.role = normalizedRole;
+  }
   const response = await fetchJson<EmbedUrlResponse>('/api/review/embed-url', {
     method: 'POST',
-    body: JSON.stringify({ project_id: projectId, user_id: userId }),
+    body: JSON.stringify(payload),
   });
 
   if (response.url) {
-    return { url: response.url };
+    return {
+      url: buildTokenPrimaryEmbedUrl({
+        rawUrl: response.url,
+      }),
+    };
   }
 
   if (response.code !== 200 && response.code !== 0) {
@@ -449,18 +699,27 @@ export async function reviewGetEmbedUrl(projectId: string, userId: string): Prom
     throw new Error('校审地址缺少路径信息');
   }
 
-  const query = data.query || {};
-  const formId = query.form_id || query.formId || '';
-  const baseUrl = getReviewWebBaseUrl().replace(/\/$/, '');
-  const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  const params = new URLSearchParams();
-  params.set('user_token', data.token);
-  if (formId) params.set('form_id', formId);
-  params.set('user_id', userId);
-  params.set('project_id', projectId);
-  params.set('output_project', projectId);
+  return {
+    url: buildTokenPrimaryEmbedUrl({
+      relativePath,
+      token: data.token,
+    }),
+  };
+}
 
-  return { url: `${baseUrl}${cleanPath}?${params.toString()}` };
+export async function reviewWorkflowSyncQuery(
+  request: WorkflowSyncQueryRequest,
+): Promise<WorkflowSyncResponse> {
+  const raw = await fetchJson<RawWorkflowSyncResponse>('/api/review/workflow/sync', {
+    method: 'POST',
+    body: JSON.stringify({
+      form_id: request.formId,
+      token: request.token,
+      action: 'query',
+      actor: request.actor,
+    }),
+  });
+  return normalizeWorkflowSyncResponse(raw);
 }
 
 export async function reviewPreloadCache(
@@ -828,8 +1087,8 @@ export function normalizeReviewTask(raw: Record<string, unknown>): ReviewTask {
 export function normalizeReviewAttachment(raw: Record<string, unknown>): ReviewAttachment {
   return {
     id: String(raw.id || raw.file_id || ''),
-    name: String(raw.name || raw.file_name || ''),
-    url: String(raw.url || raw.download_url || ''),
+    name: String(raw.name || raw.file_name || raw.description || '未命名附件'),
+    url: String(raw.url || raw.download_url || raw.public_url || raw.route_url || ''),
     size: typeof raw.size === 'number'
       ? raw.size
       : (typeof raw.file_size === 'number' ? raw.file_size : undefined),
@@ -920,6 +1179,7 @@ export type TokenRequest = {
   userId: string;
   formId?: string;
   role?: string;
+  workflowMode?: string;
 };
 
 export type TokenResponse = {
@@ -941,13 +1201,72 @@ export type VerifyResponse = {
       projectId: string;
       userId: string;
       formId: string;
+      userName?: string;
       role?: string;
+      workflowMode?: string;
       exp: number;
       iat: number;
     };
     error?: string;
   };
 };
+
+type RawVerifyClaims = {
+  projectId?: string;
+  project_id?: string;
+  userId?: string;
+  user_id?: string;
+  userName?: string;
+  user_name?: string;
+  formId?: string;
+  form_id?: string;
+  role?: string;
+  workflowMode?: string;
+  workflow_mode?: string;
+  exp?: number;
+  iat?: number;
+};
+
+type RawVerifyResponse = {
+  code?: number;
+  message?: string;
+  data?: {
+    valid?: boolean;
+    claims?: RawVerifyClaims | null;
+    error?: string | null;
+  };
+};
+
+function normalizeVerifyClaims(raw?: RawVerifyClaims | null): VerifyResponse['data']['claims'] | undefined {
+  if (!raw) return undefined;
+  const projectId = raw.projectId || raw.project_id;
+  const userId = raw.userId || raw.user_id;
+  const formId = raw.formId || raw.form_id;
+  if (!projectId || !userId || !formId) return undefined;
+
+  return {
+    projectId,
+    userId,
+    formId,
+    userName: raw.userName || raw.user_name,
+    role: raw.role,
+    workflowMode: raw.workflowMode || raw.workflow_mode,
+    exp: typeof raw.exp === 'number' ? raw.exp : 0,
+    iat: typeof raw.iat === 'number' ? raw.iat : 0,
+  };
+}
+
+function normalizeVerifyResponse(raw: RawVerifyResponse): VerifyResponse {
+  return {
+    code: typeof raw.code === 'number' ? raw.code : 0,
+    message: raw.message || '',
+    data: raw.data ? {
+      valid: raw.data.valid === true,
+      claims: normalizeVerifyClaims(raw.data.claims),
+      error: raw.data.error || undefined,
+    } : undefined,
+  };
+}
 
 /**
  * 获取 JWT Token
@@ -963,6 +1282,7 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
       user_id: request.userId,
       form_id: request.formId,
       role: request.role,
+      workflow_mode: request.workflowMode,
     }),
   });
 
@@ -1008,7 +1328,7 @@ export async function authVerifyToken(token?: string, formId?: string): Promise<
     throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
   }
 
-  return (await resp.json()) as VerifyResponse;
+  return normalizeVerifyResponse((await resp.json()) as RawVerifyResponse);
 }
 
 /**

@@ -43,6 +43,7 @@ import {
   getWorkflowSubmitBridgeAction,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
+import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 import { resolvePassiveWorkflowMode } from './workflowMode';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
@@ -55,10 +56,10 @@ import {
   reviewSyncImport,
 } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
-import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitToast } from '@/ribbon/toastBus';
@@ -229,17 +230,7 @@ function buildConfirmedRecordsSceneKey(taskId: string | null, records: Confirmed
 }
 
 function buildConfirmedRecordsReplayPayload(records: ConfirmedRecordEntry[]): string {
-  return JSON.stringify({
-    version: 5,
-    measurements: records.flatMap((record) => record.measurements ?? []),
-    annotations: records.flatMap((record) => record.annotations ?? []),
-    obbAnnotations: records.flatMap((record) => record.obbAnnotations ?? []),
-    cloudAnnotations: records.flatMap((record) => record.cloudAnnotations ?? []),
-    rectAnnotations: records.flatMap((record) => record.rectAnnotations ?? []),
-    dimensions: [],
-    xeokitDistanceMeasurements: [],
-    xeokitAngleMeasurements: [],
-  });
+  return buildReviewRecordReplayPayload(records);
 }
 
 async function restoreConfirmedRecordsIntoScene(force = false): Promise<void> {
@@ -879,6 +870,30 @@ onMounted(() => {
         } as Parameters<typeof toolStore.addAnnotation>[0]);
         return id;
       },
+      addMockMeasurement(kind: 'distance' | 'angle' = 'distance') {
+        const id = `e2e-measure-${Date.now()}`;
+        if (kind === 'angle') {
+          toolStore.addMeasurement({
+            id,
+            kind: 'angle',
+            origin: { entityId: '24381_145018:origin', worldPos: [0, 0, 0] },
+            corner: { entityId: '24381_145018:corner', worldPos: [1, 0, 0] },
+            target: { entityId: '24381_145018:target', worldPos: [1, 1, 0] },
+            visible: true,
+            createdAt: Date.now(),
+          } as Parameters<typeof toolStore.addMeasurement>[0]);
+          return id;
+        }
+        toolStore.addMeasurement({
+          id,
+          kind: 'distance',
+          origin: { entityId: '24381_145018:origin', worldPos: [0, 0, 0] },
+          target: { entityId: '24381_145018:target', worldPos: [1, 0, 0] },
+          visible: true,
+          createdAt: Date.now(),
+        } as Parameters<typeof toolStore.addMeasurement>[0]);
+        return id;
+      },
       async confirmData(note?: string) {
         confirmNote.value = note || 'E2E 自动化批注确认';
         await confirmCurrentData();
@@ -886,8 +901,14 @@ onMounted(() => {
       getAnnotationCount() {
         return pendingAnnotationCount.value;
       },
+      getMeasurementCount() {
+        return pendingMeasurementCount.value;
+      },
       getConfirmedRecordCount() {
         return reviewStore.confirmedRecordCount.value;
+      },
+      getConfirmedMeasurementCount() {
+        return reviewStore.totalConfirmedMeasurements.value;
       },
     };
   }

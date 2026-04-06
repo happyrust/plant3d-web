@@ -6,15 +6,66 @@
 > 主设计参考：PMS `sysin.html` / 「三维校审单」列表页截图 / 审批处理弹窗截图  
 > 配套文档：`docs/verification/pms-3d-review-integration-e2e.md`、`开发文档/三维校审/编校审交互接口设计.md`、`开发文档/三维校审/三维校审M0页面接口字段映射表.md`
 
+## 0. 2026-04-01 当前已落地口径
+
+围绕“点击**新增**后 plant3d 仍要求手动选择 Project”的问题，仿 PMS 调试页当前已经收口到以下行为：
+
+1. **项目来源**改为后端 `/api/projects`，不再默认沿用 `PROJECT-EMBED-001` 这类伪项目号。
+2. **默认项目解析顺序**为：`output_project -> project -> AvevaMarineSample -> 项目列表第一项`。
+3. 工具栏中的项目字段已从**自由输入**改为**真实项目下拉选择**。
+4. 发往 `/api/review/embed-url` 的 `project_id` 现在使用真实模型项目路径，例如 `AvevaMarineSample`。
+5. 最终 iframe URL 收口为：
+   - 保留 `user_token`
+   - 保留 `output_project=<真实项目路径>`
+   - 不再回流 `project_id / user_id / user_role`
+6. 本地浏览器级验证结果已确认：点击「新增」后会直接进入 plant3d 嵌入工作区，不再回到项目选择页。
+
+如果后续继续扩展该调试页，请以这一组口径为准，不要再把外部业务项目号直接塞回 `project_id`。
+
+## 0.2 2026-04-02 当前运行态补充
+
+在 0.1 的项目/嵌入合同之外，仿 PMS 调试页当前还已经收口到以下运行态事实：
+
+1. **PMS 用户与工作流角色解耦**
+   - `SJ / JH / SH / PZ`：PMS 测试用户
+   - `sj / jd / sh / pz`：工作流角色
+2. **external/passive 由 `workflow/sync` 驱动**
+   - 外层 workflow 面板已支持：
+     - `active`
+     - `agree`
+     - `return`
+     - `stop`
+3. **已验证的 external/passive 主链**
+   - `SJ active -> JH agree -> SH agree -> PZ agree -> approved`
+   - `SJ active -> JH agree -> SH stop -> cancelled`
+   - `SJ active -> JH agree -> SH agree -> PZ return -> sj -> SJ reopen initiate`
+4. **基于固定 BRAN `24381_145018` 的数据证据链**
+   - `JH` 阶段可真实添加：
+     - 1 条批注
+     - 1 条距离测量
+     - 1 个截图附件
+   - `approved` reopen 时：
+     - iframe 内恢复批注与测量
+     - iframe 内“附件材料”tab 已出现 1 条附件条目
+     - 当前默认显示 attachment `description` / 标签，而不是原始上传文件名
+5. **可操作性判定已固定**
+   - 已有单据优先按**真实任务指派**判断是否可操作
+   - 缺失真实指派时回退按**默认测试流转映射**
+   - `approved / cancelled` 终态强制只读
+
+因此如果后续继续扩展该调试页，请不要再按“external/passive 下 reviewer 永远只读”来设计仿 PMS 外层壳；当前真实口径是：
+
+> **plant3d 内部 reviewer 面板仍保持被动只读，但仿 PMS 外层 workflow 面板已可通过 `workflow/sync` 驱动外部流程。**
+
 ## 1. 目标
 
 本任务的目标不是复刻完整 PMS 门户，而是先提供一个**高效率、可复现、可观察**的调试壳，用最少操作支撑以下调试主链路：
 
-1. 通过固定角色按钮快速切换 `SJ / JH / SH / PZ`。
+1. 通过固定 PMS 用户按钮快速切换 `SJ / JH / SH / PZ`。
 2. 打开一个与 PMS「三维校审单」外观接近的列表页。
 3. 列表直接展示真实后端返回的**全部校审数据**，不使用 mock 假数据。
 4. 从列表中选中某条单据后，以 iframe 打开真实 plant3d 三维校审页。
-5. 支持围绕同一个 `form_id` 做“首次打开 / 同角色重开 / 跨角色重开”调试。
+5. 支持围绕同一个 `form_id` 做“首次打开 / 同用户重开 / 跨用户重开”调试。
 6. 在外层页面同步观察 `taskId / formId / status / currentNode / components / workflow models`，便于定位“保存后重进为什么看不到关联构件”。
 
 ## 2. 范围与非范围
@@ -23,7 +74,7 @@
 
 - 独立 PMS 风格调试页（优先独立 html 入口）
 - 左侧静态菜单壳与顶部面包屑/当前层级/当前用户区域
-- 顶部固定角色快捷切换
+- 顶部固定 PMS 用户快捷切换
 - PMS 风格工具栏与表格布局
 - 真实校审数据列表与前端字段映射层
 - 列表选择、查看、刷新、重开当前单据
@@ -63,18 +114,18 @@
   - 页面结构优先接近 PMS，而不是沿用当前 plant3d 主应用的 Dock 样式。
 - **风险/备注**：本轮重点是信息架构与调试效率，不做像素级还原。
 
-### FE-T2 快速角色切换
+### FE-T2 快速用户切换
 
 - **目标**：提供“一键切用户”的调试能力，避免每次重走复杂登录流程。
 - **涉及文件**：`src/debug/pmsReviewSimulator.ts`
-- **依赖**：角色别名固定为 `SJ / JH / SH / PZ`
+- **依赖**：PMS 用户别名固定为 `SJ / JH / SH / PZ`
 - **完成标准**：
-  - 顶部提供固定角色按钮。
+  - 顶部提供固定 PMS 用户按钮。
   - 切换后当前用户展示立即更新。
   - 切换后列表自动刷新。
   - 切换后默认关闭当前 iframe，避免旧会话残留。
   - 保留“最近打开单据”的 `form_id`，供新角色一键重开。
-- **风险/备注**：本轮是“角色上下文模拟”，不是 PMS 后端登录态真正迁移。
+- **风险/备注**：本轮是“PMS 用户上下文模拟”，不是 PMS 后端登录态真正迁移；工作流角色应由外部 `role` 或任务节点决定。
 
 ### FE-T3 校审清单表格实现
 
@@ -102,17 +153,25 @@
   - `刷新` 会刷新列表与当前诊断快照。
 - **风险/备注**：按钮存在感用于贴近 PMS，但不能把本轮范围扩成完整业务 CRUD。
 
+> 2026-04-01 更新：项目字段当前已不是自由文本输入，而是后端 `/api/projects` 驱动的下拉选择；默认真实可用项目优先 `AvevaMarineSample`。
+
 ### FE-T5 iframe 打开与重开模型
 
 - **目标**：让列表页成为真实 plant3d 校审页的稳定调试入口。
 - **涉及文件**：`src/debug/pmsReviewSimulator.ts`、复用 `src/api/reviewApi.ts`
 - **依赖**：`POST /api/review/embed-url`
 - **完成标准**：
-  - 选中行后可点击“查看”在页面下方或右侧打开 iframe。
-  - “新增”可打开一个发起态 iframe 会话。
-  - 外层状态至少保留：当前角色、`form_id`、`task_id`、打开来源、最近打开时间。
-  - 提供“以当前角色重新打开当前单据”动作。
-  - 提供“同角色刷新重开”动作。
+- 选中行后可点击“查看”在页面下方或右侧打开 iframe。
+- “新增”可打开一个发起态 iframe 会话。
+- 外层状态至少保留：当前 PMS 用户、当前工作流角色、`form_id`、`task_id`、打开来源、最近打开时间。
+- 提供“以当前 PMS 用户重新打开当前单据”动作。
+- 提供“同用户刷新重开”动作。
+- external/passive 下需额外支持外层 workflow 面板：
+  - `SJ active`
+  - `JH / SH / PZ agree`
+  - `return`
+  - `stop`
+- 终态或非目标用户打开已有单据时，应自动退回 `readonly`。
 - **风险/备注**：本轮由外层页负责“打开谁、用谁打开”，三维内部仍由真实页面负责流程操作。
 
 ### FE-T6 诊断区与 form_id 核查
@@ -121,7 +180,7 @@
 - **涉及文件**：`src/debug/pmsReviewSimulator.ts`、复用 `src/api/reviewApi.ts`
 - **依赖**：任务详情接口、workflow query 接口
 - **完成标准**：
-  - 打开任意单据后显示：`form_id`、`task_id`、`status`、`current_node`、`components 数量`、`workflow models 数量`、当前角色、最近刷新时间。
+  - 打开任意单据后显示：`form_id`、`task_id`、`status`、`current_node`、`components 数量`、`workflow models 数量`、当前 PMS 用户、当前工作流角色、最近刷新时间。
   - 提供“查任务详情”动作。
   - 提供“查 form_id 聚合结果”动作。
   - 支持对比 `task.components` 与 `workflow models`。
@@ -147,6 +206,8 @@
   - 从当前角色与当前项目生成嵌入地址
   - 支持“新增打开”与“按既有单据重开”两种模式
 - **必须确认**：若接口返回 `url` 与 `relative_path + token + query` 双轨格式，调试页要统一兼容。
+
+> 2026-04-01 更新：当前调试页最终 iframe URL 已收口为 token-primary，并保留 `output_project` 作为资源作用域提示；不再把 `project_id / user_id / user_role` 回流进最终 URL。
 
 ### INT-T3 form_id 维度核查链路
 
@@ -179,12 +240,33 @@
 ### QA-T4 列表进入 iframe 验证
 
 - **覆盖**：选中一条记录后查看、双击查看、新增发起态打开
-- **通过标准**：iframe 能稳定打开真实 plant3d 页面，并正确带出当前角色与单据上下文
+- **通过标准**：iframe 能稳定打开真实 plant3d 页面，并正确带出当前角色与单据上下文；若点击「新增」，不应再落到项目选择页，而应直接进入嵌入工作区
 
 ### QA-T5 同单据重开验证
 
 - **覆盖**：同角色重开、跨角色重开、最近打开单据保留
 - **通过标准**：可以围绕同一 `form_id` 连续执行 `SJ 打开 -> JH 重开` 这样的调试动作
+
+### QA-T7 external/passive workflow 主链验证
+
+- **覆盖**：
+  - `SJ active -> JH agree -> SH agree -> PZ agree -> approved`
+  - `SJ active -> JH agree -> SH stop -> cancelled`
+  - `SJ active -> JH agree -> SH agree -> PZ return -> sj -> SJ reopen`
+- **通过标准**：
+  - `workflow/sync` 动作后 backend 真实状态发生变化
+  - `task_status / form_status / lineage.status` 与页面表现一致
+  - `approved / cancelled` reopen 自动只读
+  - `return -> sj` 后 `SJ` 可重新进入 `initiate`
+
+### QA-T8 BRAN 数据恢复验证
+
+- **覆盖**：固定 BRAN `24381_145018` 下的批注、测量、附件恢复
+- **通过标准**：
+  - `JH` 阶段可真实添加 1 条批注、1 条距离测量、1 个截图附件
+  - `records/by-task` 可回读 `annotations_total = 1`、`measurements_total = 1`
+  - `workflow/sync?action=query` 可回读 `attachments_len = 1`
+  - `approved` reopen 时，iframe 内恢复批注与测量，附件 tab 至少出现 1 条附件条目
 
 ### QA-T6 关联构件问题定位验证
 
@@ -200,7 +282,10 @@
 
 1. 第一版主入口采用**独立调试页**，不先侵入主应用路由/布局。
 2. 第一版列表字段顺序与截图保持一致，不做自由列配置。
-3. 第一版只开放 `新增 / 查看 / 刷新` 三个实际动作。
+3. 第一版只开放 `新增 / 查看 / 刷新` 三个实际动作；**当前运行态已扩展**为：
+   - 仿 PMS 外层 workflow 面板支持 `active / agree / return / stop`
+   - 但 plant3d 内部 reviewer 工作区在 passive/external 下仍不开放内部流转按钮
+   - 固定 BRAN `24381_145018` 的批注 / 测量 / 附件恢复链已经验证通过，后续 UI 不要回退到“附件只能外层可见”的旧口径
 4. 第一版角色切换使用固定别名按钮，不复刻完整 PMS 登录协议。
 5. 第一版 iframe 内使用真实 plant3d 页面按钮，外层不重做第二套流程 UI。
 6. 第一版诊断必须同时覆盖 `task` 视角与 `form_id` 视角。

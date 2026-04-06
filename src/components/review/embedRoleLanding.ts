@@ -11,14 +11,31 @@ export type EmbedModeParams = {
   workflowMode?: string | null;
   externalWorkflowMode?: boolean | null;
   isEmbedMode: boolean;
+  launchInput?: {
+    formId: string | null;
+    userId: string | null;
+    userRole: string | null;
+    projectId: string | null;
+    workflowMode: string | null;
+  };
   verifiedClaims?: {
     projectId: string;
     userId: string;
     formId: string;
+    userName?: string;
     role?: string;
+    workflowMode?: string;
     exp: number;
     iat: number;
   } | null;
+};
+
+export type TrustedEmbedIdentity = {
+  userId: string;
+  userRole: string | null;
+  formId: string;
+  projectId: string;
+  workflowMode: string | null;
 };
 
 export type EmbedLandingTarget = 'designer' | 'reviewer';
@@ -61,28 +78,109 @@ function normalizeEmbedRole(role?: string | null): string | null {
   return normalized || null;
 }
 
+function normalizeEmbedValue(value?: string | null): string | null {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+}
+
+export function readEmbedModeParamsFromSearch(search: string): EmbedModeParams {
+  const urlParams = new URLSearchParams(search);
+  const launchFormId = normalizeEmbedValue(urlParams.get('form_id'));
+  const userToken = normalizeEmbedValue(urlParams.get('user_token'));
+  const launchUserId = normalizeEmbedValue(urlParams.get('user_id'));
+  const launchUserRole = normalizeEmbedRole(urlParams.get('user_role'));
+  const launchProjectId = normalizeEmbedValue(urlParams.get('project_id'));
+  const workflowMode = normalizeEmbedValue(urlParams.get('workflow_mode'));
+  const tokenPrimary = !!userToken;
+
+  return {
+    formId: tokenPrimary ? null : launchFormId,
+    userToken,
+    userId: tokenPrimary ? null : launchUserId,
+    userRole: tokenPrimary ? null : launchUserRole,
+    projectId: tokenPrimary ? null : launchProjectId,
+    workflowMode,
+    isEmbedMode: !!(launchFormId || userToken),
+    launchInput: {
+      formId: launchFormId,
+      userId: launchUserId,
+      userRole: launchUserRole,
+      projectId: launchProjectId,
+      workflowMode,
+    },
+    verifiedClaims: null,
+  };
+}
+
+export function resolveTrustedEmbedIdentity(params: EmbedModeParams): TrustedEmbedIdentity | null {
+  if (!params.isEmbedMode || !params.verifiedClaims) return null;
+
+  const { userId, formId, projectId, role } = params.verifiedClaims;
+  if (!userId || !formId || !projectId) return null;
+  const trustedRole = normalizeEmbedRole(role);
+  if (!trustedRole) return null;
+
+  return {
+    userId,
+    userRole: trustedRole,
+    formId,
+    projectId,
+    workflowMode: normalizeEmbedValue(params.verifiedClaims.workflowMode) || null,
+  };
+}
+
+export function buildPersistedEmbedModeParams(params: EmbedModeParams): EmbedModeParams {
+  if (!params.userToken) return params;
+
+  return {
+    ...params,
+    formId: params.verifiedClaims?.formId || params.formId || null,
+    userId: params.verifiedClaims?.userId || params.userId || null,
+    userRole: normalizeEmbedRole(params.verifiedClaims?.role) || null,
+    projectId: params.verifiedClaims?.projectId || params.projectId || null,
+    workflowMode: normalizeEmbedValue(params.verifiedClaims?.workflowMode) || params.workflowMode || null,
+    launchInput: params.launchInput
+      ? {
+        formId: params.launchInput.formId,
+        userId: null,
+        userRole: null,
+        projectId: null,
+        workflowMode: params.launchInput.workflowMode,
+      }
+      : undefined,
+  };
+}
+
 export function resolveEmbedLandingTargetFromRole(role?: string | null): EmbedLandingTarget | null {
   const normalizedRole = normalizeEmbedRole(role);
   if (!normalizedRole) return null;
 
-  if (normalizedRole === 'sj' || normalizedRole === 'designer') {
+  if (normalizedRole === 'sj') {
     return 'designer';
   }
 
   if (
     normalizedRole === 'jd' ||
-    normalizedRole === 'jh' ||
     normalizedRole === 'sh' ||
     normalizedRole === 'pz' ||
-    normalizedRole === 'proofreader' ||
-    normalizedRole === 'reviewer' ||
-    normalizedRole === 'manager' ||
     normalizedRole === 'admin'
   ) {
     return 'reviewer';
   }
 
   return null;
+}
+
+export function getVerifiedEmbedProjectId(params: EmbedModeParams): string | null {
+  return params.verifiedClaims?.projectId || params.projectId || null;
+}
+
+export function getVerifiedEmbedFormId(params: EmbedModeParams): string | null {
+  return params.verifiedClaims?.formId || params.formId || null;
+}
+
+export function getVerifiedEmbedWorkflowMode(params: EmbedModeParams): string | null {
+  return normalizeEmbedValue(params.verifiedClaims?.workflowMode) || params.workflowMode || null;
 }
 
 export function resolveEmbedLandingTarget(params: {
@@ -104,9 +202,10 @@ export function getEmbedLandingPanelIdsWithOptions(
   target: EmbedLandingTarget,
   options: { passiveWorkflowMode?: boolean } = {},
 ): string[] {
+  void options;
   return target === 'designer'
-    ? (options.passiveWorkflowMode ? ['initiateReview'] : ['initiateReview', 'myTasks'])
-    : ['review', 'reviewerTasks'];
+    ? ['initiateReview']
+    : ['review'];
 }
 
 export function applyEmbedLandingState<TPanel extends { api: { setActive: () => void } }>(options: {
@@ -119,8 +218,9 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
   passiveWorkflowMode?: boolean;
 }) {
   // 如果有 projectId，优先准备项目上下文，但不改变 reviewer/designer 工作台落点
-  if (options.embedModeParams.projectId && options.switchProjectById) {
-    options.switchProjectById(options.embedModeParams.projectId);
+  const projectId = getVerifiedEmbedProjectId(options.embedModeParams);
+  if (projectId && options.switchProjectById) {
+    options.switchProjectById(projectId);
   }
 
   const passiveWorkflowMode = options.passiveWorkflowMode
@@ -140,12 +240,15 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
 
   const storage = options.sessionStorageLike;
   if (storage) {
-    storage.setItem(EMBED_MODE_PARAMS_STORAGE_KEY, JSON.stringify(options.embedModeParams));
+    storage.setItem(
+      EMBED_MODE_PARAMS_STORAGE_KEY,
+      JSON.stringify(buildPersistedEmbedModeParams(options.embedModeParams))
+    );
     storage.setItem(
       EMBED_LANDING_STATE_STORAGE_KEY,
       JSON.stringify(({
         target: options.target,
-        formId: options.embedModeParams.formId,
+        formId: getVerifiedEmbedFormId(options.embedModeParams),
         primaryPanelId,
         visiblePanelIds: panelIds,
       } as EmbedLandingState))

@@ -20,18 +20,19 @@
  */
 import { chromium } from 'playwright';
 
-import { startPmsApiSniffer, startPmsApiSnifferV2 } from './pms-api-sniffer';
+import { startPmsApiSniffer, startPmsApiSnifferV2, type PmsReviewEntryCandidate } from './pms-api-sniffer';
 import {
   assertNoCaptchaBarrier,
   PMS_DEFAULT_TEST_BRAN_REFNO,
   pollTryFillPmsDialogsInContext,
   registerPlant3dAutomationReviewInitScript,
+  reloadReviewerWorkbenchAcrossContext,
   runCheckerWorkflowAcrossContext,
   runReviewerAnnotationAcrossContext,
   runSubmitReviewAcrossContext,
   tryFillPmsNewDocumentDialog,
-  tryOpenReviewEntryContainingPackage,
-  waitForSubstringInPageOrChildFrames,
+  tryOpenReviewEntryByNeedles,
+  waitForAnySubstringInPageOrChildFrames,
 } from './pms-plant3d-initiate-flow';
 
 const base = (process.env.PMS_E2E_BASE || 'http://pms.powerpms.net:1801').replace(/\/$/, '');
@@ -86,6 +87,25 @@ function hostnameFromNeedle(needle: string): string | null {
   } catch {
     return null;
   }
+}
+
+function uniqNeedles(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean))];
+}
+
+function formatReviewEntryCandidate(candidate: PmsReviewEntryCandidate): string {
+  return [
+    `needle=${candidate.matchedNeedle}`,
+    `ModelFormId=${candidate.modelFormId || '-'}`,
+    `formId=${candidate.formId || '-'}`,
+    `Id=${candidate.id || '-'}`,
+    `Title=${candidate.title || '-'}`,
+    `RegHumName=${candidate.regHumName || '-'}`,
+    `RegDate=${candidate.regDate || '-'}`,
+    `Status=${candidate.status || '-'}`,
+    `path=${candidate.path}`,
+    `url=${candidate.sourceUrl}`,
+  ].join(' | ');
 }
 const cdpUrl = process.env.CHROME_CDP_URL?.trim();
 const headless = process.env.PMS_CDP_HEADLESS === '1';
@@ -499,9 +519,11 @@ async function main(): Promise<void> {
       console.error(`[cdp] 本次提资包名（用于 PMS 检索）: ${pkg}`);
 
       const strictEmbedEnabled = !!embedApiSniffer;
+      const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
+      const branAlt = bran.includes('_') ? bran.replace(/_/g, '/') : bran.replace(/\//g, '_');
+      let reviewEntryCandidates: PmsReviewEntryCandidate[] = [];
+      let reviewLookupNeedles = uniqNeedles([pkg]);
       if (pmsApiSniffer) {
-        const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
-        const branAlt = bran.includes('_') ? bran.replace(/_/g, '/') : bran.replace(/\//g, '_');
         console.error('[cdp] 回到三维校审单以触发列表接口…');
         await page.bringToFront().catch(() => undefined);
         for (let i = 0; i < 5; i++) {
@@ -522,12 +544,29 @@ async function main(): Promise<void> {
           await pmsApiSniffer.waitForAnyNeedleInBodies([pkg, bran, branAlt], pmsApiVerifyTimeoutMs);
           console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
         }
+        reviewEntryCandidates = pmsApiSniffer.findReviewEntryCandidates([pkg, bran, branAlt], 6);
+        if (reviewEntryCandidates.length) {
+          console.error('[cdp] PMS 候选记录：');
+          for (const [index, candidate] of reviewEntryCandidates.entries()) {
+            console.error(`  [${index + 1}] ${formatReviewEntryCandidate(candidate)}`);
+          }
+        } else {
+          console.error('[cdp] PMS 候选记录：未能从已捕获 JSON 中提取到包含包名/BRAN 的结构化记录，将只能按包名回查列表');
+        }
+        reviewLookupNeedles = uniqNeedles([
+          ...reviewEntryCandidates.flatMap((candidate) => [
+            candidate.modelFormId,
+            candidate.formId,
+            candidate.id,
+            candidate.title,
+          ]),
+          pkg,
+        ]);
+        console.error(`[cdp] PMS reopen 匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}`);
       }
 
       // Strict verification: re-enter the just-created record and confirm embed pulls component data from plant3d.
       if (embedApiSniffer) {
-        const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
-        const branAlt = bran.includes('_') ? bran.replace(/_/g, '/') : bran.replace(/\//g, '_');
         console.error('[cdp] 严格校验：重新进入刚创建的记录，并断言「PMS 嗅探命中」或「嵌入站点拉取命中」任一成立…');
 
         const pmsNeedles = [pkg, bran, branAlt];
@@ -545,15 +584,16 @@ async function main(): Promise<void> {
         }
         await openReviewFormList(page);
 
-        let opened = false;
-        try {
-          opened = await tryOpenReviewEntryContainingPackage(page, pkg);
-        } catch {
-          opened = false;
+        const strictOpenResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+        if (!strictOpenResult.opened) {
+          throw new Error(
+            `严格校验失败：未能在 PMS 列表中按以下任一键重新打开刚创建的记录：${reviewLookupNeedles.join(' | ') || '(空)'}。`
+            + (reviewEntryCandidates.length
+              ? ` 候选记录：${reviewEntryCandidates.map((x) => formatReviewEntryCandidate(x)).join(' || ')}`
+              : ' 当前未提取到结构化候选记录。'),
+          );
         }
-        if (!opened) {
-          await clickNewInAnyFrame(page);
-        }
+        console.error(`[cdp] 严格校验：已按「${strictOpenResult.matchedNeedle}」重新打开 PMS 记录`);
         await new Promise((r) => setTimeout(r, 2500));
 
         const embedNetworkOk = await embedApiSniffer
@@ -589,42 +629,51 @@ async function main(): Promise<void> {
 
       if (extendedFlow) {
         let pmsListFound = false;
-        try {
-          console.error(`[cdp] PMS_CDP_EXTENDED_FLOW：在 PMS 中等待出现包名（${pmsVerifyTimeoutMs}ms）…`);
-          await page.bringToFront().catch(() => undefined);
-          for (let i = 0; i < 5; i++) {
-            await page.keyboard.press('Escape').catch(() => undefined);
-          }
-          if (pmsWebCenterUrl.includes('WebCenter')) {
-            console.error(`[cdp] 回到 PMS 壳: ${pmsWebCenterUrl}`);
-            await page.goto(pmsWebCenterUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-            await new Promise((r) => setTimeout(r, 1200));
-          }
-          await openReviewFormList(page);
+        let matchedListNeedle: string | null = null;
+        console.error(`[cdp] PMS_CDP_EXTENDED_FLOW：在 PMS 中等待已有单据出现（${pmsVerifyTimeoutMs}ms）…`);
+        await page.bringToFront().catch(() => undefined);
+        for (let i = 0; i < 5; i++) {
+          await page.keyboard.press('Escape').catch(() => undefined);
+        }
+        if (pmsWebCenterUrl.includes('WebCenter')) {
+          console.error(`[cdp] 回到 PMS 壳: ${pmsWebCenterUrl}`);
+          await page.goto(pmsWebCenterUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+        await openReviewFormList(page);
 
-          const refreshDeadline = Date.now() + pmsVerifyTimeoutMs;
-          let refreshCount = 0;
-          while (Date.now() < refreshDeadline) {
-            const found = await waitForSubstringInPageOrChildFrames(page, pkg, Math.min(20_000, refreshDeadline - Date.now())).then(() => true).catch(() => false);
-            if (found) { pmsListFound = true; break; }
-            refreshCount++;
-            console.error(`[cdp] PMS 列表第 ${refreshCount} 次刷新…`);
-            for (const frame of page.frames()) {
-              if (frame === page.mainFrame() || frame.isDetached()) continue;
-              try { await frame.evaluate(() => location.reload()); } catch { /* cross-origin */ }
-            }
-            await page.keyboard.press('F5').catch(() => undefined);
-            await new Promise((r) => setTimeout(r, 3000));
-            await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
+        const refreshDeadline = Date.now() + pmsVerifyTimeoutMs;
+        let refreshCount = 0;
+        while (Date.now() < refreshDeadline) {
+          matchedListNeedle = await waitForAnySubstringInPageOrChildFrames(
+            page,
+            reviewLookupNeedles,
+            Math.min(20_000, refreshDeadline - Date.now()),
+          ).catch(() => null);
+          if (matchedListNeedle) {
+            pmsListFound = true;
+            break;
           }
+          refreshCount++;
+          console.error(`[cdp] PMS 列表第 ${refreshCount} 次刷新…（匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}）`);
+          for (const frame of page.frames()) {
+            if (frame === page.mainFrame() || frame.isDetached()) continue;
+            try { await frame.evaluate(() => location.reload()); } catch { /* cross-origin */ }
+          }
+          await page.keyboard.press('F5').catch(() => undefined);
+          await new Promise((r) => setTimeout(r, 3000));
+          await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
+        }
 
-          if (pmsListFound) {
-            console.error('[cdp] PMS 列表/iframe 中已可见提资包名');
-          } else {
-            throw new Error('PMS 列表刷新超时');
-          }
-        } catch {
-          console.error('[cdp] PMS 列表未刷新出包名，降级为 JH 直接从三维校审单「新增」进入 plant3d');
+        if (pmsListFound) {
+          console.error(`[cdp] PMS 列表/iframe 中已可见已有单据匹配键：${matchedListNeedle}`);
+        } else {
+          throw new Error(
+            `PMS 列表刷新超时：在 ${pmsVerifyTimeoutMs}ms 内未发现以下任一已有单据匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}。`
+            + (reviewEntryCandidates.length
+              ? ` 候选记录：${reviewEntryCandidates.map((x) => formatReviewEntryCandidate(x)).join(' || ')}`
+              : ' 当前未提取到结构化候选记录。'),
+          );
         }
 
         console.error(`[cdp] 清除会话并以校核用户 ${checkerUsername} 重新登录…`);
@@ -642,17 +691,17 @@ async function main(): Promise<void> {
 
         console.error('[cdp] 设计交付 → 三维校审单…');
         await openReviewFormList(page);
-        let opened = false;
-        if (pmsListFound) {
-          console.error('[cdp] 尝试打开含包名的记录…');
-          opened = await tryOpenReviewEntryContainingPackage(page, pkg);
+        console.error(`[cdp] 尝试按已有单据匹配键打开记录：${reviewLookupNeedles.join(' | ') || '(空)'}`);
+        const openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+        if (!openResult.opened) {
+          throw new Error(
+            `JH 未能在 PMS 列表中打开已有单据。匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}。`
+            + (reviewEntryCandidates.length
+              ? ` 候选记录：${reviewEntryCandidates.map((x) => formatReviewEntryCandidate(x)).join(' || ')}`
+              : ' 当前未提取到结构化候选记录。'),
+          );
         }
-        if (!opened) {
-          console.error('[cdp] 点击「新增」打开 plant3d 嵌入页…');
-          await clickNewInAnyFrame(page);
-          await new Promise((r) => setTimeout(r, 3000));
-        }
-        console.error(opened ? '[cdp] 已对匹配行执行点击/双击' : '[cdp] 已通过「新增」打开 plant3d，将在嵌入页中操作批注');
+        console.error(`[cdp] 已按「${openResult.matchedNeedle}」对 PMS 列表项执行点击/双击`);
 
         console.error('[cdp] 扫描 iframe 内校审面板，自动添加批注…');
         try {
@@ -660,6 +709,15 @@ async function main(): Promise<void> {
           console.error(`[cdp] 校核批注：已添加 annotationId=${annotResult.annotationId}，确认记录数=${annotResult.confirmedCount}`);
         } catch (annotErr) {
           console.error(`[cdp] 校核批注：${annotErr instanceof Error ? annotErr.message : String(annotErr)}（不影响后续流程）`);
+        }
+
+        const reviewerRefreshRestoreEnabled =
+          process.env.PMS_CDP_CHECKER_REFRESH_RESTORE === '1'
+          || process.env.PMS_CDP_CHECKER_REFRESH_RESTORE === 'true';
+        if (reviewerRefreshRestoreEnabled) {
+          console.error('[cdp] 校核流程：按配置先刷新当前 reviewer 页面，并等待 workbench 恢复…');
+          await reloadReviewerWorkbenchAcrossContext(context);
+          console.error('[cdp] 校核流程：刷新恢复成功，继续执行提交动作');
         }
 
         console.error('[cdp] 扫描 iframe 内校核工作区并点击「提交到审核」类按钮…');

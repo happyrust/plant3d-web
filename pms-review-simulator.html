@@ -221,16 +221,30 @@
         font-size: 12px;
       }
 
+      .tool-btn.danger {
+        color: #8a2222;
+      }
+
       .toolbar-meta {
         font-size: 12px;
       }
 
-      .toolbar-meta input {
-        width: 200px;
+      .toolbar-meta input,
+      .toolbar-meta select {
+        width: 220px;
         border: 1px solid var(--line-strong);
         border-radius: 2px;
         background: #fff;
         padding: 5px 8px;
+      }
+
+      .toolbar-meta-status {
+        max-width: 360px;
+        color: var(--text-muted);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .table-panel,
@@ -284,6 +298,17 @@
       th:last-child,
       td:last-child {
         border-right: none;
+      }
+
+      .checkbox-cell {
+        width: 44px;
+        text-align: center;
+      }
+
+      .checkbox-cell input {
+        width: 14px;
+        height: 14px;
+        accent-color: var(--primary);
       }
 
       tbody tr {
@@ -868,13 +893,13 @@
         <section class="topbar">
           <div class="breadcrumbs">当前位置：设计交付 / 三维校审单（PMS 调试模式）</div>
           <div class="header-meta">
-            <span id="current-user-label">当前用户：SJ</span>
-            <span id="current-role-label">当前角色：编制</span>
+            <span id="current-user-label">当前 PMS 用户：SJ</span>
+            <span id="current-role-label">当前工作流角色：sj（编制）</span>
           </div>
         </section>
 
         <section class="roles">
-          <span>快速角色切换：</span>
+          <span>PMS 用户切换：</span>
           <div id="role-buttons" class="role-buttons">
             <button class="role-btn active" data-role="SJ">SJ</button>
             <button class="role-btn" data-role="JH">JH</button>
@@ -889,7 +914,7 @@
           <div class="toolbar">
             <div class="toolbar-actions">
               <button id="tool-create" class="tool-btn">新增</button>
-              <button id="tool-delete" class="tool-btn" disabled>删除</button>
+              <button id="tool-delete" class="tool-btn danger" disabled>删除 / 清空</button>
               <button id="tool-edit" class="tool-btn" disabled>编辑</button>
               <button id="tool-view" class="tool-btn" disabled>查看</button>
               <button id="tool-reopen" class="tool-btn" disabled>重开当前</button>
@@ -897,7 +922,8 @@
             </div>
             <div class="toolbar-meta">
               <label for="project-id-input">项目号</label>
-              <input id="project-id-input" type="text" />
+              <select id="project-id-input"></select>
+              <span id="project-id-status" class="toolbar-meta-status">项目列表加载中…</span>
             </div>
           </div>
 
@@ -1008,19 +1034,19 @@
                 </section>
 
                 <section id="panel-initiate-section" class="panel-section" hidden>
-                  <div class="panel-section-header">发起信息</div>
+                  <div class="panel-section-header">送审信息</div>
                   <div class="panel-section-body">
                     <div class="panel-field">
-                      <label for="side-panel-comment-input">发起说明 / 意见</label>
+                      <label for="side-panel-comment-input">送审说明 / 意见</label>
                       <textarea
                         id="side-panel-comment-input"
                         class="panel-textarea"
-                        placeholder="请输入发起说明、校审意见或补充说明"></textarea>
+                        placeholder="请输入送审说明、校审意见或补充说明"></textarea>
                     </div>
                     <div class="panel-actions">
-                      <button id="panel-action-active-btn" class="panel-btn primary" type="button">发起</button>
+                      <button id="panel-action-active-btn" class="panel-btn primary" type="button">送审提交</button>
                     </div>
-                    <div class="panel-muted">新增打开时保留发起态；若 embed-url 随后返回 form_id，仍由此处作为首个 authoritative 输入。</div>
+                    <div class="panel-muted">请先在嵌入页保存提资数据；保存完成并拿到 form_id 后，再回到此处执行送审提交。</div>
                   </div>
                 </section>
 

@@ -3,7 +3,8 @@ import type { Ref } from 'vue';
 
 import type { InstanceManifest } from '@/utils/instances/instanceManifest';
 
-import { e3dGetSubtreeRefnos } from '@/api/genModelE3dApi';
+import { e3dGetSubtreeRefnos, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
+import { pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi';
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
 import { modelShowByRefno } from '@/api/genModelTaskApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
@@ -16,38 +17,28 @@ import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { emitToast } from '@/ribbon/toastBus';
 
 /**
- * 全局开关：是否跳过自动生成（SSE 流式生成、弹窗选择等）
- * 默认 false（开启自动补生成）；可通过 query/localStorage 强制关闭：
- * - query: `dtx_skip_auto_generation=1` or legacy `skip_auto_gen=1`
- * - localStorage: `dtx_skip_auto_generation=1` or legacy `skip_auto_gen=1`
+ * 全局开关：是否显式启用自动生成（SSE 流式生成、自动导出 parquet）
+ * 默认 false（关闭自动补生成）；仅支持 query 参数：
+ * - query: `dtx_enable_auto_generation=1`
  */
-function shouldSkipAutoGeneration(): boolean {
+function shouldEnableAutoGeneration(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const q = new URLSearchParams(window.location.search);
-    const rawQ = (q.get('dtx_skip_auto_generation') || q.get('skip_auto_gen') || '').trim().toLowerCase();
+    const rawQ = (q.get('dtx_enable_auto_generation') || '').trim().toLowerCase();
     if (rawQ === '1' || rawQ === 'true') return true;
     if (rawQ === '0' || rawQ === 'false') return false;
-
-    const rawLs = (
-      window.localStorage?.getItem('dtx_skip_auto_generation') ||
-      window.localStorage?.getItem('skip_auto_gen') ||
-      ''
-    ).trim().toLowerCase();
-    if (rawLs === '1' || rawLs === 'true') return true;
-    if (rawLs === '0' || rawLs === 'false') return false;
   } catch {
     // ignore
   }
   return false;
 }
 
-// Preserve the old test-facing contract while the runtime uses the constant snapshot.
-export function isSkipAutoGeneration(): boolean {
-  return shouldSkipAutoGeneration();
+export function isAutoGenerationEnabled(): boolean {
+  return shouldEnableAutoGeneration();
 }
 
-export const SKIP_AUTO_GENERATION = shouldSkipAutoGeneration();
+export const AUTO_GENERATION_ENABLED = shouldEnableAutoGeneration();
 const VISIBLE_REFNOS_PAGE_SIZE = 1000;
 
 export type ModelGenerationOptions = {
@@ -72,10 +63,24 @@ export type ModelLoadDebugInfo = {
   refno: string
   dbno: number
   visibleInsts: { ok: boolean; count: number; error: string | null }
+  componentRefnos?: { count: number; sample: string[] }
   manifestMatch?: { candidates: number; matched: number; missing: number; missingSample: string[] }
   loadRefnos: { count: number; sample: string[] }
+  scopeDecision?: {
+    rootNoun: string | null
+    branHangRootInjected: boolean
+    typeInfoError: string | null
+  }
   result: { loadedRefnos: number; skippedRefnos: number; loadedObjects: number } | null
   ms: number
+}
+
+export type ActualModelLoadScope = {
+  componentRefnos: string[]
+  actualLoadRefnos: string[]
+  rootNoun: string | null
+  branHangRootInjected: boolean
+  typeInfoError: string | null
 }
 
 function normalizeRefnoString(refno: string): string {
@@ -114,6 +119,76 @@ async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; tr
   const list = Array.isArray(resp.refnos) ? resp.refnos : [];
   const out = uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean);
   return { refnos: out, truncated: !!resp.truncated };
+}
+
+export async function queryLoadScopeRefnos(refno: string): Promise<{
+  refnos: string[]
+  source: 'visible-insts' | 'subtree-refnos'
+  truncated: boolean
+}> {
+  const normalized = normalizeRefnoString(refno);
+  if (!normalized) {
+    return { refnos: [], source: 'visible-insts', truncated: false };
+  }
+
+  try {
+    const resp = await e3dGetVisibleInsts(normalized);
+    if (!resp.success) {
+      throw new Error(resp.error_message || 'e3d visible-insts 查询失败');
+    }
+    const list = Array.isArray(resp.refnos) ? resp.refnos : [];
+    return {
+      refnos: uniqStrings(list.map((r) => normalizeRefnoString(String(r || '')))).filter(Boolean),
+      source: 'visible-insts',
+      truncated: false,
+    };
+  } catch {
+    const subtree = await querySubtreeRefnos(normalized);
+    return {
+      refnos: subtree.refnos,
+      source: 'subtree-refnos',
+      truncated: subtree.truncated,
+    };
+  }
+}
+
+export async function resolveActualModelLoadScope(
+  rootRefno: string,
+  componentRefnos: string[]
+): Promise<ActualModelLoadScope> {
+  const normalizedRoot = normalizeRefnoString(rootRefno);
+  const normalizedComponents = uniqStrings(componentRefnos.map((r) => normalizeRefnoString(r))).filter(Boolean);
+  if (!normalizedRoot) {
+    return {
+      componentRefnos: normalizedComponents,
+      actualLoadRefnos: normalizedComponents,
+      rootNoun: null,
+      branHangRootInjected: false,
+      typeInfoError: null,
+    };
+  }
+
+  try {
+    const resp = await pdmsGetTypeInfo(normalizedRoot);
+    const noun = resp.success ? String(resp.noun || '').trim().toUpperCase() : '';
+    const isBranHang = noun === 'BRAN' || noun === 'HANG';
+
+    return {
+      componentRefnos: normalizedComponents,
+      actualLoadRefnos: isBranHang ? uniqStrings([normalizedRoot, ...normalizedComponents]) : normalizedComponents,
+      rootNoun: noun || null,
+      branHangRootInjected: isBranHang,
+      typeInfoError: resp.success ? null : (resp.error_message || 'pdms type-info 查询失败'),
+    };
+  } catch (e) {
+    return {
+      componentRefnos: normalizedComponents,
+      actualLoadRefnos: normalizedComponents,
+      rootNoun: null,
+      branHangRootInjected: false,
+      typeInfoError: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
@@ -224,8 +299,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const parquetLoader = useDbnoInstancesParquetLoader();
     if (await parquetLoader.isParquetAvailable(dbno)) return true;
 
-    if (SKIP_AUTO_GENERATION) {
-      console.warn(`[model-generation] parquet 缺失且已禁用自动补生成 dbno=${dbno}`);
+    if (!AUTO_GENERATION_ENABLED) {
+      console.warn(`[model-generation] parquet 缺失，当前默认不自动导出 dbno=${dbno}`);
+      consoleStore.addLog('warning', `[model-load] parquet 缺失，当前默认不自动导出 dbno=${dbno}`);
       return false;
     }
 
@@ -295,8 +371,12 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       return { loadedObjects: 0, failedRefnos: [] };
     }
 
-    if (SKIP_AUTO_GENERATION) {
-      console.warn(`[model-generation] 发现 ${normalizedMissing.length} 个缺失模型，已跳过自动生成`);
+    if (!AUTO_GENERATION_ENABLED) {
+      console.warn(`[model-generation] 发现 ${normalizedMissing.length} 个缺失模型，已按默认策略跳过自动生成`);
+      consoleStore.addLog(
+        'warning',
+        `[model-load] 发现 ${normalizedMissing.length} 个缺失模型，已按默认策略跳过自动生成 dbno=${dbno}`
+      );
       return { loadedObjects: 0, failedRefnos: normalizedMissing };
     }
 
@@ -468,16 +548,18 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
 
-      statusMessage.value = '查询可见几何子孙...';
+      statusMessage.value = '查询可见实例范围...';
       progress.value = 10;
       syncGlobalLoadStatus();
       let visibleOk = false;
       let visibleErr: string | null = null;
       let visibleRefnos: string[] = [];
+      let visibleSource: 'visible-insts' | 'subtree-refnos' = 'visible-insts';
       try {
-        const { refnos, truncated } = await querySubtreeRefnos(normalizedRoot);
+        const { refnos, source, truncated } = await queryLoadScopeRefnos(normalizedRoot);
         visibleRefnos = refnos;
-        if (truncated) {
+        visibleSource = source;
+        if (source === 'subtree-refnos' && truncated) {
           consoleStore.addLog('error', `[model-load] subtree-refnos 返回被截断 refno=${normalizedRoot}（limit=200000）`);
           emitToast({
             message: `[错误] 子孙 refno 列表过大已被截断（${normalizedRoot}），结果可能不完整`,
@@ -495,32 +577,45 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
       }
       consoleStore.addLog(
         'info',
-        `[model-load] visible_refnos ok=${visibleOk ? 1 : 0} refno=${normalizedRoot} dbno=${dbno} count=${visibleRefnos.length}` +
+        `[model-load] load_scope_refnos ok=${visibleOk ? 1 : 0} source=${visibleSource} refno=${normalizedRoot} dbno=${dbno} count=${visibleRefnos.length}` +
           (visibleErr ? ` err=${visibleErr}` : '')
       );
       if (!visibleOk && visibleErr) {
-        consoleStore.addLog('warning', `[model-load] subtree-refnos 失败，将尝试从 Parquet 加载：${visibleErr}`);
+        consoleStore.addLog('warning', `[model-load] 查询加载范围失败，将尝试从 Parquet 加载：${visibleErr}`);
         emitToast({
-          message: `[警告] 查询子孙 refno 失败，将尝试从 Parquet 加载：${visibleErr}`,
+          message: `[警告] 查询加载范围失败，将尝试从 Parquet 加载：${visibleErr}`,
           level: 'warning',
         });
       } else if (visibleOk && visibleRefnos.length === 0) {
         consoleStore.addLog(
           'warning',
-          `[model-load] 未查询到子孙 refno（${normalizedRoot}），将尝试从 Parquet 加载本库全部几何`
+          `[model-load] 未查询到可见实例 refno（${normalizedRoot}），本次不再回退加载本库全部几何`
         );
         emitToast({
-          message: `[警告] 未查询到可见子孙 refno（${normalizedRoot}），将尝试从 Parquet 加载本库几何`,
+          message: `[警告] 未查询到可见实例 refno（${normalizedRoot}），本次不再回退加载本库全部几何`,
           level: 'warning',
         });
       }
+
+      const loadScope = await resolveActualModelLoadScope(normalizedRoot, visibleRefnos);
+      if (loadScope.typeInfoError) {
+        consoleStore.addLog(
+          'warning',
+          `[model-load] root type-info 查询失败，沿用 component scope refno=${normalizedRoot} err=${loadScope.typeInfoError}`
+        );
+      }
+      consoleStore.addLog(
+        'info',
+        `[model-load] resolved_load_scope refno=${normalizedRoot} dbno=${dbno} component_count=${loadScope.componentRefnos.length} actual_load_count=${loadScope.actualLoadRefnos.length} bran_hang_root_injected=${loadScope.branHangRootInjected ? 1 : 0}` +
+          (loadScope.rootNoun ? ` root_noun=${loadScope.rootNoun}` : '')
+      );
 
       // ========== Parquet 优先路径（不可用时自动导出） ==========
       const parquetLoader = useDbnoInstancesParquetLoader();
       let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
 
       if (!parquetAvailable) {
-        const exportTargets = visibleRefnos.length > 0 ? visibleRefnos : [normalizedRoot];
+        const exportTargets = loadScope.actualLoadRefnos;
         parquetAvailable = await ensureParquetAvailableByAutoExport(dbno, exportTargets);
       }
 
@@ -537,21 +632,14 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         const dtxLayer = anyViewer.__dtxLayer as any;
         if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型');
 
-        // 可见 refnos 优先；若为空则从 Parquet 查询全量
-        const loadRefnos = visibleRefnos.length > 0
-          ? visibleRefnos
-          : await parquetLoader.queryAllRefnoKeys(dbno, { debug: false });
+        const loadRefnos = loadScope.actualLoadRefnos;
 
         if (loadRefnos.length === 0) {
-          statusMessage.value = `dbnum=${dbno} 无可加载 refno`;
+          statusMessage.value = `refno=${normalizedRoot} 无可见实例`;
           progress.value = 100;
           syncGlobalLoadStatus();
-          consoleStore.addLog('error', `[model-load] dbnum=${dbno} 无可加载 refno`);
-          emitToast({
-            message: `[错误] dbno=${dbno} 没有可加载的 refno（请先导出 Parquet 或检查数据）`,
-            level: 'error',
-          });
-          return false;
+          consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 当前无可见实例，无需回退全量加载`);
+          return true;
         }
 
         statusMessage.value = `加载 ${loadRefnos.length} 个 refno (Parquet)...`;
@@ -607,7 +695,13 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           refno: normalizedRoot,
           dbno,
           visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
           loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+          scopeDecision: {
+            rootNoun: loadScope.rootNoun,
+            branHangRootInjected: loadScope.branHangRootInjected,
+            typeInfoError: loadScope.typeInfoError,
+          },
           result: { loadedRefnos: totalLoaded, skippedRefnos: totalSkipped, loadedObjects: totalObjects },
           ms: Date.now() - startedAt,
         };

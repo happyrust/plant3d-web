@@ -68,6 +68,26 @@ export type ParquetMeshValidationInfo = {
   reportGeneratedAt: string | null
 }
 
+export type ParquetQueryTiming = {
+  phaseMs: {
+    duckdbInit: number
+    registerDbno: number
+    mainSql: number
+    mainRows: number
+    tubiSql: number
+    tubiRows: number
+    total: number
+  }
+  stats: {
+    requestedRefnos: number
+    chunkCount: number
+    mainRows: number
+    tubiRows: number
+    resultBuckets: number
+    resultEntries: number
+  }
+}
+
 type RegisteredDbno = {
   dbno: number
   baseDirUrl: string
@@ -194,6 +214,8 @@ let initPromise: Promise<void> | null = null;
 // 每个 dbno 的注册缓存
 const registeredByDbno = new Map<number, RegisteredDbno>();
 const registeringByDbno = new Map<number, Promise<RegisteredDbno>>();
+const availableByDbno = new Map<number, boolean>();
+const availabilityCheckingByDbno = new Map<number, Promise<boolean>>();
 const meshValidationByDbno = new Map<number, Promise<ParquetMeshValidationInfo | null>>();
 
 async function ensureDuckDB(): Promise<void> {
@@ -288,6 +310,28 @@ function multiplyWorldAndGeoLocal(worldCols: number[], geoCols: number[] | null)
   return combined.toArray();
 }
 
+function createParquetQueryTiming(requestedRefnos: number, chunkCount: number): ParquetQueryTiming {
+  return {
+    phaseMs: {
+      duckdbInit: 0,
+      registerDbno: 0,
+      mainSql: 0,
+      mainRows: 0,
+      tubiSql: 0,
+      tubiRows: 0,
+      total: 0,
+    },
+    stats: {
+      requestedRefnos,
+      chunkCount,
+      mainRows: 0,
+      tubiRows: 0,
+      resultBuckets: 0,
+      resultEntries: 0,
+    },
+  };
+}
+
 async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
   const hint = await getDirectoryHint(dbno);
   if (hint?.manifestBaseDir) {
@@ -379,56 +423,78 @@ async function registerDbno(dbno: number): Promise<RegisteredDbno> {
 
 export function useDbnoInstancesParquetLoader() {
   const lastError = shallowRef<string | null>(null);
+  const lastQueryTiming = shallowRef<ParquetQueryTiming | null>(null);
+
+  async function prewarmDuckDB(): Promise<void> {
+    await ensureDuckDB();
+  }
+
+  async function prewarmDbno(dbno: number): Promise<void> {
+    await registerDbno(dbno);
+  }
 
   async function isParquetAvailable(dbno: number): Promise<boolean> {
-    try {
-      const hint = await getDirectoryHint(dbno);
-      if (hint?.manifestBaseDir) {
-        const hintedManifest = await tryFetchManifest(dbno, hint.manifestBaseDir);
-        if (hintedManifest) {
-          return await areRequiredParquetFilesPresent(hint.manifestBaseDir, {
-            instances: hintedManifest.tables.instances.file,
-            geo_instances: hintedManifest.tables.geo_instances.file,
-            transforms: hintedManifest.tables.transforms.file,
-            aabb: hintedManifest.tables.aabb.file,
+    if (availableByDbno.get(dbno) === true) return true;
+
+    const pending = availabilityCheckingByDbno.get(dbno);
+    if (pending) return await pending;
+
+    const task = (async () => {
+      try {
+        const hint = await getDirectoryHint(dbno);
+        if (hint?.manifestBaseDir) {
+          const hintedManifest = await tryFetchManifest(dbno, hint.manifestBaseDir);
+          if (hintedManifest) {
+            return await areRequiredParquetFilesPresent(hint.manifestBaseDir, {
+              instances: hintedManifest.tables.instances.file,
+              geo_instances: hintedManifest.tables.geo_instances.file,
+              transforms: hintedManifest.tables.transforms.file,
+              aabb: hintedManifest.tables.aabb.file,
+            });
+          }
+        }
+
+        if (hint?.filesBaseDir) {
+          return await areRequiredParquetFilesPresent(hint.filesBaseDir, getDefaultParquetFiles(dbno));
+        }
+
+        // 1) manifest 驱动（优先 parquet/，兼容 instances/）
+        const parquetManifest = await tryFetchManifest(dbno, 'parquet');
+        if (parquetManifest) {
+          return await areRequiredParquetFilesPresent('parquet', {
+            instances: parquetManifest.tables.instances.file,
+            geo_instances: parquetManifest.tables.geo_instances.file,
+            transforms: parquetManifest.tables.transforms.file,
+            aabb: parquetManifest.tables.aabb.file,
           });
         }
-      }
 
-      if (hint?.filesBaseDir) {
-        return await areRequiredParquetFilesPresent(hint.filesBaseDir, getDefaultParquetFiles(dbno));
-      }
+        const instancesManifest = await tryFetchManifest(dbno, 'instances');
+        if (instancesManifest) {
+          return await areRequiredParquetFilesPresent('instances', {
+            instances: instancesManifest.tables.instances.file,
+            geo_instances: instancesManifest.tables.geo_instances.file,
+            transforms: instancesManifest.tables.transforms.file,
+            aabb: instancesManifest.tables.aabb.file,
+          });
+        }
 
-      // 1) manifest 驱动（优先 parquet/，兼容 instances/）
-      const parquetManifest = await tryFetchManifest(dbno, 'parquet');
-      if (parquetManifest) {
-        return await areRequiredParquetFilesPresent('parquet', {
-          instances: parquetManifest.tables.instances.file,
-          geo_instances: parquetManifest.tables.geo_instances.file,
-          transforms: parquetManifest.tables.transforms.file,
-          aabb: parquetManifest.tables.aabb.file,
-        });
+        // 2) 无 manifest：按约定命名兜底探测
+        const defaults = getDefaultParquetFiles(dbno);
+        const okParquet = await areRequiredParquetFilesPresent('parquet', defaults);
+        if (okParquet) return true;
+        return await areRequiredParquetFilesPresent('instances', defaults);
+      } catch {
+        return false;
       }
+    })().finally(() => {
+      availabilityCheckingByDbno.delete(dbno);
+    });
 
-      const instancesManifest = await tryFetchManifest(dbno, 'instances');
-      if (instancesManifest) {
-        return await areRequiredParquetFilesPresent('instances', {
-          instances: instancesManifest.tables.instances.file,
-          geo_instances: instancesManifest.tables.geo_instances.file,
-          transforms: instancesManifest.tables.transforms.file,
-          aabb: instancesManifest.tables.aabb.file,
-        });
-      }
-
-      // 2) 无 manifest：按约定命名兜底探测
-      const defaults = getDefaultParquetFiles(dbno);
-      const okParquet = await areRequiredParquetFilesPresent('parquet', defaults);
-      if (okParquet) return true;
-      const okInstances = await areRequiredParquetFilesPresent('instances', defaults);
-      return okInstances;
-    } catch {
-      return false;
-    }
+    availabilityCheckingByDbno.set(dbno, task);
+    const available = await task;
+    if (available) availableByDbno.set(dbno, true);
+    return available;
   }
 
   async function queryInstanceEntriesByRefnos(
@@ -437,14 +503,22 @@ export function useDbnoInstancesParquetLoader() {
     options?: { debug?: boolean }
   ): Promise<Map<string, InstanceEntry[]>> {
     lastError.value = null;
+    lastQueryTiming.value = null;
 
     const debug = options?.debug === true;
     const normalized = Array.from(new Set(refnoKeys.map(normalizeRefnoKey))).filter(Boolean);
     if (normalized.length === 0) return new Map();
+    const timing = createParquetQueryTiming(normalized.length, Math.ceil(normalized.length / 500));
+    const totalStartedAt = Date.now();
 
-    const reg = await registerDbno(dbno);
+    const duckdbInitStartedAt = Date.now();
     await ensureDuckDB();
+    timing.phaseMs.duckdbInit = Date.now() - duckdbInitStartedAt;
     if (!conn) throw new Error('DuckDB connection unavailable');
+
+    const registerDbnoStartedAt = Date.now();
+    const reg = await registerDbno(dbno);
+    timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
 
     // refno 在 parquet 里是 refno_str（与前端 refnoKey 一致：`24381_100818` 这种下划线格式）
     const toRefnoStr = (k: string) => String(k);
@@ -491,8 +565,13 @@ export function useDbnoInstancesParquetLoader() {
         ORDER BY i.refno_str, gi.geo_index
       `;
 
+      const mainSqlStartedAt = Date.now();
       const arrow = await conn.query(sql);
+      timing.phaseMs.mainSql += Date.now() - mainSqlStartedAt;
+
+      const mainRowsStartedAt = Date.now();
       const rows = arrow.toArray() as any[];
+      timing.stats.mainRows += rows.length;
 
       for (const row of rows) {
         const refnoStr = String(row.refno_str || '');
@@ -557,6 +636,7 @@ export function useDbnoInstancesParquetLoader() {
         list.push(entry);
         resultMap.set(refnoKey, list);
       }
+      timing.phaseMs.mainRows += Date.now() - mainRowsStartedAt;
 
       if (debug) {
          
@@ -617,8 +697,13 @@ export function useDbnoInstancesParquetLoader() {
         ORDER BY c.bucket_refno_str, c.order, c.tubi_refno_str
       `;
 
+      const tubiSqlStartedAt = Date.now();
       const tubiArrow = await conn.query(sqlTubi);
+      timing.phaseMs.tubiSql += Date.now() - tubiSqlStartedAt;
+
+      const tubiRowsStartedAt = Date.now();
       const tubiRows = tubiArrow.toArray() as any[];
+      timing.stats.tubiRows += tubiRows.length;
 
       for (const row of tubiRows) {
         const refnoStr = String(row.refno_str || '');
@@ -669,9 +754,14 @@ export function useDbnoInstancesParquetLoader() {
         list.push(entry);
         resultMap.set(refnoKey, list);
       }
+      timing.phaseMs.tubiRows += Date.now() - tubiRowsStartedAt;
 
     }
 
+    timing.stats.resultBuckets = resultMap.size;
+    timing.stats.resultEntries = Array.from(resultMap.values()).reduce((sum, entries) => sum + entries.length, 0);
+    timing.phaseMs.total = Date.now() - totalStartedAt;
+    lastQueryTiming.value = timing;
     return resultMap;
   }
 
@@ -798,6 +888,9 @@ export function useDbnoInstancesParquetLoader() {
 
   return {
     lastError,
+    lastQueryTiming,
+    prewarmDuckDB,
+    prewarmDbno,
     isParquetAvailable,
     queryInstanceEntriesByRefnos,
     queryAllRefnosByDbno,

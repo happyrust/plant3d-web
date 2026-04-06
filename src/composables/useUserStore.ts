@@ -109,8 +109,11 @@ export function resolveReviewProjectIdFromSession(
   try {
     const raw = storage.getItem('embed_mode_params');
     if (!raw) return DEFAULT_REVIEW_PROJECT_ID;
-    const parsed = JSON.parse(raw) as { projectId?: string | null };
-    return parsed.projectId?.trim() || DEFAULT_REVIEW_PROJECT_ID;
+    const parsed = JSON.parse(raw) as {
+      projectId?: string | null;
+      verifiedClaims?: { projectId?: string | null } | null;
+    };
+    return parsed.verifiedClaims?.projectId?.trim() || parsed.projectId?.trim() || DEFAULT_REVIEW_PROJECT_ID;
   } catch {
     return DEFAULT_REVIEW_PROJECT_ID;
   }
@@ -704,6 +707,13 @@ async function loadCurrentUser(): Promise<void> {
   } catch (e) {
     console.warn('[useUserStore] Failed to load current user:', e);
   }
+}
+
+function clearCurrentUserSelection(): void {
+  disconnectWebSocket();
+  backendCurrentUserResolved.value = false;
+  currentUserId.value = null;
+  reviewTasks.value = [];
 }
 
 async function switchUser(userId: string): Promise<void> {
@@ -1350,12 +1360,17 @@ function upsertReviewTask(task: ReviewTask): void {
 
 // ============ 外部用户同步（嵌入模式） ============
 
-function setEmbedUser(externalUserId: string, externalRole?: string): void {
+type EmbedUserOptions = {
+  verified?: boolean;
+};
+
+function setEmbedUser(externalUserId: string, externalRole?: string, options?: EmbedUserOptions): void {
   if (!externalUserId) return;
 
   const resolvedRole = externalRole ? fromBackendRole(externalRole) : undefined;
+  const verified = options?.verified === true;
 
-  if (USE_BACKEND.value && backendCurrentUserResolved.value && currentUser.value) {
+  if (!verified && USE_BACKEND.value && backendCurrentUserResolved.value && currentUser.value) {
     console.log(`[useUserStore] 嵌入模式：保留后端当前用户 ${currentUser.value.id}，外部 actor=${externalUserId}, role=${resolvedRole ?? 'unknown'}`);
     return;
   }
@@ -1378,7 +1393,7 @@ function setEmbedUser(externalUserId: string, externalRole?: string): void {
   });
   users.value = [...users.value, syntheticUser];
   currentUserId.value = syntheticUser.id;
-  console.log(`[useUserStore] 嵌入模式：已创建并切换到外部用户 ${syntheticUser.id}, 角色=${syntheticUser.role}`);
+  console.log(`[useUserStore] 嵌入模式：已创建并切换到外部用户 ${syntheticUser.id}, 角色=${syntheticUser.role}${verified ? ' (verified)' : ''}`);
 }
 
 // ============ 初始化 ============
@@ -1448,6 +1463,7 @@ export function useUserStore() {
     loadUsers,
     loadReviewers,
     loadCurrentUser,
+    clearCurrentUserSelection,
     switchUser,
 
     // 任务方法

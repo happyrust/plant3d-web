@@ -149,8 +149,8 @@ describe('restoreEmbedWorkbenchContext', () => {
 
     expect(loadReviewTasks).toHaveBeenCalledOnce();
     expect(setCurrentTask).toHaveBeenCalledWith(task);
-    expect(openPanel).toHaveBeenCalledWith('reviewerTasks');
     expect(openPanel).toHaveBeenCalledWith('review');
+    expect(openPanel).toHaveBeenCalledTimes(1);
     expect(activatePanel).toHaveBeenCalledWith('review');
     expect(result.restoreStatus).toBe('matched');
   });
@@ -173,8 +173,8 @@ describe('restoreEmbedWorkbenchContext', () => {
     });
 
     expect(setCurrentTask).toHaveBeenCalledWith(null);
-    expect(openPanel).toHaveBeenCalledWith('reviewerTasks');
     expect(openPanel).toHaveBeenCalledWith('review');
+    expect(openPanel).toHaveBeenCalledTimes(1);
     expect(activatePanel).toHaveBeenCalledWith('review');
     expect(result.restoreStatus).toBe('missing');
   });
