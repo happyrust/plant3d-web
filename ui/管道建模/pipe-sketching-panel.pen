@@ -1,0 +1,1140 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "canvas2",
+      "x": 0,
+      "y": 0,
+      "name": "Frame",
+      "clip": true,
+      "width": 800,
+      "height": 1100,
+      "fill": "#FFFFFF",
+      "layout": "none"
+    },
+    {
+      "type": "frame",
+      "id": "psRoot",
+      "x": 0,
+      "y": 0,
+      "name": "2D管道草图面板",
+      "width": 340,
+      "fill": "#FFFFFF",
+      "cornerRadius": 8,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "#E5E7EB"
+      },
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#0000000f",
+        "offset": { "x": 0, "y": 4 },
+        "blur": 16
+      },
+      "layout": "vertical",
+      "gap": 0,
+      "padding": 0,
+      "children": [
+        {
+          "type": "frame",
+          "id": "psHeader",
+          "name": "header",
+          "width": "fill_container",
+          "fill": "#FAFAFA",
+          "padding": [16, 20],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "psTitle",
+              "name": "title",
+              "fill": "#111827",
+              "content": "2D 管道草图",
+              "fontFamily": "Fira Sans",
+              "fontSize": 16,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "psQuickRouter",
+              "name": "quickRouterToggle",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "psQuickRouterLabel",
+                  "name": "quickRouterLabel",
+                  "fill": "#6B7280",
+                  "content": "快速路由",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 11,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "frame",
+                  "id": "psToggleTrack",
+                  "name": "toggleTrack",
+                  "width": 36,
+                  "height": 20,
+                  "fill": "#FF6B00",
+                  "cornerRadius": 10,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psToggleThumb",
+                      "name": "toggleThumb",
+                      "x": 18,
+                      "y": 2,
+                      "width": 16,
+                      "height": 16,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 8,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000026",
+                        "offset": { "x": 0, "y": 1 },
+                        "blur": 2
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "line",
+          "id": "psDivH",
+          "name": "dividerHeader",
+          "width": "fill_container",
+          "height": 1,
+          "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+        },
+        {
+          "type": "frame",
+          "id": "psBody",
+          "name": "body",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": 20,
+          "children": [
+            {
+              "type": "frame",
+              "id": "psPointToolsSec",
+              "name": "pointToolsSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "psPointToolsTitle",
+                  "name": "pointToolsTitle",
+                  "fill": "#111827",
+                  "content": "路径点工具",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "psToolbar",
+                  "name": "toolbar",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psToolCreate",
+                      "name": "toolCreate",
+                      "width": "fill_container",
+                      "fill": "#FFF0E6",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1.5,
+                        "fill": "#FF6B00"
+                      },
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [8, 6],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "psToolCreateIcon",
+                          "name": "toolCreateIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "plus-circle",
+                          "iconFontFamily": "lucide",
+                          "fill": "#FF6B00"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psToolCreateText",
+                          "name": "toolCreateText",
+                          "fill": "#FF6B00",
+                          "content": "创建点",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psToolInsert",
+                      "name": "toolInsert",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [8, 6],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "psToolInsertIcon",
+                          "name": "toolInsertIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "between-horizontal-start",
+                          "iconFontFamily": "lucide",
+                          "fill": "#6B7280"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psToolInsertText",
+                          "name": "toolInsertText",
+                          "fill": "#6B7280",
+                          "content": "插入点",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psToolDelete",
+                      "name": "toolDelete",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [8, 6],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "psToolDeleteIcon",
+                          "name": "toolDeleteIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "trash-2",
+                          "iconFontFamily": "lucide",
+                          "fill": "#6B7280"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psToolDeleteText",
+                          "name": "toolDeleteText",
+                          "fill": "#6B7280",
+                          "content": "删除点",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psToolClear",
+                      "name": "toolClear",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [8, 6],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "psToolClearIcon",
+                          "name": "toolClearIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "x-circle",
+                          "iconFontFamily": "lucide",
+                          "fill": "#6B7280"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psToolClearText",
+                          "name": "toolClearText",
+                          "fill": "#6B7280",
+                          "content": "全部清除",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "psModeRow",
+                  "name": "modeRow",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psOrthoToggle",
+                      "name": "orthoToggle",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "psOrthoCb",
+                          "name": "orthoCb",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "#FF6B00",
+                          "cornerRadius": 4,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "psOrthoCheck",
+                              "name": "orthoCheck",
+                              "x": 2,
+                              "y": 2,
+                              "width": 12,
+                              "height": 12,
+                              "iconFontName": "check",
+                              "iconFontFamily": "lucide",
+                              "fill": "#FFFFFF"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "psOrthoText",
+                          "name": "orthoText",
+                          "fill": "#111827",
+                          "content": "正交模式",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psOffsetToggle",
+                      "name": "offsetToggle",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "psOffsetCb",
+                          "name": "offsetCb",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "#00000000",
+                          "cornerRadius": 4,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1.5,
+                            "fill": "#D1D5DB"
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "id": "psOffsetText",
+                          "name": "offsetText",
+                          "fill": "#6B7280",
+                          "content": "偏移模式",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psBendToggle",
+                      "name": "bendToggle",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "psBendCb",
+                          "name": "bendCb",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "#FF6B00",
+                          "cornerRadius": 4,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "psBendCheck",
+                              "name": "bendCheck",
+                              "x": 2,
+                              "y": 2,
+                              "width": 12,
+                              "height": 12,
+                              "iconFontName": "check",
+                              "iconFontFamily": "lucide",
+                              "fill": "#FFFFFF"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "psBendText",
+                          "name": "bendText",
+                          "fill": "#111827",
+                          "content": "使用弯管",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "psDiv1",
+              "name": "divider1",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "psPointListSec",
+              "name": "pointListSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "psPointListHeader",
+                  "name": "pointListHeader",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "psPointListTitle",
+                      "name": "pointListTitle",
+                      "fill": "#111827",
+                      "content": "路径点列表 (4)",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "psPointListContainer",
+                  "name": "pointListContainer",
+                  "width": "fill_container",
+                  "height": 120,
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psPointListInner",
+                      "name": "pointListInner",
+                      "clip": true,
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#FAFAFA",
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "psPoint1",
+                          "name": "point1",
+                          "width": "fill_container",
+                          "fill": "#FFF0E6",
+                          "padding": [8, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "psPoint1Badge",
+                              "name": "point1Badge",
+                              "width": 20,
+                              "height": 20,
+                              "fill": "#FF6B00",
+                              "cornerRadius": 10,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "psPoint1Num",
+                                  "name": "point1Num",
+                                  "fill": "#FFFFFF",
+                                  "content": "1",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 10,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "psPoint1Pos",
+                              "name": "point1Pos",
+                              "fill": "#111827",
+                              "content": "E 1200  N 3400  U 5600",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psPoint2",
+                          "name": "point2",
+                          "width": "fill_container",
+                          "fill": "#00000000",
+                          "padding": [8, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "psPoint2Badge",
+                              "name": "point2Badge",
+                              "width": 20,
+                              "height": 20,
+                              "fill": "#D1D5DB",
+                              "cornerRadius": 10,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "psPoint2Num",
+                                  "name": "point2Num",
+                                  "fill": "#FFFFFF",
+                                  "content": "2",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 10,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "psPoint2Pos",
+                              "name": "point2Pos",
+                              "fill": "#6B7280",
+                              "content": "E 1200  N 3400  U 7200",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psPoint3",
+                          "name": "point3",
+                          "width": "fill_container",
+                          "fill": "#00000000",
+                          "padding": [8, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "psPoint3Badge",
+                              "name": "point3Badge",
+                              "width": 20,
+                              "height": 20,
+                              "fill": "#D1D5DB",
+                              "cornerRadius": 10,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "psPoint3Num",
+                                  "name": "point3Num",
+                                  "fill": "#FFFFFF",
+                                  "content": "3",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 10,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "psPoint3Pos",
+                              "name": "point3Pos",
+                              "fill": "#6B7280",
+                              "content": "E 4500  N 3400  U 7200",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psPoint4",
+                          "name": "point4",
+                          "width": "fill_container",
+                          "fill": "#00000000",
+                          "padding": [8, 12],
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "psPoint4Badge",
+                              "name": "point4Badge",
+                              "width": 20,
+                              "height": 20,
+                              "fill": "#D1D5DB",
+                              "cornerRadius": 10,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "psPoint4Num",
+                                  "name": "point4Num",
+                                  "fill": "#FFFFFF",
+                                  "content": "4",
+                                  "fontFamily": "Fira Code",
+                                  "fontSize": 10,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "psPoint4Pos",
+                              "name": "point4Pos",
+                              "fill": "#6B7280",
+                              "content": "E 4500  N 6800  U 7200",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "psPosControl",
+                  "name": "positionControl",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psPosLabelRow",
+                      "name": "posLabelRow",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "psPosLabel",
+                          "name": "posLabel",
+                          "fill": "#6B7280",
+                          "content": "坐标输入 (E / N / U)",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psPosPickBtn",
+                          "name": "posPickBtn",
+                          "fill": "#00000000",
+                          "cornerRadius": 4,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#FF6B00"
+                          },
+                          "padding": [4, 6],
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "psPosPickIcon",
+                              "name": "posPickIcon",
+                              "width": 12,
+                              "height": 12,
+                              "iconFontName": "crosshair",
+                              "iconFontFamily": "lucide",
+                              "fill": "#FF6B00"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psPosInputs",
+                      "name": "posInputs",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "psPosE",
+                          "name": "posE",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 10],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "psPosEVal", "name": "posEVal", "fill": "#111827", "content": "0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
+                            { "type": "text", "id": "psPosELabel", "name": "posELabel", "fill": "#9CA3AF", "content": "E", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psPosN",
+                          "name": "posN",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 10],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "psPosNVal", "name": "posNVal", "fill": "#111827", "content": "0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
+                            { "type": "text", "id": "psPosNLabel", "name": "posNLabel", "fill": "#9CA3AF", "content": "N", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psPosU",
+                          "name": "posU",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 10],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "psPosUVal", "name": "posUVal", "fill": "#111827", "content": "0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
+                            { "type": "text", "id": "psPosULabel", "name": "posULabel", "fill": "#9CA3AF", "content": "U", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "psDiv2",
+              "name": "divider2",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "psCommandsSec",
+              "name": "commandsSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "psCommandsTitle",
+                  "name": "commandsTitle",
+                  "fill": "#111827",
+                  "content": "快捷操作",
+                  "fontFamily": "Fira Sans",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "psCmdRow1",
+                  "name": "cmdRow1",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psCmdCreateBranch",
+                      "name": "cmdCreateBranch",
+                      "width": "fill_container",
+                      "fill": "#FF6B00",
+                      "cornerRadius": 6,
+                      "gap": 6,
+                      "padding": [10, 12],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "psCmdCreateBranchIcon",
+                          "name": "cmdCreateBranchIcon",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "git-branch",
+                          "iconFontFamily": "lucide",
+                          "fill": "#FFFFFF"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psCmdCreateBranchText",
+                          "name": "cmdCreateBranchText",
+                          "fill": "#FFFFFF",
+                          "content": "创建分支",
+                          "fontFamily": "Fira Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "psCmdRow2",
+                  "name": "cmdRow2",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psCmdFlange",
+                      "name": "cmdFlange",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [8, 6],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "icon_font", "id": "psCmdFlangeIcon", "name": "cmdFlangeIcon", "width": 16, "height": 16, "iconFontName": "disc", "iconFontFamily": "lucide", "fill": "#6B7280" },
+                        { "type": "text", "id": "psCmdFlangeText", "name": "cmdFlangeText", "fill": "#6B7280", "content": "法兰组", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psCmdValve",
+                      "name": "cmdValve",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [8, 6],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "icon_font", "id": "psCmdValveIcon", "name": "cmdValveIcon", "width": 16, "height": 16, "iconFontName": "toggle-right", "iconFontFamily": "lucide", "fill": "#6B7280" },
+                        { "type": "text", "id": "psCmdValveText", "name": "cmdValveText", "fill": "#6B7280", "content": "阀组", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psCmdExpansion",
+                      "name": "cmdExpansion",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [8, 6],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "icon_font", "id": "psCmdExpansionIcon", "name": "cmdExpansionIcon", "width": 16, "height": 16, "iconFontName": "expand", "iconFontFamily": "lucide", "fill": "#6B7280" },
+                        { "type": "text", "id": "psCmdExpansionText", "name": "cmdExpansionText", "fill": "#6B7280", "content": "膨胀环", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "psCmdRow3",
+                  "name": "cmdRow3",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "psCmdCopy",
+                      "name": "cmdCopy",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "gap": 6,
+                      "padding": [8, 12],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "icon_font", "id": "psCmdCopyIcon", "name": "cmdCopyIcon", "width": 14, "height": 14, "iconFontName": "copy", "iconFontFamily": "lucide", "fill": "#6B7280" },
+                        { "type": "text", "id": "psCmdCopyText", "name": "cmdCopyText", "fill": "#374151", "content": "复制选择", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psCmdMirror",
+                      "name": "cmdMirror",
+                      "width": "fill_container",
+                      "fill": "#00000000",
+                      "cornerRadius": 6,
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "gap": 6,
+                      "padding": [8, 12],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        { "type": "icon_font", "id": "psCmdMirrorIcon", "name": "cmdMirrorIcon", "width": 14, "height": 14, "iconFontName": "flip-horizontal-2", "iconFontFamily": "lucide", "fill": "#6B7280" },
+                        { "type": "text", "id": "psCmdMirrorText", "name": "cmdMirrorText", "fill": "#374151", "content": "镜像选择", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "line",
+              "id": "psDiv3",
+              "name": "divider3",
+              "width": "fill_container",
+              "height": 1,
+              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+            },
+            {
+              "type": "frame",
+              "id": "psMirrorSec",
+              "name": "mirrorSection",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "psMirrorHeader",
+                  "name": "mirrorHeader",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "psMirrorTitle",
+                      "name": "mirrorTitle",
+                      "fill": "#111827",
+                      "content": "镜像设置",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "psMirrorChevron",
+                      "name": "mirrorChevron",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "chevron-down",
+                      "iconFontFamily": "lucide",
+                      "fill": "#9CA3AF"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "psMirrorDirRow",
+                  "name": "mirrorDirRow",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "psMirrorDirLabel",
+                      "name": "mirrorDirLabel",
+                      "fill": "#6B7280",
+                      "content": "镜像方向",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psMirrorDirInputRow",
+                      "name": "mirrorDirInputRow",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "psMirrorDirInput",
+                          "name": "mirrorDirInput",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 12],
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "psMirrorDirVal", "name": "mirrorDirVal", "fill": "#111827", "content": "N 0  E 1  U 0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psMirrorDirPickBtn",
+                          "name": "mirrorDirPickBtn",
+                          "fill": "#00000000",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#FF6B00" },
+                          "padding": [7, 8],
+                          "children": [
+                            { "type": "icon_font", "id": "psMirrorDirPickIcon", "name": "mirrorDirPickIcon", "width": 14, "height": 14, "iconFontName": "crosshair", "iconFontFamily": "lucide", "fill": "#FF6B00" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "psMirrorPosRow",
+                  "name": "mirrorPosRow",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "psMirrorPosLabel",
+                      "name": "mirrorPosLabel",
+                      "fill": "#6B7280",
+                      "content": "镜像基点",
+                      "fontFamily": "Fira Sans",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "psMirrorPosInputRow",
+                      "name": "mirrorPosInputRow",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "psMirrorPosInput",
+                          "name": "mirrorPosInput",
+                          "width": "fill_container",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                          "padding": [8, 12],
+                          "alignItems": "center",
+                          "children": [
+                            { "type": "text", "id": "psMirrorPosVal", "name": "mirrorPosVal", "fill": "#111827", "content": "E 0  N 0  U 0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "psMirrorPosPickBtn",
+                          "name": "mirrorPosPickBtn",
+                          "fill": "#00000000",
+                          "cornerRadius": 6,
+                          "stroke": { "align": "inside", "thickness": 1, "fill": "#FF6B00" },
+                          "padding": [7, 8],
+                          "children": [
+                            { "type": "icon_font", "id": "psMirrorPosPickIcon", "name": "mirrorPosPickIcon", "width": 14, "height": 14, "iconFontName": "crosshair", "iconFontFamily": "lucide", "fill": "#FF6B00" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
