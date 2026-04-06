@@ -1,13 +1,21 @@
-export type SimulatorPmsUser = 'SJ' | 'JH' | 'SH' | 'PZ';
-export type WorkflowRole = 'sj' | 'jd' | 'sh' | 'pz';
+import {
+  buildAuthLoginRequest as _buildAuthLoginRequest,
+  buildEmbedUrlPayload as _buildEmbedUrlPayload,
+  buildWorkflowSyncPayload as _buildWorkflowSyncPayload,
+  resolveSimulatorPmsUserIdentity as _resolveSimulatorPmsUserIdentity,
+  type BuildAuthLoginRequestOptions,
+  type BuildEmbedUrlPayloadOptions,
+  type BuildWorkflowSyncPayloadOptions,
+  type SimulatorActorIdentity,
+  type SimulatorPmsUser,
+  type WorkflowMutationAction,
+  type WorkflowRole,
+  type WorkflowSyncNextStepPayload,
+} from './pmsPlatformContractPayloads';
+
+export type { SimulatorActorIdentity, SimulatorPmsUser, WorkflowMutationAction, WorkflowRole, WorkflowSyncNextStepPayload };
 export type SidePanelMode = 'initiate' | 'workflow' | 'readonly';
 export type IframeSource = 'new' | 'task-view' | 'task-reopen' | 'last-form-reopen' | 'iframe-refresh-reopen';
-export type WorkflowMutationAction = 'active' | 'agree' | 'return' | 'stop';
-
-export type SimulatorActorIdentity = {
-  userId: string;
-  userName: string;
-};
 
 export type WorkflowRoleResolutionSource =
   | 'workflow-next-step'
@@ -46,12 +54,6 @@ export type WorkflowAccessResolution = {
   reason: string;
 };
 
-export type WorkflowSyncNextStepPayload = {
-  assigneeId: string;
-  name?: string | null;
-  roles: WorkflowRole;
-};
-
 type DeriveSimulatorSidePanelModeOptions = {
   passiveWorkflowMode: boolean;
   currentPmsUser: SimulatorPmsUser;
@@ -78,28 +80,9 @@ type ResolveSimulatorWorkflowRoleOptions = {
   iframeSource?: IframeSource | null;
 };
 
-type BuildSimulatorAuthLoginRequestOptions = {
-  projectId: string;
-  currentPmsUser: SimulatorPmsUser;
-  currentWorkflowRole: WorkflowRole;
-};
-
-type BuildSimulatorEmbedUrlPayloadOptions = {
-  projectId: string;
-  currentPmsUser: SimulatorPmsUser;
-  currentWorkflowRole: WorkflowRole;
-  preferredFormId?: string | null;
-};
-
-type BuildSimulatorWorkflowSyncPayloadOptions = {
-  formId: string;
-  token: string;
-  action: WorkflowMutationAction | 'query';
-  comments: string;
-  currentPmsUser: SimulatorPmsUser;
-  currentWorkflowRole: WorkflowRole;
-  nextStep?: WorkflowSyncNextStepPayload | null;
-};
+type BuildSimulatorEmbedUrlPayloadOptions = BuildEmbedUrlPayloadOptions;
+type BuildSimulatorWorkflowSyncPayloadOptions = BuildWorkflowSyncPayloadOptions;
+type BuildSimulatorAuthLoginRequestOptions = BuildAuthLoginRequestOptions;
 
 type BuildSimulatorRuntimeWorkflowRoleOptions = {
   currentPmsUser: SimulatorPmsUser;
@@ -139,12 +122,7 @@ function normalizeWorkflowRole(value?: string | null): WorkflowRole | null {
   return null;
 }
 
-export function resolveSimulatorPmsUserIdentity(currentPmsUser: SimulatorPmsUser): SimulatorActorIdentity {
-  return {
-    userId: currentPmsUser,
-    userName: currentPmsUser,
-  };
-}
+export const resolveSimulatorPmsUserIdentity = _resolveSimulatorPmsUserIdentity;
 
 export function resolveSimulatorWorkflowRole(options: ResolveSimulatorWorkflowRoleOptions): WorkflowRoleResolution {
   const explicitRole = normalizeWorkflowRole(options.explicitRole);
@@ -228,85 +206,11 @@ export function shouldUseSyncOnlyWorkflowAction(options: SyncOnlyWorkflowActionO
   return options.sidePanelMode === 'workflow';
 }
 
-export function buildSimulatorAuthLoginRequest(options: BuildSimulatorAuthLoginRequestOptions): {
-  projectId: string;
-  userId: string;
-  role: WorkflowRole;
-} {
-  const actor = resolveSimulatorPmsUserIdentity(options.currentPmsUser);
-  return {
-    projectId: options.projectId,
-    userId: actor.userId,
-    role: options.currentWorkflowRole,
-  };
-}
+export const buildSimulatorAuthLoginRequest = _buildAuthLoginRequest;
 
-export function buildSimulatorEmbedUrlPayload(options: BuildSimulatorEmbedUrlPayloadOptions): Record<string, unknown> {
-  const actor = resolveSimulatorPmsUserIdentity(options.currentPmsUser);
-  const payload: Record<string, unknown> = {
-    project_id: options.projectId,
-    user_id: actor.userId,
-    role: options.currentWorkflowRole,
-  };
-  if (options.preferredFormId?.trim()) {
-    payload.form_id = options.preferredFormId.trim();
-  }
-  return payload;
-}
+export const buildSimulatorEmbedUrlPayload = _buildEmbedUrlPayload;
 
-export function buildSimulatorWorkflowSyncPayload(options: BuildSimulatorWorkflowSyncPayloadOptions): {
-  form_id: string;
-  token: string;
-  action: WorkflowMutationAction | 'query';
-  actor: {
-    id: string;
-    name: string;
-    roles: WorkflowRole;
-  };
-  comments: string;
-  next_step?: {
-    assignee_id: string;
-    name: string;
-    roles: WorkflowRole;
-  };
-} {
-  const actor = resolveSimulatorPmsUserIdentity(options.currentPmsUser);
-  const payload: {
-    form_id: string;
-    token: string;
-    action: WorkflowMutationAction | 'query';
-    actor: {
-      id: string;
-      name: string;
-      roles: WorkflowRole;
-    };
-    comments: string;
-    next_step?: {
-      assignee_id: string;
-      name: string;
-      roles: WorkflowRole;
-    };
-  } = {
-    form_id: options.formId,
-    token: options.token,
-    action: options.action,
-    actor: {
-      id: actor.userId,
-      name: actor.userName,
-      roles: options.currentWorkflowRole,
-    },
-    comments: options.comments,
-  };
-  const nextStep = options.nextStep;
-  if (options.action !== 'query' && nextStep?.assigneeId?.trim()) {
-    payload.next_step = {
-      assignee_id: nextStep.assigneeId.trim(),
-      name: nextStep.name?.trim() || nextStep.assigneeId.trim(),
-      roles: nextStep.roles,
-    };
-  }
-  return payload;
-}
+export const buildSimulatorWorkflowSyncPayload = _buildWorkflowSyncPayload;
 
 export function resolveSimulatorWorkflowMutationTargetRole(options: {
   action: WorkflowMutationAction;

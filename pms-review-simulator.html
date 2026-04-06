@@ -192,7 +192,7 @@
       .workspace {
         min-height: 0;
         display: grid;
-        grid-template-rows: auto minmax(240px, 1fr) minmax(260px, 36%);
+        grid-template-rows: auto auto minmax(240px, 1fr) minmax(260px, 36%);
         gap: 10px;
         padding: 10px 14px 14px;
       }
@@ -926,6 +926,106 @@
               <span id="project-id-status" class="toolbar-meta-status">项目列表加载中…</span>
             </div>
           </div>
+
+          <section id="platform-params-panel" class="bottom-panel" style="grid-template-rows: auto auto; min-height: 0;">
+            <div class="panel-title" style="cursor: pointer; user-select: none;" id="platform-params-toggle">
+              <span>▸ 平台 API 参数（types.rs 对齐）</span>
+              <span style="font-size: 11px; color: var(--text-muted);">embed-url / workflow/sync / cache / delete</span>
+            </div>
+            <div id="platform-params-body" style="display: none; padding: 10px 12px; gap: 10px; font-size: 12px;" class="panel-section-body">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="panel-field">
+                  <label for="platform-workflow-mode">workflow_mode（embed-url）</label>
+                  <select id="platform-workflow-mode" class="dialog-select" style="min-height: 28px;">
+                    <option value="external" selected>external（真实 PMS 默认）</option>
+                    <option value="manual">manual（仅 plant3d 内部流）</option>
+                    <option value="internal">internal</option>
+                    <option value="">（不传，使用后端默认）</option>
+                  </select>
+                </div>
+                <div class="panel-field">
+                  <label for="platform-embed-token">token（embed-url 续流程 JWT）</label>
+                  <input id="platform-embed-token" class="panel-input" type="text" placeholder="留空则由后端签发新 token" style="min-height: 28px;" />
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="panel-field">
+                  <label for="platform-extra-params">extra_parameters（embed-url JSON）</label>
+                  <textarea id="platform-extra-params" class="panel-textarea" style="min-height: 56px; font-family: monospace; font-size: 11px;" placeholder='例：{"is_reviewer": true}'></textarea>
+                </div>
+                <div class="panel-field">
+                  <label for="platform-workflow-metadata">metadata（workflow/sync JSON）</label>
+                  <textarea id="platform-workflow-metadata" class="panel-textarea" style="min-height: 56px; font-family: monospace; font-size: 11px;" placeholder='例：{"integration_version": "1.0"}'></textarea>
+                </div>
+              </div>
+              <div id="platform-mode-warning" hidden
+                style="padding: 8px 10px; border: 1px solid #e0c1a0; background: #fff6ea; color: #8b4d16; font-size: 12px; line-height: 1.55; border-radius: 2px;">
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; padding-top: 4px; border-top: 1px solid var(--line-faint);">
+                <span style="color: var(--text-muted); margin-right: 4px;">平台侧 API：</span>
+                <button id="platform-cache-preload-btn" class="tool-btn" type="button" disabled>cache/preload</button>
+                <button id="platform-delete-btn" class="tool-btn danger" type="button" disabled>delete（需二次确认）</button>
+                <span id="platform-api-feedback" style="color: var(--text-muted); font-size: 11px; margin-left: auto;">token 可用后启用</span>
+              </div>
+              <div style="padding-top: 6px; border-top: 1px solid var(--line-faint);">
+                <div style="font-weight: 700; color: #41586f; margin-bottom: 6px;">SOP 操作清单（对齐 test:pms:cdp:full）</div>
+                <div style="display: grid; gap: 3px; font-size: 12px; line-height: 1.6;">
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="login" style="accent-color: var(--primary);" />
+                    <span><b>1. 选择 PMS 用户</b>（等价于 PMS 登录）— 顶部「PMS 用户切换」按钮</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="project" style="accent-color: var(--primary);" />
+                    <span><b>2. 选择项目号</b> — 工具栏「项目号」下拉</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="new" style="accent-color: var(--primary);" />
+                    <span><b>3. 点击「新增」</b> → 调 embed-url → 打开 iframe（等价于 PMS 新增按钮）</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="fill-data" style="accent-color: var(--primary);" />
+                    <span><b>4. 在 iframe 中填写提资数据</b>（包名、BRAN、构件清单等）→ 点击「创建提资数据」</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="submit" style="accent-color: var(--primary);" />
+                    <span><b>5. 回到 PMS 面板执行 workflow/sync active</b>（送审提交）</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="verify-list" style="accent-color: var(--primary);" />
+                    <span><b>6. 刷新列表</b>，确认新记录出现（对应 CDP 的 PMS JSON 嗅探断言）</span>
+                  </label>
+                  <label style="display: flex; align-items: baseline; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" class="sop-check" data-step="checker" style="accent-color: var(--primary);" />
+                    <span><b>7.（Extended）切换校核用户 JH</b> → 打开同一记录 → 查看/批注 → 同意/驳回</span>
+                  </label>
+                </div>
+              </div>
+              <div style="padding-top: 6px; border-top: 1px solid var(--line-faint);">
+                <div style="font-weight: 700; color: #41586f; margin-bottom: 6px;">CDP 环境变量预置（query / localStorage）</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px;">
+                  <div class="panel-field">
+                    <label for="platform-env-bran">PMS_TARGET_BRAN_REFNO</label>
+                    <input id="platform-env-bran" class="panel-input" type="text" placeholder="24381_145018（默认）" style="min-height: 26px; font-size: 11px;" />
+                  </div>
+                  <div class="panel-field">
+                    <label for="platform-env-package">PMS_MOCK_PACKAGE_NAME</label>
+                    <input id="platform-env-package" class="panel-input" type="text" placeholder="自动生成或手填包名" style="min-height: 26px; font-size: 11px;" />
+                  </div>
+                  <div class="panel-field">
+                    <label for="platform-env-embed-site">PMS_EMBEDDED_SITE_SUBSTRING</label>
+                    <input id="platform-env-embed-site" class="panel-input" type="text" placeholder="嵌入站点域名片段" style="min-height: 26px; font-size: 11px;" />
+                  </div>
+                  <div class="panel-field">
+                    <label for="platform-env-cdp-mode">PMS_CDP_WORKFLOW_MODE</label>
+                    <input id="platform-env-cdp-mode" class="panel-input" type="text" placeholder="manual / external" style="min-height: 26px; font-size: 11px;" readonly />
+                  </div>
+                </div>
+                <div style="margin-top: 4px; color: var(--text-muted); font-size: 11px;">
+                  以上字段通过 <code>?bran_refno=…&amp;package_name=…</code> URL 参数或 <code>localStorage</code> 预设时自动填入，与 CDP 脚本共享语义。
+                </div>
+              </div>
+            </div>
+          </section>
 
           <section class="table-panel">
             <div class="panel-title">

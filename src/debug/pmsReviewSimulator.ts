@@ -11,7 +11,7 @@ import {
   reviewTaskSubmitToNext,
   type ReviewTask,
 } from '@/api/reviewApi';
-import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
+import { resolvePassiveWorkflowMode, resolveWorkflowMode } from '@/components/review/workflowMode';
 import {
   buildTokenPrimaryPmsLaunchSearch,
   resolveDefaultSimulatorProjectId,
@@ -195,6 +195,10 @@ type SimulatorState = {
   sidePanelDraftComment: string;
   workflowNodeRaw: string | null;
   workflowDialog: WorkflowDialogState;
+  platformEmbedWorkflowMode: string;
+  platformEmbedToken: string;
+  platformEmbedExtraParameters: string;
+  platformWorkflowMetadata: string;
 };
 
 type SimulatorTestSnapshot = {
@@ -282,7 +286,7 @@ const NODE_LABELS: Record<string, string> = {
 
 const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
 const WORKFLOW_MUTATION_ACTIONS: WorkflowMutationAction[] = ['active', 'agree', 'return', 'stop'];
-const PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
+let PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
 const SIMULATOR_SESSION_STORAGE_KEY = 'pms-review-simulator-session-v1';
 
 const IFRAME_SOURCE_LABELS: Record<IframeSource, string> = {
@@ -403,6 +407,10 @@ const state: SimulatorState = {
     submitting: false,
     error: null,
   },
+  platformEmbedWorkflowMode: '',
+  platformEmbedToken: '',
+  platformEmbedExtraParameters: '',
+  platformWorkflowMetadata: '',
 };
 
 function persistSimulatorSession(): void {
@@ -2019,6 +2027,14 @@ async function requestWorkflowSync(
     headers.Authorization = `Bearer ${authToken}`;
   }
 
+  let parsedMetadata: Record<string, unknown> | null = null;
+  if (state.platformWorkflowMetadata.trim()) {
+    try {
+      parsedMetadata = JSON.parse(state.platformWorkflowMetadata.trim());
+    } catch {
+      // ignore invalid JSON — will be omitted
+    }
+  }
   const payload = buildSimulatorWorkflowSyncPayload({
     formId,
     token,
@@ -2027,6 +2043,7 @@ async function requestWorkflowSync(
     currentPmsUser: state.currentPmsUser,
     currentWorkflowRole,
     nextStep: action === 'query' ? null : resolveWorkflowMutationNextStep(action, currentWorkflowRole, targetNode),
+    metadata: parsedMetadata,
   });
 
   try {
@@ -2219,11 +2236,22 @@ async function requestEmbedUrlData(
     headers.Authorization = `Bearer ${token}`;
   }
 
+  let parsedExtraParameters: Record<string, unknown> | null = null;
+  if (state.platformEmbedExtraParameters.trim()) {
+    try {
+      parsedExtraParameters = JSON.parse(state.platformEmbedExtraParameters.trim());
+    } catch {
+      // ignore invalid JSON — will be omitted
+    }
+  }
   const payload = buildSimulatorEmbedUrlPayload({
     projectId,
     currentPmsUser: state.currentPmsUser,
     currentWorkflowRole: workflowRole,
     preferredFormId,
+    workflowMode: state.platformEmbedWorkflowMode || null,
+    token: state.platformEmbedToken || null,
+    extraParameters: parsedExtraParameters,
   });
 
   const resp = await fetch(`${base}/api/review/embed-url`, {
@@ -2791,6 +2819,163 @@ function bindEvents(): void {
       event.preventDefault();
     }
   });
+
+  const platformToggle = document.getElementById('platform-params-toggle');
+  const platformBody = document.getElementById('platform-params-body');
+  if (platformToggle && platformBody) {
+    platformToggle.addEventListener('click', () => {
+      const isHidden = platformBody.style.display === 'none';
+      platformBody.style.display = isHidden ? 'grid' : 'none';
+      const arrow = platformToggle.querySelector('span');
+      if (arrow) {
+        arrow.textContent = arrow.textContent.replace(/^[▸▾]/, isHidden ? '▾' : '▸');
+      }
+    });
+  }
+
+  const platformWorkflowModeEl = document.getElementById('platform-workflow-mode') as HTMLSelectElement | null;
+  const platformEmbedTokenEl = document.getElementById('platform-embed-token') as HTMLInputElement | null;
+  const platformExtraParamsEl = document.getElementById('platform-extra-params') as HTMLTextAreaElement | null;
+  const platformWorkflowMetadataEl = document.getElementById('platform-workflow-metadata') as HTMLTextAreaElement | null;
+  const platformCacheBtn = document.getElementById('platform-cache-preload-btn') as HTMLButtonElement | null;
+  const platformDeleteBtn = document.getElementById('platform-delete-btn') as HTMLButtonElement | null;
+  const platformApiFeedback = document.getElementById('platform-api-feedback') as HTMLSpanElement | null;
+
+  const platformModeWarning = document.getElementById('platform-mode-warning') as HTMLDivElement | null;
+
+  function applyWorkflowModeSwitch(modeValue: string): void {
+    state.platformEmbedWorkflowMode = modeValue;
+    const effectiveMode = modeValue
+      ? resolveWorkflowMode({ verifiedWorkflowMode: modeValue })
+      : resolveWorkflowMode();
+    PASSIVE_WORKFLOW_MODE = effectiveMode === 'external';
+
+    if (platformModeWarning) {
+      if (modeValue && modeValue !== 'external') {
+        platformModeWarning.hidden = false;
+        platformModeWarning.textContent =
+          `⚠ 当前 workflow_mode="${modeValue}"（非 external）：与真实 PMS 默认行为不一致，仅用于验证 plant3d 内部按钮流程。`;
+      } else {
+        platformModeWarning.hidden = true;
+      }
+    }
+
+    renderSidePanelState();
+    renderDiagnostics();
+  }
+
+  platformWorkflowModeEl?.addEventListener('change', () => {
+    applyWorkflowModeSwitch(platformWorkflowModeEl.value);
+  });
+  platformEmbedTokenEl?.addEventListener('input', () => {
+    state.platformEmbedToken = platformEmbedTokenEl.value;
+  });
+  platformExtraParamsEl?.addEventListener('input', () => {
+    state.platformEmbedExtraParameters = platformExtraParamsEl.value;
+  });
+  platformWorkflowMetadataEl?.addEventListener('input', () => {
+    state.platformWorkflowMetadata = platformWorkflowMetadataEl.value;
+  });
+
+  function updatePlatformApiButtons(): void {
+    const hasToken = Boolean(state.embedToken?.trim());
+    if (platformCacheBtn) platformCacheBtn.disabled = !hasToken;
+    if (platformDeleteBtn) platformDeleteBtn.disabled = !hasToken && !state.lastOpenedFormId;
+    if (platformApiFeedback) {
+      platformApiFeedback.textContent = hasToken ? `token 就绪（${state.embedToken!.slice(0, 12)}…）` : 'token 可用后启用';
+    }
+  }
+
+  const updateBtnsInterval = setInterval(updatePlatformApiButtons, 2000);
+  void updateBtnsInterval;
+
+  platformCacheBtn?.addEventListener('click', async () => {
+    if (!state.embedToken?.trim()) return;
+    const base = getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' }).replace(/\/$/, '');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const authToken = getAuthToken();
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    const body = JSON.stringify({
+      project_id: state.projectId,
+      initiator: state.currentPmsUser,
+      token: state.embedToken,
+    });
+    try {
+      const resp = await fetch(`${base}/api/review/cache/preload`, { method: 'POST', headers, body });
+      const result = await resp.json().catch(() => ({ code: resp.status }));
+      if (platformApiFeedback) {
+        platformApiFeedback.textContent = `cache/preload → ${resp.status} code=${result.code ?? '?'}`;
+        platformApiFeedback.style.color = resp.ok ? 'var(--success)' : 'var(--danger)';
+      }
+    } catch (error) {
+      if (platformApiFeedback) {
+        platformApiFeedback.textContent = `cache/preload 失败：${error instanceof Error ? error.message : String(error)}`;
+        platformApiFeedback.style.color = 'var(--danger)';
+      }
+    }
+  });
+
+  platformDeleteBtn?.addEventListener('click', async () => {
+    const formIds: string[] = [];
+    if (state.lastOpenedFormId) formIds.push(state.lastOpenedFormId);
+    if (!formIds.length) return;
+    const confirmed = confirm(`确认调用平台 DELETE 接口删除 form_ids=[${formIds.join(', ')}]？此操作不可撤销。`);
+    if (!confirmed) return;
+    const base = getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' }).replace(/\/$/, '');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const authToken = getAuthToken();
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    const body = JSON.stringify({
+      form_ids: formIds,
+      operator_id: state.currentPmsUser,
+      token: state.embedToken || '',
+    });
+    try {
+      const resp = await fetch(`${base}/api/review/delete`, { method: 'POST', headers, body });
+      const result = await resp.json().catch(() => ({ code: resp.status }));
+      if (platformApiFeedback) {
+        platformApiFeedback.textContent = `delete → ${resp.status} code=${result.code ?? '?'}`;
+        platformApiFeedback.style.color = resp.ok ? 'var(--success)' : 'var(--danger)';
+      }
+    } catch (error) {
+      if (platformApiFeedback) {
+        platformApiFeedback.textContent = `delete 失败：${error instanceof Error ? error.message : String(error)}`;
+        platformApiFeedback.style.color = 'var(--danger)';
+      }
+    }
+  });
+}
+
+function initCdpEnvPresets(): void {
+  const query = new URLSearchParams(window.location.search);
+
+  function readPreset(queryAliases: string[], localStorageKey?: string): string {
+    for (const alias of queryAliases) {
+      const v = query.get(alias);
+      if (v?.trim()) return v.trim();
+    }
+    if (localStorageKey) {
+      try {
+        const v = localStorage.getItem(localStorageKey);
+        if (v?.trim()) return v.trim();
+      } catch { /* ignore */ }
+    }
+    return '';
+  }
+
+  const branRefno = readPreset(['bran_refno', 'PMS_TARGET_BRAN_REFNO'], 'pms_target_bran_refno');
+  const packageName = readPreset(['package_name', 'PMS_MOCK_PACKAGE_NAME'], 'pms_mock_package_name');
+  const embedSite = readPreset(['embed_site', 'PMS_EMBEDDED_SITE_SUBSTRING'], 'pms_embedded_site_substring');
+
+  const branEl = document.getElementById('platform-env-bran') as HTMLInputElement | null;
+  const packageEl = document.getElementById('platform-env-package') as HTMLInputElement | null;
+  const embedSiteEl = document.getElementById('platform-env-embed-site') as HTMLInputElement | null;
+  const cdpModeEl = document.getElementById('platform-env-cdp-mode') as HTMLInputElement | null;
+
+  if (branEl && branRefno) branEl.value = branRefno;
+  if (packageEl && packageName) packageEl.value = packageName;
+  if (embedSiteEl && embedSite) embedSiteEl.value = embedSite;
+  if (cdpModeEl) cdpModeEl.value = state.platformEmbedWorkflowMode || 'external';
 }
 
 async function bootstrap(): Promise<void> {
@@ -2819,6 +3004,11 @@ async function bootstrap(): Promise<void> {
 
   initRefs();
   bindEvents();
+
+  state.platformEmbedWorkflowMode = 'external';
+
+  initCdpEnvPresets();
+
   renderRoleHeader();
   renderLastOpened();
   renderActionStates();

@@ -53,3 +53,4 @@ e2e/*
 scripts/*
 !scripts/pms-chrome-devtools-flow.ts
 !scripts/pms-plant3d-initiate-flow.ts
+!scripts/pms-contract-sequence.ts
