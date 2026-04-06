@@ -835,7 +835,7 @@ function resetLayout() {
   resetZoneState();
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
   if (isEmbedLayoutMode()) {
-    const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.userRole);
+    const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
     createEmbedFocusedLayout(api.value, {
       primaryPanelId: landingTarget === 'designer' ? 'initiateReview' : landingTarget === 'reviewer' ? 'review' : undefined,
     });
@@ -1194,15 +1194,15 @@ async function bootstrapEmbedSession(): Promise<void> {
               claimsProjectId: claims.projectId,
             });
           }
-          if (embedModeParams.value.launchInput?.userRole) {
-            if (claims.role && embedModeParams.value.launchInput.userRole !== claims.role) {
-              console.warn('[DockLayout] 忽略 URL user_role，改用 token claims.role', {
-                urlUserRole: embedModeParams.value.launchInput.userRole,
-                claimsUserRole: claims.role,
+          if (embedModeParams.value.launchInput?.workflowRole) {
+            if (claims.role && embedModeParams.value.launchInput.workflowRole !== claims.role) {
+              console.warn('[DockLayout] 忽略 URL workflow role，改用 token claims.role', {
+                urlWorkflowRole: embedModeParams.value.launchInput.workflowRole,
+                claimsWorkflowRole: claims.role,
               });
             } else if (!claims.role) {
-              console.warn('[DockLayout] token claims 缺少 role，URL user_role 不再作为可信身份源', {
-                urlUserRole: embedModeParams.value.launchInput.userRole,
+              console.warn('[DockLayout] token claims 缺少 role，URL workflow role 不再作为可信身份源', {
+                urlWorkflowRole: embedModeParams.value.launchInput.workflowRole,
               });
             }
           }
@@ -1210,7 +1210,7 @@ async function bootstrapEmbedSession(): Promise<void> {
             ...embedModeParams.value,
             formId: claims.formId || embedModeParams.value.formId,
             userId: claims.userId,
-            userRole: claims.role || null,
+            workflowRole: claims.role || null,
             projectId: claims.projectId,
             workflowMode: claims.workflowMode || embedModeParams.value.workflowMode || null,
             verifiedClaims: claims,
@@ -1241,7 +1241,7 @@ async function bootstrapEmbedSession(): Promise<void> {
   if (trustedEmbedIdentity) {
     userStore.setEmbedUser(
       trustedEmbedIdentity.userId,
-      trustedEmbedIdentity.userRole || undefined,
+      trustedEmbedIdentity.workflowRole || undefined,
       { verified: true },
     );
   }
@@ -1278,7 +1278,7 @@ async function applyInitialLanding() {
   }
 
   if (embedModeParams.value.isEmbedMode) {
-    const roleLandingTarget = resolveEmbedLandingTargetFromRole(trustedEmbedIdentity?.userRole);
+    const roleLandingTarget = resolveEmbedLandingTargetFromRole(trustedEmbedIdentity?.workflowRole);
     const landingTarget = roleLandingTarget;
 
     if (landingTarget) {
@@ -1320,14 +1320,15 @@ async function applyInitialLanding() {
           actor: {
             id: trustedEmbedIdentity.userId,
             name: trustedEmbedIdentity.userId,
-            roles: trustedEmbedIdentity.userRole || 'sj',
+            roles: trustedEmbedIdentity.workflowRole || 'sj',
           },
           importTools: (payload) => toolStore.importJSON(payload),
           syncTools: () => viewerContext.tools.value?.syncFromStore(),
         });
         restoredModelRefnos = snapshotRestore.modelRefnos;
-        if (restoreResult.restoredTask && snapshotRestore.attachments.length > 0) {
-          const mergedTask = mergeSnapshotAttachmentsIntoTask(restoreResult.restoredTask, snapshotRestore.attachments);
+        const restoredAttachments = Array.isArray(snapshotRestore.attachments) ? snapshotRestore.attachments : [];
+        if (restoreResult.restoredTask && restoredAttachments.length > 0) {
+          const mergedTask = mergeSnapshotAttachmentsIntoTask(restoreResult.restoredTask, restoredAttachments);
           restoreResult.restoredTask = mergedTask;
           if (restoreResult.restoredTaskDraft) {
             restoreResult.restoredTaskDraft = {
@@ -1377,9 +1378,9 @@ function onReady(event: DockviewReadyEvent) {
 
   if (isEmbedLayoutMode()) {
     createEmbedFocusedLayout(api.value, {
-      primaryPanelId: resolveEmbedLandingTargetFromRole(embedModeParams.value.userRole) === 'designer'
+      primaryPanelId: resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole) === 'designer'
         ? 'initiateReview'
-        : resolveEmbedLandingTargetFromRole(embedModeParams.value.userRole) === 'reviewer'
+        : resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole) === 'reviewer'
           ? 'review'
           : undefined,
     });

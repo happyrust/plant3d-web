@@ -36,7 +36,7 @@ describe('resolvePmsLaunchFormId', () => {
   it('builds a token-primary simulator launch query without legacy identity params and reattaches selected output_project', () => {
     const search = buildTokenPrimaryPmsLaunchSearch({
       directQuery: new URLSearchParams(
-        'workflow_mode=external&project_id=query-project&output_project=query-output&user_id=JH&user_role=jd&foo=bar&user_token=should-strip'
+        'workflow_mode=external&project_id=query-project&output_project=query-output&user_id=JH&workflow_role=sh&role=jd&user_role=pz&foo=bar&user_token=should-strip'
       ),
       outputProject: 'AvevaMarineSample',
     });
@@ -47,6 +47,8 @@ describe('resolvePmsLaunchFormId', () => {
     expect(search.get('foo')).toBe('bar');
     expect(search.has('project_id')).toBe(false);
     expect(search.has('user_id')).toBe(false);
+    expect(search.has('role')).toBe(false);
+    expect(search.has('workflow_role')).toBe(false);
     expect(search.has('user_role')).toBe(false);
     expect(search.has('user_token')).toBe(false);
   });

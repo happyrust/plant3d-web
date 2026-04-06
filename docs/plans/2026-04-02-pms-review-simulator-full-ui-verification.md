@@ -102,10 +102,10 @@ VITE_GEN_MODEL_API_BASE_URL=http://localhost:3100
 当前 simulator 已统一成：
 
 1. `ensureRoleAuth()`：以 `当前 PMS 用户 + 当前工作流角色` 申请 token
-2. `requestEmbedUrlData()`：向 `/api/review/embed-url` 发送 `user_id=当前 PMS 用户`、`role=当前工作流角色`
+2. `requestEmbedUrlData()`：向 `/api/review/embed-url` 发送 `user_id=当前 PMS 用户`、`workflow_role=当前工作流角色`，并兼容旧 `role`
 3. `requestWorkflowSync()`：`actor.id / actor.name = 当前 PMS 用户`，`actor.roles = 当前工作流角色`
 
-也就是说，仿 PMS 现在不再假扮 `checkerId / approverId` 等任务参与人，而是更接近真实 PMS 的“用户 + role”合同。
+也就是说，仿 PMS 现在不再假扮 `checkerId / approverId` 等任务参与人，而是更接近真实 PMS 的“用户 + workflowRole”合同。
 
 ---
 

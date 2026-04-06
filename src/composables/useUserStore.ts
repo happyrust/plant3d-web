@@ -1364,14 +1364,14 @@ type EmbedUserOptions = {
   verified?: boolean;
 };
 
-function setEmbedUser(externalUserId: string, externalRole?: string, options?: EmbedUserOptions): void {
+function setEmbedUser(externalUserId: string, externalWorkflowRole?: string, options?: EmbedUserOptions): void {
   if (!externalUserId) return;
 
-  const resolvedRole = externalRole ? fromBackendRole(externalRole) : undefined;
+  const resolvedRole = externalWorkflowRole ? fromBackendRole(externalWorkflowRole) : undefined;
   const verified = options?.verified === true;
 
   if (!verified && USE_BACKEND.value && backendCurrentUserResolved.value && currentUser.value) {
-    console.log(`[useUserStore] 嵌入模式：保留后端当前用户 ${currentUser.value.id}，外部 actor=${externalUserId}, role=${resolvedRole ?? 'unknown'}`);
+    console.log(`[useUserStore] 嵌入模式：保留后端当前用户 ${currentUser.value.id}，外部 actor=${externalUserId}, workflowRole=${resolvedRole ?? 'unknown'}`);
     return;
   }
 
@@ -1381,7 +1381,7 @@ function setEmbedUser(externalUserId: string, externalRole?: string, options?: E
       existing.role = resolvedRole;
     }
     currentUserId.value = existing.id;
-    console.log(`[useUserStore] 嵌入模式：已切换到已有用户 ${existing.id} (${existing.name}), 角色=${existing.role}`);
+    console.log(`[useUserStore] 嵌入模式：已切换到已有用户 ${existing.id} (${existing.name}), workflowRole=${existing.role}`);
     return;
   }
 
@@ -1393,7 +1393,7 @@ function setEmbedUser(externalUserId: string, externalRole?: string, options?: E
   });
   users.value = [...users.value, syntheticUser];
   currentUserId.value = syntheticUser.id;
-  console.log(`[useUserStore] 嵌入模式：已创建并切换到外部用户 ${syntheticUser.id}, 角色=${syntheticUser.role}${verified ? ' (verified)' : ''}`);
+  console.log(`[useUserStore] 嵌入模式：已创建并切换到外部用户 ${syntheticUser.id}, workflowRole=${syntheticUser.role}${verified ? ' (verified)' : ''}`);
 }
 
 // ============ 初始化 ============

@@ -76,7 +76,7 @@ describe('reviewApi base url defaults', () => {
     expect(url.searchParams.get('user_id')).toBeNull();
   });
 
-  it('passes workflow_role when requesting embed url', async () => {
+  it('passes workflow_role as the primary field and role as a compatibility field when requesting embed url', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         code: 200,
@@ -95,7 +95,7 @@ describe('reviewApi base url defaults', () => {
     expectBackendFetch(
       fetchMock,
       '/api/review/embed-url',
-      JSON.stringify({ project_id: 'project-1', user_id: 'user-1', workflow_role: 'jd' })
+      JSON.stringify({ project_id: 'project-1', user_id: 'user-1', workflow_role: 'jd', role: 'jd' })
     );
   });
 
@@ -164,7 +164,7 @@ describe('reviewApi base url defaults', () => {
       new Response(JSON.stringify({
         code: 200,
         message: 'ok',
-        url: 'http://review-web.local/review/3d-view?form_id=FORM-DIRECT&user_token=token-direct&user_id=SJ&user_role=sj&project_id=legacy-project&workflow_mode=external',
+        url: 'http://review-web.local/review/3d-view?form_id=FORM-DIRECT&user_token=token-direct&user_id=SJ&user_role=sj&workflow_role=jd&role=sh&project_id=legacy-project&workflow_mode=external',
       }), { status: 200 })
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -180,6 +180,8 @@ describe('reviewApi base url defaults', () => {
     expect(url.searchParams.get('output_project')).toBeNull();
     expect(url.searchParams.get('user_id')).toBeNull();
     expect(url.searchParams.get('user_role')).toBeNull();
+    expect(url.searchParams.get('workflow_role')).toBeNull();
+    expect(url.searchParams.get('role')).toBeNull();
     expect(url.searchParams.get('project_id')).toBeNull();
   });
 

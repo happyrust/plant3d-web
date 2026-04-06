@@ -17,6 +17,7 @@ const LEGACY_EMBED_IDENTITY_QUERY_KEYS = new Set([
   'output_project',
   'project_id',
   'user_id',
+  'role',
   'user_role',
   'workflow_role',
   'user_token',

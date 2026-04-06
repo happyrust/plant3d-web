@@ -6,7 +6,7 @@ export type EmbedModeParams = {
   formId: string | null;
   userToken: string | null;
   userId: string | null;
-  userRole: string | null;
+  workflowRole: string | null;
   projectId: string | null;
   workflowMode?: string | null;
   externalWorkflowMode?: boolean | null;
@@ -14,7 +14,7 @@ export type EmbedModeParams = {
   launchInput?: {
     formId: string | null;
     userId: string | null;
-    userRole: string | null;
+    workflowRole: string | null;
     projectId: string | null;
     workflowMode: string | null;
   };
@@ -32,7 +32,7 @@ export type EmbedModeParams = {
 
 export type TrustedEmbedIdentity = {
   userId: string;
-  userRole: string | null;
+  workflowRole: string | null;
   formId: string;
   projectId: string;
   workflowMode: string | null;
@@ -88,7 +88,9 @@ export function readEmbedModeParamsFromSearch(search: string): EmbedModeParams {
   const launchFormId = normalizeEmbedValue(urlParams.get('form_id'));
   const userToken = normalizeEmbedValue(urlParams.get('user_token'));
   const launchUserId = normalizeEmbedValue(urlParams.get('user_id'));
-  const launchUserRole = normalizeEmbedRole(urlParams.get('user_role'));
+  const launchWorkflowRole = normalizeEmbedRole(urlParams.get('workflow_role'))
+    || normalizeEmbedRole(urlParams.get('role'))
+    || normalizeEmbedRole(urlParams.get('user_role'));
   const launchProjectId = normalizeEmbedValue(urlParams.get('project_id'));
   const workflowMode = normalizeEmbedValue(urlParams.get('workflow_mode'));
   const tokenPrimary = !!userToken;
@@ -97,14 +99,14 @@ export function readEmbedModeParamsFromSearch(search: string): EmbedModeParams {
     formId: tokenPrimary ? null : launchFormId,
     userToken,
     userId: tokenPrimary ? null : launchUserId,
-    userRole: tokenPrimary ? null : launchUserRole,
+    workflowRole: tokenPrimary ? null : launchWorkflowRole,
     projectId: tokenPrimary ? null : launchProjectId,
     workflowMode,
     isEmbedMode: !!(launchFormId || userToken),
     launchInput: {
       formId: launchFormId,
       userId: launchUserId,
-      userRole: launchUserRole,
+      workflowRole: launchWorkflowRole,
       projectId: launchProjectId,
       workflowMode,
     },
@@ -122,7 +124,7 @@ export function resolveTrustedEmbedIdentity(params: EmbedModeParams): TrustedEmb
 
   return {
     userId,
-    userRole: trustedRole,
+    workflowRole: trustedRole,
     formId,
     projectId,
     workflowMode: normalizeEmbedValue(params.verifiedClaims.workflowMode) || null,
@@ -136,14 +138,14 @@ export function buildPersistedEmbedModeParams(params: EmbedModeParams): EmbedMod
     ...params,
     formId: params.verifiedClaims?.formId || params.formId || null,
     userId: params.verifiedClaims?.userId || params.userId || null,
-    userRole: normalizeEmbedRole(params.verifiedClaims?.role) || null,
+    workflowRole: normalizeEmbedRole(params.verifiedClaims?.role) || null,
     projectId: params.verifiedClaims?.projectId || params.projectId || null,
     workflowMode: normalizeEmbedValue(params.verifiedClaims?.workflowMode) || params.workflowMode || null,
     launchInput: params.launchInput
       ? {
         formId: params.launchInput.formId,
         userId: null,
-        userRole: null,
+        workflowRole: null,
         projectId: null,
         workflowMode: params.launchInput.workflowMode,
       }

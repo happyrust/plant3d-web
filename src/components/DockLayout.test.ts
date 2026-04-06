@@ -395,7 +395,7 @@ describe('DockLayout embed bootstrap', () => {
     expect(persisted.projectId).toBe('PROJECT-CLAIMS');
     expect(persisted.formId).toBe('FORM-CLAIMS-1');
     expect(persisted.userId).toBe('checker-1');
-    expect(persisted.userRole).toBe('jd');
+    expect(persisted.workflowRole).toBe('jd');
     expect(persisted.workflowMode).toBe('manual');
     expect(persisted.verifiedClaims).toEqual(expect.objectContaining({
       projectId: 'PROJECT-CLAIMS',

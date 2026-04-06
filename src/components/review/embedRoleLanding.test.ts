@@ -27,18 +27,18 @@ describe('embed role landing', () => {
   });
 
   it('reads token-primary embed params from URL search and ignores query user/project identity fields', () => {
-    expect(readEmbedModeParamsFromSearch('?form_id=FORM-1&user_token=token-1&user_id=query-user&user_role=jd&project_id=query-project&workflow_mode=external')).toEqual({
+    expect(readEmbedModeParamsFromSearch('?form_id=FORM-1&user_token=token-1&user_id=query-user&workflow_role=sh&role=pz&user_role=jd&project_id=query-project&workflow_mode=external')).toEqual({
       formId: null,
       userToken: 'token-1',
       userId: null,
-      userRole: null,
+      workflowRole: null,
       projectId: null,
       workflowMode: 'external',
       isEmbedMode: true,
       launchInput: {
         formId: 'FORM-1',
         userId: 'query-user',
-        userRole: 'jd',
+        workflowRole: 'sh',
         projectId: 'query-project',
         workflowMode: 'external',
       },
@@ -46,19 +46,59 @@ describe('embed role landing', () => {
     });
   });
 
-  it('keeps URL identity fields only when token is absent', () => {
-    expect(readEmbedModeParamsFromSearch('?form_id=FORM-2&user_id=query-user&user_role=jd&project_id=query-project')).toEqual({
+  it('keeps workflow_role from URL identity fields when token is absent', () => {
+    expect(readEmbedModeParamsFromSearch('?form_id=FORM-2&user_id=query-user&workflow_role=jd&project_id=query-project')).toEqual({
       formId: 'FORM-2',
       userToken: null,
       userId: 'query-user',
-      userRole: 'jd',
+      workflowRole: 'jd',
       projectId: 'query-project',
       workflowMode: null,
       isEmbedMode: true,
       launchInput: {
         formId: 'FORM-2',
         userId: 'query-user',
-        userRole: 'jd',
+        workflowRole: 'jd',
+        projectId: 'query-project',
+        workflowMode: null,
+      },
+      verifiedClaims: null,
+    });
+  });
+
+  it('falls back to legacy role when workflow_role is absent', () => {
+    expect(readEmbedModeParamsFromSearch('?form_id=FORM-2&user_id=query-user&role=sh&project_id=query-project')).toEqual({
+      formId: 'FORM-2',
+      userToken: null,
+      userId: 'query-user',
+      workflowRole: 'sh',
+      projectId: 'query-project',
+      workflowMode: null,
+      isEmbedMode: true,
+      launchInput: {
+        formId: 'FORM-2',
+        userId: 'query-user',
+        workflowRole: 'sh',
+        projectId: 'query-project',
+        workflowMode: null,
+      },
+      verifiedClaims: null,
+    });
+  });
+
+  it('falls back to legacy user_role only when workflow_role and role are both absent', () => {
+    expect(readEmbedModeParamsFromSearch('?form_id=FORM-2&user_id=query-user&user_role=pz&project_id=query-project')).toEqual({
+      formId: 'FORM-2',
+      userToken: null,
+      userId: 'query-user',
+      workflowRole: 'pz',
+      projectId: 'query-project',
+      workflowMode: null,
+      isEmbedMode: true,
+      launchInput: {
+        formId: 'FORM-2',
+        userId: 'query-user',
+        workflowRole: 'pz',
         projectId: 'query-project',
         workflowMode: null,
       },
@@ -134,7 +174,7 @@ describe('embed role landing', () => {
       formId: 'FORM-QUERY',
       userToken: 'token-1',
       userId: 'query-user',
-      userRole: 'jd',
+      workflowRole: 'jd',
       projectId: 'query-project',
       isEmbedMode: true,
       verifiedClaims: {
@@ -148,7 +188,7 @@ describe('embed role landing', () => {
       },
     })).toEqual({
       userId: 'JH',
-      userRole: 'sj',
+      workflowRole: 'sj',
       formId: 'FORM-134F980BCB9C',
       projectId: 'AvevaMarineSample',
       workflowMode: 'external',
@@ -160,7 +200,7 @@ describe('embed role landing', () => {
       formId: 'FORM-QUERY',
       userToken: 'token-1',
       userId: 'query-user',
-      userRole: 'jd',
+      workflowRole: 'jd',
       projectId: 'query-project',
       isEmbedMode: true,
       verifiedClaims: {
@@ -178,14 +218,14 @@ describe('embed role landing', () => {
       formId: 'FORM-1',
       userToken: 'token-1',
       userId: 'JH',
-      userRole: 'jd',
+      workflowRole: 'jd',
       projectId: 'AvevaMarineSample',
       workflowMode: 'external',
       isEmbedMode: true,
       launchInput: {
         formId: 'FORM-1',
         userId: 'query-user',
-        userRole: 'jd',
+        workflowRole: 'jd',
         projectId: 'query-project',
         workflowMode: 'external',
       },
@@ -202,14 +242,14 @@ describe('embed role landing', () => {
       formId: 'FORM-1',
       userToken: 'token-1',
       userId: 'JH',
-      userRole: 'jd',
+      workflowRole: 'jd',
       projectId: 'AvevaMarineSample',
       workflowMode: 'manual',
       isEmbedMode: true,
       launchInput: {
         formId: 'FORM-1',
         userId: null,
-        userRole: null,
+        workflowRole: null,
         projectId: null,
         workflowMode: 'external',
       },
@@ -230,7 +270,7 @@ describe('embed role landing', () => {
       formId: 'FORM-QUERY',
       userToken: 'token-1',
       userId: 'query-user',
-      userRole: 'jd',
+      workflowRole: 'jd',
       projectId: 'query-project',
       isEmbedMode: true,
       verifiedClaims: null,
