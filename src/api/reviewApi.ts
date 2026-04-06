@@ -34,6 +34,7 @@ const LEGACY_EMBED_IDENTITY_QUERY_KEYS = [
   'project_id',
   'user_id',
   'user_role',
+  'workflow_role',
   'workflow_mode',
   'landing_role',
 ];
@@ -659,18 +660,22 @@ export async function reviewTaskGetWorkflow(
 
 // ============ 外部校审集成 API ============
 
+/**
+ * 向模型中心申请嵌入页地址。
+ * @param workflowRole 本单据上为当前用户指定的工作流角色（sj/jd/sh/pz/admin），非账号系统 user_role
+ */
 export async function reviewGetEmbedUrl(
   projectId: string,
   userId: string,
-  userRole?: string | null,
+  workflowRole?: string | null,
 ): Promise<{ url: string }> {
   const payload: Record<string, string> = {
     project_id: projectId,
     user_id: userId,
   };
-  const normalizedRole = userRole?.trim();
+  const normalizedRole = workflowRole?.trim();
   if (normalizedRole) {
-    payload.role = normalizedRole;
+    payload.workflow_role = normalizedRole;
   }
   const response = await fetchJson<EmbedUrlResponse>('/api/review/embed-url', {
     method: 'POST',

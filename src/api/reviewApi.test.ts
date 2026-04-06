@@ -76,7 +76,7 @@ describe('reviewApi base url defaults', () => {
     expect(url.searchParams.get('user_id')).toBeNull();
   });
 
-  it('passes backend workflow role when requesting embed url', async () => {
+  it('passes workflow_role when requesting embed url', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         code: 200,
@@ -95,7 +95,7 @@ describe('reviewApi base url defaults', () => {
     expectBackendFetch(
       fetchMock,
       '/api/review/embed-url',
-      JSON.stringify({ project_id: 'project-1', user_id: 'user-1', role: 'jd' })
+      JSON.stringify({ project_id: 'project-1', user_id: 'user-1', workflow_role: 'jd' })
     );
   });
 

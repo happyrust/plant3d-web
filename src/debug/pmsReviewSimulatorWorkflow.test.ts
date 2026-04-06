@@ -195,7 +195,7 @@ describe('request payload builders', () => {
     });
   });
 
-  it('embed-url payload 应带当前 PMS 用户与工作流角色，并在有 form_id 时附带 form_id', () => {
+  it('embed-url payload 应带当前 PMS 用户与本单据 workflow_role，并在有 form_id 时附带 form_id', () => {
     expect(buildSimulatorEmbedUrlPayload({
       projectId: 'AvevaMarineSample',
       currentPmsUser: 'SH',
@@ -204,7 +204,7 @@ describe('request payload builders', () => {
     })).toEqual({
       project_id: 'AvevaMarineSample',
       user_id: 'SH',
-      role: 'sh',
+      workflow_role: 'sh',
       form_id: 'FORM-123',
     });
   });

@@ -104,7 +104,8 @@ export function buildEmbedUrlPayload(options: BuildEmbedUrlPayloadOptions): Reco
   const payload: Record<string, unknown> = {
     project_id: options.projectId,
     user_id: actor.userId,
-    role: options.currentWorkflowRole,
+    // 与后端 EmbedUrlRequest.workflow_role（本单据工作流角色）
+    workflow_role: options.currentWorkflowRole,
   };
   if (options.preferredFormId?.trim()) {
     payload.form_id = options.preferredFormId.trim();

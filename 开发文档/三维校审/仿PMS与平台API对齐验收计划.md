@@ -16,7 +16,7 @@
 
 **后端契约（只读参照）**：
 
-- `EmbedUrlRequest`：`project_id, user_id, role, workflow_mode, form_id, token, extra_parameters`
+- `EmbedUrlRequest`：`project_id, user_id, workflow_role`（本单据工作流角色；兼容顶层键 `role`）、`workflow_mode, form_id, token, extra_parameters`
 - `SyncWorkflowRequest`：`form_id, token, action, actor, next_step, comments, metadata`
 - `CachePreloadRequest`：`project_id, initiator, token`
 - `DeleteReviewRequest`：`form_ids, operator_id, token`
@@ -256,7 +256,7 @@ npx tsx scripts/pms-contract-sequence.ts --base http://localhost:3100 --verbose
 |-----------|-----------|----------------------|------|
 | `project_id: String` | — | `project_id` | `options.projectId` |
 | `user_id: String` | — | `user_id` | `resolveSimulatorPmsUserIdentity().userId` |
-| `role: Option<String>` | `user_role` | `role` | `options.currentWorkflowRole` |
+| `workflow_role: Option<String>` | `workflow_role`、兼容 `role` | `workflow_role` | `options.currentWorkflowRole` |
 | `workflow_mode: Option<String>` | `workflowMode` | `workflow_mode` | `options.workflowMode`（UI 下拉） |
 | `form_id: Option<String>` | — | `form_id` | `options.preferredFormId`（续流程） |
 | `token: Option<String>` | — | `token` | `options.token`（UI 输入框） |
