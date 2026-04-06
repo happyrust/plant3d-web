@@ -1,72 +1,90 @@
-# Plant3D-Web 部署指南
+# Plant3D-Web Ubuntu 部署指南
 
-## 服务器信息
-- **IP**: 123.57.182.243
-- **用户**: root
-- **部署路径**: /var/www/plant3d-web
+## 目标
 
-## 快速部署
+将前端静态文件部署到 Ubuntu 服务器的 `/var/www/plant3d-web`，并由 Nginx 对外提供站点，同时把 `/api`、`/files` 反代到后端 `web_server`。
 
-### 方式一：自动化脚本
+## 默认约定
+
+- 服务器：`123.57.182.243`
+- 用户：`root`
+- 前端目录：`/var/www/plant3d-web`
+- 后端反代：`http://127.0.0.1:3100`
+- 站点入口：`http://123.57.182.243/`
+
+## 自动化部署
+
+推荐使用新的 bundle 脚本：
+
 ```bash
 cd deploy
-chmod +x deploy_remote.sh
-./deploy_remote.sh
+chmod +x deploy_frontend_bundle.sh
+REMOTE_PASS='***' ./deploy_frontend_bundle.sh
 ```
 
-### 方式二：手动部署
+可选环境变量：
 
-#### 1. 本地构建
 ```bash
-cd /Volumes/DPC/work/plant-code/plant3d-web
-npm install
-npm run build
+REMOTE_HOST=123.57.182.243 \
+REMOTE_USER=root \
+REMOTE_PASS='***' \
+SERVER_NAME=123.57.182.243 \
+DEPLOY_PATH=/var/www/plant3d-web \
+BACKEND_ORIGIN=http://127.0.0.1:3100 \
+./deploy_frontend_bundle.sh
 ```
 
-#### 2. 上传文件
+兼容入口 `deploy_remote.sh` 仍可使用，但其内部已转发到 `deploy_frontend_bundle.sh`。
+
+## 与后端联动
+
+若在 `plant-model-gen` 仓库执行：
+
 ```bash
-scp -r dist/* root@123.57.182.243:/var/www/plant3d-web/
+./shells/deploy_all_with_frontend.sh
 ```
 
-#### 3. 配置 Nginx
-```bash
-# SSH 到服务器
-ssh root@123.57.182.243
+后端总控脚本会自动调用本仓 `deploy/deploy_frontend_bundle.sh`，因此此前缺失前端脚本导致的联动部署断点已被补齐。
 
-# 复制 Nginx 配置
-sudo cp deploy/nginx_remote.conf /etc/nginx/sites-available/plant3d-web
+## 服务器前置条件
 
-# 启用站点
-sudo ln -sf /etc/nginx/sites-available/plant3d-web /etc/nginx/sites-enabled/
+Ubuntu 服务器至少需要安装：
 
-# 测试配置
-sudo nginx -t
+- `nginx`
+- `rsync`
+- `sshpass`
+- 已在 `127.0.0.1:3100` 监听的后端 `web_server`
 
-# 重载 Nginx
-sudo systemctl reload nginx
-```
+安装 Nginx 示例：
 
-## 验证
-
-访问: http://123.57.182.243/
-
-## 前置条件
-
-服务器需要安装:
-- Nginx
-- 后端 API 服务运行在 3100 端口
-
-### 安装 Nginx (如未安装)
 ```bash
 sudo apt update
-sudo apt install nginx
+sudo apt install -y nginx
 sudo systemctl enable nginx
 sudo systemctl start nginx
 ```
 
-## 目录结构
+## 验证
+
+脚本完成后会自动验证：
+
+- `systemctl is-active nginx`
+- `http://<REMOTE_HOST>/` 返回 `200`
+
+可手工补充：
+
+```bash
+curl -I http://123.57.182.243/
+curl -I http://123.57.182.243/api/health
+curl -I http://123.57.182.243/files/
 ```
+
+## 目录结构
+
+```text
 deploy/
-├── README.md      # 本指南
-└── deploy_remote.sh      # 唯一官方部署脚本
+├── README.md
+├── deploy_frontend_bundle.sh
+├── deploy_remote.sh
+└── nginx_remote.conf
 ```
