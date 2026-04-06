@@ -28,7 +28,7 @@ const showDashboardLayout = computed(() => !currentProject.value && !embedBootst
 
 async function bootstrapEmbedProjectFromToken() {
   const token = urlParams.get('user_token')?.trim();
-  if (!token || currentProject.value) return;
+  if (!token) return;
 
   embedBootstrapPending.value = true;
   try {

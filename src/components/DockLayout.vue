@@ -1166,7 +1166,7 @@ async function bootstrapEmbedSession(): Promise<void> {
     setAuthToken(token);
 
     try {
-      const verifyResponse = await authVerifyToken(token, embedModeParams.value.formId || undefined);
+      const verifyResponse = await authVerifyToken(token);
       if (!verifyResponse.data?.valid) {
         console.warn('[DockLayout] Embedded token verification failed:', verifyResponse.data?.error);
         clearAuthToken();
@@ -1176,12 +1176,6 @@ async function bootstrapEmbedSession(): Promise<void> {
         embedTokenVerified.value = true;
         const claims = verifyResponse.data.claims;
         if (claims) {
-          if (embedModeParams.value.launchInput?.formId && embedModeParams.value.launchInput.formId !== claims.formId) {
-            console.warn('[DockLayout] 忽略 URL form_id，改用 token claims.formId', {
-              urlFormId: embedModeParams.value.launchInput.formId,
-              claimsFormId: claims.formId,
-            });
-          }
           if (embedModeParams.value.launchInput?.userId && embedModeParams.value.launchInput.userId !== claims.userId) {
             console.warn('[DockLayout] 忽略 URL user_id，改用 token claims.userId', {
               urlUserId: embedModeParams.value.launchInput.userId,
@@ -1208,7 +1202,6 @@ async function bootstrapEmbedSession(): Promise<void> {
           }
           embedModeParams.value = {
             ...embedModeParams.value,
-            formId: claims.formId || embedModeParams.value.formId,
             userId: claims.userId,
             workflowRole: claims.role || null,
             projectId: claims.projectId,

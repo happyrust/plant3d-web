@@ -28,7 +28,7 @@ describe('embed role landing', () => {
 
   it('reads token-primary embed params from URL search and ignores query user/project identity fields', () => {
     expect(readEmbedModeParamsFromSearch('?form_id=FORM-1&user_token=token-1&user_id=query-user&workflow_role=sh&role=pz&user_role=jd&project_id=query-project&workflow_mode=external')).toEqual({
-      formId: null,
+      formId: 'FORM-1',
       userToken: 'token-1',
       userId: null,
       workflowRole: null,
@@ -169,7 +169,7 @@ describe('embed role landing', () => {
     expect(resolveEmbedLandingTargetFromRole('manager')).toBeNull();
   });
 
-  it('prefers verified token claims as the only trusted embed identity source', () => {
+  it('uses verified token claims for trusted user identity while keeping explicit form lineage', () => {
     expect(resolveTrustedEmbedIdentity({
       formId: 'FORM-QUERY',
       userToken: 'token-1',
@@ -179,7 +179,6 @@ describe('embed role landing', () => {
       isEmbedMode: true,
       verifiedClaims: {
         userId: 'JH',
-        formId: 'FORM-134F980BCB9C',
         projectId: 'AvevaMarineSample',
         role: 'sj',
         workflowMode: 'external',
@@ -189,7 +188,7 @@ describe('embed role landing', () => {
     })).toEqual({
       userId: 'JH',
       workflowRole: 'sj',
-      formId: 'FORM-134F980BCB9C',
+      formId: 'FORM-QUERY',
       projectId: 'AvevaMarineSample',
       workflowMode: 'external',
     });
@@ -205,7 +204,6 @@ describe('embed role landing', () => {
       isEmbedMode: true,
       verifiedClaims: {
         userId: 'JH',
-        formId: 'FORM-MOCK-PMS-1774594825',
         projectId: 'AvevaMarineSample',
         exp: 1775001441,
         iat: 1774915041,
@@ -231,7 +229,6 @@ describe('embed role landing', () => {
       },
       verifiedClaims: {
         userId: 'JH',
-        formId: 'FORM-1',
         projectId: 'AvevaMarineSample',
         role: 'jd',
         workflowMode: 'manual',
@@ -255,7 +252,6 @@ describe('embed role landing', () => {
       },
       verifiedClaims: {
         userId: 'JH',
-        formId: 'FORM-1',
         projectId: 'AvevaMarineSample',
         role: 'jd',
         workflowMode: 'manual',
@@ -274,6 +270,25 @@ describe('embed role landing', () => {
       projectId: 'query-project',
       isEmbedMode: true,
       verifiedClaims: null,
+    })).toBeNull();
+  });
+
+  it('rejects trusted embed identity when explicit form lineage is missing', () => {
+    expect(resolveTrustedEmbedIdentity({
+      formId: null,
+      userToken: 'token-1',
+      userId: 'query-user',
+      workflowRole: 'jd',
+      projectId: 'query-project',
+      isEmbedMode: true,
+      verifiedClaims: {
+        userId: 'JH',
+        projectId: 'AvevaMarineSample',
+        role: 'sj',
+        workflowMode: 'external',
+        exp: 1774949170,
+        iat: 1774862770,
+      },
     })).toBeNull();
   });
 

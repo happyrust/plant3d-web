@@ -199,6 +199,8 @@ type SimulatorState = {
   platformEmbedToken: string;
   platformEmbedExtraParameters: string;
   platformWorkflowMetadata: string;
+  /** 与真实 PMS 一致：iframe URL 附带 user_id（HumanCode）及 form_id（等同 ModelUrl 血缘） */
+  pmsLikeIframeQuery: boolean;
 };
 
 type SimulatorTestSnapshot = {
@@ -288,6 +290,17 @@ const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
 const WORKFLOW_MUTATION_ACTIONS: WorkflowMutationAction[] = ['active', 'agree', 'return', 'stop'];
 let PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
 const SIMULATOR_SESSION_STORAGE_KEY = 'pms-review-simulator-session-v1';
+const PMS_LIKE_IFRAME_QUERY_STORAGE_KEY = 'pms_simulator_pms_like_iframe';
+
+function readPmsLikeIframeQueryPreference(): boolean {
+  try {
+    const v = localStorage.getItem(PMS_LIKE_IFRAME_QUERY_STORAGE_KEY);
+    if (v === '0' || v === 'false') return false;
+  } catch {
+    // ignore
+  }
+  return true;
+}
 
 const IFRAME_SOURCE_LABELS: Record<IframeSource, string> = {
   new: '新增打开',
@@ -411,6 +424,7 @@ const state: SimulatorState = {
   platformEmbedToken: '',
   platformEmbedExtraParameters: '',
   platformWorkflowMetadata: '',
+  pmsLikeIframeQuery: readPmsLikeIframeQueryPreference(),
 };
 
 function persistSimulatorSession(): void {
@@ -1673,12 +1687,10 @@ function renderDiagnostics(): void {
   const accessState = resolveWorkflowAccessState(workflowRoleState);
   const { assignment, taskAssignment, access } = accessState;
   const launchPlan = state.diagnostics.launchPlan;
-  const tokenClaimFormId = launchPlan?.tokenClaims?.formId?.trim() || null;
   const tokenClaimProjectId = launchPlan?.tokenClaims?.projectId?.trim() || null;
   const modelUrlFormId = launchPlan?.modelUrlFormId || null;
   const queryFormId = launchPlan?.queryFormId || null;
   const queryVsModelDiff = Boolean(queryFormId && modelUrlFormId && queryFormId !== modelUrlFormId);
-  const tokenVsModelDiff = Boolean(tokenClaimFormId && modelUrlFormId && tokenClaimFormId !== modelUrlFormId);
   const availableProjectPaths = getAvailableProjectPaths();
   const tokenProjectMatched = Boolean(tokenClaimProjectId && availableProjectPaths.includes(tokenClaimProjectId));
 
@@ -1769,9 +1781,9 @@ function renderDiagnostics(): void {
     ${launchPlan
     ? `<div class="diag-card">
           <div><strong>PMS 风格启动链</strong></div>
+          <div>拼链模式：${state.pmsLikeIframeQuery ? '真实 PMS（URL 含 user_id + form_id）' : 'token-primary（仅 user_token + output_project）'}</div>
           <div>query form_id：${escapeHtml(queryFormId || '--')}</div>
           <div>ModelUrl form_id：${escapeHtml(modelUrlFormId || '--')}${queryVsModelDiff ? ' <strong>（与 query 不一致）</strong>' : ''}</div>
-          <div>token claims form_id：${escapeHtml(tokenClaimFormId || '--')}${tokenVsModelDiff ? ' <strong>（与 ModelUrl 不一致）</strong>' : ''}</div>
           <div>token claims project_id：${escapeHtml(tokenClaimProjectId || '--')}${tokenClaimProjectId ? tokenProjectMatched ? ' <strong>（命中项目列表）</strong>' : ' <strong>（未命中项目列表）</strong>' : ''}</div>
           <div>可用项目列表：${escapeHtml(availableProjectPaths.join(', ') || '--')}</div>
           <div>ModelUrl 片段：${escapeHtml(launchPlan.modelUrlSummary)}</div>
@@ -2288,18 +2300,13 @@ async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsL
   const queryFormId = (query.form_id || query.formId || '').trim() || null;
   const preferred = preferredFormId?.trim() || null;
   const directFormId = directQuery.get('form_id')?.trim() || null;
-  const responseFormId = resolvePmsLaunchFormId({
-    preferredFormId: preferred,
-    queryFormId,
-    directFormId,
-  });
 
   const token = data?.token?.trim() || directQuery.get('user_token')?.trim() || '';
   if (!token) {
     throw new Error('embed-url 返回缺少 token');
   }
 
-  const tokenClaims = await verifyLaunchToken(token, responseFormId);
+  const tokenClaims = await verifyLaunchToken(token);
   const tokenClaimFormId = tokenClaims?.formId?.trim() || null;
   const modelUrlFormId = resolvePmsLaunchFormId({
     preferredFormId: preferred,
@@ -2316,6 +2323,13 @@ async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsL
   const finalUrl = new URL(modelUrlPath, window.location.origin);
   finalUrl.search = modelUrlSearch.toString();
   finalUrl.searchParams.set('user_token', token);
+  // 对齐真实 PMS：root_url + ModelUrl + "&user_token=" + token + "&user_id=" + HumanCode（及 ModelUrl 上的 form_id）
+  if (state.pmsLikeIframeQuery) {
+    finalUrl.searchParams.set('user_id', state.currentPmsUser);
+    if (modelUrlFormId) {
+      finalUrl.searchParams.set('form_id', modelUrlFormId);
+    }
+  }
 
   return {
     modelUrlPath,
@@ -2352,18 +2366,11 @@ function summarizeToken(token: string): string {
   return `${trimmed.slice(0, 16)}...(${trimmed.length})`;
 }
 
-async function verifyLaunchToken(token: string, formId?: string | null): Promise<TokenVerifyClaims | null> {
+async function verifyLaunchToken(token: string): Promise<TokenVerifyClaims | null> {
   try {
-    const response = await authVerifyToken(token, formId?.trim() || undefined);
+    const response = await authVerifyToken(token);
     if (response.data?.valid) {
       return response.data.claims || null;
-    }
-
-    if (/form_id mismatch/i.test(response.data?.error || '')) {
-      const fallbackResponse = await authVerifyToken(token);
-      if (fallbackResponse.data?.valid) {
-        return fallbackResponse.data.claims || null;
-      }
     }
   } catch (error) {
     console.warn('[pms-review-simulator] token verify failed', error);
@@ -2396,7 +2403,9 @@ async function openIframe(params: {
   try {
     await ensureRoleAuth();
     refs.modalTitle.textContent = '正在模拟 PMS 两段式启动…';
-    refs.modalSubtitle.textContent = '阶段 1/2：获取 ModelUrl；阶段 2/2：获取 token 并本地拼装 iframe src';
+    refs.modalSubtitle.textContent = state.pmsLikeIframeQuery
+      ? '阶段 1/2：embed-url（等同 GetZyModelUrl+GetZyModeInfo 合一）；阶段 2/2：拼装 iframe（含 user_token、user_id、form_id，贴近真实 PMS 拼链）'
+      : '阶段 1/2：embed-url → path/query；阶段 2/2：token-primary 仅 user_token + output_project（不含 URL user_id/form_id）';
     const launchPlan = await buildPmsLaunchPlan(formId);
     state.diagnostics.launchPlan = launchPlan;
     const url = launchPlan.finalUrl;
@@ -2867,6 +2876,21 @@ function bindEvents(): void {
   platformWorkflowModeEl?.addEventListener('change', () => {
     applyWorkflowModeSwitch(platformWorkflowModeEl.value);
   });
+
+  const pmsLikeIframeEl = document.getElementById('pms-like-iframe-query') as HTMLInputElement | null;
+  if (pmsLikeIframeEl) {
+    pmsLikeIframeEl.checked = state.pmsLikeIframeQuery;
+    pmsLikeIframeEl.addEventListener('change', () => {
+      state.pmsLikeIframeQuery = pmsLikeIframeEl.checked;
+      try {
+        localStorage.setItem(PMS_LIKE_IFRAME_QUERY_STORAGE_KEY, state.pmsLikeIframeQuery ? '1' : '0');
+      } catch {
+        // ignore
+      }
+      renderDiagnostics();
+    });
+  }
+
   platformEmbedTokenEl?.addEventListener('input', () => {
     state.platformEmbedToken = platformEmbedTokenEl.value;
   });

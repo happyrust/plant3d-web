@@ -29,7 +29,6 @@ function getReviewWebBaseUrl(): string {
 }
 
 const LEGACY_EMBED_IDENTITY_QUERY_KEYS = [
-  'form_id',
   'output_project',
   'project_id',
   'user_id',
@@ -44,6 +43,7 @@ function buildTokenPrimaryEmbedUrl(options: {
   rawUrl?: string | null;
   relativePath?: string | null;
   token?: string | null;
+  formId?: string | null;
 }): string {
   const baseUrl = getReviewWebBaseUrl().replace(/\/$/, '');
   const fallbackPath = options.relativePath?.trim()
@@ -58,6 +58,9 @@ function buildTokenPrimaryEmbedUrl(options: {
 
   if (options.token?.trim()) {
     params.set('user_token', options.token.trim());
+  }
+  if (options.formId?.trim()) {
+    params.set('form_id', options.formId.trim());
   }
 
   url.search = params.toString();
@@ -688,6 +691,7 @@ export async function reviewGetEmbedUrl(
     return {
       url: buildTokenPrimaryEmbedUrl({
         rawUrl: response.url,
+        formId: response.data?.query?.form_id || response.data?.query?.formId || null,
       }),
     };
   }
@@ -710,6 +714,7 @@ export async function reviewGetEmbedUrl(
     url: buildTokenPrimaryEmbedUrl({
       relativePath,
       token: data.token,
+      formId: data.query?.form_id || data.query?.formId || null,
     }),
   };
 }
@@ -1207,7 +1212,6 @@ export type VerifyResponse = {
     claims?: {
       projectId: string;
       userId: string;
-      formId: string;
       userName?: string;
       role?: string;
       workflowMode?: string;
@@ -1225,8 +1229,6 @@ type RawVerifyClaims = {
   user_id?: string;
   userName?: string;
   user_name?: string;
-  formId?: string;
-  form_id?: string;
   role?: string;
   workflowMode?: string;
   workflow_mode?: string;
@@ -1248,13 +1250,11 @@ function normalizeVerifyClaims(raw?: RawVerifyClaims | null): VerifyResponse['da
   if (!raw) return undefined;
   const projectId = raw.projectId || raw.project_id;
   const userId = raw.userId || raw.user_id;
-  const formId = raw.formId || raw.form_id;
-  if (!projectId || !userId || !formId) return undefined;
+  if (!projectId || !userId) return undefined;
 
   return {
     projectId,
     userId,
-    formId,
     userName: raw.userName || raw.user_name,
     role: raw.role,
     workflowMode: raw.workflowMode || raw.workflow_mode,
@@ -1311,7 +1311,7 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
  * 验证 JWT Token
  * POST /api/auth/verify
  */
-export async function authVerifyToken(token?: string, formId?: string): Promise<VerifyResponse> {
+export async function authVerifyToken(token?: string): Promise<VerifyResponse> {
   const tokenToVerify = token || getAuthToken();
   if (!tokenToVerify) {
     return {
@@ -1327,7 +1327,6 @@ export async function authVerifyToken(token?: string, formId?: string): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       token: tokenToVerify,
-      ...(formId ? { form_id: formId } : {}),
     }),
   });
 

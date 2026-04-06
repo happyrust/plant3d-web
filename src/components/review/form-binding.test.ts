@@ -5,6 +5,10 @@ const createTaskMock = vi.fn();
 const updateTaskAttachmentsMock = vi.fn();
 const submitTaskToNextNodeSpy = vi.fn();
 const uploadStartMock = vi.fn(async () => undefined);
+const selectionState = {
+  selectedRefno: { value: 'REF-001' as string | null },
+  propertiesData: { value: { NAME: 'Fallback component', NOUN: '构件' } as Record<string, unknown> | null },
+};
 
 async function flushAsyncWork() {
   await nextTick();
@@ -55,13 +59,36 @@ vi.mock('@/components/review/FileUploadSection.vue', () => ({
 
 vi.mock('@/composables/useSelectionStore', () => ({
   useSelectionStore: () => ({
-    selectedRefno: { value: 'REF-001' },
-    propertiesData: { value: { NAME: 'Fallback component', NOUN: '构件' } },
+    selectedRefno: selectionState.selectedRefno,
+    propertiesData: selectionState.propertiesData,
+    setSelectedRefno: vi.fn((refno: string | null) => {
+      selectionState.selectedRefno.value = refno;
+    }),
   }),
+}));
+
+vi.mock('@/composables/useReviewDeliveryUnit', () => ({
+  normalizeReviewDeliveryRefno: (value?: string | null) => String(value || '').trim(),
+  resolveReviewDeliveryUnitRefno: vi.fn(async (value?: string | null) => String(value || '').trim()),
+}));
+
+vi.mock('@/composables/useDockApi', () => ({
+  ensurePanelAndActivate: vi.fn(),
+}));
+
+vi.mock('@/composables/useViewerContext', () => ({
+  showModelByRefnosWithAck: vi.fn(async () => ({
+    ok: ['REF/001'],
+    fail: [],
+    error: null,
+  })),
 }));
 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
+    currentUser: {
+      value: { id: 'designer_001', name: '设计员', role: 'designer' },
+    },
     availableCheckers: {
       value: [
         { id: 'checker-1', name: '张校对员', role: 'proofreader' },
@@ -92,12 +119,23 @@ describe('InitiateReviewPanel form binding', () => {
     updateTaskAttachmentsMock.mockReset();
     submitTaskToNextNodeSpy.mockReset();
     uploadStartMock.mockClear();
+    selectionState.selectedRefno.value = 'REF-001';
+    selectionState.propertiesData.value = { NAME: 'Fallback component', NOUN: '构件' };
     createTaskMock.mockResolvedValue({
       id: 'task-1',
       formId: 'FORM-1',
       title: '综合校审数据包',
     });
     sessionStorage.clear();
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: (key: string) => sessionStorage.getItem(key),
+        setItem: (key: string, value: string) => sessionStorage.setItem(key, value),
+        removeItem: (key: string) => sessionStorage.removeItem(key),
+        clear: () => sessionStorage.clear(),
+      },
+      configurable: true,
+    });
     // 让 InitiateReviewPanel 的 resolveExternalWorkflowMode 返回 false（手动模式）
     sessionStorage.setItem('plant3d_workflow_mode', 'manual');
   });
@@ -187,6 +225,7 @@ describe('InitiateReviewPanel form binding', () => {
 
   it('allows adding components in external workflow mode', async () => {
     sessionStorage.setItem('plant3d_workflow_mode', 'external');
+    localStorage.setItem('plant3d_automation_review', '1');
 
     const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
 
@@ -199,11 +238,12 @@ describe('InitiateReviewPanel form binding', () => {
     app.mount(host);
     await nextTick();
 
-    const addButton = host.querySelector('button[title="将选中的构件添加到列表"]') as HTMLButtonElement | null;
-    expect(addButton).not.toBeNull();
-    addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await nextTick();
-    await nextTick();
+    const automationHook = (window as Window & {
+      __plant3dInitiateReviewE2E?: { addMockComponent: (refNo?: string, name?: string) => Promise<void> };
+    }).__plant3dInitiateReviewE2E;
+    expect(automationHook?.addMockComponent).toBeTypeOf('function');
+    await automationHook?.addMockComponent('REF-001', 'Hull/REF-001');
+    await flushAsyncWork();
 
     expect(host.textContent).toContain('Hull/REF-001');
     expect(host.textContent).toContain('RefNo: REF-001');
@@ -215,7 +255,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     const submitTrigger = host.querySelector('[data-testid="initiate-submit-trigger"]') as HTMLButtonElement | null;
     expect(submitTrigger).not.toBeNull();
-    expect(submitTrigger?.textContent).toContain('保存提资单数据');
+    expect(submitTrigger?.textContent).toContain('验证并保存提资单');
     submitTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
@@ -239,6 +279,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     app.unmount();
     host.remove();
+    localStorage.removeItem('plant3d_automation_review');
   }, 10000);
 
   it('shows success feedback, closes the panel, and emits created/close after submit succeeds', async () => {
@@ -337,6 +378,50 @@ describe('InitiateReviewPanel form binding', () => {
     expect(host.querySelector('[data-testid="designer-landing-workspace"]')).not.toBeNull();
     expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
     expect(host.textContent).toContain('提资单创建成功');
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('blocks external workflow save when embed form lineage is missing', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: null,
+      userToken: 'token-missing-form',
+      userId: 'SJ',
+      projectId: 'AvevaMarineSample',
+      isEmbedMode: true,
+    }));
+
+    const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp({
+      render: () => h(InitiateReviewPanel),
+    });
+    app.mount(host);
+    await nextTick();
+
+    const addButton = host.querySelector('button[title="将选中的构件添加到列表"]') as HTMLButtonElement | null;
+    expect(addButton).not.toBeNull();
+    addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null;
+    expect(packageInput).not.toBeNull();
+    packageInput!.value = '外部流程提资包';
+    packageInput!.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const submitTrigger = host.querySelector('[data-testid="initiate-submit-trigger"]') as HTMLButtonElement | null;
+    expect(submitTrigger).not.toBeNull();
+    submitTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    expect(createTaskMock).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('提资单保存失败');
+    expect(host.textContent).toContain('缺少业务单据号');
 
     app.unmount();
     host.remove();

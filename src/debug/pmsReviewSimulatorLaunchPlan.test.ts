@@ -15,13 +15,13 @@ describe('resolvePmsLaunchFormId', () => {
     })).toBe('FORM-QUERY');
   });
 
-  it('prefers verified token claim form_id over response and caller values', () => {
+  it('ignores verified token claim form_id and keeps explicit response lineage first', () => {
     expect(resolvePmsLaunchFormId({
       preferredFormId: 'FORM-PREFERRED',
       queryFormId: 'FORM-QUERY',
       directFormId: 'FORM-DIRECT',
       tokenClaimFormId: 'FORM-TOKEN',
-    })).toBe('FORM-TOKEN');
+    })).toBe('FORM-QUERY');
   });
 
   it('falls back to preferred form_id when no backend lineage is available', () => {
@@ -33,15 +33,24 @@ describe('resolvePmsLaunchFormId', () => {
     })).toBe('FORM-PREFERRED');
   });
 
+  it('prefers JWT form_id over preferred when query/direct empty', () => {
+    expect(resolvePmsLaunchFormId({
+      preferredFormId: 'FORM-PREFERRED',
+      queryFormId: null,
+      directFormId: null,
+      tokenClaimFormId: 'FORM-TOKEN',
+    })).toBe('FORM-TOKEN');
+  });
+
   it('builds a token-primary simulator launch query without legacy identity params and reattaches selected output_project', () => {
     const search = buildTokenPrimaryPmsLaunchSearch({
       directQuery: new URLSearchParams(
-        'workflow_mode=external&project_id=query-project&output_project=query-output&user_id=JH&workflow_role=sh&role=jd&user_role=pz&foo=bar&user_token=should-strip'
+        'form_id=FORM-DIRECT&workflow_mode=external&project_id=query-project&output_project=query-output&user_id=JH&workflow_role=sh&role=jd&user_role=pz&foo=bar&user_token=should-strip'
       ),
       outputProject: 'AvevaMarineSample',
     });
 
-    expect(search.get('form_id')).toBeNull();
+    expect(search.get('form_id')).toBe('FORM-DIRECT');
     expect(search.get('output_project')).toBe('AvevaMarineSample');
     expect(search.get('workflow_mode')).toBeNull();
     expect(search.get('foo')).toBe('bar');

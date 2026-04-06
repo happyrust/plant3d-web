@@ -13,7 +13,6 @@ export type BuildTokenPrimaryPmsLaunchSearchOptions = {
 const DEFAULT_SIMULATOR_PROJECT_ID = 'AvevaMarineSample';
 
 const LEGACY_EMBED_IDENTITY_QUERY_KEYS = new Set([
-  'form_id',
   'output_project',
   'project_id',
   'user_id',
@@ -70,14 +69,14 @@ export function resolveDefaultSimulatorProjectId(
 }
 
 export function resolvePmsLaunchFormId(options: ResolvePmsLaunchFormIdOptions): string | null {
-  const tokenClaimFormId = normalizeFormId(options.tokenClaimFormId);
-  if (tokenClaimFormId) return tokenClaimFormId;
-
   const queryFormId = normalizeFormId(options.queryFormId);
   if (queryFormId) return queryFormId;
 
   const directFormId = normalizeFormId(options.directFormId);
   if (directFormId) return directFormId;
+
+  const tokenClaimFormId = normalizeFormId(options.tokenClaimFormId);
+  if (tokenClaimFormId) return tokenClaimFormId;
 
   return normalizeFormId(options.preferredFormId);
 }

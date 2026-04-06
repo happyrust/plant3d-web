@@ -502,9 +502,10 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           } else if (!genuinelyLoaded) {
             // refno 仅在 scene.objects 中有占位（来自树选择/可见性操作），
             // 但实际几何数据未加载 → 回落到下方加载路径
-            const w = `[警告] 节点 ${normalizedRoot} 仅为占位、尚无几何，正在重新加载模型数据`;
-            consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 占位但无几何，回落加载`);
-            emitToast({ message: w, level: 'warning' });
+            consoleStore.addLog(
+              'info',
+              `[model-load] refno=${normalizedRoot} 命中占位节点，转入真实模型加载`
+            );
           } else {
             const err = `[错误] 无法定位：包围盒为空（refno=${normalizedRoot}）`;
             consoleStore.addLog('error', `[model-load] flyTo 失败：AABB 为空 refno=${normalizedRoot}`);

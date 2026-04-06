@@ -143,18 +143,19 @@ async function runSequence(opts: ReturnType<typeof parseArgs>): Promise<StepResu
   results.push({ step: 'embed-url', ok: embedOk, ...embedResp });
   printResult(results[results.length - 1]);
 
-  // 从 embed-url 响应中提取 token，从 JWT payload 中解码 form_id
+  // 从 embed-url 响应中提取 token，并仅从显式响应字段提取 form_id
   const embedData = (embedResp.body.data ?? embedResp.body) as Record<string, unknown>;
   const token = String(embedData.token || embedData.user_token || '');
-  let formId = String(embedData.form_id || '');
-
-  if (!formId && token) {
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      formId = String(payload.form_id || '');
-      if (opts.verbose) console.error(`  JWT decoded form_id: ${formId}`);
-    } catch { /* ignore */ }
-  }
+  const query = (embedData.query ?? {}) as Record<string, unknown>;
+  const lineage = (embedData.lineage ?? {}) as Record<string, unknown>;
+  const formId = String(
+    embedData.form_id
+      || query.form_id
+      || query.formId
+      || lineage.form_id
+      || lineage.formId
+      || ''
+  );
 
   if (!token) {
     console.log('  ⚠ embed-url 未返回 token，后续步骤将使用空 token（可能 4xx）');

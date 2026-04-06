@@ -162,7 +162,7 @@ describe('useModelProjects', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('does not use project_id as output project path when loading projects', async () => {
+  it('matches project_id query param to list item path when id differs (PMS 常用目录名)', async () => {
     window.history.replaceState({}, '', '/?project_id=AvevaMarineSample');
     fetchMock.mockResolvedValue(buildProjectsResponse([
       { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS' },
@@ -171,7 +171,32 @@ describe('useModelProjects', () => {
     const { currentProject } = await createModelProjects();
     await flushPromises();
 
-    expect(currentProject.value).toBeNull();
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
+    expect(currentProject.value?.id).toBe('ams-model');
+  });
+
+  it('dedupes concurrent loadProjects onto one fetch', async () => {
+    let resolveFetch!: (value: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    fetchMock.mockImplementation(() => pending);
+
+    const { loadProjects, projects } = await createModelProjects();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const extraA = loadProjects();
+    const extraB = loadProjects();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFetch!(buildProjectsResponse([
+      { id: 'p1', name: 'ProjOne', notes: '' },
+    ]));
+    await Promise.all([extraA, extraB]);
+    await flushPromises();
+
+    expect(projects.value).toHaveLength(1);
+    expect(projects.value[0]?.path).toBe('ProjOne');
   });
 
   it('only auto-creates a project from output_project, not from project_id', async () => {

@@ -410,13 +410,13 @@ async function main(): Promise<void> {
   }
 
   const apiUrlSub = process.env.PMS_API_URL_SUBSTRING?.trim() || null;
-  const pmsApiSniffer =
-    submitReview && verifyPmsApi
-      ? startPmsApiSniffer(context, {
-        hostNeedle: pmsHostnameFromBase(base),
-        urlSubstring: apiUrlSub,
-      })
-      : null;
+  /** 与 submitReview 脱钩：登录后「新增」即可抓到 GetZy* JSON，便于单独抓包（不必跑完 plant3d 提资） */
+  const pmsApiSniffer = verifyPmsApi
+    ? startPmsApiSniffer(context, {
+      hostNeedle: pmsHostnameFromBase(base),
+      urlSubstring: apiUrlSub,
+    })
+    : null;
   if (pmsApiSniffer) {
     console.error(
       `[cdp] 已启用 PMS 数据接口嗅探（host=*${pmsHostnameFromBase(base)}*${apiUrlSub ? ` url*${apiUrlSub}*` : ''}，${pmsApiVerifyTimeoutMs}ms 内需在 JSON 响应中出现包名或 BRAN）`,

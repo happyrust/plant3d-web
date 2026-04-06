@@ -69,7 +69,7 @@ describe('reviewApi base url defaults', () => {
 
     expectBackendFetch(fetchMock, '/api/review/embed-url');
     expect(url.searchParams.get('user_token')).toBe('token-1');
-    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('form_id')).toBe('FORM-1');
     expect(url.searchParams.get('output_project')).toBeNull();
     expect(url.searchParams.get('workflow_mode')).toBeNull();
     expect(url.searchParams.get('project_id')).toBeNull();
@@ -129,7 +129,7 @@ describe('reviewApi base url defaults', () => {
 
     const url = new URL(result.url);
     expect(url.searchParams.get('user_token')).toBe('token-2');
-    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('form_id')).toBe('FORM-LINEAGE');
     expect(url.searchParams.get('output_project')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -155,7 +155,7 @@ describe('reviewApi base url defaults', () => {
     expect(url.searchParams.get('output_project')).toBeNull();
     expect(url.searchParams.get('user_id')).toBeNull();
     expect(url.searchParams.get('user_role')).toBeNull();
-    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('form_id')).toBe('FORM-AMS');
     expect(url.searchParams.get('user_token')).toBe('token-ams');
   });
 
@@ -174,7 +174,7 @@ describe('reviewApi base url defaults', () => {
     const url = new URL(result.url);
     expect(url.origin).toBe('http://review-web.local');
     expect(url.pathname).toBe('/review/3d-view');
-    expect(url.searchParams.get('form_id')).toBeNull();
+    expect(url.searchParams.get('form_id')).toBe('FORM-DIRECT');
     expect(url.searchParams.get('user_token')).toBe('token-direct');
     expect(url.searchParams.get('workflow_mode')).toBeNull();
     expect(url.searchParams.get('output_project')).toBeNull();
@@ -200,7 +200,7 @@ describe('reviewApi base url defaults', () => {
     expectBackendFetch(fetchMock, '/api/auth/verify');
   });
 
-  it('passes form_id when verifying embed token lineage', async () => {
+  it('verifies embed token without sending form_id lineage hints', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         code: 0,
@@ -210,12 +210,12 @@ describe('reviewApi base url defaults', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await authVerifyToken('token-verify', 'FORM-EMBED-1');
+    await authVerifyToken('token-verify');
 
     expectBackendFetch(
       fetchMock,
       '/api/auth/verify',
-      JSON.stringify({ token: 'token-verify', form_id: 'FORM-EMBED-1' })
+      JSON.stringify({ token: 'token-verify' })
     );
   });
 
@@ -229,8 +229,8 @@ describe('reviewApi base url defaults', () => {
           claims: {
             project_id: 'AvevaMarineSample',
             user_id: 'JH',
-            form_id: 'FORM-134F980BCB9C',
             role: 'sj',
+            workflow_mode: 'external',
             exp: 1774949170,
             iat: 1774862770,
           },
@@ -239,13 +239,13 @@ describe('reviewApi base url defaults', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await authVerifyToken('token-verify', 'FORM-134F980BCB9C');
+    const result = await authVerifyToken('token-verify');
 
     expect(result.data?.claims).toEqual({
       projectId: 'AvevaMarineSample',
       userId: 'JH',
-      formId: 'FORM-134F980BCB9C',
       role: 'sj',
+      workflowMode: 'external',
       exp: 1774949170,
       iat: 1774862770,
     });

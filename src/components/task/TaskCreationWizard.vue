@@ -2,9 +2,17 @@
   <div class="task-creation-wizard">
     <!-- 头部 -->
     <div class="wizard-header">
-      <div class="header-title">
-        <v-icon size="20" class="mr-2">mdi-plus-circle</v-icon>
-        <span>创建任务</span>
+      <div class="header-title-block">
+        <div class="header-title">
+          <v-icon size="20" class="mr-2">mdi-plus-circle</v-icon>
+          <span>{{ wizardHeaderTitle }}</span>
+        </div>
+        <div v-if="showModelGenContext" class="header-meta">
+          <v-chip size="x-small" variant="tonal" color="primary" class="header-chip">
+            后台批任务
+          </v-chip>
+          <span class="header-caption">对接 gen-model /api/tasks</span>
+        </div>
       </div>
       <v-btn icon size="small" variant="text" @click="handleClose">
         <v-icon size="18">mdi-close</v-icon>
@@ -33,6 +41,13 @@
         </div>
         <span class="step-label">{{ stepLabels[step - 1] }}</span>
       </div>
+    </div>
+
+    <div v-if="currentStep === 1 && formData.type === 'DataGeneration'" class="wizard-context-alert">
+      <v-alert type="info" variant="tonal" density="compact" class="mb-0">
+        此处创建的是<strong>后台批处理任务</strong>（创建后将调用 /api/tasks 并自动启动）。在模型树或 Viewer
+        中按节点按需加载模型属于<strong>即时加载</strong>，无需在此创建任务；批任务进度请在「任务监视」面板查看。
+      </v-alert>
     </div>
 
     <!-- 步骤内容 -->
@@ -159,10 +174,39 @@
           </div>
         </template>
 
-        <!-- 模型生成参数 -->
+        <!-- 模型生成参数（范围 → 生成内容 → 高级） -->
         <template v-if="formData.type === 'DataGeneration'">
+          <h4 class="section-heading">生成范围</h4>
+          <p class="section-lead">
+            与任务配置一致：可选 dbnum 或 refno，二者勿同时填写；留空表示全部数据库。多个 dbnum 请用英文逗号分隔（解析任务会拆子任务；模型生成按单字段规则校验）。
+          </p>
+
           <div class="form-group">
-            <label class="form-label required">生成内容</label>
+            <label class="form-label">数据库编号</label>
+            <v-text-field v-model="formData.dbnum"
+              placeholder="例如：1516 或 7999,8000"
+              variant="outlined"
+              density="compact"
+              :error-messages="errors.dbnum" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">参考号（可选）</label>
+            <v-text-field v-model="formData.refno"
+              placeholder="例如：24381_145018"
+              variant="outlined"
+              density="compact"
+              :error-messages="errors.refno" />
+          </div>
+
+          <div class="form-hint">
+            <v-icon size="14" color="info" class="mr-1">mdi-information-outline</v-icon>
+            dbnum 与 refno 二选一；均留空则处理全部数据库
+          </div>
+
+          <h4 class="section-heading section-heading-spaced">生成内容</h4>
+          <div class="form-group">
+            <label class="form-label required">至少选一</label>
             <div class="checkbox-group">
               <v-checkbox v-model="formData.generateModels"
                 label="生成模型"
@@ -182,116 +226,112 @@
             </div>
           </div>
 
-          <div class="form-group">
-            <v-checkbox v-model="formData.applyBooleanOperation"
-              label="应用布尔运算"
-              density="compact"
-              hide-details />
-          </div>
+          <v-btn variant="text"
+            size="small"
+            class="advanced-toggle px-0"
+            :append-icon="modelGenAdvancedOpen ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+            @click="modelGenAdvancedOpen = !modelGenAdvancedOpen">
+            高级：布尔运算、Web 数据包、网格容差、并发、Noun 过滤…
+          </v-btn>
 
-          <div class="form-group">
-            <v-checkbox v-model="formData.exportWebBundle"
-              label="导出 Web 数据包"
-              density="compact"
-              hide-details
-              hint="自动生成 export-all-relates 数据包用于 Web 查看器" />
-          </div>
+          <v-expand-transition>
+            <div v-show="modelGenAdvancedOpen" class="advanced-block">
+              <div class="form-group">
+                <v-checkbox v-model="formData.applyBooleanOperation"
+                  label="应用布尔运算"
+                  density="compact"
+                  hide-details />
+              </div>
 
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label class="form-label">数据库编号</label>
-              <v-text-field v-model="formData.dbnum"
-                placeholder="例如：7997"
-                variant="outlined"
-                density="compact"
-                :error-messages="errors.dbnum" />
+              <div class="form-group">
+                <v-checkbox v-model="formData.exportWebBundle"
+                  label="导出 Web 数据包"
+                  density="compact"
+                  hide-details
+                  hint="自动生成 export-all-relates 数据包用于 Web 查看器" />
+              </div>
+
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label class="form-label">网格容差比例</label>
+                  <v-text-field v-model.number="formData.meshTolRatio"
+                    variant="outlined"
+                    density="compact"
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    max="1"
+                    :error-messages="errors.meshTolRatio" />
+                </div>
+                <div class="form-group flex-1">
+                  <label class="form-label">最大并发数</label>
+                  <v-text-field v-model.number="formData.maxConcurrent"
+                    variant="outlined"
+                    density="compact"
+                    type="number"
+                    min="1"
+                    max="16"
+                    :error-messages="errors.maxConcurrent" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Noun 过滤</label>
+                <v-combobox :model-value="formData.enabledNouns"
+                  :search="formData.nounInput"
+                  :error="nounInputInvalid"
+                  :error-messages="nounInputError ? [nounInputError] : []"
+                  multiple
+                  chips
+                  closable-chips
+                  clear-on-select
+                  hide-selected
+                  hint="输入 noun 后按 Enter 添加；留空表示不过滤，生成全部类型"
+                  persistent-hint
+                  placeholder="例如：BRAN、HANG、PANE"
+                  variant="outlined"
+                  density="compact"
+                  @update:search="handleNounSearch"
+                  @update:model-value="handleNounListChange"
+                  @keydown.enter.prevent="handleNounEnter"
+                  @click:clear="clearNounInput">
+                  <template #chip="{ props: chipProps, item }">
+                    <v-chip v-bind="chipProps"
+                      size="small"
+                      closable
+                      @click:close="removeNoun(String(item.raw))">
+                      {{ String(item.raw) }}
+                    </v-chip>
+                  </template>
+                </v-combobox>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Limit instances per noun type (optional, for testing)</label>
+                <v-text-field v-model="formData.limitPerNounType"
+                  placeholder="Leave empty for no limit"
+                  variant="outlined"
+                  density="compact"
+                  type="number"
+                  min="1"
+                  step="1"
+                  :error-messages="errors.limitPerNounType" />
+              </div>
             </div>
-            <div class="form-group flex-1">
-              <label class="form-label">参考号</label>
-              <v-text-field v-model="formData.refno"
-                placeholder="例如：24381_145018"
-                variant="outlined"
-                density="compact"
-                :error-messages="errors.refno" />
-            </div>
-          </div>
-
-          <div class="form-hint">
-            <v-icon size="14" color="info" class="mr-1">mdi-information-outline</v-icon>
-            可选填写 dbnum 或 refno，留空表示处理全部数据库
-          </div>
-
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label class="form-label">网格容差比例</label>
-              <v-text-field v-model.number="formData.meshTolRatio"
-                variant="outlined"
-                density="compact"
-                type="number"
-                step="0.001"
-                min="0.001"
-                max="1"
-                :error-messages="errors.meshTolRatio" />
-            </div>
-            <div class="form-group flex-1">
-              <label class="form-label">最大并发数</label>
-              <v-text-field v-model.number="formData.maxConcurrent"
-                variant="outlined"
-                density="compact"
-                type="number"
-                min="1"
-                max="16"
-                :error-messages="errors.maxConcurrent" />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Noun 过滤</label>
-            <v-combobox :model-value="formData.enabledNouns"
-              :search="formData.nounInput"
-              :error="nounInputInvalid"
-              :error-messages="nounInputError ? [nounInputError] : []"
-              multiple
-              chips
-              closable-chips
-              clear-on-select
-              hide-selected
-              hint="输入 noun 后按 Enter 添加；留空表示不过滤，生成全部类型"
-              persistent-hint
-              placeholder="例如：BRAN、HANG、PANE"
-              variant="outlined"
-              density="compact"
-              @update:search="handleNounSearch"
-              @update:model-value="handleNounListChange"
-              @keydown.enter.prevent="handleNounEnter"
-              @click:clear="clearNounInput">
-              <template #chip="{ props: chipProps, item }">
-                <v-chip v-bind="chipProps"
-                  size="small"
-                  closable
-                  @click:close="removeNoun(String(item.raw))">
-                  {{ String(item.raw) }}
-                </v-chip>
-              </template>
-            </v-combobox>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Limit instances per noun type (optional, for testing)</label>
-            <v-text-field v-model="formData.limitPerNounType"
-              placeholder="Leave empty for no limit"
-              variant="outlined"
-              density="compact"
-              type="number"
-              min="1"
-              step="1"
-              :error-messages="errors.limitPerNounType" />
-          </div>
+          </v-expand-transition>
         </template>
       </div>
 
       <!-- 步骤 3: 预览确认 -->
       <div v-show="currentStep === 3" class="step-content">
+        <v-alert v-if="formData.type === 'DataGeneration' && !createdTaskId"
+          type="warning"
+          variant="tonal"
+          density="comfortable"
+          class="mb-2">
+          提交后将<strong>创建任务并自动启动</strong>。运行中或失败时，请在<strong>任务监视</strong>面板查看状态与日志；与模型树中按需「显示模型」不是同一条链路。
+        </v-alert>
+
         <div class="preview-section">
           <h4 class="preview-title">基础信息</h4>
           <div class="preview-item">
@@ -413,7 +453,7 @@
         :loading="loading"
         :disabled="!canSubmit"
         @click="handleSubmit">
-        创建任务
+        {{ formData.type === 'DataGeneration' ? '创建并启动' : '创建任务' }}
       </v-btn>
       <v-btn v-if="createdTaskId"
         color="primary"
@@ -426,7 +466,7 @@
 
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import type { DatabaseConfig } from '@/api/genModelTaskApi';
 import type { TaskCreationSiteContext } from '@/composables/useTaskCreationStore';
@@ -487,8 +527,12 @@ onMounted(() => {
   applyPresetType();
 });
 
+// 模型生成：高级参数默认折叠（对齐设计稿渐进披露）
+const modelGenAdvancedOpen = ref(false);
+
 // ============ 常量 ============
-const stepLabels = ['基础信息', '参数配置', '预览确认'];
+const stepLabelsDefault = ['基础信息', '参数配置', '预览确认'];
+const stepLabelsModelGen = ['基础信息', '范围与选项', '确认并启动'];
 
 const priorityOptions = [
   { label: '低', value: 'low' },
@@ -504,6 +548,16 @@ const parseModeLabels: Record<string, string> = {
 };
 
 // ============ 计算属性 ============
+
+const wizardHeaderTitle = computed(() =>
+  formData.type === 'DataGeneration' ? '模型生成' : '创建任务'
+);
+
+const showModelGenContext = computed(() => formData.type === 'DataGeneration');
+
+const stepLabels = computed(() =>
+  formData.type === 'DataGeneration' ? stepLabelsModelGen : stepLabelsDefault
+);
 
 /** 解析逗号分隔的 dbnum 输入为数字数组 */
 const parsedDbnums = computed<number[]>(() => {
@@ -687,6 +741,7 @@ async function handleBatchSubmit() {
 function handleCreateAnother() {
   resetForm();
   formData.type = DEFAULT_TASK_TYPE;
+  modelGenAdvancedOpen.value = false;
 }
 </script>
 
@@ -700,10 +755,17 @@ function handleCreateAnother() {
 
 .wizard-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+
+  .header-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
 
   .header-title {
     display: flex;
@@ -711,6 +773,59 @@ function handleCreateAnother() {
     font-size: 15px;
     font-weight: 500;
   }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-left: 28px;
+  }
+
+  .header-chip {
+    font-weight: 600;
+  }
+
+  .header-caption {
+    font-size: 11px;
+    color: rgba(var(--v-theme-on-surface), 0.55);
+  }
+}
+
+.wizard-context-alert {
+  padding: 0 16px 12px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.section-heading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.section-heading-spaced {
+  margin-top: 8px;
+}
+
+.section-lead {
+  margin: -8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.advanced-toggle {
+  align-self: flex-start;
+  margin-top: -4px;
+  font-size: 12px;
+}
+
+.advanced-block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 8px;
 }
 
 .site-context-banner {

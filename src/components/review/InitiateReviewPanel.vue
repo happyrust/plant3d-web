@@ -535,6 +535,13 @@ async function handleSubmit() {
 
   try {
     const isExternal = externalWorkflowMode.value;
+    const pageFormId = embedModeParams.value.launchInput?.formId || null;
+    const persistedFormId = formId.value || null;
+    const requestFormId = embedModeParams.value.isEmbedMode ? (persistedFormId || undefined) : undefined;
+
+    if (embedModeParams.value.isEmbedMode && !requestFormId) {
+      throw new Error('缺少业务单据号，请重新从提资入口打开当前单据');
+    }
 
     const checkerIdToSubmit = isExternal ? undefined : resolvedAssignees.value.checkerId;
     const approverIdToSubmit = isExternal ? undefined : resolvedAssignees.value.approverId;
@@ -543,6 +550,11 @@ async function handleSubmit() {
     }
 
     const attachments = getUploadedAttachments();
+    console.log('[InitiateReviewPanel] 提资单保存上下文', {
+      pageFormId,
+      persistedFormId,
+      requestFormId: requestFormId || null,
+    });
 
     const task = await userStore.createReviewTask({
       title: formData.packageName,
@@ -550,7 +562,7 @@ async function handleSubmit() {
       modelName: formData.packageName,
       checkerId: checkerIdToSubmit,
       approverId: approverIdToSubmit,
-      formId: embedModeParams.value.isEmbedMode ? (embedModeParams.value.formId || undefined) : undefined,
+      formId: requestFormId,
       priority: isExternal ? undefined : formData.priority,
       components: [...selectedComponents.value],
       dueDate: !isExternal && formData.dueDate ? new Date(formData.dueDate).getTime() : undefined,

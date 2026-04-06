@@ -948,6 +948,10 @@
                   <input id="platform-embed-token" class="panel-input" type="text" placeholder="留空则由后端签发新 token" style="min-height: 28px;" />
                 </div>
               </div>
+              <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; cursor: pointer; user-select: none; line-height: 1.55;">
+                <input id="pms-like-iframe-query" type="checkbox" checked style="accent-color: var(--primary); margin-top: 2px;" />
+                <span><b>真实 PMS 拼链</b>：iframe URL 附带 <code>user_id</code>（当前 PMS 用户，等同 HumanCode）与 <code>form_id</code>（与 embed 血缘 / ModelUrl 一致）；关闭则仅用 token-primary（user_token + output_project）</span>
+              </label>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="panel-field">
                   <label for="platform-extra-params">extra_parameters（embed-url JSON）</label>
