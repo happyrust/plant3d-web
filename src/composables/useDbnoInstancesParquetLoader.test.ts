@@ -4,9 +4,11 @@ vi.mock('@/api/genModelTaskApi', () => ({
   getBaseUrl: () => 'http://127.0.0.1:3100',
 }));
 
-const { queryMock, registerFileURLMock } = vi.hoisted(() => ({
+const { queryMock, registerFileURLMock, instantiateMock, connectMock } = vi.hoisted(() => ({
   queryMock: vi.fn(),
   registerFileURLMock: vi.fn(),
+  instantiateMock: vi.fn(),
+  connectMock: vi.fn(),
 }));
 
 vi.mock('@duckdb/duckdb-wasm', () => {
@@ -14,10 +16,11 @@ vi.mock('@duckdb/duckdb-wasm', () => {
 
   class AsyncDuckDB {
     async instantiate() {
-      return undefined;
+      return await instantiateMock();
     }
 
     async connect() {
+      await connectMock();
       return {
         query: queryMock,
       };
@@ -84,6 +87,8 @@ describe('useDbnoInstancesParquetLoader', () => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     registerFileURLMock.mockResolvedValue(undefined);
+    instantiateMock.mockResolvedValue(undefined);
+    connectMock.mockResolvedValue(undefined);
     queryMock.mockReset();
 
     vi.stubGlobal(
@@ -141,6 +146,103 @@ describe('useDbnoInstancesParquetLoader', () => {
     const urls = fetchMock.mock.calls.map(([input]) => String(input));
     expect(urls).toContain('/files/output/instances/manifest_7997.json');
     expect(urls).not.toContain('/files/output/parquet/manifest_7997.json');
+  });
+
+  it('同一 dbno 的 parquet 可用性探测会复用并发请求并缓存成功结果', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = String(init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      if (method === 'HEAD' && url.includes('/files/output/instances/')) {
+        return new Response(null, { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${method} ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    const [first, second] = await Promise.all([
+      loader.isParquetAvailable(7997),
+      loader.isParquetAvailable(7997),
+    ]);
+    const third = await loader.isParquetAvailable(7997);
+
+    expect(first).toBe(true);
+    expect(second).toBe(true);
+    expect(third).toBe(true);
+
+    const urls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(urls.filter((url) => url.includes('/api/model/parquet-version/7997'))).toHaveLength(1);
+    expect(urls.filter((url) => url.endsWith('/files/output/instances/manifest_7997.json'))).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(([input, init]) => {
+        const url = String(input);
+        const method = String((init as RequestInit | undefined)?.method || 'GET').toUpperCase();
+        return method === 'HEAD' && url.includes('/files/output/instances/');
+      })
+    ).toHaveLength(4);
+  });
+
+  it('支持预热 DuckDB 与 dbno 注册，且重复调用复用同一冷启动状态', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await loader.prewarmDuckDB();
+    await loader.prewarmDuckDB();
+    await loader.prewarmDbno(7997);
+    await loader.prewarmDbno(7997);
+
+    expect(instantiateMock).toHaveBeenCalledTimes(1);
+    expect(connectMock).toHaveBeenCalledTimes(1);
+    expect(registerFileURLMock).toHaveBeenCalledTimes(5);
   });
 
   it('mesh validation 报告沿 manifest 所在目录读取', async () => {
@@ -360,9 +462,9 @@ describe('useDbnoInstancesParquetLoader', () => {
     expect(elboList[0]?.uniforms.owner_refno).toBe('24381_145712');
     expect(elboList[1]?.uniforms.noun).toBe('TUBI');
     expect(elboList[1]?.uniforms.refno).toBe('24381_145714');
-    expect(elboList[1]?.matrix[12]).toBe(11);
-    expect(elboList[1]?.matrix[13]).toBe(22);
-    expect(elboList[1]?.matrix[14]).toBe(33);
+    expect(elboList[1]?.matrix[12]).toBe(1);
+    expect(elboList[1]?.matrix[13]).toBe(2);
+    expect(elboList[1]?.matrix[14]).toBe(3);
 
     expect(branList).toHaveLength(2);
     expect(branList[0]?.uniforms.noun).toBe('TUBI');
@@ -371,9 +473,159 @@ describe('useDbnoInstancesParquetLoader', () => {
     expect(branList[0]?.matrix[13]).toBe(200);
     expect(branList[0]?.matrix[14]).toBe(300);
     expect(branList[1]?.uniforms.refno).toBe('24381_145714');
-    expect(branList[1]?.matrix[12]).toBe(11);
-    expect(branList[1]?.matrix[13]).toBe(22);
-    expect(branList[1]?.matrix[14]).toBe(33);
+    expect(branList[1]?.matrix[12]).toBe(1);
+    expect(branList[1]?.matrix[13]).toBe(2);
+    expect(branList[1]?.matrix[14]).toBe(3);
     expect(queryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('暴露 query 内部细分时序，便于区分冷启动、注册与 SQL 阶段', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    queryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes('ORDER BY i.refno_str, gi.geo_index')) {
+        return {
+          toArray: () => [
+            {
+              refno_str: '24381_145714',
+              noun: 'ELBO',
+              owner_refno_str: '24381_145712',
+              owner_noun: 'BRAN',
+              spec_value: 2,
+              has_neg: false,
+              trans_hash: '111',
+              aabb_hash: '222',
+              geo_index: 0,
+              geo_hash: '3',
+              geo_trans_hash: null,
+              min_x: 0,
+              min_y: 0,
+              min_z: 0,
+              max_x: 1,
+              max_y: 1,
+              max_z: 1,
+              ...createIdentityMatrix(10, 20, 30),
+              g_m00: null, g_m10: null, g_m20: null, g_m30: null,
+              g_m01: null, g_m11: null, g_m21: null, g_m31: null,
+              g_m02: null, g_m12: null, g_m22: null, g_m32: null,
+              g_m03: null, g_m13: null, g_m23: null, g_m33: null,
+            },
+          ],
+        };
+      }
+      if (sql.includes('FROM tubi_candidates c')) {
+        return {
+          toArray: () => [
+            {
+              refno_str: '24381_145712',
+              tubi_refno_str: '24381_145712',
+              noun: 'TUBI',
+              owner_refno_str: '24381_145712',
+              owner_noun: '',
+              spec_value: 1,
+              has_neg: false,
+              trans_hash: '333',
+              aabb_hash: '444',
+              geo_index: 0,
+              geo_hash: '2',
+              geo_trans_hash: '',
+              min_x: 0,
+              min_y: 0,
+              min_z: 0,
+              max_x: 1,
+              max_y: 1,
+              max_z: 1,
+              ...createIdentityMatrix(100, 200, 300),
+              iw_m00: null, iw_m10: null, iw_m20: null, iw_m30: null,
+              iw_m01: null, iw_m11: null, iw_m21: null, iw_m31: null,
+              iw_m02: null, iw_m12: null, iw_m22: null, iw_m32: null,
+              iw_m03: null, iw_m13: null, iw_m23: null, iw_m33: null,
+              g_m00: null, g_m10: null, g_m20: null, g_m30: null,
+              g_m01: null, g_m11: null, g_m21: null, g_m31: null,
+              g_m02: null, g_m12: null, g_m22: null, g_m32: null,
+              g_m03: null, g_m13: null, g_m23: null, g_m33: null,
+            },
+            {
+              refno_str: '24381_145714',
+              tubi_refno_str: '24381_145714',
+              noun: 'TUBI',
+              owner_refno_str: '24381_145712',
+              owner_noun: '',
+              spec_value: 1,
+              has_neg: false,
+              trans_hash: '334',
+              aabb_hash: '445',
+              geo_index: 1,
+              geo_hash: '2',
+              geo_trans_hash: '',
+              min_x: 0,
+              min_y: 0,
+              min_z: 0,
+              max_x: 1,
+              max_y: 1,
+              max_z: 1,
+              ...createIdentityMatrix(1, 2, 3),
+              iw_m00: 1, iw_m10: 0, iw_m20: 0, iw_m30: 0,
+              iw_m01: 0, iw_m11: 1, iw_m21: 0, iw_m31: 0,
+              iw_m02: 0, iw_m12: 0, iw_m22: 1, iw_m32: 0,
+              iw_m03: 10, iw_m13: 20, iw_m23: 30, iw_m33: 1,
+              g_m00: null, g_m10: null, g_m20: null, g_m30: null,
+              g_m01: null, g_m11: null, g_m21: null, g_m31: null,
+              g_m02: null, g_m12: null, g_m22: null, g_m32: null,
+              g_m03: null, g_m13: null, g_m23: null, g_m33: null,
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected sql: ${sql}`);
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryInstanceEntriesByRefnos(7997, ['24381_145712', '24381_145714']);
+
+    expect(out.get('24381_145712')).toHaveLength(1);
+    expect(out.get('24381_145714')).toHaveLength(2);
+    expect(loader.lastQueryTiming.value).toMatchObject({
+      stats: {
+        requestedRefnos: 2,
+        chunkCount: 1,
+        mainRows: 1,
+        tubiRows: 2,
+        resultBuckets: 2,
+        resultEntries: 3,
+      },
+    });
+    expect(loader.lastQueryTiming.value?.phaseMs.total).toBeGreaterThanOrEqual(0);
+    expect(loader.lastQueryTiming.value?.phaseMs.duckdbInit).toBeGreaterThanOrEqual(0);
+    expect(loader.lastQueryTiming.value?.phaseMs.registerDbno).toBeGreaterThanOrEqual(0);
+    expect(loader.lastQueryTiming.value?.phaseMs.mainSql).toBeGreaterThanOrEqual(0);
+    expect(loader.lastQueryTiming.value?.phaseMs.mainRows).toBeGreaterThanOrEqual(0);
+    expect(loader.lastQueryTiming.value?.phaseMs.tubiSql).toBeGreaterThanOrEqual(0);
+    expect(loader.lastQueryTiming.value?.phaseMs.tubiRows).toBeGreaterThanOrEqual(0);
   });
 });

@@ -1,5 +1,6 @@
 import '@/assets/tailwind.css';
 import '@/assets/main.scss';
+import '@/utils/three/patches/applyMeshLineShaderCompat';
 import 'dockview-vue/dist/styles/dockview.css';
 import { createApp } from 'vue';
 
