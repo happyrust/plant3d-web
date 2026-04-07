@@ -188,7 +188,14 @@ async function addConfirmedRecord(
         confirmedAt: response.record.confirmedAt,
         note: record.note,
       };
-      confirmedRecords.value = [...confirmedRecords.value, newRecord];
+      const nextRecords = [...confirmedRecords.value];
+      const existingIndex = nextRecords.findIndex((item) => item.id === newRecord.id);
+      if (existingIndex >= 0) {
+        nextRecords.splice(existingIndex, 1, newRecord);
+      } else {
+        nextRecords.push(newRecord);
+      }
+      confirmedRecords.value = nextRecords;
       return newRecord.id;
     }
 

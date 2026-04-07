@@ -175,6 +175,11 @@ function readMbdDimTextModeFromUrl(): 'backend' | 'auto' | null {
   return null;
 }
 
+function resolveMbdApiMode(mode: 'layout_first' | 'construction' | 'inspection') {
+  if (mode === 'construction' || mode === 'inspection') return mode;
+  return undefined;
+}
+
 function readMbdArrowSizeFromUrl(): number | null {
   try {
     const q = new URLSearchParams(window.location.search);
@@ -3611,7 +3616,8 @@ onMounted(async () => {
         let batchId: string | null = null;
 
         const resp = await getMbdPipeAnnotations(refnoKey, {
-          mode: mbdPipeVis.mbdViewMode.value,
+          // 后端已不再接受 layout_first；前端保留该模式仅用于本地渲染分流。
+          mode: resolveMbdApiMode(mbdPipeVis.mbdViewMode.value),
           // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
           source: 'db',
           debug: isDev || isMbdApiDebugFromUrl(),
@@ -3638,6 +3644,15 @@ onMounted(async () => {
           bend_mode: 'facecenter',
         });
         if (resp.success && resp.data) {
+          if (mbdPipeVis.mbdViewMode.value === 'layout_first' && !resp.data.layout_result) {
+            console.warn('[mbd-pipe] layout_first 未拿到 layout_result，自动回退到 construction', {
+              branch_refno: resp.data.branch_refno,
+            });
+            mbdPipeVis.applyModeDefaults('construction');
+            emitToast({
+              message: '后端未返回版面排布结果，已按施工模式显示',
+            });
+          }
           if (resp.data.debug_info && (isDev || isMbdApiDebugFromUrl())) {
             console.info('[mbd-pipe] debug_info', resp.data.debug_info);
           }
@@ -3656,7 +3671,8 @@ onMounted(async () => {
         }
       } catch (e) {
         console.error('[mbd-pipe] Failed to load:', e);
-        emitToast({ message: '生成管道标注失败' });
+        const msg = e instanceof Error ? e.message : String(e);
+        emitToast({ message: `生成管道标注失败：${msg}` });
       } finally {
         store.clearMbdPipeAnnotationRequest();
       }

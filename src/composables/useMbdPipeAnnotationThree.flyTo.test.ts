@@ -16,7 +16,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vi.restoreAllMocks();
   });
 
-  it('默认显示施工视图相关标注', () => {
+  it('默认显示施工模式相关标注', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -32,9 +32,9 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
-    expect(vis.mbdViewMode.value).toBe('layout_first');
+    expect(vis.mbdViewMode.value).toBe('construction');
     expect(vis.dimMode.value).toBe('classic');
-    expect(vis.showDimSegment.value).toBe(true);
+    expect(vis.showDimSegment.value).toBe(false);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(true);
     expect(vis.showDimPort.value).toBe(false);
@@ -44,7 +44,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showFlanges.value).toBe(true);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
-    expect(vis.showBends.value).toBe(true);
+    expect(vis.showBends.value).toBe(false);
     expect(vis.bendDisplayMode.value).toBe('size');
     expect(vis.showSegments.value).toBe(false);
   });
@@ -77,6 +77,19 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showBends.value).toBe(false);
     expect(vis.bendDisplayMode.value).toBe('size');
     expect(vis.showSegments.value).toBe(false);
+
+    vis.applyModeDefaults('construction');
+    expect(vis.mbdViewMode.value).toBe('construction');
+    expect(vis.dimMode.value).toBe('classic');
+    expect(vis.showDimSegment.value).toBe(false);
+    expect(vis.showDimChain.value).toBe(true);
+    expect(vis.showDimOverall.value).toBe(true);
+    expect(vis.showDimPort.value).toBe(false);
+    expect(vis.showCutTubis.value).toBe(false);
+    expect(vis.showWelds.value).toBe(true);
+    expect(vis.showSlopes.value).toBe(true);
+    expect(vis.showBends.value).toBe(false);
+    expect(vis.bendDisplayMode.value).toBe('size');
 
     vis.applyModeDefaults('layout_first');
     expect(vis.mbdViewMode.value).toBe('layout_first');
@@ -177,6 +190,93 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(params?.laidOutGeometry?.extensionLine1End?.toArray()).toEqual([10, 320, 0]);
     expect(params?.laidOutGeometry?.extensionLine2End?.toArray()).toEqual([1010, 320, 0]);
     expect(params?.laidOutGeometry?.textAnchor?.toArray()).toEqual([240, 360, 0]);
+  });
+
+  it('construction 下相邻短 chain 尺寸应自动错开文字位置', () => {
+    const viewer = {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera: new PerspectiveCamera(),
+      flyTo: vi.fn(),
+    } as any;
+
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults('construction');
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-CHAIN-DECLUTTER',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-1',
+          refno: 'seg-1',
+          noun: 'STRA',
+          arrive: [0, 0, 0],
+          leave: [150, 0, 0],
+          length: 150,
+          straight_length: 150,
+        },
+      ],
+      dims: [
+        {
+          id: 'chain-1',
+          kind: 'chain',
+          start: [0, 0, 0],
+          end: [150, 0, 0],
+          length: 150,
+          text: '150',
+        },
+        {
+          id: 'chain-2',
+          kind: 'chain',
+          start: [0, 10, 0],
+          end: [150, 10, 0],
+          length: 150,
+          text: '150',
+        },
+        {
+          id: 'overall-1',
+          kind: 'overall',
+          start: [0, 20, 0],
+          end: [150, 20, 0],
+          length: 450,
+          text: '450',
+        },
+      ],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 3,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    } as any);
+
+    const chain1 = vis.getDimAnnotations().get('chain-1');
+    const chain2 = vis.getDimAnnotations().get('chain-2');
+    expect(chain1).toBeTruthy();
+    expect(chain2).toBeTruthy();
+
+    const p1 = chain1!.getLabelWorldPos();
+    const p2 = chain2!.getLabelWorldPos();
+    expect(p1.distanceTo(p2)).toBeGreaterThan(0.35);
   });
 
   it('应抑制与非 overall 尺寸共用同一 span 的 overall 标注', () => {

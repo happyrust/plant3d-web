@@ -641,6 +641,42 @@ describe('LinearDimension3D', () => {
     expect(w2 / w1).toBeCloseTo(1, 2);
   });
 
+  it('should keep label anchor stable across repeated updates under parent transform', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(151.32854, 0.6682232, 0),
+      end: new THREE.Vector3(0, -151.169, 0),
+      offset: 50,
+      direction: new THREE.Vector3(-0.7082922857095729, 0.7059192857574503, 0),
+      text: '214',
+    });
+
+    const parent = new THREE.Group();
+    parent.scale.setScalar(0.001);
+    parent.position.set(-5.9634189453125, -9.97009532750105, -16.5493609375);
+    parent.add(dim);
+
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 1000);
+    (camera as any).userData.annotationViewport = { width: 900, height: 700 };
+    camera.position.set(68.5670880546875, 48.07137367249895, 62.4286710625);
+    camera.lookAt(-1.0785439453125, -4.162850327501051, -7.2169609375000014);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    dim.update(camera);
+    const first = dim.getLabelWorldPos();
+
+    for (let i = 0; i < 5; i += 1) {
+      dim.update(camera);
+    }
+
+    const again = dim.getLabelWorldPos();
+    expect(again.distanceTo(first)).toBeLessThan(0.05);
+  });
+
   it('should render open arrow style with V-line geometry', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { LinearDimension3D } = await import('./LinearDimension3D');

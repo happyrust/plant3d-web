@@ -126,7 +126,10 @@ export function resolveSemanticLane(
   const normalized = 'offsetLevel' in (hint ?? {})
     ? (hint as NormalizedLayoutHint)
     : normalizeMbdLayoutHint(hint as MbdLayoutHint | null | undefined);
-  const semanticLane = SEMANTIC_LANE_ORDER[role] ?? 0;
+  const hasBackendOffsetLevel = Number.isFinite(
+    Number(normalized.raw?.offset_level),
+  );
+  const semanticLane = hasBackendOffsetLevel ? 0 : (SEMANTIC_LANE_ORDER[role] ?? 0);
   const explicitLane = normalized.placementLane;
   const lane = Number.isFinite(explicitLane)
     ? Math.max(semanticLane, Math.floor(explicitLane as number))

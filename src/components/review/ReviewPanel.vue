@@ -26,6 +26,7 @@ import {
 } from 'lucide-vue-next';
 
 import CollisionResultList from './CollisionResultList.vue';
+import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
 import {
   EMBED_LANDING_STATE_STORAGE_KEY,
@@ -38,12 +39,13 @@ import ReviewDataSync from './ReviewDataSync.vue';
 import {
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
+  buildReviewConfirmSnapshotKey,
+  buildReviewConfirmSnapshotPayloadFromRecords,
   confirmCurrentDataSafely,
   getSubmitActionLabel,
   getWorkflowSubmitBridgeAction,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
-import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 import { resolvePassiveWorkflowMode } from './workflowMode';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
@@ -96,7 +98,16 @@ const userStore = useUserStore();
 const onboarding = useOnboardingGuide();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
-const lastRestoredSceneKey = ref<string | null>(null);
+
+// 确认记录场景恢复（公共模块）
+const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
+  currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
+  toolStore,
+  waitForViewerReady,
+  getViewerTools: () => viewerContext.tools.value ?? null,
+});
+const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
 const showDebugUi = isReviewDebugUiEnabled();
@@ -214,47 +225,9 @@ function getConfirmedRecordNote(record: ConfirmedRecordEntry): string {
   return record.note?.trim() || '-';
 }
 
-const currentTaskConfirmedRecords = computed<ConfirmedRecordEntry[]>(() => {
-  const taskId = currentTask.value?.id;
-  if (!taskId) return [];
-  return reviewStore.sortedConfirmedRecords.value
-    .filter((record) => (record.taskId || '') === taskId)
-    .slice()
-    .sort((a, b) => a.confirmedAt - b.confirmedAt);
-});
+const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
 
-function buildConfirmedRecordsSceneKey(taskId: string | null, records: ConfirmedRecordEntry[]): string {
-  if (!taskId) return '__no-task__';
-  if (records.length === 0) return `${taskId}:empty`;
-  return `${taskId}:${records.map((record) => `${record.id}:${record.confirmedAt}`).join('|')}`;
-}
-
-function buildConfirmedRecordsReplayPayload(records: ConfirmedRecordEntry[]): string {
-  return buildReviewRecordReplayPayload(records);
-}
-
-async function restoreConfirmedRecordsIntoScene(force = false): Promise<void> {
-  const taskId = currentTask.value?.id ?? null;
-  const records = currentTaskConfirmedRecords.value;
-  const restoreKey = buildConfirmedRecordsSceneKey(taskId, records);
-  if (!force && lastRestoredSceneKey.value === restoreKey) return;
-
-  const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
-  const tools = viewerContext.tools.value;
-  if (!viewerReady || !tools) return;
-  if ((currentTask.value?.id ?? null) !== taskId) return;
-
-  if (!taskId || records.length === 0) {
-    toolStore.clearAll();
-    tools.syncFromStore();
-    lastRestoredSceneKey.value = restoreKey;
-    return;
-  }
-
-  toolStore.importJSON(buildConfirmedRecordsReplayPayload(records));
-  tools.syncFromStore();
-  lastRestoredSceneKey.value = restoreKey;
-}
+const { restoreConfirmedRecordsIntoScene } = confirmedRecordsRestorer;
 
 // 下载附件
 function downloadAttachment(attachment: ReviewAttachment) {
@@ -769,24 +742,39 @@ const reviewerMeasurementActions = computed(() => [
 const hasPendingData = computed(() => {
   return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
 });
+const currentDraftConfirmPayload = computed(() => ({
+  annotations: [...toolStore.annotations.value],
+  cloudAnnotations: [...toolStore.cloudAnnotations.value],
+  rectAnnotations: [...toolStore.rectAnnotations.value],
+  obbAnnotations: [...toolStore.obbAnnotations.value],
+  measurements: [...toolStore.measurements.value],
+}));
+const confirmedSnapshotPayload = computed(() => (
+  buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
+));
+const hasUnsavedChanges = computed(() => {
+  return buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
+    !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value);
+});
+const hasUnsavedPendingData = computed(() => hasUnsavedChanges.value);
 const confirmSaving = ref(false);
 const confirmError = ref<string | null>(null);
 
 async function confirmCurrentData() {
-  if (confirmSaving.value) return;
+  if (confirmSaving.value || !hasUnsavedPendingData.value) return;
 
   confirmSaving.value = true;
   confirmError.value = null;
   try {
-    await confirmCurrentDataSafely({
-      hasPendingData: hasPendingData.value,
+    const saved = await confirmCurrentDataSafely({
+      hasPendingData: hasUnsavedPendingData.value,
       payload: {
         type: 'batch' as const,
-        annotations: [...toolStore.annotations.value],
-        cloudAnnotations: [...toolStore.cloudAnnotations.value],
-        rectAnnotations: [...toolStore.rectAnnotations.value],
-        obbAnnotations: [...toolStore.obbAnnotations.value],
-        measurements: [...toolStore.measurements.value],
+        annotations: [...currentDraftConfirmPayload.value.annotations],
+        cloudAnnotations: [...currentDraftConfirmPayload.value.cloudAnnotations],
+        rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations],
+        obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations],
+        measurements: [...currentDraftConfirmPayload.value.measurements],
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
@@ -797,6 +785,11 @@ async function confirmCurrentData() {
         confirmNote.value = '';
       },
     });
+    if (saved) {
+      emitToast({ message: '确认数据已保存', level: 'success' });
+      await nextTick();
+      await restoreConfirmedRecordsIntoScene(true);
+    }
   } catch (e) {
     confirmError.value = e instanceof Error ? e.message : '确认当前数据失败';
   } finally {
@@ -1413,11 +1406,14 @@ function flyToAnnotationItem(item: AnnotationListItem) {
         <button type="button"
           data-command="review.confirm"
           class="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          :disabled="confirmSaving"
+          :disabled="!hasUnsavedPendingData || confirmSaving"
           @click="confirmCurrentData">
           <CheckCircle class="h-4 w-4" />
-          {{ confirmSaving ? '保存中...' : '确认当前数据' }}
+          {{ confirmSaving ? '保存中...' : hasUnsavedPendingData ? '确认当前数据' : '已保存' }}
         </button>
+        <div v-if="!hasUnsavedPendingData && !confirmError && !hasUnsavedChanges" class="mt-1 text-xs text-muted-foreground">
+          当前批注/测量已保存，新增或修改后可再次确认
+        </div>
         <div v-if="confirmError" class="mt-1 text-xs text-red-600">{{ confirmError }}</div>
       </div>
     </div>

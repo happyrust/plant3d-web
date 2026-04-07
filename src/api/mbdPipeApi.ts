@@ -10,7 +10,8 @@ import { getBackendApiBaseUrl } from '@/utils/apiBase';
 export type Vec3 = [number, number, number]
 
 export type MbdPipeSource = 'db' | 'cache'
-export type MbdPipeViewMode = 'layout_first' | 'construction' | 'inspection'
+export type MbdPipeApiMode = 'construction' | 'inspection'
+export type MbdPipeViewMode = 'layout_first' | MbdPipeApiMode
 
 export type BranchAttrsDto = {
   duty?: string | null
@@ -320,8 +321,8 @@ export type MbdPipeResponse = {
 }
 
 export type MbdPipeQueryParams = {
-  /** 语义模式：layout_first=后台排版优先（默认），construction=施工表达，inspection=几何校核 */
-  mode?: MbdPipeViewMode
+  /** 后端接口当前仅接受 construction / inspection；省略时按后端默认值处理 */
+  mode?: MbdPipeApiMode
   /** 数据源：db=SurrealDB（默认），cache=foyer cache */
   source?: MbdPipeSource
   /** 后端返回 debug_info（用于对比/定位） */

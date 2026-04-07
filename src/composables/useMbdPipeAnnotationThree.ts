@@ -294,18 +294,6 @@ export class BendAnnotationGroup extends AnnotationBase {
   }
 }
 
-type PlanarDimAlignmentCandidate = {
-  id: string;
-  kind: MbdDimKind;
-  dim: LinearDimension3D;
-  hint?: NormalizedLayoutHint | null;
-  start: Vector3;
-  end: Vector3;
-  offsetDir: Vector3;
-  offset: number;
-  hasManualOffset: boolean;
-};
-
 function clamp01(n: number, fallback: number): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
@@ -406,31 +394,6 @@ function roundTo(value: number, step: number): number {
   if (!Number.isFinite(value)) return 0;
   if (!Number.isFinite(step) || step <= 0) return value;
   return Math.round(value / step) * step;
-}
-
-function canonicalizeUnitVector(input: Vector3): Vector3 | null {
-  const vec = input.clone();
-  if (vec.lengthSq() < 1e-9) return null;
-  vec.normalize();
-
-  if (
-    vec.x < -1e-6 ||
-    (Math.abs(vec.x) <= 1e-6 && vec.y < -1e-6) ||
-    (Math.abs(vec.x) <= 1e-6 &&
-      Math.abs(vec.y) <= 1e-6 &&
-      vec.z < -1e-6)
-  ) {
-    vec.negate();
-  }
-  return vec;
-}
-
-function vectorKey(vec: Vector3): string {
-  return [
-    roundTo(vec.x, 0.001).toFixed(3),
-    roundTo(vec.y, 0.001).toFixed(3),
-    roundTo(vec.z, 0.001).toFixed(3),
-  ].join(',');
 }
 
 function buildDimSpanKey(start: Vector3, end: Vector3): string {
@@ -654,60 +617,6 @@ function resolveBendSizeOffset(
   return resolveSemanticDimOffset(scaledBaseOffset, 'segment');
 }
 
-function buildPlanarDimAlignmentGroupKey(
-  candidate: PlanarDimAlignmentCandidate,
-): string | null {
-  const segDir = candidate.end.clone().sub(candidate.start);
-  if (segDir.lengthSq() < 1e-9) return null;
-  const canonicalSeg = canonicalizeUnitVector(segDir);
-  const canonicalOffset = canonicalizeUnitVector(candidate.offsetDir);
-  if (!canonicalSeg || !canonicalOffset) return null;
-
-  const planeNormalRaw = canonicalSeg.clone().cross(canonicalOffset);
-  const canonicalPlaneNormal = canonicalizeUnitVector(planeNormalRaw);
-  if (!canonicalPlaneNormal) return null;
-
-  const mid = candidate.start.clone().add(candidate.end).multiplyScalar(0.5);
-  const planeDistance = roundTo(mid.dot(canonicalPlaneNormal), 1);
-  const offsetLevel = candidate.hint?.offsetLevel ?? 0;
-
-  return [
-    candidate.kind,
-    vectorKey(canonicalSeg),
-    vectorKey(canonicalOffset),
-    vectorKey(canonicalPlaneNormal),
-    planeDistance.toFixed(1),
-    String(offsetLevel),
-  ].join('|');
-}
-
-function applyPlanarDimAlignment(
-  candidates: PlanarDimAlignmentCandidate[],
-): void {
-  const groups = new Map<string, PlanarDimAlignmentCandidate[]>();
-
-  for (const candidate of candidates) {
-    if (candidate.kind !== 'chain' && candidate.kind !== 'overall') continue;
-    const key = buildPlanarDimAlignmentGroupKey(candidate);
-    if (!key) continue;
-    const bucket = groups.get(key);
-    if (bucket) bucket.push(candidate);
-    else groups.set(key, [candidate]);
-  }
-
-  for (const bucket of groups.values()) {
-    if (bucket.length <= 1) continue;
-    const alignedOffset = Math.max(...bucket.map((item) => item.offset));
-    for (const item of bucket) {
-      if (item.hasManualOffset) continue;
-      item.dim.setParams({
-        offset: alignedOffset,
-        direction: item.offsetDir.clone(),
-      });
-    }
-  }
-}
-
 function resolveFloatingLabelOffset(
   hint?: MbdLayoutHint | null,
   baseOffset = 110,
@@ -846,7 +755,7 @@ export function useMbdPipeAnnotationThree(
 
   // UI 状态（MbdPipePanel 使用）
   const uiTab = ref<MbdPipeUiTab>('dims');
-  const mbdViewMode = ref<MbdPipeViewMode>('layout_first');
+  const mbdViewMode = ref<MbdPipeViewMode>('construction');
 
   // MBD 尺寸显示配置
   const dimTextMode = ref<'backend' | 'auto'>('backend');
@@ -864,7 +773,7 @@ export function useMbdPipeAnnotationThree(
 
   const isVisible = ref(false);
   const showDims = ref(true);
-  const showDimSegment = ref(true);
+  const showDimSegment = ref(false);
   const showDimChain = ref(true);
   const showDimOverall = ref(true);
   const showDimPort = ref(false);
@@ -878,7 +787,7 @@ export function useMbdPipeAnnotationThree(
   const suppressedWrongLineCount = ref(0);
   const showWelds = ref(true);
   const showSlopes = ref(true);
-  const showBends = ref(true);
+  const showBends = ref(false);
   const showSegments = ref(false);
   const showLabels = ref(true);
 
@@ -982,9 +891,9 @@ export function useMbdPipeAnnotationThree(
 
     dimMode.value = 'classic';
     bendDisplayMode.value = 'size';
-    showDimSegment.value = true;
-    showDimChain.value = false;
-    showDimOverall.value = false;
+    showDimSegment.value = false;
+    showDimChain.value = true;
+    showDimOverall.value = true;
     showDimPort.value = false;
     showCutTubis.value = false;
     showElbows.value = true;
@@ -994,7 +903,7 @@ export function useMbdPipeAnnotationThree(
     showOwnerSegmentDebug.value = false;
     showWelds.value = true;
     showSlopes.value = true;
-    showBends.value = true;
+    showBends.value = false;
     showSegments.value = false;
   }
 
@@ -1386,7 +1295,6 @@ export function useMbdPipeAnnotationThree(
     const viewer = dtxViewerRef.value;
     const gm = getGlobalModelMatrix?.() || identityMatrix;
     const modeConfig = getRuntimeModeConfig();
-    const planarAlignmentCandidates: PlanarDimAlignmentCandidate[] = [];
     const duplicateOverallIds = collectDuplicateOverallDimIds(dims);
     dimTextById.value.clear();
     for (const d of dims) {
@@ -1494,20 +1402,7 @@ export function useMbdPipeAnnotationThree(
         offset: offset,
         normalizedHint: layoutResolution.normalizedHint,
       };
-      planarAlignmentCandidates.push({
-        id: d.id,
-        kind,
-        dim: rawDim,
-        hint: layoutResolution.normalizedHint,
-        start: start.clone(),
-        end: end.clone(),
-        offsetDir: finalDir.clone(),
-        offset: finalOffset,
-        hasManualOffset: ov?.offset != null,
-      });
     }
-    applyPlanarDimAlignment(planarAlignmentCandidates);
-    applyPortDimLabelDeclutter();
   }
 
   function applyPortDimLabelDeclutter(): void {
@@ -3150,7 +3045,6 @@ export function useMbdPipeAnnotationThree(
             });
             rawDim.setLineWidthPx(modeConfig.lineWidthPx);
           }
-          applyPortDimLabelDeclutter();
         }
         if (bendAnnotations.size > 0) {
           rebuildBendsByCurrentData();

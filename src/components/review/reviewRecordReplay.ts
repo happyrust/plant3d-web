@@ -62,6 +62,27 @@ function attachCommentsToItems(
   });
 }
 
+function dedupeReplayItems(items: unknown[]): unknown[] {
+  const keyedItems = new Map<string, unknown>();
+  const anonymousItems: unknown[] = [];
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') {
+      anonymousItems.push(item);
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id.trim() : '';
+    if (!id) {
+      anonymousItems.push(item);
+      continue;
+    }
+    keyedItems.set(id, item);
+  }
+
+  return [...keyedItems.values(), ...anonymousItems];
+}
+
 export function mergeWorkflowCommentsIntoRecords(
   records: WorkflowRecordData[],
   comments: WorkflowAnnotationCommentData[] = [],
@@ -85,13 +106,18 @@ export function mergeWorkflowCommentsIntoRecords(
 }
 
 export function buildReviewRecordReplayPayload(records: ReplayRecordLike[]): string {
+  const measurements = dedupeReplayItems(records.flatMap((record) => record.measurements ?? []));
+  const annotations = dedupeReplayItems(records.flatMap((record) => record.annotations ?? []));
+  const obbAnnotations = dedupeReplayItems(records.flatMap((record) => record.obbAnnotations ?? []));
+  const cloudAnnotations = dedupeReplayItems(records.flatMap((record) => record.cloudAnnotations ?? []));
+  const rectAnnotations = dedupeReplayItems(records.flatMap((record) => record.rectAnnotations ?? []));
   return JSON.stringify({
     version: 5,
-    measurements: records.flatMap((record) => record.measurements ?? []),
-    annotations: records.flatMap((record) => record.annotations ?? []),
-    obbAnnotations: records.flatMap((record) => record.obbAnnotations ?? []),
-    cloudAnnotations: records.flatMap((record) => record.cloudAnnotations ?? []),
-    rectAnnotations: records.flatMap((record) => record.rectAnnotations ?? []),
+    measurements,
+    annotations,
+    obbAnnotations,
+    cloudAnnotations,
+    rectAnnotations,
     dimensions: [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],

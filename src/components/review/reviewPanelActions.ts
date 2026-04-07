@@ -47,6 +47,144 @@ export function mapWorkflowHistoryToTaskDetailItems(history: WorkflowStep[]): Ta
   }));
 }
 
+export type ReviewConfirmSnapshotPayload = {
+  annotations: unknown[];
+  cloudAnnotations: unknown[];
+  rectAnnotations: unknown[];
+  obbAnnotations: unknown[];
+  measurements: unknown[];
+};
+
+type ReviewConfirmSnapshotRecordLike = {
+  annotations?: unknown[];
+  cloudAnnotations?: unknown[];
+  rectAnnotations?: unknown[];
+  obbAnnotations?: unknown[];
+  measurements?: unknown[];
+};
+
+export function buildReviewConfirmSnapshotPayloadFromRecords(
+  records: ReviewConfirmSnapshotRecordLike[]
+): ReviewConfirmSnapshotPayload {
+  return {
+    annotations: records.flatMap((record) => record.annotations ?? []),
+    cloudAnnotations: records.flatMap((record) => record.cloudAnnotations ?? []),
+    rectAnnotations: records.flatMap((record) => record.rectAnnotations ?? []),
+    obbAnnotations: records.flatMap((record) => record.obbAnnotations ?? []),
+    measurements: records.flatMap((record) => record.measurements ?? []),
+  };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getSnapshotObjectSortKey(value: unknown): string {
+  if (!isPlainObject(value)) return JSON.stringify(value);
+  const id = typeof value.id === 'string' ? value.id : '';
+  const createdAt = typeof value.createdAt === 'number' || typeof value.createdAt === 'string'
+    ? String(value.createdAt)
+    : '';
+  const kind = typeof value.kind === 'string' ? value.kind : '';
+  return `${id}|${createdAt}|${kind}|${JSON.stringify(value)}`;
+}
+
+function normalizeSnapshotValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const normalized = value.map((item) => normalizeSnapshotValue(item));
+    if (normalized.every((item) => typeof item === 'string')) {
+      return [...normalized].sort((a, b) => String(a).localeCompare(String(b)));
+    }
+    if (normalized.every((item) => isPlainObject(item))) {
+      return [...normalized].sort((a, b) => getSnapshotObjectSortKey(a).localeCompare(getSnapshotObjectSortKey(b)));
+    }
+    return normalized;
+  }
+  if (!isPlainObject(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort((a, b) => a.localeCompare(b))
+      .map((key) => [key, normalizeSnapshotValue(value[key])])
+  );
+}
+
+export function buildReviewConfirmSnapshotKey(payload: ReviewConfirmSnapshotPayload): string {
+  return JSON.stringify({
+    annotations: normalizeSnapshotValue(payload.annotations),
+    cloudAnnotations: normalizeSnapshotValue(payload.cloudAnnotations),
+    rectAnnotations: normalizeSnapshotValue(payload.rectAnnotations),
+    obbAnnotations: normalizeSnapshotValue(payload.obbAnnotations),
+    measurements: normalizeSnapshotValue(payload.measurements),
+  });
+}
+
+function buildSnapshotItemKey(item: unknown): string {
+  return JSON.stringify(normalizeSnapshotValue(item));
+}
+
+function getSnapshotItemId(item: unknown): string | null {
+  if (!isPlainObject(item)) return null;
+  const id = item.id;
+  if (typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  return trimmed || null;
+}
+
+function diffSnapshotCollection(current: unknown[], baseline: unknown[]): unknown[] {
+  const baselineById = new Map<string, string>();
+  const baselineWithoutId = new Set<string>();
+
+  for (const item of baseline) {
+    const itemId = getSnapshotItemId(item);
+    const itemKey = buildSnapshotItemKey(item);
+    if (itemId) {
+      baselineById.set(itemId, itemKey);
+      continue;
+    }
+    baselineWithoutId.add(itemKey);
+  }
+
+  const emittedWithId = new Set<string>();
+  const emittedWithoutId = new Set<string>();
+
+  return current.filter((item) => {
+    const itemId = getSnapshotItemId(item);
+    const itemKey = buildSnapshotItemKey(item);
+    if (itemId) {
+      if (baselineById.get(itemId) === itemKey) return false;
+      const dedupeKey = `${itemId}|${itemKey}`;
+      if (emittedWithId.has(dedupeKey)) return false;
+      emittedWithId.add(dedupeKey);
+      return true;
+    }
+    if (baselineWithoutId.has(itemKey)) return false;
+    if (emittedWithoutId.has(itemKey)) return false;
+    emittedWithoutId.add(itemKey);
+    return true;
+  });
+}
+
+export function buildUnsavedReviewConfirmPayload(
+  current: ReviewConfirmSnapshotPayload,
+  baseline: ReviewConfirmSnapshotPayload
+): ReviewConfirmSnapshotPayload {
+  return {
+    annotations: diffSnapshotCollection(current.annotations, baseline.annotations),
+    cloudAnnotations: diffSnapshotCollection(current.cloudAnnotations, baseline.cloudAnnotations),
+    rectAnnotations: diffSnapshotCollection(current.rectAnnotations, baseline.rectAnnotations),
+    obbAnnotations: diffSnapshotCollection(current.obbAnnotations, baseline.obbAnnotations),
+    measurements: diffSnapshotCollection(current.measurements, baseline.measurements),
+  };
+}
+
+export function hasReviewConfirmPayloadData(payload: ReviewConfirmSnapshotPayload): boolean {
+  return payload.annotations.length > 0
+    || payload.cloudAnnotations.length > 0
+    || payload.rectAnnotations.length > 0
+    || payload.obbAnnotations.length > 0
+    || payload.measurements.length > 0;
+}
+
 type ConfirmCurrentDataOptions<TPayload> = {
   hasPendingData: boolean;
   payload: TPayload;

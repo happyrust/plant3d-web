@@ -418,7 +418,7 @@ export class LinearDimension3D extends AnnotationBase {
 
   /** 获取文字标签的世界坐标 */
   getLabelWorldPos(): THREE.Vector3 {
-    return this.textLabel.object3d.getWorldPosition(new THREE.Vector3());
+    return this.resolveLabelAnchorWorld(new THREE.Vector3());
   }
 
   /** 获取吸附点的世界坐标（用于拖拽提示线/外部辅助） */
@@ -503,6 +503,20 @@ export class LinearDimension3D extends AnnotationBase {
     }
     const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
     return this.dimStart.clone().lerp(this.dimEnd, t);
+  }
+
+  private resolveLabelAnchorWorld(out: THREE.Vector3): THREE.Vector3 {
+    if (this.params.laidOutGeometry?.textAnchor) {
+      return this.localToWorld(out.copy(this.params.laidOutGeometry.textAnchor));
+    }
+
+    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
+    out.copy(this.dimStart).lerp(this.dimEnd, t);
+    this.localToWorld(out);
+    if (this.params.labelOffsetWorld) {
+      out.add(this.params.labelOffsetWorld);
+    }
+    return out;
   }
 
   /** 更新参数并重建几何 */
@@ -722,14 +736,9 @@ export class LinearDimension3D extends AnnotationBase {
     const endW = this.localToWorld(this.endWorld.copy(this.params.end));
     const aeW = this.localToWorld(this.aeWorld.copy(this.dimStart));
     const beW = this.localToWorld(this.beWorld.copy(this.dimEnd));
-    // layout_first 显式几何模式下，文字锚点必须始终以后端给定的原始 textAnchor 为准。
-    // 不能再从 textLabel.object3d.position 反推下一帧 anchor，因为 setFrame() 会把
-    // object3d.position 改写成 billboard frame 下的位置；继续拿它做几何输入会导致
-    // 缩放/旋转后文字越来越偏离尺寸线。
-    const labelAnchorLocal = this.params.laidOutGeometry?.textAnchor
-      ? this.tempLocalA.copy(this.params.laidOutGeometry.textAnchor)
-      : this.tempLocalA.copy(this.textLabel.object3d.position);
-    const baseRefWorld = this.localToWorld(labelAnchorLocal);
+    // 文字锚点必须始终从几何参数重建，不能从上一帧 billboard 的 object3d.position 回推。
+    // 否则 setFrame() 改写后的局部坐标会被再次当作“原始锚点”，连续 update 后会漂移并堆叠。
+    const baseRefWorld = this.resolveLabelAnchorWorld(this.tempWorldA);
     alignToPixelGrid(camera, baseRefWorld, vw, vh, this.refWorld);
     const wpp = worldPerPixelAt(camera, this.refWorld, vw, vh, this.wppTmp);
     if (!Number.isFinite(wpp) || wpp <= 0) return;

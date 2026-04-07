@@ -15,7 +15,7 @@ import MbdPipePanel from './MbdPipePanel.vue';
 function createVisStub() {
   return {
     uiTab: ref('settings'),
-    mbdViewMode: ref('layout_first'),
+    mbdViewMode: ref('construction'),
     dimTextMode: ref('backend'),
     dimOffsetScale: ref(1),
     dimLabelT: ref(0.5),
@@ -87,7 +87,7 @@ describe('MbdPipePanel mode controls', () => {
       '[data-testid="mbd-view-mode"]',
     ) as HTMLSelectElement | null;
     expect(modeSelect).toBeTruthy();
-    expect(modeSelect?.value).toBe('layout_first');
+    expect(modeSelect?.value).toBe('construction');
 
     modeSelect!.value = 'construction';
     modeSelect!.dispatchEvent(new Event('change'));

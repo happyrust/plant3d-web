@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch, type WatchStopHandle } from 'vue';
 
 import { Box, Calendar, CheckCircle, ChevronDown, Flag, HelpCircle, Link, Paperclip, Plus, Send, UploadCloud, User, X } from 'lucide-vue-next';
 
 import AssociatedFilesList from './AssociatedFilesList.vue';
+import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
 import {
   EMBED_LANDING_STATE_STORAGE_KEY,
@@ -30,9 +31,11 @@ import {
   resolveReviewDeliveryUnitRefno,
   type ReviewDeliveryTypeInfo,
 } from '@/composables/useReviewDeliveryUnit';
+import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
+import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { showModelByRefnosWithAck } from '@/composables/useViewerContext';
+import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { getRoleDisplayName } from '@/types/auth';
 
 const emit = defineEmits<{
@@ -41,8 +44,21 @@ const emit = defineEmits<{
 }>();
 
 const userStore = useUserStore();
+const reviewStore = useReviewStore();
+const toolStore = useToolStore();
+const viewerContext = useViewerContext();
 const selectionStore = useSelectionStore();
 const onboarding = useOnboardingGuide();
+
+// 确认记录场景恢复：设计端重开退回任务时，回放审核侧已确认的批注/测量
+const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
+  currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
+  toolStore,
+  waitForViewerReady,
+  getViewerTools: () => viewerContext.tools.value ?? null,
+  skipClearOnEmpty: true,
+});
 
 const formData = reactive({
   packageName: '',
@@ -347,10 +363,28 @@ onMounted(() => {
       },
     };
   }
+
+  // 当 reviewStore.currentTask 和确认记录变化时，自动恢复批注到场景
+  confirmedRecordsStopWatch = watch(
+    () => ({
+      taskId: reviewStore.currentTask.value?.id ?? null,
+      recordKeys: confirmedRecordsRestorer.currentTaskRecords.value
+        .map((r) => `${r.id}:${r.confirmedAt}`).join('|'),
+      viewerReady: !!viewerContext.viewerRef.value,
+      toolsReady: !!viewerContext.tools.value,
+    }),
+    async () => {
+      await confirmedRecordsRestorer.restoreConfirmedRecordsIntoScene();
+    },
+    { immediate: true },
+  );
 });
+
+let confirmedRecordsStopWatch: WatchStopHandle | null = null;
 
 onUnmounted(() => {
   window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
+  confirmedRecordsStopWatch?.();
 });
 
 // 表单 ID：仅在嵌入模式展示/透传；正常模式由后端生成
@@ -634,6 +668,11 @@ function resetForNewTask() {
   notification.value = { type: null, message: '', details: '' };
   hydratedRestoreTaskId.value = null;
   selectedComponentRefno.value = null;
+  // 清除场景中的批注和测量，避免新建单据时显示上一个单据的批注
+  toolStore.clearAll();
+  viewerContext.tools.value?.syncFromStore();
+  // 重置恢复器的场景键，确保下次不会跳过清除
+  confirmedRecordsRestorer.lastRestoredSceneKey.value = null;
 }
 
 function goToTaskMonitor() {
