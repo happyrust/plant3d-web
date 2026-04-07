@@ -116,8 +116,10 @@ function normalizeWorkflowRole(value?: string | null): WorkflowRole | null {
   if (!normalized) return null;
 
   if (normalized === 'sj' || normalized.includes('编制')) return 'sj';
-  if (normalized === 'jd' || normalized.includes('校核') || normalized === 'jh') return 'jd';
-  if (normalized === 'sh' || normalized.includes('审核')) return 'sh';
+  if (normalized === 'jd' || normalized.includes('校对')) return 'jd';
+  // jh：常见 HumanCode / 外链写法，收件为审核节点 sh（与 backendRoleMapping 一致）
+  if (normalized === 'jh' || normalized === 'sh' || normalized.includes('审核')) return 'sh';
+  if (normalized.includes('校核')) return 'jd';
   if (normalized === 'pz' || normalized.includes('批准')) return 'pz';
   return null;
 }

@@ -48,6 +48,9 @@ describe('useModelProjects', () => {
     const { switchProjectById, currentProject } = await createModelProjects();
     await flushPromises();
 
+    expect(switchProjectById('project-1')).toBe(true);
+    expect(currentProject.value?.path).toBe('Project1');
+
     const result = switchProjectById('AvevaMarineSample');
     expect(result).toBe(true);
     expect(currentProject.value?.path).toBe('AvevaMarineSample');
@@ -111,18 +114,20 @@ describe('useModelProjects', () => {
 
   it('switchProjectById matches project by path when id does not match', async () => {
     fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'other', name: 'OtherProj', notes: 'x' },
       { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Test AMS' },
     ]));
 
     const { switchProjectById, currentProject } = await createModelProjects();
     await flushPromises();
 
-    expect(currentProject.value).toBeNull();
-
-    const result = switchProjectById('AvevaMarineSample');
-    expect(result).toBe(true);
-    expect(currentProject.value?.id).toBe('ams-model');
     expect(currentProject.value?.path).toBe('AvevaMarineSample');
+
+    expect(switchProjectById('other')).toBe(true);
+    expect(currentProject.value?.id).toBe('other');
+
+    expect(switchProjectById('AvevaMarineSample')).toBe(true);
+    expect(currentProject.value?.id).toBe('ams-model');
   });
 
   it('switchProjectById matches project by id or path for embed URLs', async () => {
@@ -134,7 +139,10 @@ describe('useModelProjects', () => {
     const { switchProjectById, currentProject } = await createModelProjects();
     await flushPromises();
 
-    expect(currentProject.value).toBeNull();
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
+
+    expect(switchProjectById('other-project')).toBe(true);
+    expect(currentProject.value?.id).toBe('other-project');
 
     // Test matching by path（显式切换时仍支持 path）
     let result = switchProjectById('AvevaMarineSample');
@@ -182,7 +190,7 @@ describe('useModelProjects', () => {
     });
     fetchMock.mockImplementation(() => pending);
 
-    const { loadProjects, projects } = await createModelProjects();
+    const { currentProject, loadProjects, projects } = await createModelProjects();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const extraA = loadProjects();
@@ -195,19 +203,21 @@ describe('useModelProjects', () => {
     await Promise.all([extraA, extraB]);
     await flushPromises();
 
-    expect(projects.value).toHaveLength(1);
-    expect(projects.value[0]?.path).toBe('ProjOne');
+    expect(projects.value).toHaveLength(2);
+    expect(projects.value.map((p) => p.path).sort()).toEqual(['AvevaMarineSample', 'ProjOne']);
+    expect(projects.value.find((p) => p.path === 'ProjOne')).toBeTruthy();
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
   });
 
-  it('only auto-creates a project from output_project, not from project_id', async () => {
+  it('falls back to default AvevaMarineSample when project_id does not match and list is empty', async () => {
     window.history.replaceState({}, '', '/?project_id=legacy-project-path');
     fetchMock.mockResolvedValue(buildProjectsResponse([]));
 
     const { currentProject, projects } = await createModelProjects();
     await flushPromises();
 
-    expect(projects.value).toEqual([]);
-    expect(currentProject.value).toBeNull();
+    expect(projects.value).toHaveLength(1);
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
   });
 
   it('still auto-creates a project from output_project when backend list is empty', async () => {

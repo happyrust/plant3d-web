@@ -6,14 +6,19 @@ import { Clock, FileText, Filter, HelpCircle, PlayCircle, RefreshCw, User, XCirc
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import { getSubmitActionLabel } from './reviewPanelActions';
 
-import type { ReviewTask } from '@/types/auth';
+import { UserRole, type ReviewTask } from '@/types/auth';
 
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
-import { getPriorityDisplayName, getTaskStatusDisplayName } from '@/types/auth';
+import {
+  getPriorityDisplayName,
+  getReviewerInboxPanelTitle,
+  getSubmittedInboxLabelForReviewer,
+  getTaskStatusDisplayName,
+} from '@/types/auth';
 
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
@@ -34,9 +39,13 @@ navigationState.bindRef('statusFilter', statusFilter, 'all');
 navigationState.bindRef('priorityFilter', priorityFilter, 'all');
 
 const tasks = computed(() => userStore.pendingReviewTasks.value);
+const inboxPanelTitle = computed(() => getReviewerInboxPanelTitle(userStore.currentUser.value?.role));
+const submittedInboxLabel = computed(() => getSubmittedInboxLabelForReviewer(userStore.currentUser.value?.role));
 const reviewStageLabel = computed(() => {
-  if (userStore.isChecker.value) return '校核';
-  if (userStore.isApprover.value) return '审核';
+  const r = userStore.currentUser.value?.role;
+  if (r === UserRole.PROOFREADER) return '校对';
+  if (r === UserRole.REVIEWER) return '审核';
+  if (r === UserRole.MANAGER) return '批准';
   return '校审';
 });
 
@@ -115,7 +124,7 @@ function getStatusPresentation(task: ReviewTask) {
   const status = getTaskStatusDisplayName(task.status);
   if (task.status === 'submitted') {
     return {
-      label: status.label,
+      label: submittedInboxLabel.value,
       textClass: 'text-amber-600',
       dotClass: 'bg-amber-500',
     };
@@ -221,7 +230,7 @@ onMounted(() => {
     <!-- 头部 -->
     <div class="flex items-center justify-between gap-3">
       <div>
-        <h3 class="text-base font-semibold text-gray-900">待处理提资任务</h3>
+        <h3 class="text-base font-semibold text-gray-900">{{ inboxPanelTitle }}</h3>
         <p class="mt-1 text-[13px] text-gray-500">共 {{ filteredTasks.length }} 条</p>
       </div>
       <div class="flex items-center gap-2">
@@ -257,10 +266,10 @@ onMounted(() => {
       </div>
       <select v-model="statusFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
         <option value="all">全部状态</option>
-        <option value="submitted">待审核</option>
+        <option value="submitted">{{ submittedInboxLabel }}</option>
         <option value="in_review">审核中</option>
         <option value="approved">已通过</option>
-        <option value="rejected">未通过</option>
+        <option value="rejected">已驳回</option>
       </select>
       <select v-model="priorityFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
         <option value="all">全部优先级</option>
@@ -280,7 +289,7 @@ onMounted(() => {
     <div class="space-y-3">
       <div v-if="isLoading" class="text-center py-8">
         <RefreshCw class="h-8 w-8 animate-spin mx-auto mb-2 text-gray-400" />
-        <p class="text-sm text-gray-500">正在加载审核任务...</p>
+        <p class="text-sm text-gray-500">正在加载任务...</p>
       </div>
 
       <template v-else-if="filteredTasks.length > 0">
@@ -340,9 +349,9 @@ onMounted(() => {
 
       <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
         <FileText class="h-12 w-12 mx-auto mb-4 text-gray-300" />
-        <h4 class="font-medium mb-2">暂无审核任务</h4>
+        <h4 class="font-medium mb-2">暂无任务</h4>
         <p class="text-sm text-gray-500 mb-4">
-          {{ hasFilters ? '没有符合筛选条件的任务' : '还没有分配给您的审核任务' }}
+          {{ hasFilters ? '没有符合筛选条件的任务' : `还没有分配给您的${inboxPanelTitle.replace(/任务$/, '')}任务` }}
         </p>
         <button v-if="hasFilters"
           class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"

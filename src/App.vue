@@ -1,20 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
-import { authVerifyToken, reviewGetEmbedUrl } from '@/api/reviewApi';
+import { authVerifyToken } from '@/api/reviewApi';
 import AboutDialog from '@/components/AboutDialog.vue';
 import DashboardLayout from '@/components/dashboard/DashboardLayout.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import ReviewGuideCenter from '@/components/onboarding/ReviewGuideCenter.vue';
 import HierarchicalMenuBar from '@/components/ribbon/HierarchicalMenuBar.vue';
+import RibbonBar from '@/components/ribbon/RibbonBar.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LayoutToggleButtons from '@/components/ui/LayoutToggleButtons.vue';
 import UserAvatar from '@/components/user/UserAvatar.vue';
+import { useMenuMode } from '@/composables/useMenuMode';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 
-const extensionHeight = 48;
+const { isRibbonMode, toggleMenuMode } = useMenuMode();
+const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
+const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
+const extensionHeight = computed(() =>
+  isRibbonMode.value ? (ribbonCollapsed.value ? 32 : 120) : 48,
+);
 
 const urlParams = new URLSearchParams(window.location.search);
 const showBenchmark = urlParams.get('benchmark') === 'true';
@@ -22,7 +29,6 @@ const showBenchmark = urlParams.get('benchmark') === 'true';
 const { currentProject, loadProjects, switchProjectById, projects } = useModelProjects();
 
 const onboarding = useOnboardingGuide();
-const embedLoading = ref(false);
 const embedBootstrapPending = ref(false);
 const showDashboardLayout = computed(() => !currentProject.value && !embedBootstrapPending.value);
 
@@ -58,18 +64,12 @@ async function bootstrapEmbedProjectFromToken() {
   }
 }
 
-async function handleEmbedTest() {
-  if (!currentProject.value) return;
-  embedLoading.value = true;
-  try {
-    const { url } = await reviewGetEmbedUrl(currentProject.value.id, 'SJ', 'sj');
-    window.open(url, '_blank');
-  } catch (e: unknown) {
-    alert('获取校审地址失败: ' + (e instanceof Error ? e.message : String(e)));
-  } finally {
-    embedLoading.value = false;
+watch(currentProject, async (project) => {
+  if (project) {
+    await nextTick();
+    onboarding.autoStartIfNeeded();
   }
-}
+});
 
 onMounted(() => {
   void bootstrapEmbedProjectFromToken();
@@ -86,24 +86,32 @@ onMounted(() => {
     <div v-else-if="embedBootstrapPending" class="h-screen w-full" data-testid="embed-bootstrap-loading" />
     
     <template v-else>
-      <v-app-bar class="ribbon-app-bar hierarchical-app-bar"
+      <v-app-bar class="ribbon-app-bar" :class="{ 'hierarchical-app-bar': !isRibbonMode }"
         :height="0"
         :extension-height="extensionHeight">
         <template #extension>
-          <HierarchicalMenuBar class="w-full">
+          <RibbonBar v-if="isRibbonMode" ref="ribbonBarRef" class="w-full">
             <template #header-right>
               <div class="flex items-center gap-2 px-2">
-                <v-btn size="small"
-                  variant="tonal"
-                  color="info"
-                  :loading="embedLoading"
-                  @click="handleEmbedTest">
-                  校审测试
+                <v-btn size="small" variant="text" title="切换到普通菜单" @click="toggleMenuMode">
+                  <v-icon size="18">mdi-menu</v-icon>
                 </v-btn>
-                <v-btn size="small"
-                  variant="text"
-                  title="三维校审导航"
-                  @click="onboarding.openGuideCenter('currentRole')">
+                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.openGuideCenter('currentRole')">
+                  <v-icon size="18">mdi-help-circle-outline</v-icon>
+                </v-btn>
+                <LayoutToggleButtons />
+                <AboutDialog />
+                <UserAvatar />
+              </div>
+            </template>
+          </RibbonBar>
+          <HierarchicalMenuBar v-else class="w-full">
+            <template #header-right>
+              <div class="flex items-center gap-2 px-2">
+                <v-btn size="small" variant="text" title="切换到 Ribbon 菜单" @click="toggleMenuMode">
+                  <v-icon size="18">mdi-ribbon</v-icon>
+                </v-btn>
+                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.openGuideCenter('currentRole')">
                   <v-icon size="18">mdi-help-circle-outline</v-icon>
                 </v-btn>
                 <LayoutToggleButtons />

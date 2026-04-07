@@ -70,7 +70,7 @@ export type WorkflowStep = {
 // 工作流节点显示名称
 export const WORKFLOW_NODE_NAMES: Record<WorkflowNode, string> = {
   sj: '编制',
-  jd: '校核',
+  jd: '校对',
   sh: '审核',
   pz: '批准',
 };
@@ -138,6 +138,8 @@ export function hasAnyRole(user: User | null, roles: UserRole[]): boolean {
 export const backendRoleMapping: Record<string, UserRole> = {
   'sj': UserRole.DESIGNER,
   'jd': UserRole.PROOFREADER,
+  /** 部分 PMS 链路与「审」岗位HumanCode一致，收件节点为 sh */
+  'jh': UserRole.REVIEWER,
   'sh': UserRole.REVIEWER,
   'pz': UserRole.MANAGER,  // 批准节点更接近“项目负责人/项目管理员”
   'admin': UserRole.ADMIN,
@@ -225,13 +227,30 @@ export function getTaskStatusDisplayName(
 ): { label: string; color: string } {
   const statusMap: Record<ReviewTask['status'], { label: string; color: string }> = {
     draft: { label: '草稿', color: 'bg-gray-100 text-gray-700' },
-    submitted: { label: '待审核', color: 'bg-yellow-100 text-yellow-700' },
+    submitted: { label: '待处理', color: 'bg-yellow-100 text-yellow-700' },
     in_review: { label: '审核中', color: 'bg-blue-100 text-blue-700' },
     approved: { label: '已通过', color: 'bg-green-100 text-green-700' },
-    rejected: { label: '未通过', color: 'bg-red-100 text-red-700' },
+    rejected: { label: '已驳回', color: 'bg-red-100 text-red-700' },
     cancelled: { label: '已取消', color: 'bg-gray-100 text-gray-500' },
   };
   return statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-700' };
+}
+
+/** 审核侧收件列表标题（与 workflow_role / 节点一致） */
+export function getReviewerInboxPanelTitle(role: UserRole | undefined): string {
+  if (role === UserRole.PROOFREADER) return '待校对任务';
+  if (role === UserRole.REVIEWER) return '待审核任务';
+  if (role === UserRole.MANAGER) return '待批准任务';
+  if (role === UserRole.ADMIN) return '待审核/批准任务';
+  return '待办任务';
+}
+
+/** submitted 在黄区列表中的含义随当前审核岗位变化 */
+export function getSubmittedInboxLabelForReviewer(role: UserRole | undefined): string {
+  if (role === UserRole.PROOFREADER) return '待校对';
+  if (role === UserRole.REVIEWER) return '待审核';
+  if (role === UserRole.MANAGER) return '待批准';
+  return '待处理';
 }
 
 // 获取优先级显示名称

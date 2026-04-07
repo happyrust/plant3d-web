@@ -112,7 +112,8 @@ export function resolveEmbedRestoreResult(options: ResolveEmbedRestoreOptions): 
     return createRestoreResult(options.target, matchedTask ? 'matched' : 'missing', matchedTask, null);
   }
 
-  const matchedTask = findTaskByFormId(options.designerTasks, normalizedFormId);
+  const matchedTask = findTaskByFormId(options.designerTasks, normalizedFormId)
+    ?? findTaskByFormId(options.allTasks, normalizedFormId);
   return createRestoreResult(options.target, matchedTask ? 'matched' : 'missing', matchedTask);
 }
 

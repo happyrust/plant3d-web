@@ -163,6 +163,7 @@ export function resolveEmbedLandingTargetFromRole(role?: string | null): EmbedLa
 
   if (
     normalizedRole === 'jd' ||
+    normalizedRole === 'jh' ||
     normalizedRole === 'sh' ||
     normalizedRole === 'pz' ||
     normalizedRole === 'admin'

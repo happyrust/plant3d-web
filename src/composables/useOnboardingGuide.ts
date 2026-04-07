@@ -1,16 +1,39 @@
 import { computed, nextTick, ref, watch } from 'vue';
 
+import { useMenuMode } from './useMenuMode';
 import { useUserStore } from './useUserStore';
 
-import type { GuideDefinition, GuideStep, OnboardingPersistedState } from '@/components/onboarding/types';
+import type { GuideContext, GuideDefinition, GuideStep, OnboardingPersistedState, WorkflowMode, WorkflowRole } from '@/components/onboarding/types';
 
-import { designerGuide } from '@/components/onboarding/roleGuides/designerGuide';
-import { managerGuide, proofreaderGuide, reviewerGuide } from '@/components/onboarding/roleGuides/reviewerGuide';
+import { buildDesignerGuide, designerGuide } from '@/components/onboarding/roleGuides/designerGuide';
+import {
+  buildManagerGuide,
+  buildProofreaderGuide,
+  buildReviewerGuide,
+  managerGuide,
+  proofreaderGuide,
+  reviewerGuide,
+} from '@/components/onboarding/roleGuides/reviewerGuide';
+import { resolveWorkflowMode } from '@/components/review/workflowMode';
 
 const STORAGE_KEY = 'plant3d-onboarding-v1';
 
 export type GuideRole = 'designer' | 'proofreader' | 'reviewer' | 'manager';
 export type GuideCenterTopic = 'currentRole' | 'designer' | 'proofreader' | 'reviewer' | 'manager' | 'initiateReview' | 'reviewerTasks' | 'reviewPanel';
+
+const ROLE_TO_WORKFLOW_ROLE: Record<GuideRole, WorkflowRole> = {
+  designer: 'sj',
+  proofreader: 'jd',
+  reviewer: 'sh',
+  manager: 'pz',
+};
+
+const WORKFLOW_ROLE_TO_GUIDE_ROLE: Record<WorkflowRole, GuideRole> = {
+  sj: 'designer',
+  jd: 'proofreader',
+  sh: 'reviewer',
+  pz: 'manager',
+};
 
 type StartGuideOptions = {
   stepId?: string;
@@ -58,21 +81,28 @@ const progress = computed(() => {
   return ((currentStepIndex.value + 1) / totalSteps.value) * 100;
 });
 
-function guideKey(userId: string, role: string): string {
-  return `${userId}__${role}`;
+function guideKey(userId: string, role: string, workflowMode?: string): string {
+  const mode = workflowMode || 'manual';
+  return `${userId}__${role}__${mode}`;
 }
 
-function isGuideCompleted(userId: string, role: string): boolean {
-  return !!persistedState.value.completedGuides[guideKey(userId, role)];
+function isGuideCompleted(userId: string, role: string, workflowMode?: string): boolean {
+  // 同时检查新格式和旧格式 key，兼容已有完成记录
+  const newKey = guideKey(userId, role, workflowMode);
+  const legacyKey = `${userId}__${role}`;
+  return !!persistedState.value.completedGuides[newKey]
+    || !!persistedState.value.completedGuides[legacyKey];
 }
 
-function markGuideCompleted(userId: string, role: string) {
-  persistedState.value.completedGuides[guideKey(userId, role)] = true;
+function markGuideCompleted(userId: string, role: string, workflowMode?: string) {
+  persistedState.value.completedGuides[guideKey(userId, role, workflowMode)] = true;
   saveState(persistedState.value);
 }
 
-function resetGuideForUser(userId: string, role: string) {
-  delete persistedState.value.completedGuides[guideKey(userId, role)];
+function resetGuideForUser(userId: string, role: string, workflowMode?: string) {
+  delete persistedState.value.completedGuides[guideKey(userId, role, workflowMode)];
+  // 同时清除旧格式 key
+  delete persistedState.value.completedGuides[`${userId}__${role}`];
   saveState(persistedState.value);
 }
 
@@ -122,9 +152,10 @@ function finishGuide() {
   const userStore = useUserStore();
   const userId = userStore.currentUserId.value;
   const role = userStore.currentUser.value?.role;
+  const workflowMode = resolveWorkflowMode() as WorkflowMode;
 
   if (userId && role) {
-    markGuideCompleted(userId, role);
+    markGuideCompleted(userId, role, workflowMode);
   }
 
   active.value = false;
@@ -145,17 +176,45 @@ function closeGuideCenter() {
   guideCenterOpen.value = false;
 }
 
+function resolveCurrentGuideContext(): GuideContext | null {
+  const userStore = useUserStore();
+  const { menuMode } = useMenuMode();
+  const role = userStore.currentUser.value?.role as GuideRole | undefined;
+  if (!role) return null;
+
+  const workflowRole = ROLE_TO_WORKFLOW_ROLE[role] ?? 'sj';
+  const workflowMode = resolveWorkflowMode() as WorkflowMode;
+
+  return { workflowRole, workflowMode, menuMode: menuMode.value };
+}
+
+function resolveGuideForUser(ctx: GuideContext): GuideDefinition | null {
+  const guideRole = WORKFLOW_ROLE_TO_GUIDE_ROLE[ctx.workflowRole];
+  if (!guideRole) return null;
+
+  switch (guideRole) {
+    case 'designer': return buildDesignerGuide(ctx);
+    case 'proofreader': return buildProofreaderGuide(ctx);
+    case 'reviewer': return buildReviewerGuide(ctx);
+    case 'manager': return buildManagerGuide(ctx);
+    default: return null;
+  }
+}
+
 async function startGuideForRole(role: GuideRole, options?: StartGuideOptions) {
-  const guide = allGuides[role];
+  const ctx = resolveCurrentGuideContext();
+  const workflowRole = ROLE_TO_WORKFLOW_ROLE[role];
+  const guide = ctx
+    ? resolveGuideForUser({ ...ctx, workflowRole })
+    : allGuides[role];
   if (!guide) return;
   await startGuide(guide, options);
 }
 
 async function startGuideForCurrentRole(options?: StartGuideOptions) {
-  const userStore = useUserStore();
-  const role = userStore.currentUser.value?.role as GuideRole | undefined;
-  if (!role) return;
-  const guide = allGuides[role];
+  const ctx = resolveCurrentGuideContext();
+  if (!ctx) return;
+  const guide = resolveGuideForUser(ctx);
   if (!guide) return;
   await startGuide(guide, options);
 }
@@ -165,7 +224,8 @@ function shouldShowGuideForCurrentUser(): boolean {
   const userId = userStore.currentUserId.value;
   const role = userStore.currentUser.value?.role;
   if (!userId || !role) return false;
-  return !isGuideCompleted(userId, role);
+  const workflowMode = resolveWorkflowMode() as WorkflowMode;
+  return !isGuideCompleted(userId, role, workflowMode);
 }
 
 function autoStartIfNeeded() {
@@ -214,6 +274,8 @@ export function useOnboardingGuide() {
     autoStartIfNeeded,
     resetGuideForUser,
     isGuideCompleted,
+    resolveGuideForUser,
+    resolveCurrentGuideContext,
     allGuides,
   };
 }

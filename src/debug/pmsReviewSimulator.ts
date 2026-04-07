@@ -272,7 +272,7 @@ const PMS_USER_CONTEXT: Record<SimulatorPmsUser, { label: string }> = {
 
 const STATUS_LABELS: Record<ReviewTask['status'], string> = {
   draft: '草稿',
-  submitted: '待审核',
+  submitted: '待处理',
   in_review: '审核中',
   approved: '已通过',
   rejected: '已驳回',
@@ -281,12 +281,13 @@ const STATUS_LABELS: Record<ReviewTask['status'], string> = {
 
 const NODE_LABELS: Record<string, string> = {
   sj: '编制',
-  jd: '校核',
+  jd: '校对',
   sh: '审核',
   pz: '批准',
 };
 
 const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
+const SIMULATOR_INBOX_STATUSES: ReviewTask['status'][] = ['submitted', 'in_review', 'approved', 'rejected'];
 const WORKFLOW_MUTATION_ACTIONS: WorkflowMutationAction[] = ['active', 'agree', 'return', 'stop'];
 let PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
 const SIMULATOR_SESSION_STORAGE_KEY = 'pms-review-simulator-session-v1';
@@ -812,7 +813,17 @@ function escapeHtml(text: string): string {
     .replaceAll('\'', '&#39;');
 }
 
+function inboxSubmittedLabelForWorkflowRole(role: WorkflowRole): string {
+  if (role === 'jd') return '待校对';
+  if (role === 'sh') return '待审核';
+  if (role === 'pz') return '待批准';
+  return STATUS_LABELS.submitted;
+}
+
 function statusLabel(status: ReviewTask['status']): string {
+  if (status === 'submitted') {
+    return inboxSubmittedLabelForWorkflowRole(getCurrentWorkflowRole());
+  }
   return STATUS_LABELS[status] || status;
 }
 
@@ -968,11 +979,44 @@ function normalizeWorkflowNodeId(raw: unknown): string | null {
     .toLowerCase();
   if (!normalized) return null;
 
+  if (normalized === 'jh' || normalized.includes('/jh')) return 'sh';
   if (normalized.includes('sj') || normalized.includes('编制')) return 'sj';
-  if (normalized.includes('jd') || normalized.includes('jh') || normalized.includes('校核')) return 'jd';
+  if (normalized.includes('jd') || normalized.includes('校对') || normalized.includes('校核')) return 'jd';
   if (normalized.includes('sh') || normalized.includes('审核')) return 'sh';
   if (normalized.includes('pz') || normalized.includes('批准')) return 'pz';
   return null;
+}
+
+function filterTasksForSimulatorInbox(tasks: ReviewTask[]): ReviewTask[] {
+  const workflowRole = getCurrentWorkflowRole();
+  if (workflowRole === 'sj') {
+    return tasks;
+  }
+
+  return tasks.filter((task) => {
+    if (!SIMULATOR_INBOX_STATUSES.includes(task.status)) return false;
+    const nodeRaw = normalizeWorkflowNodeId(task.currentNode) || 'sj';
+
+    const assignment = resolveSimulatorTaskAssignment({
+      currentPmsUser: state.currentPmsUser,
+      currentWorkflowRole: workflowRole,
+      requesterId: task.requesterId,
+      checkerId: task.checkerId,
+      reviewerId: task.reviewerId,
+      approverId: task.approverId,
+    });
+
+    if (workflowRole === 'jd') {
+      return nodeRaw === 'jd' && assignment.matchesCurrentPmsUser;
+    }
+    if (workflowRole === 'sh') {
+      return nodeRaw === 'sh' && assignment.matchesCurrentPmsUser;
+    }
+    if (workflowRole === 'pz') {
+      return nodeRaw === 'pz' && assignment.matchesCurrentPmsUser;
+    }
+    return false;
+  });
 }
 
 function getNodeLabel(raw: unknown): string {
@@ -1871,7 +1915,8 @@ async function refreshList(): Promise<void> {
       throw new Error(response.error_message || '接口返回 success=false');
     }
     const tasks = Array.isArray(response.tasks) ? response.tasks : [];
-    state.rows = tasks.map((task, index) => toListRow(task, index + 1));
+    const scopedTasks = filterTasksForSimulatorInbox(tasks);
+    state.rows = scopedTasks.map((task, index) => toListRow(task, index + 1));
     const availableTaskIds = new Set(state.rows.map((row) => row.taskId));
     state.selectedTaskIds = state.selectedTaskIds.filter((taskId) => availableTaskIds.has(taskId));
     if (state.selectedTaskId && !availableTaskIds.has(state.selectedTaskId)) {

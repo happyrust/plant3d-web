@@ -162,7 +162,7 @@ describe('embed role landing', () => {
     expect(resolveEmbedLandingTargetFromRole('sh')).toBe('reviewer');
     expect(resolveEmbedLandingTargetFromRole('pz')).toBe('reviewer');
     expect(resolveEmbedLandingTargetFromRole('admin')).toBe('reviewer');
-    expect(resolveEmbedLandingTargetFromRole('jh')).toBeNull();
+    expect(resolveEmbedLandingTargetFromRole('jh')).toBe('reviewer');
     expect(resolveEmbedLandingTargetFromRole('designer')).toBeNull();
     expect(resolveEmbedLandingTargetFromRole('reviewer')).toBeNull();
     expect(resolveEmbedLandingTargetFromRole('proofreader')).toBeNull();

@@ -4,6 +4,9 @@ import { recordRecentProject } from '@/composables/dashboardRecentProjects';
 import { refreshToolStorePersistedScope } from '@/composables/useToolStore';
 import { setCurrentProjectPath } from '@/lib/filesOutput';
 
+/** 无 URL 指定时的默认模型工程（output 目录名）；与后端项目 name 对齐 */
+export const DEFAULT_MODEL_PROJECT_PATH = 'AvevaMarineSample';
+
 export type ModelProject = {
   id: string;
   name: string;
@@ -131,6 +134,23 @@ export function useModelProjects() {
           };
           projects.value = [...projects.value, autoProject];
           applyProject(autoProject, false);
+        } else {
+          // 简化入口：未在 URL 指定项目时固定默认工程，避免先进入项目卡片页
+          const path = DEFAULT_MODEL_PROJECT_PATH;
+          let fallback = projects.value.find(
+            (p) => p.path === path || p.name === path || p.id === path,
+          );
+          if (!fallback) {
+            fallback = {
+              id: path,
+              name: path,
+              description: '',
+              path,
+              default: true,
+            };
+            projects.value = [...projects.value, fallback];
+          }
+          applyProject(fallback, false);
         }
       } catch (error) {
         console.error('Failed to load model projects from API:', error);
@@ -138,11 +158,11 @@ export function useModelProjects() {
         const requested = readRequestedProject();
         // 设置默认项目以防后端不可达
         const fallbackProject = {
-          id: 'ams-model',
-          name: 'AMS 项目',
-          description: 'AMS 系统模型',
-          path: 'AvevaMarineSample',
-          default: true
+          id: DEFAULT_MODEL_PROJECT_PATH,
+          name: DEFAULT_MODEL_PROJECT_PATH,
+          description: '',
+          path: DEFAULT_MODEL_PROJECT_PATH,
+          default: true,
         };
         projects.value = [fallbackProject];
         // URL 若已指定其它项目，应避免静默落到默认 AMS；此处仍用 fallback 仅作兜底，但用 emit 让监听方与工具作用域一致

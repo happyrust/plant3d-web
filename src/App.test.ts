@@ -4,12 +4,10 @@ import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 const {
   authVerifyTokenMock,
   loadProjectsMock,
-  reviewGetEmbedUrlMock,
   switchProjectByIdMock,
 } = vi.hoisted(() => ({
   authVerifyTokenMock: vi.fn(),
   loadProjectsMock: vi.fn(),
-  reviewGetEmbedUrlMock: vi.fn(),
   switchProjectByIdMock: vi.fn(),
 }));
 
@@ -18,7 +16,6 @@ const projectsRef = ref<{ id: string; path: string }[]>([]);
 
 vi.mock('@/api/reviewApi', () => ({
   authVerifyToken: (...args: unknown[]) => authVerifyTokenMock(...args),
-  reviewGetEmbedUrl: (...args: unknown[]) => reviewGetEmbedUrlMock(...args),
 }));
 
 vi.mock('@/components/dashboard/DashboardLayout.vue', () => ({
@@ -148,7 +145,6 @@ describe('App embed bootstrap', () => {
     projectsRef.value = [];
     authVerifyTokenMock.mockReset();
     loadProjectsMock.mockReset();
-    reviewGetEmbedUrlMock.mockReset();
     switchProjectByIdMock.mockReset();
     loadProjectsMock.mockResolvedValue(undefined);
     switchProjectByIdMock.mockImplementation((projectId: string) => {

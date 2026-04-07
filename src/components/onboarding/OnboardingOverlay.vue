@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { ChevronLeft, ChevronRight, HelpCircle, X } from 'lucide-vue-next';
+import { AlertTriangle, ChevronLeft, ChevronRight, HelpCircle, X } from 'lucide-vue-next';
 
 import type { StepPlacement } from './types';
 
@@ -13,20 +13,38 @@ const tooltipRef = ref<HTMLDivElement | null>(null);
 const highlightRect = ref({ top: 0, left: 0, width: 0, height: 0 });
 const tooltipPos = ref({ top: 0, left: 0 });
 const tooltipVisible = ref(false);
+const isFallbackMode = ref(false);
 
 function findTargetElement(): HTMLElement | null {
   const step = guide.currentStep.value;
   if (!step) return null;
-  return document.querySelector<HTMLElement>(step.targetSelector);
+  const primary = document.querySelector<HTMLElement>(step.targetSelector);
+  if (primary) return primary;
+  if (step.fallbackSelector) {
+    return document.querySelector<HTMLElement>(step.fallbackSelector);
+  }
+  return null;
 }
 
 function updatePositions() {
   const el = findTargetElement();
   if (!el) {
     highlightRect.value = { top: 0, left: 0, width: 0, height: 0 };
-    tooltipVisible.value = false;
+    isFallbackMode.value = true;
+    // 居中显示 tooltip
+    nextTick(() => {
+      const tip = tooltipRef.value;
+      if (!tip) return;
+      const tipRect = tip.getBoundingClientRect();
+      tooltipPos.value = {
+        top: Math.max(80, window.innerHeight / 2 - tipRect.height / 2 - 40),
+        left: Math.max(16, window.innerWidth / 2 - tipRect.width / 2),
+      };
+      tooltipVisible.value = true;
+    });
     return;
   }
+  isFallbackMode.value = false;
 
   const rect = el.getBoundingClientRect();
   const pad = 6;
@@ -172,6 +190,17 @@ function handleOverlayClick(e: MouseEvent) {
           <p class="text-xs text-slate-600 leading-relaxed mb-3">
             {{ guide.currentStep.value?.description }}
           </p>
+
+          <!-- 操作提示（目标元素不存在时显示） -->
+          <div v-if="isFallbackMode && guide.currentStep.value?.actionHint"
+            class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-start gap-2">
+            <AlertTriangle class="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+            <span>{{ guide.currentStep.value.actionHint }}</span>
+          </div>
+          <div v-else-if="isFallbackMode"
+            class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            当前步骤的目标元素尚未出现，请先完成前置操作后，点击「下一步」重试。
+          </div>
 
           <!-- 进度条 -->
           <div class="w-full h-1 bg-slate-100 rounded-full mb-3 overflow-hidden">

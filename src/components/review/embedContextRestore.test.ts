@@ -125,6 +125,45 @@ describe('resolveEmbedRestoreResult', () => {
       { id: 'comp-1', name: '支管', refNo: '24381_145018', type: 'BRAN' },
     ]);
   });
+
+  it('falls back to all tasks when the designer slice is temporarily empty for the same form id', () => {
+    const task = createTask({
+      id: 'task-designer-fallback',
+      formId: 'FORM-D-FALLBACK',
+      status: 'draft',
+      currentNode: 'sj',
+      title: '设计侧回填兜底',
+      components: [
+        { id: 'comp-1', name: '支管', refNo: '24381/145018', type: 'BRAN' },
+      ],
+    });
+
+    const result = resolveEmbedRestoreResult({
+      target: 'designer',
+      formId: 'FORM-D-FALLBACK',
+      reviewerTasks: [],
+      designerTasks: [],
+      allTasks: [task],
+    });
+
+    expect(result).toMatchObject({
+      restoreStatus: 'matched',
+      restoredTaskId: 'task-designer-fallback',
+      restoredTaskSummary: {
+        title: '设计侧回填兜底',
+        status: 'draft',
+        currentNode: 'sj',
+      },
+      restoredTaskDraft: {
+        title: '设计侧回填兜底',
+        taskId: 'task-designer-fallback',
+        formId: 'FORM-D-FALLBACK',
+        components: [
+          { id: 'comp-1', name: '支管', refNo: '24381_145018', type: 'BRAN' },
+        ],
+      },
+    });
+  });
 });
 
 describe('restoreEmbedWorkbenchContext', () => {
