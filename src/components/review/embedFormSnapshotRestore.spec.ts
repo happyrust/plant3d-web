@@ -116,6 +116,146 @@ describe('restoreEmbedFormSnapshot', () => {
     }));
   });
 
+  it('当新单据没有历史记录时，也会下发空快照以清空旧批注', async () => {
+    const importTools = vi.fn();
+    const syncTools = vi.fn();
+    const request = vi.fn().mockResolvedValue({
+      code: 200,
+      message: 'success',
+      data: {
+        models: [],
+        records: [],
+        annotationComments: [],
+        attachments: [],
+      },
+    });
+
+    const result = await restoreEmbedFormSnapshot({
+      formId: 'FORM-EMPTY',
+      token: 'token-empty',
+      actor: {
+        id: 'SJ',
+        name: 'SJ',
+        roles: 'sj',
+      },
+      request,
+      importTools,
+      syncTools,
+    });
+
+    expect(result.recordCount).toBe(0);
+    expect(importTools).toHaveBeenCalledTimes(1);
+    expect(syncTools).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(importTools.mock.calls[0][0] as string)).toEqual({
+      version: 5,
+      measurements: [],
+      annotations: [],
+      obbAnnotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      dimensions: [],
+      xeokitDistanceMeasurements: [],
+      xeokitAngleMeasurements: [],
+    });
+  });
+
+  it('连续从旧单据切到空白新单据时，后一次快照会覆盖并清空前一次批注', async () => {
+    const importTools = vi.fn();
+    const syncTools = vi.fn();
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        code: 200,
+        message: 'success',
+        data: {
+          models: ['24381_147608'],
+          records: [
+            {
+              id: 'record-old',
+              taskId: 'task-old',
+              type: 'batch',
+              annotations: [
+                {
+                  id: 'anno-old-1',
+                  entityId: 'entity-old-1',
+                  worldPos: [1, 2, 3],
+                  visible: true,
+                  glyph: '1',
+                  title: '旧单批注',
+                  description: '',
+                  createdAt: 1,
+                },
+              ],
+              cloudAnnotations: [],
+              rectAnnotations: [],
+              obbAnnotations: [],
+              measurements: [],
+              note: '旧单记录',
+              confirmedAt: '2026-03-30 20:00:00',
+            },
+          ],
+          annotationComments: [],
+          attachments: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        code: 200,
+        message: 'success',
+        data: {
+          models: [],
+          records: [],
+          annotationComments: [],
+          attachments: [],
+        },
+      });
+
+    await restoreEmbedFormSnapshot({
+      formId: 'FORM-OLD',
+      token: 'token-old',
+      actor: {
+        id: 'SJ',
+        name: 'SJ',
+        roles: 'sj',
+      },
+      request,
+      importTools,
+      syncTools,
+    });
+
+    await restoreEmbedFormSnapshot({
+      formId: 'FORM-NEW',
+      token: 'token-new',
+      actor: {
+        id: 'SJ',
+        name: 'SJ',
+        roles: 'sj',
+      },
+      request,
+      importTools,
+      syncTools,
+    });
+
+    expect(importTools).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(importTools.mock.calls[0][0] as string)).toEqual(expect.objectContaining({
+      annotations: [
+        expect.objectContaining({
+          id: 'anno-old-1',
+          title: '旧单批注',
+        }),
+      ],
+    }));
+    expect(JSON.parse(importTools.mock.calls[1][0] as string)).toEqual({
+      version: 5,
+      measurements: [],
+      annotations: [],
+      obbAnnotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      dimensions: [],
+      xeokitDistanceMeasurements: [],
+      xeokitAngleMeasurements: [],
+    });
+  });
+
   it('merges snapshot attachments into restored task for readonly reopen surfaces', () => {
     const task: ReviewTask = {
       id: 'task-1',

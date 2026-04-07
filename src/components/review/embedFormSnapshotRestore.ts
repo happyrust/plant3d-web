@@ -67,7 +67,7 @@ export async function restoreEmbedFormSnapshot(
     ? data.attachments.map((attachment) => normalizeReviewAttachment(attachment as Record<string, unknown>))
     : [];
 
-  if (records.length > 0 && options.importTools) {
+  if (options.importTools) {
     options.importTools(buildWorkflowSnapshotReplayPayload(records, comments));
     options.syncTools?.();
   }
