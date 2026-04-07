@@ -818,17 +818,14 @@ function exportData() {
 }
 
 function startAnnotation() {
-  ensurePanelAndActivate('annotation');
   toolStore.setToolMode('annotation');
 }
 
 function startCloudAnnotation() {
-  ensurePanelAndActivate('annotation');
   toolStore.setToolMode('annotation_cloud');
 }
 
 function startRectAnnotation() {
-  ensurePanelAndActivate('annotation');
   toolStore.setToolMode('annotation_rect');
 }
 
@@ -1122,7 +1119,6 @@ function toggleAnnotationDetail(item: AnnotationListItem) {
 }
 
 function flyToAnnotationItem(item: AnnotationListItem) {
-  ensurePanelAndActivate('annotation');
   if (item.type === 'text') {
     toolStore.activeAnnotationId.value = item.id;
     toolStore.activeCloudAnnotationId.value = null;
@@ -1476,7 +1472,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
               <div class="flex items-center gap-0.5">
                 <button type="button"
                   class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-500"
-                  title="定位到批注面板"
+                  title="在场景中定位此批注"
                   @click.stop="flyToAnnotationItem(item)">
                   <ArrowRight class="h-3.5 w-3.5" />
                 </button>

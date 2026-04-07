@@ -1,8 +1,13 @@
 # Changelog
 
-## Unreleased
+本文件记录 `plant3d-web` 面向部署与用户可见行为的变更摘要。
 
-### Changed
+## [Unreleased]
 
-- **校审嵌入**：嵌入链路里的角色统一定义为按 `form_id` 动态指派的工作流角色；前端内部状态统一改名为 `workflowRole`，`reviewGetEmbedUrl` / `buildEmbedUrlPayload` 对外以 **`workflow_role`** 为正式字段，同时兼容旧 `role`。
-- 嵌入 URL 清理逻辑继续剥离历史 query 键 `role` / `user_role` / `workflow_role`（与 token-primary 合同一致）。
+### Fixed
+
+- **校审批注与 Dock**：校核/校对在工作台启动文字/云线/矩形批注，或在三维视图中完成批注创建时，不再自动打开右侧 Dock 的「批注」页签；需查看列表或编辑详情时，仍可通过 Ribbon「批注」或画布批注悬浮条中的「打开批注面板」手动打开。批注列表中的「定位」仅做场景内选中与飞行，提示文案已与行为一致。
+
+### Added
+
+- **菜单模式与引导**：补充 `useMenuMode` composable 与 `hierarchicalMenuGuide`，使设计师/校核角色 onboarding 与分层菜单、`GuideContext.menuMode` 等既有类型约定一致并可正常构建。

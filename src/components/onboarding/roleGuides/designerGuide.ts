@@ -1,5 +1,6 @@
 import type { GuideContext, GuideDefinition, GuideStep } from '../types';
 
+import { withHierarchicalMenuCommandSteps } from '../hierarchicalMenuGuide';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 
 export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
@@ -27,6 +28,19 @@ export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
       placement: 'bottom',
       menuMode: 'ribbon',
       actionHint: '请先点击顶部「校审」标签页展开功能区，再找到「发起提资」按钮。',
+    });
+  }
+
+  // 分层菜单：先从「校审」子菜单进入「发起提资」（展开步骤由 withHierarchicalMenuCommandSteps 插入）
+  if (!isRibbon) {
+    steps.push({
+      id: 'menu-open-initiate-review',
+      targetSelector: '[data-command="panel.initiateReview"]',
+      title: '菜单：发起提资',
+      description: '在顶部「校审」菜单中点击「发起提资」，打开设计师工作台。',
+      placement: 'bottom',
+      actionHint: '请先展开「校审」菜单，再点击「发起提资」。',
+      onBeforeShow: () => ensurePanelAndActivate('initiateReview'),
     });
   }
 
@@ -79,12 +93,12 @@ export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
   if (isActiveWorkflow) {
     steps.push({
       id: 'my-tasks-panel',
-      targetSelector: isRibbon ? '[data-command="panel.myTasks"]' : '[data-panel="myTasks"]',
+      targetSelector: '[data-command="panel.myTasks"]',
       title: '查看我的提资',
       description: '在「我的提资」里跟踪已发起任务的状态、附件和流转进度。',
       placement: isRibbon ? 'bottom' : 'left',
       requiresActiveWorkflow: true,
-      actionHint: isRibbon ? '请点击「校审」标签页，找到「我的提资」按钮。' : '请在右侧面板中找到「我的提资」标签页。',
+      actionHint: isRibbon ? '请点击「校审」标签页，找到「我的提资」按钮。' : '请先展开「校审」菜单，再点「我的提资」；或在右侧面板打开对应标签页。',
       onBeforeShow: () => ensurePanelAndActivate('myTasks'),
     });
   }
@@ -93,11 +107,11 @@ export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
   if (isActiveWorkflow) {
     steps.push({
       id: 'resubmission-panel',
-      targetSelector: isRibbon ? '[data-command="panel.resubmissionTasks"]' : '[data-panel="resubmissionTasks"]',
+      targetSelector: '[data-command="panel.resubmissionTasks"]',
       title: '处理驳回与复审',
       description: '若任务被驳回，复审任务会出现在这里。根据意见修改后，可继续重新提交。',
       placement: isRibbon ? 'bottom' : 'left',
-      actionHint: isRibbon ? '请点击「校审」标签页，找到「复审任务」按钮。' : '请在右侧面板中找到「复审任务」标签页。',
+      actionHint: isRibbon ? '请点击「校审」标签页，找到「复审任务」按钮。' : '请先展开「校审」菜单，再点「复审任务」；或在右侧面板打开对应标签页。',
       onBeforeShow: () => ensurePanelAndActivate('resubmissionTasks'),
     });
   }
@@ -108,7 +122,7 @@ export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
     description: ctx.workflowMode === 'external'
       ? '了解如何在外部流程模式下发起提资并跟踪进度。'
       : '了解如何发起提资、跟踪进度，并在驳回后完成修改与复提。',
-    steps,
+    steps: withHierarchicalMenuCommandSteps(steps, ctx.menuMode),
   };
 }
 

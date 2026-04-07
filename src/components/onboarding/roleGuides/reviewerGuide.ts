@@ -1,5 +1,6 @@
 import type { GuideContext, GuideDefinition, GuideStep } from '../types';
 
+import { withHierarchicalMenuCommandSteps } from '../hierarchicalMenuGuide';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 
 function buildRibbonEntrySteps(description: string): GuideStep[] {
@@ -29,12 +30,12 @@ function buildReviewStartStep(isRibbon: boolean): GuideStep {
     }
     : {
       id: 'reviewer-task-list',
-      targetSelector: '[data-panel="reviewerTasks"]',
+      targetSelector: '[data-command="panel.reviewerTasks"]',
       targetPanelId: 'reviewerTasks',
       title: '查看待处理任务',
       description: '打开待处理任务列表，查看分配给你的任务。',
       placement: 'left',
-      actionHint: '请通过菜单「校审 → 待审核」打开任务列表面板。',
+      actionHint: '请先点击顶部「校审」展开菜单，再选择「待审核」。',
       onBeforeShow: () => ensurePanelAndActivate('reviewerTasks'),
     };
 }
@@ -139,12 +140,12 @@ export function buildProofreaderGuide(ctx: GuideContext): GuideDefinition {
     if (isRibbon) {
       steps.push({
         id: 'reviewer-task-list',
-        targetSelector: '[data-panel="reviewerTasks"]',
+        targetSelector: '[data-command="panel.reviewerTasks"]',
         targetPanelId: 'reviewerTasks',
         title: '待校核任务列表',
         description: '这里列出了所有分配给你的待校核任务。点击任务即可进入校审面板。',
         placement: 'left',
-        actionHint: '请通过菜单「校审 → 待审核」打开任务列表面板。',
+        actionHint: '在 Ribbon「校审」中点击「待审核」；分层菜单下请先展开「校审」再选「待审核」。',
         onBeforeShow: () => ensurePanelAndActivate('reviewerTasks'),
       });
     }
@@ -158,7 +159,7 @@ export function buildProofreaderGuide(ctx: GuideContext): GuideDefinition {
     description: isPassive
       ? '了解如何在外部流程模式下接收设计提资、完成三维校核。'
       : '了解如何接收设计提资、完成三维校核并提交下一节点。',
-    steps,
+    steps: withHierarchicalMenuCommandSteps(steps, ctx.menuMode),
   };
 }
 
@@ -175,12 +176,12 @@ export function buildReviewerGuide(ctx: GuideContext): GuideDefinition {
   if (!isPassive) {
     steps.push({
       id: 'reviewer-task-list',
-      targetSelector: '[data-panel="reviewerTasks"]',
+      targetSelector: '[data-command="panel.reviewerTasks"]',
       targetPanelId: 'reviewerTasks',
       title: '待审核任务',
       description: '这里列出了经过校核后提交给你审核的任务。点击任务可进入详情。',
       placement: 'left',
-      actionHint: '请通过菜单「校审 → 待审核」打开任务列表面板。',
+      actionHint: '请先展开「校审」菜单，再选择「待审核」。',
       onBeforeShow: () => ensurePanelAndActivate('reviewerTasks'),
     });
   }
@@ -259,7 +260,7 @@ export function buildReviewerGuide(ctx: GuideContext): GuideDefinition {
     description: isPassive
       ? '了解如何在外部流程模式下读取校核结果并复核三维内容。'
       : '了解如何读取校核结果、复核三维内容并做出审核决策。',
-    steps,
+    steps: withHierarchicalMenuCommandSteps(steps, ctx.menuMode),
   };
 }
 
@@ -276,12 +277,12 @@ export function buildManagerGuide(ctx: GuideContext): GuideDefinition {
   if (!isPassive) {
     steps.push({
       id: 'reviewer-task-list',
-      targetSelector: '[data-panel="reviewerTasks"]',
+      targetSelector: '[data-command="panel.reviewerTasks"]',
       targetPanelId: 'reviewerTasks',
       title: '待批准任务',
       description: '经过校核和审核后的任务会出现在这里，等待你的最终批准。',
       placement: 'left',
-      actionHint: '请通过菜单「校审 → 待审核」打开任务列表面板。',
+      actionHint: '请先展开「校审」菜单，再选择「待审核」。',
       onBeforeShow: () => ensurePanelAndActivate('reviewerTasks'),
     });
   }
@@ -335,7 +336,7 @@ export function buildManagerGuide(ctx: GuideContext): GuideDefinition {
     description: isPassive
       ? '了解如何在外部流程模式下查看完整校审链路。'
       : '了解如何查看完整校审链路并做出最终批准决策。',
-    steps,
+    steps: withHierarchicalMenuCommandSteps(steps, ctx.menuMode),
   };
 }
 

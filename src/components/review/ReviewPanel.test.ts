@@ -386,17 +386,14 @@ describe('ReviewPanel', () => {
 
     findButton('文字批注')?.click();
     await nextTick();
-    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
     expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation');
 
     findButton('云线批注')?.click();
     await nextTick();
-    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
     expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation_cloud');
 
     findButton('矩形批注')?.click();
     await nextTick();
-    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
     expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('annotation_rect');
 
     findButton('创建测量')?.click();

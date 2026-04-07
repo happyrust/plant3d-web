@@ -29,11 +29,9 @@ import {
   getDtxRefnoTransform,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
-import { dockActivatePanelIfExists, dockPanelExists } from '@/composables/useDockApi';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
-import { emitCommand } from '@/ribbon/commandBus';
 import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
@@ -1506,14 +1504,6 @@ function makeCloudLeaderPathEl(parent: SVGSVGElement): SVGPathElement {
   path.setAttribute('stroke-linecap', 'round');
   parent.appendChild(path);
   return path;
-}
-
-function ensurePanelActivated(panelId: string) {
-  if (dockPanelExists(panelId)) {
-    dockActivatePanelIfExists(panelId);
-    return;
-  }
-  emitCommand(`panel.${panelId === 'modelTree' ? 'tree' : panelId}`);
 }
 
 export function useDtxTools(options: {
@@ -3529,9 +3519,6 @@ export function useDtxTools(options: {
 
     if (selectedRefnos.length === 0) return;
 
-    // 打开批注面板，便于用户立即看到新建条目
-    ensurePanelActivated('annotation');
-
     // 计算 combined bbox
     const compat = compatViewerRef.value;
     if (!compat) return;
@@ -3680,7 +3667,6 @@ export function useDtxTools(options: {
         refno: hit.entityId,
         entityId: hit.entityId,
       });
-      ensurePanelActivated('annotation');
       return;
     }
     if (mode === 'annotation_rect') {
@@ -3691,7 +3677,6 @@ export function useDtxTools(options: {
       const pickedRefno = parseRefnoFromDtxObjectId(hit.objectId) || hit.entityId;
       const aabb = compat.scene.getAABB([pickedRefno]);
       if (!aabb) return;
-      ensurePanelActivated('annotation');
       const box = new Box3(new Vector3(aabb[0], aabb[1], aabb[2]), new Vector3(aabb[3], aabb[4], aabb[5]));
       const obb = computeAabbObbFromBox3(box);
       const n = store.rectAnnotations.value.length + 1;
@@ -3933,7 +3918,6 @@ export function useDtxTools(options: {
         refno: boundRefno,
       };
       store.addAnnotation(rec);
-      ensurePanelActivated('annotation');
       return;
     }
 
