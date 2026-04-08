@@ -221,11 +221,11 @@ describe('loadReviewTasks', () => {
           requesterName: '王设计师',
           checkerId: 'user-002',
           checkerName: '李校核员',
-          approverId: 'manager_001',
-          approverName: '陈经理',
+          approverId: 'user-002',
+          approverName: '李审核员',
           reviewerId: 'user-002',
           reviewerName: '李校核员',
-          currentNode: 'jd',
+          currentNode: 'sh',
           components: [],
           createdAt: 1700000000000,
           updatedAt: 1700000001000,
@@ -241,11 +241,11 @@ describe('loadReviewTasks', () => {
           requesterName: '王设计师',
           checkerId: 'user-002',
           checkerName: '李校核员',
-          approverId: 'manager_001',
-          approverName: '陈经理',
+          approverId: 'user-002',
+          approverName: '李审核员',
           reviewerId: 'user-002',
           reviewerName: '李校核员',
-          currentNode: 'jd',
+          currentNode: 'sh',
           components: [],
           createdAt: 1700000002000,
           updatedAt: 1700000003000,
@@ -261,11 +261,11 @@ describe('loadReviewTasks', () => {
           requesterName: '王设计师',
           checkerId: 'user-002',
           checkerName: '李校核员',
-          approverId: 'manager_001',
-          approverName: '陈经理',
+          approverId: 'user-002',
+          approverName: '李审核员',
           reviewerId: 'user-002',
           reviewerName: '李校核员',
-          currentNode: 'jd',
+          currentNode: 'sj',
           components: [],
           createdAt: 1700000004000,
           updatedAt: 1700000005000,
@@ -281,11 +281,11 @@ describe('loadReviewTasks', () => {
           requesterName: '王设计师',
           checkerId: 'user-002',
           checkerName: '李校核员',
-          approverId: 'manager_001',
-          approverName: '陈经理',
+          approverId: 'user-002',
+          approverName: '李审核员',
           reviewerId: 'user-002',
           reviewerName: '李校核员',
-          currentNode: 'jd',
+          currentNode: 'sh',
           components: [],
           createdAt: 1700000006000,
           updatedAt: 1700000007000,
@@ -425,7 +425,7 @@ describe('loadReviewTasks', () => {
     expect(store.currentUserId.value).toBe('reviewer_001');
     expect(store.currentUser.value?.name).toBe('李审核员');
     expect(reviewTaskGetListMock).toHaveBeenLastCalledWith({ checkerId: 'user-002' });
-    expect(store.pendingReviewTasks.value.map((task) => task.formId)).toContain('FORM-EMBED-1');
+    expect(store.reviewTasks.value.map((task) => task.formId)).toContain('FORM-EMBED-1');
   });
 
   it('prefers verified embed actor over backend debug user when claims are trusted', async () => {
@@ -866,11 +866,11 @@ describe('review task websocket notifications', () => {
             requesterName: '王设计师',
             checkerId: 'user-002',
             checkerName: '李校核员',
-            approverId: 'manager_001',
-            approverName: '陈经理',
+            approverId: 'user-002',
+            approverName: '李审核员',
             reviewerId: 'user-002',
             reviewerName: '李校核员',
-            currentNode: 'jd',
+            currentNode: 'sh',
             createdAt: 1700000000000,
             updatedAt: 1700000010000,
             workflowHistory: [
@@ -918,11 +918,11 @@ describe('review task websocket notifications', () => {
             requester_name: '王设计师',
             checker_id: 'user-002',
             checker_name: '李校核员',
-            approver_id: 'manager_001',
-            approver_name: '陈经理',
+            approver_id: 'user-002',
+            approver_name: '李审核员',
             reviewer_id: 'user-002',
             reviewer_name: '李校核员',
-            current_node: 'jd',
+            current_node: 'sh',
             created_at: 1700000000000,
             updated_at: 1700000009500,
             workflow_history: [
@@ -954,7 +954,7 @@ describe('review task websocket notifications', () => {
     expect(store.pendingReviewTasks.value[0]).toEqual(
       expect.objectContaining({
         id: 'task-resubmit-1',
-        currentNode: 'jd',
+        currentNode: 'sh',
         status: 'submitted',
         description: 'after websocket',
       })
@@ -966,7 +966,7 @@ describe('review task websocket notifications', () => {
     expect(store.pendingReviewTasks.value[0]).toEqual(
       expect.objectContaining({
         id: 'task-resubmit-1',
-        currentNode: 'jd',
+        currentNode: 'sh',
         status: 'submitted',
         description: 'after refresh',
       })
@@ -1097,9 +1097,9 @@ describe('review task websocket notifications', () => {
             checker_name: '李校核员',
             reviewer_id: 'user-002',
             reviewer_name: '李校核员',
-            approver_id: 'manager_001',
-            approver_name: '陈经理',
-            current_node: 'jd',
+            approver_id: 'user-002',
+            approver_name: '李审核员',
+            current_node: 'sh',
             created_at: 1700000000000,
             updated_at: 1700000009000,
             return_reason: '校核退回',
@@ -1112,8 +1112,8 @@ describe('review task websocket notifications', () => {
 
     expect(store.pendingReviewTasks.value.find((task) => task.id === 'task-reviewer-returned-1')).toEqual(
       expect.objectContaining({
-        currentNode: 'jd',
-        checkerId: 'user-002',
+        currentNode: 'sh',
+        approverId: 'user-002',
         status: 'rejected',
       })
     );
@@ -1337,11 +1337,11 @@ describe('switch user auth helpers', () => {
           requesterName: '王设计师',
           checkerId: 'user-002',
           checkerName: '李校核员',
-          approverId: 'manager_001',
+          approverId: 'user-002',
           approverName: '李审核员',
           reviewerId: 'user-002',
           reviewerName: '李校核员',
-          currentNode: 'jd',
+          currentNode: 'sh',
           components: [],
           createdAt: 1700000000000,
           updatedAt: 1700000001000,

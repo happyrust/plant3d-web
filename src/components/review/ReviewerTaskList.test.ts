@@ -3,7 +3,7 @@ import { createApp, h, nextTick } from 'vue';
 
 import ReviewerTaskList from './ReviewerTaskList.vue';
 
-import type { ReviewTask } from '@/types/auth';
+import { UserRole, type ReviewTask } from '@/types/auth';
 
 const loadReviewTasksMock = vi.fn(() => Promise.resolve());
 const setCurrentTaskMock = vi.fn();
@@ -12,7 +12,7 @@ const persistenceStorageKeys: string[] = [];
 
 const mockUserStore = {
   pendingReviewTasks: { value: [] as ReviewTask[] },
-  currentUser: { value: { id: 'checker-1', name: '李审核员' } },
+  currentUser: { value: { id: 'checker-1', name: '张校对员', role: UserRole.PROOFREADER } },
   isChecker: { value: true },
   isApprover: { value: false },
   loadReviewTasks: (...args: unknown[]) => loadReviewTasksMock(...args),
@@ -128,7 +128,7 @@ describe('ReviewerTaskList', () => {
       createTask({ id: 'submitted-task', title: '待审核任务', status: 'submitted', priority: 'urgent' }),
     ]);
 
-    expect(document.body.textContent).toContain('待处理提资任务');
+    expect(document.body.textContent).toContain('待校对任务');
     expect(document.body.textContent).toContain('待审核任务');
     expect(document.body.textContent).toContain('全部状态');
     expect(document.body.textContent).toContain('全部优先级');

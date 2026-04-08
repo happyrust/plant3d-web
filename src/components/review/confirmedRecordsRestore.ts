@@ -69,7 +69,11 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
     if (options.currentTaskId() !== taskId) return;
 
     if (!taskId || records.length === 0) {
-      if (!options.skipClearOnEmpty) {
+      const shouldClear =
+        !options.skipClearOnEmpty
+        || (lastRestoredSceneKey.value !== null && lastRestoredSceneKey.value !== restoreKey);
+
+      if (shouldClear) {
         options.toolStore.clearAll();
         tools.syncFromStore();
       }

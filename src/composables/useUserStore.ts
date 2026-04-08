@@ -579,20 +579,21 @@ const pendingReviewTasks = computed(() => {
     const node = t.currentNode ?? 'sj';
     const checkerId = resolveEffectiveUserId({ id: t.checkerId || t.reviewerId });
     const approverId = resolveEffectiveUserId(t.approverId ? { id: t.approverId } : null);
+    const isRejected = t.status === 'rejected';
 
     if (!reviewerInboxStatuses.includes(t.status)) return false;
 
     if (role === UserRole.PROOFREADER) {
-      return checkerId === uid && node === 'jd';
+      return checkerId === uid && (node === 'jd' || isRejected);
     }
     if (role === UserRole.REVIEWER) {
-      return approverId === uid && node === 'sh';
+      return approverId === uid && (node === 'sh' || isRejected);
     }
     if (role === UserRole.MANAGER) {
-      return approverId === uid && node === 'pz';
+      return approverId === uid && (node === 'pz' || isRejected);
     }
     if (role === UserRole.ADMIN) {
-      return approverId === uid && (node === 'sh' || node === 'pz');
+      return approverId === uid && (node === 'sh' || node === 'pz' || isRejected);
     }
     return false;
   });

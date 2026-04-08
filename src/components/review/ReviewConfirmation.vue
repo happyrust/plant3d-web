@@ -4,9 +4,11 @@ import { computed, ref } from 'vue';
 import { CheckCircle, MessageSquare, Ruler, X } from 'lucide-vue-next';
 
 import {
+  buildUnsavedReviewConfirmPayload,
   buildReviewConfirmSnapshotKey,
   buildReviewConfirmSnapshotPayloadFromRecords,
   confirmCurrentDataSafely,
+  hasReviewConfirmPayloadData,
 } from './reviewPanelActions';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
@@ -53,15 +55,24 @@ const confirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
 ));
 
+const unsavedConfirmPayload = computed(() => (
+  buildUnsavedReviewConfirmPayload(
+    currentDraftConfirmPayload.value,
+    confirmedSnapshotPayload.value,
+  )
+));
+
 const hasUnsavedChanges = computed(() => {
   return buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
     !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value);
 });
 
-const hasUnsavedPendingData = computed(() => hasUnsavedChanges.value);
+const hasUnsavedPendingData = computed(() => (
+  hasReviewConfirmPayloadData(unsavedConfirmPayload.value)
+));
 
 const isVisible = computed(() => {
-  return reviewStore.reviewMode.value && (hasPendingData.value || hasUnsavedChanges.value);
+  return reviewStore.reviewMode.value && (hasPendingData.value || hasUnsavedPendingData.value);
 });
 
 async function confirmCurrentData() {
@@ -74,11 +85,11 @@ async function confirmCurrentData() {
       hasPendingData: hasUnsavedPendingData.value,
       payload: {
         type: 'batch' as const,
-        annotations: [...currentDraftConfirmPayload.value.annotations],
-        cloudAnnotations: [...currentDraftConfirmPayload.value.cloudAnnotations],
-        rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations],
-        obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations],
-        measurements: [...currentDraftConfirmPayload.value.measurements],
+        annotations: [...unsavedConfirmPayload.value.annotations],
+        cloudAnnotations: [...unsavedConfirmPayload.value.cloudAnnotations],
+        rectAnnotations: [...unsavedConfirmPayload.value.rectAnnotations],
+        obbAnnotations: [...unsavedConfirmPayload.value.obbAnnotations],
+        measurements: [...unsavedConfirmPayload.value.measurements],
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,

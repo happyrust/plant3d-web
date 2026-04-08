@@ -27,9 +27,31 @@ describe('useReviewStore - confirm without OBB', () => {
     toolStore.clearAll();
   });
 
-  it('should not include obbAnnotations in confirmed records', () => {
+  it('should preserve empty obbAnnotations in confirmed records', async () => {
     const reviewStore = useReviewStore();
     const toolStore = useToolStore();
+
+    await reviewStore.setCurrentTask({
+      id: 'task-confirm-1',
+      formId: 'FORM-CONFIRM-1',
+      title: 'Confirm task',
+      description: '',
+      modelName: 'Demo',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: 'Designer',
+      checkerId: 'checker-1',
+      checkerName: 'Checker',
+      approverId: 'approver-1',
+      approverName: 'Approver',
+      reviewerId: 'checker-1',
+      reviewerName: 'Checker',
+      components: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      currentNode: 'jd',
+    });
 
     toolStore.addAnnotation({
       id: 'text-1',
@@ -66,7 +88,7 @@ describe('useReviewStore - confirm without OBB', () => {
       createdAt: Date.now(),
     });
 
-    reviewStore.addConfirmedRecord({
+    await reviewStore.addConfirmedRecord({
       type: 'batch',
       annotations: [...toolStore.annotations.value],
       cloudAnnotations: [...toolStore.cloudAnnotations.value],
@@ -80,7 +102,7 @@ describe('useReviewStore - confirm without OBB', () => {
     expect(confirmed[0].annotations).toHaveLength(1);
     expect(confirmed[0].cloudAnnotations).toHaveLength(1);
     expect(confirmed[0].rectAnnotations).toHaveLength(1);
-    expect('obbAnnotations' in confirmed[0]).toBe(false);
+    expect(confirmed[0].obbAnnotations).toEqual([]);
   });
 
   it('should preserve stable task and form lineage on confirmed records', async () => {

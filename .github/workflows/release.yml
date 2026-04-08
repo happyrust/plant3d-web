@@ -27,6 +27,13 @@ jobs:
       
       - name: Install dependencies
         run: npm ci
+
+      - name: Write production env
+        if: ${{ secrets.FRONTEND_ENV_PRODUCTION != '' }}
+        run: |
+          cat > .env.production <<'EOF'
+          ${{ secrets.FRONTEND_ENV_PRODUCTION }}
+          EOF
       
       - name: Create version metadata
         run: |
@@ -77,34 +84,62 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
         run: |
+          set -euo pipefail
+
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$PROD_HOST"
+          test -n "$PROD_USER"
+
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H $PROD_HOST >> ~/.ssh/known_hosts
           
           VERSION="${{ steps.version.outputs.VERSION }}"
-          RELEASE_DIR="/opt/plant3d-web/releases/$VERSION"
+          ARCHIVE="plant3d-web-$VERSION.tar.gz"
+
+          test -f "$ARCHIVE"
+
+          scp -i ~/.ssh/deploy_key "$ARCHIVE" $PROD_USER@$PROD_HOST:/tmp/
           
-          scp -i ~/.ssh/deploy_key plant3d-web-$VERSION.tar.gz $PROD_USER@$PROD_HOST:/tmp/
-          
-          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST << 'ENDSSH'
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << ENDSSH
+            set -euo pipefail
+
             VERSION="${{ steps.version.outputs.VERSION }}"
-            RELEASE_DIR="/opt/plant3d-web/releases/$VERSION"
+            APP_ROOT="/opt/plant3d-web"
+            RELEASE_DIR="\$APP_ROOT/releases/\$VERSION"
             CURRENT_LINK="/opt/plant3d-web/current"
-            
-            mkdir -p $RELEASE_DIR
-            cd $RELEASE_DIR
-            tar -xzf /tmp/plant3d-web-$VERSION.tar.gz
-            rm /tmp/plant3d-web-$VERSION.tar.gz
-            
-            if [ -L "$CURRENT_LINK" ]; then
-              PREV_RELEASE=$(readlink $CURRENT_LINK)
-              echo "Previous release: $PREV_RELEASE"
+
+            mkdir -p "\$APP_ROOT/releases"
+
+            PREV_RELEASE=""
+            if [ -L "\$CURRENT_LINK" ]; then
+              PREV_RELEASE=\$(readlink -f "\$CURRENT_LINK")
+              echo "Previous release: \$PREV_RELEASE"
             fi
-            
-            ln -sfn $RELEASE_DIR $CURRENT_LINK
-            
-            sudo nginx -t && sudo systemctl reload nginx || echo "Nginx reload skipped"
-            
-            echo "Deployed frontend version $VERSION to production"
+
+            rm -rf "\$RELEASE_DIR"
+            mkdir -p "\$RELEASE_DIR"
+            tar -xzf "/tmp/plant3d-web-\$VERSION.tar.gz" -C "\$RELEASE_DIR"
+            rm -f "/tmp/plant3d-web-\$VERSION.tar.gz"
+
+            test -f "\$RELEASE_DIR/index.html"
+
+            ln -sfn "\$RELEASE_DIR" "\$CURRENT_LINK"
+
+            if ! sudo nginx -t; then
+              if [ -n "\$PREV_RELEASE" ]; then
+                ln -sfn "\$PREV_RELEASE" "\$CURRENT_LINK"
+              fi
+              exit 1
+            fi
+
+            if ! sudo systemctl reload nginx; then
+              if [ -n "\$PREV_RELEASE" ]; then
+                ln -sfn "\$PREV_RELEASE" "\$CURRENT_LINK"
+              fi
+              exit 1
+            fi
+
+            echo "Deployed frontend version \$VERSION to production"
           ENDSSH
