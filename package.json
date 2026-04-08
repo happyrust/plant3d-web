@@ -30,6 +30,7 @@
     "test:e2e:ui": "npx @playwright/test test --ui",
     "test:e2e:headed": "npx @playwright/test test --headed",
     "verify:dashboard": "bash scripts/verify-dashboard-workbench.sh",
+    "deploy:ubuntu": "bash scripts/deploy-ubuntu.sh",
     "test:e2e:mbd-arrow-gallery": "npx @playwright/test e2e/mbd-pipe-arrow-style-gallery.spec.ts --reporter=line",
     "compare:mbd-rebarviz-beam": "node scripts/compare-mbd-rebarviz-beam.mjs",
     "demo:rebarviz-beam": "vite --open /rebar-beam-demo.html",
