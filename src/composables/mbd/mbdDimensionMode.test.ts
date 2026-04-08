@@ -36,6 +36,7 @@ describe('mbdDimensionMode', () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
+    vis.applyModeDefaults('construction');
     vis.renderBranch({
       input_refno: '24381_145018',
       branch_refno: '24381_145018',

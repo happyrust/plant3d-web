@@ -89,7 +89,7 @@ function hostnameFromNeedle(needle: string): string | null {
   }
 }
 
-function uniqNeedles(values: Array<string | null | undefined>): string[] {
+function uniqNeedles(values: (string | null | undefined)[]): string[] {
   return [...new Set(values.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean))];
 }
 

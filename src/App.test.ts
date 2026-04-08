@@ -44,6 +44,14 @@ vi.mock('@/components/AboutDialog.vue', () => ({
   }),
 }));
 
+vi.mock('@/components/ReleaseNotesDialog.vue', () => ({
+  default: defineComponent({
+    setup() {
+      return () => h('div');
+    },
+  }),
+}));
+
 vi.mock('@/components/onboarding/OnboardingOverlay.vue', () => ({
   default: defineComponent({
     setup() {
@@ -95,6 +103,7 @@ vi.mock('@/components/user/UserAvatar.vue', () => ({
 vi.mock('@/composables/useOnboardingGuide', () => ({
   useOnboardingGuide: () => ({
     openGuideCenter: vi.fn(),
+    autoStartIfNeeded: vi.fn(),
   }),
 }));
 

@@ -96,4 +96,71 @@ describe('DtxCompatScene', () => {
     expect(selection.select).toHaveBeenCalledWith(['o:100_1:0', 'o:100_1:1'], true);
     expect(scene.getAABB(['100_1'])).toEqual([-0.5, -0.5, -0.5, 2.5, 0.5, 0.5]);
   });
+
+  it('XRayed 只降低非目标对象透明度，不会隐藏它们', () => {
+    const layer = new DTXLayer({
+      maxVertices: 128,
+      maxIndices: 256,
+      maxObjects: 8,
+    });
+
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4());
+    layer.addObject('o:100_2:0', 'box', new Matrix4().makeTranslation(4, 0, 0));
+
+    const scene = new DtxCompatScene({ dtxLayer: layer });
+
+    scene.setObjectsXRayed(['100_2'], true);
+
+    expect(scene.objects['100_2']?.xrayed).toBe(true);
+    expect(scene.objects['100_2']?.visible).toBe(true);
+    expect(layer.isObjectVisible('o:100_2:0')).toBe(true);
+    expect(layer.getObjectOpacity('o:100_2:0')).toBeLessThan(1);
+    expect(layer.getObjectOpacity('o:100_1:0')).toBe(1);
+  });
+
+  it('清除 XRayed 不会把原本隐藏的对象重新显示出来', () => {
+    const layer = new DTXLayer({
+      maxVertices: 128,
+      maxIndices: 256,
+      maxObjects: 8,
+    });
+
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4());
+    layer.addObject('o:100_2:0', 'box', new Matrix4().makeTranslation(4, 0, 0));
+
+    const scene = new DtxCompatScene({ dtxLayer: layer });
+
+    scene.setObjectsVisible(['100_2'], false);
+    scene.setObjectsXRayed(['100_2'], true);
+    scene.setObjectsXRayed(['100_2'], false);
+
+    expect(scene.objects['100_2']?.visible).toBe(false);
+    expect(scene.objects['100_2']?.xrayed).toBe(false);
+    expect(layer.isObjectVisible('o:100_2:0')).toBe(false);
+    expect(layer.getObjectOpacity('o:100_2:0')).toBe(1);
+  });
+
+  it('按需加载对象会回放 XRayed 透明度，而不是直接隐藏', () => {
+    const layer = new DTXLayer({
+      maxVertices: 128,
+      maxIndices: 256,
+      maxObjects: 8,
+    });
+
+    layer.addGeometry('box', new BoxGeometry(1, 1, 1));
+    layer.addObject('o:100_1:0', 'box', new Matrix4());
+
+    const scene = new DtxCompatScene({ dtxLayer: layer });
+
+    scene.setObjectsXRayed(['100_2'], true);
+    layer.addObject('o:100_2:0', 'box', new Matrix4().makeTranslation(4, 0, 0));
+    scene.applyStateToRefnos(['100_2'], { forceVisible: true });
+
+    expect(scene.objects['100_2']?.visible).toBe(true);
+    expect(scene.objects['100_2']?.xrayed).toBe(true);
+    expect(layer.isObjectVisible('o:100_2:0')).toBe(true);
+    expect(layer.getObjectOpacity('o:100_2:0')).toBeLessThan(1);
+  });
 });

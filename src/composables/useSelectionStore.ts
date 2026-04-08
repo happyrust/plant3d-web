@@ -5,14 +5,37 @@ import { useQuery } from '@tanstack/vue-query';
 import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 
 const selectedRefno = ref<string | null>(null);
+const selectedRefnos = ref<string[]>([]);
+
+function normalizeSelection(refnos: (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const refno of refnos) {
+    const key = String(refno ?? '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    next.push(key);
+  }
+  return next;
+}
+
+function setSelectionState(refnos: (string | null | undefined)[], activeRefno?: string | null) {
+  const next = normalizeSelection(refnos);
+  selectedRefnos.value = next;
+  if (next.length === 0) {
+    selectedRefno.value = null;
+    return;
+  }
+  const active = String(activeRefno ?? '').trim();
+  selectedRefno.value = active && next.includes(active) ? active : next[next.length - 1] ?? null;
+}
 
 /**
  * 在不需要 Vue 注入上下文的场景（如异步回调、命令处理器）中直接修改 selectedRefno。
  * 不调用 useQuery，因此可以在 setup() 外安全使用。
  */
 export function setGlobalSelectedRefno(refno: string | null) {
-  if (refno === selectedRefno.value) return;
-  selectedRefno.value = refno;
+  setSelectionState(refno ? [refno] : [], refno);
 }
 
 function usePdmsUiAttrQuery(refno: { value: string | null }) {
@@ -48,26 +71,47 @@ export function useSelectionStore() {
   });
 
   async function loadProperties(refno: string) {
-    selectedRefno.value = refno;
+    setSelectionState([refno], refno);
   }
 
   function clearSelection() {
-    selectedRefno.value = null;
+    setSelectionState([]);
   }
 
   function setSelectedRefno(refno: string | null) {
-    if (refno === selectedRefno.value) return;
-    selectedRefno.value = refno;
+    setSelectionState(refno ? [refno] : [], refno);
+  }
+
+  function clearSelectedRefnos() {
+    setSelectionState([]);
+  }
+
+  function isSelected(refno: string): boolean {
+    return selectedRefnos.value.includes(String(refno ?? '').trim());
+  }
+
+  function toggleSelectedRefno(refno: string) {
+    const key = String(refno ?? '').trim();
+    if (!key) return;
+    if (selectedRefnos.value.includes(key)) {
+      setSelectionState(selectedRefnos.value.filter((item) => item !== key));
+      return;
+    }
+    setSelectionState([...selectedRefnos.value, key], key);
   }
 
   return {
     selectedRefno,
+    selectedRefnos,
     propertiesLoading,
     propertiesError,
     propertiesData,
     fullName,
     loadProperties,
     clearSelection,
+    clearSelectedRefnos,
+    isSelected,
     setSelectedRefno,
+    toggleSelectedRefno,
   };
 }

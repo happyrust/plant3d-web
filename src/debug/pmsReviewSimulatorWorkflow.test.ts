@@ -181,7 +181,6 @@ describe('shouldUseSyncOnlyWorkflowAction', () => {
   });
 });
 
-
 describe('request payload builders', () => {
   it('auth token 请求应始终使用当前 PMS 用户作为 user_id、使用当前工作流角色作为 role', () => {
     expect(buildSimulatorAuthLoginRequest({
@@ -288,7 +287,6 @@ describe('resolveSimulatorWorkflowMutationTargetRole', () => {
     })).toBeNull();
   });
 });
-
 
 describe('buildSimulatorRuntimeWorkflowRole', () => {
   it('外部流程 next_step 存在时，应优先使用 next_step 作为当前工作流角色', () => {

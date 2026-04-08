@@ -226,12 +226,18 @@ function isRefnoLike(id: string): boolean {
 function handleSelectionChanged(selected: Set<string>) {
   // 约定：全局 selection（属性面板/查询等）只绑定 PDMS refno，房间树 id 不写入
   if (isRoomTree.value) return;
-  if (selected.size !== 1) return;
-  const only = Array.from(selected)[0];
-  if (!only || !isRefnoLike(only)) return;
-
   internalTreeSelection = true;
-  selection.setSelectedRefno(only);
+  if (selected.size !== 1) {
+    selection.clearSelection();
+    return;
+  }
+  const only = Array.from(selected)[0];
+  if (!only || !isRefnoLike(only)) {
+    selection.clearSelection();
+    return;
+  }
+
+  selection.setSelectedRefno(normalizeRefnoKeyLike(only));
 }
 
 function flyTo(id: string) {
@@ -578,21 +584,21 @@ watch(
       return;
     }
 
-    if (!refno || !isRefnoLike(refno)) return;
+    if (tab === 'room') return;
+
+    if (!refno || !isRefnoLike(refno)) {
+      if (pdmsTree.selectedIds.value.size > 0) {
+        pdmsTree.selectedIds.value = new Set();
+      }
+      return;
+    }
 
     void (async () => {
-      const targetId = tab === 'room' ? refno : normalizeRefnoKeyLike(refno);
+      const targetId = normalizeRefnoKeyLike(refno);
       try {
-        if (tab === 'room') {
-          const already = roomTree.selectedIds.value.size === 1 && roomTree.selectedIds.value.has(targetId);
-          if (!already) {
-            await roomTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
-          }
-        } else {
-          const already = pdmsTree.selectedIds.value.size === 1 && pdmsTree.selectedIds.value.has(targetId);
-          if (!already) {
-            await pdmsTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
-          }
+        const already = pdmsTree.selectedIds.value.size === 1 && pdmsTree.selectedIds.value.has(targetId);
+        if (!already) {
+          await pdmsTree.focusNodeById(targetId, { flyTo: false, syncSceneSelection: false, clearSearch: false });
         }
       } catch {
         void 0;

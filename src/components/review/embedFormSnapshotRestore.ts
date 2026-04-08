@@ -3,6 +3,8 @@ import {
   extractWorkflowModelRefnos,
 } from './reviewRecordReplay';
 
+import type { ReviewAttachment, ReviewTask } from '@/types/auth';
+
 import {
   normalizeReviewAttachment,
   reviewWorkflowSyncQuery,
@@ -10,7 +12,6 @@ import {
   type WorkflowSyncQueryRequest,
   type WorkflowSyncResponse,
 } from '@/api/reviewApi';
-import type { ReviewAttachment, ReviewTask } from '@/types/auth';
 
 export type EmbedFormSnapshotRestoreOptions = {
   formId: string;

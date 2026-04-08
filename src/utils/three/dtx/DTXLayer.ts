@@ -1632,6 +1632,80 @@ export class DTXLayer {
     }
   }
 
+  setObjectsOpacity(objectIds: string[], opacity: number, options: { keepColorOverride?: boolean } = {}): void {
+    if (!objectIds || objectIds.length === 0) return;
+
+    const nextOpacity = Math.min(1, Math.max(0, opacity));
+    const keepColorOverride = options.keepColorOverride !== false;
+    const updatedMaterialIndices = new Set<number>();
+
+    let pixelsPerRow = 0;
+    let texData: Uint8Array | null = null;
+    let colorsTextureChanged = false;
+    if (this._colorsAndFlagsTexture) {
+      pixelsPerRow = OBJECTS_TEXTURE_WIDTH * PIXELS_PER_OBJECT;
+      texData = this._colorsAndFlagsTexture.image.data as Uint8Array;
+    }
+
+    for (const objectId of objectIds) {
+      const obj = this._objects.get(objectId);
+      if (!obj) continue;
+
+      const current = this._getMaterialPaletteEntry(obj.materialIndex) ?? {
+        color: new Color(1, 1, 1),
+        metalness: 0.5,
+        roughness: 0.5,
+        opacity: obj.opacity,
+      };
+
+      const hasOpacityChanged = Math.abs(obj.opacity - nextOpacity) > 1e-6;
+      const shouldClearColorOverride = !keepColorOverride && obj.hasColorOverride;
+      if (!hasOpacityChanged && !shouldClearColorOverride) continue;
+
+      const nextMaterialIndex = this._getOrCreateMaterialIndex(
+        current.color,
+        current.metalness,
+        current.roughness,
+        nextOpacity,
+      );
+
+      obj.opacity = nextOpacity;
+
+      const objX = (obj.objectIndex % OBJECTS_TEXTURE_WIDTH) * PIXELS_PER_OBJECT;
+      const objY = Math.floor(obj.objectIndex / OBJECTS_TEXTURE_WIDTH);
+      const dstOffset = (objY * pixelsPerRow + objX) * 4;
+      const flagsOffset = obj.objectIndex * 16;
+
+      if (nextMaterialIndex !== obj.materialIndex) {
+        obj.materialIndex = nextMaterialIndex;
+        this._colorsAndFlagsBuffer[flagsOffset + 0] = nextMaterialIndex;
+        if (texData) {
+          texData[dstOffset + 0] = nextMaterialIndex;
+        }
+        colorsTextureChanged = true;
+      }
+
+      if (shouldClearColorOverride) {
+        obj.hasColorOverride = false;
+        this._colorsAndFlagsBuffer[flagsOffset + 1] = 0;
+        if (texData) {
+          texData[dstOffset + 1] = 0;
+        }
+        colorsTextureChanged = true;
+      }
+
+      updatedMaterialIndices.add(nextMaterialIndex);
+    }
+
+    if (colorsTextureChanged && this._colorsAndFlagsTexture) {
+      this._colorsAndFlagsTexture.needsUpdate = true;
+    }
+
+    for (const materialIndex of updatedMaterialIndices) {
+      this._syncMaterialPaletteTexture(materialIndex);
+    }
+  }
+
   /**
    * 批量设置所有对象的可见性
    */
@@ -1693,6 +1767,11 @@ export class DTXLayer {
    */
   getObject(objectId: string): DTXObject | undefined {
     return this._objects.get(objectId);
+  }
+
+  getObjectOpacity(objectId: string): number | null {
+    const obj = this._objects.get(objectId);
+    return obj ? obj.opacity : null;
   }
 
   /**

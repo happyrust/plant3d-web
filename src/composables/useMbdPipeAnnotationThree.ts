@@ -755,7 +755,7 @@ export function useMbdPipeAnnotationThree(
 
   // UI 状态（MbdPipePanel 使用）
   const uiTab = ref<MbdPipeUiTab>('dims');
-  const mbdViewMode = ref<MbdPipeViewMode>('construction');
+  const mbdViewMode = ref<MbdPipeViewMode>('layout_first');
 
   // MBD 尺寸显示配置
   const dimTextMode = ref<'backend' | 'auto'>('backend');
@@ -773,7 +773,7 @@ export function useMbdPipeAnnotationThree(
 
   const isVisible = ref(false);
   const showDims = ref(true);
-  const showDimSegment = ref(false);
+  const showDimSegment = ref(true);
   const showDimChain = ref(true);
   const showDimOverall = ref(true);
   const showDimPort = ref(false);
@@ -787,7 +787,7 @@ export function useMbdPipeAnnotationThree(
   const suppressedWrongLineCount = ref(0);
   const showWelds = ref(true);
   const showSlopes = ref(true);
-  const showBends = ref(false);
+  const showBends = ref(true);
   const showSegments = ref(false);
   const showLabels = ref(true);
 

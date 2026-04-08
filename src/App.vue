@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/dashboard/DashboardLayout.vue';
 import DockLayout from '@/components/DockLayout.vue';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay.vue';
 import ReviewGuideCenter from '@/components/onboarding/ReviewGuideCenter.vue';
+import ReleaseNotesDialog from '@/components/ReleaseNotesDialog.vue';
 import HierarchicalMenuBar from '@/components/ribbon/HierarchicalMenuBar.vue';
 import RibbonBar from '@/components/ribbon/RibbonBar.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
@@ -101,6 +102,7 @@ onMounted(() => {
                 </v-btn>
                 <LayoutToggleButtons />
                 <AboutDialog />
+                <ReleaseNotesDialog />
                 <UserAvatar />
               </div>
             </template>
@@ -116,6 +118,7 @@ onMounted(() => {
                 </v-btn>
                 <LayoutToggleButtons />
                 <AboutDialog />
+                <ReleaseNotesDialog />
                 <UserAvatar />
               </div>
             </template>

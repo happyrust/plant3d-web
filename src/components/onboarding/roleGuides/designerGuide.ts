@@ -1,6 +1,7 @@
+import { withHierarchicalMenuCommandSteps } from '../hierarchicalMenuGuide';
+
 import type { GuideContext, GuideDefinition, GuideStep } from '../types';
 
-import { withHierarchicalMenuCommandSteps } from '../hierarchicalMenuGuide';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 
 export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {

@@ -413,6 +413,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         items: [
           { kind: 'button', id: 'help.reviewGuide', label: '校审导航', icon: 'help', commandId: 'help.reviewGuide' },
           { kind: 'button', id: 'help.about', label: '关于', icon: 'help', commandId: 'help.about' },
+          { kind: 'button', id: 'help.releaseNotes', label: '更新说明', icon: 'help', commandId: 'help.releaseNotes' },
           { kind: 'button', id: 'help.docs', label: '文档', icon: 'question', commandId: 'help.docs' },
         ],
       },

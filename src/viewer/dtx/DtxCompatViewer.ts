@@ -48,6 +48,13 @@ export class DtxCompatScene {
 
   private _fallbackRefnoToObjectIds: Map<string, string[]> | null = null;
   private _fallbackIndexObjectCount = 0;
+  private _xrayOriginalOpacityByObjectId = new Map<string, number>();
+  private _xrayDimOpacity = 0.2;
+  private _focusKeepRefnos = new Set<string>();
+  private _focusOriginalOpacityByObjectId = new Map<string, number>();
+  private _focusDimOpacity = 0.2;
+  private _autoFocusTransparencyEnabled = false;
+  private _focusSyncRafId: number | null = null;
 
   constructor(options: { dtxLayer: DTXLayer; selection?: DTXSelectionController | null; onDirty?: (() => void) | null }) {
     this._dtxLayer = options.dtxLayer;
@@ -193,9 +200,13 @@ export class DtxCompatScene {
 
   setObjectsSelected(refnos: string[], selected: boolean): void {
     this.ensureRefnos(refnos, { computeAabb: false });
+    let changed = false;
     for (const refno of refnos) {
       const st = this.objects[refno];
-      if (st) st.selected = selected;
+      if (st && st.selected !== selected) {
+        st.selected = selected;
+        changed = true;
+      }
 
       if (!this._selection) continue;
 
@@ -208,21 +219,36 @@ export class DtxCompatScene {
         this._selection.deselect(objectIds);
       }
     }
+    if (changed) {
+      this.syncFocusTransparencyFromSelection();
+    }
     this._onDirty?.();
   }
 
   /**
-   * XRayed：阶段 1 采用“隔离=隐藏其它”的近似实现
-   * - xrayed=true 视为隐藏
-   * - xrayed=false 视为显示
+   * XRayed：保持对象可见，仅降低透明度
+   * - xrayed=true 视为半透明弱化
+   * - xrayed=false 恢复原始透明度
    */
   setObjectsXRayed(refnos: string[], xrayed: boolean): void {
     this.ensureRefnos(refnos, { computeAabb: false });
+
+    if (xrayed) {
+      this.clearFocusTransparency();
+    }
+
     for (const refno of refnos) {
       const st = this.objects[refno];
       if (st) st.xrayed = xrayed;
     }
-    this.setObjectsVisible(refnos, !xrayed);
+
+    this._applyXrayToRefnos(refnos);
+
+    if (this._hasXRayedObjects()) {
+      this._onDirty?.();
+    } else {
+      this.syncFocusTransparencyFromSelection();
+    }
   }
 
   /**
@@ -247,8 +273,7 @@ export class DtxCompatScene {
       const objectIds = this._getDtxObjectIds(refno);
       if (objectIds.length === 0) continue;
 
-      const effectiveVisible = st.xrayed ? false : st.visible;
-      if (!effectiveVisible) {
+      if (!st.visible) {
         for (const objectId of objectIds) toHide.add(objectId);
       } else if (forceVisible) {
         // 仅在明确需要时才强制把对象设为可见（避免对大规模加载造成无意义的写入）
@@ -262,12 +287,244 @@ export class DtxCompatScene {
 
     if (toHide.size > 0) this._dtxLayer.setObjectsVisible(Array.from(toHide), false);
     if (toShow.size > 0) this._dtxLayer.setObjectsVisible(Array.from(toShow), true);
+    this._applyXrayToRefnos(refnos);
 
     if (this._selection) {
       if (toSelect.size > 0) this._selection.select(Array.from(toSelect), true);
     }
 
+    this.replayFocusTransparency(refnos);
+
     this._onDirty?.();
+  }
+
+  setAutoFocusTransparencyEnabled(enabled: boolean, options?: { dimOpacity?: number }): void {
+    if (typeof options?.dimOpacity === 'number' && Number.isFinite(options.dimOpacity)) {
+      this._focusDimOpacity = Math.min(1, Math.max(0, options.dimOpacity));
+    }
+
+    if (this._autoFocusTransparencyEnabled === enabled) {
+      if (enabled) {
+        this.syncFocusTransparencyFromSelection({ immediate: true });
+      }
+      return;
+    }
+
+    this._autoFocusTransparencyEnabled = enabled;
+    if (!enabled) {
+      this.clearFocusTransparency();
+      return;
+    }
+
+    this.syncFocusTransparencyFromSelection();
+  }
+
+  syncFocusTransparencyFromSelection(options?: { immediate?: boolean }): void {
+    if (!this._autoFocusTransparencyEnabled) return;
+    if (options?.immediate) {
+      this._flushFocusTransparencySync();
+      return;
+    }
+    if (this._focusSyncRafId !== null) return;
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      this._flushFocusTransparencySync();
+      return;
+    }
+    this._focusSyncRafId = window.requestAnimationFrame(() => {
+      this._focusSyncRafId = null;
+      this._flushFocusTransparencySync();
+    });
+  }
+
+  setFocusDimOpacity(opacity: number): void {
+    const nextOpacity = Math.min(1, Math.max(0, opacity));
+    if (Math.abs(nextOpacity - this._focusDimOpacity) < 1e-6) return;
+    this._focusDimOpacity = nextOpacity;
+    if (this._focusKeepRefnos.size > 0) {
+      this.applyFocusTransparency(Array.from(this._focusKeepRefnos), { dimOpacity: nextOpacity });
+    }
+  }
+
+  applyFocusTransparency(keepRefnos: string[], options?: { dimOpacity?: number }): void {
+    const nextOpacity =
+      typeof options?.dimOpacity === 'number' && Number.isFinite(options.dimOpacity)
+        ? Math.min(1, Math.max(0, options.dimOpacity))
+        : this._focusDimOpacity;
+    this._focusDimOpacity = nextOpacity;
+
+    const uniqueKeepRefnos = Array.from(new Set(keepRefnos.filter((refno) => !!refno)));
+    if (uniqueKeepRefnos.length === 0) {
+      this.clearFocusTransparency();
+      return;
+    }
+
+    this.ensureRefnos(uniqueKeepRefnos, { computeAabb: false });
+    this._focusKeepRefnos = new Set(uniqueKeepRefnos);
+    this._applyFocusTransparencyToRefnos(this.getLoadedRefnos(), { partial: false });
+    this._onDirty?.();
+  }
+
+  replayFocusTransparency(refnos: string[]): void {
+    if (this._hasXRayedObjects() || this._focusKeepRefnos.size === 0 || !refnos || refnos.length === 0) return;
+    const uniqueRefnos = Array.from(new Set(refnos.filter((refno) => !!refno)));
+    if (uniqueRefnos.length === 0) return;
+    this._applyFocusTransparencyToRefnos(uniqueRefnos, { partial: true });
+  }
+
+  reapplyFocusTransparency(): void {
+    if (this._focusKeepRefnos.size === 0) return;
+    this._focusOriginalOpacityByObjectId.clear();
+    this._applyFocusTransparencyToRefnos(this.getLoadedRefnos(), { partial: false });
+    this._onDirty?.();
+  }
+
+  clearFocusTransparency(): void {
+    this._cancelFocusTransparencySync();
+    this._focusKeepRefnos.clear();
+    if (this._focusOriginalOpacityByObjectId.size === 0) return;
+    this._restoreTrackedObjectOpacities(
+      this._focusOriginalOpacityByObjectId,
+      Array.from(this._focusOriginalOpacityByObjectId.keys()),
+    );
+    this._onDirty?.();
+  }
+
+  private _flushFocusTransparencySync(): void {
+    if (!this._autoFocusTransparencyEnabled) return;
+    if (this._hasXRayedObjects()) {
+      this.clearFocusTransparency();
+      return;
+    }
+    const selectedRefnos = this.selectedObjectIds;
+    if (selectedRefnos.length === 0) {
+      this.clearFocusTransparency();
+      return;
+    }
+    this.applyFocusTransparency(selectedRefnos);
+  }
+
+  private _cancelFocusTransparencySync(): void {
+    if (this._focusSyncRafId === null) return;
+    if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(this._focusSyncRafId);
+    }
+    this._focusSyncRafId = null;
+  }
+
+  private _hasXRayedObjects(): boolean {
+    for (const obj of Object.values(this.objects)) {
+      if (obj.xrayed) return true;
+    }
+    return false;
+  }
+
+  private _applyXrayToRefnos(refnos: string[]): void {
+    if (!refnos || refnos.length === 0) return;
+
+    const toDim = new Set<string>();
+    const toRestore = new Set<string>();
+
+    for (const refno of refnos) {
+      const st = this.objects[refno];
+      if (!st) continue;
+
+      const objectIds = this._getDtxObjectIds(refno);
+      if (objectIds.length === 0) continue;
+
+      if (st.xrayed) {
+        for (const objectId of objectIds) {
+          if (!this._xrayOriginalOpacityByObjectId.has(objectId)) {
+            const originalOpacity = this._dtxLayer.getObjectOpacity(objectId);
+            if (originalOpacity !== null) {
+              this._xrayOriginalOpacityByObjectId.set(objectId, originalOpacity);
+            }
+          }
+          toDim.add(objectId);
+        }
+        continue;
+      }
+
+      for (const objectId of objectIds) {
+        if (this._xrayOriginalOpacityByObjectId.has(objectId)) {
+          toRestore.add(objectId);
+        }
+      }
+    }
+
+    if (toRestore.size > 0) {
+      this._restoreTrackedObjectOpacities(this._xrayOriginalOpacityByObjectId, Array.from(toRestore));
+    }
+    if (toDim.size > 0) {
+      this._dtxLayer.setObjectsOpacity(Array.from(toDim), this._xrayDimOpacity, { keepColorOverride: true });
+    }
+  }
+
+  private _applyFocusTransparencyToRefnos(refnos: string[], options?: { partial?: boolean }): void {
+    if (!refnos || refnos.length === 0) {
+      this._restoreTrackedObjectOpacities(this._focusOriginalOpacityByObjectId, Array.from(this._focusOriginalOpacityByObjectId.keys()));
+      return;
+    }
+
+    const partial = options?.partial === true;
+    const dimObjectIds = new Set<string>();
+    for (const refno of refnos) {
+      const objectIds = this._getDtxObjectIds(refno);
+      if (objectIds.length === 0) continue;
+
+      if (this._focusKeepRefnos.has(refno)) {
+        this._restoreTrackedObjectOpacities(this._focusOriginalOpacityByObjectId, objectIds);
+        continue;
+      }
+
+      for (const objectId of objectIds) {
+        if (!this._focusOriginalOpacityByObjectId.has(objectId)) {
+          const originalOpacity = this._dtxLayer.getObjectOpacity(objectId);
+          if (originalOpacity !== null) {
+            this._focusOriginalOpacityByObjectId.set(objectId, originalOpacity);
+          }
+        }
+        dimObjectIds.add(objectId);
+      }
+    }
+
+    if (!partial) {
+      const toRestore: string[] = [];
+      for (const objectId of this._focusOriginalOpacityByObjectId.keys()) {
+        if (!dimObjectIds.has(objectId)) {
+          toRestore.push(objectId);
+        }
+      }
+      if (toRestore.length > 0) {
+        this._restoreTrackedObjectOpacities(this._focusOriginalOpacityByObjectId, toRestore);
+      }
+    }
+
+    if (dimObjectIds.size > 0) {
+      this._dtxLayer.setObjectsOpacity(Array.from(dimObjectIds), this._focusDimOpacity, { keepColorOverride: true });
+    }
+  }
+
+  private _restoreTrackedObjectOpacities(store: Map<string, number>, objectIds: string[]): void {
+    if (!objectIds || objectIds.length === 0 || store.size === 0) return;
+    const grouped = new Map<number, string[]>();
+    for (const objectId of objectIds) {
+      const originalOpacity = store.get(objectId);
+      if (originalOpacity === undefined) continue;
+      const list = grouped.get(originalOpacity);
+      if (list) {
+        list.push(objectId);
+      } else {
+        grouped.set(originalOpacity, [objectId]);
+      }
+    }
+
+    for (const [opacity, ids] of grouped.entries()) {
+      this._dtxLayer.setObjectsOpacity(ids, opacity, { keepColorOverride: true });
+    }
+
+    for (const objectId of objectIds) {
+      store.delete(objectId);
+    }
   }
 
   getAABB(refnos: string[]): Aabb6 | null {
@@ -295,6 +552,13 @@ export class DtxCompatScene {
   }
 
   clear(): void {
+    this.clearFocusTransparency();
+    if (this._xrayOriginalOpacityByObjectId.size > 0) {
+      this._restoreTrackedObjectOpacities(
+        this._xrayOriginalOpacityByObjectId,
+        Array.from(this._xrayOriginalOpacityByObjectId.keys()),
+      );
+    }
     for (const id of Object.keys(this.objects)) {
       delete this.objects[id];
     }

@@ -9,17 +9,17 @@ const emitToastMock = vi.fn();
 const reviewStoreMock = {
   reviewMode: { value: true },
   currentTask: { value: { id: 'task-1' } },
-  sortedConfirmedRecords: { value: [] as Array<Record<string, unknown>> },
+  sortedConfirmedRecords: { value: [] as Record<string, unknown>[] },
   addConfirmedRecord: (...args: unknown[]) => addConfirmedRecordMock(...args),
   setReviewMode: vi.fn(),
 };
 
 const toolStoreMock = {
-  annotations: { value: [] as Array<Record<string, unknown>> },
-  cloudAnnotations: { value: [] as Array<Record<string, unknown>> },
-  rectAnnotations: { value: [] as Array<Record<string, unknown>> },
-  obbAnnotations: { value: [] as Array<Record<string, unknown>> },
-  measurements: { value: [] as Array<Record<string, unknown>> },
+  annotations: { value: [] as Record<string, unknown>[] },
+  cloudAnnotations: { value: [] as Record<string, unknown>[] },
+  rectAnnotations: { value: [] as Record<string, unknown>[] },
+  obbAnnotations: { value: [] as Record<string, unknown>[] },
+  measurements: { value: [] as Record<string, unknown>[] },
   annotationCount: { value: 0 },
   cloudAnnotationCount: { value: 0 },
   rectAnnotationCount: { value: 0 },

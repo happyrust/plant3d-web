@@ -324,7 +324,7 @@ onUnmounted(() => {
           <label v-if="currentGuideRole"
             class="mt-3 flex cursor-pointer items-center gap-2 text-sm font-normal normal-case tracking-normal text-slate-700">
             <input v-model="showAllGuideOperations" type="checkbox"
-              class="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+              class="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
             显示所有操作
           </label>
           <div class="mt-3 space-y-2">

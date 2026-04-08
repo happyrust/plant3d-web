@@ -6,13 +6,12 @@ import { Clock, FileText, Filter, HelpCircle, PlayCircle, RefreshCw, User, XCirc
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import { getSubmitActionLabel } from './reviewPanelActions';
 
-import { UserRole, type ReviewTask } from '@/types/auth';
-
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
+import { UserRole, type ReviewTask } from '@/types/auth';
 import {
   getPriorityDisplayName,
   getReviewerInboxPanelTitle,

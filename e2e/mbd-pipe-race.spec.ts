@@ -74,6 +74,17 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
   let secondHit = 0;
   const malformedQueryUrls: string[] = [];
 
+  await page.addInitScript(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem('plant3d-onboarding-v1', JSON.stringify({
+      completedGuides: {
+        'designer_001__designer__manual': true,
+        'designer_001__designer': true,
+      },
+    }));
+  });
+
   await page.route('**/api/mbd/pipe/**', async (route) => {
     const url = new URL(route.request().url());
     const refno = decodeURIComponent(url.pathname.split('/').pop() || '');
@@ -129,7 +140,7 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
     });
   });
 
-  await page.goto('/?dtx_demo=primitives&dtx_demo_count=20', { waitUntil: 'domcontentloaded' });
+  await page.goto('/?output_project=PlaywrightMbdPipeRace&dtx_demo=primitives&dtx_demo_count=20', { waitUntil: 'domcontentloaded' });
 
   await page.waitForFunction(() => !!(window as any).__xeokitViewer?.scene, null, { timeout: 60_000 });
 

@@ -19,9 +19,9 @@ export function displayVersionText(value: string): string {
 
 export function getDefaultFrontendVersion(): VersionInfo {
   return {
-    version: __FRONTEND_APP_VERSION__,
-    commit: __FRONTEND_GIT_COMMIT__,
-    buildDate: formatBuildDateFromIso(__FRONTEND_BUILD_ISO__),
+    version: typeof __FRONTEND_APP_VERSION__ === 'undefined' ? '0.0.0' : __FRONTEND_APP_VERSION__,
+    commit: typeof __FRONTEND_GIT_COMMIT__ === 'undefined' ? 'unknown' : __FRONTEND_GIT_COMMIT__,
+    buildDate: formatBuildDateFromIso(typeof __FRONTEND_BUILD_ISO__ === 'undefined' ? '' : __FRONTEND_BUILD_ISO__),
   };
 }
 

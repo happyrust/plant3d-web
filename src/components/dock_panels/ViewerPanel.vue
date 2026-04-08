@@ -3,12 +3,14 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import {
+  Aperture,
   Eye,
   EyeOff,
   Focus,
   Eraser,
   GitCompare,
   Ruler,
+  ScanEye,
   Search,
   Settings,
 } from 'lucide-vue-next';
@@ -130,6 +132,22 @@ function mergeRootRefnoWithVisibleRefnos(rootRefno: string, visibleRefnos: strin
   return Array.from(merged);
 }
 
+function getSelectionStoreRefnos(): string[] {
+  const rawSelectedRefnos = Array.isArray((selectionStore as any).selectedRefnos?.value)
+    ? (selectionStore as any).selectedRefnos.value
+    : (selectionStore.selectedRefno.value ? [selectionStore.selectedRefno.value] : []);
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const refno of rawSelectedRefnos) {
+    const normalized = normalizeRefnoKeyLike(String(refno ?? ''));
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
 function isTruthyUrlQueryFlag(raw: string | null | undefined): boolean {
   const t = String(raw ?? '').trim().toLowerCase();
   return t === '1' || t === 'true' || t === 'yes';
@@ -176,8 +194,7 @@ function readMbdDimTextModeFromUrl(): 'backend' | 'auto' | null {
 }
 
 function resolveMbdApiMode(mode: 'layout_first' | 'construction' | 'inspection') {
-  if (mode === 'construction' || mode === 'inspection') return mode;
-  return undefined;
+  return mode;
 }
 
 function readMbdArrowSizeFromUrl(): number | null {
@@ -243,6 +260,11 @@ function getCameraFovByMode(mode: CameraViewMode): number {
 function clampGlobalEdgeThresholdAngle(value: number): number {
   if (!Number.isFinite(value)) return 20;
   return Math.max(1, Math.min(60, Math.round(value)));
+}
+
+function clampFocusDimOpacityPercent(value: number): number {
+  if (!Number.isFinite(value)) return 20;
+  return Math.max(5, Math.min(100, Math.round(value)));
 }
 
 function syncGlobalEdgeOverlay(force = false): void {
@@ -319,6 +341,24 @@ function onGlobalEdgeThresholdInput(value: number | string): void {
   } catch {
     // ignore
   }
+}
+
+function onFocusTransparencyEnabledChange(enabled: boolean): void {
+  focusTransparencyEnabled.value = enabled;
+  compatViewerRef.value?.scene.setAutoFocusTransparencyEnabled(enabled, {
+    dimOpacity: focusDimOpacityPercent.value / 100,
+  });
+  safeLsSet('dtx_focus_transparency', enabled ? '1' : '0');
+  requestRender();
+}
+
+function onFocusDimOpacityInput(value: number | string): void {
+  const next = clampFocusDimOpacityPercent(Number(value));
+  if (next === focusDimOpacityPercent.value) return;
+  focusDimOpacityPercent.value = next;
+  compatViewerRef.value?.scene.setFocusDimOpacity(next / 100);
+  safeLsSet('dtx_focus_opacity', String(next));
+  requestRender();
 }
 
 // URL 预加载：通过 ?mbd_refno= 或 ?mbd_pipe= 自动触发 MBD 管道标注（mbd_refno 优先）。
@@ -533,6 +573,8 @@ const modelGenerationRef = shallowRef<ReturnType<
 const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
 const globalEdgeThresholdAngle = ref(20);
+const focusTransparencyEnabled = ref(false);
+const focusDimOpacityPercent = ref(20);
 
 let attachedToScene = false;
 let shaderPrecompiled = false;
@@ -580,6 +622,35 @@ let dtxGlobalTransformAppliedKey: string | null = null;
 let dtxAutoFitAppliedKey: string | null = null;
 let activeDbno: number | null = null;
 let tileLodInitializedDbno: number | null = null;
+
+watch(
+  () => [compatViewerRef.value, selectionStore.selectedRefno.value, selectionStore.selectedRefnos.value.join('|')] as const,
+  () => {
+    const compat = compatViewerRef.value;
+    if (!compat || demoMode === 'primitives') return;
+
+    const nextSelectedRefnos = getSelectionStoreRefnos();
+    const nextSet = new Set(nextSelectedRefnos);
+    const currentSelectedRefnos = compat.scene.selectedObjectIds
+      .map((refno) => normalizeRefnoKeyLike(refno))
+      .filter((refno): refno is string => !!refno);
+    const currentSet = new Set(currentSelectedRefnos);
+
+    const toDeselect = currentSelectedRefnos.filter((refno) => !nextSet.has(refno));
+    const toSelect = nextSelectedRefnos.filter((refno) => !currentSet.has(refno));
+    if (toDeselect.length === 0 && toSelect.length === 0) return;
+
+    if (toDeselect.length > 0) {
+      compat.scene.setObjectsSelected(toDeselect, false);
+    }
+    if (toSelect.length > 0) {
+      compat.scene.ensureRefnos(toSelect, { computeAabb: false });
+      compat.scene.setObjectsSelected(toSelect, true);
+    }
+    requestRender();
+  },
+  { immediate: true }
+);
 
 function readDtxScaleConfigFromUrl(): {
     scale: number;
@@ -886,6 +957,7 @@ async function onDisplayThemeChange(theme: DisplayTheme): Promise<void> {
   if (!layer || activeDbno === null) return;
   const config = await loadModelDisplayConfig();
   applyMaterialConfigToLoadedDtx(layer, activeDbno, config, theme);
+  compatViewerRef.value?.scene.reapplyFocusTransparency();
   requestRender();
 }
 
@@ -1000,6 +1072,54 @@ async function showSelected(): Promise<void> {
   const compat = compatViewerRef.value;
   if (!compat) return;
   compat.scene.setObjectsVisible(targetRefnos, true);
+  requestRender();
+}
+
+function hasActiveXrayMode(): boolean {
+  const compat = compatViewerRef.value;
+  if (!compat) return false;
+  for (const obj of Object.values(compat.scene.objects)) {
+    if (obj.xrayed) return true;
+  }
+  return false;
+}
+
+async function toggleXraySelected(): Promise<void> {
+  const compat = compatViewerRef.value;
+  if (!compat) return;
+
+  if (hasActiveXrayMode()) {
+    const all = compat.scene.objectIds;
+    if (all.length > 0) {
+      compat.scene.setObjectsXRayed(all, false);
+    }
+    requestRender();
+    return;
+  }
+
+  const selection = getToolbarSelection();
+  if (selection.sceneSelectedRefnos.length === 0 && !selection.primaryRefno) {
+    toastNeedSelection();
+    return;
+  }
+
+  const targetRefnos =
+    selection.sceneSelectedRefnos.length > 0
+      ? selection.sceneSelectedRefnos
+      : await getTargetRefnos(selection.primaryRefno!);
+
+  if (modelGenerationRef.value && selection.primaryRefno) {
+    await modelGenerationRef.value.showModelByRefno(selection.primaryRefno, { flyTo: false });
+  }
+
+  const all = compat.scene.objectIds;
+  if (all.length > 0) {
+    compat.scene.setObjectsXRayed(all, true);
+  }
+  if (targetRefnos.length > 0) {
+    compat.scene.setObjectsXRayed(targetRefnos, false);
+    compat.scene.setObjectsVisible(targetRefnos, true);
+  }
   requestRender();
 }
 
@@ -1924,6 +2044,8 @@ onMounted(async () => {
   cameraViewMode.value = 'cad_weak';
   globalEdgeEnabled.value = false;
   globalEdgeThresholdAngle.value = 20;
+  focusTransparencyEnabled.value = false;
+  focusDimOpacityPercent.value = 20;
   try {
     // DEV: localStorage.setItem('dtx_continuous_render','1') 可打开持续渲染（用于 profile）
     continuousRender =
@@ -1973,6 +2095,20 @@ onMounted(async () => {
     if (edgeAngleRaw !== null && edgeAngleRaw !== undefined) {
       globalEdgeThresholdAngle.value = clampGlobalEdgeThresholdAngle(
         Number(edgeAngleRaw),
+      );
+    }
+
+    const focusTransparencyRaw =
+            q.get('dtx_focus_transparency') || localStorage.getItem('dtx_focus_transparency');
+    if (focusTransparencyRaw !== null && focusTransparencyRaw !== undefined) {
+      focusTransparencyEnabled.value = String(focusTransparencyRaw).trim() !== '0';
+    }
+
+    const focusOpacityRaw =
+            q.get('dtx_focus_opacity') || localStorage.getItem('dtx_focus_opacity');
+    if (focusOpacityRaw !== null && focusOpacityRaw !== undefined) {
+      focusDimOpacityPercent.value = clampFocusDimOpacityPercent(
+        Number(focusOpacityRaw),
       );
     }
   } catch {
@@ -2115,7 +2251,10 @@ onMounted(async () => {
     selection: selectionController,
     requestRender,
   });
-    // 让 useModelGeneration 能识别 DTX 后端
+  compat.scene.setAutoFocusTransparencyEnabled(focusTransparencyEnabled.value, {
+    dimOpacity: focusDimOpacityPercent.value / 100,
+  });
+  // 让 useModelGeneration 能识别 DTX 后端
   (compat as any).__dtxLayer = dtxLayer;
   (compat as any).__dtxAfterInstancesLoaded = (
     _dbno: number,
@@ -3616,7 +3755,6 @@ onMounted(async () => {
         let batchId: string | null = null;
 
         const resp = await getMbdPipeAnnotations(refnoKey, {
-          // 后端已不再接受 layout_first；前端保留该模式仅用于本地渲染分流。
           mode: resolveMbdApiMode(mbdPipeVis.mbdViewMode.value),
           // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
           source: 'db',
@@ -3945,6 +4083,11 @@ onUnmounted(() => {
   }
   dtxViewerRef.value = null;
 
+  try {
+    compatViewerRef.value?.scene.setAutoFocusTransparencyEnabled(false);
+  } catch {
+    // ignore
+  }
   compatViewerRef.value = null;
   try {
     delete (window as any).__xeokitViewer;
@@ -4115,6 +4258,12 @@ onUnmounted(() => {
       </button>
       <button type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
+        title="X-ray（选中对象 / 已开启时点击取消）"
+        @click.stop="toggleXraySelected">
+        <ScanEye class="h-5 w-5" />
+      </button>
+      <button type="button"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         title="全部隐藏"
         @click.stop="hideAll">
         <Eraser class="h-5 w-5" />
@@ -4176,6 +4325,14 @@ onUnmounted(() => {
       style="z-index: 940"
       @pointerdown.stop
       @wheel.stop>
+      <button type="button"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
+        :class="focusTransparencyEnabled ? 'bg-muted' : ''"
+        :title="focusTransparencyEnabled ? '关闭选中聚焦半透明' : '开启选中聚焦半透明'"
+        @click.stop="onFocusTransparencyEnabledChange(!focusTransparencyEnabled)">
+        <Aperture class="h-5 w-5" />
+      </button>
+
       <button type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         :class="spatialQueryOpen ? 'bg-muted' : ''"
@@ -4301,6 +4458,32 @@ onUnmounted(() => {
                 @input="onGlobalEdgeThresholdInput(globalEdgeThresholdAngle)" />
               <div class="text-[11px] text-muted-foreground">
                 角度越小，边线越密；建议 15~25。
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex items-center justify-between">
+                <label class="text-xs text-muted-foreground">选中聚焦半透明</label>
+                <button type="button"
+                  class="rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted"
+                  :class="focusTransparencyEnabled ? 'border-ring bg-muted font-medium' : 'border-border text-muted-foreground'"
+                  @click.stop="onFocusTransparencyEnabledChange(!focusTransparencyEnabled)">
+                  {{ focusTransparencyEnabled ? '已开启' : '已关闭' }}
+                </button>
+              </div>
+              <div class="flex items-center justify-between">
+                <label class="text-xs text-muted-foreground">未选中不透明度</label>
+                <span class="text-xs tabular-nums text-foreground">{{ focusDimOpacityPercent }}%</span>
+              </div>
+              <input v-model.number="focusDimOpacityPercent"
+                type="range"
+                min="5"
+                max="100"
+                class="w-full"
+                :disabled="!focusTransparencyEnabled"
+                @input="onFocusDimOpacityInput(focusDimOpacityPercent)" />
+              <div class="text-[11px] text-muted-foreground">
+                数值越低，未选中对象越透明；建议 15~35。
               </div>
             </div>
 

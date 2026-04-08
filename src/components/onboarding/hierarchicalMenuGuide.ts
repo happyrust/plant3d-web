@@ -1,10 +1,10 @@
 import { nextTick } from 'vue';
 
+import type { GuideStep } from './types';
 import type { MenuMode } from '@/composables/useMenuMode';
-import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import type { RibbonItem } from '@/ribbon/ribbonTypes';
 
-import type { GuideStep } from './types';
+import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 
 function collectCommandIdsFromItem(item: RibbonItem): string[] {
   if (item.kind === 'button') return [item.commandId];

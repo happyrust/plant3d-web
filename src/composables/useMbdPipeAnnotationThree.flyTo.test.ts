@@ -16,7 +16,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vi.restoreAllMocks();
   });
 
-  it('默认显示施工模式相关标注', () => {
+  it('默认显示版面优先模式相关标注', () => {
     const viewer = {
       canvas: {
         getBoundingClientRect: () => ({ width: 800, height: 600 }),
@@ -32,9 +32,9 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
       { getGlobalModelMatrix: () => new Matrix4() },
     );
 
-    expect(vis.mbdViewMode.value).toBe('construction');
+    expect(vis.mbdViewMode.value).toBe('layout_first');
     expect(vis.dimMode.value).toBe('classic');
-    expect(vis.showDimSegment.value).toBe(false);
+    expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(true);
     expect(vis.showDimPort.value).toBe(false);
@@ -44,7 +44,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showFlanges.value).toBe(true);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
-    expect(vis.showBends.value).toBe(false);
+    expect(vis.showBends.value).toBe(true);
     expect(vis.bendDisplayMode.value).toBe('size');
     expect(vis.showSegments.value).toBe(false);
   });

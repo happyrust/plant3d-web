@@ -55,6 +55,27 @@ describe('HierarchicalMenuBar', () => {
     expect(emitCommand).toHaveBeenCalledWith('review.start');
   });
 
+  it('帮助菜单应包含更新说明命令', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mountMenu(host);
+
+    const helpTab = host.querySelector('[data-hierarchical-tab="help"] button') as HTMLButtonElement | null;
+    expect(helpTab).toBeTruthy();
+
+    helpTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    const releaseNotesCommand = host.querySelector('[data-command="help.releaseNotes"]') as HTMLButtonElement | null;
+    expect(releaseNotesCommand).toBeTruthy();
+
+    releaseNotesCommand?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    expect(emitCommand).toHaveBeenCalledWith('help.releaseNotes');
+  });
+
   it('keeps the dropdown open while the pointer moves from tab trigger into dropdown content', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
