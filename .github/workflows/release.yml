@@ -11,6 +11,8 @@ jobs:
   build:
     name: Build Frontend Release
     runs-on: ubuntu-latest
+    env:
+      FRONTEND_ENV_PRODUCTION: ${{ secrets.FRONTEND_ENV_PRODUCTION }}
     
     steps:
       - uses: actions/checkout@v4
@@ -29,10 +31,10 @@ jobs:
         run: npm ci
 
       - name: Write production env
-        if: ${{ secrets.FRONTEND_ENV_PRODUCTION != '' }}
+        if: ${{ env.FRONTEND_ENV_PRODUCTION != '' }}
         run: |
           cat > .env.production <<'EOF'
-          ${{ secrets.FRONTEND_ENV_PRODUCTION }}
+          ${{ env.FRONTEND_ENV_PRODUCTION }}
           EOF
       
       - name: Create version metadata
