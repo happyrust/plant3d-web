@@ -6,8 +6,6 @@ import type {
   TaskType,
   TaskPriority,
   TaskCreationRequest,
-  ParseTaskParameters,
-  ModelGenParameters,
 } from '@/types/task';
 
 import { taskCreate, taskValidateName, taskStart, getServerConfig } from '@/api/genModelTaskApi';
@@ -33,8 +31,6 @@ export type TaskCreationFormData = {
   generateSpatialTree: boolean;
   applyBooleanOperation: boolean;
   meshTolRatio: number;
-  maxConcurrent: number;
-  exportWebBundle: boolean;  // 导出 Web 数据包
   enabledNouns: string[];
   nounInput: string;
   limitPerNounType: string;
@@ -168,8 +164,6 @@ export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreati
     generateSpatialTree: false,
     applyBooleanOperation: false,
     meshTolRatio: 0.01,
-    maxConcurrent: 4,
-    exportWebBundle: true,  // 默认开启 Web 数据包导出
     enabledNouns: [],
     nounInput: '',
     limitPerNounType: '',
@@ -258,9 +252,6 @@ export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreati
           return false;
         }
         if (formData.meshTolRatio <= 0 || formData.meshTolRatio > 1) {
-          return false;
-        }
-        if (formData.maxConcurrent < 1 || formData.maxConcurrent > 16) {
           return false;
         }
         if (!isLimitPerNounTypeValid()) {
@@ -411,9 +402,6 @@ export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreati
         if (formData.meshTolRatio <= 0 || formData.meshTolRatio > 1) {
           newErrors.meshTolRatio = '网格容差比例必须在 0-1 之间';
         }
-        if (formData.maxConcurrent < 1 || formData.maxConcurrent > 16) {
-          newErrors.maxConcurrent = '并发数必须在 1-16 之间';
-        }
         const limitError = getLimitPerNounTypeError();
         if (limitError) {
           newErrors.limitPerNounType = limitError;
@@ -430,7 +418,7 @@ export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreati
       if (!newErrors.type && errors.value.type) delete errors.value.type;
     }
     if (step === 2) {
-      for (const field of ['dbnum', 'refno', 'generateModels', 'meshTolRatio', 'maxConcurrent', 'limitPerNounType'] as const) {
+      for (const field of ['dbnum', 'refno', 'generateModels', 'meshTolRatio', 'limitPerNounType'] as const) {
         if (!newErrors[field]) {
           delete errors.value[field];
         }
@@ -540,7 +528,7 @@ export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreati
   /**
    * 构建请求数据
    */
-  function buildRequest(): any {
+  function buildRequest(): TaskCreationRequest {
     const cfg = serverConfig.value;
     const trimmedDbnum = formData.dbnum.trim();
     const trimmedRefno = formData.refno.trim();
@@ -553,7 +541,7 @@ export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreati
       ? (trimmedRefno ? [trimmedRefno] : [])
       : (formData.parseMode === 'refno' ? [trimmedRefno] : []);
     // 后端真正的请求结构是 CreateTaskRequest { name, task_type, config }
-    const request: any = {
+    const request: TaskCreationRequest = {
       name: formData.name.trim(),
       task_type: formData.type === 'DataParsingWizard' ? 'DataParsingWizard' : 'DataGeneration',
       config: {
@@ -652,8 +640,6 @@ export function useTaskCreation(options?: UseTaskCreationOptions): UseTaskCreati
     formData.generateSpatialTree = false;
     formData.applyBooleanOperation = false;
     formData.meshTolRatio = 0.01;
-    formData.maxConcurrent = 4;
-    formData.exportWebBundle = true;
     formData.enabledNouns = [];
     formData.nounInput = '';
     formData.limitPerNounType = '';

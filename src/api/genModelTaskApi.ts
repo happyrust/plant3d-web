@@ -22,6 +22,9 @@ export type DatabaseConfig = {
   name: string;
   manual_db_nums: number[];
   manual_refnos: string[];
+  enabled_nouns?: string[] | null;
+  excluded_nouns?: string[] | null;
+  debug_limit_per_noun_type?: number | null;
   project_name: string;
   project_path: string;
   project_code: number;
@@ -478,9 +481,11 @@ function normalizeTaskType(type: unknown): Task['type'] {
     'DataParsing': 'DataParsingWizard',
     'ModelGeneration': 'DataGeneration',
     'DataGeneration': 'DataGeneration',
+    'RefnoModelGeneration': 'DataGeneration',
     'SpatialTreeGeneration': 'DataGeneration',
     'FullSync': 'DataParsingWizard',
     'IncrementalSync': 'DataParsingWizard',
+    'ModelExport': 'ModelExport',
   };
   return typeMap[typeStr] || 'DataParsingWizard';
 }

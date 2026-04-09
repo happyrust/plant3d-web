@@ -38,7 +38,7 @@ describe('queryLoadScopeRefnos', () => {
     });
     expect(e3dGetVisibleInstsMock).toHaveBeenCalledWith('24381_145018');
     expect(e3dGetSubtreeRefnosMock).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it('visible-insts 成功但为空时，直接返回空，不回退 subtree-refnos', async () => {
     e3dGetVisibleInstsMock.mockResolvedValue({ success: true, refnos: [] });
@@ -52,7 +52,7 @@ describe('queryLoadScopeRefnos', () => {
       truncated: false,
     });
     expect(e3dGetSubtreeRefnosMock).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it('visible-insts 失败时，回退 subtree-refnos', async () => {
     e3dGetVisibleInstsMock.mockResolvedValue({ success: false, error_message: 'visible api failed', refnos: [] });

@@ -231,7 +231,7 @@
             class="advanced-toggle px-0"
             :append-icon="modelGenAdvancedOpen ? 'mdi-chevron-up' : 'mdi-chevron-down'"
             @click="modelGenAdvancedOpen = !modelGenAdvancedOpen">
-            高级：布尔运算、Web 数据包、网格容差、并发、Noun 过滤…
+            高级：布尔运算、网格容差、Noun 过滤…
           </v-btn>
 
           <v-expand-transition>
@@ -244,35 +244,15 @@
               </div>
 
               <div class="form-group">
-                <v-checkbox v-model="formData.exportWebBundle"
-                  label="导出 Web 数据包"
+                <label class="form-label">网格容差比例</label>
+                <v-text-field v-model.number="formData.meshTolRatio"
+                  variant="outlined"
                   density="compact"
-                  hide-details
-                  hint="自动生成 export-all-relates 数据包用于 Web 查看器" />
-              </div>
-
-              <div class="form-row">
-                <div class="form-group flex-1">
-                  <label class="form-label">网格容差比例</label>
-                  <v-text-field v-model.number="formData.meshTolRatio"
-                    variant="outlined"
-                    density="compact"
-                    type="number"
-                    step="0.001"
-                    min="0.001"
-                    max="1"
-                    :error-messages="errors.meshTolRatio" />
-                </div>
-                <div class="form-group flex-1">
-                  <label class="form-label">最大并发数</label>
-                  <v-text-field v-model.number="formData.maxConcurrent"
-                    variant="outlined"
-                    density="compact"
-                    type="number"
-                    min="1"
-                    max="16"
-                    :error-messages="errors.maxConcurrent" />
-                </div>
+                  type="number"
+                  step="0.001"
+                  min="0.001"
+                  max="1"
+                  :error-messages="errors.meshTolRatio" />
               </div>
 
               <div class="form-group">
@@ -307,9 +287,9 @@
               </div>
 
               <div class="form-group">
-                <label class="form-label">Limit instances per noun type (optional, for testing)</label>
+                <label class="form-label">每种 Noun 的实例上限（可选）</label>
                 <v-text-field v-model="formData.limitPerNounType"
-                  placeholder="Leave empty for no limit"
+                  placeholder="留空表示不限制"
                   variant="outlined"
                   density="compact"
                   type="number"
@@ -397,10 +377,6 @@
             <div class="preview-item">
               <span class="preview-label">网格容差</span>
               <span class="preview-value">{{ formData.meshTolRatio }}</span>
-            </div>
-            <div class="preview-item">
-              <span class="preview-label">并发数</span>
-              <span class="preview-value">{{ formData.maxConcurrent }}</span>
             </div>
             <div class="preview-item">
               <span class="preview-label">Noun 过滤</span>

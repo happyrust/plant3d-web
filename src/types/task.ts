@@ -46,8 +46,9 @@ export type ModelGenParameters = {
   generateSpatialTree: boolean;
   applyBooleanOperation: boolean;
   meshTolRatio: number;
-  maxConcurrent?: number;
-  exportWebBundle?: boolean;  // 导出 Web 数据包（默认开启）
+  enabledNouns?: string[];
+  excludedNouns?: string[];
+  limitPerNounType?: number;
 };
 
 /** 导出模型任务参数 */
@@ -81,6 +82,9 @@ export type TaskConfig = {
   apply_boolean_operation: boolean;
   mesh_tol_ratio: number;
   room_keyword: string;
+  enabled_nouns?: string[] | null;
+  excluded_nouns?: string[] | null;
+  debug_limit_per_noun_type?: number | null;
 };
 
 // ============ 任务实体 ============

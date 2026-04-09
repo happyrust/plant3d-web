@@ -166,6 +166,19 @@
                 placeholder="例如：PIPE,EQUI,BRAN"
                 class="h-10 w-full rounded-md border border-gray-200 bg-white px-3 font-mono text-sm text-gray-900 outline-none focus:border-[#FF6B00]" />
             </label>
+            <div class="text-xs text-gray-500">
+              <div class="mb-1 block">专业筛选</div>
+              <div class="flex flex-wrap gap-2">
+                <button v-for="spec in specOptions"
+                  :key="spec.value"
+                  type="button"
+                  class="rounded-full border px-3 py-1.5 transition-colors"
+                  :class="selectedSpecValues.has(spec.value) ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                  @click="toggleSpecValue(spec.value)">
+                  {{ spec.label }}
+                </button>
+              </div>
+            </div>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">关键字（Refno / 名称）</span>
               <input v-model="draft.keyword"
@@ -229,6 +242,18 @@
               <button type="button" class="rounded-md border border-gray-200 px-2 py-2 text-xs text-gray-600 hover:bg-gray-50" @click="restoreAll">
                 恢复场景
               </button>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-2 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isBusy"
+                @click="loadCurrentResults">
+                加载当前筛选结果
+              </button>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-2 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isBusy"
+                @click="loadUnloadedResults">
+                只加载未加载结果
+              </button>
             </div>
           </div>
 
@@ -251,10 +276,25 @@
           <div v-else class="max-h-[320px] overflow-y-auto px-3 py-3">
             <div v-for="group in resultSet?.groups ?? []" :key="group.specValue" class="mb-4 last:mb-0">
               <div class="mb-2 flex items-center justify-between">
-                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  {{ group.specName }}
+                <div>
+                  <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {{ group.specName }}
+                  </div>
+                  <div class="mt-1 text-xs text-gray-400">{{ group.count }} 项</div>
                 </div>
-                <div class="text-xs text-gray-400">{{ group.count }} 项</div>
+                <div class="flex items-center gap-2">
+                  <button type="button"
+                    class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="isBusy"
+                    @click="loadSpecGroup(group.specValue)">
+                    加载本专业
+                  </button>
+                  <button type="button"
+                    class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
+                    @click="showOnlyGroup(group.specValue)">
+                    仅显示本专业
+                  </button>
+                </div>
               </div>
 
               <div class="space-y-2">
@@ -313,6 +353,7 @@ import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Searc
 import type { SpatialQueryMode, SpatialQueryResultItem } from '@/types/spatialQuery';
 
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
+import { SITE_SPEC_OPTIONS } from '@/types/spec';
 
 const props = defineProps<{
   open: boolean;
@@ -336,13 +377,17 @@ const {
   submitQuery,
   clearResults,
   activateResult,
+  loadResults,
+  showOnlySpecGroup,
   toggleResultVisible,
   setAllResultsVisible,
   isolateResults,
   restoreScene,
 } = spatialQuery;
 
-const isBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'flying-to-result'].includes(status.value));
+const isBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
+const specOptions = SITE_SPEC_OPTIONS;
+const selectedSpecValues = computed(() => new Set(draft.specValues));
 
 const showCoordinateInputs = computed(() => {
   return (draft.mode === 'range' && (draft.rangeCenterSource === 'coordinates' || draft.rangeCenterSource === 'pick'))
@@ -365,6 +410,8 @@ const statusLabel = computed(() => {
       return '合并结果...';
     case 'loading-model-for-result':
       return '加载模型...';
+    case 'loading-results-batch':
+      return '批量加载模型...';
     case 'flying-to-result':
       return '定位结果...';
     default:
@@ -396,6 +443,16 @@ function startPick() {
   startPickCenter();
 }
 
+function toggleSpecValue(specValue: number) {
+  const next = new Set(draft.specValues);
+  if (next.has(specValue)) {
+    next.delete(specValue);
+  } else {
+    next.add(specValue);
+  }
+  draft.specValues = Array.from(next).sort((a, b) => a - b);
+}
+
 function focusItem(item: SpatialQueryResultItem) {
   void activateResult(item);
 }
@@ -418,6 +475,22 @@ function isolateAll() {
 
 function restoreAll() {
   restoreScene();
+}
+
+function loadCurrentResults() {
+  void loadResults({ flyTo: true });
+}
+
+function loadUnloadedResults() {
+  void loadResults({ onlyUnloaded: true, flyTo: true });
+}
+
+function loadSpecGroup(specValue: number) {
+  void loadResults({ specValue, flyTo: true });
+}
+
+function showOnlyGroup(specValue: number) {
+  showOnlySpecGroup(specValue);
 }
 
 function formatDistance(distance: number) {

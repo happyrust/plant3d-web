@@ -739,6 +739,75 @@ async function querySubtreeRefnosSingleDb(
   return { refnos, truncated };
 }
 
+function sortUniqueRefnos(refnos: string[], limit?: number): string[] {
+  const out = Array.from(new Set(refnos.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  return typeof limit === 'number' ? out.slice(0, limit) : out;
+}
+
+async function queryNodeNounSingleDb(dbnum: number, nodeId: bigint): Promise<string | null> {
+  const treeFile = await ensureTreeFile(dbnum);
+  const rows = await queryRows(`
+    SELECT noun
+    FROM parquet_scan('${treeFile}')
+    WHERE id = ${nodeId.toString()}
+    LIMIT 1
+  `);
+  const noun = String(rows?.[0]?.noun || '').trim().toUpperCase();
+  return noun || null;
+}
+
+async function queryChildRefnosSingleDb(
+  dbnum: number,
+  parentId: bigint,
+  params?: { limit?: number }
+): Promise<string[]> {
+  const treeFile = await ensureTreeFile(dbnum);
+  const limit = params?.limit === undefined ? 200_000 : Math.max(1, Math.min(params.limit, 200_000));
+  const rows = await queryRows(`
+    SELECT refno_str AS refno
+    FROM parquet_scan('${treeFile}')
+    WHERE parent = ${parentId.toString()}
+    ORDER BY id
+    LIMIT ${Math.floor(limit)}
+  `);
+  return rows.map((r) => String(r.refno || '')).filter(Boolean);
+}
+
+async function queryDescendantRefnosByNounsSingleDb(
+  dbnum: number,
+  rootId: bigint,
+  nouns: string[],
+  params?: { limit?: number }
+): Promise<string[]> {
+  const treeFile = await ensureTreeFile(dbnum);
+  const limit = params?.limit === undefined ? 200_000 : Math.max(1, Math.min(params.limit, 200_000));
+  const normalizedNouns = nouns.map((noun) => noun.trim().toUpperCase()).filter(Boolean);
+  if (normalizedNouns.length === 0) return [];
+  const nounList = normalizedNouns.map((noun) => `'${escapeSqlLike(noun)}'`).join(', ');
+
+  const rows = await queryRows(`
+    WITH RECURSIVE tree AS (
+      SELECT id, parent, refno_str, noun
+      FROM parquet_scan('${treeFile}')
+    ),
+    subtree(id) AS (
+      SELECT id FROM tree WHERE id = ${rootId.toString()}
+      UNION ALL
+      SELECT t.id
+      FROM tree t
+      JOIN subtree s ON t.parent = s.id
+    )
+    SELECT t.refno_str AS refno
+    FROM tree t
+    JOIN subtree s ON t.id = s.id
+    WHERE t.id != ${rootId.toString()} AND upper(t.noun) IN (${nounList})
+    ORDER BY t.id
+    LIMIT ${Math.floor(limit)}
+  `);
+
+  return rows.map((r) => String(r.refno || '')).filter(Boolean);
+}
+
 export async function e3dParquetGetSubtreeRefnos(
   refno: string,
   params?: { includeSelf?: boolean; maxDepth?: number; limit?: number }
@@ -874,6 +943,32 @@ async function queryVisibleInstRefnosSingleDb(
   return rows.map((r) => String(r.refno || '')).filter(Boolean);
 }
 
+async function queryVisibleLoadScopeRefnosSingleDb(
+  dbnum: number,
+  rootId: bigint,
+  params?: { limit?: number }
+): Promise<string[]> {
+  const limit = params?.limit === undefined ? 200_000 : Math.max(1, Math.min(params.limit, 200_000));
+  const noun = await queryNodeNounSingleDb(dbnum, rootId);
+
+  if (noun === 'BRAN' || noun === 'HANG') {
+    return sortUniqueRefnos(await queryChildRefnosSingleDb(dbnum, rootId, { limit }), limit);
+  }
+
+  const ordinaryVisible = await queryVisibleInstRefnosSingleDb(dbnum, rootId, { limit });
+  const branHangRoots = await queryDescendantRefnosByNounsSingleDb(dbnum, rootId, ['BRAN', 'HANG'], { limit });
+  const out = [...ordinaryVisible];
+
+  for (const branHangRoot of branHangRoots) {
+    out.push(branHangRoot);
+    const parsed = parseRefno(branHangRoot);
+    if (!parsed) continue;
+    out.push(...await queryChildRefnosSingleDb(dbnum, parsed.id, { limit }));
+  }
+
+  return sortUniqueRefnos(out, limit);
+}
+
 export async function e3dParquetGetVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
   try {
     const world = await ensureWorldInfo();
@@ -909,7 +1004,7 @@ export async function e3dParquetGetVisibleInsts(refno: string): Promise<VisibleI
         const p = parseRefno(s.refno);
         if (!p) continue;
         try {
-          const list = await queryVisibleInstRefnosSingleDb(s.dbnum, p.id, { limit: limit - out.length });
+          const list = await queryVisibleLoadScopeRefnosSingleDb(s.dbnum, p.id, { limit: limit - out.length });
           for (const r of list) push(r);
         } catch {
           // 忽略单库失败（可能缺少 tree/instances parquet）
@@ -926,7 +1021,7 @@ export async function e3dParquetGetVisibleInsts(refno: string): Promise<VisibleI
     const dbnum = resolveDbnumByRef0(meta, parsed.ref0);
     if (!dbnum) return { success: false, refno: parsed.str, refnos: [], error_message: 'resolve_dbnum_for_refno failed' };
 
-    const list = await queryVisibleInstRefnosSingleDb(dbnum, parsed.id, { limit });
+    const list = await queryVisibleLoadScopeRefnosSingleDb(dbnum, parsed.id, { limit });
     return { success: true, refno: parsed.str, refnos: list, error_message: null };
   } catch (e) {
     return { success: false, refno, refnos: [], error_message: e instanceof Error ? e.message : String(e) };
@@ -1007,4 +1102,3 @@ export async function e3dParquetResolveDbnumForRefno(refno: string): Promise<num
     return null;
   }
 }
-

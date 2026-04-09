@@ -14,6 +14,7 @@ export type SpatialQueryStatus =
   | 'merging-results'
   | 'ready'
   | 'loading-model-for-result'
+  | 'loading-results-batch'
   | 'flying-to-result'
   | 'error';
 

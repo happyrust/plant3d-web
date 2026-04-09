@@ -1,15 +1,21 @@
 import { computed, reactive, ref, watch, type Ref } from 'vue';
 
+import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
 import {
   queryNearbyByPosition,
   querySpatialIndex,
   type SpatialQueryResult as ApiSpatialQueryResult,
   type SpatialQueryResultItem as ApiSpatialQueryResultItem,
 } from '@/api/genModelSpatialApi';
+import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import {
   findNounByRefnoAcrossAllDbnos,
   findSpecValueByRefnoAcrossAllDbnos,
+  loadDbnoInstancesForVisibleRefnosDtx,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { triggerBatchGenerateSse } from '@/composables/useDbnoInstancesJsonLoader';
+import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
+import { AUTO_GENERATION_ENABLED } from '@/composables/useModelGeneration';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
@@ -47,6 +53,11 @@ type ViewerLike = {
   };
 };
 
+type ViewerRuntimeLike = ViewerLike & {
+  __dtxLayer?: unknown;
+  __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void;
+};
+
 type SelectionLike = {
   selectedRefno: Ref<string | null>;
 };
@@ -57,6 +68,17 @@ type ToolStoreLike = {
   setPickedQueryCenter: (value: { entityId: string; worldPos: [number, number, number] } | null) => void;
 };
 
+type BatchLoadOptions = {
+  flyTo?: boolean;
+};
+
+type BatchLoadResult = {
+  ok: string[];
+  fail: { refno: string; error: string | null }[];
+};
+
+type BatchLoadRefnosFn = (refnos: string[], options?: BatchLoadOptions) => Promise<BatchLoadResult>;
+
 type SpatialQueryStoreOptions = {
   viewerRef?: Ref<ViewerLike | null>;
   selection?: SelectionLike;
@@ -64,6 +86,7 @@ type SpatialQueryStoreOptions = {
   queryNearbyByPosition?: typeof queryNearbyByPosition;
   querySpatialIndex?: typeof querySpatialIndex;
   createRequestId?: () => string;
+  batchLoadRefnos?: BatchLoadRefnosFn;
 };
 
 function createDefaultDraft(): SpatialQueryDraft {
@@ -132,6 +155,32 @@ function toSpecName(specValue: number): string {
 
 function createRequestId(): string {
   return `spatial-query-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeRefno(refno: string): string {
+  return String(refno || '').trim().replace(/\//g, '_');
+}
+
+function uniqStrings(list: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of list) {
+    const value = normalizeRefno(raw);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function chunkBySize<T>(items: T[], size: number): T[][] {
+  if (items.length === 0) return [];
+  const safeSize = Math.max(1, Math.floor(size));
+  const chunks: T[][] = [];
+  for (let start = 0; start < items.length; start += safeSize) {
+    chunks.push(items.slice(start, start + safeSize));
+  }
+  return chunks;
 }
 
 function resolveLoadedRefnos(viewer: ViewerLike): string[] {
@@ -233,6 +282,239 @@ function toSpatialItemFromApi(item: ApiSpatialQueryResultItem, loaded: boolean, 
   };
 }
 
+function syncResultSetSummary(current: SpatialQueryResultSet): SpatialQueryResultSet {
+  const items = sortItems(current.items, current.request.sortBy);
+  return {
+    ...current,
+    items,
+    total: items.length,
+    loadedCount: items.filter((item) => item.loaded).length,
+    unloadedCount: items.filter((item) => !item.loaded).length,
+    groups: buildGroups(items),
+  };
+}
+
+async function loadRefnosBySource(
+  viewer: ViewerRuntimeLike,
+  dtxLayer: unknown,
+  dbno: number,
+  refnos: string[],
+  source: 'parquet' | 'backend',
+  options: { forceReload?: boolean } = {},
+): Promise<{ ok: string[]; missing: string[] }> {
+  const ok: string[] = [];
+  const missing: string[] = [];
+
+  for (const batch of chunkBySize(refnos, 1000)) {
+    const result = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer as any, dbno, batch, {
+      lodAssetKey: 'L1',
+      debug: false,
+      dataSource: source,
+      forceReloadRefnos: options.forceReload ? batch : undefined,
+    });
+    viewer.__dtxAfterInstancesLoaded?.(dbno, batch);
+    const missingSet = new Set(result.missingRefnos.map((item) => normalizeRefno(item)));
+    for (const refno of batch) {
+      if (missingSet.has(refno)) {
+        missing.push(refno);
+      } else {
+        ok.push(refno);
+      }
+    }
+  }
+
+  return {
+    ok: uniqStrings(ok),
+    missing: uniqStrings(missing),
+  };
+}
+
+async function generateMissingRefnos(
+  viewer: ViewerRuntimeLike,
+  dtxLayer: unknown,
+  dbno: number,
+  refnos: string[],
+): Promise<{ ok: string[]; fail: string[] }> {
+  const okSet = new Set<string>();
+  const backendMissing = new Set<string>();
+  const normalized = uniqStrings(refnos);
+  if (normalized.length === 0) {
+    return { ok: [], fail: [] };
+  }
+
+  try {
+    const result = await triggerBatchGenerateSse(normalized, {
+      onBatchDone: async (update) => {
+        const readyRefnos = uniqStrings(update.readyRefnos.map((item) => normalizeRefno(item)));
+        if (readyRefnos.length === 0) return;
+
+        const loadResult = await loadRefnosBySource(viewer, dtxLayer, dbno, readyRefnos, 'backend', {
+          forceReload: true,
+        });
+        loadResult.ok.forEach((refno) => okSet.add(refno));
+        loadResult.missing.forEach((refno) => backendMissing.add(refno));
+
+        try {
+          await enqueueParquetIncremental(dbno, readyRefnos);
+        } catch {
+          // ignore parquet incremental enqueue failures for spatial-query batch load
+        }
+      },
+      skipOnError: true,
+      exportInstances: false,
+      mergeInstances: false,
+    });
+
+    const failed = uniqStrings([
+      ...result.failedRefnos.map((item) => normalizeRefno(item)),
+      ...Array.from(backendMissing),
+    ]).filter((refno) => !okSet.has(refno));
+
+    return {
+      ok: uniqStrings(Array.from(okSet)),
+      fail: failed,
+    };
+  } catch {
+    return {
+      ok: uniqStrings(Array.from(okSet)),
+      fail: normalized.filter((refno) => !okSet.has(refno)),
+    };
+  }
+}
+
+async function batchLoadSpatialQueryRefnos(
+  viewerRef: Ref<ViewerLike | null>,
+  refnos: string[],
+  options: BatchLoadOptions = {},
+): Promise<BatchLoadResult> {
+  const viewer = viewerRef.value as ViewerRuntimeLike | null;
+  const normalizedRefnos = uniqStrings(refnos);
+  if (normalizedRefnos.length === 0) {
+    return { ok: [], fail: [] };
+  }
+  if (!viewer) {
+    return {
+      ok: [],
+      fail: normalizedRefnos.map((refno) => ({ refno, error: '查看器未就绪' })),
+    };
+  }
+
+  const dtxLayer = viewer.__dtxLayer;
+  if (!dtxLayer) {
+    return {
+      ok: [],
+      fail: normalizedRefnos.map((refno) => ({ refno, error: 'DTXLayer 未初始化，无法批量加载模型' })),
+    };
+  }
+
+  const failMap = new Map<string, string | null>();
+  const groupedByDbno = new Map<number, string[]>();
+
+  try {
+    await ensureDbMetaInfoLoaded();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: [],
+      fail: normalizedRefnos.map((refno) => ({ refno, error: message })),
+    };
+  }
+
+  for (const refno of normalizedRefnos) {
+    try {
+      const dbno = getDbnumByRefno(refno);
+      const list = groupedByDbno.get(dbno) ?? [];
+      list.push(refno);
+      groupedByDbno.set(dbno, list);
+    } catch (error) {
+      failMap.set(refno, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const parquetLoader = useDbnoInstancesParquetLoader();
+  const okSet = new Set<string>();
+
+  for (const [dbno, groupRefnos] of groupedByDbno.entries()) {
+    const normalizedGroup = uniqStrings(groupRefnos);
+    if (normalizedGroup.length === 0) continue;
+
+    let pending = normalizedGroup.slice();
+    const groupOk = new Set<string>();
+
+    const parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
+    if (parquetAvailable) {
+      try {
+        const parquetResult = await loadRefnosBySource(viewer, dtxLayer, dbno, pending, 'parquet');
+        parquetResult.ok.forEach((refno) => groupOk.add(refno));
+        pending = parquetResult.missing;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        pending.forEach((refno) => failMap.set(refno, message));
+        pending = normalizedGroup.filter((refno) => !groupOk.has(refno));
+      }
+    }
+
+    if (pending.length > 0) {
+      try {
+        const backendResult = await loadRefnosBySource(viewer, dtxLayer, dbno, pending, 'backend', {
+          forceReload: parquetAvailable,
+        });
+        backendResult.ok.forEach((refno) => {
+          groupOk.add(refno);
+          failMap.delete(refno);
+        });
+        pending = backendResult.missing;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        pending.forEach((refno) => failMap.set(refno, message));
+        pending = [];
+      }
+    }
+
+    if (pending.length > 0 && AUTO_GENERATION_ENABLED) {
+      const generated = await generateMissingRefnos(viewer, dtxLayer, dbno, pending);
+      generated.ok.forEach((refno) => {
+        groupOk.add(refno);
+        failMap.delete(refno);
+      });
+      pending = generated.fail;
+    }
+
+    pending.forEach((refno) => {
+      if (!groupOk.has(refno)) {
+        failMap.set(refno, failMap.get(refno) ?? '加载模型失败');
+      }
+    });
+
+    const loadedGroup = uniqStrings(Array.from(groupOk));
+    if (loadedGroup.length > 0) {
+      viewer.scene.ensureRefnos(loadedGroup);
+      viewer.scene.setObjectsVisible(loadedGroup, true);
+      loadedGroup.forEach((refno) => {
+        okSet.add(refno);
+        failMap.delete(refno);
+      });
+    }
+  }
+
+  const ok = uniqStrings(Array.from(okSet));
+
+  if (options.flyTo && ok.length > 0) {
+    const flyTargets = ok.length > 5000 ? ok.slice(0, 5000) : ok;
+    const aabb = viewer.scene.getAABB(flyTargets);
+    if (aabb) {
+      viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+    }
+  }
+
+  return {
+    ok,
+    fail: Array.from(failMap.entries())
+      .filter(([refno]) => !okSet.has(refno))
+      .map(([refno, error]) => ({ refno, error })),
+  };
+}
+
 export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) {
   const viewerRef = options.viewerRef ?? useViewerContext().viewerRef;
   const selection = options.selection ?? useSelectionStore();
@@ -240,6 +522,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const queryNearby = options.queryNearbyByPosition ?? queryNearbyByPosition;
   const queryByIndex = options.querySpatialIndex ?? querySpatialIndex;
   const nextRequestId = options.createRequestId ?? createRequestId;
+  const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
+    return batchLoadSpatialQueryRefnos(viewerRef, refnos, loadOptions);
+  });
 
   const draft = reactive<SpatialQueryDraft>(createDefaultDraft());
   const status = ref<SpatialQueryStatus>('idle');
@@ -279,6 +564,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   function clearResults() {
     resultSet.value = null;
     activeResultRefno.value = null;
+  }
+
+  function commitResultSet(next: SpatialQueryResultSet | null) {
+    resultSet.value = next ? syncResultSetSummary(next) : null;
   }
 
   function setMode(mode: SpatialQueryMode) {
@@ -508,6 +797,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       status.value = 'querying-server';
       const serverOptions = {
         nouns: request.filters.nouns.length > 0 ? request.filters.nouns.join(',') : undefined,
+        spec_values: request.filters.specValues.length > 0 ? request.filters.specValues.join(',') : undefined,
         max_results: request.limit,
         shape: request.shape,
       };
@@ -531,7 +821,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       }
 
       status.value = 'merging-results';
-      resultSet.value = mergeResults(request, localItems, serverResp);
+      commitResultSet(mergeResults(request, localItems, serverResp));
 
       if (serverFallbackRefno) {
         resultSet.value.warnings.push('起始 Refno 未在当前 Viewer 中加载，已回退为服务端 Refno 周边查询');
@@ -564,6 +854,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     if (currentItem) {
       currentItem.loaded = true;
       currentItem.visible = true;
+    }
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
     }
   }
 
@@ -600,6 +893,57 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         currentItem.loaded = true;
         currentItem.visible = true;
       }
+      if (resultSet.value) {
+        commitResultSet(resultSet.value);
+      }
+      status.value = 'ready';
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err);
+      status.value = 'error';
+    }
+  }
+
+  function pickResultItems(options: { onlyUnloaded?: boolean; specValue?: number } = {}): SpatialQueryResultItem[] {
+    const items = resultSet.value?.items ?? [];
+    return items.filter((item) => {
+      if (options.onlyUnloaded && item.loaded) return false;
+      if (typeof options.specValue === 'number' && item.specValue !== options.specValue) return false;
+      return true;
+    });
+  }
+
+  async function loadResults(options: { onlyUnloaded?: boolean; specValue?: number; flyTo?: boolean } = {}) {
+    const targets = pickResultItems(options);
+    if (targets.length === 0) {
+      status.value = 'ready';
+      return;
+    }
+
+    try {
+      error.value = null;
+      status.value = 'loading-results-batch';
+      const result = await batchLoadRefnos(
+        targets.map((item) => item.refno),
+        { flyTo: options.flyTo }
+      );
+      const okSet = new Set(result.ok.map((item) => normalizeRefno(item)));
+
+      if (resultSet.value) {
+        for (const item of resultSet.value.items) {
+          if (okSet.has(item.refno)) {
+            item.loaded = true;
+            item.visible = true;
+          }
+        }
+        commitResultSet(resultSet.value);
+      }
+
+      if (result.fail.length > 0) {
+        error.value = result.fail.length === 1
+          ? (result.fail[0]?.error || `加载模型失败: ${result.fail[0]?.refno}`)
+          : `有 ${result.fail.length} 个模型加载失败`;
+      }
+
       status.value = 'ready';
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err);
@@ -623,6 +967,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     items.forEach((item) => {
       item.visible = visible;
     });
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
+    }
   }
 
   function isolateResults() {
@@ -641,6 +988,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         item.visible = true;
       });
     }
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
+    }
   }
 
   function restoreScene() {
@@ -649,6 +999,33 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const all = viewer.scene.objectIds.slice();
     if (all.length > 0) {
       viewer.scene.setObjectsXRayed(all, false);
+    }
+  }
+
+  function showOnlySpecGroup(specValue: number) {
+    const viewer = viewerRef.value;
+    const items = resultSet.value?.items ?? [];
+    if (!viewer || items.length === 0) return;
+
+    const showRefnos = items
+      .filter((item) => item.specValue === specValue)
+      .map((item) => item.refno);
+    const hideRefnos = items
+      .filter((item) => item.specValue !== specValue)
+      .map((item) => item.refno);
+
+    if (showRefnos.length > 0) {
+      viewer.scene.setObjectsVisible(showRefnos, true);
+    }
+    if (hideRefnos.length > 0) {
+      viewer.scene.setObjectsVisible(hideRefnos, false);
+    }
+
+    items.forEach((item) => {
+      item.visible = item.specValue === specValue;
+    });
+    if (resultSet.value) {
+      commitResultSet(resultSet.value);
     }
   }
 
@@ -666,6 +1043,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     resetQuery,
     clearResults,
     activateResult,
+    loadResults,
+    showOnlySpecGroup,
     toggleResultVisible,
     setAllResultsVisible,
     isolateResults,

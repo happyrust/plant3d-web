@@ -61,4 +61,27 @@ describe('genModelSpatialApi', () => {
     expect(url.searchParams.get('distance')).toBe('5000');
     expect(url.searchParams.get('include_self')).toBe('false');
   });
+
+  it('应透传 spec_values 专业过滤参数', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true, results: [] }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await querySpatialIndex({
+      mode: 'position',
+      x: 100,
+      y: 200,
+      z: 300,
+      radius: 400,
+      spec_values: '1,3',
+      nouns: 'PIPE,EQUI',
+    });
+
+    const requestUrl = String(fetchMock.mock.calls[0]?.[0]);
+    const url = new URL(requestUrl, 'http://localhost');
+
+    expect(url.searchParams.get('spec_values')).toBe('1,3');
+    expect(url.searchParams.get('nouns')).toBe('PIPE,EQUI');
+  });
 });

@@ -9,6 +9,13 @@ export enum SiteSpecValue {
   Hvac = 4,     // 暖通空调系统
 }
 
+export const SITE_SPEC_OPTIONS = [
+  { value: SiteSpecValue.Pipe, label: '管道系统' },
+  { value: SiteSpecValue.Elec, label: '电气系统' },
+  { value: SiteSpecValue.Inst, label: '仪表系统' },
+  { value: SiteSpecValue.Hvac, label: '暖通空调系统' },
+] as const;
+
 /**
  * 获取专业名称
  */

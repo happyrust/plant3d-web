@@ -148,4 +148,31 @@ describe('useTaskCreation', () => {
       }),
     }));
   });
+
+  it('submits refno model generation with noun filters', async () => {
+    const mounted = mountComposable();
+    await nextTick();
+
+    const api = mounted.getApi();
+    api.formData.name = 'Refno 模型生成';
+    api.formData.type = 'DataGeneration';
+    api.formData.refno = '24381_145018';
+    api.formData.enabledNouns = ['BRAN', 'HANG'];
+    api.formData.limitPerNounType = '8';
+
+    const ok = await api.submitTask();
+
+    expect(ok).toBe(true);
+    expect(taskCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Refno 模型生成',
+      task_type: 'DataGeneration',
+      config: expect.objectContaining({
+        manual_db_nums: [],
+        manual_refnos: ['24381_145018'],
+        enabled_nouns: ['BRAN', 'HANG'],
+        debug_limit_per_noun_type: 8,
+      }),
+    }));
+    expect(taskStartMock).toHaveBeenCalledWith('task-001');
+  });
 });

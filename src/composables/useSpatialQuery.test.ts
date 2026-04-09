@@ -87,6 +87,102 @@ describe('createSpatialQueryStore', () => {
     ]);
   });
 
+  it('范围查询应透传 specValues 并按专业过滤结果', async () => {
+    const viewer = createViewerStub();
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      truncated: false,
+      results: [
+        { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
+        { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
+      ],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+    });
+
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    store.draft.specValues = [1];
+
+    await store.submitQuery();
+
+    expect(queryNearbyByPosition).toHaveBeenCalledWith(5, 5, 5, 50, expect.objectContaining({
+      spec_values: '1',
+    }));
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
+    expect(store.resultSet.value?.groups.map((group) => group.specValue)).toEqual([1]);
+  });
+
+  it('批量加载当前筛选结果时应走精确 refno 批量加载并刷新统计', async () => {
+    const viewer = createViewerStub();
+    const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({
+      ok: refnos,
+      fail: [],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      batchLoadRefnos,
+    });
+
+    store.resultSet.value = {
+      request: {
+        mode: 'range',
+        centerSource: 'coordinates',
+        center: { x: 0, y: 0, z: 0 },
+        radius: 100,
+        shape: 'sphere',
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        limit: 100,
+        sortBy: 'specThenDistance',
+      },
+      items: [
+        {
+          refno: 'loaded_a',
+          noun: 'PIPE',
+          specValue: 1,
+          specName: '管道系统',
+          distance: 5,
+          loaded: true,
+          visible: true,
+          matchedBy: 'viewer-local',
+        },
+        {
+          refno: 'server_only',
+          noun: 'EQUI',
+          specValue: 2,
+          specName: '电气系统',
+          distance: 20,
+          loaded: false,
+          visible: false,
+          matchedBy: 'server-spatial-index',
+        },
+      ],
+      total: 2,
+      loadedCount: 1,
+      unloadedCount: 1,
+      truncated: false,
+      warnings: [],
+      groups: [],
+    };
+
+    await store.loadResults({ onlyUnloaded: true, flyTo: true });
+
+    expect(batchLoadRefnos).toHaveBeenCalledWith(['server_only'], expect.objectContaining({ flyTo: true }));
+    expect(store.resultSet.value?.loadedCount).toBe(2);
+    expect(store.resultSet.value?.unloadedCount).toBe(0);
+    expect(store.resultSet.value?.items.find((item) => item.refno === 'server_only')?.loaded).toBe(true);
+    expect(store.resultSet.value?.items.find((item) => item.refno === 'server_only')?.visible).toBe(true);
+  });
+
   it('点击未加载结果时应先请求加载，再飞行并选中', async () => {
     const viewer = createViewerStub();
     const requestId = 'req-1';

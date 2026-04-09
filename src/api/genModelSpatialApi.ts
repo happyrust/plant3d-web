@@ -74,6 +74,8 @@ export type SpatialQueryParams = {
   max_results?: number;
   /** noun 过滤（逗号分隔，如 "EQUI,PIPE,TUBI"） */
   nouns?: string;
+  /** 专业过滤（逗号分隔，如 "1,3"） */
+  spec_values?: string;
   /** 是否包含自身（mode=refno 时有效，默认 true） */
   include_self?: boolean;
   /** 查询形状：cube（立方体，默认）| sphere（球体） */
@@ -155,6 +157,7 @@ export async function querySpatialIndex(params: SpatialQueryParams): Promise<Spa
 
   if (params.max_results !== undefined) sp.set('max_results', String(params.max_results));
   if (params.nouns) sp.set('nouns', params.nouns);
+  if (params.spec_values) sp.set('spec_values', params.spec_values);
   if (params.include_self !== undefined) sp.set('include_self', String(params.include_self));
   if (params.shape) sp.set('shape', params.shape);
 
@@ -195,7 +198,7 @@ export async function queryNearbyByCenter(
   cy: number,
   cz: number,
   radius: number,
-  options?: { nouns?: string; max_results?: number; shape?: 'cube' | 'sphere' },
+  options?: { nouns?: string; spec_values?: string; max_results?: number; shape?: 'cube' | 'sphere' },
 ): Promise<SpatialQueryResult> {
   return querySpatialIndex({
     mode: 'bbox',
@@ -207,6 +210,7 @@ export async function queryNearbyByCenter(
     maxz: cz + radius,
     max_results: options?.max_results,
     nouns: options?.nouns,
+    spec_values: options?.spec_values,
     shape: options?.shape,
   });
 }
@@ -219,7 +223,7 @@ export async function queryNearbyByPosition(
   y: number,
   z: number,
   radius: number,
-  options?: { nouns?: string; max_results?: number; shape?: 'cube' | 'sphere' },
+  options?: { nouns?: string; spec_values?: string; max_results?: number; shape?: 'cube' | 'sphere' },
 ): Promise<SpatialQueryResult> {
   return querySpatialIndex({
     mode: 'position',
@@ -229,6 +233,7 @@ export async function queryNearbyByPosition(
     radius,
     max_results: options?.max_results,
     nouns: options?.nouns,
+    spec_values: options?.spec_values,
     shape: options?.shape,
   });
 }
