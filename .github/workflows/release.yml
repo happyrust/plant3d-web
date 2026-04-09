@@ -108,40 +108,39 @@ jobs:
             set -euo pipefail
 
             VERSION="${{ steps.version.outputs.VERSION }}"
-            APP_ROOT="/opt/plant3d-web"
-            RELEASE_DIR="\$APP_ROOT/releases/\$VERSION"
-            CURRENT_LINK="/opt/plant3d-web/current"
+            DEPLOY_DIR="/var/www/plant3d-web"
+            TMP_DIR="/tmp/plant3d-web-\$VERSION"
+            BACKUP_DIR="/tmp/plant3d-web-backup-\$VERSION"
 
-            mkdir -p "\$APP_ROOT/releases"
-
-            PREV_RELEASE=""
-            if [ -L "\$CURRENT_LINK" ]; then
-              PREV_RELEASE=\$(readlink -f "\$CURRENT_LINK")
-              echo "Previous release: \$PREV_RELEASE"
-            fi
-
-            rm -rf "\$RELEASE_DIR"
-            mkdir -p "\$RELEASE_DIR"
-            tar -xzf "/tmp/plant3d-web-\$VERSION.tar.gz" -C "\$RELEASE_DIR"
+            rm -rf "\$TMP_DIR" "\$BACKUP_DIR"
+            mkdir -p "\$TMP_DIR" "\$BACKUP_DIR"
+            tar -xzf "/tmp/plant3d-web-\$VERSION.tar.gz" -C "\$TMP_DIR"
             rm -f "/tmp/plant3d-web-\$VERSION.tar.gz"
 
-            test -f "\$RELEASE_DIR/index.html"
+            test -f "\$TMP_DIR/index.html"
 
-            ln -sfn "\$RELEASE_DIR" "\$CURRENT_LINK"
+            if [ -d "\$DEPLOY_DIR" ]; then
+              sudo rsync -a --delete "\$DEPLOY_DIR"/ "\$BACKUP_DIR"/
+            fi
+
+            sudo mkdir -p "\$DEPLOY_DIR"
+            sudo rsync -a --delete "\$TMP_DIR"/ "\$DEPLOY_DIR"/
+            sudo chown -R www-data:www-data "\$DEPLOY_DIR" 2>/dev/null || true
 
             if ! sudo nginx -t; then
-              if [ -n "\$PREV_RELEASE" ]; then
-                ln -sfn "\$PREV_RELEASE" "\$CURRENT_LINK"
+              if [ -d "\$BACKUP_DIR" ]; then
+                sudo rsync -a --delete "\$BACKUP_DIR"/ "\$DEPLOY_DIR"/
               fi
               exit 1
             fi
 
             if ! sudo systemctl reload nginx; then
-              if [ -n "\$PREV_RELEASE" ]; then
-                ln -sfn "\$PREV_RELEASE" "\$CURRENT_LINK"
+              if [ -d "\$BACKUP_DIR" ]; then
+                sudo rsync -a --delete "\$BACKUP_DIR"/ "\$DEPLOY_DIR"/
               fi
               exit 1
             fi
 
-            echo "Deployed frontend version \$VERSION to production"
+            rm -rf "\$TMP_DIR" "\$BACKUP_DIR"
+            echo "Deployed frontend version \$VERSION to \$DEPLOY_DIR"
           ENDSSH
