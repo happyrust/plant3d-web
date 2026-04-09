@@ -2,6 +2,12 @@ import type {
   WorkflowAnnotationCommentData,
   WorkflowRecordData,
 } from '@/api/reviewApi';
+import type {
+  MeasurementRecord,
+  MeasurementPoint,
+  XeokitAngleMeasurementRecord,
+  XeokitDistanceMeasurementRecord,
+} from '@/composables/useToolStore';
 
 import { fromBackendRole, type AnnotationComment } from '@/types/auth';
 
@@ -83,6 +89,112 @@ function dedupeReplayItems(items: unknown[]): unknown[] {
   return [...keyedItems.values(), ...anonymousItems];
 }
 
+function isMeasurementPoint(value: unknown): value is MeasurementPoint {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.entityId === 'string'
+    && Array.isArray(record.worldPos)
+    && record.worldPos.length === 3
+    && record.worldPos.every((entry) => typeof entry === 'number' && Number.isFinite(entry));
+}
+
+function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const id = typeof record.id === 'string' ? record.id.trim() : '';
+  const kind = typeof record.kind === 'string' ? record.kind.trim().toLowerCase() : '';
+  const origin = isMeasurementPoint(record.origin) ? record.origin : null;
+  const target = isMeasurementPoint(record.target) ? record.target : null;
+  const createdAt = typeof record.createdAt === 'number' ? record.createdAt : Date.now();
+  const visible = record.visible !== false;
+
+  if (!id || !origin || !target) return null;
+
+  if (kind === 'distance') {
+    return {
+      id,
+      kind: 'distance',
+      origin,
+      target,
+      visible,
+      createdAt,
+    };
+  }
+
+  const corner = isMeasurementPoint(record.corner) ? record.corner : null;
+  if (kind === 'angle' && corner) {
+    return {
+      id,
+      kind: 'angle',
+      origin,
+      corner,
+      target,
+      visible,
+      createdAt,
+    };
+  }
+
+  return null;
+}
+
+function toXeokitMeasurement(
+  measurement: MeasurementRecord,
+): XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord {
+  if (measurement.kind === 'angle') {
+    return {
+      id: measurement.id,
+      kind: 'angle',
+      origin: measurement.origin,
+      corner: measurement.corner,
+      target: measurement.target,
+      visible: measurement.visible,
+      approximate: false,
+      createdAt: measurement.createdAt,
+    };
+  }
+
+  return {
+    id: measurement.id,
+    kind: 'distance',
+    origin: measurement.origin,
+    target: measurement.target,
+    visible: measurement.visible,
+    approximate: false,
+    createdAt: measurement.createdAt,
+  };
+}
+
+function buildReplayMeasurements(measurements: unknown[]): {
+  measurements: unknown[];
+  xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
+  xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
+} {
+  const fallbackMeasurements: unknown[] = [];
+  const xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[] = [];
+  const xeokitAngleMeasurements: XeokitAngleMeasurementRecord[] = [];
+
+  for (const measurement of measurements) {
+    const normalized = normalizeReplayMeasurement(measurement);
+    if (!normalized) {
+      fallbackMeasurements.push(measurement);
+      continue;
+    }
+
+    const converted = toXeokitMeasurement(normalized);
+    if (converted.kind === 'angle') {
+      xeokitAngleMeasurements.push(converted);
+      continue;
+    }
+    xeokitDistanceMeasurements.push(converted);
+  }
+
+  return {
+    measurements: dedupeReplayItems(fallbackMeasurements) as unknown[],
+    xeokitDistanceMeasurements: dedupeReplayItems(xeokitDistanceMeasurements) as XeokitDistanceMeasurementRecord[],
+    xeokitAngleMeasurements: dedupeReplayItems(xeokitAngleMeasurements) as XeokitAngleMeasurementRecord[],
+  };
+}
+
 export function mergeWorkflowCommentsIntoRecords(
   records: WorkflowRecordData[],
   comments: WorkflowAnnotationCommentData[] = [],
@@ -106,21 +218,23 @@ export function mergeWorkflowCommentsIntoRecords(
 }
 
 export function buildReviewRecordReplayPayload(records: ReplayRecordLike[]): string {
-  const measurements = dedupeReplayItems(records.flatMap((record) => record.measurements ?? []));
+  const replayMeasurements = buildReplayMeasurements(
+    dedupeReplayItems(records.flatMap((record) => record.measurements ?? []))
+  );
   const annotations = dedupeReplayItems(records.flatMap((record) => record.annotations ?? []));
   const obbAnnotations = dedupeReplayItems(records.flatMap((record) => record.obbAnnotations ?? []));
   const cloudAnnotations = dedupeReplayItems(records.flatMap((record) => record.cloudAnnotations ?? []));
   const rectAnnotations = dedupeReplayItems(records.flatMap((record) => record.rectAnnotations ?? []));
   return JSON.stringify({
     version: 5,
-    measurements,
+    measurements: replayMeasurements.measurements,
     annotations,
     obbAnnotations,
     cloudAnnotations,
     rectAnnotations,
     dimensions: [],
-    xeokitDistanceMeasurements: [],
-    xeokitAngleMeasurements: [],
+    xeokitDistanceMeasurements: replayMeasurements.xeokitDistanceMeasurements,
+    xeokitAngleMeasurements: replayMeasurements.xeokitAngleMeasurements,
   });
 }
 

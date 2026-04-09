@@ -37,6 +37,7 @@ import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
 import {
+  buildReviewConfirmSnapshotPayload,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
   buildReviewConfirmSnapshotKey,
@@ -64,6 +65,7 @@ import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
+import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { getTaskStatusDisplayName, WORKFLOW_NODE_NAMES } from '@/types/auth';
 
@@ -701,8 +703,6 @@ const pendingAnnotationCount = computed(() => {
   );
 });
 
-const pendingMeasurementCount = computed(() => toolStore.measurementCount.value);
-
 const reviewerDirectLaunchActions = computed(() => [
   {
     id: 'annotation-text',
@@ -742,13 +742,16 @@ const reviewerMeasurementActions = computed(() => [
 const hasPendingData = computed(() => {
   return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
 });
-const currentDraftConfirmPayload = computed(() => ({
+const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
   annotations: [...toolStore.annotations.value],
   cloudAnnotations: [...toolStore.cloudAnnotations.value],
   rectAnnotations: [...toolStore.rectAnnotations.value],
   obbAnnotations: [...toolStore.obbAnnotations.value],
   measurements: [...toolStore.measurements.value],
+  xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
+  xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
 }));
+const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
 const confirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
 ));
@@ -823,12 +826,12 @@ function startRectAnnotation() {
 }
 
 function startDistanceMeasurement() {
-  toolStore.setToolMode('measure_distance');
+  emitCommand('measurement.distance');
   showMeasurementMenu.value = false;
 }
 
 function startAngleMeasurement() {
-  toolStore.setToolMode('measure_angle');
+  emitCommand('measurement.angle');
   showMeasurementMenu.value = false;
 }
 

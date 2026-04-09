@@ -1,3 +1,8 @@
+import type {
+  MeasurementRecord,
+  XeokitAngleMeasurementRecord,
+  XeokitDistanceMeasurementRecord,
+} from '@/composables/useToolStore';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
 const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
@@ -63,16 +68,88 @@ type ReviewConfirmSnapshotRecordLike = {
   measurements?: unknown[];
 };
 
+type ReviewConfirmSnapshotPayloadInput = ReviewConfirmSnapshotRecordLike & {
+  xeokitDistanceMeasurements?: XeokitDistanceMeasurementRecord[];
+  xeokitAngleMeasurements?: XeokitAngleMeasurementRecord[];
+};
+
+function convertXeokitMeasurementToClassic(
+  measurement: XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord,
+): MeasurementRecord {
+  if (measurement.kind === 'angle') {
+    return {
+      id: measurement.id,
+      kind: 'angle',
+      origin: measurement.origin,
+      corner: measurement.corner,
+      target: measurement.target,
+      visible: measurement.visible,
+      createdAt: measurement.createdAt,
+    };
+  }
+
+  return {
+    id: measurement.id,
+    kind: 'distance',
+    origin: measurement.origin,
+    target: measurement.target,
+    visible: measurement.visible,
+    createdAt: measurement.createdAt,
+  };
+}
+
+function dedupeSnapshotCollection(items: unknown[]): unknown[] {
+  const keyedItems = new Map<string, unknown>();
+  const anonymousItems = new Set<string>();
+  const dedupedAnonymousItems: unknown[] = [];
+
+  for (const item of items) {
+    const itemId = getSnapshotItemId(item);
+    if (itemId) {
+      keyedItems.set(itemId, item);
+      continue;
+    }
+
+    const itemKey = buildSnapshotItemKey(item);
+    if (anonymousItems.has(itemKey)) continue;
+    anonymousItems.add(itemKey);
+    dedupedAnonymousItems.push(item);
+  }
+
+  return [...keyedItems.values(), ...dedupedAnonymousItems];
+}
+
+export function buildReviewConfirmSnapshotPayload(
+  payload: ReviewConfirmSnapshotPayloadInput,
+): ReviewConfirmSnapshotPayload {
+  const xeokitMeasurements = [
+    ...(payload.xeokitDistanceMeasurements ?? [])
+      .filter((measurement) => !measurement.approximate)
+      .map(convertXeokitMeasurementToClassic),
+    ...(payload.xeokitAngleMeasurements ?? [])
+      .filter((measurement) => !measurement.approximate)
+      .map(convertXeokitMeasurementToClassic),
+  ];
+
+  return {
+    annotations: [...(payload.annotations ?? [])],
+    cloudAnnotations: [...(payload.cloudAnnotations ?? [])],
+    rectAnnotations: [...(payload.rectAnnotations ?? [])],
+    obbAnnotations: [...(payload.obbAnnotations ?? [])],
+    measurements: dedupeSnapshotCollection([...(payload.measurements ?? []), ...xeokitMeasurements]),
+  };
+}
+
 export function buildReviewConfirmSnapshotPayloadFromRecords(
   records: ReviewConfirmSnapshotRecordLike[]
 ): ReviewConfirmSnapshotPayload {
-  return {
+  return buildReviewConfirmSnapshotPayload({
     annotations: records.flatMap((record) => record.annotations ?? []),
     cloudAnnotations: records.flatMap((record) => record.cloudAnnotations ?? []),
     rectAnnotations: records.flatMap((record) => record.rectAnnotations ?? []),
     obbAnnotations: records.flatMap((record) => record.obbAnnotations ?? []),
     measurements: records.flatMap((record) => record.measurements ?? []),
-  };
+  });
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

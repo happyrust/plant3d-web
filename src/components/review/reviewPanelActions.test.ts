@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  buildReviewConfirmSnapshotPayload,
   canFinalizeAtCurrentNode,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
@@ -94,6 +95,64 @@ describe('reviewPanelActions', () => {
       expect.objectContaining({ action: 'submit', userName: '审核员小王', comment: '提交批准' }),
       expect.objectContaining({ action: 'approve', userName: '项目负责人', comment: '同意' }),
     ]);
+  });
+
+  it('buildReviewConfirmSnapshotPayload 会把已完成 xeokit 测量并入 measurements，并过滤草稿近似值', () => {
+    const payload = buildReviewConfirmSnapshotPayload({
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      measurements: [
+        {
+          id: 'classic-distance',
+          kind: 'distance',
+          origin: { entityId: 'pipe-a', worldPos: [0, 0, 0] },
+          target: { entityId: 'pipe-b', worldPos: [1, 0, 0] },
+          visible: true,
+          createdAt: 10,
+        },
+      ],
+      xeokitDistanceMeasurements: [
+        {
+          id: 'xeokit-distance-draft',
+          kind: 'distance',
+          origin: { entityId: 'pipe-c', worldPos: [0, 0, 0] },
+          target: { entityId: 'pipe-d', worldPos: [2, 0, 0] },
+          visible: true,
+          approximate: true,
+          createdAt: 20,
+        },
+        {
+          id: 'xeokit-distance-final',
+          kind: 'distance',
+          origin: { entityId: 'pipe-e', worldPos: [0, 0, 0] },
+          target: { entityId: 'pipe-f', worldPos: [3, 0, 0] },
+          visible: true,
+          approximate: false,
+          createdAt: 30,
+        },
+      ],
+      xeokitAngleMeasurements: [
+        {
+          id: 'xeokit-angle-final',
+          kind: 'angle',
+          origin: { entityId: 'pipe-g', worldPos: [0, 0, 0] },
+          corner: { entityId: 'pipe-h', worldPos: [1, 0, 0] },
+          target: { entityId: 'pipe-i', worldPos: [1, 1, 0] },
+          visible: true,
+          approximate: false,
+          createdAt: 40,
+        },
+      ],
+    });
+
+    expect(payload.measurements).toEqual([
+      expect.objectContaining({ id: 'classic-distance', kind: 'distance' }),
+      expect.objectContaining({ id: 'xeokit-distance-final', kind: 'distance' }),
+      expect.objectContaining({ id: 'xeokit-angle-final', kind: 'angle' }),
+    ]);
+    expect(payload.measurements).not.toContainEqual(expect.objectContaining({ id: 'xeokit-distance-draft' }));
   });
 
   it('confirmCurrentDataSafely 应等待保存成功后再清理工具数据', async () => {

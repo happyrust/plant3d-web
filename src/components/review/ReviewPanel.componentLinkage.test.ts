@@ -15,6 +15,7 @@ const sortedConfirmedRecords = { value: [] as unknown[] };
 const mocks = vi.hoisted(() => ({
   setSelectedRefno: vi.fn(),
   ensurePanelAndActivate: vi.fn(),
+  emitCommand: vi.fn(),
   showModelByRefnosWithAck: vi.fn(async () => ({
     ok: ['24381/145018'],
     fail: [],
@@ -60,6 +61,8 @@ vi.mock('@/composables/useToolStore', () => ({
     rectAnnotations: { value: [] },
     obbAnnotations: { value: [] },
     measurements: { value: [] },
+    xeokitDistanceMeasurements: { value: [] },
+    xeokitAngleMeasurements: { value: [] },
     clearAll: vi.fn(),
     setToolMode: vi.fn(),
     getAnnotationComments: vi.fn(() => []),
@@ -76,13 +79,20 @@ vi.mock('@/composables/useSelectionStore', () => ({
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
-  useViewerContext: () => ({ viewerRef: { value: null } }),
+  useViewerContext: () => ({
+    viewerRef: { value: null },
+    tools: { value: null },
+  }),
   waitForViewerReady: mocks.waitForViewerReady,
   showModelByRefnosWithAck: mocks.showModelByRefnosWithAck,
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: mocks.ensurePanelAndActivate,
+}));
+
+vi.mock('@/ribbon/commandBus', () => ({
+  emitCommand: mocks.emitCommand,
 }));
 
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
@@ -162,6 +172,7 @@ describe('ReviewPanel 构件明细联动', () => {
     currentTask.value = createTask();
     mocks.setSelectedRefno.mockClear();
     mocks.ensurePanelAndActivate.mockClear();
+    mocks.emitCommand.mockClear();
     mocks.showModelByRefnosWithAck.mockClear();
     mocks.waitForViewerReady.mockClear();
     mocks.loadReviewTasks.mockClear();

@@ -20,6 +20,8 @@ const toolStoreMock = {
   rectAnnotations: { value: [] as Record<string, unknown>[] },
   obbAnnotations: { value: [] as Record<string, unknown>[] },
   measurements: { value: [] as Record<string, unknown>[] },
+  xeokitDistanceMeasurements: { value: [] as Record<string, unknown>[] },
+  xeokitAngleMeasurements: { value: [] as Record<string, unknown>[] },
   annotationCount: { value: 0 },
   cloudAnnotationCount: { value: 0 },
   rectAnnotationCount: { value: 0 },
@@ -52,6 +54,8 @@ describe('ReviewConfirmation', () => {
     toolStoreMock.rectAnnotations.value = [];
     toolStoreMock.obbAnnotations.value = [];
     toolStoreMock.measurements.value = [];
+    toolStoreMock.xeokitDistanceMeasurements.value = [];
+    toolStoreMock.xeokitAngleMeasurements.value = [];
     toolStoreMock.annotationCount.value = 0;
     toolStoreMock.cloudAnnotationCount.value = 0;
     toolStoreMock.rectAnnotationCount.value = 0;
@@ -116,5 +120,54 @@ describe('ReviewConfirmation', () => {
       measurements: [],
     }));
     expect(emitToastMock).toHaveBeenCalledWith({ message: '确认数据已保存', level: 'success' });
+  });
+
+  it('xeokit 已完成测量会进入保存，草稿不会进入', async () => {
+    toolStoreMock.xeokitDistanceMeasurements.value = [
+      {
+        id: 'xeokit-draft',
+        kind: 'distance',
+        origin: { entityId: 'pipe-a', worldPos: [0, 0, 0] },
+        target: { entityId: 'pipe-b', worldPos: [1, 0, 0] },
+        visible: true,
+        approximate: true,
+        createdAt: 1,
+      },
+      {
+        id: 'xeokit-final',
+        kind: 'distance',
+        origin: { entityId: 'pipe-c', worldPos: [0, 0, 0] },
+        target: { entityId: 'pipe-d', worldPos: [2, 0, 0] },
+        visible: true,
+        approximate: false,
+        createdAt: 2,
+      },
+    ];
+    addConfirmedRecordMock.mockResolvedValue('record-2');
+
+    await mountComponent();
+
+    const confirmButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('确认完成'));
+    expect(confirmButton).toBeTruthy();
+
+    confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    await nextTick();
+
+    expect(addConfirmedRecordMock).toHaveBeenCalledTimes(1);
+    expect(addConfirmedRecordMock).toHaveBeenCalledWith(expect.objectContaining({
+      measurements: [
+        expect.objectContaining({
+          id: 'xeokit-final',
+          kind: 'distance',
+        }),
+      ],
+    }));
+    expect(addConfirmedRecordMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      measurements: expect.arrayContaining([
+        expect.objectContaining({ id: 'xeokit-draft' }),
+      ]),
+    }));
   });
 });

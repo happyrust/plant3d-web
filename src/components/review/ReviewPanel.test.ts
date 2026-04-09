@@ -76,6 +76,8 @@ const toolStoreMock = vi.hoisted(() => ({
   rectAnnotations: { value: [] },
   obbAnnotations: { value: [] },
   measurements: { value: [] },
+  xeokitDistanceMeasurements: { value: [] },
+  xeokitAngleMeasurements: { value: [] },
   addAnnotation: vi.fn(),
   addMeasurement: vi.fn(),
   clearAll: vi.fn(),
@@ -86,8 +88,16 @@ const dockApiMock = vi.hoisted(() => ({
   ensurePanelAndActivate: vi.fn(),
 }));
 
+const commandBusMock = vi.hoisted(() => ({
+  emitCommand: vi.fn(),
+}));
+
 vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: dockApiMock.ensurePanelAndActivate,
+}));
+
+vi.mock('@/ribbon/commandBus', () => ({
+  emitCommand: commandBusMock.emitCommand,
 }));
 
 vi.mock('@/composables/useSelectionStore', () => ({
@@ -204,7 +214,10 @@ describe('ReviewPanel', () => {
     toolStoreMock.addAnnotation.mockClear();
     toolStoreMock.addMeasurement.mockClear();
     toolStoreMock.setToolMode.mockClear();
+    toolStoreMock.xeokitDistanceMeasurements.value = [];
+    toolStoreMock.xeokitAngleMeasurements.value = [];
     dockApiMock.ensurePanelAndActivate.mockClear();
+    commandBusMock.emitCommand.mockClear();
   });
 
   it('confirmed record counts only canonical reviewer annotations', async () => {
@@ -402,13 +415,13 @@ describe('ReviewPanel', () => {
     const angleButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('角度测量')) as HTMLButtonElement | undefined;
     distanceButton?.click();
     await nextTick();
-    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('measure_distance');
+    expect(commandBusMock.emitCommand).toHaveBeenCalledWith('measurement.distance');
 
     findButton('创建测量')?.click();
     await nextTick();
     angleButton?.click();
     await nextTick();
-    expect(toolStoreMock.setToolMode).toHaveBeenCalledWith('measure_angle');
+    expect(commandBusMock.emitCommand).toHaveBeenCalledWith('measurement.angle');
 
     mounted.unmount();
   });

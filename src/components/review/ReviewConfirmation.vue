@@ -4,6 +4,7 @@ import { computed, ref } from 'vue';
 import { CheckCircle, MessageSquare, Ruler, X } from 'lucide-vue-next';
 
 import {
+  buildReviewConfirmSnapshotPayload,
   buildUnsavedReviewConfirmPayload,
   buildReviewConfirmSnapshotKey,
   buildReviewConfirmSnapshotPayloadFromRecords,
@@ -32,19 +33,20 @@ const pendingAnnotationCount = computed(() => {
   );
 });
 
-const pendingMeasurementCount = computed(() => toolStore.measurementCount.value);
-
 const hasPendingData = computed(() => {
   return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
 });
 
-const currentDraftConfirmPayload = computed(() => ({
+const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
   annotations: [...toolStore.annotations.value],
   cloudAnnotations: [...toolStore.cloudAnnotations.value],
   rectAnnotations: [...toolStore.rectAnnotations.value],
   obbAnnotations: [...toolStore.obbAnnotations.value],
   measurements: [...toolStore.measurements.value],
+  xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
+  xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
 }));
+const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
 
 const currentTaskConfirmedRecords = computed(() => {
   const taskId = reviewStore.currentTask.value?.id;

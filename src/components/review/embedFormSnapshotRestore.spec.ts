@@ -108,8 +108,12 @@ describe('restoreEmbedFormSnapshot', () => {
     const payload = JSON.parse(importTools.mock.calls[0][0] as string) as {
       annotations: { comments?: { authorRole: UserRole; content: string }[] }[];
       measurements: unknown[];
+      xeokitDistanceMeasurements: { approximate?: boolean }[];
     };
-    expect(payload.measurements).toHaveLength(1);
+    expect(payload.measurements).toEqual([]);
+    expect(payload.xeokitDistanceMeasurements).toEqual([
+      expect.objectContaining({ approximate: false }),
+    ]);
     expect(payload.annotations[0]?.comments?.[0]).toEqual(expect.objectContaining({
       authorRole: UserRole.PROOFREADER,
       content: '请复核',
