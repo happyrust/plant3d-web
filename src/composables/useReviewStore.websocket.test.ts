@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const reviewTaskGetHistoryMock = vi.fn(async () => ({ success: true, history: [] }));
 const reviewRecordGetByTaskIdMock = vi.fn(async () => ({ success: true, records: [] }));
+const reviewTaskGetByIdMock = vi.fn(async () => ({ success: false }));
 
 const webSocketCtor = vi.fn(() => {
   throw new Error('WebSocket should stay disabled in this test');
@@ -12,6 +13,7 @@ vi.mock('@/api/reviewApi', () => ({
   reviewRecordDelete: vi.fn(),
   reviewRecordGetByTaskId: reviewRecordGetByTaskIdMock,
   reviewRecordClearByTaskId: vi.fn(),
+  reviewTaskGetById: reviewTaskGetByIdMock,
   reviewTaskGetHistory: reviewTaskGetHistoryMock,
   getReviewUserWebSocketUrl: vi.fn(() => null),
 }));
@@ -41,6 +43,7 @@ describe('useReviewStore websocket fallback', () => {
     webSocketCtor.mockClear();
     reviewTaskGetHistoryMock.mockClear();
     reviewRecordGetByTaskIdMock.mockClear();
+    reviewTaskGetByIdMock.mockClear();
     vi.resetModules();
     vi.stubGlobal('localStorage', createLocalStorageMock());
     vi.stubGlobal('WebSocket', webSocketCtor);
@@ -97,6 +100,42 @@ describe('useReviewStore websocket fallback', () => {
   });
 
   it('hydrates reviewer workspace context when selecting an active reviewer task', async () => {
+    reviewTaskGetByIdMock.mockResolvedValueOnce({
+      success: true,
+      task: {
+        id: 'task-hydration',
+        title: 'Hydrated Reviewer Task',
+        description: 'full-desc',
+        modelName: 'Hull-A',
+        status: 'in_review',
+        priority: 'high',
+        requesterId: 'designer-1',
+        requesterName: 'Designer One',
+        checkerId: 'checker-1',
+        checkerName: 'Checker One',
+        approverId: 'approver-1',
+        approverName: 'Approver One',
+        reviewerId: 'checker-1',
+        reviewerName: 'Checker One',
+        components: [
+          { id: 'component-1', name: 'Pipe-100', refNo: '100_1', type: 'Pipe' },
+          { id: 'component-2', name: 'Valve-200', refNo: '200_1', type: 'Valve' },
+        ],
+        attachments: [
+          {
+            id: 'attachment-1',
+            name: 'handoff.pdf',
+            url: 'http://example.test/handoff.pdf',
+            mimeType: 'application/pdf',
+            uploadedAt: 1700000001000,
+          },
+        ],
+        createdAt: 1700000000000,
+        updatedAt: 1700000005000,
+        currentNode: 'sh',
+        formId: 'FORM-REVIEW-1',
+      },
+    });
     reviewRecordGetByTaskIdMock.mockResolvedValueOnce({
       success: true,
       records: [
@@ -147,26 +186,19 @@ describe('useReviewStore websocket fallback', () => {
       reviewerName: 'Checker One',
       components: [
         { id: 'component-1', name: 'Pipe-100', refNo: '100_1', type: 'Pipe' },
-        { id: 'component-2', name: 'Valve-200', refNo: '200_1', type: 'Valve' },
       ],
-      attachments: [
-        {
-          id: 'attachment-1',
-          name: 'handoff.pdf',
-          url: 'http://example.test/handoff.pdf',
-          uploadedAt: 1700000001000,
-        },
-      ],
+      attachments: [],
       createdAt: 1700000000000,
-      updatedAt: 1700000005000,
-      currentNode: 'sh',
-      formId: 'FORM-REVIEW-1',
+      updatedAt: 1700000004000,
+      currentNode: 'jd',
     } as never);
 
+    expect(reviewTaskGetByIdMock).toHaveBeenCalledWith('task-hydration');
     expect(store.currentTask.value).toEqual(
       expect.objectContaining({
         id: 'task-hydration',
         title: 'Hydrated Reviewer Task',
+        description: 'full-desc',
         requesterName: 'Designer One',
         checkerName: 'Checker One',
         approverName: 'Approver One',
@@ -175,7 +207,13 @@ describe('useReviewStore websocket fallback', () => {
       })
     );
     expect(store.currentTask.value?.components).toHaveLength(2);
-    expect(store.currentTask.value?.attachments).toHaveLength(1);
+    expect(store.currentTask.value?.attachments).toEqual([
+      expect.objectContaining({
+        id: 'attachment-1',
+        name: 'handoff.pdf',
+        mimeType: 'application/pdf',
+      }),
+    ]);
     expect(store.confirmedRecordCount.value).toBe(1);
     expect(store.sortedConfirmedRecords.value[0]?.taskId).toBe('task-hydration');
     expect(store.reviewHistory.value).toEqual([
@@ -186,6 +224,47 @@ describe('useReviewStore websocket fallback', () => {
         comment: 'handoff to reviewer workspace',
       }),
     ]);
+  });
+
+  it('falls back to incoming task when detail hydration fails', async () => {
+    reviewTaskGetByIdMock.mockResolvedValueOnce({ success: false });
+
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+
+    await store.setCurrentTask({
+      id: 'task-fallback',
+      title: 'Fallback Reviewer Task',
+      description: 'desc',
+      modelName: 'Hull-B',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: 'Designer Two',
+      checkerId: 'checker-2',
+      checkerName: 'Checker Two',
+      approverId: 'approver-2',
+      approverName: 'Approver Two',
+      reviewerId: 'checker-2',
+      reviewerName: 'Checker Two',
+      components: [
+        { id: 'component-1', name: 'Pipe-300', refNo: '300_1', type: 'Pipe' },
+      ],
+      attachments: [],
+      createdAt: 1700000000000,
+      updatedAt: 1700000005000,
+      currentNode: 'jd',
+      formId: 'FORM-REVIEW-FALLBACK',
+    } as never);
+
+    expect(reviewTaskGetByIdMock).toHaveBeenCalledWith('task-fallback');
+    expect(store.currentTask.value).toEqual(
+      expect.objectContaining({
+        id: 'task-fallback',
+        title: 'Fallback Reviewer Task',
+        formId: 'FORM-REVIEW-FALLBACK',
+      })
+    );
   });
 
   it('keeps workflow history separate from confirmed records after hydration', async () => {

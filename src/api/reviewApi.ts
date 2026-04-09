@@ -522,7 +522,14 @@ export async function reviewTaskGetList(options?: {
  * GET /api/review/tasks/{taskId}
  */
 export async function reviewTaskGetById(taskId: string): Promise<ReviewTaskResponse> {
-  return await fetchJson<ReviewTaskResponse>(`/api/review/tasks/${encodeURIComponent(taskId)}`);
+  const response = await fetchJson<ReviewTaskResponse>(`/api/review/tasks/${encodeURIComponent(taskId)}`);
+  const normalizedTask = response.task && typeof response.task === 'object'
+    ? normalizeReviewTask(response.task as Record<string, unknown>)
+    : response.task;
+  return {
+    ...response,
+    task: normalizedTask,
+  };
 }
 
 /**

@@ -7,6 +7,7 @@ import { UserRole, type ReviewTask } from '@/types/auth';
 
 const loadReviewTasksMock = vi.fn(() => Promise.resolve());
 const setCurrentTaskMock = vi.fn();
+const reviewTaskGetByIdMock = vi.fn(async () => ({ success: false }));
 const persistenceState = new Map<string, unknown>();
 const persistenceStorageKeys: string[] = [];
 
@@ -28,6 +29,10 @@ vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
     setCurrentTask: setCurrentTaskMock,
   }),
+}));
+
+vi.mock('@/api/reviewApi', () => ({
+  reviewTaskGetById: (...args: unknown[]) => reviewTaskGetByIdMock(...args),
 }));
 
 vi.mock('@/composables/useNavigationStatePersistence', () => ({
@@ -72,6 +77,7 @@ describe('ReviewerTaskList', () => {
     persistenceStorageKeys.length = 0;
     loadReviewTasksMock.mockClear();
     setCurrentTaskMock.mockClear();
+    reviewTaskGetByIdMock.mockClear();
     mockUserStore.pendingReviewTasks.value = [];
     mockUserStore.submitTaskToNextNode.mockClear();
     mockUserStore.returnTaskToNode.mockClear();
@@ -142,5 +148,51 @@ describe('ReviewerTaskList', () => {
     expect(persistenceStorageKeys).toContain('plant3d-web-nav-state-reviewer-tasks-v1');
     expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-designer-tasks-v1');
     expect(persistenceStorageKeys).not.toContain('plant3d-web-nav-state-resubmission-tasks-v1');
+  });
+
+  it('hydrates reviewer task detail modal with formId and attachments from single-task detail api', async () => {
+    const task = createTask({
+      id: 'review-task-detail',
+      title: '审核详情任务',
+      description: '列表摘要',
+      components: [
+        { id: 'comp-1', name: 'BRAN-001', refNo: '24381_145018', type: 'BRAN' },
+      ],
+      attachments: [],
+    });
+    reviewTaskGetByIdMock.mockResolvedValueOnce({
+      success: true,
+      task: {
+        ...task,
+        description: '完整的设计提资包说明',
+        formId: 'FORM-REVIEW-226',
+        attachments: [
+          {
+            id: 'att-1',
+            name: '设计提资说明.pdf',
+            url: '/files/review_attachments/att-1.pdf',
+            mimeType: 'application/pdf',
+            uploadedAt: new Date('2026-04-09T10:00:00+08:00').getTime(),
+          },
+        ],
+      },
+    });
+
+    await mountComponent([task]);
+
+    const taskCard = Array.from(document.querySelectorAll('div.cursor-pointer')).find((node) =>
+      node.textContent?.includes('审核详情任务')
+    ) as HTMLDivElement | undefined;
+    expect(taskCard).toBeTruthy();
+
+    taskCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(reviewTaskGetByIdMock).toHaveBeenCalledWith('review-task-detail');
+    expect(document.body.textContent).toContain('FORM-REVIEW-226');
+    expect(document.body.textContent).toContain('设计提资说明.pdf');
+    expect(document.body.textContent).toContain('完整的设计提资包说明');
   });
 });

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 
-import { Clock, FileText, Filter, HelpCircle, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
+import { Clock, FileText, Filter, HelpCircle, Paperclip, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
 import { getSubmitActionLabel } from './reviewPanelActions';
 
+import { reviewTaskGetById } from '@/api/reviewApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -29,6 +30,8 @@ const statusFilter = ref<string>('all');
 const priorityFilter = ref<string>('all');
 const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
+const selectedTaskLoading = ref(false);
+const selectedTaskError = ref<string | null>(null);
 const showRejectForm = ref(false);
 const rejectReason = ref('');
 const scrollContainer = ref<HTMLElement | null>(null);
@@ -197,12 +200,41 @@ async function handleReject(task: ReviewTask) {
   rejectReason.value = '';
 }
 
+async function hydrateSelectedTask(task: ReviewTask): Promise<void> {
+  const taskId = task.id?.trim();
+  if (!taskId) return;
+
+  selectedTaskLoading.value = true;
+  try {
+    const response = await reviewTaskGetById(taskId);
+    if (!response.success || !response.task) {
+      throw new Error(response.error_message || '加载任务详情失败');
+    }
+    if (selectedTask.value?.id === taskId) {
+      selectedTask.value = response.task;
+      selectedTaskError.value = null;
+    }
+  } catch (error) {
+    if (selectedTask.value?.id === taskId) {
+      selectedTaskError.value = error instanceof Error ? error.message : '加载任务详情失败';
+    }
+  } finally {
+    if (selectedTask.value?.id === taskId) {
+      selectedTaskLoading.value = false;
+    }
+  }
+}
+
 function handleViewTask(task: ReviewTask) {
   selectedTask.value = task;
+  selectedTaskError.value = null;
+  void hydrateSelectedTask(task);
 }
 
 function closeTaskDetail() {
   selectedTask.value = null;
+  selectedTaskLoading.value = false;
+  selectedTaskError.value = null;
   showRejectForm.value = false;
   rejectReason.value = '';
 }
@@ -387,6 +419,10 @@ onMounted(() => {
                 <p class="font-medium">{{ selectedTask.requesterName }}</p>
               </div>
               <div>
+                <label class="text-sm text-gray-500">提资包编号</label>
+                <p class="font-medium">{{ selectedTask.formId || '未绑定 formId' }}</p>
+              </div>
+              <div>
                 <label class="text-sm text-gray-500">状态</label>
                 <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getTaskStatusDisplayName(selectedTask.status).color]">
                   {{ getTaskStatusDisplayName(selectedTask.status).label }}
@@ -408,6 +444,28 @@ onMounted(() => {
                   <span class="text-gray-500">({{ comp.refNo }})</span>
                 </div>
               </div>
+            </div>
+            <div>
+              <div class="flex items-center justify-between gap-2">
+                <label class="text-sm text-gray-500">附件材料 ({{ selectedTask.attachments?.length || 0 }})</label>
+                <span v-if="selectedTaskLoading" class="text-xs text-gray-400">同步详情中...</span>
+              </div>
+              <div v-if="selectedTask.attachments?.length" class="mt-2 space-y-1 max-h-32 overflow-auto">
+                <a v-for="attachment in selectedTask.attachments"
+                  :key="attachment.id || attachment.url"
+                  :href="attachment.url"
+                  target="_blank"
+                  rel="noreferrer"
+                  class="flex items-center gap-2 rounded bg-gray-50 px-2 py-2 text-sm hover:bg-gray-100">
+                  <Paperclip class="h-4 w-4 text-blue-600" />
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate font-medium text-gray-900">{{ attachment.name || '未命名附件' }}</div>
+                    <div class="truncate text-xs text-gray-500">{{ attachment.mimeType || attachment.type || attachment.url }}</div>
+                  </div>
+                </a>
+              </div>
+              <p v-else class="mt-2 text-sm text-gray-500">暂无附件</p>
+              <p v-if="selectedTaskError" class="mt-2 text-xs text-red-500">{{ selectedTaskError }}</p>
             </div>
           </div>
           <div class="p-4 border-t flex justify-end gap-2">

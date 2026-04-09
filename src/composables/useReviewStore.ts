@@ -14,6 +14,7 @@ import {
   reviewRecordDelete,
   reviewRecordGetByTaskId,
   reviewRecordClearByTaskId,
+  reviewTaskGetById,
   reviewTaskGetHistory,
   getReviewUserWebSocketUrl,
   type ConfirmedRecordData,
@@ -308,6 +309,29 @@ async function loadReviewHistory(taskId: string): Promise<void> {
 // ============ 当前任务管理 ============
 
 async function setCurrentTask(task: ReviewTask | null) {
+  if (task && USE_BACKEND.value && task.id?.trim()) {
+    try {
+      const response = await reviewTaskGetById(task.id);
+      if (response.success && response.task) {
+        task = {
+          ...task,
+          ...response.task,
+          formId: response.task.formId || task.formId,
+          description: response.task.description || task.description,
+          modelName: response.task.modelName || task.modelName,
+          components: response.task.components.length > 0 ? response.task.components : task.components,
+          attachments: response.task.attachments ?? task.attachments,
+          workflowHistory: response.task.workflowHistory ?? task.workflowHistory,
+        };
+      }
+    } catch (error) {
+      console.warn('[ReviewStore] Failed to hydrate task detail:', {
+        taskId: task.id,
+        error,
+      });
+    }
+  }
+
   currentTask.value = task;
   if (task) {
     reviewMode.value = true;
