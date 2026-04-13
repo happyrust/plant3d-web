@@ -1,8 +1,10 @@
 import { Box3, BufferAttribute, BufferGeometry, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
 
 import { realtimeInstancesByRefnos } from '@/api/genModelRealtimeApi';
+import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
+import { buildInstanceIndexByRefno, type InstanceEntry } from '@/utils/instances/instanceManifest';
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
 import { DTXLayer } from '@/utils/three/dtx';
 import {
@@ -23,8 +25,9 @@ type LoaderOptions = {
    * 数据源选择：
    * - 'parquet'：默认（失败则抛错）
    * - 'backend'：实时查库（用于 parquet miss 回填）
+   * - 'json'：读取 instances_{dbno}.json 并本地索引
    */
-  dataSource?: 'parquet' | 'backend'
+  dataSource?: 'parquet' | 'backend' | 'json'
 }
 
 export type DtxMissingBreakdown = {
@@ -480,7 +483,7 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
 
   // 根据 dataSource 选项决定数据源
   const dataSource = options.dataSource || 'parquet';
-  let index: Map<string, import('@/utils/instances/instanceManifest').InstanceEntry[]>;
+  let index: Map<string, InstanceEntry[]>;
 
   if (dataSource === 'backend') {
     const resp = await realtimeInstancesByRefnos(dbno, toLoad, {
@@ -497,6 +500,10 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       index.set(refnoKey, Array.isArray(entries) ? entries : []);
     }
     if (debug) console.log('[dtx][instances] using backend', { dbno, refnos: toLoad.length, indexSize: index.size, missing: resp.missing_refnos?.length ?? 0 });
+  } else if (dataSource === 'json') {
+    const manifest = await getDbnoInstancesManifest(dbno);
+    index = buildInstanceIndexByRefno(manifest, new Set(toLoad));
+    if (debug) console.log('[dtx][instances] using json', { dbno, refnos: toLoad.length, indexSize: index.size });
   } else {
     const parquet = useDbnoInstancesParquetLoader();
     const available = await parquet.isParquetAvailable(dbno);

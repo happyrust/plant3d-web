@@ -1,20 +1,25 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 
-import type { InstanceManifest } from '@/utils/instances/instanceManifest';
-
 import { e3dGetSubtreeRefnos, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi';
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
 import { modelShowByRefno } from '@/api/genModelTaskApi';
+import { getMbdPipeAnnotations, type MbdPipeData, type Vec3 } from '@/api/mbdPipeApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
-import { triggerBatchGenerateSse } from '@/composables/useDbnoInstancesJsonLoader';
+import {
+  getDbnoInstancesManifest,
+  InstancesJsonNotFoundError,
+  setDbnoInstancesManifest,
+  triggerBatchGenerateSse,
+} from '@/composables/useDbnoInstancesJsonLoader';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { emitToast } from '@/ribbon/toastBus';
+import { buildInstanceIndexByRefno, type InstanceManifest } from '@/utils/instances/instanceManifest';
 
 /**
  * 全局开关：是否显式启用自动生成（SSE 流式生成、自动导出 parquet）
@@ -105,6 +110,191 @@ function uniqStrings(list: string[]): string[] {
     out.push(v);
   }
   return out;
+}
+
+const IDENTITY_MATRIX = [
+  1, 0, 0, 0,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1,
+];
+
+const DEFAULT_SYNTHETIC_TUBI_DIAMETER_MM = 100;
+
+function vecSub(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function vecLength(v: Vec3): number {
+  return Math.hypot(v[0], v[1], v[2]);
+}
+
+function vecNormalize(v: Vec3): Vec3 {
+  const len = vecLength(v);
+  if (!Number.isFinite(len) || len <= 1e-6) return [0, 0, 1];
+  return [v[0] / len, v[1] / len, v[2] / len];
+}
+
+function vecCross(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function buildSyntheticSegmentMatrix(start: Vec3, end: Vec3, diameterMm: number): number[] {
+  const axisZ = vecNormalize(vecSub(end, start));
+  const scaleZ = Math.max(vecLength(vecSub(end, start)), 1);
+  const radialScale = Math.max(diameterMm, 1);
+
+  let seed: Vec3 = Math.abs(axisZ[2]) > 0.95 ? [0, 1, 0] : [0, 0, 1];
+  let axisX = vecNormalize(vecCross(seed, axisZ));
+  if (vecLength(axisX) <= 1e-6) {
+    seed = [1, 0, 0];
+    axisX = vecNormalize(vecCross(seed, axisZ));
+  }
+  const axisY = vecNormalize(vecCross(axisZ, axisX));
+
+  return [
+    axisX[0] * radialScale, axisX[1] * radialScale, axisX[2] * radialScale, 0,
+    axisY[0] * radialScale, axisY[1] * radialScale, axisY[2] * radialScale, 0,
+    axisZ[0] * scaleZ, axisZ[1] * scaleZ, axisZ[2] * scaleZ, 0,
+    start[0], start[1], start[2], 1,
+  ];
+}
+
+function buildSyntheticBranchInstance(
+  rootRefno: string,
+  rootNoun: string | null,
+  branchName: string | null | undefined,
+  data: MbdPipeData,
+): NonNullable<InstanceManifest['instances']>[number] | null {
+  const validSegments = (data.segments || []).filter((segment) => {
+    return Array.isArray(segment.arrive) && segment.arrive.length === 3
+      && Array.isArray(segment.leave) && segment.leave.length === 3;
+  });
+  if (validSegments.length === 0) return null;
+
+  const diameter = Math.max(
+    Number(validSegments.find((segment) => Number.isFinite(segment.outside_diameter ?? NaN))?.outside_diameter)
+      || DEFAULT_SYNTHETIC_TUBI_DIAMETER_MM,
+    1,
+  );
+  const radius = diameter * 0.5;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  const geoInstances = validSegments.map((segment, index) => {
+    const start = segment.arrive as Vec3;
+    const end = segment.leave as Vec3;
+    for (const point of [start, end]) {
+      minX = Math.min(minX, point[0] - radius);
+      minY = Math.min(minY, point[1] - radius);
+      minZ = Math.min(minZ, point[2] - radius);
+      maxX = Math.max(maxX, point[0] + radius);
+      maxY = Math.max(maxY, point[1] + radius);
+      maxZ = Math.max(maxZ, point[2] + radius);
+    }
+
+    return {
+      geo_hash: `tubi_${rootRefno}_${index}`,
+      transform: buildSyntheticSegmentMatrix(start, end, diameter),
+    };
+  });
+
+  return {
+    refno: rootRefno,
+    noun: rootNoun || 'BRAN',
+    name: branchName || null,
+    aabb: Number.isFinite(minX) && Number.isFinite(maxX)
+      ? {
+        min: [minX, minY, minZ],
+        max: [maxX, maxY, maxZ],
+      }
+      : null,
+    refno_transform: IDENTITY_MATRIX,
+    geo_instances: geoInstances,
+  };
+}
+
+async function prepareJsonManifestForFallback(
+  dbno: number,
+  rootRefno: string,
+  loadRefnos: string[],
+  rootNoun: string | null,
+): Promise<{ ready: boolean; syntheticAabb?: number[] | null; syntheticNoun?: string | null }> {
+  let manifest: InstanceManifest;
+
+  try {
+    manifest = await getDbnoInstancesManifest(dbno);
+  } catch (error) {
+    if (!(error instanceof InstancesJsonNotFoundError)) {
+      return { ready: false };
+    }
+    manifest = {
+      generated_at: new Date().toISOString(),
+      instances: [],
+    };
+  }
+
+  const wanted = new Set(loadRefnos);
+  const existingIndex = buildInstanceIndexByRefno(manifest, wanted);
+  const hasAnyWanted = loadRefnos.some((refno) => (existingIndex.get(refno)?.length ?? 0) > 0);
+  if (hasAnyWanted || (rootNoun !== 'BRAN' && rootNoun !== 'HANG')) {
+    return { ready: true };
+  }
+
+  let mbdResp;
+  try {
+    mbdResp = await getMbdPipeAnnotations(rootRefno, {
+      include_dims: false,
+      include_welds: false,
+      include_slopes: false,
+      include_bends: false,
+      include_cut_tubis: false,
+      include_fittings: false,
+      include_tags: false,
+      include_layout_result: false,
+    });
+  } catch {
+    return { ready: true };
+  }
+  if (!mbdResp.success || !mbdResp.data) {
+    return { ready: true };
+  }
+
+  const syntheticInstance = buildSyntheticBranchInstance(
+    rootRefno,
+    rootNoun,
+    mbdResp.data.branch_name,
+    mbdResp.data,
+  );
+  if (!syntheticInstance) {
+    return { ready: true };
+  }
+
+  const nextInstances = Array.isArray(manifest.instances)
+    ? manifest.instances.filter((item) => normalizeRefnoString(String(item?.refno ?? '')) !== rootRefno)
+    : [];
+  nextInstances.push(syntheticInstance);
+
+  setDbnoInstancesManifest(dbno, {
+    ...manifest,
+    generated_at: manifest.generated_at || new Date().toISOString(),
+    instances: nextInstances,
+  });
+  return {
+    ready: true,
+    syntheticAabb: syntheticInstance.aabb
+      ? [...syntheticInstance.aabb.min, ...syntheticInstance.aabb.max]
+      : null,
+    syntheticNoun: syntheticInstance.noun ?? rootNoun,
+  };
 }
 
 async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; truncated: boolean }> {
@@ -728,6 +918,104 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           }
         } else {
           emitToast({ message: `[成功] 已加载 ${totalObjects} 个几何实例`, level: 'success' });
+        }
+        return true;
+      }
+
+      const anyViewer = viewer as unknown as {
+        __dtxLayer?: unknown
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        scene?: { getAABB?: (ids: string[]) => unknown }
+        cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
+      };
+      const dtxLayer = anyViewer.__dtxLayer as any;
+      if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型');
+
+      const loadRefnos = loadScope.actualLoadRefnos;
+      if (loadRefnos.length === 0) {
+        statusMessage.value = `refno=${normalizedRoot} 无可见实例`;
+        progress.value = 100;
+        syncGlobalLoadStatus();
+        consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 无可见实例，跳过 JSON fallback`);
+        return true;
+      }
+
+      const jsonFallback = await prepareJsonManifestForFallback(
+        dbno,
+        normalizedRoot,
+        loadRefnos,
+        loadScope.rootNoun,
+      );
+      if (jsonFallback.ready) {
+        consoleStore.addLog('warning', `[model-load] parquet 不可用，回退 instances JSON dbno=${dbno}`);
+        statusMessage.value = `从 instances JSON 加载 dbno=${dbno}...`;
+        progress.value = 20;
+        syncGlobalLoadStatus();
+
+        const jsonResult = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
+          lodAssetKey: 'L1',
+          debug: false,
+          dataSource: 'json',
+          forceReloadRefnos: loadRefnos,
+        });
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
+
+        if (typeof anyViewer.scene?.ensureRefnos === 'function') {
+          anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
+        }
+        if (jsonFallback.syntheticAabb && anyViewer.scene?.objects?.[normalizedRoot]) {
+          (anyViewer.scene.objects[normalizedRoot] as { aabb?: number[]; noun?: string }).aabb = jsonFallback.syntheticAabb;
+          if (jsonFallback.syntheticNoun) {
+            (anyViewer.scene.objects[normalizedRoot] as { aabb?: number[]; noun?: string }).noun = jsonFallback.syntheticNoun;
+          }
+        }
+
+        if (loadOptions?.flyTo) {
+          try {
+            const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
+            const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+            if (aabb) {
+              anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+            }
+          } catch {
+            // ignore flyTo errors
+          }
+        }
+
+        lastLoadDebug.value = {
+          refno: normalizedRoot,
+          dbno,
+          visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+          componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
+          loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+          scopeDecision: {
+            rootNoun: loadScope.rootNoun,
+            branHangRootInjected: loadScope.branHangRootInjected,
+            typeInfoError: loadScope.typeInfoError,
+          },
+          result: {
+            loadedRefnos: jsonResult.loadedRefnos,
+            skippedRefnos: jsonResult.skippedRefnos,
+            loadedObjects: jsonResult.loadedObjects,
+          },
+          ms: Date.now() - startedAt,
+        };
+
+        if (jsonResult.loadedObjects > 0) {
+          loadedRoots.add(normalizedRoot);
+        }
+
+        statusMessage.value = jsonResult.loadedObjects > 0 ? '加载完成 (JSON)' : '无可见几何实例';
+        progress.value = 100;
+        syncGlobalLoadStatus();
+        if (jsonResult.loadedObjects === 0) {
+          emitToast({
+            message:
+              `[警告] JSON fallback 已执行，但未绘制任何实例（refno=${normalizedRoot}）。请检查 instances_*.json 或 MBD 语义数据`,
+            level: 'warning',
+          });
+        } else {
+          emitToast({ message: `[成功] 已通过 JSON fallback 加载 ${jsonResult.loadedObjects} 个几何实例`, level: 'success' });
         }
         return true;
       }

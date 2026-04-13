@@ -184,9 +184,13 @@ function chunkBySize<T>(items: T[], size: number): T[][] {
 }
 
 function resolveLoadedRefnos(viewer: ViewerLike): string[] {
-  return typeof viewer.scene.getLoadedRefnos === 'function'
+  const primary = typeof viewer.scene.getLoadedRefnos === 'function'
     ? viewer.scene.getLoadedRefnos()
     : viewer.scene.objectIds.slice();
+  const withAabb = Object.keys(viewer.scene.objects || {}).filter((refno) => {
+    return Array.isArray(viewer.scene.objects[refno]?.aabb);
+  });
+  return uniqStrings([...primary, ...withAabb]);
 }
 
 function sortItems(items: SpatialQueryResultItem[], sortBy: SpatialQuerySortBy): SpatialQueryResultItem[] {
@@ -641,7 +645,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       const matchShape = request.shape === 'cube' ? intersectsCube : intersectsSphere;
       if (!matchShape) continue;
 
-      const noun = findNounByRefnoAcrossAllDbnos(refno) || 'UNKNOWN';
+      const noun = findNounByRefnoAcrossAllDbnos(refno)
+        || (viewer.scene.objects as Record<string, { noun?: string } | undefined>)[refno]?.noun
+        || 'UNKNOWN';
       const specValue = findSpecValueByRefnoAcrossAllDbnos(refno) ?? 0;
       const visible = viewer.scene.objects[refno]?.visible !== false;
       const item = {
