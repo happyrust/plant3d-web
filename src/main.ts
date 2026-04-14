@@ -30,6 +30,7 @@ import ResubmissionTaskListPanelDock from '@/components/dock_panels/Resubmission
 import ReviewerTaskListPanelDock from '@/components/dock_panels/ReviewerTaskListPanelDock.vue';
 import ReviewPanelDock from '@/components/dock_panels/ReviewPanelDock.vue';
 import RoomStatusPanelDock from '@/components/dock_panels/RoomStatusPanelDock.vue';
+import SpatialComputePanelDock from '@/components/dock_panels/SpatialComputePanelDock.vue';
 import TaskCreationPanelDock from '@/components/dock_panels/TaskCreationPanelDock.vue';
 import TaskMonitorPanelDock from '@/components/dock_panels/TaskMonitorPanelDock.vue';
 import ViewerPanel from '@/components/dock_panels/ViewerPanel.vue';
@@ -60,6 +61,7 @@ app.component('ModelExportPanel', ModelExportPanelDock);
 app.component('ConsolePanel', ConsolePanelDock);
 app.component('ParquetDebugPanel', ParquetDebugPanelDock);
 app.component('RoomStatusPanel', RoomStatusPanelDock);
+app.component('SpatialComputePanel', SpatialComputePanelDock);
 app.component('DimensionStylePanel', DimensionStylePanelDock);
 app.component('DtxMaterialConfigPanel', DtxMaterialConfigPanelDock);
 app.component('DashboardPanel', DashboardPanelDock);

@@ -90,6 +90,116 @@ export type SpatialStatsResult = {
   error?: string;
 };
 
+export type SpaceEnvelope<T> = {
+  status: 'success' | 'error';
+  message?: string;
+  data?: T | null;
+};
+
+export type SpaceComputeRefnoRequest = {
+  suppo_refno: string;
+};
+
+export type SpaceComputePoint = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+export type SpaceComputeVector = {
+  dx: number;
+  dy: number;
+  dz: number;
+};
+
+export type SpaceComputeSuppoRequest = SpaceComputeRefnoRequest & {
+  tolerance?: number;
+};
+
+export type SpaceComputeWallDistanceRequest = SpaceComputeRefnoRequest & {
+  suppo_type?: string;
+  search_radius?: number;
+  target_nouns?: string[];
+};
+
+export type SpaceComputeSteelRelativeRequest = SpaceComputeRefnoRequest & {
+  suppo_type?: string;
+  search_radius?: number;
+};
+
+export type SpaceComputeTraySpanRequest = SpaceComputeRefnoRequest & {
+  neighbor_window?: number;
+};
+
+export type SpaceComputeFittingData = {
+  fitting: string;
+  panel_refno: string;
+  panel_center: SpaceComputePoint;
+  match_method: string;
+  covered: boolean;
+  coverage_ratio: number;
+};
+
+export type SpaceComputeFittingOffsetData = {
+  anchor_kind: string;
+  anchor_point: SpaceComputePoint;
+  panel_refno: string;
+  panel_center: SpaceComputePoint;
+  vector: SpaceComputeVector;
+  length: number;
+  within: boolean;
+};
+
+export type SpaceComputeWallDistanceCandidate = {
+  refno: string;
+  noun: string;
+  spec_value?: number | null;
+  distance_mm: number;
+  closest_point: SpaceComputePoint;
+};
+
+export type SpaceComputeWallDistanceData = {
+  anchor_kind: string;
+  anchor_point: SpaceComputePoint;
+  target: {
+    refno: string;
+    noun: string;
+    distance_mm: number;
+    closest_point: SpaceComputePoint;
+  };
+  candidates: SpaceComputeWallDistanceCandidate[];
+};
+
+export type SpaceComputeSuppoTrayData = {
+  anchor_kind: string;
+  trays: {
+    bran_refno: string;
+    tray_section_refno: string;
+    support_type: string;
+    contact_point: SpaceComputePoint;
+  }[];
+};
+
+export type SpaceComputeSteelRelativeData = {
+  anchor_kind: string;
+  anchor_point: SpaceComputePoint;
+  steel_refno: string;
+  steel_noun: string;
+  closest_point: SpaceComputePoint;
+  vector: SpaceComputeVector;
+  length: number;
+  within: boolean;
+};
+
+export type SpaceComputeTraySpanData = {
+  bran_refno: string;
+  left_suppo_refno?: string | null;
+  right_suppo_refno?: string | null;
+  left_distance?: number | null;
+  right_distance?: number | null;
+  neighbor_window: number;
+};
+
 export type PipeWallDistanceRequest = {
   dbnum: number;
   source_refno: string;
@@ -127,6 +237,10 @@ export type PipeWallDistanceResponse = {
     candidates: PipeWallDistanceCandidate[];
   };
 };
+
+function normalizeSuppoRefno(refno: string): string {
+  return String(refno || '').trim().replace(/,/g, '/').replace(/_/g, '/');
+}
 
 // ============================================================================
 // API functions
@@ -181,6 +295,78 @@ export async function queryPipeWallDistanceCandidates(
   return await fetchJson<PipeWallDistanceResponse>('/api/space/wall-distance', {
     method: 'POST',
     body: JSON.stringify(request),
+  });
+}
+
+export async function postSpaceFitting(
+  request: SpaceComputeSuppoRequest,
+): Promise<SpaceEnvelope<SpaceComputeFittingData>> {
+  return await fetchJson<SpaceEnvelope<SpaceComputeFittingData>>('/api/space/fitting', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...request,
+      suppo_refno: normalizeSuppoRefno(request.suppo_refno),
+    }),
+  });
+}
+
+export async function postSpaceFittingOffset(
+  request: SpaceComputeSuppoRequest,
+): Promise<SpaceEnvelope<SpaceComputeFittingOffsetData>> {
+  return await fetchJson<SpaceEnvelope<SpaceComputeFittingOffsetData>>('/api/space/fitting-offset', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...request,
+      suppo_refno: normalizeSuppoRefno(request.suppo_refno),
+    }),
+  });
+}
+
+export async function postSpaceWallDistance(
+  request: SpaceComputeWallDistanceRequest,
+): Promise<SpaceEnvelope<SpaceComputeWallDistanceData>> {
+  return await fetchJson<SpaceEnvelope<SpaceComputeWallDistanceData>>('/api/space/wall-distance', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...request,
+      suppo_refno: normalizeSuppoRefno(request.suppo_refno),
+    }),
+  });
+}
+
+export async function postSpaceSuppoTrays(
+  request: SpaceComputeSuppoRequest,
+): Promise<SpaceEnvelope<SpaceComputeSuppoTrayData>> {
+  return await fetchJson<SpaceEnvelope<SpaceComputeSuppoTrayData>>('/api/space/suppo-trays', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...request,
+      suppo_refno: normalizeSuppoRefno(request.suppo_refno),
+    }),
+  });
+}
+
+export async function postSpaceSteelRelative(
+  request: SpaceComputeSteelRelativeRequest,
+): Promise<SpaceEnvelope<SpaceComputeSteelRelativeData>> {
+  return await fetchJson<SpaceEnvelope<SpaceComputeSteelRelativeData>>('/api/space/steel-relative', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...request,
+      suppo_refno: normalizeSuppoRefno(request.suppo_refno),
+    }),
+  });
+}
+
+export async function postSpaceTraySpan(
+  request: SpaceComputeTraySpanRequest,
+): Promise<SpaceEnvelope<SpaceComputeTraySpanData>> {
+  return await fetchJson<SpaceEnvelope<SpaceComputeTraySpanData>>('/api/space/tray-span', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...request,
+      suppo_refno: normalizeSuppoRefno(request.suppo_refno),
+    }),
   });
 }
 

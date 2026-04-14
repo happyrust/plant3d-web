@@ -16,7 +16,7 @@ export const ZONE_PANELS: Record<ZoneName, string[]> = {
     'measurement', 'dimension', 'annotation', 'manager', 'properties',
     'modelQuery', 'ptset', 'mbdPipe', 'materialConfig', 'review',
     'initiateReview', 'reviewerTasks', 'myTasks', 'resubmissionTasks',
-    'taskMonitor', 'taskCreation', 'modelExport', 'hydraulic', 'roomStatus', 'dashboard',
+    'taskMonitor', 'taskCreation', 'modelExport', 'hydraulic', 'roomStatus', 'spatialCompute', 'dashboard',
   ],
   bottom: ['console', 'parquetDebug'],
 };

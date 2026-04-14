@@ -240,6 +240,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '查询',
         items: [
           { kind: 'button', id: 'space_calc.range_query', label: '空间查询', icon: 'search', commandId: 'panel.spatialQuery' },
+          { kind: 'button', id: 'space_calc.suppo_compute', label: '支架空间计算', icon: 'calculator', commandId: 'panel.spatialCompute' },
         ],
       },
       {

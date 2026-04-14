@@ -334,6 +334,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
   closePanelIfExists(dockApi, 'dashboard');
+  closePanelIfExists(dockApi, 'spatialCompute');
 
   const viewerPanel = dockApi.addPanel({
     id: 'viewer',
@@ -435,6 +436,7 @@ function createEmbedFocusedLayout(
     'modelExport',
     'materialConfig',
     'roomStatus',
+    'spatialCompute',
     'parquetDebug',
   ].forEach((panelId) => {
     closePanelIfExists(dockApi, panelId);
@@ -770,6 +772,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (panelId === 'spatialCompute') {
+    return dockApi.addPanel({
+      id: 'spatialCompute',
+      component: 'SpatialComputePanel',
+      title: '支架空间计算',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
 }
 
 function togglePanel(panelId: string) {
@@ -981,6 +995,9 @@ function handleRibbonCommand(commandId: string) {
           mode: commandId === 'panel.query' ? 'range' : 'distance',
         },
       }));
+      return;
+    case 'panel.spatialCompute':
+      openPanel('spatialCompute');
       return;
     case 'panel.ptset':
       togglePanel('ptset');

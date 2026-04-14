@@ -1,12 +1,12 @@
 <template>
   <div v-if="open"
-    class="pointer-events-auto absolute right-[60px] top-[120px] z-[950] flex max-h-[85vh] w-[360px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
+    class="pointer-events-auto absolute right-[60px] top-[120px] z-[950] flex max-h-[85vh] w-[440px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
     @pointerdown.stop
     @wheel.stop>
     <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
       <div>
         <div class="font-ui text-base font-semibold text-gray-900">空间查询</div>
-        <div class="mt-0.5 text-xs text-gray-500">统一使用毫米坐标与半径</div>
+        <div class="mt-0.5 text-xs text-gray-500">范围查询与距离查询</div>
       </div>
       <button type="button" class="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900" title="关闭" @click="closePanel">
         <X class="h-4 w-4" />
@@ -14,22 +14,22 @@
     </div>
 
     <div class="flex flex-1 flex-col overflow-y-auto px-4 py-4">
-      <div class="flex rounded-md bg-gray-100 p-1">
-        <button type="button"
-          class="flex-1 rounded py-1.5 text-sm font-medium transition-colors"
-          :class="draft.mode === 'range' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
-          @click="setMode('range')">
-          范围查询
-        </button>
-        <button type="button"
-          class="flex-1 rounded py-1.5 text-sm font-medium transition-colors"
-          :class="draft.mode === 'distance' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
-          @click="setMode('distance')">
-          距离查询
-        </button>
-      </div>
+      <div class="flex flex-col gap-4">
+        <div class="flex rounded-md bg-gray-100 p-1">
+          <button type="button"
+            class="flex-1 rounded py-1.5 text-sm font-medium transition-colors"
+            :class="draft.mode === 'range' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+            @click="setMode('range')">
+            范围查询
+          </button>
+          <button type="button"
+            class="flex-1 rounded py-1.5 text-sm font-medium transition-colors"
+            :class="draft.mode === 'distance' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+            @click="setMode('distance')">
+            距离查询
+          </button>
+        </div>
 
-      <div class="mt-4 flex flex-col gap-4">
         <template v-if="draft.mode === 'range'">
           <section class="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
             <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">中心来源</div>
@@ -200,12 +200,12 @@
         </section>
 
         <button type="button"
-          :disabled="!canSubmit || isBusy"
+          :disabled="!canSubmit || isQueryBusy"
           class="mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#FF6B00] px-4 text-sm font-medium text-white transition-colors hover:bg-[#E35F00] disabled:cursor-not-allowed disabled:opacity-50"
           @click="runQuery">
-          <Loader2 v-if="isBusy" class="h-4 w-4 animate-spin" />
+          <Loader2 v-if="isQueryBusy" class="h-4 w-4 animate-spin" />
           <Search v-else class="h-4 w-4" />
-          <span>{{ isBusy ? statusLabel : '执行空间查询' }}</span>
+          <span>{{ isQueryBusy ? statusLabel : '执行空间查询' }}</span>
         </button>
 
         <div v-if="error" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -244,13 +244,13 @@
               </button>
               <button type="button"
                 class="rounded-md border border-gray-200 px-2 py-2 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isBusy"
+                :disabled="isQueryBusy"
                 @click="loadCurrentResults">
                 加载当前筛选结果
               </button>
               <button type="button"
                 class="rounded-md border border-gray-200 px-2 py-2 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isBusy"
+                :disabled="isQueryBusy"
                 @click="loadUnloadedResults">
                 只加载未加载结果
               </button>
@@ -265,11 +265,11 @@
             </div>
           </div>
 
-          <div v-if="!resultSet && !isBusy" class="px-3 py-8 text-center text-sm text-gray-400">
+          <div v-if="!resultSet && !isQueryBusy" class="px-3 py-8 text-center text-sm text-gray-400">
             暂无结果，执行一次空间查询后会在这里按专业分组显示。
           </div>
 
-          <div v-else-if="resultSet && resultSet.items.length === 0 && !isBusy" class="px-3 py-8 text-center text-sm text-gray-400">
+          <div v-else-if="resultSet && resultSet.items.length === 0 && !isQueryBusy" class="px-3 py-8 text-center text-sm text-gray-400">
             当前条件下没有匹配结果。
           </div>
 
@@ -285,7 +285,7 @@
                 <div class="flex items-center gap-2">
                   <button type="button"
                     class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                    :disabled="isBusy"
+                    :disabled="isQueryBusy"
                     @click="loadSpecGroup(group.specValue)">
                     加载本专业
                   </button>
@@ -355,7 +355,7 @@ import type { SpatialQueryMode, SpatialQueryResultItem } from '@/types/spatialQu
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import { SITE_SPEC_OPTIONS } from '@/types/spec';
 
-const props = defineProps<{
+defineProps<{
   open: boolean;
 }>();
 
@@ -385,7 +385,7 @@ const {
   restoreScene,
 } = spatialQuery;
 
-const isBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
+const isQueryBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
 const specOptions = SITE_SPEC_OPTIONS;
 const selectedSpecValues = computed(() => new Set(draft.specValues));
 
@@ -501,7 +501,6 @@ function setModeAndKeepDraft(mode: SpatialQueryMode) {
   setSpatialQueryMode(mode);
 }
 
-// keep template syntax concise
 function setMode(mode: SpatialQueryMode) {
   setModeAndKeepDraft(mode);
 }
@@ -509,6 +508,6 @@ function setMode(mode: SpatialQueryMode) {
 
 <style scoped>
 .font-ui {
-  font-family: "Fira Sans", system-ui, sans-serif;
+  font-family: 'Fira Sans', system-ui, sans-serif;
 }
 </style>
