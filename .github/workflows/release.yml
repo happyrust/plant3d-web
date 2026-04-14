@@ -111,6 +111,16 @@ jobs:
             DEPLOY_DIR="/var/www/plant3d-web"
 
             sudo mkdir -p "\$DEPLOY_DIR"
+            sudo journalctl --vacuum-size=100M || true
+            sudo apt-get clean || true
+            sudo rm -rf /var/cache/apt/archives/*.deb /var/cache/apt/archives/partial/* || true
+            sudo find /var/log -type f -name '*.gz' -delete || true
+            sudo find /var/log -type f -regex '.*\\.[0-9]+' -delete || true
+            rm -rf "\$HOME"/.cache/* || true
+            echo 'Top directories under /:'
+            sudo du -xhd1 / 2>/dev/null | sort -h | tail -n 20 || true
+            echo 'Top directories under /var:'
+            sudo du -xhd1 /var 2>/dev/null | sort -h | tail -n 20 || true
             sudo du -sh "\$DEPLOY_DIR" || true
             df -h "\$DEPLOY_DIR" || true
             sudo find "\$DEPLOY_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
