@@ -99,23 +99,23 @@ jobs:
           
           VERSION="${{ steps.version.outputs.VERSION }}"
           ARCHIVE="plant3d-web-$VERSION.tar.gz"
+          REMOTE_ARCHIVE="~/$ARCHIVE"
 
           test -f "$ARCHIVE"
 
-          scp -i ~/.ssh/deploy_key "$ARCHIVE" $PROD_USER@$PROD_HOST:/tmp/
+          scp -i ~/.ssh/deploy_key "$ARCHIVE" $PROD_USER@$PROD_HOST:$REMOTE_ARCHIVE
           
           ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << ENDSSH
             set -euo pipefail
 
             VERSION="${{ steps.version.outputs.VERSION }}"
+            ARCHIVE="\$HOME/plant3d-web-\$VERSION.tar.gz"
             DEPLOY_DIR="/var/www/plant3d-web"
-            TMP_DIR="/tmp/plant3d-web-\$VERSION"
-            BACKUP_DIR="/tmp/plant3d-web-backup-\$VERSION"
+            TMP_DIR=\$(mktemp -d "\$HOME/plant3d-web-\$VERSION.XXXXXX")
+            BACKUP_DIR=\$(mktemp -d "\$HOME/plant3d-web-backup-\$VERSION.XXXXXX")
 
-            rm -rf "\$TMP_DIR" "\$BACKUP_DIR"
-            mkdir -p "\$TMP_DIR" "\$BACKUP_DIR"
-            tar -xzf "/tmp/plant3d-web-\$VERSION.tar.gz" -C "\$TMP_DIR"
-            rm -f "/tmp/plant3d-web-\$VERSION.tar.gz"
+            tar -xzf "\$ARCHIVE" -C "\$TMP_DIR"
+            rm -f "\$ARCHIVE"
 
             test -f "\$TMP_DIR/index.html"
 
