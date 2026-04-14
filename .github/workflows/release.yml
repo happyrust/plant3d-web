@@ -99,55 +99,32 @@ jobs:
           
           VERSION="${{ steps.version.outputs.VERSION }}"
           ARCHIVE="plant3d-web-$VERSION.tar.gz"
+          EXTRACT_DIR="$RUNNER_TEMP/plant3d-web-$VERSION"
 
           test -f "$ARCHIVE"
-
-          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << 'ENDSSH_CLEANUP'
-            set -euo pipefail
-            rm -f "$HOME"/plant3d-web-*.tar.gz || true
-            rm -rf "$HOME"/plant3d-web-*.?????? "$HOME"/plant3d-web-backup-*.?????? || true
-            rm -rf /tmp/plant3d-web-* /tmp/plant3d-web-backup-* || true
-            df -h "$HOME" /tmp /var/www || true
-          ENDSSH_CLEANUP
-
-          cat "$ARCHIVE" | ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST "cat > \$HOME/$ARCHIVE"
+          mkdir -p "$EXTRACT_DIR"
+          tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
           
           ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << ENDSSH
             set -euo pipefail
 
-            VERSION="${{ steps.version.outputs.VERSION }}"
-            ARCHIVE="\$HOME/plant3d-web-\$VERSION.tar.gz"
             DEPLOY_DIR="/var/www/plant3d-web"
-            TMP_DIR=\$(mktemp -d "\$HOME/plant3d-web-\$VERSION.XXXXXX")
-            BACKUP_DIR=\$(mktemp -d "\$HOME/plant3d-web-backup-\$VERSION.XXXXXX")
-
-            tar -xzf "\$ARCHIVE" -C "\$TMP_DIR"
-            rm -f "\$ARCHIVE"
-
-            test -f "\$TMP_DIR/index.html"
-
-            if [ -d "\$DEPLOY_DIR" ]; then
-              sudo rsync -a --delete "\$DEPLOY_DIR"/ "\$BACKUP_DIR"/
-            fi
 
             sudo mkdir -p "\$DEPLOY_DIR"
-            sudo rsync -a --delete "\$TMP_DIR"/ "\$DEPLOY_DIR"/
+          ENDSSH
+
+          rsync -az --delete-before --inplace \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            --rsync-path="sudo rsync" \
+            "$EXTRACT_DIR"/ "$PROD_USER@$PROD_HOST:/var/www/plant3d-web/"
+
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << ENDSSH
+            set -euo pipefail
+
+            DEPLOY_DIR="/var/www/plant3d-web"
+
             sudo chown -R www-data:www-data "\$DEPLOY_DIR" 2>/dev/null || true
-
-            if ! sudo nginx -t; then
-              if [ -d "\$BACKUP_DIR" ]; then
-                sudo rsync -a --delete "\$BACKUP_DIR"/ "\$DEPLOY_DIR"/
-              fi
-              exit 1
-            fi
-
-            if ! sudo systemctl reload nginx; then
-              if [ -d "\$BACKUP_DIR" ]; then
-                sudo rsync -a --delete "\$BACKUP_DIR"/ "\$DEPLOY_DIR"/
-              fi
-              exit 1
-            fi
-
-            rm -rf "\$TMP_DIR" "\$BACKUP_DIR"
-            echo "Deployed frontend version \$VERSION to \$DEPLOY_DIR"
+            sudo nginx -t
+            sudo systemctl reload nginx
+            echo "Deployed frontend to \$DEPLOY_DIR"
           ENDSSH
