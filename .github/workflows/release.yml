@@ -102,6 +102,14 @@ jobs:
 
           test -f "$ARCHIVE"
 
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << 'ENDSSH_CLEANUP'
+            set -euo pipefail
+            rm -f "$HOME"/plant3d-web-*.tar.gz || true
+            rm -rf "$HOME"/plant3d-web-*.?????? "$HOME"/plant3d-web-backup-*.?????? || true
+            rm -rf /tmp/plant3d-web-* /tmp/plant3d-web-backup-* || true
+            df -h "$HOME" /tmp /var/www || true
+          ENDSSH_CLEANUP
+
           cat "$ARCHIVE" | ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST "cat > \$HOME/$ARCHIVE"
           
           ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << ENDSSH
