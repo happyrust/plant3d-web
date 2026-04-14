@@ -18,13 +18,6 @@ export type ModelProject = {
   default?: boolean;
 };
 
-const projects = ref<ModelProject[]>([]);
-const currentProject = ref<ModelProject | null>(null);
-const isLoading = ref(false);
-
-/** 模块级：并发 loadProjects（如首屏初始化与 App 嵌入引导）共用同一次 fetch，避免后一次空返回导致 switch 落空列表 */
-let loadProjectsInFlight: Promise<void> | null = null;
-
 function readRequestedProject(): { projectId: string | null; projectPath: string | null } {
   if (typeof window === 'undefined') {
     return { projectId: null, projectPath: null };
@@ -39,6 +32,33 @@ function readRequestedProject(): { projectId: string | null; projectPath: string
   };
 }
 
+function readRequestedShowDbnum(): number | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const showDbnum = new URLSearchParams(window.location.search).get('show_dbnum');
+  if (!showDbnum) return undefined;
+  const parsed = Number(showDbnum);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function buildRequestedOutputProject(): ModelProject | null {
+  const requested = readRequestedProject();
+  if (!requested.projectPath) return null;
+  return {
+    id: requested.projectPath,
+    name: requested.projectPath,
+    description: '',
+    path: requested.projectPath,
+    showDbnum: readRequestedShowDbnum(),
+    default: false,
+  };
+}
+
+function ensureProjectListed(project: ModelProject): void {
+  if (!projects.value.some((item) => item.id === project.id || item.path === project.path)) {
+    projects.value = [...projects.value, project];
+  }
+}
+
 function syncProjectUrl(project: ModelProject): void {
   if (typeof window === 'undefined') return;
 
@@ -50,6 +70,18 @@ function syncProjectUrl(project: ModelProject): void {
 
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 }
+
+const initialRequestedProject = buildRequestedOutputProject();
+const projects = ref<ModelProject[]>(initialRequestedProject ? [initialRequestedProject] : []);
+const currentProject = ref<ModelProject | null>(initialRequestedProject);
+const isLoading = ref(false);
+
+if (initialRequestedProject) {
+  setCurrentProjectPath(initialRequestedProject.path);
+}
+
+/** 模块级：并发 loadProjects（如首屏初始化与 App 嵌入引导）共用同一次 fetch，避免后一次空返回导致 switch 落空列表 */
+let loadProjectsInFlight: Promise<void> | null = null;
 
 export function useModelProjects() {
   /** 每个 composable 调用独立，避免单测串扰；与当前实例上的 applyProject 闭包绑定 */
@@ -121,18 +153,14 @@ export function useModelProjects() {
         } else if (requested.projectPath) {
           // 后端项目列表中没有匹配项（可能未注册），
           // 但 URL 明确指定了项目，直接根据 URL 参数构造项目
-          const projectPath = requested.projectPath;
-          const urlParams = new URLSearchParams(window.location.search);
-          const showDbnum = urlParams.get('show_dbnum');
-          const autoProject: ModelProject = {
-            id: projectPath,
-            name: projectPath,
+          const autoProject = buildRequestedOutputProject() ?? {
+            id: requested.projectPath,
+            name: requested.projectPath,
             description: '',
-            path: projectPath,
-            showDbnum: showDbnum ? Number(showDbnum) : undefined,
+            path: requested.projectPath,
             default: false,
           };
-          projects.value = [...projects.value, autoProject];
+          ensureProjectListed(autoProject);
           applyProject(autoProject, false);
         } else {
           // 简化入口：未在 URL 指定项目时固定默认工程，避免先进入项目卡片页
@@ -154,8 +182,14 @@ export function useModelProjects() {
         }
       } catch (error) {
         console.error('Failed to load model projects from API:', error);
-        projects.value = [];
         const requested = readRequestedProject();
+        const requestedProject = buildRequestedOutputProject();
+        if (requestedProject) {
+          projects.value = [requestedProject];
+          applyProject(requestedProject, true);
+          return;
+        }
+        projects.value = [];
         // 设置默认项目以防后端不可达
         const fallbackProject = {
           id: DEFAULT_MODEL_PROJECT_PATH,

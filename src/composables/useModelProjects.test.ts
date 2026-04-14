@@ -231,4 +231,32 @@ describe('useModelProjects', () => {
     expect(currentProject.value?.path).toBe('OutputOnlyPath');
     expect(currentProject.value?.id).toBe('OutputOnlyPath');
   });
+
+  it('sets output_project as current project immediately before /api/projects resolves', async () => {
+    window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+
+    const { currentProject, projects, isLoading } = await createModelProjects();
+
+    expect(currentProject.value?.path).toBe('AvevaMarineSample');
+    expect(currentProject.value?.id).toBe('AvevaMarineSample');
+    expect(projects.value.map((project) => project.path)).toContain('AvevaMarineSample');
+    expect(isLoading.value).toBe(true);
+  });
+
+  it('keeps output_project when /api/projects fails', async () => {
+    window.history.replaceState({}, '', '/?output_project=OtherProject');
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockRejectedValueOnce(new Error('network down'));
+
+    const { currentProject, projects, isLoading } = await createModelProjects();
+    await flushPromises();
+
+    expect(isLoading.value).toBe(false);
+    expect(projects.value).toHaveLength(1);
+    expect(currentProject.value?.path).toBe('OtherProject');
+    expect(currentProject.value?.id).toBe('OtherProject');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
 });
