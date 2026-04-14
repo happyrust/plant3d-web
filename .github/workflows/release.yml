@@ -99,11 +99,10 @@ jobs:
           
           VERSION="${{ steps.version.outputs.VERSION }}"
           ARCHIVE="plant3d-web-$VERSION.tar.gz"
-          REMOTE_ARCHIVE="~/$ARCHIVE"
 
           test -f "$ARCHIVE"
 
-          scp -i ~/.ssh/deploy_key "$ARCHIVE" $PROD_USER@$PROD_HOST:$REMOTE_ARCHIVE
+          cat "$ARCHIVE" | ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST "cat > \$HOME/$ARCHIVE"
           
           ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST 'bash -se' << ENDSSH
             set -euo pipefail
