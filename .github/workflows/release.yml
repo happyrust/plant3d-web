@@ -111,9 +111,13 @@ jobs:
             DEPLOY_DIR="/var/www/plant3d-web"
 
             sudo mkdir -p "\$DEPLOY_DIR"
+            sudo du -sh "\$DEPLOY_DIR" || true
+            df -h "\$DEPLOY_DIR" || true
+            sudo find "\$DEPLOY_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            df -h "\$DEPLOY_DIR" || true
           ENDSSH
 
-          rsync -az --delete-before --inplace \
+          rsync -az --inplace \
             -e "ssh -i ~/.ssh/deploy_key" \
             --rsync-path="sudo rsync" \
             "$EXTRACT_DIR"/ "$PROD_USER@$PROD_HOST:/var/www/plant3d-web/"
