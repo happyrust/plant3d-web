@@ -115,6 +115,8 @@ type ParquetDirectoryHint = {
   filesBaseDir: ParquetBaseDir | null
 }
 
+const DUCKDB_REMOTE_QUERY_KEY = '__duckdb';
+
 class ParquetNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -130,6 +132,31 @@ function toAbsoluteUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+export function buildParquetRemoteFileUrl(baseDirUrl: string, remoteFile: string, cacheBustToken: string): string {
+  try {
+    const base = typeof window === 'undefined'
+      ? new URL(toAbsoluteUrl(baseDirUrl), 'http://127.0.0.1')
+      : new URL(toAbsoluteUrl(baseDirUrl), window.location.origin);
+    const cleanFile = String(remoteFile || '').replace(/^\/+/, '');
+    const nextPath = `${base.pathname.replace(/\/+$/, '')}/${cleanFile}`.replace(/\/{2,}/g, '/');
+    base.pathname = nextPath;
+    const parsed = base;
+    parsed.searchParams.set(DUCKDB_REMOTE_QUERY_KEY, cacheBustToken);
+    return typeof window === 'undefined'
+      ? `${parsed.pathname}${parsed.search}${parsed.hash}`
+      : parsed.toString();
+  } catch {
+    const remotePath = `${baseDirUrl}/${remoteFile}`.replace(/\/{2,}/g, '/');
+    const remoteUrl = toAbsoluteUrl(remotePath);
+    const separator = remoteUrl.includes('?') ? '&' : '?';
+    return `${remoteUrl}${separator}${DUCKDB_REMOTE_QUERY_KEY}=${encodeURIComponent(cacheBustToken)}`;
+  }
+}
+
+function createDuckdbRemoteQueryToken(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 async function urlExists(url: string): Promise<boolean> {
@@ -155,7 +182,7 @@ async function tryFetchManifest(
   baseDir: ParquetBaseDir
 ): Promise<ParquetManifest | null> {
   const url = buildFilesOutputUrl(`${baseDir}/manifest_${dbno}.json`);
-  const resp = await fetch(url);
+  const resp = await fetch(url, { cache: 'no-store' });
   if (resp.status === 404) return null;
   if (!resp.ok) {
     throw new Error(`加载 manifest 失败(${baseDir}): HTTP ${resp.status} ${resp.statusText}`);
@@ -372,9 +399,10 @@ async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> 
   };
 }
 
-async function registerDbno(dbno: number): Promise<RegisteredDbno> {
+async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = {}): Promise<RegisteredDbno> {
+  const forceRefresh = options.forceRefresh === true;
   const cached = registeredByDbno.get(dbno);
-  if (cached) return cached;
+  if (cached && !forceRefresh) return cached;
   const pending = registeringByDbno.get(dbno);
   if (pending) return await pending;
 
@@ -392,12 +420,12 @@ async function registerDbno(dbno: number): Promise<RegisteredDbno> {
       transforms: `p_${dbno}_transforms.parquet`,
       aabb: `p_${dbno}_aabb.parquet`,
     };
+    const requestToken = createDuckdbRemoteQueryToken();
 
     // 注册远程文件（HTTP Range）
     const registerOne = async (localName: string, remoteFile: string) => {
-      const remotePath = `${baseDirUrl}/${remoteFile}`.replace(/\/{2,}/g, '/');
-      const remoteUrl = toAbsoluteUrl(remotePath);
-      await db!.registerFileURL(localName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, false);
+      const remoteUrl = buildParquetRemoteFileUrl(baseDirUrl, remoteFile, requestToken);
+      await db!.registerFileURL(localName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, true);
     };
 
     await Promise.all([
@@ -517,7 +545,7 @@ export function useDbnoInstancesParquetLoader() {
     if (!conn) throw new Error('DuckDB connection unavailable');
 
     const registerDbnoStartedAt = Date.now();
-    const reg = await registerDbno(dbno);
+    const reg = await registerDbno(dbno, { forceRefresh: true });
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
 
     // refno 在 parquet 里是 refno_str（与前端 refnoKey 一致：`24381_100818` 这种下划线格式）

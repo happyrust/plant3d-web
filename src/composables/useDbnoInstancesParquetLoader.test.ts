@@ -628,4 +628,86 @@ describe('useDbnoInstancesParquetLoader', () => {
     expect(loader.lastQueryTiming.value?.phaseMs.tubiSql).toBeGreaterThanOrEqual(0);
     expect(loader.lastQueryTiming.value?.phaseMs.tubiRows).toBeGreaterThanOrEqual(0);
   });
+
+  it('给 DuckDB 远程 parquet URL 添加缓存规避参数', async () => {
+    const { buildParquetRemoteFileUrl } = await import('./useDbnoInstancesParquetLoader');
+
+    const url = buildParquetRemoteFileUrl(
+      '/files/output/AvevaMarineSample/parquet',
+      '7997/instances.parquet',
+      'page-load-1'
+    );
+
+    expect(url).toContain('/files/output/AvevaMarineSample/parquet/7997/instances.parquet');
+    const parsed = new URL(url, 'http://127.0.0.1:3101');
+    expect(parsed.searchParams.get('__duckdb')).toBe('page-load-1');
+  });
+
+  it('保留已有查询参数并继续追加缓存规避参数', async () => {
+    const { buildParquetRemoteFileUrl } = await import('./useDbnoInstancesParquetLoader');
+
+    const url = buildParquetRemoteFileUrl(
+      'http://123.57.182.243/files/output/AvevaMarineSample/parquet?foo=1',
+      '7997/instances.parquet',
+      'page-load-2'
+    );
+
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get('foo')).toBe('1');
+    expect(parsed.searchParams.get('__duckdb')).toBe('page-load-2');
+  });
+
+  it('每次查询前都重新注册远端 parquet，并启用 directIO 避免复用旧缓存路径', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    queryMock.mockResolvedValue({
+      toArray: () => [],
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await loader.queryInstanceEntriesByRefnos(7997, ['24381_145018']);
+    await loader.queryInstanceEntriesByRefnos(7997, ['24381_145018']);
+
+    expect(registerFileURLMock).toHaveBeenCalledTimes(10);
+
+    const firstQueryCalls = registerFileURLMock.mock.calls.slice(0, 5);
+    const secondQueryCalls = registerFileURLMock.mock.calls.slice(5, 10);
+
+    for (const call of registerFileURLMock.mock.calls) {
+      expect(call[2]).toBe('http');
+      expect(call[3]).toBe(true);
+    }
+
+    expect(firstQueryCalls[0]?.[0]).toBe('p_7997_instances.parquet');
+    expect(secondQueryCalls[0]?.[0]).toBe('p_7997_instances.parquet');
+    expect(String(firstQueryCalls[0]?.[1])).toContain('/files/output/instances/instances_7997.parquet');
+    expect(String(secondQueryCalls[0]?.[1])).toContain('/files/output/instances/instances_7997.parquet');
+    expect(String(firstQueryCalls[0]?.[1])).not.toBe(String(secondQueryCalls[0]?.[1]));
+  });
 });
