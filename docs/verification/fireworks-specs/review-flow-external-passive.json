@@ -1,0 +1,413 @@
+{
+  "template_type": "flowchart",
+  "style": 7,
+  "width": 1280,
+  "height": 860,
+  "style_overrides": {
+    "title_align": "center"
+  },
+  "title": "三维校审当前默认主链路",
+  "subtitle": "external / passive 生产口径：外部平台推进 workflow，前端负责嵌入、保存镜像与恢复工作台",
+  "containers": [
+    {
+      "x": 40,
+      "y": 118,
+      "width": 1200,
+      "height": 104,
+      "label": "ENTRY"
+    },
+    {
+      "x": 40,
+      "y": 252,
+      "width": 1200,
+      "height": 138,
+      "label": "DESIGN SAVE"
+    },
+    {
+      "x": 40,
+      "y": 420,
+      "width": 1200,
+      "height": 154,
+      "label": "REVIEW RESTORE"
+    },
+    {
+      "x": 40,
+      "y": 604,
+      "width": 1200,
+      "height": 124,
+      "label": "EXTERNAL TRANSITION"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "pms",
+      "kind": "hexagon",
+      "x": 70,
+      "y": 144,
+      "width": 210,
+      "height": 62,
+      "label": "PowerPMS 打开单据",
+      "type_label": "ENTRY"
+    },
+    {
+      "id": "embed",
+      "kind": "rect",
+      "x": 330,
+      "y": 144,
+      "width": 230,
+      "height": 62,
+      "label": "embed-url 合同",
+      "sublabel": "user_token + form_id",
+      "type_label": "CONTRACT"
+    },
+    {
+      "id": "auth",
+      "kind": "rect",
+      "x": 620,
+      "y": 144,
+      "width": 200,
+      "height": 62,
+      "label": "authVerifyToken",
+      "sublabel": "claims(project role)",
+      "type_label": "VERIFY"
+    },
+    {
+      "id": "dock",
+      "kind": "double_rect",
+      "x": 930,
+      "y": 138,
+      "width": 240,
+      "height": 74,
+      "label": "DockLayout 落点",
+      "sublabel": "可信身份 + role landing",
+      "type_label": "P3D"
+    },
+    {
+      "id": "designer",
+      "kind": "user_avatar",
+      "x": 90,
+      "y": 286,
+      "width": 190,
+      "height": 58,
+      "label": "sj 设计角色"
+    },
+    {
+      "id": "initiate",
+      "kind": "double_rect",
+      "x": 330,
+      "y": 278,
+      "width": 260,
+      "height": 74,
+      "label": "InitiateReviewPanel",
+      "sublabel": "构件、包名、附件",
+      "type_label": "WORKBENCH"
+    },
+    {
+      "id": "create",
+      "kind": "rect",
+      "x": 660,
+      "y": 286,
+      "width": 220,
+      "height": 62,
+      "label": "createReviewTask",
+      "sublabel": "POST /api/review/tasks",
+      "type_label": "API"
+    },
+    {
+      "id": "mirror",
+      "kind": "rect",
+      "x": 940,
+      "y": 286,
+      "width": 230,
+      "height": 62,
+      "label": "内部镜像任务",
+      "sublabel": "form_id 绑定数据",
+      "type_label": "FORM"
+    },
+    {
+      "id": "reviewer",
+      "kind": "user_avatar",
+      "x": 90,
+      "y": 464,
+      "width": 240,
+      "height": 58,
+      "label": "jd / jh / sh / pz"
+    },
+    {
+      "id": "match",
+      "kind": "rect",
+      "x": 390,
+      "y": 456,
+      "width": 220,
+      "height": 62,
+      "label": "按 form_id 匹配",
+      "sublabel": "restoreEmbedWorkbenchContext",
+      "type_label": "CONTEXT"
+    },
+    {
+      "id": "query",
+      "kind": "rect",
+      "x": 690,
+      "y": 456,
+      "width": 220,
+      "height": 62,
+      "label": "workflow/sync query",
+      "sublabel": "snapshot + attachments",
+      "type_label": "SYNC"
+    },
+    {
+      "id": "review",
+      "kind": "double_rect",
+      "x": 960,
+      "y": 450,
+      "width": 210,
+      "height": 74,
+      "label": "ReviewPanel",
+      "sublabel": "恢复模型、批注、附件",
+      "type_label": "PASSIVE"
+    },
+    {
+      "id": "pmsSync",
+      "kind": "hexagon",
+      "x": 140,
+      "y": 638,
+      "width": 250,
+      "height": 62,
+      "label": "PMS 发动作",
+      "sublabel": "active / agree / return / stop",
+      "type_label": "WORKFLOW"
+    },
+    {
+      "id": "syncState",
+      "kind": "rect",
+      "x": 500,
+      "y": 638,
+      "width": 260,
+      "height": 62,
+      "label": "workflow/sync 驱动状态",
+      "sublabel": "真实流转不在前端闭环",
+      "type_label": "BACKEND"
+    },
+    {
+      "id": "assist",
+      "kind": "rect",
+      "x": 890,
+      "y": 638,
+      "width": 280,
+      "height": 62,
+      "label": "前端默认只展示",
+      "sublabel": "辅助校审，不直接推进审批",
+      "type_label": "PASSIVE"
+    }
+  ],
+  "arrows": [
+    {
+      "source": "pms",
+      "target": "embed",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "control",
+      "label": "POST /embed-url"
+    },
+    {
+      "source": "embed",
+      "target": "auth",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "user_token"
+    },
+    {
+      "source": "auth",
+      "target": "dock",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "claims"
+    },
+    {
+      "source": "dock",
+      "target": "initiate",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "async",
+      "dashed": true,
+      "label": "designer",
+      "route_points": [
+        [
+          1050,
+          230
+        ],
+        [
+          460,
+          230
+        ],
+        [
+          460,
+          278
+        ]
+      ]
+    },
+    {
+      "source": "dock",
+      "target": "review",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "async",
+      "dashed": true,
+      "label": "reviewer",
+      "route_points": [
+        [
+          1050,
+          388
+        ],
+        [
+          1065,
+          388
+        ],
+        [
+          1065,
+          450
+        ]
+      ]
+    },
+    {
+      "source": "designer",
+      "target": "initiate",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "选择构件"
+    },
+    {
+      "source": "initiate",
+      "target": "create",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "control",
+      "label": "保存"
+    },
+    {
+      "source": "create",
+      "target": "mirror",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "write",
+      "dashed": true,
+      "label": "form_id"
+    },
+    {
+      "source": "reviewer",
+      "target": "match",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "打开单据"
+    },
+    {
+      "source": "match",
+      "target": "query",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "control",
+      "label": "query"
+    },
+    {
+      "source": "query",
+      "target": "review",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "records"
+    },
+    {
+      "source": "mirror",
+      "target": "pmsSync",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "async",
+      "dashed": true,
+      "label": "回 PMS",
+      "route_points": [
+        [
+          1055,
+          390
+        ],
+        [
+          1055,
+          670
+        ],
+        [
+          265,
+          670
+        ],
+        [
+          265,
+          638
+        ]
+      ]
+    },
+    {
+      "source": "pmsSync",
+      "target": "syncState",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "control",
+      "label": "workflow/sync"
+    },
+    {
+      "source": "syncState",
+      "target": "assist",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "control",
+      "label": "状态同步"
+    },
+    {
+      "source": "review",
+      "target": "assist",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "feedback",
+      "dashed": true,
+      "label": "辅助校审",
+      "route_points": [
+        [
+          1065,
+          560
+        ],
+        [
+          1065,
+          638
+        ]
+      ]
+    }
+  ],
+  "legend": [
+    {
+      "flow": "control",
+      "label": "外部平台或前端触发动作"
+    },
+    {
+      "flow": "read",
+      "label": "读取 token / 快照 / records"
+    },
+    {
+      "flow": "write",
+      "label": "写入 form_id 镜像任务"
+    },
+    {
+      "flow": "async",
+      "label": "外部平台继续推进流程"
+    },
+    {
+      "flow": "feedback",
+      "label": "前端只做辅助校审展示"
+    }
+  ],
+  "legend_position": "bottom-left",
+  "legend_box": true,
+  "legend_y": 738,
+  "legend_box_fill": "#ffffff",
+  "footer": ""
+}

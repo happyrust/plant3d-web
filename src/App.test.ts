@@ -232,6 +232,55 @@ describe('App embed bootstrap', () => {
     warnSpy.mockRestore();
   });
 
+  it('只要 URL 带 output_project，就不会回退到项目选择页', async () => {
+    window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
+
+    const { host } = mountApp();
+    await flushView();
+
+    expect(host.querySelector('[data-testid="dashboard-layout-stub"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dock-layout-stub"]')).toBeTruthy();
+  });
+
+  it('output_project 已选中时，token claims.project_id 不一致只告警不覆盖当前项目', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    window.history.replaceState(
+      {},
+      '',
+      '/?output_project=AvevaMarineSample&user_token=jwt-app-token',
+    );
+    currentProjectRef.value = { id: 'projects:sample', path: 'AvevaMarineSample' };
+    authVerifyTokenMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: {
+        valid: true,
+        claims: {
+          projectId: 'AnotherProject',
+          userId: 'designer-1',
+          formId: 'FORM-CLAIMS-1',
+          role: 'sj',
+          workflowMode: 'external',
+          exp: 1999999999,
+          iat: 1700000000,
+        },
+      },
+    });
+
+    mountApp();
+    await flushView();
+
+    expect(switchProjectByIdMock).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[App] output_project 与 token claims.project_id 不一致，保留 output_project 直达:',
+      {
+        outputProject: 'AvevaMarineSample',
+        projectId: 'AnotherProject',
+      },
+    );
+    warnSpy.mockRestore();
+  });
+
   it('主工作区使用可收缩的 v-main flex，避免嵌入 iframe 时高度溢出', async () => {
     authVerifyTokenMock.mockResolvedValue({
       code: 0,

@@ -50,6 +50,7 @@ npm-cache
 # 本地大量 e2e 不入库；PMS 外网联调用例单独跟踪
 e2e/*
 !e2e/pms-powerpms-review-new.spec.ts
+!e2e/output-project-direct-entry.spec.ts
 !e2e/helpers/
 !e2e/helpers/spatialQueryRealBran.ts
 !e2e/spatial-query-real-bran.spec.ts

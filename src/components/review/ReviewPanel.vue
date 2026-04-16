@@ -52,7 +52,7 @@ import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
-import type { ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
+import type { AnnotationReviewState, ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
   reviewSyncExport,
@@ -67,7 +67,12 @@ import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import { getTaskStatusDisplayName, WORKFLOW_NODE_NAMES } from '@/types/auth';
+import {
+  getAnnotationReviewDisplay,
+  getRoleDisplayName,
+  getTaskStatusDisplayName,
+  WORKFLOW_NODE_NAMES,
+} from '@/types/auth';
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
 type ConfirmedRecordEntry = typeof reviewStore.sortedConfirmedRecords.value[number];
@@ -1033,6 +1038,7 @@ type AnnotationListItem = {
   visible: boolean;
   commentCount: number;
   refno?: string;
+  reviewState?: AnnotationReviewState;
 };
 
 const expandedAnnotationId = ref<string | null>(null);
@@ -1051,6 +1057,7 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
       visible: a.visible,
       commentCount: toolStore.getAnnotationComments('text', a.id).length,
       refno: a.refno,
+      reviewState: a.reviewState,
     });
   }
 
@@ -1063,6 +1070,7 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
       createdAt: a.createdAt,
       visible: a.visible,
       commentCount: toolStore.getAnnotationComments('cloud', a.id).length,
+      reviewState: a.reviewState,
     });
   }
 
@@ -1075,6 +1083,20 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
       createdAt: a.createdAt,
       visible: a.visible,
       commentCount: toolStore.getAnnotationComments('rect', a.id).length,
+      reviewState: a.reviewState,
+    });
+  }
+
+  for (const a of toolStore.obbAnnotations.value) {
+    items.push({
+      id: a.id,
+      type: 'obb',
+      title: a.title?.trim() || '未命名包围盒批注',
+      description: a.description?.trim() || '',
+      createdAt: a.createdAt,
+      visible: a.visible,
+      commentCount: toolStore.getAnnotationComments('obb', a.id).length,
+      reviewState: a.reviewState,
     });
   }
 
@@ -1088,8 +1110,13 @@ function getAnnotationTypeBadge(type: AnnotationType): { label: string; colorCla
     case 'text': return { label: '文字', colorClass: 'bg-blue-100 text-blue-700' };
     case 'cloud': return { label: '云线', colorClass: 'bg-violet-100 text-violet-700' };
     case 'rect': return { label: '矩形', colorClass: 'bg-amber-100 text-amber-700' };
+    case 'obb': return { label: '包围盒', colorClass: 'bg-fuchsia-100 text-fuchsia-700' };
     default: return { label: '批注', colorClass: 'bg-slate-100 text-slate-700' };
   }
+}
+
+function getAnnotationReviewBadge(item: AnnotationListItem): { label: string; detail: string; color: string } {
+  return getAnnotationReviewDisplay(item.reviewState);
 }
 
 function formatAnnotationTime(timestamp: number): string {
@@ -1119,14 +1146,22 @@ function flyToAnnotationItem(item: AnnotationListItem) {
     toolStore.activeAnnotationId.value = item.id;
     toolStore.activeCloudAnnotationId.value = null;
     toolStore.activeRectAnnotationId.value = null;
+    toolStore.activeObbAnnotationId.value = null;
   } else if (item.type === 'cloud') {
     toolStore.activeCloudAnnotationId.value = item.id;
     toolStore.activeAnnotationId.value = null;
     toolStore.activeRectAnnotationId.value = null;
+    toolStore.activeObbAnnotationId.value = null;
   } else if (item.type === 'rect') {
     toolStore.activeRectAnnotationId.value = item.id;
     toolStore.activeAnnotationId.value = null;
     toolStore.activeCloudAnnotationId.value = null;
+    toolStore.activeObbAnnotationId.value = null;
+  } else if (item.type === 'obb') {
+    toolStore.activeObbAnnotationId.value = item.id;
+    toolStore.activeAnnotationId.value = null;
+    toolStore.activeCloudAnnotationId.value = null;
+    toolStore.activeRectAnnotationId.value = null;
   }
 }
 </script>
@@ -1450,10 +1485,19 @@ function flyToAnnotationItem(item: AnnotationListItem) {
                     :class="getAnnotationTypeBadge(item.type).colorClass">
                     {{ getAnnotationTypeBadge(item.type).label }}
                   </span>
+                  <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                    :class="getAnnotationReviewBadge(item).color">
+                    {{ getAnnotationReviewBadge(item).label }}
+                  </span>
                 </div>
                 <p v-if="item.description" class="mt-0.5 truncate text-xs text-slate-500">{{ item.description }}</p>
                 <div v-if="item.refno" class="mt-1">
                   <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] text-blue-600">{{ item.refno }}</span>
+                </div>
+                <div v-if="item.reviewState?.updatedByName" class="mt-1 text-[11px] text-slate-400">
+                  {{ item.reviewState.updatedByName }}
+                  <span v-if="item.reviewState.updatedByRole"> · {{ getRoleDisplayName(item.reviewState.updatedByRole) }}</span>
+                  <span v-if="item.reviewState.updatedAt"> · {{ formatAnnotationTime(item.reviewState.updatedAt) }}</span>
                 </div>
               </div>
               <span class="shrink-0 text-[11px] text-slate-400">{{ formatAnnotationTime(item.createdAt) }}</span>
@@ -1462,6 +1506,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
             <!-- 底部：评论数 + 操作 -->
             <div class="mt-2 flex items-center justify-between">
               <div class="flex items-center gap-2 text-[11px] text-slate-400">
+                <div class="truncate">{{ getAnnotationReviewBadge(item).detail }}</div>
                 <div v-if="item.commentCount > 0" class="flex items-center gap-1 text-orange-500">
                   <MessageSquare class="h-3 w-3" />
                   <span class="font-medium">{{ item.commentCount }} 条意见</span>

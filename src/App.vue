@@ -26,12 +26,20 @@ const extensionHeight = computed(() =>
 
 const urlParams = new URLSearchParams(window.location.search);
 const showBenchmark = urlParams.get('benchmark') === 'true';
+const requestedOutputProject = urlParams.get('output_project')?.trim() ?? '';
+const hasRequestedOutputProject = requestedOutputProject.length > 0;
 
 const { currentProject, loadProjects, switchProjectById, projects } = useModelProjects();
 
 const onboarding = useOnboardingGuide();
 const embedBootstrapPending = ref(false);
-const showDashboardLayout = computed(() => !currentProject.value && !embedBootstrapPending.value);
+const showDashboardLayout = computed(() =>
+  !currentProject.value && !embedBootstrapPending.value && !hasRequestedOutputProject,
+);
+
+function isCurrentProjectMatched(projectId: string): boolean {
+  return currentProject.value?.id === projectId || currentProject.value?.path === projectId;
+}
 
 async function bootstrapEmbedProjectFromToken() {
   const token = urlParams.get('user_token')?.trim();
@@ -45,11 +53,18 @@ async function bootstrapEmbedProjectFromToken() {
     if (!projectId) return;
 
     await loadProjects();
+    const outputProjectAlreadySelected =
+      hasRequestedOutputProject && isCurrentProjectMatched(requestedOutputProject);
+    if (outputProjectAlreadySelected && requestedOutputProject !== projectId) {
+      console.warn('[App] output_project 与 token claims.project_id 不一致，保留 output_project 直达:', {
+        outputProject: requestedOutputProject,
+        projectId,
+      });
+      return;
+    }
+
     const matched = switchProjectById(projectId);
-    const alreadySelected =
-      currentProject.value?.id === projectId ||
-      currentProject.value?.path === projectId;
-    if (!matched && !alreadySelected) {
+    if (!matched && !isCurrentProjectMatched(projectId)) {
       console.warn('[App] 嵌入模式 project_id 未命中项目列表:', {
         projectId,
         availableProjects: projects.value.map((project) => ({

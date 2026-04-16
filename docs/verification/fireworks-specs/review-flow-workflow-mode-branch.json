@@ -1,0 +1,467 @@
+{
+  "template_type": "flowchart",
+  "style": 7,
+  "width": 1240,
+  "height": 780,
+  "style_overrides": {
+    "title_align": "center"
+  },
+  "title": "workflow_mode 分叉口径",
+  "subtitle": "默认 external；只有显式设置 manual / internal，前端才走内部提交与驳回链路",
+  "containers": [
+    {
+      "x": 40,
+      "y": 118,
+      "width": 1160,
+      "height": 104,
+      "label": "BOOTSTRAP"
+    },
+    {
+      "x": 40,
+      "y": 270,
+      "width": 560,
+      "height": 420,
+      "label": "EXTERNAL DEFAULT"
+    },
+    {
+      "x": 640,
+      "y": 270,
+      "width": 560,
+      "height": 420,
+      "label": "MANUAL / INTERNAL"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "entry",
+      "kind": "rect",
+      "x": 70,
+      "y": 144,
+      "width": 200,
+      "height": 62,
+      "label": "进入嵌入页",
+      "sublabel": "iframe / 新标签",
+      "type_label": "ENTRY"
+    },
+    {
+      "id": "params",
+      "kind": "rect",
+      "x": 330,
+      "y": 144,
+      "width": 220,
+      "height": 62,
+      "label": "读取 query / session",
+      "sublabel": "user_token / form_id",
+      "type_label": "BOOT"
+    },
+    {
+      "id": "verify",
+      "kind": "rect",
+      "x": 610,
+      "y": 144,
+      "width": 220,
+      "height": 62,
+      "label": "authVerifyToken",
+      "sublabel": "claims.projectId role",
+      "type_label": "VERIFY"
+    },
+    {
+      "id": "mode",
+      "kind": "hexagon",
+      "x": 900,
+      "y": 138,
+      "width": 240,
+      "height": 74,
+      "label": "resolveWorkflowMode",
+      "sublabel": "default = external",
+      "type_label": "MODE"
+    },
+    {
+      "id": "extMode",
+      "kind": "hexagon",
+      "x": 200,
+      "y": 308,
+      "width": 240,
+      "height": 68,
+      "label": "workflow = external",
+      "sublabel": "生产默认",
+      "type_label": "DEFAULT"
+    },
+    {
+      "id": "extDesigner",
+      "kind": "rect",
+      "x": 80,
+      "y": 430,
+      "width": 210,
+      "height": 60,
+      "label": "sj -> InitiateReview",
+      "sublabel": "设计侧工作区",
+      "type_label": "DESIGNER"
+    },
+    {
+      "id": "extSave",
+      "kind": "rect",
+      "x": 80,
+      "y": 520,
+      "width": 220,
+      "height": 60,
+      "label": "createReviewTask 保存",
+      "sublabel": "只落地 form_id 数据",
+      "type_label": "FORM"
+    },
+    {
+      "id": "extWait",
+      "kind": "rect",
+      "x": 80,
+      "y": 610,
+      "width": 220,
+      "height": 60,
+      "label": "等待 PMS active",
+      "sublabel": "前端不直接 submit",
+      "type_label": "SYNC"
+    },
+    {
+      "id": "extReviewer",
+      "kind": "rect",
+      "x": 340,
+      "y": 430,
+      "width": 210,
+      "height": 60,
+      "label": "reviewer -> ReviewPanel",
+      "sublabel": "审核侧工作区",
+      "type_label": "REVIEWER"
+    },
+    {
+      "id": "extRestore",
+      "kind": "rect",
+      "x": 330,
+      "y": 520,
+      "width": 220,
+      "height": 60,
+      "label": "form_id + query 恢复",
+      "sublabel": "tasks + snapshot + 附件",
+      "type_label": "RESTORE"
+    },
+    {
+      "id": "extAction",
+      "kind": "rect",
+      "x": 330,
+      "y": 610,
+      "width": 220,
+      "height": 60,
+      "label": "等待 agree / return / stop",
+      "sublabel": "真实动作仍由 PMS 推进",
+      "type_label": "SYNC"
+    },
+    {
+      "id": "manMode",
+      "kind": "hexagon",
+      "x": 800,
+      "y": 308,
+      "width": 240,
+      "height": 68,
+      "label": "workflow = manual",
+      "sublabel": "或 internal",
+      "type_label": "OPT-IN"
+    },
+    {
+      "id": "manDesigner",
+      "kind": "rect",
+      "x": 680,
+      "y": 430,
+      "width": 210,
+      "height": 60,
+      "label": "sj -> InitiateReview",
+      "sublabel": "显示校核人 / 批准人",
+      "type_label": "DESIGNER"
+    },
+    {
+      "id": "manSubmit",
+      "kind": "rect",
+      "x": 680,
+      "y": 520,
+      "width": 220,
+      "height": 60,
+      "label": "submitTaskToNextNode",
+      "sublabel": "保存后推进下一节点",
+      "type_label": "INTERNAL"
+    },
+    {
+      "id": "manList",
+      "kind": "rect",
+      "x": 940,
+      "y": 430,
+      "width": 220,
+      "height": 60,
+      "label": "ReviewerTaskList",
+      "sublabel": "待办列表仍参与流转",
+      "type_label": "QUEUE"
+    },
+    {
+      "id": "manReview",
+      "kind": "rect",
+      "x": 940,
+      "y": 520,
+      "width": 220,
+      "height": 60,
+      "label": "ReviewPanel 内部提交",
+      "sublabel": "confirm / submit",
+      "type_label": "ACTION"
+    },
+    {
+      "id": "manReturn",
+      "kind": "rect",
+      "x": 940,
+      "y": 610,
+      "width": 220,
+      "height": 60,
+      "label": "returnTaskToNode",
+      "sublabel": "驳回到上游节点",
+      "type_label": "INTERNAL"
+    }
+  ],
+  "arrows": [
+    {
+      "source": "entry",
+      "target": "params",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "control",
+      "label": "url params"
+    },
+    {
+      "source": "params",
+      "target": "verify",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "user_token"
+    },
+    {
+      "source": "verify",
+      "target": "mode",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "claims"
+    },
+    {
+      "source": "mode",
+      "target": "extMode",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "默认",
+      "route_points": [
+        [
+          1020,
+          240
+        ],
+        [
+          320,
+          240
+        ],
+        [
+          320,
+          308
+        ]
+      ]
+    },
+    {
+      "source": "mode",
+      "target": "manMode",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "async",
+      "dashed": true,
+      "label": "显式 manual",
+      "route_points": [
+        [
+          1020,
+          240
+        ],
+        [
+          920,
+          240
+        ],
+        [
+          920,
+          308
+        ]
+      ]
+    },
+    {
+      "source": "extMode",
+      "target": "extDesigner",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "sj"
+    },
+    {
+      "source": "extDesigner",
+      "target": "extSave",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "保存"
+    },
+    {
+      "source": "extSave",
+      "target": "extWait",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "async",
+      "dashed": true,
+      "label": "不闭环"
+    },
+    {
+      "source": "extMode",
+      "target": "extReviewer",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "reviewer",
+      "route_points": [
+        [
+          430,
+          400
+        ],
+        [
+          445,
+          400
+        ],
+        [
+          445,
+          430
+        ]
+      ]
+    },
+    {
+      "source": "extReviewer",
+      "target": "extRestore",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "read",
+      "label": "restore"
+    },
+    {
+      "source": "extRestore",
+      "target": "extAction",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "async",
+      "dashed": true,
+      "label": "PMS 推进"
+    },
+    {
+      "source": "manMode",
+      "target": "manDesigner",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "sj",
+      "route_points": [
+        [
+          820,
+          400
+        ],
+        [
+          785,
+          400
+        ],
+        [
+          785,
+          430
+        ]
+      ]
+    },
+    {
+      "source": "manDesigner",
+      "target": "manSubmit",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "保存后"
+    },
+    {
+      "source": "manSubmit",
+      "target": "manList",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "control",
+      "label": "下一节点",
+      "route_points": [
+        [
+          910,
+          550
+        ],
+        [
+          910,
+          460
+        ],
+        [
+          940,
+          460
+        ]
+      ]
+    },
+    {
+      "source": "manMode",
+      "target": "manList",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "reviewer",
+      "route_points": [
+        [
+          1020,
+          400
+        ],
+        [
+          1050,
+          400
+        ],
+        [
+          1050,
+          430
+        ]
+      ]
+    },
+    {
+      "source": "manList",
+      "target": "manReview",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "startReview"
+    },
+    {
+      "source": "manReview",
+      "target": "manReturn",
+      "source_port": "bottom",
+      "target_port": "top",
+      "flow": "control",
+      "label": "驳回 / 提交"
+    }
+  ],
+  "legend": [
+    {
+      "flow": "control",
+      "label": "前端内部主链路"
+    },
+    {
+      "flow": "read",
+      "label": "读取 token / claims / restore 数据"
+    },
+    {
+      "flow": "async",
+      "label": "external 默认下交还 PMS 推进"
+    }
+  ],
+  "legend_position": "bottom-left",
+  "legend_box": true,
+  "legend_y": 724,
+  "legend_box_fill": "#ffffff",
+  "footer": ""
+}

@@ -1,6 +1,15 @@
 import { computed, ref, watch } from 'vue';
 
-import type { AnnotationComment } from '@/types/auth';
+import {
+  createDefaultAnnotationReviewState,
+  normalizeAnnotationReviewState,
+} from '@/types/auth';
+import type {
+  AnnotationComment,
+  AnnotationReviewAction,
+  AnnotationReviewState,
+  User,
+} from '@/types/auth';
 
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 
@@ -186,6 +195,7 @@ export type AnnotationRecord = {
   createdAt: number;
   refno?: string; // 关联的对象参考号
   comments?: AnnotationComment[]; // 多角色意见列表
+  reviewState?: AnnotationReviewState;
 };
 
 export type Obb = {
@@ -216,6 +226,7 @@ export type ObbAnnotationRecord = {
   createdAt: number;
   refnos?: string[]; // 关联的对象参考号列表
   comments?: AnnotationComment[]; // 多角色意见列表
+  reviewState?: AnnotationReviewState;
 };
 
 export type CloudAnnotationRecord = {
@@ -234,6 +245,7 @@ export type CloudAnnotationRecord = {
   createdAt: number;
   refnos?: string[]; // 关联的对象参考号列表
   comments?: AnnotationComment[]; // 多角色意见列表
+  reviewState?: AnnotationReviewState;
 };
 
 export type RectAnnotationRecord = {
@@ -248,6 +260,7 @@ export type RectAnnotationRecord = {
   createdAt: number;
   refnos?: string[];
   comments?: AnnotationComment[]; // 多角色意见列表
+  reviewState?: AnnotationReviewState;
 };
 
 export type PickedQueryCenter = {
@@ -351,6 +364,28 @@ function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
     ...rec,
     labelWorldPos: Array.isArray(rec.labelWorldPos) && rec.labelWorldPos.length === 3 ? rec.labelWorldPos : undefined,
     collapsed: rec.collapsed === true,
+    reviewState: normalizeAnnotationReviewState(rec.reviewState),
+  };
+}
+
+function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRecord {
+  return {
+    ...rec,
+    reviewState: normalizeAnnotationReviewState(rec.reviewState),
+  };
+}
+
+function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnotationRecord {
+  return {
+    ...rec,
+    reviewState: normalizeAnnotationReviewState(rec.reviewState),
+  };
+}
+
+function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotationRecord {
+  return {
+    ...rec,
+    reviewState: normalizeAnnotationReviewState(rec.reviewState),
   };
 }
 
@@ -373,7 +408,7 @@ function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
-    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
+    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: [],
     rectAnnotations: [],
     dimensions: [],
@@ -387,9 +422,9 @@ function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
-    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
-    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
-    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
+    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
+    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
+    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations.map(normalizeRectAnnotationRecord) : [],
     dimensions: [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],
@@ -401,9 +436,9 @@ function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
-    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
-    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
-    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
+    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
+    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
+    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations.map(normalizeRectAnnotationRecord) : [],
     dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],
@@ -415,9 +450,9 @@ function normalizeV5(parsed: PersistedStateV5): PersistedStateV5 {
     version: 5,
     measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
-    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations : [],
-    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations : [],
-    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations : [],
+    obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
+    cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
+    rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations.map(normalizeRectAnnotationRecord) : [],
     dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
     xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements) ? parsed.xeokitDistanceMeasurements : [],
     xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements) ? parsed.xeokitAngleMeasurements : [],
@@ -898,7 +933,7 @@ function clearAnnotations() {
 }
 
 function addObbAnnotation(rec: ObbAnnotationRecord) {
-  obbAnnotations.value = [...obbAnnotations.value, rec];
+  obbAnnotations.value = [...obbAnnotations.value, normalizeObbAnnotationRecord(rec)];
   activeObbAnnotationId.value = rec.id;
   // 不再自动弹出编辑框，用户点击图钉后再编辑
 }
@@ -925,7 +960,7 @@ function clearObbAnnotations() {
 }
 
 function addCloudAnnotation(rec: CloudAnnotationRecord) {
-  cloudAnnotations.value = [...cloudAnnotations.value, rec];
+  cloudAnnotations.value = [...cloudAnnotations.value, normalizeCloudAnnotationRecord(rec)];
   activeCloudAnnotationId.value = rec.id;
   pendingCloudAnnotationEditId.value = rec.id;
 }
@@ -955,7 +990,7 @@ function clearCloudAnnotations() {
 }
 
 function addRectAnnotation(rec: RectAnnotationRecord) {
-  rectAnnotations.value = [...rectAnnotations.value, rec];
+  rectAnnotations.value = [...rectAnnotations.value, normalizeRectAnnotationRecord(rec)];
   activeRectAnnotationId.value = rec.id;
   pendingRectAnnotationEditId.value = rec.id;
 }
@@ -1080,6 +1115,122 @@ export type AnnotationType = 'text' | 'cloud' | 'rect' | 'obb';
 export type AnnotationCommentInput =
   Omit<AnnotationComment, 'id' | 'annotationId' | 'annotationType' | 'createdAt'>
   & Partial<Pick<AnnotationComment, 'id' | 'annotationId' | 'annotationType' | 'createdAt'>>;
+type AnnotationReviewActor = Pick<User, 'id' | 'name' | 'role'>;
+
+function getAnnotationRecordByType(
+  annotationType: AnnotationType,
+  annotationId: string
+): AnyAnnotationRecord | null {
+  switch (annotationType) {
+    case 'text':
+      return annotations.value.find((a) => a.id === annotationId) || null;
+    case 'cloud':
+      return cloudAnnotations.value.find((a) => a.id === annotationId) || null;
+    case 'rect':
+      return rectAnnotations.value.find((a) => a.id === annotationId) || null;
+    case 'obb':
+      return obbAnnotations.value.find((a) => a.id === annotationId) || null;
+  }
+}
+
+function getAnnotationReviewState(
+  annotationType: AnnotationType,
+  annotationId: string
+): AnnotationReviewState {
+  const record = getAnnotationRecordByType(annotationType, annotationId);
+  return normalizeAnnotationReviewState(record?.reviewState ?? createDefaultAnnotationReviewState());
+}
+
+function setAnnotationReviewState(
+  annotationType: AnnotationType,
+  annotationId: string,
+  reviewState: AnnotationReviewState
+): boolean {
+  const normalized = normalizeAnnotationReviewState(reviewState);
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, { reviewState: normalized });
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, { reviewState: normalized });
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, { reviewState: normalized });
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, { reviewState: normalized });
+      return true;
+    }
+  }
+}
+
+function applyAnnotationReviewAction(
+  annotationType: AnnotationType,
+  annotationId: string,
+  payload: {
+    action: AnnotationReviewAction;
+    actor: AnnotationReviewActor;
+    note?: string;
+    createdAt?: number;
+  }
+): AnnotationReviewState | null {
+  const record = getAnnotationRecordByType(annotationType, annotationId);
+  if (!record) return null;
+
+  const timestamp = payload.createdAt || Date.now();
+  const note = payload.note?.trim() || undefined;
+  const current = getAnnotationReviewState(annotationType, annotationId);
+  const next: AnnotationReviewState = {
+    ...current,
+    note,
+    updatedAt: timestamp,
+    updatedById: payload.actor.id,
+    updatedByName: payload.actor.name,
+    updatedByRole: payload.actor.role,
+    history: [
+      ...current.history,
+      {
+        id: `annotation_review_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+        action: payload.action,
+        operatorId: payload.actor.id,
+        operatorName: payload.actor.name,
+        operatorRole: payload.actor.role,
+        note,
+        createdAt: timestamp,
+      },
+    ],
+  };
+
+  switch (payload.action) {
+    case 'fixed':
+      next.resolutionStatus = 'fixed';
+      next.decisionStatus = 'pending';
+      break;
+    case 'wont_fix':
+      next.resolutionStatus = 'wont_fix';
+      next.decisionStatus = 'pending';
+      break;
+    case 'agree':
+      next.decisionStatus = 'agreed';
+      break;
+    case 'reject':
+      next.decisionStatus = 'rejected';
+      break;
+  }
+
+  return setAnnotationReviewState(annotationType, annotationId, next) ? next : null;
+}
 
 /**
  * 为批注添加评论/意见
@@ -1520,6 +1671,9 @@ export function useToolStore() {
     updateAnnotationComment,
     removeAnnotationComment,
     getAnnotationComments,
+    getAnnotationReviewState,
+    setAnnotationReviewState,
+    applyAnnotationReviewAction,
 
     exportJSON,
     importJSON,

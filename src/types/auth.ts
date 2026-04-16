@@ -14,6 +14,31 @@ export type AnnotationComment = {
   updatedAt?: number;
 };
 
+export type AnnotationResolutionStatus = 'open' | 'fixed' | 'wont_fix';
+export type AnnotationDecisionStatus = 'pending' | 'agreed' | 'rejected';
+export type AnnotationReviewAction = 'fixed' | 'wont_fix' | 'agree' | 'reject';
+
+export type AnnotationReviewEvent = {
+  id: string;
+  action: AnnotationReviewAction;
+  operatorId: string;
+  operatorName: string;
+  operatorRole: UserRole;
+  note?: string;
+  createdAt: number;
+};
+
+export type AnnotationReviewState = {
+  resolutionStatus: AnnotationResolutionStatus;
+  decisionStatus: AnnotationDecisionStatus;
+  note?: string;
+  updatedAt?: number;
+  updatedById?: string;
+  updatedByName?: string;
+  updatedByRole?: UserRole;
+  history: AnnotationReviewEvent[];
+};
+
 export enum UserRole {
   ADMIN = 'admin', // 系统管理员
   MANAGER = 'manager', // 项目管理员
@@ -209,6 +234,98 @@ export function getRoleDisplayName(role: UserRole): string {
     [UserRole.VIEWER]: '查看者',
   };
   return roleNames[role] || role;
+}
+
+export function createDefaultAnnotationReviewState(): AnnotationReviewState {
+  return {
+    resolutionStatus: 'open',
+    decisionStatus: 'pending',
+    history: [],
+  };
+}
+
+export function normalizeAnnotationReviewState(
+  state?: Partial<AnnotationReviewState> | null
+): AnnotationReviewState {
+  return {
+    resolutionStatus: state?.resolutionStatus === 'fixed' || state?.resolutionStatus === 'wont_fix'
+      ? state.resolutionStatus
+      : 'open',
+    decisionStatus: state?.decisionStatus === 'agreed' || state?.decisionStatus === 'rejected'
+      ? state.decisionStatus
+      : 'pending',
+    note: state?.note?.trim() || undefined,
+    updatedAt: state?.updatedAt,
+    updatedById: state?.updatedById,
+    updatedByName: state?.updatedByName,
+    updatedByRole: state?.updatedByRole,
+    history: Array.isArray(state?.history) ? state.history : [],
+  };
+}
+
+export function getAnnotationReviewActionLabel(action: AnnotationReviewAction): string {
+  switch (action) {
+    case 'fixed':
+      return '标记已修改';
+    case 'wont_fix':
+      return '标记不需解决';
+    case 'agree':
+      return '同意';
+    case 'reject':
+      return '驳回';
+  }
+}
+
+export function getAnnotationReviewDisplay(
+  state?: Partial<AnnotationReviewState> | null
+): { label: string; detail: string; color: string } {
+  const normalized = normalizeAnnotationReviewState(state);
+
+  if (normalized.decisionStatus === 'rejected') {
+    return {
+      label: '已驳回',
+      detail: '校对/审核要求重新处理',
+      color: 'bg-red-100 text-red-700',
+    };
+  }
+
+  if (normalized.decisionStatus === 'agreed' && normalized.resolutionStatus === 'wont_fix') {
+    return {
+      label: '已同意不处理',
+      detail: '校对/审核已同意该批注不需解决',
+      color: 'bg-emerald-100 text-emerald-700',
+    };
+  }
+
+  if (normalized.decisionStatus === 'agreed') {
+    return {
+      label: '已同意',
+      detail: '校对/审核已同意设计处理结果',
+      color: 'bg-emerald-100 text-emerald-700',
+    };
+  }
+
+  if (normalized.resolutionStatus === 'wont_fix') {
+    return {
+      label: '不需解决待确认',
+      detail: '设计已标记为不需解决，待校对/审核确认',
+      color: 'bg-amber-100 text-amber-700',
+    };
+  }
+
+  if (normalized.resolutionStatus === 'fixed') {
+    return {
+      label: '已修改待确认',
+      detail: '设计已处理，待校对/审核确认',
+      color: 'bg-blue-100 text-blue-700',
+    };
+  }
+
+  return {
+    label: '待处理',
+    detail: '当前批注默认打开，等待设计处理',
+    color: 'bg-slate-100 text-slate-700',
+  };
 }
 
 // 获取状态显示名称

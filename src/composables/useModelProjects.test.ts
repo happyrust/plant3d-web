@@ -232,6 +232,20 @@ describe('useModelProjects', () => {
     expect(currentProject.value?.id).toBe('OutputOnlyPath');
   });
 
+  it('当 /api/projects 未返回该 output_project 时，仍保留 URL 指定项目为当前项目', async () => {
+    window.history.replaceState({}, '', '/?output_project=MissingButRequested');
+    fetchMock.mockResolvedValue(buildProjectsResponse([
+      { id: 'ams-model', name: 'AvevaMarineSample', notes: 'Marine' },
+    ]));
+
+    const { currentProject, projects } = await createModelProjects();
+    await flushPromises();
+
+    expect(currentProject.value?.path).toBe('MissingButRequested');
+    expect(currentProject.value?.id).toBe('MissingButRequested');
+    expect(projects.value.map((project) => project.path)).toContain('MissingButRequested');
+  });
+
   it('sets output_project as current project immediately before /api/projects resolves', async () => {
     window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
     fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
