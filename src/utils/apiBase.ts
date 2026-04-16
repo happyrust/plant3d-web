@@ -84,7 +84,27 @@ export function resolveBackendApiBaseUrl(options: ResolveBackendApiBaseUrlOption
   return normalized;
 }
 
+function getBackendOverrideFromQuery(): string | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const port = params.get('backendPort');
+  if (port && /^\d+$/.test(port)) return `http://localhost:${port}`;
+  const backend = params.get('backend');
+  if (backend) {
+    try {
+      new URL(backend);
+      return sanitize(backend);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function getBackendApiBaseUrl(options: BackendApiBaseOptions = {}): string {
+  const queryOverride = getBackendOverrideFromQuery();
+  if (queryOverride) return queryOverride;
+
   return resolveBackendApiBaseUrl({
     envBase: (import.meta.env as unknown as { VITE_GEN_MODEL_API_BASE_URL?: string })
       .VITE_GEN_MODEL_API_BASE_URL,
