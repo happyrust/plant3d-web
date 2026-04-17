@@ -284,4 +284,126 @@ describe('AnnotationPanel', () => {
     host.remove();
     host = null;
   });
+
+  it('严重度概览条应按桶展示数量，并支持点击筛选列表', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/components/review/ReviewCommentsTimeline.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({ currentUser: ref(null) }),
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.addAnnotation({
+      id: 't-crit', entityId: 'e1', worldPos: [0, 0, 0],
+      visible: true, glyph: 'A', title: '致命文字', description: '', createdAt: 10,
+    });
+    store.addAnnotation({
+      id: 't-normal', entityId: 'e2', worldPos: [0, 0, 0],
+      visible: true, glyph: 'B', title: '一般文字', description: '', createdAt: 20,
+    });
+    store.addAnnotation({
+      id: 't-unset', entityId: 'e3', worldPos: [0, 0, 0],
+      visible: true, glyph: 'C', title: '未设置文字', description: '', createdAt: 30,
+    });
+    store.updateAnnotationSeverity('text', 't-crit', 'critical');
+    store.updateAnnotationSeverity('text', 't-normal', 'normal');
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true), statusText: ref('ready'),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const critBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-critical"]') as HTMLButtonElement | null;
+    const normalBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-normal"]') as HTMLButtonElement | null;
+    const unsetBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-unset"]') as HTMLButtonElement | null;
+    const clearBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-clear"]') as HTMLButtonElement | null;
+    expect(critBtn?.textContent).toContain('1');
+    expect(normalBtn?.textContent).toContain('1');
+    expect(unsetBtn?.textContent).toContain('1');
+    expect(clearBtn?.textContent).toContain('3');
+
+    critBtn?.click();
+    await nextTick();
+    const textSection = host.querySelector('[data-testid="annotation-panel-section-text"]') as HTMLElement | null;
+    expect(textSection?.textContent).toContain('致命文字');
+    expect(textSection?.textContent).not.toContain('一般文字');
+    expect(textSection?.textContent).not.toContain('未设置文字');
+
+    critBtn?.click();
+    await nextTick();
+    const textSectionAfter = host.querySelector('[data-testid="annotation-panel-section-text"]') as HTMLElement | null;
+    expect(textSectionAfter?.textContent).toContain('致命文字');
+    expect(textSectionAfter?.textContent).toContain('一般文字');
+    expect(textSectionAfter?.textContent).toContain('未设置文字');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('严重度为 0 的桶禁用点击，且点击不会改变筛选', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/components/review/ReviewCommentsTimeline.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({ currentUser: ref(null) }),
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.addAnnotation({
+      id: 't-1', entityId: 'e1', worldPos: [0, 0, 0],
+      visible: true, glyph: '1', title: 'T', description: '', createdAt: 1,
+    });
+    store.updateAnnotationSeverity('text', 't-1', 'severe');
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true), statusText: ref('ready'),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const critBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-critical"]') as HTMLButtonElement | null;
+    expect(critBtn?.hasAttribute('disabled')).toBe(true);
+    expect(critBtn?.textContent).toContain('0');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
 });

@@ -3,15 +3,29 @@ import { computed, ref, watch } from 'vue';
 import {
   createDefaultAnnotationReviewState,
   normalizeAnnotationReviewState,
+  normalizeAnnotationSeverity,
 } from '@/types/auth';
 import type {
   AnnotationComment,
   AnnotationReviewAction,
   AnnotationReviewState,
+  AnnotationSeverity,
   User,
 } from '@/types/auth';
 
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+// 延迟到函数内部再解析，避免 module 顶层循环加载风险
+// eslint-disable-next-line import/no-cycle
+import { useUserStore } from '@/composables/useUserStore';
+
+/** 从 userStore 读当前登录用户 id；未登录/SSR 场景返回 undefined，供批注 authorId 回填。 */
+function resolveCurrentAuthorId(): string | undefined {
+  try {
+    return useUserStore().currentUser.value?.id || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export type ToolMode =
   | 'none'
@@ -196,6 +210,10 @@ export type AnnotationRecord = {
   refno?: string; // 关联的对象参考号
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
+  /** 问题严重度（建议/一般/严重/致命），默认未设置 */
+  severity?: AnnotationSeverity;
+  /** 批注创建者 ID（用于权限判断：作者可编辑严重度） */
+  authorId?: string;
 };
 
 export type Obb = {
@@ -227,6 +245,8 @@ export type ObbAnnotationRecord = {
   refnos?: string[]; // 关联的对象参考号列表
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
+  severity?: AnnotationSeverity;
+  authorId?: string;
 };
 
 export type CloudAnnotationRecord = {
@@ -246,6 +266,8 @@ export type CloudAnnotationRecord = {
   refnos?: string[]; // 关联的对象参考号列表
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
+  severity?: AnnotationSeverity;
+  authorId?: string;
 };
 
 export type RectAnnotationRecord = {
@@ -261,6 +283,8 @@ export type RectAnnotationRecord = {
   refnos?: string[];
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
+  severity?: AnnotationSeverity;
+  authorId?: string;
 };
 
 export type PickedQueryCenter = {
@@ -365,6 +389,7 @@ function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
     labelWorldPos: Array.isArray(rec.labelWorldPos) && rec.labelWorldPos.length === 3 ? rec.labelWorldPos : undefined,
     collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
+    severity: normalizeAnnotationSeverity(rec.severity),
   };
 }
 
@@ -372,6 +397,7 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
   return {
     ...rec,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
+    severity: normalizeAnnotationSeverity(rec.severity),
   };
 }
 
@@ -379,6 +405,7 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
   return {
     ...rec,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
+    severity: normalizeAnnotationSeverity(rec.severity),
   };
 }
 
@@ -386,6 +413,7 @@ function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotatio
   return {
     ...rec,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
+    severity: normalizeAnnotationSeverity(rec.severity),
   };
 }
 
@@ -906,7 +934,8 @@ function clearDimensions() {
 }
 
 function addAnnotation(rec: AnnotationRecord) {
-  annotations.value = [...annotations.value, normalizeAnnotationRecord(rec)];
+  const withAuthor: AnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  annotations.value = [...annotations.value, normalizeAnnotationRecord(withAuthor)];
   activeAnnotationId.value = rec.id;
   pendingTextAnnotationEditId.value = rec.id;
 }
@@ -933,7 +962,8 @@ function clearAnnotations() {
 }
 
 function addObbAnnotation(rec: ObbAnnotationRecord) {
-  obbAnnotations.value = [...obbAnnotations.value, normalizeObbAnnotationRecord(rec)];
+  const withAuthor: ObbAnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  obbAnnotations.value = [...obbAnnotations.value, normalizeObbAnnotationRecord(withAuthor)];
   activeObbAnnotationId.value = rec.id;
   // 不再自动弹出编辑框，用户点击图钉后再编辑
 }
@@ -960,7 +990,8 @@ function clearObbAnnotations() {
 }
 
 function addCloudAnnotation(rec: CloudAnnotationRecord) {
-  cloudAnnotations.value = [...cloudAnnotations.value, normalizeCloudAnnotationRecord(rec)];
+  const withAuthor: CloudAnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  cloudAnnotations.value = [...cloudAnnotations.value, normalizeCloudAnnotationRecord(withAuthor)];
   activeCloudAnnotationId.value = rec.id;
   pendingCloudAnnotationEditId.value = rec.id;
 }
@@ -990,7 +1021,8 @@ function clearCloudAnnotations() {
 }
 
 function addRectAnnotation(rec: RectAnnotationRecord) {
-  rectAnnotations.value = [...rectAnnotations.value, normalizeRectAnnotationRecord(rec)];
+  const withAuthor: RectAnnotationRecord = rec.authorId ? rec : { ...rec, authorId: resolveCurrentAuthorId() };
+  rectAnnotations.value = [...rectAnnotations.value, normalizeRectAnnotationRecord(withAuthor)];
   activeRectAnnotationId.value = rec.id;
   pendingRectAnnotationEditId.value = rec.id;
 }
@@ -1230,6 +1262,44 @@ function applyAnnotationReviewAction(
   }
 
   return setAnnotationReviewState(annotationType, annotationId, next) ? next : null;
+}
+
+/**
+ * 更新批注严重度（问题严重程度）。
+ * severity 可传 undefined 表示清空。调用方需先做权限校验。
+ */
+function updateAnnotationSeverity(
+  annotationType: AnnotationType,
+  annotationId: string,
+  severity: AnnotationSeverity | undefined
+): boolean {
+  const normalized = normalizeAnnotationSeverity(severity);
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, { severity: normalized });
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, { severity: normalized });
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, { severity: normalized });
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, { severity: normalized });
+      return true;
+    }
+  }
 }
 
 /**
@@ -1674,6 +1744,7 @@ export function useToolStore() {
     getAnnotationReviewState,
     setAnnotationReviewState,
     applyAnnotationReviewAction,
+    updateAnnotationSeverity,
 
     exportJSON,
     importJSON,

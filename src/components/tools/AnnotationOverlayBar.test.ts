@@ -244,4 +244,133 @@ describe('AnnotationOverlayBar', () => {
     host.remove();
     host = null;
   });
+
+  it('更多抽屉中提供当前批注/批量严重度快捷，具备权限时能写入 store', async () => {
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
+    }));
+
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [{ default: AnnotationOverlayBar }, { useToolStore }] = await Promise.all([
+      import('./AnnotationOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.setToolMode('annotation');
+    store.addAnnotation({
+      id: 'text-sev-1',
+      entityId: 'e-1',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: 'A',
+      title: 'A',
+      description: '',
+      createdAt: 1,
+    });
+    store.addAnnotation({
+      id: 'text-sev-2',
+      entityId: 'e-2',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: 'B',
+      title: 'B',
+      description: '',
+      createdAt: 2,
+    });
+    store.activeAnnotationId.value = 'text-sev-1';
+
+    const app = createApp(AnnotationOverlayBar, {
+      tools: {
+        ready: ref(true), statusText: ref('文字批注'),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+
+    const critBtn = host.querySelector('[data-testid="annotation-overlay-severity-critical"]') as HTMLButtonElement | null;
+    expect(critBtn).toBeTruthy();
+    expect(critBtn?.hasAttribute('disabled')).toBe(false);
+    critBtn?.click();
+    await nextTick();
+    expect(store.annotations.value.find((a: any) => a.id === 'text-sev-1').severity).toBe('critical');
+
+    const batchSevBtn = host.querySelector('[data-testid="annotation-overlay-batch-severity-severe"]') as HTMLButtonElement | null;
+    expect(batchSevBtn).toBeTruthy();
+    batchSevBtn?.click();
+    await nextTick();
+    expect(store.annotations.value.every((a: any) => a.severity === 'severe')).toBe(true);
+
+    const batchClear = host.querySelector('[data-testid="annotation-overlay-batch-severity-clear"]') as HTMLButtonElement | null;
+    batchClear?.click();
+    await nextTick();
+    expect(store.annotations.value.every((a: any) => a.severity === undefined)).toBe(true);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('未登录用户在 drawer 中看到严重度按钮为 disabled', async () => {
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({ currentUser: ref(null) }),
+    }));
+
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [{ default: AnnotationOverlayBar }, { useToolStore }] = await Promise.all([
+      import('./AnnotationOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.setToolMode('annotation');
+    store.addAnnotation({
+      id: 'text-anon', entityId: 'e', worldPos: [0, 0, 0],
+      visible: true, glyph: 'A', title: 'A', description: '', createdAt: 1,
+    });
+    store.activeAnnotationId.value = 'text-anon';
+
+    const app = createApp(AnnotationOverlayBar, {
+      tools: {
+        ready: ref(true), statusText: ref('文字批注'),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+
+    const critBtn = host.querySelector('[data-testid="annotation-overlay-severity-critical"]') as HTMLButtonElement | null;
+    const batchCritBtn = host.querySelector('[data-testid="annotation-overlay-batch-severity-critical"]') as HTMLButtonElement | null;
+    expect(critBtn?.hasAttribute('disabled')).toBe(true);
+    expect(batchCritBtn?.hasAttribute('disabled')).toBe(true);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
 });

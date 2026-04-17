@@ -63,3 +63,33 @@
   --input: 217.2 32.6% 17.5%;
   --ring: 212.7 26.8% 83.9%;
 }
+
+/* ========================================================================== */
+/* DTX 批注严重度高亮（仅 HTML overlay 卡片，不影响 Three.js 线条材质） */
+/* 作用于 useDtxTools.ts 中 makeInlineAnnotationCardEl / makeTextAnnotationCardEl */
+/* 通过 label.dataset.severity = 'critical' | 'severe' | 'normal' | 'suggestion' */
+/* ========================================================================== */
+.dtx-anno-label[data-severity] {
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+.dtx-anno-label[data-severity="critical"]   { border-left-color: #ef4444; box-shadow: -1px 0 0 #ef4444 inset, 0 2px 8px rgba(239, 68, 68, 0.12); }
+.dtx-anno-label[data-severity="severe"]     { border-left-color: #f97316; box-shadow: -1px 0 0 #f97316 inset, 0 2px 8px rgba(249, 115, 22, 0.12); }
+.dtx-anno-label[data-severity="normal"]     { border-left-color: #3b82f6; }
+.dtx-anno-label[data-severity="suggestion"] { border-left-color: #94a3b8; }
+
+/* 图钉样式：仅对致命/严重追加一个小红/橙点，避免视觉过载 */
+.dtx-anno-marker[data-severity="critical"]::after,
+.dtx-anno-marker[data-severity="severe"]::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  border: 1px solid #ffffff;
+  pointer-events: none;
+}
+.dtx-anno-marker[data-severity="critical"]::after { background: #ef4444; }
+.dtx-anno-marker[data-severity="severe"]::after   { background: #f97316; }

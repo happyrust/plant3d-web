@@ -156,4 +156,59 @@ describe('useReviewStore - confirm without OBB', () => {
     expect(confirmed?.taskId).toBe('task-lineage-1');
     expect(confirmed?.formId).toBe('FORM-LINEAGE-1');
   });
+
+  it('should preserve annotation severity across confirm snapshot and exportReviewData', async () => {
+    const reviewStore = useReviewStore();
+    const toolStore = useToolStore();
+
+    await reviewStore.setCurrentTask({
+      id: 'task-sev-1',
+      formId: 'FORM-SEV-1',
+      title: 'Severity task',
+      description: '',
+      modelName: 'Demo',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: 'Designer',
+      checkerId: 'checker-1',
+      checkerName: 'Checker',
+      approverId: 'approver-1',
+      approverName: 'Approver',
+      reviewerId: 'checker-1',
+      reviewerName: 'Checker',
+      components: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      currentNode: 'jd',
+    });
+
+    toolStore.addAnnotation({
+      id: 'text-sev', entityId: 'e1', worldPos: [0, 0, 0],
+      visible: true, glyph: '1', title: 'critical text', description: '', createdAt: 1,
+    });
+    toolStore.addCloudAnnotation({
+      id: 'cloud-sev', objectIds: ['o1'], anchorWorldPos: [0, 0, 0],
+      visible: true, title: 'severe cloud', description: '', createdAt: 2, refnos: ['o1'],
+    });
+    toolStore.updateAnnotationSeverity('text', 'text-sev', 'critical');
+    toolStore.updateAnnotationSeverity('cloud', 'cloud-sev', 'severe');
+
+    await reviewStore.addConfirmedRecord({
+      type: 'batch',
+      annotations: [...toolStore.annotations.value],
+      cloudAnnotations: [...toolStore.cloudAnnotations.value],
+      rectAnnotations: [],
+      measurements: [],
+      note: 'Severity snapshot',
+    });
+
+    const confirmed = reviewStore.confirmedRecords.value[0];
+    expect((confirmed?.annotations[0] as any).severity).toBe('critical');
+    expect((confirmed?.cloudAnnotations[0] as any).severity).toBe('severe');
+
+    const exported = JSON.parse(reviewStore.exportReviewData());
+    expect(exported.records[0].annotations[0].severity).toBe('critical');
+    expect(exported.records[0].cloudAnnotations[0].severity).toBe('severe');
+  });
 });

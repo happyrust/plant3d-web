@@ -2675,6 +2675,7 @@ export function useDtxTools(options: {
       const wp = new Vector3(...a.worldPos);
       const labelWorldPos = new Vector3(...(a.labelWorldPos ?? getDefaultTextAnnotationLabelWorldPos(a.worldPos)));
       const marker = makeTextAnnotationMarkerEl(overlay, a.glyph || 'A', a.collapsed === true);
+      if (a.severity) marker.dataset.severity = a.severity;
       markers.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: wp, el: marker });
       marker.addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -2688,6 +2689,7 @@ export function useDtxTools(options: {
 
         const draft = getInlineTextAnnotationDraft('text', a.id, a);
         const label = makeTextAnnotationCardEl(overlay, draft.title, draft.description);
+        if (a.severity) label.dataset.severity = a.severity;
         labels.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: labelWorldPos, el: label });
 
         const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
@@ -2787,6 +2789,7 @@ export function useDtxTools(options: {
       const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
       const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
       label.style.transform = 'translate(-50%,-50%)';
+      if (c.severity) label.dataset.severity = c.severity;
       labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: visual.labelWorldPos, el: label });
       const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
       const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
@@ -2871,6 +2874,7 @@ export function useDtxTools(options: {
 
       const draft = getInlineTextAnnotationDraft('rect', r.id, r);
       const label = makeInlineAnnotationCardEl(overlay, '矩形批注', draft.title, draft.description);
+      if (r.severity) label.dataset.severity = r.severity;
       const labelWorldPos = r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos;
       labels.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: labelWorldPos, el: label });
       rectShapes.set(`rect:${r.id}`, {
@@ -2958,6 +2962,7 @@ export function useDtxTools(options: {
 
       const draft = getInlineTextAnnotationDraft('obb', o.id, o);
       const label = makeInlineAnnotationCardEl(overlay, 'OBB 批注', draft.title, draft.description);
+      if (o.severity) label.dataset.severity = o.severity;
       const anchorWorldPos = resolveObbAnnotationAnchorWorldPos(o);
       labels.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: visual.labelWorldPos.clone(), el: label });
       obbShapes.set(`obb:${o.id}`, {

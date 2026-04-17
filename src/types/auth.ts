@@ -18,6 +18,27 @@ export type AnnotationResolutionStatus = 'open' | 'fixed' | 'wont_fix';
 export type AnnotationDecisionStatus = 'pending' | 'agreed' | 'rejected';
 export type AnnotationReviewAction = 'fixed' | 'wont_fix' | 'agree' | 'reject';
 
+/**
+ * 批注严重度（问题严重程度）。
+ * 语义区别于任务级 `ReviewTask.priority`：这里描述"问题严重程度"而非"紧急度"。
+ */
+export type AnnotationSeverity = 'suggestion' | 'normal' | 'severe' | 'critical';
+
+export const ANNOTATION_SEVERITY_VALUES: readonly AnnotationSeverity[] = [
+  'critical',
+  'severe',
+  'normal',
+  'suggestion',
+] as const;
+
+export function isAnnotationSeverity(value: unknown): value is AnnotationSeverity {
+  return value === 'suggestion' || value === 'normal' || value === 'severe' || value === 'critical';
+}
+
+export function normalizeAnnotationSeverity(value: unknown): AnnotationSeverity | undefined {
+  return isAnnotationSeverity(value) ? value : undefined;
+}
+
 export type AnnotationReviewEvent = {
   id: string;
   action: AnnotationReviewAction;
@@ -381,4 +402,53 @@ export function getPriorityDisplayName(
     urgent: { label: '紧急', color: 'bg-red-100 text-red-600' },
   };
   return priorityMap[priority] || { label: priority, color: 'bg-gray-100 text-gray-600' };
+}
+
+// ============================================================================
+// 批注严重度 (Annotation Severity)
+// ============================================================================
+
+/**
+ * 获取批注严重度的显示配置。
+ * - 致命 critical：红，最严重
+ * - 严重 severe：橙
+ * - 一般 normal：蓝
+ * - 建议 suggestion：灰，最轻
+ */
+export function getAnnotationSeverityDisplay(
+  severity: AnnotationSeverity | undefined | null
+): { label: string; color: string; dot: string; rank: number } {
+  switch (severity) {
+    case 'critical':
+      return { label: '致命', color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500', rank: 4 };
+    case 'severe':
+      return { label: '严重', color: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-500', rank: 3 };
+    case 'normal':
+      return { label: '一般', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500', rank: 2 };
+    case 'suggestion':
+      return { label: '建议', color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', rank: 1 };
+    default:
+      return { label: '未设置', color: 'bg-transparent text-muted-foreground border-dashed border-border', dot: 'bg-gray-300', rank: 0 };
+  }
+}
+
+/** 列表排序用：致命 > 严重 > 一般 > 建议 > 未设置 */
+export function compareAnnotationSeverity(
+  a: AnnotationSeverity | undefined | null,
+  b: AnnotationSeverity | undefined | null
+): number {
+  return getAnnotationSeverityDisplay(b).rank - getAnnotationSeverityDisplay(a).rank;
+}
+
+/**
+ * 判断当前用户是否有权限修改批注严重度。
+ * 规则：批注作者本人，或审核侧角色（校对/审核/经理/Admin）。
+ *
+ * @param user 当前登录用户
+ * @param authorId 批注/关联评论的作者 ID，用于判断是否本人
+ */
+export function canEditAnnotationSeverity(user: User | null, authorId?: string | null): boolean {
+  if (!user) return false;
+  if (authorId && user.id === authorId) return true;
+  return hasAnyRole(user, [UserRole.PROOFREADER, UserRole.REVIEWER, UserRole.MANAGER, UserRole.ADMIN]);
 }

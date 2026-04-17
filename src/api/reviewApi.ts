@@ -3,10 +3,11 @@
 
 import {
   fromBackendRole,
-  type ReviewTask,
-  type ReviewComponent,
-  type ReviewAttachment,
   type AnnotationComment,
+  type AnnotationSeverity,
+  type ReviewAttachment,
+  type ReviewComponent,
+  type ReviewTask,
   type User,
   UserRole,
 } from '@/types/auth';
@@ -859,6 +860,39 @@ export async function reviewCommentDelete(commentId: string): Promise<ReviewActi
   return await fetchJson(`/api/review/comments/item/${encodeURIComponent(commentId)}`, {
     method: 'DELETE',
   });
+}
+
+// ============ 批注严重度 API ============
+
+export type AnnotationSeverityUpdateResponse = {
+  success: boolean;
+  severity?: AnnotationSeverity | null;
+  updatedAt?: number;
+  error_message?: string;
+};
+
+/**
+ * 更新批注的严重度（问题严重程度）。
+ * 后端约定：PATCH /api/review/annotations/{annotationId}/severity?type={annotationType}
+ *
+ * Body: { severity: 'suggestion' | 'normal' | 'severe' | 'critical' | null }
+ * - 传 null 表示清空。
+ *
+ * 调用方需自行做权限校验（canEditAnnotationSeverity），并在失败时降级到本地 store。
+ */
+export async function annotationSeverityUpdate(
+  annotationId: string,
+  annotationType: AnnotationComment['annotationType'],
+  severity: AnnotationSeverity | null
+): Promise<AnnotationSeverityUpdateResponse> {
+  const params = new URLSearchParams({ type: annotationType });
+  return await fetchJson(
+    `/api/review/annotations/${encodeURIComponent(annotationId)}/severity?${params}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ severity }),
+    }
+  );
 }
 
 // ============ 用户 API ============

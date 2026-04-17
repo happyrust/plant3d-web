@@ -5,6 +5,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
 
 import {
+  annotationSeverityUpdate,
   reviewCommentCreate,
   reviewCommentDelete,
   reviewCommentGetByAnnotation,
@@ -14,7 +15,17 @@ import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { type AnnotationComment, getRoleDisplayName, getRoleTheme, UserRole } from '@/types/auth';
+import {
+  ANNOTATION_SEVERITY_VALUES,
+  canEditAnnotationSeverity,
+  compareAnnotationSeverity,
+  getAnnotationSeverityDisplay,
+  getRoleDisplayName,
+  getRoleTheme,
+  UserRole,
+  type AnnotationComment,
+  type AnnotationSeverity,
+} from '@/types/auth';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -38,16 +49,92 @@ const props = defineProps<{
 const store = useToolStore();
 const userStore = useUserStore();
 
+/**
+ * 列表顶部的"严重度筛选"：
+ * - null 表示不过滤
+ * - 'unset' 表示仅显示未设置的批注
+ * - 其它为具体严重度
+ */
+const severityFilter = ref<AnnotationSeverity | 'unset' | null>(null);
+
+function bucketSeverity(s: AnnotationSeverity | undefined): AnnotationSeverity | 'unset' {
+  return s ?? 'unset';
+}
+
+function matchesSeverityFilter<T extends { severity?: AnnotationSeverity }>(a: T): boolean {
+  if (severityFilter.value === null) return true;
+  return bucketSeverity(a.severity) === severityFilter.value;
+}
+
+/** 合并 4 类批注，按严重度（含 'unset'）计数，用于顶部概览条。 */
+const severityCounts = computed(() => {
+  const counts: Record<AnnotationSeverity | 'unset', number> = {
+    critical: 0,
+    severe: 0,
+    normal: 0,
+    suggestion: 0,
+    unset: 0,
+  };
+  const all = [
+    ...store.annotations.value,
+    ...store.cloudAnnotations.value,
+    ...store.rectAnnotations.value,
+    ...store.obbAnnotations.value,
+  ];
+  for (const item of all) {
+    const key = bucketSeverity((item as { severity?: AnnotationSeverity }).severity);
+    counts[key]++;
+  }
+  return counts;
+});
+
+const totalAnnotations = computed(() => {
+  const c = severityCounts.value;
+  return c.critical + c.severe + c.normal + c.suggestion + c.unset;
+});
+
+function toggleSeverityFilter(next: AnnotationSeverity | 'unset' | null) {
+  severityFilter.value = severityFilter.value === next ? null : next;
+}
+
+const SEVERITY_FILTER_BUCKETS: Array<{
+  key: AnnotationSeverity | 'unset';
+  label: string;
+  colorClass: string;
+  dotClass: string;
+}> = [
+  { key: 'critical', label: '致命', colorClass: 'bg-red-100 text-red-700 border-red-200', dotClass: 'bg-red-500' },
+  { key: 'severe', label: '严重', colorClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-500' },
+  { key: 'normal', label: '一般', colorClass: 'bg-blue-100 text-blue-700 border-blue-200', dotClass: 'bg-blue-500' },
+  { key: 'suggestion', label: '建议', colorClass: 'bg-slate-100 text-slate-600 border-slate-200', dotClass: 'bg-slate-400' },
+  { key: 'unset', label: '未设置', colorClass: 'bg-muted text-muted-foreground border-border', dotClass: 'bg-gray-300' },
+];
+
 const sortedText = computed(() => {
-  return [...store.annotations.value].sort((a, b) => b.createdAt - a.createdAt);
+  return [...store.annotations.value]
+    .filter(matchesSeverityFilter)
+    .sort((a, b) => {
+      const bySeverity = compareAnnotationSeverity(a.severity, b.severity);
+      return bySeverity !== 0 ? bySeverity : b.createdAt - a.createdAt;
+    });
 });
 
 const sortedCloud = computed(() => {
-  return [...store.cloudAnnotations.value].sort((a, b) => b.createdAt - a.createdAt);
+  return [...store.cloudAnnotations.value]
+    .filter(matchesSeverityFilter)
+    .sort((a, b) => {
+      const bySeverity = compareAnnotationSeverity(a.severity, b.severity);
+      return bySeverity !== 0 ? bySeverity : b.createdAt - a.createdAt;
+    });
 });
 
 const sortedRect = computed(() => {
-  return [...store.rectAnnotations.value].sort((a, b) => b.createdAt - a.createdAt);
+  return [...store.rectAnnotations.value]
+    .filter(matchesSeverityFilter)
+    .sort((a, b) => {
+      const bySeverity = compareAnnotationSeverity(a.severity, b.severity);
+      return bySeverity !== 0 ? bySeverity : b.createdAt - a.createdAt;
+    });
 });
 
 const activeText = computed(() => {
@@ -254,6 +341,51 @@ function updateDescription(v: string) {
 function toggleActiveTextCollapsed() {
   if (!activeText.value) return;
   store.updateAnnotation(activeText.value.id, { collapsed: !activeTextCollapsed.value });
+}
+
+// ==================== 严重度 ====================
+
+const SEVERITY_OPTIONS: { value: AnnotationSeverity | ''; label: string }[] = [
+  { value: '', label: '未设置' },
+  ...ANNOTATION_SEVERITY_VALUES.map((v) => ({ value: v, label: getAnnotationSeverityDisplay(v).label })),
+];
+
+/** 当前选中批注是否允许当前用户编辑严重度（作者或审核侧） */
+const canEditActiveSeverity = computed<boolean>(() => {
+  const rec = activeAny.value as { authorId?: string } | null;
+  return canEditAnnotationSeverity(userStore.currentUser.value, rec?.authorId);
+});
+
+function applyLocalSeverity(type: AnnotationType, id: string, severity: AnnotationSeverity | undefined) {
+  store.updateAnnotationSeverity(type, id, severity);
+}
+
+async function handleChangeSeverity(event: Event) {
+  const target = event.target as HTMLSelectElement | null;
+  if (!target) return;
+  const active = store.activeAnnotationContext.value;
+  if (!active) return;
+  if (!canEditActiveSeverity.value) return;
+
+  const raw = target.value;
+  const next: AnnotationSeverity | undefined = raw === '' ? undefined : (raw as AnnotationSeverity);
+  const prev = (active.record as { severity?: AnnotationSeverity }).severity;
+
+  applyLocalSeverity(active.type, active.id, next);
+
+  try {
+    const resp = await annotationSeverityUpdate(active.id, active.type, next ?? null);
+    if (resp && resp.success === false) {
+      applyLocalSeverity(active.type, active.id, prev);
+      target.value = prev ?? '';
+      // eslint-disable-next-line no-console
+      console.warn('[annotation] 严重度同步后端被拒绝，已回滚：', resp.error_message);
+    }
+  } catch (err) {
+    // 后端接口不可用/网络异常时保留本地（与现有评论流程一致），避免用户输入丢失
+    // eslint-disable-next-line no-console
+    console.warn('[annotation] 严重度接口暂不可用，保留本地：', err);
+  }
 }
 
 // 文字批注创建后弹窗编辑
@@ -615,6 +747,38 @@ function formatCommentTime(timestamp: number): string {
           </div>
         </div>
       </div>
+
+      <!-- 严重度概览与筛选 -->
+      <div data-testid="annotation-panel-severity-overview" class="mt-3">
+        <div class="flex items-center justify-between">
+          <div class="text-[11px] text-muted-foreground">按严重度筛选（点击切换）</div>
+          <button type="button"
+            data-testid="annotation-panel-severity-filter-clear"
+            class="h-6 rounded border px-2 text-[11px] transition-colors"
+            :class="severityFilter === null ? 'border-primary bg-primary/10 text-primary' : 'border-input bg-background text-muted-foreground hover:bg-muted'"
+            @click="severityFilter = null">
+            全部 ({{ totalAnnotations }})
+          </button>
+        </div>
+        <div class="mt-1.5 flex flex-wrap gap-1.5">
+          <button v-for="bucket in SEVERITY_FILTER_BUCKETS"
+            :key="bucket.key"
+            type="button"
+            :data-testid="'annotation-panel-severity-filter-' + bucket.key"
+            class="inline-flex items-center gap-1.5 h-6 rounded border px-2 text-[11px] transition-opacity"
+            :class="[
+              bucket.colorClass,
+              severityFilter === bucket.key ? 'ring-2 ring-primary/40' : '',
+              severityCounts[bucket.key] === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-80',
+            ]"
+            :disabled="severityCounts[bucket.key] === 0"
+            @click="toggleSeverityFilter(bucket.key)">
+            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass"></span>
+            {{ bucket.label }}
+            <span class="ml-0.5 font-semibold">{{ severityCounts[bucket.key] }}</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <div data-testid="annotation-panel-section-text"
@@ -643,6 +807,11 @@ function formatCommentTime(timestamp: number): string {
                 <span class="font-semibold">{{ a.glyph }}</span>
                 <span class="ml-2">{{ a.title }}</span>
                 <span v-if="a.refno" class="ml-1 inline-block rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950 dark:text-blue-400" :title="'RefNo: ' + a.refno">{{ a.refno }}</span>
+                <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
+                  :class="getAnnotationSeverityDisplay(a.severity).color"
+                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                </span>
                 <span v-if="a.collapsed" class="ml-1 inline-block rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">
                   已最小化
                 </span>
@@ -708,6 +877,11 @@ function formatCommentTime(timestamp: number): string {
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm">
                 <span class="font-semibold">{{ a.title }}</span>
+                <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
+                  :class="getAnnotationSeverityDisplay(a.severity).color"
+                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
             </div>
@@ -770,6 +944,11 @@ function formatCommentTime(timestamp: number): string {
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm">
                 <span class="font-semibold">{{ a.title }}</span>
+                <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
+                  :class="getAnnotationSeverityDisplay(a.severity).color"
+                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
             </div>
@@ -839,6 +1018,29 @@ function formatCommentTime(timestamp: number): string {
         <textarea class="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           :value="activeAny.description"
           @input="updateDescription(($event.target as HTMLTextAreaElement).value)" />
+
+        <label class="mt-1 text-xs text-muted-foreground">
+          严重程度
+          <span v-if="!canEditActiveSeverity" class="ml-1 text-[10px] text-muted-foreground">（仅批注作者或校对/审核可修改）</span>
+        </label>
+        <div class="flex items-center gap-2">
+          <select data-testid="annotation-panel-severity-select"
+            class="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            :value="(activeAny as any).severity || ''"
+            :disabled="!canEditActiveSeverity"
+            @change="handleChangeSeverity">
+            <option v-for="opt in SEVERITY_OPTIONS" :key="opt.value || 'none'" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <span v-if="(activeAny as any).severity"
+            class="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px]"
+            :class="getAnnotationSeverityDisplay((activeAny as any).severity).color">
+            <span class="inline-block h-1.5 w-1.5 rounded-full"
+              :class="getAnnotationSeverityDisplay((activeAny as any).severity).dot"></span>
+            {{ getAnnotationSeverityDisplay((activeAny as any).severity).label }}
+          </span>
+        </div>
 
         <div class="text-xs text-muted-foreground">修改会自动同步到场景与本地存储。</div>
       </div>

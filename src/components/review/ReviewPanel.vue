@@ -69,9 +69,11 @@ import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   getAnnotationReviewDisplay,
+  getAnnotationSeverityDisplay,
   getRoleDisplayName,
   getTaskStatusDisplayName,
   WORKFLOW_NODE_NAMES,
+  type AnnotationSeverity,
 } from '@/types/auth';
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
@@ -231,6 +233,32 @@ function getConfirmedMeasurementCount(record: ConfirmedRecordEntry): number {
 function getConfirmedRecordNote(record: ConfirmedRecordEntry): string {
   return record.note?.trim() || '-';
 }
+
+type SeverityBucket = AnnotationSeverity | 'unset';
+
+/** 汇总一条确认记录内所有批注的严重度分布，供审核侧一眼看到批次风险画像。 */
+function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<SeverityBucket, number> {
+  const buckets: Record<SeverityBucket, number> = {
+    critical: 0, severe: 0, normal: 0, suggestion: 0, unset: 0,
+  };
+  const all = [
+    ...record.annotations,
+    ...record.cloudAnnotations,
+    ...record.rectAnnotations,
+    ...(record.obbAnnotations ?? []),
+  ];
+  for (const item of all) {
+    const sev = (item as { severity?: AnnotationSeverity } | null)?.severity;
+    if (sev === 'critical' || sev === 'severe' || sev === 'normal' || sev === 'suggestion') {
+      buckets[sev]++;
+    } else {
+      buckets.unset++;
+    }
+  }
+  return buckets;
+}
+
+const CONFIRMED_SEVERITY_ORDER: SeverityBucket[] = ['critical', 'severe', 'normal', 'suggestion', 'unset'];
 
 const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
 
@@ -1623,6 +1651,21 @@ function flyToAnnotationItem(item: AnnotationListItem) {
                 <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
                 <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
               </div>
+            </div>
+            <!-- 严重度分布：只渲染有批注的记录 -->
+            <div v-if="getConfirmedAnnotationCount(record) > 0"
+              data-testid="confirmed-record-severity-breakdown"
+              class="mt-2 flex flex-wrap items-center gap-1.5">
+              <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">严重度</span>
+              <template v-for="bucket in CONFIRMED_SEVERITY_ORDER" :key="bucket">
+                <span v-if="getConfirmedSeverityBreakdown(record)[bucket] > 0"
+                  class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px]"
+                  :class="bucket === 'unset' ? 'border-border text-muted-foreground' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).color"
+                  :title="bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label">
+                  {{ bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label }}
+                  <span class="font-semibold">{{ getConfirmedSeverityBreakdown(record)[bucket] }}</span>
+                </span>
+              </template>
             </div>
           </div>
         </div>

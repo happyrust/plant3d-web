@@ -25,6 +25,13 @@ import {
   type AnnotationType,
   useToolStore,
 } from '@/composables/useToolStore';
+import { useUserStore } from '@/composables/useUserStore';
+import {
+  ANNOTATION_SEVERITY_VALUES,
+  canEditAnnotationSeverity,
+  getAnnotationSeverityDisplay,
+  type AnnotationSeverity,
+} from '@/types/auth';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -245,6 +252,61 @@ function clearAll(): void {
   store.clearAllAnnotations();
 }
 
+// ==================== 严重度 ====================
+
+const userStore = useUserStore();
+
+/** 严重度快捷按钮的 4 档（不含"清除"，清除单独处理） */
+const SEVERITY_QUICK_BUCKETS: Array<{ key: AnnotationSeverity; label: string; dotClass: string }> = [
+  { key: 'critical', label: '致命', dotClass: 'bg-red-500' },
+  { key: 'severe', label: '严重', dotClass: 'bg-orange-500' },
+  { key: 'normal', label: '一般', dotClass: 'bg-blue-500' },
+  { key: 'suggestion', label: '建议', dotClass: 'bg-slate-400' },
+];
+
+/** 当前选中批注的严重度（undefined 表示未设置） */
+const currentSeverity = computed<AnnotationSeverity | undefined>(() => {
+  return (currentAnnotation.value?.record as { severity?: AnnotationSeverity } | null)?.severity;
+});
+
+/** 当前选中批注是否允许当前用户改严重度 */
+const canEditCurrentSeverity = computed<boolean>(() => {
+  const rec = currentAnnotation.value?.record as { authorId?: string } | null;
+  return !!currentAnnotation.value && canEditAnnotationSeverity(userStore.currentUser.value, rec?.authorId);
+});
+
+/** 当前类型中允许当前用户批量改严重度的记录数（用于按钮状态/提示） */
+const currentTypeEditableCount = computed<number>(() => {
+  const user = userStore.currentUser.value;
+  if (!user) return 0;
+  return currentTypeRecords.value.filter((r) => canEditAnnotationSeverity(user, (r as { authorId?: string }).authorId)).length;
+});
+
+const batchActionDisabled = computed<boolean>(() => {
+  if (currentTypeActionDisabled.value) return true;
+  return currentTypeEditableCount.value === 0;
+});
+
+function setCurrentSeverity(next: AnnotationSeverity | undefined): void {
+  const ctx = currentAnnotation.value;
+  if (!ctx) return;
+  if (!canEditCurrentSeverity.value) return;
+  store.updateAnnotationSeverity(ctx.type, ctx.id, next);
+}
+
+function batchSetCurrentTypeSeverity(next: AnnotationSeverity | undefined): void {
+  const type = currentType.value;
+  if (!type) return;
+  const user = userStore.currentUser.value;
+  if (!user) return;
+  const records = store.getAnnotationRecordsByType(type);
+  for (const r of records) {
+    if (canEditAnnotationSeverity(user, (r as { authorId?: string }).authorId)) {
+      store.updateAnnotationSeverity(type, (r as { id: string }).id, next);
+    }
+  }
+}
+
 function exitAnnotation(): void {
   store.setToolMode('none');
 }
@@ -463,6 +525,42 @@ onUnmounted(() => {
                 <Trash2 class="h-3.5 w-3.5 shrink-0" />
                 <span>删除当前</span>
               </button>
+
+              <!-- 当前批注严重度快捷 -->
+              <div data-testid="annotation-overlay-current-severity"
+                class="mt-1 rounded-lg border border-dashed border-border/60 px-2 py-1.5"
+                :class="currentActionDisabled ? 'opacity-40' : ''">
+                <div class="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>严重度</span>
+                  <span v-if="currentSeverity" class="font-medium"
+                    :class="getAnnotationSeverityDisplay(currentSeverity).color + ' border rounded px-1'">
+                    {{ getAnnotationSeverityDisplay(currentSeverity).label }}
+                  </span>
+                  <span v-else>未设置</span>
+                </div>
+                <div class="flex gap-1">
+                  <button v-for="bucket in SEVERITY_QUICK_BUCKETS"
+                    :key="bucket.key"
+                    type="button"
+                    :data-testid="'annotation-overlay-severity-' + bucket.key"
+                    class="inline-flex flex-1 items-center justify-center gap-1 rounded border px-1 py-0.5 text-[10px] transition-colors disabled:pointer-events-none disabled:opacity-40"
+                    :class="currentSeverity === bucket.key ? 'border-primary bg-primary/10 text-primary' : 'border-input hover:bg-muted'"
+                    :disabled="!canEditCurrentSeverity"
+                    :title="bucket.label"
+                    @click="setCurrentSeverity(bucket.key)">
+                    <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass"></span>
+                    {{ bucket.label }}
+                  </button>
+                  <button type="button"
+                    data-testid="annotation-overlay-severity-clear"
+                    class="inline-flex items-center justify-center rounded border border-input px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                    :disabled="!canEditCurrentSeverity || !currentSeverity"
+                    title="清除严重度"
+                    @click="setCurrentSeverity(undefined)">
+                    ✕
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- 批量操作 -->
@@ -508,6 +606,37 @@ onUnmounted(() => {
                 <Trash class="h-3.5 w-3.5 shrink-0" />
                 <span>清空全部批注</span>
               </button>
+
+              <!-- 当前类型批量严重度 -->
+              <div data-testid="annotation-overlay-batch-severity"
+                class="mt-1 rounded-lg border border-dashed border-border/60 px-2 py-1.5"
+                :class="batchActionDisabled ? 'opacity-40' : ''">
+                <div class="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>当前类型批量严重度</span>
+                  <span class="font-medium">可改 {{ currentTypeEditableCount }}/{{ currentTypeRecords.length }}</span>
+                </div>
+                <div class="flex gap-1">
+                  <button v-for="bucket in SEVERITY_QUICK_BUCKETS"
+                    :key="bucket.key"
+                    type="button"
+                    :data-testid="'annotation-overlay-batch-severity-' + bucket.key"
+                    class="inline-flex flex-1 items-center justify-center gap-1 rounded border border-input px-1 py-0.5 text-[10px] transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                    :disabled="batchActionDisabled"
+                    :title="'批量设为' + bucket.label"
+                    @click="batchSetCurrentTypeSeverity(bucket.key)">
+                    <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass"></span>
+                    {{ bucket.label }}
+                  </button>
+                  <button type="button"
+                    data-testid="annotation-overlay-batch-severity-clear"
+                    class="inline-flex items-center justify-center rounded border border-input px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                    :disabled="batchActionDisabled"
+                    title="批量清除严重度"
+                    @click="batchSetCurrentTypeSeverity(undefined)">
+                    ✕
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </Transition>
