@@ -146,7 +146,7 @@ describe('useUserStore.createReviewTask', () => {
       components: [{ id: 'c1', name: 'Comp', refNo: '100_1' }],
     });
 
-    await expect(store.submitTaskToNextNode(task.id, '发起提资')).resolves.toBeUndefined();
+    await expect(store.submitTaskToNextNode(task.id, '发起编校审')).resolves.toBeUndefined();
 
     const updated = store.reviewTasks.value.find((item) => item.id === task.id);
     expect(updated).toMatchObject({

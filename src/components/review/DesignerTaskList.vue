@@ -229,7 +229,7 @@ onMounted(() => {
       <FileText class="mx-auto mb-4 h-12 w-12 text-blue-300" />
       <h3 class="text-xl font-semibold text-slate-900">外部流程模式</h3>
       <p class="mt-2 text-sm text-slate-500">
-        当前流程由外部平台驱动，不提供内部“我的提资单”列表界面。
+        当前流程由外部平台驱动，不提供内部“我的编校审单”列表界面。
       </p>
       <p class="mt-2 text-xs text-slate-400">
         如需查看流程进度，请回到外部流程平台或使用当前单据的只读状态面板。
@@ -243,7 +243,7 @@ onMounted(() => {
     <div class="rounded-[24px] border border-slate-200 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur">
       <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
-          <h3 class="text-xl font-semibold text-slate-900">我的提资单</h3>
+          <h3 class="text-xl font-semibold text-slate-900">我的编校审单</h3>
           <p class="mt-1 text-sm text-slate-500">
             设计人员：{{ currentUser?.name || '未登录' }} | 共 {{ tasks.length }} 个任务
           </p>
@@ -373,9 +373,9 @@ onMounted(() => {
 
         <div v-else class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center">
           <FileText class="mx-auto mb-4 h-12 w-12 text-slate-300" />
-          <h4 class="mb-2 font-medium text-slate-900">暂无提资任务</h4>
+          <h4 class="mb-2 font-medium text-slate-900">暂无编校审任务</h4>
           <p class="mb-4 text-sm text-slate-500">
-            {{ statusFilter !== 'all' ? '当前筛选条件下没有任务' : '您还没有发起过提资单' }}
+            {{ statusFilter !== 'all' ? '当前筛选条件下没有任务' : '您还没有发起过编校审单' }}
           </p>
           <button v-if="statusFilter !== 'all'"
             class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"

@@ -15,7 +15,7 @@
  * export PMS_E2E_ROLES=SJ,SH,JD       # 可选，逗号分隔多角色串行测
  * export PMS_EMBEDDED_SITE_SUBSTRING=你的-plant3d-线上域名   # 推荐：嵌入页为部署站点非本地
  * # 或与 PMS_E2E_OPEN_URL_SUBSTRING 二选一
- * # 可选：全流程「发起提资」（需已部署含自动化钩子的 plant3d-web）
+ * # 可选：全流程「发起编校审」（需已部署含自动化钩子的 plant3d-web）
  * export PMS_E2E_SUBMIT_REVIEW=1
  * # export PMS_E2E_FILL_PMS_DIALOG=1   # 若「新增」后先出 PMS 弹窗表单
  * # 或一键：export PMS_E2E_FULL_FLOW=1（等同打开 FILL + SUBMIT，可用 SKIP 环境变量关闭子步骤）
@@ -231,7 +231,7 @@ for (const role of rolesToRun()) {
       }
     });
 
-    test(`登录 ${role} → 新增${embedUrlSubstring() ? ` → 部署页 URL 含「${embedUrlSubstring()}」` : ''}${submitReviewEnabled ? ' → plant3d 发起提资' : ''}`, async ({
+    test(`登录 ${role} → 新增${embedUrlSubstring() ? ` → 部署页 URL 含「${embedUrlSubstring()}」` : ''}${submitReviewEnabled ? ' → plant3d 发起编校审' : ''}`, async ({
       page,
       context,
     }) => {
@@ -250,7 +250,7 @@ for (const role of rolesToRun()) {
         const ok = pageHit || frameHit || submitReviewEnabled;
         expect(
           ok,
-          `期望顶层 URL 或 iframe 含「${sub}」，或已开启发起提资以便在同页 iframe 场景下降级校验。当前标签：\n${allUrls.join('\n')}`,
+          `期望顶层 URL 或 iframe 含「${sub}」，或已开启发起编校审以便在同页 iframe 场景下降级校验。当前标签：\n${allUrls.join('\n')}`,
         ).toBe(true);
       } else {
         // 未配置部署域名时：仍完成自动化点击，便于有头观察行为

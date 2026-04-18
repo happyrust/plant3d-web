@@ -1,108 +1,67 @@
 ---
 name: review-collaboration-worker
-description: Implement task-thread and annotation-thread collaboration contracts, APIs, refresh behavior, and UI for the M7 reviewer/designer collaboration mission.
+description: Execute annotation refactor collaboration, detached comment-source, contract, and realtime convergence features across review surfaces.
 ---
 
 # review-collaboration-worker
 
-NOTE: Startup and cleanup are handled by `worker-base`. This skill defines the work procedure for M7 collaboration features in `plant3d-web`.
+## When to Use
 
-## When to Use This Skill
+Use this skill for milestone leaves that change detached annotation-thread behavior, comment/workflow-sync contract handling, or websocket-driven refresh/convergence rules.
 
-Use this skill for features that touch:
-- `src/components/review/ReviewCommentsPanel.vue`
-- collaboration state in `src/composables/useReviewStore.ts`
-- collaboration contracts in `src/api/reviewApi.ts` and related shared types
-- task-thread / annotation-thread UI integration
-- mentions, attachments, unread state, resolve/unresolve, and targeted refresh behavior
+## Required Reading Order
 
-## Work Procedure
+1. mission `mission.md`
+2. mission `validation-contract.md`
+3. mission `features.json`
+4. mission `validation-state.json`
+5. `.factory/library/architecture.md`
+6. `.factory/library/environment.md`
+7. `.factory/library/user-testing.md`
+8. `.factory/library/reviewsnapshot-restore-notes.md`
+9. `.factory/library/workflow-sync-contract-bridge.md`
 
-1. Read mission context first:
-   - mission `mission.md`
-   - mission `AGENTS.md`
-   - `validation-contract.md`
-   - `features.json`
-   - `.factory/library/architecture.md`
-   - `.factory/library/environment.md`
-   - `.factory/library/user-testing.md`
-   - `.factory/library/m6-m7-review-collaboration.md`
-2. Inspect the current collaboration path before editing:
-   - `src/components/review/ReviewCommentsPanel.vue`
-   - `src/composables/useReviewStore.ts`
-   - `src/api/reviewApi.ts`
-   - relevant shared types and designer/reviewer integration points
-3. Write failing tests first (red). Cover contract shape, UI behavior, and refresh behavior before implementation.
-4. Implement the smallest change that makes tests pass while keeping task-thread and annotation-thread semantics explicit and separate.
-5. Do not let message attachments collapse into existing task attachment semantics. Keep message/thread payload ownership clear.
-6. Prefer quasi-real-time targeted refresh behavior over broad architectural churn unless the feature explicitly requires more.
-7. Run targeted validation before handoff:
-   - focused Vitest files
-   - `npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run type-check`
-   - focused `npx eslint <files>`
-8. Perform manual verification in browser on seeded tasks for both thread scopes, recording each meaningful collaboration flow in `interactiveChecks`.
-9. Stop any ad hoc services/processes you start unless a validator is explicitly reusing them.
+## Procedure
 
-## Example Handoff
+1. Restate the assigned leaf feature ID and assertion IDs before editing.
+2. Identify whether the feature owns browser thread UX, HTTP contract work, realtime convergence, or a mix; keep scope explicit.
+3. Use TDD first for deterministic contract adapters/store reducers and focused tests around chronological ordering, merge identity, and refresh targeting.
+4. Keep task-thread and annotation-thread semantics separate; do not let detached comment work collapse them into one mixed stream.
+5. For contract work, prefer live request/response probes against the backend rather than assumptions.
+6. For realtime work, verify endpoint shape, event targeting, reconnect behavior, and heartbeat no-op behavior with browser/network evidence.
+7. Run mission-scoped verification before handoff:
+   - `npm run type-check`
+   - `npm run lint`
+   - focused vitest and/or curl/browser checks tied to owned assertions
+8. Report explicit contract gaps instead of filling them with guessed frontend behavior.
+9. Stop processes you started and preserve unrelated dirty files.
+
+## Example Handoff JSON
 
 ```json
 {
-  "salientSummary": "Implemented explicit task-thread and annotation-thread collaboration with reply/edit/delete, resolve/unresolve, mentions, attachments, and targeted refresh updates for the active review surfaces.",
-  "whatWasImplemented": "Added separate task-thread and annotation-thread contracts to the review API/store path, updated ReviewCommentsPanel to render the correct scope with message actions and attachment support, and added targeted refresh hooks so active collaboration views and unread badges update without full page reload. Kept task-thread and annotation-thread UI entry points explicit rather than collapsing them into one mixed panel.",
-  "whatWasLeftUndone": "Unread aggregation across very large thread histories is functional but not yet optimized for huge datasets; pagination follow-up can address that if needed.",
+  "featureId": "M5-F1-review-realtime-convergence",
+  "assertionsCovered": ["VAL-CONTRACT-027", "VAL-CONTRACT-028"],
+  "salientSummary": "Standardized websocket convergence so record, comment, and history refreshes target the correct review surfaces.",
   "verification": {
     "commandsRun": [
-      {
-        "command": "npm --prefix /Volumes/DPC/work/plant-code/plant3d-web test -- src/api/reviewApi.test.ts src/composables/useReviewStore.websocket.test.ts src/components/review/ReviewCommentsPanel.test.ts",
-        "exitCode": 0,
-        "observation": "Focused collaboration tests passed, covering dual-scope contracts, refresh updates, mentions, and attachment metadata."
-      },
-      {
-        "command": "npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run type-check",
-        "exitCode": 0,
-        "observation": "Type-check passed after collaboration contract and UI changes."
-      },
-      {
-        "command": "npx eslint src/components/review/ReviewCommentsPanel.vue src/api/reviewApi.ts src/composables/useReviewStore.ts --max-warnings 0",
-        "exitCode": 0,
-        "observation": "No lint violations in collaboration-owned files."
-      }
+      { "command": "npm run type-check", "exitCode": 0 },
+      { "command": "npm run lint", "exitCode": 0 }
     ],
     "interactiveChecks": [
-      {
-        "action": "Opened a seeded reviewer task, added replies in task-thread, resolved the thread, and refreshed only the collaboration region.",
-        "observed": "Task-thread showed the new replies, resolve state, and unread badge updates without requiring a full page reload."
-      },
-      {
-        "action": "Selected a canonical annotation, opened annotation-thread, added a mention and message attachment, then opened the same task in the designer surface.",
-        "observed": "Designer saw the same annotation-thread continuity with mention markup and attachment metadata preserved."
-      }
+      { "action": "Observed websocket frames during comment add and record save", "observed": "Only the expected thread/record/history refreshes fired; heartbeat stayed inert." }
     ]
   },
-  "tests": {
-    "added": [
-      {
-        "file": "/Volumes/DPC/work/plant-code/plant3d-web/src/components/review/ReviewCommentsPanel.test.ts",
-        "cases": [
-          {
-            "name": "task-thread and annotation-thread render different scope entry points",
-            "verifies": "UI keeps collaboration scopes explicit rather than mixing them."
-          },
-          {
-            "name": "thread actions update active view through targeted refresh",
-            "verifies": "Reply/edit/delete/resolve flows refresh the affected collaboration surface without full reload."
-          }
-        ]
-      }
-    ]
-  },
-  "discoveredIssues": []
+  "filesChanged": [
+    "src/composables/useReviewStore.ts"
+  ],
+  "returnToOrchestrator": false
 }
 ```
 
-## When to Return to Orchestrator
+## Return to Orchestrator When
 
-- Collaboration requires a backend schema or message lifecycle decision that is not specified in the mission.
-- Stable annotation identity is missing, preventing correct annotation-thread lineage.
-- Attachment or mention scope would leak beyond the approved task-participant boundaries.
-- Seeded collaboration tasks are not available for manual validation.
+- backend contract gaps block the owned assertions and need a milestone-level decision
+- detached comment identity would duplicate threads across task-context and workflow-sync paths
+- websocket payloads cannot support idempotent merge without expanding scope beyond the assigned feature
+- services or seeded data needed for validation are unavailable

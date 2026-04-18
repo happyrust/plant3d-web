@@ -60,7 +60,7 @@
     "Open http://127.0.0.1:3101",
     "Select a project from the landing page",
     "Open the top-right account switcher if needed",
-    "Use the 校审 ribbon entries: 开始校审 / 待审核 / 复审任务 / 我的提资"
+    "Use the 校审 ribbon entries: 开始校审 / 待审核 / 复审任务 / 我的编校审"
   ],
   "frictions": [
     "Headless browser sessions are not suitable for WebGL2 viewer validation, but list/detail navigation is reachable.",

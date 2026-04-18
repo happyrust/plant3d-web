@@ -1,5 +1,5 @@
 /**
- * PMS → plant3d「发起提资单」自动化：供 CDP 脚本与 Playwright PMS E2E 共用。
+ * PMS → plant3d「发起编校审单」自动化：供 CDP 脚本与 Playwright PMS E2E 共用。
  * 依赖前端 InitiateReviewPanel 在 localStorage plant3d_automation_review=1 或 ?automation_review=1 时暴露 window.__plant3dInitiateReviewE2E。
  *
  * 默认测试 BRAN 与 PMS 数据界面展示一致（下划线 RefNo），便于联调核对同步。
@@ -71,7 +71,7 @@ export async function tryFillPmsNewDocumentDialog(page: Page): Promise<void> {
       await input.fill(val).catch(() => undefined);
     }
   }
-  const submit = dialog.getByRole('button', { name: /保存|确定|提交|发起提资|下一步|确认/ }).first();
+  const submit = dialog.getByRole('button', { name: /保存|确定|提交|发起编校审|下一步|确认/ }).first();
   if (await submit.count()) {
     await submit.click({ timeout: 10_000 }).catch(() => undefined);
   }
@@ -107,7 +107,7 @@ export async function assertNoCaptchaBarrier(page: Page): Promise<void> {
   }
 }
 
-/** 与发起提资填写一致，便于 PMS 列表检索与跨角色联调 */
+/** 与发起编校审填写一致，便于 PMS 列表检索与跨角色联调 */
 export function resolveMockPackageName(): string {
   return (process.env.PMS_MOCK_PACKAGE_NAME || `E2E-PKG-${Date.now()}`).trim();
 }
@@ -203,7 +203,7 @@ async function clickAddComponentAndWaitForRefno(root: Page | Frame, rawRefno: st
     return false;
   }
 
-  console.error('[cdp] plant3d：点击「添加构件」，将当前选中 CE 写入提资构件列表…');
+  console.error('[cdp] plant3d：点击「添加构件」，将当前选中 CE 写入编校审构件列表…');
   await addComponent.click({ timeout: 15_000 });
 
   const listMs = parseAddComponentListWaitMs();
@@ -377,7 +377,7 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
     )
     .catch(() => {
       throw new Error(
-        'plant3d 发起提资面板已出现，但未挂载自动化钩子。请部署含 InitiateReviewPanel 改动的版本，并启用 localStorage plant3d_automation_review（Playwright/CDP 的 registerPlant3dAutomationReviewInitScript）。',
+        'plant3d 发起编校审面板已出现，但未挂载自动化钩子。请部署含 InitiateReviewPanel 改动的版本，并启用 localStorage plant3d_automation_review（Playwright/CDP 的 registerPlant3dAutomationReviewInitScript）。',
       );
     });
 
@@ -413,7 +413,7 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
   }
 
   const pkg = resolveMockPackageName();
-  await root.getByPlaceholder('输入提资数据包名称...').fill(pkg);
+  await root.getByPlaceholder('输入编校审数据包名称...').fill(pkg);
 
   const checkerSel = root.locator('[data-testid="initiate-checker-select"]');
   const approverSel = root.locator('[data-testid="initiate-approver-select"]');
@@ -460,7 +460,7 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
 
     const approverId = approverVals.find((id) => id !== checkerId) ?? approverVals[0];
     if (!checkerId || !approverId) {
-      throw new Error('校核/批准下拉无可用选项，无法自动提资');
+      throw new Error('校核/批准下拉无可用选项，无法自动发起编校审');
     }
     if (checkerId === approverId && approverVals.length < 2) {
       throw new Error('仅有一名可选审核人，无法满足「校核人与批准人不同」校验');
@@ -482,7 +482,7 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
   await submitBtn.click({ timeout: 20_000 });
 
   await root
-    .getByText(/提资单(创建|保存)成功/, { exact: false })
+    .getByText(/编校审单(创建|保存)成功/, { exact: false })
     .first()
     .waitFor({ state: 'visible', timeout: 120_000 });
   return pkg;
@@ -674,7 +674,7 @@ export async function waitForReviewerWorkbenchAcrossContext(context: BrowserCont
     await new Promise((r) => setTimeout(r, 600));
   }
   throw new Error(
-    '超时：未在任何标签页/iframe 内找到校核工作区 [data-testid=review-workbench-workflow-zone]（请确认 JH 已从 PMS 打开含该提资的三维/校审入口）',
+    '超时：未在任何标签页/iframe 内找到校核工作区 [data-testid=review-workbench-workflow-zone]（请确认 JH 已从 PMS 打开含该编校审单的三维/校审入口）',
   );
 }
 
@@ -715,6 +715,6 @@ export async function runSubmitReviewAcrossContext(context: BrowserContext): Pro
     await new Promise((r) => setTimeout(r, 600));
   }
   throw new Error(
-    '超时：未在任何标签页/iframe 内找到发起提资面板 [data-testid=designer-landing-workspace]（跨域 iframe 无法用 Playwright 注入，请改为新开同源标签或调整嵌入方式）',
+    '超时：未在任何标签页/iframe 内找到发起编校审面板 [data-testid=designer-landing-workspace]（跨域 iframe 无法用 Playwright 注入，请改为新开同源标签或调整嵌入方式）',
   );
 }

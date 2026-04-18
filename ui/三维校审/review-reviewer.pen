@@ -1,5 +1,5 @@
 {
-  "version": "2.9",
+  "version": "2.11",
   "children": [
     {
       "type": "frame",
@@ -19,7 +19,7 @@
           "x": 460,
           "y": 40,
           "name": "ReviewerTaskList",
-          "width": 380,
+          "width": 400,
           "height": 800,
           "fill": "#FFFFFF",
           "cornerRadius": 12,
@@ -67,7 +67,7 @@
                       "id": "RrQZZ",
                       "name": "Count",
                       "fill": "#6B7280",
-                      "content": "共 4 条",
+                      "content": "4单 / 7批注",
                       "fontFamily": "Inter",
                       "fontSize": 13,
                       "fontWeight": "normal"
@@ -222,6 +222,46 @@
                     },
                     {
                       "type": "frame",
+                      "id": "QnA11",
+                      "name": "AnnotationSignal",
+                      "width": "fill_container",
+                      "fill": "#FFF7ED",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FED7AA"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "QnA12",
+                          "name": "SignalTitle",
+                          "fill": "#9A3412",
+                          "content": "批注信号",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QnA13",
+                          "name": "SignalValue",
+                          "fill": "#C2410C",
+                          "content": "5条批注 · 待处理2条 · 高优1条",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
                       "id": "zF5wF",
                       "name": "CardBot",
                       "width": "fill_container",
@@ -256,7 +296,7 @@
                               "id": "lsdWq",
                               "name": "StatusText",
                               "fill": "#D97706",
-                              "content": "待审核 (submitted)",
+                              "content": "校核中 · 2条待处理",
                               "fontFamily": "Inter",
                               "fontSize": 12,
                               "fontWeight": "normal"
@@ -291,7 +331,7 @@
                               "id": "LtUzg",
                               "name": "BtnText",
                               "fill": "#FFFFFF",
-                              "content": "开始审核",
+                              "content": "进入批注",
                               "fontFamily": "Inter",
                               "fontSize": 13,
                               "fontWeight": "500"
@@ -514,7 +554,7 @@
           "x": 880,
           "y": 40,
           "name": "ReviewPanel",
-          "width": 460,
+          "width": 560,
           "height": 800,
           "fill": "#FFFFFF",
           "cornerRadius": 12,
@@ -562,7 +602,7 @@
                       "id": "OiI3L",
                       "name": "Title",
                       "fill": "#111827",
-                      "content": "审核任务: 1号厂房管线碰撞问题包",
+                      "content": "审核任务 / 批注处理",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "600"
@@ -604,7 +644,7 @@
                           "id": "T1sjd",
                           "name": "Text",
                           "fill": "#C2410C",
-                          "content": "已过滤",
+                          "content": "高优批注",
                           "fontFamily": "Inter",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -750,7 +790,7 @@
                       "id": "JK7o0",
                       "name": "T1",
                       "fill": "#111827",
-                      "content": "审核记录",
+                      "content": "批注处理",
                       "fontFamily": "Inter",
                       "fontSize": 13,
                       "fontWeight": "500"
@@ -773,7 +813,7 @@
                       "id": "tQT37",
                       "name": "T2",
                       "fill": "#6B7280",
-                      "content": "历史流转",
+                      "content": "确认记录",
                       "fontFamily": "Inter",
                       "fontSize": 13,
                       "fontWeight": "normal"
@@ -796,7 +836,7 @@
                       "id": "5Zy3g",
                       "name": "T3",
                       "fill": "#6B7280",
-                      "content": "附件材料",
+                      "content": "流程历史",
                       "fontFamily": "Inter",
                       "fontSize": 13,
                       "fontWeight": "normal"
@@ -808,82 +848,702 @@
             {
               "type": "frame",
               "id": "BabQL",
-              "name": "RecordArea",
+              "name": "AnnotationWorkspace",
               "width": "fill_container",
               "layout": "vertical",
               "gap": 12,
               "children": [
                 {
                   "type": "text",
-                  "id": "OwvDa",
-                  "name": "SubTitle",
+                  "id": "RvQ001",
+                  "name": "QueueTitle",
                   "fill": "#374151",
-                  "content": "当前未确认的测量/批注",
+                  "content": "当前批注（5） / 待处理2 / 高优1",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "600"
                 },
                 {
                   "type": "frame",
-                  "id": "s1ML2",
-                  "name": "RecordItem",
+                  "id": "RvQ010",
+                  "name": "ActiveAnnotationCard",
                   "width": "fill_container",
                   "fill": "#FFFFFF",
-                  "cornerRadius": 6,
+                  "cornerRadius": 8,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#E5E7EB"
+                    "fill": "#FED7AA"
                   },
-                  "gap": 12,
-                  "padding": 10,
-                  "alignItems": "center",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
                   "children": [
                     {
-                      "type": "icon_font",
-                      "id": "zCOPw",
-                      "name": "RulerIco",
-                      "width": 14,
-                      "height": 14,
-                      "iconFontName": "ruler",
-                      "iconFontFamily": "lucide",
-                      "fill": "#FF6B00"
+                      "type": "frame",
+                      "id": "RvQ011",
+                      "name": "AnnHead",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ012",
+                          "name": "AnnTitle",
+                          "fill": "#111827",
+                          "content": "管口对位偏差 / 云线批注",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RvQ013",
+                          "name": "AnnStatus",
+                          "fill": "#FEF3C7",
+                          "cornerRadius": 999,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RvQ013T",
+                              "name": "AnnStatusText",
+                              "fill": "#92400E",
+                              "content": "待设计处理",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
                     },
                     {
                       "type": "text",
-                      "id": "PVWSe",
-                      "name": "RecordText",
-                      "fill": "#111827",
-                      "content": "管道间距测量结果 (2)",
+                      "id": "RvQ014",
+                      "name": "AnnMeta",
+                      "fill": "#6B7280",
+                      "content": "RefNo 24381_145018 · 创建于 10-24 10:36 · 评论 3 条",
                       "fontFamily": "Inter",
-                      "fontSize": 13,
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "RvQ015",
+                      "name": "AnnDesc",
+                      "fill": "#374151",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "主泵上方穿墙点仍存在碰撞，需要设计侧确认是否修改模型；若维持现状，则必须填写跳过原因。",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "frame",
-                      "id": "IbNVp",
-                      "name": "Spacer",
+                      "id": "RvQ016",
+                      "name": "SkipRuleCallout",
                       "width": "fill_container",
-                      "height": "fit_content(0)",
-                      "layout": "none"
-                    },
-                    {
-                      "type": "icon_font",
-                      "id": "2NRm3",
-                      "name": "DelIco",
-                      "width": 14,
-                      "height": 14,
-                      "iconFontName": "trash-2",
-                      "iconFontFamily": "lucide",
-                      "fill": "#EF4444"
+                      "fill": "#FEF2F2",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FECACA"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "RvQ016H",
+                          "name": "SkipRuleHeader",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "RvQ016I",
+                              "name": "WarnIcon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "triangle-alert",
+                              "iconFontFamily": "lucide",
+                              "fill": "#DC2626"
+                            },
+                            {
+                              "type": "text",
+                              "id": "RvQ017",
+                              "name": "SkipRuleTitle",
+                              "fill": "#991B1B",
+                              "content": "跳过规则",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "RvQ018",
+                          "name": "SkipRuleBody",
+                          "fill": "#991B1B",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "若设计侧选择“跳过处理”，必须填写原因后才能进入后续复核。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
                 {
                   "type": "frame",
-                  "id": "TM7TE",
-                  "name": "NoteInput",
+                  "id": "RvQ020",
+                  "name": "FilterRow",
                   "width": "fill_container",
-                  "height": 60,
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "RvQ021",
+                      "name": "AllChip",
+                      "fill": "#111827",
+                      "cornerRadius": 999,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ021T",
+                          "name": "AllChipText",
+                          "fill": "#FFFFFF",
+                          "content": "全部",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ022",
+                      "name": "TodoChip",
+                      "fill": "#FEF3C7",
+                      "cornerRadius": 999,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ022T",
+                          "name": "TodoChipText",
+                          "fill": "#92400E",
+                          "content": "待处理",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ023",
+                      "name": "DoneChip",
+                      "fill": "#DCFCE7",
+                      "cornerRadius": 999,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ023T",
+                          "name": "DoneChipText",
+                          "fill": "#166534",
+                          "content": "已修改",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ024",
+                      "name": "SkipChip",
+                      "fill": "#FEE2E2",
+                      "cornerRadius": 999,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ024T",
+                          "name": "SkipChipText",
+                          "fill": "#991B1B",
+                          "content": "已跳过",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ025",
+                      "name": "HighChip",
+                      "fill": "#FED7AA",
+                      "cornerRadius": 999,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ025T",
+                          "name": "HighChipText",
+                          "fill": "#9A3412",
+                          "content": "高优先级",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "RvQ030",
+                  "name": "PriorityCard",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "RvQ031",
+                      "name": "PriorityTitle",
+                      "fill": "#374151",
+                      "content": "优先级设置（点击等级即调整）",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ032",
+                      "name": "PriorityRow",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "RvQ033",
+                          "name": "LowBadge",
+                          "width": 64,
+                          "fill": "#E5E7EB",
+                          "cornerRadius": 999,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RvQ033T",
+                              "name": "LowBadgeText",
+                              "fill": "#374151",
+                              "content": "低",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RvQ034",
+                          "name": "MidBadge",
+                          "width": 64,
+                          "fill": "#FEF3C7",
+                          "cornerRadius": 999,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RvQ034T",
+                              "name": "MidBadgeText",
+                              "fill": "#92400E",
+                              "content": "中",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RvQ035",
+                          "name": "HighBadge",
+                          "width": 64,
+                          "fill": "#FED7AA",
+                          "cornerRadius": 999,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RvQ035T",
+                              "name": "HighBadgeText",
+                              "fill": "#9A3412",
+                              "content": "高",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RvQ036",
+                          "name": "UrgentBadge",
+                          "width": 80,
+                          "fill": "#FB923C",
+                          "cornerRadius": 999,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RvQ036T",
+                              "name": "UrgentBadgeText",
+                              "fill": "#FFFFFF",
+                              "content": "紧急",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "RvQ037",
+                      "name": "PriorityMeta",
+                      "fill": "#6B7280",
+                      "content": "最近调整：校核人 SH · 3分钟前",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "RvQ040",
+                  "name": "ActionRow",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "RvQ041",
+                      "name": "ReplyBtn",
+                      "width": 248,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#D1D5DB"
+                      },
+                      "padding": [
+                        10,
+                        0
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ041T",
+                          "name": "ReplyBtnText",
+                          "fill": "#374151",
+                          "content": "回复设计",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ043",
+                      "name": "RecheckBtn",
+                      "width": 248,
+                      "fill": "#10B981",
+                      "cornerRadius": 6,
+                      "padding": [
+                        10,
+                        0
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ043T",
+                          "name": "RecheckBtnText",
+                          "fill": "#FFFFFF",
+                          "content": "进入待复核",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "RvQ050",
+                  "name": "ThreadPreview",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "RvQ051",
+                      "name": "ThreadTitle",
+                      "fill": "#374151",
+                      "content": "最近处理留痕",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ052",
+                      "name": "Msg1",
+                      "width": "fill_container",
+                      "fill": "#FFF7ED",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FED7AA"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ053",
+                          "name": "Msg1Head",
+                          "fill": "#9A3412",
+                          "content": "校核 · SH（待设计处理）",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RvQ054",
+                          "name": "Msg1Body",
+                          "fill": "#374151",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "请设计确认该偏差是否来自支吊架定位。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ055",
+                      "name": "Msg2",
+                      "width": "fill_container",
+                      "fill": "#ECFDF5",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#BBF7D0"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ056",
+                          "name": "Msg2Head",
+                          "fill": "#166534",
+                          "content": "设计 · SJ（已修改）",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RvQ057",
+                          "name": "Msg2Body",
+                          "fill": "#166534",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "已调整管口位置并更新模型，等待校核复核。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RvQ061",
+                      "name": "Msg4",
+                      "width": "fill_container",
+                      "fill": "#FEF2F2",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#FECACA"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 10,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RvQ062",
+                          "name": "Msg4Head",
+                          "fill": "#991B1B",
+                          "content": "设计 · SJ（已跳过）",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RvQ063",
+                          "name": "Msg4Body",
+                          "fill": "#991B1B",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "处理动作：已跳过。原因：当前安装条件受现场支架约束，需待上游支架模型统一调整后再复核。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "RvQ065",
+                  "name": "CompactRuleHint",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "gap": 8,
+                  "padding": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "RvQ065I",
+                      "name": "InfoIcon",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "circle-alert",
+                      "iconFontFamily": "lucide",
+                      "fill": "#9CA3AF"
+                    },
+                    {
+                      "type": "text",
+                      "id": "RvQ066",
+                      "name": "CompactRuleHintText",
+                      "fill": "#6B7280",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "先看状态与优先级，再决定回复或进入任务级流转。",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "RvQ070",
+                  "name": "DraftInput",
+                  "width": "fill_container",
+                  "height": 48,
                   "fill": "#FFFFFF",
                   "cornerRadius": 6,
                   "stroke": {
@@ -891,107 +1551,19 @@
                     "fill": "#D1D5DB"
                   },
                   "padding": [
-                    8,
-                    10
+                    10,
+                    12
                   ],
                   "children": [
                     {
                       "type": "text",
-                      "id": "3RFmu",
-                      "name": "Placeholder",
+                      "id": "RvQ071",
+                      "name": "DraftPlaceholder",
                       "fill": "#9CA3AF",
-                      "content": "添加审图意见记录概要...",
+                      "content": "输入追问、复核意见，或说明为何提升/降低优先级...",
                       "fontFamily": "Inter",
-                      "fontSize": 13,
+                      "fontSize": 11,
                       "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "wLSGa",
-                  "name": "BtnGroupRecord",
-                  "width": "fill_container",
-                  "gap": 12,
-                  "justifyContent": "space_between",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "TfaqR",
-                      "name": "ConfirmBtn",
-                      "width": 196,
-                      "fill": "#FF6B00",
-                      "cornerRadius": 6,
-                      "gap": 6,
-                      "padding": [
-                        8,
-                        0
-                      ],
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "4msVK",
-                          "name": "CheckIco",
-                          "width": 14,
-                          "height": 14,
-                          "iconFontName": "check-circle",
-                          "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
-                        },
-                        {
-                          "type": "text",
-                          "id": "aV3BX",
-                          "name": "Txt",
-                          "fill": "#FFFFFF",
-                          "content": "确认记录",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "BYjFO",
-                      "name": "ClearBtn",
-                      "width": 196,
-                      "fill": "#FFFFFF",
-                      "cornerRadius": 6,
-                      "stroke": {
-                        "thickness": 1,
-                        "fill": "#D1D5DB"
-                      },
-                      "gap": 6,
-                      "padding": [
-                        8,
-                        0
-                      ],
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "QUAlt",
-                          "name": "TrashIco",
-                          "width": 14,
-                          "height": 14,
-                          "iconFontName": "trash-2",
-                          "iconFontFamily": "lucide",
-                          "fill": "#4B5563"
-                        },
-                        {
-                          "type": "text",
-                          "id": "730Sc",
-                          "name": "Txt",
-                          "fill": "#4B5563",
-                          "content": "清空画板",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        }
-                      ]
                     }
                   ]
                 }
@@ -1023,6 +1595,16 @@
                   }
                 },
                 {
+                  "type": "text",
+                  "id": "RvQ080",
+                  "name": "FlowHint",
+                  "fill": "#9CA3AF",
+                  "content": "以下按钮属于任务级流转，不替代单条批注处理。",
+                  "fontFamily": "Inter",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
                   "type": "frame",
                   "id": "1eH8I",
                   "name": "BtnGroupFlow",
@@ -1034,7 +1616,7 @@
                       "type": "frame",
                       "id": "GvbTS",
                       "name": "ReturnBtn",
-                      "width": 196,
+                      "width": 254,
                       "fill": "#FEF2F2",
                       "cornerRadius": 6,
                       "stroke": {
@@ -1075,7 +1657,7 @@
                       "type": "frame",
                       "id": "I1TSF",
                       "name": "PassBtn",
-                      "width": 196,
+                      "width": 254,
                       "fill": "#10B981",
                       "cornerRadius": 6,
                       "gap": 6,
@@ -2338,8 +2920,8 @@
         {
           "type": "frame",
           "id": "I743P",
-          "x": 880,
-          "y": 900,
+          "x": 893,
+          "y": 1337,
           "name": "WorkflowReturnDialog",
           "width": 460,
           "height": 800,

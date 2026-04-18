@@ -68,7 +68,7 @@
 
 | 字段 | 来源 | 验证 |
 |------|------|------|
-| `form_id` | iframe 返回的 form_id | 创建提资后检查非空 |
+| `form_id` | iframe 返回的 form_id | 创建编校审后检查非空 |
 | `token` | embed-url 返回的 JWT | 自动填入 |
 | `action` | 面板操作按钮 | 分别触发 `active`/`agree`/`return`/`stop`/`query` |
 | `actor` | 当前用户自动构建 | 检查 `id`、`name`、`roles` |
@@ -78,10 +78,10 @@
 
 **手动验证步骤**：
 
-1. 完成 embed-url 后在 iframe 中创建提资数据
+1. 完成 embed-url 后在 iframe 中创建编校审数据
 2. 在 `metadata` 文本区填入 `{"integration_version": "1.0"}`
 3. 在评论框输入「验收测试评论」
-4. 点击「送审提交」（active）
+4. 点击「确认提交流转」（active）
 5. DevTools Network 检查 `POST /api/review/workflow/sync` 请求体
 6. **预期**：包含 `metadata`、`comments`、`actor`、`next_step` 等全部字段
 
@@ -128,10 +128,10 @@
 | 1 | 选择 PMS 用户 | CDP 的 login 步骤 |
 | 2 | 选择项目号 | 项目选择 |
 | 3 | 点击「新增」→ embed-url → iframe | 新增按钮 → 三维打开 |
-| 4 | iframe 中填写提资数据 | 注入构件 + 创建提资数据 |
-| 5 | PMS 面板执行 workflow/sync active | 送审提交 |
+| 4 | iframe 中填写编校审数据 | 注入构件 + 创建编校审数据 |
+| 5 | PMS 面板执行 workflow/sync active | 确认提交流转 |
 | 6 | 刷新列表确认新记录 | PMS JSON 嗅探断言 |
-| 7 | （Extended）切换校核用户 JH | clearCookies + JH 登录 + 查看/批注 |
+| 7 | （Extended）切换校对用户 JH | clearCookies + JH 登录 + 查看/批注 |
 
 **验证**：
 
@@ -299,11 +299,11 @@ npx tsx scripts/pms-contract-sequence.ts --base http://localhost:3100 --verbose
 ### 7.1 基础流程（不受本次改动影响）
 
 - [ ] SJ 用户新增 → embed-url → iframe 打开
-- [ ] iframe 中创建提资数据成功
-- [ ] 送审提交（workflow/sync active）成功
+- [ ] iframe 中创建编校审数据成功
+- [ ] 确认提交流转（workflow/sync active）成功
 - [ ] 列表刷新显示新记录
 - [ ] JH 用户打开同一记录
-- [ ] JH 执行「同意」（workflow/sync agree）
+- [ ] JH 执行「确认流转至审核」（workflow/sync agree）
 - [ ] 任务状态流转正确
 
 ### 7.2 阶段 2 新增功能

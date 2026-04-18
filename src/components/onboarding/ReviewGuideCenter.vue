@@ -51,7 +51,7 @@ const ROLE_LABELS: Record<GuideRole, string> = {
 };
 
 const ROLE_SUMMARIES: Record<GuideRole, string> = {
-  designer: '负责选择构件、整理提资内容并跟踪驳回与复审任务。',
+  designer: '负责选择构件、整理编校审内容并跟踪驳回与复审任务。',
   proofreader: '负责进入待办任务、做批注与测量、确认当前数据并提交下一节点。',
   reviewer: '负责读取校核结果、复核三维内容、查看确认记录后做审核决策。',
   manager: '负责查看完整校审链路、确认记录与附件，并做最终批准决策。',
@@ -59,7 +59,7 @@ const ROLE_SUMMARIES: Record<GuideRole, string> = {
 
 /** 外部流程（如 PMS）：平台驱动流转，向导不强调退回/节点提交类操作 */
 const ROLE_SUMMARIES_PASSIVE: Record<GuideRole, string> = {
-  designer: '负责选择构件、整理提资内容；后续环节由外部平台驱动。',
+  designer: '负责选择构件、整理编校审内容；后续环节由外部平台驱动。',
   proofreader: '负责进入待办任务、做批注与测量、确认当前三维校核数据。',
   reviewer: '负责读取校核结果、复核三维内容并查看确认记录。',
   manager: '负责查看完整校审链路、确认记录与附件。',
@@ -132,11 +132,11 @@ const quickActions = computed(() => {
   if (role === 'designer') {
     list.push({
       id: 'initiate-review',
-      title: '学习如何发起提资',
-      description: '从选择构件、填写提资信息到提交，适合第一次发起三维校审。',
+      title: '学习如何发起编校审',
+      description: '从选择构件、填写编校审信息到提交，适合第一次发起三维校审。',
       topic: 'initiateReview',
-      actionLabel: '打开提资指南',
-      stepsHint: '从提资面板开始',
+      actionLabel: '打开编校审指南',
+      stepsHint: '从编校审面板开始',
       run: async () => {
         ensurePanelAndActivate('initiateReview');
         await onboarding.startGuideForRole('designer', { stepId: 'initiate-review-panel' });
@@ -146,10 +146,10 @@ const quickActions = computed(() => {
     if (showMyTasksEntry.value) {
       list.push({
         id: 'designer-my-tasks',
-        title: '查看我的提资进度',
-        description: '快速定位自己发起的提资，检查当前状态、附件和流转进度。',
+        title: '查看我的编校审进度',
+        description: '快速定位自己发起的编校审单，检查当前状态、附件和流转进度。',
         topic: 'designer',
-        actionLabel: '打开我的提资',
+        actionLabel: '打开我的编校审',
         stepsHint: '进度追踪',
         run: async () => {
           ensurePanelAndActivate('myTasks');
@@ -160,7 +160,7 @@ const quickActions = computed(() => {
       list.push({
         id: 'designer-resubmission',
         title: '学习如何处理驳回与复审',
-        description: '当提资被退回时，查看复审任务、修改内容并重新提交。',
+        description: '当编校审单被退回时，查看复审任务、修改内容并重新提交。',
         topic: 'designer',
         actionLabel: '打开复审指南',
         stepsHint: '驳回闭环',
@@ -177,7 +177,7 @@ const quickActions = computed(() => {
       list.push({
         id: 'reviewer-tasks',
         title: '学习如何处理待办任务',
-        description: '从待处理提资任务列表进入，找到当前应处理的校审 / 审核任务。',
+        description: '从待处理编校审任务列表进入，找到当前应处理的校审 / 审核任务。',
         topic: 'reviewerTasks',
         actionLabel: '打开待办任务指南',
         stepsHint: '从任务列表开始',
@@ -215,8 +215,8 @@ const mainSectionDescription = computed(() => {
   const passive = currentGuideCtx.value?.workflowMode === 'external';
   if (showAllGuideOperations.value || !currentGuideRole.value) {
     return passive
-      ? '这里聚合了三维校审最常见的操作导航：使用校审面板、发起提资等。外部流程下通常从平台表单列表进入当前单据，无需在应用内打开待办任务。'
-      : '这里聚合了三维校审最常见的操作导航：进入待办、使用校审面板、发起提资、查看复审与进度。';
+      ? '这里聚合了三维校审最常见的操作导航：使用校审面板、发起编校审等。外部流程下通常从平台表单列表进入当前单据，无需在应用内打开待办任务。'
+      : '这里聚合了三维校审最常见的操作导航：进入待办、使用校审面板、发起编校审、查看复审与进度。';
   }
   return `以下仅展示与「${ROLE_LABELS[currentGuideRole.value]}」工作流角色相关的教程入口。勾选侧栏「显示所有操作」可浏览全部角色教程。`;
 });
@@ -234,9 +234,9 @@ const usageTips = computed(() => {
   const out = [...base];
   if (showDesigner) {
     if (showMyTasksEntry.value) {
-      out.push('设计师建议先完成“发起提资”，再查看“我的提资”或“复审任务”。');
+      out.push('设计师建议先完成“发起编校审”，再查看“我的编校审”或“复审任务”。');
     } else {
-      out.push('设计师建议先完成“发起提资”；进度与退回处理通常在外部平台完成。');
+      out.push('设计师建议先完成“发起编校审”；进度与退回处理通常在外部平台完成。');
     }
   }
   if (showReviewer) {
@@ -248,7 +248,7 @@ const usageTips = computed(() => {
 const topicHeadline = computed(() => {
   switch (onboarding.guideCenterTopic.value) {
     case 'initiateReview':
-      return '你当前更可能需要“发起提资”的操作说明。';
+      return '你当前更可能需要“发起编校审”的操作说明。';
     case 'reviewerTasks':
       return '你当前更可能需要“待办任务处理”的操作说明。';
     case 'reviewPanel':

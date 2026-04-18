@@ -66,7 +66,7 @@ sessionStorage.removeItem('plant3d_debug_ui');
 ### Review 相关调试/联调提示
 
 - `src/components/review/InitiateReviewPanel.vue`
-  - 自动进入提资/编辑工作区
+  - 自动进入编校审/编辑工作区
   - 表单 ID / 项目 / Lineage
   - 当前绑定任务
   - form_id 未绑定内部任务提示

@@ -21,12 +21,12 @@
         {
           "action": "Open the app, switch to the reviewer role, and enter the reviewer workbench from the pending task list.",
           "expected": "Reviewer workbench opens for the candidate task.",
-          "observed": "Workbench opened from the pending reviewer task card for task title '测试提资单-1767928364中'."
+          "observed": "Workbench opened from the pending reviewer task card for task title '测试编校审单-1767928364中'."
         },
         {
           "action": "Inspect the workbench header/context section.",
           "expected": "Task title, model name, requester, reviewer(s), component count, and current node are visible.",
-          "observed": "Visible text showed title '测试提资单-1767928364中', model 'test-model', requester '系统用户', reviewers '校核 / 审核人', component count '1 个构件', and current node '校核'."
+          "observed": "Visible text showed title '测试编校审单-1767928364中', model 'test-model', requester '系统用户', reviewers '校核 / 审核人', component count '1 个构件', and current node '校核'."
         }
       ],
       "evidence": {
@@ -40,18 +40,18 @@
     },
     {
       "id": "VAL-WORK-002",
-      "title": "提交到下一节点对话框",
+      "title": "确认提交流转对话框",
       "status": "pass",
       "steps": [
         {
-          "action": "Click '提交到审核' in the workbench.",
+          "action": "Click '确认流转至审核' in the workbench.",
           "expected": "A submit dialog opens.",
-          "observed": "Dialog titled '提交到下一节点' opened."
+          "observed": "Dialog titled '确认提交流转' opened."
         },
         {
           "action": "Inspect submit dialog content.",
           "expected": "Current node, target node, and comment/remark input are visible.",
-          "observed": "Dialog showed current node '校核', target node '审核', and textbox '备注输入（可选）'."
+          "observed": "Dialog showed current node '校对', target node '审核', and textbox '流转备注 (选填)'."
         }
       ],
       "evidence": {
@@ -65,18 +65,18 @@
     },
     {
       "id": "VAL-WORK-004",
-      "title": "驳回到指定节点对话框",
+      "title": "确认驳回流转对话框",
       "status": "pass",
       "steps": [
         {
           "action": "Close the submit dialog and click '驳回到设计'.",
           "expected": "A return dialog opens.",
-          "observed": "Dialog titled '驳回到指定节点' opened."
+          "observed": "Dialog titled '确认驳回流转' opened."
         },
         {
           "action": "Inspect return dialog content.",
           "expected": "Target node and required return-reason input are visible.",
-          "observed": "Dialog showed target node button/value '编制', current node '校核', and textbox '驳回原因输入（必填）'."
+          "observed": "Dialog showed target action/value '编制', current node '校核', and textbox '流转驳回原因（必填）'."
         }
       ],
       "evidence": {
@@ -95,13 +95,13 @@
       "steps": [
         {
           "action": "Inspect the return dialog with an empty reason.",
-          "expected": "'确认驳回' remains disabled until a return reason is entered.",
-          "observed": "Return dialog showed validation text '驳回原因为必填项' and the '确认驳回' button was disabled in the snapshot."
+          "expected": "'确认驳回流转' remains disabled until a return reason is entered.",
+          "observed": "Return dialog showed validation text '驳回原因为必填项' and the '确认驳回流转' button was disabled in the snapshot."
         },
         {
           "action": "Enter a sample reason without submitting.",
           "expected": "The confirm button becomes enabled after text entry.",
-          "observed": "After filling 'needs revision', the '确认驳回' button became enabled."
+          "observed": "After filling 'needs revision', the '确认驳回流转' button became enabled."
         }
       ],
       "evidence": {

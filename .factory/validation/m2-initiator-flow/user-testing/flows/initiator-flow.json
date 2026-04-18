@@ -3,7 +3,7 @@
     {
       "id": "VAL-INIT-001",
       "status": "blocked",
-      "reason": "In the live embedded surface, triggering review mode only exposed ribbon actions like '开始校审' and task panels; the expected initiator panel titled '发起提资单' never rendered, so the open-panel assertion could not be exercised through the user surface.",
+      "reason": "In the live embedded surface, triggering review mode only exposed ribbon actions like '开始校审' and task panels; the expected initiator panel titled '发起编校审单' never rendered, so the open-panel assertion could not be exercised through the user surface.",
       "evidence": [
         "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-review-tab.png",
         "/Volumes/DPC/work/plant-code/plant3d-web/.factory/validation/m2-initiator-flow/user-testing/flows/initiator-start-review.png"
@@ -63,7 +63,7 @@
   "frictions": [
     "The browser session runs without WebGL2, so the 3D viewer fails to initialize and object-selection-dependent initiator interactions are unavailable.",
     "The '校审测试' entry opens an external embedded page but still lands on review/task surfaces rather than the initiator form.",
-    "The live review tab exposes '开始校审', '校审面板', '待审核', '复审任务', and '我的提资', but not a visible '发起提资单' workflow entry."
+    "The live review tab exposes '开始校审', '校审面板', '待审核', '复审任务', and '我的编校审', but not a visible '发起编校审单' workflow entry."
   ],
   "blockers": [
     "Primary blocker: the expected initiator panel never rendered in the real browser surface, so all VAL-INIT assertions remained unreachable.",

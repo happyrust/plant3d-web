@@ -35,11 +35,11 @@ async function handleSubmit(comment?: string) {
   workflowLoading.value = true;
   try {
     await userStore.submitTaskToNextNode(currentTask.value.id, comment);
-    emitToast({ message: '提交成功', type: 'success' });
+    emitToast({ message: '已确认提交流转', type: 'success' });
     await refreshTask();
   } catch (error) {
     emitToast({ 
-      message: error instanceof Error ? error.message : '提交失败', 
+      message: error instanceof Error ? error.message : '提交流转失败', 
       type: 'error' 
     });
   } finally {
@@ -53,11 +53,11 @@ async function handleReturn(targetNode: WorkflowNode, reason: string) {
   workflowLoading.value = true;
   try {
     await userStore.returnTaskToNode(currentTask.value.id, targetNode, reason);
-    emitToast({ message: '退回成功', type: 'success' });
+    emitToast({ message: '已确认驳回流转', type: 'success' });
     await refreshTask();
   } catch (error) {
     emitToast({ 
-      message: error instanceof Error ? error.message : '退回失败', 
+      message: error instanceof Error ? error.message : '驳回流转失败', 
       type: 'error' 
     });
   } finally {

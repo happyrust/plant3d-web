@@ -391,7 +391,7 @@
                               "id": "1dr87",
                               "name": "text2",
                               "fill": "#1F2937",
-                              "content": "发起提资",
+                              "content": "发起编校审",
                               "fontFamily": "Inter",
                               "fontSize": 16,
                               "fontWeight": "500"
@@ -1110,7 +1110,7 @@
                                               "id": "aDpO8",
                                               "name": "taskTitle2",
                                               "fill": "#1F2937",
-                                              "content": "[提资] 结构专业条件确认",
+                                              "content": "[编校审] 结构专业条件确认",
                                               "fontFamily": "Inter",
                                               "fontSize": 14,
                                               "fontWeight": "500"
@@ -1281,7 +1281,7 @@
                                       "id": "3StJc",
                                       "name": "actAction1",
                                       "fill": "#4B5563",
-                                      "content": "提交了一份针对 [冷冻水管廊] 的新提资单，需结构专业确认。",
+                                      "content": "提交了一份针对 [冷冻水管廊] 的新编校审单，需结构专业确认。",
                                       "fontFamily": "Inter",
                                       "fontSize": 14,
                                       "fontWeight": "normal"

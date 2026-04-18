@@ -42,7 +42,7 @@ const recentTasks = computed(() => {
 
 const quickActions = [
   { id: 'open', label: '上传/打开模型', icon: Upload, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-  { id: 'initiate', label: '发起提资', icon: Plus, bgColor: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+  { id: 'initiate', label: '发起编校审', icon: Plus, bgColor: 'bg-emerald-50', iconColor: 'text-emerald-600' },
   { id: 'review', label: '待办校审', icon: CheckSquare, bgColor: 'bg-amber-50', iconColor: 'text-amber-600' },
   { id: 'collision', label: '碰撞检查', icon: AlertTriangle, bgColor: 'bg-red-50', iconColor: 'text-red-600' },
 ];

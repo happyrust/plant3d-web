@@ -162,7 +162,7 @@ describe('InitiateReviewPanel form binding', () => {
     await nextTick();
     await nextTick();
 
-    const textInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null;
+    const textInput = host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement | null;
     expect(textInput).not.toBeNull();
     textInput!.value = '综合校审数据包';
     textInput!.dispatchEvent(new Event('input', { bubbles: true }));
@@ -217,7 +217,7 @@ describe('InitiateReviewPanel form binding', () => {
         }),
       ],
     }));
-    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
+    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起编校审');
 
     app.unmount();
     host.remove();
@@ -248,19 +248,19 @@ describe('InitiateReviewPanel form binding', () => {
     expect(host.textContent).toContain('Hull/REF-001');
     expect(host.textContent).toContain('RefNo: REF-001');
 
-    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null;
+    const packageInput = host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement | null;
     expect(packageInput).not.toBeNull();
-    packageInput!.value = '外部流程提资包';
+    packageInput!.value = '外部流程编校审包';
     packageInput!.dispatchEvent(new Event('input', { bubbles: true }));
 
     const submitTrigger = host.querySelector('[data-testid="initiate-submit-trigger"]') as HTMLButtonElement | null;
     expect(submitTrigger).not.toBeNull();
-    expect(submitTrigger?.textContent).toContain('验证并保存提资单');
+    expect(submitTrigger?.textContent).toContain('验证并保存编校审单');
     submitTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
     expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      title: '外部流程提资包',
+      title: '外部流程编校审包',
       checkerId: undefined,
       approverId: undefined,
       priority: undefined,
@@ -271,9 +271,9 @@ describe('InitiateReviewPanel form binding', () => {
       ],
     }));
     expect(submitTaskToNextNodeSpy).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('提资单保存成功');
+    expect(host.textContent).toContain('编校审单保存成功');
     expect(host.textContent).toContain('流程提示');
-    expect(host.textContent).not.toContain('新建提资单');
+    expect(host.textContent).not.toContain('新建编校审单');
     expect(host.textContent).not.toContain('任务监控');
     expect(host.textContent).not.toContain('审核工作台');
 
@@ -310,7 +310,7 @@ describe('InitiateReviewPanel form binding', () => {
     await nextTick();
     await nextTick();
 
-    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement;
+    const packageInput = host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement;
     packageInput.value = '成功关闭校审包';
     packageInput.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -328,7 +328,7 @@ describe('InitiateReviewPanel form binding', () => {
     await flushAsyncWork();
 
     expect(createTaskMock).toHaveBeenCalledTimes(1);
-    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
+    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起编校审');
     expect(closeHandler).not.toHaveBeenCalled();
     expect(createdHandler).toHaveBeenCalledWith('task-1');
 
@@ -358,7 +358,7 @@ describe('InitiateReviewPanel form binding', () => {
     await nextTick();
     await nextTick();
 
-    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement;
+    const packageInput = host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement;
     packageInput.value = '保持渲染的校审包';
     packageInput.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -376,8 +376,8 @@ describe('InitiateReviewPanel form binding', () => {
     await flushAsyncWork();
 
     expect(host.querySelector('[data-testid="designer-landing-workspace"]')).not.toBeNull();
-    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起提资');
-    expect(host.textContent).toContain('提资单创建成功');
+    expect(submitTaskToNextNodeSpy).toHaveBeenCalledWith('task-1', '发起编校审');
+    expect(host.textContent).toContain('编校审单创建成功');
 
     app.unmount();
     host.remove();
@@ -409,9 +409,9 @@ describe('InitiateReviewPanel form binding', () => {
     addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
-    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null;
+    const packageInput = host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement | null;
     expect(packageInput).not.toBeNull();
-    packageInput!.value = '外部流程提资包';
+    packageInput!.value = '外部流程编校审包';
     packageInput!.dispatchEvent(new Event('input', { bubbles: true }));
 
     const submitTrigger = host.querySelector('[data-testid="initiate-submit-trigger"]') as HTMLButtonElement | null;
@@ -420,7 +420,7 @@ describe('InitiateReviewPanel form binding', () => {
     await flushAsyncWork();
 
     expect(createTaskMock).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('提资单保存失败');
+    expect(host.textContent).toContain('编校审单保存失败');
     expect(host.textContent).toContain('缺少业务单据号');
 
     app.unmount();
@@ -457,7 +457,7 @@ describe('InitiateReviewPanel form binding', () => {
     await nextTick();
     await nextTick();
 
-    const packageInput = host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement;
+    const packageInput = host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement;
     packageInput.value = '失败保留内容';
     packageInput.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -481,9 +481,9 @@ describe('InitiateReviewPanel form binding', () => {
 
     expect(createTaskMock).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[data-testid="designer-landing-workspace"]')).not.toBeNull();
-    expect(host.textContent).toContain('提资单创建失败');
+    expect(host.textContent).toContain('编校审单创建失败');
     expect(host.textContent).toContain('network broken');
-    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement).value).toBe('失败保留内容');
+    expect((host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement).value).toBe('失败保留内容');
     expect((host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement).value).toBe('失败后应保留');
 
     app.unmount();
@@ -546,12 +546,12 @@ describe('InitiateReviewPanel form binding', () => {
       restoreStatus: 'matched',
       restoredTaskId: 'task-embed-2',
       restoredTaskSummary: {
-        title: '已保存提资单',
+        title: '已保存编校审单',
         status: 'draft',
         currentNode: 'sj',
       },
       restoredTaskDraft: {
-        title: '已保存提资单',
+        title: '已保存编校审单',
         description: '复开后应回填',
         checkerId: 'checker-1',
         approverId: 'approver-1',
@@ -591,8 +591,8 @@ describe('InitiateReviewPanel form binding', () => {
     app.mount(host);
     await nextTick();
 
-    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null)?.value)
-      .toBe('已保存提资单');
+    expect((host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement | null)?.value)
+      .toBe('已保存编校审单');
     expect((host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement | null)?.value)
       .toBe('复开后应回填');
     expect((host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement | null)?.value)
@@ -637,7 +637,7 @@ describe('InitiateReviewPanel form binding', () => {
     app.mount(host);
     await nextTick();
 
-    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null)?.value)
+    expect((host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement | null)?.value)
       .toBe('');
 
     sessionStorage.setItem('embed_landing_state', JSON.stringify({
@@ -675,7 +675,7 @@ describe('InitiateReviewPanel form binding', () => {
     window.dispatchEvent(new CustomEvent('plant3d:embed-landing-state-updated'));
     await flushAsyncWork();
 
-    expect((host.querySelector('input[placeholder="输入提资数据包名称..."]') as HTMLInputElement | null)?.value)
+    expect((host.querySelector('input[placeholder="输入编校审数据包名称..."]') as HTMLInputElement | null)?.value)
       .toBe('晚到草稿');
     expect((host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement | null)?.value)
       .toBe('挂载后补写入的恢复数据');

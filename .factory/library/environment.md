@@ -1,37 +1,40 @@
-# Environment
+# Annotation Refactor Environment
 
-Environment variables, shared services, and setup notes for the MBD layout consistency mission.
+## Repository and Mission Paths
 
-## Local Development Environment
-
-- Node.js 20+ preferred
-- npm available for dependency install and mission-scoped commands
-- Vite frontend app served locally on `http://127.0.0.1:3101`
+- Frontend repo: `D:/work/plant-code/plant3d-web`
+- Backend repo: `D:/work/plant-code/plant-model-gen`
+- Mission directory: `C:/Users/Administrator/.factory/missions/721db4de-bdc8-4f82-afdb-66cfddd40847`
 
 ## Shared Service Assumptions
 
-- Frontend: `http://127.0.0.1:3101`
-- Backend: `http://127.0.0.1:3100` (optional for this frontend-first mission)
-- Workers must not stop shared services they did not start
-- The repository worktree is already dirty; unrelated changes must remain untouched
+- Frontend Vite server should run on `http://127.0.0.1:3101`
+- Backend review web server should run on `http://127.0.0.1:3100`
+- Supporting data-service assumptions should remain compatible with `8020` when contract validation needs them
+- `9222` is reserved/off-limits for this mission
 
-## Mission-Specific Environment Notes
+## Workspace Safety
 
-- The mission is designed to succeed without backend producer changes in other repositories.
-- The strongest evidence comes from focused unit and fixture tests, not from broad end-to-end infrastructure.
-- If a BRAN-specific spot check is performed, use BRAN `24381_145717` as the anchor target.
-- New pure-layout tests are encouraged when they strengthen deterministic behavior checks.
+- The frontend repository is already dirty; preserve unrelated changes exactly as found.
+- Workers must avoid broad cleanup, `git checkout`, or cross-mission rewrites.
+- Do not run the mission runner and do not create commits from this artifact set.
 
-## Environment Variables
+## Dependency and Tooling Baseline
 
-The project follows Vite environment conventions. No new mission-specific environment variables are required by default.
+- Frontend package management: `npm install`
+- Frontend validators: `npm run type-check`, `npm run lint`, `npm test`
+- Focused frontend iteration may use mission-scoped Vitest commands from `.factory/services.yaml`
+- Backend contract validation should prefer live HTTP probes (`curl`) against `3100`
 
-If a worker introduces optional debugging flags for layout comparison, they must:
-- default them off
-- document them in the handoff
-- avoid checking secrets or machine-specific values into git
+## Validation Notes
 
-## Lint and Test Scope Note
+- Use deterministic seeded/demo review data whenever browser validation needs stable reviewer/designer flows.
+- Keep browser validation conservative; assume one active browser validator at a time unless the orchestrator explicitly parallelizes isolated checks.
+- If backend metadata rollout is partial, collect compatibility-window evidence instead of inventing missing fields.
 
-- Use mission-scoped commands from `.factory/services.yaml` as the gate.
-- Do not treat whole-repo `npm run lint` or `npm test` as required mission blockers unless the changed surface specifically depends on them.
+## Common Blockers To Report
+
+- frontend or backend service not reachable on the expected port
+- seeded reviewer/designer data unavailable for the assigned validation flow
+- inability to validate workflow-sync because `formId`-scoped query data is absent
+- any requirement that would force use of port `9222`

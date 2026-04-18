@@ -275,10 +275,10 @@ async function handleResubmit() {
     localTaskOverride.value = userStore.reviewTasks.value.find((task) => task.id === props.task.id) ?? localTaskOverride.value;
     await Promise.all([loadWorkflowHistory(), loadConfirmedRecords()]);
     await nextTick();
-    emitToast({ message: '任务已再次提交到审核流程' });
+    emitToast({ message: '已确认再次提交流转' });
     open.value = false;
   } catch (error) {
-    resubmitError.value = error instanceof Error ? error.message : '再次提交失败';
+    resubmitError.value = error instanceof Error ? error.message : '再次提交流转失败';
   } finally {
     resubmitLoading.value = false;
   }

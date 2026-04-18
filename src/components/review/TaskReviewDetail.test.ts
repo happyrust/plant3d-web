@@ -540,7 +540,7 @@ describe('TaskReviewDetail', () => {
       currentNodeName: '编制',
       history: [],
     });
-    submitTaskToNextNodeMock.mockRejectedValue(new Error('提交失败'));
+    submitTaskToNextNodeMock.mockRejectedValue(new Error('提交流转失败'));
 
     await mountComponent(createTask({ status: 'draft', currentNode: 'sj' }));
 
@@ -550,7 +550,7 @@ describe('TaskReviewDetail', () => {
     await Promise.resolve();
     await nextTick();
 
-    expect(document.body.textContent).toContain('提交失败');
+    expect(document.body.textContent).toContain('提交流转失败');
     expect(emitToastMock).not.toHaveBeenCalled();
   });
 });

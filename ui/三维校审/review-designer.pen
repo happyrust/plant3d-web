@@ -1,5 +1,5 @@
 {
-  "version": "2.8",
+  "version": "2.11",
   "children": [
     {
       "type": "frame",
@@ -533,7 +533,7 @@
           "x": 40,
           "y": 900,
           "name": "TaskReviewDetail",
-          "width": 380,
+          "width": 420,
           "fill": "#FFFFFF",
           "cornerRadius": 12,
           "effect": {
@@ -573,7 +573,7 @@
                   "id": "QXNCE",
                   "name": "Title",
                   "fill": "#111827",
-                  "content": "提资任务详情",
+                  "content": "批注处理详情",
                   "fontFamily": "Inter",
                   "fontSize": 16,
                   "fontWeight": "600"
@@ -608,7 +608,7 @@
                       "id": "hD5u3",
                       "name": "PkgName",
                       "fill": "#111827",
-                      "content": "1号厂房管线碰撞问题包",
+                      "content": "批注 A-102 / 管口对位偏差",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "600"
@@ -617,7 +617,7 @@
                       "type": "frame",
                       "id": "OcA3v",
                       "name": "PriorityBadge",
-                      "fill": "#FFF0E6",
+                      "fill": "#FED7AA",
                       "cornerRadius": 4,
                       "padding": [
                         4,
@@ -628,8 +628,8 @@
                           "type": "text",
                           "id": "7tzcN",
                           "name": "PriText",
-                          "fill": "#E66000",
-                          "content": "中等",
+                          "fill": "#9A3412",
+                          "content": "高优",
                           "fontFamily": "Inter",
                           "fontSize": 12,
                           "fontWeight": "500"
@@ -653,6 +653,7 @@
                   "type": "frame",
                   "id": "kkAUr",
                   "name": "Desc",
+                  "width": "fill_container",
                   "layout": "vertical",
                   "gap": 4,
                   "children": [
@@ -661,7 +662,7 @@
                       "id": "in1ac",
                       "name": "L",
                       "fill": "#6B7280",
-                      "content": "任务描述",
+                      "content": "当前问题",
                       "fontFamily": "Inter",
                       "fontSize": 12,
                       "fontWeight": "normal"
@@ -671,7 +672,9 @@
                       "id": "qLea7",
                       "name": "V",
                       "fill": "#6B7280",
-                      "content": "主泵上方管线穿墙存在硬碰撞，需电气配合修改桥架走向。同时复核周围的安全距离！",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "主泵上方穿墙点仍存在硬碰撞，请设计明确：是修改模型，还是维持现状并填写跳过原因。",
                       "fontFamily": "Inter",
                       "fontSize": 13,
                       "fontWeight": "normal"
@@ -703,7 +706,7 @@
                           "id": "z5GGW",
                           "name": "L",
                           "fill": "#6B7280",
-                          "content": "发起人",
+                          "content": "RefNo",
                           "fontFamily": "Inter",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -713,7 +716,7 @@
                           "id": "EyfaQ",
                           "name": "V",
                           "fill": "#111827",
-                          "content": "张三 (sj)",
+                          "content": "24381_145018",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "500"
@@ -732,7 +735,7 @@
                           "id": "xkslm",
                           "name": "L",
                           "fill": "#6B7280",
-                          "content": "发起时间",
+                          "content": "处理状态",
                           "fontFamily": "Inter",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -742,7 +745,7 @@
                           "id": "w05It",
                           "name": "V",
                           "fill": "#111827",
-                          "content": "10-24 10:30",
+                          "content": "待设计回复",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "500"
@@ -773,7 +776,7 @@
                   "name": "ClockIco",
                   "width": 16,
                   "height": 16,
-                  "iconFontName": "clock",
+                  "iconFontName": "message-square",
                   "iconFontFamily": "lucide",
                   "fill": "#FF6B00"
                 },
@@ -782,7 +785,7 @@
                   "id": "H4XuK",
                   "name": "Title",
                   "fill": "#111827",
-                  "content": "审核流转历史",
+                  "content": "处理动作",
                   "fontFamily": "Inter",
                   "fontSize": 14,
                   "fontWeight": "600"
@@ -792,7 +795,7 @@
             {
               "type": "frame",
               "id": "0gVXg",
-              "name": "TimelineArea",
+              "name": "DesignerActionArea",
               "width": "fill_container",
               "layout": "vertical",
               "padding": [
@@ -802,336 +805,269 @@
               "children": [
                 {
                   "type": "frame",
-                  "id": "b5AdI",
-                  "name": "Node1",
+                  "id": "DsA010",
+                  "name": "StatusCard",
                   "width": "fill_container",
-                  "gap": 12,
+                  "fill": "#FFF7ED",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#FED7AA"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
                   "children": [
                     {
-                      "type": "frame",
-                      "id": "kFQAS",
-                      "name": "Axis",
-                      "layout": "vertical",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "my6Wg",
-                          "name": "Dot",
-                          "width": 10,
-                          "height": 10,
-                          "fill": "#10b981",
-                          "cornerRadius": 5
-                        },
-                        {
-                          "type": "frame",
-                          "id": "aTgcV",
-                          "name": "Line",
-                          "width": 2,
-                          "height": 50,
-                          "fill": "#10b981"
-                        }
-                      ]
+                      "type": "text",
+                      "id": "DsA011",
+                      "name": "StatusTitle",
+                      "fill": "#9A3412",
+                      "content": "当前批注状态：请先选择处理动作",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "600"
                     },
                     {
-                      "type": "frame",
-                      "id": "ryC8b",
-                      "name": "Content",
-                      "layout": "vertical",
-                      "gap": 4,
-                      "padding": [
-                        0,
-                        0,
-                        16,
-                        0
-                      ],
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "uHjEQ",
-                          "name": "Head",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "1vKmj",
-                              "name": "Ti",
-                              "fill": "#111827",
-                              "content": "(sj) 张三 提交提资",
-                              "fontFamily": "Inter",
-                              "fontSize": 13,
-                              "fontWeight": "600"
-                            },
-                            {
-                              "type": "text",
-                              "id": "RfPLs",
-                              "name": "TiTime",
-                              "fill": "#6B7280",
-                              "content": "10-24 10:30",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
+                      "type": "text",
+                      "id": "DsA012",
+                      "name": "StatusBody",
+                      "fill": "#92400E",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "推荐顺序：能修改则优先“标记已修改”；确实不能改时，再选择“跳过处理”并填写原因。",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
                 {
                   "type": "frame",
-                  "id": "P0l6g",
-                  "name": "Node2",
+                  "id": "DsA020",
+                  "name": "ActionRow",
                   "width": "fill_container",
-                  "gap": 12,
+                  "justifyContent": "space_between",
                   "children": [
                     {
                       "type": "frame",
-                      "id": "8rP7G",
-                      "name": "Axis",
-                      "layout": "vertical",
+                      "id": "DsA021",
+                      "name": "ReplyBtn",
+                      "width": 126,
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#D1D5DB"
+                      },
+                      "padding": [
+                        10,
+                        0
+                      ],
+                      "justifyContent": "center",
                       "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "oN7QK",
-                          "name": "Dot",
-                          "width": 10,
-                          "height": 10,
-                          "fill": "#ef4444",
-                          "cornerRadius": 5
-                        },
-                        {
-                          "type": "frame",
-                          "id": "9sWu6",
-                          "name": "Line",
-                          "width": 2,
-                          "height": 80,
-                          "fill": "#E5E7EB"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "faDQt",
-                      "name": "Content",
-                      "layout": "vertical",
-                      "gap": 4,
-                      "padding": [
-                        0,
-                        0,
-                        16,
-                        0
-                      ],
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "Ls0cW",
-                          "name": "Head",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "GaQF3",
-                              "name": "Ti",
-                              "fill": "#EF4444",
-                              "content": "(jd) 李四 驳回提资",
-                              "fontFamily": "Inter",
-                              "fontSize": 13,
-                              "fontWeight": "600"
-                            },
-                            {
-                              "type": "text",
-                              "id": "OJIv9",
-                              "name": "TiTime",
-                              "fill": "#6B7280",
-                              "content": "10-24 14:15",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "X31ia",
-                          "name": "MsgBox",
-                          "fill": "#FEF2F2",
-                          "cornerRadius": 6,
-                          "stroke": {
-                            "thickness": 1,
-                            "fill": "#FECACA"
-                          },
-                          "padding": 8,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "8svo7",
-                              "name": "Msg",
-                              "fill": "#991B1B",
-                              "content": "碰撞点附近还漏选了两个支架，重新补充构件进数据包！",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "pReAR",
-                  "name": "Node3",
-                  "width": "fill_container",
-                  "gap": 12,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "XzitU",
-                      "name": "Axis",
-                      "layout": "vertical",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "It8zF",
-                          "name": "Dot",
-                          "width": 10,
-                          "height": 10,
-                          "fill": "#10b981",
-                          "cornerRadius": 5
-                        },
-                        {
-                          "type": "frame",
-                          "id": "80LRV",
-                          "name": "Line",
-                          "width": 2,
-                          "height": 50,
-                          "fill": "#10b981"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "dr9ig",
-                      "name": "Content",
-                      "layout": "vertical",
-                      "gap": 4,
-                      "padding": [
-                        0,
-                        0,
-                        16,
-                        0
-                      ],
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "aAq9o",
-                          "name": "Head",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "JNd07",
-                              "name": "Ti",
-                              "fill": "#111827",
-                              "content": "(sj) 张三 重新提交",
-                              "fontFamily": "Inter",
-                              "fontSize": 13,
-                              "fontWeight": "600"
-                            },
-                            {
-                              "type": "text",
-                              "id": "ZxCh2",
-                              "name": "TiTime",
-                              "fill": "#6B7280",
-                              "content": "10-25 09:12",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "MCJVl",
-                  "name": "Node4",
-                  "width": "fill_container",
-                  "gap": 12,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "JdhQB",
-                      "name": "Axis",
-                      "layout": "vertical",
-                      "padding": [
-                        4,
-                        0,
-                        0,
-                        0
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "2rkTo",
-                          "name": "DotPulse",
-                          "width": 14,
-                          "height": 14,
-                          "fill": "#FFF7ED",
-                          "cornerRadius": 7,
-                          "stroke": {
-                            "thickness": 2,
-                            "fill": "#FF6B00"
-                          },
-                          "justifyContent": "center",
-                          "alignItems": "center"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "xuicc",
-                      "name": "Content",
-                      "layout": "vertical",
-                      "gap": 4,
-                      "padding": [
-                        3,
-                        0,
-                        0,
-                        0
-                      ],
                       "children": [
                         {
                           "type": "text",
-                          "id": "RlrGZ",
-                          "name": "Ti",
-                          "fill": "#FF6B00",
-                          "content": "等待 (jd) 李四 重新审核",
+                          "id": "DsA021T",
+                          "name": "ReplyBtnText",
+                          "fill": "#374151",
+                          "content": "回复批注",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DsA022",
+                      "name": "DoneBtn",
+                      "width": 126,
+                      "fill": "#10B981",
+                      "cornerRadius": 6,
+                      "padding": [
+                        10,
+                        0
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "DsA022T",
+                          "name": "DoneBtnText",
+                          "fill": "#FFFFFF",
+                          "content": "标记已修改",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DsA023",
+                      "name": "SkipBtn",
+                      "width": 126,
+                      "fill": "#DC2626",
+                      "cornerRadius": 6,
+                      "padding": [
+                        10,
+                        0
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "DsA023T",
+                          "name": "SkipBtnText",
+                          "fill": "#FFFFFF",
+                          "content": "跳过处理",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DsA024",
+                  "name": "ActionHint",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "padding": 10,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "DsA025",
+                      "name": "ActionHintText",
+                      "fill": "#6B7280",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "推荐：优先标记已修改；只有确实无法处理时才选择跳过处理。",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DsA030",
+                  "name": "SkipReasonBox",
+                  "width": "fill_container",
+                  "height": 88,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#FECACA"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "DsA030H",
+                      "name": "SkipHeader",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "DsA030I",
+                          "name": "WarnIcon",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "triangle-alert",
+                          "iconFontFamily": "lucide",
+                          "fill": "#DC2626"
                         },
                         {
                           "type": "text",
-                          "id": "pjrYj",
-                          "name": "TiTime",
-                          "fill": "#F59E0B",
-                          "content": "已停留 1小时20分钟",
+                          "id": "DsA031",
+                          "name": "SkipLabel",
+                          "fill": "#991B1B",
+                          "content": "跳过原因（必填，提交前检查）",
                           "fontFamily": "Inter",
                           "fontSize": 12,
-                          "fontWeight": "normal"
+                          "fontWeight": "600"
                         }
                       ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "DsA032",
+                      "name": "SkipPlaceholder",
+                      "fill": "#9CA3AF",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "请输入无法修改或无需修改的原因，例如：需等待上游模型统一调整、现场条件限制、当前阶段仅记录不执行。",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DsA033",
+                      "name": "SkipRuleTip",
+                      "fill": "#991B1B",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "未填写原因时，不应允许提交“跳过处理”。",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DsA040",
+                  "name": "HintCard",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "DsA041",
+                      "name": "HintTitle",
+                      "fill": "#374151",
+                      "content": "讨论线程说明",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DsA042",
+                      "name": "HintBody",
+                      "fill": "#6B7280",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "右侧讨论区用于继续回复、展示“已修改/已跳过”的处理留痕，以及给校核人补充说明。",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -1229,7 +1165,7 @@
               "id": "59yks",
               "name": "Tabs",
               "width": "fill_container",
-              "fill": "#FFFFFF",
+              "fill": "#F3F4F6",
               "cornerRadius": 8,
               "gap": 4,
               "padding": 4,
@@ -1487,6 +1423,8 @@
                           "id": "n7vPr",
                           "name": "Desc",
                           "fill": "#6B7280",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
                           "content": "T-1002 与 V-301 碰撞，穿透 45mm",
                           "fontFamily": "Inter",
                           "fontSize": 13,
@@ -1666,6 +1604,8 @@
                           "id": "VFedC",
                           "name": "Desc",
                           "fill": "#6B7280",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
                           "content": "桥架 E-0021 距管道 P-8827 仅120mm",
                           "fontFamily": "Inter",
                           "fontSize": 13,
@@ -2166,7 +2106,7 @@
           "x": 554,
           "y": 93,
           "name": "ReviewCommentsTimeline",
-          "width": 340,
+          "width": 360,
           "fill": "#FFFFFF",
           "cornerRadius": 12,
           "stroke": {
@@ -2223,7 +2163,7 @@
                       "type": "text",
                       "id": "Hscx3",
                       "fill": "#111827",
-                      "content": "批注 #A-102 讨论",
+                      "content": "批注 A-102 处理讨论",
                       "fontFamily": "Inter",
                       "fontSize": 14,
                       "fontWeight": "600"
@@ -2276,6 +2216,12 @@
                   "id": "lmpSu",
                   "name": "m1",
                   "width": "fill_container",
+                  "fill": "#FFF7ED",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#FED7AA"
+                  },
                   "gap": 10,
                   "padding": [
                     8,
@@ -2332,7 +2278,7 @@
                               "type": "text",
                               "id": "gWGCP",
                               "fill": "#111827",
-                              "content": "李大维",
+                              "content": "校核 · SH（提问）",
                               "fontFamily": "Inter",
                               "fontSize": 12,
                               "fontWeight": "600"
@@ -2354,7 +2300,7 @@
                           "fill": "#6B7280",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "缺少必要的安全间距，请调整。",
+                          "content": "请确认是否能调整支架位置；若不修改，请在处理动作里选择“跳过处理”并填写原因。",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -2385,7 +2331,12 @@
                   "id": "9wq0B",
                   "name": "m2",
                   "width": "fill_container",
-                  "fill": "#FFFFFF",
+                  "fill": "#ECFDF5",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#BBF7D0"
+                  },
                   "gap": 10,
                   "padding": [
                     8,
@@ -2420,7 +2371,7 @@
                               "type": "frame",
                               "id": "e56pW",
                               "name": "b2",
-                              "fill": "#FFF0E6",
+                              "fill": "#DCFCE7",
                               "cornerRadius": 3,
                               "padding": [
                                 1,
@@ -2430,8 +2381,8 @@
                                 {
                                   "type": "text",
                                   "id": "5bg07",
-                                  "fill": "#E66000",
-                                  "content": "设",
+                                  "fill": "#166534",
+                                  "content": "已修改",
                                   "fontFamily": "Inter",
                                   "fontSize": 10,
                                   "fontWeight": "600"
@@ -2442,7 +2393,7 @@
                               "type": "text",
                               "id": "ArtdA",
                               "fill": "#111827",
-                              "content": "张小明",
+                              "content": "设计 · SJ（已修改）",
                               "fontFamily": "Inter",
                               "fontSize": 12,
                               "fontWeight": "600"
@@ -2464,7 +2415,7 @@
                           "fill": "#6B7280",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "已修改管道走向避开碰撞。",
+                          "content": "处理动作：已修改。已调整管道走向避开碰撞，并同步更新模型位置。",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -2479,7 +2430,7 @@
                               "type": "text",
                               "id": "0LMLK",
                               "fill": "#6B7280",
-                              "content": "回复",
+                              "content": "继续回复",
                               "fontFamily": "Inter",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -2495,6 +2446,12 @@
                   "id": "CQJTR",
                   "name": "m3",
                   "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
                   "gap": 10,
                   "padding": [
                     8,
@@ -2551,7 +2508,7 @@
                               "type": "text",
                               "id": "AlTiM",
                               "fill": "#111827",
-                              "content": "王工",
+                              "content": "校核 · 王工（复核说明）",
                               "fontFamily": "Inter",
                               "fontSize": 12,
                               "fontWeight": "600"
@@ -2613,7 +2570,7 @@
                           "fill": "#6B7280",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "确认，安全间距已预留300mm，满足净高要求。建议设计人员同步更新截面图。",
+                          "content": "收到。若最终维持现状，请继续在下方提交“跳过处理”并说明原因，便于校核留痕。",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "normal"
@@ -2634,6 +2591,119 @@
                               "fontWeight": "normal"
                             }
                           ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DsM100",
+                  "name": "m4",
+                  "width": "fill_container",
+                  "fill": "#FEF2F2",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#FECACA"
+                  },
+                  "gap": 10,
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "DsM101",
+                      "name": "m4bar",
+                      "width": 3,
+                      "height": 56,
+                      "fill": "#FCA5A5",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DsM102",
+                      "name": "m4c",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "DsM103",
+                          "name": "m4t",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "DsM104",
+                              "name": "m4badge",
+                              "fill": "#FEE2E2",
+                              "cornerRadius": 3,
+                              "padding": [
+                                1,
+                                6
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "DsM105",
+                                  "name": "m4badgeText",
+                                  "fill": "#991B1B",
+                                  "content": "跳过",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "DsM106",
+                              "name": "m4name",
+                              "fill": "#111827",
+                              "content": "设计 · SJ",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "DsM107",
+                              "name": "m4time",
+                              "fill": "#6B7280",
+                              "content": "10:18",
+                              "fontFamily": "Inter",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "DsM108",
+                          "name": "m4body",
+                          "fill": "#991B1B",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "处理动作：已跳过。原因：当前区域需等待上游支架模型统一调整，现阶段无法单独修正本条批注。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "DsM109",
+                          "name": "m4reply",
+                          "fill": "#6B7280",
+                          "content": "继续回复",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -2682,10 +2752,42 @@
                       "type": "text",
                       "id": "cno1T",
                       "fill": "#6B7280",
-                      "content": "输入意见...",
+                      "content": "输入处理说明，或补充给校核人的说明...",
                       "fontFamily": "Inter",
                       "fontSize": 13,
                       "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DsI020",
+                  "name": "InputRuleRow",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "DsI021",
+                      "name": "WarnIcon",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "circle-alert",
+                      "iconFontFamily": "lucide",
+                      "fill": "#B91C1C"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DsI010",
+                      "name": "InputRule",
+                      "fill": "#B91C1C",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "提交前检查：若选择“跳过处理”，必须先填写左侧跳过原因。",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "600"
                     }
                   ]
                 },
@@ -2741,7 +2843,7 @@
                           "type": "text",
                           "id": "LTiCV",
                           "fill": "#FFFFFF",
-                          "content": "发表",
+                          "content": "提交处理",
                           "fontFamily": "Inter",
                           "fontSize": 13,
                           "fontWeight": "600"

@@ -505,29 +505,29 @@ const missingFields = computed(() => {
 });
 
 const submitButtonLabel = computed(() => (
-  externalWorkflowMode.value ? '保存提资单数据' : '创建并提交提资单'
+  externalWorkflowMode.value ? '保存编校审单数据' : '创建并提交编校审单'
 ));
 const submitLoadingLabel = computed(() => (
   externalWorkflowMode.value ? '正在保存...' : '正在创建...'
 ));
 const attachmentUploadHint = computed(() => (
   externalWorkflowMode.value
-    ? '当前将在保存提资单后自动上传附件，避免缺少 lineage 导致上传失败。'
-    : '当前将在创建提资单后自动上传附件，避免缺少 lineage 导致上传失败。'
+    ? '当前将在保存编校审单后自动上传附件，避免缺少 lineage 导致上传失败。'
+    : '当前将在创建编校审单后自动上传附件，避免缺少 lineage 导致上传失败。'
 ));
 const submitSuccessTitle = computed(() => (
-  externalWorkflowMode.value ? '提资单保存成功' : '提资单创建成功'
+  externalWorkflowMode.value ? '编校审单保存成功' : '编校审单创建成功'
 ));
 const submitSuccessDetails = computed(() => (
-  externalWorkflowMode.value ? '已保存到提资单，流程流转由外部系统继续处理。' : '已提交到校审流程。'
+  externalWorkflowMode.value ? '已保存到编校审单，流程流转由外部系统继续处理。' : '已提交到校审流程。'
 ));
 const submitButtonAriaLabel = computed(() => (
-  externalWorkflowMode.value ? '验证并保存提资单' : '验证并提交提资单'
+  externalWorkflowMode.value ? '验证并保存编校审单' : '验证并提交编校审单'
 ));
 const panelSubTitle = computed(() => (
   externalWorkflowMode.value
-    ? '根据设计稿填写提资信息并保存到提资单，流程流转由外部系统驱动'
-    : '根据设计稿填写提资信息并提交到校审流程'
+    ? '根据设计稿填写编校审信息并保存到编校审单，流程流转由外部系统驱动'
+    : '根据设计稿填写编校审信息并提交到校审流程'
 ));
 
 const selectedChecker = computed(() => {
@@ -574,7 +574,7 @@ async function handleSubmit() {
     const requestFormId = embedModeParams.value.isEmbedMode ? (persistedFormId || undefined) : undefined;
 
     if (embedModeParams.value.isEmbedMode && !requestFormId) {
-      throw new Error('缺少业务单据号，请重新从提资入口打开当前单据');
+      throw new Error('缺少业务单据号，请重新从编校审入口打开当前单据');
     }
 
     const checkerIdToSubmit = isExternal ? undefined : resolvedAssignees.value.checkerId;
@@ -584,7 +584,7 @@ async function handleSubmit() {
     }
 
     const attachments = getUploadedAttachments();
-    console.log('[InitiateReviewPanel] 提资单保存上下文', {
+    console.log('[InitiateReviewPanel] 编校审单保存上下文', {
       pageFormId,
       persistedFormId,
       requestFormId: requestFormId || null,
@@ -619,7 +619,7 @@ async function handleSubmit() {
     await syncTaskAttachments(task.id);
 
     if (!isExternal) {
-      await userStore.submitTaskToNextNode(task.id, '发起提资');
+      await userStore.submitTaskToNextNode(task.id, '发起编校审');
     }
 
     const checker = checkerIdToSubmit ? reviewerOptions.value.find((r) => r.id === checkerIdToSubmit) : null;
@@ -650,7 +650,7 @@ async function handleSubmit() {
   } catch (error) {
     notification.value = {
       type: 'error',
-      message: externalWorkflowMode.value ? '提资单保存失败' : '提资单创建失败',
+      message: externalWorkflowMode.value ? '编校审单保存失败' : '编校审单创建失败',
       details: error instanceof Error ? error.message : '未知错误，请重试',
     };
   } finally {
@@ -692,20 +692,20 @@ function closePanel() {
   <div class="flex h-full flex-col overflow-y-auto p-3" data-testid="designer-landing-workspace" data-panel="initiateReview">
     <div class="flex items-center justify-between">
       <div>
-        <h3 class="text-base font-semibold text-[#111827]">发起提资单</h3>
+        <h3 class="text-base font-semibold text-[#111827]">发起编校审单</h3>
         <p class="mt-1 text-xs text-[#6B7280]">{{ panelSubTitle }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button type="button"
           class="inline-flex h-8 items-center gap-1 rounded-md border border-[#E5E7EB] px-2 text-xs text-[#6B7280] transition hover:bg-[#F9FAFB] hover:text-[#374151]"
-          title="查看发起提资操作指南"
+          title="查看发起编校审操作指南"
           @click="onboarding.openGuideCenter('initiateReview')">
           <HelpCircle class="h-4 w-4" />
           操作指南
         </button>
         <button type="button"
           class="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#9CA3AF] transition hover:bg-[#F9FAFB] hover:text-[#6B7280]"
-          aria-label="关闭发起提资单面板"
+          aria-label="关闭发起编校审单面板"
           @click="closePanel">
           <X class="h-5 w-5" />
         </button>
@@ -732,7 +732,7 @@ function closePanel() {
       <div v-if="externalWorkflowMode" class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
         <p class="text-xs font-medium text-blue-700">流程提示</p>
         <p class="mt-1 text-xs text-blue-600">
-          提资单已保存，后续流转将由外部系统继续处理，无需在此继续操作。
+          编校审单已保存，后续流转将由外部系统继续处理，无需在此继续操作。
         </p>
       </div>
 
@@ -746,7 +746,7 @@ function closePanel() {
       <div class="flex gap-2">
         <Button v-if="!externalWorkflowMode" class="flex-1" @click="resetForNewTask">
           <Plus class="h-3.5 w-3.5" />
-          新建提资单
+          新建编校审单
         </Button>
         <Button variant="secondary" class="flex-1" @click="closePanel">
           关闭面板
@@ -759,7 +759,7 @@ function closePanel() {
       <div v-if="showDebugUi && embedLandingState?.target === 'designer'"
         data-testid="designer-landing-cta"
         class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-        自动进入提资/编辑工作区
+        自动进入编校审/编辑工作区
       </div>
 
       <div v-if="showDebugUi && embedModeParams.isEmbedMode" class="flex flex-wrap gap-2 text-xs">
@@ -780,11 +780,11 @@ function closePanel() {
       <div v-else-if="showDebugUi && embedModeParams.isEmbedMode && embedLandingState?.restoreStatus === 'missing'"
         class="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
         data-testid="designer-restored-task-missing">
-        当前 form_id 尚未绑定内部任务，可继续在此创建或补齐提资数据。
+        当前 form_id 尚未绑定内部任务，可继续在此创建或补齐编校审数据。
       </div>
       <div v-if="showDebugUi && externalWorkflowMode" data-testid="external-workflow-mode-banner"
         class="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-        外部流程模式 — 仅保存提资数据，流程流转与审批由外部系统驱动。
+        外部流程模式 — 仅保存编校审数据，流程流转与审批由外部系统驱动。
       </div>
 
       <Card class="border border-[#F3F4F6] shadow-none" body-class="p-3">
@@ -846,7 +846,7 @@ function closePanel() {
       <div class="space-y-2">
         <label class="text-[13px] font-medium text-[#6B7280]">数据包名称</label>
         <Input v-model="formData.packageName"
-          placeholder="输入提资数据包名称..."
+          placeholder="输入编校审数据包名称..."
           :error="!!formErrors.packageName" />
         <p v-if="formErrors.packageName" class="text-xs text-[#EF4444]">
           {{ formErrors.packageName }}
@@ -854,7 +854,7 @@ function closePanel() {
       </div>
 
       <div class="space-y-2">
-        <label class="text-[13px] font-medium text-[#6B7280]">提资描述（可选）</label>
+        <label class="text-[13px] font-medium text-[#6B7280]">编校审说明（可选）</label>
         <textarea v-model="formData.description"
           rows="4"
           placeholder="添加补充说明或设计注意事项..."

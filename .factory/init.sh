@@ -1,37 +1,43 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-echo "MBD Layout Consistency Mission - Environment Setup"
-echo "==============================================="
+echo "Annotation Refactor Mission bootstrap"
+echo "================================="
 
 if [ ! -f "package.json" ]; then
-  echo "Error: Not in plant3d-web directory"
+  echo "Error: run this script from D:/work/plant-code/plant3d-web" >&2
   exit 1
 fi
 
 if [ ! -d "node_modules" ]; then
-  echo "Installing dependencies..."
+  echo "Installing frontend dependencies..."
   npm install
+else
+  echo "node_modules already present; skipping install"
 fi
 
-echo "Checking mission-relevant local services..."
+echo "Checking mission ports (3101 frontend, 3100 backend, 8020 support service, 9222 reserved)..."
 if curl -sf http://127.0.0.1:3101 > /dev/null; then
-  echo "Frontend: reachable on http://127.0.0.1:3101"
+  echo "Frontend reachable on http://127.0.0.1:3101"
 else
-  echo "Frontend: not running yet on http://127.0.0.1:3101 (workers may start it if needed)"
+  echo "Frontend not running yet on http://127.0.0.1:3101"
 fi
 
 if curl -sf http://127.0.0.1:3100/api/health > /dev/null; then
-  echo "Backend: reachable on http://127.0.0.1:3100/api/health (optional for this mission)"
+  echo "Backend reachable on http://127.0.0.1:3100/api/health"
 else
-  echo "Backend: not reachable on http://127.0.0.1:3100/api/health (optional unless a worker needs a spot check)"
+  echo "Backend not running yet on http://127.0.0.1:3100/api/health"
 fi
 
-echo "Environment ready for the MBD layout consistency mission"
-echo "Primary verification surfaces:"
-echo "- src/composables/useMbdPipeAnnotationThree.ts"
-echo "- src/api/mbdPipeApi.ts"
-echo "- src/composables/mbd/"
-echo "- src/composables/useMbdPipeAnnotationThree.flyTo.test.ts"
-echo "- src/fixtures/bran-test-data.test.ts"
-echo "Reminder: preserve unrelated dirty-worktree changes and stay frontend-first."
+if curl -sf http://127.0.0.1:8020 > /dev/null; then
+  echo "Supporting service responded on http://127.0.0.1:8020"
+else
+  echo "No response detected on http://127.0.0.1:8020 (only needed for some contract checks)"
+fi
+
+echo "Reminder: preserve unrelated dirty worktree files, do not use port 9222, and do not run the mission runner from this bootstrap."
+echo "Recommended baseline validators once code changes exist:"
+echo "- npm run type-check"
+echo "- npm run lint"
+echo "- npm test"
+echo "- focused vitest and curl probes per assigned milestone"

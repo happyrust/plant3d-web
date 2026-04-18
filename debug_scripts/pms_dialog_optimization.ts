@@ -83,7 +83,7 @@ async function optimizedTryFillDialog(page: Page): Promise<boolean> {
     await fillFields();
 
     // 点击提交按钮
-    const submit = dialog.getByRole('button', { name: /保存|确定|提交|发起提资|下一步|确认/ }).first();
+    const submit = dialog.getByRole('button', { name: /保存|确定|提交|发起编校审|下一步|确认/ }).first();
     if (await submit.count() > 0) {
       await submit.click({ timeout: 5000 });
       console.log('[点击提交] 成功');

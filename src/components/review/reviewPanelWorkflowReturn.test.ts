@@ -24,12 +24,12 @@ function createReturnHandler(deps: {
       await deps.returnTaskToNode(deps.taskId, deps.returnTargetNode.value, deps.returnReason.value.trim());
       await deps.refreshCurrentTask(deps.taskId);
       await deps.loadWorkflow(deps.taskId);
-      deps.emitToast({ message: '任务已驳回到指定节点' });
+      deps.emitToast({ message: '已确认驳回流转' });
       deps.showReturnDialog.value = false;
       deps.returnReason.value = '';
       deps.returnTargetNode.value = 'sj';
     } catch (e) {
-      deps.workflowError.value = e instanceof Error ? e.message : '驳回失败';
+      deps.workflowError.value = e instanceof Error ? e.message : '驳回流转失败';
     } finally {
       deps.workflowActionLoading.value = false;
     }
@@ -65,7 +65,7 @@ describe('ReviewPanel workflow return', () => {
     expect(returnTaskToNode).toHaveBeenCalledWith('task-1', 'jd', 'Need design rework');
     expect(refreshCurrentTask).toHaveBeenCalledWith('task-1');
     expect(loadWorkflow).toHaveBeenCalledWith('task-1');
-    expect(emitToast).toHaveBeenCalledWith({ message: '任务已驳回到指定节点' });
+    expect(emitToast).toHaveBeenCalledWith({ message: '已确认驳回流转' });
     expect(showReturnDialog.value).toBe(false);
     expect(returnReason.value).toBe('');
     expect(returnTargetNode.value).toBe('sj');

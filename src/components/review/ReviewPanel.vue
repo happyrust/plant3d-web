@@ -534,7 +534,7 @@ async function handleReturnToNode() {
     await userStore.returnTaskToNode(taskId, targetNode, reason);
     await refreshCurrentTask(taskId);
     await loadWorkflow(taskId);
-    emitToast({ message: '任务已驳回到指定节点' });
+    emitToast({ message: '已确认驳回流转' });
     showReturnDialog.value = false;
     returnReason.value = '';
     returnTargetNode.value = 'sj';
@@ -546,7 +546,7 @@ async function handleReturnToNode() {
       targetNode,
     });
   } catch (e) {
-    workflowError.value = e instanceof Error ? e.message : '驳回失败';
+    workflowError.value = e instanceof Error ? e.message : '驳回流转失败';
   } finally {
     workflowActionLoading.value = false;
   }
@@ -1334,7 +1334,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 mb-2">流程上下文</div>
           <div class="grid gap-2 sm:grid-cols-2">
             <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">提资人</div>
+              <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">编校审发起人</div>
               <div class="mt-1 text-sm font-semibold text-slate-900">{{ taskContext?.requesterName || '-' }}</div>
             </div>
             <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">

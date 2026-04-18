@@ -164,12 +164,12 @@ describe('ReviewerTaskList', () => {
       success: true,
       task: {
         ...task,
-        description: '完整的设计提资包说明',
+        description: '完整的设计编校审包说明',
         formId: 'FORM-REVIEW-226',
         attachments: [
           {
             id: 'att-1',
-            name: '设计提资说明.pdf',
+            name: '设计编校审说明.pdf',
             url: '/files/review_attachments/att-1.pdf',
             mimeType: 'application/pdf',
             uploadedAt: new Date('2026-04-09T10:00:00+08:00').getTime(),
@@ -192,7 +192,7 @@ describe('ReviewerTaskList', () => {
 
     expect(reviewTaskGetByIdMock).toHaveBeenCalledWith('review-task-detail');
     expect(document.body.textContent).toContain('FORM-REVIEW-226');
-    expect(document.body.textContent).toContain('设计提资说明.pdf');
-    expect(document.body.textContent).toContain('完整的设计提资包说明');
+    expect(document.body.textContent).toContain('设计编校审说明.pdf');
+    expect(document.body.textContent).toContain('完整的设计编校审包说明');
   });
 });

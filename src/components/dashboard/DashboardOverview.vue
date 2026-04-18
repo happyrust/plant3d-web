@@ -47,7 +47,7 @@
             <div class="flex items-center gap-4">
               <div class="p-2 bg-green-50 rounded-lg text-green-600"><SendIcon class="w-6 h-6" /></div>
               <div>
-                <div class="font-medium text-gray-900">发起提资</div>
+                <div class="font-medium text-gray-900">发起编校审</div>
                 <div class="text-xs text-gray-500 mt-1">进入校审中心查看任务</div>
               </div>
             </div>

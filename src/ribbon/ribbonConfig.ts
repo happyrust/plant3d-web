@@ -269,11 +269,11 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         id: 'review.panel',
         label: '面板',
         items: [
-          { kind: 'button', id: 'panel.initiateReview', label: '发起提资', icon: 'plus', commandId: 'panel.initiateReview' },
+          { kind: 'button', id: 'panel.initiateReview', label: '发起编校审', icon: 'plus', commandId: 'panel.initiateReview' },
           { kind: 'button', id: 'panel.review', label: '校审面板', icon: 'clipboard_list', commandId: 'panel.review' },
           { kind: 'button', id: 'panel.reviewerTasks', label: '待审核', icon: 'clipboard_check', commandId: 'panel.reviewerTasks' },
           { kind: 'button', id: 'panel.resubmissionTasks', label: '复审任务', icon: 'redo', commandId: 'panel.resubmissionTasks' },
-          { kind: 'button', id: 'panel.myTasks', label: '我的提资', icon: 'file_text', commandId: 'panel.myTasks' },
+          { kind: 'button', id: 'panel.myTasks', label: '我的编校审', icon: 'file_text', commandId: 'panel.myTasks' },
         ],
       },
       {

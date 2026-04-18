@@ -22,13 +22,13 @@ export function canReturnAtCurrentNode(currentNode?: WorkflowNode): boolean {
 export function getSubmitActionLabel(currentNode?: WorkflowNode): string {
   switch (currentNode ?? 'sj') {
     case 'sj':
-      return '提交到校核';
+      return '确认流转至校对';
     case 'jd':
-      return '提交到审核';
+      return '确认流转至审核';
     case 'sh':
-      return '提交到批准';
+      return '确认流转至批准';
     case 'pz':
-      return '最终批准';
+      return '确认最终批准';
   }
 }
 
@@ -325,12 +325,12 @@ export async function submitTaskToNextNodeSafely(
     await options.submitTaskToNextNode(options.taskId, trimmedComment || undefined);
     await options.refreshCurrentTask(options.taskId);
     await options.loadWorkflow(options.taskId);
-    options.emitToast({ message: '任务已提交到下一节点' });
+    options.emitToast({ message: '已确认提交流转' });
     options.showSubmitDialog.value = false;
     options.submitComment.value = '';
     return true;
   } catch (e) {
-    options.workflowError.value = e instanceof Error ? e.message : '提交失败';
+    options.workflowError.value = e instanceof Error ? e.message : '提交流转失败';
     return false;
   } finally {
     options.workflowActionLoading.value = false;

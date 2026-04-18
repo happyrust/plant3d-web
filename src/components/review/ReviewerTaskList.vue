@@ -419,7 +419,7 @@ onMounted(() => {
                 <p class="font-medium">{{ selectedTask.requesterName }}</p>
               </div>
               <div>
-                <label class="text-sm text-gray-500">提资包编号</label>
+                <label class="text-sm text-gray-500">编校审包编号</label>
                 <p class="font-medium">{{ selectedTask.formId || '未绑定 formId' }}</p>
               </div>
               <div>

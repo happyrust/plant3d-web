@@ -1,26 +1,30 @@
 commands:
   install: npm install
   typecheck: npm run type-check
-  lint: npx eslint src/api/mbdPipeApi.ts src/composables/useMbdPipeAnnotationThree.ts src/composables/mbd --ext .ts --max-warnings 0
-  test: npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/fixtures/bran-test-data.test.ts
-  test:layout-regression: npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/fixtures/bran-test-data.test.ts
-  test:layout-focused: npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/fixtures/bran-test-data.test.ts
+  lint: npm run lint
+  test: npm test
+  test:review-focused: npx vitest run src/components/review src/composables/useReviewStore* src/api/reviewApi* --passWithNoTests
+  test:restore-focused: npx vitest run src/components/review src/composables src/api --passWithNoTests
+  test:contract-focused: echo "Use curl/API probes against http://127.0.0.1:3100 for mission contract validation"
 
 services:
   frontend:
     start: npm run dev -- --host 127.0.0.1 --port 3101
-    stop: lsof -ti :3101 | xargs kill
+    stop: powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'vite' -and $_.CommandLine -match '--port 3101' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
     healthcheck: curl -sf http://127.0.0.1:3101
     port: 3101
     depends_on: []
 
   backend:
-    start: echo "Backend is optional for this frontend-first mission"
-    stop: echo "No backend lifecycle owned by this mission"
-    healthcheck: true
+    start: cargo run --bin web_server -- --host 127.0.0.1 --port 3100
+    stop: powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'web_server' -and $_.CommandLine -match '3100' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+    healthcheck: curl -sf http://127.0.0.1:3100/api/health
     port: 3100
     depends_on: []
 
-# Mission-scoped validation commands are `commands.typecheck`, `commands.lint`, and `commands.test:layout-regression`.
-# Prefer adding focused Vitest files for new pure layout modules rather than widening to whole-repo test runs.
-# Whole-repo `npm run lint` and `npm test` are not the mission gate because unrelated baseline issues may exist outside the MBD layout surface.
+notes:
+  - Mission validation assumes frontend on 3101 and backend on 3100.
+  - Keep 8020-compatible data-service assumptions intact when backend contract checks require them.
+  - Port 9222 is reserved/off-limits.
+  - Prefer focused vitest commands during iteration, but final worker validation should still include typecheck, lint, and the appropriate tests for the changed surface.
+  - Browser validation should stay conservative; do not assume more than one concurrent browser validator unless the orchestrator explicitly opts in.

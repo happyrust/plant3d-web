@@ -63,10 +63,10 @@
 
 自动化示例：`export PMS_E2E_PASSWORD='Admin@1234'`；勿将含密码的命令写入公开 PR 描述。
 
-发起提资 CDP/E2E 默认注入测试 BRAN **`24381_145018`**（与 PMS 数据界面 RefNo 一致，便于核对同步）；覆盖方式：`PMS_TARGET_BRAN_REFNO=…`。
+发起编校审 CDP/E2E 默认注入测试 BRAN **`24381_145018`**（与 PMS 数据界面 RefNo 一致，便于核对同步）；覆盖方式：`PMS_TARGET_BRAN_REFNO=…`。
 
-**端到端（PMS 入口 → 提资 → PMS 可见 → JH 校核）**：`npm run test:pms:cdp:extended`（需 `PMS_E2E_PASSWORD`、`PMS_EMBEDDED_SITE_SUBSTRING`）。脚本顺序为 SJ 全流程发起提资 → 回到「三维校审单」等待列表出现包名 → `clearCookies` 后以 **`PMS_CHECKER_USERNAME`（默认 `JH`）** 登录 → 尝试双击含包名行打开三维 → 在 plant3d 校核区点击「提交…」主按钮。可选：`PMS_MOCK_PACKAGE_NAME`（固定包名便于人工核对）、`PMS_INITIATE_CHECKER_SUBSTRING`（校核下拉按文案匹配，extended 未设时与 `JH` 同步）。详见 `docs/verification/pms-3d-review-integration-e2e.md`。
+**端到端（PMS 入口 → 编校审 → PMS 可见 → JH 校核）**：`npm run test:pms:cdp:extended`（需 `PMS_E2E_PASSWORD`、`PMS_EMBEDDED_SITE_SUBSTRING`）。脚本顺序为 SJ 全流程发起编校审 → 回到「三维校审单」等待列表出现包名 → `clearCookies` 后以 **`PMS_CHECKER_USERNAME`（默认 `JH`）** 登录 → 尝试双击含包名行打开三维 → 在 plant3d 校核区点击「提交…」主按钮。可选：`PMS_MOCK_PACKAGE_NAME`（固定包名便于人工核对）、`PMS_INITIATE_CHECKER_SUBSTRING`（校核下拉按文案匹配，extended 未设时与 `JH` 同步）。详见 `docs/verification/pms-3d-review-integration-e2e.md`。
 
 **用本机 Chrome + DevTools（CDP 附加，便于看 Network/断点）**：终端 1 执行 `chmod +x scripts/launch-chrome-cdp.sh && ./scripts/launch-chrome-cdp.sh`；终端 2 在设好 `PMS_E2E_PASSWORD`、`PMS_EMBEDDED_SITE_SUBSTRING` 后运行 `npm run test:pms:cdp:attach:full` 或 `test:pms:cdp:attach:extended`（已内置 `CHROME_CDP_URL=http://127.0.0.1:9222`）。非默认端口时用 `CHROME_DEBUG_PORT=9333` 启动 Chrome，并对 npm 命令设置 `CHROME_CDP_URL=http://127.0.0.1:9333`。
 
-**PMS 数据接口可见性（默认开）**：`test:pms:cdp:full` 在 plant3d「提资单创建成功」后，会再次进入「三维校审单」并监听 **PMS 域名** 上 `xhr`/`fetch` 的 **JSON** 响应，确认其中出现本次 **提资包名** 或 **测试 BRAN**（`24381_145018` 及斜杠形式）。不需要时用 `PMS_CDP_VERIFY_PMS_API=0` 关闭；列表接口路径固定时可设 `PMS_API_URL_SUBSTRING` 缩小匹配范围。
+**PMS 数据接口可见性（默认开）**：`test:pms:cdp:full` 在 plant3d「编校审单创建成功」后，会再次进入「三维校审单」并监听 **PMS 域名** 上 `xhr`/`fetch` 的 **JSON** 响应，确认其中出现本次 **编校审包名** 或 **测试 BRAN**（`24381_145018` 及斜杠形式）。不需要时用 `PMS_CDP_VERIFY_PMS_API=0` 关闭；列表接口路径固定时可设 `PMS_API_URL_SUBSTRING` 缩小匹配范围。

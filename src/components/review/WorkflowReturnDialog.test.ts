@@ -28,17 +28,17 @@ describe('WorkflowReturnDialog', () => {
 
     await nextTick();
 
-    expect(document.body.textContent).toContain('驳回到指定节点');
-    expect(document.body.textContent).toContain('目标节点');
+    expect(document.body.textContent).toContain('确认驳回流转');
+    expect(document.body.textContent).toContain('目标环节');
     expect(document.body.textContent).toContain('编制');
-    expect(document.body.textContent).toContain('驳回原因输入（必填）');
+    expect(document.body.textContent).toContain('流转驳回原因（必填）');
 
     const reasonInput = document.body.querySelector('[data-testid="workflow-return-reason"]') as HTMLTextAreaElement | null;
     const confirmButton = document.body.querySelector('[data-testid="workflow-return-confirm"]') as HTMLButtonElement | null;
 
-    expect(reasonInput?.getAttribute('placeholder')).toBe('请输入驳回原因（必填）');
+    expect(reasonInput?.getAttribute('placeholder')).toBe('请输入流转驳回原因（必填）');
     expect(confirmButton?.disabled).toBe(true);
-    expect(document.body.textContent).toContain('驳回原因为必填项');
+    expect(document.body.textContent).toContain('流转驳回原因为必填项');
   });
 
   it('enables confirm after entering a trimmed reason and resets after reopen', async () => {
@@ -67,7 +67,7 @@ describe('WorkflowReturnDialog', () => {
 
     await nextTick();
 
-    const targetButtons = Array.from(document.body.querySelectorAll('button')).filter((button) => button.textContent?.includes('校核'));
+    const targetButtons = Array.from(document.body.querySelectorAll('button')).filter((button) => button.textContent?.includes('校对'));
     const reviewTargetButton = targetButtons[0] as HTMLButtonElement | undefined;
     reviewTargetButton?.click();
     await nextTick();

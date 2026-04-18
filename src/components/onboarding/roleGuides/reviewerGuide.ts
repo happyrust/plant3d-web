@@ -158,8 +158,8 @@ export function buildProofreaderGuide(ctx: GuideContext): GuideDefinition {
     role: 'proofreader',
     title: '校核员校审向导',
     description: isPassive
-      ? '了解如何在外部流程模式下接收设计提资、完成三维校核。'
-      : '了解如何接收设计提资、完成三维校核并提交下一节点。',
+      ? '了解如何在外部流程模式下接收设计编校审、完成三维校核。'
+      : '了解如何接收设计编校审、完成三维校核并提交下一节点。',
     steps: withHierarchicalMenuCommandSteps(steps, ctx.menuMode),
   };
 }
@@ -246,10 +246,10 @@ export function buildReviewerGuide(ctx: GuideContext): GuideDefinition {
       targetSelector: '[data-guide="workflow-actions"]',
       targetPanelId: 'review',
       title: '审核决策',
-      description: '审核通过可提交到批准，发现问题可驳回到设计或校核节点，要求相关人员修改。',
+      description: '审核通过可确认流转至批准，发现问题可确认驳回流转到编制或校对环节，要求相关人员修改。',
       placement: 'top',
       requiresActiveWorkflow: true,
-      actionHint: '请先选择任务并进入校审面板，在面板标题区下方找到「提交」或「驳回」按钮。',
+      actionHint: '请先选择任务并进入校审面板，在面板标题区下方找到「确认流转至批准」或「确认驳回流转」按钮。',
       fallbackSelector: '[data-panel="review"]',
       onBeforeShow: () => ensurePanelAndActivate('review'),
     });

@@ -1,117 +1,67 @@
 ---
 name: review-annotation-worker
-description: Implement reviewer workbench direct-launch, canonical text/cloud/rectangle semantics, and measurement confirm/replay behavior for the M6+M7 mission in plant3d-web.
+description: Execute annotation refactor features for replay, confirmation, task-scoped drafts, and dual-layer rendering in plant3d-web.
 ---
 
 # review-annotation-worker
 
-NOTE: Startup and cleanup are handled by `worker-base`. This skill defines the work procedure for reviewer annotation mission features in `plant3d-web`.
+## When to Use
 
-## When to Use This Skill
+Use this skill for milestone leaves that change annotation replay/restore, reviewer direct-launch actions, confirmation payloads, task-scoped drafts, or draft-vs-confirmed rendering behavior.
 
-Use this skill for features that touch:
-- reviewer workbench direct-launch in `src/components/review/ReviewPanel.vue`
-- reviewer annotation creation flows in `src/composables/useDtxTools.ts`
-- annotation mode UI / helper copy in `src/components/tools/AnnotationPanel.vue`
-- reviewer confirm/persistence flows in `src/composables/useReviewStore.ts`
-- annotation record schemas in `src/composables/useToolStore.ts`
-- measurement confirmation/replay behavior tied to the reviewer workbench
-- regression coverage for rectangle/cloud/text reviewer flows
+## Required Reading Order
 
-## Work Procedure
+1. mission `mission.md`
+2. mission `validation-contract.md`
+3. mission `features.json`
+4. mission `validation-state.json`
+5. `.factory/library/architecture.md`
+6. `.factory/library/environment.md`
+7. `.factory/library/user-testing.md`
+8. `.factory/library/reviewsnapshot-restore-notes.md`
+9. `.factory/library/review-annotations.md`
 
-1. Read mission context first:
-   - mission `mission.md`
-   - mission `AGENTS.md`
-   - `validation-contract.md`
-   - `features.json`
-   - `.factory/library/architecture.md`
-   - `.factory/library/environment.md`
-   - `.factory/library/user-testing.md`
-   - `.factory/library/m6-m7-review-collaboration.md`
-   - `.factory/library/review-annotations.md`
-2. Inspect the current reviewer action flow before editing:
-   - `src/components/review/ReviewPanel.vue`
-   - `src/composables/useDtxTools.ts`
-   - `src/components/tools/AnnotationPanel.vue`
-   - `src/composables/useToolStore.ts`
-   - `src/composables/useReviewStore.ts`
-3. Write failing tests first (red). Prefer focused Vitest coverage for direct-launch state changes, geometry/state/persistence changes, and measurement confirm/replay behavior.
-4. Implement the smallest change that makes the tests pass while preserving existing reviewer panel/store patterns.
-5. Keep reviewer semantics explicit:
-   - rectangle is canonical reviewer geometry replacement
-   - cloud is the screen-space marquee reviewer annotation
-   - no reviewer-facing legacy OBB mode
-   - measurement is temporary until explicit confirmation, then replayable later
-6. When changing rendering or replay behavior, verify both the stored data model and the visible result. Do not settle for only updating store fields or only updating visuals.
-7. If the feature touches confirmation/reload behavior, validate both the pending tool-session state and the restored replay state. Confirm reviewer-visible counts and summaries do not leak legacy OBB data.
-8. Run targeted validation before handoff:
-   - focused Vitest files
-   - `npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run type-check`
-   - focused `npx eslint <files>`
-9. Perform manual verification on seeded reviewer tasks through `http://127.0.0.1:3101`. Capture what you launched from the workbench and what changed on screen.
-10. Stop any ad hoc services/processes you start unless a validator is explicitly reusing them.
+## Procedure
 
-## Example Handoff
+1. Restate the assigned leaf feature ID and owned assertion IDs before implementation.
+2. Map current replay, confirmation, and draft storage seams before changing UI copy or viewer behavior.
+3. Use TDD first for replay/adapter/store changes, especially dedupe, measurement filtering, task-scoped persistence, and layer separation.
+4. Preserve canonical reviewer semantics (`text`, `cloud`, `rect`) and keep legacy OBB behavior out of reviewer-facing primary semantics.
+5. Validate both persisted payload shape and visible scene behavior; neither alone is sufficient.
+6. For dual-layer work, explicitly verify that confirmed state stays visible while confirm actions only consume the draft layer.
+7. Run mission-scoped verification before handoff:
+   - `npm run type-check`
+   - `npm run lint`
+   - focused vitest on replay/confirmation/draft files
+8. Perform browser validation for the owned reviewer/designer flows and capture evidence per assertion.
+9. Stop processes you started and preserve unrelated dirty files.
+
+## Example Handoff JSON
 
 ```json
 {
-  "salientSummary": "Added reviewer workbench direct-launch for canonical annotations and measurement, removed reviewer-visible OBB affordances, and made confirmed measurements replayable after reload.",
-  "whatWasImplemented": "Updated ReviewPanel to orchestrate direct-launch entry points for text/cloud/rectangle annotation and measurement, removed reviewer-facing legacy OBB mode/list copy, preserved stable annotation lineage across confirmation and reload, and added replay support for confirmed measurement records so reviewer and designer surfaces can inspect the same confirmed result set later.",
-  "whatWasLeftUndone": "Cloud visual fine-tuning under extreme zoom is acceptable but could use polish later if product wants exact screenshot parity with a reference tool.",
+  "featureId": "M6-F1-reviewer-draft-isolation-and-confirm-entry",
+  "assertionsCovered": ["VAL-REVIEW-033", "VAL-REVIEW-034"],
+  "salientSummary": "Scoped reviewer draft state to the active task and updated confirmation entry to respect draft-only changes.",
   "verification": {
     "commandsRun": [
-      {
-        "command": "npm --prefix /Volumes/DPC/work/plant-code/plant3d-web test -- src/components/review/ReviewPanel.test.ts src/components/tools/AnnotationPanel.test.ts src/components/review/TaskReviewDetail.test.ts src/api/reviewApi.test.ts",
-        "exitCode": 0,
-        "observation": "Focused reviewer annotation and replay tests passed, covering direct-launch, canonical semantics, and measurement replay payload handling."
-      },
-      {
-        "command": "npm --prefix /Volumes/DPC/work/plant-code/plant3d-web run type-check",
-        "exitCode": 0,
-        "observation": "Frontend type-check passed after workbench orchestration and store schema updates."
-      },
-      {
-        "command": "npx eslint src/components/review/ReviewPanel.vue src/components/tools/AnnotationPanel.vue src/composables/useDtxTools.ts src/composables/useToolStore.ts src/composables/useReviewStore.ts --max-warnings 0",
-        "exitCode": 0,
-        "observation": "No lint violations in reviewer annotation owned files."
-      }
+      { "command": "npm run type-check", "exitCode": 0 },
+      { "command": "npx vitest run src/components/review src/composables --passWithNoTests", "exitCode": 0 }
     ],
     "interactiveChecks": [
-      {
-        "action": "Opened a seeded reviewer task, launched text/cloud/rectangle and measurement directly from the workbench, then returned to the workbench summary.",
-        "observed": "All approved direct-launch actions started from the reviewer workbench without leaving task context, and the candidate summary reflected the pending annotation/measurement results."
-      },
-      {
-        "action": "Confirmed a seeded reviewer batch, reloaded the task, and opened the replay view for confirmed measurements.",
-        "observed": "Canonical annotations reloaded without legacy OBB wording and confirmed measurements replayed successfully in the workbench."
-      }
+      { "action": "Switched between two reviewer tasks with pending drafts", "observed": "Only the active task restored its own drafts; the other stayed clean." }
     ]
   },
-  "tests": {
-    "added": [
-      {
-        "file": "/Volumes/DPC/work/plant-code/plant3d-web/src/components/review/ReviewPanel.test.ts",
-        "cases": [
-          {
-            "name": "reviewer workbench launches approved tools directly",
-            "verifies": "ReviewPanel exposes direct-launch controls for text/cloud/rectangle and measurement."
-          },
-          {
-            "name": "confirmed measurement payload replays after reload",
-            "verifies": "Measurement stays temporary before confirmation and replayable after confirmation."
-          }
-        ]
-      }
-    ]
-  },
-  "discoveredIssues": []
+  "filesChanged": [
+    "src/composables/useReviewStore.ts"
+  ],
+  "returnToOrchestrator": false
 }
 ```
 
-## When to Return to Orchestrator
+## Return to Orchestrator When
 
-- The feature requires a reviewer workflow or persistence decision not specified in the mission.
-- Existing local changes conflict with required annotation edits and cannot be separated safely.
-- Stable annotation or measurement replay cannot be stored without a broader API/schema decision.
-- Manual validation is blocked because seeded reviewer tasks or required services are no longer reachable.
+- stable replay or draft isolation needs backend metadata not yet available in the assigned milestone
+- a change would collapse draft and confirmed layers instead of separating them
+- validation is blocked by missing reviewer/designer seed data or unavailable services
+- assertion ownership would become duplicated across replay and dual-layer features

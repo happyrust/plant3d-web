@@ -1,62 +1,60 @@
-# User Testing
+# Annotation Refactor User Testing
 
-## Validation Surface
+## Primary Validation Surfaces
 
-**Primary Surface:** Browser UI at http://127.0.0.1:3101
+1. Reviewer inbox and workbench shell
+2. Reviewer direct-launch annotation and measurement actions
+3. Reviewer annotation thread and confirmation surfaces
+4. Confirmed record replay and workflow-sync reopen
+5. Designer main list, returned-task panel, detail, and resubmit loop
+6. Cross-entry restore equivalence (task, workflow-sync, import/package)
+7. Realtime refresh and reconnect convergence
 
-**Tool:** agent-browser
+## Required Local Endpoints
 
-**Entry Points:**
-- Main app -> project selection -> reviewer role switch
-- Reviewer workbench (`ReviewPanel`) for direct-launch annotation and measurement
-- Designer tracking/detail/resubmit surfaces
-- Task-thread collaboration surface
-- Annotation-thread collaboration surface
+- Frontend UI: `http://127.0.0.1:3101`
+- Backend API / websocket: `http://127.0.0.1:3100`
+- Optional supporting service checks: `http://127.0.0.1:8020`
 
-## Validation Concurrency
+## Evidence Expectations
 
-**Max Concurrent Validators:** 1
+- Capture screenshots for each claimed browser assertion.
+- Capture request/response or websocket evidence for contract/realtime assertions.
+- Capture console errors whenever a validation step expects no client failure.
+- Tie each evidence item back to the assertion IDs owned by the worker's leaf feature.
 
-**Rationale:**
-- Current machine headroom and load only support one safe browser validator at a time
-- Seeded reviewer/designer demo data is the main validation bottleneck, not throughput
-- Headless WebGL2 limits make annotation/measurement-heavy flows more fragile, so serial validation is safer
+## Reviewer Flow Checklist
 
-## Flow Validator Guidance: browser-ui
+- Inbox shows only reviewer-relevant tasks and preserves filters on return.
+- Embedded reopen handles valid form, missing mapped task, and missing form states explicitly.
+- Workbench exposes direct-launch annotation/measurement actions without losing task context.
+- Annotation thread shows canonical type semantics, counts, empty states, chronological ordering, and correct lifecycle actions.
+- Confirmation UI appears only for draft changes, preserves drafts on failure, and refreshes history/records correctly on success.
+- Reopen/refresh restores the same evidence set and clears stale state on empty snapshots.
 
-- Stay on `http://127.0.0.1:3101` with backend on `http://127.0.0.1:3100` only.
-- Run browser validation serially; do not open concurrent browser validators for this mission.
-- Generate or refresh the scripted demo data before attempting final reviewer/designer user-surface validation.
-- Focus on seeded reviewer -> designer -> reviewer flows rather than opportunistic live business data.
-- Treat missing seeded tasks, collaboration fixtures, or headless WebGL2 replay limits as explicit environment blockers.
+## Designer Flow Checklist
 
-## Testing Surface Details
+- Main list remains requester-scoped and distinguishes canonical returned tasks from ordinary drafts.
+- Returned list uses latest return metadata, latest-first ordering, and same-task identity.
+- Detail reloads authoritative workflow history with fallback on API failure.
+- Resubmit only appears for canonical returned drafts at `sj`, advances the same task, and clears returned-only UI on success.
+- Confirmed evidence remains visible across return/resubmit loops while new drafts stay task-scoped.
 
-### M6 Flows
-1. Reviewer enters a seeded task workbench.
-2. Reviewer directly launches text/cloud/rectangle annotation and measurement from the workbench.
-3. Reviewer confirms annotation and measurement candidates.
-4. Workbench reloads canonical annotations and replayable confirmed measurement records.
-5. Designer surfaces show the same confirmed measurement/annotation result set after handoff.
+## Contract / API Checklist
 
-### M7 Flows
-1. Reviewer opens task-thread and annotation-thread from seeded tasks.
-2. Reviewer performs replies, edit/delete, resolve/unresolve, mentions, and attachments.
-3. Designer opens the same task and sees the same thread continuity.
-4. Reviewer returns task, designer resubmits, reviewer reopens.
-5. Thread lineage, read state, and replayable records remain coherent after the loop.
+- Records create/read/delete and workflow-sync probes use real HTTP calls where possible.
+- Comment create/read/filter/delete/update-gap behavior is captured explicitly.
+- Workflow-sync query stays read-only, keyed by `formId`, and returns explicit empty arrays for blank forms.
+- Compatibility-window payload samples are preserved when metadata fields are not yet present.
 
-## Required Test Data
+## Realtime Checklist
 
-- Seeded reviewer-visible task set covering text/cloud/rectangle annotation scenarios
-- Seeded measurement replay scenario
-- Seeded task-thread scenario
-- Seeded annotation-thread scenario
-- Seeded reviewer -> designer -> reviewer return/resubmit/reopen path
+- Confirm websocket endpoint shape and user scope.
+- Verify `record_saved`, `comment_added`, and task status events refresh the correct surface only.
+- Verify reconnect does not duplicate or misorder comments.
+- Verify heartbeat frames do not trigger unrelated XHR refreshes.
 
-## Dry Run Findings
+## Validation Strategy
 
-- Frontend and backend are reachable locally in the current environment.
-- Reviewer role switching and review surface entry are reachable.
-- Current live reviewer/designer queues remain empty without scripted demo data, so seeded data is mandatory for final mission validation.
-- Headless WebGL2 constraints remain a likely blocker for rich annotation/measurement replay checks; user-surface reports must distinguish this from product defects.
+- Prefer focused validation per milestone first, then run the end-to-end cross-area checks once M7 is ready.
+- Treat missing seed data or service availability as blockers; do not lower the contract bar to compensate.

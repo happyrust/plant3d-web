@@ -12,7 +12,7 @@
         "file": "src/components/review/InitiateReviewPanel.vue",
         "line": 377,
         "severity": "blocking",
-        "description": "The new close button hides the entire initiate form behind a `重新打开提资面板` placeholder without any route-level control, which is not part of the feature contract and can strand users away from the required submission fields. The feature expected a close icon in the panel header, but not a self-managed collapsed state that replaces the panel content and adds a new workflow branch."
+        "description": "The new close button hides the entire initiate form behind a `重新打开编校审面板` placeholder without any route-level control, which is not part of the feature contract and can strand users away from the required submission fields. The feature expected a close icon in the panel header, but not a self-managed collapsed state that replaces the panel content and adds a new workflow branch."
       },
       {
         "file": "src/components/review/InitiateReviewPanel.vue",

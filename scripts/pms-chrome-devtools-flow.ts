@@ -2,7 +2,7 @@
  * PowerPMS 完整入口：http://pms.powerpms.net:1801/sysin.html
  *
  * 流程：登录 → 设计交付 → 三维校审单 →「新增」→（可选）轮询填写 PMS 弹窗 →（可选）URL 断言
- * →（可选）plant3d 内注入构件 + 填数据包名 + 点击「创建提资数据」→ 等待成功提示
+ * →（可选）plant3d 内注入构件 + 填数据包名 + 点击「创建编校审数据」→ 等待成功提示
  * →（默认）回到三维校审单，嗅探 PMS 域名下 JSON 接口响应体是否含包名/测试 BRAN（`PMS_CDP_VERIFY_PMS_API=0` 可关）。
  *
  * 通过 Playwright 驱动 Chromium，底层使用 **Chrome DevTools Protocol (CDP)**。
@@ -39,7 +39,7 @@ const base = (process.env.PMS_E2E_BASE || 'http://pms.powerpms.net:1801').replac
 const username = (process.env.PMS_E2E_USERNAME || 'SJ').trim();
 const checkerUsername = (process.env.PMS_CHECKER_USERNAME || 'JH').trim();
 const password = process.env.PMS_E2E_PASSWORD?.trim();
-/** SJ 提资 → PMS 可见性校验 → 清 Cookie → JH 登录 → 打开条目 → plant3d 校核提交 */
+/** SJ 编校审 → PMS 可见性校验 → 清 Cookie → JH 登录 → 打开条目 → plant3d 校核提交 */
 const extendedFlow =
   process.env.PMS_CDP_EXTENDED_FLOW === '1' || process.env.PMS_CDP_EXTENDED_FLOW === 'true';
 const pmsVerifyTimeoutMs = (() => {
@@ -110,7 +110,7 @@ function formatReviewEntryCandidate(candidate: PmsReviewEntryCandidate): string 
 const cdpUrl = process.env.CHROME_CDP_URL?.trim();
 const headless = process.env.PMS_CDP_HEADLESS === '1';
 
-/** 一键开启：自动填 PMS 弹窗 + plant3d 发起提资（可用 PMS_CDP_SKIP_* 单独关闭） */
+/** 一键开启：自动填 PMS 弹窗 + plant3d 发起编校审（可用 PMS_CDP_SKIP_* 单独关闭） */
 const fullFlow = process.env.PMS_CDP_FULL_FLOW === '1' || process.env.PMS_CDP_FULL_FLOW === 'true';
 const submitReview =
   process.env.PMS_CDP_SUBMIT_REVIEW === '1'
@@ -375,7 +375,7 @@ async function main(): Promise<void> {
   if (extendedFlow && !process.env.PMS_INITIATE_CHECKER_SUBSTRING?.trim()) {
     process.env.PMS_INITIATE_CHECKER_SUBSTRING = checkerUsername;
     console.error(
-      `[cdp] PMS_CDP_EXTENDED_FLOW：未设 PMS_INITIATE_CHECKER_SUBSTRING，发起提资时将优先选校核下拉中含「${checkerUsername}」的项`,
+      `[cdp] PMS_CDP_EXTENDED_FLOW：未设 PMS_INITIATE_CHECKER_SUBSTRING，发起编校审时将优先选校核下拉中含「${checkerUsername}」的项`,
     );
   }
 
@@ -402,7 +402,7 @@ async function main(): Promise<void> {
   }
 
   if (fullFlow) {
-    console.error('[cdp] PMS_CDP_FULL_FLOW：已合并启用弹窗轮询 + plant3d 提资（可用 SKIP 环境变量关闭子步骤）');
+    console.error('[cdp] PMS_CDP_FULL_FLOW：已合并启用弹窗轮询 + plant3d 编校审（可用 SKIP 环境变量关闭子步骤）');
   }
   if (submitReview) {
     await registerPlant3dAutomationReviewInitScript(context);
@@ -410,7 +410,7 @@ async function main(): Promise<void> {
   }
 
   const apiUrlSub = process.env.PMS_API_URL_SUBSTRING?.trim() || null;
-  /** 与 submitReview 脱钩：登录后「新增」即可抓到 GetZy* JSON，便于单独抓包（不必跑完 plant3d 提资） */
+  /** 与 submitReview 脱钩：登录后「新增」即可抓到 GetZy* JSON，便于单独抓包（不必跑完 plant3d 编校审） */
   const pmsApiSniffer = verifyPmsApi
     ? startPmsApiSniffer(context, {
       hostNeedle: pmsHostnameFromBase(base),
@@ -442,7 +442,7 @@ async function main(): Promise<void> {
     console.error(`[cdp] 入口: ${base}/sysin.html  用户: ${username}`);
     await login(page, username, password);
     await openReviewFormList(page);
-    /** 提资后 iframe 可能抢走焦点，extended 阶段先回到此 URL 再进菜单 */
+    /** 编校审后 iframe 可能抢走焦点，extended 阶段先回到此 URL 再进菜单 */
     const pmsWebCenterUrl = page.url();
 
     const initialUrl = page.url();
@@ -495,7 +495,7 @@ async function main(): Promise<void> {
       if (!hit) {
         if (submitReview) {
           console.error(
-            `[cdp] 警告：未在顶层 URL 或可读 iframe URL 中发现「${openSubstring}」；仍将扫描 DOM 尝试 plant3d 发起提资（跨域 iframe 可能无法操作）。`,
+            `[cdp] 警告：未在顶层 URL 或可读 iframe URL 中发现「${openSubstring}」；仍将扫描 DOM 尝试 plant3d 发起编校审（跨域 iframe 可能无法操作）。`,
           );
         } else {
           throw new Error(
@@ -513,10 +513,10 @@ async function main(): Promise<void> {
     );
 
     if (submitReview) {
-      console.error('[cdp] PMS_CDP_SUBMIT_REVIEW=1：扫描各页/iframe 发起提资并提交…');
+      console.error('[cdp] PMS_CDP_SUBMIT_REVIEW=1：扫描各页/iframe 发起编校审并提交…');
       const pkg = await runSubmitReviewAcrossContext(context);
-      console.error('[cdp] plant3d：已检测到「提资单创建/保存成功」');
-      console.error(`[cdp] 本次提资包名（用于 PMS 检索）: ${pkg}`);
+      console.error('[cdp] plant3d：已检测到「编校审单创建/保存成功」');
+      console.error(`[cdp] 本次编校审包名（用于 PMS 检索）: ${pkg}`);
 
       const strictEmbedEnabled = !!embedApiSniffer;
       const bran = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
@@ -542,7 +542,7 @@ async function main(): Promise<void> {
         } else {
           console.error('[cdp] 断言 PMS JSON 中含包名或 BRAN…');
           await pmsApiSniffer.waitForAnyNeedleInBodies([pkg, bran, branAlt], pmsApiVerifyTimeoutMs);
-          console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+          console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现编校审包名或测试 BRAN');
         }
         reviewEntryCandidates = pmsApiSniffer.findReviewEntryCandidates([pkg, bran, branAlt], 6);
         if (reviewEntryCandidates.length) {
@@ -602,7 +602,7 @@ async function main(): Promise<void> {
           .catch(() => false);
         let embedOk = embedNetworkOk;
         if (embedNetworkOk) {
-          console.error('[cdp] 嵌入站点接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+          console.error('[cdp] 嵌入站点接口：已在某条 JSON 响应中发现编校审包名或测试 BRAN');
         } else {
           console.error('[cdp] 嵌入站点接口嗅探未命中，降级为 DOM 文案断言（iframe 内可能跨域，仅做 best-effort）…');
           const domOk = await waitForSubstringInPageOrChildFrames(page, pkg, embedApiVerifyTimeoutMs)
@@ -610,13 +610,13 @@ async function main(): Promise<void> {
             .catch(() => false);
           embedOk = domOk;
           if (domOk) {
-            console.error('[cdp] DOM：已在页面/子 frame 中发现提资包名（或 BRAN）');
+            console.error('[cdp] DOM：已在页面/子 frame 中发现编校审包名（或 BRAN）');
           }
         }
 
         const pmsOk = await pmsOkPromise;
         if (pmsOk) {
-          console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现提资包名或测试 BRAN');
+          console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现编校审包名或测试 BRAN');
         }
 
         if (!pmsOk && !embedOk) {

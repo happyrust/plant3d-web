@@ -1,68 +1,66 @@
 ---
 name: review-workbench-worker
-description: Implement M4 reviewer workbench structure, workflow/records integration, and task-driven auxiliary data behavior for plant3d-web.
+description: Execute annotation refactor workbench-shell and restore-entry features for reviewer surfaces in plant3d-web.
 ---
 
 # review-workbench-worker
 
-NOTE: Startup and cleanup are handled by the mission worker base. This skill defines the work procedure for M4 reviewer-workbench features.
+## When to Use
 
-## When to Use This Skill
+Use this skill for milestone leaves that change reviewer inbox/workbench entry, embedded reopen behavior, workflow action shells, normalized task context display, or workflow history continuity.
 
-Use this skill for features that touch:
-- `src/components/review/ReviewPanel.vue`
-- `src/components/review/ReviewAuxData.vue`
-- `src/components/review/ReviewDataSync.vue`
-- `src/composables/useReviewStore.ts`
-- `src/composables/useUserStore.ts`
-- `src/api/reviewApi.ts`
-- focused tests/docs for the M4 reviewer workbench milestone
+## Required Reading Order
 
-Do not use this skill for M5 annotation-panel decomposition or M6 comment-collaboration work.
+1. mission `mission.md`
+2. mission `validation-contract.md`
+3. mission `features.json`
+4. mission `validation-state.json`
+5. `.factory/library/architecture.md`
+6. `.factory/library/environment.md`
+7. `.factory/library/user-testing.md`
+8. `.factory/library/reviewsnapshot-restore-notes.md`
+9. `.factory/library/trace-frontend-task-sync-boundaries.md`
 
-## Work Procedure
+## Procedure
 
-1. Read mission context first:
-   - mission `mission.md`
-   - mission `AGENTS.md`
-   - mission `validation-contract.md`
-   - mission `features.json`
-   - `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/environment.md`
-   - `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/user-testing.md`
-   - `/Volumes/DPC/work/plant-code/plant3d-web/.factory/library/m4-review-workbench.md`
-2. Inspect the current reviewer workbench chain before editing:
-   - `src/components/review/ReviewPanel.vue`
-   - `src/components/review/ReviewAuxData.vue`
-   - `src/components/review/ReviewDataSync.vue`
-   - `src/components/review/reviewPanelActions.ts`
-   - `src/composables/useReviewStore.ts`
-   - `src/composables/useUserStore.ts`
-   - `src/api/reviewApi.ts`
-3. Keep M4 boundaries explicit:
-   - workbench shell, workflow actions, confirmed records, aux-data/collision, and sync are in scope
-   - M5/M6 surfaces are regression boundaries only
-4. Use focused TDD where practical:
-   - update or add small focused tests first when behavior is being changed materially
-   - if a feature is primarily structural and existing tests already cover it, document why new tests were not added
-5. Normalize data semantics while editing:
-   - prefer `checkerName` / `approverName` over `reviewerName`
-   - prefer task/business `formId` over silent `task.id` fallback
-   - keep confirmed records, workflow history, and comments separate
-6. Validate against the design/document contract:
-   - reviewer-facing information architecture should align with `ui/三维校审/review-reviewer.pen`
-   - use `review-flow.pen` only to sanity-check cross-role transitions, not to expand scope
-7. Run targeted verification before handoff:
+1. Restate the assigned leaf feature ID and the exact assertion IDs it owns before editing anything.
+2. Inspect current reviewer entry/workbench files and identify the minimum surface required for the owned assertions.
+3. Use focused TDD first for any logic change with deterministic state transitions.
+4. Keep normalized task semantics explicit: `formId` fallback states must be shown, not guessed; legacy reviewer fields remain compatibility inputs only.
+5. Treat embedded reopen and workflow history refresh as restore/state-management work, not as a reason to expand into unrelated UI redesign.
+6. Run mission-scoped verification before handoff:
    - `npm run type-check`
-   - `npx eslint <changed-files>`
-   - focused vitest on changed reviewer workbench files
-   - if unrelated global `npm test` suites fail outside M4 scope, record them as baseline noise and continue with mission-scoped verification
-8. Perform manual smoke validation where feasible:
-   - open `http://127.0.0.1:3101/`
-   - navigate to the reviewer workbench path
-   - verify at least the nearest available M4 smoke flow for the changed surface
-9. Stop extra processes you start and do not leave background watchers running.
+   - `npm run lint`
+   - focused vitest or browser checks tied to the owned assertions
+7. Perform manual verification for any browser-owned assertion set and capture screenshots/network evidence.
+8. Stop processes you started and leave unrelated dirty files untouched.
 
-## Return To Orchestrator If
-- the feature requires a contract decision that the mission did not freeze (for example, authoritative `project_id` source)
-- seeded reviewer tasks, confirmed records, or ownership prevent validation and require environment setup
-- the requested change spills into `AnnotationPanel` decomposition or comment-collaboration redesign
+## Example Handoff JSON
+
+```json
+{
+  "featureId": "M2-F1-reviewer-workbench-entry-and-workflow-shell",
+  "assertionsCovered": ["VAL-REVIEW-001", "VAL-REVIEW-002"],
+  "salientSummary": "Normalized reviewer inbox/workbench entry and workflow shell behavior for embedded reopen and history refresh.",
+  "verification": {
+    "commandsRun": [
+      { "command": "npm run type-check", "exitCode": 0 },
+      { "command": "npm run lint", "exitCode": 0 }
+    ],
+    "interactiveChecks": [
+      { "action": "Reopened reviewer surface from embedded formId path", "observed": "Explicit mapped/unmapped/no-form states rendered correctly." }
+    ]
+  },
+  "filesChanged": [
+    "src/components/review/ReviewPanel.vue"
+  ],
+  "returnToOrchestrator": false
+}
+```
+
+## Return to Orchestrator When
+
+- a required assertion would force editing unrelated dirty files
+- embedded reopen semantics conflict with the frozen mission contract
+- backend/service availability blocks validation on ports 3100 or 3101
+- assertion ownership would need to move across features to avoid duplication

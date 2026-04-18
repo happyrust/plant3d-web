@@ -29,18 +29,18 @@ describe('WorkflowSubmitDialog', () => {
 
     await nextTick();
 
-    expect(document.body.textContent).toContain('提交到下一节点');
-    expect(document.body.textContent).toContain('当前节点');
-    expect(document.body.textContent).toContain('校核');
-    expect(document.body.textContent).toContain('目标节点');
+    expect(document.body.textContent).toContain('确认提交流转');
+    expect(document.body.textContent).toContain('当前环节');
+    expect(document.body.textContent).toContain('校对');
+    expect(document.body.textContent).toContain('下一环节');
     expect(document.body.textContent).toContain('审核');
 
     const commentInput = document.body.querySelector('[data-testid="workflow-submit-comment"]') as HTMLTextAreaElement | null;
 
-    expect(commentInput?.getAttribute('placeholder')).toContain('输入本次提交说明');
-    expect(document.body.textContent).toContain('备注输入（可选）');
+    expect(commentInput?.getAttribute('placeholder')).toContain('请输入需要提醒后续审核人员注意事项');
+    expect(document.body.textContent).toContain('流转备注 (选填)');
     expect(document.body.textContent).toContain('取消');
-    expect(document.body.textContent).toContain('确认提交');
+    expect(document.body.textContent).toContain('确认提交流转');
   });
 
   it('emits trimmed comment and clears the field after closing and reopening', async () => {

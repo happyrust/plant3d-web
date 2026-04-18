@@ -44,7 +44,7 @@
 - 可以展示任务上下文、历史、附件、辅助数据、批注与测量
 - 可以刷新
 - **不能**在 plant3d 内主动推进流程
-- **不能**暴露“我的提资单”这类内部任务列表视图
+- **不能**暴露“我的编校审单”这类内部任务列表视图
 
 补充说明：
 
@@ -72,7 +72,7 @@
   - 外部驱动说明
   - 刷新按钮
 
-### 3.2 设计侧不再出现“我的提资单”
+### 3.2 设计侧不再出现“我的编校审单”
 
 修改文件：
 
@@ -98,8 +98,8 @@
 
 被动模式下：
 
-- “校审 -> 面板”组不再显示“我的提资”入口
-- 设计师引导不再注入“查看我的提资”步骤
+- “校审 -> 面板”组不再显示“我的编校审”入口
+- 设计师引导不再注入“查看我的编校审”步骤
 
 ### 3.4 PMS 调试模拟器改为“外层 workflow/sync 面板驱动”
 
@@ -132,11 +132,11 @@
 
 | 场景 | 内部流程模式（manual/internal） | 被动流程模式（默认 external） |
 |---|---|---|
-| 发起提资 | 可创建并按内部规则继续流转 | 只保存提资单数据，后续由外部系统处理 |
+| 发起编校审 | 可创建并按内部规则继续流转 | 只保存编校审单数据，后续由外部系统处理 |
 | reviewer 流转按钮 | 显示 | 不显示 |
 | reviewer 提交/驳回弹窗 | 显示 | 不显示 |
-| 我的提资单 | 显示 | 不显示 |
-| Ribbon “我的提资”入口 | 显示 | 不显示 |
+| 我的编校审单 | 显示 | 不显示 |
+| Ribbon “我的编校审”入口 | 显示 | 不显示 |
 | PMS 调试模拟器 workflow/sync 操作 | 可用 | 由外层 workflow 面板驱动；`SJ/JH/SH/PZ` 在命中目标处理人且未终态时可执行 `active/agree/return/stop`，否则只读 |
 | BRAN `24381_145018` 数据恢复 | 不作额外区分 | `approved` reopen 时 iframe 内恢复批注/测量/附件条目，附件当前显示 description / 标签 |
 
@@ -188,7 +188,7 @@ npm run lint -- scripts/pms-chrome-devtools-flow.ts scripts/pms-plant3d-initiate
 
 1. 被动流程下 reviewer 工作区不再出现内部流转按钮
 2. 被动流程下设计角色不再自动落到 `myTasks`
-3. Ribbon 不再显示“我的提资”
+3. Ribbon 不再显示“我的编校审”
 4. PMS 模拟器在 passive/external 下改为“外层 workflow/sync 面板 + access gate”：
    - 命中目标处理人时可操作
    - `approved / cancelled` 终态只读
@@ -200,7 +200,7 @@ npm run lint -- scripts/pms-chrome-devtools-flow.ts scripts/pms-plant3d-initiate
 
 当前仍保留：
 
-- `initiateReview / 发起提资单` 面板
+- `initiateReview / 发起编校审单` 面板
 - 批注、测量、附件、历史、辅助数据等非流程推进能力
 
 如果后续要进一步收紧为：

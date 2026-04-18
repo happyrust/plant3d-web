@@ -30,7 +30,7 @@
         {
           "action": "Open 校审 -> 待审核 inbox",
           "expected": "Inbox shows only reviewer-relevant tasks for the active reviewer/node",
-          "observed": "Inbox summary showed '校核人员: user-002 | 共 1 个任务' with a single checker task '测试提资单-1767928364' in 待审核中 state."
+          "observed": "Inbox summary showed '校核人员: user-002 | 共 1 个任务' with a single checker task '测试编校审单-1767928364' in 待审核中 state."
         }
       ],
       "evidence": {
@@ -71,7 +71,7 @@
         {
           "action": "From inbox click 处理校核 on the visible reviewer task",
           "expected": "Selected task becomes current task and workbench opens with hydrated context",
-          "observed": "Workbench opened showing 当前审核任务 测试提资单-1767928364."
+          "observed": "Workbench opened showing 当前审核任务 测试编校审单-1767928364."
         },
         {
           "action": "Inspect task context in workbench",
@@ -142,7 +142,7 @@
         {
           "action": "Inspect hydrated workbench controls for current node 校核",
           "expected": "Submit and return actions are available for this recognized reviewer node",
-          "observed": "Workbench showed both 提交到审核 and 驳回到设计 actions while task context displayed 当前节点: 校核."
+          "observed": "Workbench showed both 确认提交到审核 and 驳回到设计 actions while task context displayed 当前节点: 校核."
         },
         {
           "action": "Inspect return dialog validation",

@@ -543,7 +543,7 @@ describe('cross-role task visibility after task creation and submit', () => {
       components: [{ id: 'comp-1', name: 'BRAN-001', refNo: 'BRAN-001', type: 'pipe' }],
     });
 
-    await store.submitTaskToNextNode(task.id, '发起提资');
+    await store.submitTaskToNextNode(task.id, '发起编校审');
 
     expect(reviewTaskGetListMock).toHaveBeenCalledWith({ requesterId: 'designer_001' });
     expect(store.myInitiatedTasks.value.map((item) => item.id)).toContain('task-cross-1');

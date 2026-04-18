@@ -18,7 +18,7 @@
       "status": "pass",
       "steps": [
         {
-          "action": "Switch to reviewer role, open 待审核, and continue task task-af46d596-d792-40f8-976d-bc052fb3822b / 测试提资单-1767928364",
+          "action": "Switch to reviewer role, open 待审核, and continue task task-af46d596-d792-40f8-976d-bc052fb3822b / 测试编校审单-1767928364",
           "expected": "Reviewer workbench opens for the selected task",
           "observed": "Workbench opened and loaded workflow data via GET /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/workflow"
         },
@@ -64,14 +64,14 @@
       "status": "pass",
       "steps": [
         {
-          "action": "Open 提交到审核 dialog from the workbench",
+          "action": "Open 确认流转至审核 dialog from the workbench",
           "expected": "Submit dialog appears with remark input and confirm action",
-          "observed": "Dialog opened with 当前节点=校核, target action '提交到审核', optional remark input, and 确认提交 button"
+          "observed": "Dialog opened with 当前环节=校对, 下一环节=审核, target action '确认流转至审核', optional remark input, and 确认提交流转 button"
         },
         {
           "action": "Enter remark 'validator submit check' and confirm submit",
           "expected": "Dialog closes, success feedback appears, and task status/context updates to the next node",
-          "observed": "POST /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/submit succeeded; dialog closed; workbench context updated from current node 校核 to 审核 and primary action changed from 提交到审核 to 提交到批准"
+          "observed": "POST /api/review/tasks/task-af46d596-d792-40f8-976d-bc052fb3822b/submit succeeded; dialog closed; workbench context updated from current node 校对 to 审核 and primary action changed from 确认流转至审核 to 确认流转至批准"
         },
         {
           "action": "Return to reviewer inbox",
@@ -151,5 +151,5 @@
       "quickFixAttempted": "Queried GET /api/review/records/by-task/task-af46d596-d792-40f8-976d-bc052fb3822b and confirmed records array was empty."
     }
   ],
-  "summary": "Tested 4 assertions for reviewer workbench actions using reviewer_001/user-002 on task task-af46d596-d792-40f8-976d-bc052fb3822b (测试提资单-1767928364): 2 passed (VAL-WORK-003, VAL-WORK-007) and 2 were blocked by missing data or unavailable/safely mutable task state (VAL-WORK-006, VAL-WORK-008). The task was advanced from current node sj/校核 to sh/审核 with submit remark 'validator submit check'."
+  "summary": "Tested 4 assertions for reviewer workbench actions using reviewer_001/user-002 on task task-af46d596-d792-40f8-976d-bc052fb3822b (测试编校审单-1767928364): 2 passed (VAL-WORK-003, VAL-WORK-007) and 2 were blocked by missing data or unavailable/safely mutable task state (VAL-WORK-006, VAL-WORK-008). The task was advanced from current node sj/校核 to sh/审核 with submit remark 'validator submit check'."
 }

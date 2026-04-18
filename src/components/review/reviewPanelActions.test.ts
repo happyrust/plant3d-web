@@ -57,10 +57,10 @@ describe('reviewPanelActions', () => {
   });
 
   it('getSubmitActionLabel 返回与节点匹配的主操作文案', () => {
-    expect(getSubmitActionLabel('sj')).toBe('提交到校核');
-    expect(getSubmitActionLabel('jd')).toBe('提交到审核');
-    expect(getSubmitActionLabel('sh')).toBe('提交到批准');
-    expect(getSubmitActionLabel('pz')).toBe('最终批准');
+    expect(getSubmitActionLabel('sj')).toBe('确认流转至校对');
+    expect(getSubmitActionLabel('jd')).toBe('确认流转至审核');
+    expect(getSubmitActionLabel('sh')).toBe('确认流转至批准');
+    expect(getSubmitActionLabel('pz')).toBe('确认最终批准');
   });
 
   it('getWorkflowSubmitBridgeAction keeps SJ on active and later nodes on agree', () => {
@@ -263,7 +263,7 @@ describe('reviewPanelActions', () => {
     expect(submitTaskToNextNode).toHaveBeenCalledWith('task-1', 'ready to move');
     expect(refreshCurrentTask).toHaveBeenCalledWith('task-1');
     expect(loadWorkflow).toHaveBeenCalledWith('task-1');
-    expect(emitToast).toHaveBeenCalledWith({ message: '任务已提交到下一节点' });
+    expect(emitToast).toHaveBeenCalledWith({ message: '已确认提交流转' });
     expect(showSubmitDialog.value).toBe(false);
     expect(submitComment.value).toBe('');
     expect(workflowError.value).toBeNull();

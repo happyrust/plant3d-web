@@ -1,5 +1,5 @@
 // 校审管理 API 模块
-// 提供提资单、审核任务、确认记录的 CRUD 操作
+// 提供编校审单、审核任务、确认记录的 CRUD 操作
 
 import {
   fromBackendRole,
@@ -473,10 +473,10 @@ export type UserListResponse = {
   error_message?: string;
 };
 
-// ============ 提资单 API ============
+// ============ 编校审单 API ============
 
 /**
- * 创建提资单
+ * 创建编校审单
  * POST /api/review/tasks
  */
 export async function reviewTaskCreate(
@@ -489,7 +489,7 @@ export async function reviewTaskCreate(
 }
 
 /**
- * 获取提资单列表
+ * 获取编校审单列表
  * GET /api/review/tasks
  * 支持筛选参数
  */
@@ -519,7 +519,7 @@ export async function reviewTaskGetList(options?: {
 }
 
 /**
- * 获取单个提资单详情
+ * 获取单个编校审单详情
  * GET /api/review/tasks/{taskId}
  */
 export async function reviewTaskGetById(taskId: string): Promise<ReviewTaskResponse> {
@@ -534,7 +534,7 @@ export async function reviewTaskGetById(taskId: string): Promise<ReviewTaskRespo
 }
 
 /**
- * 更新提资单
+ * 更新编校审单
  * PATCH /api/review/tasks/{taskId}
  */
 export async function reviewTaskUpdate(
@@ -548,7 +548,7 @@ export async function reviewTaskUpdate(
 }
 
 /**
- * 删除提资单
+ * 删除编校审单
  * DELETE /api/review/tasks/{taskId}
  */
 export async function reviewTaskDelete(taskId: string): Promise<ReviewActionResponse> {
@@ -605,7 +605,7 @@ export async function reviewTaskReject(
 }
 
 /**
- * 取消提资单
+ * 取消编校审单
  * POST /api/review/tasks/{taskId}/cancel
  */
 export async function reviewTaskCancel(

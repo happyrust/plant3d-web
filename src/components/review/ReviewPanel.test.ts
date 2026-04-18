@@ -317,7 +317,7 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
-  it('renders SJ task submit action as the initial handoff to checker', async () => {
+  it('renders SJ task submit action as the initial handoff to proofreader', async () => {
     currentTask.value = createTask({
       id: 'task-sj',
       title: 'SJ 发起任务',
@@ -329,8 +329,8 @@ describe('ReviewPanel', () => {
     const mounted = await mountReviewPanel();
     await settlePanel();
 
-    expect(document.body.textContent).toContain('提交到校核');
-    expect(document.body.textContent).not.toContain('提交到审核');
+    expect(document.body.textContent).toContain('确认流转至校对');
+    expect(document.body.textContent).not.toContain('确认流转至审核');
 
     mounted.unmount();
   });
@@ -361,7 +361,7 @@ describe('ReviewPanel', () => {
     await settlePanel();
 
     expect(document.body.textContent).toContain('FORM-A');
-    expect(document.body.textContent).toContain('提交');
+    expect(document.body.textContent).toContain('确认流转至审核');
 
     mounted.unmount();
 
@@ -378,9 +378,9 @@ describe('ReviewPanel', () => {
 
     expect(document.body.textContent).toContain('FORM-B');
     expect(document.body.textContent).toContain('审核乙');
-    expect(document.body.textContent).toContain('提交到批准');
+    expect(document.body.textContent).toContain('确认流转至批准');
     expect(document.body.textContent).not.toContain('FORM-A');
-    expect(document.body.textContent).not.toContain('提交到审核');
+    expect(document.body.textContent).not.toContain('确认流转至审核');
     mounted.unmount();
   });
 

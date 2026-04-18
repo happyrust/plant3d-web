@@ -879,15 +879,15 @@ async function createReviewTask(data: {
       if (response.success && response.task) {
         const normalizedTask = normalizeReviewTask(response.task);
         if (!normalizedTask) {
-          throw new Error('创建提资单返回了无效任务数据');
+          throw new Error('创建编校审单返回了无效任务数据');
         }
         reviewTasks.value = [...reviewTasks.value, normalizedTask];
         console.log('[useUserStore] Created review task:', normalizedTask.title);
         return normalizedTask;
       }
-      throw new Error(response.error_message || '创建提资单失败');
+      throw new Error(response.error_message || '创建编校审单失败');
     } catch (e) {
-      const message = e instanceof Error ? e.message : '创建提资单失败';
+      const message = e instanceof Error ? e.message : '创建编校审单失败';
 
       if (!isNetworkFailure(e)) {
         error.value = message;
@@ -1060,11 +1060,11 @@ async function submitTaskToNextNode(taskId: string, comment?: string): Promise<v
     try {
       const response = await reviewTaskSubmitToNext(taskId, comment);
       if (!response.success) {
-        throw new Error(response.error_message || '提交到下一节点失败');
+        throw new Error(response.error_message || '提交流转失败');
       }
       await loadReviewTasks();
     } catch (e) {
-      const message = e instanceof Error ? e.message : '提交到下一节点失败';
+      const message = e instanceof Error ? e.message : '提交流转失败';
 
       if (!isNetworkFailure(e)) {
         error.value = message;
@@ -1127,11 +1127,11 @@ async function returnTaskToNode(taskId: string, targetNode: WorkflowNode, reason
     try {
       const response = await reviewTaskReturn(taskId, targetNode, reason);
       if (!response.success) {
-        throw new Error(response.error_message || '驳回失败');
+        throw new Error(response.error_message || '驳回流转失败');
       }
       await loadReviewTasks();
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '驳回失败';
+      error.value = e instanceof Error ? e.message : '驳回流转失败';
       throw e;
     } finally {
       loading.value = false;

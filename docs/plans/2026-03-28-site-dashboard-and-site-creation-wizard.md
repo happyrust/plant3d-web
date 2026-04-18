@@ -297,7 +297,7 @@ git commit -m "feat(site): add deployment site composables"
 - 新建站点
 
 要求：
-- 不删除当前已有“上传/打开模型 / 发起提资 / 待办校审”入口
+- 不删除当前已有“上传/打开模型 / 发起编校审 / 待办校审”入口
 - 新增按钮点击后切到 `sites`
 
 - [ ] **Step 5: 手工验证导航联通性**

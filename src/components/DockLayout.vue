@@ -648,7 +648,7 @@ function ensurePanel(panelId: string) {
     return dockApi.addPanel({
       id: 'initiateReview',
       component: 'InitiateReviewPanel',
-      title: '发起提资',
+      title: '发起编校审',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -672,7 +672,7 @@ function ensurePanel(panelId: string) {
     return dockApi.addPanel({
       id: 'myTasks',
       component: 'DesignerTaskListPanel',
-      title: '我的提资',
+      title: '我的编校审',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -1019,7 +1019,7 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.myTasks':
       if (isPassiveWorkflowMode()) {
-        console.info('[DockLayout] 当前为被动流程模式，不提供“我的提资”入口');
+        console.info('[DockLayout] 当前为被动流程模式，不提供“我的编校审”入口');
         return;
       }
       togglePanel('myTasks');

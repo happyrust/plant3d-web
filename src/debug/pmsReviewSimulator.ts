@@ -1247,7 +1247,7 @@ function renderWorkflowActionHint(): void {
     }
 
     refs.workflowActionHint.textContent = !hasFormId
-      ? '请先在嵌入页保存提资数据，待 form_id 回填后再回到 PMS 面板执行 workflow/sync。'
+      ? '请先在嵌入页保存编校审数据，待 form_id 回填后再回到 PMS 面板执行 workflow/sync。'
       : state.workflowAction.loading || state.workflowDialog.submitting
         ? `正在执行 workflow/sync ${action || hintAction}...`
         : state.workflowAction.lastMessage
@@ -1521,7 +1521,7 @@ function renderSidePanelState(): void {
   refs.sidePanelSubtitle.textContent =
     PASSIVE_WORKFLOW_MODE
       ? state.sidePanelMode === 'initiate'
-        ? '请先在嵌入页保存提资数据，再回到 PMS 面板执行 workflow/sync active 送审提交。'
+        ? '请先在嵌入页保存编校审数据，再回到 PMS 面板执行 workflow/sync active 送审提交。'
         : state.sidePanelMode === 'workflow'
           ? '当前为外部流程模式；同意 / 驳回 / 终止均通过 workflow/sync 驱动，右侧面板仅维护草稿意见。'
           : access.reason
@@ -2603,7 +2603,7 @@ function openWorkflowDialog(action: WorkflowMutationAction): void {
   if (PASSIVE_WORKFLOW_MODE && syncDrivenAction && !context.formId) {
     state.workflowAction.lastAction = action;
     state.workflowAction.lastOk = false;
-    state.workflowAction.lastMessage = '缺少 form_id，请先在嵌入页保存提资数据后再执行 workflow/sync。';
+    state.workflowAction.lastMessage = '缺少 form_id，请先在嵌入页保存编校审数据后再执行 workflow/sync。';
     state.workflowAction.lastAt = Date.now();
     state.diagnostics.error = state.workflowAction.lastMessage;
     renderActionStates();
