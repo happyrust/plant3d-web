@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760">
+  <style>
+    text {
+      font-family: Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      fill: #111827;
+    }
+    .title { font-size: 24px; font-weight: 600; }
+    .section { font-size: 18px; font-weight: 600; }
+    .label { font-size: 13px; fill: #6b7280; }
+    .box-title { font-size: 15px; font-weight: 600; }
+    .box-sub { font-size: 12px; fill: #4b5563; }
+    .note { font-size: 12px; fill: #374151; }
+  </style>
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#9333ea"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="760" fill="#ffffff"/>
+
+  <text x="600" y="44" text-anchor="middle" class="title">rs-core MBD &#19982; plant3d-web MBD &#20027;&#38142;&#36335;&#23545;&#27604;</text>
+  <text x="600" y="70" text-anchor="middle" class="label">&#24038;&#20391;&#65306;legacy PML &#20107;&#23454;&#28304;&#65307;&#20013;&#38388;&#65306;Rust &#22865;&#32422;&#23618;&#65307;&#21491;&#20391;&#65306;Web &#28210;&#26579;&#19982;&#20132;&#20114;&#23618;</text>
+
+  <rect x="40" y="96" width="330" height="590" rx="12" ry="12" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <rect x="430" y="96" width="320" height="590" rx="12" ry="12" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <rect x="810" y="96" width="350" height="590" rx="12" ry="12" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+  <text x="205" y="126" text-anchor="middle" class="section">Legacy PML / rs-core/MBD</text>
+  <text x="590" y="126" text-anchor="middle" class="section">Rust &#22865;&#32422;&#23618; / src/mbd/mod.rs</text>
+  <text x="985" y="126" text-anchor="middle" class="section">plant3d-web / Web &#28210;&#26579;&#19982;&#20132;&#20114;&#23618;</text>
+
+  <rect x="60" y="148" width="290" height="72" rx="8" ry="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="205" y="176" text-anchor="middle" class="box-title">markpipeform.pmlfrm</text>
+  <text x="205" y="198" text-anchor="middle" class="box-sub">&#36873;&#25321; BRAN&#65292;&#24182;&#29992; minslope / lookangle / considerprenextdir &#26500;&#36896; isobran</text>
+
+  <rect x="60" y="248" width="290" height="88" rx="8" ry="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <text x="205" y="278" text-anchor="middle" class="box-title">isobran.pmlobj</text>
+  <text x="205" y="300" text-anchor="middle" class="box-sub">&#20998;&#25903;&#32534;&#25490;&#22120;&#65306;split&#12289;&#25910;&#38598; wronglines&#12289;&#39537;&#21160; draw&#12289;&#23548;&#20986;&#25991;&#20214;</text>
+  <text x="205" y="320" text-anchor="middle" class="box-sub">&#23427;&#26159;&#26377;&#29366;&#24577;&#30340; branch solver&#65292;&#32780;&#19981;&#21482;&#26159;&#32472;&#21046;&#36741;&#21161;&#23545;&#35937;</text>
+
+  <rect x="60" y="366" width="290" height="112" rx="8" ry="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="205" y="396" text-anchor="middle" class="box-title">getisolines + putIntoIsoLine</text>
+  <text x="205" y="418" text-anchor="middle" class="box-sub">&#25353;&#30452;&#27573;&#12289;&#24367;&#22836;&#21644;&#29305;&#27530;&#20803;&#20214;&#25286;&#20998; isoline</text>
+  <text x="205" y="438" text-anchor="middle" class="box-sub">&#20877;&#25226; weld&#12289;slope&#12289;tag&#12289;material&#12289;cut part &#20998;&#37197;&#21040; isoline</text>
+  <text x="205" y="458" text-anchor="middle" class="box-sub">&#25214;&#19981;&#21040;&#21512;&#36866;&#32447;&#26102;&#35760;&#38169;&#25110;&#25233;&#21046;&#65292;&#32780;&#19981;&#26159;&#30828;&#30011;&#38169;&#35823;&#26631;&#27880;</text>
+
+  <rect x="60" y="510" width="290" height="104" rx="8" ry="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+  <text x="205" y="540" text-anchor="middle" class="box-title">isoline + isoDim</text>
+  <text x="205" y="562" text-anchor="middle" class="box-sub">&#25104;&#22871;&#27714;&#35299; dimdir&#12289;chardir &#21644; ori</text>
+  <text x="205" y="582" text-anchor="middle" class="box-sub">&#20559;&#31227;&#20381;&#36182; OD &#19982;&#25991;&#23383;&#39640;&#24230;&#23618;&#32423;&#22240;&#23376;</text>
+  <text x="205" y="602" text-anchor="middle" class="box-sub">&#22369;&#24230;&#20351;&#29992;&#29420;&#31435;&#30340;&#30452;&#35282;&#21644;&#36741;&#21161;&#32447;&#36923;&#36753;</text>
+
+  <rect x="60" y="638" width="290" height="34" rx="8" ry="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="205" y="660" text-anchor="middle" class="box-sub">generatejsonattrvm -> JSON / RVM / ATT / TXT</text>
+
+  <rect x="455" y="208" width="270" height="94" rx="8" ry="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="590" y="238" text-anchor="middle" class="box-title">LegacyPlacedLayoutSections</text>
+  <text x="590" y="260" text-anchor="middle" class="box-sub">legacy solver &#24050;&#32463;&#20135;&#20986;&#30340;&#39044;&#25490;&#29256; sections</text>
+  <text x="590" y="280" text-anchor="middle" class="box-sub">linear_dims / welds / slopes / bends / tags / fittings</text>
+
+  <rect x="455" y="342" width="270" height="106" rx="8" ry="8" fill="#faf5ff" stroke="#ddd6fe" stroke-width="1.5"/>
+  <text x="590" y="374" text-anchor="middle" class="box-title">BranchCalculator::assemble_prelaid_out</text>
+  <text x="590" y="396" text-anchor="middle" class="box-sub">&#25910;&#38598; suppressed_items &#21644;&#21407;&#22240;&#32479;&#35745;</text>
+  <text x="590" y="416" text-anchor="middle" class="box-sub">&#26500;&#24314; debug_info &#19982; legacy_diff_summary</text>
+  <text x="590" y="436" text-anchor="middle" class="box-sub">&#36825;&#37324;&#26159;&#22865;&#32422;&#32452;&#35013;&#23618;&#65292;&#19981;&#26159;&#23436;&#25972; branch solver</text>
+
+  <rect x="455" y="490" width="270" height="118" rx="8" ry="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+  <text x="590" y="522" text-anchor="middle" class="box-title">LayoutResult</text>
+  <text x="590" y="544" text-anchor="middle" class="box-sub">mode / stats / linear_dims / cut_tubis / welds / slopes</text>
+  <text x="590" y="564" text-anchor="middle" class="box-sub">bends / tags / fittings / suppressed_items</text>
+  <text x="590" y="584" text-anchor="middle" class="box-sub">&#20379; API &#19982;&#21069;&#31471;&#28210;&#26579;&#22797;&#29992;&#30340;&#31283;&#23450; DTO &#22865;&#32422;</text>
+
+  <rect x="835" y="148" width="300" height="72" rx="8" ry="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="985" y="176" text-anchor="middle" class="box-title">&#20837;&#21475;</text>
+  <text x="985" y="198" text-anchor="middle" class="box-sub">&#27169;&#22411;&#26641; / Ribbon / URL -&gt; requestMbdPipeAnnotation</text>
+
+  <rect x="835" y="248" width="300" height="88" rx="8" ry="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="985" y="278" text-anchor="middle" class="box-title">ViewerPanel API &#35831;&#27714;</text>
+  <text x="985" y="300" text-anchor="middle" class="box-sub">GET /api/mbd/pipe?mode=...</text>
+  <text x="985" y="320" text-anchor="middle" class="box-sub">layout_first &#20250;&#26174;&#24335;&#35831;&#27714; include_layout_result=true</text>
+
+  <rect x="835" y="366" width="300" height="94" rx="8" ry="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <text x="985" y="396" text-anchor="middle" class="box-title">useMbdPipeAnnotationThree</text>
+  <text x="985" y="418" text-anchor="middle" class="box-sub">Three Group&#12289;annotation maps&#12289;&#38754;&#26495;&#29366;&#24577;&#19982; renderBranch()</text>
+  <text x="985" y="438" text-anchor="middle" class="box-sub">&#20915;&#23450;&#36208; layout_first &#36824;&#26159; fallback</text>
+
+  <rect x="835" y="492" width="142" height="126" rx="8" ry="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+  <text x="906" y="524" text-anchor="middle" class="box-title">layout_first</text>
+  <text x="906" y="546" text-anchor="middle" class="box-sub">renderLaidOut*</text>
+  <text x="906" y="566" text-anchor="middle" class="box-sub">&#30452;&#25509;&#28040;&#36153;&#21518;&#31471;</text>
+  <text x="906" y="586" text-anchor="middle" class="box-sub">offset / direction</text>
+  <text x="906" y="606" text-anchor="middle" class="box-sub">suppressed_reason</text>
+
+  <rect x="993" y="492" width="142" height="126" rx="8" ry="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <text x="1064" y="524" text-anchor="middle" class="box-title">fallback</text>
+  <text x="1064" y="546" text-anchor="middle" class="box-sub">resolveBranchLayout</text>
+  <text x="1064" y="566" text-anchor="middle" class="box-sub">computePipeAlignedOffsetDirs</text>
+  <text x="1064" y="586" text-anchor="middle" class="box-sub">computeMbdDimOffset</text>
+  <text x="1064" y="606" text-anchor="middle" class="box-sub">&#36817;&#20284;&#37325;&#24314; legacy &#35821;&#20041;</text>
+
+  <rect x="835" y="638" width="300" height="34" rx="8" ry="8" fill="#faf5ff" stroke="#ddd6fe" stroke-width="1.5"/>
+  <text x="985" y="660" text-anchor="middle" class="box-sub">&#32479;&#19968;&#20132;&#20114;&#23618; + session-only overrides</text>
+
+  <line x1="205" y1="220" x2="205" y2="248" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <line x1="205" y1="336" x2="205" y2="366" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <line x1="205" y1="478" x2="205" y2="510" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <line x1="205" y1="614" x2="205" y2="638" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <path d="M 350 562 L 404 562 L 404 255 L 455 255" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <line x1="590" y1="302" x2="590" y2="342" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <line x1="590" y1="448" x2="590" y2="490" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+  <line x1="985" y1="220" x2="985" y2="248" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <line x1="985" y1="336" x2="985" y2="366" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M 985 460 L 985 476" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <path d="M 985 476 L 906 476 L 906 492" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M 985 476 L 1064 476 L 1064 492" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M 906 618 L 906 638" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M 1064 618 L 1064 638" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <path d="M 725 548 L 779 548 L 779 292 L 835 292" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <path d="M 985 638 C 760 716, 760 716, 760 460" fill="none" stroke="#9333ea" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-purple)"/>
+
+  <rect x="40" y="704" width="330" height="34" rx="8" ry="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="205" y="726" text-anchor="middle" class="note">&#20107;&#23454;&#28304;&#65306;old PML &#20173;&#28982;&#23450;&#20041; branch-level solver &#35821;&#20041;&#19982; suppress &#34892;&#20026;</text>
+
+  <rect x="810" y="704" width="350" height="34" rx="8" ry="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="985" y="726" text-anchor="middle" class="note">&#21407;&#21017;&#65306;&#21518;&#31471;&#32473;&#20986; layout_result &#26102;&#65292;&#21069;&#31471;&#21482;&#32472;&#21046;&#21644;&#20132;&#20114;&#65292;&#19981;&#20877;&#20108;&#27425;&#37325;&#25490;</text>
+
+  <g transform="translate(430, 708)">
+    <line x1="0" y1="8" x2="34" y2="8" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+    <text x="42" y="12" class="label">&#20027;&#27969;&#31243;</text>
+    <line x1="100" y1="8" x2="134" y2="8" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+    <text x="142" y="12" class="label">&#22865;&#32422;&#20132;&#25509;</text>
+    <line x1="250" y1="8" x2="284" y2="8" stroke="#9333ea" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-purple)"/>
+    <text x="292" y="12" class="label">&#20250;&#35805;&#35206;&#30422;&#22238;&#20889;</text>
+  </g>
+</svg>
