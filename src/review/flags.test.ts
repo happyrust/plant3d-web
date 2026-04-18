@@ -6,8 +6,29 @@ import {
   isReviewFlagEnabled,
 } from './flags';
 
+function createLocalStorageMock(): Storage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k: string, v: string) => {
+      store.set(k, String(v));
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+}
+
 describe('review flags', () => {
   beforeEach(() => {
+    (globalThis as unknown as { localStorage: Storage }).localStorage = createLocalStorageMock();
     clearReviewFlagOverrides();
   });
 

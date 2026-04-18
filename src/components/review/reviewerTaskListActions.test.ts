@@ -317,7 +317,7 @@ describe('reviewerTaskListActions', () => {
     scheduled[0]?.();
 
     expect(emitCommand).toHaveBeenLastCalledWith('panel.review');
-    expect(getSubmitActionLabel(task.currentNode)).toBe('提交到批准');
+    expect(getSubmitActionLabel(task.currentNode)).toBe('确认流转至批准');
     expect(task.requesterName).toBe('Designer One');
     expect(task.checkerName).toBe('Checker One');
     expect(task.approverName).toBe('Approver One');
@@ -425,9 +425,9 @@ describe('reviewerTaskListActions', () => {
   });
 
   it('reviewer primary forward labels stay on the standard submit path for each workflow node', () => {
-    expect(getSubmitActionLabel('sj')).toBe('提交到校核');
-    expect(getSubmitActionLabel('jd')).toBe('提交到审核');
-    expect(getSubmitActionLabel('sh')).toBe('提交到批准');
-    expect(getSubmitActionLabel('pz')).toBe('最终批准');
+    expect(getSubmitActionLabel('sj')).toBe('确认流转至校对');
+    expect(getSubmitActionLabel('jd')).toBe('确认流转至审核');
+    expect(getSubmitActionLabel('sh')).toBe('确认流转至批准');
+    expect(getSubmitActionLabel('pz')).toBe('确认最终批准');
   });
 });
