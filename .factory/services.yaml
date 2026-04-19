@@ -1,30 +1,30 @@
 commands:
-  install: npm install
+  install_frontend: npm install
+  install_backend: cd D:\work\plant-code\plant-model-gen && cargo check --bin web_server --features web_server
   typecheck: npm run type-check
+  build: npm run build
+  test: npm test -- --run --reporter=verbose --maxWorkers=8
   lint: npm run lint
-  test: npm test
-  test:review-focused: npx vitest run src/components/review src/composables/useReviewStore* src/api/reviewApi* --passWithNoTests
-  test:restore-focused: npx vitest run src/components/review src/composables src/api --passWithNoTests
-  test:contract-focused: echo "Use curl/API probes against http://127.0.0.1:3100 for mission contract validation"
+  test_backend: cd D:\work\plant-code\plant-model-gen && cargo check --bin web_server --features web_server
 
 services:
-  frontend:
-    start: npm run dev -- --host 127.0.0.1 --port 3101
-    stop: powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'vite' -and $_.CommandLine -match '--port 3101' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
-    healthcheck: curl -sf http://127.0.0.1:3101
-    port: 3101
+  surrealdb:
+    start: echo "SurrealDB managed externally on port 8020"
+    stop: echo "SurrealDB managed externally"
+    healthcheck: curl -sf http://localhost:8020/health
+    port: 8020
     depends_on: []
 
   backend:
-    start: cargo run --bin web_server -- --host 127.0.0.1 --port 3100
-    stop: powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'web_server' -and $_.CommandLine -match '3100' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
-    healthcheck: curl -sf http://127.0.0.1:3100/api/health
+    start: cd D:\work\plant-code\plant-model-gen && cargo run --bin web_server --features web_server --release
+    stop: cmd /c "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :3100 ^| findstr LISTENING') do taskkill /f /pid %a"
+    healthcheck: curl -sf http://localhost:3100/api/review/tasks
     port: 3100
-    depends_on: []
+    depends_on: [surrealdb]
 
-notes:
-  - Mission validation assumes frontend on 3101 and backend on 3100.
-  - Keep 8020-compatible data-service assumptions intact when backend contract checks require them.
-  - Port 9222 is reserved/off-limits.
-  - Prefer focused vitest commands during iteration, but final worker validation should still include typecheck, lint, and the appropriate tests for the changed surface.
-  - Browser validation should stay conservative; do not assume more than one concurrent browser validator unless the orchestrator explicitly opts in.
+  frontend:
+    start: cd D:\work\plant-code\plant3d-web && npm run dev
+    stop: cmd /c "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :3101 ^| findstr LISTENING') do taskkill /f /pid %a"
+    healthcheck: curl -sf http://localhost:3101
+    port: 3101
+    depends_on: [backend]

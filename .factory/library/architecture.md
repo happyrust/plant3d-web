@@ -1,84 +1,74 @@
-# Annotation Refactor Architecture
+# Architecture — Annotation Refactor
 
-## Mission Intent
+## System Overview
 
-This mission refactors the review annotation system without breaking the existing reviewer/designer workflow chain. The target state is a single ReviewSnapshot semantic layer that can restore the same evidence set whether the entrypoint is an in-app task, a `workflow/sync?action=query` reopen, or an import/package restore.
+Plant3D-Web is a Vue 3 + Three.js industrial 3D visualization app. The annotation refactor restructures the review/annotation subsystem across two repositories:
 
-## Canonical Domain Vocabulary
+- **plant3d-web** (D:\work\plant-code\plant3d-web): Vue 3 frontend — reviewer/designer workbench, annotation tools, comment threads, confirmed records, 3D viewer
+- **plant-model-gen** (D:\work\plant-code\plant-model-gen): Rust/Axum backend — review task CRUD, records, comments, workflow sync, JWT auth, WebSocket notifications
 
-- `taskId`: the internal review task identity; authoritative for reviewer/designer surfaces and task-scoped draft storage.
-- `formId`: the external/business form identity; authoritative key for workflow-sync query and readonly reopen surfaces.
-- `annotationId`: persisted item identity for a specific annotation payload entry.
-- `annotationKey`: stable logical identity used to merge detached comments, rounds, and realtime updates across restore paths.
-- `workflowNode`: the workflow node that owned a record/comment when it was created; this must stay stable after the task advances.
-- `reviewRound`: the round counter used to distinguish current-round draft/comment state from accumulated history.
+## Data Layers (Current → Target)
 
-## Seven-Milestone Architecture Path
+### Current State
+1. **Tool Draft Layer** (`useToolStore.ts`): annotations, measurements, xeokit measurements — user's in-progress work
+2. **Comment Layer** (`ReviewCommentsTimeline.vue` + `/api/review/comments`): per-annotation discussion, inline on annotation objects
+3. **Confirmed Record Layer** (`useReviewStore` + `/api/review/records`): batch snapshots of confirmed annotations/measurements, keyed by taskId
+4. **Workflow Sync Layer** (`/api/review/workflow/sync`): aggregated restore payload by formId (records + comments + attachments + models)
 
-### M1 — Contract freeze
-Freeze the field matrix and compatibility window before moving behavior. Workers should know exactly which payloads are authoritative, which fields are compatibility fallbacks, and which surfaces consume them.
+### Target State (After Refactor)
+1. **Annotation Entity**: stable `annotationKey` + `annotationId`, with `workflowNode` and `reviewRound`
+2. **Detached Comment Thread**: independent comment source, not embedded in annotation objects
+3. **ReviewSnapshot**: unified restore intermediate — all sources (task, workflow-sync, import) convert to this before UI consumption
+4. **Draft Layer**: task-scoped (project + db + taskId), isolated per task
+5. **Confirmed Layer**: separate from draft, persists independently, always visible
 
-### M2 — ReviewSnapshot restore unification
-All restore entrypoints should normalize into one ReviewSnapshot shape before the UI renders. This includes:
-- platform task restore
-- workflow-sync restore keyed by `formId`
-- import/export or package restore
+## Key Components
 
-The replay layer must be able to:
-- rehydrate annotations, measurements, comments, attachments, and task context together
-- deduplicate repeated items
-- clear stale state on empty snapshots
-- honor explicit `skipClearOnEmpty` first-entry behavior only where the mission permits it
+### Frontend (plant3d-web)
+| Component | File | Purpose |
+|-----------|------|---------|
+| ReviewPanel | src/components/review/ReviewPanel.vue (72KB) | Main reviewer workbench shell |
+| InitiateReviewPanel | src/components/review/InitiateReviewPanel.vue (42KB) | Designer task creation |
+| ReviewCommentsTimeline | src/components/review/ReviewCommentsTimeline.vue | Annotation comment threads |
+| ReviewerTaskList | src/components/review/ReviewerTaskList.vue | Reviewer inbox |
+| DesignerTaskList | src/components/review/DesignerTaskList.vue | Designer task list |
+| ResubmissionTaskList | src/components/review/ResubmissionTaskList.vue | Returned task handling |
+| TaskReviewDetail | src/components/review/TaskReviewDetail.vue | Designer task detail |
+| useToolStore | src/composables/useToolStore.ts (1786 lines) | Annotation/measurement state |
+| useReviewStore | src/composables/useReviewStore.ts | Review mode, task context, WebSocket |
+| reviewRecordReplay | src/components/review/reviewRecordReplay.ts | Record replay/restore engine |
+| confirmedRecordsRestore | src/components/review/confirmedRecordsRestore.ts | Scene restore from confirmed records |
+| embedFormSnapshotRestore | src/components/review/embedFormSnapshotRestore.ts | Embed mode form restore |
+| embedContextRestore | src/components/review/embedContextRestore.ts | Embed mode context resolution |
+| reviewPanelActions | src/components/review/reviewPanelActions.ts | Workflow action helpers |
+| reviewApi | src/api/reviewApi.ts | All review API calls |
 
-### M3 — Comment-source decoupling
-Annotation comments stop living as the sole truth inside annotation payloads. Detached comment sources should feed both reviewer and designer thread surfaces. Restore logic must reattach comments to the correct annotation identity without duplicating threads.
+### Backend (plant-model-gen)
+| Module | File | Purpose |
+|--------|------|---------|
+| review_api | src/web_api/review_api.rs (156KB) | Task/record/comment CRUD |
+| workflow_sync | src/web_api/platform_api/workflow_sync.rs | PMS ↔ plant3d workflow bridge |
+| jwt_auth | src/web_api/jwt_auth.rs | JWT middleware for review routes |
 
-### M4 — Backend metadata extension
-`plant-model-gen` contracts for records, comments, workflow-sync, and enhanced realtime events should expose enough metadata for stable merges:
-- `annotationKey`
-- `taskId`
-- `formId`
-- `workflowNode`
-- `reviewRound`
+## Restore Paths (Three Entries → One ReviewSnapshot)
 
-Compatibility remains required while these fields roll out. Frontend fallback logic must keep old payloads working until metadata is universally available.
+1. **Platform Task Restore**: ReviewerTaskList → setCurrentTask → loadConfirmedRecords → replay
+2. **Workflow Sync Restore**: Embed formId → workflow/sync query → replay records + attach comments
+3. **Import Package Restore**: Sync import → records + attachments
 
-### M5 — Realtime convergence
-Websocket handling should become targeted and idempotent. `record_saved` refreshes records, `comment_added` refreshes comment threads (or equivalent incremental state), and task status events refresh workflow history. Heartbeat traffic must never mutate review state.
+The refactor unifies these behind a single `ReviewSnapshot` semantic layer.
 
-### M6 — Task-scoped drafts
-Draft annotations, measurements, and related transient review inputs must scope to `project + db + taskId`. Task switching should preserve the active task's drafts while keeping other tasks clean. Returned-task continuity must stay on the same task identity instead of cloning parallel state.
+## Workflow Model
 
-### M7 — Dual-layer draft/confirmed rendering
-Viewer state splits into:
-- confirmed layer: previously confirmed evidence that stays visible across rounds and restore paths
-- draft layer: current unsaved work for the active task/round
+4-node pipeline: `sj (设计/编制)` → `jd (校对)` → `sh (审核)` → `pz (批准)`
+- Forward flow: submit to next node
+- Return flow: return to any prior node with reason
+- Each node has a role: PROOFREADER(jd), REVIEWER(sh), MANAGER(pz)
 
-Confirm actions only consume the draft layer. Export/import and reopen paths must preserve the layer boundary instead of flattening draft into confirmed payloads.
+## Key Invariants
 
-## Main Frontend Seams
-
-Expected high-churn areas in `plant3d-web`:
-- `src/components/review/*` for workbench, comments, records, and designer detail surfaces
-- `src/composables/useReviewStore.ts` for task context, restore, realtime, and confirmation state
-- `src/composables/useToolStore.ts` / related tool state for task-scoped drafts
-- `src/api/reviewApi.ts` and related shared types for contract compatibility and metadata rollout
-- replay helpers/adapters that currently mix restore interpretation with rendering side-effects
-
-## Main Backend Seams
-
-Expected high-churn areas in `plant-model-gen`:
-- review record create/read/delete handlers
-- review comment create/read/delete/update handlers or explicit gap signaling
-- workflow-sync query aggregation
-- review websocket payload shape
-
-Prefer real request/response validation over speculative implementation assumptions.
-
-## Architectural Risks To Watch
-
-- duplicate assertion ownership across milestones causing validation ambiguity
-- fallback key logic creating duplicate threads when `annotationKey` arrives
-- empty snapshot restore failing to clear the previous form/task state
-- task-scoped draft keys colliding across project/db/task boundaries
-- dual-layer cutover accidentally mixing draft state into confirmed persistence or replay
+- `taskId` is stable across return/resubmit cycles
+- `formId` links to external PMS system and is stable
+- Confirmed records are immutable once created (slot-stable idempotent)
+- Comments are always associated via `annotationId + annotationType`
+- WebSocket notifications are user-scoped at `/ws/review/user/{userId}`

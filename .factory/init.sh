@@ -1,43 +1,17 @@
 #!/bin/bash
-set -euo pipefail
+# Idempotent environment setup for annotation refactor mission
+# Runs at the start of each worker session
 
-echo "Annotation Refactor Mission bootstrap"
-echo "================================="
+cd "D:/work/plant-code/plant3d-web" || exit 1
 
-if [ ! -f "package.json" ]; then
-  echo "Error: run this script from D:/work/plant-code/plant3d-web" >&2
-  exit 1
-fi
-
+# Install frontend dependencies if needed
 if [ ! -d "node_modules" ]; then
-  echo "Installing frontend dependencies..."
   npm install
-else
-  echo "node_modules already present; skipping install"
 fi
 
-echo "Checking mission ports (3101 frontend, 3100 backend, 8020 support service, 9222 reserved)..."
-if curl -sf http://127.0.0.1:3101 > /dev/null; then
-  echo "Frontend reachable on http://127.0.0.1:3101"
-else
-  echo "Frontend not running yet on http://127.0.0.1:3101"
-fi
+# Verify TypeScript compiles
+npm run type-check 2>/dev/null || echo "Warning: type-check had issues"
 
-if curl -sf http://127.0.0.1:3100/api/health > /dev/null; then
-  echo "Backend reachable on http://127.0.0.1:3100/api/health"
-else
-  echo "Backend not running yet on http://127.0.0.1:3100/api/health"
-fi
-
-if curl -sf http://127.0.0.1:8020 > /dev/null; then
-  echo "Supporting service responded on http://127.0.0.1:8020"
-else
-  echo "No response detected on http://127.0.0.1:8020 (only needed for some contract checks)"
-fi
-
-echo "Reminder: preserve unrelated dirty worktree files, do not use port 9222, and do not run the mission runner from this bootstrap."
-echo "Recommended baseline validators once code changes exist:"
-echo "- npm run type-check"
-echo "- npm run lint"
-echo "- npm test"
-echo "- focused vitest and curl probes per assigned milestone"
+echo "Init complete. Frontend ready at D:/work/plant-code/plant3d-web"
+echo "Backend at D:/work/plant-code/plant-model-gen"
+echo "SurrealDB on localhost:8020"
