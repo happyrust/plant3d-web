@@ -66,8 +66,8 @@ async function sha1Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-1', bytes);
   const arr = new Uint8Array(digest);
   let hex = '';
-  for (let i = 0; i < arr.length; i += 1) {
-    hex += arr[i].toString(16).padStart(2, '0');
+  for (const byte of arr) {
+    hex += byte.toString(16).padStart(2, '0');
   }
   return hex;
 }
