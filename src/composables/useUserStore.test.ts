@@ -133,7 +133,48 @@ describe('loadReviewTasks', () => {
     expect(reviewTaskGetListMock).toHaveBeenCalledWith({ checkerId: 'user-002' });
   });
 
-  it('queries approver inbox tasks with approverId for manager roles', async () => {
+  it('keeps reviewer alias identity while exposing backend checker-seeded jd tasks in pending inbox collections', async () => {
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockResolvedValue({
+      success: true,
+      tasks: [
+        {
+          id: 'seed-m2-reviewer-confirmed',
+          title: 'Seeded M2 checker task',
+          description: 'desc',
+          modelName: 'Hull',
+          status: 'submitted',
+          priority: 'high',
+          requesterId: 'designer_001',
+          requesterName: '王设计师',
+          checkerId: 'user-002',
+          checkerName: '李审核员',
+          approverId: 'manager_001',
+          approverName: '陈经理',
+          reviewerId: 'user-002',
+          reviewerName: '李审核员',
+          currentNode: 'jd',
+          components: [],
+          createdAt: 1700000000000,
+          updatedAt: 1700000001000,
+        },
+      ],
+      total: 1,
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    await store.switchUser('reviewer_001');
+
+    expect(store.currentUserId.value).toBe('reviewer_001');
+    expect(store.currentUser.value?.role).toBe(UserRole.REVIEWER);
+    expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual([
+      'seed-m2-reviewer-confirmed',
+    ]);
+  });
+
+  it('queries approver inbox tasks with approverId for manager roles using backend canonical identity', async () => {
     userGetCurrentMock.mockResolvedValue({
       success: true,
       user: {
@@ -155,7 +196,7 @@ describe('loadReviewTasks', () => {
 
     await store.switchUser('manager_001');
 
-    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ approverId: 'manager_001' });
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ approverId: 'user-002' });
   });
 
   it('queries designer initiated tasks by requesterId and keeps seeded loop tasks discoverable for designer surfaces', async () => {

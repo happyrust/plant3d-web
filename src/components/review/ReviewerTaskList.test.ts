@@ -228,4 +228,26 @@ describe('ReviewerTaskList', () => {
     expect(document.body.textContent).toContain('没有符合筛选条件的任务');
     expect(document.body.textContent).toContain('清除筛选条件');
   });
+
+  it('renders backend-visible seeded reviewer tasks after switching to reviewer alias semantics', async () => {
+    mockUserStore.currentUser.value = { id: 'reviewer_001', name: '李审核员', role: UserRole.REVIEWER };
+
+    await mountComponent([
+      createTask({
+        id: 'seed-m2-reviewer-confirmed',
+        title: 'M2 reviewer seeded task',
+        checkerId: 'user-002',
+        checkerName: '李审核员',
+        reviewerId: 'user-002',
+        reviewerName: '李审核员',
+        approverId: 'manager-1',
+        approverName: '批准人',
+        currentNode: 'jd',
+        status: 'submitted',
+      }),
+    ]);
+
+    expect(document.body.textContent).toContain('共 1 条');
+    expect(document.body.textContent).toContain('M2 reviewer seeded task');
+  });
 });

@@ -49,7 +49,9 @@ const STORAGE_KEY_V1 = 'plant3d-web-user-v1';
 const DEFAULT_REVIEW_PROJECT_ID = 'debug-project';
 
 const LOCAL_REVIEW_IDENTITY_ALIASES: Record<string, string> = {
+  proofreader_001: 'user-002',
   reviewer_001: 'user-002',
+  manager_001: 'user-002',
 };
 
 // 配置：是否使用后端 API
@@ -596,22 +598,22 @@ const pendingReviewTasks = computed(() => {
     const checkerId = resolveEffectiveUserId({ id: t.checkerId || t.reviewerId });
     const approverId = resolveEffectiveUserId(t.approverId ? { id: t.approverId } : null);
     const isTerminal = t.status === 'approved' || t.status === 'rejected';
-    const isProofreaderOwner = checkerId === uid;
-    const isReviewerOwner = approverId === uid;
+    const isCheckerOwner = checkerId === uid;
+    const isApproverOwner = approverId === uid;
 
     if (!reviewerInboxStatuses.includes(t.status)) return false;
 
     if (role === UserRole.PROOFREADER) {
       if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
-      return isProofreaderOwner && node === 'jd';
+      return isCheckerOwner && node === 'jd';
     }
     if (role === UserRole.REVIEWER) {
       if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
-      return isReviewerOwner && node === 'sh';
+      return (isCheckerOwner && node === 'jd') || (isApproverOwner && node === 'sh');
     }
     if (role === UserRole.MANAGER) {
       if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
-      return isReviewerOwner && node === 'pz';
+      return isApproverOwner && node === 'pz';
     }
     if (role === UserRole.ADMIN) {
       if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
