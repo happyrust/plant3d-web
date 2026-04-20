@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic M6+M7 demo seed pack generator.
+"""Deterministic review seed pack generator.
 
 The script has two modes:
 - `--print-plan` produces the canonical demo pack inventory without touching the backend.
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-SEED_KEY = 'm6-m7-review-demo-pack-v1'
+SEED_KEY = 'review-demo-pack-v2'
 DEFAULT_BASE_URL = 'http://127.0.0.1:3100'
 DEFAULT_PROJECT_ID = 'debug-project'
 ATTACHMENT_SOURCE = 'debug_scripts/review_demo_seed.py'
@@ -55,13 +55,141 @@ def build_workflow_history() -> list[dict[str, Any]]:
             'action': 'submit',
             'operatorId': ROLES['designer']['backendUserId'],
             'operatorName': ROLES['designer']['displayName'],
-            'comment': 'Seeded handoff for M6/M7 validation',
+            'comment': 'Seeded handoff for review validation',
             'timestamp': 1763539200000,
         },
     ]
 
 
 SCENARIOS: list[dict[str, Any]] = [
+    {
+        'key': 'm2-reviewer-confirmed-restore',
+        'taskId': 'seed-m2-reviewer-confirmed',
+        'formId': 'FORM-M2-RESTORE-001',
+        'title': 'M2 Seed / Reviewer Confirmed Restore',
+        'description': 'Reviewer task-select restore fixture with confirmed records ready for direct workbench replay.',
+        'modelName': 'M2 Restore Demo / Confirmed',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-m2-confirmed-001', 'refNo': 'M2-CONFIRMED-001', 'name': 'Confirmed Restore Anchor', 'type': 'Pipe'},
+        ],
+        'attachments': [
+            {
+                'id': 'seed-att-m2-confirmed',
+                'name': 'm2-reviewer-confirmed-restore.json',
+                'url': f'/{ATTACHMENT_SOURCE}',
+                'type': 'seed-note',
+                'mimeType': 'application/json',
+                'uploadedAt': 1763539199000,
+            },
+        ],
+        'confirmedRecord': {
+            'id': 'seed-record-m2-confirmed',
+            'taskId': 'seed-m2-reviewer-confirmed',
+            'type': 'batch',
+            'annotations': [
+                {
+                    'id': 'seed-m2-text-annotation-1',
+                    'entityId': 'M2-CONFIRMED-001',
+                    'worldPos': [10.0, 2.5, 1.0],
+                    'visible': True,
+                    'glyph': 'M2-1',
+                    'title': 'Reviewer confirmed restore anchor',
+                    'description': 'Used to validate task-context replay after selecting the reviewer seeded task.',
+                    'createdAt': 1763539200500,
+                },
+            ],
+            'cloudAnnotations': [],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [
+                {
+                    'id': 'seed-m2-measurement-1',
+                    'kind': 'distance',
+                    'label': 'Confirmed replay clearance',
+                    'value': 1.618,
+                    'unit': 'm',
+                    'start': [0.0, 0.0, 0.0],
+                    'end': [1.618, 0.0, 0.0],
+                    'createdAt': 1763539200600,
+                },
+            ],
+            'note': 'M2 reviewer confirmed restore baseline',
+            'confirmedAt': 1763539200700,
+        },
+        'comments': [],
+        'tags': ['m2', 'restore', 'reviewer-confirmed', 'task-context'],
+        'validationScenarios': ['reviewer-confirmed-restore', 'embed-form-restore'],
+    },
+    {
+        'key': 'm2-empty-task-clear',
+        'taskId': 'seed-m2-empty-after-confirmed',
+        'formId': 'FORM-M2-RESTORE-EMPTY-001',
+        'title': 'M2 Seed / Empty Task Clear',
+        'description': 'Reviewer task with no confirmed records used immediately after the populated M2 fixture to validate stale-state clearing.',
+        'modelName': 'M2 Restore Demo / Empty',
+        'status': 'submitted',
+        'priority': 'medium',
+        'currentNode': 'jd',
+        'components': [],
+        'attachments': [],
+        'confirmedRecord': None,
+        'comments': [],
+        'tags': ['m2', 'restore', 'empty-task', 'clear-scene'],
+        'skipComponentHydration': True,
+        'validationScenarios': ['empty-task-clearing'],
+    },
+    {
+        'key': 'm2-embed-form-restore',
+        'taskId': 'seed-m2-embed-restore',
+        'formId': 'FORM-M2-EMBED-001',
+        'title': 'M2 Seed / Embed Form Restore',
+        'description': 'Workflow-sync fixture keyed by formId so validators can open the reviewer embed restore path directly.',
+        'modelName': 'M2 Restore Demo / Embed',
+        'status': 'submitted',
+        'priority': 'high',
+        'currentNode': 'jd',
+        'components': [
+            {'id': 'cmp-m2-embed-001', 'refNo': 'M2-EMBED-001', 'name': 'Embed Restore Anchor', 'type': 'Pipe'},
+        ],
+        'attachments': [
+            {
+                'id': 'seed-att-m2-embed',
+                'name': 'm2-embed-restore.txt',
+                'url': f'/{ATTACHMENT_SOURCE}',
+                'type': 'seed-note',
+                'mimeType': 'text/plain',
+                'uploadedAt': 1763539200750,
+            },
+        ],
+        'confirmedRecord': {
+            'id': 'seed-record-m2-embed',
+            'taskId': 'seed-m2-embed-restore',
+            'type': 'batch',
+            'annotations': [],
+            'cloudAnnotations': [
+                {
+                    'id': 'seed-m2-cloud-annotation-1',
+                    'anchorWorldPos': [15.0, 5.0, 2.0],
+                    'screenSpacePoints': [[100, 100], [160, 140], [120, 180]],
+                    'visible': True,
+                    'title': 'Embed restore cloud fixture',
+                    'description': 'Used to validate workflow-sync -> ReviewSnapshot -> scene replay.',
+                    'createdAt': 1763539200800,
+                },
+            ],
+            'rectAnnotations': [],
+            'obbAnnotations': [],
+            'measurements': [],
+            'note': 'M2 embed restore baseline',
+            'confirmedAt': 1763539200900,
+        },
+        'comments': [],
+        'tags': ['m2', 'restore', 'embed', 'workflow-sync'],
+        'validationScenarios': ['embed-form-restore'],
+    },
     {
         'key': 'text-annotation',
         'taskId': 'seed-m6-text-annotation',
@@ -529,7 +657,8 @@ def build_plan(base_url: str) -> dict[str, Any]:
         'trackedAssetPaths': {
             'seedScript': 'debug_scripts/review_demo_seed.py',
             'seedTest': 'debug_scripts/review_demo_seed_test.py',
-            'seedDoc': 'docs/verification/m6-m7-demo-seed-pack.md',
+                'seedDoc': 'docs/verification/m6-m7-demo-seed-pack.md',
+                'm2BootstrapDoc': 'docs/verification/m2-restore-bootstrap.md',
         },
         'scenarios': [
             {
@@ -545,6 +674,7 @@ def build_plan(base_url: str) -> dict[str, Any]:
                     'designerRequesterId': ROLES['designer']['backendUserId'],
                     'reviewerCheckerId': ROLES['reviewer']['backendUserId'],
                 },
+                'validationScenarios': deepcopy(scenario.get('validationScenarios') or []),
                 'seededPayload': {
                     'task': clone_task_payload(scenario),
                     'confirmedRecord': deepcopy(scenario['confirmedRecord']),
@@ -559,6 +689,15 @@ def build_plan(base_url: str) -> dict[str, Any]:
             'approverTaskQuery': f"{base_url.rstrip('/')}/api/review/tasks?approver_id={urllib.parse.quote(ROLES['approver']['backendUserId'])}",
             'frontendReviewerAlias': ROLES['reviewer']['frontendUserId'],
             'frontendDesignerAlias': ROLES['designer']['frontendUserId'],
+            'm2Restore': {
+                'reviewerConfirmedTaskId': 'seed-m2-reviewer-confirmed',
+                'emptyTaskId': 'seed-m2-empty-after-confirmed',
+                'embedTaskId': 'seed-m2-embed-restore',
+                'reviewerConfirmedFormId': 'FORM-M2-RESTORE-001',
+                'emptyTaskFormId': 'FORM-M2-RESTORE-EMPTY-001',
+                'embedFormId': 'FORM-M2-EMBED-001',
+                'embedRouteHint': '/?user_token=<token>&workflow_role=jd&workflow_mode=external&form_id=FORM-M2-EMBED-001',
+            },
         },
     }
 
@@ -761,7 +900,7 @@ def build_runtime_output(base_url: str, results: list[SeedResult], warnings: lis
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Seed deterministic M6+M7 demo review data.')
+    parser = argparse.ArgumentParser(description='Seed deterministic review demo data, including M2 restore bootstrap scenarios.')
     parser.add_argument('--base-url', default=DEFAULT_BASE_URL, help='Backend base URL, default: %(default)s')
     parser.add_argument('--timeout', type=float, default=5.0, help='HTTP timeout in seconds')
     parser.add_argument('--print-plan', action='store_true', help='Print the deterministic seed plan without calling the backend')
