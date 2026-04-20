@@ -1,0 +1,33 @@
+{
+  "featureId": "M1-F1-contract-freeze-terminology",
+  "reviewedAt": "2026-04-19T14:33:08.996699+00:00",
+  "commitId": "f0c6bf77e529741b11f424b750728dfb9c6f0862",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature establishes the planned M1 review-domain scaffolding and tests, but the authoritative contract document committed in this feature is corrupted: many canonical identifiers are written with embedded control characters, so the terminology table cannot serve as a reliable freeze artifact for engineers or downstream tooling.",
+    "issues": [
+      {
+        "file": ".factory/library/review-contract-freeze.md",
+        "line": 5,
+        "severity": "blocking",
+        "description": "The canonical terminology table is corrupted by control characters (`annotationId`, `taskId`, `formId`, `reviewRound`, etc. render as malformed text like `\\u0007nnotationId` / `\\u000taskId` / `\\u000cormId`). This breaks the core M1 deliverable of an authoritative terminology and compatibility reference because the documented field names are no longer copy-safe or machine-readable."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The repository now contains a contract artifact under `.factory/library/`, but there is no documented requirement to verify markdown/library outputs for encoding or control-character corruption before commit. The worker handoff says the terminology table was authored successfully, yet the committed file is malformed.",
+      "evidence": "Committed file `.factory/library/review-contract-freeze.md` line 5 onward shows corrupted identifiers such as `\\u0007nnotationId`, `\\u000taskId`, and `\\u000cormId`; `git show f0c6bf77e529741b11f424b750728dfb9c6f0862 -- .factory/library/review-contract-freeze.md` displays the same corruption."
+    },
+    {
+      "area": "skills",
+      "observation": "`review-contract-worker` tells workers to produce contract artifacts but does not require a final raw-file sanity check of generated `.factory/library` markdown, which likely allowed the corrupted terminology file to pass unnoticed.",
+      "evidence": "`D:\\work\\plant-code\\plant3d-web\\.factory\\skills\\review-contract-worker\\SKILL.md` lists artifact creation and quality gates, but no step asks for re-reading or validating generated contract markdown after writing it."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature M1-F1 against mission artifacts, handoff, committed diff, and current repo files. The code scaffolding and tests look aligned with milestone intent, but the committed authoritative contract markdown is corrupted by control characters, so the feature does not fully satisfy the M1 contract-freeze deliverable."
+}

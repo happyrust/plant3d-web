@@ -1,10 +1,5 @@
 import { computed, ref, watch } from 'vue';
 
-import {
-  createDefaultAnnotationReviewState,
-  normalizeAnnotationReviewState,
-  normalizeAnnotationSeverity,
-} from '@/types/auth';
 import type {
   AnnotationComment,
   AnnotationReviewAction,
@@ -13,10 +8,13 @@ import type {
   User,
 } from '@/types/auth';
 
-import { getOutputProjectFromUrl } from '@/lib/filesOutput';
-// 延迟到函数内部再解析，避免 module 顶层循环加载风险
-// eslint-disable-next-line import/no-cycle
 import { useUserStore } from '@/composables/useUserStore';
+import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import {
+  createDefaultAnnotationReviewState,
+  normalizeAnnotationReviewState,
+  normalizeAnnotationSeverity,
+} from '@/types/auth';
 
 /** 从 userStore 读当前登录用户 id；未登录/SSR 场景返回 undefined，供批注 authorId 回填。 */
 function resolveCurrentAuthorId(): string | undefined {

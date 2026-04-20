@@ -1,0 +1,53 @@
+{
+  "milestone": "M1-contract-freeze",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": false,
+      "command": "npm test -- --run --reporter=verbose --maxWorkers=8",
+      "exitCode": 1
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": false,
+      "command": "npm run lint",
+      "exitCode": 1
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "M1-F1-contract-freeze-terminology"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "M1-F1-contract-freeze-terminology",
+      "severity": "blocking",
+      "description": "The authoritative terminology artifact .factory/library/review-contract-freeze.md is corrupted by control characters, so canonical field names are not copy-safe or machine-readable."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Update review-contract-worker to require a final raw-file sanity check of generated .factory/library markdown artifacts for encoding/control-character corruption before completion.",
+      "evidence": "The M1 contract-freeze feature committed malformed identifiers in .factory/library/review-contract-freeze.md while the worker handoff still reported the terminology table as authored successfully.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Add a general AGENTS.md rule for all markdown files",
+      "reason": "ambiguous; the evidence specifically points to contract-worker output validation rather than a repo-wide markdown policy gap"
+    }
+  ],
+  "previousRound": null
+}
