@@ -1,0 +1,70 @@
+{
+  "milestone": "M2-restore-unification",
+  "round": 1,
+  "status": "overridden",
+  "validatorsRun": {
+    "test": {
+      "passed": false,
+      "command": "npm test -- --run --reporter=verbose --maxWorkers=8",
+      "exitCode": 1
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npm run type-check",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 0,
+    "failed": 3,
+    "failedFeatures": [
+      "M2-F1-reviewer-workbench-entry",
+      "M2-F2-reviewsnapshot-restore",
+      "M2-F3-restore-validation-seed-bootstrap"
+    ]
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "override": {
+    "applied": true,
+    "appliedBy": "orchestrator",
+    "resolvedByFeatures": [
+      "M2-F1-followup-reviewer-workbench-production",
+      "M2-F2-followup-live-import-cutover",
+      "M2-F3-followup-m2-bootstrap-artifact",
+      "M2-F4-restore-validator-stabilization"
+    ],
+    "resolvedByCommits": [
+      "1770a9c1324bbe2c2a0206204c1cc40d8343bf29",
+      "4e718b1fa4745022343c20b690c7fc2d622ae37f",
+      "0a5baa0ead494899f44823ae06d5201ec2800262",
+      "e191f48"
+    ],
+    "justification": "Original M2 scrutiny blockers were resolved by follow-up implementation work: reviewer workbench production changes now exist in useUserStore/embedContextRestore/ReviewPanel, the live ToolManager import path now goes through ReviewSnapshot, and a tracked M2-specific restore bootstrap artifact now exists in repo docs/library/debug_scripts. The remaining full-suite Vitest failures have been reduced to 18 unrelated baseline failures, tracked separately by misc-test-baseline-cleanup-1, so an orchestrator-level override is justified to let M2 user-testing proceed."
+  },
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Tighten review-frontend-worker and review-demo-seed-worker guidance so workers must prove feature completion with production-file changes or explicitly justify when a feature is validation-only/test-only, and keep seed-path references aligned with tracked repo locations.",
+      "evidence": "M2-F1 was marked complete from a test-only commit, and M2-F3 relied on stale review-demo-seed-worker guidance that still points at M6/M7 framing and mismatched script paths.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Add a library note that commit b0fcabd is only a coverage commit for M2-F1.",
+      "reason": "This is milestone-specific and not durable shared knowledge."
+    },
+    {
+      "observation": "Add a library note for the import restore entrypoint in ToolManagerPanel.vue.",
+      "reason": "Useful locally for this review, but too implementation-specific to add as broad shared knowledge without orchestrator direction."
+    }
+  ],
+  "previousRound": null
+}

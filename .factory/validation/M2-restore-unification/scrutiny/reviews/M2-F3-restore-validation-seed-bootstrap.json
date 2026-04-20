@@ -1,0 +1,45 @@
+{
+  "featureId": "M2-F3-restore-validation-seed-bootstrap",
+  "reviewedAt": "2026-04-20T00:00:00Z",
+  "commitId": "5cf75d790d8dc7af6a87ea74242d4a0d7c74581b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The reviewed worker inspected the transcript skeleton and existing seed assets, but the feature was not actually delivered for M2: the handoff cites an unrelated M2-F2 test commit and claims the requested bootstrap already existed, while the only tracked bootstrap artifacts are M6/M7-specific docs/scripts that do not provide an M2-scoped documented setup for reviewer task-select, empty-task clearing, and embed restore validation. This leaves the milestone without the requested M2 validation bootstrap evidence in repo artifacts workers/validators are expected to read.",
+    "issues": [
+      {
+        "file": "debug_scripts/review_demo_seed.py",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The seeded bootstrap is explicitly for M6+M7 demo scenarios, not the assigned M2 restore-validation feature. Its inventory and docs are named and scoped around M6/M7 collaboration fixtures, so treating it as the completed M2 bootstrap does not satisfy the feature description or expected behavior."
+      },
+      {
+        "file": "docs/verification/m6-m7-demo-seed-pack.md",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The only documented seed/setup path referenced by the worker is an M6+M7 demo pack. There is no M2-specific documented bootstrap artifact under the M2 validation area or other mission-read artifacts showing how to produce the three required M2 restore scenarios for user-testing."
+      },
+      {
+        "file": "C:\\Users\\Administrator\\.factory\\missions\\d39bad9a-f06d-486f-9f0d-b5d1c7998540\\handoffs\\2026-04-20T02-26-13-228Z__M2-F3-restore-validation-seed-bootstrap__18ce637e-7cb4-4f61-b710-cc9eec35fa2d.json",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The handoff records commitId `5cf75d790d8dc7af6a87ea74242d4a0d7c74581b`, but that commit is `test(review): cover snapshot restore paths` and changes only M2-F2 test files. There is no feature diff for M2-F3 itself, so the required bootstrap implementation is missing validation-backed code/documentation changes for this feature."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `review-demo-seed-worker` skill still points workers at ignored `scripts/` paths and an M6+M7 mission framing, which does not match the tracked `debug_scripts/` location the worker relied on here.",
+      "evidence": ".factory/skills/review-demo-seed-worker/SKILL.md:1 and lines 55-80 reference M6+M7 and `scripts/review_demo_seed.py`, while tracked artifacts live at `debug_scripts/review_demo_seed.py` and `debug_scripts/review_demo_seed_test.py`."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Mission-shared knowledge currently documents only the M6 seed discoverability hardening, not an M2 restore bootstrap location, so later validators/readers have no canonical M2 artifact to consult.",
+      "evidence": ".factory/library/m6-seed-discoverability.md:1-5 documents only M6/M7 seed discoverability; searching `.factory/validation/M2-restore-unification` found no M2 seed/bootstrap references."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the worker reviewed transcript/diff evidence, but the cited implementation is an existing M6/M7 seed pack plus an unrelated M2-F2 test commit, not a delivered M2 restore-validation bootstrap. No M2-scoped bootstrap artifact or feature diff was found in repo validation/shared-state locations."
+}

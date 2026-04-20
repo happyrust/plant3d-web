@@ -1,0 +1,39 @@
+{
+  "featureId": "M2-F2-reviewsnapshot-restore",
+  "reviewedAt": "2026-04-20T00:00:00Z",
+  "commitId": "5cf75d790d8dc7af6a87ea74242d4a0d7c74581b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The task/workflow restore paths remain covered and the new import adapter plus regression tests are useful, but the feature description required import restore to be unified behind the same ReviewSnapshot semantic layer. In this commit the import path is only modeled in isolated adapter tests; production import still calls useToolStore.importJSON directly and never uses the new snapshot adapter, so the promised unification is incomplete.",
+    "issues": [
+      {
+        "file": "src/review/adapters/importSnapshotAdapter.ts",
+        "line": 78,
+        "severity": "blocking",
+        "description": "buildSnapshotFromImportPayload is introduced but is never wired into any production restore/import flow. The only call sites are tests, while actual import still goes straight through useToolStore.importJSON, so M2-F2 does not yet satisfy the requirement that task-context restore, workflow-sync restore, and import restore all pass through a unified ReviewSnapshot layer."
+      },
+      {
+        "file": "src/components/tools/ToolManagerPanel.vue",
+        "line": 264,
+        "severity": "blocking",
+        "description": "The live import entrypoint still invokes store.importJSON(importText.value) directly instead of building/replaying a ReviewSnapshot. That bypass means import restore does not get the same semantic path, stale-state handling, or future shared behavior that the feature explicitly promised."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker skill requires browser verification for UI-changing features, but this feature depends on seeded reviewer/embed data that was not documented in the skill itself. The worker could only verify that the app booted and explicitly reported not exercising the required restore user flows.",
+      "evidence": ".factory/skills/review-frontend-worker/SKILL.md step 5 requires testing the affected UI flows; handoff.skillFeedback.deviations says browser verification was reduced to a boot check because no deterministic seeded scenario was available."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Mission/library guidance documents task and workflow restore architecture, but there is no shared-state note identifying the concrete production import restore entrypoint (ToolManagerPanel.vue -> useToolStore.importJSON). That omission makes it easy to add a new import adapter without noticing the real UI path is still bypassing ReviewSnapshot.",
+      "evidence": ".factory/library/architecture.md lists the three restore entries conceptually, while the production import path is discoverable in src/components/tools/ToolManagerPanel.vue:264 calling store.importJSON(importText.value) directly."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill, architecture, and commit 5cf75d7. The commit adds useful adapter/tests, but the actual import restore path is still not cut over to ReviewSnapshot, so the feature does not fully implement the promised three-entry unification and should be marked failed."
+}

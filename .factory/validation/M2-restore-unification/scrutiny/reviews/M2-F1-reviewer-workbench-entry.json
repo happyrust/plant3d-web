@@ -1,0 +1,45 @@
+{
+  "featureId": "M2-F1-reviewer-workbench-entry",
+  "reviewedAt": "2026-04-20T02:31:28Z",
+  "commitId": "b0fcabd",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature commit only adds test coverage and mock plumbing; it does not change any production reviewer workbench code, so it cannot by itself implement or stabilize the M2-F1 behavior described in the feature contract.",
+    "issues": [
+      {
+        "file": "src/components/review/ReviewerTaskList.test.ts",
+        "line": 143,
+        "severity": "blocking",
+        "description": "The commit adds assertions for reviewer/manager inbox labels, but there is no corresponding production change in ReviewerTaskList.vue or related role-filtering logic in commit b0fcabd. This means the feature handoff claims M2-F1 behavior was implemented even though the diff only verifies existing behavior and cannot fix any role-scoped filtering bug if one existed."
+      },
+      {
+        "file": "src/components/review/embedContextRestore.test.ts",
+        "line": 221,
+        "severity": "blocking",
+        "description": "The new passive embed restore test exercises existing restoreEmbedWorkbenchContext behavior without any production changes. M2-F1 explicitly requires embed-mode reopen handling and passive workflow gating to be stabilized, but this commit contains no code that could fix unresolved embed restore defects."
+      },
+      {
+        "file": "src/components/review/reviewPanelActions.test.ts",
+        "line": 74,
+        "severity": "blocking",
+        "description": "The workflow-node submit-label test only locks in current helper outputs; no production workflow action code changed in reviewPanelActions.ts or ReviewPanel.vue. The feature therefore lacks implementation evidence for stabilizing workflow action controls or task-switch state clearing/model filtering as required by the contract."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The review-frontend-worker skill says to write tests first, implement to pass them, and use agent-browser for UI features, but this worker committed a test-only change for a feature whose description is implementation-oriented and then marked it successful. The skill guidance does not currently force workers to prove that a feature commit actually includes production changes when the feature description requires them.",
+      "evidence": "review-frontend-worker SKILL.md steps 2-5 require RED/GREEN plus browser verification; worker transcript/handoff for e54e7017-76de-4df7-8bf2-0904e3c7e8cd records only four *.test.ts edits and explicitly says no production source files were changed."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Mission guidance and architecture docs describe M2-F1 as stabilizing reviewer inbox/task-selection/workbench/embed behavior, but there is no shared-state note warning reviewers/validators that b0fcabd is only a coverage commit and may need pairing with earlier production commits. This made the worker handoff appear feature-complete despite missing implementation evidence in the reviewed commit.",
+      "evidence": "features.json entry for M2-F1 lists production behavior requirements; handoff 2026-04-20T02-15-33-778Z__M2-F1-reviewer-workbench-entry__e54e7017-76de-4df7-8bf2-0904e3c7e8cd.json states \"No production source files were changed in this worker session.\""
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill, and commit diff for M2-F1. Result: fail, because commit b0fcabd is test-only and does not implement the feature’s required reviewer-workbench fixes, so there is missing implementation evidence for the claimed stabilization work."
+}

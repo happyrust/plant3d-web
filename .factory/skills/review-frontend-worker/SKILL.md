@@ -29,6 +29,7 @@ Frontend-only features in the annotation refactor: ReviewSnapshot types/adapters
    - Use TypeScript strictly — no `any` types without justification
    - Keep ReviewPanel.vue and useToolStore.ts changes minimal; prefer extracting to new files
    - Use `@/*` path aliases
+   - If the feature description requires production behavior changes, your commit must include production source-file edits; test-only commits are only acceptable when the feature is explicitly scoped to validation/test coverage.
 
 4. **Run quality gates**:
    - `npm run type-check` — MUST pass with zero errors
@@ -41,6 +42,7 @@ Frontend-only features in the annotation refactor: ReviewSnapshot types/adapters
    - Navigate to http://localhost:3101
    - Test the specific UI flows affected by this feature
    - Record each check as an `interactiveChecks` entry
+   - If seeded/browser data is unavailable, call that out explicitly in the handoff and point to the tracked bootstrap artifact or follow-up feature instead of claiming full UI verification.
 
 6. **Commit** with conventional commit format: `feat(review): ...` or `test(review): ...`
 
