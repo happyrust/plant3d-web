@@ -12,10 +12,17 @@
  */
 
 import {
+  buildSnapshotFromImportPayload,
+  type BuildSnapshotFromImportPayloadOptions,
+} from '../adapters/importSnapshotAdapter';
+import {
   buildSnapshotFromTaskRecords,
   type BuildSnapshotFromTaskRecordsOptions,
 } from '../adapters/reviewRecordAdapter';
-import { buildReplayPayloadFromSnapshot } from '../adapters/toolStoreAdapter';
+import {
+  buildReplayPayloadFromImportSnapshot,
+  buildReplayPayloadFromSnapshot,
+} from '../adapters/toolStoreAdapter';
 import {
   buildSnapshotFromWorkflowSync,
   type BuildSnapshotFromWorkflowSyncOptions,
@@ -115,13 +122,48 @@ export function runWorkflowSyncShadow(
   }
 }
 
+export type RunImportPayloadShadowOptions = {
+  legacyPayload: string;
+  payload: unknown;
+  build?: BuildSnapshotFromImportPayloadOptions;
+  reporter?: SnapshotShadowReporter;
+  force?: boolean;
+}
+
+export function runImportPayloadShadow(
+  options: RunImportPayloadShadowOptions,
+): SnapshotShadowResult | null {
+  if (!options.force && !isSnapshotShadowEnabled()) return null;
+  try {
+    const snapshot = buildSnapshotFromImportPayload(
+      (options.payload && typeof options.payload === 'object'
+        ? options.payload
+        : null) as Parameters<typeof buildSnapshotFromImportPayload>[0],
+      options.build,
+    );
+    return compareAndReport(
+      'import_package',
+      options.legacyPayload,
+      snapshot,
+      options.reporter,
+      buildReplayPayloadFromImportSnapshot,
+    );
+  } catch (err) {
+    if (typeof console !== 'undefined') {
+      console.warn('[review/M2 SHADOW] import_package build threw, fallback to legacy', err);
+    }
+    return null;
+  }
+}
+
 function compareAndReport(
   source: SnapshotSource,
   legacyPayload: string,
   snapshot: ReviewSnapshot,
   reporter: SnapshotShadowReporter | undefined,
+  buildReplayPayload: (snapshot: ReviewSnapshot) => string = buildReplayPayloadFromSnapshot,
 ): SnapshotShadowResult {
-  const shadowPayload = buildReplayPayloadFromSnapshot(snapshot);
+  const shadowPayload = buildReplayPayload(snapshot);
   const result: SnapshotShadowResult = {
     source,
     match: shadowPayload === legacyPayload,

@@ -9,6 +9,14 @@ import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
+import { buildSnapshotFromImportPayload } from '@/review/adapters/importSnapshotAdapter';
+import { buildReplayPayloadFromImportSnapshot } from '@/review/adapters/toolStoreAdapter';
+import { runImportPayloadShadow } from '@/review/services/reviewSnapshotService';
+import {
+  getReviewCommentEventLog,
+  getReviewCommentThreadStore,
+  isReviewCommentThreadStoreActive,
+} from '@/review/services/sharedStores';
 import { formatLengthMeters, formatVec3Meters } from '@/utils/unitFormat';
 
 type ToolsApi = {
@@ -261,7 +269,29 @@ async function copyExport() {
 function doImport() {
   importError.value = null;
   try {
-    store.importJSON(importText.value);
+    const parsed = JSON.parse(importText.value) as Record<string, unknown>;
+    const legacyPayload = JSON.stringify(parsed);
+    const shadowResult = runImportPayloadShadow({
+      legacyPayload,
+      payload: parsed,
+    });
+    const snapshot = shadowResult?.snapshot ?? buildSnapshotFromImportPayload(parsed);
+
+    if (isReviewCommentThreadStoreActive()) {
+      const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+      if (merge.changed) {
+        getReviewCommentEventLog().push({
+          kind: 'snapshot_merged',
+          key: 'import_package',
+          payload: {
+            comments: snapshot.comments.length,
+            annotations: snapshot.annotations.length,
+          },
+        });
+      }
+    }
+
+    store.importJSON(buildReplayPayloadFromImportSnapshot(snapshot));
     props.tools.syncFromStore();
   } catch (e) {
     importError.value = e instanceof Error ? e.message : String(e);
