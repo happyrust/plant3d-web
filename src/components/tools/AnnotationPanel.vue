@@ -11,6 +11,12 @@ import {
   reviewCommentUpdate,
 } from '@/api/reviewApi';
 import { emitToast } from '@/ribbon/toastBus';
+import {
+  getReviewCommentThreadStore,
+  getReviewCommentEventLog,
+  isReviewCommentThreadStoreActive,
+} from '@/review/services/sharedStores';
+import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
@@ -97,12 +103,12 @@ function toggleSeverityFilter(next: AnnotationSeverity | 'unset' | null) {
   severityFilter.value = severityFilter.value === next ? null : next;
 }
 
-const SEVERITY_FILTER_BUCKETS: {
+const SEVERITY_FILTER_BUCKETS: Array<{
   key: AnnotationSeverity | 'unset';
   label: string;
   colorClass: string;
   dotClass: string;
-}[] = [
+}> = [
   { key: 'critical', label: '致命', colorClass: 'bg-red-100 text-red-700 border-red-200', dotClass: 'bg-red-500' },
   { key: 'severe', label: '严重', colorClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-500' },
   { key: 'normal', label: '一般', colorClass: 'bg-blue-100 text-blue-700 border-blue-200', dotClass: 'bg-blue-500' },
@@ -378,12 +384,12 @@ async function handleChangeSeverity(event: Event) {
     if (resp && resp.success === false) {
       applyLocalSeverity(active.type, active.id, prev);
       target.value = prev ?? '';
-       
+      // eslint-disable-next-line no-console
       console.warn('[annotation] 严重度同步后端被拒绝，已回滚：', resp.error_message);
     }
   } catch (err) {
     // 后端接口不可用/网络异常时保留本地（与现有评论流程一致），避免用户输入丢失
-     
+    // eslint-disable-next-line no-console
     console.warn('[annotation] 严重度接口暂不可用，保留本地：', err);
   }
 }
@@ -497,15 +503,30 @@ function getRoleInlineStyle(role: UserRole): Record<string, string> {
   };
 }
 
-// 列表视图下也要与后端同步，避免“只走本地”的数据分叉
+/**
+ * DUAL_READ 同步：每次 inline 评论变更后，如果 thread store 已激活，
+ * 把 inline 数据推入 store 并记录差异日志。
+ */
+function dualReadSync(annType: AnnotationType, annId: string) {
+  if (!isReviewCommentThreadStoreActive()) return;
+  const inline = store.getAnnotationComments(annType, annId);
+  syncInlineToStore(annType, annId, inline, {
+    store: getReviewCommentThreadStore(),
+    log: getReviewCommentEventLog(),
+  });
+}
+
 async function loadCommentsForListView() {
   if (commentsViewMode.value !== 'list') return;
   if (!activeAny.value || !activeAnnotationType.value) return;
+  const annType = activeAnnotationType.value;
+  const annId = activeAny.value.id;
   try {
-    const resp = await reviewCommentGetByAnnotation(activeAny.value.id, activeAnnotationType.value);
+    const resp = await reviewCommentGetByAnnotation(annId, annType);
     if (resp.success && resp.comments) {
       const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
-      store.setAnnotationComments(activeAnnotationType.value, activeAny.value.id, normalized);
+      store.setAnnotationComments(annType, annId, normalized);
+      dualReadSync(annType, annId);
     }
   } catch {
     // 列表模式拉取失败时保留本地缓存
@@ -531,10 +552,13 @@ async function addComment() {
   const content = newCommentContent.value.trim();
   const replyToId = replyToCommentId.value || undefined;
 
+  const annType = activeAnnotationType.value;
+  const annId = activeAny.value.id;
+
   try {
     const resp = await reviewCommentCreate({
-      annotationId: activeAny.value.id,
-      annotationType: activeAnnotationType.value,
+      annotationId: annId,
+      annotationType: annType,
       authorId: user.id,
       authorName: user.name,
       authorRole: user.role,
@@ -542,7 +566,8 @@ async function addComment() {
       replyToId,
     });
     if (resp.success && resp.comment) {
-      store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, resp.comment);
+      store.addCommentToAnnotation(annType, annId, resp.comment);
+      dualReadSync(annType, annId);
     } else {
       emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
       return;
@@ -584,6 +609,7 @@ async function saveEditComment() {
     // 网络异常保留本地（与严重度策略一致）
   }
 
+  dualReadSync(annType, annId);
   editingCommentId.value = null;
   editingCommentContent.value = '';
 }
@@ -594,9 +620,11 @@ function cancelEditComment() {
   editingCommentContent.value = '';
 }
 
-// 删除评论
 async function deleteComment(commentId: string) {
   if (!activeAny.value || !activeAnnotationType.value) return;
+
+  const annType = activeAnnotationType.value;
+  const annId = activeAny.value.id;
 
   try {
     await reviewCommentDelete(commentId);
@@ -604,7 +632,8 @@ async function deleteComment(commentId: string) {
     // 后端失败降级本地
   }
 
-  store.removeAnnotationComment(activeAnnotationType.value, activeAny.value.id, commentId);
+  store.removeAnnotationComment(annType, annId, commentId);
+  dualReadSync(annType, annId);
 }
 
 // 设置回复目标
@@ -766,7 +795,7 @@ function formatCommentTime(timestamp: number): string {
             ]"
             :disabled="severityCounts[bucket.key] === 0"
             @click="toggleSeverityFilter(bucket.key)">
-            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass" />
+            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass"></span>
             {{ bucket.label }}
             <span class="ml-0.5 font-semibold">{{ severityCounts[bucket.key] }}</span>
           </button>
@@ -1030,7 +1059,7 @@ function formatCommentTime(timestamp: number): string {
             class="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px]"
             :class="getAnnotationSeverityDisplay((activeAny as any).severity).color">
             <span class="inline-block h-1.5 w-1.5 rounded-full"
-              :class="getAnnotationSeverityDisplay((activeAny as any).severity).dot" />
+              :class="getAnnotationSeverityDisplay((activeAny as any).severity).dot"></span>
             {{ getAnnotationSeverityDisplay((activeAny as any).severity).label }}
           </span>
         </div>
