@@ -1301,7 +1301,10 @@ function updateAnnotationSeverity(
 }
 
 /**
- * 为批注添加评论/意见
+ * 为批注添加评论/意见。
+ *
+ * @deprecated Phase C 迁移后请改用 `commentThreadStore.upsertComment()`；
+ * 本方法在 DUAL_READ 期间仍作为 inline 投影写入点保留。
  */
 function addCommentToAnnotation(
   annotationType: AnnotationType,
@@ -1352,7 +1355,9 @@ function addCommentToAnnotation(
 }
 
 /**
- * 覆盖批注评论列表（用于后端同步）
+ * 覆盖批注评论列表（用于后端同步）。
+ *
+ * @deprecated Phase C 迁移后请改用 `commentThreadStore.mergeComments()`。
  */
 function setAnnotationComments(
   annotationType: AnnotationType,
@@ -1389,7 +1394,9 @@ function setAnnotationComments(
 }
 
 /**
- * 更新批注中的某条评论
+ * 更新批注中的某条评论。
+ *
+ * @deprecated Phase C 迁移后请改用 `commentThreadStore.upsertComment()`。
  */
 function updateAnnotationComment(
   annotationType: AnnotationType,
@@ -1434,7 +1441,9 @@ function updateAnnotationComment(
 }
 
 /**
- * 删除批注中的某条评论
+ * 删除批注中的某条评论。
+ *
+ * @deprecated Phase C 迁移后请改用 `commentThreadStore.deleteComment()`。
  */
 function removeAnnotationComment(
   annotationType: AnnotationType,
