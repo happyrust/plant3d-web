@@ -115,7 +115,7 @@ describe('ResubmissionTaskList', () => {
     expect(document.body.textContent).toContain('仍可再次提交的任务');
     expect(document.body.textContent).toContain('已退回');
     expect(document.body.textContent).toContain('退回原因: 请补充净高说明');
-    expect(document.body.textContent).toContain('继续修改');
+    expect(document.body.textContent).toContain('进入模型修改');
   });
 
   it('uses the latest workflow return reason and node semantics in returned list cards', async () => {
@@ -165,7 +165,7 @@ describe('ResubmissionTaskList', () => {
     ]);
 
     const detailButton = Array.from(document.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('查看详情')
+      button.textContent?.includes('流转历史')
     );
     expect(detailButton).toBeTruthy();
 

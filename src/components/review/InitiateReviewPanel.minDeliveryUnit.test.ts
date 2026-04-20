@@ -1,5 +1,4 @@
-import { describe, beforeEach, expect, it, vi } from 'vitest';
-import { describe, beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 
 import InitiateReviewPanel from './InitiateReviewPanel.vue';
@@ -46,10 +45,17 @@ vi.mock('@/composables/useDockApi', () => ({
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
+  useViewerContext: () => ({
+    viewerRef: { value: null },
+    tools: { value: { syncFromStore: vi.fn() } },
+  }),
+  waitForViewerReady: vi.fn(async () => true),
   showModelByRefnosWithAck: mocks.showModelByRefnosWithAck,
 }));
 
 const userStoreMock = {
+  currentUser: { value: { id: 'designer-1', name: '王设计师' } },
+  currentUserId: { value: 'designer-1' },
   availableCheckers: { value: [] as { id: string; name: string }[] },
   availableApprovers: { value: [] as { id: string; name: string }[] },
   availableReviewers: { value: [] as { id: string; name: string }[] },

@@ -77,6 +77,11 @@ vi.mock('@/composables/useDockApi', () => ({
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
+  useViewerContext: () => ({
+    viewerRef: { value: null },
+    tools: { value: { syncFromStore: vi.fn() } },
+  }),
+  waitForViewerReady: vi.fn(async () => true),
   showModelByRefnosWithAck: vi.fn(async () => ({
     ok: ['REF/001'],
     fail: [],
@@ -88,6 +93,9 @@ vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
     currentUser: {
       value: { id: 'designer_001', name: '设计员', role: 'designer' },
+    },
+    currentUserId: {
+      value: 'designer_001',
     },
     availableCheckers: {
       value: [

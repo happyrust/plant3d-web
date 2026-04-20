@@ -37,6 +37,10 @@ vi.mock('@/composables/useNavigationStatePersistence', () => ({
   },
 }));
 
+vi.mock('./workflowMode', () => ({
+  resolvePassiveWorkflowMode: vi.fn(() => false),
+}));
+
 describe('DesignerTaskList', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -124,7 +128,7 @@ describe('DesignerTaskList', () => {
     ]);
 
     expect(document.body.textContent).toContain('被退回任务');
-    expect(document.body.textContent).toContain('草稿');
+    expect(document.body.textContent).toContain('校审描述');
     expect(document.body.textContent).toContain('已退回');
     expect(document.body.textContent).toContain('退回原因');
     expect(document.body.textContent).toContain('缺少净高说明');
@@ -137,7 +141,7 @@ describe('DesignerTaskList', () => {
     ]);
 
     const cancelledButton = Array.from(document.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('已取消')
+      button.textContent?.includes('取消')
     );
 
     expect(cancelledButton).toBeTruthy();

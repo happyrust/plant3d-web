@@ -37,6 +37,10 @@ vi.mock('@/composables/useViewerContext', () => ({
 }));
 
 vi.mock('@/api/reviewApi', () => ({
+  AUX_DATA_DEFAULT_AUTH: {
+    uCode: 'ZY',
+    uKey: 'swbz-token-e74fbea2427981f918d314d6583c3d24',
+  },
   reviewGetAuxData: (...args: unknown[]) => reviewGetAuxDataMock(...args),
   reviewGetCollisionData: (...args: unknown[]) => reviewGetCollisionDataMock(...args),
 }));

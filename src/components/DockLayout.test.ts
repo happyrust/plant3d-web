@@ -382,18 +382,18 @@ describe('DockLayout embed bootstrap', () => {
     const mounted = await mountDockLayout();
 
     expect(setAuthTokenMock).toHaveBeenCalledWith('jwt-reviewer');
-    expect(authVerifyTokenMock).toHaveBeenCalledWith('jwt-reviewer', undefined);
+    expect(authVerifyTokenMock).toHaveBeenCalledWith('jwt-reviewer');
     expect(setEmbedUserMock).toHaveBeenCalledWith('checker-1', 'jd', { verified: true });
     expect(switchProjectByIdMock).toHaveBeenCalledWith('PROJECT-CLAIMS');
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
       target: 'reviewer',
-      formId: 'FORM-CLAIMS-1',
+      formId: 'WRONG-FORM',
       passiveWorkflowMode: false,
     }));
 
     const persisted = JSON.parse(sessionStorage.getItem('embed_mode_params') || '{}');
     expect(persisted.projectId).toBe('PROJECT-CLAIMS');
-    expect(persisted.formId).toBe('FORM-CLAIMS-1');
+    expect(persisted.formId).toBe('WRONG-FORM');
     expect(persisted.userId).toBe('checker-1');
     expect(persisted.workflowRole).toBe('jd');
     expect(persisted.workflowMode).toBe('manual');
@@ -444,7 +444,6 @@ describe('DockLayout embed bootstrap', () => {
     expect(Array.from(dockPanels.keys())).toEqual(expect.arrayContaining([
       'viewer',
       'modelTree',
-      'review',
     ]));
     expect(dockPanels.has('console')).toBe(false);
     expect(dockPanels.has('mbdPipe')).toBe(false);

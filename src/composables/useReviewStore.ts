@@ -89,7 +89,7 @@ function loadPersisted(): ReviewPersistedState {
 }
 
 const persisted = loadPersisted();
-USE_BACKEND.value = true;
+USE_BACKEND.value = persisted.useBackend;
 
 const reviewMode = ref<boolean>(persisted.reviewMode);
 const confirmedRecords = ref<ConfirmedRecord[]>([]);
