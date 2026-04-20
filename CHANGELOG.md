@@ -6,24 +6,20 @@
 
 ### Fixed
 
-- **评论降级去重（P1）**：`addComment` 后端失败或返回非成功时，不再写入本地 store（避免本地生成的 ID 与后端不一致导致后续列表视图拉取后评论重复显示），改为 `emitToast` 提示用户重试。
-- **评论编辑回滚（P2）**：`saveEditComment` 改为乐观更新 + 后端拒绝时回滚模式（与严重度编辑策略一致），后端返回 `success: false` 时自动回滚内容并 toast 提示。
+- **评论降级去重（P1）**：`AnnotationPanel` 和 `ReviewCommentsPanel` 的 `addComment` 后端失败或返回非成功时，不再写入本地 store（避免本地生成的 ID 与后端不一致导致后续列表视图拉取后评论重复显示），改为 `emitToast` 提示用户重试。
+- **评论编辑回滚（P2）**：两个面板的 `saveEditComment` 改为乐观更新 + 后端拒绝时回滚模式（与严重度编辑策略一致），后端返回 `success: false` 时自动回滚内容并 toast 提示。
 - **移除 @ts-nocheck（P3）**：`AnnotationPanel.vue` 移除顶部 `@ts-nocheck`，TypeScript 零报错，恢复类型安全。
 
 ### Changed
 
 - **ConfirmedRecordData 类型文档（P4）**：为 `ConfirmedRecordData` 的 `unknown[]` 字段添加 JSDoc 说明设计意图（后端历史记录序列化兼容）。
 - **annotationKey 冲突概率文档（P5）**：`computeAnnotationKeyV1` JSDoc 补充 64-bit key 的冲突概率数据（10k: ≈2.7×10⁻¹²）及 10 万条以上升级建议。
+- **useToolStore 评论方法标记 @deprecated**：`addCommentToAnnotation` / `setAnnotationComments` / `updateAnnotationComment` / `removeAnnotationComment` 添加 `@deprecated` JSDoc，引导新代码使用 `commentThreadStore`。
 
-### Docs & Refactoring
+### Added（批注体系 Phase C 评论解耦）
 
-- **三维校审实现审核报告**：`docs/verification/2026-04-19-三维校审实现审核报告.md` 对照三份 plan（2026-03-26 被动模式收紧 / 2026-04-01 仿 PMS UI handoff / 2026-04-02 external/passive 全链路验收）逐条验证代码现状，给出三级风险分类与分批 commit 建议。
-- **M3 批注体系重构 plan**：`docs/plans/2026-04-19-review-comment-thread-refactor-plan.md` 补档，固化 DUAL_READ/PROMOTE/CUTOVER 三阶段判据、`commentEventLog` 6 种 kind 观测面、5 处接入点、回滚预案。解决 `src/review/services/commentEventLog.ts` 注释引用的 "§8" 死链。
-- **三维校审批注与处理留痕操作教程**：`docs/verification/三维校审批注与处理留痕操作教程.md` + 同名 `images/` 目录（截图集）。
-- **仿 PMS 批注链路问题汇总与修复方案**：`docs/verification/仿PMS批注链路问题汇总与修复方案.md`。
-- **三维校审当前流程追踪**：`docs/verification/三维校审当前流程追踪.md` 增补与修订。
-- **M3 DUAL_READ 灰度服务层**：新增 `src/review/services/commentThreadDualRead.*` / `commentEventLog.*` / `sharedStores.*` 以及 `src/components/review/ReviewCommentsTimeline.test.ts`，为批注真源从 inline 迁移到 `commentThreadStore` 提供观察期与差异诊断信道。DUAL_READ 期间 inline 真源仍驱动 UI，store 并行同步并在 `commentEventLog` 记录 `snapshot_merged` / `thread_upsert` / `dual_read_diff` 等事件。
-- **M2 审核恢复自测产物**：`.factory/library/m2-restore-bootstrap.md` 与 `docs/verification/m2-restore-bootstrap.md` 同步 M2 bootstrap 说明。
+- **AnnotationPanel DUAL_READ 接入**：新增 `dualReadSync()` 辅助函数，评论写入成功后同步推入共享 `commentThreadStore`，通过 `REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ` flag 开关控制，默认关闭。
+- **ReviewCommentsPanel DUAL_READ 接入**：三栏视图面板同步接入 `commentThreadStore`，所有评论写入点（加载/添加/编辑/删除）完成后均触发 DUAL_READ 同步。
 
 ### Added
 
