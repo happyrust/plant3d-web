@@ -1,4 +1,3 @@
-<!-- @ts-nocheck -->
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 
@@ -11,6 +10,7 @@ import {
   reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
+import { emitToast } from '@/ribbon/toastBus';
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
@@ -544,22 +544,12 @@ async function addComment() {
     if (resp.success && resp.comment) {
       store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, resp.comment);
     } else {
-      store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, {
-        authorId: user.id,
-        authorName: user.name,
-        authorRole: user.role,
-        content,
-        replyToId,
-      });
+      emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
+      return;
     }
   } catch {
-    store.addCommentToAnnotation(activeAnnotationType.value, activeAny.value.id, {
-      authorId: user.id,
-      authorName: user.name,
-      authorRole: user.role,
-      content,
-      replyToId,
-    });
+    emitToast({ message: '网络异常，评论发送失败', level: 'error' });
+    return;
   }
 
   newCommentContent.value = '';
@@ -572,24 +562,27 @@ function startEditComment(comment: AnnotationComment) {
   editingCommentContent.value = comment.content;
 }
 
-// 保存编辑的评论
 async function saveEditComment() {
   if (!editingCommentId.value || !editingCommentContent.value.trim()) return;
   if (!activeAny.value || !activeAnnotationType.value) return;
 
   const content = editingCommentContent.value.trim();
-  try {
-    await reviewCommentUpdate(editingCommentId.value, content);
-  } catch {
-    // 后端失败降级本地
-  }
+  const commentId = editingCommentId.value;
+  const annType = activeAnnotationType.value;
+  const annId = activeAny.value.id;
+  const prevContent = activeComments.value.find(c => c.id === commentId)?.content;
 
-  store.updateAnnotationComment(
-    activeAnnotationType.value,
-    activeAny.value.id,
-    editingCommentId.value,
-    { content }
-  );
+  store.updateAnnotationComment(annType, annId, commentId, { content });
+
+  try {
+    const resp = await reviewCommentUpdate(commentId, content);
+    if (resp && resp.success === false) {
+      store.updateAnnotationComment(annType, annId, commentId, { content: prevContent });
+      emitToast({ message: resp.error_message || '评论更新被拒绝，已回滚', level: 'warning' });
+    }
+  } catch {
+    // 网络异常保留本地（与严重度策略一致）
+  }
 
   editingCommentId.value = null;
   editingCommentContent.value = '';

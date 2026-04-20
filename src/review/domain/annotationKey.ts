@@ -76,7 +76,8 @@ async function sha1Hex(input: string): Promise<string> {
  * 计算 v1 版 annotationKey。
  *
  * 结果长度 = {@link ANNOTATION_KEY_LENGTH} 个 hex 字符（64 bit），
- * 在 1k-10k 批注规模下冲突概率可忽略。
+ * 在 1k-10k 批注规模下冲突概率可忽略（≈2.7×10⁻¹²）。
+ * 如果批注规模预期超过 10 万条，建议升级到 128-bit key 或由后端 UUID v7 接管。
  */
 export async function computeAnnotationKeyV1(
   input: AnnotationKeyInput,

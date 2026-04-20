@@ -134,7 +134,17 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
+    const trimmed = text.trim();
+    if (trimmed) {
+      try {
+        throw buildReviewApiHttpError(resp, JSON.parse(trimmed), trimmed);
+      } catch (error) {
+        if (error instanceof ReviewApiHttpError) {
+          throw error;
+        }
+      }
+    }
+    throw buildReviewApiHttpError(resp, undefined, trimmed || `HTTP ${resp.status} ${resp.statusText}`);
   }
 
   return (await resp.json()) as T;
@@ -186,6 +196,9 @@ export type ReviewActionResponse = {
   success: boolean;
   message?: string;
   error_message?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  annotationCheck?: ReviewAnnotationCheckResult;
 };
 
 export type EmbedUrlResponse = {
@@ -227,6 +240,15 @@ export type ReviewSnapshotMeasurementPayload = Record<string, unknown> & {
 };
 
 // 确认记录类型
+/**
+ * 确认记录——序列化到后端的批注快照。
+ *
+ * 各 annotation 数组保持 `unknown[]` 是有意设计：
+ * 后端存储的历史记录结构可能与当前前端 Store 类型
+ * （AnnotationRecord / CloudAnnotationRecord 等）有差异，
+ * 强制替换会导致反序列化旧记录时类型断言失败。
+ * 写入侧通过 `buildReviewConfirmSnapshotPayload` 保证类型安全。
+ */
 export type ConfirmedRecordData = {
   id?: string;
   taskId: string;
@@ -332,6 +354,87 @@ export type WorkflowSyncResponse = {
   data?: WorkflowSyncData;
 };
 
+export type WorkflowVerifyNextStep = {
+  assigneeId: string;
+  name: string;
+  roles: string;
+};
+
+export type WorkflowVerifyRequest = {
+  formId: string;
+  token: string;
+  action: 'active' | 'agree' | 'return' | 'stop';
+  actor: WorkflowSyncActor;
+  nextStep?: WorkflowVerifyNextStep | null;
+  comments?: string;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type WorkflowVerifyData = {
+  passed: boolean;
+  action: string;
+  currentNode: string;
+  taskStatus: string;
+  nextStep?: string;
+  reason: string;
+  recommendedAction: 'proceed' | 'return' | 'block';
+};
+
+export type WorkflowVerifyResponse = {
+  code: number;
+  message: string;
+  data?: WorkflowVerifyData;
+  errorCode?: string;
+  annotationCheck?: ReviewAnnotationCheckResult;
+};
+
+export type ReviewAnnotationCheckRequest = {
+  taskId?: string;
+  formId?: string;
+  currentNode?: string;
+  intent?: 'submit_next';
+  includedTypes?: ('text' | 'cloud' | 'rect')[];
+  token?: string;
+};
+
+export type ReviewAnnotationCheckSummary = {
+  total: number;
+  open: number;
+  pendingReview: number;
+  approved: number;
+  rejected: number;
+};
+
+export type ReviewAnnotationCheckBlocker = {
+  annotationId: string;
+  annotationType: 'text' | 'cloud' | 'rect';
+  title?: string;
+  description?: string;
+  stateCode: 'open' | 'pending_review' | 'approved' | 'rejected';
+  stateLabel: string;
+  refnos: string[];
+  updatedAt?: number;
+  updatedByName?: string;
+  updatedByRole?: string;
+  note?: string;
+};
+
+export type ReviewAnnotationCheckResult = {
+  passed: boolean;
+  recommendedAction: 'submit' | 'return' | 'block';
+  currentNode: string;
+  summary: ReviewAnnotationCheckSummary;
+  blockers: ReviewAnnotationCheckBlocker[];
+  message: string;
+};
+
+export type ReviewAnnotationCheckResponse = {
+  success: boolean;
+  data?: ReviewAnnotationCheckResult;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 export type WorkflowSyncQueryRequest = {
   formId: string;
   token: string;
@@ -403,8 +506,217 @@ type RawWorkflowSyncResponse = {
   data?: RawWorkflowSyncData;
 };
 
+type RawWorkflowVerifyData = {
+  passed?: boolean;
+  action?: string;
+  current_node?: string;
+  currentNode?: string;
+  task_status?: string;
+  taskStatus?: string;
+  next_step?: string;
+  nextStep?: string;
+  reason?: string;
+  recommended_action?: 'proceed' | 'return' | 'block';
+  recommendedAction?: 'proceed' | 'return' | 'block';
+};
+
+type RawWorkflowVerifyResponse = {
+  code?: number;
+  message?: string;
+  data?: RawWorkflowVerifyData;
+  error_code?: string;
+  errorCode?: string;
+  annotation_check?: RawReviewAnnotationCheckResult;
+  annotationCheck?: RawReviewAnnotationCheckResult;
+};
+
+type RawReviewAnnotationCheckSummary = {
+  total?: number;
+  open?: number;
+  pending_review?: number;
+  pendingReview?: number;
+  approved?: number;
+  rejected?: number;
+};
+
+type RawReviewAnnotationCheckBlocker = {
+  annotation_id?: string;
+  annotationId?: string;
+  annotation_type?: 'text' | 'cloud' | 'rect';
+  annotationType?: 'text' | 'cloud' | 'rect';
+  title?: string;
+  description?: string;
+  state_code?: 'open' | 'pending_review' | 'approved' | 'rejected';
+  stateCode?: 'open' | 'pending_review' | 'approved' | 'rejected';
+  state_label?: string;
+  stateLabel?: string;
+  refnos?: string[];
+  updated_at?: number;
+  updatedAt?: number;
+  updated_by_name?: string;
+  updatedByName?: string;
+  updated_by_role?: string;
+  updatedByRole?: string;
+  note?: string;
+};
+
+type RawReviewAnnotationCheckResult = {
+  passed?: boolean;
+  recommended_action?: 'submit' | 'return' | 'block';
+  recommendedAction?: 'submit' | 'return' | 'block';
+  current_node?: string;
+  currentNode?: string;
+  summary?: RawReviewAnnotationCheckSummary;
+  blockers?: RawReviewAnnotationCheckBlocker[];
+  message?: string;
+};
+
+type RawReviewAnnotationCheckResponse = {
+  success?: boolean;
+  data?: RawReviewAnnotationCheckResult;
+  error_code?: string;
+  errorCode?: string;
+  error_message?: string;
+  errorMessage?: string;
+};
+
+type RawReviewApiErrorPayload = RawReviewAnnotationCheckResponse & {
+  message?: string;
+  annotation_check?: RawReviewAnnotationCheckResult;
+  annotationCheck?: RawReviewAnnotationCheckResult;
+};
+
+export class ReviewApiHttpError extends Error {
+  status: number;
+  statusText: string;
+  errorCode?: string;
+  errorMessage?: string;
+  annotationCheck?: ReviewAnnotationCheckResult;
+  responseBody?: unknown;
+
+  constructor(options: {
+    status: number;
+    statusText: string;
+    message: string;
+    errorCode?: string;
+    errorMessage?: string;
+    annotationCheck?: ReviewAnnotationCheckResult;
+    responseBody?: unknown;
+  }) {
+    super(options.message);
+    this.name = 'ReviewApiHttpError';
+    this.status = options.status;
+    this.statusText = options.statusText;
+    this.errorCode = options.errorCode;
+    this.errorMessage = options.errorMessage;
+    this.annotationCheck = options.annotationCheck;
+    this.responseBody = options.responseBody;
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeReviewAnnotationCheckResult(
+  raw?: RawReviewAnnotationCheckResult
+): ReviewAnnotationCheckResult | undefined {
+  if (!raw) return undefined;
+
+  const summary = raw.summary;
+  return {
+    passed: raw.passed === true,
+    recommendedAction: raw.recommendedAction || raw.recommended_action || 'block',
+    currentNode: raw.currentNode || raw.current_node || '',
+    summary: {
+      total: typeof summary?.total === 'number' ? summary.total : 0,
+      open: typeof summary?.open === 'number' ? summary.open : 0,
+      pendingReview: typeof summary?.pendingReview === 'number'
+        ? summary.pendingReview
+        : typeof summary?.pending_review === 'number'
+          ? summary.pending_review
+          : 0,
+      approved: typeof summary?.approved === 'number' ? summary.approved : 0,
+      rejected: typeof summary?.rejected === 'number' ? summary.rejected : 0,
+    },
+    blockers: Array.isArray(raw.blockers)
+      ? raw.blockers.map((blocker) => ({
+        annotationId: blocker.annotationId || blocker.annotation_id || '',
+        annotationType: blocker.annotationType || blocker.annotation_type || 'text',
+        title: blocker.title?.trim() || undefined,
+        description: blocker.description?.trim() || undefined,
+        stateCode: blocker.stateCode || blocker.state_code || 'open',
+        stateLabel: blocker.stateLabel || blocker.state_label || '',
+        refnos: Array.isArray(blocker.refnos) ? blocker.refnos : [],
+        updatedAt: typeof blocker.updatedAt === 'number'
+          ? blocker.updatedAt
+          : typeof blocker.updated_at === 'number'
+            ? blocker.updated_at
+            : undefined,
+        updatedByName: blocker.updatedByName || blocker.updated_by_name || undefined,
+        updatedByRole: blocker.updatedByRole || blocker.updated_by_role || undefined,
+        note: blocker.note?.trim() || undefined,
+      }))
+      : [],
+    message: raw.message || '',
+  };
+}
+
+function buildReviewApiHttpError(
+  response: Response,
+  payload: unknown,
+  fallbackText: string
+): ReviewApiHttpError {
+  const raw = isPlainObject(payload) ? payload as RawReviewApiErrorPayload : undefined;
+  const errorCode = raw?.errorCode || raw?.error_code || undefined;
+  const errorMessage = raw?.errorMessage || raw?.error_message || raw?.message || undefined;
+  const annotationCheck = normalizeReviewAnnotationCheckResult(
+    raw?.annotationCheck
+    || raw?.annotation_check
+    || (errorCode === 'ANNOTATION_CHECK_FAILED' ? raw?.data : undefined)
+  );
+  const message = errorMessage || fallbackText || `HTTP ${response.status} ${response.statusText}`;
+
+  return new ReviewApiHttpError({
+    status: response.status,
+    statusText: response.statusText,
+    message,
+    errorCode,
+    errorMessage,
+    annotationCheck,
+    responseBody: payload,
+  });
+}
+
+export function getReviewApiErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (error instanceof ReviewApiHttpError) {
+    return error.errorMessage || error.message || fallbackMessage;
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return fallbackMessage;
+}
+
+export function getReviewAnnotationCheckFromError(
+  error: unknown
+): ReviewAnnotationCheckResult | undefined {
+  return error instanceof ReviewApiHttpError ? error.annotationCheck : undefined;
+}
+
 function normalizeWorkflowAttachment(raw: Partial<ReviewAttachment> & Record<string, unknown>): ReviewAttachment {
   return normalizeReviewAttachment(raw as Record<string, unknown>);
+}
+
+function normalizeReviewAnnotationCheckResponse(
+  raw: RawReviewAnnotationCheckResponse
+): ReviewAnnotationCheckResponse {
+  return {
+    success: raw.success === true,
+    data: normalizeReviewAnnotationCheckResult(raw.data),
+    errorCode: raw.errorCode || raw.error_code || undefined,
+    errorMessage: raw.errorMessage || raw.error_message || undefined,
+  };
 }
 
 function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSyncResponse {
@@ -477,6 +789,27 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
       currentNode: data.currentNode || data.current_node,
       taskStatus: data.taskStatus || data.task_status,
     } : undefined,
+  };
+}
+
+function normalizeWorkflowVerifyResponse(raw: RawWorkflowVerifyResponse): WorkflowVerifyResponse {
+  const data = raw.data;
+  return {
+    code: typeof raw.code === 'number' ? raw.code : 0,
+    message: raw.message || '',
+    data: data ? {
+      passed: data.passed === true,
+      action: data.action || '',
+      currentNode: data.currentNode || data.current_node || '',
+      taskStatus: data.taskStatus || data.task_status || '',
+      nextStep: data.nextStep || data.next_step || undefined,
+      reason: data.reason || '',
+      recommendedAction: data.recommendedAction || data.recommended_action || 'block',
+    } : undefined,
+    errorCode: raw.errorCode || raw.error_code || undefined,
+    annotationCheck: normalizeReviewAnnotationCheckResult(
+      raw.annotationCheck || raw.annotation_check
+    ),
   };
 }
 
@@ -754,6 +1087,48 @@ export async function reviewWorkflowSyncQuery(
     }),
   });
   return normalizeWorkflowSyncResponse(raw);
+}
+
+export async function reviewVerifyWorkflow(
+  request: WorkflowVerifyRequest,
+): Promise<WorkflowVerifyResponse> {
+  const raw = await fetchJson<RawWorkflowVerifyResponse>('/api/review/workflow/verify', {
+    method: 'POST',
+    body: JSON.stringify({
+      form_id: request.formId,
+      token: request.token,
+      action: request.action,
+      actor: request.actor,
+      next_step: request.nextStep
+        ? {
+          assignee_id: request.nextStep.assigneeId,
+          name: request.nextStep.name,
+          roles: request.nextStep.roles,
+        }
+        : undefined,
+      comments: request.comments,
+      metadata: request.metadata ?? undefined,
+    }),
+  });
+  return normalizeWorkflowVerifyResponse(raw);
+}
+
+export async function reviewAnnotationCheck(
+  request: ReviewAnnotationCheckRequest
+): Promise<ReviewAnnotationCheckResponse> {
+  const raw = await fetchJson<RawReviewAnnotationCheckResponse>('/api/review/annotations/check', {
+    method: 'POST',
+    body: JSON.stringify({
+      task_id: request.taskId,
+      form_id: request.formId,
+      current_node: request.currentNode,
+      intent: request.intent,
+      included_types: request.includedTypes,
+      token: request.token,
+    }),
+  });
+
+  return normalizeReviewAnnotationCheckResponse(raw);
 }
 
 export async function reviewPreloadCache(
@@ -1268,6 +1643,7 @@ export type VerifyResponse = {
       projectId: string;
       userId: string;
       userName?: string;
+      formId?: string;
       role?: string;
       workflowMode?: string;
       exp: number;
@@ -1284,6 +1660,8 @@ type RawVerifyClaims = {
   user_id?: string;
   userName?: string;
   user_name?: string;
+  formId?: string;
+  form_id?: string;
   role?: string;
   workflowMode?: string;
   workflow_mode?: string;
@@ -1311,6 +1689,7 @@ function normalizeVerifyClaims(raw?: RawVerifyClaims | null): VerifyResponse['da
     projectId,
     userId,
     userName: raw.userName || raw.user_name,
+    formId: raw.formId || raw.form_id,
     role: raw.role,
     workflowMode: raw.workflowMode || raw.workflow_mode,
     exp: typeof raw.exp === 'number' ? raw.exp : 0,

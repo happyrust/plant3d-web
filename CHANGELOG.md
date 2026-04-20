@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **评论降级去重（P1）**：`addComment` 后端失败或返回非成功时，不再写入本地 store（避免本地生成的 ID 与后端不一致导致后续列表视图拉取后评论重复显示），改为 `emitToast` 提示用户重试。
+- **评论编辑回滚（P2）**：`saveEditComment` 改为乐观更新 + 后端拒绝时回滚模式（与严重度编辑策略一致），后端返回 `success: false` 时自动回滚内容并 toast 提示。
+- **移除 @ts-nocheck（P3）**：`AnnotationPanel.vue` 移除顶部 `@ts-nocheck`，TypeScript 零报错，恢复类型安全。
+
+### Changed
+
+- **ConfirmedRecordData 类型文档（P4）**：为 `ConfirmedRecordData` 的 `unknown[]` 字段添加 JSDoc 说明设计意图（后端历史记录序列化兼容）。
+- **annotationKey 冲突概率文档（P5）**：`computeAnnotationKeyV1` JSDoc 补充 64-bit key 的冲突概率数据（10k: ≈2.7×10⁻¹²）及 10 万条以上升级建议。
+
 ### Docs & Refactoring
 
 - **三维校审实现审核报告**：`docs/verification/2026-04-19-三维校审实现审核报告.md` 对照三份 plan（2026-03-26 被动模式收紧 / 2026-04-01 仿 PMS UI handoff / 2026-04-02 external/passive 全链路验收）逐条验证代码现状，给出三级风险分类与分批 commit 建议。
@@ -15,6 +26,12 @@
 - **M2 审核恢复自测产物**：`.factory/library/m2-restore-bootstrap.md` 与 `docs/verification/m2-restore-bootstrap.md` 同步 M2 bootstrap 说明。
 
 ### Added
+
+- **批注流转门禁前端接入（V1）**：ReviewPanel 增加提交前双层校验，包含未确认草稿阻断与后端 `review/annotations/check` 校验。
+  - 未确认批注/测量草稿不允许提交流转，提示明确为「请先确认数据，再执行流转」。
+  - 后端返回 `recommendedAction=return` 时提示「当前应驳回，不可直接流转到下一节点」，`recommendedAction=block` 时提示待确认批注阻塞。
+  - `passive / external` 只读场景仍不新增内部流转按钮，提交链路保持外部约定。
+
 
 - **批注严重度（问题严重程度）**：为四类批注（文字/云线/矩形/OBB）新增 `severity` 字段，4 档`致命 / 严重 / 一般 / 建议`。
   - **权限**：批注作者本人或审核侧（校对/审核/经理/Admin）可修改；Viewer 与其他设计人员只读。
