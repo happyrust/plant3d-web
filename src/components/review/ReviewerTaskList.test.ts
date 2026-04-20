@@ -140,6 +140,23 @@ describe('ReviewerTaskList', () => {
     expect(document.body.textContent).toContain('全部优先级');
   });
 
+  it('switches inbox title and submitted label with reviewer role mappings', async () => {
+    mockUserStore.currentUser.value = { id: 'reviewer-1', name: '审核员', role: UserRole.REVIEWER };
+    await mountComponent([
+      createTask({ id: 'reviewer-task', title: '审核节点任务', status: 'submitted', currentNode: 'sh' }),
+    ]);
+    expect(document.body.textContent).toContain('待审核任务');
+    expect(document.body.textContent).toContain('待审核');
+
+    document.body.innerHTML = '';
+    mockUserStore.currentUser.value = { id: 'manager-1', name: '批准人', role: UserRole.MANAGER };
+    await mountComponent([
+      createTask({ id: 'manager-task', title: '批准节点任务', status: 'submitted', currentNode: 'pz' }),
+    ]);
+    expect(document.body.textContent).toContain('待批准任务');
+    expect(document.body.textContent).toContain('待批准');
+  });
+
   it('uses an isolated persistence key for the reviewer inbox surface', async () => {
     await mountComponent([
       createTask({ id: 'review-task', title: '审核列表任务', status: 'submitted', currentNode: 'jd' }),
@@ -194,5 +211,21 @@ describe('ReviewerTaskList', () => {
     expect(document.body.textContent).toContain('FORM-REVIEW-226');
     expect(document.body.textContent).toContain('设计编校审说明.pdf');
     expect(document.body.textContent).toContain('完整的设计编校审包说明');
+  });
+
+  it('shows explicit empty state copy when filters remove all inbox tasks', async () => {
+    await mountComponent([
+      createTask({ id: 'review-task-a', title: '审核详情任务', status: 'submitted' }),
+    ]);
+
+    const searchInput = document.querySelector('input[placeholder*="搜索任务名称"]') as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+    searchInput!.value = 'not-found';
+    searchInput!.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+
+    expect(document.body.textContent).toContain('暂无任务');
+    expect(document.body.textContent).toContain('没有符合筛选条件的任务');
+    expect(document.body.textContent).toContain('清除筛选条件');
   });
 });

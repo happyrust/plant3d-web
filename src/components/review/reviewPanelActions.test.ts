@@ -71,6 +71,19 @@ describe('reviewPanelActions', () => {
     expect(getWorkflowSubmitBridgeAction('pz')).toBe('agree');
   });
 
+  it('workflow submit labels remain enabled and explicit for each reviewer node', () => {
+    const labels = ['sj', 'jd', 'sh', 'pz'].map((node) => getSubmitActionLabel(node as never));
+    expect(labels).toEqual([
+      '确认流转至校对',
+      '确认流转至审核',
+      '确认流转至批准',
+      '确认最终批准',
+    ]);
+    for (const node of ['sj', 'jd', 'sh', 'pz'] as const) {
+      expect(canSubmitAtCurrentNode(node)).toBe(true);
+    }
+  });
+
   it('mapWorkflowHistoryToTaskDetailItems 将工作流历史映射为详情面板可展示的数据', () => {
     const items = mapWorkflowHistoryToTaskDetailItems([
       {

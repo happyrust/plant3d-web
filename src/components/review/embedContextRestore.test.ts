@@ -217,4 +217,28 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(activatePanel).toHaveBeenCalledWith('review');
     expect(result.restoreStatus).toBe('missing');
   });
+
+  it('keeps reviewer passive embed restore focused on review panel even when task is unresolved', async () => {
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'reviewer',
+      formId: 'FORM-MISSING',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+    });
+
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['review']);
+    expect(activatePanel).toHaveBeenCalledWith('review');
+    expect(setCurrentTask).toHaveBeenCalledWith(null);
+    expect(result.restoreStatus).toBe('missing');
+  });
 });

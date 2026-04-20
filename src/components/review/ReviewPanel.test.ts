@@ -28,6 +28,8 @@ const workflowResponseState = {
 
 const loadWorkflowMock = vi.fn(async () => workflowResponseState.value);
 const loadReviewTasksMock = vi.fn(async () => {});
+const submitTaskToNextNodeMock = vi.fn(async () => {});
+const returnTaskToNodeMock = vi.fn(async () => {});
 const setCurrentTaskMock = vi.fn(async (task: ReviewTask | null) => {
   currentTask.value = task;
 });
@@ -121,8 +123,8 @@ vi.mock('@/composables/useUserStore', () => ({
     reviewTasks: { value: [] as ReviewTask[] },
     loadReviewTasks: loadReviewTasksMock,
     getTaskWorkflowHistory: loadWorkflowMock,
-    submitTaskToNextNode: vi.fn(),
-    returnTaskToNode: vi.fn(),
+    submitTaskToNextNode: submitTaskToNextNodeMock,
+    returnTaskToNode: returnTaskToNodeMock,
   }),
 }));
 
@@ -209,6 +211,8 @@ describe('ReviewPanel', () => {
     };
     loadWorkflowMock.mockClear();
     loadReviewTasksMock.mockClear();
+    submitTaskToNextNodeMock.mockClear();
+    returnTaskToNodeMock.mockClear();
     setCurrentTaskMock.mockClear();
     clearCurrentTaskMock.mockClear();
     toolStoreMock.addAnnotation.mockClear();
