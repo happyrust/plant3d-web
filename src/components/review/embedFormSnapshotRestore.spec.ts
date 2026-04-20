@@ -260,6 +260,44 @@ describe('restoreEmbedFormSnapshot', () => {
     });
   });
 
+  it('workflow-sync 空记录仍通过统一 snapshot 层下发空 payload 清空场景', async () => {
+    const importTools = vi.fn();
+    const request = vi.fn().mockResolvedValue({
+      code: 200,
+      message: 'success',
+      data: {
+        models: [],
+        records: [],
+        annotationComments: [],
+        attachments: [],
+      },
+    });
+
+    await restoreEmbedFormSnapshot({
+      formId: 'FORM-CLEAR',
+      token: 'token-clear',
+      actor: {
+        id: 'SJ',
+        name: 'SJ',
+        roles: 'sj',
+      },
+      request,
+      importTools,
+    });
+
+    expect(importTools).toHaveBeenCalledWith(JSON.stringify({
+      version: 5,
+      measurements: [],
+      annotations: [],
+      obbAnnotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      dimensions: [],
+      xeokitDistanceMeasurements: [],
+      xeokitAngleMeasurements: [],
+    }));
+  });
+
   it('merges snapshot attachments into restored task for readonly reopen surfaces', () => {
     const task: ReviewTask = {
       id: 'task-1',

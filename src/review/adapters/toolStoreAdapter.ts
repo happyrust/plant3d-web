@@ -52,3 +52,54 @@ export function buildReplayPayloadFromSnapshot(snapshot: ReviewSnapshot): string
 
   return buildReviewRecordReplayPayload([fakeRecord]);
 }
+
+export function buildReplayPayloadFromImportSnapshot(snapshot: ReviewSnapshot): string {
+  const annotations: unknown[] = [];
+  const cloudAnnotations: unknown[] = [];
+  const rectAnnotations: unknown[] = [];
+  const obbAnnotations: unknown[] = [];
+  const measurements: unknown[] = [];
+  const xeokitDistanceMeasurements: unknown[] = [];
+  const xeokitAngleMeasurements: unknown[] = [];
+
+  for (const annotation of snapshot.annotations) {
+    switch (annotation.annotationType) {
+      case 'text':
+        annotations.push(annotation.payload);
+        break;
+      case 'cloud':
+        cloudAnnotations.push(annotation.payload);
+        break;
+      case 'rect':
+        rectAnnotations.push(annotation.payload);
+        break;
+      case 'obb':
+        obbAnnotations.push(annotation.payload);
+        break;
+    }
+  }
+
+  for (const measurement of snapshot.measurements) {
+    if (measurement.kind === 'distance') {
+      xeokitDistanceMeasurements.push(measurement.payload);
+      continue;
+    }
+    if (measurement.kind === 'angle') {
+      xeokitAngleMeasurements.push(measurement.payload);
+      continue;
+    }
+    measurements.push(measurement.payload);
+  }
+
+  return JSON.stringify({
+    version: 5,
+    measurements,
+    annotations,
+    obbAnnotations,
+    cloudAnnotations,
+    rectAnnotations,
+    dimensions: [],
+    xeokitDistanceMeasurements,
+    xeokitAngleMeasurements,
+  });
+}
