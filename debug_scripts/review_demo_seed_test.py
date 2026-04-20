@@ -54,6 +54,13 @@ def test_seed_script_creates_required_inventory_shape() -> None:
         'reviewerConfirmedFormId': 'FORM-M2-RESTORE-001',
         'emptyTaskFormId': 'FORM-M2-RESTORE-EMPTY-001',
         'embedFormId': 'FORM-M2-EMBED-001',
+        'embedMintRequest': {
+            'projectId': 'debug-project',
+            'userId': 'user-002',
+            'workflowRole': 'jd',
+            'workflowMode': 'external',
+            'formId': 'FORM-M2-EMBED-001',
+        },
         'embedRouteHint': '/?user_token=<token>&workflow_role=jd&workflow_mode=external&form_id=FORM-M2-EMBED-001',
     }
 

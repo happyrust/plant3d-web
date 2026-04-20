@@ -519,7 +519,7 @@ const submitSuccessTitle = computed(() => (
   externalWorkflowMode.value ? '编校审单保存成功' : '编校审单创建成功'
 ));
 const submitSuccessDetails = computed(() => (
-  externalWorkflowMode.value ? '已保存到编校审单，流程流转由外部系统继续处理。' : '已提交到校审流程。'
+  externalWorkflowMode.value ? '已保存到编校审单，后续流转将由外部系统继续处理。' : '已提交到校审流程。'
 ));
 const submitButtonAriaLabel = computed(() => (
   externalWorkflowMode.value ? '验证并保存编校审单' : '验证并提交编校审单'
@@ -732,7 +732,7 @@ function closePanel() {
       <div v-if="externalWorkflowMode" class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
         <p class="text-xs font-medium text-blue-700">流程提示</p>
         <p class="mt-1 text-xs text-blue-600">
-          编校审单已保存，后续流转将由外部系统继续处理，无需在此继续操作。
+          编校审单已保存；若后续被外部流程退回，请进入三维校审视图，对批注执行“已修改”或“不需解决”，并先确认当前数据，再继续外部流转。
         </p>
       </div>
 
@@ -784,7 +784,7 @@ function closePanel() {
       </div>
       <div v-if="showDebugUi && externalWorkflowMode" data-testid="external-workflow-mode-banner"
         class="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-        外部流程模式 — 仅保存编校审数据，流程流转与审批由外部系统驱动。
+        外部流程模式 — 仅保存编校审数据；收到退回后，请进入三维校审视图处理批注，并先确认当前数据。
       </div>
 
       <Card class="border border-[#F3F4F6] shadow-none" body-class="p-3">

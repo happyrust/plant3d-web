@@ -12,3 +12,8 @@
   - task `seed-m2-embed-restore`
   - form `FORM-M2-EMBED-001`
   - route hint `/?user_token=<token>&workflow_role=jd&workflow_mode=external&form_id=FORM-M2-EMBED-001`
+- Browser-safe helper:
+  - open `http://127.0.0.1:3101/pms-review-simulator.html?output_project=AvevaMarineSample`
+  - use token-primary mode / `新增` or `重开最近 form_id`
+  - copy the simulator diagnostics field `最终 iframe src`
+  - that URL is the supported browser-safe launch path for FORM-M2-EMBED-001 validation

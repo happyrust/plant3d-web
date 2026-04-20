@@ -21,6 +21,7 @@
     "test:e2e": "npx @playwright/test test",
     "test:e2e:pms": "npx @playwright/test test --config=playwright.pms.config.ts",
     "test:pms:cdp": "npx tsx scripts/pms-chrome-devtools-flow.ts",
+    "test:pms:cdp:local": "npx tsx scripts/local-pms-cdp-smoke.ts",
     "test:pms:cdp:full": "PMS_CDP_FULL_FLOW=1 npx tsx scripts/pms-chrome-devtools-flow.ts",
     "test:pms:cdp:extended": "PMS_CDP_FULL_FLOW=1 PMS_CDP_EXTENDED_FLOW=1 npx tsx scripts/pms-chrome-devtools-flow.ts",
     "test:pms:cdp:attach": "CHROME_CDP_URL=http://127.0.0.1:9222 npx tsx scripts/pms-chrome-devtools-flow.ts",

@@ -257,7 +257,7 @@ function clearAll(): void {
 const userStore = useUserStore();
 
 /** 严重度快捷按钮的 4 档（不含"清除"，清除单独处理） */
-const SEVERITY_QUICK_BUCKETS: Array<{ key: AnnotationSeverity; label: string; dotClass: string }> = [
+const SEVERITY_QUICK_BUCKETS: { key: AnnotationSeverity; label: string; dotClass: string }[] = [
   { key: 'critical', label: '致命', dotClass: 'bg-red-500' },
   { key: 'severe', label: '严重', dotClass: 'bg-orange-500' },
   { key: 'normal', label: '一般', dotClass: 'bg-blue-500' },
@@ -548,7 +548,7 @@ onUnmounted(() => {
                     :disabled="!canEditCurrentSeverity"
                     :title="bucket.label"
                     @click="setCurrentSeverity(bucket.key)">
-                    <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass"></span>
+                    <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass" />
                     {{ bucket.label }}
                   </button>
                   <button type="button"
@@ -624,7 +624,7 @@ onUnmounted(() => {
                     :disabled="batchActionDisabled"
                     :title="'批量设为' + bucket.label"
                     @click="batchSetCurrentTypeSeverity(bucket.key)">
-                    <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass"></span>
+                    <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass" />
                     {{ bucket.label }}
                   </button>
                   <button type="button"

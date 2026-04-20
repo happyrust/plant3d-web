@@ -32,7 +32,6 @@
 
     <div v-if="panelMode === 'compute'" class="flex-1 overflow-y-auto px-5 py-4">
       <div class="flex flex-col gap-4">
-
         <!-- Banner -->
         <div class="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2">
           <div class="text-xs font-bold text-orange-800">两种输入方式</div>

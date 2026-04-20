@@ -4,6 +4,7 @@
 import {
   fromBackendRole,
   type AnnotationComment,
+  type AnnotationReviewState,
   type AnnotationSeverity,
   type ReviewAttachment,
   type ReviewComponent,
@@ -212,17 +213,30 @@ export type CachePreloadResponse = {
   };
 };
 
+export type ReviewSnapshotAnnotationPayload = Record<string, unknown> & {
+  id: string;
+  reviewState?: AnnotationReviewState;
+  severity?: AnnotationSeverity;
+};
+
+export type ReviewSnapshotMeasurementPayload = Record<string, unknown> & {
+  id: string;
+  kind?: 'distance' | 'angle';
+  visible?: boolean;
+  createdAt?: number;
+};
+
 // 确认记录类型
 export type ConfirmedRecordData = {
   id?: string;
   taskId: string;
   formId?: string;
   type: 'batch';
-  annotations: unknown[];
-  cloudAnnotations: unknown[];
-  rectAnnotations: unknown[];
-  obbAnnotations?: unknown[];
-  measurements: unknown[];
+  annotations: ReviewSnapshotAnnotationPayload[];
+  cloudAnnotations: ReviewSnapshotAnnotationPayload[];
+  rectAnnotations: ReviewSnapshotAnnotationPayload[];
+  obbAnnotations?: ReviewSnapshotAnnotationPayload[];
+  measurements: ReviewSnapshotMeasurementPayload[];
   note: string;
 };
 
@@ -288,11 +302,11 @@ export type WorkflowRecordData = {
   id: string;
   taskId: string;
   type: string;
-  annotations: unknown[];
-  cloudAnnotations: unknown[];
-  rectAnnotations: unknown[];
-  obbAnnotations: unknown[];
-  measurements: unknown[];
+  annotations: ReviewSnapshotAnnotationPayload[];
+  cloudAnnotations: ReviewSnapshotAnnotationPayload[];
+  rectAnnotations: ReviewSnapshotAnnotationPayload[];
+  obbAnnotations: ReviewSnapshotAnnotationPayload[];
+  measurements: ReviewSnapshotMeasurementPayload[];
   note: string;
   confirmedAt: string;
 };

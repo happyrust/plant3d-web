@@ -12,6 +12,13 @@ import {
   type WorkflowSyncQueryRequest,
   type WorkflowSyncResponse,
 } from '@/api/reviewApi';
+import { buildSnapshotFromWorkflowSync } from '@/review/adapters/workflowSyncAdapter';
+import { runWorkflowSyncShadow } from '@/review/services/reviewSnapshotService';
+import {
+  getReviewCommentEventLog,
+  getReviewCommentThreadStore,
+  isReviewCommentThreadStoreActive,
+} from '@/review/services/sharedStores';
 
 export type EmbedFormSnapshotRestoreOptions = {
   formId: string;
@@ -69,7 +76,32 @@ export async function restoreEmbedFormSnapshot(
     : [];
 
   if (options.importTools) {
-    options.importTools(buildWorkflowSnapshotReplayPayload(records, comments));
+    const legacyPayload = buildWorkflowSnapshotReplayPayload(records, comments);
+    const shadowResult = runWorkflowSyncShadow({ legacyPayload, data });
+
+    if (isReviewCommentThreadStoreActive()) {
+      try {
+        const snapshot = shadowResult?.snapshot ?? buildSnapshotFromWorkflowSync(data);
+        const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+        if (merge.changed) {
+          getReviewCommentEventLog().push({
+            kind: 'snapshot_merged',
+            key: 'workflow_sync',
+            payload: {
+              formId: options.formId,
+              comments: snapshot.comments.length,
+              annotations: snapshot.annotations.length,
+            },
+          });
+        }
+      } catch (err) {
+        if (typeof console !== 'undefined') {
+          console.warn('[review/M3 thread store] workflow_sync merge failed', err);
+        }
+      }
+    }
+
+    options.importTools(legacyPayload);
     options.syncTools?.();
   }
 

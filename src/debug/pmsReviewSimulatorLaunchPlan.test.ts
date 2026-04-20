@@ -61,6 +61,22 @@ describe('resolvePmsLaunchFormId', () => {
     expect(search.has('user_role')).toBe(false);
     expect(search.has('user_token')).toBe(false);
   });
+
+  it('adds explicit workflow params back for browser-safe token launch links', () => {
+    const search = buildTokenPrimaryPmsLaunchSearch({
+      directQuery: new URLSearchParams('foo=bar'),
+      outputProject: 'AvevaMarineSample',
+      workflowMode: 'external',
+      workflowRole: 'jd',
+      formId: 'FORM-M2-EMBED-001',
+    });
+
+    expect(search.get('foo')).toBe('bar');
+    expect(search.get('output_project')).toBe('AvevaMarineSample');
+    expect(search.get('workflow_mode')).toBe('external');
+    expect(search.get('workflow_role')).toBe('jd');
+    expect(search.get('form_id')).toBe('FORM-M2-EMBED-001');
+  });
 });
 
 describe('resolveDefaultSimulatorProjectId', () => {

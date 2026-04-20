@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 
-import type { ReviewTask } from '@/types/auth';
+import { UserRole, type ReviewTask } from '@/types/auth';
 
 const currentTask = { value: null as ReviewTask | null };
 const reviewMode = { value: false };
@@ -80,6 +80,7 @@ const toolStoreMock = vi.hoisted(() => ({
   measurements: { value: [] },
   xeokitDistanceMeasurements: { value: [] },
   xeokitAngleMeasurements: { value: [] },
+  getAnnotationComments: vi.fn(() => []),
   addAnnotation: vi.fn(),
   addMeasurement: vi.fn(),
   clearAll: vi.fn(),
@@ -215,11 +216,22 @@ describe('ReviewPanel', () => {
     returnTaskToNodeMock.mockClear();
     setCurrentTaskMock.mockClear();
     clearCurrentTaskMock.mockClear();
+    toolStoreMock.annotationCount.value = 0;
+    toolStoreMock.cloudAnnotationCount.value = 0;
+    toolStoreMock.rectAnnotationCount.value = 0;
+    toolStoreMock.obbAnnotationCount.value = 0;
+    toolStoreMock.measurementCount.value = 0;
+    toolStoreMock.annotations.value = [];
+    toolStoreMock.cloudAnnotations.value = [];
+    toolStoreMock.rectAnnotations.value = [];
+    toolStoreMock.obbAnnotations.value = [];
+    toolStoreMock.measurements.value = [];
     toolStoreMock.addAnnotation.mockClear();
     toolStoreMock.addMeasurement.mockClear();
     toolStoreMock.setToolMode.mockClear();
     toolStoreMock.xeokitDistanceMeasurements.value = [];
     toolStoreMock.xeokitAngleMeasurements.value = [];
+    toolStoreMock.getAnnotationComments.mockReturnValue([]);
     dockApiMock.ensurePanelAndActivate.mockClear();
     commandBusMock.emitCommand.mockClear();
   });
@@ -275,6 +287,92 @@ describe('ReviewPanel', () => {
     expect(zone?.textContent).toContain('刷新');
     expect(zone?.textContent).not.toContain('提交到');
     expect(zone?.textContent).not.toContain('驳回到设计');
+
+    mounted.unmount();
+  });
+
+  it('renders confirmed record review-state summary for mixed annotation outcomes', async () => {
+    sortedConfirmedRecords.value = [
+      {
+        id: 'record-summary-1',
+        confirmedAt: new Date('2026-03-16T10:00:00+08:00').getTime(),
+        note: '混合处理态',
+        annotations: [
+          {
+            id: 'a-1',
+            reviewState: {
+              resolutionStatus: 'fixed',
+              decisionStatus: 'pending',
+              history: [],
+            },
+          },
+          {
+            id: 'a-2',
+            reviewState: {
+              resolutionStatus: 'wont_fix',
+              decisionStatus: 'agreed',
+              history: [],
+            },
+          },
+        ],
+        cloudAnnotations: [],
+        rectAnnotations: [
+          {
+            id: 'r-1',
+            reviewState: {
+              resolutionStatus: 'fixed',
+              decisionStatus: 'rejected',
+              history: [],
+            },
+          },
+        ],
+        obbAnnotations: [],
+        measurements: [],
+      },
+    ] as never[];
+    confirmedRecordCount.value = 1;
+    totalConfirmedAnnotations.value = 3;
+    totalConfirmedMeasurements.value = 0;
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const summary = document.querySelector('[data-testid=\"confirmed-record-review-summary\"]');
+    expect(summary?.textContent).toContain('已修改待确认');
+    expect(summary?.textContent).toContain('已同意不处理');
+    expect(summary?.textContent).toContain('已驳回');
+
+    mounted.unmount();
+  });
+
+  it('shows external unsaved reminder and measurement evidence hint when pending data exists', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+    toolStoreMock.annotationCount.value = 1;
+    toolStoreMock.annotations.value = [{
+      id: 'annot-1',
+      entityId: 'entity-1',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: 'M',
+      title: '待确认批注',
+      description: '等待确认',
+      createdAt: 1710000000000,
+      reviewState: {
+        resolutionStatus: 'fixed',
+        decisionStatus: 'pending',
+        history: [],
+        updatedAt: 1710000001000,
+        updatedById: 'designer-1',
+        updatedByName: '设计人',
+        updatedByRole: UserRole.DESIGNER,
+      },
+    }];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.body.textContent).toContain('请先点击“确认当前数据”');
+    expect(document.body.textContent).toContain('测量当前仅作为处理证据参与确认记录');
 
     mounted.unmount();
   });

@@ -696,6 +696,13 @@ def build_plan(base_url: str) -> dict[str, Any]:
                 'reviewerConfirmedFormId': 'FORM-M2-RESTORE-001',
                 'emptyTaskFormId': 'FORM-M2-RESTORE-EMPTY-001',
                 'embedFormId': 'FORM-M2-EMBED-001',
+                'embedMintRequest': {
+                    'projectId': DEFAULT_PROJECT_ID,
+                    'userId': ROLES['reviewer']['backendUserId'],
+                    'workflowRole': 'jd',
+                    'workflowMode': 'external',
+                    'formId': 'FORM-M2-EMBED-001',
+                },
                 'embedRouteHint': '/?user_token=<token>&workflow_role=jd&workflow_mode=external&form_id=FORM-M2-EMBED-001',
             },
         },
@@ -737,6 +744,43 @@ class BackendClient:
     def review_task_patch(self, task_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         encoded = urllib.parse.quote(task_id, safe='')
         return self.request_json('PATCH', f'/api/review/tasks/{encoded}', payload)
+
+    def mint_embed_url(
+        self,
+        *,
+        project_id: str,
+        user_id: str,
+        workflow_role: str,
+        workflow_mode: str,
+        form_id: str,
+    ) -> dict[str, Any]:
+        return self.request_json(
+            'POST',
+            '/api/review/embed-url',
+            {
+                'project_id': project_id,
+                'user_id': user_id,
+                'workflow_role': workflow_role,
+                'workflow_mode': workflow_mode,
+                'form_id': form_id,
+            },
+        )
+
+    def workflow_sync_query(self, *, form_id: str, token: str, actor_id: str, actor_name: str, actor_roles: str) -> dict[str, Any]:
+        return self.request_json(
+            'POST',
+            '/api/review/workflow/sync',
+            {
+                'action': 'query',
+                'form_id': form_id,
+                'token': token,
+                'actor': {
+                    'id': actor_id,
+                    'name': actor_name,
+                    'roles': actor_roles,
+                },
+            },
+        )
 
 
 @dataclass
@@ -877,7 +921,90 @@ def collect_discoverability(client: BackendClient) -> dict[str, Any]:
     }
 
 
-def build_runtime_output(base_url: str, results: list[SeedResult], warnings: list[str], discoverability: dict[str, Any]) -> dict[str, Any]:
+def build_m2_embed_runtime(client: BackendClient, base_url: str) -> dict[str, Any]:
+    request_payload = {
+        'projectId': DEFAULT_PROJECT_ID,
+        'userId': ROLES['reviewer']['backendUserId'],
+        'workflowRole': 'jd',
+        'workflowMode': 'external',
+        'formId': 'FORM-M2-EMBED-001',
+    }
+    response = client.mint_embed_url(
+        project_id=request_payload['projectId'],
+        user_id=request_payload['userId'],
+        workflow_role=request_payload['workflowRole'],
+        workflow_mode=request_payload['workflowMode'],
+        form_id=request_payload['formId'],
+    )
+    data = response.get('data') if isinstance(response, dict) else None
+    if not isinstance(data, dict):
+        raise RuntimeError('Embed URL response missing data payload')
+
+    token = str(data.get('token') or '').strip()
+    query = data.get('query') if isinstance(data.get('query'), dict) else {}
+    query_form_id = str(query.get('form_id') or '').strip()
+    lineage = data.get('lineage') if isinstance(data.get('lineage'), dict) else {}
+    task_snapshot = data.get('task') if isinstance(data.get('task'), dict) else {}
+    full_url = str(response.get('url') or '').strip()
+
+    route_url = data.get('relative_path')
+    route_path = str(route_url or '/review/3d-view').strip() or '/review/3d-view'
+    route_path = route_path if route_path.startswith('/') else f'/{route_path}'
+
+    relative_open_url = f"{route_path}?{urllib.parse.urlencode({
+        'user_token': token,
+        'workflow_role': request_payload['workflowRole'],
+        'workflow_mode': request_payload['workflowMode'],
+        'form_id': request_payload['formId'],
+    })}"
+    local_open_url = f"http://127.0.0.1:3101{relative_open_url}"
+
+    workflow_sync = client.workflow_sync_query(
+        form_id=request_payload['formId'],
+        token=token,
+        actor_id=request_payload['userId'],
+        actor_name=ROLES['reviewer']['displayName'],
+        actor_roles=request_payload['workflowRole'],
+    )
+    workflow_data = workflow_sync.get('data') if isinstance(workflow_sync, dict) else {}
+    workflow_data = workflow_data if isinstance(workflow_data, dict) else {}
+
+    return {
+        'request': request_payload,
+        'response': {
+            'queryFormId': query_form_id,
+            'lineageTaskId': lineage.get('task_id'),
+            'lineageCurrentNode': lineage.get('current_node'),
+            'lineageStatus': lineage.get('status'),
+            'responseTaskId': task_snapshot.get('id'),
+            'responseTaskCheckerId': task_snapshot.get('checkerId'),
+            'token': token,
+            'relativeOpenUrl': relative_open_url,
+            'localOpenUrl': local_open_url,
+            'publicUrl': full_url or None,
+        },
+        'workflowSyncProbe': {
+            'code': workflow_sync.get('code'),
+            'message': workflow_sync.get('message'),
+            'formExists': workflow_data.get('form_exists'),
+            'taskCreated': workflow_data.get('task_created'),
+            'taskId': workflow_data.get('task_id'),
+            'currentNode': workflow_data.get('current_node'),
+            'taskStatus': workflow_data.get('task_status'),
+            'models': workflow_data.get('models'),
+            'recordCount': len(workflow_data.get('records') or []),
+            'commentCount': len(workflow_data.get('annotation_comments') or []),
+        },
+    }
+
+
+def build_runtime_output(
+    base_url: str,
+    results: list[SeedResult],
+    warnings: list[str],
+    discoverability: dict[str, Any],
+    m2_embed_runtime: dict[str, Any],
+) -> dict[str, Any]:
     payload = build_plan(base_url)
     payload['execution'] = {
         'seeded': [
@@ -895,6 +1022,7 @@ def build_runtime_output(base_url: str, results: list[SeedResult], warnings: lis
         ],
         'warnings': warnings,
         'discoverability': discoverability,
+        'm2EmbedRuntime': m2_embed_runtime,
     }
     return payload
 
@@ -925,7 +1053,10 @@ def main(argv: list[str] | None = None) -> int:
         client.healthcheck()
         results, warnings = sync_task_inventory(client)
         discoverability = collect_discoverability(client)
-    except RuntimeError as exc:
+        m2_embed_runtime = build_m2_embed_runtime(client, args.base_url)
+        dump_json(build_runtime_output(args.base_url, results, warnings, discoverability, m2_embed_runtime), args.pretty)
+        return 0
+    except Exception as exc:
         error_payload = {
             'seedKey': SEED_KEY,
             'baseUrl': args.base_url.rstrip('/'),

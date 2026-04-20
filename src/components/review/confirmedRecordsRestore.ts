@@ -4,6 +4,14 @@ import { buildReviewRecordReplayPayload } from './reviewRecordReplay';
 
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 
+import { buildSnapshotFromTaskRecords } from '@/review/adapters/reviewRecordAdapter';
+import { runTaskRecordsShadow } from '@/review/services/reviewSnapshotService';
+import {
+  getReviewCommentEventLog,
+  getReviewCommentThreadStore,
+  isReviewCommentThreadStoreActive,
+} from '@/review/services/sharedStores';
+
 type ConfirmedRecordEntry = ConfirmedRecord;
 
 type ToolStoreForRestore = {
@@ -76,12 +84,52 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       if (shouldClear) {
         options.toolStore.clearAll();
         tools.syncFromStore();
+        if (isReviewCommentThreadStoreActive()) {
+          const cleared = getReviewCommentThreadStore().clear();
+          if (cleared.changed) {
+            getReviewCommentEventLog().push({
+              kind: 'thread_clear',
+              key: 'task_records',
+              payload: { taskId: taskId ?? null },
+            });
+          }
+        }
       }
       lastRestoredSceneKey.value = restoreKey;
       return;
     }
 
-    options.toolStore.importJSON(buildReplayPayload(records));
+    const legacyPayload = buildReplayPayload(records);
+    const shadowResult = runTaskRecordsShadow({
+      legacyPayload,
+      records,
+      build: { taskId: taskId ?? undefined },
+    });
+
+    if (isReviewCommentThreadStoreActive()) {
+      try {
+        const snapshot = shadowResult?.snapshot
+          ?? buildSnapshotFromTaskRecords(records, { taskId: taskId ?? undefined });
+        const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+        if (merge.changed) {
+          getReviewCommentEventLog().push({
+            kind: 'snapshot_merged',
+            key: 'task_records',
+            payload: {
+              taskId: taskId ?? null,
+              comments: snapshot.comments.length,
+              annotations: snapshot.annotations.length,
+            },
+          });
+        }
+      } catch (err) {
+        if (typeof console !== 'undefined') {
+          console.warn('[review/M3 thread store] task_records merge failed', err);
+        }
+      }
+    }
+
+    options.toolStore.importJSON(legacyPayload);
     tools.syncFromStore();
     lastRestoredSceneKey.value = restoreKey;
   }

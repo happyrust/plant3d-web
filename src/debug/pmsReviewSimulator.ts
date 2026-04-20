@@ -1254,8 +1254,8 @@ function renderWorkflowActionHint(): void {
           ? `${actionText ? `${actionText}：` : ''}${state.workflowAction.lastMessage}（${timeText}）`
           : syncDrivenAction
             ? state.sidePanelMode === 'initiate'
-              ? '当前为外部流程模式；送审提交直接通过 workflow/sync active 驱动，不会先推进内部任务状态。'
-              : '当前为外部流程模式；同意 / 驳回 / 终止均直接通过 workflow/sync 驱动，不会先推进内部任务状态。'
+              ? '当前为外部流程模式；送审提交直接通过 workflow/sync active 驱动，状态将由外部流程同步刷新。'
+              : '当前为外部流程模式；同意 / 驳回 / 终止均直接通过 workflow/sync 驱动，状态将由外部流程同步刷新。'
             : '当前为外部流程模式；当前上下文仅用于查看与排查。';
     return;
   }
@@ -1643,14 +1643,14 @@ function renderWorkflowDialogState(): void {
   refs.workflowDialogSubtitle.textContent =
     PASSIVE_WORKFLOW_MODE
       ? action === 'active'
-        ? '确认以当前说明执行 workflow/sync active；本次不会先推进内部任务状态。'
+        ? '确认以当前说明执行 workflow/sync active；当前状态将由外部流程同步刷新。'
         : action === 'agree'
-          ? '确认以当前意见执行 workflow/sync agree；外部流程将通过 workflow/sync 推进。'
+          ? '确认以当前意见执行 workflow/sync agree；当前状态将由外部流程同步刷新。'
           : action === 'return'
-            ? '请选择回退节点并确认驳回原因；将直接通过 workflow/sync return 驱动外部流程。'
+            ? '请选择回退节点并确认流转驳回原因；当前状态将由外部流程同步刷新。'
             : action === 'stop'
-              ? '终止属于破坏性动作；将直接通过 workflow/sync stop 驱动外部流程。'
-              : '请确认本次 workflow/sync 提交内容。'
+              ? '终止属于破坏性动作；将通过 workflow/sync stop 终止外部流程并刷新当前状态。'
+              : '请确认本次 workflow/sync 提交内容；当前状态将由外部流程同步刷新。'
       : action === 'active'
         ? '确认先推进平台任务，再以当前发起说明执行 workflow/sync active。'
         : action === 'agree'
@@ -1659,7 +1659,7 @@ function renderWorkflowDialogState(): void {
             ? '请选择回退节点并确认驳回原因；会先驳回平台任务，再同步 workflow/sync，目标节点会编码进 comments。'
             : action === 'stop'
               ? '终止属于破坏性动作；会先取消平台任务，再同步 workflow/sync stop。'
-              : '请确认本次 workflow/sync 提交内容。';
+              : '请确认本次 workflow/sync 提交内容；当前状态将由外部流程同步刷新。';
 
   const warning =
     action === 'stop'
@@ -1667,7 +1667,7 @@ function renderWorkflowDialogState(): void {
       : action === 'return'
         ? '退回不新增后端字段，目标节点会编码进 comments payload。'
         : PASSIVE_WORKFLOW_MODE && syncDrivenAction
-          ? `当前 ${actionText[action || 'active']} 将直接调用 workflow/sync，不再先推进内部任务状态。`
+          ? `当前 ${actionText[action || 'active']} 将直接调用 workflow/sync，状态将由外部流程同步刷新。`
           : '';
   refs.workflowDialogWarning.hidden = !warning;
   refs.workflowDialogWarning.textContent = warning;
@@ -1832,6 +1832,7 @@ function renderDiagnostics(): void {
           <div>可用项目列表：${escapeHtml(availableProjectPaths.join(', ') || '--')}</div>
           <div>ModelUrl 片段：${escapeHtml(launchPlan.modelUrlSummary)}</div>
           <div>token 摘要：${escapeHtml(launchPlan.tokenSummary)}</div>
+          <div>浏览器安全直开：可直接复制下方最终 iframe src 到浏览器地址栏（无需再手工拼接 token/query）。</div>
           <div>最终 iframe src：${escapeHtml(launchPlan.finalUrlSummary)}</div>
         </div>`
     : ''}
@@ -2222,7 +2223,7 @@ async function executeWorkflowAction(
     state.diagnostics.workflowSnapshot = await requestWorkflowSync(formId, action, payloadComment, targetNode);
     state.workflowAction.lastOk = true;
     state.workflowAction.lastMessage = syncDrivenAction
-      ? `workflow/sync ${action} 提交成功（外部流程驱动，未推进内部任务状态）`
+      ? `workflow/sync ${action} 成功，已等待外部流程刷新当前状态`
       : '接口调用成功';
     state.diagnostics.error = null;
     await refreshDiagnosticsSnapshot({ taskId, formId });
@@ -2363,6 +2364,9 @@ async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsL
   const modelUrlSearch = buildTokenPrimaryPmsLaunchSearch({
     directQuery,
     outputProject: state.projectId,
+    workflowMode: state.platformEmbedWorkflowMode || null,
+    workflowRole,
+    formId: modelUrlFormId,
   });
 
   const finalUrl = new URL(modelUrlPath, window.location.origin);
@@ -2450,7 +2454,7 @@ async function openIframe(params: {
     refs.modalTitle.textContent = '正在模拟 PMS 两段式启动…';
     refs.modalSubtitle.textContent = state.pmsLikeIframeQuery
       ? '阶段 1/2：embed-url（等同 GetZyModelUrl+GetZyModeInfo 合一）；阶段 2/2：拼装 iframe（含 user_token、user_id、form_id，贴近真实 PMS 拼链）'
-      : '阶段 1/2：embed-url → path/query；阶段 2/2：token-primary 仅 user_token + output_project（不含 URL user_id/form_id）';
+      : '阶段 1/2：embed-url → path/query；阶段 2/2：browser-safe token-primary（保留 user_token + form_id + workflow_mode + workflow_role，省去手工 shell 拼链）';
     const launchPlan = await buildPmsLaunchPlan(formId);
     state.diagnostics.launchPlan = launchPlan;
     const url = launchPlan.finalUrl;

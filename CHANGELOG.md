@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Docs & Refactoring
+
+- **三维校审实现审核报告**：`docs/verification/2026-04-19-三维校审实现审核报告.md` 对照三份 plan（2026-03-26 被动模式收紧 / 2026-04-01 仿 PMS UI handoff / 2026-04-02 external/passive 全链路验收）逐条验证代码现状，给出三级风险分类与分批 commit 建议。
+- **M3 批注体系重构 plan**：`docs/plans/2026-04-19-review-comment-thread-refactor-plan.md` 补档，固化 DUAL_READ/PROMOTE/CUTOVER 三阶段判据、`commentEventLog` 6 种 kind 观测面、5 处接入点、回滚预案。解决 `src/review/services/commentEventLog.ts` 注释引用的 "§8" 死链。
+- **三维校审批注与处理留痕操作教程**：`docs/verification/三维校审批注与处理留痕操作教程.md` + 同名 `images/` 目录（截图集）。
+- **仿 PMS 批注链路问题汇总与修复方案**：`docs/verification/仿PMS批注链路问题汇总与修复方案.md`。
+- **三维校审当前流程追踪**：`docs/verification/三维校审当前流程追踪.md` 增补与修订。
+- **M3 DUAL_READ 灰度服务层**：新增 `src/review/services/commentThreadDualRead.*` / `commentEventLog.*` / `sharedStores.*` 以及 `src/components/review/ReviewCommentsTimeline.test.ts`，为批注真源从 inline 迁移到 `commentThreadStore` 提供观察期与差异诊断信道。DUAL_READ 期间 inline 真源仍驱动 UI，store 并行同步并在 `commentEventLog` 记录 `snapshot_merged` / `thread_upsert` / `dual_read_diff` 等事件。
+- **M2 审核恢复自测产物**：`.factory/library/m2-restore-bootstrap.md` 与 `docs/verification/m2-restore-bootstrap.md` 同步 M2 bootstrap 说明。
+
 ### Added
 
 - **批注严重度（问题严重程度）**：为四类批注（文字/云线/矩形/OBB）新增 `severity` 字段，4 档`致命 / 严重 / 一般 / 建议`。

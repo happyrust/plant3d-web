@@ -97,12 +97,12 @@ function toggleSeverityFilter(next: AnnotationSeverity | 'unset' | null) {
   severityFilter.value = severityFilter.value === next ? null : next;
 }
 
-const SEVERITY_FILTER_BUCKETS: Array<{
+const SEVERITY_FILTER_BUCKETS: {
   key: AnnotationSeverity | 'unset';
   label: string;
   colorClass: string;
   dotClass: string;
-}> = [
+}[] = [
   { key: 'critical', label: '致命', colorClass: 'bg-red-100 text-red-700 border-red-200', dotClass: 'bg-red-500' },
   { key: 'severe', label: '严重', colorClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-500' },
   { key: 'normal', label: '一般', colorClass: 'bg-blue-100 text-blue-700 border-blue-200', dotClass: 'bg-blue-500' },
@@ -378,12 +378,12 @@ async function handleChangeSeverity(event: Event) {
     if (resp && resp.success === false) {
       applyLocalSeverity(active.type, active.id, prev);
       target.value = prev ?? '';
-      // eslint-disable-next-line no-console
+       
       console.warn('[annotation] 严重度同步后端被拒绝，已回滚：', resp.error_message);
     }
   } catch (err) {
     // 后端接口不可用/网络异常时保留本地（与现有评论流程一致），避免用户输入丢失
-    // eslint-disable-next-line no-console
+     
     console.warn('[annotation] 严重度接口暂不可用，保留本地：', err);
   }
 }
@@ -773,7 +773,7 @@ function formatCommentTime(timestamp: number): string {
             ]"
             :disabled="severityCounts[bucket.key] === 0"
             @click="toggleSeverityFilter(bucket.key)">
-            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass"></span>
+            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="bucket.dotClass" />
             {{ bucket.label }}
             <span class="ml-0.5 font-semibold">{{ severityCounts[bucket.key] }}</span>
           </button>
@@ -1037,7 +1037,7 @@ function formatCommentTime(timestamp: number): string {
             class="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px]"
             :class="getAnnotationSeverityDisplay((activeAny as any).severity).color">
             <span class="inline-block h-1.5 w-1.5 rounded-full"
-              :class="getAnnotationSeverityDisplay((activeAny as any).severity).dot"></span>
+              :class="getAnnotationSeverityDisplay((activeAny as any).severity).dot" />
             {{ getAnnotationSeverityDisplay((activeAny as any).severity).label }}
           </span>
         </div>

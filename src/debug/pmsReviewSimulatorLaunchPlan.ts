@@ -8,6 +8,9 @@ export type ResolvePmsLaunchFormIdOptions = {
 export type BuildTokenPrimaryPmsLaunchSearchOptions = {
   directQuery?: URLSearchParams;
   outputProject?: string | null;
+  workflowMode?: string | null;
+  workflowRole?: string | null;
+  formId?: string | null;
 };
 
 const DEFAULT_SIMULATOR_PROJECT_ID = 'AvevaMarineSample';
@@ -95,6 +98,21 @@ export function buildTokenPrimaryPmsLaunchSearch(
   const outputProject = options.outputProject?.trim();
   if (outputProject) {
     search.set('output_project', outputProject);
+  }
+
+  const workflowMode = options.workflowMode?.trim();
+  if (workflowMode) {
+    search.set('workflow_mode', workflowMode);
+  }
+
+  const workflowRole = options.workflowRole?.trim();
+  if (workflowRole) {
+    search.set('workflow_role', workflowRole);
+  }
+
+  const formId = options.formId?.trim();
+  if (formId && !search.has('form_id')) {
+    search.set('form_id', formId);
   }
 
   return search;

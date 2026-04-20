@@ -10,12 +10,7 @@
 
 本次已确认：
 
-1. `manual/internal` 审批主链可在仿 PMS 页面内按真实按钮完整走通：
-   - `SJ 创建`
-   - `JH agree`
-   - `SH agree`
-   - `PZ agree`
-   - 最终 `approved`
+1. **以 PMS 嵌入主链为准，仿 PMS 与真实 PMS 当前都应按 `external/passive` 理解。**
 2. `external/passive` 模式下，`workflow/sync` 主链已通过真实界面点击跑通：
    - `SJ active -> JH agree -> SH agree -> PZ agree -> approved`
    - `SJ active -> JH agree -> SH stop -> cancelled`
@@ -157,21 +152,23 @@ npm run type-check
 
 ```bash
 cd /Volumes/DPC/work/plant-code/plant3d-web
-node ./.tmp_check_external_flow.mjs
+历史临时脚本 `.tmp_check_external_flow.mjs`（现已不建议继续作为正式入口）
 ```
+
+注：上面这条命令是 2026-04-02 当时使用的临时入口；当前若继续复跑，请优先参考较新的专项教程与问题汇总文档，不再把 `.tmp_*` 当作正式复验入口。
 
 关键结果：
 
 - `passiveWorkflowMode = true`
 - `lastAction = "active"`
 - `lastOk = true`
-- `lastMessage = "workflow/sync active 提交成功（外部流程驱动，未推进内部任务状态）"`
+- `lastMessage = "workflow/sync active 成功，已等待外部流程刷新当前状态"`
 - `requestFails = []`
 
 说明：
 
 > `external/passive` 模式的 `SJ active` 已可走通，且附件 PATCH 的本机跨域噪音已消失。  
-> 注意：页面 success message 仍沿用“未推进内部任务状态”的旧文案，但后续 CLI / query / embed 三处事实已证实 backend 会真实推进外部流程状态。
+> 当前 success message 已收成“已等待外部流程刷新当前状态”的新口径，更贴近这条主链的真实行为。
 
 ---
 
@@ -341,13 +338,16 @@ node ./.tmp_check_external_flow.mjs
 
 如果要向另一个会话或联调人员说明当前状态，建议直接使用下面这段：
 
-> 当前仿 PMS 调试页已经拿到两条可复用结论：  
-> 1. `manual/internal` 下，同一条任务可在同一轮页面会话里完成 `SJ 创建 -> JH agree -> SH agree -> PZ agree -> approved`；  
-> 2. `external/passive` 下，`workflow/sync` 主链也已打通，已通过真实界面点击验证 `approved / cancelled / return->sj` 三类结果，并且终态 reopen 会自动进入 readonly。
+> 当前仿 PMS 调试页对 PMS 主链最有价值、也最应复用的结论是：  
+> **仿 PMS 与真实 PMS 当前都按 `external/passive` 理解。**  
+> 在这条主线上，`workflow/sync` 已通过真实界面点击验证 `approved / cancelled / return->sj` 三类结果，并且终态 reopen 会自动进入 readonly。
 
 ### 6.1 基于 BRAN `24381_145018` 的数据证据链（2026-04-02）
 
 本轮新增了一条更贴近真实交付的证据链，固定使用：
+
+说明：这里记录的是当时的证据链与临时脚本入口；当前再复跑时，应按 newer tutorial / verification 文档中的 external 主链说明执行。
+
 
 - `PMS_TARGET_BRAN_REFNO=24381_145018`
 
@@ -355,7 +355,7 @@ node ./.tmp_check_external_flow.mjs
 
 ```bash
 cd /Volumes/DPC/work/plant-code/plant3d-web
-node ./.tmp_check_pms_simulator_full_evidence.mjs
+历史临时脚本 `.tmp_check_pms_simulator_full_evidence.mjs`（现已不建议继续作为正式入口）
 ```
 
 关键运行态事实：
