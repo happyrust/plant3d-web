@@ -568,7 +568,8 @@ const availableApprovers = computed(() => reviewerUsers.value.filter((u) => isAp
 
 const reviewerInboxStatuses: ReviewTask['status'][] = ['submitted', 'in_review', 'approved', 'rejected'];
 
-// 审核侧收件：按岗位与 currentNode 分桶（jd 校对 / sh 审核 / pz 批准），终态含已通过、已驳回
+// 审核侧收件：按岗位与 currentNode 分桶（jd 校对 / sh 审核 / pz 批准），
+// 仅允许当前岗位看到自己节点上的进行态任务；终态里仅保留与当前岗位相关的 rejected。
 const pendingReviewTasks = computed(() => {
   if (!currentUser.value) return [];
   const uid = resolveEffectiveUserId(currentUser.value);
@@ -580,17 +581,22 @@ const pendingReviewTasks = computed(() => {
     const checkerId = resolveEffectiveUserId({ id: t.checkerId || t.reviewerId });
     const approverId = resolveEffectiveUserId(t.approverId ? { id: t.approverId } : null);
     const isRejected = t.status === 'rejected';
+    const isProofreaderOwner = checkerId === uid;
+    const isReviewerOwner = approverId === uid;
 
     if (!reviewerInboxStatuses.includes(t.status)) return false;
 
     if (role === UserRole.PROOFREADER) {
-      return checkerId === uid && (node === 'jd' || isRejected);
+      if (isRejected) return isProofreaderOwner && node === 'jd';
+      return isProofreaderOwner && node === 'jd';
     }
     if (role === UserRole.REVIEWER) {
-      return approverId === uid && (node === 'sh' || isRejected);
+      if (isRejected) return isReviewerOwner && node === 'sh';
+      return isReviewerOwner && node === 'sh';
     }
     if (role === UserRole.MANAGER) {
-      return approverId === uid && (node === 'pz' || isRejected);
+      if (isRejected) return isReviewerOwner && node === 'pz';
+      return isReviewerOwner && node === 'pz';
     }
     if (role === UserRole.ADMIN) {
       return approverId === uid && (node === 'sh' || node === 'pz' || isRejected);

@@ -668,65 +668,6 @@ async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void
 }
 
 // 监听当前任务变化，自动应用过滤
-watch(currentTask, async (newTask) => {
-  selectedTaskComponentRefno.value = null;
-  lastRestoredSceneKey.value = null;
-
-  if (newTask && newTask.components.length > 0) {
-    // 有新任务时自动应用过滤
-    const taskId = newTask.id;
-    await nextTick();
-    const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
-    if (!viewerReady) {
-      console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
-      return;
-    }
-    if (currentTask.value?.id !== taskId) {
-      return;
-    }
-    await ensureTaskComponentsLoaded(newTask);
-    if (currentTask.value?.id !== taskId) {
-      return;
-    }
-    filterModelByTask();
-  } else {
-    // 清除任务时清除过滤
-    clearModelFilter();
-  }
-
-  await restoreConfirmedRecordsIntoScene(true);
-
-  if (newTask) {
-    showSubmitDialog.value = false;
-    submitComment.value = '';
-    showReturnDialog.value = false;
-    returnReason.value = '';
-    returnTargetNode.value = 'sj';
-    loadWorkflow(newTask.id);
-  } else {
-    workflow.value = null;
-    workflowError.value = null;
-    showSubmitDialog.value = false;
-    submitComment.value = '';
-    showReturnDialog.value = false;
-    returnReason.value = '';
-    returnTargetNode.value = 'sj';
-  }
-}, { immediate: true });
-
-watch(
-  () => ({
-    taskId: currentTask.value?.id ?? null,
-    recordKeys: currentTaskConfirmedRecords.value.map((record) => `${record.id}:${record.confirmedAt}`).join('|'),
-    viewerReady: !!viewerContext.viewerRef.value,
-    toolsReady: !!viewerContext.tools.value,
-  }),
-  async () => {
-    await restoreConfirmedRecordsIntoScene();
-  },
-  { immediate: true }
-);
-
 const pendingAnnotationCount = computed(() => {
   return (
     toolStore.annotationCount.value +
@@ -1071,6 +1012,68 @@ type AnnotationListItem = {
 
 const expandedAnnotationId = ref<string | null>(null);
 const expandedAnnotationType = ref<AnnotationType | null>(null);
+
+function resetWorkbenchTransientState() {
+  showSubmitDialog.value = false;
+  submitComment.value = '';
+  showReturnDialog.value = false;
+  returnReason.value = '';
+  returnTargetNode.value = 'sj';
+  selectedTaskComponentRefno.value = null;
+  showMeasurementMenu.value = false;
+  expandedAnnotationId.value = null;
+  expandedAnnotationType.value = null;
+  workflowError.value = null;
+  confirmError.value = null;
+}
+
+watch(currentTask, async (newTask) => {
+  resetWorkbenchTransientState();
+  lastRestoredSceneKey.value = null;
+
+  if (newTask && newTask.components.length > 0) {
+    // 有新任务时自动应用过滤
+    const taskId = newTask.id;
+    await nextTick();
+    const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
+    if (!viewerReady) {
+      console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
+      return;
+    }
+    if (currentTask.value?.id !== taskId) {
+      return;
+    }
+    await ensureTaskComponentsLoaded(newTask);
+    if (currentTask.value?.id !== taskId) {
+      return;
+    }
+    filterModelByTask();
+  } else {
+    // 清除任务时清除过滤
+    clearModelFilter();
+  }
+
+  await restoreConfirmedRecordsIntoScene(true);
+
+  if (newTask) {
+    loadWorkflow(newTask.id);
+  } else {
+    workflow.value = null;
+  }
+}, { immediate: true });
+
+watch(
+  () => ({
+    taskId: currentTask.value?.id ?? null,
+    recordKeys: currentTaskConfirmedRecords.value.map((record) => `${record.id}:${record.confirmedAt}`).join('|'),
+    viewerReady: !!viewerContext.viewerRef.value,
+    toolsReady: !!viewerContext.tools.value,
+  }),
+  async () => {
+    await restoreConfirmedRecordsIntoScene();
+  },
+  { immediate: true }
+);
 
 const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   const items: AnnotationListItem[] = [];

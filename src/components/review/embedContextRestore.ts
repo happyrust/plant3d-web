@@ -120,16 +120,6 @@ export function resolveEmbedRestoreResult(options: ResolveEmbedRestoreOptions): 
 export async function restoreEmbedWorkbenchContext(
   options: RestoreEmbedWorkbenchOptions,
 ): Promise<EmbedRestoreResult> {
-  await options.loadReviewTasks();
-
-  const result = resolveEmbedRestoreResult({
-    target: options.target,
-    formId: options.formId,
-    reviewerTasks: options.reviewerTasks(),
-    designerTasks: options.designerTasks(),
-    allTasks: options.allTasks(),
-  });
-
   const panelIds = getEmbedLandingPanelIdsWithOptions(options.target, {
     passiveWorkflowMode: options.passiveWorkflowMode,
   });
@@ -141,6 +131,16 @@ export async function restoreEmbedWorkbenchContext(
   if (primaryPanelId) {
     options.activatePanel(primaryPanelId);
   }
+
+  await options.loadReviewTasks();
+
+  const result = resolveEmbedRestoreResult({
+    target: options.target,
+    formId: options.formId,
+    reviewerTasks: options.reviewerTasks(),
+    designerTasks: options.designerTasks(),
+    allTasks: options.allTasks(),
+  });
 
   if (options.target === 'reviewer') {
     await options.setCurrentTask(result.restoredTask);
