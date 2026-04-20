@@ -245,6 +245,21 @@ function applyLocalSubmitTransition(task: ReviewTask, comment?: string): ReviewT
   };
 }
 
+function shouldKeepTerminalTaskInInbox(task: ReviewTask, role: UserRole, effectiveUserId: string): boolean {
+  if (task.status !== 'approved' && task.status !== 'rejected') return false;
+
+  const checkerId = resolveEffectiveUserId({ id: task.checkerId || task.reviewerId });
+  const approverId = resolveEffectiveUserId(task.approverId ? { id: task.approverId } : null);
+
+  if (role === UserRole.PROOFREADER) {
+    return checkerId === effectiveUserId;
+  }
+  if (role === UserRole.REVIEWER || role === UserRole.MANAGER || role === UserRole.ADMIN) {
+    return approverId === effectiveUserId;
+  }
+  return false;
+}
+
 export function normalizeReviewTask(raw: unknown): ReviewTask | null {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -580,26 +595,27 @@ const pendingReviewTasks = computed(() => {
     const node = t.currentNode ?? 'sj';
     const checkerId = resolveEffectiveUserId({ id: t.checkerId || t.reviewerId });
     const approverId = resolveEffectiveUserId(t.approverId ? { id: t.approverId } : null);
-    const isRejected = t.status === 'rejected';
+    const isTerminal = t.status === 'approved' || t.status === 'rejected';
     const isProofreaderOwner = checkerId === uid;
     const isReviewerOwner = approverId === uid;
 
     if (!reviewerInboxStatuses.includes(t.status)) return false;
 
     if (role === UserRole.PROOFREADER) {
-      if (isRejected) return isProofreaderOwner && node === 'jd';
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
       return isProofreaderOwner && node === 'jd';
     }
     if (role === UserRole.REVIEWER) {
-      if (isRejected) return isReviewerOwner && node === 'sh';
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
       return isReviewerOwner && node === 'sh';
     }
     if (role === UserRole.MANAGER) {
-      if (isRejected) return isReviewerOwner && node === 'pz';
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
       return isReviewerOwner && node === 'pz';
     }
     if (role === UserRole.ADMIN) {
-      return approverId === uid && (node === 'sh' || node === 'pz' || isRejected);
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
+      return approverId === uid && (node === 'sh' || node === 'pz');
     }
     return false;
   });
