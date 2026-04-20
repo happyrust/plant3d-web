@@ -11,8 +11,15 @@ import {
   reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
+import { emitToast } from '@/ribbon/toastBus';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
+import {
+  getReviewCommentEventLog,
+  getReviewCommentThreadStore,
+  isReviewCommentThreadStoreActive,
+} from '@/review/services/sharedStores';
 import { type AnnotationComment, getRoleDisplayName, getRoleTheme, UserRole } from '@/types/auth';
 
 const props = defineProps<{
@@ -25,7 +32,16 @@ const userStore = useUserStore();
 const commentLoading = ref(false);
 const commentError = ref<string | null>(null);
 
-// 从后端加载评论
+function dualReadSync() {
+  if (!isReviewCommentThreadStoreActive()) return;
+  if (!props.annotationType || !props.annotationId) return;
+  const inline = store.getAnnotationComments(props.annotationType, props.annotationId);
+  syncInlineToStore(props.annotationType, props.annotationId, inline, {
+    store: getReviewCommentThreadStore(),
+    log: getReviewCommentEventLog(),
+  });
+}
+
 async function loadCommentsFromBackend() {
   if (!props.annotationType || !props.annotationId) return;
   commentLoading.value = true;
@@ -35,6 +51,7 @@ async function loadCommentsFromBackend() {
     if (resp.success && resp.comments) {
       const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
       store.setAnnotationComments(props.annotationType, props.annotationId, normalized);
+      dualReadSync();
     }
   } catch (e) {
     commentError.value = e instanceof Error ? e.message : '加载评论失败';
@@ -146,27 +163,15 @@ async function addComment(columnKey: string) {
       replyToId,
     });
     if (resp.success && resp.comment) {
-      // 用后端返回的带 ID 的评论更新本地 store
       store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment);
+      dualReadSync();
     } else {
-      // 后端失败时仍然保存到本地
-      store.addCommentToAnnotation(props.annotationType, props.annotationId, {
-        authorId: user.id,
-        authorName: user.name,
-        authorRole: user.role,
-        content,
-        replyToId,
-      });
+      emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
+      return;
     }
   } catch {
-    // 网络异常降级到本地保存
-    store.addCommentToAnnotation(props.annotationType, props.annotationId, {
-      authorId: user.id,
-      authorName: user.name,
-      authorRole: user.role,
-      content,
-      replyToId,
-    });
+    emitToast({ message: '网络异常，评论发送失败', level: 'error' });
+    return;
   }
 
   newCommentContents.value[columnKey] = '';
@@ -182,24 +187,27 @@ function startEditComment(comment: AnnotationComment) {
   editingCommentContent.value = comment.content;
 }
 
-// 保存编辑的评论
 async function saveEditComment() {
   if (!editingCommentId.value || !editingCommentContent.value.trim()) return;
   if (!props.annotationType || !props.annotationId) return;
 
+  const content = editingCommentContent.value.trim();
+  const commentId = editingCommentId.value;
+  const prevContent = allComments.value.find(c => c.id === commentId)?.content;
+
+  store.updateAnnotationComment(props.annotationType, props.annotationId, commentId, { content });
+
   try {
-    await reviewCommentUpdate(editingCommentId.value, editingCommentContent.value.trim());
+    const resp = await reviewCommentUpdate(commentId, content);
+    if (resp && resp.success === false) {
+      store.updateAnnotationComment(props.annotationType, props.annotationId, commentId, { content: prevContent });
+      emitToast({ message: resp.error_message || '评论更新被拒绝，已回滚', level: 'warning' });
+    }
   } catch {
-    // 后端失败时仍然更新本地
+    // 网络异常保留本地
   }
 
-  store.updateAnnotationComment(
-    props.annotationType,
-    props.annotationId,
-    editingCommentId.value,
-    { content: editingCommentContent.value.trim() }
-  );
-
+  dualReadSync();
   editingCommentId.value = null;
   editingCommentContent.value = '';
 }
@@ -210,17 +218,17 @@ function cancelEditComment() {
   editingCommentContent.value = '';
 }
 
-// 删除评论
 async function deleteComment(commentId: string) {
   if (!props.annotationType || !props.annotationId) return;
 
   try {
     await reviewCommentDelete(commentId);
   } catch {
-    // 后端失败时仍然删除本地
+    // 后端失败降级本地
   }
 
   store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
+  dualReadSync();
 }
 
 // 设置回复目标
