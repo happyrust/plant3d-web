@@ -1371,7 +1371,7 @@
                   "type": "frame",
                   "id": "eAkTC",
                   "name": "ResubmissionTaskList",
-                  "width": 420,
+                  "width": 350,
                   "height": "fill_container",
                   "fill": "#FFFFFF",
                   "cornerRadius": 12,
@@ -2011,7 +2011,7 @@
                   "type": "frame",
                   "id": "smXbX",
                   "name": "ReviewAuxData",
-                  "width": 500,
+                  "width": 420,
                   "height": "fill_container",
                   "fill": "#FFFFFF",
                   "cornerRadius": 12,
@@ -2059,7 +2059,7 @@
                               "id": "NVzI1",
                               "name": "Title",
                               "fill": "#111827",
-                              "content": "当前任务与批注",
+                              "content": "返回批注列表",
                               "fontFamily": "Inter",
                               "fontSize": 16,
                               "fontWeight": "600"
@@ -2082,10 +2082,138 @@
                               "id": "ryScy",
                               "name": "PriText",
                               "fill": "#DC2626",
-                              "content": "5 条批注",
+                              "content": "本次退回 5 条",
                               "fontFamily": "Inter",
                               "fontSize": 12,
                               "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "fNTSc",
+                      "name": "SumBar",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "padding": [
+                        12,
+                        16
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "NsE0q",
+                          "name": "SL",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "CLBCR",
+                              "name": "T1",
+                              "fill": "#6B7280",
+                              "content": "我发起的校审单",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "n6uvM",
+                              "name": "T2",
+                              "fill": "#111827",
+                              "content": "地下室电缆桥架走向确认 · 可查看我发起时填写的包名、说明、处理人和附件",
+                              "fontFamily": "Inter",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "TZHBn",
+                          "name": "ActionGroup",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "FL1c6",
+                              "name": "ViewInitiateBtn",
+                              "fill": "#FFF7ED",
+                              "cornerRadius": 6,
+                              "gap": 4,
+                              "padding": [
+                                6,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "4Zkto",
+                                  "width": 12,
+                                  "height": 12,
+                                  "iconFontName": "file-text",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "#C2410C"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "OAAES",
+                                  "fill": "#C2410C",
+                                  "content": "查看发起单",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "RgosS",
+                              "name": "HistoryBtn",
+                              "fill": "#FFFFFF",
+                              "cornerRadius": 6,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "gap": 4,
+                              "padding": [
+                                6,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "bZCt7",
+                                  "width": 12,
+                                  "height": 12,
+                                  "iconFontName": "history",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "#4B5563"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "b4Qmb",
+                                  "fill": "#6B7280",
+                                  "content": "流转历史",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
                             }
                           ]
                         }
@@ -2155,94 +2283,6 @@
                               "content": "已处理待确认",
                               "fontFamily": "Inter",
                               "fontSize": 13,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "fNTSc",
-                      "name": "SumBar",
-                      "width": "fill_container",
-                      "fill": "#FFFFFF",
-                      "cornerRadius": 6,
-                      "stroke": {
-                        "thickness": 1,
-                        "fill": "#E5E7EB"
-                      },
-                      "padding": [
-                        12,
-                        16
-                      ],
-                      "justifyContent": "space_between",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "NsE0q",
-                          "name": "SL",
-                          "layout": "vertical",
-                          "gap": 2,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "CLBCR",
-                              "name": "T1",
-                              "fill": "#6B7280",
-                              "content": "当前任务",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "n6uvM",
-                              "name": "T2",
-                              "fill": "#111827",
-                              "content": "地下室电缆桥架走向确认 · 最近退回于 2026-04-21 09:30",
-                              "fontFamily": "Inter",
-                              "fontSize": 13,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "baDQZ",
-                          "name": "ReBtn",
-                          "fill": "#FFFFFF",
-                          "cornerRadius": 4,
-                          "stroke": {
-                            "thickness": 1,
-                            "fill": "#E5E7EB"
-                          },
-                          "gap": 4,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon_font",
-                              "id": "fiGBi",
-                              "name": "Ico",
-                              "width": 12,
-                              "height": 12,
-                              "iconFontName": "refresh-cw",
-                              "iconFontFamily": "lucide",
-                              "fill": "#4B5563"
-                            },
-                            {
-                              "type": "text",
-                              "id": "jQo7z",
-                              "name": "Txt",
-                              "fill": "#6B7280",
-                              "content": "流转历史",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
                               "fontWeight": "normal"
                             }
                           ]
@@ -2369,155 +2409,6 @@
                               "fontFamily": "Inter",
                               "fontSize": 11,
                               "fontWeight": "500"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "J5eKx",
-                      "name": "SelectedAnnotationCard",
-                      "width": "fill_container",
-                      "fill": "#FFFFFF",
-                      "cornerRadius": 10,
-                      "stroke": {
-                        "thickness": 1,
-                        "fill": "#E5E7EB"
-                      },
-                      "layout": "vertical",
-                      "gap": 10,
-                      "padding": 14,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "o5WWl",
-                          "fill": "#111827",
-                          "content": "当前选中批注",
-                          "fontFamily": "Inter",
-                          "fontSize": 14,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "WqUXd",
-                          "fill": "#6B7280",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "主泵上方支架与保温后管线仍有硬碰撞，要求设计重新处理。",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "9CESY",
-                          "name": "MetaRow",
-                          "width": "fill_container",
-                          "justifyContent": "space_between",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "ANIQj",
-                              "name": "Meta1",
-                              "layout": "vertical",
-                              "gap": 2,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "Xk4gA",
-                                  "fill": "#6B7280",
-                                  "content": "严重度",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "6TzZy",
-                                  "fill": "#B91C1C",
-                                  "content": "高",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 12,
-                                  "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "VDBoH",
-                              "name": "Meta2",
-                              "layout": "vertical",
-                              "gap": 2,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "UiTZE",
-                                  "fill": "#6B7280",
-                                  "content": "关联 RefNo",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "V5hkB",
-                                  "fill": "#111827",
-                                  "content": "24381_145018",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 12,
-                                  "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "aPuS1",
-                              "name": "Meta3",
-                              "layout": "vertical",
-                              "gap": 2,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "1LPjs",
-                                  "fill": "#6B7280",
-                                  "content": "处理状态",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "aFm3W",
-                                  "fill": "#B91C1C",
-                                  "content": "已驳回",
-                                  "fontFamily": "Inter",
-                                  "fontSize": 12,
-                                  "fontWeight": "600"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "hYOKA",
-                          "name": "LocateBtn",
-                          "fill": "#FFF7ED",
-                          "cornerRadius": 8,
-                          "padding": [
-                            8,
-                            12
-                          ],
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "QLyFj",
-                              "fill": "#C2410C",
-                              "content": "定位模型",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "600"
                             }
                           ]
                         }
@@ -2894,6 +2785,155 @@
                           ]
                         }
                       ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "J5eKx",
+                      "name": "SelectedAnnotationCard",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 10,
+                      "padding": 14,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "o5WWl",
+                          "fill": "#111827",
+                          "content": "当前选中批注",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "WqUXd",
+                          "fill": "#6B7280",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "主泵上方支架与保温后管线仍有硬碰撞，要求设计重新处理。",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "9CESY",
+                          "name": "MetaRow",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "ANIQj",
+                              "name": "Meta1",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Xk4gA",
+                                  "fill": "#6B7280",
+                                  "content": "严重度",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "6TzZy",
+                                  "fill": "#B91C1C",
+                                  "content": "高",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "VDBoH",
+                              "name": "Meta2",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "UiTZE",
+                                  "fill": "#6B7280",
+                                  "content": "关联 RefNo",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "V5hkB",
+                                  "fill": "#111827",
+                                  "content": "24381_145018",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "aPuS1",
+                              "name": "Meta3",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "1LPjs",
+                                  "fill": "#6B7280",
+                                  "content": "处理状态",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "aFm3W",
+                                  "fill": "#B91C1C",
+                                  "content": "已驳回",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "hYOKA",
+                          "name": "LocateBtn",
+                          "fill": "#FFF7ED",
+                          "cornerRadius": 8,
+                          "padding": [
+                            8,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "QLyFj",
+                              "fill": "#C2410C",
+                              "content": "定位模型",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 },
@@ -2901,7 +2941,7 @@
                   "type": "frame",
                   "id": "W8Dxy",
                   "name": "ReviewCommentsTimeline",
-                  "width": 560,
+                  "width": 420,
                   "height": "fill_container",
                   "fill": "#FFFFFF",
                   "cornerRadius": 12,
@@ -3853,6 +3893,475 @@
                                   "fill": "#FFFFFF"
                                 }
                               ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "xvoNn",
+                  "name": "InitiateReviewDrawer",
+                  "width": 300,
+                  "height": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E5E7EB"
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "kEBlo",
+                      "name": "DrawerHeader",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "PiLP7",
+                          "name": "HeaderLeft",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "phgB4",
+                              "name": "icon",
+                              "width": 16,
+                              "height": 16,
+                              "iconFontName": "file-text",
+                              "iconFontFamily": "lucide",
+                              "fill": "#C2410C"
+                            },
+                            {
+                              "type": "text",
+                              "id": "gkKmi",
+                              "name": "title",
+                              "fill": "#111827",
+                              "content": "发起单填写内容",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "hp0vD",
+                          "name": "OpenBadge",
+                          "fill": "#FFF7ED",
+                          "cornerRadius": 999,
+                          "padding": [
+                            4,
+                            8
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "g9V5v",
+                              "name": "stateText",
+                              "fill": "#C2410C",
+                              "content": "已展开",
+                              "fontFamily": "Inter",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "d2pBC",
+                      "name": "hint",
+                      "fill": "#6B7280",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "处理返回批注时，可随时查看我发起校审单时填写的内容。",
+                      "fontFamily": "Inter",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kzImL",
+                      "name": "PackageCard",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "7oH9i",
+                          "name": "packL",
+                          "fill": "#6B7280",
+                          "content": "数据包名称",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "SVzAk",
+                          "name": "packV",
+                          "fill": "#111827",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "地下室电缆桥架走向确认",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BI7NX",
+                      "name": "DescriptionCard",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Eb7I0",
+                          "name": "descL",
+                          "fill": "#6B7280",
+                          "content": "发起说明",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "LONEk",
+                          "name": "descV",
+                          "fill": "#374151",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "针对地下室桥架与给排水主管道干涉问题发起校审，请重点核对净高、保温层和支架调整空间。",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "re40J",
+                      "name": "MetaGrid",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "SGpVV",
+                          "name": "MetaRow1",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "FKxP4",
+                              "name": "CheckerCard",
+                              "width": "fill_container",
+                              "fill": "#F8FAFC",
+                              "cornerRadius": 8,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 10,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "0wJp6",
+                                  "fill": "#6B7280",
+                                  "content": "校核人",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "jjxBR",
+                                  "fill": "#111827",
+                                  "content": "王工",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ms4S2",
+                              "name": "ReviewerCard",
+                              "width": "fill_container",
+                              "fill": "#F8FAFC",
+                              "cornerRadius": 8,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 10,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "qATXi",
+                                  "fill": "#6B7280",
+                                  "content": "审核人",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "lumUk",
+                                  "fill": "#111827",
+                                  "content": "李工",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "qGoxO",
+                          "name": "MetaRow2",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "E1Jm5",
+                              "name": "PriorityCard",
+                              "width": "fill_container",
+                              "fill": "#F8FAFC",
+                              "cornerRadius": 8,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 10,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "3gITg",
+                                  "fill": "#6B7280",
+                                  "content": "优先级",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "fMlZN",
+                                  "fill": "#B45309",
+                                  "content": "高",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "3Fx1Y",
+                              "name": "DueCard",
+                              "width": "fill_container",
+                              "fill": "#F8FAFC",
+                              "cornerRadius": 8,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "#E5E7EB"
+                              },
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 10,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "p8cYT",
+                                  "fill": "#6B7280",
+                                  "content": "截止时间",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "AczcV",
+                                  "fill": "#111827",
+                                  "content": "2026-04-23 18:00",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ArJ1R",
+                      "name": "ComponentCard",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "a5A8h",
+                          "fill": "#6B7280",
+                          "content": "选中构件",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "DQzHE",
+                          "fill": "#111827",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "1 个 BRAN · RefNo 24381_145018",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "7e7OX",
+                      "name": "AttachmentCard",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#E5E7EB"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FR4l3",
+                          "fill": "#6B7280",
+                          "content": "附件",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "x4YW1",
+                          "name": "File1",
+                          "width": "fill_container",
+                          "fill": "#F8FAFC",
+                          "cornerRadius": 8,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ck4xM",
+                              "fill": "#111827",
+                              "content": "碰撞截图-01.png",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "ItGGq",
+                              "fill": "#6B7280",
+                              "content": "图片",
+                              "fontFamily": "Inter",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "isNV9",
+                          "name": "File2",
+                          "width": "fill_container",
+                          "fill": "#F8FAFC",
+                          "cornerRadius": 8,
+                          "padding": [
+                            8,
+                            10
+                          ],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "rcySZ",
+                              "fill": "#111827",
+                              "content": "桥架调整说明.docx",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "YphtB",
+                              "fill": "#6B7280",
+                              "content": "文档",
+                              "fontFamily": "Inter",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
