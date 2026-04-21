@@ -45,6 +45,25 @@ export type EmbedFormSnapshotContextResult = EmbedFormSnapshotRestoreResult & {
   task: ReviewTask | null;
 };
 
+function mergeSnapshotModelRefnosIntoTask(
+  task: ReviewTask,
+  modelRefnos: string[],
+): ReviewTask {
+  if (!modelRefnos.length) return task;
+
+  const mergedComponents = modelRefnos.map((refno, index) => ({
+    id: `form-model-${index + 1}-${refno}`,
+    name: refno,
+    refNo: refno,
+    type: 'BRAN',
+  }));
+
+  return {
+    ...task,
+    components: mergedComponents,
+  };
+}
+
 export function mergeSnapshotAttachmentsIntoTask(
   task: ReviewTask,
   attachments: ReviewAttachment[],
@@ -127,6 +146,11 @@ export async function restoreEmbedFormSnapshotContext(
 ): Promise<EmbedFormSnapshotContextResult> {
   const snapshot = await restoreEmbedFormSnapshot(options);
   let nextTask = options.task ?? null;
+
+  if (nextTask && snapshot.modelRefnos.length > 0) {
+    nextTask = mergeSnapshotModelRefnosIntoTask(nextTask, snapshot.modelRefnos);
+    await options.updateTask?.(nextTask);
+  }
 
   if (nextTask && snapshot.attachments.length > 0) {
     nextTask = mergeSnapshotAttachmentsIntoTask(nextTask, snapshot.attachments);

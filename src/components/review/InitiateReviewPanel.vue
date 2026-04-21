@@ -453,7 +453,7 @@ function applyRestoredTaskDraft() {
   formData.approverId = draft.approverId || '';
   formData.priority = draft.priority || 'medium';
   formData.dueDate = draft.dueDate || '';
-  selectedComponents.value = [...draft.components];
+  selectedComponents.value = [...(draft.draftComponents ?? draft.components ?? [])];
   selectedComponentRefno.value = null;
   uploadedFiles.value = toUploadedFilesFromAttachments(draft.attachments);
   createdTaskId.value = draft.taskId || null;

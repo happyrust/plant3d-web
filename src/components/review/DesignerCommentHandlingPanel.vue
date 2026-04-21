@@ -5,10 +5,14 @@ import {
   AlertCircle,
   Calendar,
   ClipboardCheck,
+  FileText,
   LocateFixed,
+  Package,
+  Paperclip,
   RefreshCw,
   Ruler,
   Send,
+  X,
   XCircle,
 } from 'lucide-vue-next';
 
@@ -31,6 +35,7 @@ import {
 import TaskReviewDetail from './TaskReviewDetail.vue';
 
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useReviewStore } from '@/composables/useReviewStore';
 import {
   getAnnotationRefnos,
@@ -61,6 +66,7 @@ type AnnotationListItem = {
   title: string;
   description: string;
   createdAt: number;
+  activityAt: number;
   visible: boolean;
   refnos: string[];
   reviewState?: AnnotationReviewState;
@@ -83,21 +89,29 @@ const SECTION_META: Record<AnnotationSectionKey, { title: string; tone: string }
   rejected: { title: '已驳回', tone: 'bg-rose-100 text-rose-700' },
   fixed: { title: '已修改待确认', tone: 'bg-blue-100 text-blue-700' },
   wont_fix: { title: '不需解决待确认', tone: 'bg-amber-100 text-amber-700' },
-  approved: { title: '已同意', tone: 'bg-emerald-100 text-emerald-700' },
+  approved: { title: '已同意 / 已同意不处理', tone: 'bg-emerald-100 text-emerald-700' },
 };
 
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const viewerContext = useViewerContext();
+const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-designer-comment-handling-v1');
 
+const selectedTaskId = ref<string | null>(null);
 const selectedAnnotationId = ref<string | null>(null);
 const selectedAnnotationType = ref<AnnotationType | null>(null);
+const persistedAnnotationKey = ref<string | null>(null);
+const showInitiateDrawer = ref(false);
 const detailTask = ref<ReviewTask | null>(null);
 const confirmNote = ref('');
 const confirmSaving = ref(false);
 const confirmError = ref<string | null>(null);
 const refreshingTask = ref(false);
+
+navigationState.bindRef('selectedTaskId', selectedTaskId, null);
+navigationState.bindRef('selectedAnnotationKey', persistedAnnotationKey, null);
+navigationState.bindRef('showInitiateDrawer', showInitiateDrawer, false);
 
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
@@ -120,67 +134,56 @@ const latestReturnTimestamp = computed(() => (
   currentTask.value ? getResubmissionLatestReturnTime(currentTask.value.workflowHistory || []) : null
 ));
 const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
+const currentTaskDueDate = computed(() => formatDateOnly(currentTask.value?.dueDate));
 
 const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   const items: AnnotationListItem[] = [];
-
-  for (const annotation of toolStore.annotations.value) {
+  const pushAnnotation = (
+    type: AnnotationType,
+    annotation: {
+      id: string;
+      title?: string;
+      description?: string;
+      createdAt: number;
+      visible: boolean;
+      reviewState?: AnnotationReviewState;
+      severity?: AnnotationSeverity;
+    },
+    fallbackTitle: string,
+    fallbackDescription: string,
+    refnos: string[],
+  ) => {
     items.push({
       id: annotation.id,
-      type: 'text',
-      title: annotation.title?.trim() || '未命名文字批注',
-      description: annotation.description?.trim() || '暂无批注描述',
+      type,
+      title: annotation.title?.trim() || fallbackTitle,
+      description: annotation.description?.trim() || fallbackDescription,
       createdAt: annotation.createdAt,
+      activityAt: annotation.reviewState?.updatedAt || annotation.createdAt,
       visible: annotation.visible,
-      refnos: getAnnotationRefnos(annotation),
+      refnos,
       reviewState: annotation.reviewState,
       severity: annotation.severity,
     });
+  };
+
+  for (const annotation of toolStore.annotations.value) {
+    pushAnnotation('text', annotation, '未命名文字批注', '暂无批注描述', getAnnotationRefnos(annotation));
   }
 
   for (const annotation of toolStore.cloudAnnotations.value) {
-    items.push({
-      id: annotation.id,
-      type: 'cloud',
-      title: annotation.title?.trim() || '未命名云线批注',
-      description: annotation.description?.trim() || '暂无批注描述',
-      createdAt: annotation.createdAt,
-      visible: annotation.visible,
-      refnos: getAnnotationRefnos(annotation),
-      reviewState: annotation.reviewState,
-      severity: annotation.severity,
-    });
+    pushAnnotation('cloud', annotation, '未命名云线批注', '暂无批注描述', getAnnotationRefnos(annotation));
   }
 
   for (const annotation of toolStore.rectAnnotations.value) {
-    items.push({
-      id: annotation.id,
-      type: 'rect',
-      title: annotation.title?.trim() || '未命名矩形批注',
-      description: annotation.description?.trim() || '暂无批注描述',
-      createdAt: annotation.createdAt,
-      visible: annotation.visible,
-      refnos: getAnnotationRefnos(annotation),
-      reviewState: annotation.reviewState,
-      severity: annotation.severity,
-    });
+    pushAnnotation('rect', annotation, '未命名矩形批注', '暂无批注描述', getAnnotationRefnos(annotation));
   }
 
   for (const annotation of toolStore.obbAnnotations.value) {
-    items.push({
-      id: annotation.id,
-      type: 'obb',
-      title: annotation.title?.trim() || '未命名包围盒批注',
-      description: annotation.description?.trim() || '暂无批注描述',
-      createdAt: annotation.createdAt,
-      visible: annotation.visible,
-      refnos: getAnnotationRefnos(annotation),
-      reviewState: annotation.reviewState,
-      severity: annotation.severity,
-    });
+    pushAnnotation('obb', annotation, '未命名包围盒批注', '暂无批注描述', getAnnotationRefnos(annotation));
   }
 
-  return items.sort((a, b) => b.createdAt - a.createdAt);
+  return items.sort((a, b) => b.activityAt - a.activityAt);
 });
 
 const annotationSections = computed(() => {
@@ -297,6 +300,10 @@ const linkedMeasurements = computed<LinkedMeasurementItem[]>(() => {
   return [...combined.values()].sort((a, b) => b.createdAt - a.createdAt);
 });
 
+function buildAnnotationSelectionKey(taskId: string | null, type: AnnotationType, id: string): string {
+  return `${taskId || '__no_task__'}::${type}:${id}`;
+}
+
 function setActiveAnnotation(type: AnnotationType | null, id: string | null) {
   toolStore.activeAnnotationId.value = type === 'text' ? id : null;
   toolStore.activeCloudAnnotationId.value = type === 'cloud' ? id : null;
@@ -307,7 +314,27 @@ function setActiveAnnotation(type: AnnotationType | null, id: string | null) {
 function selectAnnotation(item: AnnotationListItem | null) {
   selectedAnnotationId.value = item?.id ?? null;
   selectedAnnotationType.value = item?.type ?? null;
+  persistedAnnotationKey.value = item
+    ? buildAnnotationSelectionKey(currentTask.value?.id ?? null, item.type, item.id)
+    : null;
   setActiveAnnotation(item?.type ?? null, item?.id ?? null);
+}
+
+function resolveDefaultAnnotation(): AnnotationListItem | null {
+  const taskId = currentTask.value?.id ?? null;
+  const persisted = persistedAnnotationKey.value;
+  if (taskId && persisted) {
+    const matched = allAnnotationItems.value.find((item) => (
+      buildAnnotationSelectionKey(taskId, item.type, item.id) === persisted
+    ));
+    if (matched) return matched;
+  }
+
+  const openItem = annotationSections.value.find((section) => section.key === 'open')?.items[0] ?? null;
+  if (openItem) return openItem;
+  const rejectedItem = annotationSections.value.find((section) => section.key === 'rejected')?.items[0] ?? null;
+  if (rejectedItem) return rejectedItem;
+  return allAnnotationItems.value[0] ?? null;
 }
 
 function getAnnotationTypeBadge(type: AnnotationType): { label: string; tone: string } {
@@ -333,9 +360,9 @@ function formatDateTime(timestamp?: number | null): string {
   });
 }
 
-function getCurrentTaskNodeLabel(task?: ReviewTask | null): string {
-  if (!task?.currentNode) return '未开始';
-  return WORKFLOW_NODE_NAMES[task.currentNode] || task.currentNode;
+function formatDateOnly(timestamp?: number | null): string {
+  if (!timestamp) return '—';
+  return new Date(timestamp).toLocaleDateString('zh-CN');
 }
 
 function formatWorkflowNode(node?: ReviewTask['currentNode'] | null): string {
@@ -348,6 +375,7 @@ async function loadTasks() {
 }
 
 async function selectTask(task: ReviewTask) {
+  selectedTaskId.value = task.id;
   if (reviewStore.currentTask.value?.id === task.id) return;
   selectedAnnotationId.value = null;
   selectedAnnotationType.value = null;
@@ -472,22 +500,33 @@ watch(
   async () => {
     if (!returnedTasks.value.length) return;
     const activeTask = reviewStore.currentTask.value;
-    if (activeTask && returnedTasks.value.some((task) => task.id === activeTask.id)) return;
-    await selectTask(returnedTasks.value[0]);
+    if (activeTask && returnedTasks.value.some((task) => task.id === activeTask.id)) {
+      selectedTaskId.value = activeTask.id;
+      return;
+    }
+
+    const persistedTask = selectedTaskId.value
+      ? returnedTasks.value.find((task) => task.id === selectedTaskId.value)
+      : null;
+    await selectTask(persistedTask ?? returnedTasks.value[0]);
   },
   { immediate: true },
 );
 
 watch(
   () => reviewStore.currentTask.value?.id ?? null,
-  () => {
+  (taskId) => {
+    selectedTaskId.value = taskId;
     selectedAnnotationId.value = null;
     selectedAnnotationType.value = null;
+    if (!taskId) {
+      showInitiateDrawer.value = false;
+    }
   },
 );
 
 watch(
-  () => allAnnotationItems.value.map((item) => `${item.type}:${item.id}`).join('|'),
+  () => allAnnotationItems.value.map((item) => `${item.type}:${item.id}:${item.activityAt}`).join('|'),
   () => {
     const current = selectedAnnotation.value;
     if (current) {
@@ -495,7 +534,7 @@ watch(
       return;
     }
 
-    const preferred = annotationSections.value.find((section) => section.count > 0)?.items[0] ?? null;
+    const preferred = resolveDefaultAnnotation();
     if (preferred) {
       selectAnnotation(preferred);
     } else {
@@ -511,7 +550,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 overflow-hidden bg-[#F8FAFC]" data-panel="designer-comment-handling">
+  <div class="relative flex h-full min-h-0 overflow-hidden bg-[#F8FAFC]" data-panel="designerCommentHandling">
     <section class="w-[360px] shrink-0 border-r border-slate-200 bg-white">
       <ResubmissionTaskList :auto-load="false"
         detail-mode="external"
@@ -543,7 +582,7 @@ onMounted(() => {
                 <div class="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
                   <div class="rounded-xl bg-slate-50 px-3 py-2.5">
                     <div class="text-xs text-slate-400">退回节点</div>
-                    <div class="mt-1 font-medium text-slate-900">{{ returnedMetadata?.returnNode ? getCurrentTaskNodeLabel({ currentNode: returnedMetadata.returnNode } as ReviewTask) : '—' }}</div>
+                    <div class="mt-1 font-medium text-slate-900">{{ formatWorkflowNode(returnedMetadata?.returnNode || null) }}</div>
                   </div>
                   <div class="rounded-xl bg-slate-50 px-3 py-2.5">
                     <div class="text-xs text-slate-400">退回时间</div>
@@ -551,7 +590,7 @@ onMounted(() => {
                   </div>
                   <div class="rounded-xl bg-slate-50 px-3 py-2.5">
                     <div class="text-xs text-slate-400">当前节点</div>
-                    <div class="mt-1 font-medium text-slate-900">{{ getCurrentTaskNodeLabel(currentTask) }}</div>
+                    <div class="mt-1 font-medium text-slate-900">{{ formatWorkflowNode(currentTask.currentNode) }}</div>
                   </div>
                   <div class="rounded-xl bg-slate-50 px-3 py-2.5">
                     <div class="text-xs text-slate-400">构件数</div>
@@ -566,6 +605,12 @@ onMounted(() => {
                   @click="refreshCurrentTask">
                   <RefreshCw class="h-4 w-4" :class="refreshingTask ? 'animate-spin' : ''" />
                   刷新任务
+                </button>
+                <button type="button"
+                  class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  @click="showInitiateDrawer = true">
+                  <FileText class="h-4 w-4" />
+                  查看发起单
                 </button>
                 <button type="button"
                   class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -598,8 +643,8 @@ onMounted(() => {
           <div class="mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div class="flex items-center justify-between gap-3">
               <div>
-                <h3 class="text-base font-semibold text-slate-950">全部批注</h3>
-                <p class="mt-1 text-sm text-slate-500">按处理状态分组展示，设计人员只需处理已有批注。</p>
+                <h3 class="text-base font-semibold text-slate-950">返回批注列表</h3>
+                <p class="mt-1 text-sm text-slate-500">通过驳回单据进入后，默认先查看需要处理的返回批注。</p>
               </div>
               <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                 共 {{ allAnnotationItems.length }} 条
@@ -646,7 +691,7 @@ onMounted(() => {
                         <div class="mt-2 truncate text-sm font-semibold text-slate-950">{{ item.title }}</div>
                         <div class="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">{{ item.description }}</div>
                         <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                          <span>{{ formatDateTime(item.reviewState?.updatedAt || item.createdAt) }}</span>
+                          <span>{{ formatDateTime(item.activityAt) }}</span>
                           <span v-if="item.refnos.length">RefNo {{ item.refnos.join(', ') }}</span>
                           <span v-if="item.reviewState?.updatedByName">最近处理：{{ item.reviewState.updatedByName }}</span>
                         </div>
@@ -788,6 +833,98 @@ onMounted(() => {
         </div>
       </div>
     </section>
+
+    <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="translate-x-full opacity-0"
+      enter-to-class="translate-x-0 opacity-100" leave-active-class="transition duration-150 ease-in"
+      leave-from-class="translate-x-0 opacity-100" leave-to-class="translate-x-full opacity-0">
+      <aside v-if="showInitiateDrawer && currentTask"
+        class="absolute inset-y-0 right-0 z-20 w-[460px] border-l border-slate-200 bg-white shadow-2xl">
+        <div class="flex h-full min-h-0 flex-col overflow-hidden">
+          <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">查看发起单</div>
+              <div class="mt-1 text-lg font-semibold text-slate-950">我发起的校审单</div>
+            </div>
+            <button type="button"
+              class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              @click="showInitiateDrawer = false">
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+
+          <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div class="text-xs text-slate-400">发起单填写内容</div>
+              <div class="mt-2 text-base font-semibold text-slate-950">{{ currentTask.title || '—' }}</div>
+              <div class="mt-2 text-sm leading-6 text-slate-600">{{ currentTask.description || '—' }}</div>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div class="text-xs text-slate-400">数据包名称</div>
+                <div class="mt-2 text-sm font-medium text-slate-950">{{ currentTask.title || '—' }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div class="text-xs text-slate-400">发起说明</div>
+                <div class="mt-2 text-sm font-medium text-slate-950">{{ currentTask.description || '—' }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div class="text-xs text-slate-400">校核人</div>
+                <div class="mt-2 text-sm font-medium text-slate-950">{{ currentTask.checkerName || currentTask.reviewerName || '—' }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div class="text-xs text-slate-400">审核人</div>
+                <div class="mt-2 text-sm font-medium text-slate-950">{{ currentTask.approverName || '—' }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div class="text-xs text-slate-400">优先级</div>
+                <div class="mt-2 text-sm font-medium text-slate-950">{{ currentTaskPriority?.label || '—' }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div class="text-xs text-slate-400">截止时间</div>
+                <div class="mt-2 text-sm font-medium text-slate-950">{{ currentTaskDueDate }}</div>
+              </div>
+            </div>
+
+            <section class="rounded-2xl border border-slate-200 bg-white p-4">
+              <div class="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <Package class="h-4 w-4 text-slate-400" />
+                选中构件
+              </div>
+              <div v-if="currentTask.components.length === 0" class="mt-3 text-sm text-slate-500">—</div>
+              <div v-else class="mt-3 space-y-2">
+                <div v-for="component in currentTask.components" :key="component.id"
+                  class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div class="text-sm font-medium text-slate-900">{{ component.name || component.refNo }}</div>
+                  <div class="mt-1 text-xs text-slate-500">{{ component.refNo }}<span v-if="component.type"> · {{ component.type }}</span></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="rounded-2xl border border-slate-200 bg-white p-4">
+              <div class="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <Paperclip class="h-4 w-4 text-slate-400" />
+                附件
+              </div>
+              <div v-if="!(currentTask.attachments?.length)" class="mt-3 text-sm text-slate-500">—</div>
+              <div v-else class="mt-3 space-y-2">
+                <a v-for="attachment in currentTask.attachments" :key="attachment.id"
+                  class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 hover:border-slate-300 hover:bg-white"
+                  :href="attachment.url"
+                  target="_blank"
+                  rel="noreferrer">
+                  <div class="min-w-0">
+                    <div class="truncate font-medium">{{ attachment.name }}</div>
+                    <div class="mt-1 text-xs text-slate-500">{{ formatDateTime(attachment.uploadedAt) }}</div>
+                  </div>
+                  <span class="shrink-0 text-xs text-slate-400">查看</span>
+                </a>
+              </div>
+            </section>
+          </div>
+        </div>
+      </aside>
+    </Transition>
 
     <Teleport to="body">
       <TaskReviewDetail v-if="detailTask" :task="detailTask" @close="detailTask = null" />

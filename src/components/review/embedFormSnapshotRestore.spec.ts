@@ -401,6 +401,11 @@ describe('restoreEmbedFormSnapshot', () => {
     });
 
     expect(result.task).toEqual(expect.objectContaining({
+      components: [
+        expect.objectContaining({
+          refNo: '24381_147608',
+        }),
+      ],
       attachments: [
         expect.objectContaining({
           id: 'att-context-1',
@@ -409,6 +414,11 @@ describe('restoreEmbedFormSnapshot', () => {
       ],
     }));
     expect(updateTask).toHaveBeenCalledWith(expect.objectContaining({
+      components: [
+        expect.objectContaining({
+          refNo: '24381_147608',
+        }),
+      ],
       attachments: [
         expect.objectContaining({
           id: 'att-context-1',

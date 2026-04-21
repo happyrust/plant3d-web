@@ -68,6 +68,10 @@ function formatDueDateForDraft(task: ReviewTask | null): string {
 
 function buildTaskDraft(task: ReviewTask | null): EmbedLandingTaskDraft | null {
   if (!task) return null;
+  const normalizedComponents = (task.components ?? []).map((component) => ({
+    ...component,
+    refNo: normalizeReviewDeliveryRefno(component.refNo),
+  }));
   return {
     title: task.title || '',
     description: task.description || '',
@@ -75,10 +79,8 @@ function buildTaskDraft(task: ReviewTask | null): EmbedLandingTaskDraft | null {
     approverId: task.approverId || '',
     priority: task.priority || 'medium',
     dueDate: formatDueDateForDraft(task),
-    components: (task.components ?? []).map((component) => ({
-      ...component,
-      refNo: normalizeReviewDeliveryRefno(component.refNo),
-    })),
+    components: [],
+    draftComponents: normalizedComponents,
     attachments: [...(task.attachments ?? [])],
     taskId: task.id ?? null,
     formId: task.formId ?? null,
@@ -121,18 +123,6 @@ export function resolveEmbedRestoreResult(options: ResolveEmbedRestoreOptions): 
 export async function restoreEmbedWorkbenchContext(
   options: RestoreEmbedWorkbenchOptions,
 ): Promise<EmbedRestoreResult> {
-  const panelIds = getEmbedLandingPanelIdsWithOptions(options.target, {
-    passiveWorkflowMode: options.passiveWorkflowMode,
-  });
-  for (const panelId of panelIds) {
-    options.openPanel(panelId);
-  }
-
-  const primaryPanelId = panelIds[0];
-  if (primaryPanelId) {
-    options.activatePanel(primaryPanelId);
-  }
-
   await options.loadReviewTasks();
 
   const result = resolveEmbedRestoreResult({
@@ -143,15 +133,28 @@ export async function restoreEmbedWorkbenchContext(
     allTasks: options.allTasks(),
   });
 
+  const shouldOpenDesignerCommentHandling = options.target === 'designer'
+    && !!result.restoredTask
+    && isCanonicalReturnedTask(result.restoredTask);
+  const panelIds = shouldOpenDesignerCommentHandling
+    ? ['designerCommentHandling']
+    : getEmbedLandingPanelIdsWithOptions(options.target, {
+      passiveWorkflowMode: options.passiveWorkflowMode,
+    });
+  for (const panelId of panelIds) {
+    options.openPanel(panelId);
+  }
+
+  const primaryPanelId = panelIds[0];
+  if (primaryPanelId) {
+    options.activatePanel(primaryPanelId);
+  }
+
   if (options.target === 'reviewer') {
     await options.setCurrentTask(result.restoredTask);
   } else {
     // 设计端：如果匹配到了已有任务，也绑定 currentTask，以触发确认记录加载与批注回放
     await options.setCurrentTask(result.restoredTask ?? null);
-    if (result.restoredTask && isCanonicalReturnedTask(result.restoredTask)) {
-      options.openPanel('resubmissionTasks');
-      options.activatePanel('resubmissionTasks');
-    }
   }
 
   return result;

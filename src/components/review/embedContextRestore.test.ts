@@ -99,6 +99,7 @@ describe('resolveEmbedRestoreResult', () => {
         taskId: 'task-designer',
         formId: 'FORM-D',
         components: [],
+        draftComponents: [],
         attachments: [],
       },
     });
@@ -121,7 +122,8 @@ describe('resolveEmbedRestoreResult', () => {
       allTasks: [],
     });
 
-    expect(result.restoredTaskDraft?.components).toEqual([
+    expect(result.restoredTaskDraft?.components).toEqual([]);
+    expect(result.restoredTaskDraft?.draftComponents).toEqual([
       { id: 'comp-1', name: '支管', refNo: '24381_145018', type: 'BRAN' },
     ]);
   });
@@ -158,7 +160,8 @@ describe('resolveEmbedRestoreResult', () => {
         title: '设计侧回填兜底',
         taskId: 'task-designer-fallback',
         formId: 'FORM-D-FALLBACK',
-        components: [
+        components: [],
+        draftComponents: [
           { id: 'comp-1', name: '支管', refNo: '24381_145018', type: 'BRAN' },
         ],
       },
@@ -242,7 +245,7 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(result.restoreStatus).toBe('missing');
   });
 
-  it('designer restore switches to resubmission panel when the matched task is already returned to sj', async () => {
+  it('designer restore switches to designer comment handling when the matched task is already returned to sj', async () => {
     const task = createTask({
       id: 'task-designer-returned',
       formId: 'FORM-D-RETURNED',
@@ -268,8 +271,8 @@ describe('restoreEmbedWorkbenchContext', () => {
     });
 
     expect(setCurrentTask).toHaveBeenCalledWith(task);
-    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview', 'resubmissionTasks']);
-    expect(activatePanel).toHaveBeenLastCalledWith('resubmissionTasks');
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['designerCommentHandling']);
+    expect(activatePanel).toHaveBeenLastCalledWith('designerCommentHandling');
     expect(result.restoreStatus).toBe('matched');
   });
 });

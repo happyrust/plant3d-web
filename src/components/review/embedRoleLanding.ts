@@ -68,6 +68,7 @@ export type EmbedLandingTaskDraft = {
   priority: ReviewTask['priority'];
   dueDate: string;
   components: ReviewComponent[];
+  draftComponents: ReviewComponent[];
   attachments: ReviewAttachment[];
   taskId: string | null;
   formId: string | null;
