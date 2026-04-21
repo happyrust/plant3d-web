@@ -31,6 +31,7 @@ import {
   runReviewerAnnotationAcrossContext,
   runSubmitReviewAcrossContext,
   tryFillPmsNewDocumentDialog,
+  tryOpenReviewEntryByCandidates,
   tryOpenReviewEntryByNeedles,
   waitForAnySubstringInPageOrChildFrames,
 } from './pms-plant3d-initiate-flow';
@@ -126,6 +127,69 @@ function pageUrlsInclude(context: import('playwright').BrowserContext, sub: stri
   return context.pages().some((p) => !p.isClosed() && p.url().includes(sub));
 }
 
+async function capturePmsPageScreenshot(
+  page: import('playwright').Page,
+  prefix: string,
+): Promise<string | null> {
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]+/g, '-');
+  const path = `artifacts/${safePrefix}-${Date.now()}.png`;
+  try {
+    await page.screenshot({ path, fullPage: true });
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+async function describeContextRoots(context: import('playwright').BrowserContext): Promise<string> {
+  const pages = context.pages().filter((p) => !p.isClosed());
+  const lines: string[] = [];
+  for (const p of pages) {
+    lines.push(`[page] ${p.url() || '(blank)'}`);
+    for (const root of [p, ...p.frames().filter((f) => f !== p.mainFrame() && !f.isDetached())]) {
+      const summary = await root.evaluate(() => {
+        const bodyText = document.body?.innerText?.replace(/\s+/g, ' ').trim() || '';
+        const pick = (selector: string) => !!document.querySelector(selector);
+        const knownMessages = [
+          '嵌入链接校验失败：缺少可信身份声明',
+          '请从外部流程平台重新打开带 form_id 的嵌入链接',
+          '当前单据已经被识别，但内部 review_tasks 中尚未找到对应任务',
+          '外部流程',
+          '校审工作区',
+          '待处理',
+        ].filter((text) => bodyText.includes(text));
+        return {
+          url: location.href,
+          hasReviewerHook: typeof (window as unknown as Record<string, unknown>).__plant3dReviewerE2E === 'object',
+          hasReviewerLanding: pick('[data-testid="reviewer-landing-workspace"]'),
+          hasReviewerWorkbench: pick('[data-testid="review-workbench-workflow-zone"]'),
+          hasDesignerLanding: pick('[data-testid="designer-landing-workspace"]'),
+          knownMessages,
+          textPreview: bodyText.slice(0, 240),
+        };
+      }).catch(() => null);
+      if (!summary) {
+        lines.push('  [root] <unavailable>');
+        continue;
+      }
+      lines.push(
+        `  [root] url=${summary.url || '(blank)'}`
+        + ` reviewerHook=${summary.hasReviewerHook ? '1' : '0'}`
+        + ` reviewerLanding=${summary.hasReviewerLanding ? '1' : '0'}`
+        + ` reviewerWorkbench=${summary.hasReviewerWorkbench ? '1' : '0'}`
+        + ` designerLanding=${summary.hasDesignerLanding ? '1' : '0'}`,
+      );
+      if (summary.knownMessages.length) {
+        lines.push(`    knownMessages=${summary.knownMessages.join(' | ')}`);
+      }
+      if (summary.textPreview) {
+        lines.push(`    text=${summary.textPreview}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
 /** 嵌入的 plant3d 常在 PMS 同页 iframe 内，顶层 URL 仍为 WebCenter */
 function anyFrameUrlIncludes(context: import('playwright').BrowserContext, sub: string): boolean {
   for (const p of context.pages()) {
@@ -137,6 +201,60 @@ function anyFrameUrlIncludes(context: import('playwright').BrowserContext, sub: 
       } catch {
         /* 跨域 frame 的 url 可能不可读 */
       }
+    }
+  }
+  return false;
+}
+
+async function waitForEmbeddedReviewSurface(
+  page: import('playwright').Page,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const topUrl = page.url();
+    if (openSubstring && topUrl.includes(openSubstring)) return true;
+    for (const frame of page.frames()) {
+      if (frame.isDetached()) continue;
+      try {
+        const frameUrl = frame.url();
+        if (openSubstring && frameUrl.includes(openSubstring)) return true;
+        if (frameUrl.includes('/review/3d-view')) return true;
+      } catch {
+        /* ignore */
+      }
+      const reviewWorkbench = await frame.locator('[data-testid="review-workbench-workflow-zone"]').first().isVisible().catch(() => false);
+      const designerLanding = await frame.locator('[data-testid="designer-landing-workspace"]').first().isVisible().catch(() => false);
+      const reviewerLanding = await frame.locator('[data-testid="reviewer-landing-workspace"]').first().isVisible().catch(() => false);
+      const plantText = await frame.getByText('Plant3D Web', { exact: false }).first().isVisible().catch(() => false);
+      const modelText = await frame.getByText('模型工程', { exact: false }).first().isVisible().catch(() => false);
+      if (reviewWorkbench || designerLanding || reviewerLanding || plantText || modelText) {
+        return true;
+      }
+    }
+    await page.waitForTimeout(500).catch(() => undefined);
+  }
+  return false;
+}
+
+async function promoteSelectedReviewEntryIntoViewer(page: import('playwright').Page): Promise<boolean> {
+  if (await waitForEmbeddedReviewSurface(page, 12_000)) {
+    return true;
+  }
+  const actionButtons = [
+    page.getByText('编辑', { exact: false }).first(),
+    page.getByText('查看', { exact: false }).first(),
+  ];
+  for (const button of actionButtons) {
+    const visible = await button.isVisible().catch(() => false);
+    if (!visible) continue;
+    try {
+      await button.click({ timeout: 12_000 });
+      if (await waitForEmbeddedReviewSurface(page, 30_000)) {
+        return true;
+      }
+    } catch {
+      continue;
     }
   }
   return false;
@@ -214,31 +332,84 @@ async function login(page: import('playwright').Page, user: string, pwd: string)
 }
 
 async function openReviewFormList(page: import('playwright').Page): Promise<void> {
-  const listHint = page.getByText('三维校审单', { exact: true }).first();
-  const newBtn = page.getByText('新增', { exact: false }).first();
-  const listVisible = await listHint.isVisible().catch(() => false);
-  const iframeVisible = await page.locator('iframe').first().isVisible().catch(() => false);
-  const newVisible = await newBtn.isVisible().catch(() => false);
-  const alreadyThere = listVisible && (iframeVisible || newVisible);
+  const waitForListReady = async (timeoutMs: number): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const roots: (import('playwright').Page | import('playwright').Frame)[] = [
+        page,
+        ...page.frames().filter((frame) => frame !== page.mainFrame() && !frame.isDetached()),
+      ];
+      let ready = false;
+      for (const root of roots) {
+        const listVisible = await root.getByText('三维校审单', { exact: true }).first().isVisible().catch(() => false);
+        const newVisible = await root.getByText('新增', { exact: false }).first().isVisible().catch(() => false);
+        const editVisible = await root.getByText('编辑', { exact: false }).first().isVisible().catch(() => false);
+        const viewVisible = await root.getByText('查看', { exact: false }).first().isVisible().catch(() => false);
+        const refreshVisible = await root.getByText('刷新', { exact: false }).first().isVisible().catch(() => false);
+        const rowVisible = await root.locator('tbody tr').first().isVisible().catch(() => false);
+        const textReady = await root.evaluate(() => {
+          const bodyText = document.body?.innerText || '';
+          return bodyText.includes('模型表单编号')
+            || bodyText.includes('录入日期')
+            || bodyText.includes('每页')
+            || bodyText.includes('项目代码');
+        }).catch(() => false);
+        if (listVisible && (newVisible || editVisible || viewVisible || refreshVisible || rowVisible || textReady)) {
+          ready = true;
+          break;
+        }
+      }
+      if (ready) {
+        return true;
+      }
+      await page.waitForTimeout(400).catch(() => undefined);
+    }
+    return false;
+  };
+  const alreadyThere = await waitForListReady(3000);
   if (alreadyThere) {
     await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
     return;
   }
 
+  const tryOpenViaVisibleReviewEntry = async (): Promise<boolean> => {
+    const reviewTexts = page.getByText('三维校审单', { exact: true });
+    const total = await reviewTexts.count().catch(() => 0);
+    for (let i = 0; i < total; i++) {
+      const item = reviewTexts.nth(i);
+      const visible = await item.isVisible().catch(() => false);
+      if (!visible) continue;
+      const box = await item.boundingBox().catch(() => null);
+      if (!box) continue;
+      if (box.x > 260 || box.y < 70 || box.y > 260) continue;
+      try {
+        await item.click({ timeout: 12_000 });
+        if (await waitForListReady(45_000)) {
+          console.error('[cdp] openReviewFormList: 通过左侧可见「三维校审单」菜单进入');
+          return true;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return false;
+  };
+
   const tryOpenViaDesignDeliver = async (): Promise<boolean> => {
     try {
-      const designDeliver = page.getByText('设计交付', { exact: false }).first();
-      await designDeliver.waitFor({ state: 'visible', timeout: 45_000 });
-      await designDeliver.click({ timeout: 25_000 }).catch(async () => {
-        await page.locator('[title="设计交付"]').first().click({ timeout: 25_000 });
-      });
       const reviewLink = page.getByRole('link', { name: '三维校审单', exact: true });
-      if (await reviewLink.count()) {
+      const reviewLinkVisible = await reviewLink.first().isVisible().catch(() => false);
+      if (reviewLinkVisible) {
         await reviewLink.first().click({ timeout: 20_000 });
       } else {
+        const designDeliver = page.getByText('设计交付', { exact: false }).first();
+        await designDeliver.waitFor({ state: 'visible', timeout: 45_000 });
+        await designDeliver.click({ timeout: 25_000 }).catch(async () => {
+          await page.locator('[title="设计交付"]').first().click({ timeout: 25_000 });
+        });
         await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 20_000 });
       }
-      await listHint.waitFor({ state: 'visible', timeout: 20_000 });
+      if (!(await waitForListReady(45_000))) return false;
       console.error('[cdp] openReviewFormList: 通过「设计交付 → 三维校审单」进入');
       return true;
     } catch {
@@ -263,13 +434,14 @@ async function openReviewFormList(page: import('playwright').Page): Promise<void
         await box.press('Enter', { timeout: 3000 }).catch(() => undefined);
 
         const reviewLink = page.getByRole('link', { name: '三维校审单', exact: false });
-        if (await reviewLink.count()) {
+        const reviewLinkVisible = await reviewLink.first().isVisible().catch(() => false);
+        if (reviewLinkVisible) {
           await reviewLink.first().click({ timeout: 12_000 });
         } else {
           await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 12_000 });
         }
 
-        await listHint.waitFor({ state: 'visible', timeout: 20_000 });
+        if (!(await waitForListReady(45_000))) continue;
         console.error('[cdp] openReviewFormList: 通过「菜单搜索 → 三维校审单」进入');
         return true;
       } catch {
@@ -286,13 +458,14 @@ async function openReviewFormList(page: import('playwright').Page): Promise<void
       await entry.click({ timeout: 10_000 });
 
       const reviewLink = page.getByRole('link', { name: '三维校审单', exact: false });
-      if (await reviewLink.count()) {
+      const reviewLinkVisible = await reviewLink.first().isVisible().catch(() => false);
+      if (reviewLinkVisible) {
         await reviewLink.first().click({ timeout: 12_000 });
       } else {
         await page.getByText('三维校审单', { exact: true }).first().click({ timeout: 12_000 });
       }
 
-      await listHint.waitFor({ state: 'visible', timeout: 20_000 });
+      if (!(await waitForListReady(45_000))) return false;
       console.error('[cdp] openReviewFormList: 通过「业务中心 → 三维校审单」进入');
       return true;
     } catch {
@@ -301,17 +474,26 @@ async function openReviewFormList(page: import('playwright').Page): Promise<void
   };
 
   const ok =
+    (await tryOpenViaVisibleReviewEntry()) ||
     (await tryOpenViaDesignDeliver()) ||
     (await tryOpenViaMenuSearch()) ||
     (await tryOpenViaBusinessCenter()) ||
     (await tryOpenViaMenuSearch());
+  if (!ok && (await waitForListReady(3000))) {
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
+    return;
+  }
   if (!ok) {
+    const shot = await capturePmsPageScreenshot(page, 'pms-open-review-form-list-failed');
+    if (shot) {
+      console.error(`[cdp] openReviewFormList 失败截图：${shot}`);
+    }
     throw new Error('openReviewFormList: 无法打开「三维校审单」列表');
   }
 
   await Promise.race([
     page.locator('iframe').first().waitFor({ state: 'attached', timeout: 45_000 }),
-    newBtn.waitFor({ state: 'visible', timeout: 45_000 }),
+    page.getByText('新增', { exact: false }).first().waitFor({ state: 'visible', timeout: 45_000 }),
   ]).catch(() => undefined);
 
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
@@ -339,7 +521,7 @@ async function tryClickNewInFrame(root: import('playwright').Page | import('play
 }
 
 async function clickNewInAnyFrame(page: import('playwright').Page): Promise<void> {
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     if (await tryClickNewInFrame(page)) return;
     for (const frame of page.frames()) {
@@ -348,6 +530,10 @@ async function clickNewInAnyFrame(page: import('playwright').Page): Promise<void
       if (await tryClickNewInFrame(frame)) return;
     }
     await new Promise((r) => setTimeout(r, 400));
+  }
+  const shot = await capturePmsPageScreenshot(page, 'pms-click-new-failed');
+  if (shot) {
+    console.error(`[cdp] clickNewInAnyFrame 失败截图：${shot}`);
   }
   throw new Error('未找到可点击的「新增」');
 }
@@ -545,13 +731,19 @@ async function main(): Promise<void> {
           console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现编校审包名或测试 BRAN');
         }
         reviewEntryCandidates = pmsApiSniffer.findReviewEntryCandidates([pkg, bran, branAlt], 6);
+        if (!reviewEntryCandidates.length) {
+          reviewEntryCandidates = pmsApiSniffer.findRecentReviewEntryCandidates(6);
+          if (reviewEntryCandidates.length) {
+            console.error('[cdp] PMS 候选记录：未命中包名/BRAN，已回退为最近可读的三维校审单记录');
+          }
+        }
         if (reviewEntryCandidates.length) {
           console.error('[cdp] PMS 候选记录：');
           for (const [index, candidate] of reviewEntryCandidates.entries()) {
             console.error(`  [${index + 1}] ${formatReviewEntryCandidate(candidate)}`);
           }
         } else {
-          console.error('[cdp] PMS 候选记录：未能从已捕获 JSON 中提取到包含包名/BRAN 的结构化记录，将只能按包名回查列表');
+          console.error('[cdp] PMS 候选记录：未能从已捕获 JSON 中提取到可用的结构化记录，将只能按包名回查列表');
         }
         reviewLookupNeedles = uniqNeedles([
           ...reviewEntryCandidates.flatMap((candidate) => [
@@ -584,7 +776,11 @@ async function main(): Promise<void> {
         }
         await openReviewFormList(page);
 
-        const strictOpenResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+        const strictOpenResult = reviewEntryCandidates.length
+          ? await tryOpenReviewEntryByCandidates(page, reviewEntryCandidates).then((result) =>
+            result.opened ? result : tryOpenReviewEntryByNeedles(page, reviewLookupNeedles),
+          )
+          : await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
         if (!strictOpenResult.opened) {
           throw new Error(
             `严格校验失败：未能在 PMS 列表中按以下任一键重新打开刚创建的记录：${reviewLookupNeedles.join(' | ') || '(空)'}。`
@@ -614,7 +810,7 @@ async function main(): Promise<void> {
           }
         }
 
-        const pmsOk = await pmsOkPromise;
+        const pmsOk = embedOk ? false : await pmsOkPromise;
         if (pmsOk) {
           console.error('[cdp] PMS 数据接口：已在某条 JSON 响应中发现编校审包名或测试 BRAN');
         }
@@ -690,9 +886,36 @@ async function main(): Promise<void> {
         await login(page, checkerUsername, password);
 
         console.error('[cdp] 设计交付 → 三维校审单…');
-        await openReviewFormList(page);
+        let listOpened = false;
+        let lastListErr: unknown = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            await openReviewFormList(page);
+            listOpened = true;
+            break;
+          } catch (listErr) {
+            lastListErr = listErr;
+            console.error(`[cdp] JH 打开三维校审单列表失败（第 ${attempt} 次）：${listErr instanceof Error ? listErr.message : String(listErr)}`);
+            await page.waitForTimeout(2000).catch(() => undefined);
+          }
+        }
+        if (!listOpened) {
+          const shot = await capturePmsPageScreenshot(page, 'pms-jh-open-list-failed');
+          if (shot) {
+            console.error(`[cdp] JH 列表失败截图：${shot}`);
+          }
+          throw lastListErr instanceof Error ? lastListErr : new Error('JH 无法打开三维校审单列表');
+        }
+
         console.error(`[cdp] 尝试按已有单据匹配键打开记录：${reviewLookupNeedles.join(' | ') || '(空)'}`);
-        const openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+        let openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+        if (!openResult.opened) {
+          console.error('[cdp] JH 列表首轮未命中，刷新后再按 form_id / 记录号重试一次…');
+          await page.keyboard.press('F5').catch(() => undefined);
+          await page.waitForLoadState('domcontentloaded', { timeout: 20_000 }).catch(() => undefined);
+          await openReviewFormList(page);
+          openResult = await tryOpenReviewEntryByNeedles(page, reviewLookupNeedles);
+        }
         if (!openResult.opened) {
           throw new Error(
             `JH 未能在 PMS 列表中打开已有单据。匹配键：${reviewLookupNeedles.join(' | ') || '(空)'}。`
@@ -702,6 +925,19 @@ async function main(): Promise<void> {
           );
         }
         console.error(`[cdp] 已按「${openResult.matchedNeedle}」对 PMS 列表项执行点击/双击`);
+        const viewerOpened = await promoteSelectedReviewEntryIntoViewer(page);
+        if (!viewerOpened) {
+          const diag = await describeContextRoots(context).catch(() => '');
+          if (diag) {
+            console.error(`[cdp] JH 打开 plant3d 失败诊断：\n${diag}`);
+          }
+          const shot = await capturePmsPageScreenshot(page, 'pms-jh-open-viewer-failed');
+          if (shot) {
+            console.error(`[cdp] JH 打开 plant3d 失败截图：${shot}`);
+          }
+          throw new Error(`JH 已选中单据 ${openResult.matchedNeedle}，但 PMS 未真正打开 plant3d 工作区`);
+        }
+        console.error('[cdp] JH 已从 PMS 记录进入 plant3d 工作区');
 
         console.error('[cdp] 扫描 iframe 内校审面板，自动添加批注…');
         try {
@@ -709,6 +945,14 @@ async function main(): Promise<void> {
           console.error(`[cdp] 校核批注：已添加 annotationId=${annotResult.annotationId}，确认记录数=${annotResult.confirmedCount}`);
         } catch (annotErr) {
           console.error(`[cdp] 校核批注：${annotErr instanceof Error ? annotErr.message : String(annotErr)}（不影响后续流程）`);
+          const diag = await describeContextRoots(context).catch(() => '');
+          if (diag) {
+            console.error(`[cdp] 校核批注诊断：\n${diag}`);
+          }
+          const shot = await capturePmsPageScreenshot(page, 'pms-jh-annotation-missing-hook');
+          if (shot) {
+            console.error(`[cdp] 校核批注诊断截图：${shot}`);
+          }
         }
 
         const reviewerRefreshRestoreEnabled =
@@ -716,7 +960,19 @@ async function main(): Promise<void> {
           || process.env.PMS_CDP_CHECKER_REFRESH_RESTORE === 'true';
         if (reviewerRefreshRestoreEnabled) {
           console.error('[cdp] 校核流程：按配置先刷新当前 reviewer 页面，并等待 workbench 恢复…');
-          await reloadReviewerWorkbenchAcrossContext(context);
+          try {
+            await reloadReviewerWorkbenchAcrossContext(context);
+          } catch (refreshErr) {
+            const diag = await describeContextRoots(context).catch(() => '');
+            if (diag) {
+              console.error(`[cdp] 校核刷新恢复失败诊断：\n${diag}`);
+            }
+            const shot = await capturePmsPageScreenshot(page, 'pms-jh-refresh-restore-failed');
+            if (shot) {
+              console.error(`[cdp] 校核刷新恢复失败截图：${shot}`);
+            }
+            throw refreshErr;
+          }
           console.error('[cdp] 校核流程：刷新恢复成功，继续执行提交动作');
         }
 

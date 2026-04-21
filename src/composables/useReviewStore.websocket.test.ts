@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const reviewTaskGetHistoryMock = vi.fn(async () => ({ success: true, history: [] }));
 const reviewRecordGetByTaskIdMock = vi.fn(async () => ({ success: true, records: [] }));
 const reviewTaskGetByIdMock = vi.fn(async () => ({ success: false }));
+const getReviewUserWebSocketUrlMock = vi.fn(() => null);
+const currentUserRef = { value: { id: 'reviewer-live-1' } };
 
 const webSocketCtor = vi.fn(() => {
   throw new Error('WebSocket should stay disabled in this test');
@@ -15,7 +17,13 @@ vi.mock('@/api/reviewApi', () => ({
   reviewRecordClearByTaskId: vi.fn(),
   reviewTaskGetById: reviewTaskGetByIdMock,
   reviewTaskGetHistory: reviewTaskGetHistoryMock,
-  getReviewUserWebSocketUrl: vi.fn(() => null),
+  getReviewUserWebSocketUrl: getReviewUserWebSocketUrlMock,
+}));
+
+vi.mock('@/composables/useUserStore', () => ({
+  useUserStore: () => ({
+    currentUser: currentUserRef,
+  }),
 }));
 
 function createLocalStorageMock() {
@@ -44,6 +52,9 @@ describe('useReviewStore websocket fallback', () => {
     reviewTaskGetHistoryMock.mockClear();
     reviewRecordGetByTaskIdMock.mockClear();
     reviewTaskGetByIdMock.mockClear();
+    getReviewUserWebSocketUrlMock.mockReset();
+    getReviewUserWebSocketUrlMock.mockReturnValue(null);
+    currentUserRef.value = { id: 'reviewer-live-1' };
     vi.resetModules();
     vi.stubGlobal('localStorage', createLocalStorageMock());
     vi.stubGlobal('WebSocket', webSocketCtor);
@@ -332,5 +343,50 @@ describe('useReviewStore websocket fallback', () => {
         operatorName: 'Checker One',
       }),
     ]);
+  });
+
+  it('uses current login user for reviewer websocket subscriptions', async () => {
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/reviewer-live-1');
+    const webSocketInstance = {
+      readyState: 1,
+      close: vi.fn(),
+      send: vi.fn(),
+      onopen: null as ((event: Event) => void) | null,
+      onmessage: null as ((event: MessageEvent) => void) | null,
+      onerror: null as (() => void) | null,
+      onclose: null as (() => void) | null,
+    };
+    const fakeWebSocket = vi.fn(function FakeWebSocket(this: unknown) {
+      return webSocketInstance;
+    }) as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', fakeWebSocket);
+
+    const { useReviewStore } = await import('./useReviewStore');
+    const store = useReviewStore();
+
+    await store.setCurrentTask({
+      id: 'task-ws-user',
+      title: 'Realtime task',
+      description: 'desc',
+      modelName: 'Model',
+      status: 'in_review',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: 'Designer',
+      reviewerId: 'legacy-reviewer',
+      reviewerName: 'Legacy Reviewer',
+      checkerId: 'checker-1',
+      checkerName: 'Checker',
+      approverId: 'approver-1',
+      approverName: 'Approver',
+      components: [],
+      attachments: [],
+      createdAt: 1700000000000,
+      updatedAt: 1700000000000,
+      currentNode: 'sh',
+    } as never);
+
+    expect(getReviewUserWebSocketUrlMock).toHaveBeenCalledWith('reviewer-live-1');
+    expect(fakeWebSocket).toHaveBeenCalledWith('ws://localhost/ws/review/user/reviewer-live-1');
   });
 });

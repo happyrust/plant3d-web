@@ -7,7 +7,7 @@ import type { ReviewTask } from '@/types/auth';
 
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
-import { mergeSnapshotAttachmentsIntoTask, restoreEmbedFormSnapshot } from '@/components/review/embedFormSnapshotRestore';
+import { restoreEmbedFormSnapshotContext } from '@/components/review/embedFormSnapshotRestore';
 import {
   applyEmbedLandingState,
   buildPersistedEmbedModeParams,
@@ -17,6 +17,7 @@ import {
   getVerifiedEmbedFormId,
   getVerifiedEmbedWorkflowMode,
   readEmbedModeParamsFromSearch,
+  resolvePassiveEmbedViewTarget,
   resolveTrustedEmbedIdentity,
   resolveEmbedLandingTargetFromRole,
   type EmbedLandingState,
@@ -684,7 +685,7 @@ function ensurePanel(panelId: string) {
     return dockApi.addPanel({
       id: 'resubmissionTasks',
       component: 'ResubmissionTaskListPanel',
-      title: '复审任务',
+      title: '批注处理',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -1219,6 +1220,7 @@ async function bootstrapEmbedSession(): Promise<void> {
           }
           embedModeParams.value = {
             ...embedModeParams.value,
+            formId: claims.formId || embedModeParams.value.formId || null,
             userId: claims.userId,
             workflowRole: claims.role || null,
             projectId: claims.projectId,
@@ -1290,18 +1292,19 @@ async function applyInitialLanding() {
   if (embedModeParams.value.isEmbedMode) {
     const roleLandingTarget = resolveEmbedLandingTargetFromRole(trustedEmbedIdentity?.workflowRole);
     const landingTarget = roleLandingTarget;
+    const passiveWorkflowMode = isPassiveWorkflowMode();
 
     if (landingTarget) {
       console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
       const { switchProjectById } = useModelProjects();
-      const landingState = applyEmbedLandingState({
+      let landingState = applyEmbedLandingState({
         ensurePanel,
         activatePanel,
         sessionStorageLike: sessionStorage,
         embedModeParams: embedModeParams.value,
         target: landingTarget,
         switchProjectById,
-        passiveWorkflowMode: isPassiveWorkflowMode(),
+        passiveWorkflowMode,
       });
 
       const restoreResult = await restoreEmbedWorkbenchContext({
@@ -1314,8 +1317,27 @@ async function applyInitialLanding() {
         setCurrentTask: reviewStore.setCurrentTask,
         openPanel,
         activatePanel,
-        passiveWorkflowMode: isPassiveWorkflowMode(),
+        passiveWorkflowMode,
       });
+
+      const fallbackLandingTarget = resolvePassiveEmbedViewTarget({
+        workflowRole: trustedEmbedIdentity?.workflowRole,
+        passiveWorkflowMode,
+        restoredTaskSummary: restoreResult.restoredTaskSummary,
+      });
+
+      if (fallbackLandingTarget && fallbackLandingTarget !== landingTarget) {
+        closeEmbedLandingPanels();
+        landingState = applyEmbedLandingState({
+          ensurePanel,
+          activatePanel,
+          sessionStorageLike: sessionStorage,
+          embedModeParams: embedModeParams.value,
+          target: fallbackLandingTarget,
+          switchProjectById,
+          passiveWorkflowMode,
+        });
+      }
 
       let restoredModelRefnos: string[] = [];
       const verifiedToken = embedModeParams.value.userToken;
@@ -1324,7 +1346,7 @@ async function applyInitialLanding() {
         && trustedEmbedIdentity
         && verifiedToken
       ) {
-        const snapshotRestore = await restoreEmbedFormSnapshot({
+        const snapshotRestore = await restoreEmbedFormSnapshotContext({
           formId: trustedEmbedIdentity.formId,
           token: verifiedToken,
           actor: {
@@ -1334,20 +1356,20 @@ async function applyInitialLanding() {
           },
           importTools: (payload) => toolStore.importJSON(payload),
           syncTools: () => viewerContext.tools.value?.syncFromStore(),
+          task: restoreResult.restoredTask,
+          updateTask: async (mergedTask) => {
+            restoreResult.restoredTask = mergedTask;
+            if (restoreResult.restoredTaskDraft) {
+              restoreResult.restoredTaskDraft = {
+                ...restoreResult.restoredTaskDraft,
+                attachments: mergedTask.attachments || [],
+              };
+            }
+            await reviewStore.setCurrentTask(mergedTask);
+          },
         });
         restoredModelRefnos = snapshotRestore.modelRefnos;
-        const restoredAttachments = Array.isArray(snapshotRestore.attachments) ? snapshotRestore.attachments : [];
-        if (restoreResult.restoredTask && restoredAttachments.length > 0) {
-          const mergedTask = mergeSnapshotAttachmentsIntoTask(restoreResult.restoredTask, restoredAttachments);
-          restoreResult.restoredTask = mergedTask;
-          if (restoreResult.restoredTaskDraft) {
-            restoreResult.restoredTaskDraft = {
-              ...restoreResult.restoredTaskDraft,
-              attachments: mergedTask.attachments || [],
-            };
-          }
-          await reviewStore.setCurrentTask(mergedTask);
-        }
+        restoreResult.restoredTask = snapshotRestore.task;
       }
 
       if (restoredModelRefnos.length > 0) {

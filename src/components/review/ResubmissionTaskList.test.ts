@@ -115,7 +115,7 @@ describe('ResubmissionTaskList', () => {
     expect(document.body.textContent).toContain('仍可再次提交的任务');
     expect(document.body.textContent).toContain('已退回');
     expect(document.body.textContent).toContain('退回原因: 请补充净高说明');
-    expect(document.body.textContent).toContain('进入模型修改');
+    expect(document.body.textContent).toContain('进入批注处理');
   });
 
   it('uses the latest workflow return reason and node semantics in returned list cards', async () => {

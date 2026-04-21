@@ -406,4 +406,202 @@ describe('AnnotationPanel', () => {
     host.remove();
     host = null;
   });
+
+  it('severity counts ignore legacy OBB annotations to stay consistent with hidden OBB list', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/components/review/ReviewCommentsTimeline.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({ currentUser: ref(null) }),
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+
+    // 1 条可见的 text 批注（critical），对比基线
+    store.addAnnotation({
+      id: 't-visible',
+      entityId: 'e-visible',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: 'T',
+      title: '可见文字',
+      description: '',
+      createdAt: 1,
+    });
+    store.updateAnnotationSeverity('text', 't-visible', 'critical');
+
+    // 2 条 OBB 批注（在 reviewer 面板里被隐藏），不应计入顶部筛选条数量
+    const sampleObb = {
+      center: [0, 0, 0] as [number, number, number],
+      axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] as [[number, number, number], [number, number, number], [number, number, number]],
+      halfSize: [1, 1, 1] as [number, number, number],
+      corners: [
+        [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
+        [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
+      ] as [
+        [number, number, number], [number, number, number], [number, number, number], [number, number, number],
+        [number, number, number], [number, number, number], [number, number, number], [number, number, number]
+      ],
+    };
+    store.addObbAnnotation({
+      id: 'obb-hidden-1',
+      objectIds: ['obj:1'],
+      obb: sampleObb,
+      labelWorldPos: [0, 0, 1],
+      anchor: { kind: 'top_center' },
+      visible: true,
+      title: 'OBB hidden 1',
+      description: '',
+      createdAt: 2,
+    });
+    store.addObbAnnotation({
+      id: 'obb-hidden-2',
+      objectIds: ['obj:2'],
+      obb: sampleObb,
+      labelWorldPos: [0, 0, 2],
+      anchor: { kind: 'top_center' },
+      visible: true,
+      title: 'OBB hidden 2',
+      description: '',
+      createdAt: 3,
+    });
+    store.updateAnnotationSeverity('obb', 'obb-hidden-1', 'severe');
+    store.updateAnnotationSeverity('obb', 'obb-hidden-2', 'normal');
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        flyToAnnotation: vi.fn(),
+        removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(),
+        flyToRectAnnotation: vi.fn(),
+        flyToObbAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(),
+        removeRectAnnotation: vi.fn(),
+        removeObbAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const clearBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-clear"]') as HTMLButtonElement | null;
+    const critBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-critical"]') as HTMLButtonElement | null;
+    const severeBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-severe"]') as HTMLButtonElement | null;
+    const normalBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-normal"]') as HTMLButtonElement | null;
+
+    // "全部 (N)" 只应反映面板里能看到的批注数（即 text/cloud/rect），OBB 不计入
+    expect(clearBtn?.textContent).toContain('1');
+    expect(critBtn?.textContent).toContain('1');
+    // 不能因为 obb 上有 severe/normal 就把它们计入
+    expect(severeBtn?.textContent).toContain('0');
+    expect(normalBtn?.textContent).toContain('0');
+    // severe/normal 桶应因为计数为 0 而被禁用，避免用户点击后发现列表空
+    expect(severeBtn?.hasAttribute('disabled')).toBe(true);
+    expect(normalBtn?.hasAttribute('disabled')).toBe(true);
+
+    // 页面文本不应出现 OBB 相关字样（维持 hide legacy OBB 协议）
+    expect(host.textContent).not.toContain('OBB hidden 1');
+    expect(host.textContent).not.toContain('OBB hidden 2');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('flyText dispatches showModelByRefnos derived from refno/refnos (P0-B Phase 2)', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/components/review/ReviewCommentsTimeline.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({ currentUser: ref(null) }),
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+
+    // 仅提供 legacy refno，verify normalize 后 refnos=[refno] 且 fly 的事件 payload 正确
+    store.addAnnotation({
+      id: 't-refno-only',
+      entityId: 'e-refno-only',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: '1',
+      title: '仅 refno',
+      description: '',
+      createdAt: 1,
+      refno: 'BRAN:legacy',
+    });
+
+    const flySpy = vi.fn();
+    const captured: { refnos?: string[]; regenModel?: boolean }[] = [];
+    const listener = (event: Event) => {
+      captured.push(((event as CustomEvent).detail ?? {}) as { refnos?: string[]; regenModel?: boolean });
+    };
+    window.addEventListener('showModelByRefnos', listener);
+
+    try {
+      const app = createApp(AnnotationPanel, {
+        tools: {
+          ready: ref(true),
+          statusText: ref('ready'),
+          flyToAnnotation: flySpy,
+          removeAnnotation: vi.fn(),
+          flyToCloudAnnotation: vi.fn(),
+          flyToRectAnnotation: vi.fn(),
+          flyToObbAnnotation: vi.fn(),
+          removeCloudAnnotation: vi.fn(),
+          removeRectAnnotation: vi.fn(),
+          removeObbAnnotation: vi.fn(),
+        },
+      });
+      app.mount(host);
+      await nextTick();
+
+      // 找到「定位」按钮并触发
+      const textSection = host.querySelector('[data-testid="annotation-panel-section-text"]') as HTMLElement | null;
+      const locateButton = Array.from(
+        textSection?.querySelectorAll('button') ?? [],
+      ).find((b) => (b.textContent || '').trim() === '定位') as HTMLButtonElement | undefined;
+      expect(locateButton).toBeTruthy();
+      locateButton?.click();
+      await nextTick();
+
+      expect(flySpy).toHaveBeenCalledWith('t-refno-only');
+      expect(captured).toHaveLength(1);
+      // 关键：legacy 的 `refno` 会被 normalize 成 `refnos=[refno]`，fly 事件拿到统一结构
+      expect(captured[0]?.refnos).toEqual(['BRAN:legacy']);
+      expect(captured[0]?.regenModel).toBe(false);
+
+      app.unmount();
+    } finally {
+      window.removeEventListener('showModelByRefnos', listener);
+    }
+
+    host.remove();
+    host = null;
+  });
 });

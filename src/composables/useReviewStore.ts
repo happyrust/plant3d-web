@@ -20,6 +20,7 @@ import {
   type ConfirmedRecordData,
   type ReviewHistoryItem,
 } from '@/api/reviewApi';
+import { useUserStore } from '@/composables/useUserStore';
 
 export type ConfirmedRecord = {
   id: string;
@@ -233,7 +234,7 @@ async function removeConfirmedRecord(id: string): Promise<void> {
   }
 }
 
-async function clearConfirmedRecords(): Promise<void> {
+async function clearConfirmedRecords(): Promise<boolean> {
   const taskId = currentTask.value?.id;
 
   if (USE_BACKEND.value && taskId) {
@@ -246,12 +247,14 @@ async function clearConfirmedRecords(): Promise<void> {
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : '清空确认记录失败';
+      return false;
     } finally {
       loading.value = false;
     }
   }
 
   confirmedRecords.value = [];
+  return true;
 }
 
 async function loadConfirmedRecords(taskId: string): Promise<void> {
@@ -341,7 +344,7 @@ async function setCurrentTask(task: ReviewTask | null) {
       loadReviewHistory(task.id),
     ]);
     // 连接 WebSocket 获取实时更新
-    connectWebSocket(task.reviewerId);
+    connectWebSocket(resolveRealtimeUserId());
   } else {
     disconnectWebSocket();
     confirmedRecords.value = [];
@@ -371,9 +374,20 @@ function onCommentAdded(callback: CommentAddedCallback) {
   };
 }
 
-function connectWebSocket(userId: string) {
+function resolveRealtimeUserId(): string | null {
+  const userStore = useUserStore();
+  const userId = userStore.currentUser.value?.id?.trim();
+  return userId || null;
+}
+
+function connectWebSocket(userId: string | null | undefined) {
   if (!USE_BACKEND.value) return;
   if (ws) return;
+  if (!userId) {
+    wsConnected.value = false;
+    wsError.value = null;
+    return;
+  }
 
   const url = getReviewUserWebSocketUrl(userId);
   if (!url) {
@@ -423,7 +437,7 @@ function connectWebSocket(userId: string) {
         wsError.value = `连接断开，${RECONNECT_DELAY / 1000}秒后重试 (${reconnectCount}/${MAX_RECONNECT})`;
         reconnectTimer = setTimeout(() => {
           if (currentTask.value) {
-            connectWebSocket(currentTask.value.reviewerId);
+            connectWebSocket(resolveRealtimeUserId());
           }
         }, RECONNECT_DELAY);
       }

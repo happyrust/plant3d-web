@@ -12,8 +12,15 @@ vi.mock('@/api/reviewApi', () => ({
   reviewRecordDelete: vi.fn(async () => ({ success: true })),
   reviewRecordGetByTaskId: vi.fn(async () => ({ success: true, records: [] })),
   reviewRecordClearByTaskId: vi.fn(async () => ({ success: true })),
+  reviewTaskGetById: vi.fn(async () => ({ success: false })),
   reviewTaskGetHistory: vi.fn(async () => ({ success: true, history: [] })),
   getReviewUserWebSocketUrl: vi.fn(() => null),
+}));
+
+vi.mock('@/composables/useUserStore', () => ({
+  useUserStore: () => ({
+    currentUser: { value: { id: 'reviewer-1' } },
+  }),
 }));
 
 import { useReviewStore } from './useReviewStore';

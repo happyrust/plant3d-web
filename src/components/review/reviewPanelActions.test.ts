@@ -1,15 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
   canFinalizeAtCurrentNode,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
   confirmCurrentDataSafely,
   finalizeTaskDecisionSafely,
+  getAvailableReturnNodes,
+  getDefaultReturnTargetNode,
   getSubmitActionLabel,
   getWorkflowSubmitBridgeAction,
+  hasSubmitBlockingReviewConfirmPayloadData,
   mapWorkflowHistoryToTaskDetailItems,
+  runReviewSubmitPreflight,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
 
@@ -54,6 +59,33 @@ describe('reviewPanelActions', () => {
 
   it('unknown workflow nodes do not expose return actions either', () => {
     expect(canReturnAtCurrentNode('legacy' as never)).toBe(false);
+  });
+
+  it('getDefaultReturnTargetNode returns the previous node in the workflow', () => {
+    expect(getDefaultReturnTargetNode('sj')).toBe('sj');
+    expect(getDefaultReturnTargetNode('jd')).toBe('sj');
+    expect(getDefaultReturnTargetNode('sh')).toBe('jd');
+    expect(getDefaultReturnTargetNode('pz')).toBe('sh');
+    expect(getDefaultReturnTargetNode(undefined)).toBe('sj');
+  });
+
+  it('getAvailableReturnNodes returns all nodes before the current one', () => {
+    expect(getAvailableReturnNodes('sj')).toEqual([]);
+    expect(getAvailableReturnNodes('jd')).toEqual(['sj']);
+    expect(getAvailableReturnNodes('sh')).toEqual(['sj', 'jd']);
+    expect(getAvailableReturnNodes('pz')).toEqual(['sj', 'jd', 'sh']);
+    expect(getAvailableReturnNodes(undefined)).toEqual([]);
+  });
+
+  it('return target and submit label are symmetric for each node transition', () => {
+    expect(getDefaultReturnTargetNode('jd')).toBe('sj');
+    expect(getSubmitActionLabel('sj')).toBe('确认流转至校对');
+
+    expect(getDefaultReturnTargetNode('sh')).toBe('jd');
+    expect(getSubmitActionLabel('jd')).toBe('确认流转至审核');
+
+    expect(getDefaultReturnTargetNode('pz')).toBe('sh');
+    expect(getSubmitActionLabel('sh')).toBe('确认流转至批准');
   });
 
   it('getSubmitActionLabel 返回与节点匹配的主操作文案', () => {
@@ -144,6 +176,8 @@ describe('reviewPanelActions', () => {
           visible: true,
           approximate: false,
           createdAt: 30,
+          sourceAnnotationId: 'annot-1',
+          sourceAnnotationType: 'text',
         },
       ],
       xeokitAngleMeasurements: [
@@ -162,7 +196,12 @@ describe('reviewPanelActions', () => {
 
     expect(payload.measurements).toEqual([
       expect.objectContaining({ id: 'classic-distance', kind: 'distance' }),
-      expect.objectContaining({ id: 'xeokit-distance-final', kind: 'distance' }),
+      expect.objectContaining({
+        id: 'xeokit-distance-final',
+        kind: 'distance',
+        sourceAnnotationId: 'annot-1',
+        sourceAnnotationType: 'text',
+      }),
       expect.objectContaining({ id: 'xeokit-angle-final', kind: 'angle' }),
     ]);
     expect(payload.measurements).not.toContainEqual(expect.objectContaining({ id: 'xeokit-distance-draft' }));
@@ -311,5 +350,94 @@ describe('reviewPanelActions', () => {
     expect(submitComment.value).toBe('keep this note');
     expect(emitToast).not.toHaveBeenCalled();
     expect(workflowActionLoading.value).toBe(false);
+  });
+
+  it('submitTaskToNextNodeSafely 在前置校验阻止时不调用提交流程，并保留原备注', async () => {
+    const submitTaskToNextNode = vi.fn(async () => {});
+    const refreshCurrentTask = vi.fn(async () => {});
+    const loadWorkflow = vi.fn(async () => {});
+    const emitToast = vi.fn();
+    const showSubmitDialog = { value: true };
+    const submitComment = { value: '待处理备注' };
+    const workflowActionLoading = { value: false };
+    const workflowError = { value: null as string | null };
+
+    const submitted = await submitTaskToNextNodeSafely({
+      canSubmit: true,
+      taskId: 'task-3',
+      submitComment,
+      showSubmitDialog,
+      workflowActionLoading,
+      workflowError,
+      beforeSubmit: async () => ({
+        allowed: false,
+        message: '请先确认数据，再执行流转',
+      }),
+      submitTaskToNextNode,
+      refreshCurrentTask,
+      loadWorkflow,
+      emitToast,
+    });
+
+    expect(submitted).toBe(false);
+    expect(workflowError.value).toBe('请先确认数据，再执行流转');
+    expect(showSubmitDialog.value).toBe(true);
+    expect(submitComment.value).toBe('待处理备注');
+    expect(submitTaskToNextNode).not.toHaveBeenCalled();
+    expect(refreshCurrentTask).not.toHaveBeenCalled();
+    expect(loadWorkflow).not.toHaveBeenCalled();
+    expect(emitToast).not.toHaveBeenCalled();
+  });
+
+  it('buildSubmitBlockingReviewConfirmPayload 不把 OBB 变化算作提交流转阻塞项', () => {
+    const current = buildReviewConfirmSnapshotPayload({
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [{ id: 'obb-1', label: '仅 OBB 变化' }],
+      measurements: [],
+    });
+    const baseline = buildReviewConfirmSnapshotPayload({
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      measurements: [],
+    });
+
+    const submitBlockingPayload = buildSubmitBlockingReviewConfirmPayload(current, baseline);
+
+    expect(submitBlockingPayload.obbAnnotations).toEqual([]);
+    expect(hasSubmitBlockingReviewConfirmPayloadData(submitBlockingPayload)).toBe(false);
+  });
+
+  it('runReviewSubmitPreflight 在 check 返回 return 时给出驳回提示', async () => {
+    const result = await runReviewSubmitPreflight({
+      hasUnsavedBlockingData: false,
+      taskId: 'task-1',
+      currentNode: 'sh',
+      checkAnnotations: async () => ({
+        success: true,
+        data: {
+          passed: false,
+          recommendedAction: 'return',
+          currentNode: 'sh',
+          summary: {
+            total: 1,
+            open: 0,
+            pendingReview: 0,
+            approved: 0,
+            rejected: 1,
+          },
+          blockers: [],
+          message: '存在未通过批注，应先驳回或重新处理',
+        },
+      }),
+    });
+
+    expect(result).toEqual({
+      allowed: false,
+      message: '存在未通过批注，应先驳回或重新处理',
+    });
   });
 });

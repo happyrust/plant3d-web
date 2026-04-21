@@ -11,7 +11,6 @@ import {
   reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
-import { emitToast } from '@/ribbon/toastBus';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
@@ -20,6 +19,7 @@ import {
   getReviewCommentThreadStore,
   isReviewCommentThreadStoreActive,
 } from '@/review/services/sharedStores';
+import { emitToast } from '@/ribbon/toastBus';
 import { type AnnotationComment, getRoleDisplayName, getRoleTheme, UserRole } from '@/types/auth';
 
 const props = defineProps<{

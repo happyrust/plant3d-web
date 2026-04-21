@@ -8,7 +8,7 @@ const {
   clearAuthTokenMock,
   setAuthTokenMock,
   restoreEmbedWorkbenchContextMock,
-  restoreEmbedFormSnapshotMock,
+  restoreEmbedFormSnapshotContextMock,
   switchProjectByIdMock,
   setCurrentTaskMock,
   importJsonMock,
@@ -28,7 +28,7 @@ const {
   clearAuthTokenMock: vi.fn(),
   setAuthTokenMock: vi.fn(),
   restoreEmbedWorkbenchContextMock: vi.fn(),
-  restoreEmbedFormSnapshotMock: vi.fn(),
+  restoreEmbedFormSnapshotContextMock: vi.fn(),
   switchProjectByIdMock: vi.fn(() => true),
   setCurrentTaskMock: vi.fn(async () => undefined),
   importJsonMock: vi.fn(),
@@ -133,7 +133,7 @@ vi.mock('@/components/review/embedContextRestore', () => ({
 }));
 
 vi.mock('@/components/review/embedFormSnapshotRestore', () => ({
-  restoreEmbedFormSnapshot: (...args: unknown[]) => restoreEmbedFormSnapshotMock(...args),
+  restoreEmbedFormSnapshotContext: (...args: unknown[]) => restoreEmbedFormSnapshotContextMock(...args),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
@@ -315,7 +315,7 @@ describe('DockLayout embed bootstrap', () => {
     clearAuthTokenMock.mockReset();
     setAuthTokenMock.mockReset();
     restoreEmbedWorkbenchContextMock.mockReset();
-    restoreEmbedFormSnapshotMock.mockReset();
+    restoreEmbedFormSnapshotContextMock.mockReset();
     switchProjectByIdMock.mockReset();
     setCurrentTaskMock.mockReset();
     importJsonMock.mockReset();
@@ -346,8 +346,9 @@ describe('DockLayout embed bootstrap', () => {
       restoredTaskDraft: null,
       restoredTask: createTask(),
     });
-    restoreEmbedFormSnapshotMock.mockResolvedValue({
+    restoreEmbedFormSnapshotContextMock.mockResolvedValue({
       modelRefnos: [],
+      task: createTask(),
     });
     waitForViewerReadyMock.mockResolvedValue(true);
     showModelByRefnosWithAckMock.mockResolvedValue({ ok: [], fail: [], error: null });

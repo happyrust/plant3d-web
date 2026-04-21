@@ -5,6 +5,7 @@ import {
   buildPersistedEmbedModeParams,
   getEmbedLandingPanelIds,
   readEmbedModeParamsFromSearch,
+  resolvePassiveEmbedViewTarget,
   resolveTrustedEmbedIdentity,
   resolveEmbedLandingTarget,
   resolveEmbedLandingTargetFromRole,
@@ -167,6 +168,38 @@ describe('embed role landing', () => {
     expect(resolveEmbedLandingTargetFromRole('reviewer')).toBeNull();
     expect(resolveEmbedLandingTargetFromRole('proofreader')).toBeNull();
     expect(resolveEmbedLandingTargetFromRole('manager')).toBeNull();
+  });
+
+  it('falls back to reviewer view when passive external reopen uses sj token for a non-sj task', () => {
+    expect(resolvePassiveEmbedViewTarget({
+      workflowRole: 'sj',
+      passiveWorkflowMode: true,
+      restoredTaskSummary: {
+        title: '三维校审单',
+        status: 'submitted',
+        currentNode: 'jd',
+      },
+    })).toBe('reviewer');
+
+    expect(resolvePassiveEmbedViewTarget({
+      workflowRole: 'sj',
+      passiveWorkflowMode: true,
+      restoredTaskSummary: {
+        title: '三维校审单',
+        status: 'draft',
+        currentNode: 'sj',
+      },
+    })).toBeNull();
+
+    expect(resolvePassiveEmbedViewTarget({
+      workflowRole: 'jd',
+      passiveWorkflowMode: true,
+      restoredTaskSummary: {
+        title: '三维校审单',
+        status: 'submitted',
+        currentNode: 'jd',
+      },
+    })).toBeNull();
   });
 
   it('uses verified token claims for trusted user identity while keeping explicit form lineage', () => {

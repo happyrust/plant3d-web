@@ -51,7 +51,7 @@ const ROLE_LABELS: Record<GuideRole, string> = {
 };
 
 const ROLE_SUMMARIES: Record<GuideRole, string> = {
-  designer: '负责选择构件、整理编校审内容并跟踪驳回与复审任务。',
+  designer: '负责选择构件、整理编校审内容，并在单据退回后进入批注处理页逐条处理。',
   proofreader: '负责进入待办任务、做批注与测量、确认当前数据并提交下一节点。',
   reviewer: '负责读取校核结果、复核三维内容、查看确认记录后做审核决策。',
   manager: '负责查看完整校审链路、确认记录与附件，并做最终批准决策。',
@@ -160,7 +160,7 @@ const quickActions = computed(() => {
       list.push({
         id: 'designer-resubmission',
         title: '学习如何处理驳回与复审',
-        description: '当编校审单被退回时，查看复审任务、修改内容并重新提交。',
+        description: '当编校审单被退回时，进入批注处理页查看任务、逐条处理批注并确认当前数据。',
         topic: 'designer',
         actionLabel: '打开复审指南',
         stepsHint: '驳回闭环',
@@ -234,7 +234,7 @@ const usageTips = computed(() => {
   const out = [...base];
   if (showDesigner) {
     if (showMyTasksEntry.value) {
-      out.push('设计师建议先完成“发起编校审”，再查看“我的编校审”或“复审任务”。');
+      out.push('设计师建议先完成“发起编校审”，再查看“我的编校审”或“批注处理”。');
     } else {
       out.push('设计师建议先完成“发起编校审”；进度与退回处理通常在外部平台完成。');
     }

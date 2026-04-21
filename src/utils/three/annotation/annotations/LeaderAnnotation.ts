@@ -145,12 +145,31 @@ export class LeaderAnnotation extends AnnotationBase {
     this.textLabel.position.copy(textPosition);
   }
 
+  /**
+   * 根据 SolveSpace 风格交互状态选择材质：
+   * - selected → 固定红色（`materials.ssSelected`），优先级最高
+   * - hovered  → 固定黄色（`materials.ssHovered`）
+   * - normal   → 构造时传入的基础配色（`this.materialSet`）
+   *
+   * 与 LinearDimension3D/AngleDimension3D/SlopeAnnotation3D/WeldAnnotation3D 的做法一致，
+   * 避免之前用 `_highlighted` 二值量导致 hovered 与 selected 颜色无区分。
+   */
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line;
-    const meshMat = this._highlighted ? this.materialSet.meshHover : this.materialSet.mesh;
+    const state = this.interactionState;
 
-    this.leaderLine.material = mat;
-    this.arrowHead.material = meshMat;
+    if (state === 'selected') {
+      this.leaderLine.material = this.materials.ssSelected.line;
+      this.arrowHead.material = this.materials.ssSelected.mesh;
+      return;
+    }
+    if (state === 'hovered') {
+      this.leaderLine.material = this.materials.ssHovered.line;
+      this.arrowHead.material = this.materials.ssHovered.mesh;
+      return;
+    }
+
+    this.leaderLine.material = this.materialSet.line;
+    this.arrowHead.material = this.materialSet.mesh;
   }
 
   protected override onScaleFactorChanged(factor: number): void {
@@ -163,6 +182,9 @@ export class LeaderAnnotation extends AnnotationBase {
 
     const labelEl = this.textLabel.element as HTMLElement;
     labelEl.classList.toggle('annotation-label--active', highlighted);
+    // 让 DOM 同时感知到 hovered/selected 细分，方便 CSS 区分样式。
+    labelEl.classList.toggle('annotation-label--hovered', this.interactionState === 'hovered');
+    labelEl.classList.toggle('annotation-label--selected', this.interactionState === 'selected');
   }
 
   override dispose(): void {

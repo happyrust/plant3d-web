@@ -174,9 +174,20 @@ export class AngleDimension extends AnnotationBase {
     this.textLabel.position.copy(labelPos);
   }
 
+  /**
+   * SolveSpace 状态机分流材质：selected > hovered > normal。
+   */
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line;
-    this.arcLine.material = mat;
+    const state = this.interactionState;
+    if (state === 'selected') {
+      this.arcLine.material = this.materials.ssSelected.line;
+      return;
+    }
+    if (state === 'hovered') {
+      this.arcLine.material = this.materials.ssHovered.line;
+      return;
+    }
+    this.arcLine.material = this.materialSet.line;
   }
 
   protected onHighlightChanged(highlighted: boolean): void {
@@ -184,6 +195,8 @@ export class AngleDimension extends AnnotationBase {
 
     const labelEl = this.textLabel.element as HTMLElement;
     labelEl.classList.toggle('annotation-label--active', highlighted);
+    labelEl.classList.toggle('annotation-label--hovered', this.interactionState === 'hovered');
+    labelEl.classList.toggle('annotation-label--selected', this.interactionState === 'selected');
   }
 
   override dispose(): void {

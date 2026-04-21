@@ -5,6 +5,8 @@ import { UserRole, type AnnotationComment } from '@/types/auth';
 
 const backendComments = ref<AnnotationComment[]>([]);
 const commentState = ref<Record<string, AnnotationComment[]>>({});
+const reviewState = ref<unknown>(undefined);
+const currentUser = ref({ id: 'reviewer-1', name: '校对甲', role: UserRole.PROOFREADER });
 let commentAddedCallback: ((data: unknown) => void) | null = null;
 
 const reviewCommentGetByAnnotationMock = vi.fn(async () => ({
@@ -42,7 +44,7 @@ vi.mock('@/composables/useToolStore', () => ({
         [`${type}:${id}`]: comments,
       };
     },
-    getAnnotationReviewState: vi.fn(() => undefined),
+    getAnnotationReviewState: vi.fn(() => reviewState.value),
     applyAnnotationReviewAction: vi.fn(() => null),
     updateAnnotationComment: vi.fn(),
     removeAnnotationComment: vi.fn(),
@@ -52,7 +54,7 @@ vi.mock('@/composables/useToolStore', () => ({
 
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
-    currentUser: { value: { id: 'reviewer-1', name: '校对甲', role: UserRole.PROOFREADER } },
+    currentUser,
   }),
 }));
 
@@ -88,7 +90,7 @@ async function flushUi() {
   await nextTick();
 }
 
-async function mountTimeline() {
+async function mountTimeline(props: Record<string, unknown> = {}) {
   const { default: ReviewCommentsTimeline } = await import('./ReviewCommentsTimeline.vue');
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -97,6 +99,7 @@ async function mountTimeline() {
       annotationType: 'text',
       annotationId: 'annot-1',
       annotationLabel: '文字批注 / 主评论线程',
+      ...props,
     }),
   });
   app.mount(host);
@@ -113,6 +116,8 @@ describe('ReviewCommentsTimeline', () => {
     document.body.innerHTML = '';
     backendComments.value = [makeComment('c-1', '初始评论')];
     commentState.value = {};
+    reviewState.value = undefined;
+    currentUser.value = { id: 'reviewer-1', name: '校对甲', role: UserRole.PROOFREADER };
     commentAddedCallback = null;
     reviewCommentGetByAnnotationMock.mockClear();
   });
@@ -157,6 +162,30 @@ describe('ReviewCommentsTimeline', () => {
 
     expect(reviewCommentGetByAnnotationMock).toHaveBeenCalledTimes(1);
     expect(document.body.textContent).not.toContain('实时新增评论');
+
+    mounted.unmount();
+  });
+
+  it('designerOnly 模式下不会暴露同意或驳回动作', async () => {
+    reviewState.value = {
+      resolutionStatus: 'fixed',
+      decisionStatus: 'pending',
+      updatedAt: 1700000000000,
+      history: [],
+    };
+    currentUser.value = { id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER };
+
+    const mounted = await mountTimeline({
+      designerOnly: true,
+      composerSubmitLabel: '发送回复',
+    });
+    await flushUi();
+
+    expect(document.body.textContent).toContain('已修改');
+    expect(document.body.textContent).toContain('不需解决');
+    expect(document.body.textContent).not.toContain('同意');
+    expect(document.body.textContent).not.toContain('驳回');
+    expect(document.body.textContent).toContain('发送回复');
 
     mounted.unmount();
   });

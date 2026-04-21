@@ -5,6 +5,12 @@ import type {
 } from '@/composables/useToolStore';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
+import {
+  getReviewAnnotationCheckFromError,
+  getReviewApiErrorMessage,
+  type ReviewAnnotationCheckResponse,
+} from '@/api/reviewApi';
+
 const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
 
 export function canFinalizeAtCurrentNode(currentNode?: WorkflowNode): boolean {
@@ -17,6 +23,16 @@ export function canSubmitAtCurrentNode(currentNode?: WorkflowNode): boolean {
 
 export function canReturnAtCurrentNode(currentNode?: WorkflowNode): boolean {
   return WORKFLOW_NODE_ORDER.indexOf(currentNode ?? 'sj') > 0;
+}
+
+export function getDefaultReturnTargetNode(currentNode?: WorkflowNode): WorkflowNode {
+  const idx = WORKFLOW_NODE_ORDER.indexOf(currentNode ?? 'sj');
+  return idx > 0 ? WORKFLOW_NODE_ORDER[idx - 1] : 'sj';
+}
+
+export function getAvailableReturnNodes(currentNode?: WorkflowNode): WorkflowNode[] {
+  const idx = WORKFLOW_NODE_ORDER.indexOf(currentNode ?? 'sj');
+  return idx > 0 ? WORKFLOW_NODE_ORDER.slice(0, idx) : [];
 }
 
 export function getSubmitActionLabel(currentNode?: WorkflowNode): string {
@@ -85,6 +101,8 @@ function convertXeokitMeasurementToClassic(
       target: measurement.target,
       visible: measurement.visible,
       createdAt: measurement.createdAt,
+      sourceAnnotationId: measurement.sourceAnnotationId,
+      sourceAnnotationType: measurement.sourceAnnotationType,
     };
   }
 
@@ -95,6 +113,8 @@ function convertXeokitMeasurementToClassic(
     target: measurement.target,
     visible: measurement.visible,
     createdAt: measurement.createdAt,
+    sourceAnnotationId: measurement.sourceAnnotationId,
+    sourceAnnotationType: measurement.sourceAnnotationType,
   };
 }
 
@@ -254,12 +274,111 @@ export function buildUnsavedReviewConfirmPayload(
   };
 }
 
+export function buildSubmitBlockingReviewConfirmPayload(
+  current: ReviewConfirmSnapshotPayload,
+  baseline: ReviewConfirmSnapshotPayload
+): ReviewConfirmSnapshotPayload {
+  const payload = buildUnsavedReviewConfirmPayload(current, baseline);
+  return {
+    ...payload,
+    obbAnnotations: [],
+  };
+}
+
 export function hasReviewConfirmPayloadData(payload: ReviewConfirmSnapshotPayload): boolean {
   return payload.annotations.length > 0
     || payload.cloudAnnotations.length > 0
     || payload.rectAnnotations.length > 0
     || payload.obbAnnotations.length > 0
     || payload.measurements.length > 0;
+}
+
+export function hasSubmitBlockingReviewConfirmPayloadData(
+  payload: ReviewConfirmSnapshotPayload
+): boolean {
+  return payload.annotations.length > 0
+    || payload.cloudAnnotations.length > 0
+    || payload.rectAnnotations.length > 0
+    || payload.measurements.length > 0;
+}
+
+function resolveReviewAnnotationCheckMessage(
+  response: ReviewAnnotationCheckResponse['data'] | undefined,
+  currentNode?: WorkflowNode,
+  fallbackMessage = '批注检查失败，请稍后重试'
+): string {
+  if (response?.recommendedAction === 'return') {
+    return response.message || '当前应驳回，不可直接流转到下一节点';
+  }
+
+  if (response?.recommendedAction === 'block') {
+    return response.message || (
+      currentNode === 'sj'
+        ? '当前仍有未处理批注，请先处理并确认数据后再继续'
+        : '当前仍有待确认批注，请逐条确认后再继续'
+    );
+  }
+
+  return fallbackMessage;
+}
+
+export async function runReviewSubmitPreflight(options: {
+  hasUnsavedBlockingData: boolean;
+  taskId?: string;
+  currentNode?: WorkflowNode;
+  checkAnnotations: () => Promise<ReviewAnnotationCheckResponse>;
+}): Promise<{ allowed: boolean; message?: string }> {
+  if (options.hasUnsavedBlockingData) {
+    return {
+      allowed: false,
+      message: '请先确认数据，再执行流转',
+    };
+  }
+
+  if (!options.taskId) {
+    return {
+      allowed: false,
+      message: '当前任务不存在，无法提交',
+    };
+  }
+
+  try {
+    const response = await options.checkAnnotations();
+    if (response.success && response.data?.passed) {
+      return { allowed: true };
+    }
+
+    return {
+      allowed: false,
+      message: resolveReviewAnnotationCheckMessage(
+        response.data,
+        options.currentNode,
+        response.errorMessage || '批注检查失败，请稍后重试'
+      ),
+    };
+  } catch (error) {
+    return {
+      allowed: false,
+      message: resolveReviewSubmitErrorMessage(
+        error,
+        options.currentNode,
+        '批注检查失败，请稍后重试'
+      ),
+    };
+  }
+}
+
+export function resolveReviewSubmitErrorMessage(
+  error: unknown,
+  currentNode?: WorkflowNode,
+  fallbackMessage = '提交流转失败'
+): string {
+  const annotationCheck = getReviewAnnotationCheckFromError(error);
+  if (annotationCheck) {
+    return resolveReviewAnnotationCheckMessage(annotationCheck, currentNode, fallbackMessage);
+  }
+
+  return getReviewApiErrorMessage(error, fallbackMessage);
 }
 
 type ConfirmCurrentDataOptions<TPayload> = {
@@ -302,10 +421,12 @@ export async function finalizeTaskDecisionSafely(
 type SubmitTaskToNextNodeSafelyOptions = {
   canSubmit: boolean;
   taskId?: string;
+  currentNode?: WorkflowNode;
   submitComment: { value: string };
   showSubmitDialog: { value: boolean };
   workflowActionLoading: { value: boolean };
   workflowError: { value: string | null };
+  beforeSubmit?: () => Promise<{ allowed: boolean; message?: string }>;
   submitTaskToNextNode: (taskId: string, comment?: string) => Promise<void>;
   refreshCurrentTask: (taskId: string) => Promise<void>;
   loadWorkflow: (taskId: string) => Promise<void>;
@@ -322,6 +443,14 @@ export async function submitTaskToNextNodeSafely(
   const trimmedComment = options.submitComment.value.trim();
 
   try {
+    if (options.beforeSubmit) {
+      const preflight = await options.beforeSubmit();
+      if (!preflight.allowed) {
+        options.workflowError.value = preflight.message || '提交流转前校验未通过';
+        return false;
+      }
+    }
+
     await options.submitTaskToNextNode(options.taskId, trimmedComment || undefined);
     await options.refreshCurrentTask(options.taskId);
     await options.loadWorkflow(options.taskId);
@@ -330,7 +459,7 @@ export async function submitTaskToNextNodeSafely(
     options.submitComment.value = '';
     return true;
   } catch (e) {
-    options.workflowError.value = e instanceof Error ? e.message : '提交流转失败';
+    options.workflowError.value = resolveReviewSubmitErrorMessage(e, options.currentNode);
     return false;
   } finally {
     options.workflowActionLoading.value = false;

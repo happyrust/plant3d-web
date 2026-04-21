@@ -6,6 +6,7 @@ import {
   type EmbedLandingTaskSummary,
   type EmbedRestoreStatus,
 } from './embedRoleLanding';
+import { isCanonicalReturnedTask } from './reviewTaskFilters';
 
 import type { ReviewTask, WorkflowNode } from '@/types/auth';
 
@@ -147,6 +148,10 @@ export async function restoreEmbedWorkbenchContext(
   } else {
     // 设计端：如果匹配到了已有任务，也绑定 currentTask，以触发确认记录加载与批注回放
     await options.setCurrentTask(result.restoredTask ?? null);
+    if (result.restoredTask && isCanonicalReturnedTask(result.restoredTask)) {
+      options.openPanel('resubmissionTasks');
+      options.activatePanel('resubmissionTasks');
+    }
   }
 
   return result;

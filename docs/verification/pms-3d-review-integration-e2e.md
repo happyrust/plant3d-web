@@ -71,7 +71,7 @@ npm run test:pms:cdp
 入口固定为：[PowerPMS 登录页](http://pms.powerpms.net:1801/sysin.html)（脚本内 `PMS_E2E_BASE` 默认同域，实际打开 `…/sysin.html`）。
 
 1. **部署**：plant3d-web 需已发布，且含自动化钩子（`registerPlant3dAutomationReviewInitScript` 会写入 `localStorage.plant3d_automation_review=1`，页面暴露 `window.__plant3dInitiateReviewE2E.addMockComponent`）。
-2. **外部流程模式**（默认）：三维内按钮为「**创建编校审数据**」，脚本通过 `[data-guide="submit-btn"]` 点击；成功文案为「编校审单创建成功」。设计人员若还要继续送审，需回到 **PMS 右侧面板** 再点「送审提交」，该动作触发 `workflow/sync active`。  
+2. **外部流程模式**（默认）：三维内按钮为「**创建编校审数据**」，脚本通过 `[data-guide="submit-btn"]` 点击；成功文案为「编校审单创建成功」。设计人员若还要继续送审，需回到 **PMS 右侧面板** 再点「送审提交」，该动作现在固定按 `workflow/verify -> workflow/sync active` 顺序执行。  
    > 2026-04-02 补充口径：在本仓 **仿 PMS 调试页**（`/pms-review-simulator.html`）里，external/passive 已补齐 `workflow/sync active / agree / return / stop` 全动作链，并已拿到 `approved / cancelled / return->sj` 的真实闭环证据；本节的 CDP 脚本仍以 **真实 PowerPMS 入口** 为主，因此 reviewer 内部按钮验证仍默认走 `manual/internal`。
 3. **一键命令**（密码与嵌入站点片段必填）：
 
@@ -188,8 +188,9 @@ npm run test:pms:cdp:full
 - **新增** 打开的 URL 通常由平台后端调用模型中心 **embed-url** 类能力再重定向/拼接得到；当前前端已按 **token-primary** 合同消费最终地址：优先保留 `user_token + output_project`，必要时可带 `form_id`，但不再依赖 URL 中的 `user_id / user_role / project_id` 身份字段。
 - **UCode/UKey** 用于模型中心 **主动请求** 布置平台辅助数据接口，与「新增打开页」不是同一条链路；勿混测。
 - **校审工作流同步** `POST /api/review/workflow/sync`（模型中心实现）：
+  - `POST /api/review/workflow/verify`：外部流程的正式预校验入口；请求体与 `workflow/sync` 一致，只返回 `passed / reason / recommended_action` 等判断结果，**不写库**。
   - **`action=query`**：PMS **打开/刷新** 嵌入页或单据时拉取当前工作流与意见快照；**不**在模型中心新建 `review_opinion` 记录（即使请求里带了 `comments`）。
-  - **`active` / `agree` / `return` / `stop`**：真实审批推进；当前本地模型中心实现已会更新 `review_tasks / review_forms`，并在返回快照中反映最新 `current_node / task_status / form_status`。其中：
+  - **`active` / `agree` / `return` / `stop`**：真实审批推进；当前本地模型中心实现已会更新 `review_tasks / review_forms`，并在返回快照中反映最新 `current_node / task_status / form_status`。正式调用顺序应为 `verify -> sync`。其中：
     - `active`：编制送审，推进到 `next_step`
     - `agree`：同意并推进；`pz agree` 作为最终批准，进入 `approved`
     - `return`：退回到指定前置节点，并回写 `returnReason`
@@ -199,8 +200,10 @@ npm run test:pms:cdp:full
   - `cancelled`：`task_status = cancelled`、`form_status = cancelled`、`embed-url lineage.status = cancelled`
 - **仿 PMS external/passive 当前闭环**：已通过真实界面点击验证
   - `SJ active -> JH agree -> SH agree -> PZ agree -> approved`
-  - `SJ active -> JH agree -> SH stop -> cancelled`
+  - `SJ active -> JH agree -> SH stop -> cancelled`（手工 SOP 全节点路径）
   - `SJ active -> JH agree -> SH agree -> PZ return -> sj -> SJ reopen initiate`
+- **自动化模拟器快捷路径**（`pms-simulator-runner.ts`）：
+  - `stop` 场景使用 `SJ active -> JH stop -> cancelled`（在校对节点直接终止，跳过 SH 角色登录与 agree 步骤，缩短 ~30s 执行时间；`stop` 动作本身的 verify/sync 合同校验完全一致）
 - **基于固定 BRAN `24381_145018` 的数据证据（2026-04-02 已验证）**：
   - `JH` 阶段可真实添加：
     - 1 条批注
@@ -270,6 +273,8 @@ sequenceDiagram
   MC-->>PMS: data.models / opinions / attachments
 
   Note over PMS,MC: 审批动作
+  PMS->>MC: workflow/verify action=active|agree|return|stop
+  MC-->>PMS: passed / reason / recommended_action
   PMS->>MC: workflow/sync action=active|agree|return|stop
   MC-->>PMS: 更新后快照
 ```

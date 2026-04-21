@@ -4,14 +4,26 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 import { Clock, FileText, Filter, HelpCircle, Paperclip, PlayCircle, RefreshCw, User, XCircle } from 'lucide-vue-next';
 
 import { refreshReviewerTasksSafely, startReviewerTask } from './reviewerTaskListActions';
-import { getSubmitActionLabel } from './reviewPanelActions';
+import {
+  buildReviewConfirmSnapshotPayload,
+  buildReviewConfirmSnapshotPayloadFromRecords,
+  buildSubmitBlockingReviewConfirmPayload,
+  canReturnAtCurrentNode,
+  getSubmitActionLabel,
+  hasSubmitBlockingReviewConfirmPayloadData,
+  runReviewSubmitPreflight,
+  submitTaskToNextNodeSafely,
+} from './reviewPanelActions';
+import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 
-import { reviewTaskGetById } from '@/api/reviewApi';
+import { reviewAnnotationCheck, reviewTaskGetById } from '@/api/reviewApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
+import { emitToast } from '@/ribbon/toastBus';
 import { UserRole, type ReviewTask } from '@/types/auth';
 import {
   getPriorityDisplayName,
@@ -22,6 +34,7 @@ import {
 
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
+const toolStore = useToolStore();
 const onboarding = useOnboardingGuide();
 const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-reviewer-tasks-v1');
 
@@ -32,8 +45,9 @@ const isLoading = ref(false);
 const selectedTask = ref<ReviewTask | null>(null);
 const selectedTaskLoading = ref(false);
 const selectedTaskError = ref<string | null>(null);
-const showRejectForm = ref(false);
-const rejectReason = ref('');
+const taskActionLoading = ref(false);
+const submitComment = ref('');
+const submitDialogVisible = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
 
 navigationState.bindRef('searchTerm', searchTerm, '');
@@ -77,6 +91,35 @@ const filteredTasks = computed(() => {
 
 const currentUser = computed(() => userStore.currentUser.value);
 const hasFilters = computed(() => searchTerm.value || statusFilter.value !== 'all' || priorityFilter.value !== 'all');
+const activeWorkbenchTask = computed(() => reviewStore.currentTask.value);
+const selectedTaskConfirmedRecords = computed(() => {
+  const selectedTaskId = selectedTask.value?.id;
+  if (!selectedTaskId || activeWorkbenchTask.value?.id !== selectedTaskId) return [];
+  return reviewStore.sortedConfirmedRecords.value.filter((record) => record.taskId === selectedTaskId);
+});
+const selectedTaskDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
+  annotations: [...toolStore.annotations.value],
+  cloudAnnotations: [...toolStore.cloudAnnotations.value],
+  rectAnnotations: [...toolStore.rectAnnotations.value],
+  obbAnnotations: [...toolStore.obbAnnotations.value],
+  measurements: [...toolStore.measurements.value],
+  xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
+  xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+}));
+const selectedTaskConfirmedSnapshotPayload = computed(() => (
+  buildReviewConfirmSnapshotPayloadFromRecords(selectedTaskConfirmedRecords.value)
+));
+const selectedTaskSubmitBlockingPayload = computed(() => (
+  buildSubmitBlockingReviewConfirmPayload(
+    selectedTaskDraftConfirmPayload.value,
+    selectedTaskConfirmedSnapshotPayload.value
+  )
+));
+const selectedTaskHasUnsavedBlockingData = computed(() => {
+  const selectedTaskId = selectedTask.value?.id;
+  if (!selectedTaskId || activeWorkbenchTask.value?.id !== selectedTaskId) return false;
+  return hasSubmitBlockingReviewConfirmPayloadData(selectedTaskSubmitBlockingPayload.value);
+});
 
 async function refreshTasks() {
   await refreshReviewerTasksSafely({
@@ -185,19 +228,62 @@ async function handleStartReview(task: ReviewTask) {
 }
 
 async function handleApprove(task: ReviewTask) {
-  await userStore.submitTaskToNextNode(task.id, getSubmitActionLabel(task.currentNode));
-  await userStore.loadReviewTasks();
+  selectedTaskError.value = null;
+  const submitted = await submitTaskToNextNodeSafely({
+    canSubmit: true,
+    taskId: task.id,
+    currentNode: task.currentNode,
+    submitComment,
+    showSubmitDialog: submitDialogVisible,
+    workflowActionLoading: taskActionLoading,
+    workflowError: selectedTaskError,
+    beforeSubmit: () => runReviewSubmitPreflight({
+      hasUnsavedBlockingData: selectedTaskHasUnsavedBlockingData.value,
+      taskId: task.id,
+      currentNode: task.currentNode,
+      checkAnnotations: () => reviewAnnotationCheck({
+        taskId: task.id,
+        formId: task.formId || undefined,
+        currentNode: task.currentNode,
+        intent: 'submit_next',
+        includedTypes: ['text', 'cloud', 'rect'],
+      }),
+    }),
+    submitTaskToNextNode: userStore.submitTaskToNextNode,
+    refreshCurrentTask: async () => {
+      await userStore.loadReviewTasks();
+    },
+    loadWorkflow: async () => {},
+    emitToast,
+  });
+
+  if (!submitted) return;
+
   selectedTask.value = null;
 }
 
-async function handleReject(task: ReviewTask) {
-  if (!rejectReason.value.trim()) return;
-  // 统一规则：驳回一律回发起设计人（sj）
-  await userStore.returnTaskToNode(task.id, 'sj', rejectReason.value.trim());
-  await userStore.loadReviewTasks();
-  selectedTask.value = null;
-  showRejectForm.value = false;
-  rejectReason.value = '';
+const showReturnDialog = ref(false);
+
+function openReturnDialog() {
+  if (!selectedTask.value || !canReturnAtCurrentNode(selectedTask.value.currentNode)) return;
+  showReturnDialog.value = true;
+}
+
+async function handleReturnConfirm(targetNode: import('@/types/auth').WorkflowNode, reason: string) {
+  if (!selectedTask.value) return;
+  selectedTaskError.value = null;
+  taskActionLoading.value = true;
+  try {
+    await userStore.returnTaskToNode(selectedTask.value.id, targetNode, reason);
+    await userStore.loadReviewTasks();
+    emitToast({ message: '已确认驳回流转' });
+    selectedTask.value = null;
+    showReturnDialog.value = false;
+  } catch (error) {
+    selectedTaskError.value = error instanceof Error ? error.message : '驳回流转失败';
+  } finally {
+    taskActionLoading.value = false;
+  }
 }
 
 async function hydrateSelectedTask(task: ReviewTask): Promise<void> {
@@ -235,8 +321,9 @@ function closeTaskDetail() {
   selectedTask.value = null;
   selectedTaskLoading.value = false;
   selectedTaskError.value = null;
-  showRejectForm.value = false;
-  rejectReason.value = '';
+  taskActionLoading.value = false;
+  submitComment.value = '';
+  showReturnDialog.value = false;
 }
 
 function getStartActionLabel(task: ReviewTask): string {
@@ -470,33 +557,18 @@ onMounted(() => {
           </div>
           <div class="p-4 border-t flex justify-end gap-2">
             <template v-if="selectedTask.status === 'submitted' || selectedTask.status === 'in_review'">
-              <div v-if="!showRejectForm" class="flex gap-2">
-                <button class="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
-                  @click="showRejectForm = true">
+              <div class="flex gap-2">
+                <button v-if="canReturnAtCurrentNode(selectedTask.currentNode)"
+                  class="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                  :disabled="taskActionLoading"
+                  @click="openReturnDialog">
                   驳回
                 </button>
-                <button class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                <button class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  :disabled="taskActionLoading"
                   @click="handleApprove(selectedTask)">
-                  {{ getApproveActionLabel(selectedTask) }}
+                  {{ taskActionLoading ? '处理中...' : getApproveActionLabel(selectedTask) }}
                 </button>
-              </div>
-              <div v-else class="w-full space-y-2">
-                <label class="text-sm text-gray-600">驳回原因（必填）</label>
-                <textarea v-model="rejectReason"
-                  class="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-500"
-                  rows="2"
-                  placeholder="请输入驳回原因..." />
-                <div class="flex gap-2">
-                  <button class="flex-1 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                    :disabled="!rejectReason.trim()"
-                    @click="handleReject(selectedTask)">
-                    确认驳回
-                  </button>
-                  <button class="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
-                    @click="showRejectForm = false; rejectReason = ''">
-                    取消
-                  </button>
-                </div>
               </div>
             </template>
             <button class="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50" @click="closeTaskDetail">
@@ -506,5 +578,12 @@ onMounted(() => {
         </div>
       </div>
     </Teleport>
+
+    <WorkflowReturnDialog v-if="selectedTask"
+      :visible="showReturnDialog"
+      :current-node="selectedTask.currentNode"
+      :loading="taskActionLoading"
+      @update:visible="(v) => { showReturnDialog = v; }"
+      @confirm="handleReturnConfirm" />
   </div>
 </template>

@@ -182,7 +182,7 @@ grep -n "function buildSimulatorEmbedUrlPayload\|function buildSimulatorWorkflow
 
 ### 5.2 契约序列脚本
 
-**验收条件**：一条命令可跑通 5 步 API 序列验证。
+**验收条件**：一条命令可跑通 7 步 API 序列验证。
 
 **前置条件**：
 
@@ -198,29 +198,35 @@ npx tsx scripts/pms-contract-sequence.ts --base http://localhost:3100 --verbose
 
 **预期输出**：
 
-```
+```text
 ═══════════════════════════════════════════════════════════
  PMS 平台 API 契约序列验证
   后端: http://localhost:3100  用户: SJ  项目: TEST_PROJECT  模式: external
 ═══════════════════════════════════════════════════════════
 
-[0/4] POST /api/auth/token (login)
-  ✓ [auth/token] HTTP 200 (xxms) code=0
+[0/6] POST /api/auth/token (login)
+  ✓ [auth/token] HTTP 200 (xxms) code=0 Bearer token 已获取
 
-[1/4] POST /api/review/embed-url
-  ✓ [embed-url] HTTP 200 (xxms) code=200
+[1/6] POST /api/review/embed-url
+  ✓ [embed-url] HTTP 200 (xxms) code=200 form_id=FORM-EXAMPLE
 
-[2/4] POST /api/review/workflow/sync (action=query)
-  ✓ [workflow/sync(query)] HTTP 401 (xxms) code=401 (auth-only, 契约格式 OK)
+[2/6] POST /api/review/tasks (seed)
+  ✓ [review-task(seed)] HTTP 200 (xxms) form_id=FORM-EXAMPLE task_id=task-xxxx seed task 创建成功
 
-[3/4] POST /api/review/cache/preload
-  ✓ [cache/preload] HTTP 401 (xxms) code=401 (auth-only, 契约格式 OK)
+[3/6] POST /api/review/workflow/verify
+  ✓ [workflow/verify] HTTP 200 (xxms) form_id=FORM-EXAMPLE task_id=task-xxxx passed=true recommended_action=proceed reason=验证通过，可继续流转
 
-[4/4] POST /api/review/delete (dry-run, empty form_ids)
-  ✓ [delete(dry-run)] HTTP 401 (xxms) code=401 (auth-only, 契约格式 OK)
+[4/6] POST /api/review/workflow/sync (action=query)
+  ✓ [workflow/sync(query)] HTTP 200 (xxms) code=200 form_id=FORM-EXAMPLE task_id=task-xxxx
+
+[5/6] POST /api/review/cache/preload
+  ✓ [cache/preload] HTTP 200 (xxms) code=200 form_id=FORM-EXAMPLE
+
+[6/6] POST /api/review/delete (cleanup seeded form)
+  ✓ [delete] HTTP 200 (xxms) code=200 form_id=FORM-EXAMPLE task_id=task-xxxx 已请求清理 seed form
 
 ───────────────────────────────────────────────────────────
-  结果: 5/5 步骤通过
+  结果: 7/7 步骤通过
 ───────────────────────────────────────────────────────────
 ```
 
@@ -229,12 +235,15 @@ npx tsx scripts/pms-contract-sequence.ts --base http://localhost:3100 --verbose
 | 步骤 | 通过条件 | 失败条件 |
 |------|---------|---------|
 | auth/token | HTTP 200 + `code=0` + 返回 token | 非 200 或无 token |
-| embed-url | HTTP 200 + `code=200` | 非 200 |
-| workflow/sync | HTTP 200 或 401 | 400（格式错误）、404（端点缺失）、422 |
+| embed-url | HTTP 200 + `code=200` + 返回 `form_id` 与 workflow token | 非 200 或缺字段 |
+| review-task(seed) | HTTP 200 + `success=true` + 返回 `task_id` + 与同一 `form_id` 绑定 | 非 200、无 `task_id`、或 `form_id` 不一致 |
+| workflow/verify | HTTP 200 + 返回 `passed / reason / recommended_action` | 404、400、或缺结构化字段 |
+| workflow/sync(query) | HTTP 200 或 401 | 400（格式错误）、404（端点缺失）、422 |
 | cache/preload | HTTP 200/202/401/404 | 400、422 |
 | delete | HTTP 200/400/401/404 | 422、500 |
 
-> **说明**：401 表示「端点可达 + 请求体格式正确 + JWT 认证被正确触发」，在测试环境下是预期行为。400/422 表示请求体格式与后端 `types.rs` 不匹配，是真正的契约违反。
+> **说明**：`workflow/verify` 现在必须先基于真实 `form_id` 创建 seed task，再验证 `active`。  
+> `401` 仅表示「端点可达 + 请求体格式正确 + JWT 认证被正确触发」；`404` 只允许出现在真正不存在的 `form_id`，不能再算“契约通过”。
 
 **CLI 参数与环境变量**：
 

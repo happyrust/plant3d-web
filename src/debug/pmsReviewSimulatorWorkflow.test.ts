@@ -9,6 +9,7 @@ import {
   deriveSimulatorSidePanelMode,
   resolveSimulatorPmsUserIdentity,
   resolveSimulatorWorkflowAccess,
+  resolveSimulatorInboxTaskVisibility,
   resolveSimulatorTaskAssignment,
   resolveSimulatorWorkflowAssignment,
   resolveSimulatorWorkflowRole,
@@ -444,11 +445,10 @@ describe('resolveSimulatorWorkflowAccess', () => {
   it('新增入口始终允许当前用户发起流程', () => {
     expect(resolveSimulatorWorkflowAccess({
       iframeSource: 'new',
-      taskAssignedUserId: null,
-      taskAssignmentSource: 'none',
-      matchesTaskAssignee: false,
-      defaultAssignedPmsUser: 'SJ',
-      matchesDefaultAssignee: false,
+      currentPmsUserId: 'SJ',
+      currentPmsWorkflowRole: 'sj',
+      workflowNextStepUserId: null,
+      workflowNextStepRole: null,
     })).toEqual({
       canView: true,
       canMutateWorkflow: true,
@@ -457,37 +457,51 @@ describe('resolveSimulatorWorkflowAccess', () => {
     });
   });
 
-  it('已有单据在存在真实任务指派时，优先按真实任务指派决定是否可推进流程', () => {
+  it('已有单据在 PMS 传入的 user/role 与 workflow next_step 完全命中时允许操作', () => {
     expect(resolveSimulatorWorkflowAccess({
       iframeSource: 'task-view',
       taskStatus: 'in_review',
-      taskAssignedUserId: 'proofreader_001',
-      taskAssignmentSource: 'checker',
-      matchesTaskAssignee: false,
-      defaultAssignedPmsUser: 'JH',
-      matchesDefaultAssignee: true,
-    })).toEqual({
-      canView: true,
-      canMutateWorkflow: false,
-      decisionSource: 'task-assignee',
-      reason: '当前单据已明确指派给 proofreader_001（checker），当前用户仅可查看。',
-    });
-  });
-
-  it('已有单据缺少真实任务指派时，回退按默认测试流转映射判断', () => {
-    expect(resolveSimulatorWorkflowAccess({
-      iframeSource: 'task-view',
-      taskStatus: 'submitted',
-      taskAssignedUserId: null,
-      taskAssignmentSource: 'none',
-      matchesTaskAssignee: false,
-      defaultAssignedPmsUser: 'SH',
-      matchesDefaultAssignee: true,
+      currentPmsUserId: 'JH',
+      currentPmsWorkflowRole: 'jd',
+      workflowNextStepUserId: 'JH',
+      workflowNextStepRole: 'jd',
     })).toEqual({
       canView: true,
       canMutateWorkflow: true,
-      decisionSource: 'default-assignee',
-      reason: '当前单据缺少真实任务指派，已回退到默认测试流转映射。',
+      decisionSource: 'workflow-next-step',
+      reason: '当前 PMS 入口角色和用户已命中 workflow next_step（JH / jd），允许当前用户执行对应操作。',
+    });
+  });
+
+  it('已有单据在 PMS 传入的 user/role 与 workflow next_step 不一致时只能只读查看', () => {
+    expect(resolveSimulatorWorkflowAccess({
+      iframeSource: 'task-view',
+      taskStatus: 'submitted',
+      currentPmsUserId: 'JH',
+      currentPmsWorkflowRole: 'sj',
+      workflowNextStepUserId: 'JH',
+      workflowNextStepRole: 'jd',
+    })).toEqual({
+      canView: true,
+      canMutateWorkflow: false,
+      decisionSource: 'workflow-next-step',
+      reason: '当前 PMS 入口角色和用户未命中 workflow next_step（JH / jd），当前用户仅可查看。',
+    });
+  });
+
+  it('已有单据缺少 workflow next_step 角色或用户时，只允许查看', () => {
+    expect(resolveSimulatorWorkflowAccess({
+      iframeSource: 'task-view',
+      taskStatus: 'submitted',
+      currentPmsUserId: 'SH',
+      currentPmsWorkflowRole: 'sh',
+      workflowNextStepUserId: null,
+      workflowNextStepRole: 'sh',
+    })).toEqual({
+      canView: true,
+      canMutateWorkflow: false,
+      decisionSource: 'workflow-unresolved',
+      reason: '当前单据缺少 workflow next_step 指定的处理角色或处理人，仅可查看。',
     });
   });
 
@@ -495,11 +509,10 @@ describe('resolveSimulatorWorkflowAccess', () => {
     expect(resolveSimulatorWorkflowAccess({
       iframeSource: 'task-view',
       taskStatus: 'cancelled',
-      taskAssignedUserId: 'SH',
-      taskAssignmentSource: 'approver',
-      matchesTaskAssignee: true,
-      defaultAssignedPmsUser: 'SH',
-      matchesDefaultAssignee: true,
+      currentPmsUserId: 'SH',
+      currentPmsWorkflowRole: 'sh',
+      workflowNextStepUserId: 'SH',
+      workflowNextStepRole: 'sh',
     })).toEqual({
       canView: true,
       canMutateWorkflow: false,
@@ -510,16 +523,55 @@ describe('resolveSimulatorWorkflowAccess', () => {
     expect(resolveSimulatorWorkflowAccess({
       iframeSource: 'task-view',
       taskStatus: 'approved',
-      taskAssignedUserId: 'PZ',
-      taskAssignmentSource: 'approver',
-      matchesTaskAssignee: true,
-      defaultAssignedPmsUser: 'PZ',
-      matchesDefaultAssignee: true,
+      currentPmsUserId: 'PZ',
+      currentPmsWorkflowRole: 'pz',
+      workflowNextStepUserId: 'PZ',
+      workflowNextStepRole: 'pz',
     })).toEqual({
       canView: true,
       canMutateWorkflow: false,
       decisionSource: 'task-terminal',
       reason: '当前单据已处于已完成终态，仅可查看。',
     });
+  });
+});
+
+describe('resolveSimulatorInboxTaskVisibility', () => {
+  it('按任务当前节点和真实指派决定当前用户是否出现在收件列表', () => {
+    expect(resolveSimulatorInboxTaskVisibility({
+      currentPmsUser: 'JH',
+      taskStatus: 'submitted',
+      taskCurrentNode: 'jd',
+      checkerId: 'JH',
+    })).toBe(true);
+
+    expect(resolveSimulatorInboxTaskVisibility({
+      currentPmsUser: 'JH',
+      taskStatus: 'submitted',
+      taskCurrentNode: 'jd',
+      checkerId: 'SH',
+    })).toBe(false);
+  });
+
+  it('设计节点按 requesterId 判定；缺少节点或指派时保留查看', () => {
+    expect(resolveSimulatorInboxTaskVisibility({
+      currentPmsUser: 'JH',
+      taskStatus: 'draft',
+      taskCurrentNode: 'sj',
+      requesterId: 'JH',
+    })).toBe(true);
+
+    expect(resolveSimulatorInboxTaskVisibility({
+      currentPmsUser: 'SH',
+      taskStatus: 'in_review',
+      taskCurrentNode: null,
+    })).toBe(true);
+
+    expect(resolveSimulatorInboxTaskVisibility({
+      currentPmsUser: 'SH',
+      taskStatus: 'draft',
+      taskCurrentNode: 'sh',
+      approverId: 'SH',
+    })).toBe(false);
   });
 });

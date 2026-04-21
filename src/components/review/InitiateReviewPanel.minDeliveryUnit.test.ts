@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   pdmsGetUiAttr: vi.fn(),
   e3dGetAncestors: vi.fn(),
   e3dGetSubtreeRefnos: vi.fn(),
+  e3dSearch: vi.fn(),
   ensurePanelAndActivate: vi.fn(),
   showModelByRefnosWithAck: vi.fn(async () => ({
     ok: ['24381/145018'],
@@ -24,6 +25,7 @@ vi.mock('@/api/genModelPdmsAttrApi', () => ({
 vi.mock('@/api/genModelE3dApi', () => ({
   e3dGetAncestors: mocks.e3dGetAncestors,
   e3dGetSubtreeRefnos: mocks.e3dGetSubtreeRefnos,
+  e3dSearch: mocks.e3dSearch,
 }));
 
 const selectionState = {
@@ -82,7 +84,7 @@ vi.mock('@/components/ui/Input.vue', () => ({
   default: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
-    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+    template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
 }));
 
@@ -118,6 +120,23 @@ function findAddButton(): HTMLButtonElement {
   return button!;
 }
 
+function findManualInput(): HTMLInputElement {
+  const input = document.querySelector('[data-testid="manual-component-input"]') as HTMLInputElement | null;
+  expect(input).toBeTruthy();
+  return input!;
+}
+
+function findManualSubmitButton(): HTMLButtonElement {
+  const button = document.querySelector('[data-testid="manual-component-submit"]') as HTMLButtonElement | null;
+  expect(button).toBeTruthy();
+  return button!;
+}
+
+function setInputValue(input: HTMLInputElement, value: string) {
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function getComponentListText(): string {
   return document.body.textContent || '';
 }
@@ -137,6 +156,7 @@ describe('InitiateReviewPanel 最小交付单元约束', () => {
     mocks.pdmsGetUiAttr.mockReset();
     mocks.e3dGetAncestors.mockReset();
     mocks.e3dGetSubtreeRefnos.mockReset();
+    mocks.e3dSearch.mockReset();
     mocks.ensurePanelAndActivate.mockReset();
     mocks.showModelByRefnosWithAck.mockClear();
     userStoreMock.createReviewTask.mockReset();
@@ -249,6 +269,127 @@ describe('InitiateReviewPanel 最小交付单元约束', () => {
 
     expect(mocks.e3dGetSubtreeRefnos).toHaveBeenCalled();
     expect(mocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
+  });
+
+  it('支持直接输入参考号添加构件', async () => {
+    mocks.pdmsGetTypeInfo.mockResolvedValue({
+      success: true,
+      refno: '24381_145018',
+      noun: 'BRAN',
+      owner_noun: 'PIPE',
+      owner_refno: null,
+    });
+    mocks.pdmsGetUiAttr.mockResolvedValue({
+      full_name: 'BRAN/24381_145018',
+      attrs: { NAME: 'BRAN/24381_145018', NOUN: 'BRAN' },
+    });
+
+    await mountPanel();
+    setInputValue(findManualInput(), '24381/145018');
+    await flushUi();
+    findManualSubmitButton().click();
+    await flushUi();
+
+    expect(mocks.e3dSearch).not.toHaveBeenCalled();
+    expect(mocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145018');
+    expect(getComponentListText()).toContain('24381_145018');
+  });
+
+  it('输入名称搜索到多个结果时不会自动添加，需手动选择候选项', async () => {
+    mocks.e3dSearch.mockResolvedValue({
+      success: true,
+      items: [
+        { refno: '24381_145018', name: 'BRAN/支线-1', noun: 'BRAN' },
+        { refno: '24381_145019', name: 'BRAN/支线-2', noun: 'BRAN' },
+      ],
+    });
+    mocks.pdmsGetTypeInfo.mockResolvedValue({
+      success: true,
+      refno: '24381_145019',
+      noun: 'BRAN',
+      owner_noun: 'PIPE',
+      owner_refno: null,
+    });
+    mocks.pdmsGetUiAttr.mockResolvedValue({
+      full_name: 'BRAN/24381_145019',
+      attrs: { NAME: 'BRAN/24381_145019', NOUN: 'BRAN' },
+    });
+
+    await mountPanel();
+    setInputValue(findManualInput(), '支线');
+    await flushUi();
+    findManualSubmitButton().click();
+    await flushUi();
+
+    expect(mocks.pdmsGetUiAttr).not.toHaveBeenCalled();
+    expect(getComponentListText()).toContain('BRAN/支线-1');
+    expect(getComponentListText()).toContain('BRAN/支线-2');
+
+    const resultButton = Array.from(document.body.querySelectorAll('button'))
+      .find((node) => node.textContent?.includes('BRAN/支线-2')) as HTMLButtonElement | undefined;
+    expect(resultButton).toBeTruthy();
+    resultButton?.click();
+    await flushUi();
+
+    expect(mocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145019');
+    expect(getComponentListText()).toContain('24381_145019');
+  });
+
+  it('搜索候选支持键盘上下选择并回车添加', async () => {
+    mocks.e3dSearch.mockResolvedValue({
+      success: true,
+      items: [
+        { refno: '24381_145018', name: 'BRAN/主线', noun: 'BRAN' },
+        { refno: '24381_145019', name: 'BRAN/支线', noun: 'BRAN' },
+      ],
+    });
+    mocks.pdmsGetTypeInfo.mockResolvedValue({
+      success: true,
+      refno: '24381_145019',
+      noun: 'BRAN',
+      owner_noun: 'PIPE',
+      owner_refno: null,
+    });
+    mocks.pdmsGetUiAttr.mockResolvedValue({
+      full_name: 'BRAN/24381_145019',
+      attrs: { NAME: 'BRAN/24381_145019', NOUN: 'BRAN' },
+    });
+
+    await mountPanel();
+    const input = findManualInput();
+    setInputValue(input, 'BRAN');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flushUi();
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flushUi();
+
+    expect(mocks.pdmsGetUiAttr).toHaveBeenCalledWith('24381_145019');
+    expect(getComponentListText()).toContain('24381_145019');
+  });
+
+  it('点击外部区域会关闭名称搜索候选列表', async () => {
+    mocks.e3dSearch.mockResolvedValue({
+      success: true,
+      items: [
+        { refno: '24381_145018', name: 'BRAN/主线', noun: 'BRAN' },
+        { refno: '24381_145019', name: 'BRAN/支线', noun: 'BRAN' },
+      ],
+    });
+
+    await mountPanel();
+    setInputValue(findManualInput(), 'BRAN');
+    await flushUi();
+    findManualSubmitButton().click();
+    await flushUi();
+
+    expect(getComponentListText()).toContain('BRAN/主线');
+    document.body.click();
+    await flushUi();
+
+    expect(getComponentListText()).not.toContain('BRAN/主线');
+    expect(getComponentListText()).not.toContain('BRAN/支线');
   });
 
   it('向下命中多个最小交付单元时阻止添加并报错', async () => {

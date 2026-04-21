@@ -9,6 +9,12 @@ vi.mock('@/api/reviewApi', () => ({
   getReviewUserWebSocketUrl: vi.fn(() => 'ws://localhost/ws/review/user/tester'),
 }));
 
+vi.mock('@/composables/useUserStore', () => ({
+  useUserStore: () => ({
+    currentUser: { value: { id: 'tester' } },
+  }),
+}));
+
 function createLocalStorageMock() {
   const store = new Map<string, string>();
   return {

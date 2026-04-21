@@ -36,6 +36,15 @@ export type EmbedFormSnapshotRestoreResult = {
   attachments: ReviewAttachment[];
 };
 
+export type EmbedFormSnapshotContextOptions = EmbedFormSnapshotRestoreOptions & {
+  task?: ReviewTask | null;
+  updateTask?: (task: ReviewTask) => Promise<void> | void;
+};
+
+export type EmbedFormSnapshotContextResult = EmbedFormSnapshotRestoreResult & {
+  task: ReviewTask | null;
+};
+
 export function mergeSnapshotAttachmentsIntoTask(
   task: ReviewTask,
   attachments: ReviewAttachment[],
@@ -110,5 +119,22 @@ export async function restoreEmbedFormSnapshot(
     recordCount: records.length,
     attachmentCount: attachments.length,
     attachments,
+  };
+}
+
+export async function restoreEmbedFormSnapshotContext(
+  options: EmbedFormSnapshotContextOptions,
+): Promise<EmbedFormSnapshotContextResult> {
+  const snapshot = await restoreEmbedFormSnapshot(options);
+  let nextTask = options.task ?? null;
+
+  if (nextTask && snapshot.attachments.length > 0) {
+    nextTask = mergeSnapshotAttachmentsIntoTask(nextTask, snapshot.attachments);
+    await options.updateTask?.(nextTask);
+  }
+
+  return {
+    ...snapshot,
+    task: nextTask,
   };
 }

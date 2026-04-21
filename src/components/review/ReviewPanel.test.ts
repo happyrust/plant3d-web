@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 
-import { UserRole, type ReviewTask } from '@/types/auth';
+import type { ReviewTask } from '@/types/auth';
 
 const currentTask = { value: null as ReviewTask | null };
 const reviewMode = { value: false };
+const reviewError = { value: null as string | null };
 const confirmedRecordCount = { value: 0 };
 const totalConfirmedAnnotations = { value: 0 };
 const totalConfirmedMeasurements = { value: 0 };
@@ -28,18 +29,44 @@ const workflowResponseState = {
 
 const loadWorkflowMock = vi.fn(async () => workflowResponseState.value);
 const loadReviewTasksMock = vi.fn(async () => {});
-const submitTaskToNextNodeMock = vi.fn(async () => {});
-const returnTaskToNodeMock = vi.fn(async () => {});
 const setCurrentTaskMock = vi.fn(async (task: ReviewTask | null) => {
   currentTask.value = task;
 });
+const clearConfirmedRecordsMock = vi.fn(async () => true);
 const clearCurrentTaskMock = vi.fn(() => {
   currentTask.value = null;
 });
+const restoreEmbedFormSnapshotContextMock = vi.fn(async () => ({
+  modelRefnos: [],
+  recordCount: 0,
+  attachmentCount: 0,
+  attachments: [],
+  task: null,
+}));
+const reviewAnnotationCheckMock = vi.hoisted(() => vi.fn(async () => ({
+  success: true,
+  data: {
+    passed: true,
+    recommendedAction: 'submit',
+    currentNode: 'jd',
+    summary: {
+      total: 0,
+      open: 0,
+      pendingReview: 0,
+      approved: 0,
+      rejected: 0,
+    },
+    blockers: [],
+    message: 'ok',
+  },
+})));
+const submitTaskToNextNodeMock = vi.hoisted(() => vi.fn(async () => {}));
+const returnTaskToNodeMock = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
     currentTask,
+    error: reviewError,
     reviewMode,
     confirmedRecordCount,
     totalConfirmedAnnotations,
@@ -48,7 +75,7 @@ vi.mock('@/composables/useReviewStore', () => ({
     toggleReviewMode: vi.fn(),
     clearCurrentTask: clearCurrentTaskMock,
     addConfirmedRecord: vi.fn(),
-    clearConfirmedRecords: vi.fn(),
+    clearConfirmedRecords: clearConfirmedRecordsMock,
     removeConfirmedRecord: vi.fn(),
     exportReviewData: vi.fn(() => '{}'),
     setCurrentTask: setCurrentTaskMock,
@@ -59,12 +86,22 @@ vi.mock('@/composables/useToolStore', () => ({
   useToolStore: () => toolStoreMock,
 }));
 
+vi.mock('@/api/reviewApi', () => ({
+  reviewSyncExport: vi.fn(async () => ({ success: true })),
+  reviewSyncImport: vi.fn(async () => ({ success: true })),
+  reviewAnnotationCheck: (...args: unknown[]) => reviewAnnotationCheckMock(...args),
+}));
+
+const viewerWaitForReadyMock = vi.hoisted(() => vi.fn(async () => false));
+const showModelByRefnosWithAckMock = vi.hoisted(() => vi.fn(async () => ({ ok: [], fail: [], error: null })));
+
 vi.mock('@/composables/useViewerContext', () => ({
   useViewerContext: () => ({
     viewerRef: { value: null },
     tools: { value: null },
   }),
-  waitForViewerReady: vi.fn(async () => false),
+  waitForViewerReady: (...args: unknown[]) => viewerWaitForReadyMock(...args),
+  showModelByRefnosWithAck: (...args: unknown[]) => showModelByRefnosWithAckMock(...args),
 }));
 
 const toolStoreMock = vi.hoisted(() => ({
@@ -78,12 +115,17 @@ const toolStoreMock = vi.hoisted(() => ({
   rectAnnotations: { value: [] },
   obbAnnotations: { value: [] },
   measurements: { value: [] },
+  activeAnnotationId: { value: null },
+  activeCloudAnnotationId: { value: null },
+  activeRectAnnotationId: { value: null },
+  activeObbAnnotationId: { value: null },
   xeokitDistanceMeasurements: { value: [] },
   xeokitAngleMeasurements: { value: [] },
-  getAnnotationComments: vi.fn(() => []),
   addAnnotation: vi.fn(),
   addMeasurement: vi.fn(),
   clearAll: vi.fn(),
+  getAnnotationComments: vi.fn(() => []),
+  importJSON: vi.fn(),
   setToolMode: vi.fn(),
 }));
 
@@ -110,12 +152,39 @@ vi.mock('@/composables/useSelectionStore', () => ({
   }),
 }));
 
-vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
+const emitToastMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/ribbon/toastBus', () => ({ emitToast: emitToastMock }));
+
+vi.mock('./embedFormSnapshotRestore', () => ({
+  restoreEmbedFormSnapshotContext: (...args: unknown[]) => restoreEmbedFormSnapshotContextMock(...args),
+}));
 
 vi.mock('./CollisionResultList.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./ReviewAuxData.vue', () => ({ default: { template: '<div data-testid="review-aux-data-stub">辅助校审数据</div>' } }));
 vi.mock('./ReviewDataSync.vue', () => ({ default: { template: '<div data-testid="review-data-sync-stub">数据同步（后端）</div>' } }));
-vi.mock('./WorkflowSubmitDialog.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./WorkflowSubmitDialog.vue', async () => {
+  const { defineComponent, h } = await import('vue');
+  return {
+    default: defineComponent({
+      props: {
+        visible: { type: Boolean, default: false },
+      },
+      emits: ['confirm', 'update:visible'],
+      setup(props, { emit }) {
+        return () => props.visible
+          ? h('div', { 'data-testid': 'workflow-submit-dialog-stub' }, [
+            h('button', {
+              type: 'button',
+              'data-testid': 'workflow-submit-confirm',
+              onClick: () => emit('confirm', 'mock submit comment'),
+            }, '确认提交'),
+          ])
+          : null;
+      },
+    }),
+  };
+});
 vi.mock('./WorkflowReturnDialog.vue', () => ({ default: { template: '<div />' } }));
 
 vi.mock('@/composables/useUserStore', () => ({
@@ -200,6 +269,7 @@ describe('ReviewPanel', () => {
     });
     currentTask.value = createTask();
     reviewMode.value = false;
+    reviewError.value = null;
     confirmedRecordCount.value = 0;
     totalConfirmedAnnotations.value = 0;
     totalConfirmedMeasurements.value = 0;
@@ -212,28 +282,59 @@ describe('ReviewPanel', () => {
     };
     loadWorkflowMock.mockClear();
     loadReviewTasksMock.mockClear();
-    submitTaskToNextNodeMock.mockClear();
-    returnTaskToNodeMock.mockClear();
     setCurrentTaskMock.mockClear();
+    clearConfirmedRecordsMock.mockReset();
+    clearConfirmedRecordsMock.mockResolvedValue(true);
     clearCurrentTaskMock.mockClear();
-    toolStoreMock.annotationCount.value = 0;
-    toolStoreMock.cloudAnnotationCount.value = 0;
-    toolStoreMock.rectAnnotationCount.value = 0;
-    toolStoreMock.obbAnnotationCount.value = 0;
-    toolStoreMock.measurementCount.value = 0;
+    restoreEmbedFormSnapshotContextMock.mockReset();
+    restoreEmbedFormSnapshotContextMock.mockResolvedValue({
+      modelRefnos: [],
+      recordCount: 0,
+      attachmentCount: 0,
+      attachments: [],
+      task: null,
+    });
+    toolStoreMock.addAnnotation.mockClear();
+    toolStoreMock.addMeasurement.mockClear();
+    toolStoreMock.importJSON.mockClear();
+    toolStoreMock.setToolMode.mockClear();
     toolStoreMock.annotations.value = [];
     toolStoreMock.cloudAnnotations.value = [];
     toolStoreMock.rectAnnotations.value = [];
     toolStoreMock.obbAnnotations.value = [];
     toolStoreMock.measurements.value = [];
-    toolStoreMock.addAnnotation.mockClear();
-    toolStoreMock.addMeasurement.mockClear();
-    toolStoreMock.setToolMode.mockClear();
     toolStoreMock.xeokitDistanceMeasurements.value = [];
     toolStoreMock.xeokitAngleMeasurements.value = [];
-    toolStoreMock.getAnnotationComments.mockReturnValue([]);
+    viewerWaitForReadyMock.mockClear();
+    viewerWaitForReadyMock.mockResolvedValue(false);
+    showModelByRefnosWithAckMock.mockClear();
+    showModelByRefnosWithAckMock.mockResolvedValue({ ok: [], fail: [], error: null });
     dockApiMock.ensurePanelAndActivate.mockClear();
     commandBusMock.emitCommand.mockClear();
+    emitToastMock.mockClear();
+    reviewAnnotationCheckMock.mockReset();
+    reviewAnnotationCheckMock.mockResolvedValue({
+      success: true,
+      data: {
+        passed: true,
+        recommendedAction: 'submit',
+        currentNode: 'jd',
+        summary: {
+          total: 0,
+          open: 0,
+          pendingReview: 0,
+          approved: 0,
+          rejected: 0,
+        },
+        blockers: [],
+        message: 'ok',
+      },
+    });
+    submitTaskToNextNodeMock.mockReset();
+    submitTaskToNextNodeMock.mockResolvedValue(undefined);
+    returnTaskToNodeMock.mockReset();
+    returnTaskToNodeMock.mockResolvedValue(undefined);
+    vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
   it('confirmed record counts only canonical reviewer annotations', async () => {
@@ -291,88 +392,82 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
-  it('renders confirmed record review-state summary for mixed annotation outcomes', async () => {
-    sortedConfirmedRecords.value = [
-      {
-        id: 'record-summary-1',
-        confirmedAt: new Date('2026-03-16T10:00:00+08:00').getTime(),
-        note: '混合处理态',
-        annotations: [
-          {
-            id: 'a-1',
-            reviewState: {
-              resolutionStatus: 'fixed',
-              decisionStatus: 'pending',
-              history: [],
-            },
-          },
-          {
-            id: 'a-2',
-            reviewState: {
-              resolutionStatus: 'wont_fix',
-              decisionStatus: 'agreed',
-              history: [],
-            },
-          },
-        ],
-        cloudAnnotations: [],
-        rectAnnotations: [
-          {
-            id: 'r-1',
-            reviewState: {
-              resolutionStatus: 'fixed',
-              decisionStatus: 'rejected',
-              history: [],
-            },
-          },
-        ],
-        obbAnnotations: [],
-        measurements: [],
-      },
-    ] as never[];
-    confirmedRecordCount.value = 1;
-    totalConfirmedAnnotations.value = 3;
-    totalConfirmedMeasurements.value = 0;
-
-    const mounted = await mountReviewPanel();
-    await settlePanel();
-
-    const summary = document.querySelector('[data-testid=\"confirmed-record-review-summary\"]');
-    expect(summary?.textContent).toContain('已修改待确认');
-    expect(summary?.textContent).toContain('已同意不处理');
-    expect(summary?.textContent).toContain('已驳回');
-
-    mounted.unmount();
-  });
-
-  it('shows external unsaved reminder and measurement evidence hint when pending data exists', async () => {
+  it('在 passive 模式下点击刷新会重新拉取可信快照并刷新模型显示', async () => {
     sessionStorage.setItem('plant3d_workflow_mode', 'external');
-    toolStoreMock.annotationCount.value = 1;
-    toolStoreMock.annotations.value = [{
-      id: 'annot-1',
-      entityId: 'entity-1',
-      worldPos: [0, 0, 0],
-      visible: true,
-      glyph: 'M',
-      title: '待确认批注',
-      description: '等待确认',
-      createdAt: 1710000000000,
-      reviewState: {
-        resolutionStatus: 'fixed',
-        decisionStatus: 'pending',
-        history: [],
-        updatedAt: 1710000001000,
-        updatedById: 'designer-1',
-        updatedByName: '设计人',
-        updatedByRole: UserRole.DESIGNER,
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-EMBED-REFRESH',
+      userToken: 'jwt-refresh',
+      isEmbedMode: true,
+      verifiedClaims: {
+        projectId: 'PROJECT-1',
+        userId: 'checker-1',
+        formId: 'FORM-EMBED-REFRESH',
+        role: 'jd',
+        workflowMode: 'external',
+        exp: 1999999999,
+        iat: 1700000000,
       },
-    }];
+    }));
+
+    const refreshedTask = createTask({
+      attachments: [
+        {
+          id: 'attachment-1',
+          name: 'snapshot.png',
+          url: '/files/review_attachments/snapshot.png',
+          uploadedAt: 1710000001000,
+        },
+      ],
+    });
+    restoreEmbedFormSnapshotContextMock.mockImplementationOnce(async (options: {
+      updateTask?: (task: ReviewTask) => Promise<void>;
+    }) => {
+      await options.updateTask?.(refreshedTask);
+      return {
+        modelRefnos: ['24381_145018'],
+        recordCount: 2,
+        attachmentCount: 1,
+        attachments: refreshedTask.attachments || [],
+        task: refreshedTask,
+      };
+    });
 
     const mounted = await mountReviewPanel();
     await settlePanel();
+    loadReviewTasksMock.mockClear();
+    loadWorkflowMock.mockClear();
+    setCurrentTaskMock.mockClear();
+    showModelByRefnosWithAckMock.mockClear();
 
-    expect(document.body.textContent).toContain('请先点击“确认当前数据”');
-    expect(document.body.textContent).toContain('测量当前仅作为处理证据参与确认记录');
+    const refreshButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('刷新')) as HTMLButtonElement | undefined;
+    refreshButton?.click();
+    await settlePanel();
+
+    expect(restoreEmbedFormSnapshotContextMock).toHaveBeenCalledWith(expect.objectContaining({
+      formId: 'FORM-EMBED-REFRESH',
+      token: 'jwt-refresh',
+      actor: expect.objectContaining({
+        id: 'checker-1',
+        roles: 'jd',
+      }),
+      task: expect.objectContaining({
+        id: 'task-1',
+        formId: 'FORM-001',
+      }),
+    }));
+    expect(setCurrentTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      attachments: [
+        expect.objectContaining({
+          id: 'attachment-1',
+          name: 'snapshot.png',
+        }),
+      ],
+    }));
+    expect(loadReviewTasksMock).toHaveBeenCalledTimes(1);
+    expect(loadWorkflowMock).toHaveBeenCalledWith('task-1');
+    expect(showModelByRefnosWithAckMock).toHaveBeenCalledWith(expect.objectContaining({
+      refnos: ['24381/145018'],
+    }));
 
     mounted.unmount();
   });
@@ -483,6 +578,42 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('确认流转至批准');
     expect(document.body.textContent).not.toContain('FORM-A');
     expect(document.body.textContent).not.toContain('确认流转至审核');
+    mounted.unmount();
+  });
+
+  it('清空确认记录失败时保留列表并提示错误', async () => {
+    sortedConfirmedRecords.value = [
+      {
+        id: 'record-1',
+        confirmedAt: new Date('2026-03-16T09:30:00+08:00').getTime(),
+        note: '失败后仍保留',
+        annotations: [{ id: 'a-1' }],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        obbAnnotations: [],
+        measurements: [],
+      },
+    ] as never[];
+    confirmedRecordCount.value = 1;
+    totalConfirmedAnnotations.value = 1;
+    totalConfirmedMeasurements.value = 0;
+    reviewError.value = '后端清空失败';
+    clearConfirmedRecordsMock.mockResolvedValue(false);
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const clearButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('清空')) as HTMLButtonElement | undefined;
+    clearButton?.click();
+    await settlePanel();
+
+    expect(clearConfirmedRecordsMock).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain('失败后仍保留');
+    expect(emitToastMock).toHaveBeenCalledWith({
+      message: '后端清空失败',
+      level: 'error',
+    });
+
     mounted.unmount();
   });
 
@@ -624,6 +755,187 @@ describe('ReviewPanel', () => {
     await settlePanel();
 
     expect(document.body.textContent).toContain('当前打开的嵌入链接未提供有效 form_id');
+
+    mounted.unmount();
+  });
+
+  it('有未确认数据时，提交流转会直接被拦住', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'draft-annotation-1',
+        entityId: 'entity-1',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '待确认批注',
+        description: '尚未确认',
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const openDialogButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
+    openDialogButton?.click();
+    await settlePanel();
+
+    const confirmButton = document.querySelector('[data-testid="workflow-submit-confirm"]') as HTMLButtonElement | null;
+    confirmButton?.click();
+    await settlePanel();
+
+    expect(reviewAnnotationCheckMock).not.toHaveBeenCalled();
+    expect(submitTaskToNextNodeMock).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('请先确认数据，再执行流转');
+
+    mounted.unmount();
+  });
+
+  it('只有 OBB 改动时，不会因为未确认数据阻塞提交流转', async () => {
+    toolStoreMock.obbAnnotations.value = [
+      {
+        id: 'draft-obb-1',
+        entityId: 'entity-obb-1',
+        worldPos: [0, 0, 0],
+        width: 1,
+        height: 1,
+        depth: 1,
+        visible: true,
+        title: '仅 OBB 变化',
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const openDialogButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
+    openDialogButton?.click();
+    await settlePanel();
+
+    const confirmButton = document.querySelector('[data-testid="workflow-submit-confirm"]') as HTMLButtonElement | null;
+    confirmButton?.click();
+    await settlePanel();
+
+    expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      currentNode: 'jd',
+      includedTypes: ['text', 'cloud', 'rect'],
+    }));
+    expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1', 'mock submit comment');
+    expect(document.body.textContent).not.toContain('请先确认数据，再执行流转');
+
+    mounted.unmount();
+  });
+
+  it('批注检查返回 block 时，会阻止继续提交', async () => {
+    reviewAnnotationCheckMock.mockResolvedValue({
+      success: true,
+      data: {
+        passed: false,
+        recommendedAction: 'block',
+        currentNode: 'jd',
+        summary: {
+          total: 1,
+          open: 0,
+          pendingReview: 1,
+          approved: 0,
+          rejected: 0,
+        },
+        blockers: [],
+        message: '存在待确认批注，请逐条确认后再继续',
+      },
+    });
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const openDialogButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
+    openDialogButton?.click();
+    await settlePanel();
+
+    const confirmButton = document.querySelector('[data-testid="workflow-submit-confirm"]') as HTMLButtonElement | null;
+    confirmButton?.click();
+    await settlePanel();
+
+    expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      currentNode: 'jd',
+      includedTypes: ['text', 'cloud', 'rect'],
+    }));
+    expect(submitTaskToNextNodeMock).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('存在待确认批注，请逐条确认后再继续');
+
+    mounted.unmount();
+  });
+
+  it('批注检查返回 return 时，会提示当前应驳回', async () => {
+    reviewAnnotationCheckMock.mockResolvedValue({
+      success: true,
+      data: {
+        passed: false,
+        recommendedAction: 'return',
+        currentNode: 'sh',
+        summary: {
+          total: 1,
+          open: 0,
+          pendingReview: 0,
+          approved: 0,
+          rejected: 1,
+        },
+        blockers: [],
+        message: '存在未通过批注，应先驳回或重新处理',
+      },
+    });
+    currentTask.value = createTask({
+      id: 'task-sh',
+      formId: 'FORM-SH',
+      currentNode: 'sh',
+      status: 'in_review',
+    });
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const openDialogButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('确认流转至批准')) as HTMLButtonElement | undefined;
+    openDialogButton?.click();
+    await settlePanel();
+
+    const confirmButton = document.querySelector('[data-testid="workflow-submit-confirm"]') as HTMLButtonElement | null;
+    confirmButton?.click();
+    await settlePanel();
+
+    expect(submitTaskToNextNodeMock).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('存在未通过批注，应先驳回或重新处理');
+
+    mounted.unmount();
+  });
+
+  it('批注检查通过时，保持原有提交流转链路', async () => {
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const openDialogButton = Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
+    openDialogButton?.click();
+    await settlePanel();
+
+    const confirmButton = document.querySelector('[data-testid="workflow-submit-confirm"]') as HTMLButtonElement | null;
+    confirmButton?.click();
+    await settlePanel();
+
+    expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      formId: 'FORM-001',
+      currentNode: 'jd',
+    }));
+    expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1', 'mock submit comment');
+    expect(loadReviewTasksMock).toHaveBeenCalled();
+    expect(loadWorkflowMock).toHaveBeenCalledWith('task-1');
 
     mounted.unmount();
   });

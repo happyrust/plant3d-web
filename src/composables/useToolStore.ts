@@ -54,6 +54,11 @@ export type MeasurementPoint = {
   worldPos: Vec3;
 };
 
+export type MeasurementSourceLink = {
+  sourceAnnotationId?: string;
+  sourceAnnotationType?: AnnotationType;
+};
+
 export type DistanceMeasurementRecord = {
   id: string;
   kind: 'distance';
@@ -61,7 +66,7 @@ export type DistanceMeasurementRecord = {
   target: MeasurementPoint;
   visible: boolean;
   createdAt: number;
-};
+} & MeasurementSourceLink;
 
 export type AngleMeasurementRecord = {
   id: string;
@@ -71,7 +76,7 @@ export type AngleMeasurementRecord = {
   target: MeasurementPoint;
   visible: boolean;
   createdAt: number;
-};
+} & MeasurementSourceLink;
 
 export type MeasurementRecord = DistanceMeasurementRecord | AngleMeasurementRecord;
 
@@ -85,7 +90,7 @@ export type XeokitDistanceMeasurementRecord = {
   visible: boolean;
   approximate: boolean;
   createdAt: number;
-};
+} & MeasurementSourceLink;
 
 export type XeokitAngleMeasurementRecord = {
   id: string;
@@ -96,7 +101,7 @@ export type XeokitAngleMeasurementRecord = {
   visible: boolean;
   approximate: boolean;
   createdAt: number;
-};
+} & MeasurementSourceLink;
 
 export type XeokitMeasurementRecord = XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord;
 
@@ -205,7 +210,17 @@ export type AnnotationRecord = {
   title: string;
   description: string;
   createdAt: number;
-  refno?: string; // 关联的对象参考号
+  /**
+   * @deprecated 请改用 `refnos`。保留 `refno` 仅用于 V1\u2013V5 持久化的兼容读取。
+   * `normalizeAnnotationRecord` 会在 `refnos` 缺失时从 `refno` 推导。
+   */
+  refno?: string;
+  /**
+   * 关联的对象参考号列表（与 cloud/rect/obb 的命名保持一致）。
+   * 文字批注历史上只有单个 `refno`，此字段在 Phase 1 额外引入，
+   * 以便上层可以无差别地读取所有批注的关联对象。
+   */
+  refnos?: string[];
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
   /** 问题严重度（建议/一般/严重/致命），默认未设置 */
@@ -381,14 +396,61 @@ function withStorageScope(storageKey: string, scope = getCurrentStorageScope()):
   return `${storageKey}:${scope}`;
 }
 
+/**
+ * 计算 text 类型批注在 Phase 1 兼容期的 `refno` / `refnos` 对齐值。
+ *
+ * 规则：
+ * - 若两者都未提供，返回都为 undefined。
+ * - 若只有 `refno`，`refnos` 镜像为 `[refno]`。
+ * - 若只有 `refnos`，`refno` 镜像为 `refnos[0]`（若有）。
+ * - 若两者都有，以 `refnos` 为准，`refno` 被重置为 `refnos[0]`，避免不一致。
+ * - 空字符串/空数组都视为未设置。
+ */
+function reconcileAnnotationRefs(
+  refno: string | undefined,
+  refnos: string[] | undefined,
+): { refno?: string; refnos?: string[] } {
+  const cleanList = Array.isArray(refnos)
+    ? refnos.filter((r): r is string => typeof r === 'string' && r.length > 0)
+    : [];
+  if (cleanList.length > 0) {
+    return { refno: cleanList[0], refnos: cleanList };
+  }
+  if (typeof refno === 'string' && refno.length > 0) {
+    return { refno, refnos: [refno] };
+  }
+  return { refno: undefined, refnos: undefined };
+}
+
 function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
+  const refs = reconcileAnnotationRefs(rec.refno, rec.refnos);
   return {
     ...rec,
     labelWorldPos: Array.isArray(rec.labelWorldPos) && rec.labelWorldPos.length === 3 ? rec.labelWorldPos : undefined,
     collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
+    refno: refs.refno,
+    refnos: refs.refnos,
   };
+}
+
+/**
+ * 统一读取任意批注类型的关联 refnos，供消费代码（面板/交互）无差别使用。
+ * - text 批注：优先用 `refnos`，缺失时从 `refno` 单字段推导。
+ * - cloud/rect/obb 批注：返回 `refnos`（可能为空）。
+ */
+export function getAnnotationRefnos(record: {
+  refno?: string;
+  refnos?: string[];
+}): string[] {
+  if (Array.isArray(record.refnos) && record.refnos.length > 0) {
+    return [...record.refnos];
+  }
+  if (typeof record.refno === 'string' && record.refno.length > 0) {
+    return [record.refno];
+  }
+  return [];
 }
 
 function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRecord {

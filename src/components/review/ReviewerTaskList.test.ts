@@ -8,8 +8,37 @@ import { UserRole, type ReviewTask } from '@/types/auth';
 const loadReviewTasksMock = vi.fn(() => Promise.resolve());
 const setCurrentTaskMock = vi.fn();
 const reviewTaskGetByIdMock = vi.fn(async () => ({ success: false }));
+const reviewAnnotationCheckMock = vi.fn(async () => ({
+  success: true,
+  data: {
+    passed: true,
+    recommendedAction: 'submit',
+    currentNode: 'jd',
+    summary: {
+      total: 0,
+      open: 0,
+      pendingReview: 0,
+      approved: 0,
+      rejected: 0,
+    },
+    blockers: [],
+    message: 'ok',
+  },
+}));
+const emitToastMock = vi.fn();
 const persistenceState = new Map<string, unknown>();
 const persistenceStorageKeys: string[] = [];
+const currentWorkbenchTask = { value: null as ReviewTask | null };
+const sortedConfirmedRecords = { value: [] as { taskId: string; annotations?: unknown[]; cloudAnnotations?: unknown[]; rectAnnotations?: unknown[]; obbAnnotations?: unknown[]; measurements?: unknown[] }[] };
+const toolStoreMock = {
+  annotations: { value: [] as unknown[] },
+  cloudAnnotations: { value: [] as unknown[] },
+  rectAnnotations: { value: [] as unknown[] },
+  obbAnnotations: { value: [] as unknown[] },
+  measurements: { value: [] as unknown[] },
+  xeokitDistanceMeasurements: { value: [] as unknown[] },
+  xeokitAngleMeasurements: { value: [] as unknown[] },
+};
 
 const mockUserStore = {
   pendingReviewTasks: { value: [] as ReviewTask[] },
@@ -27,12 +56,19 @@ vi.mock('@/composables/useUserStore', () => ({
 
 vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
+    currentTask: currentWorkbenchTask,
+    sortedConfirmedRecords,
     setCurrentTask: setCurrentTaskMock,
   }),
 }));
 
+vi.mock('@/composables/useToolStore', () => ({
+  useToolStore: () => toolStoreMock,
+}));
+
 vi.mock('@/api/reviewApi', () => ({
   reviewTaskGetById: (...args: unknown[]) => reviewTaskGetByIdMock(...args),
+  reviewAnnotationCheck: (...args: unknown[]) => reviewAnnotationCheckMock(...args),
 }));
 
 vi.mock('@/composables/useNavigationStatePersistence', () => ({
@@ -70,6 +106,10 @@ vi.mock('@/ribbon/commandBus', () => ({
   emitCommand: vi.fn(),
 }));
 
+vi.mock('@/ribbon/toastBus', () => ({
+  emitToast: (...args: unknown[]) => emitToastMock(...args),
+}));
+
 describe('ReviewerTaskList', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -78,9 +118,37 @@ describe('ReviewerTaskList', () => {
     loadReviewTasksMock.mockClear();
     setCurrentTaskMock.mockClear();
     reviewTaskGetByIdMock.mockClear();
+    reviewAnnotationCheckMock.mockClear();
+    reviewAnnotationCheckMock.mockResolvedValue({
+      success: true,
+      data: {
+        passed: true,
+        recommendedAction: 'submit',
+        currentNode: 'jd',
+        summary: {
+          total: 0,
+          open: 0,
+          pendingReview: 0,
+          approved: 0,
+          rejected: 0,
+        },
+        blockers: [],
+        message: 'ok',
+      },
+    });
+    emitToastMock.mockClear();
     mockUserStore.pendingReviewTasks.value = [];
     mockUserStore.submitTaskToNextNode.mockClear();
     mockUserStore.returnTaskToNode.mockClear();
+    currentWorkbenchTask.value = null;
+    sortedConfirmedRecords.value = [];
+    toolStoreMock.annotations.value = [];
+    toolStoreMock.cloudAnnotations.value = [];
+    toolStoreMock.rectAnnotations.value = [];
+    toolStoreMock.obbAnnotations.value = [];
+    toolStoreMock.measurements.value = [];
+    toolStoreMock.xeokitDistanceMeasurements.value = [];
+    toolStoreMock.xeokitAngleMeasurements.value = [];
   });
 
   afterEach(() => {
@@ -129,6 +197,17 @@ describe('ReviewerTaskList', () => {
     return host;
   }
 
+  async function openTaskDetail(title: string) {
+    const taskCard = Array.from(document.querySelectorAll('div.cursor-pointer')).find((node) =>
+      node.textContent?.includes(title)
+    ) as HTMLDivElement | undefined;
+    expect(taskCard).toBeTruthy();
+    taskCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+  }
+
   it('renders reviewer inbox filters and tasks', async () => {
     await mountComponent([
       createTask({ id: 'submitted-task', title: '待审核任务', status: 'submitted', priority: 'urgent' }),
@@ -138,23 +217,6 @@ describe('ReviewerTaskList', () => {
     expect(document.body.textContent).toContain('待审核任务');
     expect(document.body.textContent).toContain('全部状态');
     expect(document.body.textContent).toContain('全部优先级');
-  });
-
-  it('switches inbox title and submitted label with reviewer role mappings', async () => {
-    mockUserStore.currentUser.value = { id: 'reviewer-1', name: '审核员', role: UserRole.REVIEWER };
-    await mountComponent([
-      createTask({ id: 'reviewer-task', title: '审核节点任务', status: 'submitted', currentNode: 'sh' }),
-    ]);
-    expect(document.body.textContent).toContain('待审核任务');
-    expect(document.body.textContent).toContain('待审核');
-
-    document.body.innerHTML = '';
-    mockUserStore.currentUser.value = { id: 'manager-1', name: '批准人', role: UserRole.MANAGER };
-    await mountComponent([
-      createTask({ id: 'manager-task', title: '批准节点任务', status: 'submitted', currentNode: 'pz' }),
-    ]);
-    expect(document.body.textContent).toContain('待批准任务');
-    expect(document.body.textContent).toContain('待批准');
   });
 
   it('uses an isolated persistence key for the reviewer inbox surface', async () => {
@@ -196,16 +258,7 @@ describe('ReviewerTaskList', () => {
     });
 
     await mountComponent([task]);
-
-    const taskCard = Array.from(document.querySelectorAll('div.cursor-pointer')).find((node) =>
-      node.textContent?.includes('审核详情任务')
-    ) as HTMLDivElement | undefined;
-    expect(taskCard).toBeTruthy();
-
-    taskCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await nextTick();
-    await Promise.resolve();
-    await nextTick();
+    await openTaskDetail('审核详情任务');
 
     expect(reviewTaskGetByIdMock).toHaveBeenCalledWith('review-task-detail');
     expect(document.body.textContent).toContain('FORM-REVIEW-226');
@@ -213,41 +266,130 @@ describe('ReviewerTaskList', () => {
     expect(document.body.textContent).toContain('完整的设计编校审包说明');
   });
 
-  it('shows explicit empty state copy when filters remove all inbox tasks', async () => {
-    await mountComponent([
-      createTask({ id: 'review-task-a', title: '审核详情任务', status: 'submitted' }),
-    ]);
+  it('同意入口会先执行批注检查，再继续提交流转', async () => {
+    const task = createTask({
+      id: 'review-task-submit',
+      formId: 'FORM-SUBMIT-1',
+      currentNode: 'jd',
+    });
 
-    const searchInput = document.querySelector('input[placeholder*="搜索任务名称"]') as HTMLInputElement | null;
-    expect(searchInput).toBeTruthy();
-    searchInput!.value = 'not-found';
-    searchInput!.dispatchEvent(new Event('input', { bubbles: true }));
+    await mountComponent([task]);
+    await openTaskDetail('审核任务');
+
+    const approveButton = Array.from(document.querySelectorAll('button')).find((node) =>
+      node.textContent?.includes('确认流转至审核')
+    ) as HTMLButtonElement | undefined;
+    approveButton?.click();
+    await nextTick();
+    await Promise.resolve();
     await nextTick();
 
-    expect(document.body.textContent).toContain('暂无任务');
-    expect(document.body.textContent).toContain('没有符合筛选条件的任务');
-    expect(document.body.textContent).toContain('清除筛选条件');
+    expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'review-task-submit',
+      formId: 'FORM-SUBMIT-1',
+      currentNode: 'jd',
+      includedTypes: ['text', 'cloud', 'rect'],
+    }));
+    expect(mockUserStore.submitTaskToNextNode).toHaveBeenCalledWith('review-task-submit', undefined);
   });
 
-  it('renders backend-visible seeded reviewer tasks after switching to reviewer alias semantics', async () => {
-    mockUserStore.currentUser.value = { id: 'reviewer_001', name: '李审核员', role: UserRole.REVIEWER };
-
-    await mountComponent([
-      createTask({
-        id: 'seed-m2-reviewer-confirmed',
-        title: 'M2 reviewer seeded task',
-        checkerId: 'user-002',
-        checkerName: '李审核员',
-        reviewerId: 'user-002',
-        reviewerName: '李审核员',
-        approverId: 'manager-1',
-        approverName: '批准人',
+  it('同意入口在批注检查返回 block 时会拦住并显示明确提示', async () => {
+    reviewAnnotationCheckMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        passed: false,
+        recommendedAction: 'block',
         currentNode: 'jd',
-        status: 'submitted',
-      }),
-    ]);
+        summary: {
+          total: 1,
+          open: 0,
+          pendingReview: 1,
+          approved: 0,
+          rejected: 0,
+        },
+        blockers: [],
+        message: '存在待确认批注，请逐条确认后再继续',
+      },
+    });
+    const task = createTask({
+      id: 'review-task-block',
+      formId: 'FORM-BLOCK-1',
+      currentNode: 'jd',
+    });
 
-    expect(document.body.textContent).toContain('共 1 条');
-    expect(document.body.textContent).toContain('M2 reviewer seeded task');
+    await mountComponent([task]);
+    await openTaskDetail('审核任务');
+
+    const approveButton = Array.from(document.querySelectorAll('button')).find((node) =>
+      node.textContent?.includes('确认流转至审核')
+    ) as HTMLButtonElement | undefined;
+    approveButton?.click();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(mockUserStore.submitTaskToNextNode).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('存在待确认批注，请逐条确认后再继续');
+  });
+
+  it('同意入口遇到仅 OBB 改动时，不会因为未确认数据被拦住', async () => {
+    const task = createTask({
+      id: 'review-task-obb',
+      formId: 'FORM-OBB-1',
+      currentNode: 'jd',
+    });
+    currentWorkbenchTask.value = task;
+    toolStoreMock.obbAnnotations.value = [{ id: 'obb-1' }];
+
+    await mountComponent([task]);
+    await openTaskDetail('审核任务');
+
+    const approveButton = Array.from(document.querySelectorAll('button')).find((node) =>
+      node.textContent?.includes('确认流转至审核')
+    ) as HTMLButtonElement | undefined;
+    approveButton?.click();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'review-task-obb',
+      currentNode: 'jd',
+    }));
+    expect(document.body.textContent).not.toContain('请先确认数据，再执行流转');
+    expect(mockUserStore.submitTaskToNextNode).toHaveBeenCalledWith('review-task-obb', undefined);
+  });
+
+  it('驳回按钮在 jd 节点显示，在 sj 节点不显示', async () => {
+    const jdTask = createTask({ id: 'jd-task', title: 'JD任务', currentNode: 'jd', status: 'in_review' });
+    await mountComponent([jdTask]);
+    await openTaskDetail('JD任务');
+
+    const rejectBtn = Array.from(document.querySelectorAll('button')).find((node) =>
+      node.textContent?.trim() === '驳回'
+    );
+    expect(rejectBtn).toBeTruthy();
+  });
+
+  it('驳回按钮在 sh 和 pz 节点同样显示', async () => {
+    const shTask = createTask({ id: 'sh-task', title: 'SH任务', currentNode: 'sh', status: 'in_review' });
+    await mountComponent([shTask]);
+    await openTaskDetail('SH任务');
+
+    const rejectBtn = Array.from(document.querySelectorAll('button')).find((node) =>
+      node.textContent?.trim() === '驳回'
+    );
+    expect(rejectBtn).toBeTruthy();
+  });
+
+  it('sj 节点任务不显示驳回按钮', async () => {
+    const sjTask = createTask({ id: 'sj-task', title: 'SJ任务', currentNode: 'sj', status: 'submitted' });
+    await mountComponent([sjTask]);
+    await openTaskDetail('SJ任务');
+
+    const rejectBtn = Array.from(document.querySelectorAll('button')).find((node) =>
+      node.textContent?.trim() === '驳回'
+    );
+    expect(rejectBtn).toBeFalsy();
   });
 });

@@ -18,6 +18,8 @@ describe('buildReviewRecordReplayPayload', () => {
             target: { entityId: 'pipe-b', worldPos: [1, 0, 0] },
             visible: true,
             createdAt: 10,
+            sourceAnnotationId: 'annot-1',
+            sourceAnnotationType: 'text',
           },
           {
             id: 'angle-1',
@@ -38,6 +40,8 @@ describe('buildReviewRecordReplayPayload', () => {
         id: 'distance-1',
         kind: 'distance',
         approximate: false,
+        sourceAnnotationId: 'annot-1',
+        sourceAnnotationType: 'text',
       }),
     ]);
     expect(payload.xeokitAngleMeasurements).toEqual([

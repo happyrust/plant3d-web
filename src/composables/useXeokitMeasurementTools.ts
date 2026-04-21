@@ -756,6 +756,8 @@ export function useXeokitMeasurementTools(options: {
         visible: true,
         approximate: false,
         createdAt: draft.createdAt,
+        sourceAnnotationId: store.activeAnnotationContext.value?.id,
+        sourceAnnotationType: store.activeAnnotationContext.value?.type,
       };
       store.addXeokitDistanceMeasurement(rec);
       store.clearCurrentXeokitDraft();
@@ -817,6 +819,8 @@ export function useXeokitMeasurementTools(options: {
       visible: true,
       approximate: false,
       createdAt: draft.createdAt,
+      sourceAnnotationId: store.activeAnnotationContext.value?.id,
+      sourceAnnotationType: store.activeAnnotationContext.value?.type,
     };
     store.addXeokitAngleMeasurement(rec);
     store.clearCurrentXeokitDraft();

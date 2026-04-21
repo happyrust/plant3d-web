@@ -1,27 +1,28 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyTokenPrimaryPmsLaunchUrl,
   buildTokenPrimaryPmsLaunchSearch,
   resolveDefaultSimulatorProjectId,
   resolvePmsLaunchFormId,
 } from './pmsReviewSimulatorLaunchPlan';
 
 describe('resolvePmsLaunchFormId', () => {
-  it('prefers backend query form_id over caller preferred form_id', () => {
+  it('优先保留调用方显式传入的 form_id，避免被 embed query 覆盖', () => {
     expect(resolvePmsLaunchFormId({
       preferredFormId: 'FORM-PREFERRED',
       queryFormId: 'FORM-QUERY',
       directFormId: 'FORM-DIRECT',
-    })).toBe('FORM-QUERY');
+    })).toBe('FORM-PREFERRED');
   });
 
-  it('ignores verified token claim form_id and keeps explicit response lineage first', () => {
+  it('调用方未给 preferred 时，优先使用已验签 token claims.form_id', () => {
     expect(resolvePmsLaunchFormId({
-      preferredFormId: 'FORM-PREFERRED',
+      preferredFormId: null,
       queryFormId: 'FORM-QUERY',
       directFormId: 'FORM-DIRECT',
       tokenClaimFormId: 'FORM-TOKEN',
-    })).toBe('FORM-QUERY');
+    })).toBe('FORM-TOKEN');
   });
 
   it('falls back to preferred form_id when no backend lineage is available', () => {
@@ -33,13 +34,22 @@ describe('resolvePmsLaunchFormId', () => {
     })).toBe('FORM-PREFERRED');
   });
 
-  it('prefers JWT form_id over preferred when query/direct empty', () => {
+  it('preferred 为空时，再按 direct -> query 回退', () => {
     expect(resolvePmsLaunchFormId({
-      preferredFormId: 'FORM-PREFERRED',
-      queryFormId: null,
+      preferredFormId: null,
+      queryFormId: 'FORM-QUERY',
+      directFormId: 'FORM-DIRECT',
+      tokenClaimFormId: null,
+    })).toBe('FORM-DIRECT');
+  });
+
+  it('仅在 preferred / token / direct 都缺失时，才回退到 query form_id', () => {
+    expect(resolvePmsLaunchFormId({
+      preferredFormId: null,
+      queryFormId: 'FORM-QUERY',
       directFormId: null,
-      tokenClaimFormId: 'FORM-TOKEN',
-    })).toBe('FORM-TOKEN');
+      tokenClaimFormId: null,
+    })).toBe('FORM-QUERY');
   });
 
   it('builds a token-primary simulator launch query without legacy identity params and reattaches selected output_project', () => {
@@ -62,20 +72,29 @@ describe('resolvePmsLaunchFormId', () => {
     expect(search.has('user_token')).toBe(false);
   });
 
-  it('adds explicit workflow params back for browser-safe token launch links', () => {
-    const search = buildTokenPrimaryPmsLaunchSearch({
-      directQuery: new URLSearchParams('foo=bar'),
-      outputProject: 'AvevaMarineSample',
-      workflowMode: 'external',
-      workflowRole: 'jd',
-      formId: 'FORM-M2-EMBED-001',
+  it('always keeps form_id in token-primary final url, and only adds user_id in PMS-like mode', () => {
+    const baseUrl = new URL('http://127.0.0.1:3101/review/3d-view?output_project=AvevaMarineSample');
+
+    const tokenPrimaryUrl = applyTokenPrimaryPmsLaunchUrl(new URL(baseUrl.toString()), {
+      token: 'token-1',
+      formId: 'FORM-123',
+      pmsUserId: 'SJ',
+      includePmsUserId: false,
     });
 
-    expect(search.get('foo')).toBe('bar');
-    expect(search.get('output_project')).toBe('AvevaMarineSample');
-    expect(search.get('workflow_mode')).toBe('external');
-    expect(search.get('workflow_role')).toBe('jd');
-    expect(search.get('form_id')).toBe('FORM-M2-EMBED-001');
+    expect(tokenPrimaryUrl.searchParams.get('user_token')).toBe('token-1');
+    expect(tokenPrimaryUrl.searchParams.get('form_id')).toBe('FORM-123');
+    expect(tokenPrimaryUrl.searchParams.get('user_id')).toBeNull();
+
+    const pmsLikeUrl = applyTokenPrimaryPmsLaunchUrl(new URL(baseUrl.toString()), {
+      token: 'token-1',
+      formId: 'FORM-123',
+      pmsUserId: 'SJ',
+      includePmsUserId: true,
+    });
+
+    expect(pmsLikeUrl.searchParams.get('form_id')).toBe('FORM-123');
+    expect(pmsLikeUrl.searchParams.get('user_id')).toBe('SJ');
   });
 });
 

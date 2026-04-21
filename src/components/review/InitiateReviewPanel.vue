@@ -20,6 +20,7 @@ import { resolvePassiveWorkflowMode } from './workflowMode';
 import type { UploadedFile } from './FileUploadSection.vue';
 import type { ReviewComponent } from '@/types/auth';
 
+import { e3dSearch, type TreeNodeDto } from '@/api/genModelE3dApi';
 import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import Button from '@/components/ui/Button.vue';
 import Card from '@/components/ui/Card.vue';
@@ -71,6 +72,14 @@ const formData = reactive({
 const selectedComponents = ref<ReviewComponent[]>([]);
 const selectedComponentRefno = ref<string | null>(null);
 const addingComponent = ref(false);
+const componentPickerRef = ref<HTMLElement | null>(null);
+const componentQuery = ref('');
+const componentSearchResults = ref<TreeNodeDto[]>([]);
+const componentSearchLoading = ref(false);
+const componentSearchOpen = ref(false);
+const componentSearchError = ref('');
+const highlightedSearchIndex = ref(-1);
+let componentSearchRequestSeq = 0;
 
 function normalizeComponentRefno(rawRefno?: string | null): string {
   const raw = String(rawRefno ?? '').trim();
@@ -85,6 +94,49 @@ function toSlashComponentRefno(refno: string): string {
   const matched = normalized.match(/^(\d+)_(\d+)$/);
   if (matched) return `${matched[1]}/${matched[2]}`;
   return normalized;
+}
+
+function extractDirectComponentRefno(rawQuery?: string | null): string | null {
+  const raw = String(rawQuery ?? '').trim();
+  if (!raw) return null;
+
+  const normalized = normalizeComponentRefno(raw);
+  if (/^\d+_\d+$/.test(normalized)) {
+    return normalized;
+  }
+
+  const matched = raw.match(/(\d+)\s*[_/]\s*(\d+)/);
+  return matched ? `${matched[1]}_${matched[2]}` : null;
+}
+
+function closeComponentSearch(options?: { keepQuery?: boolean }) {
+  componentSearchRequestSeq += 1;
+  componentSearchLoading.value = false;
+  if (!options?.keepQuery) {
+    componentQuery.value = '';
+  }
+  componentSearchResults.value = [];
+  componentSearchOpen.value = false;
+  componentSearchError.value = '';
+  highlightedSearchIndex.value = -1;
+}
+
+function moveComponentSearchHighlight(step: 1 | -1) {
+  if (!componentSearchOpen.value || componentSearchResults.value.length === 0) return;
+  const total = componentSearchResults.value.length;
+  const fallbackIndex = step > 0 ? 0 : total - 1;
+  const nextIndex = highlightedSearchIndex.value < 0
+    ? fallbackIndex
+    : (highlightedSearchIndex.value + step + total) % total;
+  highlightedSearchIndex.value = nextIndex;
+}
+
+function getComponentSearchItemLabel(item: TreeNodeDto): string {
+  return item.name?.trim() || item.refno;
+}
+
+function getComponentSearchItemRefno(item: TreeNodeDto): string {
+  return normalizeReviewDeliveryRefno(item.refno);
 }
 
 function isComponentSelected(rawRefno?: string | null): boolean {
@@ -192,16 +244,16 @@ async function addSelectedComponent() {
   await addComponentByRefno(refno);
 }
 
-async function addComponentByRefno(refno: string) {
+async function addComponentByRefno(refno: string): Promise<boolean> {
   const normalizedRefno = normalizeReviewDeliveryRefno(refno);
-  if (!normalizedRefno) return;
+  if (!normalizedRefno) return false;
 
   addingComponent.value = true;
   try {
     const deliveryUnitRefno = await resolveReviewDeliveryUnitRefno(normalizedRefno, {
       getFallbackTypeInfo: extractTypeInfoFromSelection,
     });
-    if (selectedComponents.value.some((c) => c.refNo === deliveryUnitRefno)) return;
+    if (selectedComponents.value.some((c) => c.refNo === deliveryUnitRefno)) return true;
 
     const resp = await pdmsGetUiAttr(deliveryUnitRefno);
     const name =
@@ -215,15 +267,123 @@ async function addComponentByRefno(refno: string) {
       name: String(name),
       type,
     }));
+    return true;
   } catch (error) {
     notification.value = {
       type: 'error',
       message: '添加构件失败',
       details: error instanceof Error ? error.message : '无法归并为最小交付单元，请重试',
     };
+    return false;
   } finally {
     addingComponent.value = false;
   }
+}
+
+async function handleManualComponentPick(item: TreeNodeDto) {
+  const added = await addComponentByRefno(item.refno);
+  if (added) {
+    closeComponentSearch();
+  }
+}
+
+async function handleManualComponentSubmit() {
+  const keyword = componentQuery.value.trim();
+  if (!keyword || addingComponent.value || componentSearchLoading.value) return;
+
+  const directRefno = extractDirectComponentRefno(keyword);
+  if (directRefno) {
+    const added = await addComponentByRefno(directRefno);
+    if (added) {
+      closeComponentSearch();
+    }
+    return;
+  }
+
+  componentSearchLoading.value = true;
+  componentSearchResults.value = [];
+  componentSearchError.value = '';
+  componentSearchOpen.value = true;
+  highlightedSearchIndex.value = -1;
+  const requestSeq = ++componentSearchRequestSeq;
+
+  try {
+    const resp = await e3dSearch({ keyword, limit: 20 });
+    if (requestSeq !== componentSearchRequestSeq) return;
+    if (!resp.success) {
+      componentSearchError.value = resp.error_message || '构件搜索失败，请稍后重试。';
+      return;
+    }
+
+    const items = Array.isArray(resp.items) ? resp.items : [];
+    if (items.length === 0) {
+      componentSearchError.value = '未找到匹配构件，请改用参考号或更完整的名称重试。';
+      return;
+    }
+
+    if (items.length === 1) {
+      await handleManualComponentPick(items[0]);
+      return;
+    }
+
+    if (requestSeq !== componentSearchRequestSeq) return;
+    componentSearchResults.value = items;
+    componentSearchOpen.value = true;
+    highlightedSearchIndex.value = 0;
+  } catch (error) {
+    if (requestSeq !== componentSearchRequestSeq) return;
+    componentSearchError.value = error instanceof Error ? error.message : '构件搜索失败，请稍后重试。';
+  } finally {
+    if (requestSeq === componentSearchRequestSeq) {
+      componentSearchLoading.value = false;
+    }
+  }
+}
+
+function handleComponentQueryKeydown(event: KeyboardEvent) {
+  if (event.isComposing) return;
+
+  if (event.key === 'ArrowDown') {
+    if (componentSearchOpen.value && componentSearchResults.value.length > 0) {
+      event.preventDefault();
+      moveComponentSearchHighlight(1);
+    }
+    return;
+  }
+
+  if (event.key === 'ArrowUp') {
+    if (componentSearchOpen.value && componentSearchResults.value.length > 0) {
+      event.preventDefault();
+      moveComponentSearchHighlight(-1);
+    }
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    if (componentSearchOpen.value) {
+      event.preventDefault();
+      closeComponentSearch({ keepQuery: true });
+    }
+    return;
+  }
+
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const highlightedItem = componentSearchResults.value[highlightedSearchIndex.value];
+    if (componentSearchOpen.value && highlightedItem) {
+      void handleManualComponentPick(highlightedItem);
+      return;
+    }
+    void handleManualComponentSubmit();
+  }
+}
+
+function handleComponentPickerClickOutside(event: MouseEvent) {
+  const target = event.target as Node | null;
+  if (!componentPickerRef.value || (target && componentPickerRef.value.contains(target))) {
+    return;
+  }
+  closeComponentSearch({ keepQuery: true });
 }
 
 const uploadedFiles = ref<UploadedFile[]>([]);
@@ -331,6 +491,7 @@ onMounted(() => {
   syncEmbedModeStateFromStorage();
   console.log('[InitiateReviewPanel] 嵌入模式参数:', embedModeParams.value);
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
+  document.addEventListener('click', handleComponentPickerClickOutside);
 
   externalWorkflowMode.value = resolvePassiveWorkflowMode({
     embedParams: embedModeParams.value,
@@ -384,6 +545,7 @@ let confirmedRecordsStopWatch: WatchStopHandle | null = null;
 
 onUnmounted(() => {
   window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
+  document.removeEventListener('click', handleComponentPickerClickOutside);
   confirmedRecordsStopWatch?.();
 });
 
@@ -732,7 +894,7 @@ function closePanel() {
       <div v-if="externalWorkflowMode" class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
         <p class="text-xs font-medium text-blue-700">流程提示</p>
         <p class="mt-1 text-xs text-blue-600">
-          编校审单已保存；若后续被外部流程退回，请进入三维校审视图，对批注执行“已修改”或“不需解决”，并先确认当前数据，再继续外部流转。
+          编校审单已保存；若后续被外部流程退回，请进入设计批注处理页，对批注执行“已修改”或“不需解决”，并先确认当前数据，再继续外部流转。
         </p>
       </div>
 
@@ -784,7 +946,7 @@ function closePanel() {
       </div>
       <div v-if="showDebugUi && externalWorkflowMode" data-testid="external-workflow-mode-banner"
         class="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-        外部流程模式 — 仅保存编校审数据；收到退回后，请进入三维校审视图处理批注，并先确认当前数据。
+        外部流程模式 — 仅保存编校审数据；收到退回后，请进入设计批注处理页处理批注，并先确认当前数据。
       </div>
 
       <Card class="border border-[#F3F4F6] shadow-none" body-class="p-3">
@@ -794,7 +956,7 @@ function closePanel() {
           </div>
           <div class="min-w-0">
             <p class="text-[13px] font-medium text-[#111827]">{{ selectedComponentSummary }}</p>
-            <p class="mt-1 text-xs text-[#6B7280]">在三维视图中选中构件后，这里会同步显示发起范围。</p>
+            <p class="mt-1 text-xs text-[#6B7280]">可直接输入或粘贴构件名称、参考号，也可在三维视图中选中构件后加入。</p>
           </div>
         </div>
       </Card>
@@ -802,18 +964,55 @@ function closePanel() {
       <div class="space-y-2">
         <div class="flex items-center justify-between">
           <label class="text-[13px] font-medium text-[#6B7280]">构件明细</label>
+        </div>
+        <div class="flex items-start gap-2">
+          <div ref="componentPickerRef" class="relative min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <Input v-model="componentQuery"
+                data-testid="manual-component-input"
+                class="flex-1"
+                :disabled="addingComponent || componentSearchLoading"
+                placeholder="输入或粘贴构件名称 / 参考号"
+                @keydown="handleComponentQueryKeydown" />
+              <Button variant="secondary"
+                size="sm"
+                data-testid="manual-component-submit"
+                :disabled="!componentQuery.trim() || addingComponent || componentSearchLoading"
+                @click="handleManualComponentSubmit">
+                {{ componentSearchLoading ? '搜索中...' : '搜索/添加' }}
+              </Button>
+            </div>
+            <div v-if="componentSearchOpen && (componentSearchError || componentSearchResults.length > 0)"
+              class="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-lg">
+              <div v-if="componentSearchError" class="px-3 py-2 text-xs text-[#EF4444]">
+                {{ componentSearchError }}
+              </div>
+              <div v-else class="max-h-64 overflow-y-auto py-1">
+                <button v-for="(item, index) in componentSearchResults"
+                  :key="`${item.refno}-${index}`"
+                  type="button"
+                  class="block w-full px-3 py-2 text-left transition"
+                  :class="highlightedSearchIndex === index ? 'bg-[#EFF6FF]' : 'hover:bg-[#F9FAFB]'"
+                  @mouseenter="highlightedSearchIndex = index"
+                  @click="void handleManualComponentPick(item)">
+                  <p class="truncate text-sm font-medium text-[#111827]">{{ getComponentSearchItemLabel(item) }}</p>
+                  <p class="mt-1 text-xs text-[#6B7280]">{{ item.noun || '构件' }} · RefNo: {{ getComponentSearchItemRefno(item) }}</p>
+                </button>
+              </div>
+            </div>
+          </div>
           <Button variant="secondary"
             size="sm"
             data-guide="add-component-btn"
             :disabled="!selectionStore.selectedRefno || addingComponent"
             :title="selectionStore.selectedRefno ? '将选中的构件添加到列表' : '请先在三维视图中点击选中一个构件'"
             @click="addSelectedComponent">
-            {{ addingComponent ? '获取中...' : '添加构件' }}
+            {{ addingComponent ? '获取中...' : '添加当前选中' }}
           </Button>
         </div>
         <div class="rounded-[8px] border border-[#E5E7EB] bg-[#FCFCFD] p-3">
           <div v-if="selectedComponents.length === 0" class="text-xs text-[#9CA3AF]">
-            暂无已加入的构件，请先在三维视图中选中构件后点击“添加构件”。
+            暂无已加入的构件，可直接输入或粘贴构件名称、参考号，也可先在三维视图中选中构件后点击“添加当前选中”。
           </div>
           <div v-else class="max-h-40 space-y-2 overflow-y-auto">
             <div v-for="comp in selectedComponents"

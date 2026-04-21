@@ -125,8 +125,19 @@ export class WeldAnnotation extends AnnotationBase {
     this.textLabel.position.copy(position);
   }
 
+  /**
+   * SolveSpace 状态机分流材质：selected > hovered > normal。
+   */
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line;
+    const state = this.interactionState;
+    let mat: THREE.Material;
+    if (state === 'selected') {
+      mat = this.materials.ssSelected.line;
+    } else if (state === 'hovered') {
+      mat = this.materials.ssHovered.line;
+    } else {
+      mat = this.materialSet.line;
+    }
     this.crossLineH.material = mat;
     this.crossLineV.material = mat;
   }
@@ -136,6 +147,8 @@ export class WeldAnnotation extends AnnotationBase {
 
     const labelEl = this.textLabel.element as HTMLElement;
     labelEl.classList.toggle('annotation-label--active', highlighted);
+    labelEl.classList.toggle('annotation-label--hovered', this.interactionState === 'hovered');
+    labelEl.classList.toggle('annotation-label--selected', this.interactionState === 'selected');
   }
 
   override dispose(): void {

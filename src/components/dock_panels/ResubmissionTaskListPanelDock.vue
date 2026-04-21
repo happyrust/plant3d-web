@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import ResubmissionTaskList from '@/components/review/ResubmissionTaskList.vue';
+import DesignerCommentHandlingPanel from '@/components/review/DesignerCommentHandlingPanel.vue';
 </script>
 
 <template>
   <div class="h-full overflow-hidden">
-    <ResubmissionTaskList />
+    <DesignerCommentHandlingPanel />
   </div>
 </template>

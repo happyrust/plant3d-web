@@ -22,6 +22,7 @@ export type EmbedModeParams = {
     projectId: string;
     userId: string;
     userName?: string;
+    formId?: string;
     role?: string;
     workflowMode?: string;
     exp: number;
@@ -82,6 +83,26 @@ function normalizeEmbedValue(value?: string | null): string | null {
   return normalized || null;
 }
 
+function normalizeVerifiedClaims(
+  raw?: Partial<NonNullable<EmbedModeParams['verifiedClaims']>> | null,
+): EmbedModeParams['verifiedClaims'] {
+  if (!raw) return null;
+  const projectId = normalizeEmbedValue(raw.projectId);
+  const userId = normalizeEmbedValue(raw.userId);
+  if (!projectId || !userId) return null;
+
+  return {
+    projectId,
+    userId,
+    userName: normalizeEmbedValue(raw.userName ?? null) || undefined,
+    formId: normalizeEmbedValue(raw.formId ?? null) || undefined,
+    role: normalizeEmbedRole(raw.role ?? null) || undefined,
+    workflowMode: normalizeEmbedValue(raw.workflowMode ?? null) || undefined,
+    exp: typeof raw.exp === 'number' ? raw.exp : 0,
+    iat: typeof raw.iat === 'number' ? raw.iat : 0,
+  };
+}
+
 export function readEmbedModeParamsFromSearch(search: string): EmbedModeParams {
   const urlParams = new URLSearchParams(search);
   const launchFormId = normalizeEmbedValue(urlParams.get('form_id'));
@@ -117,7 +138,7 @@ export function resolveTrustedEmbedIdentity(params: EmbedModeParams): TrustedEmb
   if (!params.isEmbedMode || !params.verifiedClaims) return null;
 
   const { userId, projectId, role } = params.verifiedClaims;
-  const formId = normalizeEmbedValue(params.formId);
+  const formId = getVerifiedEmbedFormId(params);
   if (!userId || !formId || !projectId) return null;
   const trustedRole = normalizeEmbedRole(role);
   if (!trustedRole) return null;
@@ -136,7 +157,7 @@ export function buildPersistedEmbedModeParams(params: EmbedModeParams): EmbedMod
 
   return {
     ...params,
-    formId: params.formId || null,
+    formId: getVerifiedEmbedFormId(params),
     userId: params.verifiedClaims?.userId || params.userId || null,
     workflowRole: normalizeEmbedRole(params.verifiedClaims?.role) || null,
     projectId: params.verifiedClaims?.projectId || params.projectId || null,
@@ -174,12 +195,26 @@ export function resolveEmbedLandingTargetFromRole(role?: string | null): EmbedLa
   return null;
 }
 
+export function resolvePassiveEmbedViewTarget(options: {
+  workflowRole?: string | null;
+  passiveWorkflowMode?: boolean;
+  restoredTaskSummary?: EmbedLandingTaskSummary | null;
+}): EmbedLandingTarget | null {
+  if (!options.passiveWorkflowMode) return null;
+  if (normalizeEmbedRole(options.workflowRole) !== 'sj') return null;
+
+  const currentNode = normalizeEmbedRole(options.restoredTaskSummary?.currentNode ?? null);
+  if (!currentNode || currentNode === 'sj') return null;
+
+  return 'reviewer';
+}
+
 export function getVerifiedEmbedProjectId(params: EmbedModeParams): string | null {
   return params.verifiedClaims?.projectId || params.projectId || null;
 }
 
 export function getVerifiedEmbedFormId(params: EmbedModeParams): string | null {
-  return params.formId || null;
+  return normalizeEmbedValue(params.verifiedClaims?.formId) || params.formId || null;
 }
 
 export function getVerifiedEmbedWorkflowMode(params: EmbedModeParams): string | null {
@@ -263,4 +298,42 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
     primaryPanelId,
     visiblePanelIds: panelIds,
   };
+}
+
+export function readPersistedEmbedModeParams(
+  storageLike: Pick<Storage, 'getItem'> | undefined = typeof sessionStorage !== 'undefined' ? sessionStorage : undefined,
+): EmbedModeParams | null {
+  if (!storageLike) return null;
+  const raw = storageLike.getItem(EMBED_MODE_PARAMS_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<EmbedModeParams> & {
+      verifiedClaims?: Partial<NonNullable<EmbedModeParams['verifiedClaims']>> | null;
+      launchInput?: Partial<NonNullable<EmbedModeParams['launchInput']>> | null;
+    };
+
+    return buildPersistedEmbedModeParams({
+      formId: normalizeEmbedValue(parsed.formId) || null,
+      userToken: normalizeEmbedValue(parsed.userToken) || null,
+      userId: normalizeEmbedValue(parsed.userId) || null,
+      workflowRole: normalizeEmbedRole(parsed.workflowRole) || null,
+      projectId: normalizeEmbedValue(parsed.projectId) || null,
+      workflowMode: normalizeEmbedValue(parsed.workflowMode) || null,
+      externalWorkflowMode: typeof parsed.externalWorkflowMode === 'boolean'
+        ? parsed.externalWorkflowMode
+        : null,
+      isEmbedMode: !!(normalizeEmbedValue(parsed.formId) || normalizeEmbedValue(parsed.userToken)),
+      launchInput: parsed.launchInput ? {
+        formId: normalizeEmbedValue(parsed.launchInput.formId) || null,
+        userId: normalizeEmbedValue(parsed.launchInput.userId) || null,
+        workflowRole: normalizeEmbedRole(parsed.launchInput.workflowRole) || null,
+        projectId: normalizeEmbedValue(parsed.launchInput.projectId) || null,
+        workflowMode: normalizeEmbedValue(parsed.launchInput.workflowMode) || null,
+      } : undefined,
+      verifiedClaims: normalizeVerifiedClaims(parsed.verifiedClaims),
+    });
+  } catch {
+    return null;
+  }
 }

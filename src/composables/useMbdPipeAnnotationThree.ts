@@ -2990,22 +2990,36 @@ export function useMbdPipeAnnotationThree(
           const offsetScale = clampNumber(dimOffsetScale.value, 0.05, 50, 1);
           const modeConfig = getRuntimeModeConfig();
 
+          const layoutDims = currentData.value?.layout_result?.linear_dims;
+          const layoutCutTubis = currentData.value?.layout_result?.cut_tubis;
+          const useLayoutResult = shouldUseLayoutFirstResult(
+            mbdViewMode.value,
+            currentData.value!,
+          );
+
           for (const [dimId, dim] of dimAnnotations.entries()) {
             const rawDim = asRaw(dim);
             const ov = dimOverrides.get(dimId) ?? {};
             const sourceDim =
               currentData.value?.dims?.find((item) => item.id === dimId) ?? null;
+            const laidOutDim = useLayoutResult
+              ? (layoutDims?.find((item) => item.id === dimId)
+                ?? layoutCutTubis?.find((item) => item.id === dimId)
+                ?? null)
+              : null;
             const kind = (((rawDim.userData as any)?.mbdDimKind ??
               sourceDim?.kind ??
               'segment') as MbdDimKind);
 
             const p = rawDim.getParams();
             const distLocal = p.start.distanceTo(p.end);
-            const baseOffset = resolveSemanticDimOffset(
-              computeMbdDimOffset(distLocal) * offsetScale,
-              kind,
-              normalizeMbdLayoutHint(sourceDim?.layout_hint),
-            );
+            const baseOffset = laidOutDim
+              ? laidOutDim.offset * offsetScale
+              : resolveSemanticDimOffset(
+                computeMbdDimOffset(distLocal) * offsetScale,
+                kind,
+                normalizeMbdLayoutHint(sourceDim?.layout_hint),
+              );
             const nextOffset = ov.offset ?? baseOffset;
             const nextLabelOffset =
               'labelOffsetWorld' in ov

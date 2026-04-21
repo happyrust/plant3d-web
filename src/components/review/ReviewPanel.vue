@@ -28,15 +28,19 @@ import {
 import CollisionResultList from './CollisionResultList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
+import { restoreEmbedFormSnapshotContext } from './embedFormSnapshotRestore';
 import {
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
+  readPersistedEmbedModeParams,
+  resolveTrustedEmbedIdentity,
   type EmbedLandingState,
 } from './embedRoleLanding';
 import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
 import {
+  buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
@@ -45,6 +49,8 @@ import {
   confirmCurrentDataSafely,
   getSubmitActionLabel,
   getWorkflowSubmitBridgeAction,
+  hasSubmitBlockingReviewConfirmPayloadData,
+  runReviewSubmitPreflight,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
 import { resolvePassiveWorkflowMode } from './workflowMode';
@@ -55,6 +61,7 @@ import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 import type { AnnotationReviewState, ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
+  reviewAnnotationCheck,
   reviewSyncExport,
   reviewSyncImport,
 } from '@/api/reviewApi';
@@ -142,6 +149,7 @@ syncEmbedLandingStateFromStorage();
 const confirmNote = ref('');
 
 const showMeasurementMenu = ref(false);
+const workflowRefreshing = ref(false);
 
 // 当前任务信息
 const currentTask = computed(() => reviewStore.currentTask.value);
@@ -235,13 +243,6 @@ function getConfirmedRecordNote(record: ConfirmedRecordEntry): string {
 }
 
 type SeverityBucket = AnnotationSeverity | 'unset';
-type ReviewStateBucket =
-  | '待处理'
-  | '已修改待确认'
-  | '不需解决待确认'
-  | '已同意'
-  | '已同意不处理'
-  | '已驳回';
 
 /** 汇总一条确认记录内所有批注的严重度分布，供审核侧一眼看到批次风险画像。 */
 function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<SeverityBucket, number> {
@@ -266,36 +267,6 @@ function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<Sev
 }
 
 const CONFIRMED_SEVERITY_ORDER: SeverityBucket[] = ['critical', 'severe', 'normal', 'suggestion', 'unset'];
-const CONFIRMED_REVIEW_STATE_ORDER: ReviewStateBucket[] = [
-  '待处理',
-  '已修改待确认',
-  '不需解决待确认',
-  '已同意',
-  '已同意不处理',
-  '已驳回',
-];
-
-function getConfirmedReviewStateBreakdown(record: ConfirmedRecordEntry): Record<ReviewStateBucket, number> {
-  const buckets: Record<ReviewStateBucket, number> = {
-    待处理: 0,
-    已修改待确认: 0,
-    不需解决待确认: 0,
-    已同意: 0,
-    已同意不处理: 0,
-    已驳回: 0,
-  };
-  const all = [
-    ...record.annotations,
-    ...record.cloudAnnotations,
-    ...record.rectAnnotations,
-    ...(record.obbAnnotations ?? []),
-  ];
-  for (const item of all) {
-    const label = getAnnotationReviewDisplay((item as { reviewState?: AnnotationReviewState } | null)?.reviewState).label as ReviewStateBucket;
-    buckets[label] += 1;
-  }
-  return buckets;
-}
 
 const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
 
@@ -528,6 +499,56 @@ async function refreshCurrentTask(taskId: string) {
   }
 }
 
+function getTrustedEmbedRefreshContext() {
+  const embedParams = readPersistedEmbedModeParams();
+  const trustedIdentity = embedParams ? resolveTrustedEmbedIdentity(embedParams) : null;
+  const token = embedParams?.userToken || null;
+
+  if (!token || !trustedIdentity?.formId) {
+    return null;
+  }
+
+  return {
+    token,
+    trustedIdentity,
+  };
+}
+
+async function refreshEmbedSnapshot(task: ReviewTask): Promise<void> {
+  const trustedContext = getTrustedEmbedRefreshContext();
+  if (!trustedContext) {
+    throw new Error('当前外部流程快照缺少可信 token 或 formId，请从外部平台重新打开。');
+  }
+
+  const snapshot = await restoreEmbedFormSnapshotContext({
+    formId: trustedContext.trustedIdentity.formId,
+    token: trustedContext.token,
+    actor: {
+      id: trustedContext.trustedIdentity.userId,
+      name: trustedContext.trustedIdentity.userId,
+      roles: trustedContext.trustedIdentity.workflowRole || 'sj',
+    },
+    importTools: (payload) => toolStore.importJSON(payload),
+    syncTools: () => viewerContext.tools.value?.syncFromStore(),
+    task,
+    updateTask: async (nextTask) => {
+      await reviewStore.setCurrentTask(nextTask);
+    },
+  });
+
+  if (snapshot.modelRefnos.length > 0) {
+    await showModelByRefnosWithAck({
+      refnos: snapshot.modelRefnos.map((refno) => toSlashComponentRefno(refno)),
+      flyTo: true,
+      ensureViewerReady: false,
+      timeoutMs: 15_000,
+    });
+    return;
+  }
+
+  await ensureTaskComponentsLoaded(snapshot.task || task);
+}
+
 async function handleSubmitToNextNode() {
   if (isPassiveWorkflow.value) return;
   const taskId = currentTask.value?.id;
@@ -537,10 +558,23 @@ async function handleSubmitToNextNode() {
   const submitted = await submitTaskToNextNodeSafely({
     canSubmit: canSubmitToNextNode.value,
     taskId,
+    currentNode: currentNode.value,
     submitComment,
     showSubmitDialog,
     workflowActionLoading,
     workflowError,
+    beforeSubmit: () => runReviewSubmitPreflight({
+      hasUnsavedBlockingData: hasUnsavedBlockingSubmitData.value,
+      taskId,
+      currentNode: currentNode.value,
+      checkAnnotations: () => reviewAnnotationCheck({
+        taskId,
+        formId: formId || undefined,
+        currentNode: currentNode.value,
+        intent: 'submit_next',
+        includedTypes: ['text', 'cloud', 'rect'],
+      }),
+    }),
     submitTaskToNextNode: userStore.submitTaskToNextNode,
     refreshCurrentTask,
     loadWorkflow,
@@ -618,15 +652,47 @@ function closeReturnDialog() {
 }
 
 async function refreshWorkflowContext() {
-  const taskId = currentTask.value?.id;
+  const task = currentTask.value;
+  const taskId = task?.id;
   if (!taskId) return;
-  await refreshCurrentTask(taskId);
-  await loadWorkflow(taskId);
+  workflowRefreshing.value = true;
+  workflowError.value = null;
+  try {
+    if (isPassiveWorkflow.value && !getTrustedEmbedRefreshContext()) {
+      throw new Error('当前外部流程快照缺少可信 token 或 formId，请从外部平台重新打开。');
+    }
+    await refreshCurrentTask(taskId);
+    await loadWorkflow(taskId);
+    if (isPassiveWorkflow.value) {
+      const refreshedTask = currentTask.value;
+      if (!refreshedTask) return;
+      await refreshEmbedSnapshot(refreshedTask);
+    }
+  } catch (e) {
+    workflowError.value = e instanceof Error ? e.message : '刷新工作台失败';
+    emitToast({
+      message: workflowError.value,
+      level: 'warning',
+    });
+  } finally {
+    workflowRefreshing.value = false;
+  }
 }
 
-function handleClearConfirmedRecords() {
+async function handleClearConfirmedRecords() {
   if (!window.confirm('确定要清空所有已确认的数据？此操作不可撤销。')) return;
-  reviewStore.clearConfirmedRecords();
+  const cleared = await reviewStore.clearConfirmedRecords();
+  if (cleared) {
+    emitToast({
+      message: '已清空确认记录',
+    });
+    return;
+  }
+
+  emitToast({
+    message: reviewStore.error.value || '清空确认记录失败',
+    level: 'error',
+  });
 }
 
 // 根据任务过滤模型显示
@@ -705,6 +771,65 @@ async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void
 }
 
 // 监听当前任务变化，自动应用过滤
+watch(currentTask, async (newTask) => {
+  selectedTaskComponentRefno.value = null;
+  lastRestoredSceneKey.value = null;
+
+  if (newTask && newTask.components.length > 0) {
+    // 有新任务时自动应用过滤
+    const taskId = newTask.id;
+    await nextTick();
+    const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
+    if (!viewerReady) {
+      console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
+      return;
+    }
+    if (currentTask.value?.id !== taskId) {
+      return;
+    }
+    await ensureTaskComponentsLoaded(newTask);
+    if (currentTask.value?.id !== taskId) {
+      return;
+    }
+    filterModelByTask();
+  } else {
+    // 清除任务时清除过滤
+    clearModelFilter();
+  }
+
+  await restoreConfirmedRecordsIntoScene(true);
+
+  if (newTask) {
+    showSubmitDialog.value = false;
+    submitComment.value = '';
+    showReturnDialog.value = false;
+    returnReason.value = '';
+    returnTargetNode.value = 'sj';
+    loadWorkflow(newTask.id);
+  } else {
+    workflow.value = null;
+    workflowError.value = null;
+    showSubmitDialog.value = false;
+    submitComment.value = '';
+    showReturnDialog.value = false;
+    returnReason.value = '';
+    returnTargetNode.value = 'sj';
+  }
+}, { immediate: true });
+
+watch(
+  () => ({
+    taskId: currentTask.value?.id ?? null,
+    recordKeys: currentTaskConfirmedRecords.value.map((record) => `${record.id}:${record.confirmedAt}`).join('|'),
+    viewerReady: !!viewerContext.viewerRef.value,
+    toolsReady: !!viewerContext.tools.value,
+  }),
+  async () => {
+    await restoreConfirmedRecordsIntoScene();
+  },
+  { immediate: true }
+);
+
 const pendingAnnotationCount = computed(() => {
   return (
     toolStore.annotationCount.value +
@@ -771,25 +896,17 @@ const hasUnsavedChanges = computed(() => {
     !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value);
 });
 const hasUnsavedPendingData = computed(() => hasUnsavedChanges.value);
-const measurementEvidenceHint = '测量当前仅作为处理证据参与确认记录，不独立进入已修改/同意/驳回状态。';
-const externalUnsavedReminderText = '当前有未确认的批注/测量处理，请先点击“确认当前数据”，再回外部平台继续流转。';
-const hasUnsavedExternalReviewData = computed(() => isPassiveWorkflow.value && hasUnsavedPendingData.value);
+const submitBlockingConfirmPayload = computed(() => (
+  buildSubmitBlockingReviewConfirmPayload(
+    currentDraftConfirmPayload.value,
+    confirmedSnapshotPayload.value
+  )
+));
+const hasUnsavedBlockingSubmitData = computed(() => (
+  hasSubmitBlockingReviewConfirmPayloadData(submitBlockingConfirmPayload.value)
+));
 const confirmSaving = ref(false);
 const confirmError = ref<string | null>(null);
-
-function remindUnsavedExternalReviewData(reason: 'refresh' | 'close' | 'switch' | 'leave') {
-  if (!hasUnsavedExternalReviewData.value) return;
-  const detailMap: Record<typeof reason, string> = {
-    refresh: '当前刷新不会自动固化处理留痕。',
-    close: '离开当前任务前，建议先完成一次确认。',
-    switch: '切换任务不会自动固化当前处理留痕。',
-    leave: '离开页面不会自动固化当前处理留痕。',
-  };
-  emitToast({
-    message: `${externalUnsavedReminderText} ${detailMap[reason]}`,
-    level: 'warning',
-  });
-}
 
 async function confirmCurrentData() {
   if (confirmSaving.value || !hasUnsavedPendingData.value) return;
@@ -841,23 +958,6 @@ function exportData() {
   URL.revokeObjectURL(url);
 }
 
-async function handleRefreshWorkflowContext() {
-  remindUnsavedExternalReviewData('refresh');
-  await refreshWorkflowContext();
-}
-
-function handleCloseCurrentTask() {
-  remindUnsavedExternalReviewData('close');
-  reviewStore.clearCurrentTask();
-}
-
-function handleBeforeUnload(event: BeforeUnloadEvent) {
-  if (!hasUnsavedExternalReviewData.value) return;
-  remindUnsavedExternalReviewData('leave');
-  event.preventDefault();
-  event.returnValue = '';
-}
-
 function startAnnotation() {
   toolStore.setToolMode('annotation');
 }
@@ -890,7 +990,6 @@ function handleClickOutside(event: MouseEvent) {
 onMounted(() => {
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   document.addEventListener('click', handleClickOutside);
-  window.addEventListener('beforeunload', handleBeforeUnload);
 
   const isAutomation = localStorage.getItem('plant3d_automation_review') === '1'
     || new URLSearchParams(window.location.search).get('automation_review') === '1';
@@ -946,6 +1045,11 @@ onMounted(() => {
       getConfirmedRecordCount() {
         return reviewStore.confirmedRecordCount.value;
       },
+      getConfirmedAnnotationCount() {
+        return currentTaskConfirmedRecords.value.reduce((sum, record) => (
+          sum + getConfirmedAnnotationCount(record)
+        ), 0);
+      },
       getConfirmedMeasurementCount() {
         return reviewStore.totalConfirmedMeasurements.value;
       },
@@ -953,10 +1057,18 @@ onMounted(() => {
   }
 });
 
+function beforeUnloadGuard(e: BeforeUnloadEvent) {
+  if (hasPendingData.value && hasUnsavedPendingData.value) {
+    e.preventDefault();
+  }
+}
+
+window.addEventListener('beforeunload', beforeUnloadGuard);
+
 onUnmounted(() => {
+  window.removeEventListener('beforeunload', beforeUnloadGuard);
   window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   document.removeEventListener('click', handleClickOutside);
-  window.removeEventListener('beforeunload', handleBeforeUnload);
   document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true } as EventListenerOptions);
 });
 
@@ -1085,71 +1197,6 @@ type AnnotationListItem = {
 
 const expandedAnnotationId = ref<string | null>(null);
 const expandedAnnotationType = ref<AnnotationType | null>(null);
-
-function resetWorkbenchTransientState() {
-  showSubmitDialog.value = false;
-  submitComment.value = '';
-  showReturnDialog.value = false;
-  returnReason.value = '';
-  returnTargetNode.value = 'sj';
-  selectedTaskComponentRefno.value = null;
-  showMeasurementMenu.value = false;
-  expandedAnnotationId.value = null;
-  expandedAnnotationType.value = null;
-  workflowError.value = null;
-  confirmError.value = null;
-}
-
-watch(currentTask, async (newTask, oldTask) => {
-  if (oldTask?.id && oldTask.id !== newTask?.id) {
-    remindUnsavedExternalReviewData('switch');
-  }
-  resetWorkbenchTransientState();
-  lastRestoredSceneKey.value = null;
-
-  if (newTask && newTask.components.length > 0) {
-    // 有新任务时自动应用过滤
-    const taskId = newTask.id;
-    await nextTick();
-    const viewerReady = await waitForViewerReady({ timeoutMs: 4000 });
-    if (!viewerReady) {
-      console.warn('[ReviewPanel] Viewer panel did not become ready in time for task filtering');
-      return;
-    }
-    if (currentTask.value?.id !== taskId) {
-      return;
-    }
-    await ensureTaskComponentsLoaded(newTask);
-    if (currentTask.value?.id !== taskId) {
-      return;
-    }
-    filterModelByTask();
-  } else {
-    // 清除任务时清除过滤
-    clearModelFilter();
-  }
-
-  await restoreConfirmedRecordsIntoScene(true);
-
-  if (newTask) {
-    loadWorkflow(newTask.id);
-  } else {
-    workflow.value = null;
-  }
-}, { immediate: true });
-
-watch(
-  () => ({
-    taskId: currentTask.value?.id ?? null,
-    recordKeys: currentTaskConfirmedRecords.value.map((record) => `${record.id}:${record.confirmedAt}`).join('|'),
-    viewerReady: !!viewerContext.viewerRef.value,
-    toolsReady: !!viewerContext.tools.value,
-  }),
-  async () => {
-    await restoreConfirmedRecordsIntoScene();
-  },
-  { immediate: true }
-);
 
 const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   const items: AnnotationListItem[] = [];
@@ -1303,7 +1350,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
             <Filter class="mr-1 inline h-3 w-3" />已过滤
           </button>
           <button type="button" class="h-6 rounded px-2 text-xs hover:bg-muted" title="关闭任务"
-            @click="handleCloseCurrentTask">
+            @click="reviewStore.clearCurrentTask()">
             <XCircle class="h-4 w-4" />
           </button>
         </div>
@@ -1326,10 +1373,6 @@ function flyToAnnotationItem(item: AnnotationListItem) {
             <div class="mt-1 text-xs text-blue-700">
               当前流程由外部平台驱动，此处仅展示状态，不提供提交、驳回等内部操作。
             </div>
-            <div v-if="hasUnsavedExternalReviewData"
-              class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {{ externalUnsavedReminderText }}
-            </div>
             <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-800">
               <span>当前节点：{{ currentTaskNodeLabel }}</span>
               <span>当前状态：{{ currentTaskStatusLabel }}</span>
@@ -1337,9 +1380,9 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           </div>
           <button type="button"
             class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted disabled:opacity-50"
-            :disabled="workflowLoading || workflowActionLoading"
-            @click="void handleRefreshWorkflowContext()">
-            <RefreshCw :class="['mr-1 inline h-3.5 w-3.5', (workflowLoading || workflowActionLoading) && 'animate-spin']" />
+            :disabled="workflowLoading || workflowActionLoading || workflowRefreshing"
+            @click="void refreshWorkflowContext()">
+            <RefreshCw :class="['mr-1 inline h-3.5 w-3.5', (workflowLoading || workflowActionLoading || workflowRefreshing) && 'animate-spin']" />
             刷新
           </button>
         </template>
@@ -1514,9 +1557,6 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           <span>测量 <strong>{{ pendingMeasurementCount }}</strong></span>
         </div>
       </div>
-      <div class="mt-2 text-xs text-slate-500">
-        {{ measurementEvidenceHint }}
-      </div>
 
       <!-- 工具按钮 -->
       <div class="mt-2 flex flex-wrap gap-1.5" data-guide="review-panel-tools" data-testid="reviewer-direct-launch-annotation-zone">
@@ -1552,10 +1592,6 @@ function flyToAnnotationItem(item: AnnotationListItem) {
 
       <!-- 确认操作 -->
       <div v-if="hasPendingData" class="mt-3 border-t border-slate-200 pt-3">
-        <div v-if="hasUnsavedExternalReviewData"
-          class="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          {{ externalUnsavedReminderText }}
-        </div>
         <input v-model="confirmNote"
           class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm"
           placeholder="备注（可选）" />
@@ -1754,18 +1790,6 @@ function flyToAnnotationItem(item: AnnotationListItem) {
                   :title="bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label">
                   {{ bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label }}
                   <span class="font-semibold">{{ getConfirmedSeverityBreakdown(record)[bucket] }}</span>
-                </span>
-              </template>
-            </div>
-            <div v-if="getConfirmedAnnotationCount(record) > 0"
-              data-testid="confirmed-record-review-summary"
-              class="mt-2 flex flex-wrap items-center gap-1.5">
-              <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">处理状态</span>
-              <template v-for="label in CONFIRMED_REVIEW_STATE_ORDER" :key="label">
-                <span v-if="getConfirmedReviewStateBreakdown(record)[label] > 0"
-                  class="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-600">
-                  {{ label }}
-                  <span class="font-semibold text-slate-900">{{ getConfirmedReviewStateBreakdown(record)[label] }}</span>
                 </span>
               </template>
             </div>

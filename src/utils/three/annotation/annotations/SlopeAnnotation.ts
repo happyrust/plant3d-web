@@ -118,9 +118,21 @@ export class SlopeAnnotation extends AnnotationBase {
     );
   }
 
+  /**
+   * 按 SolveSpace 状态机分流材质：selected > hovered > normal。
+   * 与 LinearDimension3D/SlopeAnnotation3D 等 3D 系列保持一致。
+   */
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line;
-    this.slopeLine.material = mat;
+    const state = this.interactionState;
+    if (state === 'selected') {
+      this.slopeLine.material = this.materials.ssSelected.line;
+      return;
+    }
+    if (state === 'hovered') {
+      this.slopeLine.material = this.materials.ssHovered.line;
+      return;
+    }
+    this.slopeLine.material = this.materialSet.line;
   }
 
   protected onHighlightChanged(highlighted: boolean): void {
@@ -128,6 +140,8 @@ export class SlopeAnnotation extends AnnotationBase {
 
     const labelEl = this.textLabel.element as HTMLElement;
     labelEl.classList.toggle('annotation-label--active', highlighted);
+    labelEl.classList.toggle('annotation-label--hovered', this.interactionState === 'hovered');
+    labelEl.classList.toggle('annotation-label--selected', this.interactionState === 'selected');
   }
 
   override dispose(): void {

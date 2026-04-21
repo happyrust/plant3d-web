@@ -42,11 +42,19 @@ import {
   UserRole,
 } from '@/types/auth';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   annotationType: AnnotationType | null;
   annotationId: string | null;
   annotationLabel?: string;
-}>();
+  composerPlaceholder?: string;
+  composerSubmitLabel?: string;
+  designerOnly?: boolean;
+}>(), {
+  annotationLabel: undefined,
+  composerPlaceholder: '输入意见...',
+  composerSubmitLabel: '发表',
+  designerOnly: false,
+});
 
 const emit = defineEmits<(e: 'close') => void>();
 
@@ -182,6 +190,9 @@ const reviewDisplay = computed(() => (
 const showReviewActions = computed(() => {
   const role = currentUser.value?.role;
   if (!role) return false;
+  if (props.designerOnly) {
+    return canDesignHandle.value;
+  }
   return [
     UserRole.DESIGNER,
     UserRole.PROOFREADER,
@@ -197,6 +208,7 @@ const canDesignHandle = computed(() => {
 });
 
 const canReviewDecide = computed(() => {
+  if (props.designerOnly) return false;
   const role = currentUser.value?.role;
   return role === UserRole.PROOFREADER
     || role === UserRole.REVIEWER
@@ -639,7 +651,7 @@ function canEditComment(comment: AnnotationComment): boolean {
       <div class="rounded-md border border-[#D1D5DB] bg-white px-3 py-2">
         <textarea v-model="newCommentContent"
           class="min-h-[3rem] w-full resize-none text-[13px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
-          placeholder="输入意见..."
+          :placeholder="props.composerPlaceholder"
           @keyup.enter.ctrl="submitComment" />
       </div>
 
@@ -659,7 +671,7 @@ function canEditComment(comment: AnnotationComment): boolean {
             : 'cursor-not-allowed bg-[#D1D5DB]'"
           :disabled="!newCommentContent.trim()"
           @click="submitComment">
-          发表
+          {{ props.composerSubmitLabel }}
           <Send class="h-3.5 w-3.5" />
         </button>
       </div>

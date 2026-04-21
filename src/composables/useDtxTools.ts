@@ -3773,6 +3773,7 @@ export function useDtxTools(options: {
       progressPoints.value = [...progressPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }];
       if (progressPoints.value.length >= 2) {
         const [p0, p1] = progressPoints.value as [MeasurementPoint, MeasurementPoint];
+        const sourceAnnotation = store.activeAnnotationContext.value;
         const rec: DistanceMeasurementRecord = {
           id: nowId('dist'),
           kind: 'distance',
@@ -3780,6 +3781,8 @@ export function useDtxTools(options: {
           target: p1,
           visible: true,
           createdAt: Date.now(),
+          sourceAnnotationId: sourceAnnotation?.id,
+          sourceAnnotationType: sourceAnnotation?.type,
         };
         store.addMeasurement(rec);
         progressPoints.value = [];
@@ -3803,6 +3806,7 @@ export function useDtxTools(options: {
       progressPoints.value = [...progressPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }];
       if (progressPoints.value.length >= 3) {
         const [p0, p1, p2] = progressPoints.value as [MeasurementPoint, MeasurementPoint, MeasurementPoint];
+        const sourceAnnotation = store.activeAnnotationContext.value;
         const rec: AngleMeasurementRecord = {
           id: nowId('angle'),
           kind: 'angle',
@@ -3811,6 +3815,8 @@ export function useDtxTools(options: {
           target: p2,
           visible: true,
           createdAt: Date.now(),
+          sourceAnnotationId: sourceAnnotation?.id,
+          sourceAnnotationType: sourceAnnotation?.type,
         };
         store.addMeasurement(rec);
         progressPoints.value = [];
@@ -3896,6 +3902,8 @@ export function useDtxTools(options: {
         target: { entityId: hit.entityId, worldPos: vec3ToTuple(closest.point) },
         visible: true,
         createdAt: Date.now(),
+        sourceAnnotationId: store.activeAnnotationContext.value?.id,
+        sourceAnnotationType: store.activeAnnotationContext.value?.type,
       };
       store.addMeasurement(rec);
       pointToObjectStart.value = null;

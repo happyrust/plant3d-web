@@ -32,7 +32,7 @@ const activeTab = ref<'collision' | 'auxdata'>('collision');
 const collisionData = ref<CollisionItem[]>([]);
 const collisionLoading = ref(false);
 
-const effectiveFormId = computed(() => props.formId || props.task?.formId || props.task?.id);
+const effectiveFormId = computed(() => props.formId || props.task?.formId || undefined);
 const effectiveProjectId = computed(() => props.projectId || 'default');
 </script>
 

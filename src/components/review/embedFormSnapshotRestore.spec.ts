@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { mergeSnapshotAttachmentsIntoTask, restoreEmbedFormSnapshot } from './embedFormSnapshotRestore';
+import {
+  mergeSnapshotAttachmentsIntoTask,
+  restoreEmbedFormSnapshot,
+  restoreEmbedFormSnapshotContext,
+} from './embedFormSnapshotRestore';
 
 import { UserRole, type ReviewTask } from '@/types/auth';
 
@@ -339,5 +343,77 @@ describe('restoreEmbedFormSnapshot', () => {
         url: '/files/review_attachments/att-2.png',
       }),
     ]);
+  });
+
+  it('通过共享 helper 合并附件并回写当前任务', async () => {
+    const request = vi.fn().mockResolvedValue({
+      code: 200,
+      message: 'success',
+      data: {
+        models: ['24381_147608'],
+        records: [],
+        annotationComments: [],
+        attachments: [
+          {
+            id: 'att-context-1',
+            public_url: '/files/review_attachments/att-context-1.png',
+            description: '上下文附件',
+            file_ext: '.png',
+          },
+        ],
+      },
+    });
+    const task: ReviewTask = {
+      id: 'task-context-1',
+      formId: 'FORM-CONTEXT-1',
+      title: '流程单',
+      description: 'desc',
+      modelName: '模型',
+      status: 'approved',
+      priority: 'medium',
+      requesterId: 'SJ',
+      requesterName: 'SJ',
+      checkerId: 'JH',
+      checkerName: 'JH',
+      approverId: 'PZ',
+      approverName: 'PZ',
+      reviewerId: 'JH',
+      reviewerName: 'JH',
+      components: [],
+      attachments: [],
+      createdAt: 1,
+      updatedAt: 1,
+      currentNode: 'pz',
+    };
+    const updateTask = vi.fn();
+
+    const result = await restoreEmbedFormSnapshotContext({
+      formId: 'FORM-CONTEXT-1',
+      token: 'token-context-1',
+      actor: {
+        id: 'JH',
+        name: 'JH',
+        roles: 'jd',
+      },
+      request,
+      task,
+      updateTask,
+    });
+
+    expect(result.task).toEqual(expect.objectContaining({
+      attachments: [
+        expect.objectContaining({
+          id: 'att-context-1',
+          name: '上下文附件',
+        }),
+      ],
+    }));
+    expect(updateTask).toHaveBeenCalledWith(expect.objectContaining({
+      attachments: [
+        expect.objectContaining({
+          id: 'att-context-1',
+        }),
+      ],
+    }));
   });
 });

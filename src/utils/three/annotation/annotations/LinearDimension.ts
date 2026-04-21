@@ -214,13 +214,27 @@ export class LinearDimension extends AnnotationBase {
     this.textLabel.position.copy(this.dimStart).add(this.dimEnd).multiplyScalar(0.5);
   }
 
+  /**
+   * SolveSpace 状态机分流材质：selected > hovered > normal。
+   */
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line;
-    const meshMat = this._highlighted ? this.materialSet.meshHover : this.materialSet.mesh;
+    const state = this.interactionState;
+    let lineMat: THREE.Material;
+    let meshMat: THREE.Material;
+    if (state === 'selected') {
+      lineMat = this.materials.ssSelected.line;
+      meshMat = this.materials.ssSelected.mesh;
+    } else if (state === 'hovered') {
+      lineMat = this.materials.ssHovered.line;
+      meshMat = this.materials.ssHovered.mesh;
+    } else {
+      lineMat = this.materialSet.line;
+      meshMat = this.materialSet.mesh;
+    }
 
-    this.dimensionLine.material = mat;
-    this.extensionLine1.material = mat;
-    this.extensionLine2.material = mat;
+    this.dimensionLine.material = lineMat;
+    this.extensionLine1.material = lineMat;
+    this.extensionLine2.material = lineMat;
     this.arrow1.material = meshMat;
     this.arrow2.material = meshMat;
   }
@@ -236,6 +250,8 @@ export class LinearDimension extends AnnotationBase {
 
     const labelEl = this.textLabel.element as HTMLElement;
     labelEl.classList.toggle('annotation-label--active', highlighted);
+    labelEl.classList.toggle('annotation-label--hovered', this.interactionState === 'hovered');
+    labelEl.classList.toggle('annotation-label--selected', this.interactionState === 'selected');
   }
 
   override dispose(): void {

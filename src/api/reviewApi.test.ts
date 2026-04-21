@@ -4,8 +4,11 @@ import {
   authVerifyToken,
   getReviewUserWebSocketUrl,
   getReviewWebSocketUrl,
+  reviewAnnotationCheck,
   reviewGetEmbedUrl,
   reviewRecordCreate,
+  reviewTaskSubmitToNext,
+  reviewVerifyWorkflow,
   reviewWorkflowSyncQuery,
   normalizeReviewTask,
   normalizeReviewAttachment,
@@ -229,6 +232,7 @@ describe('reviewApi base url defaults', () => {
           claims: {
             project_id: 'AvevaMarineSample',
             user_id: 'JH',
+            form_id: 'FORM-VERIFY-1',
             role: 'sj',
             workflow_mode: 'external',
             exp: 1774949170,
@@ -244,6 +248,7 @@ describe('reviewApi base url defaults', () => {
     expect(result.data?.claims).toEqual({
       projectId: 'AvevaMarineSample',
       userId: 'JH',
+      formId: 'FORM-VERIFY-1',
       role: 'sj',
       workflowMode: 'external',
       exp: 1774949170,
@@ -342,6 +347,310 @@ describe('reviewApi base url defaults', () => {
         url: expect.stringContaining('/files/review_attachments/att-desc-1.png'),
       }),
     ]);
+  });
+
+  it('normalizes annotation check payloads from snake_case to camelCase', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        data: {
+          passed: false,
+          recommended_action: 'return',
+          current_node: 'jd',
+          summary: {
+            total: 3,
+            open: 1,
+            pending_review: 1,
+            approved: 0,
+            rejected: 1,
+          },
+          blockers: [
+            {
+              annotation_id: 'ann-1',
+              annotation_type: 'text',
+              title: '泵基础位置冲突',
+              description: '与支架干涉',
+              state_code: 'rejected',
+              state_label: '已驳回',
+              refnos: ['24381/145018'],
+              updated_at: 1710000000000,
+              updated_by_name: '张三',
+              updated_by_role: 'reviewer',
+              note: '修改不完整',
+            },
+          ],
+          message: '存在未通过批注，应先驳回或重新处理',
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await reviewAnnotationCheck({
+      taskId: 'task-1',
+      formId: 'FORM-1',
+      currentNode: 'jd',
+      intent: 'submit_next',
+      includedTypes: ['text', 'cloud', 'rect'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/review\/annotations\/check$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          task_id: 'task-1',
+          form_id: 'FORM-1',
+          current_node: 'jd',
+          intent: 'submit_next',
+          included_types: ['text', 'cloud', 'rect'],
+          token: undefined,
+        }),
+      })
+    );
+    expect(response).toEqual({
+      success: true,
+      data: {
+        passed: false,
+        recommendedAction: 'return',
+        currentNode: 'jd',
+        summary: {
+          total: 3,
+          open: 1,
+          pendingReview: 1,
+          approved: 0,
+          rejected: 1,
+        },
+        blockers: [
+          {
+            annotationId: 'ann-1',
+            annotationType: 'text',
+            title: '泵基础位置冲突',
+            description: '与支架干涉',
+            stateCode: 'rejected',
+            stateLabel: '已驳回',
+            refnos: ['24381/145018'],
+            updatedAt: 1710000000000,
+            updatedByName: '张三',
+            updatedByRole: 'reviewer',
+            note: '修改不完整',
+          },
+        ],
+        message: '存在未通过批注，应先驳回或重新处理',
+      },
+      errorCode: undefined,
+      errorMessage: undefined,
+    });
+  });
+
+  it('sends workflow verify payloads and normalizes pass responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'ok',
+        data: {
+          passed: true,
+          action: 'active',
+          current_node: 'sj',
+          task_status: 'draft',
+          next_step: 'jd',
+          reason: '允许流转',
+          recommended_action: 'proceed',
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await reviewVerifyWorkflow({
+      formId: 'FORM-VERIFY-1',
+      token: 'verify-token-1',
+      action: 'active',
+      actor: {
+        id: 'SJ',
+        name: 'SJ',
+        roles: 'sj',
+      },
+      comments: '送审',
+      nextStep: {
+        assigneeId: 'JH',
+        name: 'JH',
+        roles: 'jd',
+      },
+      metadata: {
+        source: 'simulator',
+      },
+    });
+
+    expectBackendFetch(
+      fetchMock,
+      '/api/review/workflow/verify',
+      JSON.stringify({
+        form_id: 'FORM-VERIFY-1',
+        token: 'verify-token-1',
+        action: 'active',
+        actor: {
+          id: 'SJ',
+          name: 'SJ',
+          roles: 'sj',
+        },
+        next_step: {
+          assignee_id: 'JH',
+          name: 'JH',
+          roles: 'jd',
+        },
+        comments: '送审',
+        metadata: {
+          source: 'simulator',
+        },
+      })
+    );
+    expect(response).toEqual({
+      code: 200,
+      message: 'ok',
+      data: {
+        passed: true,
+        action: 'active',
+        currentNode: 'sj',
+        taskStatus: 'draft',
+        nextStep: 'jd',
+        reason: '允许流转',
+        recommendedAction: 'proceed',
+      },
+      errorCode: undefined,
+      annotationCheck: undefined,
+    });
+  });
+
+  it('normalizes workflow verify block responses with error_code and annotation_check', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'blocked',
+        error_code: 'ANNOTATION_CHECK_FAILED',
+        annotation_check: {
+          passed: false,
+          recommended_action: 'return',
+          current_node: 'jd',
+          summary: {
+            total: 2,
+            open: 0,
+            pending_review: 1,
+            approved: 0,
+            rejected: 1,
+          },
+          blockers: [
+            {
+              annotation_id: 'ann-verify-1',
+              annotation_type: 'text',
+              state_code: 'pending_review',
+              state_label: '待确认',
+              refnos: ['24381/145018'],
+            },
+          ],
+          message: '存在待确认批注',
+        },
+        data: {
+          passed: false,
+          action: 'agree',
+          current_node: 'jd',
+          task_status: 'in_review',
+          next_step: 'sh',
+          reason: '存在待确认批注',
+          recommended_action: 'return',
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await reviewVerifyWorkflow({
+      formId: 'FORM-VERIFY-2',
+      token: 'verify-token-2',
+      action: 'agree',
+      actor: {
+        id: 'JH',
+        name: 'JH',
+        roles: 'jd',
+      },
+      comments: '同意',
+    });
+
+    expect(response).toEqual({
+      code: 200,
+      message: 'blocked',
+      data: {
+        passed: false,
+        action: 'agree',
+        currentNode: 'jd',
+        taskStatus: 'in_review',
+        nextStep: 'sh',
+        reason: '存在待确认批注',
+        recommendedAction: 'return',
+      },
+      errorCode: 'ANNOTATION_CHECK_FAILED',
+      annotationCheck: {
+        passed: false,
+        recommendedAction: 'return',
+        currentNode: 'jd',
+        summary: {
+          total: 2,
+          open: 0,
+          pendingReview: 1,
+          approved: 0,
+          rejected: 1,
+        },
+        blockers: [
+          {
+            annotationId: 'ann-verify-1',
+            annotationType: 'text',
+            title: undefined,
+            description: undefined,
+            stateCode: 'pending_review',
+            stateLabel: '待确认',
+            refnos: ['24381/145018'],
+            updatedAt: undefined,
+            updatedByName: undefined,
+            updatedByRole: undefined,
+            note: undefined,
+          },
+        ],
+        message: '存在待确认批注',
+      },
+    });
+  });
+
+  it('preserves structured annotation check failure details on non-2xx submit responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: false,
+        error_code: 'ANNOTATION_CHECK_FAILED',
+        error_message: '存在待确认批注，请逐条确认后再继续',
+        data: {
+          passed: false,
+          recommended_action: 'block',
+          current_node: 'jd',
+          summary: {
+            total: 1,
+            open: 0,
+            pending_review: 1,
+            approved: 0,
+            rejected: 0,
+          },
+          blockers: [],
+          message: '存在待确认批注，请逐条确认后再继续',
+        },
+      }), { status: 409, statusText: 'Conflict' })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(reviewTaskSubmitToNext('task-1', 'go')).rejects.toMatchObject({
+      name: 'ReviewApiHttpError',
+      status: 409,
+      errorCode: 'ANNOTATION_CHECK_FAILED',
+      errorMessage: '存在待确认批注，请逐条确认后再继续',
+      annotationCheck: expect.objectContaining({
+        recommendedAction: 'block',
+        currentNode: 'jd',
+      }),
+    });
   });
 });
 

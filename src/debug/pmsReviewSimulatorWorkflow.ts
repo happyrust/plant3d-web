@@ -44,8 +44,8 @@ export type TaskAssignmentResolution = {
 export type WorkflowAccessDecisionSource =
   | 'new-entry'
   | 'task-terminal'
-  | 'task-assignee'
-  | 'default-assignee';
+  | 'workflow-next-step'
+  | 'workflow-unresolved';
 
 export type WorkflowAccessResolution = {
   canView: boolean;
@@ -53,6 +53,8 @@ export type WorkflowAccessResolution = {
   decisionSource: WorkflowAccessDecisionSource;
   reason: string;
 };
+
+const SIMULATOR_INBOX_TASK_STATUSES = new Set(['submitted', 'in_review', 'approved', 'rejected']);
 
 type DeriveSimulatorSidePanelModeOptions = {
   passiveWorkflowMode: boolean;
@@ -298,11 +300,10 @@ export function resolveSimulatorTaskAssignment(options: {
 export function resolveSimulatorWorkflowAccess(options: {
   iframeSource: IframeSource | null;
   taskStatus?: string | null;
-  taskAssignedUserId: string | null;
-  taskAssignmentSource: TaskAssignmentResolution['source'];
-  matchesTaskAssignee: boolean;
-  defaultAssignedPmsUser: SimulatorPmsUser;
-  matchesDefaultAssignee: boolean;
+  currentPmsUserId: string;
+  currentPmsWorkflowRole: WorkflowRole | null;
+  workflowNextStepUserId: string | null;
+  workflowNextStepRole: WorkflowRole | null;
 }): WorkflowAccessResolution {
   if (options.iframeSource === 'new') {
     return {
@@ -325,25 +326,70 @@ export function resolveSimulatorWorkflowAccess(options: {
     };
   }
 
-  if (options.taskAssignedUserId) {
+  if (!options.workflowNextStepRole || !options.workflowNextStepUserId) {
     return {
       canView: true,
-      canMutateWorkflow: options.matchesTaskAssignee,
-      decisionSource: 'task-assignee',
-      reason: options.matchesTaskAssignee
-        ? `当前单据已明确指派给 ${options.taskAssignedUserId}（${options.taskAssignmentSource}），允许当前用户推进流程。`
-        : `当前单据已明确指派给 ${options.taskAssignedUserId}（${options.taskAssignmentSource}），当前用户仅可查看。`,
+      canMutateWorkflow: false,
+      decisionSource: 'workflow-unresolved',
+      reason: '当前单据缺少 workflow next_step 指定的处理角色或处理人，仅可查看。',
     };
   }
 
+  const currentPmsUserId = options.currentPmsUserId.trim();
+  const matchesNextStep =
+    options.currentPmsWorkflowRole === options.workflowNextStepRole
+    && currentPmsUserId.length > 0
+    && currentPmsUserId === options.workflowNextStepUserId;
+
   return {
     canView: true,
-    canMutateWorkflow: options.matchesDefaultAssignee,
-    decisionSource: 'default-assignee',
-    reason: options.matchesDefaultAssignee
-      ? '当前单据缺少真实任务指派，已回退到默认测试流转映射。'
-      : `当前单据缺少真实任务指派，默认测试流转应由 ${options.defaultAssignedPmsUser} 处理，当前用户仅可查看。`,
+    canMutateWorkflow: matchesNextStep,
+    decisionSource: 'workflow-next-step',
+    reason: matchesNextStep
+      ? `当前 PMS 入口角色和用户已命中 workflow next_step（${options.workflowNextStepUserId} / ${options.workflowNextStepRole}），允许当前用户执行对应操作。`
+      : `当前 PMS 入口角色和用户未命中 workflow next_step（${options.workflowNextStepUserId} / ${options.workflowNextStepRole}），当前用户仅可查看。`,
   };
+}
+
+export function resolveSimulatorInboxTaskVisibility(options: {
+  currentPmsUser: SimulatorPmsUser;
+  taskStatus?: string | null;
+  taskCurrentNode?: string | null;
+  requesterId?: string | null;
+  checkerId?: string | null;
+  reviewerId?: string | null;
+  approverId?: string | null;
+}): boolean {
+  const taskRole = normalizeWorkflowRole(options.taskCurrentNode);
+  if (!taskRole) {
+    return true;
+  }
+
+  const taskAssignment = resolveSimulatorTaskAssignment({
+    currentPmsUser: options.currentPmsUser,
+    currentWorkflowRole: taskRole,
+    requesterId: options.requesterId,
+    checkerId: options.checkerId,
+    reviewerId: options.reviewerId,
+    approverId: options.approverId,
+  });
+
+  if (taskRole === 'sj') {
+    return taskAssignment.assignedUserId
+      ? taskAssignment.matchesCurrentPmsUser
+      : true;
+  }
+
+  const taskStatus = String(options.taskStatus || '')
+    .trim()
+    .toLowerCase();
+  if (!SIMULATOR_INBOX_TASK_STATUSES.has(taskStatus)) {
+    return false;
+  }
+
+  return taskAssignment.assignedUserId
+    ? taskAssignment.matchesCurrentPmsUser
+    : true;
 }
 
 export function buildSimulatorRuntimeWorkflowRole(options: BuildSimulatorRuntimeWorkflowRoleOptions): WorkflowRoleResolution {

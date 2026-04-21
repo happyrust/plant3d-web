@@ -149,12 +149,23 @@ export class RadiusDimension extends AnnotationBase {
     this.textLabel.position.copy(textPos);
   }
 
+  /**
+   * SolveSpace 状态机分流材质：selected > hovered > normal。
+   */
   private applyMaterials(): void {
-    const mat = this._highlighted ? this.materialSet.lineHover : this.materialSet.line;
-    const meshMat = this._highlighted ? this.materialSet.meshHover : this.materialSet.mesh;
-
-    this.leaderLine.material = mat;
-    this.arrow.material = meshMat;
+    const state = this.interactionState;
+    if (state === 'selected') {
+      this.leaderLine.material = this.materials.ssSelected.line;
+      this.arrow.material = this.materials.ssSelected.mesh;
+      return;
+    }
+    if (state === 'hovered') {
+      this.leaderLine.material = this.materials.ssHovered.line;
+      this.arrow.material = this.materials.ssHovered.mesh;
+      return;
+    }
+    this.leaderLine.material = this.materialSet.line;
+    this.arrow.material = this.materialSet.mesh;
   }
 
   protected onHighlightChanged(highlighted: boolean): void {
@@ -162,6 +173,8 @@ export class RadiusDimension extends AnnotationBase {
 
     const labelEl = this.textLabel.element as HTMLElement;
     labelEl.classList.toggle('annotation-label--active', highlighted);
+    labelEl.classList.toggle('annotation-label--hovered', this.interactionState === 'hovered');
+    labelEl.classList.toggle('annotation-label--selected', this.interactionState === 'selected');
   }
 
   override dispose(): void {

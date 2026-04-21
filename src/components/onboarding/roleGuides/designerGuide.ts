@@ -62,9 +62,9 @@ export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
       targetSelector: '[data-guide="add-component-btn"]',
       targetPanelId: 'initiateReview',
       title: '选择送审构件',
-      description: '先在三维模型中选中构件，再点击「添加当前选中」，把它们纳入本次编校审范围。',
+      description: '可直接输入或粘贴构件名称、参考号，也可先在三维模型中选中构件，再点击「添加当前选中」，把它们纳入本次编校审范围。',
       placement: 'left',
-      actionHint: '请先打开「发起编校审」面板，在构件明细区域找到「添加构件」按钮。操作步骤：1. 在三维视图中点击选中构件 → 2. 点击「添加构件」。',
+      actionHint: '请先打开「发起编校审」面板，在构件明细区域输入构件名称/参考号，或按以下步骤操作：1. 在三维视图中点击选中构件 → 2. 点击「添加当前选中」。',
       onBeforeShow: () => ensurePanelAndActivate('initiateReview'),
     },
     {
@@ -109,10 +109,10 @@ export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
     steps.push({
       id: 'resubmission-panel',
       targetSelector: '[data-command="panel.resubmissionTasks"]',
-      title: '处理驳回与复审',
-      description: '若任务被驳回，复审任务会出现在这里。根据意见修改后，可继续重新提交。',
+      title: '处理退回批注',
+      description: '若任务被驳回，设计批注处理页会出现在这里。根据意见逐条处理批注并确认当前数据。',
       placement: isRibbon ? 'bottom' : 'left',
-      actionHint: isRibbon ? '请点击「校审」标签页，找到「复审任务」按钮。' : '请先展开「校审」菜单，再点「复审任务」；或在右侧面板打开对应标签页。',
+      actionHint: isRibbon ? '请点击「校审」标签页，找到「批注处理」按钮。' : '请先展开「校审」菜单，再点「批注处理」；或在右侧面板打开对应标签页。',
       onBeforeShow: () => ensurePanelAndActivate('resubmissionTasks'),
     });
   }

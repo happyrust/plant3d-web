@@ -4,6 +4,7 @@
  *
  * 默认测试 BRAN 与 PMS 数据界面展示一致（下划线 RefNo），便于联调核对同步。
  */
+import type { PmsReviewEntryCandidate } from './pms-api-sniffer';
 import type { BrowserContext, Frame, Page } from 'playwright';
 
 /** 与 PMS 列表/详情一致的联调用 BRAN RefNo；可通过 `PMS_TARGET_BRAN_REFNO` 覆盖 */
@@ -493,6 +494,49 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
  */
 function normalizeLookupNeedles(needles: string[]): string[] {
   return [...new Set(needles.map((s) => s.trim()).filter(Boolean))];
+}
+
+function buildDirectReviewEntryUrl(page: Page, candidate: PmsReviewEntryCandidate): string | null {
+  const source = String(candidate.sourceUrl || '').trim();
+  if (source && /\/Form\/FormLoad/i.test(source)) return source;
+
+  const id = String(candidate.id || '').trim();
+  if (!id) return null;
+
+  try {
+    const origin = new URL(page.url() || 'http://pms.powerpms.net:1801').origin;
+    const url = new URL('/Form/FormLoad', origin);
+    url.searchParams.set('KeyWord', 'PS_DesignCheck');
+    url.searchParams.set('KeyWordType', '');
+    url.searchParams.set('keyvalue', id);
+    url.searchParams.set('select', '');
+    url.searchParams.set('formstate', 'edit');
+    url.searchParams.set('_', String(Date.now()));
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export async function tryOpenReviewEntryByCandidates(
+  page: Page,
+  candidates: PmsReviewEntryCandidate[],
+): Promise<{ opened: boolean; matchedNeedle: string | null }> {
+  for (const candidate of candidates) {
+    const directUrl = buildDirectReviewEntryUrl(page, candidate);
+    if (!directUrl) continue;
+    try {
+      await page.goto(directUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await new Promise((r) => setTimeout(r, 2500));
+      return {
+        opened: true,
+        matchedNeedle: candidate.modelFormId || candidate.formId || candidate.id || candidate.matchedNeedle || directUrl,
+      };
+    } catch {
+      continue;
+    }
+  }
+  return { opened: false, matchedNeedle: null };
 }
 
 export async function tryOpenReviewEntryByNeedles(

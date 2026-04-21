@@ -107,6 +107,12 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   const target = isMeasurementPoint(record.target) ? record.target : null;
   const createdAt = typeof record.createdAt === 'number' ? record.createdAt : Date.now();
   const visible = record.visible !== false;
+  const sourceAnnotationId = typeof record.sourceAnnotationId === 'string'
+    ? record.sourceAnnotationId
+    : undefined;
+  const sourceAnnotationType = typeof record.sourceAnnotationType === 'string'
+    ? record.sourceAnnotationType
+    : undefined;
 
   if (!id || !origin || !target) return null;
 
@@ -118,6 +124,8 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       target,
       visible,
       createdAt,
+      sourceAnnotationId,
+      sourceAnnotationType,
     };
   }
 
@@ -131,6 +139,8 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       target,
       visible,
       createdAt,
+      sourceAnnotationId,
+      sourceAnnotationType,
     };
   }
 
@@ -150,6 +160,8 @@ function toXeokitMeasurement(
       visible: measurement.visible,
       approximate: false,
       createdAt: measurement.createdAt,
+      sourceAnnotationId: measurement.sourceAnnotationId,
+      sourceAnnotationType: measurement.sourceAnnotationType,
     };
   }
 
@@ -161,6 +173,8 @@ function toXeokitMeasurement(
     visible: measurement.visible,
     approximate: false,
     createdAt: measurement.createdAt,
+    sourceAnnotationId: measurement.sourceAnnotationId,
+    sourceAnnotationType: measurement.sourceAnnotationType,
   };
 }
 

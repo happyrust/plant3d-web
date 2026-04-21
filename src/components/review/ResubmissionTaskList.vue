@@ -25,6 +25,23 @@ import { useNavigationStatePersistence } from '@/composables/useNavigationStateP
 import { useUserStore } from '@/composables/useUserStore';
 import { getPriorityDisplayName } from '@/types/auth';
 
+const props = withDefaults(defineProps<{
+  autoLoad?: boolean;
+  detailMode?: 'modal' | 'external';
+  selectedTaskId?: string | null;
+  ctaLabel?: string;
+}>(), {
+  autoLoad: true,
+  detailMode: 'modal',
+  selectedTaskId: null,
+  ctaLabel: '进入批注处理',
+});
+
+const emit = defineEmits<{
+  selectTask: [task: ReviewTask];
+  viewTask: [task: ReviewTask];
+}>();
+
 const userStore = useUserStore();
 const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-resubmission-tasks-v1');
 
@@ -64,8 +81,6 @@ const filteredTasks = computed(() => {
     return bTime - aTime;
   });
 });
-
-const currentUser = computed(() => userStore.currentUser.value);
 
 // 统计数据
 const taskStats = computed(() => {
@@ -111,6 +126,8 @@ function formatDateTime(timestamp: number): string {
 }
 
 function handleViewTask(task: ReviewTask) {
+  emit('viewTask', task);
+  if (props.detailMode === 'external') return;
   selectedTask.value = task;
 }
 
@@ -119,12 +136,19 @@ function closeTaskDetail() {
 }
 
 function handleResumeEditing(task: ReviewTask) {
-  handleViewTask(task);
+  emit('selectTask', task);
+  if (props.detailMode === 'external') return;
+  selectedTask.value = task;
 }
 
 function getRejectedTaskCardClass(task: ReviewTask): string {
-  if (task.priority === 'urgent') return 'border-red-300 bg-red-50/70';
-  return 'border-rose-200 bg-rose-50/60';
+  const base = task.priority === 'urgent'
+    ? 'border-red-300 bg-red-50/70'
+    : 'border-rose-200 bg-rose-50/60';
+  if (props.selectedTaskId && props.selectedTaskId === task.id) {
+    return `${base} ring-2 ring-orange-200 shadow-md`;
+  }
+  return base;
 }
 
 function getReturnedReason(task: ReviewTask): string {
@@ -143,7 +167,9 @@ function getReturnedNodeLabel(task: ReviewTask): string | null {
 }
 
 onMounted(() => {
-  refreshTasks();
+  if (props.autoLoad) {
+    refreshTasks();
+  }
   restoreScrollPosition();
 });
 </script>
@@ -221,9 +247,9 @@ onMounted(() => {
       <template v-else-if="filteredTasks.length > 0">
         <div v-for="task in filteredTasks"
           :key="task.id"
-          class="border-2 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+          class="border-2 rounded-lg p-4 transition-shadow cursor-pointer hover:shadow-md"
           :class="getRejectedTaskCardClass(task)"
-          @click="handleViewTask(task)">
+          @click="handleResumeEditing(task)">
           <div class="flex items-start justify-between">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-2">
@@ -267,7 +293,7 @@ onMounted(() => {
               </button>
               <button class="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
                 @click.stop="handleResumeEditing(task)">
-                进入模型修改
+                {{ props.ctaLabel }}
               </button>
             </div>
           </div>
@@ -290,7 +316,7 @@ onMounted(() => {
 
     <!-- 任务详情弹窗 -->
     <Teleport to="body">
-      <TaskReviewDetail v-if="selectedTask"
+      <TaskReviewDetail v-if="props.detailMode === 'modal' && selectedTask"
         :task="selectedTask"
         @close="closeTaskDetail" />
     </Teleport>

@@ -241,4 +241,35 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(setCurrentTask).toHaveBeenCalledWith(null);
     expect(result.restoreStatus).toBe('missing');
   });
+
+  it('designer restore switches to resubmission panel when the matched task is already returned to sj', async () => {
+    const task = createTask({
+      id: 'task-designer-returned',
+      formId: 'FORM-D-RETURNED',
+      status: 'draft',
+      currentNode: 'sj',
+      returnReason: '请先处理批注',
+    });
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-D-RETURNED',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [task],
+      allTasks: () => [task],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview', 'resubmissionTasks']);
+    expect(activatePanel).toHaveBeenLastCalledWith('resubmissionTasks');
+    expect(result.restoreStatus).toBe('matched');
+  });
 });
