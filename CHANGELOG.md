@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Added（批注表格视图 · MVP PR 2/5）
+
+- **AnnotationTableView 表格视图组件**：基于 PR 1 的纯函数层，交付可独立 mount 的批注表格组件。**本 PR 不接入 dock 面板，由 PR 3 负责集成；不接入 Ribbon 入口，由 PR 4 负责。**
+  - **`src/components/review/AnnotationTableView.vue`**：5 列（序号 / 错误标记 / 校核发现问题 / 处理情况 / 操作）· 列头可点击三态排序（asc / desc / 重置）· 顶部工具栏含搜索（300ms debounce）/ 严重度下拉 / 状态下拉 / 导出 CSV · 底部分页（pageSize 默认 10）· 空状态插画占位 · 键盘导航（Enter 单击语义、Space 双击语义）· `role="row"` + `aria-selected` 无障碍属性。
+  - **`src/composables/useAnnotationTableFilter.ts`**：session 级状态容器（不入 localStorage），暴露 `sort / filters / filteredItems / currentPage` ref 与 `toggleSort / setSearch / setStatusFilter / setSeverityFilter / setPage / reset` 方法；搜索或排序变化自动把 `currentPage` 重置为 1。
+  - **单双击区分**：单击行后延迟 220ms 再 emit `select-annotation`，期间若发生双击则改为 emit `open-annotation`，彻底避免单双击冲突。
+  - **事件命名与 `AnnotationWorkspace.vue` 对齐**：`select-annotation`（打开 drawer 语义）· `open-annotation`（飞到 3D 语义）· `locate-annotation`（操作列按钮，`@click.stop` 不冒泡到行 select），PR 3 集成时可无缝接入现有处理函数。
+  - **测试覆盖**：`AnnotationTableView.test.ts` 12 个用例（渲染 / 空态 / 单击 / 双击 / 排序 / 搜索 debounce / 严重度筛选 / 状态筛选 / locate 冒泡阻止 / 行高亮 / 分页翻页 / CSV 导出调用链）全绿。
+  - **设计文档**：`docs/plans/2026-04-22-annotation-table-view-pr2-design.md` 240 行，记录 API 契约、交互规则、测试策略与 PR 3 接入预告。
+
 ### Added（批注表格视图 · MVP PR 1/5）
 
 - **批注表格视图基础设施**：为后续 `AnnotationTableView.vue` 组件与 Ribbon 入口铺设数据层基础。本次仅新增纯函数与单元测试，不改动任何现有组件或面板，零风险。
