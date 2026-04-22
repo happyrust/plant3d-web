@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Added（批注表格视图 · MVP PR 2.5 · 响应式退化）
+
+- **`useContainerQuery` 通用响应式 hook**：基于 `ResizeObserver` 监听任意容器宽度变化，返回 `mode: 'compact' | 'medium' | 'wide'` 与 `width` 两个响应式 ref。断点默认 `compactMax=640` / `mediumMax=960`，可选自定义；支持 SSR / 测试环境的 `initialMode`；组件卸载自动 `disconnect`。
+- **`AnnotationTableView` 响应式退化**：接入 `useContainerQuery` 后根据容器（而非视口）宽度自动切换三档布局：
+  - **Wide（≥960px）**：保留 PR 2 原有 5 列表格布局。
+  - **Medium（640–960px）**：隐藏"校核发现问题"列的次要描述（只保留 title）、"处理情况"列从 `w-56` 收窄到 `w-40`。
+  - **Compact（<640px）**：表格整体降级为纵向卡片列表（`role="listitem"`）：每张卡片头部含序号 + 严重度 pill + 操作按钮，中部标题 + 描述截断，底部状态 + 讨论数。表头完全隐藏。
+  - 根 `<section>` 自动输出 `data-layout-mode="..."`，方便调试与 E2E 定位。
+- **测试覆盖**：`useContainerQuery.test.ts` 5 用例（初始化 / 三档切换 / 自定义断点 / initialMode / 卸载清理）+ `AnnotationTableView.test.ts` 新增 2 用例（Compact 卡片化 + Medium 隐藏描述），全 79 用例绿。
+- **设计文档**：`docs/plans/2026-04-22-annotation-table-responsive-pr2-5-design.md`。
+
 ### Added（批注表格视图 · MVP PR 2/5）
 
 - **AnnotationTableView 表格视图组件**：基于 PR 1 的纯函数层，交付可独立 mount 的批注表格组件。**本 PR 不接入 dock 面板，由 PR 3 负责集成；不接入 Ribbon 入口，由 PR 4 负责。**

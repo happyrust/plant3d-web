@@ -35,6 +35,7 @@ import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
 import type { AnnotationType } from '@/types/auth';
 
 import { useAnnotationTableFilter } from '@/composables/useAnnotationTableFilter';
+import { useContainerQuery } from '@/composables/useContainerQuery';
 
 // ----------------------------------------------------------------------
 // Props & Emits
@@ -84,6 +85,17 @@ const {
   setSearch,
   setPage,
 } = useAnnotationTableFilter(itemsRef);
+
+// ----------------------------------------------------------------------
+// Responsive container query
+// ----------------------------------------------------------------------
+
+const rootEl = ref<HTMLElement | null>(null);
+const { mode: layoutMode } = useContainerQuery(rootEl);
+
+const isCompact = computed(() => layoutMode.value === 'compact');
+const isMedium = computed(() => layoutMode.value === 'medium');
+const isWide = computed(() => layoutMode.value === 'wide');
 
 const searchInput = ref('');
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -279,8 +291,10 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
 </script>
 
 <template>
-  <section class="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-    data-testid="annotation-table-view">
+  <section ref="rootEl"
+    class="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+    :data-testid="'annotation-table-view'"
+    :data-layout-mode="layoutMode">
     <!-- Toolbar -->
     <header class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2.5">
       <div class="min-w-0">
@@ -349,10 +363,10 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
       <div class="text-xs leading-5 text-slate-500 max-w-md">{{ emptyDescription }}</div>
     </div>
 
-    <!-- Table head + body -->
+    <!-- Table head + body · Wide / Medium 档 -->
     <template v-else>
-      <!-- Head -->
-      <div role="rowgroup" class="flex h-9 items-center border-b border-slate-200 bg-slate-50 px-4 text-[11px] font-semibold text-slate-950">
+      <!-- Head（Compact 不显示表头）-->
+      <div v-if="!isCompact" role="rowgroup" class="flex h-9 items-center border-b border-slate-200 bg-slate-50 px-4 text-[11px] font-semibold text-slate-950">
         <button type="button"
           class="w-10 text-center flex items-center justify-center gap-1 hover:text-orange-600"
           data-testid="annotation-table-sort-index"
@@ -373,7 +387,8 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
         </button>
         <div class="flex-1">校核发现问题</div>
         <button type="button"
-          class="w-56 text-left flex items-center gap-1 hover:text-orange-600"
+          class="text-left flex items-center gap-1 hover:text-orange-600"
+          :class="isWide ? 'w-56' : 'w-40'"
           data-testid="annotation-table-sort-status"
           @click="onHeaderClick('status')">
           <span>处理情况</span>
@@ -384,8 +399,8 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
         <div class="w-16 text-center">操作</div>
       </div>
 
-      <!-- Body -->
-      <div role="rowgroup" class="flex-1 overflow-y-auto">
+      <!-- Body · Wide / Medium: 表格行 -->
+      <div v-if="!isCompact" role="rowgroup" class="flex-1 overflow-y-auto">
         <div v-for="(item, localIdx) in pagedItems"
           :key="`${item.type}:${item.id}`"
           role="row"
@@ -415,14 +430,14 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
             </span>
           </div>
 
-          <!-- 校核发现问题 -->
+          <!-- 校核发现问题 · Medium 下隐藏 description 只保留 title -->
           <div class="flex-1 pr-4 text-xs leading-snug text-slate-700 line-clamp-2">
             <span class="font-semibold text-slate-950">{{ item.title }}</span>
-            <span v-if="item.description" class="text-slate-500"> · {{ item.description }}</span>
+            <span v-if="isWide && item.description" class="text-slate-500"> · {{ item.description }}</span>
           </div>
 
-          <!-- 处理情况 -->
-          <div class="w-56 pr-2 min-w-0">
+          <!-- 处理情况 · Medium 下收窄 -->
+          <div class="pr-2 min-w-0" :class="isWide ? 'w-56' : 'w-40'">
             <div class="text-[11px] font-semibold" :class="statusTextClass(item)">
               {{ statusPrefix(item) }} {{ item.statusLabel }}
             </div>
@@ -450,6 +465,56 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Body · Compact: 纵向卡片列表 -->
+      <div v-else role="list" class="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/30"
+        data-testid="annotation-table-compact-list">
+        <article v-for="(item, localIdx) in pagedItems"
+          :key="`${item.type}:${item.id}`"
+          role="listitem"
+          tabindex="0"
+          :aria-selected="isActiveRow(item)"
+          :data-testid="`annotation-table-row-${item.id}`"
+          class="rounded-lg border bg-white p-3 cursor-pointer transition-shadow hover:shadow-sm"
+          :class="isActiveRow(item) ? 'border-amber-400 ring-1 ring-amber-300' : 'border-slate-200'"
+          @click="handleRowClick(item)"
+          @dblclick="handleRowDblClick(item)"
+          @keydown.enter.prevent="handleRowClick(item)"
+          @keydown.space.prevent="handleRowDblClick(item)">
+          <header class="flex items-center gap-2">
+            <span class="text-[11px] font-mono text-slate-400">#{{ (currentPage - 1) * pageSize + localIdx + 1 }}</span>
+            <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none"
+              :class="severityPillClass(item)">
+              <span class="h-1.5 w-1.5 rounded-full" :class="severityDotClass(item)" />
+              {{ severityLabel(item) }}
+            </span>
+            <span class="ml-auto flex gap-1.5 text-slate-400">
+              <button type="button"
+                class="hover:text-slate-900"
+                :data-testid="`annotation-table-locate-${item.id}`"
+                @click.stop="emit('locate-annotation', item)">
+                <LocateFixed class="h-4 w-4" />
+              </button>
+              <button type="button"
+                class="hover:text-slate-900"
+                :data-testid="`annotation-table-comment-${item.id}`"
+                @click.stop="handleRowClick(item)">
+                <MessageSquare class="h-4 w-4" />
+              </button>
+            </span>
+          </header>
+
+          <h3 class="mt-1.5 text-sm font-semibold text-slate-950 line-clamp-1">{{ item.title }}</h3>
+          <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2">{{ item.description }}</p>
+
+          <footer class="mt-2 flex items-center gap-2 text-[11px]">
+            <span class="font-semibold" :class="statusTextClass(item)">
+              {{ statusPrefix(item) }} {{ item.statusLabel }}
+            </span>
+            <span v-if="item.commentCount > 0" class="text-slate-400">· {{ item.commentCount }} 条讨论</span>
+          </footer>
+        </article>
       </div>
 
       <!-- Footer · Pagination -->

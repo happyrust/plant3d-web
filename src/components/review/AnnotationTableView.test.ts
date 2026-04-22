@@ -5,6 +5,44 @@ import AnnotationTableView from './AnnotationTableView.vue';
 
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
 
+// ------------------------------------------------------------
+// ResizeObserver mock · 用于响应式断点测试
+// ------------------------------------------------------------
+type RoRecord = { callback: ResizeObserverCallback; elements: Element[] };
+let roRegistry: RoRecord[] = [];
+
+class MockResizeObserver {
+  private record: RoRecord;
+  constructor(cb: ResizeObserverCallback) {
+    this.record = { callback: cb, elements: [] };
+    roRegistry.push(this.record);
+  }
+  observe(el: Element) { this.record.elements.push(el); }
+  disconnect() {
+    this.record.elements = [];
+    roRegistry = roRegistry.filter((r) => r !== this.record);
+  }
+  unobserve(el: Element) {
+    this.record.elements = this.record.elements.filter((x) => x !== el);
+  }
+}
+
+function fireContainerResize(target: Element, width: number) {
+  for (const r of roRegistry) {
+    if (!r.elements.includes(target)) continue;
+    r.callback(
+      [{
+        target,
+        contentRect: { width, height: 500, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 500, toJSON() { return {}; } },
+        borderBoxSize: [],
+        contentBoxSize: [],
+        devicePixelContentBoxSize: [],
+      } as unknown as ResizeObserverEntry],
+      {} as ResizeObserver,
+    );
+  }
+}
+
 const downloadCsvMock = vi.fn();
 const toAnnotationTableCsvMock = vi.fn(() => 'mock,csv\nrow1,data1');
 
@@ -90,10 +128,13 @@ describe('AnnotationTableView', () => {
   beforeEach(() => {
     downloadCsvMock.mockClear();
     toAnnotationTableCsvMock.mockClear();
+    roRegistry = [];
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('1. 渲染 3 行批注 + 表头', async () => {
@@ -345,6 +386,58 @@ describe('AnnotationTableView', () => {
     const [filename, content] = downloadCsvMock.mock.calls[0];
     expect(String(filename)).toMatch(/^plant3d-annotations-SJ-0418-\d{8}\.csv$/);
     expect(content).toBe('mock,csv\nrow1,data1');
+
+    destroy();
+  });
+
+  it('13. Compact 模式（<640px）· 表格变卡片 role="listitem" · 表头消失', async () => {
+    const items = [
+      createItem({ id: 'c1', title: 'DN800 管段' }),
+      createItem({ id: 'c2', title: 'DN150 支路' }),
+    ];
+    const { host, destroy } = mountTable({ items });
+    await nextTick();
+
+    const root = host.querySelector<HTMLElement>('[data-testid="annotation-table-view"]');
+    expect(root).not.toBeNull();
+
+    // 默认 wide 模式：role="row" 行 + 没有 compact list
+    expect(host.querySelectorAll('[role="row"]').length).toBe(2);
+    expect(host.querySelector('[data-testid="annotation-table-compact-list"]')).toBeNull();
+
+    // 触发响应式：shrink 到 400px → compact
+    fireContainerResize(root!, 400);
+    await nextTick();
+
+    expect(root!.getAttribute('data-layout-mode')).toBe('compact');
+    expect(host.querySelector('[data-testid="annotation-table-compact-list"]')).not.toBeNull();
+    expect(host.querySelectorAll('[role="listitem"]').length).toBe(2);
+
+    // 表头应消失（无 annotation-table-sort-index 按钮）
+    expect(host.querySelector('[data-testid="annotation-table-sort-index"]')).toBeNull();
+
+    // Table 行不应再存在（compact 模式下无 role="row"）
+    expect(host.querySelectorAll('[role="row"]').length).toBe(0);
+
+    destroy();
+  });
+
+  it('14. Medium 模式（640–960px）· 隐藏 description · 保留表头', async () => {
+    const items = [createItem({ id: 'm1', title: 'DN800 管段', description: '偏左 60mm 关键描述' })];
+    const { host, destroy } = mountTable({ items });
+    await nextTick();
+
+    const root = host.querySelector<HTMLElement>('[data-testid="annotation-table-view"]');
+    fireContainerResize(root!, 800);
+    await nextTick();
+
+    expect(root!.getAttribute('data-layout-mode')).toBe('medium');
+    // 表头还在（Medium 保留表格结构）
+    expect(host.querySelector('[data-testid="annotation-table-sort-index"]')).not.toBeNull();
+    expect(host.querySelectorAll('[role="row"]').length).toBe(1);
+    // description 文本不出现（只保留 title）
+    expect(host.innerHTML).not.toContain('关键描述');
+    expect(host.innerHTML).toContain('DN800 管段');
 
     destroy();
   });
