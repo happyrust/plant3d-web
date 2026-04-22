@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added（批注表格视图 · MVP PR 1/5）
+
+- **批注表格视图基础设施**：为后续 `AnnotationTableView.vue` 组件与 Ribbon 入口铺设数据层基础。本次仅新增纯函数与单元测试，不改动任何现有组件或面板，零风险。
+  - **`src/components/review/annotationTableSorting.ts`**：提供 `searchAnnotationTableRows`（大小写不敏感；refno 支持 `_` 与 `/` 双形式，搜 `24381_145018` 和 `24381/145018` 均命中）、`filterByStatus` / `filterBySeverity`（状态与严重度静态筛选）、`sortAnnotationTableRows`（按 `index / severity / status / activity / refno` 稳定排序，tiebreaker 为 `activityAt` 降序，中文走 `localeCompare('zh-Hans-CN')`）、`applyAnnotationTablePipeline`（filter → search → sort 聚合流水线）。
+  - **`src/components/review/annotationTableExport.ts`**：提供 `toAnnotationTableCsv`（RFC 4180 字段转义 + Windows `\r\n` 行尾，空数组保留表头）、`downloadCsv`（UTF-8 with BOM，保证 Excel 打开中文不乱码）、`buildCsvFilename`（基于任务 key 与日期的合规文件名）、默认列集对应《校审记录卡》模板。
+  - **测试覆盖**：`annotationTableSorting.test.ts`（36 用例）+ `annotationTableExport.test.ts`（24 用例）共 60 条单测全绿，`vue-tsc --noEmit` 与 ESLint 均通过。
+  - **设计与计划**：新增 `docs/plans/2026-04-22-annotation-dock-mvp-plan.md` 开发计划，规范 4 个 PR 的实施路径与验收标准；配套 Pencil 稿（`ui/三维校审/review-designer.pen` 新增 8 张设计稿）与 HTML 交互原型（`.tmp/review-annotation-dock/` 下 `index.html` / `journey.html` / `compact.html` / `workspace.html`）。
+
 ### Fixed
 
 - **评论降级去重（P1）**：`AnnotationPanel` 和 `ReviewCommentsPanel` 的 `addComment` 后端失败或返回非成功时，不再写入本地 store（避免本地生成的 ID 与后端不一致导致后续列表视图拉取后评论重复显示），改为 `emitToast` 提示用户重试。
