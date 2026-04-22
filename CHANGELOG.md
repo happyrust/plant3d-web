@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+### Added（批注表格视图 · MVP PR 2.7 · 右键菜单）
+
+- **AnnotationTableView 右键菜单**：对齐 Pencil `9xPyi` 设计稿落地行级 contextMenu，支持四项可用动作：
+  - **🎯 定位到三维模型**（快捷键 Enter） → emit `locate-annotation`
+  - **▢ 打开处理详情 drawer** → emit `select-annotation`
+  - **🔗 复制 refno** → 调用 `navigator.clipboard.writeText`（降级 `execCommand('copy')`）
+  - **📋 复制为记录卡一行** → 使用 PR 1 的 `toCsvLine` + 默认列 · 输出 1 行 CSV，可直接粘贴到 Excel
+  - MVP 不含"修改严重度"/"删除批注"（sj 角色权限受限，按 Pencil `WSaGR` 工作流）
+- **交互细节**：`@contextmenu.prevent` 阻止原生菜单；视口边界自动偏移；点菜单外 / `Esc` 关闭；`Teleport` 到 `body` 避免被父容器裁切；`role="menu"` 无障碍语义。
+- **新增文件**：
+  - `src/components/review/annotationTableClipboard.ts` · `copyToClipboard(text)`（带 execCommand 兜底）+ `buildRowClipboardLine(item)` + `pickItemRefno(item)`
+  - `src/components/review/annotationTableClipboard.test.ts` · 7 个单测
+- **组件改动**：`AnnotationTableView.vue` 新增 contextMenu 状态 / 生命周期 hook（document mousedown + keydown 监听）/ 4 个菜单动作 handler / 菜单 template
+- **新 emit 事件**：`copy-feedback({ kind: 'refno' | 'row', result: 'copied' | 'fallback' | 'failed', item })`，便于父组件 toast 提示
+- **测试**：AnnotationTableView.test.ts 新增 3 用例（contextmenu 弹出 + Esc 关闭 / "定位"项 emit / 菜单外点击关闭）· clipboard.test.ts 7 个 · **累计 107 用例全绿**
+
 ### Added（批注表格视图 · MVP PR 2.6 · 键盘导航 + 搜索高亮）
 
 - **键盘导航**：`AnnotationTableView` 根容器监听键盘事件，当焦点在行（`role="row"` / `role="listitem"`）上时支持：

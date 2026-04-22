@@ -516,4 +516,76 @@ describe('AnnotationTableView', () => {
 
     destroy();
   });
+
+  it('18. 右键行弹出 contextMenu · 按 Esc 关闭', async () => {
+    const items = [createItem({ id: 'ctx-1', title: 'DN800', refnos: ['24381_145018'] })];
+    const { host, destroy } = mountTable({ items });
+    await nextTick();
+
+    const row = host.querySelector<HTMLElement>('[role="row"]');
+    expect(row).not.toBeNull();
+
+    // 菜单初始不存在
+    expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).toBeNull();
+
+    row?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+    await nextTick();
+
+    const menu = document.querySelector('[data-testid="annotation-table-context-menu"]');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('role')).toBe('menu');
+
+    // 按 Esc 关闭
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await nextTick();
+    expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).toBeNull();
+
+    destroy();
+  });
+
+  it('19. 菜单"定位"项 emit locate-annotation · 菜单关闭', async () => {
+    vi.useFakeTimers();
+    const items = [createItem({ id: 'ctx-2', title: 'DN800' })];
+    const { host, locateSpy, destroy } = mountTable({ items });
+    await nextTick();
+
+    const row = host.querySelector<HTMLElement>('[role="row"]');
+    row?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+    await nextTick();
+
+    const locateBtn = document.querySelector<HTMLButtonElement>('[data-testid="annotation-table-ctx-locate"]');
+    expect(locateBtn).not.toBeNull();
+    locateBtn?.click();
+    // 等异步操作 flush
+    await vi.runAllTimersAsync();
+    await nextTick();
+
+    expect(locateSpy).toHaveBeenCalledTimes(1);
+    expect(locateSpy.mock.calls[0][0].id).toBe('ctx-2');
+    expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).toBeNull();
+
+    destroy();
+  });
+
+  it('20. 菜单外点击关闭 contextMenu · 不影响行 click', async () => {
+    const items = [createItem({ id: 'ctx-3', title: 'DN800' })];
+    const { host, destroy } = mountTable({ items });
+    await nextTick();
+
+    const row = host.querySelector<HTMLElement>('[role="row"]');
+    row?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+    await nextTick();
+    expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).not.toBeNull();
+
+    // 在 body 其他位置 mousedown（注意 capture=true，所以需要 bubbles 触发）
+    const outside = document.createElement('div');
+    document.body.appendChild(outside);
+    outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    await nextTick();
+
+    expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).toBeNull();
+
+    outside.remove();
+    destroy();
+  });
 });

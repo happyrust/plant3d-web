@@ -9,7 +9,7 @@
  * 事件命名与 AnnotationWorkspace.vue 对齐，PR 3 接入时可无缝复用现有处理函数。
  */
 
-import { computed, onBeforeUnmount, ref, shallowRef, toRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue';
 
 import {
   ArrowDown,
@@ -24,6 +24,12 @@ import {
   Search,
 } from 'lucide-vue-next';
 
+import {
+  buildRowClipboardLine,
+  copyToClipboard,
+  pickItemRefno,
+  type ClipboardResult,
+} from './annotationTableClipboard';
 import {
   buildCsvFilename,
   downloadCsv,
@@ -68,6 +74,7 @@ const emit = defineEmits<{
   (e: 'select-annotation', item: AnnotationWorkspaceItem): void;
   (e: 'open-annotation', item: AnnotationWorkspaceItem): void;
   (e: 'locate-annotation', item: AnnotationWorkspaceItem): void;
+  (e: 'copy-feedback', payload: { kind: 'refno' | 'row'; result: ClipboardResult; item: AnnotationWorkspaceItem }): void;
 }>();
 
 // ----------------------------------------------------------------------
@@ -130,6 +137,100 @@ function findCurrentRowIndex(): number {
   const active = document.activeElement as HTMLElement | null;
   if (!active) return -1;
   return getRowElements().indexOf(active);
+}
+
+// ----------------------------------------------------------------------
+// 右键菜单（contextMenu）
+// ----------------------------------------------------------------------
+
+type ContextMenuState = {
+  x: number;
+  y: number;
+  item: AnnotationWorkspaceItem;
+};
+
+const contextMenu = ref<ContextMenuState | null>(null);
+
+const CONTEXT_MENU_WIDTH = 228;
+const CONTEXT_MENU_MAX_HEIGHT = 260;
+
+function handleRowContextMenu(event: MouseEvent, item: AnnotationWorkspaceItem) {
+  event.preventDefault();
+  event.stopPropagation();
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1920;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 1080;
+  contextMenu.value = {
+    x: Math.min(event.clientX, vw - CONTEXT_MENU_WIDTH - 8),
+    y: Math.min(event.clientY, vh - CONTEXT_MENU_MAX_HEIGHT - 8),
+    item,
+  };
+}
+
+function closeContextMenu() {
+  contextMenu.value = null;
+}
+
+function onDocMouseDown(event: MouseEvent) {
+  if (!contextMenu.value) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('[data-testid="annotation-table-context-menu"]')) return;
+  closeContextMenu();
+}
+
+function onDocKeyDown(event: KeyboardEvent) {
+  if (contextMenu.value && event.key === 'Escape') {
+    event.preventDefault();
+    closeContextMenu();
+  }
+}
+
+onMounted(() => {
+  if (typeof document === 'undefined') return;
+  document.addEventListener('mousedown', onDocMouseDown, true);
+  document.addEventListener('keydown', onDocKeyDown);
+});
+
+onBeforeUnmount(() => {
+  if (typeof document === 'undefined') return;
+  document.removeEventListener('mousedown', onDocMouseDown, true);
+  document.removeEventListener('keydown', onDocKeyDown);
+});
+
+async function menuLocate() {
+  const state = contextMenu.value;
+  if (!state) return;
+  emit('locate-annotation', state.item);
+  closeContextMenu();
+}
+
+async function menuOpenDetail() {
+  const state = contextMenu.value;
+  if (!state) return;
+  emit('select-annotation', state.item);
+  closeContextMenu();
+}
+
+async function menuCopyRefno() {
+  const state = contextMenu.value;
+  if (!state) return;
+  const refno = pickItemRefno(state.item);
+  if (!refno) {
+    emit('copy-feedback', { kind: 'refno', result: 'failed', item: state.item });
+    closeContextMenu();
+    return;
+  }
+  const result = await copyToClipboard(refno);
+  emit('copy-feedback', { kind: 'refno', result, item: state.item });
+  closeContextMenu();
+}
+
+async function menuCopyRowAsCsv() {
+  const state = contextMenu.value;
+  if (!state) return;
+  const csvLine = buildRowClipboardLine(state.item);
+  const result = await copyToClipboard(csvLine);
+  emit('copy-feedback', { kind: 'row', result, item: state.item });
+  closeContextMenu();
 }
 
 function handleRowKeyNav(event: KeyboardEvent) {
@@ -494,6 +595,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           ]"
           @click="handleRowClick(item)"
           @dblclick="handleRowDblClick(item)"
+          @contextmenu="handleRowContextMenu($event, item)"
           @keydown.enter.prevent="handleRowClick(item)"
           @keydown.space.prevent="handleRowDblClick(item)">
           <!-- 序号 -->
@@ -566,6 +668,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           :class="isActiveRow(item) ? 'border-amber-400 ring-1 ring-amber-300' : 'border-slate-200'"
           @click="handleRowClick(item)"
           @dblclick="handleRowDblClick(item)"
+          @contextmenu="handleRowContextMenu($event, item)"
           @keydown.enter.prevent="handleRowClick(item)"
           @keydown.space.prevent="handleRowDblClick(item)">
           <header class="flex items-center gap-2">
@@ -631,5 +734,54 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
         </div>
       </div>
     </template>
+
+    <!-- Context Menu (teleport-style overlay · fixed) -->
+    <Teleport v-if="contextMenu" to="body">
+      <div role="menu"
+        data-testid="annotation-table-context-menu"
+        class="fixed z-[1200] min-w-[228px] rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-[0_10px_30px_rgba(15,23,42,0.18)]"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+        @click.stop
+        @contextmenu.prevent>
+        <div class="px-3 py-1 text-[10px] font-mono-ui text-slate-400 uppercase tracking-wider">
+          批注 #{{ (currentPage - 1) * pageSize + filteredItems.indexOf(contextMenu.item) + 1 }}
+        </div>
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          data-testid="annotation-table-ctx-locate"
+          @click="menuLocate">
+          <LocateFixed class="h-4 w-4 text-slate-500" />
+          <span class="flex-1">定位到三维模型</span>
+          <span class="text-[11px] text-slate-400">Enter</span>
+        </button>
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          data-testid="annotation-table-ctx-open"
+          @click="menuOpenDetail">
+          <MessageSquare class="h-4 w-4 text-slate-500" />
+          <span class="flex-1">打开处理详情 drawer</span>
+        </button>
+        <div class="my-1 h-px bg-slate-100" />
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="!pickItemRefno(contextMenu.item)"
+          data-testid="annotation-table-ctx-copy-refno"
+          @click="menuCopyRefno">
+          <span class="inline-flex h-4 w-4 items-center justify-center text-[13px] text-slate-500">🔗</span>
+          <span class="flex-1 truncate">复制 refno
+            <span v-if="pickItemRefno(contextMenu.item)" class="text-slate-400">
+              · {{ pickItemRefno(contextMenu.item) }}
+            </span>
+          </span>
+        </button>
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          data-testid="annotation-table-ctx-copy-row"
+          @click="menuCopyRowAsCsv">
+          <span class="inline-flex h-4 w-4 items-center justify-center text-[13px] text-slate-500">📋</span>
+          <span class="flex-1">复制为记录卡一行</span>
+        </button>
+      </div>
+    </Teleport>
   </section>
 </template>
