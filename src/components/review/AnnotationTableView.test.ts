@@ -268,7 +268,11 @@ describe('AnnotationTableView', () => {
 
     const rows = host.querySelectorAll('[role="row"]');
     expect(rows).toHaveLength(1);
-    expect(host.innerHTML).toContain('DN800 管段');
+    // 命中行的 title 应被 <mark> 包裹高亮
+    expect(host.innerHTML).toContain('<mark');
+    expect(host.innerHTML).toContain('>DN800</mark>');
+    // 非 mark 部分保留原文
+    expect(host.innerHTML).toContain('管段');
 
     destroy();
   });
@@ -438,6 +442,77 @@ describe('AnnotationTableView', () => {
     // description 文本不出现（只保留 title）
     expect(host.innerHTML).not.toContain('关键描述');
     expect(host.innerHTML).toContain('DN800 管段');
+
+    destroy();
+  });
+
+  it('15. ↑ ↓ 键在行间移动焦点', async () => {
+    const items = [
+      createItem({ id: 'k1', title: '第一行' }),
+      createItem({ id: 'k2', title: '第二行' }),
+      createItem({ id: 'k3', title: '第三行' }),
+    ];
+    const { host, destroy } = mountTable({ items });
+    await nextTick();
+
+    const rows = host.querySelectorAll<HTMLElement>('[role="row"]');
+    expect(rows.length).toBe(3);
+
+    // 聚焦第一行 → 按 ↓ 应到第二行
+    rows[0].focus();
+    rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await nextTick();
+    expect(document.activeElement).toBe(rows[1]);
+
+    // 在第二行按 ↓ 到第三行
+    rows[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await nextTick();
+    expect(document.activeElement).toBe(rows[2]);
+
+    // 在第三行按 ↓ 被夹紧（保持最后一行）
+    rows[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await nextTick();
+    expect(document.activeElement).toBe(rows[2]);
+
+    // 按 ↑ 返回第二行
+    rows[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    await nextTick();
+    expect(document.activeElement).toBe(rows[1]);
+
+    destroy();
+  });
+
+  it('16. Home / End 跳首尾行', async () => {
+    const items = [
+      createItem({ id: 'h1', title: '一' }),
+      createItem({ id: 'h2', title: '二' }),
+      createItem({ id: 'h3', title: '三' }),
+    ];
+    const { host, destroy } = mountTable({ items });
+    await nextTick();
+
+    const rows = host.querySelectorAll<HTMLElement>('[role="row"]');
+
+    rows[1].focus();
+    rows[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    await nextTick();
+    expect(document.activeElement).toBe(rows[2]);
+
+    rows[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    await nextTick();
+    expect(document.activeElement).toBe(rows[0]);
+
+    destroy();
+  });
+
+  it('17. title 含 <script> 时被 escape 后再高亮 · 不会执行脚本', async () => {
+    const items = [createItem({ id: 'xss-1', title: '<script>alert(1)</script>危险' })];
+    const { host, destroy } = mountTable({ items });
+    await nextTick();
+
+    // innerHTML 中不应出现可执行的 <script> 标签；应为转义后的 &lt;script&gt;
+    expect(host.innerHTML).toContain('&lt;script&gt;');
+    expect(host.innerHTML).toContain('危险');
 
     destroy();
   });

@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+### Added（批注表格视图 · MVP PR 2.6 · 键盘导航 + 搜索高亮）
+
+- **键盘导航**：`AnnotationTableView` 根容器监听键盘事件，当焦点在行（`role="row"` / `role="listitem"`）上时支持：
+  - `↑` / `↓` 移动到上/下一行（越界不翻转，停在首/末）
+  - `Home` / `End` 跳转首/末行
+  - `PageUp` / `PageDown` 翻分页（若有分页）
+  - 无障碍专用，对齐 Pencil `JUta4` 设计稿；行仍保留 `Enter` 单击 / `Space` 双击语义。
+- **搜索高亮**：新增 `annotationTableHighlight.ts` · `highlightMatches(text, query)` 纯函数，先 HTML 转义文本再用正则包裹 `<mark>`，多段匹配全部高亮；同时暴露 `escapeHtml` / `hasMatch` 辅助函数。
+  - `AnnotationTableView` 的 title / description（表格模式和 Compact 卡片模式）都通过 `v-html` 使用 `highlightTitle` / `highlightDescription`，所有用户输入走 escape 通道，**XSS 防护内置**（专项 test：`<script>` 被转义为 `&lt;script&gt;`）。
+- **测试**：`annotationTableHighlight.test.ts` 15 个用例（转义 / 空查询 / 大小写 / 多段 / 中文 / RegExp 元字符 / XSS / 空 text）+ `AnnotationTableView.test.ts` 新增 3 个（↑↓导航、Home/End、XSS 防护）+ 搜索 test 改为断言 `<mark>` 渲染。累计 **97 个单测全绿**。
+- **设计依据**：Pencil `JUta4` (键盘无障碍) + 交互细则 §10 对 `/` `↑↓` `Enter` `Esc` `Space` 的约定。
+
 ### Added（批注表格视图 · MVP PR 2.5 · 响应式退化）
 
 - **`useContainerQuery` 通用响应式 hook**：基于 `ResizeObserver` 监听任意容器宽度变化，返回 `mode: 'compact' | 'medium' | 'wide'` 与 `width` 两个响应式 ref。断点默认 `compactMax=640` / `mediumMax=960`，可选自定义；支持 SSR / 测试环境的 `initialMode`；组件卸载自动 `disconnect`。

@@ -29,6 +29,7 @@ import {
   downloadCsv,
   toAnnotationTableCsv,
 } from './annotationTableExport';
+import { highlightMatches } from './annotationTableHighlight';
 
 import type { AnnotationTableSortKey } from './annotationTableSorting';
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
@@ -96,6 +97,84 @@ const { mode: layoutMode } = useContainerQuery(rootEl);
 const isCompact = computed(() => layoutMode.value === 'compact');
 const isMedium = computed(() => layoutMode.value === 'medium');
 const isWide = computed(() => layoutMode.value === 'wide');
+
+// ----------------------------------------------------------------------
+// 搜索高亮 helpers
+// ----------------------------------------------------------------------
+
+function highlightTitle(item: AnnotationWorkspaceItem): string {
+  return highlightMatches(item.title, filters.value.search);
+}
+
+function highlightDescription(item: AnnotationWorkspaceItem): string {
+  return highlightMatches(item.description, filters.value.search);
+}
+
+// ----------------------------------------------------------------------
+// 键盘导航 · ↑ ↓ Home End PageUp PageDown
+// ----------------------------------------------------------------------
+
+function getRowElements(): HTMLElement[] {
+  if (!rootEl.value) return [];
+  return Array.from(rootEl.value.querySelectorAll<HTMLElement>('[role="row"], [role="listitem"]'));
+}
+
+function focusRowByIndex(index: number) {
+  const rows = getRowElements();
+  if (rows.length === 0) return;
+  const clamped = Math.max(0, Math.min(rows.length - 1, index));
+  rows[clamped]?.focus();
+}
+
+function findCurrentRowIndex(): number {
+  const active = document.activeElement as HTMLElement | null;
+  if (!active) return -1;
+  return getRowElements().indexOf(active);
+}
+
+function handleRowKeyNav(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null;
+  if (!target) return;
+  // 仅当焦点在行上时响应（不拦截搜索框输入）
+  const isOnRow = target.getAttribute('role') === 'row' || target.getAttribute('role') === 'listitem';
+  if (!isOnRow) return;
+
+  const current = findCurrentRowIndex();
+  const rows = getRowElements();
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault();
+      focusRowByIndex(current < 0 ? 0 : current + 1);
+      return;
+    case 'ArrowUp':
+      event.preventDefault();
+      focusRowByIndex(current < 0 ? rows.length - 1 : current - 1);
+      return;
+    case 'Home':
+      event.preventDefault();
+      focusRowByIndex(0);
+      return;
+    case 'End':
+      event.preventDefault();
+      focusRowByIndex(rows.length - 1);
+      return;
+    case 'PageDown':
+      event.preventDefault();
+      if (currentPage.value < totalPages.value) {
+        setPage(currentPage.value + 1);
+      }
+      return;
+    case 'PageUp':
+      event.preventDefault();
+      if (currentPage.value > 1) {
+        setPage(currentPage.value - 1);
+      }
+      return;
+    default:
+      return;
+  }
+}
 
 const searchInput = ref('');
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -294,7 +373,8 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
   <section ref="rootEl"
     class="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
     :data-testid="'annotation-table-view'"
-    :data-layout-mode="layoutMode">
+    :data-layout-mode="layoutMode"
+    @keydown="handleRowKeyNav">
     <!-- Toolbar -->
     <header class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2.5">
       <div class="min-w-0">
@@ -431,9 +511,15 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           </div>
 
           <!-- 校核发现问题 · Medium 下隐藏 description 只保留 title -->
+          <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
           <div class="flex-1 pr-4 text-xs leading-snug text-slate-700 line-clamp-2">
-            <span class="font-semibold text-slate-950">{{ item.title }}</span>
-            <span v-if="isWide && item.description" class="text-slate-500"> · {{ item.description }}</span>
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <span class="font-semibold text-slate-950" v-html="highlightTitle(item)" />
+            <template v-if="isWide && item.description">
+              <span class="text-slate-500"> · </span>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <span class="text-slate-500" v-html="highlightDescription(item)" />
+            </template>
           </div>
 
           <!-- 处理情况 · Medium 下收窄 -->
@@ -505,8 +591,11 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
             </span>
           </header>
 
-          <h3 class="mt-1.5 text-sm font-semibold text-slate-950 line-clamp-1">{{ item.title }}</h3>
-          <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2">{{ item.description }}</p>
+          <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <h3 class="mt-1.5 text-sm font-semibold text-slate-950 line-clamp-1" v-html="highlightTitle(item)" />
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2" v-html="highlightDescription(item)" />
 
           <footer class="mt-2 flex items-center gap-2 text-[11px]">
             <span class="font-semibold" :class="statusTextClass(item)">
