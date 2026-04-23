@@ -10,6 +10,10 @@
  *   - 不在模块加载阶段做任何副作用，便于在 SSR / 单测里安全 import。
  */
 
+import type { AnnotationComment } from '@/types/auth';
+
+import { buildCommentThreadKey } from '../domain/commentThread';
+import { lowerSnapshotComment } from '../domain/reviewSnapshot';
 import { isReviewFlagEnabled } from '../flags';
 
 import {
@@ -53,6 +57,24 @@ export function isReviewCommentThreadStoreActive(): boolean {
     isReviewFlagEnabled('REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ')
     || isReviewFlagEnabled('REVIEW_C_COMMENT_THREAD_STORE_CUTOVER')
   );
+}
+
+/**
+ * PROMOTE 读路径：从 commentThreadStore 读取指定批注的评论，
+ * 返回 AnnotationComment[] 格式（与 useToolStore.getAnnotationComments 兼容）。
+ *
+ * 用法：在 DUAL_READ/PROMOTE 阶段，UI 组件可用此函数替代
+ * `useToolStore().getAnnotationComments(type, id)` 来读取评论。
+ */
+export function getCommentsFromStore(
+  annotationType: 'text' | 'cloud' | 'rect' | 'obb',
+  annotationId: string,
+): AnnotationComment[] {
+  const store = getReviewCommentThreadStore();
+  const key = buildCommentThreadKey(annotationType, annotationId);
+  const thread = store.getThread(key);
+  if (!thread) return [];
+  return thread.entries.map(lowerSnapshotComment);
 }
 
 /**

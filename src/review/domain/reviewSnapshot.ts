@@ -173,3 +173,22 @@ export function liftAnnotationComment(
     reviewRound: context.reviewRound,
   };
 }
+
+/**
+ * SnapshotComment → AnnotationComment 反向适配（PROMOTE 读路径）。
+ * 用于在 PROMOTE 阶段让 UI 从 commentThreadStore 读取评论时，
+ * 保持与现有 AnnotationComment 类型兼容。
+ */
+export function lowerSnapshotComment(snapshot: SnapshotComment): AnnotationComment {
+  return {
+    id: snapshot.commentId,
+    annotationId: snapshot.annotationId,
+    annotationType: snapshot.annotationType,
+    authorId: snapshot.authorId ?? '',
+    authorName: snapshot.authorName ?? '',
+    authorRole: (snapshot.authorRole ?? 'viewer') as AnnotationComment['authorRole'],
+    content: snapshot.content,
+    replyToId: snapshot.replyToId,
+    createdAt: snapshot.createdAt,
+  };
+}
