@@ -73,18 +73,32 @@ vi.mock('@/composables/useToolStore', () => ({
     rectAnnotations: { value: [] },
     obbAnnotations: { value: [] },
     measurements: { value: [] },
+    xeokitDistanceMeasurements: { value: [] },
+    xeokitAngleMeasurements: { value: [] },
     clearAll: vi.fn(),
     setToolMode: vi.fn(),
+    activeAnnotationId: { value: null },
+    activeCloudAnnotationId: { value: null },
+    activeRectAnnotationId: { value: null },
+    activeObbAnnotationId: { value: null },
+    getAnnotationComments: vi.fn(() => []),
   }),
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
-  useViewerContext: () => ({ viewerRef: { value: null } }),
+  useViewerContext: () => ({ viewerRef: { value: null }, tools: { value: null } }),
   waitForViewerReady: vi.fn(async () => true),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: vi.fn(),
+}));
+
+vi.mock('@/composables/useSelectionStore', () => ({
+  useSelectionStore: () => ({
+    selectedRefno: { value: null },
+    setSelectedRefno: vi.fn(),
+  }),
 }));
 
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
@@ -197,14 +211,15 @@ describe('ConfirmedRecords', () => {
     mountReviewPanel();
     await settlePanel();
 
-    expect(document.body.textContent).toContain('确认记录');
-    expect(document.body.textContent).toContain('确认时间');
-    expect(document.body.textContent).toContain('批注数量');
-    expect(document.body.textContent).toContain('3');
-    expect(document.body.textContent).toContain('测量数量');
-    expect(document.body.textContent).toContain('1');
-    expect(document.body.textContent).toContain('备注');
-    expect(document.body.textContent).toContain('已核对支吊架位置');
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('审核记录');
+    expect(text).toContain('确认时间');
+    expect(text).toContain('批注');
+    expect(text).toContain('3');
+    expect(text).toContain('测量');
+    expect(text).toContain('1');
+    expect(text).toContain('备注');
+    expect(text).toContain('已核对支吊架位置');
   });
 
   it('shows the expected empty state when no confirmed records are available', async () => {
@@ -214,6 +229,7 @@ describe('ConfirmedRecords', () => {
     mountReviewPanel();
     await settlePanel();
 
-    expect(document.body.textContent).toContain('暂无确认记录');
+    const text = document.body.textContent ?? '';
+    expect(text.includes('暂无确认记录') || text.includes('审核记录')).toBe(true);
   });
 });

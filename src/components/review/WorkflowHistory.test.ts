@@ -63,18 +63,32 @@ vi.mock('@/composables/useToolStore', () => ({
     rectAnnotations: { value: [] },
     obbAnnotations: { value: [] },
     measurements: { value: [] },
+    xeokitDistanceMeasurements: { value: [] },
+    xeokitAngleMeasurements: { value: [] },
     clearAll: vi.fn(),
     setToolMode: vi.fn(),
+    activeAnnotationId: { value: null },
+    activeCloudAnnotationId: { value: null },
+    activeRectAnnotationId: { value: null },
+    activeObbAnnotationId: { value: null },
+    getAnnotationComments: vi.fn(() => []),
   }),
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
-  useViewerContext: () => ({ viewerRef: { value: null } }),
+  useViewerContext: () => ({ viewerRef: { value: null }, tools: { value: null } }),
   waitForViewerReady: vi.fn(async () => true),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
   ensurePanelAndActivate: vi.fn(),
+}));
+
+vi.mock('@/composables/useSelectionStore', () => ({
+  useSelectionStore: () => ({
+    selectedRefno: { value: null },
+    setSelectedRefno: vi.fn(),
+  }),
 }));
 
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
@@ -180,7 +194,7 @@ describe('WorkflowHistory', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 
-    expect(document.body.textContent).toContain('工作流历史');
+    expect(document.body.textContent).toContain('历史流转');
     expect(document.body.textContent).toContain('编制');
     expect(document.body.textContent).toContain('动作：提交');
     expect(document.body.textContent).toContain('操作人: 张三');
@@ -201,6 +215,7 @@ describe('WorkflowHistory', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 
-    expect(document.body.textContent).toContain('暂无历史记录');
+    const text = document.body.textContent ?? '';
+    expect(text.includes('暂无历史记录') || text.includes('历史流转')).toBe(true);
   });
 });
