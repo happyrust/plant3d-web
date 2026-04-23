@@ -1,16 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
+import { useUserStore } from '@/composables/useUserStore';
 import { emitCommand } from '@/ribbon/commandBus';
 import { RIBBON_TABS } from '@/ribbon/ribbonConfig';
 import { ribbonIcons, type RibbonIconName } from '@/ribbon/ribbonIcons';
+import { filterRibbonItemsForUser } from '@/ribbon/ribbonItemVisibility';
 import { onToast, type ToastLevel } from '@/ribbon/toastBus';
 
 const activeTabId = ref(RIBBON_TABS[0]?.id ?? '');
 const collapsed = ref(false);
 
+const userStore = useUserStore();
+
 const activeTab = computed(() => {
   return RIBBON_TABS.find((t) => t.id === activeTabId.value) ?? RIBBON_TABS[0];
+});
+
+const activeTabVisibleGroups = computed(() => {
+  const tab = activeTab.value;
+  if (!tab) return [];
+  const userRole = userStore.currentUser.value?.role;
+  return tab.groups.map((group) => ({
+    ...group,
+    items: filterRibbonItemsForUser(group.items, userRole),
+  }));
 });
 
 function toggleCollapse() {
@@ -100,7 +114,7 @@ function onTabClick(tabId: string) {
 
     <!-- Tab Content Panel -->
     <div v-show="!collapsed" class="ribbon-content-panel">
-      <div v-for="group in activeTab?.groups"
+      <div v-for="group in activeTabVisibleGroups"
         :key="group.id"
         class="ribbon-group">
         <!-- Group Content -->

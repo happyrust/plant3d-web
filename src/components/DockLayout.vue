@@ -6,6 +6,7 @@ import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 import type { ReviewTask } from '@/types/auth';
 
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
+import { requestDesignerCommentViewMode } from '@/components/review/designerCommentViewModeBus';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import { restoreEmbedFormSnapshotContext } from '@/components/review/embedFormSnapshotRestore';
 import {
@@ -14,6 +15,7 @@ import {
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
   EMBED_MODE_PARAMS_STORAGE_KEY,
+  getEmbedLandingPanelIdsWithOptions,
   getVerifiedEmbedFormId,
   getVerifiedEmbedWorkflowMode,
   readEmbedModeParamsFromSearch,
@@ -23,9 +25,10 @@ import {
   type EmbedLandingState,
   type EmbedModeParams,
 } from '@/components/review/embedRoleLanding';
+import { requestReviewerWorkbenchViewMode } from '@/components/review/reviewerWorkbenchViewModeBus';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
-import { ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
+import { dockPanelExists, ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import {
   initPanelZones,
@@ -174,6 +177,19 @@ async function ensureModelRefnosVisible(
 ): Promise<void> {
   if (componentRefnos.length === 0) return;
 
+  const normalizedRefnos = componentRefnos
+    .map((refno) => normalizeRefnoSlash(refno))
+    .filter(Boolean);
+
+  if (typeof console !== 'undefined') {
+    console.info('[embed][viewer-restore] preparing showModelByRefnos', {
+      taskId: context.taskId,
+      formId: context.formId,
+      sourceRefnos: componentRefnos,
+      normalizedRefnos,
+    });
+  }
+
   const viewerReady = await waitForViewerReady({ timeoutMs: 6000 });
   if (!viewerReady) {
     console.warn('[DockLayout] Viewer 未就绪，跳过 form_id 默认模型加载', {
@@ -184,11 +200,22 @@ async function ensureModelRefnosVisible(
   }
 
   const result = await showModelByRefnosWithAck({
-    refnos: componentRefnos.map((refno) => normalizeRefnoSlash(refno)),
+    refnos: normalizedRefnos,
     flyTo: true,
     ensureViewerReady: false,
     timeoutMs: 15_000,
   });
+
+  if (typeof console !== 'undefined') {
+    console.info('[embed][viewer-restore] showModelByRefnos result', {
+      taskId: context.taskId,
+      formId: context.formId,
+      requestedRefnos: normalizedRefnos,
+      ok: result.ok,
+      fail: result.fail,
+      error: result.error,
+    });
+  }
 
   if (result.error && result.ok.length === 0) {
     console.warn('[DockLayout] form_id 默认模型加载失败', {
@@ -1050,6 +1077,27 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.designerCommentHandling':
       togglePanel('designerCommentHandling');
       return;
+    case 'panel.annotationTable': {
+      if (dockPanelExists('review')) {
+        ensurePanelAndActivate('review');
+        requestReviewerWorkbenchViewMode('table');
+        return;
+      }
+      if (dockPanelExists('designerCommentHandling')) {
+        ensurePanelAndActivate('designerCommentHandling');
+        requestDesignerCommentViewMode('table');
+        return;
+      }
+      const preferReviewer = userStore.isReviewer.value && !userStore.isDesigner.value;
+      if (preferReviewer) {
+        ensurePanelAndActivate('review');
+        requestReviewerWorkbenchViewMode('table');
+      } else {
+        ensurePanelAndActivate('designerCommentHandling');
+        requestDesignerCommentViewMode('table');
+      }
+      return;
+    }
     case 'panel.monitor':
       togglePanel('taskMonitor');
       return;
@@ -1325,7 +1373,7 @@ async function applyInitialLanding() {
         formId: getVerifiedEmbedFormId(embedModeParams.value),
         loadReviewTasks: userStore.loadReviewTasks,
         reviewerTasks: () => userStore.pendingReviewTasks.value,
-        designerTasks: () => userStore.myInitiatedTasks.value,
+        designerTasks: () => userStore.returnedInitiatedTasks.value,
         allTasks: () => userStore.reviewTasks.value,
         setCurrentTask: reviewStore.setCurrentTask,
         openPanel,
@@ -1336,6 +1384,7 @@ async function applyInitialLanding() {
       const fallbackLandingTarget = resolvePassiveEmbedViewTarget({
         workflowRole: trustedEmbedIdentity?.workflowRole,
         passiveWorkflowMode,
+        formId: getVerifiedEmbedFormId(embedModeParams.value),
         restoredTaskSummary: restoreResult.restoredTaskSummary,
       });
 
@@ -1396,14 +1445,17 @@ async function applyInitialLanding() {
       }
 
       if (landingState) {
+        const verifiedFormId = getVerifiedEmbedFormId(embedModeParams.value);
         const shouldShowDesignerCommentHandling = landingTarget === 'designer'
-          && restoreResult.restoredTask
-          && isCanonicalReturnedTask(restoreResult.restoredTask);
+          && (
+            !!restoreResult.restoredTask
+            && (passiveWorkflowMode || isCanonicalReturnedTask(restoreResult.restoredTask))
+          );
         persistEmbedLandingState({
           ...landingState,
           primaryPanelId: shouldShowDesignerCommentHandling ? 'designerCommentHandling' : landingState.primaryPanelId,
           visiblePanelIds: shouldShowDesignerCommentHandling ? ['designerCommentHandling'] : landingState.visiblePanelIds,
-          formId: getVerifiedEmbedFormId(embedModeParams.value),
+          formId: verifiedFormId,
           restoreStatus: restoreResult.restoreStatus,
           restoredTaskId: restoreResult.restoredTaskId,
           restoredTaskSummary: restoreResult.restoredTaskSummary,
@@ -1428,12 +1480,14 @@ function onReady(event: DockviewReadyEvent) {
   );
 
   if (isEmbedLayoutMode()) {
+    const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
+    const primaryPanelId = landingTarget
+      ? getEmbedLandingPanelIdsWithOptions(landingTarget, {
+        passiveWorkflowMode: isPassiveWorkflowMode(),
+      })[0] as 'review' | 'initiateReview' | 'designerCommentHandling' | undefined
+      : undefined;
     createEmbedFocusedLayout(api.value, {
-      primaryPanelId: resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole) === 'designer'
-        ? 'initiateReview'
-        : resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole) === 'reviewer'
-          ? 'review'
-          : undefined,
+      primaryPanelId,
     });
   } else {
     const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);

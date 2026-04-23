@@ -25,6 +25,21 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
+import {
+  clearAnnotationProcessingEntryTarget,
+  useAnnotationProcessingEntryTarget,
+} from './annotationProcessingEntry';
+import AnnotationTableView from './AnnotationTableView.vue';
+import AnnotationWorkspace from './AnnotationWorkspace.vue';
+import {
+  buildAnnotationWorkspaceItems,
+  buildAnnotationWorkspaceSummary,
+  buildLinkedMeasurementItems,
+  filterAnnotationWorkspaceItems,
+  scopeAnnotationWorkspaceItemsByFormId,
+  type AnnotationWorkspaceFilter,
+  type AnnotationWorkspaceItem,
+} from './annotationWorkspaceModel';
 import CollisionResultList from './CollisionResultList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
@@ -40,8 +55,13 @@ import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
 import {
+  clearReviewerWorkbenchViewModeRequest,
+  useReviewerWorkbenchViewModeRequest,
+} from './reviewerWorkbenchViewModeBus';
+import {
   buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
+  buildUnsavedReviewConfirmPayload,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
   buildReviewConfirmSnapshotKey,
@@ -58,6 +78,7 @@ import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
+import type { ClipboardResult } from './annotationTableClipboard';
 import type { AnnotationReviewState, ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
@@ -66,6 +87,7 @@ import {
   reviewSyncImport,
 } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
@@ -75,6 +97,7 @@ import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '
 import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import {
+  canEditAnnotationSeverity,
   getAnnotationReviewDisplay,
   getAnnotationSeverityDisplay,
   getRoleDisplayName,
@@ -85,6 +108,7 @@ import {
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
 type ConfirmedRecordEntry = typeof reviewStore.sortedConfirmedRecords.value[number];
+type AnnotationListViewMode = 'split' | 'table';
 type WorkflowSyncBridgeAction = 'active' | 'agree' | 'return' | 'stop';
 type WorkflowSyncBridgeMessage = {
   type: 'plant3d.workflow_action';
@@ -114,6 +138,7 @@ const userStore = useUserStore();
 const onboarding = useOnboardingGuide();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
+const annotationProcessingEntryTarget = useAnnotationProcessingEntryTarget();
 
 // 确认记录场景恢复（公共模块）
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
@@ -148,7 +173,6 @@ syncEmbedLandingStateFromStorage();
 
 const confirmNote = ref('');
 
-const showMeasurementMenu = ref(false);
 const workflowRefreshing = ref(false);
 
 // 当前任务信息
@@ -839,42 +863,6 @@ const pendingAnnotationCount = computed(() => {
   );
 });
 
-const reviewerDirectLaunchActions = computed(() => [
-  {
-    id: 'annotation-text',
-    label: '文字批注',
-    description: '在当前审核任务上下文中直接进入文字批注。',
-    onClick: startAnnotation,
-  },
-  {
-    id: 'annotation-cloud',
-    label: '云线批注',
-    description: '保持当前任务上下文，直接启动云线批注。',
-    onClick: startCloudAnnotation,
-  },
-  {
-    id: 'annotation-rect',
-    label: '矩形批注',
-    description: '保持当前任务上下文，直接启动矩形批注。',
-    onClick: startRectAnnotation,
-  },
-]);
-
-const reviewerMeasurementActions = computed(() => [
-  {
-    id: 'measurement-distance',
-    label: '距离测量',
-    description: '从审核工作台直接开始距离测量。',
-    onClick: startDistanceMeasurement,
-  },
-  {
-    id: 'measurement-angle',
-    label: '角度测量',
-    description: '从审核工作台直接开始角度测量。',
-    onClick: startAngleMeasurement,
-  },
-]);
-
 const hasPendingData = computed(() => {
   return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
 });
@@ -891,6 +879,12 @@ const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.
 const confirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
 ));
+const unsavedConfirmPayload = computed(() => (
+  buildUnsavedReviewConfirmPayload(
+    currentDraftConfirmPayload.value,
+    confirmedSnapshotPayload.value,
+  )
+));
 const hasUnsavedChanges = computed(() => {
   return buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
     !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value);
@@ -905,8 +899,213 @@ const submitBlockingConfirmPayload = computed(() => (
 const hasUnsavedBlockingSubmitData = computed(() => (
   hasSubmitBlockingReviewConfirmPayloadData(submitBlockingConfirmPayload.value)
 ));
+const unsavedAnnotationCount = computed(() => (
+  unsavedConfirmPayload.value.annotations.length +
+  unsavedConfirmPayload.value.cloudAnnotations.length +
+  unsavedConfirmPayload.value.rectAnnotations.length +
+  unsavedConfirmPayload.value.obbAnnotations.length
+));
+const unsavedMeasurementCount = computed(() => unsavedConfirmPayload.value.measurements.length);
 const confirmSaving = ref(false);
 const confirmError = ref<string | null>(null);
+
+const annotationFilter = ref<AnnotationWorkspaceFilter>('all');
+const annotationListViewMode = ref<AnnotationListViewMode>('split');
+const selectedAnnotationId = ref<string | null>(null);
+const selectedAnnotationType = ref<AnnotationType | null>(null);
+const externalProcessingTarget = ref<{
+  annotationId: string;
+  annotationType: AnnotationType;
+  formId?: string | null;
+} | null>(null);
+
+const reviewerNavigationState = useNavigationStatePersistence('plant3d-web-nav-state-reviewer-workbench-v1');
+reviewerNavigationState.bindRef<AnnotationListViewMode>(
+  'annotationListViewMode',
+  annotationListViewMode,
+  'split',
+);
+
+const reviewerWorkbenchViewModeRequest = useReviewerWorkbenchViewModeRequest();
+
+watch(reviewerWorkbenchViewModeRequest, (request) => {
+  if (!request) return;
+  annotationListViewMode.value = request.mode;
+  clearReviewerWorkbenchViewModeRequest();
+});
+
+const allAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => buildAnnotationWorkspaceItems({
+  annotations: toolStore.annotations.value,
+  cloudAnnotations: toolStore.cloudAnnotations.value,
+  rectAnnotations: toolStore.rectAnnotations.value,
+  obbAnnotations: toolStore.obbAnnotations.value,
+  getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id).length,
+}));
+
+const scopedAnnotationItems = computed(() => (
+  scopeAnnotationWorkspaceItemsByFormId(allAnnotationItems.value, currentTask.value?.formId)
+));
+
+const annotationWorkspaceSummary = computed(() => (
+  buildAnnotationWorkspaceSummary(scopedAnnotationItems.value)
+));
+
+const filteredAnnotationItems = computed(() => (
+  filterAnnotationWorkspaceItems(scopedAnnotationItems.value, annotationFilter.value)
+));
+
+const selectedAnnotation = computed<AnnotationWorkspaceItem | null>(() => (
+  filteredAnnotationItems.value.find((item) => (
+    item.id === selectedAnnotationId.value && item.type === selectedAnnotationType.value
+  )) ?? null
+));
+
+const linkedMeasurements = computed(() => (
+  buildLinkedMeasurementItems(
+    selectedAnnotation.value,
+    toolStore.measurements.value,
+    [
+      ...toolStore.xeokitDistanceMeasurements.value,
+      ...toolStore.xeokitAngleMeasurements.value,
+    ],
+  )
+));
+
+const canEditSelectedSeverity = computed(() => (
+  canEditAnnotationSeverity(userStore.currentUser.value, selectedAnnotation.value?.authorId)
+));
+
+function setActiveWorkspaceAnnotation(type: AnnotationType | null, id: string | null) {
+  toolStore.activeAnnotationId.value = type === 'text' ? id : null;
+  toolStore.activeCloudAnnotationId.value = type === 'cloud' ? id : null;
+  toolStore.activeRectAnnotationId.value = type === 'rect' ? id : null;
+  toolStore.activeObbAnnotationId.value = type === 'obb' ? id : null;
+}
+
+function selectWorkspaceAnnotation(item: AnnotationWorkspaceItem | null) {
+  if (!item) {
+    selectedAnnotationId.value = null;
+    selectedAnnotationType.value = null;
+    setActiveWorkspaceAnnotation(null, null);
+    return;
+  }
+  selectedAnnotationId.value = item.id;
+  selectedAnnotationType.value = item.type;
+  setActiveWorkspaceAnnotation(item.type, item.id);
+}
+
+function resolvePreferredWorkspaceAnnotation(): AnnotationWorkspaceItem | null {
+  const target = externalProcessingTarget.value;
+  if (target) {
+    const matched = filteredAnnotationItems.value.find((item) => (
+      item.id === target.annotationId && item.type === target.annotationType
+    ));
+    if (matched) return matched;
+  }
+
+  const pending = filteredAnnotationItems.value.find((item) => item.statusKey === 'pending');
+  if (pending) return pending;
+  return filteredAnnotationItems.value[0] ?? null;
+}
+
+watch(
+  () => annotationProcessingEntryTarget.value?.requestedAt ?? null,
+  () => {
+    const target = annotationProcessingEntryTarget.value;
+    if (!target) return;
+    externalProcessingTarget.value = {
+      annotationId: target.annotationId,
+      annotationType: target.annotationType,
+      formId: target.formId,
+    };
+    annotationFilter.value = 'all';
+    clearAnnotationProcessingEntryTarget();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => filteredAnnotationItems.value.map((item) => `${item.type}:${item.id}:${item.activityAt}`).join('|'),
+  () => {
+    const current = selectedAnnotation.value;
+    if (current) {
+      setActiveWorkspaceAnnotation(current.type, current.id);
+      return;
+    }
+
+    const preferred = resolvePreferredWorkspaceAnnotation();
+    if (preferred) {
+      selectWorkspaceAnnotation(preferred);
+      externalProcessingTarget.value = null;
+      return;
+    }
+
+    selectWorkspaceAnnotation(null);
+  },
+  { immediate: true },
+);
+
+watch(annotationFilter, () => {
+  const current = selectedAnnotation.value;
+  if (current) return;
+  const preferred = resolvePreferredWorkspaceAnnotation();
+  if (preferred) {
+    selectWorkspaceAnnotation(preferred);
+    externalProcessingTarget.value = null;
+  }
+});
+
+async function locateWorkspaceAnnotation(item: AnnotationWorkspaceItem | null) {
+  if (!item) return;
+  selectWorkspaceAnnotation(item);
+  ensurePanelAndActivate('viewer');
+  if (!item.refnos.length) return;
+  const result = await showModelByRefnosWithAck({
+    refnos: item.refnos.map((refno) => toSlashComponentRefno(refno)),
+    viewerRef: viewerContext.viewerRef,
+    flyTo: true,
+  });
+  if (result.error && result.ok.length === 0) {
+    emitToast({ message: result.error, level: 'warning' });
+  }
+}
+
+async function handleReviewerTableOpenAnnotation(item: AnnotationWorkspaceItem) {
+  annotationListViewMode.value = 'split';
+  await locateWorkspaceAnnotation(item);
+}
+
+function handleReviewerTableCopyFeedback(payload: {
+  kind: 'refno' | 'row';
+  result: ClipboardResult;
+  item: AnnotationWorkspaceItem;
+}): void {
+  const kindLabel = payload.kind === 'refno' ? 'RefNo' : '批注行';
+  if (payload.result === 'failed') {
+    emitToast({ message: `复制${kindLabel}失败，请重试`, level: 'warning' });
+    return;
+  }
+  emitToast({
+    message: payload.result === 'fallback' ? `已复制${kindLabel}（降级）` : `已复制${kindLabel}`,
+    level: 'success',
+  });
+}
+
+function locateMeasurement(item: (typeof linkedMeasurements.value)[number]) {
+  ensurePanelAndActivate('viewer');
+  if (item.engine === 'xeokit') {
+    toolStore.activeXeokitMeasurementId.value = item.id;
+    viewerContext.xeokitMeasurementTools.value?.flyToMeasurement(item.id);
+    return;
+  }
+  toolStore.activeMeasurementId.value = item.id;
+  viewerContext.tools.value?.flyToMeasurement(item.id);
+}
+
+function updateSelectedAnnotationSeverity(severity: AnnotationSeverity | undefined) {
+  if (!selectedAnnotation.value || !canEditSelectedSeverity.value) return;
+  toolStore.updateAnnotationSeverity(selectedAnnotation.value.type, selectedAnnotation.value.id, severity);
+}
 
 async function confirmCurrentData() {
   if (confirmSaving.value || !hasUnsavedPendingData.value) return;
@@ -926,7 +1125,7 @@ async function confirmCurrentData() {
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
-      clearAll: () => {
+      clearDraftData: () => {
         toolStore.clearAll();
       },
       resetNote: () => {
@@ -972,24 +1171,14 @@ function startRectAnnotation() {
 
 function startDistanceMeasurement() {
   emitCommand('measurement.distance');
-  showMeasurementMenu.value = false;
 }
 
 function startAngleMeasurement() {
   emitCommand('measurement.angle');
-  showMeasurementMenu.value = false;
-}
-
-function handleClickOutside(event: MouseEvent) {
-  const target = event.target as HTMLElement;
-  if (!target.closest('.relative')) {
-    showMeasurementMenu.value = false;
-  }
 }
 
 onMounted(() => {
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
-  document.addEventListener('click', handleClickOutside);
 
   const isAutomation = localStorage.getItem('plant3d_automation_review') === '1'
     || new URLSearchParams(window.location.search).get('automation_review') === '1';
@@ -1068,7 +1257,6 @@ window.addEventListener('beforeunload', beforeUnloadGuard);
 onUnmounted(() => {
   window.removeEventListener('beforeunload', beforeUnloadGuard);
   window.removeEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
-  document.removeEventListener('click', handleClickOutside);
   document.removeEventListener('click', handleModuleMenuClickOutside, { capture: true } as EventListenerOptions);
 });
 
@@ -1174,150 +1362,11 @@ watch(showModuleMenu, (val) => {
 type ReviewTab = 'records' | 'history' | 'attachments';
 const activeReviewTab = ref<ReviewTab>('records');
 const expandedTaskDetails = ref(false);
-const expandedWorkflowHistory = ref(false);
-const expandedConfirmedRecords = ref(false);
-const expandedExtras = ref(false);
 
 const workflowHistoryCount = computed(() => workflow.value?.history?.length ?? 0);
 const confirmedRecordListCount = computed(() => reviewStore.sortedConfirmedRecords.value.length);
-
-// ============ 批注列表（详情 + 评论线程） ============
-
-type AnnotationListItem = {
-  id: string;
-  type: AnnotationType;
-  title: string;
-  description: string;
-  createdAt: number;
-  visible: boolean;
-  commentCount: number;
-  refno?: string;
-  reviewState?: AnnotationReviewState;
-};
-
-const expandedAnnotationId = ref<string | null>(null);
-const expandedAnnotationType = ref<AnnotationType | null>(null);
-
-const allAnnotationItems = computed<AnnotationListItem[]>(() => {
-  const items: AnnotationListItem[] = [];
-
-  for (const a of toolStore.annotations.value) {
-    items.push({
-      id: a.id,
-      type: 'text',
-      title: a.title?.trim() || '未命名文字批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('text', a.id).length,
-      refno: a.refno,
-      reviewState: a.reviewState,
-    });
-  }
-
-  for (const a of toolStore.cloudAnnotations.value) {
-    items.push({
-      id: a.id,
-      type: 'cloud',
-      title: a.title?.trim() || '未命名云线批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('cloud', a.id).length,
-      reviewState: a.reviewState,
-    });
-  }
-
-  for (const a of toolStore.rectAnnotations.value) {
-    items.push({
-      id: a.id,
-      type: 'rect',
-      title: a.title?.trim() || '未命名矩形批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('rect', a.id).length,
-      reviewState: a.reviewState,
-    });
-  }
-
-  for (const a of toolStore.obbAnnotations.value) {
-    items.push({
-      id: a.id,
-      type: 'obb',
-      title: a.title?.trim() || '未命名包围盒批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('obb', a.id).length,
-      reviewState: a.reviewState,
-    });
-  }
-
-  return items.sort((a, b) => b.createdAt - a.createdAt);
-});
-
-const totalAnnotationItemCount = computed(() => allAnnotationItems.value.length);
-
-function getAnnotationTypeBadge(type: AnnotationType): { label: string; colorClass: string } {
-  switch (type) {
-    case 'text': return { label: '文字', colorClass: 'bg-blue-100 text-blue-700' };
-    case 'cloud': return { label: '云线', colorClass: 'bg-violet-100 text-violet-700' };
-    case 'rect': return { label: '矩形', colorClass: 'bg-amber-100 text-amber-700' };
-    case 'obb': return { label: '包围盒', colorClass: 'bg-fuchsia-100 text-fuchsia-700' };
-    default: return { label: '批注', colorClass: 'bg-slate-100 text-slate-700' };
-  }
-}
-
-function getAnnotationReviewBadge(item: AnnotationListItem): { label: string; detail: string; color: string } {
-  return getAnnotationReviewDisplay(item.reviewState);
-}
-
-function formatAnnotationTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`;
-  if (diff < 86_400_000) {
-    return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  }
-  return new Date(timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) +
-    ' ' + new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-}
-
-function toggleAnnotationDetail(item: AnnotationListItem) {
-  if (expandedAnnotationId.value === item.id) {
-    expandedAnnotationId.value = null;
-    expandedAnnotationType.value = null;
-  } else {
-    expandedAnnotationId.value = item.id;
-    expandedAnnotationType.value = item.type;
-  }
-}
-
-function flyToAnnotationItem(item: AnnotationListItem) {
-  if (item.type === 'text') {
-    toolStore.activeAnnotationId.value = item.id;
-    toolStore.activeCloudAnnotationId.value = null;
-    toolStore.activeRectAnnotationId.value = null;
-    toolStore.activeObbAnnotationId.value = null;
-  } else if (item.type === 'cloud') {
-    toolStore.activeCloudAnnotationId.value = item.id;
-    toolStore.activeAnnotationId.value = null;
-    toolStore.activeRectAnnotationId.value = null;
-    toolStore.activeObbAnnotationId.value = null;
-  } else if (item.type === 'rect') {
-    toolStore.activeRectAnnotationId.value = item.id;
-    toolStore.activeAnnotationId.value = null;
-    toolStore.activeCloudAnnotationId.value = null;
-    toolStore.activeObbAnnotationId.value = null;
-  } else if (item.type === 'obb') {
-    toolStore.activeObbAnnotationId.value = item.id;
-    toolStore.activeAnnotationId.value = null;
-    toolStore.activeCloudAnnotationId.value = null;
-    toolStore.activeRectAnnotationId.value = null;
-  }
-}
+const confirmedAnnotationTotal = computed(() => reviewStore.totalConfirmedAnnotations.value);
+const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasurements.value);
 </script>
 
 <template>
@@ -1363,54 +1412,6 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       <div v-if="taskContext?.returnReason"
         class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
         <span class="font-semibold">打回原因：</span>{{ taskContext.returnReason }}
-      </div>
-
-      <!-- 核心操作按钮组 -->
-      <div class="mt-3 flex flex-wrap items-center gap-2" data-testid="review-workbench-workflow-zone" data-guide="workflow-actions">
-        <template v-if="isPassiveWorkflow">
-          <div class="min-w-[18rem] flex-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-            <div class="font-medium">外部流程模式</div>
-            <div class="mt-1 text-xs text-blue-700">
-              当前流程由外部平台驱动，此处仅展示状态，不提供提交、驳回等内部操作。
-            </div>
-            <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-800">
-              <span>当前节点：{{ currentTaskNodeLabel }}</span>
-              <span>当前状态：{{ currentTaskStatusLabel }}</span>
-            </div>
-          </div>
-          <button type="button"
-            class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted disabled:opacity-50"
-            :disabled="workflowLoading || workflowActionLoading || workflowRefreshing"
-            @click="void refreshWorkflowContext()">
-            <RefreshCw :class="['mr-1 inline h-3.5 w-3.5', (workflowLoading || workflowActionLoading || workflowRefreshing) && 'animate-spin']" />
-            刷新
-          </button>
-        </template>
-        <template v-else>
-          <button type="button"
-            class="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
-            @click="toggleSubmitDialog">
-            {{ submitActionLabel }}
-          </button>
-          <button type="button"
-            class="h-8 rounded-md border border-red-200 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-            :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
-            @click="toggleReturnDialog">
-            驳回到设计
-          </button>
-          <button type="button"
-            class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
-            @click="filterModelByTask">
-            <Filter class="mr-1 inline h-3 w-3" />只显示任务构件
-          </button>
-          <button v-if="isFilteringByTask" type="button"
-            class="h-8 rounded-md border border-input px-3 text-sm hover:bg-muted"
-            @click="clearModelFilter">
-            显示全部
-          </button>
-          <div v-if="workflowError" class="text-xs text-red-600">{{ workflowError }}</div>
-        </template>
       </div>
     </div>
 
@@ -1526,170 +1527,185 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       </div>
     </div>
 
-    <!-- ═══════ C. 批注与测量 (合并) ═══════ -->
-    <div class="rounded-md border border-border bg-background p-3">
-      <!-- 校审模式 -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <ClipboardCheck class="h-4 w-4 text-primary" />
-          <span class="text-sm font-semibold">批注与测量</span>
-        </div>
+    <div v-if="currentTask" class="rounded-2xl border border-slate-200 bg-white p-1">
+      <div class="flex flex-wrap items-center gap-1 rounded-[18px] bg-slate-100 p-1">
         <button type="button"
-          class="h-7 rounded-md px-2.5 text-xs"
-          :class="
-            reviewStore.reviewMode.value
-              ? 'bg-primary text-primary-foreground'
-              : 'border border-input bg-background hover:bg-muted'
-          "
-          @click="reviewStore.toggleReviewMode()">
-          校审{{ reviewStore.reviewMode.value ? '已启用' : '已关闭' }}
+          class="rounded-2xl px-3 py-2 text-xs font-semibold transition"
+          :class="activeReviewTab === 'records'
+            ? 'bg-white text-slate-900 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700'"
+          @click="activeReviewTab = 'records'">
+          审核记录
+          <span v-if="confirmedRecordListCount > 0"
+            class="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+            {{ confirmedRecordListCount }}
+          </span>
         </button>
-      </div>
-
-      <!-- 待确认数据计数 -->
-      <div class="mt-2 flex items-center gap-3 text-sm">
-        <div class="flex items-center gap-1.5">
-          <MessageSquare class="h-3.5 w-3.5 text-blue-500" />
-          <span>批注 <strong>{{ pendingAnnotationCount }}</strong></span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <Ruler class="h-3.5 w-3.5 text-green-500" />
-          <span>测量 <strong>{{ pendingMeasurementCount }}</strong></span>
-        </div>
-      </div>
-
-      <!-- 工具按钮 -->
-      <div class="mt-2 flex flex-wrap gap-1.5" data-guide="review-panel-tools" data-testid="reviewer-direct-launch-annotation-zone">
-        <button v-for="action in reviewerDirectLaunchActions"
-          :key="action.id"
-          type="button"
-          class="h-7 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-slate-700 hover:bg-muted"
-          :data-testid="`reviewer-direct-launch-${action.id}`"
-          :title="action.label"
-          @click="action.onClick">
-          {{ action.label }}
+        <button type="button"
+          class="rounded-2xl px-3 py-2 text-xs font-semibold transition"
+          :class="activeReviewTab === 'history'
+            ? 'bg-white text-slate-900 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700'"
+          @click="activeReviewTab = 'history'">
+          历史流转
+          <span v-if="workflowHistoryCount > 0"
+            class="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+            {{ workflowHistoryCount }}
+          </span>
         </button>
-        <div class="relative" data-testid="reviewer-direct-launch-measurement-zone">
+        <button type="button"
+          class="rounded-2xl px-3 py-2 text-xs font-semibold transition"
+          :class="activeReviewTab === 'attachments'
+            ? 'bg-white text-slate-900 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700'"
+          @click="activeReviewTab = 'attachments'">
+          附件材料
+        </button>
+        <div class="ml-auto flex items-center gap-2 px-2">
           <button type="button"
-            class="h-7 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-slate-700 hover:bg-muted"
-            title="创建测量"
-            @click="showMeasurementMenu = !showMeasurementMenu">
-            <Plus class="mr-0.5 inline h-3 w-3" />测量
+            class="rounded-xl px-3 py-1.5 text-xs font-semibold transition"
+            :class="reviewStore.reviewMode.value
+              ? 'bg-slate-900 text-white'
+              : 'border border-slate-200 bg-white text-slate-500 hover:bg-slate-50'"
+            @click="reviewStore.toggleReviewMode()">
+            校审{{ reviewStore.reviewMode.value ? '已启用' : '已关闭' }}
           </button>
-          <div v-if="showMeasurementMenu"
-            class="absolute left-0 top-full z-10 mt-1 rounded-md border border-border bg-background p-1 shadow-md">
-            <button v-for="action in reviewerMeasurementActions"
-              :key="action.id"
-              type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-              :data-testid="`reviewer-direct-launch-${action.id}`"
-              @click="action.onClick">
-              {{ action.label }}
-            </button>
-          </div>
         </div>
-      </div>
-
-      <!-- 确认操作 -->
-      <div v-if="hasPendingData" class="mt-3 border-t border-slate-200 pt-3">
-        <input v-model="confirmNote"
-          class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm"
-          placeholder="备注（可选）" />
-        <button type="button"
-          data-command="review.confirm"
-          class="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          :disabled="!hasUnsavedPendingData || confirmSaving"
-          @click="confirmCurrentData">
-          <CheckCircle class="h-4 w-4" />
-          {{ confirmSaving ? '保存中...' : hasUnsavedPendingData ? '确认当前数据' : '已保存' }}
-        </button>
-        <div v-if="!hasUnsavedPendingData && !confirmError && !hasUnsavedChanges" class="mt-1 text-xs text-muted-foreground">
-          当前批注/测量已保存，新增或修改后可再次确认
-        </div>
-        <div v-if="confirmError" class="mt-1 text-xs text-red-600">{{ confirmError }}</div>
       </div>
     </div>
 
-    <!-- ═══════ C2. 批注列表（每条批注详情 + 评论线程） ═══════ -->
-    <div v-if="totalAnnotationItemCount > 0" class="rounded-lg border border-slate-200 bg-white" data-guide="annotation-list-zone">
-      <div class="flex items-center justify-between px-4 py-3">
-        <div class="flex items-center gap-2">
-          <FileText class="h-4 w-4 text-orange-500" />
-          <span class="text-sm font-semibold text-slate-900">批注列表</span>
-          <span class="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-            {{ totalAnnotationItemCount }}
-          </span>
-        </div>
+    <div v-if="currentTask" class="flex min-h-0 flex-1 flex-col">
+      <div class="mb-3 inline-flex items-center gap-1 self-start rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
+        role="tablist"
+        aria-label="批注视图切换"
+        data-testid="reviewer-annotation-list-view-mode-tabs">
+        <button type="button"
+          role="tab"
+          :aria-selected="annotationListViewMode === 'split'"
+          class="inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition"
+          :class="annotationListViewMode === 'split'
+            ? 'bg-slate-900 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100'"
+          data-testid="reviewer-annotation-list-view-mode-split"
+          @click="annotationListViewMode = 'split'">
+          卡片列表
+        </button>
+        <button type="button"
+          role="tab"
+          :aria-selected="annotationListViewMode === 'table'"
+          class="inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition"
+          :class="annotationListViewMode === 'table'
+            ? 'bg-slate-900 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100'"
+          data-testid="reviewer-annotation-list-view-mode-table"
+          @click="annotationListViewMode = 'table'">
+          批注表格
+        </button>
       </div>
 
-      <div class="flex flex-col gap-0.5 border-t border-slate-100 px-3 py-2">
-        <div v-for="item in allAnnotationItems" :key="item.id">
-          <!-- 批注卡片 -->
-          <div class="cursor-pointer rounded-lg border p-3 transition-colors"
-            :class="expandedAnnotationId === item.id
-              ? 'border-orange-300 bg-orange-50/50 shadow-sm'
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'"
-            @click="toggleAnnotationDetail(item)">
-            <!-- 头部：标题 + 类型标签 + 时间 -->
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5">
-                  <span class="truncate text-sm font-semibold text-slate-900">{{ item.title }}</span>
-                  <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                    :class="getAnnotationTypeBadge(item.type).colorClass">
-                    {{ getAnnotationTypeBadge(item.type).label }}
-                  </span>
-                  <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                    :class="getAnnotationReviewBadge(item).color">
-                    {{ getAnnotationReviewBadge(item).label }}
-                  </span>
+      <AnnotationWorkspace v-if="annotationListViewMode === 'split'"
+        role="reviewer"
+        :items="filteredAnnotationItems"
+        :summary="annotationWorkspaceSummary"
+        :active-filter="annotationFilter"
+        :selected-annotation="selectedAnnotation"
+        :linked-measurements="linkedMeasurements"
+        :confirm-note="confirmNote"
+        :unsaved-annotation-count="unsavedAnnotationCount"
+        :unsaved-measurement-count="unsavedMeasurementCount"
+        :can-confirm="hasUnsavedPendingData"
+        :confirm-saving="confirmSaving"
+        :confirm-error="confirmError"
+        :show-tool-launcher="true"
+        :can-edit-severity="canEditSelectedSeverity"
+        timeline-placeholder="输入处理说明，或补充给校核人的说明..."
+        timeline-submit-label="发送回复"
+        @update:active-filter="annotationFilter = $event"
+        @update:confirm-note="confirmNote = $event"
+        @select-annotation="selectWorkspaceAnnotation"
+        @locate-annotation="void locateWorkspaceAnnotation($event)"
+        @locate-measurement="locateMeasurement"
+        @start-tool="(tool) => {
+          if (tool === 'annotation') startAnnotation();
+          else if (tool === 'annotation_cloud') startCloudAnnotation();
+          else startRectAnnotation();
+        }"
+        @start-measurement="(kind) => {
+          if (kind === 'distance') startDistanceMeasurement();
+          else startAngleMeasurement();
+        }"
+        @update-severity="updateSelectedAnnotationSeverity"
+        @confirm="void confirmCurrentData()">
+        <template #workflow>
+          <div data-testid="review-workbench-workflow-zone" data-guide="workflow-actions">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="space-y-2">
+                <div class="text-sm font-semibold text-slate-950">任务级流转</div>
+                <div class="text-xs leading-5 text-slate-500">
+                  以下按钮属于任务级流转，不替代单条批注处理。请先确认当前数据，再决定继续提交或驳回。
                 </div>
-                <p v-if="item.description" class="mt-0.5 truncate text-xs text-slate-500">{{ item.description }}</p>
-                <div v-if="item.refno" class="mt-1">
-                  <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] text-blue-600">{{ item.refno }}</span>
+                <div v-if="workflowError" class="text-xs text-rose-600">{{ workflowError }}</div>
+              </div>
+
+              <div v-if="isPassiveWorkflow" class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                <div class="font-medium">外部流程模式</div>
+                <div class="mt-1 text-xs text-blue-700">
+                  当前流程由外部平台驱动，此处仅展示状态，不提供内部提交与驳回。
                 </div>
-                <div v-if="item.reviewState?.updatedByName" class="mt-1 text-[11px] text-slate-400">
-                  {{ item.reviewState.updatedByName }}
-                  <span v-if="item.reviewState.updatedByRole"> · {{ getRoleDisplayName(item.reviewState.updatedByRole) }}</span>
-                  <span v-if="item.reviewState.updatedAt"> · {{ formatAnnotationTime(item.reviewState.updatedAt) }}</span>
+                <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-800">
+                  <span>当前节点：{{ currentTaskNodeLabel }}</span>
+                  <span>当前状态：{{ currentTaskStatusLabel }}</span>
                 </div>
               </div>
-              <span class="shrink-0 text-[11px] text-slate-400">{{ formatAnnotationTime(item.createdAt) }}</span>
             </div>
 
-            <!-- 底部：评论数 + 操作 -->
-            <div class="mt-2 flex items-center justify-between">
-              <div class="flex items-center gap-2 text-[11px] text-slate-400">
-                <div class="truncate">{{ getAnnotationReviewBadge(item).detail }}</div>
-                <div v-if="item.commentCount > 0" class="flex items-center gap-1 text-orange-500">
-                  <MessageSquare class="h-3 w-3" />
-                  <span class="font-medium">{{ item.commentCount }} 条意见</span>
-                </div>
-                <div v-else class="text-slate-400">暂无意见</div>
-              </div>
-              <div class="flex items-center gap-0.5">
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <button v-if="isPassiveWorkflow" type="button"
+                class="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                :disabled="workflowLoading || workflowActionLoading || workflowRefreshing"
+                @click="void refreshWorkflowContext()">
+                <RefreshCw :class="['h-4 w-4', (workflowLoading || workflowActionLoading || workflowRefreshing) && 'animate-spin']" />
+                刷新
+              </button>
+              <template v-else>
                 <button type="button"
-                  class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-500"
-                  title="在场景中定位此批注"
-                  @click.stop="flyToAnnotationItem(item)">
-                  <ArrowRight class="h-3.5 w-3.5" />
+                  class="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  @click="filterModelByTask">
+                  <Filter class="mr-1 inline h-3.5 w-3.5" />只显示任务构件
                 </button>
-                <ChevronDown class="h-3.5 w-3.5 text-slate-400 transition-transform"
-                  :class="{ 'rotate-180': expandedAnnotationId === item.id }" />
-              </div>
+                <button v-if="isFilteringByTask" type="button"
+                  class="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  @click="clearModelFilter">
+                  显示全部
+                </button>
+                <button type="button"
+                  class="inline-flex h-10 items-center justify-center rounded-xl border border-rose-200 px-4 text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
+                  @click="toggleReturnDialog">
+                  驳回到设计
+                </button>
+                <button type="button"
+                  class="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                  :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
+                  @click="toggleSubmitDialog">
+                  {{ submitActionLabel }}
+                </button>
+              </template>
             </div>
           </div>
+        </template>
+      </AnnotationWorkspace>
 
-          <!-- 展开的评论线程 -->
-          <div v-if="expandedAnnotationId === item.id && expandedAnnotationType"
-            class="mt-1 mb-2">
-            <ReviewCommentsTimeline :annotation-type="expandedAnnotationType"
-              :annotation-id="item.id"
-              :annotation-label="`${getAnnotationTypeBadge(item.type).label}批注 / ${item.title}`"
-              @close="expandedAnnotationId = null; expandedAnnotationType = null" />
-          </div>
-        </div>
-      </div>
+      <AnnotationTableView v-else
+        :items="scopedAnnotationItems"
+        :current-annotation-id="selectedAnnotationId"
+        :current-annotation-type="selectedAnnotationType"
+        :task-key="currentTask?.id ?? null"
+        :subtitle="currentTask?.title ?? null"
+        @select-annotation="selectWorkspaceAnnotation"
+        @open-annotation="(item) => void handleReviewerTableOpenAnnotation(item)"
+        @locate-annotation="(item) => void locateWorkspaceAnnotation(item)"
+        @copy-feedback="handleReviewerTableCopyFeedback" />
     </div>
 
     <!-- 弹窗组件 -->
@@ -1708,44 +1724,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"
       @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
 
-    <!-- ═══════ D. Tab 切换区域 ═══════ -->
     <div class="rounded-lg border border-slate-200 bg-white">
-      <!-- Tab 头部 -->
-      <div class="flex items-center gap-1 rounded-t-lg border-b border-slate-200 bg-slate-100 p-1">
-        <button type="button"
-          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          :class="activeReviewTab === 'records'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
-          @click="activeReviewTab = 'records'">
-          审核记录
-          <span v-if="confirmedRecordListCount > 0"
-            class="ml-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
-            {{ confirmedRecordListCount }}
-          </span>
-        </button>
-        <button type="button"
-          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          :class="activeReviewTab === 'history'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
-          @click="activeReviewTab = 'history'">
-          历史流转
-          <span v-if="workflowHistoryCount > 0"
-            class="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-            {{ workflowHistoryCount }}
-          </span>
-        </button>
-        <button type="button"
-          class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-          :class="activeReviewTab === 'attachments'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
-          @click="activeReviewTab = 'attachments'">
-          附件材料
-        </button>
-      </div>
-
       <!-- Tab: 审核记录 -->
       <div v-show="activeReviewTab === 'records'" class="p-4"
         data-testid="review-workbench-confirmed-records-zone">
@@ -1798,20 +1777,20 @@ function flyToAnnotationItem(item: AnnotationListItem) {
         <!-- 统计 + 操作 -->
         <div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
           <div class="flex items-center gap-3 text-xs text-slate-500">
-            <span>{{ reviewStore.confirmedRecordCount }} 批次</span>
-            <span>批注 {{ reviewStore.totalConfirmedAnnotations }}</span>
-            <span>测量 {{ reviewStore.totalConfirmedMeasurements }}</span>
+            <span>{{ confirmedRecordListCount }} 批次</span>
+            <span>批注 {{ confirmedAnnotationTotal }}</span>
+            <span>测量 {{ confirmedMeasurementTotal }}</span>
           </div>
           <div class="flex gap-1.5">
             <button type="button"
               class="h-7 rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted disabled:opacity-50"
-              :disabled="reviewStore.confirmedRecordCount.value === 0"
+              :disabled="confirmedRecordListCount === 0"
               @click="exportData">
               <Download class="mr-0.5 inline h-3 w-3" />导出
             </button>
             <button type="button"
               class="h-7 rounded-md border border-input bg-background px-2.5 text-xs text-destructive hover:bg-muted disabled:opacity-50"
-              :disabled="reviewStore.confirmedRecordCount.value === 0"
+              :disabled="confirmedRecordListCount === 0"
               @click="handleClearConfirmedRecords()">
               <Trash2 class="mr-0.5 inline h-3 w-3" />清空
             </button>

@@ -4,6 +4,103 @@
 
 ## [Unreleased]
 
+### Added（Ribbon · MVP++ PR 10 · 按钮角色可见性）
+
+- **`RibbonButtonItem` 新增可选 `roles: UserRole[]` 字段**：声明后仅对命中角色的用户可见；未声明（默认）则始终可见，向后兼容。类型见 `src/ribbon/ribbonTypes.ts`。
+- **纯函数 `ribbonItemVisibility.ts`**：导出 `isRibbonButtonVisibleForRole` / `filterRibbonItemsForUser`。未登录 + 按钮声明了 roles 时按"保守策略"隐藏（`undefined` role 视为无权限），避免敏感功能意外曝露。
+- **`panel.annotationTable` 限制为 review 角色**：在 `ribbonConfig.ts` 中把"批注表格"按钮的 `roles` 设为 `[DESIGNER, PROOFREADER, REVIEWER, MANAGER, ADMIN]`（即除 VIEWER 外所有角色），避免纯查看者看到无法使用的按钮。
+- **`RibbonBar.vue` 接入过滤**：新增 `activeTabVisibleGroups` computed，依据 `useUserStore().currentUser.value?.role` 对每个 group 的 items 过滤；`v-for` 切到 `activeTabVisibleGroups`。
+- **测试**：`ribbonItemVisibility.test.ts` 6 用例全绿（无声明可见 / 空数组可见 / 命中可见 / 不命中隐藏 / 无 role 有限制→隐藏 / filter 保留 stack+separator）。累计 **75/75 测试全绿**（PR 8 + PR 9 + PR 10）。
+- **非目标**：不做 stack 内嵌按钮的角色过滤（留给后续）；不对其他 review 按钮（`panel.initiateReview` / `panel.reviewerTasks` / `panel.myTasks` 等）设置 roles（避免影响既有用户预期）。
+- **设计文档**：`docs/plans/2026-04-23-ribbon-annotation-table-role-visibility-pr10-design.md`。
+
+### Changed（批注表格视图 · MVP++ PR 9 · Ribbon 按钮智能分发）
+
+- **Ribbon "批注表格" 按钮按角色 / 已打开面板智能分发**：`DockLayout.handleRibbonCommand` 的 `panel.annotationTable` 分支从硬编码走 DCH 改为按以下优先级路由：
+  1. 若 `review`（Reviewer 工作台）面板已打开 → 在 `review` 面板切表格视图；
+  2. 否则若 `designerCommentHandling`（批注处理）面板已打开 → 在 DCH 面板切表格视图；
+  3. 否则按用户角色默认：`isReviewer && !isDesigner` → 打开 `review` 面板；其他（含 sj、双重角色、未知角色）→ 打开 DCH 面板。
+- **新增 `reviewerWorkbenchViewModeBus`**：`src/components/review/reviewerWorkbenchViewModeBus.ts` 镜像 `designerCommentViewModeBus` 的 latest-value ref 模式，为 Reviewer 工作台提供独立的 viewMode 请求通道（完全隔离，避免双面板互相污染）。导出 `useReviewerWorkbenchViewModeRequest` / `requestReviewerWorkbenchViewMode` / `clearReviewerWorkbenchViewModeRequest`。
+- **`ReviewPanel` watch 请求**：新增 `watch(reviewerWorkbenchViewModeRequest, ...)`，消费后立即 `clearReviewerWorkbenchViewModeRequest()` 避免重放。
+- **UX 一致性**：sj 用户默认路径（无任何面板打开时点击 Ribbon）保持不变，仍然落到 DCH 面板；现有 E2E `annotation-table-ribbon.spec.ts` 的 designer 场景无需改动。
+- **测试**：
+  - 新增 `reviewerWorkbenchViewModeBus.test.ts`（3 用例：request 更新 ref / clear 回 null / 连续 request 新 requestedAt）；
+  - `ReviewPanel.test.ts` 新增 1 用例（外部 `request('table')` → 面板切表格视图），累计 **25 用例全绿**；
+  - 无回归：`DesignerCommentHandlingPanel.test.ts`（13 ✓）/ `designerCommentViewModeBus.test.ts`（3 ✓）/ `AnnotationTableView.test.ts`（20 ✓）/ `DockLayout.test.ts`（5 ✓）。
+- **非目标**：不新增独立的 Ribbon reviewer 按钮（那是 PR 11 的事）；不做 Ribbon 按钮角色可见性（那是 PR 10 的事）。
+- **设计文档**：`docs/plans/2026-04-23-ribbon-annotation-table-smart-dispatch-pr9-design.md`。
+
+### Added（批注表格视图 · MVP++ PR 8 · Reviewer 工作台接入批注表格）
+
+- **`ReviewPanel.vue` 新增 `卡片列表 / 批注表格` tab 切换**：校核（jh）角色的批注工作区顶部新增与 `DesignerCommentHandlingPanel` 对齐的 tab bar（`data-testid="reviewer-annotation-list-view-mode-tabs"`），在卡片列表与批注表格之间互斥切换。
+- **表格视图 = 只读浏览模式**：表格模式下隐藏 AnnotationWorkspace 的工具启动器 / timeline / "确认当前数据" 按钮，这些只在卡片列表视图下渲染；用户切回卡片列表即可继续编辑 / 确认 / 流转。
+- **行交互语义**：
+  - 单击行 → `selectWorkspaceAnnotation`（蓝色高亮联动 3D pin，保持表格视图）；
+  - 双击行 → `annotationListViewMode = 'split'` + `locateWorkspaceAnnotation`（飞到 3D 并切回卡片列表，让用户看到完整的 reviewer 处理面板）；
+  - 右键菜单复制 → `handleReviewerTableCopyFeedback` 经 `emitToast` 反馈 `success / warning` 两态。
+- **独立持久化 key**：`annotationListViewMode` 通过新实例 `useNavigationStatePersistence('plant3d-web-nav-state-reviewer-workbench-v1')` 写入 localStorage，与 Designer 面板的 `...-designer-comment-handling-v2` 键完全隔离。
+- **数据源分工**：表格视图消费未过滤的 `scopedAnnotationItems`（仅按 formId scope），表格内部独立的搜索 / 严重度 / 状态筛选与卡片列表的 pill 筛选**解耦**，避免双重筛选；与 `DesignerCommentHandlingPanel` 保持一致。
+- **组件复用**：直接接入已有的 `AnnotationTableView.vue`，0 新增组件代码；仅对 `ReviewPanel.vue` 做 ~80 行局部改动（script ~30 + template ~50）。
+- **测试**：`ReviewPanel.test.ts` 新增 4 用例（tab 切换 / 双击飞到 3D + 切回卡片 / 持久化恢复 / copy-feedback toast 分发），累计 **24/24 全绿**；`DesignerCommentHandlingPanel.test.ts`（13 ✓）/ `AnnotationTableView.test.ts`（20 ✓）/ `DockLayout.test.ts`（5 ✓）无回归。
+- **非目标**：不做 Ribbon 命令路由到 ReviewPanel（留给后续 PR 9 智能分发 / 独立 reviewer 批注表格按钮）；不改 reviewer 既有 workflow（confirm / submit / reject / dialog）。
+- **设计文档**：`docs/plans/2026-04-23-reviewer-workbench-annotation-table-pr8-design.md`。
+
+### Added（批注表格视图 · MVP++ PR 7 · Onboarding 引导）
+
+- **设计师引导流程新增"批注表格"步骤**：`src/components/onboarding/roleGuides/designerGuide.ts` 在"处理退回批注"之后追加 `annotation-table-btn` 步骤，向 target `[data-command="panel.annotationTable"]` 提示新按钮，步骤文案说明：
+  - 支持搜索 / 严重度筛选 / CSV 导出 / 键盘导航 / 右键复制；
+  - 单击行选中、双击行飞到 3D 并进入处理详情；
+  - 面板内顶部可随时用"卡片列表 / 批注表格"切换视图。
+- **只对 active workflow（内部流程）展示**：与 `resubmission-panel` 步骤一致，PMS 等外部驱动工作流在平台侧处理，不重复提示。
+- **canSkip: true**：降低新手压力，用户可直接跳过。
+
+### Added（批注表格视图 · MVP++ PR 6 · Playwright 冒烟 E2E）
+
+- **Ribbon 入口端到端冒烟测试**：新增 `e2e/annotation-table-ribbon.spec.ts`，2 个 Playwright test：
+  1. `校审 ribbon 的"批注表格"按钮应可见并带正确 label`：断言 `[data-command="panel.annotationTable"]` visible，且包含文本"批注表格"。
+  2. `点击"批注表格"按钮应打开批注处理 dock 面板`：点击后 `[data-panel="designerCommentHandling"]` 可见。
+- **运行方式**：`npm run test:e2e -- --grep "annotation-table-ribbon"`（本 PR 只提交代码，不强制在 CI 内运行；由维护者按需验证）。
+- **范围**：只验证 Ribbon → 面板开启链路，不测表格内部交互（行单双击 / 搜索 / 排序 / 导出 / 飞到 3D 均由组件级 Vitest 覆盖）。
+- **设计文档**：`docs/plans/2026-04-23-annotation-table-ribbon-smoke-pr6-design.md`。
+
+### Added（批注表格视图 · MVP++ PR 5 · viewMode 持久化）
+
+- **`annotationListViewMode` 写入 localStorage**：`DesignerCommentHandlingPanel` 里原 session 级的 `'split' | 'table'` 状态改用 `useNavigationStatePersistence.bindRef` 持久化，与 `selectedTaskId` / `selectedAnnotationKey` / `showInitiateDrawer` 共用 storage key `plant3d-web-nav-state-designer-comment-handling-v2`。效果：切到"批注表格"后刷新或重新挂载，面板首屏仍旧是 table，省一次点击。
+- **向后兼容**：旧版用户 localStorage 无此字段时，`bindRef` 走 fallback `'split'`；非法值理论上会退化但 MVP 不做增强校验。
+- **测试**：`DesignerCommentHandlingPanel.test.ts` 新增 1 用例（`persistenceState.set('annotationListViewMode', 'table')` → 挂载即 table），累计 **13/13 全绿**。
+- **设计文档**：`docs/plans/2026-04-23-annotation-list-view-mode-persistence-pr5-design.md`。
+
+### Added（批注表格视图 · MVP PR 4 · Ribbon 入口 + viewMode 请求总线）
+
+- **Ribbon 校审组新增"批注表格"按钮**：`校审 → 面板 → 批注表格`（图标 `table`），对应新命令 `panel.annotationTable`。点击后：
+  1. `ensurePanelAndActivate('designerCommentHandling')` 打开（或激活）批注处理 dock 面板；
+  2. 通过 `requestDesignerCommentViewMode('table')` 请求面板内部切到表格视图；
+  3. 若用户此时处于批注详情页，自动回到 `annotation_list` 顶层视图再切表格。
+- **`designerCommentViewModeBus` 轻量 ref 总线**：新增 `src/components/review/designerCommentViewModeBus.ts`，导出 `useDesignerCommentViewModeRequest()` / `requestDesignerCommentViewMode(mode)` / `clearDesignerCommentViewModeRequest()`。采用"latest value" ref（非即发即触 commandBus）以保证面板被按钮触发打开时，即使尚未 mount 也能在 mount 后读到最近一次请求（风格对齐 `annotationProcessingEntry`）。
+- **DockLayout 命令路由**：`src/components/DockLayout.vue` 的 `handleRibbonCommand` 新增 `'panel.annotationTable'` case，`src/ribbon/ribbonIcons.ts` 注册 `table` 图标，`src/ribbon/ribbonConfig.ts` 在 `review.panel` group 的 `panel.resubmissionTasks` 与 `panel.myTasks` 之间插入新按钮。
+- **DesignerCommentHandlingPanel watch 请求**：面板内部新增 `watch(designerCommentViewModeRequest, ...)`，消费请求后立即 `clearDesignerCommentViewModeRequest()` 避免重放。
+- **测试**：
+  - 新增 `designerCommentViewModeBus.test.ts` 3 用例（request 更新 ref / clear 回 null / 连续 request 新 timestamp）；
+  - `DesignerCommentHandlingPanel.test.ts` 新增 2 用例（Ribbon 请求切换 viewMode / 详情页下 Ribbon 请求回到列表 + 表格视图）；
+  - AnnotationTableView 原 20 用例、PR 3 新增的 3 用例继续绿，累计 **35 用例全绿**。
+- **设计文档**：`docs/plans/2026-04-22-annotation-table-ribbon-entry-pr4-design.md` 记录组件通信模式、文件清单、测试矩阵。
+- **MVP 主线收尾**：PR 1 – PR 4 全部落地，批注表格视图功能闭环。PR 5（响应式 Drawer 浮层）已在 PR 2.5 `useContainerQuery` + AnnotationTableView Compact 卡片形态中提前实现，无独立 PR 需求。
+
+### Added（批注表格视图 · MVP PR 3 · 接入 Dock 面板）
+
+- **DesignerCommentHandlingPanel 接入 AnnotationTableView**：在批注列表视图顶部加入 `卡片列表 / 批注表格` **tab 切换**（`role="tablist"`，`aria-selected` 语义）。切到"批注表格"时，原 `AnnotationWorkspace` 卡片列表被 `AnnotationTableView` 替换，三端（卡片 / 表格 / 3D 图钉）共用同一份 `scopedAnnotationItems`，保持数据一致。
+- **交互一致性**：
+  - 表格行**单击** → `selectWorkspaceAnnotation`（与卡片单击同义：仅选中高亮，不跳转）
+  - 表格行**双击** → 先 `locateAnnotation`（飞到 3D 对应构件）再 `enterAnnotationDetail`（进详情页）
+  - 操作列**定位按钮** → 复用现有 `locateAnnotation`
+  - **右键菜单**复制 RefNo / 批注行 → 新增 `handleCopyFeedback` 通过 `emitToast` 反馈 `copied` / `fallback` / `failed` 三态
+- **详情页布局稳定性**：进入 `annotation_detail` 时自动把 `annotationListViewMode` 重置为 `'split'`，保证详情页始终走 `AnnotationWorkspace` detail 布局，避免 table 侧栅格错乱。
+- **viewMode 状态管理**：新增 `annotationListViewMode: 'split' | 'table'` ref（session 级，不入 `useNavigationStatePersistence`），仅在 `annotation_list` 顶层视图下渲染 tab bar，详情页与任务入口页不显示。
+- **数据源分工**：表格视图直接消费**未经 `annotationFilter` 过滤**的 `scopedAnnotationItems`（仅 `formId` scope），表格内部独立的搜索 / 严重度 / 状态筛选与卡片列表的 pill 筛选**解耦**，避免双重筛选。
+- **测试**：`DesignerCommentHandlingPanel.test.ts` 新增 3 用例（tab 切换 · 表格行单击保持列表视图 · 表格行双击进详情并切回 split），`AnnotationTableView.test.ts` 原 20 用例无破坏；`npm run lint` / `npx vue-tsc --noEmit` 均通过。
+- **设计文档**：`docs/plans/2026-04-22-annotation-table-dock-integration-pr3-design.md` 记录组件 API、数据源分工、事件接线、测试矩阵与风险点。
+- **未做**：Ribbon 按钮入口（留给 PR 4）· `useDockLayoutMode` hook 独立（PR 2.5 的 `useContainerQuery` 已够用）。
+
 ### Added（批注表格视图 · MVP PR 2.7 · 右键菜单）
 
 - **AnnotationTableView 右键菜单**：对齐 Pencil `9xPyi` 设计稿落地行级 contextMenu，支持四项可用动作：
@@ -63,6 +160,10 @@
 
 ### Fixed
 
+- **versionInfo 跨时区稳定性（PR 8 · 非批注表格 scope）**：`src/utils/versionInfo.ts` 的 `formatBuildDateFromIso` 与 `normalizeVersionInfo` 原来用 `getFullYear` / `getMonth` / `getHours` 等依赖 local timezone 的方法拼"北京时间"，导致 CI（UTC+0）和工位（UTC+8）输出不同的北京时间字符串，`versionInfo.test.ts` 跨机器红绿不一致。
+  - 修复：新增 `formatMsAsBeijing(ms)` 工具函数，先把 UTC 时间戳加 8 小时，再用 `getUTC*` 系列方法读字段，确保输出与宿主 timezone 无关。
+  - `normalizeVersionInfo` 里 UTC / UTC+8 两种格式先规范为 ISO（`T` 分隔 + `Z` / `+08:00` 后缀）再走 `formatMsAsBeijing`，语义更清晰。
+  - 测试：`versionInfo.test.ts` 从 2 用例扩到 3 用例（UTC → 北京时间 · UTC+8 → 保持墙钟 · HTML fallback），时间字符串断言固定，不再依赖运行环境。
 - **评论降级去重（P1）**：`AnnotationPanel` 和 `ReviewCommentsPanel` 的 `addComment` 后端失败或返回非成功时，不再写入本地 store（避免本地生成的 ID 与后端不一致导致后续列表视图拉取后评论重复显示），改为 `emitToast` 提示用户重试。
 - **评论编辑回滚（P2）**：两个面板的 `saveEditComment` 改为乐观更新 + 后端拒绝时回滚模式（与严重度编辑策略一致），后端返回 `success: false` 时自动回滚内容并 toast 提示。
 - **移除 @ts-nocheck（P3）**：`AnnotationPanel.vue` 移除顶部 `@ts-nocheck`，TypeScript 零报错，恢复类型安全。

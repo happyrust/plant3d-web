@@ -84,6 +84,7 @@ vi.mock('@/composables/useReviewStore', () => ({
 
 vi.mock('@/composables/useToolStore', () => ({
   useToolStore: () => toolStoreMock,
+  getAnnotationRefnos: (annotation: { refnos?: string[]; refno?: string }) => annotation.refnos ?? (annotation.refno ? [annotation.refno] : []),
 }));
 
 vi.mock('@/api/reviewApi', () => ({
@@ -127,6 +128,7 @@ const toolStoreMock = vi.hoisted(() => ({
   getAnnotationComments: vi.fn(() => []),
   importJSON: vi.fn(),
   setToolMode: vi.fn(),
+  updateAnnotationSeverity: vi.fn(),
 }));
 
 const dockApiMock = vi.hoisted(() => ({
@@ -156,11 +158,40 @@ const emitToastMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: emitToastMock }));
 
+const persistenceState = new Map<string, unknown>();
+const persistenceStorageKeys: string[] = [];
+
+vi.mock('@/composables/useNavigationStatePersistence', () => ({
+  useNavigationStatePersistence: (storageKey: string) => {
+    persistenceStorageKeys.push(storageKey);
+    return {
+      bindRef: (key: string, target: { value: unknown }, defaultValue: unknown) => {
+        target.value = persistenceState.has(key) ? persistenceState.get(key) : defaultValue;
+      },
+      saveValue: (key: string, value: unknown) => {
+        persistenceState.set(key, value);
+      },
+      getValue: (key: string, defaultValue: unknown) => persistenceState.get(key) ?? defaultValue,
+    };
+  },
+}));
+
 vi.mock('./embedFormSnapshotRestore', () => ({
   restoreEmbedFormSnapshotContext: (...args: unknown[]) => restoreEmbedFormSnapshotContextMock(...args),
 }));
 
 vi.mock('./CollisionResultList.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./ReviewCommentsTimeline.vue', () => ({
+  default: {
+    name: 'ReviewCommentsTimelineStub',
+    props: {
+      designerOnly: { type: Boolean, default: false },
+      composerSubmitLabel: { type: String, default: '' },
+      annotationLabel: { type: String, default: '' },
+    },
+    template: '<div data-testid="timeline-stub">{{ designerOnly ? "designerOnly" : "review" }}|{{ composerSubmitLabel }}|{{ annotationLabel }}</div>',
+  },
+}));
 vi.mock('./ReviewAuxData.vue', () => ({ default: { template: '<div data-testid="review-aux-data-stub">辅助校审数据</div>' } }));
 vi.mock('./ReviewDataSync.vue', () => ({ default: { template: '<div data-testid="review-data-sync-stub">数据同步（后端）</div>' } }));
 vi.mock('./WorkflowSubmitDialog.vue', async () => {
@@ -254,6 +285,8 @@ describe('ReviewPanel', () => {
     document.body.innerHTML = '';
     sessionStorage.clear();
     sessionStorage.setItem('plant3d_workflow_mode', 'manual');
+    persistenceState.clear();
+    persistenceStorageKeys.length = 0;
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
         getItem: vi.fn((key: string) => {
@@ -369,9 +402,10 @@ describe('ReviewPanel', () => {
 
     expect(document.querySelector('[data-testid="review-workbench-context-zone"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="review-workbench-workflow-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).not.toBeNull();
     expect(document.body.textContent).toContain('历史流转');
     expect(document.body.textContent).toContain('审核记录');
-    expect(document.body.textContent).toContain('批注与测量');
+    expect(document.body.textContent).toContain('当前批注');
     expect(document.body.textContent).not.toContain('旧审核字段');
     mounted.unmount();
   });
@@ -936,6 +970,179 @@ describe('ReviewPanel', () => {
     expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1', 'mock submit comment');
     expect(loadReviewTasksMock).toHaveBeenCalled();
     expect(loadWorkflowMock).toHaveBeenCalledWith('task-1');
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 工作台默认显示卡片列表，tab 切换到批注表格后渲染 AnnotationTableView · PR 8', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-1',
+        formId: 'FORM-001',
+        entityId: 'entity-1',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'reviewer 批注',
+        description: 'description',
+        severity: 'medium',
+        refnos: ['comp-1'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="reviewer-annotation-list-view-mode-tabs"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    const tableTabButton = document.querySelector('[data-testid="reviewer-annotation-list-view-mode-table"]') as HTMLButtonElement | null;
+    expect(tableTabButton).not.toBeNull();
+    tableTabButton?.click();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格行双击 → 飞到 3D + 自动切回卡片列表 · PR 8', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-2',
+        formId: 'FORM-001',
+        entityId: 'entity-2',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '需双击的批注',
+        description: 'dbl click',
+        severity: 'medium',
+        refnos: ['comp-2'],
+        createdAt: 1710000000000,
+      },
+    ];
+    showModelByRefnosWithAckMock.mockResolvedValue({ ok: ['comp-2'], fail: [], error: null });
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const tableTabButton = document.querySelector('[data-testid="reviewer-annotation-list-view-mode-table"]') as HTMLButtonElement | null;
+    tableTabButton?.click();
+    await settlePanel();
+
+    const row = document.querySelector('[data-testid="annotation-table-row-ann-reviewer-2"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await settlePanel();
+
+    expect(showModelByRefnosWithAckMock).toHaveBeenCalled();
+    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('viewer');
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格持久化 viewMode：预置 table 后首屏即表格视图 · PR 8', async () => {
+    persistenceState.set('annotationListViewMode', 'table');
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-3',
+        formId: 'FORM-001',
+        entityId: 'entity-3',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '持久化恢复测试',
+        description: 'persist restore',
+        severity: 'low',
+        refnos: ['comp-3'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).toBeNull();
+    expect(persistenceStorageKeys).toContain('plant3d-web-nav-state-reviewer-workbench-v1');
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 响应 reviewerWorkbenchViewModeBus.request("table") · PR 9', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-bus-1',
+        formId: 'FORM-001',
+        entityId: 'entity-bus-1',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'bus test',
+        description: 'bus test',
+        severity: 'medium',
+        refnos: ['comp-bus-1'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    const { requestReviewerWorkbenchViewMode, clearReviewerWorkbenchViewModeRequest } = await import('./reviewerWorkbenchViewModeBus');
+    requestReviewerWorkbenchViewMode('table');
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).toBeNull();
+
+    clearReviewerWorkbenchViewModeRequest();
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格 copy-feedback 事件正确分发 toast · PR 8', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-4',
+        formId: 'FORM-001',
+        entityId: 'entity-4',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'copy feedback',
+        description: 'copy feedback',
+        severity: 'high',
+        refnos: ['comp-4'],
+        createdAt: 1710000000000,
+      },
+    ];
+    persistenceState.set('annotationListViewMode', 'table');
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const tableEl = document.querySelector('[data-testid="annotation-table-view"]');
+    expect(tableEl).not.toBeNull();
+
+    const vueInternals = (tableEl as unknown as { __vueParentComponent?: { emit: (event: string, payload: unknown) => void } }).__vueParentComponent;
+    vueInternals?.emit('copy-feedback', {
+      kind: 'refno',
+      result: 'copied',
+      item: { id: 'ann-reviewer-4' },
+    });
+    await settlePanel();
+
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      message: '已复制RefNo',
+      level: 'success',
+    }));
 
     mounted.unmount();
   });

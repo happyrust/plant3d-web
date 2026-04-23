@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, createApp, h, nextTick, ref } from 'vue';
 
+import {
+  clearDesignerCommentViewModeRequest,
+  requestDesignerCommentViewMode,
+} from './designerCommentViewModeBus';
+
 import { UserRole, type ReviewTask } from '@/types/auth';
 
 const currentTaskRef = ref<ReviewTask | null>(null);
@@ -17,6 +22,7 @@ const activeAnnotationIdRef = ref<string | null>(null);
 const activeCloudAnnotationIdRef = ref<string | null>(null);
 const activeRectAnnotationIdRef = ref<string | null>(null);
 const activeObbAnnotationIdRef = ref<string | null>(null);
+const annotationProcessingEntryTargetRef = ref<any>(null);
 
 const loadReviewTasksMock = vi.fn(async () => undefined);
 const setCurrentTaskMock = vi.fn(async (task: ReviewTask | null) => {
@@ -31,8 +37,21 @@ const showModelByRefnosWithAckMock = vi.fn(async () => ({ ok: [], fail: [], erro
 const flyToClassicMeasurementMock = vi.fn();
 const flyToXeokitMeasurementMock = vi.fn();
 const syncFromStoreMock = vi.fn();
+const clearDraftDataByPayloadMock = vi.fn();
+const submitTaskToNextNodeMock = vi.fn(async () => undefined);
 const persistenceState = new Map<string, unknown>();
 const persistenceStorageKeys: string[] = [];
+
+function setExternalEntryTarget(target: {
+  annotationId: string;
+  annotationType: 'text' | 'cloud' | 'rect' | 'obb';
+  formId?: string | null;
+}) {
+  annotationProcessingEntryTargetRef.value = {
+    ...target,
+    requestedAt: Date.now(),
+  };
+}
 
 vi.mock('./confirmedRecordsRestore', () => ({
   createConfirmedRecordsRestorer: () => ({
@@ -42,10 +61,20 @@ vi.mock('./confirmedRecordsRestore', () => ({
   }),
 }));
 
+vi.mock('./annotationProcessingEntry', () => ({
+  useAnnotationProcessingEntryTarget: () => computed(() => annotationProcessingEntryTargetRef.value),
+  clearAnnotationProcessingEntryTarget: () => {
+    annotationProcessingEntryTargetRef.value = null;
+  },
+}));
+
 vi.mock('./ResubmissionTaskList.vue', () => ({
   default: {
     name: 'ResubmissionTaskListStub',
-    template: '<div data-testid="resubmission-task-list-stub"></div>',
+    props: {
+      selectedTaskId: { type: String, default: null },
+    },
+    template: '<div data-testid="resubmission-task-list-stub">{{ selectedTaskId || "none" }}</div>',
   },
 }));
 
@@ -115,7 +144,10 @@ vi.mock('@/composables/useToolStore', () => ({
     activeObbAnnotationId: activeObbAnnotationIdRef,
     activeMeasurementId: ref<string | null>(null),
     activeXeokitMeasurementId: ref<string | null>(null),
+    getAnnotationComments: vi.fn(() => []),
     clearAll: vi.fn(),
+    clearDraftDataByPayload: clearDraftDataByPayloadMock,
+    updateAnnotationSeverity: vi.fn(),
   }),
   getAnnotationRefnos: (annotation: { refnos?: string[]; refno?: string }) => annotation.refnos ?? (annotation.refno ? [annotation.refno] : []),
 }));
@@ -125,6 +157,7 @@ vi.mock('@/composables/useUserStore', () => ({
     currentUser: ref({ id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER }),
     returnedInitiatedTasks: returnedTasksRef,
     loadReviewTasks: loadReviewTasksMock,
+    submitTaskToNextNode: submitTaskToNextNodeMock,
   }),
 }));
 
@@ -225,8 +258,10 @@ async function mountPanel() {
 describe('DesignerCommentHandlingPanel', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    sessionStorage.clear();
     persistenceState.clear();
     persistenceStorageKeys.length = 0;
+    annotationProcessingEntryTargetRef.value = null;
     currentTaskRef.value = null;
     returnedTasksRef.value = [createTask()];
     confirmedRecordsRef.value = [];
@@ -238,22 +273,18 @@ describe('DesignerCommentHandlingPanel', () => {
         createdAt: 10,
         visible: true,
         refnos: ['24381_145018'],
+        formId: 'FORM-1001',
         reviewState: undefined,
       },
       {
-        id: 'annot-rejected',
-        title: '已驳回批注',
-        description: '这条批注被驳回过',
+        id: 'annot-other-form',
+        title: '其他单据批注',
+        description: '这条批注属于别的单据',
         createdAt: 20,
         visible: true,
-        refnos: ['24381_145018'],
-        reviewState: {
-          resolutionStatus: 'fixed',
-          decisionStatus: 'rejected',
-          updatedAt: 40,
-          updatedByName: '校核甲',
-          history: [],
-        },
+        refnos: ['24381_145019'],
+        formId: 'FORM-2002',
+        reviewState: undefined,
       },
     ];
     cloudAnnotationsRef.value = [];
@@ -269,16 +300,7 @@ describe('DesignerCommentHandlingPanel', () => {
         createdAt: 100,
         sourceAnnotationId: 'annot-open',
         sourceAnnotationType: 'text',
-      },
-      {
-        id: 'measure-other',
-        kind: 'distance',
-        origin: { entityId: 'pipe-c', worldPos: [0, 0, 0] },
-        target: { entityId: 'pipe-d', worldPos: [1, 0, 0] },
-        visible: true,
-        createdAt: 90,
-        sourceAnnotationId: 'annot-rejected',
-        sourceAnnotationType: 'text',
+        formId: 'FORM-1001',
       },
     ];
     xeokitDistanceMeasurementsRef.value = [];
@@ -289,48 +311,321 @@ describe('DesignerCommentHandlingPanel', () => {
     activeObbAnnotationIdRef.value = null;
     loadReviewTasksMock.mockClear();
     setCurrentTaskMock.mockClear();
+    addConfirmedRecordMock.mockClear();
     restoreConfirmedRecordsIntoSceneMock.mockClear();
     ensurePanelAndActivateMock.mockClear();
     emitCommandMock.mockClear();
     emitToastMock.mockClear();
     showModelByRefnosWithAckMock.mockClear();
+    clearDraftDataByPayloadMock.mockClear();
+    submitTaskToNextNodeMock.mockClear();
+    clearDesignerCommentViewModeRequest();
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
+    sessionStorage.clear();
+    clearDesignerCommentViewModeRequest();
   });
 
-  it('从驳回单据进入后默认显示返回批注列表，并优先选中待处理批注', async () => {
+  it('驳回任务恢复后默认进入批注列表页', async () => {
+    currentTaskRef.value = createTask();
+
     const mounted = await mountPanel();
 
     expect(loadReviewTasksMock).toHaveBeenCalled();
-    expect(document.body.textContent).toContain('返回批注列表');
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-comment-task-entry"]')).toBeNull();
+    expect(document.body.textContent).toContain('批注列表');
     expect(document.body.textContent).toContain('待处理批注');
-    expect(document.body.textContent).toContain('designerOnly|发送回复|待处理批注');
-    expect(document.body.textContent).toContain('距离 · pipe-a → pipe-b');
-    expect(document.body.textContent).not.toContain('距离 · pipe-c → pipe-d');
+    expect(document.body.textContent).not.toContain('其他单据批注');
 
     mounted.unmount();
   });
 
-  it('点击查看发起单后，会以右侧抽屉展示原始发起数据', async () => {
+  it('被动恢复到同 form_id 的任务时，即使任务尚未回到 sj 也默认显示批注列表', async () => {
+    returnedTasksRef.value = [];
+    currentTaskRef.value = createTask({
+      status: 'submitted',
+      currentNode: 'jd',
+      returnReason: undefined,
+      workflowHistory: [],
+    });
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'designer',
+      formId: 'FORM-1001',
+      primaryPanelId: 'designerCommentHandling',
+      visiblePanelIds: ['designerCommentHandling'],
+    }));
+
     const mounted = await mountPanel();
 
-    const openDrawerButton = Array.from(document.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('查看发起单')
-    );
-    expect(openDrawerButton).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-task-entry"]')).toBeNull();
+    expect(document.body.textContent).toContain('待处理批注');
+    expect(document.body.textContent).not.toContain('其他单据批注');
 
-    openDrawerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    mounted.unmount();
+  });
+
+  it('双击批注后进入详情页', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    const row = document.querySelector('[data-testid="annotation-row-text-annot-open"]') as HTMLElement;
+
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     await flushUi();
 
-    expect(document.body.textContent).toContain('我发起的校审单');
-    expect(document.body.textContent).toContain('发起单填写内容');
-    expect(document.body.textContent).toContain('BOX1 审核单');
-    expect(document.body.textContent).toContain('我发起的校审单说明');
-    expect(document.body.textContent).toContain('校核甲');
-    expect(document.body.textContent).toContain('审核甲');
-    expect(document.body.textContent).toContain('BRAN 管道构件');
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeTruthy();
+    expect(document.body.textContent).toContain('designerOnly|发送回复|待处理批注');
+    expect(document.body.textContent).toContain('测量证据');
+    expect(document.body.textContent).toContain('确认当前数据');
+
+    mounted.unmount();
+  });
+
+  it('详情返回列表后保留当前选中批注', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    const row = document.querySelector('[data-testid="annotation-row-text-annot-open"]') as HTMLElement;
+
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await flushUi();
+
+    const backBtn = document.querySelector('[data-testid="annotation-workspace-back"]') as HTMLElement;
+    backBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushUi();
+
+    const returnedRow = document.querySelector('[data-testid="annotation-row-text-annot-open"]') as HTMLElement;
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
+    expect(returnedRow.className).toContain('border-orange-200');
+
+    mounted.unmount();
+  });
+
+  it('当前任务切换后自动回到新任务的批注列表页', async () => {
+    const task1 = createTask();
+    const task2 = createTask({
+      id: 'task-designer-2',
+      formId: 'FORM-2002',
+      title: 'BOX2 审核单',
+    });
+    returnedTasksRef.value = [task1, task2];
+    currentTaskRef.value = task1;
+
+    const mounted = await mountPanel();
+    const row = document.querySelector('[data-testid="annotation-row-text-annot-open"]') as HTMLElement;
+
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await flushUi();
+
+    annotationsRef.value = [
+      {
+        id: 'annot-task-2',
+        title: 'BOX2 批注',
+        description: '任务二的批注',
+        createdAt: 30,
+        visible: true,
+        refnos: ['24381_145099'],
+        formId: 'FORM-2002',
+        reviewState: undefined,
+      },
+    ];
+    currentTaskRef.value = task2;
+    await flushUi();
+
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
+    expect(document.body.textContent).toContain('BOX2 审核单');
+    expect(document.body.textContent).toContain('BOX2 批注');
+
+    mounted.unmount();
+  });
+
+  it('没有匹配驳回任务时显示任务页兜底', async () => {
+    const mounted = await mountPanel();
+
+    expect(document.querySelector('[data-testid="designer-comment-task-entry"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
+    expect(document.querySelector('[data-testid="resubmission-task-list-stub"]')).toBeTruthy();
+
+    mounted.unmount();
+  });
+
+  it('未匹配到 form_id 时仍保留目标批注的详情页', async () => {
+    annotationsRef.value = [
+      {
+        id: 'annot-orphan',
+        title: '孤立批注',
+        description: '找不到对应任务',
+        createdAt: 30,
+        visible: true,
+        refnos: ['24381_149999'],
+        formId: 'FORM-9999',
+      },
+      {
+        id: 'annot-task-1',
+        title: '当前任务批注',
+        description: '不应被自动带入',
+        createdAt: 10,
+        visible: true,
+        refnos: ['24381_145018'],
+        formId: 'FORM-1001',
+      },
+    ];
+    setExternalEntryTarget({
+      annotationId: 'annot-orphan',
+      annotationType: 'text',
+      formId: 'FORM-9999',
+    });
+
+    const mounted = await mountPanel();
+
+    expect(currentTaskRef.value).toBeNull();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="external-entry-unmatched-task"]')).toBeTruthy();
+    expect(document.body.textContent).toContain('孤立批注');
+    expect(document.body.textContent).toContain('designerOnly|发送回复|孤立批注');
+    expect(document.body.textContent).not.toContain('当前任务批注');
+
+    mounted.unmount();
+  });
+
+  it('点击"批注表格" tab 后切换到 AnnotationTableView · PR 3', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+
+    // 默认卡片模式
+    expect(document.querySelector('[data-testid="annotation-workspace-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-table"]')).toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    const tableTab = document.querySelector<HTMLElement>('[data-testid="annotation-list-view-mode-table"]');
+    expect(tableTab).toBeTruthy();
+    tableTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushUi();
+
+    // 切换后表格视图出现、卡片列表隐藏，但仍在 annotation_list 顶层视图
+    expect(document.querySelector('[data-testid="designer-comment-annotation-table"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="annotation-workspace-list"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('表格行单击选中批注后保持在批注列表 · PR 3', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    const tableTab = document.querySelector<HTMLElement>('[data-testid="annotation-list-view-mode-table"]');
+    tableTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushUi();
+
+    const row = document.querySelector<HTMLElement>('[data-testid="annotation-table-view"] [role="row"]');
+    expect(row).toBeTruthy();
+
+    vi.useFakeTimers();
+    try {
+      row!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      vi.advanceTimersByTime(240);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flushUi();
+
+    // 列表视图保持 · 未进入详情页
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
+    // 表格视图保持 · 选中批注被激活
+    expect(document.querySelector('[data-testid="designer-comment-annotation-table"]')).toBeTruthy();
+    expect(activeAnnotationIdRef.value).toBe('annot-open');
+
+    mounted.unmount();
+  });
+
+  it('表格行双击进入批注详情并自动切回卡片布局 · PR 3', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    const tableTab = document.querySelector<HTMLElement>('[data-testid="annotation-list-view-mode-table"]');
+    tableTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushUi();
+
+    const row = document.querySelector<HTMLElement>('[data-testid="annotation-table-view"] [role="row"]');
+    expect(row).toBeTruthy();
+
+    row!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await flushUi();
+    await flushUi();
+
+    // 进入详情页 · AnnotationWorkspace detail 布局（因为 annotationListViewMode 被重置为 split）
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeNull();
+    // locateAnnotation 副作用：调用 showModelByRefnosWithAck + ensurePanelAndActivate('viewer')
+    expect(showModelByRefnosWithAckMock).toHaveBeenCalled();
+    expect(ensurePanelAndActivateMock).toHaveBeenCalledWith('viewer');
+
+    mounted.unmount();
+  });
+
+  it('Ribbon 请求切到 table 视图时面板响应并清空请求 · PR 4', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    expect(document.querySelector('[data-testid="annotation-workspace-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    requestDesignerCommentViewMode('table');
+    await flushUi();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="annotation-workspace-list"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+
+    mounted.unmount();
+  });
+
+  it('处于详情页时 Ribbon 请求 table 会回到列表并切到表格视图 · PR 4', async () => {
+    currentTaskRef.value = createTask();
+
+    const mounted = await mountPanel();
+    const row = document.querySelector<HTMLElement>('[data-testid="annotation-row-text-annot-open"]');
+    row!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await flushUi();
+
+    // 先到详情页
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeTruthy();
+
+    // Ribbon 请求
+    requestDesignerCommentViewMode('table');
+    await flushUi();
+
+    // 回到列表视图且是 table 形态
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeTruthy();
+
+    mounted.unmount();
+  });
+
+  it('刷新后恢复上次的 annotationListViewMode · PR 5', async () => {
+    currentTaskRef.value = createTask();
+    persistenceState.set('annotationListViewMode', 'table');
+
+    const mounted = await mountPanel();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="annotation-workspace-list"]')).toBeNull();
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
 
     mounted.unmount();
   });

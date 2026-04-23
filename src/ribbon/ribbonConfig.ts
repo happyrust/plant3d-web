@@ -2,6 +2,7 @@ import type { RibbonTabConfig } from '@/ribbon/ribbonTypes';
 
 import { isReviewDebugUiEnabled } from '@/components/review/debugUiGate';
 import { isMyTasksAvailableInWorkflowMode } from '@/components/review/workflowMode';
+import { UserRole } from '@/types/auth';
 
 const showDebugUi = isReviewDebugUiEnabled();
 const showMyTasksEntry = isMyTasksAvailableInWorkflowMode();
@@ -273,6 +274,20 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'panel.review', label: '校审面板', icon: 'clipboard_list', commandId: 'panel.review' },
           { kind: 'button', id: 'panel.reviewerTasks', label: '待审核', icon: 'clipboard_check', commandId: 'panel.reviewerTasks' },
           { kind: 'button', id: 'panel.resubmissionTasks', label: '批注处理', icon: 'redo', commandId: 'panel.resubmissionTasks' },
+          {
+            kind: 'button',
+            id: 'panel.annotationTable',
+            label: '批注表格',
+            icon: 'table',
+            commandId: 'panel.annotationTable',
+            roles: [
+              UserRole.DESIGNER,
+              UserRole.PROOFREADER,
+              UserRole.REVIEWER,
+              UserRole.MANAGER,
+              UserRole.ADMIN,
+            ],
+          },
           { kind: 'button', id: 'panel.myTasks', label: '我的编校审', icon: 'file_text', commandId: 'panel.myTasks' },
         ],
       },
