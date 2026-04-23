@@ -10,8 +10,11 @@ import type {
 
 import {
   getCommentsFromStore as _storeGetComments,
+  getReviewCommentThreadStore as _getThreadStore,
   isReviewCommentThreadStoreActive as _isStoreActive,
 } from '@/review/services/sharedStores';
+import { liftAnnotationComment } from '@/review/domain/reviewSnapshot';
+import { buildCommentThreadKey } from '@/review/domain/commentThread';
 
 import { useUserStore } from '@/composables/useUserStore';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
@@ -1450,6 +1453,12 @@ function addCommentToAnnotation(
     createdAt: comment.createdAt || fallbackCreatedAt,
   };
 
+  if (_isCommentStoreActive()) {
+    _getThreadStore().upsertComment(
+      liftAnnotationComment(newComment, { annotationType }),
+    );
+  }
+
   switch (annotationType) {
     case 'text': {
       const annotation = annotations.value.find((a) => a.id === annotationId);
@@ -1534,6 +1543,17 @@ function updateAnnotationComment(
   commentId: string,
   patch: Partial<Pick<AnnotationComment, 'content' | 'updatedAt'>>
 ): boolean {
+  if (_isCommentStoreActive()) {
+    const existing = _getCommentsFromInline(annotationType, annotationId)
+      .find((c) => c.id === commentId);
+    if (existing) {
+      const updated = { ...existing, ...patch, updatedAt: Date.now() };
+      _getThreadStore().upsertComment(
+        liftAnnotationComment(updated, { annotationType }),
+      );
+    }
+  }
+
   const updateComments = (comments: AnnotationComment[] | undefined): AnnotationComment[] | undefined => {
     if (!comments) return undefined;
     return comments.map((c) =>
@@ -1580,6 +1600,11 @@ function removeAnnotationComment(
   annotationId: string,
   commentId: string
 ): boolean {
+  if (_isCommentStoreActive()) {
+    const key = buildCommentThreadKey(annotationType, annotationId);
+    _getThreadStore().deleteComment(key, commentId);
+  }
+
   const filterComments = (comments: AnnotationComment[] | undefined): AnnotationComment[] | undefined => {
     if (!comments) return undefined;
     return comments.filter((c) => c.id !== commentId);
