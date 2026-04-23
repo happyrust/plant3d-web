@@ -169,6 +169,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         items: [
           { kind: 'button', id: 'measurement.distance', label: '距离', icon: 'ruler', commandId: 'measurement.distance' },
           { kind: 'button', id: 'measurement.point_to_mesh', label: '点到面', icon: 'ruler_combined', commandId: 'measurement.point_to_mesh' },
+          { kind: 'button', id: 'measurement.object_to_object', label: '构件最近点', icon: 'ruler_combined', commandId: 'measurement.object_to_object' },
           { kind: 'button', id: 'measurement.pipe_to_structure', label: '管-墙/柱', icon: 'ruler_combined', commandId: 'measurement.pipe_to_structure' },
           { kind: 'button', id: 'measurement.pipe_to_pipe', label: '管-管', icon: 'ruler_combined', commandId: 'measurement.pipe_to_pipe' },
           { kind: 'button', id: 'measurement.angle', label: '角度', icon: 'ruler', commandId: 'measurement.angle' },

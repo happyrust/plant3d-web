@@ -4,6 +4,7 @@ import type {
   AnnotationComment,
   AnnotationReviewAction,
   AnnotationReviewState,
+  AnnotationScreenshot,
   AnnotationSeverity,
   User,
 } from '@/types/auth';
@@ -21,6 +22,7 @@ import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import {
   createDefaultAnnotationReviewState,
   normalizeAnnotationReviewState,
+  normalizeAnnotationScreenshot,
   normalizeAnnotationSeverity,
 } from '@/types/auth';
 
@@ -40,6 +42,7 @@ export type ToolMode =
   | 'xeokit_measure_distance'
   | 'xeokit_measure_angle'
   | 'measure_point_to_object'
+  | 'measure_object_to_object'
   | 'measure_pipe_to_structure'
   | 'measure_pipe_to_pipe'
   | 'dimension_linear'
@@ -237,6 +240,7 @@ export type AnnotationRecord = {
   /** 批注创建者 ID（用于权限判断：作者可编辑严重度） */
   authorId?: string;
   formId?: string;
+  screenshot?: AnnotationScreenshot;
 };
 
 export type Obb = {
@@ -271,6 +275,7 @@ export type ObbAnnotationRecord = {
   severity?: AnnotationSeverity;
   authorId?: string;
   formId?: string;
+  screenshot?: AnnotationScreenshot;
 };
 
 export type CloudAnnotationRecord = {
@@ -293,6 +298,7 @@ export type CloudAnnotationRecord = {
   severity?: AnnotationSeverity;
   authorId?: string;
   formId?: string;
+  screenshot?: AnnotationScreenshot;
 };
 
 export type RectAnnotationRecord = {
@@ -311,6 +317,7 @@ export type RectAnnotationRecord = {
   severity?: AnnotationSeverity;
   authorId?: string;
   formId?: string;
+  screenshot?: AnnotationScreenshot;
 };
 
 export type PickedQueryCenter = {
@@ -470,6 +477,7 @@ function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
     refno: refs.refno,
     refnos: refs.refnos,
     formId: normalizeOptionalString(rec.formId),
+    screenshot: normalizeAnnotationScreenshot(rec.screenshot),
   };
 }
 
@@ -497,6 +505,7 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     formId: normalizeOptionalString(rec.formId),
+    screenshot: normalizeAnnotationScreenshot(rec.screenshot),
   };
 }
 
@@ -506,6 +515,7 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     formId: normalizeOptionalString(rec.formId),
+    screenshot: normalizeAnnotationScreenshot(rec.screenshot),
   };
 }
 
@@ -515,6 +525,7 @@ function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotatio
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     formId: normalizeOptionalString(rec.formId),
+    screenshot: normalizeAnnotationScreenshot(rec.screenshot),
   };
 }
 
@@ -1433,6 +1444,82 @@ function updateAnnotationSeverity(
   }
 }
 
+function getAnnotationScreenshot(
+  annotationType: AnnotationType,
+  annotationId: string
+): AnnotationScreenshot | null {
+  const record = getAnnotationRecordByType(annotationType, annotationId);
+  return normalizeAnnotationScreenshot(record?.screenshot) ?? null;
+}
+
+function setAnnotationScreenshot(
+  annotationType: AnnotationType,
+  annotationId: string,
+  screenshot: AnnotationScreenshot
+): boolean {
+  const normalized = normalizeAnnotationScreenshot(screenshot);
+  if (!normalized) return false;
+
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, { screenshot: normalized });
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, { screenshot: normalized });
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, { screenshot: normalized });
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, { screenshot: normalized });
+      return true;
+    }
+  }
+}
+
+function clearAnnotationScreenshot(
+  annotationType: AnnotationType,
+  annotationId: string
+): boolean {
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, { screenshot: undefined });
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, { screenshot: undefined });
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, { screenshot: undefined });
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, { screenshot: undefined });
+      return true;
+    }
+  }
+}
+
 /**
  * 为批注添加评论/意见。
  *
@@ -1943,6 +2030,9 @@ export function useToolStore() {
     setAnnotationReviewState,
     applyAnnotationReviewAction,
     updateAnnotationSeverity,
+    getAnnotationScreenshot,
+    setAnnotationScreenshot,
+    clearAnnotationScreenshot,
 
     exportJSON,
     importJSON,
