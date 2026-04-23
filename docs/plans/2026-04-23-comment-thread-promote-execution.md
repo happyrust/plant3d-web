@@ -110,4 +110,15 @@ Step 1 (开启 DUAL_READ) → Step 2 (读路径) → Step 3 (写路径) → Step
 
 **总预估：~6.5h**
 
-Step 1 立即开始。
+## 6. 执行记录
+
+| 步骤 | 状态 | 提交 |
+|------|------|------|
+| Step 1 · DUAL_READ 激活 | ✅ 完成 | `3592364` |
+| Step 2 · 读路径适配层 | ✅ 完成 | `9b5e1f1` |
+| Step 2 · 适配器测试 | ✅ 完成 | `187b2c6` |
+| Step 2 · getAnnotationComments 透明切换 | ✅ 完成 | `7fad8a1` |
+| Step 3 · 写路径同步 | ✅ 完成 | `948293b` |
+| Step 4 · 稳定验证 | ✅ 176 测试全绿 | — |
+
+PROMOTE 阶段闭环。保留 DUAL_READ flag 一个迭代，待验证无 `dual_read_diff` 后进入 CUTOVER。

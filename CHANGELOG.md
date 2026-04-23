@@ -4,6 +4,20 @@
 
 ## [2026-04-23]
 
+### Refactored
+
+- **评论真源迁移 PROMOTE 完成（M3）**：`commentThreadStore` 升级为评论数据的主读写源
+  - 读路径：`getAnnotationComments()` 在 DUAL_READ 模式下透明切换到 `commentThreadStore`
+  - 写路径：`addCommentToAnnotation` / `updateAnnotationComment` / `removeAnnotationComment` 同时同步到 store + inline
+  - 新增 `lowerSnapshotComment` 反向适配器（`SnapshotComment` → `AnnotationComment`）+ 3 个测试
+  - 新增 `getCommentsFromStore()` PROMOTE 读取辅助函数
+  - `REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ` + `REVIEW_C_EVENT_LOG` 默认开启
+  - 176 个相关测试全绿，0 回归
+
+### Fixed
+
+- 修复 ReviewPanel 相关 8 个测试回归：补全 `useSelectionStore` / `useViewerContext.tools` / `toolStore.activeObbAnnotationId` / `xeokitDistanceMeasurements` 等 mock，适配组件标签变更
+
 ### Added
 
 - 三维校审嵌入流程增强：`embedContextRestore` 上下文恢复、`embedFormSnapshotRestore` 表单快照恢复、`embedRoleLanding` 角色着陆分发逻辑
