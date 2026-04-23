@@ -110,9 +110,9 @@ describe('restoreEmbedFormSnapshot', () => {
     expect(syncTools).toHaveBeenCalledTimes(1);
 
     const payload = JSON.parse(importTools.mock.calls[0][0] as string) as {
-      annotations: { comments?: { authorRole: UserRole; content: string }[] }[];
+      annotations: { formId?: string; comments?: { authorRole: UserRole; content: string }[] }[];
       measurements: unknown[];
-      xeokitDistanceMeasurements: { approximate?: boolean }[];
+      xeokitDistanceMeasurements: { approximate?: boolean; formId?: string }[];
     };
     expect(payload.measurements).toEqual([]);
     expect(payload.xeokitDistanceMeasurements).toEqual([
@@ -122,6 +122,8 @@ describe('restoreEmbedFormSnapshot', () => {
       authorRole: UserRole.PROOFREADER,
       content: '请复核',
     }));
+    expect(payload.annotations[0]?.formId).toBe('FORM-1');
+    expect(payload.xeokitDistanceMeasurements[0]?.formId).toBe('FORM-1');
   });
 
   it('当新单据没有历史记录时，也会下发空快照以清空旧批注', async () => {

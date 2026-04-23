@@ -2,6 +2,29 @@
 
 本文件记录 `plant3d-web` 面向部署与用户可见行为的变更摘要。
 
+## [2026-04-23]
+
+### Added
+
+- 三维校审嵌入流程增强：`embedContextRestore` 上下文恢复、`embedFormSnapshotRestore` 表单快照恢复、`embedRoleLanding` 角色着陆分发逻辑
+- `ResubmissionTaskList` 重提交任务列表组件增强
+- `ReviewConfirmation` 审核确认流程优化
+- `TaskReviewDetail` 任务审核详情增强
+- `useXeokitMeasurementTools` 测量工具扩展
+- `reviewRecordReplay` 审核记录回放功能完善
+- PMS 模拟器增强：`pmsReviewSimulator` / `pmsReviewSimulatorWorkflow` 完整流程模拟
+- 批注/测量工具栏统一改造：`AnnotationOverlayBar` / `MeasurementOverlayBar` 交互优化
+- `useDtxTools` / `useToolStore` 工具状态管理重构，含持久化测试
+
+### Changed
+
+- `versionInfo.ts` 版本信息增强与测试覆盖
+- `DockLayout.test.ts` 布局测试扩展
+- `InitiateReviewPanel.vue` 发起审核面板优化
+- `reviewPanelActions` 审核面板动作分发改进
+- `scripts/pms-simulator-runner.ts` 模拟器运行脚本重构
+- 三维校审设计稿 `review-designer.pen` 大幅更新
+
 ## [Unreleased]
 
 ### Added（Ribbon · MVP++ PR 10 · 按钮角色可见性）

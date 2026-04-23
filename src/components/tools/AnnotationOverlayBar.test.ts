@@ -26,11 +26,25 @@ describe('AnnotationOverlayBar', () => {
 
   it('应在批注模式或存在当前批注时显示 toolbar，并支持打开 dock 批注面板', async () => {
     const ensurePanelAndActivate = vi.fn();
+    const setAnnotationProcessingEntryTarget = vi.fn();
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
 
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate,
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref(null),
+      }),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
+    }));
+    vi.doMock('@/components/review/annotationProcessingEntry', () => ({
+      setAnnotationProcessingEntryTarget,
     }));
 
     const [{ default: AnnotationOverlayBar }, { useToolStore }] = await Promise.all([
@@ -75,7 +89,11 @@ describe('AnnotationOverlayBar', () => {
 
     (host.querySelector('[data-testid="annotation-overlay-details-toggle"]') as HTMLButtonElement | null)?.click();
     await nextTick();
-    expect(ensurePanelAndActivate).toHaveBeenCalledWith('annotation');
+    expect(setAnnotationProcessingEntryTarget).toHaveBeenCalledWith(expect.objectContaining({
+      annotationId: 'text-1',
+      annotationType: 'text',
+    }));
+    expect(ensurePanelAndActivate).toHaveBeenCalledWith('review');
 
     // 展开抽屉后访问删除按钮
     (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
@@ -93,6 +111,16 @@ describe('AnnotationOverlayBar', () => {
   it('应支持切换四种批注模式，并按当前批注类型执行批量动作', async () => {
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref(null),
+      }),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
     }));
 
     let host: HTMLDivElement | null = document.createElement('div');
@@ -185,6 +213,16 @@ describe('AnnotationOverlayBar', () => {
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),
     }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref(null),
+      }),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
+    }));
 
     let host: HTMLDivElement | null = document.createElement('div');
     document.body.appendChild(host);
@@ -248,6 +286,11 @@ describe('AnnotationOverlayBar', () => {
   it('更多抽屉中提供当前批注/批量严重度快捷，具备权限时能写入 store', async () => {
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref(null),
+      }),
     }));
     vi.doMock('@/composables/useUserStore', () => ({
       useUserStore: () => ({
@@ -328,6 +371,11 @@ describe('AnnotationOverlayBar', () => {
   it('未登录用户在 drawer 中看到严重度按钮为 disabled', async () => {
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref(null),
+      }),
     }));
     vi.doMock('@/composables/useUserStore', () => ({
       useUserStore: () => ({ currentUser: ref(null) }),

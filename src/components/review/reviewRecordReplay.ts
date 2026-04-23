@@ -68,6 +68,28 @@ function attachCommentsToItems(
   });
 }
 
+function injectFormIdIntoItems(items: unknown[], formId?: string): unknown[] {
+  const normalizedFormId = typeof formId === 'string' ? formId.trim() : '';
+  if (!normalizedFormId) return items;
+
+  return items.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const record = item as Record<string, unknown>;
+    const currentFormId = typeof record.formId === 'string' ? record.formId.trim() : '';
+    if (currentFormId) {
+      if (currentFormId === record.formId) return item;
+      return {
+        ...record,
+        formId: currentFormId,
+      };
+    }
+    return {
+      ...record,
+      formId: normalizedFormId,
+    };
+  });
+}
+
 function dedupeReplayItems(items: unknown[]): unknown[] {
   const keyedItems = new Map<string, unknown>();
   const anonymousItems: unknown[] = [];
@@ -113,6 +135,9 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   const sourceAnnotationType = typeof record.sourceAnnotationType === 'string'
     ? record.sourceAnnotationType
     : undefined;
+  const formId = typeof record.formId === 'string'
+    ? record.formId.trim() || undefined
+    : undefined;
 
   if (!id || !origin || !target) return null;
 
@@ -126,6 +151,7 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       createdAt,
       sourceAnnotationId,
       sourceAnnotationType,
+      formId,
     };
   }
 
@@ -141,6 +167,7 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       createdAt,
       sourceAnnotationId,
       sourceAnnotationType,
+      formId,
     };
   }
 
@@ -162,6 +189,7 @@ function toXeokitMeasurement(
       createdAt: measurement.createdAt,
       sourceAnnotationId: measurement.sourceAnnotationId,
       sourceAnnotationType: measurement.sourceAnnotationType,
+      formId: measurement.formId,
     };
   }
 
@@ -175,6 +203,7 @@ function toXeokitMeasurement(
     createdAt: measurement.createdAt,
     sourceAnnotationId: measurement.sourceAnnotationId,
     sourceAnnotationType: measurement.sourceAnnotationType,
+    formId: measurement.formId,
   };
 }
 
@@ -212,6 +241,7 @@ function buildReplayMeasurements(measurements: unknown[]): {
 export function mergeWorkflowCommentsIntoRecords(
   records: WorkflowRecordData[],
   comments: WorkflowAnnotationCommentData[] = [],
+  formId?: string,
 ): ReplayRecordLike[] {
   const groupedComments = new Map<string, AnnotationComment[]>();
   for (const rawComment of comments) {
@@ -223,11 +253,23 @@ export function mergeWorkflowCommentsIntoRecords(
 
   return records.map((record) => ({
     ...record,
-    annotations: attachCommentsToItems(record.annotations ?? [], 'text', groupedComments),
-    cloudAnnotations: attachCommentsToItems(record.cloudAnnotations ?? [], 'cloud', groupedComments),
-    rectAnnotations: attachCommentsToItems(record.rectAnnotations ?? [], 'rect', groupedComments),
-    obbAnnotations: attachCommentsToItems(record.obbAnnotations ?? [], 'obb', groupedComments),
-    measurements: record.measurements ?? [],
+    annotations: injectFormIdIntoItems(
+      attachCommentsToItems(record.annotations ?? [], 'text', groupedComments),
+      formId,
+    ),
+    cloudAnnotations: injectFormIdIntoItems(
+      attachCommentsToItems(record.cloudAnnotations ?? [], 'cloud', groupedComments),
+      formId,
+    ),
+    rectAnnotations: injectFormIdIntoItems(
+      attachCommentsToItems(record.rectAnnotations ?? [], 'rect', groupedComments),
+      formId,
+    ),
+    obbAnnotations: injectFormIdIntoItems(
+      attachCommentsToItems(record.obbAnnotations ?? [], 'obb', groupedComments),
+      formId,
+    ),
+    measurements: injectFormIdIntoItems(record.measurements ?? [], formId),
   }));
 }
 
@@ -255,8 +297,9 @@ export function buildReviewRecordReplayPayload(records: ReplayRecordLike[]): str
 export function buildWorkflowSnapshotReplayPayload(
   records: WorkflowRecordData[],
   comments: WorkflowAnnotationCommentData[] = [],
+  formId?: string,
 ): string {
-  return buildReviewRecordReplayPayload(mergeWorkflowCommentsIntoRecords(records, comments));
+  return buildReviewRecordReplayPayload(mergeWorkflowCommentsIntoRecords(records, comments, formId));
 }
 
 export function extractWorkflowModelRefnos(models: (string | Record<string, unknown>)[] = []): string[] {

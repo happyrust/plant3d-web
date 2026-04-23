@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe('versionInfo', () => {
-  it('应能解析 JSON 版本信息', async () => {
+  it('UTC 时间的 buildDate 应转换为跨时区稳定的「北京时间」字符串', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         version: '1.2.3',
@@ -24,7 +24,28 @@ describe('versionInfo', () => {
     await expect(loadVersionInfo('/version.json')).resolves.toEqual({
       version: '1.2.3',
       commit: 'abc123',
-      buildDate: '2026-03-16 10:00:00 UTC',
+      buildDate: '2026-03-16 18:00:00 北京时间',
+    });
+  });
+
+  it('UTC+8 时间的 buildDate 保持墙钟时间不变', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        version: '1.2.3',
+        commit: 'abc123',
+        buildDate: '2026-03-16 18:00:00 UTC+8',
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      })
+    ));
+
+    await expect(loadVersionInfo('/version.json')).resolves.toEqual({
+      version: '1.2.3',
+      commit: 'abc123',
+      buildDate: '2026-03-16 18:00:00 北京时间',
     });
   });
 

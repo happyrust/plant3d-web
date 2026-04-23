@@ -20,6 +20,7 @@ describe('buildReviewRecordReplayPayload', () => {
             createdAt: 10,
             sourceAnnotationId: 'annot-1',
             sourceAnnotationType: 'text',
+            formId: 'FORM-2001',
           },
           {
             id: 'angle-1',
@@ -42,6 +43,7 @@ describe('buildReviewRecordReplayPayload', () => {
         approximate: false,
         sourceAnnotationId: 'annot-1',
         sourceAnnotationType: 'text',
+        formId: 'FORM-2001',
       }),
     ]);
     expect(payload.xeokitAngleMeasurements).toEqual([

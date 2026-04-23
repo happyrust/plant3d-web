@@ -1,3 +1,76 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "my-mcp-1": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "1"
+      }
+    },
+    "my-mcp-2": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "2"
+      }
+    },
+    "my-mcp-3": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "3"
+      }
+    },
+    "my-mcp-4": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "4"
+      }
+    },
+    "my-mcp-5": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "5"
+      }
+    },
+    "my-mcp-6": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "6"
+      }
+    },
+    "my-mcp-7": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "7"
+      }
+    },
+    "my-mcp-8": {
+      "command": "node",
+      "args": [
+        "/Users/dongpengcheng/.cursor/extensions/lingxi.lingxi-mcp-1.0.24/dist/server.mjs"
+      ],
+      "env": {
+        "XIAOYEZI_SESSION": "8"
+      }
+    }
+  }
 }

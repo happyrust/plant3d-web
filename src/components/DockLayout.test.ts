@@ -159,6 +159,7 @@ vi.mock('@/composables/usePanelZones', () => ({
 const currentTaskRef = ref<ReviewTask | null>(null);
 const pendingReviewTasksRef = ref<ReviewTask[]>([]);
 const myInitiatedTasksRef = ref<ReviewTask[]>([]);
+const returnedInitiatedTasksRef = ref<ReviewTask[]>([]);
 const reviewTasksRef = ref<ReviewTask[]>([]);
 
 vi.mock('@/composables/useReviewStore', () => ({
@@ -206,6 +207,7 @@ vi.mock('@/composables/useUserStore', () => ({
     clearCurrentUserSelection: (...args: unknown[]) => clearCurrentUserSelectionMock(...args),
     pendingReviewTasks: pendingReviewTasksRef,
     myInitiatedTasks: myInitiatedTasksRef,
+    returnedInitiatedTasks: returnedInitiatedTasksRef,
     reviewTasks: reviewTasksRef,
     currentUser: ref({ id: 'local-user', role: 'designer' }),
     currentUserId: ref('local-user'),
@@ -333,6 +335,7 @@ describe('DockLayout embed bootstrap', () => {
 
     pendingReviewTasksRef.value = [createTask()];
     myInitiatedTasksRef.value = [];
+    returnedInitiatedTasksRef.value = [];
     reviewTasksRef.value = [createTask()];
 
     switchProjectByIdMock.mockReturnValue(true);
@@ -388,13 +391,13 @@ describe('DockLayout embed bootstrap', () => {
     expect(switchProjectByIdMock).toHaveBeenCalledWith('PROJECT-CLAIMS');
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
       target: 'reviewer',
-      formId: 'WRONG-FORM',
+      formId: 'FORM-CLAIMS-1',
       passiveWorkflowMode: false,
     }));
 
     const persisted = JSON.parse(sessionStorage.getItem('embed_mode_params') || '{}');
     expect(persisted.projectId).toBe('PROJECT-CLAIMS');
-    expect(persisted.formId).toBe('WRONG-FORM');
+    expect(persisted.formId).toBe('FORM-CLAIMS-1');
     expect(persisted.userId).toBe('checker-1');
     expect(persisted.workflowRole).toBe('jd');
     expect(persisted.workflowMode).toBe('manual');
@@ -405,6 +408,72 @@ describe('DockLayout embed bootstrap', () => {
       role: 'jd',
       workflowMode: 'manual',
     }));
+
+    mounted.unmount();
+  });
+
+  it('设计端被动恢复时优先打开批注处理并使用 returnedInitiatedTasks 匹配任务', async () => {
+    const returnedTask = createTask({
+      id: 'task-returned-1',
+      formId: 'FORM-RETURNED-1',
+      status: 'draft',
+      currentNode: 'sj',
+    });
+    returnedInitiatedTasksRef.value = [returnedTask];
+    reviewTasksRef.value = [createTask({
+      id: 'task-reviewing-1',
+      formId: 'FORM-RETURNED-1',
+      status: 'submitted',
+      currentNode: 'jd',
+    })];
+    restoreEmbedWorkbenchContextMock.mockResolvedValue({
+      target: 'designer',
+      restoreStatus: 'matched',
+      restoredTaskId: returnedTask.id,
+      restoredTaskSummary: {
+        title: returnedTask.title,
+        status: returnedTask.status,
+        currentNode: returnedTask.currentNode,
+      },
+      restoredTaskDraft: null,
+      restoredTask: returnedTask,
+    });
+
+    window.history.replaceState({}, '', '/?user_token=jwt-designer&workflow_mode=external&form_id=FORM-RETURNED-1');
+    authVerifyTokenMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: {
+        valid: true,
+        claims: {
+          projectId: 'PROJECT-CLAIMS',
+          userId: 'designer-1',
+          formId: 'FORM-RETURNED-1',
+          role: 'sj',
+          workflowMode: 'external',
+          exp: 1999999999,
+          iat: 1700000000,
+        },
+      },
+    });
+
+    const mounted = await mountDockLayout();
+
+    expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
+      target: 'designer',
+      formId: 'FORM-RETURNED-1',
+      passiveWorkflowMode: true,
+    }));
+    const restoreArgs = restoreEmbedWorkbenchContextMock.mock.calls.at(-1)?.[0] as {
+      designerTasks: () => ReviewTask[];
+    };
+    expect(restoreArgs.designerTasks()).toEqual([returnedTask]);
+    expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
+      target: 'designer',
+      formId: 'FORM-RETURNED-1',
+      primaryPanelId: 'designerCommentHandling',
+      visiblePanelIds: ['designerCommentHandling'],
+    });
 
     mounted.unmount();
   });

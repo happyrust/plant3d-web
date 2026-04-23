@@ -104,7 +104,7 @@ export async function restoreEmbedFormSnapshot(
     : [];
 
   if (options.importTools) {
-    const legacyPayload = buildWorkflowSnapshotReplayPayload(records, comments);
+    const legacyPayload = buildWorkflowSnapshotReplayPayload(records, comments, options.formId);
     const shadowResult = runWorkflowSyncShadow({ legacyPayload, data });
 
     if (isReviewCommentThreadStoreActive()) {
@@ -133,6 +133,17 @@ export async function restoreEmbedFormSnapshot(
     options.syncTools?.();
   }
 
+  if (typeof console !== 'undefined') {
+    console.info('[embed][form-restore] workflow snapshot resolved', {
+      formId: options.formId,
+      taskId: data?.taskId || null,
+      modelCount: modelRefnos.length,
+      modelRefnos,
+      recordCount: records.length,
+      attachmentCount: attachments.length,
+    });
+  }
+
   return {
     modelRefnos,
     recordCount: records.length,
@@ -149,6 +160,14 @@ export async function restoreEmbedFormSnapshotContext(
 
   if (nextTask && snapshot.modelRefnos.length > 0) {
     nextTask = mergeSnapshotModelRefnosIntoTask(nextTask, snapshot.modelRefnos);
+    if (typeof console !== 'undefined') {
+      console.info('[embed][form-restore] task components replaced from workflow snapshot', {
+        formId: options.formId,
+        taskId: nextTask.id,
+        componentCount: nextTask.components.length,
+        componentRefnos: nextTask.components.map((component) => component.refNo),
+      });
+    }
     await options.updateTask?.(nextTask);
   }
 

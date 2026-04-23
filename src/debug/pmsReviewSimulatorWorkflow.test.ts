@@ -489,7 +489,43 @@ describe('resolveSimulatorWorkflowAccess', () => {
     });
   });
 
-  it('已有单据缺少 workflow next_step 角色或用户时，只允许查看', () => {
+  it('已有单据缺少 workflow next_step 时，可回退到任务当前节点与指派判断权限', () => {
+    expect(resolveSimulatorWorkflowAccess({
+      iframeSource: 'task-view',
+      taskStatus: 'submitted',
+      currentPmsUserId: 'JH',
+      currentPmsWorkflowRole: 'jd',
+      workflowNextStepUserId: null,
+      workflowNextStepRole: null,
+      taskCurrentNode: 'jd',
+      taskAssignedUserId: 'JH',
+    })).toEqual({
+      canView: true,
+      canMutateWorkflow: true,
+      decisionSource: 'task-current-node',
+      reason: 'workflow next_step 缺失，已回退到任务当前节点与指派（JH / jd），允许当前用户执行对应操作。',
+    });
+  });
+
+  it('已有单据缺少 workflow next_step，且任务当前节点与指派不命中时只能查看', () => {
+    expect(resolveSimulatorWorkflowAccess({
+      iframeSource: 'task-view',
+      taskStatus: 'submitted',
+      currentPmsUserId: 'SH',
+      currentPmsWorkflowRole: 'sh',
+      workflowNextStepUserId: null,
+      workflowNextStepRole: 'sh',
+      taskCurrentNode: 'jd',
+      taskAssignedUserId: 'JH',
+    })).toEqual({
+      canView: true,
+      canMutateWorkflow: false,
+      decisionSource: 'task-current-node',
+      reason: 'workflow next_step 缺失，当前仅能按任务当前节点与指派判断（JH / jd）；当前用户仅可查看。',
+    });
+  });
+
+  it('已有单据缺少 workflow next_step 和任务指派时，只允许查看', () => {
     expect(resolveSimulatorWorkflowAccess({
       iframeSource: 'task-view',
       taskStatus: 'submitted',

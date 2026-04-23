@@ -103,6 +103,7 @@ function convertXeokitMeasurementToClassic(
       createdAt: measurement.createdAt,
       sourceAnnotationId: measurement.sourceAnnotationId,
       sourceAnnotationType: measurement.sourceAnnotationType,
+      formId: measurement.formId,
     };
   }
 
@@ -115,6 +116,7 @@ function convertXeokitMeasurementToClassic(
     createdAt: measurement.createdAt,
     sourceAnnotationId: measurement.sourceAnnotationId,
     sourceAnnotationType: measurement.sourceAnnotationType,
+    formId: measurement.formId,
   };
 }
 
@@ -385,7 +387,7 @@ type ConfirmCurrentDataOptions<TPayload> = {
   hasPendingData: boolean;
   payload: TPayload;
   addConfirmedRecord: (payload: TPayload) => Promise<string>;
-  clearAll: () => void;
+  clearDraftData: () => void;
   resetNote: () => void;
 };
 
@@ -394,7 +396,7 @@ export async function confirmCurrentDataSafely<TPayload>(
 ): Promise<boolean> {
   if (!options.hasPendingData) return false;
   await options.addConfirmedRecord(options.payload);
-  options.clearAll();
+  options.clearDraftData();
   options.resetNote();
   return true;
 }

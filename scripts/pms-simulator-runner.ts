@@ -19,6 +19,7 @@ import {
 } from '../src/debug/pmsSimulatorAutomation';
 
 import {
+  listPageAndFrames,
   registerPlant3dAutomationReviewInitScript,
   reloadReviewerWorkbenchAcrossContext,
   runSubmitReviewAcrossContext,
@@ -56,6 +57,7 @@ type SimulatorTestSnapshot = {
   currentPmsUser: SimulatorPmsUser;
   currentWorkflowRole: WorkflowRole;
   currentWorkflowNode: string | null;
+  currentTaskId: string | null;
   currentFormId: string | null;
   currentTaskStatus: string;
   iframeSource: string | null;
@@ -93,10 +95,47 @@ type ScenarioRuntime = ScenarioContext & {
 type CreatedReview = {
   packageName: string;
   formId: string;
-  taskId: string;
+  taskId: string | null;
 };
 
 type ScenarioHandler = (runtime: ScenarioRuntime) => Promise<PmsSimulatorScenarioReport>;
+
+function traceSimulator(message: string): void {
+  if (process.env.PMS_SIMULATOR_TRACE !== '1') return;
+  console.error(`[pms-simulator] ${message}`);
+}
+
+async function waitForDesignerCommentAnnotationListAcrossContext(
+  context: BrowserContext,
+): Promise<{ page: Page; root: Page | import('playwright').Frame }> {
+  const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
+  const parsed = rawPoll ? Number(rawPoll) : NaN;
+  const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;
+  const deadline = Date.now() + pollMs;
+  while (Date.now() < deadline) {
+    const pages = context.pages().filter((p) => !p.isClosed());
+    for (const p of pages) {
+      for (const root of listPageAndFrames(p)) {
+        let listVisible = false;
+        try {
+          listVisible = await root
+            .locator('[data-testid="designer-comment-annotation-list"]')
+            .first()
+            .isVisible()
+            .catch(() => false);
+        } catch {
+          continue;
+        }
+        if (!listVisible) continue;
+        return { page: p, root };
+      }
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  throw new Error(
+    '超时：未在任何标签页/iframe 内找到设计端批注列表 [data-testid=designer-comment-annotation-list]（请确认驳回后已从 PMS 重新打开对应单据）',
+  );
+}
 
 const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
   approved: '主链通过到 approved',
@@ -200,20 +239,42 @@ async function waitForSimulatorReady(page: Page): Promise<void> {
   );
 }
 
+function isRetryableSimulatorNavigationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Execution context was destroyed')
+    || message.includes('Cannot find context with specified id')
+    || message.includes('__pmsReviewSimulatorTest')
+    || message.includes('Target page, context or browser has been closed');
+}
+
 async function callSimulatorApi<T>(page: Page, method: string, ...args: unknown[]): Promise<T> {
-  return await page.evaluate(
-    async ({ targetMethod, targetArgs }) => {
-      const host = window as Window & {
-        __pmsReviewSimulatorTest?: Record<string, (...innerArgs: unknown[]) => unknown>;
-      };
-      const api = host.__pmsReviewSimulatorTest;
-      if (!api || typeof api[targetMethod] !== 'function') {
-        throw new Error(`__pmsReviewSimulatorTest.${targetMethod} 不存在`);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      await waitForSimulatorReady(page);
+      return await page.evaluate(
+        async ({ targetMethod, targetArgs }) => {
+          const host = window as Window & {
+            __pmsReviewSimulatorTest?: Record<string, (...innerArgs: unknown[]) => unknown>;
+          };
+          const api = host.__pmsReviewSimulatorTest;
+          if (!api || typeof api[targetMethod] !== 'function') {
+            throw new Error(`__pmsReviewSimulatorTest.${targetMethod} 不存在`);
+          }
+          return await api[targetMethod](...targetArgs);
+        },
+        { targetMethod: method, targetArgs: args },
+      ) as T;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableSimulatorNavigationError(error) || attempt >= 3 || page.isClosed()) {
+        throw error;
       }
-      return await api[targetMethod](...targetArgs);
-    },
-    { targetMethod: method, targetArgs: args },
-  ) as T;
+      await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 async function getSnapshot(page: Page): Promise<SimulatorTestSnapshot> {
@@ -252,6 +313,26 @@ async function waitForRowByFormId(page: Page, formId: string, options?: { timeou
   });
 }
 
+async function resolveTaskIdByFormId(
+  page: Page,
+  formId: string,
+  preferredTaskId?: string | null,
+  options?: { timeoutMs?: number; allowMissing?: boolean },
+): Promise<string | null> {
+  const normalizedTaskId = String(preferredTaskId || '').trim() || null;
+  if (normalizedTaskId) return normalizedTaskId;
+
+  try {
+    const row = await waitForRowByFormId(page, formId, {
+      timeoutMs: options?.timeoutMs,
+    });
+    return String(row.taskId || '').trim() || null;
+  } catch (error) {
+    if (options?.allowMissing) return null;
+    throw error;
+  }
+}
+
 async function waitForSnapshotByFormId(
   page: Page,
   formId: string,
@@ -277,19 +358,26 @@ async function openTaskForRole(
   page: Page,
   formId: string,
   role: SimulatorPmsUser,
-  source: 'task-view' | 'task-reopen' = 'task-view',
-): Promise<{ row: SimulatorTestRowSummary; snapshot: SimulatorTestSnapshot }> {
-  await switchRole(page, role);
-  const row = await waitForRowByFormId(page, formId);
-  const selected = await callSimulatorApi<boolean>(page, 'selectTaskByFormId', formId);
-  if (!selected) {
-    throw new Error(`按 form_id=${formId} 选中任务失败`);
-  }
-  await callSimulatorApi<void>(page, 'openSelected', source);
-  const snapshot = await waitForSnapshotByFormId(page, formId, {
+  options?: {
+    source?: 'task-view' | 'task-reopen';
+    taskId?: string | null;
+  },
+): Promise<SimulatorTestSnapshot> {
+  const normalizedTaskId = await resolveTaskIdByFormId(page, formId, options?.taskId, {
+    timeoutMs: 30_000,
+    allowMissing: true,
+  });
+  const source = options?.source || 'task-view';
+  traceSimulator(`openTaskForRole role=${role} source=${source} form_id=${formId} task_id=${normalizedTaskId || '--'}`);
+  await callSimulatorApi<void>(page, 'openTaskByFormId', {
+    role,
+    formId,
+    taskId: normalizedTaskId,
+    source,
+  });
+  return await waitForSnapshotByFormId(page, formId, {
     predicate: (item) => Boolean(item.iframeSource),
   });
-  return { row, snapshot };
 }
 
 async function runWorkflowAction(
@@ -301,6 +389,7 @@ async function runWorkflowAction(
   },
 ): Promise<SimulatorTestSnapshot> {
   const before = await getSnapshot(page);
+  traceSimulator(`runWorkflowAction action=${action} form_id=${before.currentFormId || before.lastOpenedFormId || '--'} node=${before.currentWorkflowNode || '--'}`);
   await callSimulatorApi<void>(page, 'openWorkflowAction', action);
   if (action === 'return' && options?.targetNode) {
     await callSimulatorApi<void>(page, 'setWorkflowDialogTargetNode', options.targetNode);
@@ -461,20 +550,36 @@ async function openScenarioPage(runtime: ScenarioRuntime): Promise<void> {
       localStorage.setItem('plant3d_automation_review', '1');
       localStorage.setItem('plant3d_debug_ui', '1');
       localStorage.setItem('plant3d_workflow_mode', 'external');
+      localStorage.setItem('plant3d-onboarding-v1', JSON.stringify({
+        completedGuides: {
+          'SJ__designer': true,
+          'SJ__designer__external': true,
+          'JH__proofreader': true,
+          'JH__proofreader__external': true,
+          'SH__reviewer': true,
+          'SH__reviewer__external': true,
+          'PZ__manager': true,
+          'PZ__manager__external': true,
+        },
+      }));
     } catch {
       /* ignore */
     }
   });
+  traceSimulator(`openScenarioPage goto ${runtime.env.simulatorUrl}`);
   await runtime.page.goto(runtime.env.simulatorUrl, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await waitForSimulatorReady(runtime.page);
-  await refreshList(runtime.page);
+  traceSimulator('openScenarioPage ready');
 }
 
 async function createReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId): Promise<CreatedReview> {
   await switchRole(runtime.page, 'SJ');
   process.env.PMS_MOCK_PACKAGE_NAME = scenarioPackageName(caseId);
+  traceSimulator(`createReview case=${caseId} openNew`);
   await callSimulatorApi<void>(runtime.page, 'openNew');
+  traceSimulator(`createReview case=${caseId} submitReview`);
   const packageName = await runSubmitReviewAcrossContext(runtime.context);
+  traceSimulator(`createReview case=${caseId} submitDone package=${packageName}`);
   const snapshot = await waitFor(async () => {
     const current = await getSnapshot(runtime.page);
     return current.lastOpenedFormId ? current : null;
@@ -488,11 +593,16 @@ async function createReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId
     throw new Error('新建单据后未获得 form_id');
   }
   runtime.cleanupFormIds.add(formId);
-  const row = await waitForRowByFormId(runtime.page, formId, { timeoutMs: 120_000 });
+  const taskId = snapshot.currentTaskId || snapshot.selectedTaskId;
+  const resolvedTaskId = await resolveTaskIdByFormId(runtime.page, formId, taskId, {
+    timeoutMs: 30_000,
+    allowMissing: true,
+  });
+  traceSimulator(`createReview case=${caseId} created form_id=${formId} task_id=${resolvedTaskId || '--'}`);
   return {
     packageName,
     formId,
-    taskId: row.taskId,
+    taskId: resolvedTaskId,
   };
 }
 
@@ -569,17 +679,17 @@ async function scenarioApproved(runtime: ScenarioRuntime): Promise<PmsSimulatorS
   assertions.push(assertResult('sj-active-order', snapshot.lastVerifyAt != null && snapshot.lastActionAt != null && snapshot.lastVerifyAt <= snapshot.lastActionAt));
   assertions.push(assertResult('sj-active-sync', snapshot.lastAction === 'active' && snapshot.lastOk === true, snapshot.lastMessage || ''));
 
-  await openTaskForRole(runtime.page, created.formId, 'JH');
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 自动化' });
   assertions.push(assertResult('jh-agree-verify', snapshot.lastVerifyAction === 'agree' && snapshot.lastVerifyOk === true, snapshot.lastVerifyMessage || ''));
   assertions.push(assertResult('jh-agree-sync', snapshot.lastAction === 'agree' && snapshot.lastOk === true, snapshot.lastMessage || ''));
 
-  await openTaskForRole(runtime.page, created.formId, 'SH');
+  await openTaskForRole(runtime.page, created.formId, 'SH', { taskId: created.taskId });
   snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'SH agree 自动化' });
   assertions.push(assertResult('sh-agree-verify', snapshot.lastVerifyAction === 'agree' && snapshot.lastVerifyOk === true, snapshot.lastVerifyMessage || ''));
   assertions.push(assertResult('sh-agree-sync', snapshot.lastAction === 'agree' && snapshot.lastOk === true, snapshot.lastMessage || ''));
 
-  await openTaskForRole(runtime.page, created.formId, 'PZ');
+  await openTaskForRole(runtime.page, created.formId, 'PZ', { taskId: created.taskId });
   snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'PZ agree 自动化' });
   assertions.push(assertResult('pz-agree-verify', snapshot.lastVerifyAction === 'agree' && snapshot.lastVerifyOk === true, snapshot.lastVerifyMessage || ''));
   assertions.push(assertResult('pz-agree-sync', snapshot.lastAction === 'agree' && snapshot.lastOk === true, snapshot.lastMessage || ''));
@@ -608,11 +718,11 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
   const assertions: PmsSimulatorAssertionResult[] = [];
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'JH');
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'SH');
+  await openTaskForRole(runtime.page, created.formId, 'SH', { taskId: created.taskId });
   await runWorkflowAction(runtime.page, 'agree', { comment: 'SH agree 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'PZ');
+  await openTaskForRole(runtime.page, created.formId, 'PZ', { taskId: created.taskId });
   const returnSnapshot = await runWorkflowAction(runtime.page, 'return', {
     comment: 'PZ return 自动化',
     targetNode: 'sj',
@@ -620,18 +730,40 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
   assertions.push(assertResult('return-verify', returnSnapshot.lastVerifyAction === 'return' && returnSnapshot.lastVerifyOk === true, returnSnapshot.lastVerifyMessage || ''));
   assertions.push(assertResult('return-sync', returnSnapshot.lastAction === 'return' && returnSnapshot.lastOk === true, returnSnapshot.lastMessage || ''));
 
-  const reopened = await openTaskForRole(runtime.page, created.formId, 'SJ', 'task-reopen');
-  assertions.push(assertResult('return-node', reopened.snapshot.currentWorkflowNode === 'sj', undefined, 'sj', reopened.snapshot.currentWorkflowNode));
-  assertions.push(assertResult('return-side-panel', reopened.snapshot.sidePanelMode === 'initiate', undefined, 'initiate', reopened.snapshot.sidePanelMode));
-  assertions.push(assertResult('return-form-preserved', reopened.snapshot.currentFormId === created.formId, undefined, created.formId, reopened.snapshot.currentFormId));
+  const reopened = await openTaskForRole(runtime.page, created.formId, 'SJ', {
+    source: 'task-reopen',
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult('return-node', reopened.currentWorkflowNode === 'sj', undefined, 'sj', reopened.currentWorkflowNode));
+  assertions.push(assertResult('return-side-panel', reopened.sidePanelMode === 'initiate', undefined, 'initiate', reopened.sidePanelMode));
+  assertions.push(assertResult('return-form-preserved', reopened.currentFormId === created.formId, undefined, created.formId, reopened.currentFormId));
+  const designerCommentPanel = await waitForDesignerCommentAnnotationListAcrossContext(runtime.context);
+  const detailVisible = await designerCommentPanel.root
+    .locator('[data-testid="designer-comment-annotation-detail"]')
+    .first()
+    .isVisible()
+    .catch(() => false);
+  const taskEntryVisible = await designerCommentPanel.root
+    .locator('[data-testid="designer-comment-task-entry"]')
+    .first()
+    .isVisible()
+    .catch(() => false);
+  const listText = await designerCommentPanel.root
+    .locator('[data-testid="designer-comment-annotation-list"]')
+    .first()
+    .textContent()
+    .catch(() => null);
+  assertions.push(assertResult('return-designer-comment-list', Boolean(listText?.includes('批注列表')), listText || ''));
+  assertions.push(assertResult('return-designer-comment-detail-hidden', detailVisible === false, undefined, false, detailVisible));
+  assertions.push(assertResult('return-designer-comment-task-entry-hidden', taskEntryVisible === false, undefined, false, taskEntryVisible));
 
   return finalizeScenarioReport({
     caseId: 'return',
     name: CASE_NAMES.return,
     formId: created.formId,
     taskId: created.taskId,
-    finalNode: normalizeNode(reopened.snapshot.currentWorkflowNode),
-    finalStatus: reopened.snapshot.currentTaskStatus,
+    finalNode: normalizeNode(reopened.currentWorkflowNode),
+    finalStatus: reopened.currentTaskStatus,
     packageName: created.packageName,
     assertions,
   });
@@ -642,7 +774,7 @@ async function scenarioStop(runtime: ScenarioRuntime): Promise<PmsSimulatorScena
   const assertions: PmsSimulatorAssertionResult[] = [];
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'JH');
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   const stopSnapshot = await runWorkflowAction(runtime.page, 'stop', { comment: 'JH stop 自动化' });
   assertions.push(assertResult('stop-verify', stopSnapshot.lastVerifyAction === 'stop' && stopSnapshot.lastVerifyOk === true, stopSnapshot.lastVerifyMessage || ''));
   assertions.push(assertResult('stop-sync', stopSnapshot.lastAction === 'stop' && stopSnapshot.lastOk === true, stopSnapshot.lastMessage || ''));
@@ -671,7 +803,7 @@ async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorSc
   const assertions: PmsSimulatorAssertionResult[] = [];
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'JH');
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   const beforeCounts = await buildRestoreCounts(runtime);
   assertions.push(assertResult('restore-before-annotation', beforeCounts.pendingAnnotationCount >= 1, undefined, '>=1', beforeCounts.pendingAnnotationCount));
   assertions.push(assertResult('restore-before-measurement', beforeCounts.pendingMeasurementCount >= 1, undefined, '>=1', beforeCounts.pendingMeasurementCount));
@@ -705,11 +837,14 @@ async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorSc
 async function scenarioGateBlock(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
   const created = await createReview(runtime, 'gate-block');
   const assertions: PmsSimulatorAssertionResult[] = [];
+  if (!created.taskId) {
+    throw new Error(`gate-block 缺少 task_id（form_id=${created.formId}）`);
+  }
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  const opened = await openTaskForRole(runtime.page, created.formId, 'JH');
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   await saveGateRecord(runtime, {
-    taskId: opened.row.taskId,
+    taskId: created.taskId,
     formId: created.formId,
     currentWorkflowRole: 'jd',
     currentPmsUser: 'JH',
@@ -736,13 +871,16 @@ async function scenarioGateBlock(runtime: ScenarioRuntime): Promise<PmsSimulator
 async function scenarioGateReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
   const created = await createReview(runtime, 'gate-return');
   const assertions: PmsSimulatorAssertionResult[] = [];
+  if (!created.taskId) {
+    throw new Error(`gate-return 缺少 task_id（form_id=${created.formId}）`);
+  }
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'JH');
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 自动化' });
-  const opened = await openTaskForRole(runtime.page, created.formId, 'SH');
+  await openTaskForRole(runtime.page, created.formId, 'SH', { taskId: created.taskId });
   await saveGateRecord(runtime, {
-    taskId: opened.row.taskId,
+    taskId: created.taskId,
     formId: created.formId,
     currentWorkflowRole: 'sh',
     currentPmsUser: 'SH',
@@ -776,6 +914,7 @@ const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
 };
 
 async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCaseId): Promise<PmsSimulatorScenarioReport> {
+  traceSimulator(`runSingleScenario ${caseId} newContext`);
   const context = await base.browser.newContext({ viewport: { width: 1680, height: 1040 } });
   const page = await context.newPage();
   const runtime: ScenarioRuntime = {
@@ -824,6 +963,7 @@ export async function runPmsSimulatorScenarios(options?: {
   const artifactDir = path.resolve(options?.artifactDir || path.dirname(env.outputPath), 'pms-simulator-artifacts');
   await ensureDir(artifactDir);
 
+  traceSimulator(`launch browser headless=${env.headless}`);
   const browser = await chromium.launch({ headless: env.headless });
   try {
     const base: ScenarioContext = {

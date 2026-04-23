@@ -22,6 +22,7 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
 import { getMbdPipeAnnotations, type MbdPipeData } from '@/api/mbdPipeApi';
+import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import {
   findNounByRefnoAcrossAllDbnos,
@@ -29,6 +30,7 @@ import {
   getDtxRefnoTransform,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
@@ -144,6 +146,12 @@ type CloudLayout = {
   cloudCenterY: number
   labelY: number
   labelAlign: 'left' | 'right'
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 export type AnnotationOverlayKind = 'text' | 'cloud' | 'rect' | 'obb';
@@ -699,6 +707,7 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
   refnos?: string[]
   anchorWorldPos: Vec3
   anchorRefno?: string
+  formId?: string
   anchorScreen: ScreenPoint
   rect: { x1: number; y1: number; x2: number; y2: number }
   title: string
@@ -743,6 +752,7 @@ export function createCloudAnnotationRecordFromAnchorAndMarquee(params: {
     description: params.description ?? '',
     createdAt: params.createdAt ?? Date.now(),
     refnos: params.refnos ? [...params.refnos] : [...params.objectIds],
+    formId: normalizeOptionalString(params.formId),
   };
 }
 
@@ -1330,6 +1340,7 @@ export function createRectAnnotationRecordFromObb(params: {
   title: string
   description?: string
   createdAt?: number
+  formId?: string
 }): RectAnnotationRecord {
   const center = new Vector3(...params.obb.center);
   const halfSize = new Vector3(...params.obb.halfSize);
@@ -1347,6 +1358,7 @@ export function createRectAnnotationRecordFromObb(params: {
     description: params.description ?? '',
     createdAt: params.createdAt ?? Date.now(),
     refnos: params.refnos ? [...params.refnos] : [...params.objectIds],
+    formId: normalizeOptionalString(params.formId),
   };
 }
 
@@ -1520,6 +1532,7 @@ export function useDtxTools(options: {
   const requestRender = options.requestRender ?? null;
 
   const selectionStore = useSelectionStore();
+  const reviewStore = useReviewStore();
   const unitSettings = useUnitSettingsStore();
   const annotationStyleStore = useAnnotationStyleStore();
   const readyRevision = ref(0);
@@ -1581,6 +1594,39 @@ export function useDtxTools(options: {
     store.activeCloudAnnotationId.value = kind === 'cloud' ? id : null;
     store.activeRectAnnotationId.value = kind === 'rect' ? id : null;
     store.activeObbAnnotationId.value = kind === 'obb' ? id : null;
+  }
+
+  function getAnnotationRecordByKind(
+    kind: 'text' | 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+  ): AnnotationRecord | CloudAnnotationRecord | RectAnnotationRecord | ObbAnnotationRecord | null {
+    if (kind === 'text') {
+      return store.annotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    if (kind === 'cloud') {
+      return store.cloudAnnotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    if (kind === 'rect') {
+      return store.rectAnnotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    return store.obbAnnotations.value.find((item) => item.id === annotationId) ?? null;
+  }
+
+  function resolveCurrentFormId(): string | undefined {
+    return normalizeOptionalString(store.activeAnnotationContext.value?.record.formId)
+      ?? normalizeOptionalString(reviewStore.currentTask.value?.formId);
+  }
+
+  function openAnnotationProcessingPage(kind: AnnotationOverlayKind, id: string) {
+    commitInlineAnnotationDraft(kind, id);
+    const formId = normalizeOptionalString(getAnnotationRecordByKind(kind, id)?.formId) ?? resolveCurrentFormId();
+    activateAnnotation(kind, id);
+    setAnnotationProcessingEntryTarget({
+      annotationId: id,
+      annotationType: kind,
+      formId: formId ?? null,
+    });
+    ensurePanelAndActivate('designerCommentHandling');
   }
 
   function openAnnotationEditor(kind: AnnotationOverlayKind, id: string) {
@@ -2679,7 +2725,13 @@ export function useDtxTools(options: {
       markers.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: wp, el: marker });
       marker.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        if (ev.detail > 1) return;
         handleTextAnnotationMarkerClick(a.id);
+      });
+      marker.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+        lastTextMarkerClick = null;
+        openAnnotationProcessingPage('text', a.id);
       });
 
       if (shouldRenderTextAnnotationCard(a.collapsed)) {
@@ -2699,6 +2751,10 @@ export function useDtxTools(options: {
         label.addEventListener('click', (ev) => {
           ev.stopPropagation();
           activateAnnotation('text', a.id);
+        });
+        label.addEventListener('dblclick', (ev) => {
+          ev.stopPropagation();
+          openAnnotationProcessingPage('text', a.id);
         });
         label.addEventListener('focusout', () => {
           queueMicrotask(() => {
@@ -2739,6 +2795,9 @@ export function useDtxTools(options: {
           ev.stopPropagation();
           activateAnnotation('text', a.id);
         });
+        titleInput?.addEventListener('dblclick', (ev) => {
+          ev.stopPropagation();
+        });
         titleInput?.addEventListener('input', () => {
           setInlineAnnotationDraft('text', a.id, {
             title: titleInput.value,
@@ -2749,6 +2808,9 @@ export function useDtxTools(options: {
         descriptionInput?.addEventListener('click', (ev) => {
           ev.stopPropagation();
           activateAnnotation('text', a.id);
+        });
+        descriptionInput?.addEventListener('dblclick', (ev) => {
+          ev.stopPropagation();
         });
         descriptionInput?.addEventListener('input', () => {
           setInlineAnnotationDraft('text', a.id, {
@@ -2785,6 +2847,10 @@ export function useDtxTools(options: {
         ev.stopPropagation();
         activateAnnotation('cloud', c.id);
       });
+      cloudMarker.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+        openAnnotationProcessingPage('cloud', c.id);
+      });
 
       const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
       const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
@@ -2801,7 +2867,7 @@ export function useDtxTools(options: {
       });
       label.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
-        focusInlineAnnotationEditor('cloud', c.id);
+        openAnnotationProcessingPage('cloud', c.id);
       });
       label.addEventListener('focusout', () => {
         queueMicrotask(() => {
@@ -2842,6 +2908,9 @@ export function useDtxTools(options: {
         ev.stopPropagation();
         activateAnnotation('cloud', c.id);
       });
+      titleInput?.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+      });
       titleInput?.addEventListener('input', () => {
         setInlineAnnotationDraft('cloud', c.id, {
           title: titleInput.value,
@@ -2851,6 +2920,9 @@ export function useDtxTools(options: {
       descriptionInput?.addEventListener('click', (ev) => {
         ev.stopPropagation();
         activateAnnotation('cloud', c.id);
+      });
+      descriptionInput?.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
       });
       descriptionInput?.addEventListener('input', () => {
         setInlineAnnotationDraft('cloud', c.id, {
@@ -2892,7 +2964,7 @@ export function useDtxTools(options: {
       });
       label.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
-        focusInlineAnnotationEditor('rect', r.id);
+        openAnnotationProcessingPage('rect', r.id);
       });
       label.addEventListener('focusout', () => {
         queueMicrotask(() => {
@@ -2931,6 +3003,9 @@ export function useDtxTools(options: {
         ev.stopPropagation();
         activateAnnotation('rect', r.id);
       });
+      titleInput?.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+      });
       titleInput?.addEventListener('input', () => {
         setInlineAnnotationDraft('rect', r.id, {
           title: titleInput.value,
@@ -2940,6 +3015,9 @@ export function useDtxTools(options: {
       descriptionInput?.addEventListener('click', (ev) => {
         ev.stopPropagation();
         activateAnnotation('rect', r.id);
+      });
+      descriptionInput?.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
       });
       descriptionInput?.addEventListener('input', () => {
         setInlineAnnotationDraft('rect', r.id, {
@@ -2981,7 +3059,7 @@ export function useDtxTools(options: {
       });
       label.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
-        focusInlineAnnotationEditor('obb', o.id);
+        openAnnotationProcessingPage('obb', o.id);
       });
       label.addEventListener('focusout', () => {
         queueMicrotask(() => {
@@ -3020,6 +3098,9 @@ export function useDtxTools(options: {
         ev.stopPropagation();
         activateAnnotation('obb', o.id);
       });
+      titleInput?.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+      });
       titleInput?.addEventListener('input', () => {
         setInlineAnnotationDraft('obb', o.id, {
           title: titleInput.value,
@@ -3029,6 +3110,9 @@ export function useDtxTools(options: {
       descriptionInput?.addEventListener('click', (ev) => {
         ev.stopPropagation();
         activateAnnotation('obb', o.id);
+      });
+      descriptionInput?.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
       });
       descriptionInput?.addEventListener('input', () => {
         setInlineAnnotationDraft('obb', o.id, {
@@ -3545,6 +3629,7 @@ export function useDtxTools(options: {
         refnos: [...selectedRefnos],
         anchorWorldPos: anchorState.worldPos,
         anchorRefno: anchorState.refno,
+        formId: resolveCurrentFormId(),
         anchorScreen,
         rect,
         title: `云线批注 ${n}`,
@@ -3581,6 +3666,7 @@ export function useDtxTools(options: {
         description: '',
         createdAt: Date.now(),
         refnos: selectedRefnos,
+        formId: resolveCurrentFormId(),
       };
       store.addObbAnnotation(rec);
       return;
@@ -3592,6 +3678,7 @@ export function useDtxTools(options: {
       refnos: selectedRefnos,
       obb,
       title: `矩形批注 ${n}`,
+      formId: resolveCurrentFormId(),
     });
     store.addRectAnnotation(rec);
   }
@@ -3690,6 +3777,7 @@ export function useDtxTools(options: {
         refnos: [pickedRefno],
         obb,
         title: `矩形批注 ${n}`,
+        formId: resolveCurrentFormId(),
       });
       store.addRectAnnotation(rec);
       return;
@@ -3783,6 +3871,7 @@ export function useDtxTools(options: {
           createdAt: Date.now(),
           sourceAnnotationId: sourceAnnotation?.id,
           sourceAnnotationType: sourceAnnotation?.type,
+          formId: normalizeOptionalString(sourceAnnotation?.record.formId) ?? resolveCurrentFormId(),
         };
         store.addMeasurement(rec);
         progressPoints.value = [];
@@ -3817,6 +3906,7 @@ export function useDtxTools(options: {
           createdAt: Date.now(),
           sourceAnnotationId: sourceAnnotation?.id,
           sourceAnnotationType: sourceAnnotation?.type,
+          formId: normalizeOptionalString(sourceAnnotation?.record.formId) ?? resolveCurrentFormId(),
         };
         store.addMeasurement(rec);
         progressPoints.value = [];
@@ -3904,6 +3994,7 @@ export function useDtxTools(options: {
         createdAt: Date.now(),
         sourceAnnotationId: store.activeAnnotationContext.value?.id,
         sourceAnnotationType: store.activeAnnotationContext.value?.type,
+        formId: normalizeOptionalString(store.activeAnnotationContext.value?.record.formId) ?? resolveCurrentFormId(),
       };
       store.addMeasurement(rec);
       pointToObjectStart.value = null;
@@ -3929,6 +4020,7 @@ export function useDtxTools(options: {
         description: '',
         createdAt: Date.now(),
         refno: boundRefno,
+        formId: resolveCurrentFormId(),
       };
       store.addAnnotation(rec);
       return;

@@ -445,6 +445,7 @@ describe('TaskReviewDetail', () => {
 
     const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
     expect(button).toBeTruthy();
+    expect(document.body.textContent).toContain('当前单据已回到设计节点，可再次提交。');
   });
 
   it('does not show resubmit button once returned task has re-entered review flow', async () => {
@@ -468,6 +469,7 @@ describe('TaskReviewDetail', () => {
 
     const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
     expect(button).toBeUndefined();
+    expect(document.body.textContent).not.toContain('再次提交');
   });
 
   it('clears stale returned state UI after resubmit reload shows task back in review flow', async () => {

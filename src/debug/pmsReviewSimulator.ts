@@ -350,6 +350,7 @@ type SimulatorTestSnapshot = {
   taskCurrentNode: string | null;
   workflowCurrentNode: string | null;
   currentWorkflowNode: string | null;
+  currentTaskId: string | null;
   currentFormId: string | null;
   currentTaskStatus: string;
   iframeSource: IframeSource | null;
@@ -394,6 +395,12 @@ type SimulatorTestApi = {
   listRows: () => SimulatorTestRowSummary[];
   selectTask: (taskId: string) => void;
   selectTaskByFormId: (formId: string) => boolean;
+  openTaskByFormId: (options: {
+    role?: SimulatorPmsUser;
+    formId: string;
+    taskId?: string | null;
+    source?: 'task-view' | 'task-reopen';
+  }) => Promise<void>;
   openSelected: (source?: 'task-view' | 'task-reopen') => Promise<void>;
   setDraftComment: (comment: string) => void;
   openWorkflowAction: (action: WorkflowMutationAction) => void;
@@ -735,6 +742,7 @@ function buildSimulatorTestSnapshot(): SimulatorTestSnapshot {
     taskCurrentNode: deriveTaskCurrentNodeRaw(),
     workflowCurrentNode: deriveWorkflowCurrentNodeRaw(),
     currentWorkflowNode: deriveWorkflowNodeRaw(),
+    currentTaskId: context.taskId,
     currentFormId: context.formId,
     currentTaskStatus: getCurrentTaskStatus(),
     iframeSource: state.iframeMeta?.source || null,
@@ -799,6 +807,22 @@ function exposeSimulatorTestApi(): void {
       const row = state.rows.find((item) => item.formId === normalizedFormId) || null;
       setSelectedTask(row?.taskId || null);
       return Boolean(row);
+    },
+    openTaskByFormId: async (options) => {
+      const normalizedFormId = String(options?.formId || '').trim();
+      if (!normalizedFormId) {
+        throw new Error('openTaskByFormId 缺少 formId');
+      }
+      const nextRole = options?.role;
+      if (nextRole) {
+        applyRoleSwitch(nextRole);
+      }
+      const normalizedTaskId = String(options?.taskId || '').trim() || null;
+      await openIframe({
+        source: options?.source || 'task-view',
+        taskId: normalizedTaskId,
+        formId: normalizedFormId,
+      });
     },
     openSelected: async (source: 'task-view' | 'task-reopen' = 'task-view') => {
       await openBySelectedTask(source);
@@ -1214,6 +1238,8 @@ function resolveWorkflowAccessState(
     currentPmsWorkflowRole,
     workflowNextStepUserId: deriveWorkflowNextStepAssigneeIdRaw(),
     workflowNextStepRole: deriveWorkflowNextStepRaw(),
+    taskCurrentNode: currentTask?.currentNode || state.diagnostics.workflowSnapshot?.data?.current_node || null,
+    taskAssignedUserId: taskAssignment.assignedUserId,
   });
 
   return {
@@ -2855,7 +2881,7 @@ async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsL
     throw new Error('embed-url 返回缺少 token');
   }
 
-  const tokenClaims = await verifyLaunchToken(token);
+  const tokenClaims = await verifyLaunchTokenSafely(token);
   const tokenClaimFormId = tokenClaims?.formId?.trim() || null;
   const modelUrlFormId = resolvePmsLaunchFormId({
     preferredFormId: preferred,
@@ -2877,6 +2903,7 @@ async function buildPmsLaunchPlan(preferredFormId?: string | null): Promise<PmsL
     pmsUserId: state.currentPmsUser,
     includePmsUserId: state.pmsLikeIframeQuery,
   });
+  const workflowRole = getCurrentWorkflowRole();
 
   return {
     modelUrlPath,
@@ -2925,6 +2952,15 @@ async function verifyLaunchToken(token: string): Promise<TokenVerifyClaims | nul
     console.warn('[pms-review-simulator] token verify failed', error);
   }
   return null;
+}
+
+async function verifyLaunchTokenSafely(token: string, timeoutMs = 1500): Promise<TokenVerifyClaims | null> {
+  return await Promise.race<TokenVerifyClaims | null>([
+    verifyLaunchToken(token),
+    new Promise<TokenVerifyClaims | null>((resolve) => {
+      window.setTimeout(() => resolve(null), timeoutMs);
+    }),
+  ]);
 }
 
 function buildModelUrlSummary(relativePath: string, search: URLSearchParams): string {
@@ -2985,8 +3021,11 @@ async function openIframe(params: {
     renderIframeState();
     renderActionStates();
     renderSidePanelState();
-
-    await refreshDiagnosticsSnapshot({ taskId, formId: finalFormId });
+    void refreshDiagnosticsSnapshot({ taskId, formId: finalFormId }).catch((diagError) => {
+      state.diagnostics.error = `单据诊断刷新失败：${diagError instanceof Error ? diagError.message : String(diagError)}`;
+      renderDiagnostics();
+      renderSidePanelState();
+    });
   } catch (error) {
     state.diagnostics.error = `打开 iframe 失败：${error instanceof Error ? error.message : String(error)}`;
     renderDiagnostics();
@@ -3065,8 +3104,8 @@ async function reopenLastForm(): Promise<void> {
   });
 }
 
-async function handleRoleSwitch(role: SimulatorPmsUser): Promise<void> {
-  if (role === state.currentPmsUser) return;
+function applyRoleSwitch(role: SimulatorPmsUser): boolean {
+  if (role === state.currentPmsUser) return false;
   state.currentPmsUser = role;
   state.sidePanelDraftComment = '';
   closeIframe();
@@ -3074,9 +3113,15 @@ async function handleRoleSwitch(role: SimulatorPmsUser): Promise<void> {
   state.selectedTaskIds = [];
   resetDiagnosticsState();
   renderTable();
+  renderRoleHeader();
   renderDiagnostics();
   renderSidePanelState();
   persistSimulatorSession();
+  return true;
+}
+
+async function handleRoleSwitch(role: SimulatorPmsUser): Promise<void> {
+  if (!applyRoleSwitch(role)) return;
   await refreshList();
 }
 
@@ -3614,14 +3659,20 @@ async function bootstrap(): Promise<void> {
   renderIframeState();
   renderSidePanelState();
   renderWorkflowDialogState();
-  await loadAvailableProjects();
-  await refreshList();
-  await restorePersistedIframeIfNeeded();
   exposeSimulatorTestApi();
   (window as Window & {
     __pmsReviewSimulatorReady?: boolean;
     __pmsReviewSimulatorTest?: SimulatorTestApi;
   }).__pmsReviewSimulatorReady = true;
+
+  await loadAvailableProjects();
+  void (async () => {
+    await refreshList();
+    await restorePersistedIframeIfNeeded();
+  })().catch((error) => {
+    state.diagnostics.error = `初始化任务列表失败：${error instanceof Error ? error.message : String(error)}`;
+    renderDiagnostics();
+  });
 }
 
 void bootstrap();

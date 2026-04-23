@@ -199,10 +199,12 @@ export function resolveEmbedLandingTargetFromRole(role?: string | null): EmbedLa
 export function resolvePassiveEmbedViewTarget(options: {
   workflowRole?: string | null;
   passiveWorkflowMode?: boolean;
+  formId?: string | null;
   restoredTaskSummary?: EmbedLandingTaskSummary | null;
 }): EmbedLandingTarget | null {
   if (!options.passiveWorkflowMode) return null;
   if (normalizeEmbedRole(options.workflowRole) !== 'sj') return null;
+  if (normalizeEmbedValue(options.formId ?? null)) return null;
 
   const currentNode = normalizeEmbedRole(options.restoredTaskSummary?.currentNode ?? null);
   if (!currentNode || currentNode === 'sj') return null;
@@ -239,12 +241,14 @@ export function getEmbedLandingPanelIds(target: EmbedLandingTarget): string[] {
 
 export function getEmbedLandingPanelIdsWithOptions(
   target: EmbedLandingTarget,
-  options: { passiveWorkflowMode?: boolean } = {},
+  options: { passiveWorkflowMode?: boolean; formId?: string | null } = {},
 ): string[] {
   void options;
-  return target === 'designer'
-    ? ['initiateReview']
-    : ['review'];
+  if (target === 'designer') {
+    return ['initiateReview'];
+  }
+
+  return ['review'];
 }
 
 export function applyEmbedLandingState<TPanel extends { api: { setActive: () => void } }>(options: {

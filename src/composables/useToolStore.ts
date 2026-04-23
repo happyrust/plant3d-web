@@ -57,6 +57,7 @@ export type MeasurementPoint = {
 export type MeasurementSourceLink = {
   sourceAnnotationId?: string;
   sourceAnnotationType?: AnnotationType;
+  formId?: string;
 };
 
 export type DistanceMeasurementRecord = {
@@ -227,6 +228,7 @@ export type AnnotationRecord = {
   severity?: AnnotationSeverity;
   /** 批注创建者 ID（用于权限判断：作者可编辑严重度） */
   authorId?: string;
+  formId?: string;
 };
 
 export type Obb = {
@@ -260,6 +262,7 @@ export type ObbAnnotationRecord = {
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
   authorId?: string;
+  formId?: string;
 };
 
 export type CloudAnnotationRecord = {
@@ -281,6 +284,7 @@ export type CloudAnnotationRecord = {
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
   authorId?: string;
+  formId?: string;
 };
 
 export type RectAnnotationRecord = {
@@ -298,6 +302,7 @@ export type RectAnnotationRecord = {
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
   authorId?: string;
+  formId?: string;
 };
 
 export type PickedQueryCenter = {
@@ -422,6 +427,30 @@ function reconcileAnnotationRefs(
   return { refno: undefined, refnos: undefined };
 }
 
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function normalizeMeasurementRecord(rec: MeasurementRecord): MeasurementRecord {
+  return {
+    ...rec,
+    sourceAnnotationId: normalizeOptionalString(rec.sourceAnnotationId),
+    sourceAnnotationType: normalizeOptionalString(rec.sourceAnnotationType) as AnnotationType | undefined,
+    formId: normalizeOptionalString(rec.formId),
+  };
+}
+
+function normalizeXeokitMeasurementRecord<T extends XeokitMeasurementRecord>(rec: T): T {
+  return {
+    ...rec,
+    sourceAnnotationId: normalizeOptionalString(rec.sourceAnnotationId),
+    sourceAnnotationType: normalizeOptionalString(rec.sourceAnnotationType) as AnnotationType | undefined,
+    formId: normalizeOptionalString(rec.formId),
+  };
+}
+
 function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
   const refs = reconcileAnnotationRefs(rec.refno, rec.refnos);
   return {
@@ -432,6 +461,7 @@ function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
     severity: normalizeAnnotationSeverity(rec.severity),
     refno: refs.refno,
     refnos: refs.refnos,
+    formId: normalizeOptionalString(rec.formId),
   };
 }
 
@@ -458,6 +488,7 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
     ...rec,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
+    formId: normalizeOptionalString(rec.formId),
   };
 }
 
@@ -466,6 +497,7 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
     ...rec,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
+    formId: normalizeOptionalString(rec.formId),
   };
 }
 
@@ -474,13 +506,14 @@ function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotatio
     ...rec,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
+    formId: normalizeOptionalString(rec.formId),
   };
 }
 
 function normalizeV1(parsed: PersistedStateV1): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: [],
     cloudAnnotations: [],
@@ -494,7 +527,7 @@ function normalizeV1(parsed: PersistedStateV1): PersistedStateV5 {
 function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: [],
@@ -508,7 +541,7 @@ function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
 function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
@@ -522,7 +555,7 @@ function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
 function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
@@ -536,14 +569,18 @@ function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
 function normalizeV5(parsed: PersistedStateV5): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations.map(normalizeRectAnnotationRecord) : [],
     dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
-    xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements) ? parsed.xeokitDistanceMeasurements : [],
-    xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements) ? parsed.xeokitAngleMeasurements : [],
+    xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements)
+      ? parsed.xeokitDistanceMeasurements.map(normalizeXeokitMeasurementRecord)
+      : [],
+    xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements)
+      ? parsed.xeokitAngleMeasurements.map(normalizeXeokitMeasurementRecord)
+      : [],
   };
 }
 
@@ -863,8 +900,9 @@ function setCompareMode(enabled: boolean) {
 }
 
 function addMeasurement(rec: MeasurementRecord) {
-  measurements.value = [...measurements.value, rec];
-  activeMeasurementId.value = rec.id;
+  const normalized = normalizeMeasurementRecord(rec);
+  measurements.value = [...measurements.value, normalized];
+  activeMeasurementId.value = normalized.id;
 }
 
 function updateMeasurementVisible(id: string, visible: boolean) {
@@ -884,8 +922,9 @@ function clearMeasurements() {
 }
 
 function addXeokitDistanceMeasurement(rec: XeokitDistanceMeasurementRecord) {
-  xeokitDistanceMeasurements.value = [...xeokitDistanceMeasurements.value, rec];
-  activeXeokitMeasurementId.value = rec.id;
+  const normalized = normalizeXeokitMeasurementRecord(rec);
+  xeokitDistanceMeasurements.value = [...xeokitDistanceMeasurements.value, normalized];
+  activeXeokitMeasurementId.value = normalized.id;
 }
 
 function updateXeokitDistanceMeasurement(id: string, patch: Partial<XeokitDistanceMeasurementRecord>) {
@@ -893,8 +932,9 @@ function updateXeokitDistanceMeasurement(id: string, patch: Partial<XeokitDistan
 }
 
 function addXeokitAngleMeasurement(rec: XeokitAngleMeasurementRecord) {
-  xeokitAngleMeasurements.value = [...xeokitAngleMeasurements.value, rec];
-  activeXeokitMeasurementId.value = rec.id;
+  const normalized = normalizeXeokitMeasurementRecord(rec);
+  xeokitAngleMeasurements.value = [...xeokitAngleMeasurements.value, normalized];
+  activeXeokitMeasurementId.value = normalized.id;
 }
 
 function updateXeokitAngleMeasurement(id: string, patch: Partial<XeokitAngleMeasurementRecord>) {
@@ -1199,6 +1239,29 @@ function clearAll() {
     canvasPos: null,
   });
   toolMode.value = 'none';
+}
+
+function clearDraftDataByPayload(payload: {
+  annotations?: { id?: string }[];
+  cloudAnnotations?: { id?: string }[];
+  rectAnnotations?: { id?: string }[];
+  obbAnnotations?: { id?: string }[];
+  measurements?: { id?: string }[];
+}) {
+  const annotationIds = new Set((payload.annotations ?? []).map((item) => item?.id).filter((id): id is string => typeof id === 'string' && id.length > 0));
+  const cloudAnnotationIds = new Set((payload.cloudAnnotations ?? []).map((item) => item?.id).filter((id): id is string => typeof id === 'string' && id.length > 0));
+  const rectAnnotationIds = new Set((payload.rectAnnotations ?? []).map((item) => item?.id).filter((id): id is string => typeof id === 'string' && id.length > 0));
+  const obbAnnotationIds = new Set((payload.obbAnnotations ?? []).map((item) => item?.id).filter((id): id is string => typeof id === 'string' && id.length > 0));
+  const measurementIds = new Set((payload.measurements ?? []).map((item) => item?.id).filter((id): id is string => typeof id === 'string' && id.length > 0));
+
+  for (const id of annotationIds) removeAnnotation(id);
+  for (const id of cloudAnnotationIds) removeCloudAnnotation(id);
+  for (const id of rectAnnotationIds) removeRectAnnotation(id);
+  for (const id of obbAnnotationIds) removeObbAnnotation(id);
+  for (const id of measurementIds) {
+    removeMeasurement(id);
+    removeXeokitMeasurement(id);
+  }
 }
 
 // ==================== 评论/意见管理函数 ====================
@@ -1803,6 +1866,7 @@ export function useToolStore() {
     getAnnotationRecordsByType,
 
     clearAll,
+    clearDraftDataByPayload,
 
     // 评论/意见管理
     addCommentToAnnotation,

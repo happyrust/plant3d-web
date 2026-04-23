@@ -105,6 +105,7 @@ describe('useToolStore - persistence', () => {
       title: '文字批注',
       description: '折叠状态',
       createdAt: 10,
+      formId: 'FORM-COLLAPSE-1',
     });
     await nextTick();
 
@@ -114,6 +115,7 @@ describe('useToolStore - persistence', () => {
     expect(reloaded.annotations.value).toHaveLength(1);
     expect(reloaded.annotations.value[0].labelWorldPos).toEqual([4, 5, 6]);
     expect(reloaded.annotations.value[0].collapsed).toBe(true);
+    expect(reloaded.annotations.value[0].formId).toBe('FORM-COLLAPSE-1');
   });
 
   it('should expose and clear pending cloud annotation editor state', async () => {
@@ -207,6 +209,7 @@ describe('useToolStore - persistence', () => {
       visible: true,
       approximate: false,
       createdAt: 1,
+      formId: 'FORM-XEOKIT-1',
     });
     store.addXeokitAngleMeasurement({
       id: 'x-ang-1',
@@ -217,6 +220,7 @@ describe('useToolStore - persistence', () => {
       visible: true,
       approximate: false,
       createdAt: 2,
+      formId: 'FORM-XEOKIT-1',
     });
 
     store.setCurrentXeokitDistanceDraft({
@@ -239,6 +243,8 @@ describe('useToolStore - persistence', () => {
     expect(reloaded.measurements.value).toHaveLength(0);
     expect(reloaded.xeokitDistanceMeasurements.value).toHaveLength(1);
     expect(reloaded.xeokitAngleMeasurements.value).toHaveLength(1);
+    expect(reloaded.xeokitDistanceMeasurements.value[0].formId).toBe('FORM-XEOKIT-1');
+    expect(reloaded.xeokitAngleMeasurements.value[0].formId).toBe('FORM-XEOKIT-1');
     expect(reloaded.currentXeokitDistanceDraft.value).toBeNull();
   });
 

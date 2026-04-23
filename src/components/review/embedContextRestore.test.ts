@@ -275,4 +275,58 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(activatePanel).toHaveBeenLastCalledWith('designerCommentHandling');
     expect(result.restoreStatus).toBe('matched');
   });
+
+  it('designer passive restore keeps designer comment handling for the matched form even before task状态回到 sj', async () => {
+    const task = createTask({
+      id: 'task-designer-passive',
+      formId: 'FORM-D-PASSIVE',
+      status: 'submitted',
+      currentNode: 'jd',
+    });
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-D-PASSIVE',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [task],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['designerCommentHandling']);
+    expect(activatePanel).toHaveBeenLastCalledWith('designerCommentHandling');
+    expect(result.restoreStatus).toBe('matched');
+  });
+
+  it('designer passive restore without matched task falls back to initiate-review workspace', async () => {
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-D-MISSING',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(null);
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview']);
+    expect(activatePanel).toHaveBeenLastCalledWith('initiateReview');
+    expect(result.restoreStatus).toBe('missing');
+  });
 });

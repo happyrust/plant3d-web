@@ -178,6 +178,7 @@ describe('reviewPanelActions', () => {
           createdAt: 30,
           sourceAnnotationId: 'annot-1',
           sourceAnnotationType: 'text',
+          formId: 'FORM-1001',
         },
       ],
       xeokitAngleMeasurements: [
@@ -201,6 +202,7 @@ describe('reviewPanelActions', () => {
         kind: 'distance',
         sourceAnnotationId: 'annot-1',
         sourceAnnotationType: 'text',
+        formId: 'FORM-1001',
       }),
       expect.objectContaining({ id: 'xeokit-angle-final', kind: 'angle' }),
     ]);
@@ -210,7 +212,7 @@ describe('reviewPanelActions', () => {
   it('confirmCurrentDataSafely 应等待保存成功后再清理工具数据', async () => {
     const addDone = deferred<string>();
     const addConfirmedRecord = vi.fn(async () => addDone.promise);
-    const clearAll = vi.fn();
+    const clearDraftData = vi.fn();
     const resetNote = vi.fn();
     const payload = { note: 'n', annotations: [] };
 
@@ -218,18 +220,18 @@ describe('reviewPanelActions', () => {
       hasPendingData: true,
       payload,
       addConfirmedRecord,
-      clearAll,
+      clearDraftData,
       resetNote,
     });
 
     expect(addConfirmedRecord).toHaveBeenCalledTimes(1);
-    expect(clearAll).not.toHaveBeenCalled();
+    expect(clearDraftData).not.toHaveBeenCalled();
     expect(resetNote).not.toHaveBeenCalled();
 
     addDone.resolve('record-1');
     await running;
 
-    expect(clearAll).toHaveBeenCalledTimes(1);
+    expect(clearDraftData).toHaveBeenCalledTimes(1);
     expect(resetNote).toHaveBeenCalledTimes(1);
   });
 
@@ -237,7 +239,7 @@ describe('reviewPanelActions', () => {
     const addConfirmedRecord = vi.fn(async () => {
       throw new Error('save failed');
     });
-    const clearAll = vi.fn();
+    const clearDraftData = vi.fn();
     const resetNote = vi.fn();
 
     await expect(
@@ -245,12 +247,12 @@ describe('reviewPanelActions', () => {
         hasPendingData: true,
         payload: { note: '', annotations: [] },
         addConfirmedRecord,
-        clearAll,
+        clearDraftData,
         resetNote,
       })
     ).rejects.toThrow('save failed');
 
-    expect(clearAll).not.toHaveBeenCalled();
+    expect(clearDraftData).not.toHaveBeenCalled();
     expect(resetNote).not.toHaveBeenCalled();
   });
 

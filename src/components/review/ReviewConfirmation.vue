@@ -96,7 +96,7 @@ async function confirmCurrentData() {
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
-      clearAll: () => {},
+      clearDraftData: () => {},
       resetNote: () => {
         confirmNote.value = '';
         showNoteInput.value = false;
@@ -121,68 +121,74 @@ function cancel() {
 <template>
   <Transition name="slide-up">
     <div v-if="isVisible"
-      class="pointer-events-auto absolute bottom-4 right-4 w-64 rounded-lg border border-border bg-background/95 p-3 shadow-xl backdrop-blur"
+      class="pointer-events-auto absolute bottom-4 right-4 w-[320px] rounded-[24px] border border-slate-800 bg-slate-950 p-4 text-white shadow-2xl"
       style="z-index: 950;"
       @pointerdown.stop
       @wheel.stop>
       <!-- 头部 -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <div class="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-          <span class="text-sm font-medium">待确认数据</span>
+          <div class="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+          <span class="text-sm font-medium text-white">待确认数据</span>
         </div>
-        <button type="button" class="rounded p-1 hover:bg-muted" title="关闭校审模式"
+        <button type="button" class="rounded-lg p-1 text-slate-300 hover:bg-white/10 hover:text-white" title="关闭校审模式"
           @click="reviewStore.setReviewMode(false)">
           <X class="h-4 w-4" />
         </button>
       </div>
 
       <!-- 统计 -->
-      <div class="mt-2 flex gap-3 text-xs">
-        <div class="flex items-center gap-1">
-          <MessageSquare class="h-3.5 w-3.5 text-blue-500" />
-          <span>批注: {{ pendingAnnotationCount }}</span>
+      <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+          <div class="flex items-center gap-1 text-slate-300">
+            <MessageSquare class="h-3.5 w-3.5 text-blue-300" />
+            <span>批注</span>
+          </div>
+          <div class="mt-1 text-base font-semibold text-white">{{ pendingAnnotationCount }}</div>
         </div>
-        <div class="flex items-center gap-1">
-          <Ruler class="h-3.5 w-3.5 text-green-500" />
-          <span>测量: {{ pendingMeasurementCount }}</span>
+        <div class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+          <div class="flex items-center gap-1 text-slate-300">
+            <Ruler class="h-3.5 w-3.5 text-emerald-300" />
+            <span>测量</span>
+          </div>
+          <div class="mt-1 text-base font-semibold text-white">{{ pendingMeasurementCount }}</div>
         </div>
       </div>
 
       <!-- 备注输入 -->
-      <div v-if="showNoteInput" class="mt-2">
+      <div v-if="showNoteInput" class="mt-3">
         <input v-model="confirmNote"
-          class="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+          class="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white placeholder:text-slate-400"
           placeholder="输入确认备注（可选）..."
           @keyup.enter="confirmCurrentData" />
       </div>
 
       <!-- 操作按钮 -->
-      <div class="mt-2 flex gap-2">
+      <div class="mt-3 flex gap-2">
         <button type="button"
-          class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md bg-green-500 text-xs text-white hover:bg-green-600 disabled:opacity-50"
+          class="flex h-10 flex-1 items-center justify-center gap-1 rounded-xl bg-emerald-500 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
           :disabled="!hasUnsavedPendingData || confirmSaving"
           @click="confirmCurrentData">
           <CheckCircle class="h-3.5 w-3.5" />
           {{ confirmSaving ? '保存中...' : hasUnsavedPendingData ? '确认完成' : '已保存' }}
         </button>
         <button v-if="!showNoteInput" type="button"
-          class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+          class="h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:bg-white/10"
           @click="showNoteInput = true">
           备注
         </button>
         <button v-else type="button"
-          class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+          class="h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:bg-white/10"
           @click="cancel">
           取消
         </button>
       </div>
 
       <!-- 提示 -->
-      <div class="mt-2 text-center text-xs text-muted-foreground">
+      <div class="mt-3 text-xs text-slate-400">
         {{ !hasUnsavedPendingData && !confirmError ? '当前批注/测量已保存，修改后可再次确认' : '确认后数据将移入已确认列表' }}
       </div>
-      <div v-if="confirmError" class="mt-2 text-center text-xs text-red-600">
+      <div v-if="confirmError" class="mt-2 text-xs text-rose-300">
         {{ confirmError }}
       </div>
     </div>

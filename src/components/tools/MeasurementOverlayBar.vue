@@ -113,9 +113,9 @@ watch(
 <template>
   <div v-if="isVisible"
     data-testid="measurement-overlay-root"
-    class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center"
+    class="pointer-events-none absolute right-4 top-20 flex justify-end"
     style="z-index: 940">
-    <div class="pointer-events-auto flex flex-col items-center gap-3"
+    <div class="pointer-events-auto flex flex-col items-end gap-3"
       @pointerdown.stop
       @wheel.stop>
       <div data-testid="measurement-overlay-bar"

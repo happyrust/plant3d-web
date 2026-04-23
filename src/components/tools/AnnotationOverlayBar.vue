@@ -17,9 +17,12 @@ import {
   X,
 } from 'lucide-vue-next';
 
+import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
+import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import AnnotationColorPicker from '@/components/tools/AnnotationColorPicker.vue';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useReviewStore } from '@/composables/useReviewStore';
 import {
   type ActiveAnnotationContext,
   type AnnotationType,
@@ -31,6 +34,7 @@ import {
   canEditAnnotationSeverity,
   getAnnotationSeverityDisplay,
   type AnnotationSeverity,
+  UserRole,
 } from '@/types/auth';
 
 type ToolsApi = {
@@ -50,6 +54,7 @@ const props = defineProps<{
 
 const store = useToolStore();
 const styleStore = useAnnotationStyleStore();
+const reviewStore = useReviewStore();
 
 const drawerOpen = ref(false);
 const drawerRef = ref<HTMLElement | null>(null);
@@ -167,7 +172,23 @@ function setMode(mode: 'annotation' | 'annotation_cloud' | 'annotation_rect') {
 }
 
 function openAnnotationPanel(): void {
-  ensurePanelAndActivate('annotation');
+  const currentTask = reviewStore.currentTask.value;
+  const currentUser = userStore.currentUser.value;
+  const shouldUseDesignerPanel = (
+    currentUser?.role === UserRole.DESIGNER ||
+    (currentTask ? isCanonicalReturnedTask(currentTask) : false)
+  );
+
+  if (currentAnnotation.value) {
+    const record = currentAnnotation.value.record as { formId?: string } | null;
+    setAnnotationProcessingEntryTarget({
+      annotationId: currentAnnotation.value.id,
+      annotationType: currentAnnotation.value.type,
+      formId: record?.formId ?? currentTask?.formId ?? null,
+    });
+  }
+
+  ensurePanelAndActivate(shouldUseDesignerPanel ? 'designerCommentHandling' : 'review');
 }
 
 function flyCurrent(): void {
@@ -374,9 +395,9 @@ onUnmounted(() => {
 <template>
   <div v-if="isVisible"
     data-testid="annotation-overlay-root"
-    class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center"
+    class="pointer-events-none absolute right-4 top-4 flex justify-end"
     style="z-index: 940">
-    <div class="pointer-events-auto flex flex-col items-center gap-2"
+    <div class="pointer-events-auto flex flex-col items-end gap-2"
       @pointerdown.stop
       @wheel.stop>
       <!-- 状态信息 -->

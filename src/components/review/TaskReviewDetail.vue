@@ -151,6 +151,11 @@ const measurementRecords = computed(() => {
 });
 const isReturnedTask = computed(() => isCanonicalReturnedTask(canonicalTask.value));
 const canResubmit = computed(() => isReturnedTask.value && canonicalTask.value.currentNode === 'sj' && canonicalTask.value.status === 'draft');
+const returnedTaskHint = computed(() => (
+  canResubmit.value
+    ? '当前单据已回到设计节点，可再次提交。'
+    : '当前单据属于退回处理范围，但尚未回到可再次提交的设计节点。'
+));
 
 function formatMeasurementKind(kind: ConfirmedRecord['measurements'][number]['kind']): string {
   return kind === 'distance' ? '距离测量' : '角度测量';
@@ -335,6 +340,9 @@ onMounted(() => {
           <p>
             <span class="font-medium text-rose-700">退回原因：</span>
             {{ returnedMetadata.returnReason || '未填写' }}
+          </p>
+          <p class="rounded-xl bg-white/70 px-3 py-2 text-xs leading-5 text-rose-800">
+            {{ returnedTaskHint }}
           </p>
           <div class="flex flex-wrap items-center gap-3 pt-1">
             <button v-if="canResubmit"

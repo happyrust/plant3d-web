@@ -514,12 +514,9 @@ onMounted(() => {
       async addMockComponent(refNo, name) {
         const ref = refNo || `E2E-AUTO-${Date.now()}`;
         notification.value = { type: null, message: '', details: '' };
-        try {
-          await addComponentByRefno(ref);
-        } catch {
-          if (name) {
-            ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name);
-          }
+        const added = await addComponentByRefno(ref);
+        if (!added && name) {
+          ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name);
         }
       },
     };

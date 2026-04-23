@@ -13,6 +13,9 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import {
+  useReviewStore,
+} from '@/composables/useReviewStore';
+import {
   useToolStore,
   type MeasurementPoint,
   type Vec3,
@@ -48,6 +51,12 @@ function vec3ToTuple(v: Vector3): Vec3 {
 
 function tupleToVector(v: Vec3): Vector3 {
   return new Vector3(v[0], v[1], v[2]);
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 function worldToAnnotationLocal(world: Vec3, dtxLayerRef: Ref<DTXLayer | null>): Vector3 {
@@ -100,6 +109,7 @@ export function useXeokitMeasurementTools(options: {
   } = options;
   const requestRender = options.requestRender ?? null;
   const measurementStyle = useXeokitMeasurementStyleStore();
+  const reviewStore = useReviewStore();
 
   const readyRevision = ref(0);
   const clickTracker = ref<ClickTracker>({ down: null, moved: false });
@@ -118,6 +128,11 @@ export function useXeokitMeasurementTools(options: {
   const hasVisibleMeasurements = computed(() => {
     return store.allXeokitMeasurements.value.some((item) => item.visible);
   });
+
+  function resolveCurrentFormId(): string | undefined {
+    return normalizeOptionalString(store.activeAnnotationContext.value?.record.formId)
+      ?? normalizeOptionalString(reviewStore.currentTask.value?.formId);
+  }
   const hasHiddenMeasurements = computed(() => {
     return store.allXeokitMeasurements.value.some((item) => !item.visible);
   });
@@ -758,6 +773,7 @@ export function useXeokitMeasurementTools(options: {
         createdAt: draft.createdAt,
         sourceAnnotationId: store.activeAnnotationContext.value?.id,
         sourceAnnotationType: store.activeAnnotationContext.value?.type,
+        formId: normalizeOptionalString(store.activeAnnotationContext.value?.record.formId) ?? resolveCurrentFormId(),
       };
       store.addXeokitDistanceMeasurement(rec);
       store.clearCurrentXeokitDraft();
@@ -821,6 +837,7 @@ export function useXeokitMeasurementTools(options: {
       createdAt: draft.createdAt,
       sourceAnnotationId: store.activeAnnotationContext.value?.id,
       sourceAnnotationType: store.activeAnnotationContext.value?.type,
+      formId: normalizeOptionalString(store.activeAnnotationContext.value?.record.formId) ?? resolveCurrentFormId(),
     };
     store.addXeokitAngleMeasurement(rec);
     store.clearCurrentXeokitDraft();

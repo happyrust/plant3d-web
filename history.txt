@@ -69,3 +69,4 @@ SELECT id, start_pt.d, end_pt.d, world_trans.d FROM tubi_relate:[24381_145712, 0
 SELECT id, start_pt.d, end_pt.d, world_trans.d FROM tubi_relate WHERE id[0] = pe:⟨24381_145712⟩ LIMIT 5;
 -- Check TUBI children of this BRAN
 SELECT refno, noun, name, attrs.LLEN, attrs.TEFR, attrs.TOFR, attrs.BORE, attrs.AOD FROM pe WHERE owner = pe:⟨24381_145712⟩ AND noun IN ['TUBI', 'ELBO', 'BEND', 'TEE'] ORDER BY refno LIMIT 20;
+INFO FOR DB;
