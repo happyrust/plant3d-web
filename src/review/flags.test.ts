@@ -45,9 +45,13 @@ describe('review flags', () => {
     }
   });
 
-  it('defaults every known flag to false', () => {
+  it('defaults every known flag to expected value', () => {
+    const expectedOn = new Set([
+      'REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ',
+      'REVIEW_C_EVENT_LOG',
+    ]);
     for (const name of REVIEW_FLAG_NAMES) {
-      expect(isReviewFlagEnabled(name)).toBe(false);
+      expect(isReviewFlagEnabled(name)).toBe(expectedOn.has(name));
     }
   });
 

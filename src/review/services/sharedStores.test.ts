@@ -56,13 +56,13 @@ describe('sharedStores', () => {
     expect(a).not.toBe(b);
   });
 
-  it('isReviewCommentThreadStoreActive defaults to false', () => {
-    expect(isReviewCommentThreadStoreActive()).toBe(false);
+  it('isReviewCommentThreadStoreActive defaults to true (DUAL_READ on)', () => {
+    expect(isReviewCommentThreadStoreActive()).toBe(true);
   });
 
-  it('isReviewCommentThreadStoreActive activates on DUAL_READ flag', () => {
-    localStorage.setItem('review.flag.REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ', '1');
-    expect(isReviewCommentThreadStoreActive()).toBe(true);
+  it('isReviewCommentThreadStoreActive can be disabled via localStorage', () => {
+    localStorage.setItem('review.flag.REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ', '0');
+    expect(isReviewCommentThreadStoreActive()).toBe(false);
   });
 
   it('isReviewCommentThreadStoreActive activates on CUTOVER flag', () => {
