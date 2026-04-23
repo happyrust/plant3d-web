@@ -5,6 +5,7 @@ import {
   createEmptyReviewSnapshot,
   isSnapshotEmpty,
   liftAnnotationComment,
+  lowerSnapshotComment,
   snapshotInlineCommentKey,
 } from './reviewSnapshot';
 
@@ -163,5 +164,81 @@ describe('liftAnnotationComment', () => {
       workflowNode: 'jd',
       reviewRound: 2,
     });
+  });
+});
+
+describe('lowerSnapshotComment', () => {
+  it('converts SnapshotComment back to AnnotationComment', () => {
+    const snapshot = {
+      commentId: 'c-1',
+      annotationId: 'a-1',
+      annotationType: 'text' as const,
+      authorId: 'u-1',
+      authorName: 'Alice',
+      authorRole: UserRole.REVIEWER,
+      content: 'hello',
+      replyToId: 'c-0',
+      createdAt: 1_700_000_001,
+      taskId: 'task-1',
+      formId: 'form-1',
+      workflowNode: 'jd' as const,
+      reviewRound: 2,
+    };
+
+    const lowered = lowerSnapshotComment(snapshot);
+
+    expect(lowered).toEqual({
+      id: 'c-1',
+      annotationId: 'a-1',
+      annotationType: 'text',
+      authorId: 'u-1',
+      authorName: 'Alice',
+      authorRole: UserRole.REVIEWER,
+      content: 'hello',
+      replyToId: 'c-0',
+      createdAt: 1_700_000_001,
+    });
+  });
+
+  it('handles missing optional fields with defaults', () => {
+    const snapshot = {
+      commentId: 'c-2',
+      annotationId: 'a-2',
+      annotationType: 'cloud' as const,
+      content: 'note',
+      createdAt: 1_700_000_002,
+    };
+
+    const lowered = lowerSnapshotComment(snapshot);
+
+    expect(lowered.id).toBe('c-2');
+    expect(lowered.authorId).toBe('');
+    expect(lowered.authorName).toBe('');
+    expect(lowered.authorRole).toBe('viewer');
+    expect(lowered.replyToId).toBeUndefined();
+  });
+
+  it('roundtrips with liftAnnotationComment', () => {
+    const original: AnnotationComment = {
+      id: 'c-3',
+      annotationId: 'a-3',
+      annotationType: 'rect',
+      authorId: 'u-2',
+      authorName: 'Bob',
+      authorRole: UserRole.DESIGNER,
+      content: 'fix this',
+      createdAt: 1_700_000_003,
+    };
+
+    const lifted = liftAnnotationComment(original, { annotationType: 'rect' });
+    const lowered = lowerSnapshotComment(lifted);
+
+    expect(lowered.id).toBe(original.id);
+    expect(lowered.annotationId).toBe(original.annotationId);
+    expect(lowered.annotationType).toBe(original.annotationType);
+    expect(lowered.authorId).toBe(original.authorId);
+    expect(lowered.authorName).toBe(original.authorName);
+    expect(lowered.content).toBe(original.content);
+    expect(lowered.createdAt).toBe(original.createdAt);
   });
 });
