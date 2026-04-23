@@ -70,7 +70,22 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
+
+    if (resp.status === 404 && !text.trim()) {
+      const message =
+        `HTTP 404 at ${url}\n` +
+        '后端可能没有挂载这个 API（例如 web_server 路由装配遗漏），或请求路径拼写错误。\n' +
+        '请优先检查 plant-model-gen 的路由装配。';
+      console.warn('[pdms-api]', message);
+      throw new Error(message);
+    }
+
+    const message = `HTTP ${resp.status} ${resp.statusText} at ${url}: ${text}`;
+    if (resp.status >= 500) {
+      console.error('[pdms-api]', message);
+    }
+
+    throw new Error(message);
   }
 
   return (await resp.json()) as T;
