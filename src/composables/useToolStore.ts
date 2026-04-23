@@ -8,6 +8,11 @@ import type {
   User,
 } from '@/types/auth';
 
+import {
+  getCommentsFromStore as _storeGetComments,
+  isReviewCommentThreadStoreActive as _isStoreActive,
+} from '@/review/services/sharedStores';
+
 import { useUserStore } from '@/composables/useUserStore';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import {
@@ -1610,11 +1615,27 @@ function removeAnnotationComment(
 }
 
 /**
- * 获取批注的所有评论
+ * 获取批注的所有评论。
+ *
+ * PROMOTE 读路径：当 DUAL_READ 或 CUTOVER flag 开启时，优先从
+ * commentThreadStore 读取；否则回退到 inline annotation.comments。
+ *
+ * @deprecated 长期目标：CUTOVER 后由 commentThreadStore 完全接管，
+ * 此函数将简化为纯 store 读取。
  */
 function getAnnotationComments(
   annotationType: AnnotationType,
   annotationId: string
+): AnnotationComment[] {
+  if (_isCommentStoreActive()) {
+    return _getCommentsFromStore(annotationType, annotationId);
+  }
+  return _getCommentsFromInline(annotationType, annotationId);
+}
+
+function _getCommentsFromInline(
+  annotationType: AnnotationType,
+  annotationId: string,
 ): AnnotationComment[] {
   switch (annotationType) {
     case 'text': {
@@ -1635,6 +1656,25 @@ function getAnnotationComments(
     }
   }
   return [];
+}
+
+function _isCommentStoreActive(): boolean {
+  try {
+    return _isStoreActive();
+  } catch {
+    return false;
+  }
+}
+
+function _getCommentsFromStore(
+  annotationType: AnnotationType,
+  annotationId: string,
+): AnnotationComment[] {
+  try {
+    return _storeGetComments(annotationType, annotationId);
+  } catch {
+    return _getCommentsFromInline(annotationType, annotationId);
+  }
 }
 
 function exportJSON(): string {
