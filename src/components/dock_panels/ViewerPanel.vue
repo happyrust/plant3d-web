@@ -26,6 +26,7 @@ import SpatialQueryDrawer from '@/components/spatial-query/SpatialQueryDrawer.vu
 import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
 import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
+import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
 import {
   createLatestOnlyGate,
   ExternalAnnotationRegistry,
@@ -519,6 +520,7 @@ const isMeasureModeActive = computed(() => {
     mode === 'measure_angle' ||
     mode === 'xeokit_measure_distance' ||
     mode === 'xeokit_measure_angle' ||
+    mode === 'measure_object_to_object' ||
     mode === 'measure_pipe_to_structure' ||
     mode === 'measure_pipe_to_pipe'
   );
@@ -1233,6 +1235,11 @@ function onLeftMeasureAngleClick(): void {
   leftToolbarOpenMeasureMenu.value = false;
 }
 
+function onLeftMeasureObjectToObjectClick(): void {
+  setAutoNearestMode('measure_object_to_object');
+  leftToolbarOpenMeasureMenu.value = false;
+}
+
 function onLeftMeasurePipeToStructureClick(): void {
   setAutoNearestMode('measure_pipe_to_structure');
   leftToolbarOpenMeasureMenu.value = false;
@@ -1243,8 +1250,24 @@ function onLeftMeasurePipeToPipeClick(): void {
   leftToolbarOpenMeasureMenu.value = false;
 }
 
+function closeObjectMeasureMode(): void {
+  if (store.toolMode.value !== 'measure_object_to_object') return;
+  store.setToolMode('none');
+  requestRender();
+}
+
+function resetObjectMeasureSelection(): void {
+  if (store.toolMode.value !== 'measure_object_to_object') return;
+  try {
+    toolsRef.value?.cancelMeasurementInteraction?.();
+  } catch {
+    // ignore
+  }
+  requestRender();
+}
+
 function setAutoNearestMode(
-  next: 'measure_pipe_to_structure' | 'measure_pipe_to_pipe',
+  next: 'measure_object_to_object' | 'measure_pipe_to_structure' | 'measure_pipe_to_pipe',
 ): void {
   if (store.toolMode.value === next) {
     store.setToolMode('none');
@@ -1329,6 +1352,9 @@ function handleRibbonCommand(commandId: string) {
     case 'measurement.point_to_mesh':
       store.setToolMode('measure_point_to_object');
       requestRender();
+      return;
+    case 'measurement.object_to_object':
+      setAutoNearestMode('measure_object_to_object');
       return;
     case 'measurement.pipe_to_structure':
       setAutoNearestMode('measure_pipe_to_structure');
@@ -4304,6 +4330,13 @@ onUnmounted(() => {
           </button>
           <button type="button"
             class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            :class="store.toolMode.value === 'measure_object_to_object' ? 'bg-muted' : ''"
+            @click.stop="onLeftMeasureObjectToObjectClick">
+            <Ruler class="h-4 w-4" />
+            <span>构件最近点</span>
+          </button>
+          <button type="button"
+            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
             :class="store.toolMode.value === 'measure_pipe_to_structure' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasurePipeToStructureClick">
             <Ruler class="h-4 w-4" />
@@ -4549,7 +4582,18 @@ onUnmounted(() => {
       @click="closeDimContextMenu"
       @contextmenu.prevent="closeDimContextMenu" />
 
-    <MeasurementWizard v-if="
+    <ObjectMeasureDrawer v-if="store.toolMode.value === 'measure_object_to_object' && toolsRef"
+      :title="'构件最近点测量'"
+      :subtitle="'点击模型或在模型树中双选两个构件'"
+      :status-text="toolsRef.objectToObjectUiState.value.statusText"
+      :source-refno="toolsRef.objectToObjectUiState.value.sourceRefno"
+      :target-refno="toolsRef.objectToObjectUiState.value.targetRefno"
+      :busy="toolsRef.objectToObjectUiState.value.busy"
+      :can-reset="toolsRef.objectToObjectUiState.value.canReset"
+      @close="closeObjectMeasureMode"
+      @reset="resetObjectMeasureSelection" />
+
+    <MeasurementWizard v-else-if="
                          (store.toolMode.value === 'measure_point_to_object' ||
                            store.toolMode.value === 'measure_pipe_to_structure' ||
                            store.toolMode.value === 'measure_pipe_to_pipe') &&
