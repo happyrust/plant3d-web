@@ -88,27 +88,80 @@
 
         <template v-else>
           <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
-            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">起始位置</div>
-            <div class="mt-2 flex rounded-md bg-white p-0.5">
-              <button type="button"
-                class="flex-1 rounded py-1.5 text-xs font-medium transition-colors"
-                :class="draft.distanceCenterSource === 'refno' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'"
-                @click="draft.distanceCenterSource = 'refno'">
-                通过 Refno
-              </button>
-              <button type="button"
-                class="flex-1 rounded py-1.5 text-xs font-medium transition-colors"
-                :class="draft.distanceCenterSource === 'coordinates' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'"
-                @click="draft.distanceCenterSource = 'coordinates'">
-                通过坐标
-              </button>
+            <div class="flex items-center justify-between">
+              <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">起始位置</div>
+              <div class="flex rounded-md bg-white p-0.5 text-[11px]">
+                <button type="button"
+                  class="rounded px-2 py-0.5 font-medium transition-colors"
+                  :class="draft.distanceCenterSource === 'refno' ? 'bg-[#FFF1E8] text-[#C84D00]' : 'text-gray-500 hover:text-gray-700'"
+                  @click="draft.distanceCenterSource = 'refno'">
+                  通过 Refno
+                </button>
+                <button type="button"
+                  class="rounded px-2 py-0.5 font-medium transition-colors"
+                  :class="draft.distanceCenterSource === 'coordinates' ? 'bg-[#FFF1E8] text-[#C84D00]' : 'text-gray-500 hover:text-gray-700'"
+                  @click="draft.distanceCenterSource = 'coordinates'">
+                  通过坐标
+                </button>
+              </div>
             </div>
-            <div v-if="draft.distanceCenterSource === 'refno'" class="mt-3">
-              <label class="mb-1 block text-xs text-gray-500">起始物项 Refno</label>
-              <input v-model="draft.refno"
-                type="text"
-                placeholder="例如：24381_100818"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+            <div v-if="draft.distanceCenterSource === 'refno'" class="mt-3 space-y-2">
+              <label class="block text-xs text-gray-500">拾取起始物项</label>
+              <div class="flex gap-1.5">
+                <button type="button"
+                  class="inline-flex items-center gap-1 rounded-md border border-[#FF6B00] bg-[#FF6B00] px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#E35F00]"
+                  data-testid="pick-from-selection"
+                  @click="pickRefnoFromSelection">
+                  <MousePointerClick class="h-3.5 w-3.5" />
+                  拾取物项
+                </button>
+                <div class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs">
+                  <span class="h-2 w-2 shrink-0 rounded-full"
+                    :class="draft.refno.trim() ? 'bg-emerald-500' : 'bg-gray-300'"
+                    aria-hidden="true" />
+                  <span v-if="draft.refno.trim()" class="truncate font-mono text-gray-900">{{ draft.refno.trim() }}</span>
+                  <span v-else class="text-gray-400">尚未选中物项</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <label class="text-[11px] text-gray-400">或手填 Refno</label>
+                <input v-model="draft.refno"
+                  type="text"
+                  placeholder="例如：24381_100818"
+                  class="h-7 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-[11px] text-gray-900 outline-none focus:border-[#FF6B00]" />
+              </div>
+            </div>
+          </section>
+
+          <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
+            <div class="flex items-center justify-between">
+              <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">查询半径</div>
+              <div class="font-mono text-lg font-semibold text-[#C84D00]">
+                {{ draft.radius }} <span class="text-xs text-[#C84D00]/70">mm</span>
+              </div>
+            </div>
+            <input :value="draft.radius"
+              type="range"
+              :min="DISTANCE_RADIUS_MIN"
+              :max="DISTANCE_RADIUS_MAX"
+              :step="DISTANCE_RADIUS_STEP"
+              data-testid="radius-slider"
+              class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-[#FF6B00]"
+              @input="onRadiusSliderInput" />
+            <div class="mt-1 flex justify-between text-[10px] text-gray-400">
+              <span>{{ DISTANCE_RADIUS_MIN }} mm</span>
+              <span>{{ DISTANCE_RADIUS_MAX }} mm</span>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              <button v-for="preset in DISTANCE_RADIUS_PRESETS"
+                :key="preset"
+                type="button"
+                class="rounded-full border px-2.5 py-0.5 text-[11px] transition-colors"
+                :class="draft.radius === preset ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                data-testid="radius-preset"
+                @click="draft.radius = preset">
+                {{ preset }} mm
+              </button>
             </div>
           </section>
         </template>
@@ -138,8 +191,8 @@
         </section>
 
         <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
-          <div class="grid grid-cols-2 gap-1.5">
-            <label class="text-xs text-gray-500">
+          <div class="grid gap-1.5" :class="draft.mode === 'range' ? 'grid-cols-2' : 'grid-cols-1'">
+            <label v-if="draft.mode === 'range'" class="text-xs text-gray-500">
               <span class="mb-1 block">查询半径 (mm)</span>
               <input v-model.number="draft.radius"
                 type="number"
@@ -385,6 +438,11 @@ const {
   restoreScene,
 } = spatialQuery;
 
+const DISTANCE_RADIUS_MIN = 100;
+const DISTANCE_RADIUS_MAX = 10000;
+const DISTANCE_RADIUS_STEP = 100;
+const DISTANCE_RADIUS_PRESETS = [100, 500, 1000, 5000] as const;
+
 const isQueryBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
 const specOptions = SITE_SPEC_OPTIONS;
 const selectedSpecValues = computed(() => new Set(draft.specValues));
@@ -441,6 +499,23 @@ function useSelection() {
 function startPick() {
   draft.rangeCenterSource = 'pick';
   startPickCenter();
+}
+
+/**
+ * Distance 模式下从 viewer 当前选中拾取 Refno。
+ * 复用 applyCurrentSelection 获取 refno，但保持 distanceCenterSource='refno' 不变。
+ * applyCurrentSelection 会把 rangeCenterSource 改为 'selected'，在 distance 模式下无副作用（UI 走 distanceCenterSource）。
+ */
+function pickRefnoFromSelection() {
+  applyCurrentSelection();
+}
+
+function onRadiusSliderInput(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const value = Number(target.value);
+  if (Number.isFinite(value)) {
+    draft.radius = value;
+  }
 }
 
 function toggleSpecValue(specValue: number) {

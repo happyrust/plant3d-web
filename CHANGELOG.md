@@ -1,5 +1,16 @@
 # 变更日志
 
+## 2026-04-24（晚间 · Wave 3B）
+
+### 空间距离查询抽屉 UI 按设计稿重构
+
+- **新增**"拾取物项"按钮（distance + refno 模式）— 点击复用 `applyCurrentSelection` 从 viewer 当前选中回填 `draft.refno`
+- **新增** refno 状态指示：绿色圆点 + 当前 Refno 显示；未选中时显示"尚未选中物项"
+- **新增** 半径滑动条（100–10000 mm，步长 100）+ 4 个预设 Chip（100 / 500 / 1000 / 5000 mm）
+- **重构** 通用 section：distance 模式下只保留"最大结果数"（半径已迁移至专属滑动条区块），range 模式保持原布局
+- **新增** `src/components/spatial-query/SpatialQueryDrawer.test.ts` — 6 个单测覆盖拾取按钮、状态圆点、滑动条、预设 Chip、模式切换隔离
+- **对齐** `ui/空间查询/distance-query.pen` 设计稿
+
 ## 2026-04-24（晚间 · Wave 3A）
 
 ### 截图能力扩展 + 测试
