@@ -16,6 +16,7 @@ import {
 import type { AnnotationType } from '@/composables/useToolStore';
 
 import {
+  annotationReviewStateApply,
   reviewCommentCreate,
   reviewCommentDelete,
   reviewCommentGetByAnnotation,
@@ -293,10 +294,24 @@ function cancelEdit() {
 
 async function deleteComment(commentId: string) {
   if (!props.annotationType || !props.annotationId) return;
+  const task = reviewStore.currentTask.value;
   try {
-    await reviewCommentDelete(commentId);
-  } catch { /* fallback */ }
-  store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
+    const resp = await reviewCommentDelete(commentId);
+    if (!resp.success) {
+      emitToast({ message: resp.error_message || '删除评论失败', level: 'error' });
+      return;
+    }
+    store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
+  } catch (err) {
+    if (task?.formId) {
+      emitToast({
+        message: err instanceof Error ? err.message : '删除评论失败',
+        level: 'error',
+      });
+      return;
+    }
+    store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
+  }
 }
 
 async function submitComment() {
@@ -308,6 +323,8 @@ async function submitComment() {
 
   const replyToId = replyToCommentId.value || undefined;
 
+  const task = reviewStore.currentTask.value;
+
   try {
     const resp = await reviewCommentCreate({
       annotationId: props.annotationId,
@@ -317,10 +334,12 @@ async function submitComment() {
       authorRole: user.role,
       content,
       replyToId,
+      formId: task?.formId || undefined,
+      taskId: task?.id || undefined,
     });
     if (resp.success && resp.comment) {
       store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment);
-    } else {
+    } else if (!task?.formId) {
       store.addCommentToAnnotation(props.annotationType, props.annotationId, {
         authorId: user.id,
         authorName: user.name,
@@ -328,8 +347,18 @@ async function submitComment() {
         content,
         replyToId,
       });
+    } else {
+      emitToast({ message: resp.error_message || '评论创建失败', level: 'error' });
+      return;
     }
-  } catch {
+  } catch (err) {
+    if (task?.formId) {
+      emitToast({
+        message: err instanceof Error ? err.message : '评论创建失败',
+        level: 'error',
+      });
+      return;
+    }
     store.addCommentToAnnotation(props.annotationType, props.annotationId, {
       authorId: user.id,
       authorName: user.name,
@@ -343,13 +372,45 @@ async function submitComment() {
   replyToCommentId.value = null;
 }
 
-function applyReviewAction(action: AnnotationReviewAction) {
+const actionSubmitting = ref(false);
+
+async function applyReviewAction(action: AnnotationReviewAction) {
   if (!props.annotationType || !props.annotationId) return;
   const user = currentUser.value;
   if (!user) return;
 
   if ((action === 'fixed' || action === 'wont_fix') && !canDesignHandle.value) return;
   if ((action === 'agree' || action === 'reject') && !canDecisionAct.value) return;
+
+  const task = reviewStore.currentTask.value;
+  const formId = task?.formId;
+  const taskId = task?.id;
+
+  if (formId && taskId) {
+    actionSubmitting.value = true;
+    try {
+      const resp = await annotationReviewStateApply({
+        formId,
+        taskId,
+        annotationId: props.annotationId,
+        annotationType: props.annotationType as 'text' | 'cloud' | 'rect' | 'obb',
+        action,
+        note: actionNote.value || undefined,
+      });
+      if (!resp.success) {
+        emitToast({ message: resp.errorMessage || '更新批注处理状态失败', level: 'error' });
+        return;
+      }
+    } catch (err) {
+      emitToast({
+        message: err instanceof Error ? err.message : '更新批注处理状态失败',
+        level: 'error',
+      });
+      return;
+    } finally {
+      actionSubmitting.value = false;
+    }
+  }
 
   const nextState = store.applyAnnotationReviewAction(props.annotationType, props.annotationId, {
     action,

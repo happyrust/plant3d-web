@@ -55,6 +55,7 @@ import {
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
 
+import { reviewAnnotationCheck, getReviewAnnotationCheckFromError } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -541,10 +542,13 @@ async function handleTableOpenAnnotation(item: AnnotationWorkspaceItem) {
   enterAnnotationDetail(item);
 }
 
-function updateSelectedAnnotationSeverity(severity: AnnotationSeverity | undefined) {
+async function updateSelectedAnnotationSeverity(severity: AnnotationSeverity | undefined) {
   if (!selectedAnnotation.value || !canEditSelectedSeverity.value) return;
-  toolStore.updateAnnotationSeverity(selectedAnnotation.value.type, selectedAnnotation.value.id, severity);
+  const { saveAnnotationSeverity } = await import('@/composables/useAnnotationSeveritySync');
+  await saveAnnotationSeverity(selectedAnnotation.value.type, selectedAnnotation.value.id, severity);
 }
+
+const annotationCheckBlockers = ref<{ annotationId: string; annotationType: string; stateLabel: string }[]>([]);
 
 async function confirmCurrentData() {
   if (!currentTask.value) {
@@ -555,6 +559,49 @@ async function confirmCurrentData() {
 
   confirmSaving.value = true;
   confirmError.value = null;
+  annotationCheckBlockers.value = [];
+
+  if (currentTask.value.formId) {
+    try {
+      const checkResp = await reviewAnnotationCheck({
+        formId: currentTask.value.formId,
+        taskId: currentTask.value.id,
+        currentNode: currentTask.value.currentNode || 'sj',
+        intent: 'submit_next',
+      });
+      if (!checkResp.success) {
+        confirmError.value = checkResp.error_message || '批注门禁校验请求失败';
+        confirmSaving.value = false;
+        return;
+      }
+      if (checkResp.data && !checkResp.data.passed) {
+        confirmError.value = checkResp.data.message || '存在未处理批注，请先处理后再确认';
+        annotationCheckBlockers.value = checkResp.data.blockers.map((b) => ({
+          annotationId: b.annotationId,
+          annotationType: b.annotationType,
+          stateLabel: b.stateLabel,
+        }));
+        confirmSaving.value = false;
+        return;
+      }
+    } catch (err) {
+      const checkResult = getReviewAnnotationCheckFromError(err);
+      if (checkResult && !checkResult.passed) {
+        confirmError.value = checkResult.message || '批注门禁校验未通过';
+        annotationCheckBlockers.value = checkResult.blockers.map((b) => ({
+          annotationId: b.annotationId,
+          annotationType: b.annotationType,
+          stateLabel: b.stateLabel,
+        }));
+        confirmSaving.value = false;
+        return;
+      }
+      confirmError.value = err instanceof Error ? err.message : '批注门禁校验异常';
+      confirmSaving.value = false;
+      return;
+    }
+  }
+
   try {
     const saved = await confirmCurrentDataSafely({
       hasPendingData: canConfirmCurrentData.value,

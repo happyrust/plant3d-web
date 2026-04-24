@@ -358,6 +358,7 @@ export type WorkflowSyncData = {
   taskCreated?: boolean;
   currentNode?: string;
   taskStatus?: string;
+  annotationStates?: AnnotationReviewStateView[];
 };
 
 export type WorkflowSyncResponse = {
@@ -1220,7 +1221,12 @@ export async function reviewTaskGetHistory(taskId: string): Promise<ReviewHistor
  * POST /api/review/comments
  */
 export async function reviewCommentCreate(
-  comment: Omit<AnnotationComment, 'id' | 'createdAt'>
+  comment: Omit<AnnotationComment, 'id' | 'createdAt'> & {
+    formId?: string;
+    taskId?: string;
+    workflowNode?: string;
+    reviewRound?: number;
+  },
 ): Promise<{ success: boolean; comment?: AnnotationComment; error_message?: string }> {
   return await fetchJson('/api/review/comments', {
     method: 'POST',
@@ -1248,9 +1254,12 @@ export async function reviewCommentUpdate(
  */
 export async function reviewCommentGetByAnnotation(
   annotationId: string,
-  annotationType: AnnotationComment['annotationType']
+  annotationType: AnnotationComment['annotationType'],
+  context?: { formId?: string; taskId?: string },
 ): Promise<{ success: boolean; comments: AnnotationComment[]; error_message?: string }> {
   const params = new URLSearchParams({ type: annotationType });
+  if (context?.formId) params.set('form_id', context.formId);
+  if (context?.taskId) params.set('task_id', context.taskId);
   return await fetchJson(`/api/review/comments/by-annotation/${encodeURIComponent(annotationId)}?${params}`);
 }
 
@@ -1295,6 +1304,72 @@ export async function annotationSeverityUpdate(
       body: JSON.stringify({ severity }),
     }
   );
+}
+
+// ============ 批注处理状态 API ============
+
+export type AnnotationReviewStateApplyRequest = {
+  formId: string;
+  taskId: string;
+  annotationId: string;
+  annotationType: 'text' | 'cloud' | 'rect' | 'obb';
+  action: 'fixed' | 'wont_fix' | 'agree' | 'reject';
+  note?: string;
+};
+
+export type AnnotationReviewStateView = {
+  formId: string;
+  taskId: string;
+  annotationId: string;
+  annotationType: string;
+  workflowNode: string;
+  reviewRound: number;
+  resolutionStatus: string;
+  decisionStatus: string;
+  note?: string;
+  updatedById: string;
+  updatedByName: string;
+  updatedByRole: string;
+  updatedAt: number;
+  history: unknown[];
+};
+
+export type AnnotationReviewStateApplyResponse = {
+  success: boolean;
+  state?: AnnotationReviewStateView;
+  errorMessage?: string;
+};
+
+export type AnnotationReviewStatesQueryResponse = {
+  success: boolean;
+  states?: AnnotationReviewStateView[];
+  errorMessage?: string;
+};
+
+/**
+ * 提交批注处理动作（fixed / wont_fix / agree / reject）到后端独立状态表。
+ * POST /api/review/annotation-states/apply
+ */
+export async function annotationReviewStateApply(
+  request: AnnotationReviewStateApplyRequest,
+): Promise<AnnotationReviewStateApplyResponse> {
+  return await fetchJson('/api/review/annotation-states/apply', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+/**
+ * 查询 form_id+task_id 下所有批注的独立处理状态。
+ * GET /api/review/annotation-states?form_id=...&task_id=...
+ */
+export async function annotationReviewStatesQuery(params: {
+  formId: string;
+  taskId?: string;
+}): Promise<AnnotationReviewStatesQueryResponse> {
+  const search = new URLSearchParams({ form_id: params.formId });
+  if (params.taskId) search.set('task_id', params.taskId);
+  return await fetchJson(`/api/review/annotation-states?${search}`);
 }
 
 // ============ 用户 API ============

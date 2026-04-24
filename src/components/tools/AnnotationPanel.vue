@@ -4,7 +4,6 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { Camera, LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
 
 import {
-  annotationSeverityUpdate,
   reviewCommentCreate,
   reviewCommentDelete,
   reviewCommentGetByAnnotation,
@@ -410,10 +409,6 @@ const canEditActiveSeverity = computed<boolean>(() => {
   return canEditAnnotationSeverity(userStore.currentUser.value, rec?.authorId);
 });
 
-function applyLocalSeverity(type: AnnotationType, id: string, severity: AnnotationSeverity | undefined) {
-  store.updateAnnotationSeverity(type, id, severity);
-}
-
 async function handleChangeSeverity(event: Event) {
   const target = event.target as HTMLSelectElement | null;
   if (!target) return;
@@ -425,20 +420,10 @@ async function handleChangeSeverity(event: Event) {
   const next: AnnotationSeverity | undefined = raw === '' ? undefined : (raw as AnnotationSeverity);
   const prev = (active.record as { severity?: AnnotationSeverity }).severity;
 
-  applyLocalSeverity(active.type, active.id, next);
-
-  try {
-    const resp = await annotationSeverityUpdate(active.id, active.type, next ?? null);
-    if (resp && resp.success === false) {
-      applyLocalSeverity(active.type, active.id, prev);
-      target.value = prev ?? '';
-       
-      console.warn('[annotation] 严重度同步后端被拒绝，已回滚：', resp.error_message);
-    }
-  } catch (err) {
-    // 后端接口不可用/网络异常时保留本地（与现有评论流程一致），避免用户输入丢失
-     
-    console.warn('[annotation] 严重度接口暂不可用，保留本地：', err);
+  const { saveAnnotationSeverity } = await import('@/composables/useAnnotationSeveritySync');
+  const ok = await saveAnnotationSeverity(active.type, active.id, next);
+  if (!ok) {
+    target.value = prev ?? '';
   }
 }
 
