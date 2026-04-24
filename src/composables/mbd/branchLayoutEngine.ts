@@ -126,10 +126,7 @@ export function resolveSemanticLane(
   const normalized = 'offsetLevel' in (hint ?? {})
     ? (hint as NormalizedLayoutHint)
     : normalizeMbdLayoutHint(hint as MbdLayoutHint | null | undefined);
-  const hasBackendOffsetLevel = Number.isFinite(
-    Number(normalized.raw?.offset_level),
-  );
-  const semanticLane = hasBackendOffsetLevel ? 0 : (SEMANTIC_LANE_ORDER[role] ?? 0);
+  const semanticLane = SEMANTIC_LANE_ORDER[role] ?? 0;
   const explicitLane = normalized.placementLane;
   const lane = Number.isFinite(explicitLane)
     ? Math.max(semanticLane, Math.floor(explicitLane as number))
@@ -160,13 +157,19 @@ export function resolveBranchLayout(
     hint?: MbdLayoutHint | null;
     segments?: MbdPipeSegmentDto[];
     pipeOffsetDirs?: Vector3[];
+    baseOffset?: number;
     baseOffsetScale?: number;
   },
 ): BranchLayoutResolution {
   const normalizedHint = normalizeMbdLayoutHint(args.hint);
+  const baseOffset = Number.isFinite(args.baseOffset)
+    ? Math.max(1, Math.min(5000, Number(args.baseOffset)))
+    : computeMbdDimOffset(args.start.distanceTo(args.end));
   const scaledBaseOffset =
-    computeMbdDimOffset(args.start.distanceTo(args.end)) *
-    (Number.isFinite(args.baseOffsetScale) ? Math.max(0.05, Math.min(50, args.baseOffsetScale!)) : 1);
+    baseOffset *
+    (Number.isFinite(args.baseOffsetScale)
+      ? Math.max(0.05, Math.min(50, args.baseOffsetScale!))
+      : 1);
   const branchDirection =
     args.segments && args.pipeOffsetDirs
       ? findSegmentOffsetDir(

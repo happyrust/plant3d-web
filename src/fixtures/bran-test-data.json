@@ -325,6 +325,74 @@
       "position": [2850, 600, 0]
     }
   ],
+  "pipe_clearances": [
+    {
+      "id": "pc_1",
+      "pipe1_refno": "TEST-BRAN-001",
+      "pipe2_refno": "BRAN:NEAR",
+      "start": [1800, 600, 0],
+      "end": [1800, 780, 0],
+      "distance": 180,
+      "text": "净距 180"
+    }
+  ],
+  "structure_clearances": [
+    {
+      "id": "sc_wall_1",
+      "pipe_refno": "TEST-BRAN-001",
+      "target_refno": "STRU:WALL:01",
+      "target_noun": "WALL",
+      "target_kind": "wall",
+      "anchor_point": [800, 600, 0],
+      "closest_point": [800, 900, 0],
+      "distance": 300,
+      "text": "距墙 300",
+      "priority": 1
+    },
+    {
+      "id": "sc_beam_1",
+      "pipe_refno": "TEST-BRAN-001",
+      "target_refno": "STRU:BEAM:01",
+      "target_noun": "BEAM",
+      "target_kind": "beam",
+      "anchor_point": [1950, 600, 0],
+      "closest_point": [1950, 600, 250],
+      "distance": 250,
+      "text": "距梁底 250",
+      "priority": 2
+    }
+  ],
+  "elevation_marks": [
+    {
+      "id": "elv_start",
+      "point": [0, 0, 0],
+      "elevation_mm": 0,
+      "text": "EL 0",
+      "role": "start"
+    },
+    {
+      "id": "elv_high",
+      "point": [800, 600, 120],
+      "elevation_mm": 120,
+      "text": "EL 120",
+      "role": "high"
+    },
+    {
+      "id": "elv_end",
+      "point": [2850, 600, 60],
+      "elevation_mm": 60,
+      "text": "EL 60",
+      "role": "end"
+    }
+  ],
+  "envelope": {
+    "id": "env_branch",
+    "kind": "insulation_outer",
+    "min": [0, -84.15, -50],
+    "max": [2850, 684.15, 120],
+    "size": [2850, 768.3, 170],
+    "center": [1425, 300, 35]
+  },
   "stats": {
     "segments_count": 5,
     "dims_count": 13,

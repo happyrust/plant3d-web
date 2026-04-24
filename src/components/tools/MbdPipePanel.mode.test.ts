@@ -14,7 +14,7 @@ import MbdPipePanel from './MbdPipePanel.vue';
 
 function createVisStub() {
   return {
-    uiTab: ref('settings'),
+    uiTab: ref('overview'),
     mbdViewMode: ref('construction'),
     dimTextMode: ref('backend'),
     dimOffsetScale: ref(1),
@@ -31,6 +31,10 @@ function createVisStub() {
     showDimChain: ref(true),
     showDimOverall: ref(false),
     showDimPort: ref(false),
+    showPipeClearances: ref(true),
+    showStructureClearances: ref(false),
+    showElevationMarks: ref(true),
+    showEnvelope: ref(false),
     showCutTubis: ref(true),
     showElbows: ref(true),
     showBranches: ref(true),
@@ -61,6 +65,14 @@ function createVisStub() {
     getWeldAnnotations: vi.fn(() => new Map()),
     getSlopeAnnotations: vi.fn(() => new Map()),
     getBendAnnotations: vi.fn(() => new Map()),
+    getCutTubiAnnotations: vi.fn(() => new Map()),
+    getTagAnnotations: vi.fn(() => new Map()),
+    getPipeClearanceAnnotations: vi.fn(() => new Map()),
+    getStructureClearanceAnnotations: vi.fn(() => new Map()),
+    getElevationAnnotations: vi.fn(() => new Map()),
+    getEnvelopeObjects: vi.fn(() => new Map()),
+    resolveElevationMarks: vi.fn((data?: any) => data?.elevation_marks ?? []),
+    resolveEnvelopeData: vi.fn((data?: any) => data?.envelope ?? null),
     applyModeDefaults: vi.fn(),
     resetToCurrentModeDefaults: vi.fn(),
   } as any;
@@ -106,6 +118,36 @@ describe('MbdPipePanel mode controls', () => {
     app.unmount();
   });
 
+  it('应展示新页签并支持结构净距开关', async () => {
+    const vis = createVisStub();
+    host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp(MbdPipePanel, { vis });
+    app.mount(host);
+    await nextTick();
+
+    expect(host.textContent).toContain('总览');
+    expect(host.textContent).toContain('尺寸');
+    expect(host.textContent).toContain('净空');
+    expect(host.textContent).toContain('材质');
+    expect(host.textContent).toContain('包络');
+    expect(host.textContent).toContain('设置');
+
+    const toggle = host.querySelector(
+      '[data-testid="mbd-toggle-structure-clearances"]',
+    ) as HTMLInputElement | null;
+    expect(toggle).toBeTruthy();
+    expect(vis.showStructureClearances.value).toBe(false);
+
+    toggle!.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    expect(vis.showStructureClearances.value).toBe(true);
+
+    app.unmount();
+  });
+
   it('应支持切换弯头显示模式', async () => {
     const vis = createVisStub();
     host = document.createElement('div');
@@ -113,6 +155,12 @@ describe('MbdPipePanel mode controls', () => {
 
     const app = createApp(MbdPipePanel, { vis });
     app.mount(host);
+    await nextTick();
+
+    const settingsButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('设置'),
+    ) as HTMLButtonElement | undefined;
+    settingsButton?.click();
     await nextTick();
 
     const bendModeSelect = host.querySelector(
@@ -130,7 +178,7 @@ describe('MbdPipePanel mode controls', () => {
     app.unmount();
   });
 
-  it('应基于 fittings.kind 统计弯头、支管和法兰分类', async () => {
+  it('应在总览中展示管件分类摘要', async () => {
     const vis = createVisStub();
     vis.currentData.value = {
       input_refno: '24381_145018',
@@ -150,6 +198,10 @@ describe('MbdPipePanel mode controls', () => {
         { id: 'f4', refno: 'f4', noun: 'FITT', kind: 'bend', anchor_point: [3, 0, 0] },
       ],
       tags: [],
+      pipe_clearances: [],
+      structure_clearances: [],
+      elevation_marks: [],
+      envelope: null,
       stats: {
         segments_count: 0,
         dims_count: 0,
@@ -169,9 +221,9 @@ describe('MbdPipePanel mode controls', () => {
     app.mount(host);
     await nextTick();
 
-    expect(host.textContent).toContain('elbows=2');
-    expect(host.textContent).toContain('branches=1');
-    expect(host.textContent).toContain('flanges=1');
+    expect(host.textContent).toContain('fittings: elbow=2');
+    expect(host.textContent).toContain('branch=1');
+    expect(host.textContent).toContain('flange=1');
 
     app.unmount();
   });

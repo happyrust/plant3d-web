@@ -181,6 +181,44 @@ export type MbdPipeClearanceDto = {
   layout_hint?: MbdLayoutHint | null
 }
 
+export type MbdElevationRole = 'start' | 'end' | 'high' | 'low' | 'bend' | 'branch'
+
+export type MbdElevationMarkDto = {
+  id: string
+  point: Vec3
+  elevation_mm: number
+  text: string
+  role?: MbdElevationRole | null
+  layout_hint?: MbdLayoutHint | null
+}
+
+export type MbdStructureTargetKind = 'beam' | 'slab' | 'column' | 'wall' | 'other'
+
+export type MbdStructureClearanceDto = {
+  id: string
+  pipe_refno: string
+  target_refno?: string | null
+  target_noun?: string | null
+  target_kind: MbdStructureTargetKind
+  anchor_point: Vec3
+  closest_point: Vec3
+  distance: number
+  text: string
+  priority?: number | null
+  layout_hint?: MbdLayoutHint | null
+}
+
+export type MbdPipeEnvelopeKind = 'pipe_outer' | 'insulation_outer'
+
+export type MbdPipeEnvelopeDto = {
+  id: string
+  kind: MbdPipeEnvelopeKind
+  min: Vec3
+  max: Vec3
+  size: Vec3
+  center: Vec3
+}
+
 export type MbdLaidOutLinearDimDto = {
   id: string
   kind: string
@@ -309,6 +347,9 @@ export type MbdPipeData = {
   fittings?: MbdFittingDto[]
   tags?: MbdTagDto[]
   pipe_clearances?: MbdPipeClearanceDto[]
+  elevation_marks?: MbdElevationMarkDto[]
+  structure_clearances?: MbdStructureClearanceDto[]
+  envelope?: MbdPipeEnvelopeDto | null
   stats: MbdPipeStats
   layout_result?: MbdPipeLayoutResult | null
   debug_info?: MbdPipeDebugInfo

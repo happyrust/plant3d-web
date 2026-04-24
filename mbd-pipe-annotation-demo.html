@@ -1,0 +1,1571 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>管道自动标注交互草图</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: 'Bahnschrift', 'DIN Alternate', 'Microsoft YaHei UI', sans-serif;
+        --page-bg: #f2f5f7;
+        --panel-bg: rgba(255, 255, 255, 0.94);
+        --panel-strong: #ffffff;
+        --ink-900: #0f2b3f;
+        --ink-700: #35506a;
+        --ink-500: #5f7489;
+        --line: rgba(31, 69, 98, 0.14);
+        --line-strong: rgba(31, 69, 98, 0.24);
+        --accent: #0d7c66;
+        --accent-soft: rgba(13, 124, 102, 0.14);
+        --alert: #ca6c18;
+        --alert-soft: rgba(202, 108, 24, 0.12);
+        --danger: #b84a38;
+        --danger-soft: rgba(184, 74, 56, 0.14);
+        --layout: #1d5f95;
+        --construction: #7a4c9d;
+        --inspection: #c15d20;
+        --shadow: 0 22px 48px rgba(17, 35, 52, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top left, rgba(13, 124, 102, 0.08), transparent 26%),
+          radial-gradient(circle at top right, rgba(29, 95, 149, 0.09), transparent 24%),
+          linear-gradient(180deg, #f7fafc 0%, #eef3f5 100%);
+        color: var(--ink-900);
+      }
+
+      body {
+        min-height: 100vh;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      .gate {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .gate-card {
+        width: min(560px, 100%);
+        padding: 28px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .gate-card h1 {
+        margin: 0 0 12px;
+        font-size: 28px;
+      }
+
+      .gate-card p,
+      .gate-card li {
+        color: var(--ink-700);
+        line-height: 1.7;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 28px 30px 20px;
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(14px);
+      }
+
+      .hero-copy {
+        max-width: 760px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 12px;
+        color: var(--accent);
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(30px, 5vw, 44px);
+        line-height: 1.08;
+      }
+
+      .hero p {
+        margin: 14px 0 0;
+        color: var(--ink-700);
+        line-height: 1.7;
+        font-size: 15px;
+      }
+
+      .hero-actions {
+        min-width: 280px;
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+
+      .mode-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .mode-card {
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.82);
+        text-align: left;
+        transition: 160ms ease;
+      }
+
+      .mode-card[data-mode='layout_first'].active {
+        border-color: rgba(29, 95, 149, 0.32);
+        background: rgba(29, 95, 149, 0.1);
+      }
+
+      .mode-card[data-mode='construction'].active {
+        border-color: rgba(122, 76, 157, 0.32);
+        background: rgba(122, 76, 157, 0.1);
+      }
+
+      .mode-card[data-mode='inspection'].active {
+        border-color: rgba(193, 93, 32, 0.32);
+        background: rgba(193, 93, 32, 0.1);
+      }
+
+      .mode-card strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 15px;
+      }
+
+      .mode-card span {
+        color: var(--ink-700);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .shell {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr) 360px;
+        gap: 18px;
+        padding: 20px 22px 24px;
+      }
+
+      .stack {
+        min-height: 0;
+        display: grid;
+        gap: 16px;
+        align-content: start;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        background: var(--panel-bg);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-head h2,
+      .panel-head h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .panel-head span {
+        color: var(--ink-500);
+        font-size: 12px;
+      }
+
+      .panel-body {
+        padding: 16px 18px 18px;
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .stat-card {
+        padding: 14px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 246, 249, 0.92));
+        border: 1px solid var(--line);
+      }
+
+      .stat-card strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 24px;
+      }
+
+      .stat-card span {
+        color: var(--ink-500);
+        font-size: 12px;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        color: var(--ink-700);
+      }
+
+      .pill strong {
+        color: var(--ink-900);
+      }
+
+      .control-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .switch-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px dashed rgba(31, 69, 98, 0.12);
+      }
+
+      .switch-row:last-child {
+        border-bottom: none;
+      }
+
+      .switch-copy strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .switch-copy span {
+        color: var(--ink-500);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .switch-row input[type='checkbox'] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--accent);
+      }
+
+      .threshold-card {
+        margin-top: 10px;
+        padding: 14px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, rgba(13, 124, 102, 0.09), rgba(29, 95, 149, 0.06));
+      }
+
+      .threshold-card label {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+        font-size: 13px;
+      }
+
+      .threshold-card input[type='range'] {
+        width: 100%;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .legend-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--ink-700);
+      }
+
+      .legend-tag::before {
+        content: '';
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+      }
+
+      .legend-layout::before {
+        background: var(--layout);
+      }
+
+      .legend-construction::before {
+        background: var(--construction);
+      }
+
+      .legend-inspection::before {
+        background: var(--inspection);
+      }
+
+      .item-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .item-card {
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.86);
+        text-align: left;
+        transition: 140ms ease;
+      }
+
+      .item-card.active {
+        border-color: rgba(13, 124, 102, 0.34);
+        background: rgba(13, 124, 102, 0.08);
+      }
+
+      .item-card strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .item-card .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--ink-500);
+      }
+
+      .severity {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 68px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid transparent;
+      }
+
+      .severity.ok {
+        color: var(--accent);
+        background: var(--accent-soft);
+        border-color: rgba(13, 124, 102, 0.18);
+      }
+
+      .severity.warn {
+        color: var(--alert);
+        background: var(--alert-soft);
+        border-color: rgba(202, 108, 24, 0.18);
+      }
+
+      .severity.alert {
+        color: var(--danger);
+        background: var(--danger-soft);
+        border-color: rgba(184, 74, 56, 0.22);
+      }
+
+      .stage-wrap {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 14px;
+      }
+
+      .mode-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+      }
+
+      .mode-strip strong {
+        font-size: 18px;
+      }
+
+      .mode-strip p {
+        margin: 6px 0 0;
+        color: var(--ink-500);
+        font-size: 13px;
+      }
+
+      .strip-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .strip-badge {
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid var(--line);
+      }
+
+      .canvas {
+        position: relative;
+        min-height: 520px;
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 248, 250, 0.98)),
+          repeating-linear-gradient(90deg, rgba(31, 69, 98, 0.03) 0, rgba(31, 69, 98, 0.03) 1px, transparent 1px, transparent 88px),
+          repeating-linear-gradient(0deg, rgba(31, 69, 98, 0.03) 0, rgba(31, 69, 98, 0.03) 1px, transparent 1px, transparent 88px);
+        overflow: hidden;
+      }
+
+      .canvas svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .annotation-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .annotation-chip,
+      .hotspot {
+        position: absolute;
+        transform: translate(-50%, -50%);
+      }
+
+      .hotspot {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 2px solid var(--panel-strong);
+        background: var(--accent);
+        box-shadow: 0 0 0 6px rgba(13, 124, 102, 0.12);
+        pointer-events: auto;
+      }
+
+      .hotspot.active {
+        background: var(--danger);
+        box-shadow: 0 0 0 10px rgba(184, 74, 56, 0.14);
+      }
+
+      .annotation-chip {
+        max-width: 180px;
+        padding: 10px 12px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 14px 24px rgba(17, 35, 52, 0.08);
+        pointer-events: auto;
+        text-align: left;
+      }
+
+      .annotation-chip.layout_first {
+        border-left: 5px solid var(--layout);
+      }
+
+      .annotation-chip.construction {
+        border-left: 5px solid var(--construction);
+      }
+
+      .annotation-chip.inspection {
+        border-left: 5px solid var(--inspection);
+      }
+
+      .annotation-chip.active {
+        outline: 2px solid rgba(13, 124, 102, 0.24);
+      }
+
+      .annotation-chip strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .annotation-chip span {
+        display: block;
+        margin-top: 4px;
+        color: var(--ink-500);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .stage-footer {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .footer-card {
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.88);
+      }
+
+      .footer-card h4 {
+        margin: 0 0 10px;
+        font-size: 14px;
+      }
+
+      .footer-card p,
+      .footer-card li {
+        margin: 0;
+        color: var(--ink-500);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .footer-card ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tab-btn {
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .tab-btn.active {
+        border-color: rgba(13, 124, 102, 0.34);
+        background: rgba(13, 124, 102, 0.1);
+        color: var(--accent);
+      }
+
+      .detail-body {
+        display: grid;
+        gap: 14px;
+      }
+
+      .detail-card {
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.84);
+      }
+
+      .detail-card h4 {
+        margin: 0 0 12px;
+        font-size: 14px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 8px 10px;
+      }
+
+      .detail-grid dt {
+        color: var(--ink-500);
+        font-size: 12px;
+      }
+
+      .detail-grid dd {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .detail-card ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .detail-card li {
+        font-size: 13px;
+        line-height: 1.75;
+        color: var(--ink-700);
+      }
+
+      .ghost-note {
+        color: var(--ink-500);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      @media (max-width: 1360px) {
+        .shell {
+          grid-template-columns: 296px minmax(0, 1fr);
+        }
+
+        .stack.detail-stack {
+          grid-column: 1 / -1;
+        }
+
+        .stage-footer {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 980px) {
+        .hero,
+        .shell {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+
+        .stage-footer,
+        .stat-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .canvas {
+          min-height: 460px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gate" class="gate" hidden>
+      <div class="gate-card">
+        <p class="eyebrow">Debug UI Gate</p>
+        <h1>此交互页默认仅在调试模式开放</h1>
+        <p>
+          若在非开发环境访问，请于 URL 追加 <code>?debug_ui=1</code>，或先在浏览器控制台执行
+          <code>localStorage.setItem('plant3d_debug_ui', '1')</code>。
+        </p>
+        <ul>
+          <li>推荐地址：<code>/mbd-pipe-annotation-demo.html?debug_ui=1</code></li>
+          <li>此页用于演示管道自动标注的信息分层与侧栏联动，不接真实后端。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="app" class="app" hidden>
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Pipe Annotation Demo · Pencil Fallback</p>
+          <h1>管道自动标注信息分层交互草图</h1>
+          <p>
+            以一个支路样例演示 <strong>layout_first / construction / inspection</strong>
+            三模式如何分层承载 ISO 主标、施工读数与净空校核，并通过右侧详情区承接完整信息。
+          </p>
+        </div>
+        <div class="hero-actions">
+          <div class="mode-grid" id="mode-grid"></div>
+        </div>
+      </header>
+
+      <main class="shell">
+        <aside class="stack">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>支路总览</h2>
+              <span>BRAN 24381_145018</span>
+            </div>
+            <div class="panel-body">
+              <div class="stat-grid" id="stat-grid"></div>
+              <div class="pill-row" id="summary-pills"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>显示控制</h2>
+              <span>3D 常驻项只保留关键数值</span>
+            </div>
+            <div class="panel-body">
+              <div id="control-grid" class="control-grid"></div>
+              <div class="threshold-card">
+                <label for="clearance-threshold">
+                  <strong>净空阈值</strong>
+                  <span id="threshold-value">150 mm</span>
+                </label>
+                <input id="clearance-threshold" type="range" min="80" max="260" step="10" value="150" />
+                <div class="legend">
+                  <span class="legend-tag legend-layout">ISO 主标</span>
+                  <span class="legend-tag legend-construction">施工读数</span>
+                  <span class="legend-tag legend-inspection">校核异常</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>标注条目</h2>
+              <span>点击任一条目，右侧同步切页</span>
+            </div>
+            <div class="panel-body">
+              <div id="item-list" class="item-list"></div>
+            </div>
+          </section>
+        </aside>
+
+        <section class="stack stage-wrap">
+          <section class="panel">
+            <div class="mode-strip">
+              <div>
+                <strong id="mode-title"></strong>
+                <p id="mode-description"></p>
+              </div>
+              <div class="strip-badges" id="mode-badges"></div>
+            </div>
+          </section>
+
+          <section class="panel canvas">
+            <svg viewBox="0 0 980 560" aria-hidden="true">
+              <defs>
+                <linearGradient id="pipeGrad" x1="0%" x2="100%">
+                  <stop offset="0%" stop-color="#0d7c66" />
+                  <stop offset="100%" stop-color="#1d5f95" />
+                </linearGradient>
+              </defs>
+
+              <rect x="720" y="36" width="180" height="116" rx="24" fill="rgba(29,95,149,0.08)" stroke="rgba(29,95,149,0.18)" />
+              <text x="748" y="72" fill="#35506a" font-size="16">梁 B2</text>
+              <text x="748" y="98" fill="#5f7489" font-size="12">距管中心最近 120 mm</text>
+
+              <rect x="128" y="420" width="240" height="76" rx="22" fill="rgba(193,93,32,0.08)" stroke="rgba(193,93,32,0.18)" />
+              <text x="156" y="454" fill="#35506a" font-size="16">板 S1</text>
+              <text x="156" y="480" fill="#5f7489" font-size="12">最低净高 245 mm</text>
+
+              <rect x="84" y="96" width="100" height="232" rx="22" fill="rgba(13,124,102,0.08)" stroke="rgba(13,124,102,0.18)" />
+              <text x="104" y="132" fill="#35506a" font-size="16">墙 W3</text>
+              <text x="104" y="158" fill="#5f7489" font-size="12">保温外包络基准</text>
+
+              <polyline
+                points="184,332 312,332 440,332 440,210 684,210 820,210"
+                fill="none"
+                stroke="rgba(220,231,237,0.95)"
+                stroke-width="54"
+                stroke-linecap="round"
+                stroke-linejoin="round" />
+
+              <polyline
+                points="184,332 312,332 440,332 440,210 684,210 820,210"
+                fill="none"
+                stroke="url(#pipeGrad)"
+                stroke-width="28"
+                stroke-linecap="round"
+                stroke-linejoin="round" />
+
+              <polyline
+                points="206,370 320,370 428,370 428,248 656,248 792,248"
+                fill="none"
+                stroke="rgba(122,76,157,0.35)"
+                stroke-width="12"
+                stroke-linecap="round"
+                stroke-dasharray="18 12"
+                stroke-linejoin="round" />
+
+              <path d="M 190 332 Q 220 290 252 268" fill="none" stroke="rgba(53,80,106,0.2)" stroke-width="1.5" stroke-dasharray="4 6" />
+              <path d="M 438 210 Q 516 150 608 138" fill="none" stroke="rgba(53,80,106,0.2)" stroke-width="1.5" stroke-dasharray="4 6" />
+              <path d="M 684 210 Q 734 170 792 152" fill="none" stroke="rgba(53,80,106,0.2)" stroke-width="1.5" stroke-dasharray="4 6" />
+
+              <rect id="envelope-box" x="160" y="184" width="678" height="212" rx="34" fill="rgba(13,124,102,0.04)" stroke="rgba(13,124,102,0.26)" stroke-width="2" stroke-dasharray="12 10" />
+
+              <line x1="736" y1="152" x2="736" y2="220" stroke="rgba(193,93,32,0.44)" stroke-width="2" stroke-dasharray="8 6" />
+              <line x1="168" y1="326" x2="88" y2="326" stroke="rgba(13,124,102,0.44)" stroke-width="2" stroke-dasharray="8 6" />
+            </svg>
+            <div id="annotation-layer" class="annotation-layer"></div>
+          </section>
+
+          <section class="stage-footer" id="stage-footer"></section>
+        </section>
+
+        <aside class="stack detail-stack">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>侧栏详情</h2>
+              <span id="detail-target-label">跟随选中标注切页</span>
+            </div>
+            <div class="panel-body">
+              <div id="tabs" class="tabs"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-body detail-body">
+              <div class="detail-card">
+                <h4 id="detail-title">S-02 抬高段</h4>
+                <dl id="detail-summary" class="detail-grid"></dl>
+              </div>
+              <div id="detail-content"></div>
+              <div class="ghost-note">
+                此侧栏承接完整属性与明细；中间画布只显示“核心数值 + 少量告警”，避免三维视图被信息淹没。
+              </div>
+            </div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script>
+      const MODES = {
+        layout_first: {
+          label: 'ISO 主标',
+          description: '只保留段长、关键口径、链式与必要角度，聚焦出图语义，不把校核读数塞满主画面。',
+          badges: ['段长', '关键 DN/OD', '链式尺寸', '弯头角度'],
+        },
+        construction: {
+          label: '施工读数',
+          description: '突出长度、口径、坡度与材质短标签，方便现场读数与加工下料。',
+          badges: ['切管段', '坡度', 'PSPEC / FLUID', '保温厚度'],
+        },
+        inspection: {
+          label: '校核模式',
+          description: '只强调绝对标高、最近结构净距、最近管间净距与包络异常，便于快速发现问题。',
+          badges: ['标高', '结构净距', '管间净距', '包络'],
+        },
+      };
+
+      const TABS = ['总览', '尺寸', '净空', '材质', '包络', '设置'];
+
+      const TOGGLES = [
+        { key: 'diameters', label: '关键口径', help: '只在起终点、支路点与变径处显示 DN / OD。', modes: ['layout_first', 'construction'] },
+        { key: 'dimensions', label: '尺寸链', help: '显示段长、总长与施工链式尺寸。', modes: ['layout_first', 'construction'] },
+        { key: 'materials', label: '材质短签', help: '在施工模式下显示 PSPEC / FLUID / ISPEC / TSPEC。', modes: ['construction'] },
+        { key: 'elevations', label: '绝对标高', help: '在校核模式下显示高低点和支路点的绝对高程。', modes: ['inspection'] },
+        { key: 'structureClearance', label: '结构净距', help: '默认只保留每类最近结构构件或阈值超限项。', modes: ['inspection'] },
+        { key: 'pipeClearance', label: '管间净距', help: '显示最近相邻管道净距，支持异常优先。', modes: ['inspection'] },
+        { key: 'envelope', label: '包络框', help: '按保温外径计算 AABB，仅在校核或选中时显示。', modes: ['inspection'] },
+      ];
+
+      const ITEMS = [
+        {
+          id: 'seg_s1',
+          title: 'S-01 入口直管',
+          type: 'segment',
+          group: '尺寸',
+          severity: 'ok',
+          point: { x: 236, y: 332 },
+          chipOffset: { x: 20, y: -74 },
+          tabs: {
+            总览: {
+              summary: [
+                ['段号', 'S-01'],
+                ['位置', '支路起点'],
+                ['模式关注', 'ISO 主标 / 施工读数'],
+                ['状态', '稳定段'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['layout_first 下显示段长与起点 DN100。', 'construction 下补充 OD114.3 与材质短签。'] }],
+            },
+            尺寸: {
+              title: '尺寸信息',
+              list: ['中心线长度 4 200 mm', '公称直径 DN100', '外径 OD114.3', '无变径，链式尺寸起点'],
+            },
+            净空: {
+              title: '净空摘要',
+              list: ['距离墙 W3 最近 180 mm', '未触发异常阈值', '与相邻支路最小净距 240 mm'],
+            },
+            材质: {
+              title: '材质标签',
+              list: ['FLUID: FW', 'PSPEC: A2-CS', 'ISPEC: HT-50', 'TSPEC: MARINE-01'],
+            },
+            包络: {
+              title: '包络',
+              list: ['AABB 参与计算', 'X 尺寸 6780 mm', 'Y 尺寸 212 mm', 'Z 尺寸 540 mm'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['仅显示起点 DN，不重复铺满整段。', '未选中时不常驻详情卡。'],
+            },
+          },
+        },
+        {
+          id: 'seg_s2',
+          title: 'S-02 抬高段',
+          type: 'segment',
+          group: '尺寸',
+          severity: 'warn',
+          point: { x: 440, y: 332 },
+          chipOffset: { x: 12, y: -98 },
+          tabs: {
+            总览: {
+              summary: [
+                ['段号', 'S-02'],
+                ['位置', '立管抬高段'],
+                ['模式关注', '尺寸 + 标高'],
+                ['状态', '高低点关键段'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['layout_first 下保留 90° 弯头与链式尺寸。', 'inspection 下突出 +3.650 m 标高与低点切换。'] }],
+            },
+            尺寸: {
+              title: '尺寸信息',
+              list: ['竖向抬高 1 120 mm', '弯头 90°', 'OD114.3 / DN100', '总长累计 5 320 mm'],
+            },
+            净空: {
+              title: '净空摘要',
+              list: ['距板 S1 最低 245 mm', '距梁 B2 尚有安全余量', '未出现与其他管线碰撞'],
+            },
+            材质: {
+              title: '材质标签',
+              list: ['与 S-01 同支路材质', '保温 50 mm', '防腐等级 C4'],
+            },
+            包络: {
+              title: '包络',
+              list: ['抬高后包络顶点 +3.710 m', '纳入 insulation_outer 计算', '包络用于 flyTo 与碰撞校核'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['选中时自动跳到“尺寸”页。', 'inspection 模式默认打开标高开关。'],
+            },
+          },
+        },
+        {
+          id: 'seg_s3',
+          title: 'S-03 梁下穿越',
+          type: 'segment',
+          group: '净空',
+          severity: 'alert',
+          point: { x: 684, y: 210 },
+          chipOffset: { x: 44, y: -82 },
+          tabs: {
+            总览: {
+              summary: [
+                ['段号', 'S-03'],
+                ['位置', '梁 B2 下方'],
+                ['模式关注', '结构净距'],
+                ['状态', '异常优先'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['inspection 下只显示最小净空 120 mm。', '侧栏列出梁/板/墙全部候选净距。'] }],
+            },
+            尺寸: {
+              title: '尺寸信息',
+              list: ['水平长度 2 440 mm', '链式尺寸继续累计', '端部接 S-04 出口段'],
+            },
+            净空: {
+              title: '净空摘要',
+              list: ['梁 B2 最近净距 120 mm', '低于当前阈值 150 mm，标记告警', '候选列表：梁 B2 / 墙 W3 / 板 S1'],
+            },
+            材质: {
+              title: '材质标签',
+              list: ['PSPEC: A2-CS', '支吊架型式 HN-04', '保温外径参与净距计算'],
+            },
+            包络: {
+              title: '包络',
+              list: ['受包络上界控制', '最接近 envelope 顶部', '可作为结构调整讨论点'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['点击告警芯片自动切到“净空”页。', '阈值变化时实时刷新严重级别。'],
+            },
+          },
+        },
+        {
+          id: 'elevation_high',
+          title: '高点标高',
+          type: 'elevation',
+          group: '标高',
+          severity: 'ok',
+          point: { x: 440, y: 210 },
+          chipOffset: { x: 96, y: -114 },
+          tabs: {
+            总览: {
+              summary: [
+                ['标记', '高点'],
+                ['绝对标高', '+3.650 m'],
+                ['角色', 'high / bend'],
+                ['状态', '正常'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['inspection 常驻标高值。', 'layout_first 不展示，避免 ISO 画面拥挤。'] }],
+            },
+            尺寸: {
+              title: '关联段',
+              list: ['关联 S-02 抬高段', '竖向提升 1 120 mm', '弯头中心点作为标高锚点'],
+            },
+            净空: {
+              title: '校核摘要',
+              list: ['标高与梁底净空联动', '高点处净空仍满足 120 mm 以上'],
+            },
+            材质: {
+              title: '影响项',
+              list: ['保温厚度会抬高 envelope 上界', '未影响材质标签展示'],
+            },
+            包络: {
+              title: '包络关联',
+              list: ['该点决定包络 Z-max', '可用于 flyTo 聚焦高点'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['默认文字格式：+3.650 m', '支持后端稳定下发 text 与 layout_hint'],
+            },
+          },
+        },
+        {
+          id: 'clearance_beam',
+          title: '梁 B2 最小净距',
+          type: 'structureClearance',
+          group: '净空',
+          severity: 'alert',
+          point: { x: 736, y: 188 },
+          chipOffset: { x: 96, y: -66 },
+          tabs: {
+            总览: {
+              summary: [
+                ['对象', '梁 B2'],
+                ['最近净距', '120 mm'],
+                ['类别', 'beam'],
+                ['状态', '低于阈值'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['画面只显示最近梁净距。', '完整结构净距候选保留在侧栏。'] }],
+            },
+            尺寸: {
+              title: '定位信息',
+              list: ['锚点位于 S-03 中段', 'closest_point 已映射到梁底面', '用于 3D 连线标记'],
+            },
+            净空: {
+              title: '结构净距',
+              list: ['梁 B2: 120 mm', '墙 W3: 180 mm', '板 S1: 245 mm', '柱 C5: 320 mm'],
+            },
+            材质: {
+              title: '计算依据',
+              list: ['基于 insulation_outer 包络', '结构净距不受 PSPEC 文本展示影响'],
+            },
+            包络: {
+              title: '包络关联',
+              list: ['采用包络上边界参与净距', '可切换 pipe_outer / insulation_outer'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['inspection 默认保留每类最近一条。', '点击后切到“净空”页并高亮结构对象。'],
+            },
+          },
+        },
+        {
+          id: 'clearance_pipe',
+          title: '相邻支路净距',
+          type: 'pipeClearance',
+          group: '净空',
+          severity: 'warn',
+          point: { x: 520, y: 248 },
+          chipOffset: { x: 112, y: 74 },
+          tabs: {
+            总览: {
+              summary: [
+                ['对象', 'FW-102-AB vs FO-204'],
+                ['最近净距', '165 mm'],
+                ['类别', 'pipe_clearance'],
+                ['状态', '接近阈值'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['inspection 下仅显示最近管间净距。', '列表中保留 refno 与最近点坐标。'] }],
+            },
+            尺寸: {
+              title: '定位信息',
+              list: ['最近点在 S-03 与 FO-204 并行段', 'anchor_point 采用当前支路中心线', 'closest_point 指向对方包络外表面'],
+            },
+            净空: {
+              title: '管间净距',
+              list: ['最小值 165 mm', '未低于阈值，但列为次级关注项', '可切换异常优先排序'],
+            },
+            材质: {
+              title: '影响项',
+              list: ['保温后净距从 210 mm 缩至 165 mm', '如取消保温包络，结果会重新计算'],
+            },
+            包络: {
+              title: '包络关联',
+              list: ['包络类型：insulation_outer', '对侧管线亦按保温外包络处理'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['inspection 默认开启。', '点击后右侧保持在“净空”页。'],
+            },
+          },
+        },
+        {
+          id: 'material_tag',
+          title: '支路材质短签',
+          type: 'material',
+          group: '材质',
+          severity: 'ok',
+          point: { x: 304, y: 370 },
+          chipOffset: { x: 20, y: 86 },
+          tabs: {
+            总览: {
+              summary: [
+                ['标签', 'PSPEC / FLUID'],
+                ['内容', 'A2-CS / FW'],
+                ['模式关注', 'construction'],
+                ['状态', '简洁展示'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['不逐段常驻大标签。', '只在 branch 头部或 hover 卡片中展示。'] }],
+            },
+            尺寸: {
+              title: '关联段',
+              list: ['覆盖 S-01 至 S-04 整体支路', '不参与尺寸链绘制'],
+            },
+            净空: {
+              title: '校核影响',
+              list: ['材质文本本身不参与净距计算', '保温厚度才参与包络与净距'],
+            },
+            材质: {
+              title: '材质信息',
+              list: ['FLUID: FW', 'PSPEC: A2-CS', 'ISPEC: HT-50', 'TSPEC: MARINE-01'],
+            },
+            包络: {
+              title: '包络',
+              list: ['保温 50 mm 直接决定 insulation_outer', '材质与包络在侧栏关联展示'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['construction 模式默认显示。', 'layout_first 与 inspection 隐藏。'],
+            },
+          },
+        },
+        {
+          id: 'envelope_box',
+          title: '保温外包络',
+          type: 'envelope',
+          group: '包络',
+          severity: 'ok',
+          point: { x: 168, y: 182 },
+          chipOffset: { x: 132, y: -32 },
+          tabs: {
+            总览: {
+              summary: [
+                ['类型', 'insulation_outer'],
+                ['包络尺寸', '6780 × 212 × 540 mm'],
+                ['展示方式', '半透明框'],
+                ['状态', '按需显示'],
+              ],
+              blocks: [{ title: '推荐展示', list: ['3D 默认不常驻文字。', '选中或 inspection 开关开启时显示半透明 AABB。'] }],
+            },
+            尺寸: {
+              title: '尺寸信息',
+              list: ['X: 6780 mm', 'Y: 212 mm', 'Z: 540 mm', 'center 已用于 flyTo 聚焦'],
+            },
+            净空: {
+              title: '校核关系',
+              list: ['结构净距采用包络外表面', '管间净距亦按包络参与'],
+            },
+            材质: {
+              title: '来源',
+              list: ['基础外径 DN100 / OD114.3', '保温厚度 50 mm 叠加形成外包络'],
+            },
+            包络: {
+              title: '包络说明',
+              list: ['最小可用版：AABB', '后续如需贴近出图，可演进为 OBB', '当前足以支撑侧栏与校核'],
+            },
+            设置: {
+              title: '显示策略',
+              list: ['inspection 默认开启。', '可单独关闭，不影响其他标记。'],
+            },
+          },
+        },
+      ];
+
+      const FOOTER_CARDS = [
+        {
+          title: '布局结论',
+          content: ['画布只保留核心读数，完整属性移至侧栏。', '点击任一标注，详情区自动切换对应页签。'],
+        },
+        {
+          title: '净空策略',
+          content: ['结构净距与管间净距均采用“最近项优先”。', '阈值变化只影响严重级别与排序，不影响原始数据。'],
+        },
+        {
+          title: '材质策略',
+          content: ['材质短签仅在 construction 模式出现。', 'FLUID / PSPEC / ISPEC / TSPEC 进入“材质”页承载。'],
+        },
+        {
+          title: '包络策略',
+          content: ['首期使用 insulation_outer AABB。', '包络框仅在 inspection 或选中时浮出，避免画面噪声。'],
+        },
+      ];
+
+      const state = {
+        mode: 'inspection',
+        tab: '净空',
+        selectedId: 'clearance_beam',
+        threshold: 150,
+        toggles: {
+          diameters: true,
+          dimensions: true,
+          materials: true,
+          elevations: true,
+          structureClearance: true,
+          pipeClearance: true,
+          envelope: true,
+        },
+      };
+
+      function isDebugEnabled() {
+        if (typeof window === 'undefined') return false;
+        if (window.location.protocol === 'file:') return true;
+        if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') return true;
+        try {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('debug_ui') === '1') return true;
+          if (localStorage.getItem('plant3d_debug_ui') === '1') return true;
+          if (sessionStorage.getItem('plant3d_debug_ui') === '1') return true;
+        } catch {
+          return false;
+        }
+        return false;
+      }
+
+      function getSelectedItem() {
+        return ITEMS.find((item) => item.id === state.selectedId) || ITEMS[0];
+      }
+
+      function getSeverityLabel(severity) {
+        if (severity === 'alert') return '需处理';
+        if (severity === 'warn') return '关注';
+        return '正常';
+      }
+
+      function getVisibleItems() {
+        return ITEMS.filter((item) => {
+          if (item.type === 'segment') {
+            return state.mode !== 'inspection' || state.toggles.dimensions;
+          }
+          if (item.type === 'elevation') return state.mode === 'inspection' && state.toggles.elevations;
+          if (item.type === 'structureClearance') return state.mode === 'inspection' && state.toggles.structureClearance;
+          if (item.type === 'pipeClearance') return state.mode === 'inspection' && state.toggles.pipeClearance;
+          if (item.type === 'material') return state.mode === 'construction' && state.toggles.materials;
+          if (item.type === 'envelope') return state.mode === 'inspection' && state.toggles.envelope;
+          return true;
+        }).sort((left, right) => {
+          const score = { alert: 0, warn: 1, ok: 2 };
+          return score[left.severity] - score[right.severity];
+        });
+      }
+
+      function ensureSelectedVisible() {
+        const visibleItems = getVisibleItems();
+        if (!visibleItems.some((item) => item.id === state.selectedId)) {
+          state.selectedId = visibleItems[0]?.id || ITEMS[0].id;
+        }
+      }
+
+      function applyThreshold() {
+        const beam = ITEMS.find((item) => item.id === 'clearance_beam');
+        const pipe = ITEMS.find((item) => item.id === 'clearance_pipe');
+        if (!beam || !pipe) return;
+        beam.severity = state.threshold >= 120 ? 'alert' : 'ok';
+        pipe.severity = state.threshold >= 165 ? 'warn' : 'ok';
+      }
+
+      function renderModes() {
+        const host = document.getElementById('mode-grid');
+        host.innerHTML = Object.entries(MODES).map(([key, value]) => `
+          <button class="mode-card ${state.mode === key ? 'active' : ''}" data-mode="${key}">
+            <strong>${value.label}</strong>
+            <span>${value.description}</span>
+          </button>
+        `).join('');
+
+        host.querySelectorAll('[data-mode]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.mode = button.getAttribute('data-mode');
+            if (state.mode === 'layout_first') {
+              state.tab = '尺寸';
+            } else if (state.mode === 'construction') {
+              state.tab = '材质';
+            } else {
+              state.tab = '净空';
+            }
+            render();
+          });
+        });
+      }
+
+      function renderStats() {
+        const visibleItems = getVisibleItems();
+        const statGrid = document.getElementById('stat-grid');
+        statGrid.innerHTML = `
+          <div class="stat-card">
+            <span>当前模式可见标注</span>
+            <strong>${visibleItems.length}</strong>
+          </div>
+          <div class="stat-card">
+            <span>最小结构净距</span>
+            <strong>120 mm</strong>
+          </div>
+          <div class="stat-card">
+            <span>支路总长</span>
+            <strong>7.76 m</strong>
+          </div>
+          <div class="stat-card">
+            <span>包络尺寸</span>
+            <strong>6.78 × 0.21 × 0.54</strong>
+          </div>
+        `;
+
+        document.getElementById('summary-pills').innerHTML = `
+          <span class="pill"><strong>FLUID</strong> FW</span>
+          <span class="pill"><strong>PSPEC</strong> A2-CS</span>
+          <span class="pill"><strong>保温</strong> 50 mm</span>
+          <span class="pill"><strong>异常项</strong> ${visibleItems.filter((item) => item.severity !== 'ok').length}</span>
+        `;
+      }
+
+      function renderControls() {
+        const controlGrid = document.getElementById('control-grid');
+        controlGrid.innerHTML = TOGGLES.map((toggle) => `
+          <label class="switch-row">
+            <span class="switch-copy">
+              <strong>${toggle.label}</strong>
+              <span>${toggle.help}</span>
+            </span>
+            <input type="checkbox" data-toggle="${toggle.key}" ${state.toggles[toggle.key] ? 'checked' : ''} />
+          </label>
+        `).join('');
+
+        controlGrid.querySelectorAll('[data-toggle]').forEach((checkbox) => {
+          checkbox.addEventListener('change', () => {
+            const key = checkbox.getAttribute('data-toggle');
+            state.toggles[key] = checkbox.checked;
+            render();
+          });
+        });
+
+        const slider = document.getElementById('clearance-threshold');
+        slider.value = String(state.threshold);
+        slider.oninput = () => {
+          state.threshold = Number(slider.value);
+          applyThreshold();
+          render();
+        };
+        document.getElementById('threshold-value').textContent = `${state.threshold} mm`;
+      }
+
+      function renderItemList() {
+        const list = document.getElementById('item-list');
+        const visibleItems = getVisibleItems();
+        list.innerHTML = visibleItems.map((item) => `
+          <button class="item-card ${state.selectedId === item.id ? 'active' : ''}" data-item-id="${item.id}">
+            <strong>${item.title}</strong>
+            <div class="meta">
+              <span>${item.group}</span>
+              <span>${item.type}</span>
+              <span class="severity ${item.severity}">${getSeverityLabel(item.severity)}</span>
+            </div>
+          </button>
+        `).join('');
+
+        list.querySelectorAll('[data-item-id]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const itemId = button.getAttribute('data-item-id');
+            const item = ITEMS.find((entry) => entry.id === itemId);
+            state.selectedId = itemId;
+            if (item?.type === 'structureClearance' || item?.type === 'pipeClearance') {
+              state.tab = '净空';
+            } else if (item?.type === 'material') {
+              state.tab = '材质';
+            } else if (item?.type === 'envelope') {
+              state.tab = '包络';
+            } else {
+              state.tab = '尺寸';
+            }
+            render();
+          });
+        });
+      }
+
+      function renderStageHeader() {
+        const mode = MODES[state.mode];
+        document.getElementById('mode-title').textContent = mode.label;
+        document.getElementById('mode-description').textContent = mode.description;
+        document.getElementById('mode-badges').innerHTML = mode.badges.map((badge) => `<span class="strip-badge">${badge}</span>`).join('');
+      }
+
+      function getChipText(item) {
+        if (item.id === 'seg_s1') return ['DN100 · 4200', '入口段长'];
+        if (item.id === 'seg_s2') return ['+3.650 m', '抬高段'];
+        if (item.id === 'seg_s3') return ['120 mm', '梁下净空'];
+        if (item.id === 'elevation_high') return ['+3.650 m', '高点标高'];
+        if (item.id === 'clearance_beam') return ['梁 B2 · 120', '结构净距'];
+        if (item.id === 'clearance_pipe') return ['FO-204 · 165', '管间净距'];
+        if (item.id === 'material_tag') return ['A2-CS / FW', '材质短签'];
+        if (item.id === 'envelope_box') return ['AABB 6780×212×540', '保温外包络'];
+        return [item.title, item.group];
+      }
+
+      function renderStage() {
+        const layer = document.getElementById('annotation-layer');
+        const visibleItems = getVisibleItems();
+        layer.innerHTML = visibleItems.map((item) => {
+          const [headline, detail] = getChipText(item);
+          const chipLeft = item.point.x + item.chipOffset.x;
+          const chipTop = item.point.y + item.chipOffset.y;
+          return `
+            <button
+              class="hotspot ${state.selectedId === item.id ? 'active' : ''}"
+              data-item-id="${item.id}"
+              style="left:${item.point.x / 980 * 100}%;top:${item.point.y / 560 * 100}%;"></button>
+            <button
+              class="annotation-chip ${state.mode} ${state.selectedId === item.id ? 'active' : ''}"
+              data-item-id="${item.id}"
+              style="left:${chipLeft / 980 * 100}%;top:${chipTop / 560 * 100}%;">
+              <strong>${headline}</strong>
+              <span>${detail}</span>
+            </button>
+          `;
+        }).join('');
+
+        layer.querySelectorAll('[data-item-id]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const itemId = button.getAttribute('data-item-id');
+            const item = ITEMS.find((entry) => entry.id === itemId);
+            state.selectedId = itemId;
+            if (item?.type === 'structureClearance' || item?.type === 'pipeClearance') {
+              state.tab = '净空';
+            } else if (item?.type === 'material') {
+              state.tab = '材质';
+            } else if (item?.type === 'envelope') {
+              state.tab = '包络';
+            } else {
+              state.tab = '总览';
+            }
+            render();
+          });
+        });
+
+        const envelopeBox = document.getElementById('envelope-box');
+        envelopeBox.style.display = state.mode === 'inspection' && state.toggles.envelope ? 'block' : 'none';
+      }
+
+      function renderFooter() {
+        const footer = document.getElementById('stage-footer');
+        footer.innerHTML = FOOTER_CARDS.map((card) => `
+          <section class="footer-card">
+            <h4>${card.title}</h4>
+            <ul>${card.content.map((line) => `<li>${line}</li>`).join('')}</ul>
+          </section>
+        `).join('');
+      }
+
+      function renderTabs() {
+        const tabs = document.getElementById('tabs');
+        tabs.innerHTML = TABS.map((tab) => `
+          <button class="tab-btn ${state.tab === tab ? 'active' : ''}" data-tab="${tab}">${tab}</button>
+        `).join('');
+
+        tabs.querySelectorAll('[data-tab]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.tab = button.getAttribute('data-tab');
+            render();
+          });
+        });
+      }
+
+      function renderDetail() {
+        const item = getSelectedItem();
+        const tabContent = item.tabs[state.tab] || item.tabs['总览'];
+        document.getElementById('detail-title').textContent = item.title;
+        document.getElementById('detail-target-label').textContent = `当前选中：${item.title}`;
+
+        const summary = tabContent.summary || item.tabs['总览'].summary;
+        document.getElementById('detail-summary').innerHTML = summary.map(([key, value]) => `
+          <dt>${key}</dt>
+          <dd>${value}</dd>
+        `).join('');
+
+        let contentHtml = '';
+        if (tabContent.title) {
+          contentHtml += `
+            <div class="detail-card">
+              <h4>${tabContent.title}</h4>
+              <ul>${(tabContent.list || []).map((line) => `<li>${line}</li>`).join('')}</ul>
+            </div>
+          `;
+        }
+
+        (tabContent.blocks || []).forEach((block) => {
+          contentHtml += `
+            <div class="detail-card">
+              <h4>${block.title}</h4>
+              <ul>${block.list.map((line) => `<li>${line}</li>`).join('')}</ul>
+            </div>
+          `;
+        });
+
+        if (!contentHtml) {
+          contentHtml = `
+            <div class="detail-card">
+              <h4>当前页暂无额外信息</h4>
+              <p class="ghost-note">此页签留给后续接入真实 DTO 时扩展。</p>
+            </div>
+          `;
+        }
+
+        document.getElementById('detail-content').innerHTML = contentHtml;
+      }
+
+      function render() {
+        applyThreshold();
+        ensureSelectedVisible();
+        renderModes();
+        renderStats();
+        renderControls();
+        renderItemList();
+        renderStageHeader();
+        renderStage();
+        renderFooter();
+        renderTabs();
+        renderDetail();
+      }
+
+      const gate = document.getElementById('gate');
+      const app = document.getElementById('app');
+      if (isDebugEnabled()) {
+        app.hidden = false;
+        render();
+      } else {
+        gate.hidden = false;
+      }
+    </script>
+  </body>
+</html>

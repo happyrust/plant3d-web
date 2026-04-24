@@ -31,6 +31,7 @@ import type {
   MbdCutTubiDto,
   MbdDimDto,
   MbdDimKind,
+  MbdElevationMarkDto,
   MbdLaidOutAngleDto,
   MbdLaidOutBendDto,
   MbdLaidOutFittingDto,
@@ -39,9 +40,12 @@ import type {
   MbdLaidOutTagDto,
   MbdLaidOutWeldDto,
   MbdPipeLayoutResult,
+  MbdPipeEnvelopeDto,
   MbdFittingDto,
   MbdLayoutHint,
+  MbdPipeClearanceDto,
   MbdSlopeDto,
+  MbdStructureClearanceDto,
   MbdTagDto,
   MbdWeldDto,
   MbdBendDto,
@@ -56,6 +60,7 @@ import {
   resolveBranchLayout,
   resolveLayeredDimOffset,
   resolveSemanticDimOffset,
+  type LayoutRole,
   type NormalizedLayoutHint,
 } from '@/composables/mbd/branchLayoutEngine';
 import { computeMbdDimOffset } from '@/composables/mbd/computeMbdDimOffset';
@@ -88,12 +93,15 @@ import { computeDimensionOffsetDirInLocal } from '@/utils/three/annotation/utils
 import { formatLengthMeters } from '@/utils/unitFormat';
 
 export type MbdBendDisplayMode = 'size' | 'angle';
+export type MbdPipeRenderSource = 'layout_result' | 'fallback';
 
 export type UseMbdPipeAnnotationThreeReturn = {
   /** MBD 面板当前页签（仅 UI 状态） */
   uiTab: Ref<MbdPipeUiTab>;
   /** 语义模式：layout_first=后台排版优先；construction=施工表达；inspection=几何校核 */
   mbdViewMode: Ref<MbdPipeViewMode>;
+  /** 当前实际渲染来源：layout_result=后端版面结果；fallback=前端回退渲染 */
+  renderSource: Ref<MbdPipeRenderSource>;
 
   /** 尺寸文字来源：backend=用后端 text；auto=按当前单位/精度自动计算 */
   dimTextMode: Ref<'backend' | 'auto'>;
@@ -126,6 +134,12 @@ export type UseMbdPipeAnnotationThreeReturn = {
   showDimPort: Ref<boolean>;
   /** 管道间平行距离标注 */
   showPipeClearances: Ref<boolean>;
+  /** 管道与结构构件净距标注 */
+  showStructureClearances: Ref<boolean>;
+  /** 绝对标高标注 */
+  showElevationMarks: Ref<boolean>;
+  /** 包络盒显示 */
+  showEnvelope: Ref<boolean>;
   showCutTubis: Ref<boolean>;
   showElbows: Ref<boolean>;
   showBranches: Ref<boolean>;
@@ -179,6 +193,18 @@ export type UseMbdPipeAnnotationThreeReturn = {
   getCutTubiAnnotations: () => Map<string, LinearDimension3D>;
   /** 获取 tag annotations map（用于调试/测试） */
   getTagAnnotations: () => Map<string, WeldAnnotation3D>;
+  /** 获取管道间净距标注 map（用于侧栏/交互） */
+  getPipeClearanceAnnotations: () => Map<string, LinearDimension3D>;
+  /** 获取结构净距标注 map（用于侧栏/交互） */
+  getStructureClearanceAnnotations: () => Map<string, LinearDimension3D>;
+  /** 获取标高标注 map（用于侧栏/交互） */
+  getElevationAnnotations: () => Map<string, WeldAnnotation3D>;
+  /** 获取包络对象 map（用于调试/测试） */
+  getEnvelopeObjects: () => Map<string, LineSegments>;
+  /** 获取当前有效标高数据（优先后端，缺省时前端回退推导） */
+  resolveElevationMarks: (data?: MbdPipeData | null) => MbdElevationMarkDto[];
+  /** 获取当前有效包络（优先后端，缺省时前端回退推导） */
+  resolveEnvelopeData: (data?: MbdPipeData | null) => MbdPipeEnvelopeDto | null;
 };
 
 /** MBD dims session-only override（不写回后端，仅当前会话有效） */
@@ -191,7 +217,11 @@ export type MbdDimOverride = {
 };
 
 export type MbdPipeUiTab =
+  | 'overview'
   | 'dims'
+  | 'clearances'
+  | 'materials'
+  | 'envelope'
   | 'welds'
   | 'slopes'
   | 'bends'
@@ -617,6 +647,86 @@ function resolveBendSizeOffset(
   return resolveSemanticDimOffset(scaledBaseOffset, 'segment');
 }
 
+const FALLBACK_BRANCH_BASE_OFFSET = 150;
+
+function resolveSegmentBaselineSpan(
+  segment: MbdPipeSegmentDto | null | undefined,
+): number | null {
+  if (!segment) return null;
+  const start = toVector3(segment.arrive ?? null);
+  const end = toVector3(segment.leave ?? null);
+  const geometricLength =
+    start && end ? start.distanceTo(end) : null;
+  const straightLength = Number(segment.straight_length);
+  if (Number.isFinite(straightLength) && straightLength > 0) {
+    return straightLength;
+  }
+  const length = Number(segment.length);
+  if (Number.isFinite(length) && length > 0) {
+    return length;
+  }
+  return geometricLength && Number.isFinite(geometricLength) && geometricLength > 0
+    ? geometricLength
+    : null;
+}
+
+function resolveSegmentBaselineOffset(
+  segment: MbdPipeSegmentDto | null | undefined,
+): number | null {
+  if (!segment) return null;
+  const outsideDiameter = Number(segment.outside_diameter);
+  if (Number.isFinite(outsideDiameter) && outsideDiameter > 0) {
+    return clampNumber(
+      outsideDiameter + 60,
+      FALLBACK_BRANCH_BASE_OFFSET,
+      5000,
+      FALLBACK_BRANCH_BASE_OFFSET,
+    );
+  }
+  const span = resolveSegmentBaselineSpan(segment);
+  if (!span) return null;
+  return computeMbdDimOffset(span);
+}
+
+function resolveBranchBaselineSegment(
+  segments: MbdPipeSegmentDto[],
+  ownerSegmentId?: string | null,
+): MbdPipeSegmentDto | null {
+  if (ownerSegmentId) {
+    const ownerSegment = segments.find((segment) => segment.id === ownerSegmentId) ?? null;
+    if (ownerSegment) return ownerSegment;
+  }
+
+  let bestSegment: MbdPipeSegmentDto | null = null;
+  let bestSpan = Number.NEGATIVE_INFINITY;
+  for (const segment of segments) {
+    const span = resolveSegmentBaselineSpan(segment);
+    if (span == null || span <= bestSpan) continue;
+    bestSpan = span;
+    bestSegment = segment;
+  }
+  return bestSegment;
+}
+
+function resolveFallbackBaseOffset(
+  role: LayoutRole,
+  start: Vector3,
+  end: Vector3,
+  hint: MbdLayoutHint | null | undefined,
+  segments: MbdPipeSegmentDto[],
+): number {
+  if (role === 'port') {
+    return computeMbdDimOffset(start.distanceTo(end));
+  }
+
+  const normalizedHint = normalizeMbdLayoutHint(hint);
+  const baselineSegment = resolveBranchBaselineSegment(
+    segments,
+    normalizedHint.ownerSegmentId,
+  );
+  return resolveSegmentBaselineOffset(baselineSegment) ?? FALLBACK_BRANCH_BASE_OFFSET;
+}
+
 function resolveFloatingLabelOffset(
   hint?: MbdLayoutHint | null,
   baseOffset = 110,
@@ -730,6 +840,136 @@ function resolveTagPriority(kind: MbdTagKind): number {
   return 4;
 }
 
+function formatElevationText(value: number): string {
+  return `EL ${Math.round(value)}`;
+}
+
+function deriveElevationMarksFromSegments(data: MbdPipeData): MbdElevationMarkDto[] {
+  const segments = data.segments ?? [];
+  if (segments.length <= 0) return [];
+
+  const pointEntries: { key: string; point: Vector3 }[] = [];
+  const seenKeys = new Set<string>();
+  const pushPoint = (point: Vector3 | null) => {
+    if (!point) return;
+    const key = buildPointKey(point);
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    pointEntries.push({ key, point: point.clone() });
+  };
+
+  pushPoint(toVector3(segments[0]?.arrive ?? null));
+  pushPoint(toVector3(segments[segments.length - 1]?.leave ?? null));
+  for (const segment of segments) {
+    pushPoint(toVector3(segment.arrive ?? null));
+    pushPoint(toVector3(segment.leave ?? null));
+  }
+
+  if (pointEntries.length <= 0) return [];
+
+  const highest = pointEntries.reduce((acc, entry) =>
+    entry.point.z > acc.point.z ? entry : acc,
+  );
+  const lowest = pointEntries.reduce((acc, entry) =>
+    entry.point.z < acc.point.z ? entry : acc,
+  );
+
+  const derived: MbdElevationMarkDto[] = [];
+  const emitted = new Set<string>();
+  const appendMark = (
+    role: MbdElevationMarkDto['role'],
+    id: string,
+    point: Vector3 | null,
+  ) => {
+    if (!point) return;
+    const key = buildPointKey(point);
+    if (emitted.has(key)) return;
+    emitted.add(key);
+    derived.push({
+      id,
+      point: [point.x, point.y, point.z],
+      elevation_mm: point.z,
+      text: formatElevationText(point.z),
+      role,
+    });
+  };
+
+  appendMark('start', 'derived-elevation-start', toVector3(segments[0]?.arrive ?? null));
+  appendMark('end', 'derived-elevation-end', toVector3(segments[segments.length - 1]?.leave ?? null));
+  appendMark('high', 'derived-elevation-high', highest.point);
+  appendMark('low', 'derived-elevation-low', lowest.point);
+
+  return derived;
+}
+
+function resolveEffectiveElevationMarks(data: MbdPipeData | null | undefined): MbdElevationMarkDto[] {
+  if (!data) return [];
+  if ((data.elevation_marks?.length ?? 0) > 0) return data.elevation_marks ?? [];
+  return deriveElevationMarksFromSegments(data);
+}
+
+function collectEnvelopePoints(data: MbdPipeData): Vector3[] {
+  const points: Vector3[] = [];
+  const pushPoint = (point?: ApiVec3 | null) => {
+    const vec = toVector3(point ?? null);
+    if (vec) points.push(vec);
+  };
+
+  for (const segment of data.segments ?? []) {
+    pushPoint(segment.arrive);
+    pushPoint(segment.leave);
+  }
+  for (const bend of data.bends ?? []) {
+    pushPoint(bend.work_point);
+    pushPoint(bend.face_center_1);
+    pushPoint(bend.face_center_2);
+  }
+  for (const fitting of data.fittings ?? []) {
+    pushPoint(fitting.anchor_point);
+    pushPoint(fitting.face_center_1);
+    pushPoint(fitting.face_center_2);
+  }
+  for (const cut of data.cut_tubis ?? []) {
+    pushPoint(cut.start);
+    pushPoint(cut.end);
+  }
+  for (const tag of data.tags ?? []) {
+    pushPoint(tag.position);
+  }
+
+  return points;
+}
+
+function resolveEffectiveEnvelope(data: MbdPipeData | null | undefined): MbdPipeEnvelopeDto | null {
+  if (!data) return null;
+  if (data.envelope) return data.envelope;
+
+  const points = collectEnvelopePoints(data);
+  if (points.length <= 0) return null;
+
+  const box = new Box3();
+  for (const point of points) {
+    box.expandByPoint(point);
+  }
+  if (box.isEmpty()) return null;
+
+  const min = box.min.clone();
+  const max = box.max.clone();
+  const size = new Vector3();
+  const center = new Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+
+  return {
+    id: 'derived-envelope',
+    kind: 'pipe_outer',
+    min: [min.x, min.y, min.z],
+    max: [max.x, max.y, max.z],
+    size: [size.x, size.y, size.z],
+    center: [center.x, center.y, center.z],
+  };
+}
+
 function getAnnotationLabelWorldPos<T extends { updateWorldMatrix: (a?: boolean, b?: boolean) => void; getLabelWorldPos: () => Vector3 }>(
   annotation: T,
 ): Vector3 {
@@ -754,8 +994,9 @@ export function useMbdPipeAnnotationThree(
   const unitSettings = useUnitSettingsStore();
 
   // UI 状态（MbdPipePanel 使用）
-  const uiTab = ref<MbdPipeUiTab>('dims');
+  const uiTab = ref<MbdPipeUiTab>('overview');
   const mbdViewMode = ref<MbdPipeViewMode>('layout_first');
+  const renderSource = ref<MbdPipeRenderSource>('fallback');
 
   // MBD 尺寸显示配置
   const dimTextMode = ref<'backend' | 'auto'>('backend');
@@ -778,6 +1019,9 @@ export function useMbdPipeAnnotationThree(
   const showDimOverall = ref(true);
   const showDimPort = ref(false);
   const showPipeClearances = ref(true);
+  const showStructureClearances = ref(true);
+  const showElevationMarks = ref(true);
+  const showEnvelope = ref(false);
   const showCutTubis = ref(false);
   const showElbows = ref(true);
   const showBranches = ref(true);
@@ -818,6 +1062,9 @@ export function useMbdPipeAnnotationThree(
   >();
   const tagAnnotations = new Map<string, WeldAnnotation3D>();
   const pipeClearanceAnnotations = new Map<string, LinearDimension3D>();
+  const structureClearanceAnnotations = new Map<string, LinearDimension3D>();
+  const elevationAnnotations = new Map<string, WeldAnnotation3D>();
+  const envelopeObjects = new Map<string, LineSegments>();
   const anchorDebugMarkers = new Map<string, LineSegments>();
   const ownerSegmentDebugLines = new Map<string, Line>();
 
@@ -836,6 +1083,16 @@ export function useMbdPipeAnnotationThree(
     color: 0x06b6d4,
     transparent: true,
     opacity: 0.9,
+  });
+  const envelopeMaterial = new LineBasicMaterial({
+    color: 0x0891b2,
+    transparent: true,
+    opacity: 0.8,
+  });
+  const envelopeHighlightMaterial = new LineBasicMaterial({
+    color: 0xf97316,
+    transparent: true,
+    opacity: 0.95,
   });
 
   // 历史兼容：保留 initCSS2DRenderer API（但不再实际参与渲染）
@@ -856,6 +1113,10 @@ export function useMbdPipeAnnotationThree(
       showDimChain.value = false;
       showDimOverall.value = false;
       showDimPort.value = true;
+      showPipeClearances.value = true;
+      showStructureClearances.value = true;
+      showElevationMarks.value = true;
+      showEnvelope.value = false;
       showCutTubis.value = false;
       showElbows.value = true;
       showBranches.value = true;
@@ -876,6 +1137,10 @@ export function useMbdPipeAnnotationThree(
       showDimChain.value = true;
       showDimOverall.value = true;
       showDimPort.value = false;
+      showPipeClearances.value = false;
+      showStructureClearances.value = false;
+      showElevationMarks.value = false;
+      showEnvelope.value = false;
       showCutTubis.value = false;
       showElbows.value = true;
       showBranches.value = true;
@@ -895,6 +1160,10 @@ export function useMbdPipeAnnotationThree(
     showDimChain.value = true;
     showDimOverall.value = true;
     showDimPort.value = false;
+    showPipeClearances.value = false;
+    showStructureClearances.value = false;
+    showElevationMarks.value = false;
+    showEnvelope.value = false;
     showCutTubis.value = false;
     showElbows.value = true;
     showBranches.value = true;
@@ -976,6 +1245,15 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).setLabelVisible(visible);
     }
+    for (const annotation of pipeClearanceAnnotations.values()) {
+      asRaw(annotation).setLabelVisible(visible);
+    }
+    for (const annotation of structureClearanceAnnotations.values()) {
+      asRaw(annotation).setLabelVisible(visible);
+    }
+    for (const annotation of elevationAnnotations.values()) {
+      asRaw(annotation).setLabelVisible(visible);
+    }
   }
 
   function ensureGroupAttached(): void {
@@ -1024,6 +1302,26 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).dispose();
     }
     pipeClearanceAnnotations.clear();
+
+    for (const annotation of structureClearanceAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    structureClearanceAnnotations.clear();
+
+    for (const annotation of elevationAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    elevationAnnotations.clear();
+
+    for (const envelope of envelopeObjects.values()) {
+      try {
+        (envelope.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      envelope.removeFromParent();
+    }
+    envelopeObjects.clear();
 
     // 清理弯头标注
     for (const annotation of bendAnnotations.values()) {
@@ -1083,6 +1381,7 @@ export function useMbdPipeAnnotationThree(
     currentData.value = null;
     activeItemId.value = null;
     isVisible.value = false;
+    renderSource.value = 'fallback';
     applyLabelVisibility();
     requestRender?.();
   }
@@ -1110,6 +1409,12 @@ export function useMbdPipeAnnotationThree(
     for (const a of fittingAnnotations.values())
       asRaw(a).setBackgroundColor(color);
     for (const a of tagAnnotations.values())
+      asRaw(a).setBackgroundColor(color);
+    for (const a of pipeClearanceAnnotations.values())
+      asRaw(a).setBackgroundColor(color);
+    for (const a of structureClearanceAnnotations.values())
+      asRaw(a).setBackgroundColor(color);
+    for (const a of elevationAnnotations.values())
       asRaw(a).setBackgroundColor(color);
   }
 
@@ -1151,6 +1456,18 @@ export function useMbdPipeAnnotationThree(
     // 管道间距离标注可见性
     for (const annotation of pipeClearanceAnnotations.values()) {
       asRaw(annotation).visible = isVisible.value && showPipeClearances.value;
+    }
+
+    for (const annotation of structureClearanceAnnotations.values()) {
+      asRaw(annotation).visible = isVisible.value && showStructureClearances.value;
+    }
+
+    for (const annotation of elevationAnnotations.values()) {
+      asRaw(annotation).visible = isVisible.value && showElevationMarks.value;
+    }
+
+    for (const envelope of envelopeObjects.values()) {
+      envelope.visible = isVisible.value && showEnvelope.value;
     }
 
     // 弯头标注可见性
@@ -1226,6 +1543,15 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
     }
+    for (const annotation of pipeClearanceAnnotations.values()) {
+      asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
+    }
+    for (const annotation of structureClearanceAnnotations.values()) {
+      asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
+    }
+    for (const annotation of elevationAnnotations.values()) {
+      asRaw(annotation).setLabelRenderStyle(labelRenderStyle);
+    }
   }
 
   function highlightItem(id: string | null): void {
@@ -1253,12 +1579,32 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of tagAnnotations.values()) {
       asRaw(annotation).highlighted = false;
     }
+    for (const annotation of pipeClearanceAnnotations.values()) {
+      asRaw(annotation).highlighted = false;
+    }
+    for (const annotation of structureClearanceAnnotations.values()) {
+      asRaw(annotation).highlighted = false;
+    }
+    for (const annotation of elevationAnnotations.values()) {
+      asRaw(annotation).highlighted = false;
+    }
     for (const line of segmentLines.values()) {
       line.material = segmentMaterial;
+    }
+    for (const line of envelopeObjects.values()) {
+      line.material = envelopeMaterial;
     }
 
     // 设置新的高亮
     if (id) {
+      if (dimAnnotations.has(id)) uiTab.value = 'dims';
+      else if (
+        pipeClearanceAnnotations.has(id) ||
+        structureClearanceAnnotations.has(id) ||
+        elevationAnnotations.has(id)
+      ) uiTab.value = 'clearances';
+      else if (envelopeObjects.has(id)) uiTab.value = 'envelope';
+
       const dim = dimAnnotations.get(id);
       if (dim) asRaw(dim).highlighted = true;
 
@@ -1280,8 +1626,20 @@ export function useMbdPipeAnnotationThree(
       const tag = tagAnnotations.get(id);
       if (tag) asRaw(tag).highlighted = true;
 
+      const pipeClearance = pipeClearanceAnnotations.get(id);
+      if (pipeClearance) asRaw(pipeClearance).highlighted = true;
+
+      const structureClearance = structureClearanceAnnotations.get(id);
+      if (structureClearance) asRaw(structureClearance).highlighted = true;
+
+      const elevation = elevationAnnotations.get(id);
+      if (elevation) asRaw(elevation).highlighted = true;
+
       const seg = segmentLines.get(id);
       if (seg) seg.material = segmentHighlightMaterial;
+
+      const envelope = envelopeObjects.get(id);
+      if (envelope) envelope.material = envelopeHighlightMaterial;
     }
 
     requestRender?.();
@@ -1301,6 +1659,13 @@ export function useMbdPipeAnnotationThree(
       const start = new Vector3(d.start[0], d.start[1], d.start[2]);
       const end = new Vector3(d.end[0], d.end[1], d.end[2]);
       const kind = (d.kind ?? 'segment') as MbdDimKind;
+      const baseOffset = resolveFallbackBaseOffset(
+        kind,
+        start,
+        end,
+        d.layout_hint,
+        segments,
+      );
       const layoutResolution = resolveBranchLayout({
         start,
         end,
@@ -1308,6 +1673,7 @@ export function useMbdPipeAnnotationThree(
         hint: d.layout_hint,
         segments,
         pipeOffsetDirs,
+        baseOffset,
         baseOffsetScale: dimOffsetScale.value,
       });
       if (kind === 'overall' && duplicateOverallIds.has(d.id)) {
@@ -1409,7 +1775,9 @@ export function useMbdPipeAnnotationThree(
     const portAnnotations: [string, LinearDimension3D][] = [];
     for (const [dimId, dim] of dimAnnotations.entries()) {
       const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
-      if (kind === 'port') portAnnotations.push([dimId, asRaw(dim)]);
+      if (kind !== 'port') continue;
+      (asRaw(dim).userData as any).mbdDeclutterHidden = false;
+      portAnnotations.push([dimId, asRaw(dim)]);
     }
     if (portAnnotations.length <= 1) return;
 
@@ -1424,6 +1792,12 @@ export function useMbdPipeAnnotationThree(
     for (const [_, dim] of sortedByLengthDesc) {
       const p = dim.getParams();
       const anchor = p.start.clone().add(p.end).multiplyScalar(0.5);
+      const hasBackendLabelLayout = !!(dim.userData as any)?.mbdHasExplicitLabelLayout;
+      if (hasBackendLabelLayout) {
+        (dim.userData as any).mbdDeclutterHidden = false;
+        keptAnchors.push(anchor);
+        continue;
+      }
       const tooClose = keptAnchors.some((k) => k.distanceTo(anchor) < minAnchorGap);
       (dim.userData as any).mbdDeclutterHidden = tooClose;
       if (!tooClose) keptAnchors.push(anchor);
@@ -1437,8 +1811,11 @@ export function useMbdPipeAnnotationThree(
     for (const [dimId, dim] of portAnnotations) {
       if ((dim.userData as any).mbdDeclutterHidden) continue;
       const ov = dimOverrides.get(dimId);
+      const hasBackendLabelLayout = !!(dim.userData as any)?.mbdHasExplicitLabelLayout;
       const hasManualLabel =
-        (ov?.labelOffsetWorld != null) || ov?.labelT !== undefined;
+        hasBackendLabelLayout ||
+        (ov?.labelOffsetWorld != null) ||
+        ov?.labelT !== undefined;
       if (hasManualLabel) {
         placed.push(dim.getLabelWorldPos());
         rank += 1;
@@ -1819,6 +2196,8 @@ export function useMbdPipeAnnotationThree(
       (dim.userData as any).mbdDimKind = kind;
       (dim.userData as any).mbdLayoutHidden = item.visible === false;
       (dim.userData as any).mbdDeclutterHidden = item.visible === false;
+      (dim.userData as any).mbdHasExplicitLabelLayout =
+        item.label_offset_world != null || item.label_t != null;
       const rawDim = markRaw(dim);
       group.add(rawDim);
       dimAnnotations.set(item.id, rawDim);
@@ -2051,6 +2430,10 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).dispose();
     }
     dimAnnotations.clear();
+    for (const annotation of cutTubiAnnotations.values()) {
+      asRaw(annotation).dispose();
+    }
+    cutTubiAnnotations.clear();
 
     if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
       renderLaidOutLinearDims(data.layout_result.linear_dims ?? []);
@@ -2064,8 +2447,14 @@ export function useMbdPipeAnnotationThree(
       if (data.dims?.length) {
         renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
       }
-      applyCutTubiLabelDeclutter();
+      if (data.cut_tubis?.length) {
+        renderCutTubis(data.cut_tubis, data.segments ?? [], pipeOffsetDirs);
+      }
     }
+    applyPortDimLabelDeclutter();
+    applyCutTubiLabelDeclutter();
+    applyTagLabelDeclutter();
+    applyCutTubiLabelDeclutter(true);
 
     const viewer = dtxViewerRef.value;
     if (viewer) applyBackgroundColor(viewer);
@@ -2182,13 +2571,128 @@ export function useMbdPipeAnnotationThree(
 
       dim.setMaterialSet(materials.orange);
       dim.setLineWidthPx(modeConfig.lineWidthPx);
+      dim.userData.pickable = true;
+      (dim.userData as any).mbdAuxKind = 'pipe_clearance';
+      (dim.userData as any).mbdPipeClearanceId = c.id;
       const rawDim = markRaw(dim);
       group.add(rawDim);
       pipeClearanceAnnotations.set(c.id, rawDim);
     }
   }
 
-  function renderCutTubis(cutTubis: MbdCutTubiDto[]): void {
+  function renderStructureClearances(clearances: MbdStructureClearanceDto[]): void {
+    const modeConfig = getRuntimeModeConfig();
+    for (const clearance of clearances) {
+      const start = toVector3(clearance.anchor_point);
+      const end = toVector3(clearance.closest_point);
+      if (!start || !end) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          'structure_clearance_invalid_endpoint',
+        );
+        continue;
+      }
+
+      const dist = start.distanceTo(end);
+      const dim = new LinearDimension3D(
+        materials,
+        {
+          start,
+          end,
+          offset: computeMbdDimOffset(dist) * 0.38,
+          text: clearance.text,
+          arrowStyle: modeConfig.arrowStyle,
+          arrowSizePx: modeConfig.arrowSizePx,
+          arrowAngleDeg: modeConfig.arrowAngleDeg,
+          extensionOvershootPx: modeConfig.extensionOvershootPx,
+          labelRenderStyle: modeConfig.labelRenderStyle,
+        },
+        { depthTest: modeConfig.depthTest },
+      );
+      dim.setMaterialSet(materials.yellow);
+      dim.setLineWidthPx(modeConfig.lineWidthPx);
+      dim.userData.pickable = true;
+      (dim.userData as any).mbdAuxKind = 'structure_clearance';
+      (dim.userData as any).mbdStructureClearanceId = clearance.id;
+      const rawDim = markRaw(dim);
+      group.add(rawDim);
+      structureClearanceAnnotations.set(clearance.id, rawDim);
+    }
+  }
+
+  function renderElevationMarks(marks: MbdElevationMarkDto[]): void {
+    const { labelRenderStyle } = getRuntimeModeConfig();
+    for (const mark of marks) {
+      const position = toVector3(mark.point);
+      if (!position) {
+        recordSuppressedAnnotation(
+          suppressedWrongLineCount,
+          'elevation_mark_invalid_point',
+        );
+        continue;
+      }
+      const annotation = new WeldAnnotation3D(materials, {
+        position,
+        label: mark.text,
+        subtitle: mark.role ?? '',
+        isShop: true,
+        crossSize: 0,
+        labelOffsetWorld:
+          resolveFloatingLabelOffset(mark.layout_hint, 96)
+          ?? new Vector3(0, 120, 80),
+        labelRenderStyle,
+      });
+      annotation.setMaterialSet(materials.blue);
+      annotation.userData.pickable = true;
+      (annotation.userData as any).mbdAuxKind = 'elevation';
+      (annotation.userData as any).mbdElevationId = mark.id;
+      const rawAnnotation = markRaw(annotation);
+      group.add(rawAnnotation);
+      elevationAnnotations.set(mark.id, rawAnnotation);
+    }
+  }
+
+  function buildEnvelopeEdgePositions(envelope: MbdPipeEnvelopeDto): Float32Array {
+    const [minX, minY, minZ] = envelope.min;
+    const [maxX, maxY, maxZ] = envelope.max;
+    return new Float32Array([
+      minX, minY, minZ, maxX, minY, minZ,
+      minX, maxY, minZ, maxX, maxY, minZ,
+      minX, minY, maxZ, maxX, minY, maxZ,
+      minX, maxY, maxZ, maxX, maxY, maxZ,
+      minX, minY, minZ, minX, maxY, minZ,
+      maxX, minY, minZ, maxX, maxY, minZ,
+      minX, minY, maxZ, minX, maxY, maxZ,
+      maxX, minY, maxZ, maxX, maxY, maxZ,
+      minX, minY, minZ, minX, minY, maxZ,
+      maxX, minY, minZ, maxX, minY, maxZ,
+      minX, maxY, minZ, minX, maxY, maxZ,
+      maxX, maxY, minZ, maxX, maxY, maxZ,
+    ]);
+  }
+
+  function renderEnvelope(envelope: MbdPipeEnvelopeDto | null): void {
+    if (!envelope) return;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute(
+      'position',
+      new Float32BufferAttribute(buildEnvelopeEdgePositions(envelope), 3),
+    );
+    const lines = new LineSegments(geometry, envelopeMaterial);
+    lines.name = `mbd-envelope:${envelope.id}`;
+    lines.userData.pickable = true;
+    (lines.userData as any).mbdAuxKind = 'envelope';
+    (lines.userData as any).mbdEnvelopeId = envelope.id;
+    const rawLines = markRaw(lines);
+    group.add(rawLines);
+    envelopeObjects.set(envelope.id, rawLines);
+  }
+
+  function renderCutTubis(
+    cutTubis: MbdCutTubiDto[],
+    segments: MbdPipeSegmentDto[],
+    pipeOffsetDirs: Vector3[],
+  ): void {
     const viewer = dtxViewerRef.value;
     const gm = getGlobalModelMatrix?.() || identityMatrix;
     const modeConfig = getRuntimeModeConfig();
@@ -2200,11 +2704,22 @@ export function useMbdPipeAnnotationThree(
         continue;
       }
 
+      const baseOffset = resolveFallbackBaseOffset(
+        'cut_tubi',
+        start,
+        end,
+        cutTubi.layout_hint,
+        segments,
+      );
       const branchLayout = resolveBranchLayout({
         start,
         end,
         role: 'cut_tubi',
         hint: cutTubi.layout_hint,
+        segments,
+        pipeOffsetDirs,
+        baseOffset,
+        baseOffsetScale: dimOffsetScale.value,
       });
       const direction =
         branchLayout.direction ??
@@ -2625,12 +3140,20 @@ export function useMbdPipeAnnotationThree(
     const rect = viewer.canvas.getBoundingClientRect();
     setResolution(rect.width, rect.height);
 
+    const effectiveElevationMarks = resolveEffectiveElevationMarks(data);
+    const effectiveEnvelope = resolveEffectiveEnvelope(data);
+    const useLayoutResult = shouldUseLayoutFirstResult(mbdViewMode.value, data);
+    renderSource.value = useLayoutResult ? 'layout_result' : 'fallback';
+
     // 渲染各类标注
-    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
+    if (useLayoutResult) {
       renderLaidOutLinearDims(data.layout_result.linear_dims ?? []);
       if (data.layout_result.welds?.length) renderLaidOutWelds(data.layout_result.welds);
       if (data.layout_result.slopes?.length) renderLaidOutSlopes(data.layout_result.slopes);
       if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
+      if (data.structure_clearances?.length) {
+        renderStructureClearances(data.structure_clearances);
+      }
       if (data.layout_result.bends?.length) renderLaidOutBends(data.layout_result.bends);
       if (data.layout_result.cut_tubis?.length) {
         renderLaidOutCutTubis(data.layout_result.cut_tubis);
@@ -2639,6 +3162,12 @@ export function useMbdPipeAnnotationThree(
         renderLaidOutFittings(data.layout_result.fittings);
       }
       if (data.layout_result.tags?.length) renderLaidOutTags(data.layout_result.tags);
+      applyPortDimLabelDeclutter();
+      applyCutTubiLabelDeclutter();
+      applyTagLabelDeclutter();
+      applyCutTubiLabelDeclutter(true);
+      if (effectiveElevationMarks.length > 0) renderElevationMarks(effectiveElevationMarks);
+      renderEnvelope(effectiveEnvelope);
     } else {
       if (mbdViewMode.value === 'layout_first') {
         console.info('[mbd-layout-first] 缺少 layout_result，已回退到旧渲染路径', {
@@ -2653,13 +3182,21 @@ export function useMbdPipeAnnotationThree(
       if (data.welds?.length) renderWelds(data.welds);
       if (data.slopes?.length) renderSlopes(data.slopes);
       if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
+      if (data.structure_clearances?.length) {
+        renderStructureClearances(data.structure_clearances);
+      }
       if (data.bends?.length) renderBends(data.bends, data.segments ?? []);
-      if (data.cut_tubis?.length) renderCutTubis(data.cut_tubis);
-      applyCutTubiLabelDeclutter();
+      if (data.cut_tubis?.length) {
+        renderCutTubis(data.cut_tubis, data.segments ?? [], pipeOffsetDirs);
+      }
       if (data.fittings?.length) renderFittings(data.fittings);
       if (data.tags?.length) renderTags(data.tags);
+      applyPortDimLabelDeclutter();
+      applyCutTubiLabelDeclutter();
       applyTagLabelDeclutter();
       applyCutTubiLabelDeclutter(true);
+      if (effectiveElevationMarks.length > 0) renderElevationMarks(effectiveElevationMarks);
+      renderEnvelope(effectiveEnvelope);
     }
     if (data.segments?.length) renderSegments(data.segments);
     renderDebugOverlays(data);
@@ -2779,6 +3316,22 @@ export function useMbdPipeAnnotationThree(
       expand(tag.position);
       if (tag.layout_hint?.anchor_point) expand(tag.layout_hint.anchor_point);
     }
+    for (const clearance of data.pipe_clearances || []) {
+      expand(clearance.start);
+      expand(clearance.end);
+    }
+    for (const clearance of data.structure_clearances || []) {
+      expand(clearance.anchor_point);
+      expand(clearance.closest_point);
+    }
+    for (const mark of resolveEffectiveElevationMarks(data)) {
+      expand(mark.point);
+    }
+    const effectiveEnvelope = resolveEffectiveEnvelope(data);
+    if (effectiveEnvelope) {
+      expand(effectiveEnvelope.min);
+      expand(effectiveEnvelope.max);
+    }
     for (const seg of data.segments || []) {
       if (seg.arrive) expand(seg.arrive);
       if (seg.leave) expand(seg.leave);
@@ -2829,6 +3382,15 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).update(camera);
     }
     for (const annotation of tagAnnotations.values()) {
+      asRaw(annotation).update(camera);
+    }
+    for (const annotation of pipeClearanceAnnotations.values()) {
+      asRaw(annotation).update(camera);
+    }
+    for (const annotation of structureClearanceAnnotations.values()) {
+      asRaw(annotation).update(camera);
+    }
+    for (const annotation of elevationAnnotations.values()) {
       asRaw(annotation).update(camera);
     }
   }
@@ -2919,6 +3481,30 @@ export function useMbdPipeAnnotationThree(
     return cutTubiAnnotations;
   }
 
+  function getPipeClearanceAnnotations(): Map<string, LinearDimension3D> {
+    return pipeClearanceAnnotations;
+  }
+
+  function getStructureClearanceAnnotations(): Map<string, LinearDimension3D> {
+    return structureClearanceAnnotations;
+  }
+
+  function getElevationAnnotations(): Map<string, WeldAnnotation3D> {
+    return elevationAnnotations;
+  }
+
+  function getEnvelopeObjects(): Map<string, LineSegments> {
+    return envelopeObjects;
+  }
+
+  function resolveElevationMarks(data: MbdPipeData | null = currentData.value): MbdElevationMarkDto[] {
+    return resolveEffectiveElevationMarks(data);
+  }
+
+  function resolveEnvelopeData(data: MbdPipeData | null = currentData.value): MbdPipeEnvelopeDto | null {
+    return resolveEffectiveEnvelope(data);
+  }
+
   function dispose(): void {
     clearAll();
     legacyCss2dRenderer?.domElement.remove();
@@ -2928,6 +3514,8 @@ export function useMbdPipeAnnotationThree(
     segmentHighlightMaterial.dispose();
     anchorDebugMaterial.dispose();
     ownerSegmentDebugMaterial.dispose();
+    envelopeMaterial.dispose();
+    envelopeHighlightMaterial.dispose();
     group.removeFromParent();
   }
 
@@ -2941,6 +3529,9 @@ export function useMbdPipeAnnotationThree(
       showDimOverall,
       showDimPort,
       showPipeClearances,
+      showStructureClearances,
+      showElevationMarks,
+      showEnvelope,
       showCutTubis,
       showElbows,
       showBranches,
@@ -2955,7 +3546,9 @@ export function useMbdPipeAnnotationThree(
     ],
     () => {
       try {
+        applyPortDimLabelDeclutter();
         applyVisibility();
+        applyCutTubiLabelDeclutter();
         applyTagLabelDeclutter();
         applyCutTubiLabelDeclutter(true);
         applyLabelVisibility();
@@ -2985,23 +3578,27 @@ export function useMbdPipeAnnotationThree(
 
       try {
         if (dimAnnotations.size > 0) {
+          const data = currentData.value;
           const gm = getGlobalModelMatrix?.() || identityMatrix;
           const useBackendText = dimTextMode.value === 'backend';
           const offsetScale = clampNumber(dimOffsetScale.value, 0.05, 50, 1);
           const modeConfig = getRuntimeModeConfig();
 
-          const layoutDims = currentData.value?.layout_result?.linear_dims;
-          const layoutCutTubis = currentData.value?.layout_result?.cut_tubis;
+          const layoutDims = data?.layout_result?.linear_dims;
+          const layoutCutTubis = data?.layout_result?.cut_tubis;
           const useLayoutResult = shouldUseLayoutFirstResult(
             mbdViewMode.value,
-            currentData.value!,
+            data!,
           );
+          const segments = data?.segments ?? [];
+          const pipeOffsetDirs = segments.length
+            ? computePipeAlignedOffsetDirs(segments)
+            : [];
 
           for (const [dimId, dim] of dimAnnotations.entries()) {
             const rawDim = asRaw(dim);
             const ov = dimOverrides.get(dimId) ?? {};
-            const sourceDim =
-              currentData.value?.dims?.find((item) => item.id === dimId) ?? null;
+            const sourceDim = data?.dims?.find((item) => item.id === dimId) ?? null;
             const laidOutDim = useLayoutResult
               ? (layoutDims?.find((item) => item.id === dimId)
                 ?? layoutCutTubis?.find((item) => item.id === dimId)
@@ -3012,14 +3609,24 @@ export function useMbdPipeAnnotationThree(
               'segment') as MbdDimKind);
 
             const p = rawDim.getParams();
-            const distLocal = p.start.distanceTo(p.end);
             const baseOffset = laidOutDim
               ? laidOutDim.offset * offsetScale
-              : resolveSemanticDimOffset(
-                computeMbdDimOffset(distLocal) * offsetScale,
-                kind,
-                normalizeMbdLayoutHint(sourceDim?.layout_hint),
-              );
+              : resolveBranchLayout({
+                start: p.start,
+                end: p.end,
+                role: kind,
+                hint: sourceDim?.layout_hint,
+                segments,
+                pipeOffsetDirs,
+                baseOffset: resolveFallbackBaseOffset(
+                  kind,
+                  p.start,
+                  p.end,
+                  sourceDim?.layout_hint,
+                  segments,
+                ),
+                baseOffsetScale: offsetScale,
+              }).offset;
             const nextOffset = ov.offset ?? baseOffset;
             const nextLabelOffset =
               'labelOffsetWorld' in ov
@@ -3059,6 +3666,12 @@ export function useMbdPipeAnnotationThree(
             });
             rawDim.setLineWidthPx(modeConfig.lineWidthPx);
           }
+          applyPortDimLabelDeclutter();
+          applyVisibility();
+          applyCutTubiLabelDeclutter();
+          applyTagLabelDeclutter();
+          applyCutTubiLabelDeclutter(true);
+          applyLabelVisibility();
         }
         if (bendAnnotations.size > 0) {
           rebuildBendsByCurrentData();
@@ -3098,6 +3711,7 @@ export function useMbdPipeAnnotationThree(
   return {
     uiTab,
     mbdViewMode,
+    renderSource,
     dimTextMode,
     dimOffsetScale,
     dimLabelT,
@@ -3114,6 +3728,9 @@ export function useMbdPipeAnnotationThree(
     showDimOverall,
     showDimPort,
     showPipeClearances,
+    showStructureClearances,
+    showElevationMarks,
+    showEnvelope,
     showCutTubis,
     showElbows,
     showBranches,
@@ -3148,5 +3765,11 @@ export function useMbdPipeAnnotationThree(
     getBendAnnotations,
     getCutTubiAnnotations,
     getTagAnnotations,
+    getPipeClearanceAnnotations,
+    getStructureClearanceAnnotations,
+    getElevationAnnotations,
+    getEnvelopeObjects,
+    resolveElevationMarks,
+    resolveEnvelopeData,
   };
 }

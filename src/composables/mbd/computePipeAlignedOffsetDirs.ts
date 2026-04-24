@@ -9,7 +9,7 @@ const EPS = 1e-6;
  *
  * 优先级：
  * 1. 弯头平面：相邻管段叉积得到法线，offsetDir = normal × segDir
- * 2. 重力对齐：近似水平管段向上偏移
+ * 2. 重力对齐：近似水平管段向 +Z 方向偏移
  * 3. 主轴垂直：选择与管段方向最不平行的坐标轴
  *
  * 最后做一致性修正，避免相邻管段标注"翻面"。
@@ -62,9 +62,9 @@ export function computePipeAlignedOffsetDirs(
       else offsetDir.normalize();
     }
 
-    // 优先级 2：重力对齐（近似水平管段）
-    if (!offsetDir && Math.abs(dir.y) < 0.5) {
-      const up = new Vector3(0, 1, 0);
+    // 优先级 2：重力对齐（仓内统一采用 Z-up）
+    if (!offsetDir && Math.abs(dir.z) < 0.5) {
+      const up = new Vector3(0, 0, 1);
       offsetDir = up.cross(dir);
       if (offsetDir.lengthSq() < EPS) offsetDir = null;
       else offsetDir.normalize();

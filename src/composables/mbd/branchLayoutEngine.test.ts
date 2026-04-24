@@ -103,7 +103,7 @@ describe('branchLayoutEngine', () => {
     expect(cutTubiOffset).toBeLessThan(overallOffset);
   });
 
-  it('uses backend offset_level as the primary lane when the hint already provides one', () => {
+  it('adds backend offset_level on top of semantic lane instead of replacing it', () => {
     const segmentOffsetLevel0 = resolveSemanticDimOffset(120, 'segment', {
       offset_level: 0,
     } as MbdLayoutHint);
@@ -116,14 +116,18 @@ describe('branchLayoutEngine', () => {
 
     const layerGap = Math.max(120 * 0.85, 60);
     expect(segmentOffsetLevel1 - segmentOffsetLevel0).toBeCloseTo(layerGap, 6);
-    expect(portOffsetLevel1).toBeCloseTo(segmentOffsetLevel1, 6);
+    expect(portOffsetLevel1 - segmentOffsetLevel1).toBeCloseTo(layerGap, 6);
+    expect(portOffsetLevel1).toBeGreaterThan(segmentOffsetLevel1);
   });
 
-  it('still keeps semantic lane ordering when backend does not provide offset_level', () => {
+  it('keeps semantic lane ordering stable regardless of offset_level presence', () => {
     expect(resolveSemanticLane('segment')).toBe(0);
     expect(resolveSemanticLane('port')).toBe(1);
     expect(resolveSemanticLane('chain')).toBe(2);
     expect(resolveSemanticLane('overall')).toBe(4);
+    expect(resolveSemanticLane('segment', { offset_level: 2 } as MbdLayoutHint)).toBe(0);
+    expect(resolveSemanticLane('port', { offset_level: 2 } as MbdLayoutHint)).toBe(1);
+    expect(resolveSemanticLane('cut_tubi', { offset_level: 2 } as MbdLayoutHint)).toBe(3);
   });
 
   it('keeps explicit placement_lane backward-compatible while preventing semantic regressions', () => {

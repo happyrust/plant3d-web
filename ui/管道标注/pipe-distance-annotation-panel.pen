@@ -1,5 +1,5 @@
 {
-  "version": "2.8",
+  "version": "2.11",
   "children": [
     {
       "type": "frame",
@@ -8,8 +8,8 @@
       "y": 0,
       "name": "Frame",
       "clip": true,
-      "width": 800,
-      "height": 600,
+      "width": 774,
+      "height": 692,
       "fill": "#FFFFFF",
       "layout": "none"
     },

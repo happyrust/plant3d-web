@@ -21,29 +21,30 @@ describe('computePipeAlignedOffsetDirs', () => {
     expect(computePipeAlignedOffsetDirs([])).toEqual([]);
   });
 
-  it('单段水平管道 → 重力对齐（向上偏移）', () => {
+  it('单段水平管道 → 按 Z-up 重力对齐', () => {
     const segments = [seg('s1', [0, 0, 0], [1000, 0, 0])];
     const dirs = computePipeAlignedOffsetDirs(segments);
     expect(dirs).toHaveLength(1);
-    // 水平管段 dir=(1,0,0), worldUp=(0,1,0), offsetDir = up × dir = (0,0,-1)
-    expect(Math.abs(dirs[0]!.z)).toBeCloseTo(1, 3);
+    // 水平管段 dir=(1,0,0), worldUp=(0,0,1), offsetDir = up × dir = (0,1,0)
+    expect(Math.abs(dirs[0]!.y)).toBeCloseTo(1, 3);
     expect(Math.abs(dirs[0]!.x)).toBeCloseTo(0, 3);
-    expect(Math.abs(dirs[0]!.y)).toBeCloseTo(0, 3);
+    expect(Math.abs(dirs[0]!.z)).toBeCloseTo(0, 3);
   });
 
-  it('单段竖直管道 → 主轴垂直', () => {
-    const segments = [seg('s1', [0, 0, 0], [0, 1000, 0])];
+  it('单段竖直管道（沿 Z）→ 主轴垂直', () => {
+    const segments = [seg('s1', [0, 0, 0], [0, 0, 1000])];
     const dirs = computePipeAlignedOffsetDirs(segments);
     expect(dirs).toHaveLength(1);
-    // 竖直管段 dir=(0,1,0), |dir.y|=1 > 0.5, 走主轴垂直
-    // leastAlignedAxis: ax=0, ay=1, az=0 → axis=(1,0,0), cross=(1,0,0)×(0,1,0)=(0,0,1)
+    // 竖直管段 dir=(0,0,1), |dir.z|=1 > 0.5, 走主轴垂直
+    // leastAlignedAxis: ax=0, ay=0, az=1 → axis=(1,0,0), cross=(1,0,0)×(0,0,1)=(0,-1,0)
     const d = dirs[0]!;
     expect(d.length()).toBeCloseTo(1, 5);
-    // 应该在 XZ 平面内
-    expect(Math.abs(d.y)).toBeCloseTo(0, 3);
+    expect(Math.abs(d.y)).toBeCloseTo(1, 3);
+    expect(Math.abs(d.x)).toBeCloseTo(0, 3);
+    expect(Math.abs(d.z)).toBeCloseTo(0, 3);
   });
 
-  it('L 形管道（XY 平面 90° 弯头）→ offsetDir 在 Z 方向', () => {
+  it('L 形管道（XY 平面 90° 弯头）→ 弯头法线为 Z，offsetDir 落在 XY 平面', () => {
     const segments = [
       seg('s1', [0, 0, 0], [1000, 0, 0]),
       seg('s2', [1000, 0, 0], [1000, 800, 0]),
@@ -61,7 +62,7 @@ describe('computePipeAlignedOffsetDirs', () => {
     }
   });
 
-  it('L 形管道（XZ 平面 90° 弯头）→ offsetDir 在 Y 方向', () => {
+  it('L 形管道（XZ 平面 90° 弯头）→ 弯头法线为 Y，offsetDir 保持稳定', () => {
     const segments = [
       seg('s1', [0, 0, 0], [1000, 0, 0]),
       seg('s2', [1000, 0, 0], [1000, 0, 800]),
