@@ -19,6 +19,7 @@ import type { Obb } from './useToolStore';
 vi.mock('@/composables/useSelectionStore', () => ({
   useSelectionStore: () => ({
     selectedRefno: ref<string | null>(null),
+    selectedRefnos: ref<string[]>([]),
     propertiesLoading: ref(false),
     propertiesError: ref(null),
     propertiesData: ref(null),
@@ -26,6 +27,7 @@ vi.mock('@/composables/useSelectionStore', () => ({
     loadProperties: vi.fn(),
     clearSelection: vi.fn(),
     setSelectedRefno: vi.fn(),
+    setSelectedRefnos: vi.fn(),
   }),
 }));
 

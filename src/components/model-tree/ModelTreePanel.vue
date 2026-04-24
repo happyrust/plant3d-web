@@ -227,17 +227,25 @@ function handleSelectionChanged(selected: Set<string>) {
   // 约定：全局 selection（属性面板/查询等）只绑定 PDMS refno，房间树 id 不写入
   if (isRoomTree.value) return;
   internalTreeSelection = true;
-  if (selected.size !== 1) {
-    selection.clearSelection();
-    return;
-  }
-  const only = Array.from(selected)[0];
-  if (!only || !isRefnoLike(only)) {
-    selection.clearSelection();
+  const normalized = Array.from(selected)
+    .filter((id) => !!id && isRefnoLike(id))
+    .map((id) => normalizeRefnoKeyLike(id))
+    .filter(Boolean);
+
+  if (toolStore.toolMode.value === 'measure_object_to_object') {
+    if (normalized.length === 0) {
+      selection.clearSelection();
+      return;
+    }
+    selection.setSelectedRefnos(normalized, normalized[normalized.length - 1] ?? normalized[0] ?? null);
     return;
   }
 
-  selection.setSelectedRefno(normalizeRefnoKeyLike(only));
+  if (normalized.length !== 1) {
+    selection.clearSelection();
+    return;
+  }
+  selection.setSelectedRefno(normalized[0] ?? null);
 }
 
 function flyTo(id: string) {
@@ -571,6 +579,22 @@ const activeRootId = computed(() => (isRoomTree.value ? roomTree.rootIds.value[0
 
 let selectionSyncSeq = 0;
 let internalTreeSelection = false;
+
+watch(
+  () => toolStore.toolMode.value,
+  (mode, prev) => {
+    if (mode === 'measure_object_to_object' || prev !== 'measure_object_to_object' || isRoomTree.value) return;
+    if (pdmsTree.selectedIds.value.size <= 1) return;
+
+    const active = normalizeRefnoKeyLike(selection.selectedRefno.value || Array.from(pdmsTree.selectedIds.value)[0] || '');
+    const next = new Set<string>();
+    if (active) {
+      next.add(active);
+    }
+    pdmsTree.selectedIds.value = next;
+    handleSelectionChanged(next);
+  },
+);
 
 watch(
   () => [selection.selectedRefno.value, activeTree.value, activeRootId.value] as const,

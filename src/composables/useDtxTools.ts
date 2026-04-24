@@ -37,6 +37,7 @@ import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
+import { formatLengthMeters } from '@/utils/unitFormat';
 
 type DragRect = {
   active: boolean
@@ -266,6 +267,7 @@ const PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES = 5;
 const PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT = 128;
 const PIPE_STRUCTURE_DEFAULT_NOUNS = ['WALL', 'COLUMN'];
 const PIPE_STRUCTURE_MBD_CACHE_TTL_MS = 60_000;
+const OBJECT_TO_OBJECT_VERTEX_SAMPLE_LIMIT = 64;
 
 type PipeMeasureResult = {
   sourcePoint: Vector3
@@ -290,6 +292,26 @@ type PipeReferencePointInput = {
   }[]
   refnoPosition?: Vec3 | null
   aabbCenter?: Vec3 | null
+}
+
+type ObjectMeasureCandidate = {
+  refno: string
+  objectId: string
+  entityId: string
+  hitPoint?: Vec3 | null
+}
+
+export type ApproxNearestBetweenObjectsInput = {
+  sourceObjectId: string
+  targetObjectId: string
+  sourceHitPoint?: Vec3 | null
+  targetHitPoint?: Vec3 | null
+}
+
+export type ApproxNearestBetweenObjectsResult = {
+  sourcePoint: Vec3
+  targetPoint: Vec3
+  distance: number
 }
 
 function normalizeRefnoKey(raw: string): string {
@@ -330,6 +352,15 @@ function pushVec3Unique(target: Vec3[], candidate: Vec3 | null | undefined): voi
   target.push(next);
 }
 
+function pushVector3Unique(target: Vector3[], candidate: Vector3 | null | undefined): void {
+  if (!candidate) return;
+  if (!Number.isFinite(candidate.x) || !Number.isFinite(candidate.y) || !Number.isFinite(candidate.z)) return;
+  for (const existing of target) {
+    if (existing.distanceToSquared(candidate) < 1e-12) return;
+  }
+  target.push(candidate.clone());
+}
+
 export function collectOrderedPipeReferencePointSeeds(input: PipeReferencePointInput): Vec3[] {
   const out: Vec3[] = [];
   const sourceRefno = normalizeRefnoKey(input.sourceRefno);
@@ -353,6 +384,138 @@ export function choosePipeMeasureBetterSeed(
   if (!candidate) return current;
   if (!current) return candidate;
   return candidate.distance < current.distance ? candidate : current;
+}
+
+function collectApproxNearestSeedPoints(
+  layer: DTXLayer,
+  objectId: string,
+  options?: {
+    hitPoint?: Vec3 | null
+    vertexLimit?: number
+  },
+): Vector3[] {
+  const out: Vector3[] = [];
+  const hitPoint = asVec3(options?.hitPoint ?? null);
+  if (hitPoint) {
+    pushVector3Unique(out, new Vector3(hitPoint[0], hitPoint[1], hitPoint[2]));
+  }
+
+  const bbox = layer.getObjectBoundingBox(objectId);
+  if (bbox && !bbox.isEmpty()) {
+    const center = bbox.getCenter(new Vector3());
+    pushVector3Unique(out, center);
+    for (const x of [bbox.min.x, bbox.max.x]) {
+      for (const y of [bbox.min.y, bbox.max.y]) {
+        for (const z of [bbox.min.z, bbox.max.z]) {
+          pushVector3Unique(out, new Vector3(x, y, z));
+        }
+      }
+    }
+  }
+
+  const data = layer.getObjectGeometryData(objectId);
+  if (!data) return out;
+
+  const posAttr = data.geometry.getAttribute('position') as BufferAttribute | undefined;
+  if (!posAttr || posAttr.count <= 0) return out;
+
+  const matrix = data.matrix;
+  const maxVertices = Math.max(1, Math.floor(options?.vertexLimit ?? OBJECT_TO_OBJECT_VERTEX_SAMPLE_LIMIT));
+  const vertexStep = Math.max(1, Math.floor(posAttr.count / maxVertices));
+  const tmp = new Vector3();
+  let sampled = 0;
+
+  for (let index = 0; index < posAttr.count && sampled < maxVertices; index += vertexStep) {
+    tmp.fromBufferAttribute(posAttr, index).applyMatrix4(matrix);
+    pushVector3Unique(out, tmp);
+    sampled += 1;
+  }
+
+  if (sampled < maxVertices && posAttr.count > 0) {
+    tmp.fromBufferAttribute(posAttr, posAttr.count - 1).applyMatrix4(matrix);
+    pushVector3Unique(out, tmp);
+  }
+
+  return out;
+}
+
+function buildObjectMeasurePairKey(sourceRefno: string, targetRefno: string): string {
+  return [normalizeRefnoKey(sourceRefno), normalizeRefnoKey(targetRefno)].sort().join('::');
+}
+
+function resolveLoadedVisibleObjectCandidateByRefno(
+  layer: DTXLayer,
+  refno: string,
+): ObjectMeasureCandidate | null {
+  const normalizedRefno = normalizeRefnoKey(refno);
+  if (!normalizedRefno) return null;
+
+  const directObjectIds = layer.hasObject(normalizedRefno) ? [normalizedRefno] : [];
+  const dbnum = parseDbnumFromRefno(normalizedRefno);
+  const cachedObjectIds = dbnum ? resolveDtxObjectIdsByRefno(dbnum, normalizedRefno) : [];
+  const fallbackObjectIds = layer.getAllObjectIds().filter((objectId) => {
+    if (!objectId) return false;
+    if (objectId === normalizedRefno) return true;
+    return objectId.startsWith(`o:${normalizedRefno}:`);
+  });
+  const objectIds = [...directObjectIds, ...cachedObjectIds, ...fallbackObjectIds]
+    .filter((objectId, index, array) => !!objectId && array.indexOf(objectId) === index);
+  const visibleObjectId = objectIds.find((objectId) => layer.hasObject(objectId) && layer.isObjectVisible(objectId));
+  if (!visibleObjectId) return null;
+
+  return {
+    refno: normalizedRefno,
+    objectId: visibleObjectId,
+    entityId: normalizedRefno,
+    hitPoint: null,
+  };
+}
+
+export function computeApproxNearestBetweenObjects(
+  layer: DTXLayer,
+  input: ApproxNearestBetweenObjectsInput,
+): ApproxNearestBetweenObjectsResult | null {
+  if (!layer) return null;
+  if (!input.sourceObjectId || !input.targetObjectId) return null;
+  if (input.sourceObjectId === input.targetObjectId) return null;
+
+  const sourceSeeds = collectApproxNearestSeedPoints(layer, input.sourceObjectId, {
+    hitPoint: input.sourceHitPoint ?? null,
+  });
+  const targetSeeds = collectApproxNearestSeedPoints(layer, input.targetObjectId, {
+    hitPoint: input.targetHitPoint ?? null,
+  });
+  if (sourceSeeds.length === 0 || targetSeeds.length === 0) return null;
+
+  let best: ApproxNearestBetweenObjectsResult | null = null;
+
+  for (const sourceSeed of sourceSeeds) {
+    const closest = layer.closestPointToObject(input.targetObjectId, sourceSeed);
+    if (!closest) continue;
+    const candidate: ApproxNearestBetweenObjectsResult = {
+      sourcePoint: vec3ToTuple(sourceSeed),
+      targetPoint: vec3ToTuple(closest.point),
+      distance: closest.distance,
+    };
+    if (!best || candidate.distance < best.distance) {
+      best = candidate;
+    }
+  }
+
+  for (const targetSeed of targetSeeds) {
+    const closest = layer.closestPointToObject(input.sourceObjectId, targetSeed);
+    if (!closest) continue;
+    const candidate: ApproxNearestBetweenObjectsResult = {
+      sourcePoint: vec3ToTuple(closest.point),
+      targetPoint: vec3ToTuple(targetSeed),
+      distance: closest.distance,
+    };
+    if (!best || candidate.distance < best.distance) {
+      best = candidate;
+    }
+  }
+
+  return best;
 }
 
 function fromSeed(seed: PipeMeasureSeed, targetObjectId: string, targetRefno: string): PipeMeasureResult {
@@ -1552,6 +1715,11 @@ export function useDtxTools(options: {
 
   const progressPoints = ref<MeasurementPoint[]>([]);
   const pointToObjectStart = ref<MeasurementPoint | null>(null);
+  const objectToObjectSourceCandidate = ref<ObjectMeasureCandidate | null>(null);
+  const objectToObjectTargetCandidate = ref<ObjectMeasureCandidate | null>(null);
+  const objectToObjectBusy = ref(false);
+  const objectToObjectStatus = ref('');
+  const lastAppliedObjectMeasurePairKey = ref<string | null>(null);
   const pipeMeasureBusy = ref(false);
   const pipeMeasureStatus = ref<string>('');
   const mbdBranchCache = new Map<string, { expiresAt: number; data: MbdPipeData | null }>();
@@ -2166,6 +2334,152 @@ export function useDtxTools(options: {
     pipeMeasureStatus.value = message;
   }
 
+  function setObjectMeasureStatus(message: string): void {
+    objectToObjectStatus.value = message;
+  }
+
+  function clearObjectMeasureCandidates(options?: { clearStatus?: boolean; clearLastPairKey?: boolean }): void {
+    objectToObjectSourceCandidate.value = null;
+    objectToObjectTargetCandidate.value = null;
+    objectToObjectBusy.value = false;
+    if (options?.clearStatus) {
+      objectToObjectStatus.value = '';
+    }
+    if (options?.clearLastPairKey) {
+      lastAppliedObjectMeasurePairKey.value = null;
+    }
+  }
+
+  function applyObjectMeasureSourceCandidate(candidate: ObjectMeasureCandidate | null): void {
+    objectToObjectSourceCandidate.value = candidate;
+    objectToObjectTargetCandidate.value = null;
+    if (!candidate) return;
+    setObjectMeasureStatus(`构件最近点测量：已选第一个构件 ${candidate.refno}，请选择第二个构件`);
+  }
+
+  function createObjectMeasureCandidateFromHit(hit: {
+    entityId: string
+    worldPos: Vector3
+    objectId: string
+  }): ObjectMeasureCandidate | null {
+    const refno = normalizeRefnoKey(hit.entityId || parseRefnoFromDtxObjectId(hit.objectId) || '');
+    if (!refno || !hit.objectId) return null;
+    return {
+      refno,
+      objectId: hit.objectId,
+      entityId: hit.entityId || refno,
+      hitPoint: vec3ToTuple(hit.worldPos),
+    };
+  }
+
+  function commitObjectToObjectMeasurement(
+    source: ObjectMeasureCandidate,
+    target: ObjectMeasureCandidate,
+  ): boolean {
+    const layer = dtxLayerRef.value;
+    if (!layer) {
+      setObjectMeasureStatus('DTX 图层未就绪');
+      return false;
+    }
+    if (source.objectId === target.objectId || source.refno === target.refno) {
+      objectToObjectTargetCandidate.value = null;
+      setObjectMeasureStatus('请选择另一个构件');
+      return false;
+    }
+
+    objectToObjectBusy.value = true;
+    setObjectMeasureStatus('构件最近点测量：正在计算…');
+
+    try {
+      const approx = computeApproxNearestBetweenObjects(layer, {
+        sourceObjectId: source.objectId,
+        targetObjectId: target.objectId,
+        sourceHitPoint: source.hitPoint ?? null,
+        targetHitPoint: target.hitPoint ?? null,
+      });
+      if (!approx) {
+        objectToObjectTargetCandidate.value = null;
+        setObjectMeasureStatus('未能计算两个构件之间的最近点');
+        return false;
+      }
+
+      const sourceAnnotation = store.activeAnnotationContext.value;
+      const rec: DistanceMeasurementRecord = {
+        id: nowId('o2o'),
+        kind: 'distance',
+        origin: { entityId: source.objectId, worldPos: approx.sourcePoint },
+        target: { entityId: target.objectId, worldPos: approx.targetPoint },
+        visible: true,
+        createdAt: Date.now(),
+        sourceAnnotationId: sourceAnnotation?.id,
+        sourceAnnotationType: sourceAnnotation?.type,
+      };
+      store.addMeasurement(rec);
+      lastAppliedObjectMeasurePairKey.value = buildObjectMeasurePairKey(source.refno, target.refno);
+      clearObjectMeasureCandidates();
+      setObjectMeasureStatus(
+        `已生成构件最近点测量：${source.refno} ↔ ${target.refno}，距离 ${formatLengthMeters(approx.distance, unitSettings.displayUnit.value, unitSettings.precision.value)}`,
+      );
+      requestRender?.();
+      return true;
+    } finally {
+      objectToObjectBusy.value = false;
+    }
+  }
+
+  function handleTreeObjectMeasureSelection(selectedRefnos: string[]): void {
+    if (store.toolMode.value !== 'measure_object_to_object') return;
+
+    const normalized = selectedRefnos
+      .map((refno) => normalizeRefnoKey(refno))
+      .filter(Boolean);
+    if (normalized.length === 0) {
+      clearObjectMeasureCandidates({ clearStatus: true });
+      return;
+    }
+    if (normalized.length > 2) {
+      clearObjectMeasureCandidates();
+      setObjectMeasureStatus('该模式仅支持两个构件');
+      return;
+    }
+
+    const layer = dtxLayerRef.value;
+    if (!layer) {
+      clearObjectMeasureCandidates();
+      setObjectMeasureStatus('DTX 图层未就绪');
+      return;
+    }
+
+    const resolvedCandidates = normalized.map((refno) => resolveLoadedVisibleObjectCandidateByRefno(layer, refno));
+    if (normalized.length === 1) {
+      const only = resolvedCandidates[0];
+      if (!only) {
+        clearObjectMeasureCandidates();
+        setObjectMeasureStatus('请先显示该构件后再测量');
+        return;
+      }
+      applyObjectMeasureSourceCandidate(only);
+      return;
+    }
+
+    const [sourceCandidate, targetCandidate] = resolvedCandidates;
+    if (!sourceCandidate || !targetCandidate) {
+      clearObjectMeasureCandidates();
+      setObjectMeasureStatus('请先显示这两个构件后再测量');
+      return;
+    }
+
+    const pairKey = buildObjectMeasurePairKey(sourceCandidate.refno, targetCandidate.refno);
+    objectToObjectSourceCandidate.value = sourceCandidate;
+    objectToObjectTargetCandidate.value = targetCandidate;
+    if (lastAppliedObjectMeasurePairKey.value === pairKey) {
+      setObjectMeasureStatus(`构件最近点测量：已选 ${sourceCandidate.refno} 与 ${targetCandidate.refno}`);
+      return;
+    }
+
+    void commitObjectToObjectMeasurement(sourceCandidate, targetCandidate);
+  }
+
   function resolvePipeOwnerBranchRefno(sourceRefno: string): string {
     const sourceNoun = (findNounByRefnoAcrossAllDbnos(sourceRefno) || '').toUpperCase();
     if (sourceNoun === 'BRAN' || sourceNoun === 'HANG') {
@@ -2509,6 +2823,18 @@ export function useDtxTools(options: {
     if (mode === 'measure_point_to_object') {
       return pointToObjectStart.value ? '点到面测量：请点击选择目标对象（自动计算最近距离）' : '点到面测量：请点击选择起始点';
     }
+    if (mode === 'measure_object_to_object') {
+      if (objectToObjectBusy.value) {
+        return objectToObjectStatus.value || '构件最近点测量：正在计算…';
+      }
+      if (objectToObjectStatus.value) {
+        return objectToObjectStatus.value;
+      }
+      if (objectToObjectSourceCandidate.value) {
+        return `构件最近点测量：已选第一个构件 ${objectToObjectSourceCandidate.value.refno}，请选择第二个构件`;
+      }
+      return '构件最近点测量：请选择第一个构件（可点三维或在模型树选中）';
+    }
     if (mode === 'measure_pipe_to_structure') {
       if (pipeMeasureBusy.value) {
         return pipeMeasureStatus.value || '管-墙/柱快速标注：正在计算…';
@@ -2544,6 +2870,16 @@ export function useDtxTools(options: {
       return '矩形批注：点击对象生成 OBB 包围框批注';
     }
     return '批注：点击模型表面创建';
+  });
+
+  const objectToObjectUiState = computed(() => {
+    return {
+      sourceRefno: objectToObjectSourceCandidate.value?.refno ?? null,
+      targetRefno: objectToObjectTargetCandidate.value?.refno ?? null,
+      busy: objectToObjectBusy.value,
+      canReset: !!objectToObjectSourceCandidate.value || !!objectToObjectTargetCandidate.value,
+      statusText: statusText.value,
+    };
   });
 
   const toolsGroup = new Group();
@@ -2591,6 +2927,7 @@ export function useDtxTools(options: {
   function resetProgress() {
     progressPoints.value = [];
     pointToObjectStart.value = null;
+    clearObjectMeasureCandidates({ clearStatus: true, clearLastPairKey: true });
     dimensionPoints.value = [];
     pipeMeasureBusy.value = false;
     pipeMeasureStatus.value = '';
@@ -4001,6 +4338,29 @@ export function useDtxTools(options: {
       return;
     }
 
+    if (mode === 'measure_object_to_object') {
+      const hit = pickSurfacePoint(canvas, e);
+      if (!hit) {
+        setObjectMeasureStatus('未拾取到有效构件');
+        return;
+      }
+
+      const candidate = createObjectMeasureCandidateFromHit(hit);
+      if (!candidate) {
+        setObjectMeasureStatus('未拾取到有效构件');
+        return;
+      }
+
+      if (!objectToObjectSourceCandidate.value) {
+        applyObjectMeasureSourceCandidate(candidate);
+        return;
+      }
+
+      objectToObjectTargetCandidate.value = candidate;
+      void commitObjectToObjectMeasurement(objectToObjectSourceCandidate.value, candidate);
+      return;
+    }
+
     // annotation: click to create text annotation
     if (mode === 'annotation') {
       const hit = pickSurfacePoint(canvas, e);
@@ -4043,6 +4403,22 @@ export function useDtxTools(options: {
     rectPreviewLine.value = null;
     clickTracker.value = { down: null, moved: false };
     try { canvas.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+  }
+
+  function cancelMeasurementInteraction(): void {
+    const mode = store.toolMode.value;
+    if (mode === 'pick_query_center' || mode === 'pick_refno') {
+      store.setToolMode('none');
+      return;
+    }
+    if (mode === 'measure_object_to_object') {
+      clearObjectMeasureCandidates({ clearStatus: true, clearLastPairKey: true });
+      return;
+    }
+    resetProgress();
+    clearPendingCloudAnchor();
+    hideMarquee();
+    clearDimensionPreview();
   }
 
   watch(
@@ -4138,6 +4514,19 @@ export function useDtxTools(options: {
   );
 
   watch(
+    () => [store.toolMode.value, selectionStore.selectedRefnos.value.join('|')] as const,
+    ([mode, selectedRefnos]) => {
+      if (mode !== 'measure_object_to_object') return;
+      const refnos = selectedRefnos
+        .split('|')
+        .map((refno) => refno.trim())
+        .filter(Boolean);
+      handleTreeObjectMeasureSelection(refnos);
+    },
+    { immediate: true },
+  );
+
+  watch(
     () => store.toolMode.value,
     (mode, prev) => {
       if (mode !== prev) {
@@ -4172,6 +4561,7 @@ export function useDtxTools(options: {
   return {
     ready,
     statusText,
+    objectToObjectUiState,
     refreshReadyState,
 
     syncFromStore,
@@ -4203,6 +4593,7 @@ export function useDtxTools(options: {
     onCanvasPointerMove,
     onCanvasPointerUp,
     onCanvasPointerCancel,
+    cancelMeasurementInteraction,
 
     // 兼容：selectionStore 在 none 模式下由 ViewerPanel 处理
     selectionStore,

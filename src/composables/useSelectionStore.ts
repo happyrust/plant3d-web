@@ -82,6 +82,10 @@ export function useSelectionStore() {
     setSelectionState(refno ? [refno] : [], refno);
   }
 
+  function setSelectedRefnos(refnos: (string | null | undefined)[], activeRefno?: string | null) {
+    setSelectionState(refnos, activeRefno);
+  }
+
   function clearSelectedRefnos() {
     setSelectionState([]);
   }
@@ -112,6 +116,7 @@ export function useSelectionStore() {
     clearSelectedRefnos,
     isSelected,
     setSelectedRefno,
+    setSelectedRefnos,
     toggleSelectedRefno,
   };
 }
