@@ -10,14 +10,17 @@ import type {
 } from '@/types/auth';
 
 import {
+  combineMeasurements,
+  type UnifiedMeasurementRecord,
+} from '@/composables/unifiedMeasurement';
+import { useUserStore } from '@/composables/useUserStore';
+import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { buildCommentThreadKey } from '@/review/domain/commentThread';
+import { liftAnnotationComment } from '@/review/domain/reviewSnapshot';
+import {
   getCommentsFromStore as _storeGetComments,
   getReviewCommentThreadStore as _getThreadStore,
 } from '@/review/services/sharedStores';
-import { liftAnnotationComment } from '@/review/domain/reviewSnapshot';
-import { buildCommentThreadKey } from '@/review/domain/commentThread';
-
-import { useUserStore } from '@/composables/useUserStore';
-import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import {
   createDefaultAnnotationReviewState,
   normalizeAnnotationReviewState,
@@ -1872,6 +1875,21 @@ const allXeokitMeasurements = computed<XeokitMeasurementRecord[]>(() => {
   return [...xeokitDistanceMeasurements.value, ...xeokitAngleMeasurements.value];
 });
 
+/**
+ * 测量统一 Phase B · 只读聚合投影。
+ *
+ * 合并 classic / xeokit distance / xeokit angle 三路测量为单一 UnifiedMeasurementRecord[]。
+ * 写入路径仍走旧方法；本 computed 仅用于观测性和新消费者接入。
+ * 参见 `src/composables/unifiedMeasurement.ts` 与 `docs/plans/2026-04-23-measurement-unification-plan.md` Phase B。
+ */
+const unifiedMeasurements = computed<UnifiedMeasurementRecord[]>(() => {
+  return combineMeasurements(
+    measurements.value,
+    xeokitDistanceMeasurements.value,
+    xeokitAngleMeasurements.value,
+  );
+});
+
 const allItems = computed(() => {
   return {
     measurements: measurements.value,
@@ -1906,6 +1924,7 @@ export function useToolStore() {
     measurements,
     xeokitDistanceMeasurements,
     xeokitAngleMeasurements,
+    unifiedMeasurements,
     dimensions,
     annotations,
     obbAnnotations,

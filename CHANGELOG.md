@@ -1,5 +1,20 @@
 # 变更日志
 
+## 2026-04-24（晚间 · Wave 3C）
+
+### 测量体系统一 Phase B 启动
+
+- **新增** `src/composables/unifiedMeasurement.ts`
+  - `UnifiedMeasurementRecord` 类型（含 `approximate: boolean` + `source: 'classic' | 'xeokit' | 'replay'`）
+  - 正反向适配器：`fromClassicMeasurement` / `fromXeokitMeasurement` / `toClassicMeasurement` / `toXeokitMeasurement`
+  - 聚合函数：`combineMeasurements(classic, xeokitDistance, xeokitAngle)`
+  - Flag helper：`isUnifiedMeasurementStoreEnabled()`（默认 false，`localStorage['measurement.unified_store']` 或 `VITE_MEASUREMENT_UNIFIED_STORE` 可覆盖）
+- **新增** `useToolStore.unifiedMeasurements`（只读 computed）— 三路测量的聚合投影，**写入路径不变**
+- **新增测试** 20 个：
+  - `unifiedMeasurement.test.ts` — 15 个（适配器正反向 + combine + flag）
+  - `useToolStore.unifiedMeasurements.test.ts` — 5 个（store 集成：新增/删除时 computed 同步变化）
+- **承接计划** `docs/plans/2026-04-23-measurement-unification-plan.md` Phase B B1–B2
+
 ## 2026-04-24（归档 · 规划文档 + 设计稿）
 
 ### 新增规划文档
