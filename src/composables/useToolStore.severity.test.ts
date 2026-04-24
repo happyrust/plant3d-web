@@ -86,10 +86,10 @@ describe('useToolStore - annotation severity', () => {
     expect(store.updateAnnotationSeverity('rect', 'r-1', 'normal')).toBe(true);
     expect(store.updateAnnotationSeverity('obb', 'o-1', 'suggestion')).toBe(true);
 
-    expect(store.annotations.value[0].severity).toBe('critical');
-    expect(store.cloudAnnotations.value[0].severity).toBe('severe');
-    expect(store.rectAnnotations.value[0].severity).toBe('normal');
-    expect(store.obbAnnotations.value[0].severity).toBe('suggestion');
+    expect(store.annotations.value[0]!.severity).toBe('critical');
+    expect(store.cloudAnnotations.value[0]!.severity).toBe('severe');
+    expect(store.rectAnnotations.value[0]!.severity).toBe('normal');
+    expect(store.obbAnnotations.value[0]!.severity).toBe('suggestion');
   });
 
   it('updateAnnotationSeverity 非法值会被规范化为 undefined', async () => {
@@ -103,13 +103,13 @@ describe('useToolStore - annotation severity', () => {
     });
 
     store.updateAnnotationSeverity('text', 't-bad', 'severe');
-    expect(store.annotations.value[0].severity).toBe('severe');
+    expect(store.annotations.value[0]!.severity).toBe('severe');
 
     store.updateAnnotationSeverity('text', 't-bad', 'wtf' as unknown as 'severe');
-    expect(store.annotations.value[0].severity).toBeUndefined();
+    expect(store.annotations.value[0]!.severity).toBeUndefined();
 
     store.updateAnnotationSeverity('text', 't-bad', undefined);
-    expect(store.annotations.value[0].severity).toBeUndefined();
+    expect(store.annotations.value[0]!.severity).toBeUndefined();
   });
 
   it('updateAnnotationSeverity 对不存在的 id 返回 false 且不影响其它批注', async () => {
@@ -123,7 +123,7 @@ describe('useToolStore - annotation severity', () => {
     });
 
     expect(store.updateAnnotationSeverity('text', 'no-such-id', 'critical')).toBe(false);
-    expect(store.annotations.value[0].severity).toBeUndefined();
+    expect(store.annotations.value[0]!.severity).toBeUndefined();
   });
 
   it('add* 自动回填 authorId：当前登录用户可用时写入；未登录时保持 undefined', async () => {
@@ -135,7 +135,7 @@ describe('useToolStore - annotation severity', () => {
       id: 't-auto', entityId: 'e1', worldPos: [0, 0, 0],
       visible: true, glyph: '1', title: 't', description: '', createdAt: 1,
     });
-    expect(store.annotations.value[0].authorId).toBe('user-42');
+    expect(store.annotations.value[0]!.authorId).toBe('user-42');
 
     vi.resetModules();
     mockUser(null);
@@ -146,7 +146,7 @@ describe('useToolStore - annotation severity', () => {
       id: 'c-auto', objectIds: ['o1'], anchorWorldPos: [0, 0, 0],
       visible: true, title: 'c', description: '', createdAt: 2, refnos: ['o1'],
     });
-    expect(store2.cloudAnnotations.value[0].authorId).toBeUndefined();
+    expect(store2.cloudAnnotations.value[0]!.authorId).toBeUndefined();
   });
 
   it('add* 已显式携带 authorId 时不会被 store 覆盖', async () => {
@@ -159,6 +159,6 @@ describe('useToolStore - annotation severity', () => {
       visible: true, glyph: '1', title: 't', description: '', createdAt: 1,
       authorId: 'explicit-author',
     });
-    expect(store.annotations.value[0].authorId).toBe('explicit-author');
+    expect(store.annotations.value[0]!.authorId).toBe('explicit-author');
   });
 });

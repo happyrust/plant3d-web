@@ -85,9 +85,9 @@ describe('useToolStore - persistence', () => {
     expect(store.annotations.value).toHaveLength(1);
     expect(store.cloudAnnotations.value).toHaveLength(1);
     expect(store.rectAnnotations.value).toHaveLength(1);
-    expect(store.annotations.value[0].worldPos).toEqual([1, 2, 3]);
-    expect(store.cloudAnnotations.value[0].anchorWorldPos).toEqual([4, 5, 6]);
-    expect(store.rectAnnotations.value[0].obb.center).toEqual([7, 8, 9]);
+    expect(store.annotations.value[0]!.worldPos).toEqual([1, 2, 3]);
+    expect(store.cloudAnnotations.value[0]!.anchorWorldPos).toEqual([4, 5, 6]);
+    expect(store.rectAnnotations.value[0]!.obb.center).toEqual([7, 8, 9]);
   });
 
   it('should persist text annotation labelWorldPos and collapsed state', async () => {
@@ -112,8 +112,8 @@ describe('useToolStore - persistence', () => {
     const reloaded = await loadStore();
 
     expect(reloaded.annotations.value).toHaveLength(1);
-    expect(reloaded.annotations.value[0].labelWorldPos).toEqual([4, 5, 6]);
-    expect(reloaded.annotations.value[0].collapsed).toBe(true);
+    expect(reloaded.annotations.value[0]!.labelWorldPos).toEqual([4, 5, 6]);
+    expect(reloaded.annotations.value[0]!.collapsed).toBe(true);
   });
 
   it('should expose and clear pending cloud annotation editor state', async () => {
@@ -163,7 +163,7 @@ describe('useToolStore - persistence', () => {
     vi.resetModules();
     const storeAReloaded = await loadStore();
     expect(storeAReloaded.annotations.value).toHaveLength(1);
-    expect(storeAReloaded.annotations.value[0].title).toBe('Text A');
+    expect(storeAReloaded.annotations.value[0]!.title).toBe('Text A');
   });
 
   it('should ignore legacy global storage to avoid cross-project annotation leakage', async () => {
@@ -408,18 +408,18 @@ describe('useToolStore - persistence', () => {
     });
 
     store.setAnnotationTypeVisible('cloud', false);
-    expect(store.annotations.value[0].visible).toBe(true);
-    expect(store.cloudAnnotations.value[0].visible).toBe(false);
-    expect(store.rectAnnotations.value[0].visible).toBe(true);
-    expect(store.obbAnnotations.value[0].visible).toBe(true);
+    expect(store.annotations.value[0]!.visible).toBe(true);
+    expect(store.cloudAnnotations.value[0]!.visible).toBe(false);
+    expect(store.rectAnnotations.value[0]!.visible).toBe(true);
+    expect(store.obbAnnotations.value[0]!.visible).toBe(true);
 
     store.setAllAnnotationsVisible(false);
-    expect(store.annotations.value[0].visible).toBe(false);
-    expect(store.cloudAnnotations.value[0].visible).toBe(false);
-    expect(store.rectAnnotations.value[0].visible).toBe(false);
-    expect(store.obbAnnotations.value[0].visible).toBe(false);
+    expect(store.annotations.value[0]!.visible).toBe(false);
+    expect(store.cloudAnnotations.value[0]!.visible).toBe(false);
+    expect(store.rectAnnotations.value[0]!.visible).toBe(false);
+    expect(store.obbAnnotations.value[0]!.visible).toBe(false);
     expect(store.measurements.value).toHaveLength(1);
-    expect(store.measurements.value[0].visible).toBe(true);
+    expect(store.measurements.value[0]!.visible).toBe(true);
 
     store.clearAnnotationType('rect');
     expect(store.rectAnnotations.value).toHaveLength(0);
