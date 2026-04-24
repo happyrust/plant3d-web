@@ -3,7 +3,28 @@
  * 用于处理 4x4 变换矩阵（列主序）
  */
 
-export type TransformMatrix = number[]; // 16 个元素的数组，列主序
+// 固定 16 元 tuple 让 literal 索引（m[0] / m[5] ...）在
+// `noUncheckedIndexedAccess: true` 下仍然被推断为 `number` 而非
+// `number | undefined`；数学上也和原来的列主序 4x4 完全等价。
+// 注意：variable 索引（`m[k * 4 + i]`）TS 仍然推不出 undefined-safe，
+// 所以下面 `multiplyMat4` 里统一用 `Float64Array` 做累加，然后再还原回
+// tuple 返回。
+export type TransformMatrix = [
+  number, number, number, number,
+  number, number, number, number,
+  number, number, number, number,
+  number, number, number, number,
+];
+
+/** 建一个零矩阵（16 个 0）作为 out buffer。 */
+function zeroMat4(): TransformMatrix {
+  return [
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+  ];
+}
 
 /**
  * 单位矩阵
@@ -20,17 +41,29 @@ export const IDENTITY_MATRIX: TransformMatrix = [
  * result = a * b
  */
 export function multiplyMat4(a: TransformMatrix, b: TransformMatrix): TransformMatrix {
-  const out: TransformMatrix = new Array(16);
+  // Float64Array 做变量索引累加。`noUncheckedIndexedAccess: true` 同样
+  // 让 `buf[i]` 变成 `number | undefined`，但长度固定为 16、索引都在
+  // [0,15] 内、未写入位置也是 0（TypedArray 语义），所以用 `!` 断言在
+  // 这里是安全的；与其把每个 `buf[i]` 改成 `buf[i] ?? 0` 加运行时 cost，
+  // 不如直接告诉 TS "这里必然有值"。
+  const aa = Float64Array.from(a);
+  const bb = Float64Array.from(b);
+  const buf = new Float64Array(16);
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
       let sum = 0;
       for (let k = 0; k < 4; k++) {
-        sum += a[k * 4 + i] * b[j * 4 + k];
+        sum += aa[k * 4 + i]! * bb[j * 4 + k]!;
       }
-      out[j * 4 + i] = sum;
+      buf[j * 4 + i] = sum;
     }
   }
-  return out;
+  return [
+    buf[0]!, buf[1]!, buf[2]!, buf[3]!,
+    buf[4]!, buf[5]!, buf[6]!, buf[7]!,
+    buf[8]!, buf[9]!, buf[10]!, buf[11]!,
+    buf[12]!, buf[13]!, buf[14]!, buf[15]!,
+  ];
 }
 
 /**
@@ -38,8 +71,6 @@ export function multiplyMat4(a: TransformMatrix, b: TransformMatrix): TransformM
  * 使用伴随矩阵法
  */
 export function inverseMat4(m: TransformMatrix): TransformMatrix | null {
-  const out: TransformMatrix = new Array(16);
-  
   // 提取矩阵元素（列主序转行主序便于计算）
   const m00 = m[0], m01 = m[4], m02 = m[8], m03 = m[12];
   const m10 = m[1], m11 = m[5], m12 = m[9], m13 = m[13];
@@ -62,13 +93,14 @@ export function inverseMat4(m: TransformMatrix): TransformMatrix | null {
 
   // 计算行列式
   let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-  
+
   if (Math.abs(det) < 1e-10) {
     return null; // 矩阵不可逆
   }
-  
+
   det = 1.0 / det;
 
+  const out = zeroMat4();
   // 计算逆矩阵（转置伴随矩阵）
   out[0] = (m11 * b11 - m12 * b10 + m13 * b09) * det;
   out[1] = (m12 * b08 - m10 * b11 - m13 * b07) * det;
