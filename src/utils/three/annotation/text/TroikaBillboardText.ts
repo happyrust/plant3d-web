@@ -72,7 +72,11 @@ export class TroikaBillboardText {
     ;(t as any).outlineBlur = 0;
 
     // 监听 sync 完成，更新 pickProxy 的尺寸
-    t.addEventListener('synccomplete', () => {
+    // troika 自定义事件 'synccomplete' 不在 three.js 的 Object3DEventMap
+    // 里，所以要绕过 generic event 签名（见 `src/types/troika-three-text.d.ts`）。
+    ;(t as unknown as {
+      addEventListener: (type: string, listener: (event: unknown) => void) => void
+    }).addEventListener('synccomplete', () => {
       this._updatePickProxy();
     });
 

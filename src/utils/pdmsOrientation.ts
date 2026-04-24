@@ -47,12 +47,20 @@ function dotAxis(v: Vec3, idx: 0 | 1 | 2, sign: 1 | -1): number {
 
 /**
  * 在给定的候选轴集合里（默认全部 6 个），找和向量 v 点积最大的那一个。
+ *
+ * 约定：`candidates` 必须非空；调用点（`formatPdmsAxis`）只会传 `ALL_AXES`
+ * （6 个）或 `ALL_AXES.filter(c => c.idx !== A.idx)`（4 个），永远 >=1。
+ * 为满足 `noUncheckedIndexedAccess: true` 的收窄，本函数对空集显式抛错，
+ * 然后用 `!` 告诉 TS 剩下的索引访问必定有值。
  */
 function pickPrincipal(v: Vec3, candidates: AxisCandidate[] = ALL_AXES): AxisCandidate {
-  let best = candidates[0];
+  if (candidates.length === 0) {
+    throw new Error('pickPrincipal: candidates must be non-empty');
+  }
+  let best: AxisCandidate = candidates[0]!;
   let bestVal = dotAxis(v, best.idx, best.sign);
   for (let i = 1; i < candidates.length; i++) {
-    const c = candidates[i];
+    const c = candidates[i]!;
     const val = dotAxis(v, c.idx, c.sign);
     if (val > bestVal) {
       best = c;
