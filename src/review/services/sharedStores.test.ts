@@ -56,21 +56,16 @@ describe('sharedStores', () => {
     expect(a).not.toBe(b);
   });
 
-  it('isReviewCommentThreadStoreActive defaults to true (DUAL_READ on)', () => {
+  it('isReviewCommentThreadStoreActive defaults to true (CUTOVER on)', () => {
     expect(isReviewCommentThreadStoreActive()).toBe(true);
   });
 
   it('isReviewCommentThreadStoreActive can be disabled via localStorage', () => {
-    localStorage.setItem('review.flag.REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ', '0');
+    localStorage.setItem('review.flag.REVIEW_C_COMMENT_THREAD_STORE_CUTOVER', '0');
     expect(isReviewCommentThreadStoreActive()).toBe(false);
   });
 
-  it('isReviewCommentThreadStoreActive activates on CUTOVER flag', () => {
-    localStorage.setItem('review.flag.REVIEW_C_COMMENT_THREAD_STORE_CUTOVER', '1');
-    expect(isReviewCommentThreadStoreActive()).toBe(true);
-  });
-
-  it('force_legacy beats both flags', () => {
+  it('force_legacy beats CUTOVER flag', () => {
     localStorage.setItem('review.force_legacy', '1');
     localStorage.setItem('review.flag.REVIEW_C_COMMENT_THREAD_STORE_CUTOVER', '1');
     expect(isReviewCommentThreadStoreActive()).toBe(false);

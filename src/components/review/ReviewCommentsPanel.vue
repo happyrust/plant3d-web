@@ -13,12 +13,6 @@ import {
 } from '@/api/reviewApi';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
-import {
-  getReviewCommentEventLog,
-  getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
-} from '@/review/services/sharedStores';
 import { emitToast } from '@/ribbon/toastBus';
 import { type AnnotationComment, getRoleDisplayName, getRoleTheme, UserRole } from '@/types/auth';
 
@@ -32,16 +26,6 @@ const userStore = useUserStore();
 const commentLoading = ref(false);
 const commentError = ref<string | null>(null);
 
-function dualReadSync() {
-  if (!isReviewCommentThreadStoreActive()) return;
-  if (!props.annotationType || !props.annotationId) return;
-  const inline = store.getAnnotationComments(props.annotationType, props.annotationId);
-  syncInlineToStore(props.annotationType, props.annotationId, inline, {
-    store: getReviewCommentThreadStore(),
-    log: getReviewCommentEventLog(),
-  });
-}
-
 async function loadCommentsFromBackend() {
   if (!props.annotationType || !props.annotationId) return;
   commentLoading.value = true;
@@ -51,7 +35,6 @@ async function loadCommentsFromBackend() {
     if (resp.success && resp.comments) {
       const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
       store.setAnnotationComments(props.annotationType, props.annotationId, normalized);
-      dualReadSync();
     }
   } catch (e) {
     commentError.value = e instanceof Error ? e.message : '加载评论失败';
@@ -164,7 +147,6 @@ async function addComment(columnKey: string) {
     });
     if (resp.success && resp.comment) {
       store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment);
-      dualReadSync();
     } else {
       emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
       return;
@@ -207,7 +189,6 @@ async function saveEditComment() {
     // 网络异常保留本地
   }
 
-  dualReadSync();
   editingCommentId.value = null;
   editingCommentContent.value = '';
 }
@@ -228,7 +209,6 @@ async function deleteComment(commentId: string) {
   }
 
   store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
-  dualReadSync();
 }
 
 // 设置回复目标

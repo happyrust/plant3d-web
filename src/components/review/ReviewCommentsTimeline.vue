@@ -24,12 +24,6 @@ import {
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
-import {
-  getReviewCommentEventLog,
-  getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
-} from '@/review/services/sharedStores';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   type AnnotationComment,
@@ -139,33 +133,6 @@ const allComments = computed<AnnotationComment[]>(() => {
   return [...store.getAnnotationComments(props.annotationType, props.annotationId)]
     .sort((a, b) => a.createdAt - b.createdAt);
 });
-
-// M3 DUAL_READ：把 inline 评论同步到 commentThreadStore，并在差异时写入 commentEventLog。
-// flag 关闭时整段早返回；store 异常被吞没，保护既有 UI 行为。
-watch(
-  () => allComments.value,
-  (next) => {
-    if (!props.annotationType || !props.annotationId) return;
-    if (!isReviewCommentThreadStoreActive()) return;
-    try {
-      const task = reviewStore.currentTask.value;
-      syncInlineToStore(props.annotationType, props.annotationId, next, {
-        store: getReviewCommentThreadStore(),
-        log: getReviewCommentEventLog(),
-        context: {
-          taskId: task?.id,
-          formId: task?.formId,
-          workflowNode: task?.currentNode,
-        },
-      });
-    } catch (err) {
-      if (typeof console !== 'undefined') {
-        console.warn('[review/M3 DUAL_READ] inline → store sync failed', err);
-      }
-    }
-  },
-  { deep: true, immediate: true },
-);
 
 const displayLabel = computed(() => {
   return props.annotationLabel || `批注 #${props.annotationId?.slice(-6) || '---'} 讨论`;

@@ -84,7 +84,6 @@ vi.mock('@/review/services/reviewSnapshotService', () => ({
 }));
 
 vi.mock('@/review/services/sharedStores', () => ({
-  isReviewCommentThreadStoreActive: vi.fn(() => false),
   getReviewCommentThreadStore: vi.fn(() => ({
     mergeFromSnapshot,
   })),

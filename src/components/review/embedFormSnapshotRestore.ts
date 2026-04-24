@@ -17,7 +17,6 @@ import { runWorkflowSyncShadow } from '@/review/services/reviewSnapshotService';
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
 } from '@/review/services/sharedStores';
 
 export type EmbedFormSnapshotRestoreOptions = {
@@ -107,25 +106,23 @@ export async function restoreEmbedFormSnapshot(
     const legacyPayload = buildWorkflowSnapshotReplayPayload(records, comments, options.formId);
     const shadowResult = runWorkflowSyncShadow({ legacyPayload, data });
 
-    if (isReviewCommentThreadStoreActive()) {
-      try {
-        const snapshot = shadowResult?.snapshot ?? buildSnapshotFromWorkflowSync(data);
-        const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
-        if (merge.changed) {
-          getReviewCommentEventLog().push({
-            kind: 'snapshot_merged',
-            key: 'workflow_sync',
-            payload: {
-              formId: options.formId,
-              comments: snapshot.comments.length,
-              annotations: snapshot.annotations.length,
-            },
-          });
-        }
-      } catch (err) {
-        if (typeof console !== 'undefined') {
-          console.warn('[review/M3 thread store] workflow_sync merge failed', err);
-        }
+    try {
+      const snapshot = shadowResult?.snapshot ?? buildSnapshotFromWorkflowSync(data);
+      const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+      if (merge.changed) {
+        getReviewCommentEventLog().push({
+          kind: 'snapshot_merged',
+          key: 'workflow_sync',
+          payload: {
+            formId: options.formId,
+            comments: snapshot.comments.length,
+            annotations: snapshot.annotations.length,
+          },
+        });
+      }
+    } catch (err) {
+      if (typeof console !== 'undefined') {
+        console.warn('[review thread store] workflow_sync merge failed', err);
       }
     }
 

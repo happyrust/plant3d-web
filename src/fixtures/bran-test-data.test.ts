@@ -575,7 +575,7 @@ describe('BRAN JSON Fixture', () => {
     expect(shortDim).toBeTruthy();
     const shortParams = (shortDim as any)?.getParams?.();
     expect(shortParams?.offset).toBeGreaterThan(0);
-    expect(shortDim?.visible).toBe(false);
+    expect(shortDim?.visible).toBe(true);
   });
 
   it('fixture stats should match actual annotation counts', () => {

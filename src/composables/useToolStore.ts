@@ -11,7 +11,6 @@ import type {
 import {
   getCommentsFromStore as _storeGetComments,
   getReviewCommentThreadStore as _getThreadStore,
-  isReviewCommentThreadStoreActive as _isStoreActive,
 } from '@/review/services/sharedStores';
 import { liftAnnotationComment } from '@/review/domain/reviewSnapshot';
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
@@ -293,6 +292,10 @@ export type CloudAnnotationRecord = {
   severity?: AnnotationSeverity;
   authorId?: string;
   formId?: string;
+  /** 批注的代表截图 URL（用户点「添加截图」后生成，覆盖语义：每次截图替换旧图） */
+  thumbnailUrl?: string;
+  /** 关联的 ReviewAttachment id，便于后续反查 */
+  attachmentId?: string;
 };
 
 export type RectAnnotationRecord = {
@@ -1436,8 +1439,7 @@ function updateAnnotationSeverity(
 /**
  * 为批注添加评论/意见。
  *
- * @deprecated Phase C 迁移后请改用 `commentThreadStore.upsertComment()`；
- * 本方法在 DUAL_READ 期间仍作为 inline 投影写入点保留。
+ * 写入时同时更新 commentThreadStore 与 inline annotation.comments（兼容投影）。
  */
 function addCommentToAnnotation(
   annotationType: AnnotationType,
@@ -1453,11 +1455,9 @@ function addCommentToAnnotation(
     createdAt: comment.createdAt || fallbackCreatedAt,
   };
 
-  if (_isCommentStoreActive()) {
-    _getThreadStore().upsertComment(
-      liftAnnotationComment(newComment, { annotationType }),
-    );
-  }
+  _getThreadStore().upsertComment(
+    liftAnnotationComment(newComment, { annotationType }),
+  );
 
   switch (annotationType) {
     case 'text': {
@@ -1495,8 +1495,6 @@ function addCommentToAnnotation(
 
 /**
  * 覆盖批注评论列表（用于后端同步）。
- *
- * @deprecated Phase C 迁移后请改用 `commentThreadStore.mergeComments()`。
  */
 function setAnnotationComments(
   annotationType: AnnotationType,
@@ -1534,8 +1532,6 @@ function setAnnotationComments(
 
 /**
  * 更新批注中的某条评论。
- *
- * @deprecated Phase C 迁移后请改用 `commentThreadStore.upsertComment()`。
  */
 function updateAnnotationComment(
   annotationType: AnnotationType,
@@ -1543,15 +1539,13 @@ function updateAnnotationComment(
   commentId: string,
   patch: Partial<Pick<AnnotationComment, 'content' | 'updatedAt'>>
 ): boolean {
-  if (_isCommentStoreActive()) {
-    const existing = _getCommentsFromInline(annotationType, annotationId)
-      .find((c) => c.id === commentId);
-    if (existing) {
-      const updated = { ...existing, ...patch, updatedAt: Date.now() };
-      _getThreadStore().upsertComment(
-        liftAnnotationComment(updated, { annotationType }),
-      );
-    }
+  const existing = _getCommentsFromInline(annotationType, annotationId)
+    .find((c) => c.id === commentId);
+  if (existing) {
+    const updated = { ...existing, ...patch, updatedAt: Date.now() };
+    _getThreadStore().upsertComment(
+      liftAnnotationComment(updated, { annotationType }),
+    );
   }
 
   const updateComments = (comments: AnnotationComment[] | undefined): AnnotationComment[] | undefined => {
@@ -1592,18 +1586,14 @@ function updateAnnotationComment(
 
 /**
  * 删除批注中的某条评论。
- *
- * @deprecated Phase C 迁移后请改用 `commentThreadStore.deleteComment()`。
  */
 function removeAnnotationComment(
   annotationType: AnnotationType,
   annotationId: string,
   commentId: string
 ): boolean {
-  if (_isCommentStoreActive()) {
-    const key = buildCommentThreadKey(annotationType, annotationId);
-    _getThreadStore().deleteComment(key, commentId);
-  }
+  const key = buildCommentThreadKey(annotationType, annotationId);
+  _getThreadStore().deleteComment(key, commentId);
 
   const filterComments = (comments: AnnotationComment[] | undefined): AnnotationComment[] | undefined => {
     if (!comments) return undefined;
@@ -1642,20 +1632,13 @@ function removeAnnotationComment(
 /**
  * 获取批注的所有评论。
  *
- * PROMOTE 读路径：当 DUAL_READ 或 CUTOVER flag 开启时，优先从
- * commentThreadStore 读取；否则回退到 inline annotation.comments。
- *
- * @deprecated 长期目标：CUTOVER 后由 commentThreadStore 完全接管，
- * 此函数将简化为纯 store 读取。
+ * commentThreadStore 为唯一真源，inline annotation.comments 仅作兼容投影。
  */
 function getAnnotationComments(
   annotationType: AnnotationType,
   annotationId: string
 ): AnnotationComment[] {
-  if (_isCommentStoreActive()) {
-    return _getCommentsFromStore(annotationType, annotationId);
-  }
-  return _getCommentsFromInline(annotationType, annotationId);
+  return _getCommentsFromStore(annotationType, annotationId);
 }
 
 function _getCommentsFromInline(
@@ -1681,14 +1664,6 @@ function _getCommentsFromInline(
     }
   }
   return [];
-}
-
-function _isCommentStoreActive(): boolean {
-  try {
-    return _isStoreActive();
-  } catch {
-    return false;
-  }
 }
 
 function _getCommentsFromStore(

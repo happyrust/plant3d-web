@@ -7,7 +7,7 @@
  *   - 真源：`CommentThreadIndex`（不可变 snapshot），所有写入操作返回
  *     `{ changed }`，未变化时 listener 不会被触发。
  *   - 与 M2 衔接：`mergeFromSnapshot(reviewSnapshot)` 直接消费 `SnapshotComment[]`
- *     重建 index；该 API 是 M3 DUAL_READ 阶段从 restore 链路初始化 store 的入口。
+ *     重建 index；该 API 是 restore 链路初始化 store 的入口。
  *
  * 不在本阶段引入：
  *   - WebSocket 实时推送（由 M5/F `commentSyncService` 接管）；

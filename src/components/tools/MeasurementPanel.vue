@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
+import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import {
   type MeasurementRecord,
   type XeokitMeasurementRecord,
@@ -8,6 +9,7 @@ import {
 } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import { emitCommand } from '@/ribbon/commandBus';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -21,6 +23,7 @@ const props = defineProps<{
 }>();
 
 const store = useToolStore();
+const pipeDistanceStore = usePipeDistanceStore();
 const ctx = useViewerContext();
 const xeokitTools = computed(() => ctx.xeokitMeasurementTools.value);
 const measurementStyle = useXeokitMeasurementStyleStore();
@@ -74,6 +77,23 @@ const distanceStyleNote = computed(() => {
   return measurementStyle.state.distanceShowAxisBreakdown
     ? '当前会同时显示总长和 X / Y / Z 分量标签。'
     : '开启后会额外显示 X / Y / Z 三段分量线和标签。';
+});
+const pipeDistanceSelectedCount = computed(() => pipeDistanceStore.selectedBranRefnos.value.length);
+const pipeDistanceResultCount = computed(() => pipeDistanceStore.results.value.length);
+const pipeDistanceStatusText = computed(() => {
+  if (pipeDistanceStore.isDetecting.value) {
+    return '正在检测管道间净距…';
+  }
+  if (pipeDistanceStore.detectError.value) {
+    return pipeDistanceStore.detectError.value;
+  }
+  if (pipeDistanceResultCount.value > 0) {
+    return `已生成 ${pipeDistanceResultCount.value} 条净距结果`;
+  }
+  if (pipeDistanceSelectedCount.value > 0) {
+    return `已选 ${pipeDistanceSelectedCount.value} 根 BRAN 管道`;
+  }
+  return '选择至少 2 根 BRAN 管道后可检测管道间净距';
 });
 
 function isApproximateMeasurement(record: MeasurementRecord | XeokitMeasurementRecord): boolean {
@@ -193,6 +213,10 @@ function updateMeasurementStyle(key: 'distanceShowTotalLabel' | 'distanceShowMar
 
 function resetMeasurementStyle() {
   measurementStyle.resetStyle();
+}
+
+function openPipeDistanceMeasurement() {
+  emitCommand('measurement.pipe_to_pipe');
 }
 
 watch(
@@ -331,6 +355,51 @@ watch(
           </div>
         </div>
       </details>
+    </div>
+
+    <div data-testid="measurement-pipe-distance-card"
+      class="rounded-md border border-border bg-background p-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold">管-管净距</div>
+          <div class="mt-1 text-xs text-muted-foreground">
+            选择多根 BRAN 管道，生成管道间净距标注。
+          </div>
+        </div>
+        <span class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          {{ pipeDistanceResultCount }} 条
+        </span>
+      </div>
+
+      <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div class="rounded-md border border-border bg-muted/30 px-2 py-1.5">
+          <div class="text-muted-foreground">已选管道</div>
+          <div data-testid="measurement-pipe-distance-selected-count"
+            class="mt-0.5 text-sm font-semibold text-foreground">
+            {{ pipeDistanceSelectedCount }} 根
+          </div>
+        </div>
+        <div class="rounded-md border border-border bg-muted/30 px-2 py-1.5">
+          <div class="text-muted-foreground">检测结果</div>
+          <div data-testid="measurement-pipe-distance-result-count"
+            class="mt-0.5 text-sm font-semibold text-foreground">
+            {{ pipeDistanceResultCount }} 条
+          </div>
+        </div>
+      </div>
+
+      <div data-testid="measurement-pipe-distance-status"
+        class="mt-2 text-xs"
+        :class="pipeDistanceStore.detectError.value ? 'text-destructive' : 'text-muted-foreground'">
+        {{ pipeDistanceStatusText }}
+      </div>
+
+      <button type="button"
+        data-testid="measurement-open-pipe-distance"
+        class="mt-3 h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
+        @click="openPipeDistanceMeasurement">
+        打开管-管净距
+      </button>
     </div>
 
     <div class="rounded-md border border-border bg-background p-3">

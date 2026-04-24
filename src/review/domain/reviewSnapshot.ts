@@ -60,7 +60,7 @@ export type SnapshotMeasurementKind = 'distance' | 'angle' | 'unknown';
 export type SnapshotMeasurement = {
   measurementId: string;
   kind: SnapshotMeasurementKind;
-  payload: Record<string, unknown>;
+  payload: import('@/api/reviewApi').ReviewSnapshotMeasurementPayload;
 }
 
 export type ReviewSnapshotMeta = {

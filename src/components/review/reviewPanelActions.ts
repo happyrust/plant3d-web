@@ -9,6 +9,7 @@ import {
   getReviewAnnotationCheckFromError,
   getReviewApiErrorMessage,
   type ReviewAnnotationCheckResponse,
+  type ReviewSnapshotMeasurementPayload,
 } from '@/api/reviewApi';
 
 const WORKFLOW_NODE_ORDER: WorkflowNode[] = ['sj', 'jd', 'sh', 'pz'];
@@ -73,7 +74,7 @@ export type ReviewConfirmSnapshotPayload = {
   cloudAnnotations: unknown[];
   rectAnnotations: unknown[];
   obbAnnotations: unknown[];
-  measurements: unknown[];
+  measurements: ReviewSnapshotMeasurementPayload[];
 };
 
 type ReviewConfirmSnapshotRecordLike = {
@@ -81,7 +82,7 @@ type ReviewConfirmSnapshotRecordLike = {
   cloudAnnotations?: unknown[];
   rectAnnotations?: unknown[];
   obbAnnotations?: unknown[];
-  measurements?: unknown[];
+  measurements?: ReviewSnapshotMeasurementPayload[];
 };
 
 type ReviewConfirmSnapshotPayloadInput = ReviewConfirmSnapshotRecordLike & {

@@ -1239,8 +1239,7 @@ function onLeftMeasurePipeToStructureClick(): void {
 }
 
 function onLeftMeasurePipeToPipeClick(): void {
-  setAutoNearestMode('measure_pipe_to_pipe');
-  leftToolbarOpenMeasureMenu.value = false;
+  openPipeDistanceDrawer();
 }
 
 function setAutoNearestMode(
@@ -1250,6 +1249,27 @@ function setAutoNearestMode(
     store.setToolMode('none');
   } else {
     store.setToolMode(next);
+  }
+  requestRender();
+}
+
+function openPipeDistanceDrawer(): void {
+  pipeDistDrawerOpen.value = true;
+  rangeDrawerOpen.value = false;
+  if (store.toolMode.value === 'measure_pipe_to_pipe') {
+    store.setToolMode('none');
+  }
+  leftToolbarOpenMeasureMenu.value = false;
+  requestRender();
+}
+
+function togglePipeDistanceDrawer(): void {
+  pipeDistDrawerOpen.value = !pipeDistDrawerOpen.value;
+  if (pipeDistDrawerOpen.value) {
+    rangeDrawerOpen.value = false;
+  }
+  if (store.toolMode.value === 'measure_pipe_to_pipe') {
+    store.setToolMode('none');
   }
   requestRender();
 }
@@ -1334,7 +1354,7 @@ function handleRibbonCommand(commandId: string) {
       setAutoNearestMode('measure_pipe_to_structure');
       return;
     case 'measurement.pipe_to_pipe':
-      setAutoNearestMode('measure_pipe_to_pipe');
+      openPipeDistanceDrawer();
       return;
     case 'measurement.clear':
       if (
@@ -1376,8 +1396,7 @@ function handleRibbonCommand(commandId: string) {
       }
       return;
     case 'panel.pipeDistance':
-      pipeDistDrawerOpen.value = !pipeDistDrawerOpen.value;
-      if (pipeDistDrawerOpen.value) rangeDrawerOpen.value = false;
+      togglePipeDistanceDrawer();
       return;
     case 'mbd.generate': {
       // 一条龙：用当前选中 refno 触发 MBD 管道标注生成（复用 store watcher 链路）。

@@ -232,11 +232,24 @@ export type ReviewSnapshotAnnotationPayload = Record<string, unknown> & {
   severity?: AnnotationSeverity;
 };
 
-export type ReviewSnapshotMeasurementPayload = Record<string, unknown> & {
+export type ReviewSnapshotMeasurementPoint = {
+  entityId: string;
+  worldPos: [number, number, number];
+};
+
+export type ReviewSnapshotMeasurementPayload = {
   id: string;
   kind?: 'distance' | 'angle';
+  origin?: ReviewSnapshotMeasurementPoint;
+  corner?: ReviewSnapshotMeasurementPoint;
+  target?: ReviewSnapshotMeasurementPoint;
   visible?: boolean;
+  approximate?: boolean;
   createdAt?: number;
+  sourceAnnotationId?: string;
+  sourceAnnotationType?: string;
+  formId?: string;
+  [key: string]: unknown;
 };
 
 // 确认记录类型

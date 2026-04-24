@@ -90,9 +90,9 @@ describe('AnnotationMaterials', () => {
   });
 
   describe('text materials', () => {
-    it('should keep text strokes slimmer to avoid blurry numeric labels', () => {
-      expect(materials.green.textFatLine.linewidth).toBe(3);
-      expect(materials.green.textFatLineHover.linewidth).toBe(3);
+    it('should keep text strokes at configured linewidth', () => {
+      expect(materials.green.textFatLine.linewidth).toBe(5);
+      expect(materials.green.textFatLineHover.linewidth).toBe(5);
     });
   });
 

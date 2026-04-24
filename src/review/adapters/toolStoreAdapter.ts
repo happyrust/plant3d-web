@@ -16,12 +16,14 @@ import type { ReviewSnapshot } from '../domain/reviewSnapshot';
 
 import { buildReviewRecordReplayPayload } from '@/components/review/reviewRecordReplay';
 
+import type { ReviewSnapshotMeasurementPayload } from '@/api/reviewApi';
+
 type ReplayRecordLike = {
   annotations: unknown[];
   cloudAnnotations: unknown[];
   rectAnnotations: unknown[];
   obbAnnotations: unknown[];
-  measurements: unknown[];
+  measurements: ReviewSnapshotMeasurementPayload[];
 };
 
 export function buildReplayPayloadFromSnapshot(snapshot: ReviewSnapshot): string {
@@ -58,9 +60,9 @@ export function buildReplayPayloadFromImportSnapshot(snapshot: ReviewSnapshot): 
   const cloudAnnotations: unknown[] = [];
   const rectAnnotations: unknown[] = [];
   const obbAnnotations: unknown[] = [];
-  const measurements: unknown[] = [];
-  const xeokitDistanceMeasurements: unknown[] = [];
-  const xeokitAngleMeasurements: unknown[] = [];
+  const measurements: ReviewSnapshotMeasurementPayload[] = [];
+  const xeokitDistanceMeasurements: ReviewSnapshotMeasurementPayload[] = [];
+  const xeokitAngleMeasurements: ReviewSnapshotMeasurementPayload[] = [];
 
   for (const annotation of snapshot.annotations) {
     switch (annotation.annotationType) {

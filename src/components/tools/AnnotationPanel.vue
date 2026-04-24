@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 
-import { LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
+import { Camera, LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
 
 import {
   annotationSeverityUpdate,
@@ -12,18 +12,14 @@ import {
 } from '@/api/reviewApi';
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
+import { useReviewStore } from '@/composables/useReviewStore';
+import { useScreenshot } from '@/composables/useScreenshot';
 import {
   getAnnotationRefnos,
   useToolStore,
   type AnnotationType,
 } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
-import {
-  getReviewCommentThreadStore,
-  getReviewCommentEventLog,
-  isReviewCommentThreadStoreActive,
-} from '@/review/services/sharedStores';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   ANNOTATION_SEVERITY_VALUES,
@@ -58,6 +54,47 @@ const props = defineProps<{
 
 const store = useToolStore();
 const userStore = useUserStore();
+const reviewStore = useReviewStore();
+const { captureAndUpload, isCapturing } = useScreenshot();
+
+const capturingAnnotationId = ref<string | null>(null);
+
+const canCaptureAnnotation = computed(() => {
+  const task = reviewStore.currentTask.value;
+  return !!task?.id && !isCapturing.value;
+});
+
+/**
+ * 为批注拍摄一张代表截图并挂到 record 上。
+ * 语义：覆盖（再次拍摄时替换旧图）；批注被删除时不级联删 attachment（由后端保留）。
+ */
+async function captureCloudAnnotationShot(annotationId: string) {
+  const task = reviewStore.currentTask.value;
+  if (!task?.id) {
+    emitToast({ message: '请先进入校审任务后再截图', level: 'warning' });
+    return;
+  }
+  if (isCapturing.value) return;
+
+  capturingAnnotationId.value = annotationId;
+  try {
+    const attachment = await captureAndUpload(task.id, {
+      kind: 'annotation_shot',
+      sourceAnnotationId: annotationId,
+    });
+    if (!attachment) {
+      emitToast({ message: '截图失败，请重试', level: 'error' });
+      return;
+    }
+    store.updateCloudAnnotation(annotationId, {
+      thumbnailUrl: attachment.url,
+      attachmentId: attachment.id,
+    });
+    emitToast({ message: '截图已添加', level: 'success' });
+  } finally {
+    capturingAnnotationId.value = null;
+  }
+}
 
 /**
  * 列表顶部的"严重度筛选"：
@@ -515,19 +552,6 @@ function getRoleInlineStyle(role: UserRole): Record<string, string> {
   };
 }
 
-/**
- * DUAL_READ 同步：每次 inline 评论变更后，如果 thread store 已激活，
- * 把 inline 数据推入 store 并记录差异日志。
- */
-function dualReadSync(annType: AnnotationType, annId: string) {
-  if (!isReviewCommentThreadStoreActive()) return;
-  const inline = store.getAnnotationComments(annType, annId);
-  syncInlineToStore(annType, annId, inline, {
-    store: getReviewCommentThreadStore(),
-    log: getReviewCommentEventLog(),
-  });
-}
-
 async function loadCommentsForListView() {
   if (commentsViewMode.value !== 'list') return;
   if (!activeAny.value || !activeAnnotationType.value) return;
@@ -538,7 +562,6 @@ async function loadCommentsForListView() {
     if (resp.success && resp.comments) {
       const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
       store.setAnnotationComments(annType, annId, normalized);
-      dualReadSync(annType, annId);
     }
   } catch {
     // 列表模式拉取失败时保留本地缓存
@@ -579,7 +602,6 @@ async function addComment() {
     });
     if (resp.success && resp.comment) {
       store.addCommentToAnnotation(annType, annId, resp.comment);
-      dualReadSync(annType, annId);
     } else {
       emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
       return;
@@ -621,7 +643,6 @@ async function saveEditComment() {
     // 网络异常保留本地（与严重度策略一致）
   }
 
-  dualReadSync(annType, annId);
   editingCommentId.value = null;
   editingCommentContent.value = '';
 }
@@ -645,7 +666,6 @@ async function deleteComment(commentId: string) {
   }
 
   store.removeAnnotationComment(annType, annId, commentId);
-  dualReadSync(annType, annId);
 }
 
 // 设置回复目标
@@ -924,6 +944,28 @@ function formatCommentTime(timestamp: number): string {
               <span class="text-xs text-muted-foreground">{{ new Date(a.createdAt).toLocaleString() }}</span>
             </div>
           </div>
+
+          <!-- 代表截图：有则显示，hover 显示「重拍」角标；无且可拍则显示虚线「添加截图」入口 -->
+          <div v-if="a.thumbnailUrl"
+            class="group relative mt-2 overflow-hidden rounded border border-[#E5E7EB]"
+            style="height: 120px;">
+            <img :src="a.thumbnailUrl" alt="批注截图" class="h-full w-full object-cover" />
+            <button v-if="canCaptureAnnotation" type="button"
+              class="absolute right-1 top-1 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] text-[#111827] opacity-0 shadow-sm transition-opacity hover:bg-white group-hover:opacity-100"
+              :disabled="capturingAnnotationId === a.id"
+              title="重新截图"
+              @click.stop="captureCloudAnnotationShot(a.id)">
+              <Camera class="h-3 w-3" />
+              <span>{{ capturingAnnotationId === a.id ? '截图中…' : '重拍' }}</span>
+            </button>
+          </div>
+          <button v-else-if="canCaptureAnnotation" type="button"
+            class="mt-2 flex h-[80px] w-full items-center justify-center gap-2 rounded border border-dashed border-[#D1D5DB] text-xs text-[#6B7280] hover:border-[#FDBA74] hover:bg-[#FFF7ED] hover:text-[#EA580C]"
+            :disabled="capturingAnnotationId === a.id"
+            @click.stop="captureCloudAnnotationShot(a.id)">
+            <Camera class="h-3.5 w-3.5" />
+            <span>{{ capturingAnnotationId === a.id ? '正在截图…' : '添加截图 · 记录当前视角' }}</span>
+          </button>
 
           <div class="mt-2 flex flex-wrap gap-2">
             <button type="button"

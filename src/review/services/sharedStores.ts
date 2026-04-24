@@ -45,26 +45,16 @@ export function getReviewCommentEventLog(): CommentEventLog {
 /**
  * 当 thread store 被启用为评论真源时返回 true。
  *
- * 启用条件（任一即生效）：
- *   - `REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ`：DUAL_READ 灰度阶段，store 与 inline 同跑；
- *   - `REVIEW_C_COMMENT_THREAD_STORE_CUTOVER`：CUTOVER 阶段，仅 store。
- *
- * 与 SHADOW 不同：thread store 的预填本身不影响渲染，但需要与 ReviewCommentsTimeline
- * 的 DUAL_READ/CUTOVER 严格联动，避免 store 数据陈旧。
+ * CUTOVER 阶段（当前默认）：store 是唯一真源，inline 仅作兼容投影。
+ * 可通过 localStorage `review.flag.REVIEW_C_COMMENT_THREAD_STORE_CUTOVER=0` 临时回退。
  */
 export function isReviewCommentThreadStoreActive(): boolean {
-  return (
-    isReviewFlagEnabled('REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ')
-    || isReviewFlagEnabled('REVIEW_C_COMMENT_THREAD_STORE_CUTOVER')
-  );
+  return isReviewFlagEnabled('REVIEW_C_COMMENT_THREAD_STORE_CUTOVER');
 }
 
 /**
- * PROMOTE 读路径：从 commentThreadStore 读取指定批注的评论，
+ * 从 commentThreadStore 读取指定批注的评论，
  * 返回 AnnotationComment[] 格式（与 useToolStore.getAnnotationComments 兼容）。
- *
- * 用法：在 DUAL_READ/PROMOTE 阶段，UI 组件可用此函数替代
- * `useToolStore().getAnnotationComments(type, id)` 来读取评论。
  */
 export function getCommentsFromStore(
   annotationType: 'text' | 'cloud' | 'rect' | 'obb',

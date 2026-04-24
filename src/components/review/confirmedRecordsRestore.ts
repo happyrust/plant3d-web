@@ -9,7 +9,6 @@ import { runTaskRecordsShadow } from '@/review/services/reviewSnapshotService';
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
 } from '@/review/services/sharedStores';
 
 type ConfirmedRecordEntry = ConfirmedRecord;
@@ -84,15 +83,13 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       if (shouldClear) {
         options.toolStore.clearAll();
         tools.syncFromStore();
-        if (isReviewCommentThreadStoreActive()) {
-          const cleared = getReviewCommentThreadStore().clear();
-          if (cleared.changed) {
-            getReviewCommentEventLog().push({
-              kind: 'thread_clear',
-              key: 'task_records',
-              payload: { taskId: taskId ?? null },
-            });
-          }
+        const cleared = getReviewCommentThreadStore().clear();
+        if (cleared.changed) {
+          getReviewCommentEventLog().push({
+            kind: 'thread_clear',
+            key: 'task_records',
+            payload: { taskId: taskId ?? null },
+          });
         }
       }
       lastRestoredSceneKey.value = restoreKey;
@@ -106,26 +103,24 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       build: { taskId: taskId ?? undefined },
     });
 
-    if (isReviewCommentThreadStoreActive()) {
-      try {
-        const snapshot = shadowResult?.snapshot
-          ?? buildSnapshotFromTaskRecords(records, { taskId: taskId ?? undefined });
-        const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
-        if (merge.changed) {
-          getReviewCommentEventLog().push({
-            kind: 'snapshot_merged',
-            key: 'task_records',
-            payload: {
-              taskId: taskId ?? null,
-              comments: snapshot.comments.length,
-              annotations: snapshot.annotations.length,
-            },
-          });
-        }
-      } catch (err) {
-        if (typeof console !== 'undefined') {
-          console.warn('[review/M3 thread store] task_records merge failed', err);
-        }
+    try {
+      const snapshot = shadowResult?.snapshot
+        ?? buildSnapshotFromTaskRecords(records, { taskId: taskId ?? undefined });
+      const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+      if (merge.changed) {
+        getReviewCommentEventLog().push({
+          kind: 'snapshot_merged',
+          key: 'task_records',
+          payload: {
+            taskId: taskId ?? null,
+            comments: snapshot.comments.length,
+            annotations: snapshot.annotations.length,
+          },
+        });
+      }
+    } catch (err) {
+      if (typeof console !== 'undefined') {
+        console.warn('[review thread store] task_records merge failed', err);
       }
     }
 

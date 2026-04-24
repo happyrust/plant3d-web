@@ -4,7 +4,7 @@
  * 设计要点：
  *   - 复用 M2 引入的 `SnapshotComment`，避免类型重复；
  *   - thread 内顺序按 `(createdAt ASC, commentId ASC)`，store 与 inline 投影
- *     使用相同规则，便于 DUAL_READ 阶段比对；
+ *     使用相同排序规则；
  *   - 索引 key 为 `${annotationType}:${annotationId}`，与 M2
  *     `snapshotInlineCommentKey` 对齐，方便后续从 snapshot 直接构造 index。
  */

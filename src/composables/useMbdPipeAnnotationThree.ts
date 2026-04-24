@@ -1405,6 +1405,40 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function applyChainOffsetUnification(): void {
+    const chainDims: [string, LinearDimension3D][] = [];
+    for (const [dimId, dim] of dimAnnotations.entries()) {
+      const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
+      if (kind === 'chain') chainDims.push([dimId, asRaw(dim)]);
+    }
+    if (chainDims.length <= 1) return;
+
+    const groups = new Map<string, [string, LinearDimension3D][]>();
+    for (const entry of chainDims) {
+      const [, dim] = entry;
+      const res = (dim.userData as any).mbdLayoutResolution;
+      const hint = res?.normalizedHint;
+      const dir = hint?.offsetDir;
+      const groupKey = dir
+        ? `${dir.x.toFixed(4)},${dir.y.toFixed(4)},${dir.z.toFixed(4)}`
+        : '_default';
+      let arr = groups.get(groupKey);
+      if (!arr) {
+        arr = [];
+        groups.set(groupKey, arr);
+      }
+      arr.push(entry);
+    }
+
+    for (const members of groups.values()) {
+      if (members.length <= 1) continue;
+      const maxOffset = Math.max(...members.map(([, d]) => d.getParams().offset));
+      for (const [, dim] of members) {
+        dim.setParams({ offset: maxOffset });
+      }
+    }
+  }
+
   function applyPortDimLabelDeclutter(): void {
     const portAnnotations: [string, LinearDimension3D][] = [];
     for (const [dimId, dim] of dimAnnotations.entries()) {
@@ -2650,6 +2684,8 @@ export function useMbdPipeAnnotationThree(
         : [];
       if (data.dims?.length)
         renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
+      applyChainOffsetUnification();
+      applyPortDimLabelDeclutter();
       if (data.welds?.length) renderWelds(data.welds);
       if (data.slopes?.length) renderSlopes(data.slopes);
       if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);

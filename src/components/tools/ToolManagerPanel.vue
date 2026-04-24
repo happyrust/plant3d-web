@@ -15,7 +15,6 @@ import { runImportPayloadShadow } from '@/review/services/reviewSnapshotService'
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
 } from '@/review/services/sharedStores';
 import { formatLengthMeters, formatVec3Meters } from '@/utils/unitFormat';
 
@@ -277,18 +276,16 @@ function doImport() {
     });
     const snapshot = shadowResult?.snapshot ?? buildSnapshotFromImportPayload(parsed);
 
-    if (isReviewCommentThreadStoreActive()) {
-      const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
-      if (merge.changed) {
-        getReviewCommentEventLog().push({
-          kind: 'snapshot_merged',
-          key: 'import_package',
-          payload: {
-            comments: snapshot.comments.length,
-            annotations: snapshot.annotations.length,
-          },
-        });
-      }
+    const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+    if (merge.changed) {
+      getReviewCommentEventLog().push({
+        kind: 'snapshot_merged',
+        key: 'import_package',
+        payload: {
+          comments: snapshot.comments.length,
+          annotations: snapshot.annotations.length,
+        },
+      });
     }
 
     store.importJSON(buildReplayPayloadFromImportSnapshot(snapshot));

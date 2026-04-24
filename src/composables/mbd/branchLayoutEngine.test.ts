@@ -103,7 +103,7 @@ describe('branchLayoutEngine', () => {
     expect(cutTubiOffset).toBeLessThan(overallOffset);
   });
 
-  it('uses backend offset_level as the primary lane when the hint already provides one', () => {
+  it('uses backend offset_level additively on top of semantic lane', () => {
     const segmentOffsetLevel0 = resolveSemanticDimOffset(120, 'segment', {
       offset_level: 0,
     } as MbdLayoutHint);
@@ -116,7 +116,7 @@ describe('branchLayoutEngine', () => {
 
     const layerGap = Math.max(120 * 0.85, 60);
     expect(segmentOffsetLevel1 - segmentOffsetLevel0).toBeCloseTo(layerGap, 6);
-    expect(portOffsetLevel1).toBeCloseTo(segmentOffsetLevel1, 6);
+    expect(portOffsetLevel1).toBeGreaterThan(segmentOffsetLevel1);
   });
 
   it('still keeps semantic lane ordering when backend does not provide offset_level', () => {

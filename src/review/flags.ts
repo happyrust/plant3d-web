@@ -4,7 +4,7 @@
  * 命名规范：`REVIEW_<PHASE>_<FEATURE>_<STAGE>`
  *   - PHASE：`A`/`B`/`C`/`D`/`E`/`F`/`G`/`H`
  *   - FEATURE：小写短语（`snapshot_layer` / `comment_thread_store` 等）
- *   - STAGE：`SHADOW` / `DUAL_READ` / `CUTOVER`
+ *   - STAGE：`SHADOW` / `CUTOVER`
  *
  * 优先级（高 → 低）：
  *   1. `localStorage['review.force_legacy']='1'` → 强制全部关闭
@@ -16,7 +16,6 @@
 export type ReviewFlagName =
   | 'REVIEW_B_SNAPSHOT_LAYER_SHADOW'
   | 'REVIEW_B_SNAPSHOT_LAYER_CUTOVER'
-  | 'REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ'
   | 'REVIEW_C_COMMENT_THREAD_STORE_CUTOVER'
   | 'REVIEW_C_EVENT_LOG'
   | 'REVIEW_D_ANNOTATION_KEY_V2'
@@ -29,8 +28,7 @@ export type ReviewFlagName =
 const FLAG_DEFAULTS: Record<ReviewFlagName, boolean> = {
   REVIEW_B_SNAPSHOT_LAYER_SHADOW: false,
   REVIEW_B_SNAPSHOT_LAYER_CUTOVER: false,
-  REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ: true,
-  REVIEW_C_COMMENT_THREAD_STORE_CUTOVER: false,
+  REVIEW_C_COMMENT_THREAD_STORE_CUTOVER: true,
   REVIEW_C_EVENT_LOG: true,
   REVIEW_D_ANNOTATION_KEY_V2: false,
   REVIEW_D_REVIEW_ROUND_FIELDS: false,

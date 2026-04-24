@@ -58,16 +58,6 @@ vi.mock('@/composables/useUserStore', () => ({
   }),
 }));
 
-vi.mock('@/review/services/commentThreadDualRead', () => ({
-  syncInlineToStore: vi.fn(),
-}));
-
-vi.mock('@/review/services/sharedStores', () => ({
-  getReviewCommentEventLog: vi.fn(),
-  getReviewCommentThreadStore: vi.fn(),
-  isReviewCommentThreadStoreActive: vi.fn(() => false),
-}));
-
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: vi.fn() }));
 
 function makeComment(id: string, content: string): AnnotationComment {

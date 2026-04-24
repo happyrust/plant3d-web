@@ -1,4 +1,5 @@
 import type {
+  ReviewSnapshotMeasurementPayload,
   WorkflowAnnotationCommentData,
   WorkflowRecordData,
 } from '@/api/reviewApi';
@@ -207,17 +208,17 @@ function toXeokitMeasurement(
   };
 }
 
-function buildReplayMeasurements(measurements: unknown[]): {
-  measurements: unknown[];
+function buildReplayMeasurements(measurements: ReviewSnapshotMeasurementPayload[]): {
+  measurements: ReviewSnapshotMeasurementPayload[];
   xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
   xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
 } {
-  const fallbackMeasurements: unknown[] = [];
+  const fallbackMeasurements: ReviewSnapshotMeasurementPayload[] = [];
   const xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[] = [];
   const xeokitAngleMeasurements: XeokitAngleMeasurementRecord[] = [];
 
   for (const measurement of measurements) {
-    const normalized = normalizeReplayMeasurement(measurement);
+    const normalized = normalizeReplayMeasurement(measurement as unknown);
     if (!normalized) {
       fallbackMeasurements.push(measurement);
       continue;
@@ -232,7 +233,7 @@ function buildReplayMeasurements(measurements: unknown[]): {
   }
 
   return {
-    measurements: dedupeReplayItems(fallbackMeasurements) as unknown[],
+    measurements: dedupeReplayItems(fallbackMeasurements) as ReviewSnapshotMeasurementPayload[],
     xeokitDistanceMeasurements: dedupeReplayItems(xeokitDistanceMeasurements) as XeokitDistanceMeasurementRecord[],
     xeokitAngleMeasurements: dedupeReplayItems(xeokitAngleMeasurements) as XeokitAngleMeasurementRecord[],
   };

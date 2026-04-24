@@ -22,10 +22,9 @@ describe('SlopeAnnotation3D', () => {
     expect(ann.getParams().text).toBe('1:100');
     ann.setLabelVisible(false);
 
-    // SolveSpaceBillboardVectorText.object3d is a Group (LineSegments + pickProxy)
-    const textGroup = ann.children.find((c: any) => c.isGroup && c.children?.some((cc: any) => cc.isLineSegments)) as any;
-    expect(textGroup).toBeTruthy();
-    expect(textGroup.visible).toBe(false);
+    const textObj = (ann as any).textLabel?.object3d;
+    expect(textObj).toBeTruthy();
+    expect(textObj.visible).toBe(false);
 
     ann.dispose();
     materials.dispose();
