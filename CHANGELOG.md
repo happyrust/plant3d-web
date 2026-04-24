@@ -1,5 +1,17 @@
 # 变更日志
 
+## 2026-04-24（晚间 · Wave 3A）
+
+### 截图能力扩展 + 测试
+
+- **新增** `CaptureOptions` 类型（`kind` + `sourceAnnotationId`），向后兼容 `string` filename 入参
+- **新增** `buildDefaultFilename` 的 3 条分支：
+  - `annotation_shot` + `sourceAnnotationId` → `annotation-<id>-<ts>.png`
+  - `auto_cloud_finish` + `sourceAnnotationId` → `cloud-<id>-<ts>.png`
+  - 其他 → `screenshot-<ts>.png`
+- **新增** `src/composables/useScreenshot.test.ts` — 12 个单测覆盖分支/兼容性/错误/辅助函数
+- **接入** `src/components/tools/AnnotationPanel.vue` 的 `captureCloudAnnotationShot` 已使用新签名
+
 ## 2026-04-24
 
 ### 评论体系 CUTOVER 收尾
