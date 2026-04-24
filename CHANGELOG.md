@@ -1,5 +1,16 @@
 # 变更日志
 
+## 2026-04-24（归档 · 规划文档 + 设计稿）
+
+### 新增规划文档
+
+- `docs/plans/2026-04-23-measurement-unification-plan.md` — 测量体系统一与增强开发计划（经典/Xeokit 双轨合一、类型安全强化、管到管核心算法补齐）
+- `docs/plans/2026-04-24-next-phase-development-plan.md` — 下一阶段开发计划（CUTOVER 收尾 + E2E 补全 + 代码清理 + 下一功能准备）
+
+### 新增设计稿
+
+- `ui/三维校审/annotation-screenshot-feature.pen` — 批注截图特性（CaptureOptions / 自动云收束截图 / 截图缩略图展示）Pencil 设计稿
+
 ## 2026-04-24（晚间 · Wave 3B）
 
 ### 空间距离查询抽屉 UI 按设计稿重构
