@@ -1,0 +1,110 @@
+{
+  "milestone": "M2-restore-unification",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 22,
+    "passed": 0,
+    "failed": 4,
+    "blocked": 18
+  },
+  "passedAssertions": [],
+  "failedAssertions": [
+    {
+      "id": "VAL-RW-001",
+      "reason": "Reviewer workbench surface is reachable, but the real inbox for reviewer user-002 showed 0 tasks while the documented M2 seed fixtures were not discoverable."
+    },
+    {
+      "id": "VAL-RW-007",
+      "reason": "Reviewer role switching normalized the visible identity to backend user-002 instead of preserving the documented frontend alias reviewer_001 on-surface."
+    },
+    {
+      "id": "VAL-RW-011",
+      "reason": "Reviewer workbench opened without hydrated M2 restore context, showing missing project/form binding and no confirmed records on the live surface."
+    },
+    {
+      "id": "VAL-XA-010",
+      "reason": "The documented embed route could only be exercised with an invalid placeholder token, producing InvalidToken before any form-backed restore state appeared."
+    }
+  ],
+  "blockedAssertions": [
+    {
+      "id": "VAL-RW-002",
+      "blockedBy": "Documented M2 reviewer fixture seed-m2-reviewer-confirmed was not discoverable in the live reviewer inbox."
+    },
+    {
+      "id": "VAL-RW-003",
+      "blockedBy": "Confirmed-record replay could not be observed because no documented M2 reviewer seed task was reachable from the browser surface."
+    },
+    {
+      "id": "VAL-RW-004",
+      "blockedBy": "Task hydration/focus behavior is only evidenced by unit tests and could not be black-box validated without the missing M2 reviewer fixture."
+    },
+    {
+      "id": "VAL-RW-005",
+      "blockedBy": "Empty-task clearing depends on first loading the missing confirmed-task fixture seed-m2-reviewer-confirmed."
+    },
+    {
+      "id": "VAL-RW-006",
+      "blockedBy": "Scene clearing on switch to an empty task has no HTTP-visible signal and the required seeded M2 tasks were absent."
+    },
+    {
+      "id": "VAL-RW-008",
+      "blockedBy": "Embed reopen requires a valid user_token and a discoverable FORM-M2-EMBED-001 fixture, neither of which was available."
+    },
+    {
+      "id": "VAL-RW-009",
+      "blockedBy": "Missing/no-form informational state is a UI-only assertion and could not be confirmed from API probes without a valid embed session."
+    },
+    {
+      "id": "VAL-RW-010",
+      "blockedBy": "Workbench hydration from a selected M2 task could not be observed because the documented M2 reviewer fixtures were not present."
+    },
+    {
+      "id": "VAL-RW-012",
+      "blockedBy": "Workflow history visibility requires browser interaction; API probes only exposed raw data and not the user-facing surface."
+    },
+    {
+      "id": "VAL-RW-013",
+      "blockedBy": "Comparison between confirmed-task restore and empty-task clearing was impossible because neither M2 fixture was discoverable."
+    },
+    {
+      "id": "VAL-RW-014",
+      "blockedBy": "Confirmed-records UX assertions are UI-only and could not be established from API data alone."
+    },
+    {
+      "id": "VAL-RW-026",
+      "blockedBy": "No browser-visible M2 task existed to validate the confirmed-records zone on the reviewer workbench."
+    },
+    {
+      "id": "VAL-RW-027",
+      "blockedBy": "Unified ReviewSnapshot replay output is only observable through frontend import side effects, not current HTTP responses."
+    },
+    {
+      "id": "VAL-RW-028",
+      "blockedBy": "Clearing on empty workflow-sync restore is only covered by frontend side effects and unit tests; no black-box signal was available."
+    },
+    {
+      "id": "VAL-RW-029",
+      "blockedBy": "Measurement replay normalization occurs in frontend payload builders and cannot be verified from raw API responses alone."
+    },
+    {
+      "id": "VAL-RW-030",
+      "blockedBy": "Viewer readiness gating and task-change abort behavior are timing-based frontend effects with no current external telemetry."
+    },
+    {
+      "id": "VAL-RW-031",
+      "blockedBy": "Snapshot attachment merge and restore completion are memory-state effects not observable from the available HTTP endpoints."
+    },
+    {
+      "id": "VAL-RW-040",
+      "blockedBy": "The entire M2 bootstrap fixture set (seed-m2-reviewer-confirmed, seed-m2-empty-after-confirmed, seed-m2-embed-restore / FORM-M2-EMBED-001) was absent from live backend data."
+    },
+    {
+      "id": "VAL-RW-041",
+      "blockedBy": "Current validation tooling lacks non-browser telemetry for restore import payloads, panel focus, and scene clear behavior."
+    }
+  ],
+  "appliedUpdates": [],
+  "previousRound": null
+}

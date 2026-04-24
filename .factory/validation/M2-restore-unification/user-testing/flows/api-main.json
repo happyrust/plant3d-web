@@ -1,0 +1,139 @@
+{
+  "surface": "api-main",
+  "summaryStatus": "pass",
+  "assertions": [
+    {
+      "id": "VAL-RW-004",
+      "status": "pass",
+      "reason": "Reviewer task list now exposes seed-m2-reviewer-confirmed for checker user-002, and task detail plus confirmed-record payload provide the seeded restore inputs for the reviewer workbench selection path.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/tasks_user_002.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/task_seed_m2_reviewer_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/records_seed_m2_reviewer_confirmed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-006",
+      "status": "pass",
+      "reason": "The empty follow-on seed task is discoverable and its confirmed-record API returns an empty records array, supplying the black-box empty-state input needed for stale-state clearing validation.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/task_seed_m2_empty_after_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/records_seed_m2_empty_after_confirmed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-008",
+      "status": "pass",
+      "reason": "The embed seed is present and a freshly minted embed token resolves workflow-sync for FORM-M2-EMBED-001 to the expected task and record payload, proving the API-side reopen/restore path is wired.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/embed_url_form_m2_embed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_sync_form_m2_embed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-009",
+      "status": "blocked",
+      "reason": "The live backend now returns a healthy form/task mapping for FORM-M2-EMBED-001, so the missing/no_form branch cannot be exercised from the seeded happy-path fixtures in this retest.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/embed_url_form_m2_embed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_sync_form_m2_embed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-012",
+      "status": "pass",
+      "reason": "All three M2 seed tasks expose workflow history endpoints successfully, confirming the API-side workflow metadata is discoverable for user testing.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_seed_m2_reviewer_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_seed_m2_empty_after_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_seed_m2_embed_restore.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-014",
+      "status": "pass",
+      "reason": "Confirmed-record APIs now return the seeded non-empty and empty datasets for the M2 reviewer and embed fixtures, giving direct black-box evidence for record discoverability.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/records_seed_m2_reviewer_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/records_seed_m2_empty_after_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/records_seed_m2_embed_restore.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-027",
+      "status": "pass",
+      "reason": "workflow-sync now returns a populated record batch and model list for FORM-M2-EMBED-001, so the unified snapshot source payload is available from black-box API evidence.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_sync_form_m2_embed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-028",
+      "status": "pass",
+      "reason": "The empty-task confirmed-record API yields records=[], providing the black-box empty restore payload needed to validate the empty restore branch inputs.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/records_seed_m2_empty_after_confirmed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-029",
+      "status": "pass",
+      "reason": "The reviewer confirmed fixture exposes a seeded measurement record through the confirmed-record API, confirming the measurement replay source data is present on the API surface.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/records_seed_m2_reviewer_confirmed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-030",
+      "status": "blocked",
+      "reason": "Viewer-readiness/task-switch interruption remains a frontend timing behavior; the HTTP surface exposes inputs only, not whether an in-flight restore gets aborted.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/task_seed_m2_reviewer_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/task_seed_m2_empty_after_confirmed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-031",
+      "status": "pass",
+      "reason": "workflow-sync for FORM-M2-EMBED-001 succeeds with attachments=[], proving the API now returns the restore payload shape needed for attachment merge handling on the readonly reopen surface.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_sync_form_m2_embed.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-040",
+      "status": "pass",
+      "reason": "All three M2 bootstrap fixtures are now discoverable on the live backend by task ID and via the reviewer task list, removing the previous seed-data blocker.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/tasks_user_002.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/task_seed_m2_reviewer_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/task_seed_m2_empty_after_confirmed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/task_seed_m2_embed_restore.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-041",
+      "status": "pass",
+      "reason": "The seeded backend now supplies black-box API evidence for the core M2 restore fixtures, workflow-sync form resolution, and confirmed-record payloads needed by this API-only retest.",
+      "evidence": [
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/probe_summary.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/embed_url_form_m2_embed.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main/workflow_sync_form_m2_embed.json"
+      ]
+    }
+  ],
+  "frictions": [
+    "GET /api/review/workflow/sync now returns 405; the live backend requires POST with token and actor metadata for query probes.",
+    "workflow/sync query also requires a minted embed token plus actor payload, so simple unauthenticated curl probes are insufficient for form-backed validation."
+  ],
+  "blockers": [
+    "VAL-RW-009 remains blocked because the seeded environment only provides the healthy FORM-M2-EMBED-001 happy path, not a missing/no_form fixture.",
+    "VAL-RW-030 remains blocked because API-only probes cannot observe frontend viewer readiness or restore cancellation side effects."
+  ],
+  "toolsUsed": [
+    "Read",
+    "Execute (python urllib HTTP probes)"
+  ],
+  "checkedAt": "2026-04-20",
+  "evidenceDir": "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/api-main"
+}

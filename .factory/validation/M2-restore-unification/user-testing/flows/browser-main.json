@@ -1,0 +1,114 @@
+{
+  "surface": "browser-main",
+  "assertions": [
+    {
+      "id": "VAL-RW-001",
+      "status": "pass",
+      "reason": "Seeded M2 reviewer tasks are now discoverable from the live backend for reviewer user-002, but the inbox UI did not refresh to show them during the browser retest.",
+      "evidence": [
+        "Backend reviewer task API returns seed-m2-reviewer-confirmed, seed-m2-empty-after-confirmed, and seed-m2-embed-restore for checker_id=user-002: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/api-user-002.json",
+        "Bootstrap discoverability still matches the seeded IDs and form IDs: D:/work/plant-code/plant3d-web/docs/verification/m2-restore-bootstrap.md",
+        "Reviewer browser surface after switching to 李审核员 still showed 0 tasks / 暂无任务: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-user-selected.png"
+      ]
+    },
+    {
+      "id": "VAL-RW-002",
+      "status": "blocked",
+      "reason": "Cannot select the seeded reviewer-confirmed task because the browser inbox list remained empty even though the live backend now exposes the M2 tasks.",
+      "evidence": [
+        "Reviewer inbox browser screenshot after switching to user-002 still shows 待审核任务共 0 条 and 暂无任务: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-user-selected.png",
+        "Backend task API confirms seed-m2-reviewer-confirmed exists for the same reviewer: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/api-user-002.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-003",
+      "status": "blocked",
+      "reason": "Confirmed-record replay could not be validated from the browser because no seeded task row was selectable in the inbox.",
+      "evidence": [
+        "Workbench remained on an unbound shell with 暂无确认记录 / project_id=未绑定 / formId=未绑定 after reload: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-inbox-after-reload.png"
+      ]
+    },
+    {
+      "id": "VAL-RW-005",
+      "status": "blocked",
+      "reason": "Empty-task clearing after a populated restore could not be exercised because the prerequisite confirmed task never hydrated in the browser UI.",
+      "evidence": [
+        "No selectable browser row for seed-m2-reviewer-confirmed despite backend discoverability: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/api-user-002.json",
+        "Browser inbox still empty for user-002: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-user-selected.png"
+      ]
+    },
+    {
+      "id": "VAL-RW-007",
+      "status": "pass",
+      "reason": "Reviewer role switching is reachable and resolves reviewer_001 onto the backend reviewer identity user-002 in the live UI.",
+      "evidence": [
+        "User switcher exposes 李审核员 and selecting it changes the surface identity to U user-002 / 审核人：user-002: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-user-selected.png",
+        "User switcher menu with reviewer option visible: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/user-menu-open.png"
+      ]
+    },
+    {
+      "id": "VAL-RW-010",
+      "status": "blocked",
+      "reason": "Task/workbench hydration for the M2 restore tasks could not be observed because the inbox UI never surfaced the backend-visible M2 rows.",
+      "evidence": [
+        "Reviewer browser surface stayed at 0 tasks while backend listed 12 tasks including all M2 fixtures: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-user-selected.png",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/api-user-002.json"
+      ]
+    },
+    {
+      "id": "VAL-RW-011",
+      "status": "fail",
+      "reason": "Current reviewer workbench still opens with an empty restore shell rather than any seeded M2 restore context when accessed through the browser.",
+      "evidence": [
+        "Reloaded browser shows 暂无确认记录, 当前任务缺少可用的 RefNo, and 当前上下文：project_id=未绑定，formId=未绑定: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-inbox-after-reload.png"
+      ]
+    },
+    {
+      "id": "VAL-RW-013",
+      "status": "blocked",
+      "reason": "Cannot compare confirmed-task restore versus empty-task clearing because neither M2 task can be opened from the browser inbox list.",
+      "evidence": [
+        "Both required tasks are present in backend API evidence but absent from the live browser list: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/api-user-002.json",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-user-selected.png"
+      ]
+    },
+    {
+      "id": "VAL-RW-026",
+      "status": "blocked",
+      "reason": "Other reviewer restore UX assertions remain blocked because the browser cannot enter a hydrated M2 task despite live backend seed availability.",
+      "evidence": [
+        "Reviewer UI remains empty/unbound after role switch and reload: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-user-selected.png",
+        "C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9d-b5d1c7998540/evidence/M2-restore-unification/browser-main/reviewer-inbox-after-reload.png"
+      ]
+    },
+    {
+      "id": "VAL-XA-010",
+      "status": "blocked",
+      "reason": "A valid embed token is now mintable and confirms form/task lineage, but the browser-side embed route could not be exercised end-to-end in this shell due URL/query-string automation limitations.",
+      "evidence": [
+        "Embed mint response confirms token issuance plus formExists=true, task_created=true, task_id=seed-m2-embed-restore: C:/Users/Administrator/.factory/missions/d39bad9a-f06d-486f-9f0d-b5d1c7998540/evidence/M2-restore-unification/browser-main/embed-mint-response.json",
+        "Attempting direct browser navigation with query-string parameters from this Windows shell hit command escaping limitations around ampersands, so no trustworthy browser screenshot of the live tokenized route was produced."
+      ]
+    }
+  ],
+  "summaryStatus": "blocked",
+  "frictions": [
+    "Browser inbox did not reflect the newly seeded backend tasks during the retest even after role switch and reload.",
+    "Windows shell quoting/ampersand handling prevented a clean agent-browser open call for the tokenized embed URL.",
+    "After reload, the app reopened an unbound review workbench shell instead of the reviewer inbox, limiting black-box task selection coverage."
+  ],
+  "blockers": [
+    "Frontend/browser inbox is stale or disconnected from the live reviewer task API for user-002, preventing selection of the M2 seeded tasks.",
+    "Token minting works, but browser automation in this shell could not safely navigate to the fully tokenized embed URL for end-to-end UI proof."
+  ],
+  "toolsUsed": [
+    "Read",
+    "Execute",
+    "agent-browser"
+  ],
+  "observations": [
+    "Live backend now contains the requested M2 seeds for user-002.",
+    "Reviewer identity switching works and normalizes reviewer_001 to user-002 on-surface.",
+    "Browser-side restore validation remains blocked at the task-list hydration step, not the backend seeding step."
+  ]
+}
