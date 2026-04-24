@@ -362,20 +362,23 @@ export async function resolveActualModelLoadScope(
     const resp = await pdmsGetTypeInfo(normalizedRoot);
     const noun = resp.success ? String(resp.noun || '').trim().toUpperCase() : '';
     const isBranHang = noun === 'BRAN' || noun === 'HANG';
+    const actualLoadRefnos = isBranHang
+      ? uniqStrings([normalizedRoot, ...normalizedComponents])
+      : (normalizedComponents.length > 0 ? normalizedComponents : [normalizedRoot]);
 
     return {
       componentRefnos: normalizedComponents,
-      actualLoadRefnos: isBranHang ? uniqStrings([normalizedRoot, ...normalizedComponents]) : normalizedComponents,
+      actualLoadRefnos,
       rootNoun: noun || null,
-      branHangRootInjected: isBranHang,
+      branHangRootInjected: isBranHang || normalizedComponents.length === 0,
       typeInfoError: resp.success ? null : (resp.error_message || 'pdms type-info 查询失败'),
     };
   } catch (e) {
     return {
       componentRefnos: normalizedComponents,
-      actualLoadRefnos: normalizedComponents,
+      actualLoadRefnos: normalizedComponents.length > 0 ? normalizedComponents : [normalizedRoot],
       rootNoun: null,
-      branHangRootInjected: false,
+      branHangRootInjected: normalizedComponents.length === 0,
       typeInfoError: e instanceof Error ? e.message : String(e),
     };
   }
@@ -801,6 +804,97 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           (loadScope.rootNoun ? ` root_noun=${loadScope.rootNoun}` : '')
       );
 
+      const anyViewer = viewer as unknown as {
+        __dtxLayer?: unknown
+        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
+        scene?: {
+          ensureRefnos?: (ids: string[], options?: { computeAabb?: boolean }) => void
+          getAABB?: (ids: string[]) => unknown
+        }
+        cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
+      };
+      const dtxLayer = anyViewer.__dtxLayer as any;
+      if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型');
+
+      if (loadScope.actualLoadRefnos.length === 0) {
+        statusMessage.value = `refno=${normalizedRoot} 无可见实例`;
+        progress.value = 100;
+        syncGlobalLoadStatus();
+        consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 当前无可见实例，无需回退全量加载`);
+        return true;
+      }
+
+      if (AUTO_GENERATION_ENABLED) {
+        try {
+          const loadRefnos = loadScope.actualLoadRefnos;
+          statusMessage.value = `从后端实时数据加载 dbno=${dbno}...`;
+          progress.value = 20;
+          syncGlobalLoadStatus();
+
+          const backendResult = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
+            lodAssetKey: 'L1',
+            debug: false,
+            dataSource: 'backend',
+            forceReloadRefnos: loadRefnos,
+          });
+          anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
+
+          if (typeof anyViewer.scene?.ensureRefnos === 'function') {
+            anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
+          }
+
+          if (loadOptions?.flyTo) {
+            try {
+              const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
+              const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+              if (aabb) {
+                anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+              }
+            } catch {
+              // ignore flyTo errors
+            }
+          }
+
+          lastLoadDebug.value = {
+            refno: normalizedRoot,
+            dbno,
+            visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+            componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
+            loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+            scopeDecision: {
+              rootNoun: loadScope.rootNoun,
+              branHangRootInjected: loadScope.branHangRootInjected,
+              typeInfoError: loadScope.typeInfoError,
+            },
+            result: {
+              loadedRefnos: backendResult.loadedRefnos,
+              skippedRefnos: backendResult.skippedRefnos,
+              loadedObjects: backendResult.loadedObjects,
+            },
+            ms: Date.now() - startedAt,
+          };
+
+          if (backendResult.loadedObjects > 0) {
+            loadedRoots.add(normalizedRoot);
+            statusMessage.value = '加载完成 (Backend)';
+            progress.value = 100;
+            syncGlobalLoadStatus();
+            emitToast({ message: `[成功] 已通过后端实时数据加载 ${backendResult.loadedObjects} 个几何实例`, level: 'success' });
+            return true;
+          }
+
+          consoleStore.addLog(
+            'warning',
+            `[model-load] 后端实时数据未返回可绘制实例 refno=${normalizedRoot} dbno=${dbno}，继续尝试 Parquet/JSON`
+          );
+        } catch (backendError) {
+          consoleStore.addLog(
+            'warning',
+            `[model-load] 后端实时加载失败，继续尝试 Parquet/JSON dbno=${dbno} err=${backendError instanceof Error ? backendError.message : String(backendError)}`
+          );
+        }
+      }
+
       // ========== Parquet 优先路径（不可用时自动导出） ==========
       const parquetLoader = useDbnoInstancesParquetLoader();
       let parquetAvailable = await parquetLoader.isParquetAvailable(dbno);
@@ -816,22 +910,7 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         progress.value = 20;
         syncGlobalLoadStatus();
 
-        const anyViewer = viewer as unknown as {
-          __dtxLayer?: unknown
-          __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
-        };
-        const dtxLayer = anyViewer.__dtxLayer as any;
-        if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型');
-
         const loadRefnos = loadScope.actualLoadRefnos;
-
-        if (loadRefnos.length === 0) {
-          statusMessage.value = `refno=${normalizedRoot} 无可见实例`;
-          progress.value = 100;
-          syncGlobalLoadStatus();
-          consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 当前无可见实例，无需回退全量加载`);
-          return true;
-        }
 
         statusMessage.value = `加载 ${loadRefnos.length} 个 refno (Parquet)...`;
         progress.value = 60;
@@ -922,22 +1001,76 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         return true;
       }
 
-      const anyViewer = viewer as unknown as {
-        __dtxLayer?: unknown
-        __dtxAfterInstancesLoaded?: (dbno: number, loadedRefnos: string[]) => void
-        scene?: { getAABB?: (ids: string[]) => unknown }
-        cameraFlight?: { flyTo?: (options: { aabb?: unknown; duration?: number; fit?: boolean }) => void }
-      };
-      const dtxLayer = anyViewer.__dtxLayer as any;
-      if (!dtxLayer) throw new Error('DTXLayer 未初始化，无法加载模型');
-
       const loadRefnos = loadScope.actualLoadRefnos;
-      if (loadRefnos.length === 0) {
-        statusMessage.value = `refno=${normalizedRoot} 无可见实例`;
-        progress.value = 100;
-        syncGlobalLoadStatus();
-        consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 无可见实例，跳过 JSON fallback`);
-        return true;
+
+      if (AUTO_GENERATION_ENABLED) {
+        try {
+          statusMessage.value = `从后端实时数据加载 dbno=${dbno}...`;
+          progress.value = 20;
+          syncGlobalLoadStatus();
+
+          const backendResult = await loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, loadRefnos, {
+            lodAssetKey: 'L1',
+            debug: false,
+            dataSource: 'backend',
+            forceReloadRefnos: loadRefnos,
+          });
+          anyViewer.__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
+
+          if (typeof anyViewer.scene?.ensureRefnos === 'function') {
+            anyViewer.scene.ensureRefnos(loadRefnos, { computeAabb: false });
+          }
+
+          if (loadOptions?.flyTo) {
+            try {
+              const flyTargets = loadRefnos.length > 5000 ? loadRefnos.slice(0, 5000) : loadRefnos;
+              const aabb = anyViewer.scene?.getAABB?.(flyTargets) ?? null;
+              if (aabb) {
+                anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+              }
+            } catch {
+              // ignore flyTo errors
+            }
+          }
+
+          lastLoadDebug.value = {
+            refno: normalizedRoot,
+            dbno,
+            visibleInsts: { ok: visibleOk, count: visibleRefnos.length, error: visibleErr },
+            componentRefnos: { count: loadScope.componentRefnos.length, sample: loadScope.componentRefnos.slice(0, 10) },
+            loadRefnos: { count: loadRefnos.length, sample: loadRefnos.slice(0, 10) },
+            scopeDecision: {
+              rootNoun: loadScope.rootNoun,
+              branHangRootInjected: loadScope.branHangRootInjected,
+              typeInfoError: loadScope.typeInfoError,
+            },
+            result: {
+              loadedRefnos: backendResult.loadedRefnos,
+              skippedRefnos: backendResult.skippedRefnos,
+              loadedObjects: backendResult.loadedObjects,
+            },
+            ms: Date.now() - startedAt,
+          };
+
+          if (backendResult.loadedObjects > 0) {
+            loadedRoots.add(normalizedRoot);
+            statusMessage.value = '加载完成 (Backend)';
+            progress.value = 100;
+            syncGlobalLoadStatus();
+            emitToast({ message: `[成功] 已通过后端实时数据加载 ${backendResult.loadedObjects} 个几何实例`, level: 'success' });
+            return true;
+          }
+
+          consoleStore.addLog(
+            'warning',
+            `[model-load] 后端实时数据未返回可绘制实例 refno=${normalizedRoot} dbno=${dbno}`
+          );
+        } catch (backendError) {
+          consoleStore.addLog(
+            'warning',
+            `[model-load] 后端实时加载失败，继续尝试 JSON fallback dbno=${dbno} err=${backendError instanceof Error ? backendError.message : String(backendError)}`
+          );
+        }
       }
 
       const jsonFallback = await prepareJsonManifestForFallback(

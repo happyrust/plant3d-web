@@ -37,3 +37,23 @@ export function formatVec3Meters(v: Vec3, unit: LengthUnit, precision: number, o
   return opts?.suffix === false ? text : `${text}${unit}`;
 }
 
+/**
+ * PDMS/E3D 控制台位置字符串格式。
+ *
+ * 形如：`X 3341.63mm Y 8330.57mm Z 13301.33mm`
+ * - X/Y/Z 作为轴前缀
+ * - 单位内联在每个数值之后
+ * - 不含括号、不含逗号分隔
+ *
+ * @param v_m        以米为单位的三维位置
+ * @param unit       目标显示单位，默认 'mm'（E3D 默认）
+ * @param precision  小数位数，默认 2（E3D 默认）
+ */
+export function formatPdmsPos(v_m: Vec3, unit: LengthUnit = 'mm', precision = 2): string {
+  const x = convertLength(v_m[0], 'm', unit);
+  const y = convertLength(v_m[1], 'm', unit);
+  const z = convertLength(v_m[2], 'm', unit);
+  const p = Math.max(0, Math.min(6, Math.floor(Number(precision) || 0)));
+  return `X ${x.toFixed(p)}${unit} Y ${y.toFixed(p)}${unit} Z ${z.toFixed(p)}${unit}`;
+}
+

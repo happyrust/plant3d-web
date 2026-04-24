@@ -25,19 +25,28 @@ type PtsetVisualObject = {
 export type UsePtsetVisualizationThreeReturn = {
   visualObjects: Ref<Map<string, PtsetVisualObject>>
   isVisible: Ref<boolean>
+  panelContextRefno: Ref<string | null>
   currentRefno: Ref<string | null>
   currentResponse: Ref<PtsetResponse | null>
   showCrosses: Ref<boolean>
   showLabels: Ref<boolean>
   showArrows: Ref<boolean>
   renderPtset: (refno: string, response: PtsetResponse) => void
+  appendPtset: (refno: string, response: PtsetResponse, options?: { setCurrent?: boolean }) => void
+  clearVisualization: () => void
   clearAll: () => void
+  setPanelContext: (refno: string | null) => void
   setVisible: (visible: boolean) => void
   setCrossesVisible: (visible: boolean) => void
   setLabelsVisible: (visible: boolean) => void
   setArrowsVisible: (visible: boolean) => void
   flyToPtset: () => void
   updateLabelPositions: () => void
+}
+
+type RenderedPtsetEntry = {
+  refno: string
+  response: PtsetResponse
 }
 
 function formatCoord(pt: [number, number, number]): string {
@@ -184,8 +193,10 @@ export function usePtsetVisualizationThree(
   const unitSettings = useUnitSettingsStore();
   const visualObjects = ref<Map<string, PtsetVisualObject>>(new Map());
   const isVisible = ref(false);
+  const panelContextRefno = ref<string | null>(null);
   const currentRefno = ref<string | null>(null);
   const currentResponse = ref<PtsetResponse | null>(null);
+  const renderedEntries = ref<RenderedPtsetEntry[]>([]);
 
   const showCrosses = ref(true);
   const showLabels = ref(true);
@@ -206,7 +217,7 @@ export function usePtsetVisualizationThree(
     }
   }
 
-  function clearAll() {
+  function disposeVisualObjects() {
     for (const obj of visualObjects.value.values()) {
       try {
         obj.cross?.geometry.dispose()
@@ -218,15 +229,25 @@ export function usePtsetVisualizationThree(
       } catch { /* ignore */ }
       try { obj.labelDiv?.remove(); } catch { /* ignore */ }
     }
+  }
+
+  function clearVisualization() {
+    disposeVisualObjects();
     visualObjects.value.clear();
     currentRefno.value = null;
     currentResponse.value = null;
+    renderedEntries.value = [];
     isVisible.value = false;
 
     for (const child of [...group.children]) {
       group.remove(child);
     }
     requestRender?.();
+  }
+
+  function clearAll() {
+    clearVisualization();
+    panelContextRefno.value = null;
   }
 
   function applyVisibility() {
@@ -265,36 +286,21 @@ export function usePtsetVisualizationThree(
     }
   }
 
-  function renderPtset(refno: string, response: PtsetResponse) {
+  function appendEntry(refno: string, response: PtsetResponse, unitFactor: number, policy: string, targetUnit: string, displayUnit: string, precision: number, gm: Matrix4) {
     const viewer = dtxViewerRef.value;
     const container = labelContainerRef.value;
-    if (!viewer || !container) return;
-
-    ensureGroupAttached();
-    clearAll();
-
-    currentRefno.value = refno;
-    currentResponse.value = response;
-
-    if (!response.success || response.ptset.length === 0) {
-      return;
-    }
-
-    // DTX 使用 shader uniform 的 globalModelMatrix 做全局变换；ptset 作为普通 Three 对象需要显式对齐。
-    const gm = getGlobalModelMatrix?.() || identityMatrix;
-    group.matrix.copy(gm);
-    group.updateMatrixWorld(true);
-
-    const unitFactor = response.unit_info?.conversion_factor || 1;
-    const targetUnit = response.unit_info?.target_unit || 'unknown';
-    const policy = unitSettings.ptsetDisplayPolicy.value;
-    const displayUnit = unitSettings.displayUnit.value;
-    const precision = unitSettings.precision.value;
+    if (!viewer || !container) return false;
 
     const normalizedRefno = refno.trim().replace('/', '_');
-    const dbno = getDbnumByRefno(normalizedRefno);
-    const refnoTransform = getDtxRefnoTransform(dbno, normalizedRefno);
+    let dbno: number | null = null;
+    try {
+      dbno = getDbnumByRefno(normalizedRefno);
+    } catch {
+      dbno = null;
+    }
+    const refnoTransform = dbno != null ? getDtxRefnoTransform(dbno, normalizedRefno) : undefined;
     const worldTransform = refnoTransform || response.world_transform;
+    let hasAny = false;
 
     for (const point of response.ptset) {
       const objId = `ptset_${normalizedRefno}_${point.number}`;
@@ -315,19 +321,17 @@ export function usePtsetVisualizationThree(
       const scenePtV = new Vector3(worldPt[0], worldPt[1], worldPt[2]).applyMatrix4(gm);
       const scenePt: Vec3 = [scenePtV.x, scenePtV.y, scenePtV.z];
 
-      // crosses
       const crossSize = Math.max(0.2, (point.pbore * unitFactor) * 0.15 || 0.6);
       const cross = generateCrossLines(worldPt, crossSize);
       const crossGeo = new BufferGeometry();
       crossGeo.setAttribute('position', new BufferAttribute(new Float32Array(cross.positions), 3));
       crossGeo.setIndex(new BufferAttribute(new Uint16Array(cross.indices), 1));
-      const crossMat = new LineBasicMaterial({ color: 0x22c55e })
-      ;(crossMat as any).depthTest = false;
+      const crossMat = new LineBasicMaterial({ color: 0x22c55e });
+      (crossMat as any).depthTest = false;
       const crossLine = new LineSegments(crossGeo, crossMat);
       crossLine.renderOrder = 980;
       group.add(crossLine);
 
-      // arrows
       let arrowLine: LineSegments | undefined;
       if (worldDir) {
         const arrowLen = Math.max(0.6, (point.pbore * unitFactor) * 0.6 || 2.0);
@@ -336,15 +340,14 @@ export function usePtsetVisualizationThree(
           const arrowGeo = new BufferGeometry();
           arrowGeo.setAttribute('position', new BufferAttribute(new Float32Array(arrow.positions), 3));
           arrowGeo.setIndex(new BufferAttribute(new Uint16Array(arrow.indices), 1));
-          const arrowMat = new LineBasicMaterial({ color: 0xf59e0b })
-          ;(arrowMat as any).depthTest = false;
+          const arrowMat = new LineBasicMaterial({ color: 0xf59e0b });
+          (arrowMat as any).depthTest = false;
           arrowLine = new LineSegments(arrowGeo, arrowMat);
           arrowLine.renderOrder = 980;
           group.add(arrowLine);
         }
       }
 
-      // label
       const labelDiv = document.createElement('div');
       labelDiv.className = 'ptset-label';
       labelDiv.setAttribute('data-ptset-point', String(point.number));
@@ -383,12 +386,88 @@ export function usePtsetVisualizationThree(
         arrow: arrowLine,
         labelDiv,
       });
+      hasAny = true;
     }
 
-    isVisible.value = true;
+    return hasAny;
+  }
+
+  function renderEntries(entries: RenderedPtsetEntry[], current: RenderedPtsetEntry | null) {
+    const viewer = dtxViewerRef.value;
+    const container = labelContainerRef.value;
+    if (!viewer || !container) return;
+
+    ensureGroupAttached();
+    disposeVisualObjects();
+    visualObjects.value.clear();
+    for (const child of [...group.children]) {
+      group.remove(child);
+    }
+    renderedEntries.value = entries.map((entry) => ({ ...entry }));
+
+    // DTX 使用 shader uniform 的 globalModelMatrix 做全局变换；ptset 作为普通 Three 对象需要显式对齐。
+    const gm = getGlobalModelMatrix?.() || identityMatrix;
+    group.matrix.copy(gm);
+    group.updateMatrixWorld(true);
+
+    const unitSource = current?.response
+      ?? entries.find((entry) => entry.response.success && entry.response.ptset.length > 0)?.response
+      ?? entries[0]?.response
+      ?? null;
+    const unitFactor = unitSource?.unit_info?.conversion_factor || 1;
+    const targetUnit = unitSource?.unit_info?.target_unit || 'unknown';
+    const policy = unitSettings.ptsetDisplayPolicy.value;
+    const displayUnit = unitSettings.displayUnit.value;
+    const precision = unitSettings.precision.value;
+    let hasAny = false;
+    for (const entry of entries) {
+      if (!entry.response.success || entry.response.ptset.length === 0) {
+        continue;
+      }
+      const entryHasAny = appendEntry(
+        entry.refno,
+        entry.response,
+        unitFactor,
+        policy,
+        targetUnit,
+        displayUnit,
+        precision,
+        gm,
+      );
+      hasAny = hasAny || entryHasAny;
+    }
+
+    currentRefno.value = current?.refno ?? entries.at(-1)?.refno ?? null;
+    currentResponse.value = current?.response ?? entries.at(-1)?.response ?? null;
+    isVisible.value = hasAny;
     applyVisibility();
     updateLabelPositions();
     requestRender?.();
+  }
+
+  function renderPtset(refno: string, response: PtsetResponse) {
+    if (!panelContextRefno.value) {
+      panelContextRefno.value = refno;
+    }
+    renderEntries([{ refno, response }], { refno, response });
+  }
+
+  function appendPtset(refno: string, response: PtsetResponse, options?: { setCurrent?: boolean }) {
+    if (!panelContextRefno.value) {
+      panelContextRefno.value = refno;
+    }
+    const nextEntries = [...renderedEntries.value, { refno, response }];
+    const current = options?.setCurrent === false
+      ? (currentRefno.value && currentResponse.value
+        ? { refno: currentRefno.value, response: currentResponse.value }
+        : nextEntries.at(-1) ?? null)
+      : { refno, response };
+    renderEntries(nextEntries, current);
+  }
+
+  function setPanelContext(refno: string | null) {
+    const normalized = String(refno ?? '').trim();
+    panelContextRefno.value = normalized || null;
   }
 
   function setVisible(visible: boolean) {
@@ -438,7 +517,7 @@ export function usePtsetVisualizationThree(
 
   watch(dtxViewerRef, (viewer, prev) => {
     if (prev && !viewer) {
-      clearAll();
+      clearVisualization();
     }
   });
 
@@ -450,21 +529,28 @@ export function usePtsetVisualizationThree(
       unitSettings.ptsetDisplayPolicy.value,
     ],
     () => {
-      if (!currentRefno.value || !currentResponse.value) return;
-      renderPtset(currentRefno.value, currentResponse.value);
+      if (renderedEntries.value.length === 0) return;
+      const current = currentRefno.value && currentResponse.value
+        ? { refno: currentRefno.value, response: currentResponse.value }
+        : renderedEntries.value.at(-1) ?? null;
+      renderEntries(renderedEntries.value, current);
     }
   );
 
   return {
     visualObjects,
     isVisible,
+    panelContextRefno,
     currentRefno,
     currentResponse,
     showCrosses,
     showLabels,
     showArrows,
     renderPtset,
+    appendPtset,
+    clearVisualization,
     clearAll,
+    setPanelContext,
     setVisible,
     setCrossesVisible,
     setLabelsVisible,

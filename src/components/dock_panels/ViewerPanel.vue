@@ -520,6 +520,8 @@ const isMeasureModeActive = computed(() => {
     mode === 'measure_angle' ||
     mode === 'xeokit_measure_distance' ||
     mode === 'xeokit_measure_angle' ||
+    mode === 'xeokit_measure_elevation_point' ||
+    mode === 'xeokit_measure_elevation_delta' ||
     mode === 'measure_object_to_object' ||
     mode === 'measure_pipe_to_structure' ||
     mode === 'measure_pipe_to_pipe'
@@ -528,7 +530,9 @@ const isMeasureModeActive = computed(() => {
 const isXeokitMeasureMode = computed(() => {
   return (
     store.toolMode.value === 'xeokit_measure_distance' ||
-    store.toolMode.value === 'xeokit_measure_angle'
+    store.toolMode.value === 'xeokit_measure_angle' ||
+    store.toolMode.value === 'xeokit_measure_elevation_point' ||
+    store.toolMode.value === 'xeokit_measure_elevation_delta'
   );
 });
 const activeMeasureTools = computed(() => {
@@ -1164,11 +1168,22 @@ async function locateShowSelected(): Promise<void> {
   requestRender();
 }
 
-type MeasureMode = 'measure_distance' | 'measure_angle' | 'xeokit_measure_distance' | 'xeokit_measure_angle' | 'none';
+type MeasureMode =
+  | 'measure_distance'
+  | 'measure_angle'
+  | 'xeokit_measure_distance'
+  | 'xeokit_measure_angle'
+  | 'xeokit_measure_elevation_point'
+  | 'xeokit_measure_elevation_delta'
+  | 'none';
 
 function setMeasureMode(next: MeasureMode): void {
   const mappedMode =
-    next === 'measure_distance' ? 'xeokit_measure_distance' : next === 'measure_angle' ? 'xeokit_measure_angle' : next;
+    next === 'measure_distance'
+      ? 'xeokit_measure_distance'
+      : next === 'measure_angle'
+        ? 'xeokit_measure_angle'
+        : next;
 
   if (mappedMode === 'none') {
     store.setToolMode('none');
@@ -1178,7 +1193,12 @@ function setMeasureMode(next: MeasureMode): void {
   if (store.toolMode.value === mappedMode) {
     store.setToolMode('none');
   } else {
-    if (mappedMode === 'xeokit_measure_distance' || mappedMode === 'xeokit_measure_angle') {
+    if (
+      mappedMode === 'xeokit_measure_distance' ||
+      mappedMode === 'xeokit_measure_angle' ||
+      mappedMode === 'xeokit_measure_elevation_point' ||
+      mappedMode === 'xeokit_measure_elevation_delta'
+    ) {
       xeokitMeasurementToolsRef.value?.activate(mappedMode);
       if (!xeokitMeasurementToolsRef.value) {
         store.setToolMode(mappedMode);
@@ -1193,7 +1213,9 @@ function setMeasureMode(next: MeasureMode): void {
 function exitXeokitMeasureMode(): void {
   if (
     store.toolMode.value !== 'xeokit_measure_distance' &&
-    store.toolMode.value !== 'xeokit_measure_angle'
+    store.toolMode.value !== 'xeokit_measure_angle' &&
+    store.toolMode.value !== 'xeokit_measure_elevation_point' &&
+    store.toolMode.value !== 'xeokit_measure_elevation_delta'
   ) {
     return;
   }
@@ -1232,6 +1254,16 @@ function onLeftMeasureDistanceClick(): void {
 
 function onLeftMeasureAngleClick(): void {
   setMeasureMode('xeokit_measure_angle');
+  leftToolbarOpenMeasureMenu.value = false;
+}
+
+function onLeftMeasureElevationPointClick(): void {
+  setMeasureMode('xeokit_measure_elevation_point');
+  leftToolbarOpenMeasureMenu.value = false;
+}
+
+function onLeftMeasureElevationDeltaClick(): void {
+  setMeasureMode('xeokit_measure_elevation_delta');
   leftToolbarOpenMeasureMenu.value = false;
 }
 
@@ -1304,6 +1336,26 @@ function syncMbdAnnotationsToInteraction(): void {
     annotationSystem.registerExternalAnnotation(interactionId, bend as any);
     nextIds.add(interactionId);
   }
+  for (const [clearanceId, clearance] of mbdPipeVis.getPipeClearanceAnnotations()) {
+    const interactionId = `mbd_pipe_clearance_${clearanceId}`;
+    annotationSystem.registerExternalAnnotation(interactionId, clearance as any);
+    nextIds.add(interactionId);
+  }
+  for (const [clearanceId, clearance] of mbdPipeVis.getStructureClearanceAnnotations()) {
+    const interactionId = `mbd_structure_clearance_${clearanceId}`;
+    annotationSystem.registerExternalAnnotation(interactionId, clearance as any);
+    nextIds.add(interactionId);
+  }
+  for (const [elevationId, elevation] of mbdPipeVis.getElevationAnnotations()) {
+    const interactionId = `mbd_elevation_${elevationId}`;
+    annotationSystem.registerExternalAnnotation(interactionId, elevation as any);
+    nextIds.add(interactionId);
+  }
+  for (const [envelopeId, envelope] of mbdPipeVis.getEnvelopeObjects()) {
+    const interactionId = `mbd_envelope_${envelopeId}`;
+    annotationSystem.registerExternalAnnotation(interactionId, envelope as any);
+    nextIds.add(interactionId);
+  }
 
   mbdInteractionRegistry.sync(
     nextIds,
@@ -1346,6 +1398,12 @@ function handleRibbonCommand(commandId: string) {
     case 'measurement.distance':
       setMeasureMode('xeokit_measure_distance');
       return;
+    case 'measurement.elevation_point':
+      setMeasureMode('xeokit_measure_elevation_point');
+      return;
+    case 'measurement.elevation_delta':
+      setMeasureMode('xeokit_measure_elevation_delta');
+      return;
     case 'measurement.angle':
       setMeasureMode('xeokit_measure_angle');
       return;
@@ -1365,7 +1423,9 @@ function handleRibbonCommand(commandId: string) {
     case 'measurement.clear':
       if (
         store.toolMode.value === 'xeokit_measure_distance' ||
-        store.toolMode.value === 'xeokit_measure_angle'
+        store.toolMode.value === 'xeokit_measure_angle' ||
+        store.toolMode.value === 'xeokit_measure_elevation_point' ||
+        store.toolMode.value === 'xeokit_measure_elevation_delta'
       ) {
         xeokitMeasurementToolsRef.value?.clearMeasurements();
       } else {
@@ -2484,6 +2544,16 @@ onMounted(async () => {
         const dtxViewer2 = dtxViewerRef.value;
         if (!dtxViewer2) return;
 
+        if (ev.type === 'select' || ev.type === 'click') {
+          mbdPipeVisRef.value?.highlightItem(mbdDimId);
+        } else if (
+          ev.type === 'deselect' &&
+          mbdPipeVisRef.value &&
+          mbdPipeVisRef.value.activeItemId.value === mbdDimId
+        ) {
+          mbdPipeVisRef.value?.highlightItem(null);
+        }
+
         if (ev.type === 'drag-start') {
           dtxViewer2.controls.enabled = false;
           return;
@@ -2583,8 +2653,19 @@ onMounted(async () => {
 
       // MBD weld 处理（session-only 交互：label 拖拽）
       if (id.startsWith('mbd_weld_')) {
+        const mbdWeldId = id.slice('mbd_weld_'.length);
         const dtxViewer2 = dtxViewerRef.value;
         if (!dtxViewer2) return;
+
+        if (ev.type === 'select' || ev.type === 'click') {
+          mbdPipeVisRef.value?.highlightItem(mbdWeldId);
+        } else if (
+          ev.type === 'deselect' &&
+          mbdPipeVisRef.value &&
+          mbdPipeVisRef.value.activeItemId.value === mbdWeldId
+        ) {
+          mbdPipeVisRef.value?.highlightItem(null);
+        }
 
         if (ev.type === 'drag-start') {
           dtxViewer2.controls.enabled = false;
@@ -2618,8 +2699,19 @@ onMounted(async () => {
 
       // MBD slope 处理（session-only 交互：label 拖拽）
       if (id.startsWith('mbd_slope_')) {
+        const mbdSlopeId = id.slice('mbd_slope_'.length);
         const dtxViewer2 = dtxViewerRef.value;
         if (!dtxViewer2) return;
+
+        if (ev.type === 'select' || ev.type === 'click') {
+          mbdPipeVisRef.value?.highlightItem(mbdSlopeId);
+        } else if (
+          ev.type === 'deselect' &&
+          mbdPipeVisRef.value &&
+          mbdPipeVisRef.value.activeItemId.value === mbdSlopeId
+        ) {
+          mbdPipeVisRef.value?.highlightItem(null);
+        }
 
         if (ev.type === 'drag-start') {
           dtxViewer2.controls.enabled = false;
@@ -2653,8 +2745,19 @@ onMounted(async () => {
 
       // MBD bend 处理（session-only 交互：label 拖拽）
       if (id.startsWith('mbd_bend_')) {
+        const mbdBendId = id.slice('mbd_bend_'.length);
         const dtxViewer2 = dtxViewerRef.value;
         if (!dtxViewer2) return;
+
+        if (ev.type === 'select' || ev.type === 'click') {
+          mbdPipeVisRef.value?.highlightItem(mbdBendId);
+        } else if (
+          ev.type === 'deselect' &&
+          mbdPipeVisRef.value &&
+          mbdPipeVisRef.value.activeItemId.value === mbdBendId
+        ) {
+          mbdPipeVisRef.value?.highlightItem(null);
+        }
 
         if (ev.type === 'drag-start') {
           dtxViewer2.controls.enabled = false;
@@ -2681,6 +2784,32 @@ onMounted(async () => {
             } catch { /* ignore */ }
             requestRender();
           }
+        }
+        return;
+      }
+
+      if (
+        id.startsWith('mbd_pipe_clearance_') ||
+        id.startsWith('mbd_structure_clearance_') ||
+        id.startsWith('mbd_elevation_') ||
+        id.startsWith('mbd_envelope_')
+      ) {
+        const targetId = id.startsWith('mbd_pipe_clearance_')
+          ? id.slice('mbd_pipe_clearance_'.length)
+          : id.startsWith('mbd_structure_clearance_')
+            ? id.slice('mbd_structure_clearance_'.length)
+            : id.startsWith('mbd_elevation_')
+              ? id.slice('mbd_elevation_'.length)
+              : id.slice('mbd_envelope_'.length);
+
+        if (ev.type === 'select' || ev.type === 'click') {
+          mbdPipeVisRef.value?.highlightItem(targetId);
+        } else if (
+          ev.type === 'deselect' &&
+          mbdPipeVisRef.value &&
+          mbdPipeVisRef.value.activeItemId.value === targetId
+        ) {
+          mbdPipeVisRef.value?.highlightItem(null);
         }
         return;
       }
@@ -3095,6 +3224,26 @@ onMounted(async () => {
     for (const [slopeId, slope] of slopeMap) {
       const interactionId = `mbd_slope_${slopeId}`;
       annotationSystemRef.value.registerExternalAnnotation(interactionId, slope as any);
+    }
+    const pipeClearanceMap = mbdPipeVisRef.value.getPipeClearanceAnnotations();
+    for (const [clearanceId, clearance] of pipeClearanceMap) {
+      const interactionId = `mbd_pipe_clearance_${clearanceId}`;
+      annotationSystemRef.value.registerExternalAnnotation(interactionId, clearance as any);
+    }
+    const structureClearanceMap = mbdPipeVisRef.value.getStructureClearanceAnnotations();
+    for (const [clearanceId, clearance] of structureClearanceMap) {
+      const interactionId = `mbd_structure_clearance_${clearanceId}`;
+      annotationSystemRef.value.registerExternalAnnotation(interactionId, clearance as any);
+    }
+    const elevationMap = mbdPipeVisRef.value.getElevationAnnotations();
+    for (const [elevationId, elevation] of elevationMap) {
+      const interactionId = `mbd_elevation_${elevationId}`;
+      annotationSystemRef.value.registerExternalAnnotation(interactionId, elevation as any);
+    }
+    const envelopeMap = mbdPipeVisRef.value.getEnvelopeObjects();
+    for (const [envelopeId, envelope] of envelopeMap) {
+      const interactionId = `mbd_envelope_${envelopeId}`;
+      annotationSystemRef.value.registerExternalAnnotation(interactionId, envelope as any);
     }
   }
 
@@ -3713,6 +3862,8 @@ onMounted(async () => {
         emitToast({ message: `正在加载点集数据: ${request.refno}` });
         // ptset 按需获取：尽量带上 dbno + batch_id（来自 meta_{dbno}.json）以确保与当前模型快照一致。
         const normalized = String(request.refno ?? '').trim().replace('/', '_');
+        const refnoKey = normalizeRefnoKeyLike(request.refno) || request.refno;
+        ptsetVis.setPanelContext(refnoKey);
         let dbno: number | null = null;
         try {
           dbno = getDbnumByRefno(normalized);
@@ -3721,12 +3872,12 @@ onMounted(async () => {
         }
         let batchId: string | null = null;
 
-        const response = await pdmsGetPtsetWithContext(request.refno, {
+        const response = await pdmsGetPtsetWithContext(refnoKey, {
           dbno: dbno ?? undefined,
           batchId,
         });
         if (response.success && response.ptset.length > 0) {
-          ptsetVis.renderPtset(request.refno, response);
+          ptsetVis.renderPtset(refnoKey, response);
           ptsetVis.flyToPtset();
           emitToast({
             message: `已显示 ${response.ptset.length} 个连接点`,
@@ -3809,12 +3960,11 @@ onMounted(async () => {
         });
         if (resp.success && resp.data) {
           if (mbdPipeVis.mbdViewMode.value === 'layout_first' && !resp.data.layout_result) {
-            console.warn('[mbd-pipe] layout_first 未拿到 layout_result，自动回退到 construction', {
+            console.warn('[mbd-pipe] layout_first 未拿到 layout_result，保持当前模式并回退到 fallback 渲染', {
               branch_refno: resp.data.branch_refno,
             });
-            mbdPipeVis.applyModeDefaults('construction');
             emitToast({
-              message: '后端未返回版面排布结果，已按施工模式显示',
+              message: '后端未返回版面排布结果，当前按 fallback 渲染',
             });
           }
           if (resp.data.debug_info && (isDev || isMbdApiDebugFromUrl())) {
@@ -3912,7 +4062,9 @@ onMounted(async () => {
       }
       if (
         store.toolMode.value === 'xeokit_measure_distance' ||
-        store.toolMode.value === 'xeokit_measure_angle'
+        store.toolMode.value === 'xeokit_measure_angle' ||
+        store.toolMode.value === 'xeokit_measure_elevation_point' ||
+        store.toolMode.value === 'xeokit_measure_elevation_delta'
       ) {
         exitXeokitMeasureMode();
         return;
@@ -4320,6 +4472,20 @@ onUnmounted(() => {
             @click.stop="onLeftMeasureDistanceClick">
             <Ruler class="h-4 w-4" />
             <span>长度测量</span>
+          </button>
+          <button type="button"
+            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            :class="store.toolMode.value === 'xeokit_measure_elevation_point' ? 'bg-muted' : ''"
+            @click.stop="onLeftMeasureElevationPointClick">
+            <Ruler class="h-4 w-4" />
+            <span>点标高</span>
+          </button>
+          <button type="button"
+            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            :class="store.toolMode.value === 'xeokit_measure_elevation_delta' ? 'bg-muted' : ''"
+            @click.stop="onLeftMeasureElevationDeltaClick">
+            <Ruler class="h-4 w-4" />
+            <span>高差</span>
           </button>
           <button type="button"
             class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"

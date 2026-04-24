@@ -7,7 +7,24 @@ import { useViewerContext } from './useViewerContext';
 
 import type { ReviewAttachment } from '@/types/auth';
 
-import { reviewAttachmentUploadWithProgress } from '@/api/reviewApi';
+import {
+  reviewAttachmentUploadWithProgress,
+  type ReviewAttachmentUploadOptions,
+} from '@/api/reviewApi';
+
+export type ScreenshotUploadResult = {
+  attachment: ReviewAttachment;
+  width: number;
+  height: number;
+  capturedAt: number;
+};
+
+export type CaptureAndUploadOptions = {
+  filename?: string;
+  format?: 'image/png' | 'image/jpeg';
+  quality?: number;
+  upload?: ReviewAttachmentUploadOptions;
+};
 
 export function useScreenshot() {
   const { viewerRef } = useViewerContext();
@@ -20,6 +37,11 @@ export function useScreenshot() {
   function getCanvas(): HTMLCanvasElement | null {
     const viewer = viewerRef.value;
     if (!viewer) return null;
+
+    const canvas = (viewer as unknown as { canvas?: HTMLCanvasElement }).canvas;
+    if (canvas instanceof HTMLCanvasElement) {
+      return canvas;
+    }
 
     const scene = viewer.scene as unknown as {
       canvas?: { canvas?: HTMLCanvasElement };
@@ -87,33 +109,52 @@ export function useScreenshot() {
    */
   async function captureAndUpload(
     taskId: string | null = null,
-    filename?: string
-  ): Promise<ReviewAttachment | null> {
+    options?: string | CaptureAndUploadOptions
+  ): Promise<ScreenshotUploadResult | null> {
     if (isCapturing.value) return null;
+
+    const resolved: CaptureAndUploadOptions = typeof options === 'string'
+      ? { filename: options }
+      : (options ?? {});
 
     isCapturing.value = true;
     uploadProgress.value = 0;
 
     try {
-      const blob = await captureToBlob('image/png');
+      const canvas = getCanvas();
+      if (!canvas) {
+        console.error('Canvas not available for screenshot');
+        return null;
+      }
+
+      const capturedAt = Date.now();
+      const format = resolved.format ?? 'image/png';
+      const blob = await captureToBlob(format, resolved.quality ?? 0.92);
       if (!blob) {
         console.error('Failed to capture screenshot');
         return null;
       }
 
-      const name = filename || `screenshot-${Date.now()}.png`;
-      const file = new File([blob], name, { type: 'image/png' });
+      const ext = format === 'image/jpeg' ? 'jpg' : 'png';
+      const name = resolved.filename || `screenshot-${capturedAt}.${ext}`;
+      const file = new File([blob], name, { type: format });
 
       const response = await reviewAttachmentUploadWithProgress(
         taskId,
         file,
         (percent) => {
           uploadProgress.value = percent;
-        }
+        },
+        resolved.upload,
       );
 
       if (response.success && response.attachment) {
-        return response.attachment;
+        return {
+          attachment: response.attachment,
+          width: canvas.width || canvas.clientWidth || 0,
+          height: canvas.height || canvas.clientHeight || 0,
+          capturedAt,
+        };
       }
 
       console.error('Upload failed:', response.error_message);

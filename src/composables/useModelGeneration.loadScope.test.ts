@@ -162,4 +162,19 @@ describe('resolveActualModelLoadScope', () => {
       typeInfoError: 'network down',
     });
   });
+
+  it('pdmsGetTypeInfo 失败且 component scope 为空时，保留 root 作为实际加载范围', async () => {
+    pdmsGetTypeInfoMock.mockRejectedValue(new Error('network down'));
+
+    const { resolveActualModelLoadScope } = await import('@/composables/useModelGeneration');
+    const result = await resolveActualModelLoadScope('24381_145018', []);
+
+    expect(result).toEqual({
+      componentRefnos: [],
+      actualLoadRefnos: ['24381_145018'],
+      rootNoun: null,
+      branHangRootInjected: true,
+      typeInfoError: 'network down',
+    });
+  });
 });

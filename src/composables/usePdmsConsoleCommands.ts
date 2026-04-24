@@ -1,5 +1,3 @@
-import { Matrix4, Vector3 } from 'three';
-
 import { useConsoleStore } from './useConsoleStore';
 import { useViewerContext } from './useViewerContext';
 
@@ -9,50 +7,14 @@ import { pdmsGetUiAttr, pdmsGetTransform } from '@/api/genModelPdmsAttrApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { getModelTreeInstance } from '@/composables/useModelTreeStore';
 import { setGlobalSelectedRefno } from '@/composables/useSelectionStore';
-import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import {
   extractPosition,
-  extractEulerAnglesDegrees,
   computeRelativeTransform,
   type TransformMatrix,
 } from '@/utils/matrixUtils';
-import { formatVec3Meters } from '@/utils/unitFormat';
-
-const unitSettings = useUnitSettingsStore();
-
-function formatPosSceneMeters(p: [number, number, number]): string {
-  return formatVec3Meters(p, unitSettings.displayUnit.value as any, unitSettings.precision.value);
-}
-
-function formatPosFromRawMaybe(viewer: any, p: [number, number, number]): string {
-  const v = new Vector3(p[0], p[1], p[2]);
-
-  // 尽量与 Viewer 的 globalModelMatrix 对齐（mm->m + recenter 等）
-  try {
-    const layer = viewer?.__dtxLayer as any;
-    const gm = layer?.getGlobalModelMatrix?.() as Matrix4 | null;
-    if (gm) {
-      v.applyMatrix4(gm);
-    } else {
-      const scale = unitSettings.modelUnit.value === 'mm' ? 0.001 : 1;
-      v.multiplyScalar(scale);
-    }
-  } catch {
-    const scale = unitSettings.modelUnit.value === 'mm' ? 0.001 : 1;
-    v.multiplyScalar(scale);
-  }
-
-  return formatPosSceneMeters([v.x, v.y, v.z]);
-}
-
-// 用于角度/非长度的三元组输出（保持原有控制台输出风格）
-function formatTriple(p: number[] | Float32Array | Float64Array | { [key: number]: number, length: number }): string {
-  if (!p) return 'N/A';
-  if (Array.isArray(p) || ArrayBuffer.isView(p)) {
-    return `${Number(p[0] ?? 0).toFixed(2)} ${Number(p[1] ?? 0).toFixed(2)} ${Number(p[2] ?? 0).toFixed(2)}`;
-  }
-  return 'Invalid Vec3';
-}
+import { formatPdmsOrientation } from '@/utils/pdmsOrientation';
+import { formatPdmsRef } from '@/utils/pdmsRefno';
+import { formatPdmsPos } from '@/utils/unitFormat';
 
 export function usePdmsConsoleCommands() {
   const store = useConsoleStore();
@@ -125,7 +87,8 @@ export function usePdmsConsoleCommands() {
     // Handle Q REF (Refno) - 查询参考号
     if (cmd === 'REF' || cmd === 'REFNO') {
       if (id) {
-        store.addLog('output', `Refno: ${id}`);
+        // 对齐 E3D 控制台：`Ref =24381/145019`
+        store.addLog('output', `Ref =${formatPdmsRef(id)}`);
       }
       return;
     }
@@ -192,24 +155,37 @@ export function usePdmsConsoleCommands() {
         return String(val);
       };
 
-      // Handle Q WPOS / Q POS WRT /* - 查询世界坐标位置
+      // Handle Q WPOS / Q POS WRT /* - 查询世界坐标位置（E3D 风格）
       if (cmd === 'WPOS' || cmd === 'POS WRT /*') {
+        try {
+          const transformResp = await pdmsGetTransform(id);
+          if (transformResp.success && transformResp.world_transform) {
+            const pos_mm = extractPosition(transformResp.world_transform as TransformMatrix);
+            const pos_m: [number, number, number] = [pos_mm[0] / 1000, pos_mm[1] / 1000, pos_mm[2] / 1000];
+            store.addLog('output', `Position ${formatPdmsPos(pos_m, 'mm', 2)}`);
+            return;
+          }
+        } catch {
+          // 继续走 attr / AABB 回退
+        }
         const pos = getAttr('WPOS') ?? getAttr('POS');
         if (pos !== undefined) {
           if (Array.isArray(pos) && pos.length >= 3 && typeof pos[0] === 'number' && typeof pos[1] === 'number' && typeof pos[2] === 'number') {
-            store.addLog('output', `Position (World): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
+            // PDMS 属性中 POS 默认单位 mm
+            const pos_m: [number, number, number] = [pos[0] / 1000, pos[1] / 1000, pos[2] / 1000];
+            store.addLog('output', `Position ${formatPdmsPos(pos_m, 'mm', 2)}`);
           } else {
             const formatted = formatVec3(pos);
-            store.addLog('output', `Position (World): ${formatted}`);
+            store.addLog('output', `Position ${formatted}`);
           }
         } else {
-          // 尝试从场景 AABB 推导中心点
+          // 回退：AABB 中心（scene 米坐标）
           const aabb = viewer.scene.getAABB([id]);
           if (aabb && aabb.length === 6) {
             const cx = (aabb[0] + aabb[3]) / 2;
             const cy = (aabb[1] + aabb[4]) / 2;
             const cz = (aabb[2] + aabb[5]) / 2;
-            store.addLog('output', `Position (World): ${formatPosSceneMeters([cx, cy, cz])}`);
+            store.addLog('output', `Position ${formatPdmsPos([cx, cy, cz], 'mm', 2)}`);
           } else {
             store.addLog('info', 'World position not available');
           }
@@ -217,19 +193,21 @@ export function usePdmsConsoleCommands() {
         return;
       }
 
-      // Handle Q POS - 查询本地坐标位置（从世界变换矩阵提取）
+      // Handle Q POS - 查询位置（当前走 world 语义，字符串对齐 E3D 风格）
       if (cmd === 'POS') {
         try {
           const transformResp = await pdmsGetTransform(id);
           if (transformResp.success && transformResp.world_transform) {
-            const pos = extractPosition(transformResp.world_transform as TransformMatrix);
-            store.addLog('output', `Position (World): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
+            const pos_mm = extractPosition(transformResp.world_transform as TransformMatrix);
+            const pos_m: [number, number, number] = [pos_mm[0] / 1000, pos_mm[1] / 1000, pos_mm[2] / 1000];
+            store.addLog('output', `Position ${formatPdmsPos(pos_m, 'mm', 2)}`);
           } else {
-            // 回退：从属性读取
             const pos = getAttr('POS') ?? getAttr('POSITION');
-            if (pos !== undefined) {
-              const formatted = formatVec3(pos);
-              store.addLog('output', `Position (Local): ${formatted}`);
+            if (pos !== undefined && Array.isArray(pos) && pos.length >= 3 && typeof pos[0] === 'number') {
+              const pos_m: [number, number, number] = [pos[0] / 1000, pos[1] / 1000, pos[2] / 1000];
+              store.addLog('output', `Position ${formatPdmsPos(pos_m, 'mm', 2)}`);
+            } else if (pos !== undefined) {
+              store.addLog('output', `Position ${formatVec3(pos)}`);
             } else {
               store.addLog('info', 'Position not available');
             }
@@ -240,31 +218,38 @@ export function usePdmsConsoleCommands() {
         return;
       }
 
-      // Handle Q WORI / Q ORI WRT /* - 查询世界坐标方位
+      // Handle Q WORI / Q ORI WRT /* - 查询世界坐标方位（E3D PDMS 轴描述语法）
       if (cmd === 'WORI' || cmd === 'ORI WRT /*') {
+        try {
+          const transformResp = await pdmsGetTransform(id);
+          if (transformResp.success && transformResp.world_transform) {
+            const text = formatPdmsOrientation(transformResp.world_transform as TransformMatrix);
+            store.addLog('output', `Worientation ${text}`);
+            return;
+          }
+        } catch {
+          // 继续走 attr 回退
+        }
         const ori = getAttr('WORI') ?? getAttr('ORI');
         if (ori !== undefined) {
-          const formatted = formatVec3(ori);
-          store.addLog('output', `Orientation (World): ${formatted}`);
+          store.addLog('output', `Worientation ${formatVec3(ori)}`);
         } else {
           store.addLog('info', 'World orientation not available');
         }
         return;
       }
 
-      // Handle Q ORI - 查询本地坐标方位（从世界变换矩阵提取）
+      // Handle Q ORI - 查询方位（当前走 world 语义，字符串对齐 E3D 风格）
       if (cmd === 'ORI') {
         try {
           const transformResp = await pdmsGetTransform(id);
           if (transformResp.success && transformResp.world_transform) {
-            const ori = extractEulerAnglesDegrees(transformResp.world_transform as TransformMatrix);
-            store.addLog('output', `Orientation (World, degrees): ${formatTriple(ori as any)}`);
+            const text = formatPdmsOrientation(transformResp.world_transform as TransformMatrix);
+            store.addLog('output', `Orientation ${text}`);
           } else {
-            // 回退：从属性读取
             const ori = getAttr('ORI') ?? getAttr('ORIENTATION');
             if (ori !== undefined) {
-              const formatted = formatVec3(ori);
-              store.addLog('output', `Orientation (Local): ${formatted}`);
+              store.addLog('output', `Orientation ${formatVec3(ori)}`);
             } else {
               store.addLog('info', 'Orientation not available');
             }
@@ -275,10 +260,9 @@ export function usePdmsConsoleCommands() {
         return;
       }
 
-      // Handle Q POS WRT OWNER - 查询相对于拥有者的位置
+      // Handle Q POS WRT OWNER - 查询相对于拥有者的位置（E3D 风格）
       if (cmd === 'POS WRT OWNER') {
         try {
-          // 查询元素的变换矩阵
           const elementResp = await pdmsGetTransform(id);
           if (!elementResp.success || !elementResp.world_transform) {
             store.addLog('error', 'Failed to query element transform');
@@ -289,40 +273,36 @@ export function usePdmsConsoleCommands() {
           const ownerRefno = elementResp.owner;
 
           if (!ownerRefno || ownerRefno === id) {
-            // 没有 owner 或 owner 就是自己，返回世界位置
-            const pos = extractPosition(elementWorld);
-            store.addLog('output', `Position (WRT OWNER - no owner): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
+            const pos_mm = extractPosition(elementWorld);
+            const pos_m: [number, number, number] = [pos_mm[0] / 1000, pos_mm[1] / 1000, pos_mm[2] / 1000];
+            store.addLog('output', `Position ${formatPdmsPos(pos_m, 'mm', 2)}`);
             return;
           }
 
-          // 查询 owner 的变换矩阵
           const ownerResp = await pdmsGetTransform(ownerRefno);
           if (!ownerResp.success || !ownerResp.world_transform) {
             store.addLog('error', `Failed to query owner transform (${ownerRefno})`);
             return;
           }
 
-          const ownerWorld = ownerResp.world_transform as TransformMatrix;
-
-          // 计算相对变换
-          const relativeTransform = computeRelativeTransform(elementWorld, ownerWorld);
+          const relativeTransform = computeRelativeTransform(elementWorld, ownerResp.world_transform as TransformMatrix);
           if (!relativeTransform) {
             store.addLog('error', 'Failed to compute relative transform (matrix not invertible)');
             return;
           }
 
-          const pos = extractPosition(relativeTransform);
-          store.addLog('output', `Position (WRT OWNER ${ownerRefno}): ${formatPosFromRawMaybe(viewer, [pos[0], pos[1], pos[2]])}`);
+          const pos_mm = extractPosition(relativeTransform);
+          const pos_m: [number, number, number] = [pos_mm[0] / 1000, pos_mm[1] / 1000, pos_mm[2] / 1000];
+          store.addLog('output', `Position ${formatPdmsPos(pos_m, 'mm', 2)} wrt ${formatPdmsRef(ownerRefno)}`);
         } catch (e) {
           store.addLog('error', `Failed to compute position WRT owner: ${e}`);
         }
         return;
       }
 
-      // Handle Q ORI WRT OWNER - 查询相对于拥有者的方位
+      // Handle Q ORI WRT OWNER - 查询相对于拥有者的方位（E3D PDMS 轴描述语法）
       if (cmd === 'ORI WRT OWNER') {
         try {
-          // 查询元素的变换矩阵
           const elementResp = await pdmsGetTransform(id);
           if (!elementResp.success || !elementResp.world_transform) {
             store.addLog('error', 'Failed to query element transform');
@@ -333,30 +313,23 @@ export function usePdmsConsoleCommands() {
           const ownerRefno = elementResp.owner;
 
           if (!ownerRefno || ownerRefno === id) {
-            // 没有 owner 或 owner 就是自己，返回世界方位
-            const ori = extractEulerAnglesDegrees(elementWorld);
-            store.addLog('output', `Orientation (WRT OWNER - no owner, degrees): ${formatTriple(ori as any)}`);
+            store.addLog('output', `Orientation ${formatPdmsOrientation(elementWorld)}`);
             return;
           }
 
-          // 查询 owner 的变换矩阵
           const ownerResp = await pdmsGetTransform(ownerRefno);
           if (!ownerResp.success || !ownerResp.world_transform) {
             store.addLog('error', `Failed to query owner transform (${ownerRefno})`);
             return;
           }
 
-          const ownerWorld = ownerResp.world_transform as TransformMatrix;
-
-          // 计算相对变换
-          const relativeTransform = computeRelativeTransform(elementWorld, ownerWorld);
+          const relativeTransform = computeRelativeTransform(elementWorld, ownerResp.world_transform as TransformMatrix);
           if (!relativeTransform) {
             store.addLog('error', 'Failed to compute relative transform (matrix not invertible)');
             return;
           }
 
-          const ori = extractEulerAnglesDegrees(relativeTransform);
-          store.addLog('output', `Orientation (WRT OWNER ${ownerRefno}, degrees): ${formatTriple(ori as any)}`);
+          store.addLog('output', `Orientation ${formatPdmsOrientation(relativeTransform)} wrt ${formatPdmsRef(ownerRefno)}`);
         } catch (e) {
           store.addLog('error', `Failed to compute orientation WRT owner: ${e}`);
         }

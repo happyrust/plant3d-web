@@ -284,6 +284,7 @@ export async function modelShowByRefno(params: {
   regen_model?: boolean;
   gen_mesh?: boolean;
   gen_model?: boolean;
+  gen_parquet?: boolean;
 }): Promise<{
   success: boolean;
   bundle_url?: string;

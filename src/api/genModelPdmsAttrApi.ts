@@ -42,7 +42,7 @@ export type PtsetResponse = {
   /** 点集数据列表 */
   ptset: PtsetPoint[];
   /** 世界坐标变换矩阵（4x4） */
-  world_transform: number[][] | null;
+  world_transform: number[] | number[][] | null;
   /** 单位转换信息 */
   unit_info?: {
     source_unit: string;
@@ -50,6 +50,34 @@ export type PtsetResponse = {
     conversion_factor: number;
   } | null;
   error_message?: string | null;
+}
+
+export type PtsetQueryContext = {
+  dbno?: number;
+  batchId?: string | null;
+}
+
+export type PtsetBatchItemResponse = {
+  input_refno: string;
+  refno?: string | null;
+  success: boolean;
+  ptset: PtsetPoint[];
+  world_transform?: number[] | number[][] | null;
+  batch_id?: string | null;
+  unit_info?: {
+    source_unit: string;
+    target_unit: string;
+    conversion_factor: number;
+  } | null;
+  error_message?: string | null;
+}
+
+export type PtsetBatchQueryResponse = {
+  success: boolean;
+  results: PtsetBatchItemResponse[];
+  total_count: number;
+  success_count: number;
+  failed_count: number;
 }
 
 function getBaseUrl(): string {
@@ -111,9 +139,33 @@ export async function pdmsGetPtset(refno: string): Promise<PtsetResponse> {
  */
 export async function pdmsGetPtsetWithContext(
   refno: string,
-  _ctx?: { dbno?: number; batchId?: string | null },
+  ctx?: PtsetQueryContext,
 ): Promise<PtsetResponse> {
-  return await pdmsGetPtset(refno);
+  const search = new URLSearchParams();
+  if (ctx?.dbno !== undefined) {
+    search.set('dbno', String(ctx.dbno));
+  }
+  if (ctx?.batchId) {
+    search.set('batch_id', String(ctx.batchId));
+  }
+  const qs = search.toString();
+  return await fetchJson<PtsetResponse>(
+    `/api/pdms/ptset/${encodeURIComponent(refno)}${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function pdmsBatchGetPtsetWithContext(
+  refnos: string[],
+  ctx?: PtsetQueryContext,
+): Promise<PtsetBatchQueryResponse> {
+  return await fetchJson<PtsetBatchQueryResponse>('/api/pdms/ptset/batch-query', {
+    method: 'POST',
+    body: JSON.stringify({
+      refnos,
+      dbno: ctx?.dbno,
+      batch_id: ctx?.batchId ?? undefined,
+    }),
+  });
 }
 
 /**
