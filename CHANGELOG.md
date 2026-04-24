@@ -1,5 +1,22 @@
 # 变更日志
 
+## 2026-04-24（晚间 · Wave 3D）
+
+### ReleaseNotesDialog 回归修复
+
+- **修复** `src/utils/releaseNotes.ts` 的 `VERSION_HEADING_RE`：同时支持 `## [Unreleased]` 与 `## 2026-04-24（自由式）` 两种版本标题格式
+- **修复** `src/components/ReleaseNotesDialog.test.ts` 断言：用 `/2026-04-\d{2}|Unreleased/` 正则兼容两种格式
+- **背景**：提交 `9ac1d9c` 把 CHANGELOG.md 格式从 `## [Unreleased]` 改为 `## 2026-04-24（...）` 后，`parseReleaseNotes` 无法解析，对话框内容为空导致测试失败
+
+### Wave 4 新功能选题定稿
+
+- **发现** 远端 `b33545c feat(dtx): add object nearest measure ui` 已落地"两个构件最近点测量" MVP v1（ObjectMeasureDrawer + useDtxTools 算法）
+- **决策** Wave 4 按 ROI 降序推进：
+  1. 最近元素测量 V2 结果卡（~3h）— 结果展示 / 保存到校审 / 截图（复用 CaptureOptions.annotation_shot）
+  2. 批注截图自动触发（~2h）— 云批注完成后调用 auto_cloud_finish 截图 + 缩略图
+  3. 构件空间定位 MVP（~5h）— useSpatialQuery 扩展，属新能力线
+- **详见** `docs/plans/2026-04-24-wave3-continuation-plan.md` §9 Wave 3D 决策章节
+
 ## 2026-04-24（晚间 · Wave 3C）
 
 ### 测量体系统一 Phase B 启动
