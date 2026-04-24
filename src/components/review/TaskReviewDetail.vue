@@ -26,6 +26,7 @@ import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
 import { reviewRecordGetByTaskId, reviewTaskGetWorkflow } from '@/api/reviewApi';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import Dialog from '@/components/ui/Dialog.vue';
 import { useUserStore } from '@/composables/useUserStore';
 import { emitToast } from '@/ribbon/toastBus';
@@ -34,6 +35,10 @@ import {
   getPriorityDisplayName,
   getTaskStatusDisplayName,
 } from '@/types/auth';
+import {
+  formatMeasurementKindLabel,
+  formatSignedLengthMeters,
+} from '@/utils/xeokitMeasurementFormat';
 
 const props = defineProps<{
   task: ReviewTask;
@@ -44,6 +49,7 @@ const emit = defineEmits<{
 }>();
 
 const userStore = useUserStore();
+const unitSettings = useUnitSettingsStore();
 
 const isLoadingHistory = ref(false);
 const workflowHistory = ref<WorkflowStep[]>([]);
@@ -153,14 +159,20 @@ const isReturnedTask = computed(() => isCanonicalReturnedTask(canonicalTask.valu
 const canResubmit = computed(() => isReturnedTask.value && canonicalTask.value.currentNode === 'sj' && canonicalTask.value.status === 'draft');
 
 function formatMeasurementKind(kind: ConfirmedRecord['measurements'][number]['kind']): string {
-  return kind === 'distance' ? '距离测量' : '角度测量';
+  return formatMeasurementKindLabel(kind);
 }
 
 function formatMeasurementSummary(measurement: ConfirmedRecord['measurements'][number]): string {
   if (measurement.kind === 'distance') {
     return `起点 ${measurement.origin.entityId} -> 终点 ${measurement.target.entityId}`;
   }
-  return `起点 ${measurement.origin.entityId} -> 拐点 ${measurement.corner.entityId} -> 终点 ${measurement.target.entityId}`;
+  if (measurement.kind === 'angle') {
+    return `起点 ${measurement.origin.entityId} -> 拐点 ${measurement.corner.entityId} -> 终点 ${measurement.target.entityId}`;
+  }
+  if (measurement.kind === 'elevation_point') {
+    return `绝对 ${formatSignedLengthMeters(measurement.absoluteElevation, unitSettings.displayUnit.value, unitSettings.precision.value)} -> 相对基准 ${formatSignedLengthMeters(measurement.relativeElevation, unitSettings.displayUnit.value, unitSettings.precision.value)}`;
+  }
+  return `起点 ${formatSignedLengthMeters(measurement.originElevation, unitSettings.displayUnit.value, unitSettings.precision.value)} -> 终点 ${formatSignedLengthMeters(measurement.targetElevation, unitSettings.displayUnit.value, unitSettings.precision.value)} -> 高差 ${formatSignedLengthMeters(measurement.deltaElevation, unitSettings.displayUnit.value, unitSettings.precision.value)}`;
 }
 
 async function loadConfirmedRecords() {

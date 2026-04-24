@@ -3,10 +3,14 @@ import type {
   WorkflowRecordData,
 } from '@/api/reviewApi';
 import type {
+  ElevationDeltaMeasurementRecord,
+  ElevationPointMeasurementRecord,
   MeasurementRecord,
   MeasurementPoint,
   XeokitAngleMeasurementRecord,
   XeokitDistanceMeasurementRecord,
+  XeokitElevationDeltaMeasurementRecord,
+  XeokitElevationPointMeasurementRecord,
 } from '@/composables/useToolStore';
 
 import { fromBackendRole, type AnnotationComment } from '@/types/auth';
@@ -129,6 +133,28 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
     };
   }
 
+  if (kind === 'elevation_point') {
+    const point = isMeasurementPoint(record.point) ? record.point : null;
+    const absoluteElevation = typeof record.absoluteElevation === 'number' ? record.absoluteElevation : null;
+    const datumElevation = typeof record.datumElevation === 'number' ? record.datumElevation : 0;
+    if (!point || absoluteElevation === null) return null;
+    const normalized: ElevationPointMeasurementRecord = {
+      id,
+      kind: 'elevation_point',
+      point,
+      absoluteElevation,
+      datumElevation,
+      relativeElevation: typeof record.relativeElevation === 'number'
+        ? record.relativeElevation
+        : absoluteElevation - datumElevation,
+      visible,
+      createdAt,
+      sourceAnnotationId,
+      sourceAnnotationType,
+    };
+    return normalized;
+  }
+
   const corner = isMeasurementPoint(record.corner) ? record.corner : null;
   if (kind === 'angle' && corner) {
     return {
@@ -144,12 +170,36 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
     };
   }
 
+  if (kind === 'elevation_delta') {
+    const originElevation = typeof record.originElevation === 'number' ? record.originElevation : null;
+    const targetElevation = typeof record.targetElevation === 'number' ? record.targetElevation : null;
+    const datumElevation = typeof record.datumElevation === 'number' ? record.datumElevation : 0;
+    if (originElevation === null || targetElevation === null) return null;
+    const normalized: ElevationDeltaMeasurementRecord = {
+      id,
+      kind: 'elevation_delta',
+      origin,
+      target,
+      originElevation,
+      targetElevation,
+      deltaElevation: typeof record.deltaElevation === 'number'
+        ? record.deltaElevation
+        : targetElevation - originElevation,
+      datumElevation,
+      visible,
+      createdAt,
+      sourceAnnotationId,
+      sourceAnnotationType,
+    };
+    return normalized;
+  }
+
   return null;
 }
 
 function toXeokitMeasurement(
   measurement: MeasurementRecord,
-): XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord {
+): XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord | XeokitElevationPointMeasurementRecord | XeokitElevationDeltaMeasurementRecord {
   if (measurement.kind === 'angle') {
     return {
       id: measurement.id,
@@ -157,6 +207,40 @@ function toXeokitMeasurement(
       origin: measurement.origin,
       corner: measurement.corner,
       target: measurement.target,
+      visible: measurement.visible,
+      approximate: false,
+      createdAt: measurement.createdAt,
+      sourceAnnotationId: measurement.sourceAnnotationId,
+      sourceAnnotationType: measurement.sourceAnnotationType,
+    };
+  }
+
+  if (measurement.kind === 'elevation_point') {
+    return {
+      id: measurement.id,
+      kind: 'elevation_point',
+      point: measurement.point,
+      absoluteElevation: measurement.absoluteElevation,
+      datumElevation: measurement.datumElevation,
+      relativeElevation: measurement.relativeElevation,
+      visible: measurement.visible,
+      approximate: false,
+      createdAt: measurement.createdAt,
+      sourceAnnotationId: measurement.sourceAnnotationId,
+      sourceAnnotationType: measurement.sourceAnnotationType,
+    };
+  }
+
+  if (measurement.kind === 'elevation_delta') {
+    return {
+      id: measurement.id,
+      kind: 'elevation_delta',
+      origin: measurement.origin,
+      target: measurement.target,
+      originElevation: measurement.originElevation,
+      targetElevation: measurement.targetElevation,
+      deltaElevation: measurement.deltaElevation,
+      datumElevation: measurement.datumElevation,
       visible: measurement.visible,
       approximate: false,
       createdAt: measurement.createdAt,
@@ -182,10 +266,14 @@ function buildReplayMeasurements(measurements: unknown[]): {
   measurements: unknown[];
   xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
   xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
+  xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[];
+  xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[];
 } {
   const fallbackMeasurements: unknown[] = [];
   const xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[] = [];
   const xeokitAngleMeasurements: XeokitAngleMeasurementRecord[] = [];
+  const xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[] = [];
+  const xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[] = [];
 
   for (const measurement of measurements) {
     const normalized = normalizeReplayMeasurement(measurement);
@@ -199,6 +287,14 @@ function buildReplayMeasurements(measurements: unknown[]): {
       xeokitAngleMeasurements.push(converted);
       continue;
     }
+    if (converted.kind === 'elevation_point') {
+      xeokitElevationPointMeasurements.push(converted);
+      continue;
+    }
+    if (converted.kind === 'elevation_delta') {
+      xeokitElevationDeltaMeasurements.push(converted);
+      continue;
+    }
     xeokitDistanceMeasurements.push(converted);
   }
 
@@ -206,6 +302,8 @@ function buildReplayMeasurements(measurements: unknown[]): {
     measurements: dedupeReplayItems(fallbackMeasurements) as unknown[],
     xeokitDistanceMeasurements: dedupeReplayItems(xeokitDistanceMeasurements) as XeokitDistanceMeasurementRecord[],
     xeokitAngleMeasurements: dedupeReplayItems(xeokitAngleMeasurements) as XeokitAngleMeasurementRecord[],
+    xeokitElevationPointMeasurements: dedupeReplayItems(xeokitElevationPointMeasurements) as XeokitElevationPointMeasurementRecord[],
+    xeokitElevationDeltaMeasurements: dedupeReplayItems(xeokitElevationDeltaMeasurements) as XeokitElevationDeltaMeasurementRecord[],
   };
 }
 
@@ -249,6 +347,8 @@ export function buildReviewRecordReplayPayload(records: ReplayRecordLike[]): str
     dimensions: [],
     xeokitDistanceMeasurements: replayMeasurements.xeokitDistanceMeasurements,
     xeokitAngleMeasurements: replayMeasurements.xeokitAngleMeasurements,
+    xeokitElevationPointMeasurements: replayMeasurements.xeokitElevationPointMeasurements,
+    xeokitElevationDeltaMeasurements: replayMeasurements.xeokitElevationDeltaMeasurements,
   });
 }
 

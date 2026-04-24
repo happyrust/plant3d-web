@@ -224,7 +224,12 @@ function appendMeasurements(
 function normalizeMeasurementKind(raw: unknown): SnapshotMeasurementKind {
   if (typeof raw !== 'string') return 'unknown';
   const kind = raw.trim().toLowerCase();
-  if (kind === 'distance' || kind === 'angle') return kind;
+  if (
+    kind === 'distance' ||
+    kind === 'angle' ||
+    kind === 'elevation_point' ||
+    kind === 'elevation_delta'
+  ) return kind;
   return 'unknown';
 }
 

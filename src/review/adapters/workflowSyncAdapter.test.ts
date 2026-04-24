@@ -16,6 +16,17 @@ import { buildWorkflowSnapshotReplayPayload } from '@/components/review/reviewRe
 import { UserRole } from '@/types/auth';
 
 const FIXED_NOW = 1_700_000_000_000;
+const sampleScreenshot = {
+  attachmentId: 'att-1',
+  name: 'workflow-shot.png',
+  url: '/files/workflow-shot.png',
+  mimeType: 'image/png',
+  size: 1024,
+  width: 1024,
+  height: 768,
+  uploadedAt: 1_710_000_000_300,
+  capturedAt: 1_710_000_000_000,
+};
 
 function makeRecord(partial: Partial<WorkflowRecordData> & { id: string }): WorkflowRecordData {
   return {
@@ -239,5 +250,31 @@ describe('buildSnapshotFromWorkflowSync', () => {
     expect(
       snapshot.annotations.map((a) => `${a.annotationType}:${a.annotationId}`),
     ).toEqual(['text:t0', 'cloud:c0', 'text:t1']);
+  });
+
+  it('preserves screenshot payload from workflow records', () => {
+    const records: WorkflowRecordData[] = [
+      makeRecord({
+        id: 'r0',
+        annotations: [{ ...makeTextItem('t-shot'), screenshot: sampleScreenshot }],
+      }),
+    ];
+    const data: WorkflowSyncData = {
+      models: [],
+      records,
+      annotationComments: [],
+      attachments: [],
+    };
+
+    const snapshot = buildSnapshotFromWorkflowSync(data, { now: () => FIXED_NOW });
+    const adapted = buildReplayPayloadFromSnapshot(snapshot);
+    const parsed = JSON.parse(adapted) as {
+      annotations: Array<{ id: string; screenshot?: unknown }>;
+    };
+
+    expect(parsed.annotations[0]).toMatchObject({
+      id: 't-shot',
+      screenshot: sampleScreenshot,
+    });
   });
 });

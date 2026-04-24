@@ -45,6 +45,8 @@ const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayl
   measurements: [...toolStore.measurements.value],
   xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
   xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+  xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
+  xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
 }));
 const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
 

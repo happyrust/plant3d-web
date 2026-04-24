@@ -16,6 +16,18 @@ import type {
 
 import { buildReviewRecordReplayPayload } from '@/components/review/reviewRecordReplay';
 
+const sampleScreenshot = {
+  attachmentId: 'att-1',
+  name: 'replay-shot.png',
+  url: '/files/replay-shot.png',
+  mimeType: 'image/png',
+  size: 4096,
+  width: 1600,
+  height: 900,
+  uploadedAt: 1_710_000_000_400,
+  capturedAt: 1_710_000_000_000,
+};
+
 function makeText(id: string): AnnotationRecord {
   return {
     id,
@@ -219,5 +231,29 @@ describe('buildReplayPayloadFromSnapshot', () => {
     const adapted = buildReplayPayloadFromSnapshot(snapshot);
 
     expect(adapted).toBe(golden);
+  });
+
+  it('preserves screenshot metadata in legacy replay payload and snapshot replay payload', () => {
+    const r0 = makeRecord({
+      id: 'r0',
+      annotations: [{ ...makeText('t-shot'), screenshot: sampleScreenshot }],
+    });
+    const records = [r0];
+
+    const golden = JSON.parse(buildReviewRecordReplayPayload(toReplayRecords(records))) as {
+      annotations: Array<{ id: string; screenshot?: unknown }>;
+    };
+    const adapted = JSON.parse(buildReplayPayloadFromSnapshot(buildSnapshotFromTaskRecords(records))) as {
+      annotations: Array<{ id: string; screenshot?: unknown }>;
+    };
+
+    expect(golden.annotations[0]).toMatchObject({
+      id: 't-shot',
+      screenshot: sampleScreenshot,
+    });
+    expect(adapted.annotations[0]).toMatchObject({
+      id: 't-shot',
+      screenshot: sampleScreenshot,
+    });
   });
 });

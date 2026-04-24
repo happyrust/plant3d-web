@@ -20,16 +20,23 @@ type ImportPayloadLike = {
   rectAnnotations?: unknown[];
   xeokitDistanceMeasurements?: unknown[];
   xeokitAngleMeasurements?: unknown[];
+  xeokitElevationPointMeasurements?: unknown[];
+  xeokitElevationDeltaMeasurements?: unknown[];
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? { ...(value as Record<string, unknown>) } : null;
 }
 
-function normalizeMeasurementKind(raw: unknown): 'distance' | 'angle' | 'unknown' {
+function normalizeMeasurementKind(raw: unknown): 'distance' | 'angle' | 'elevation_point' | 'elevation_delta' | 'unknown' {
   if (typeof raw !== 'string') return 'unknown';
   const normalized = raw.trim().toLowerCase();
-  if (normalized === 'distance' || normalized === 'angle') return normalized;
+  if (
+    normalized === 'distance' ||
+    normalized === 'angle' ||
+    normalized === 'elevation_point' ||
+    normalized === 'elevation_delta'
+  ) return normalized;
   return 'unknown';
 }
 
@@ -58,7 +65,7 @@ function pushAnnotations(
 function pushMeasurements(
   snapshot: ReviewSnapshot,
   items: unknown[] | undefined,
-  fallbackKind: 'distance' | 'angle' | 'unknown' = 'unknown',
+  fallbackKind: 'distance' | 'angle' | 'elevation_point' | 'elevation_delta' | 'unknown' = 'unknown',
 ): void {
   if (!Array.isArray(items)) return;
   for (const raw of items) {
@@ -100,6 +107,8 @@ export function buildSnapshotFromImportPayload(
   pushMeasurements(snapshot, payload.measurements, 'unknown');
   pushMeasurements(snapshot, payload.xeokitDistanceMeasurements, 'distance');
   pushMeasurements(snapshot, payload.xeokitAngleMeasurements, 'angle');
+  pushMeasurements(snapshot, payload.xeokitElevationPointMeasurements, 'elevation_point');
+  pushMeasurements(snapshot, payload.xeokitElevationDeltaMeasurements, 'elevation_delta');
 
   return snapshot;
 }

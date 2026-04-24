@@ -39,6 +39,7 @@ import {
   type MeasurementRecord,
   type XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitCommand } from '@/ribbon/commandBus';
@@ -54,6 +55,10 @@ import {
   type AnnotationSeverity,
   type ReviewTask,
 } from '@/types/auth';
+import {
+  formatMeasurementKindLabel,
+  formatMeasurementSummary,
+} from '@/utils/xeokitMeasurementFormat';
 
 type AnnotationListItem = {
   id: string;
@@ -72,7 +77,7 @@ type AnnotationSectionKey = 'open' | 'rejected' | 'fixed' | 'wont_fix' | 'approv
 type LinkedMeasurementItem = {
   id: string;
   engine: 'xeokit' | 'classic';
-  kind: 'distance' | 'angle';
+  kind: MeasurementRecord['kind'];
   createdAt: number;
   visible: boolean;
   summary: string;
@@ -90,6 +95,7 @@ const userStore = useUserStore();
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
 const viewerContext = useViewerContext();
+const unitSettings = useUnitSettingsStore();
 
 const selectedAnnotationId = ref<string | null>(null);
 const selectedAnnotationType = ref<AnnotationType | null>(null);
@@ -241,6 +247,8 @@ const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayl
   measurements: [...toolStore.measurements.value],
   xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
   xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+  xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
+  xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
 }));
 const confirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
@@ -274,9 +282,11 @@ const linkedMeasurements = computed<LinkedMeasurementItem[]>(() => {
     engine: 'xeokit' | 'classic',
   ) => {
     if (measurement.sourceAnnotationId !== annotation.id || measurement.sourceAnnotationType !== annotation.type) return;
-    const summary = measurement.kind === 'angle'
-      ? `角度 · ${measurement.origin.entityId} → ${measurement.corner.entityId} → ${measurement.target.entityId}`
-      : `距离 · ${measurement.origin.entityId} → ${measurement.target.entityId}`;
+    const summary = `${formatMeasurementKindLabel(measurement.kind)} · ${formatMeasurementSummary(
+      measurement,
+      unitSettings.displayUnit.value,
+      unitSettings.precision.value,
+    )}`;
     combined.set(`${engine}:${measurement.id}`, {
       id: measurement.id,
       engine,
@@ -388,7 +398,7 @@ async function locateAnnotation(item: AnnotationListItem | null) {
   }
 }
 
-async function startMeasurement(kind: 'distance' | 'angle') {
+async function startMeasurement(kind: MeasurementRecord['kind']) {
   const annotation = selectedAnnotation.value;
   if (!annotation) {
     emitToast({ message: '请先选择一条批注，再补充测量证据', level: 'warning' });
@@ -396,9 +406,24 @@ async function startMeasurement(kind: 'distance' | 'angle') {
   }
   selectAnnotation(annotation);
   ensurePanelAndActivate('viewer');
-  emitCommand(kind === 'distance' ? 'measurement.distance' : 'measurement.angle');
+  emitCommand(
+    kind === 'distance'
+      ? 'measurement.distance'
+      : kind === 'angle'
+        ? 'measurement.angle'
+        : kind === 'elevation_point'
+          ? 'measurement.elevation_point'
+          : 'measurement.elevation_delta',
+  );
   emitToast({
-    message: kind === 'distance' ? '请在模型中选择两个点完成距离测量' : '请在模型中选择三个点完成角度测量',
+    message:
+      kind === 'distance'
+        ? '请在模型中选择两个点完成距离测量'
+        : kind === 'angle'
+          ? '请在模型中选择三个点完成角度测量'
+          : kind === 'elevation_point'
+            ? '单击一点完成标高测量'
+            : '选择两点完成高差测量',
     level: 'info',
   });
 }
@@ -730,6 +755,20 @@ onMounted(() => {
                 @click="startMeasurement('angle')">
                 <Ruler class="h-3.5 w-3.5" />
                 新增角度
+              </button>
+              <button type="button"
+                class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="!selectedAnnotation"
+                @click="startMeasurement('elevation_point')">
+                <Ruler class="h-3.5 w-3.5" />
+                新增点标高
+              </button>
+              <button type="button"
+                class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="!selectedAnnotation"
+                @click="startMeasurement('elevation_delta')">
+                <Ruler class="h-3.5 w-3.5" />
+                新增高差
               </button>
             </div>
           </div>

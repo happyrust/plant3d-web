@@ -1,0 +1,62 @@
+{
+  "base": "http://localhost:3101",
+  "iframeSrc": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsIndvcmtmbG93X21vZGUiOiJleHRlcm5hbCIsImV4cCI6MTc3NjczOTExMywiaWF0IjoxNzc2NjUyNzEzfQ.rWz6drhFJ-DjaFEqJdD8n071eP5JAHOeKr4-xA2-Cf8&user_id=SJ&form_id=FORM-6DA598D756D4",
+  "consoleErrors": [
+    "pageerror: Invalid grid element",
+    "console.error: Failed to load model projects from API: TypeError: Failed to fetch\n    at http://localhost:3101/src/composables/useModelProjects.ts?t=1776652582423:81:32\n    at loadProjects (http://localhost:3101/src/composables/useModelProjects.ts?t=1776652582423:154:7)\n    at useModelProjects (http://localhost:3101/src/composables/useModelProjects.ts?t=1776652582423:181:3)\n    at applyInitialLanding (http://localhost:3101/src/components/DockLayout.vue?t=1776652591854:1009:41)"
+  ],
+  "stages": [
+    {
+      "stage": "open-simulator",
+      "ok": true,
+      "elapsedMs": 823,
+      "value": {
+        "title": "三维校审单"
+      }
+    },
+    {
+      "stage": "seed-tasks-present",
+      "ok": true,
+      "elapsedMs": 25,
+      "value": {
+        "seedRowCount": 9
+      }
+    },
+    {
+      "stage": "click-add",
+      "ok": true,
+      "elapsedMs": 550,
+      "value": {
+        "embedFrameUrl": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsIndvcmtmbG93X21vZGUiOiJleHRlcm5hbCIsImV4cCI6MTc3NjczOTExMywiaWF0IjoxNzc2NjUyNzEzfQ.rWz6drhFJ-DjaFEqJdD8n071eP5JAHOeKr4-xA2-Cf8&user_id=SJ&form_id=FORM-6DA598D756D4"
+      }
+    },
+    {
+      "stage": "embed-url-contract",
+      "ok": true,
+      "elapsedMs": 0,
+      "value": {
+        "pathname": "/review/3d-view",
+        "formId": "FORM-6DA598D756D4",
+        "userId": "SJ",
+        "outputProject": "AvevaMarineSample",
+        "userTokenLen": 267
+      }
+    },
+    {
+      "stage": "embed-plant3d-ready",
+      "ok": true,
+      "elapsedMs": 1272,
+      "value": {
+        "iframeTitle": "plant3d-web - 3D 模型查看"
+      }
+    },
+    {
+      "stage": "refresh-list",
+      "ok": true,
+      "elapsedMs": 850,
+      "value": {
+        "seedRowCount": 9
+      }
+    }
+  ]
+}

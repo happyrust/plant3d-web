@@ -55,7 +55,7 @@ export type SnapshotComment = {
   reviewRound?: number;
 }
 
-export type SnapshotMeasurementKind = 'distance' | 'angle' | 'unknown';
+export type SnapshotMeasurementKind = 'distance' | 'angle' | 'elevation_point' | 'elevation_delta' | 'unknown';
 
 export type SnapshotMeasurement = {
   measurementId: string;

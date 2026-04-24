@@ -61,6 +61,8 @@ export function buildReplayPayloadFromImportSnapshot(snapshot: ReviewSnapshot): 
   const measurements: unknown[] = [];
   const xeokitDistanceMeasurements: unknown[] = [];
   const xeokitAngleMeasurements: unknown[] = [];
+  const xeokitElevationPointMeasurements: unknown[] = [];
+  const xeokitElevationDeltaMeasurements: unknown[] = [];
 
   for (const annotation of snapshot.annotations) {
     switch (annotation.annotationType) {
@@ -88,6 +90,14 @@ export function buildReplayPayloadFromImportSnapshot(snapshot: ReviewSnapshot): 
       xeokitAngleMeasurements.push(measurement.payload);
       continue;
     }
+    if (measurement.kind === 'elevation_point') {
+      xeokitElevationPointMeasurements.push(measurement.payload);
+      continue;
+    }
+    if (measurement.kind === 'elevation_delta') {
+      xeokitElevationDeltaMeasurements.push(measurement.payload);
+      continue;
+    }
     measurements.push(measurement.payload);
   }
 
@@ -101,5 +111,7 @@ export function buildReplayPayloadFromImportSnapshot(snapshot: ReviewSnapshot): 
     dimensions: [],
     xeokitDistanceMeasurements,
     xeokitAngleMeasurements,
+    xeokitElevationPointMeasurements,
+    xeokitElevationDeltaMeasurements,
   });
 }

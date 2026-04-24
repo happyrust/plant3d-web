@@ -21,8 +21,9 @@ import {
   reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
+import { useScreenshot } from '@/composables/useScreenshot';
 import { useReviewStore } from '@/composables/useReviewStore';
-import { useToolStore } from '@/composables/useToolStore';
+import { getAnnotationRefnos, useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
 import {
@@ -35,6 +36,8 @@ import {
   type AnnotationComment,
   type AnnotationReviewAction,
   type AnnotationReviewEvent,
+  type AnnotationScreenshot,
+  type ReviewAttachment,
   getAnnotationReviewActionLabel,
   getAnnotationReviewDisplay,
   getRoleDisplayName,
@@ -61,6 +64,7 @@ const emit = defineEmits<(e: 'close') => void>();
 const store = useToolStore();
 const reviewStore = useReviewStore();
 const userStore = useUserStore();
+const { captureAndUpload, getCanvas, isCapturing, uploadProgress } = useScreenshot();
 const commentLoading = ref(false);
 const commentError = ref<string | null>(null);
 const newCommentContent = ref('');
@@ -177,6 +181,16 @@ const replyToComment = computed<AnnotationComment | null>(() => {
 });
 
 const currentUser = computed(() => userStore.currentUser.value);
+const currentTask = computed(() => reviewStore.currentTask.value);
+const currentAnnotationRecord = computed(() => {
+  if (!props.annotationType || !props.annotationId) return null;
+  return store.getAnnotationRecordsByType(props.annotationType)
+    .find((item) => item.id === props.annotationId) ?? null;
+});
+const annotationScreenshot = computed(() => {
+  if (!props.annotationType || !props.annotationId) return null;
+  return store.getAnnotationScreenshot(props.annotationType, props.annotationId);
+});
 
 const reviewState = computed(() => {
   if (!props.annotationType || !props.annotationId) return null;
@@ -234,6 +248,21 @@ const reviewActionHint = computed(() => {
   }
   if (canReviewDecide.value) return '校对/审核人员可对设计处理结果执行同意或驳回，并继续补充意见。';
   return `当前角色为${getRoleDisplayName(currentUser.value.role)}，仅可查看处理状态与讨论。`;
+});
+
+const screenshotHint = computed(() => {
+  if (isCapturing.value) {
+    return uploadProgress.value > 0
+      ? `正在上传截图 ${uploadProgress.value}%`
+      : '正在上传截图...';
+  }
+  if (annotationScreenshot.value) {
+    return '截图已关联到当前批注。再次点击下方相机按钮，可重拍覆盖旧图。';
+  }
+  if (!currentTask.value?.id) {
+    return '当前任务未关联，暂不可上传截图。';
+  }
+  return '尚未添加截图。点击下方相机按钮，可抓取当前三维视图作为批注证据。';
 });
 
 const timelineItems = computed<TimelineItem[]>(() => {
@@ -413,6 +442,119 @@ function canEditComment(comment: AnnotationComment): boolean {
   if (!user) return false;
   return comment.authorId === user.id || user.role === UserRole.ADMIN;
 }
+
+function buildScreenshotFilename(annotationType: AnnotationType, annotationId: string): string {
+  const safeId = annotationId.replace(/[^a-zA-Z0-9_-]+/g, '-');
+  return `annotation-${annotationType}-${safeId}-${Date.now()}.png`;
+}
+
+function buildAnnotationScreenshot(
+  attachment: ReviewAttachment,
+  width: number,
+  height: number,
+  capturedAt: number
+): AnnotationScreenshot {
+  return {
+    attachmentId: attachment.id,
+    name: attachment.name,
+    url: attachment.url,
+    mimeType: attachment.mimeType || attachment.type,
+    size: attachment.size,
+    width,
+    height,
+    uploadedAt: attachment.uploadedAt,
+    capturedAt,
+  };
+}
+
+function mergeAttachmentIntoCurrentTask(attachment: ReviewAttachment): void {
+  const task = currentTask.value;
+  if (!task) return;
+
+  const merged = new Map<string, ReviewAttachment>();
+  for (const item of task.attachments || []) {
+    const key = String(item.id || item.url || item.name || '');
+    if (key) {
+      merged.set(key, item);
+    }
+  }
+
+  const nextKey = String(attachment.id || attachment.url || attachment.name || '');
+  if (nextKey) {
+    merged.set(nextKey, attachment);
+  }
+
+  reviewStore.currentTask.value = {
+    ...task,
+    attachments: [...merged.values()],
+  };
+}
+
+async function captureAnnotationScreenshot() {
+  if (!props.annotationType || !props.annotationId) return;
+  const task = currentTask.value;
+  if (!task?.id) {
+    emitToast({ message: '当前任务未关联，无法上传批注截图', level: 'error' });
+    return;
+  }
+
+  const canvas = getCanvas();
+  if (!canvas) {
+    emitToast({ message: '当前三维视图未就绪，无法截图', level: 'error' });
+    return;
+  }
+
+  const width = canvas.width || canvas.clientWidth || 0;
+  const height = canvas.height || canvas.clientHeight || 0;
+  if (!width || !height) {
+    emitToast({ message: '当前三维画布尺寸异常，无法截图', level: 'error' });
+    return;
+  }
+
+  const hadScreenshot = !!annotationScreenshot.value;
+
+  try {
+    const result = await captureAndUpload(task.id, {
+      filename: buildScreenshotFilename(props.annotationType, props.annotationId),
+      upload: {
+        formId: task.formId ?? null,
+        modelRefnos: currentAnnotationRecord.value
+          ? getAnnotationRefnos(currentAnnotationRecord.value)
+          : undefined,
+        fileType: 'annotation_screenshot',
+        description: `${props.annotationType}:${props.annotationId}`,
+      },
+    });
+
+    if (!result?.attachment) {
+      emitToast({ message: '批注截图上传失败', level: 'error' });
+      return;
+    }
+
+    const screenshot = buildAnnotationScreenshot(
+      result.attachment,
+      result.width || width,
+      result.height || height,
+      result.capturedAt,
+    );
+    const saved = store.setAnnotationScreenshot(props.annotationType, props.annotationId, screenshot);
+    if (!saved) {
+      emitToast({ message: '当前批注不存在，截图未能绑定', level: 'error' });
+      return;
+    }
+
+    mergeAttachmentIntoCurrentTask(result.attachment);
+    emitToast({
+      message: hadScreenshot ? '批注截图已覆盖更新' : '批注截图已关联',
+      level: 'success',
+    });
+  } catch (error) {
+    emitToast({
+      message: error instanceof Error ? error.message : '批注截图上传失败',
+      level: 'error',
+    });
+  }
+}
 </script>
 
 <template>
@@ -462,6 +604,49 @@ function canEditComment(comment: AnnotationComment): boolean {
         <div v-if="reviewState?.note"
           class="mt-2 rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] leading-relaxed text-[#4B5563]">
           {{ reviewState.note }}
+        </div>
+
+        <div class="mt-3 rounded-lg border border-[#E5E7EB] bg-white p-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-[12px] font-semibold text-[#111827]">批注截图</div>
+              <div class="mt-1 text-[11px] leading-relaxed text-[#9CA3AF]">
+                {{ screenshotHint }}
+              </div>
+            </div>
+            <span v-if="annotationScreenshot"
+              class="shrink-0 rounded-full bg-[#FFF7ED] px-2 py-1 text-[10px] font-semibold text-[#C2410C]">
+              已关联
+            </span>
+          </div>
+
+          <div v-if="annotationScreenshot" class="mt-3">
+            <a v-if="annotationScreenshot.url"
+              :href="annotationScreenshot.url"
+              target="_blank"
+              rel="noreferrer"
+              class="block overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F8FAFC]">
+              <img :src="annotationScreenshot.url"
+                :alt="`${displayLabel} 截图`"
+                class="h-40 w-full object-cover" />
+            </a>
+            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280]">
+              <span class="max-w-full truncate">{{ annotationScreenshot.name }}</span>
+              <span>{{ annotationScreenshot.width }} × {{ annotationScreenshot.height }}</span>
+              <span>抓拍于 {{ formatDateTime(annotationScreenshot.capturedAt) }}</span>
+              <a v-if="annotationScreenshot.url"
+                :href="annotationScreenshot.url"
+                target="_blank"
+                rel="noreferrer"
+                class="font-semibold text-[#FF6B00] hover:text-[#EA580C]">
+                查看原图
+              </a>
+            </div>
+          </div>
+          <div v-else
+            class="mt-3 flex items-center justify-center rounded-lg border border-dashed border-[#D1D5DB] bg-[#F9FAFB] px-3 py-6 text-[12px] text-[#9CA3AF]">
+            暂无批注截图
+          </div>
         </div>
 
         <div v-if="showReviewActions" class="mt-3">
@@ -660,7 +845,15 @@ function canEditComment(comment: AnnotationComment): boolean {
           <button type="button" class="rounded p-1 text-[#9CA3AF] hover:bg-[#E5E7EB] hover:text-[#6B7280]">
             <Paperclip class="h-4 w-4" />
           </button>
-          <button type="button" class="rounded p-1 text-[#9CA3AF] hover:bg-[#E5E7EB] hover:text-[#6B7280]">
+          <button type="button"
+            class="rounded p-1 hover:bg-[#E5E7EB]"
+            :class="[
+              isCapturing ? 'cursor-not-allowed text-[#D1D5DB]' : 'text-[#9CA3AF] hover:text-[#6B7280]',
+              annotationScreenshot && !isCapturing ? 'text-[#FF6B00]' : '',
+            ]"
+            :disabled="isCapturing"
+            :title="annotationScreenshot ? '重新截屏并覆盖当前批注截图' : '为当前批注截取三维视图'"
+            @click="captureAnnotationScreenshot">
             <Camera class="h-4 w-4" />
           </button>
         </div>

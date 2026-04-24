@@ -868,6 +868,18 @@ const reviewerMeasurementActions = computed(() => [
     onClick: startDistanceMeasurement,
   },
   {
+    id: 'measurement-elevation-point',
+    label: '点标高',
+    description: '从审核工作台直接开始点标高测量。',
+    onClick: startElevationPointMeasurement,
+  },
+  {
+    id: 'measurement-elevation-delta',
+    label: '高差',
+    description: '从审核工作台直接开始高差测量。',
+    onClick: startElevationDeltaMeasurement,
+  },
+  {
     id: 'measurement-angle',
     label: '角度测量',
     description: '从审核工作台直接开始角度测量。',
@@ -886,6 +898,8 @@ const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayl
   measurements: [...toolStore.measurements.value],
   xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
   xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+  xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
+  xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
 }));
 const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
 const confirmedSnapshotPayload = computed(() => (
@@ -975,6 +989,16 @@ function startDistanceMeasurement() {
   showMeasurementMenu.value = false;
 }
 
+function startElevationPointMeasurement() {
+  emitCommand('measurement.elevation_point');
+  showMeasurementMenu.value = false;
+}
+
+function startElevationDeltaMeasurement() {
+  emitCommand('measurement.elevation_delta');
+  showMeasurementMenu.value = false;
+}
+
 function startAngleMeasurement() {
   emitCommand('measurement.angle');
   showMeasurementMenu.value = false;
@@ -1008,7 +1032,7 @@ onMounted(() => {
         } as Parameters<typeof toolStore.addAnnotation>[0]);
         return id;
       },
-      addMockMeasurement(kind: 'distance' | 'angle' = 'distance') {
+      addMockMeasurement(kind: 'distance' | 'angle' | 'elevation_point' | 'elevation_delta' = 'distance') {
         const id = `e2e-measure-${Date.now()}`;
         if (kind === 'angle') {
           toolStore.addMeasurement({
@@ -1017,6 +1041,34 @@ onMounted(() => {
             origin: { entityId: '24381_145018:origin', worldPos: [0, 0, 0] },
             corner: { entityId: '24381_145018:corner', worldPos: [1, 0, 0] },
             target: { entityId: '24381_145018:target', worldPos: [1, 1, 0] },
+            visible: true,
+            createdAt: Date.now(),
+          } as Parameters<typeof toolStore.addMeasurement>[0]);
+          return id;
+        }
+        if (kind === 'elevation_point') {
+          toolStore.addMeasurement({
+            id,
+            kind: 'elevation_point',
+            point: { entityId: '24381_145018:point', worldPos: [0, 0, 12.35] },
+            absoluteElevation: 12.35,
+            datumElevation: 0,
+            relativeElevation: 12.35,
+            visible: true,
+            createdAt: Date.now(),
+          } as Parameters<typeof toolStore.addMeasurement>[0]);
+          return id;
+        }
+        if (kind === 'elevation_delta') {
+          toolStore.addMeasurement({
+            id,
+            kind: 'elevation_delta',
+            origin: { entityId: '24381_145018:origin', worldPos: [0, 0, 12.35] },
+            target: { entityId: '24381_145018:target', worldPos: [1, 0, 15.6] },
+            originElevation: 12.35,
+            targetElevation: 15.6,
+            deltaElevation: 3.25,
+            datumElevation: 0,
             visible: true,
             createdAt: Date.now(),
           } as Parameters<typeof toolStore.addMeasurement>[0]);
@@ -1415,7 +1467,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
     </div>
 
     <!-- 嵌入模式落点 -->
-    <div v-else-if="showDebugUi && embedLandingState?.target === 'reviewer'"
+    <div v-else-if="embedLandingState?.target === 'reviewer'"
       data-testid="reviewer-landing-workspace"
       class="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-900">
       <div class="flex items-center justify-between gap-2">

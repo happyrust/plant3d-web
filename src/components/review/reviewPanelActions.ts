@@ -1,7 +1,11 @@
 import type {
+  ElevationDeltaMeasurementRecord,
+  ElevationPointMeasurementRecord,
   MeasurementRecord,
   XeokitAngleMeasurementRecord,
   XeokitDistanceMeasurementRecord,
+  XeokitElevationDeltaMeasurementRecord,
+  XeokitElevationPointMeasurementRecord,
 } from '@/composables/useToolStore';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
 
@@ -87,10 +91,16 @@ type ReviewConfirmSnapshotRecordLike = {
 type ReviewConfirmSnapshotPayloadInput = ReviewConfirmSnapshotRecordLike & {
   xeokitDistanceMeasurements?: XeokitDistanceMeasurementRecord[];
   xeokitAngleMeasurements?: XeokitAngleMeasurementRecord[];
+  xeokitElevationPointMeasurements?: XeokitElevationPointMeasurementRecord[];
+  xeokitElevationDeltaMeasurements?: XeokitElevationDeltaMeasurementRecord[];
 };
 
 function convertXeokitMeasurementToClassic(
-  measurement: XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord,
+  measurement:
+    | XeokitDistanceMeasurementRecord
+    | XeokitAngleMeasurementRecord
+    | XeokitElevationPointMeasurementRecord
+    | XeokitElevationDeltaMeasurementRecord,
 ): MeasurementRecord {
   if (measurement.kind === 'angle') {
     return {
@@ -104,6 +114,40 @@ function convertXeokitMeasurementToClassic(
       sourceAnnotationId: measurement.sourceAnnotationId,
       sourceAnnotationType: measurement.sourceAnnotationType,
     };
+  }
+
+  if (measurement.kind === 'elevation_point') {
+    const converted: ElevationPointMeasurementRecord = {
+      id: measurement.id,
+      kind: 'elevation_point',
+      point: measurement.point,
+      absoluteElevation: measurement.absoluteElevation,
+      datumElevation: measurement.datumElevation,
+      relativeElevation: measurement.relativeElevation,
+      visible: measurement.visible,
+      createdAt: measurement.createdAt,
+      sourceAnnotationId: measurement.sourceAnnotationId,
+      sourceAnnotationType: measurement.sourceAnnotationType,
+    };
+    return converted;
+  }
+
+  if (measurement.kind === 'elevation_delta') {
+    const converted: ElevationDeltaMeasurementRecord = {
+      id: measurement.id,
+      kind: 'elevation_delta',
+      origin: measurement.origin,
+      target: measurement.target,
+      originElevation: measurement.originElevation,
+      targetElevation: measurement.targetElevation,
+      deltaElevation: measurement.deltaElevation,
+      datumElevation: measurement.datumElevation,
+      visible: measurement.visible,
+      createdAt: measurement.createdAt,
+      sourceAnnotationId: measurement.sourceAnnotationId,
+      sourceAnnotationType: measurement.sourceAnnotationType,
+    };
+    return converted;
   }
 
   return {
@@ -147,6 +191,12 @@ export function buildReviewConfirmSnapshotPayload(
       .filter((measurement) => !measurement.approximate)
       .map(convertXeokitMeasurementToClassic),
     ...(payload.xeokitAngleMeasurements ?? [])
+      .filter((measurement) => !measurement.approximate)
+      .map(convertXeokitMeasurementToClassic),
+    ...(payload.xeokitElevationPointMeasurements ?? [])
+      .filter((measurement) => !measurement.approximate)
+      .map(convertXeokitMeasurementToClassic),
+    ...(payload.xeokitElevationDeltaMeasurements ?? [])
       .filter((measurement) => !measurement.approximate)
       .map(convertXeokitMeasurementToClassic),
   ];

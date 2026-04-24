@@ -19,6 +19,17 @@ import type {
 import { UserRole, type AnnotationComment } from '@/types/auth';
 
 const FIXED_NOW = 1_700_000_000_000;
+const sampleScreenshot = {
+  attachmentId: 'att-1',
+  name: 'shot.png',
+  url: '/files/shot.png',
+  mimeType: 'image/png',
+  size: 2048,
+  width: 1280,
+  height: 720,
+  uploadedAt: 1_710_000_000_100,
+  capturedAt: 1_710_000_000_000,
+};
 
 function makeTextAnnotation(
   id: string,
@@ -281,5 +292,18 @@ describe('buildSnapshotFromTaskRecords', () => {
     });
     const snapshot = buildSnapshotFromTaskRecords([r0]);
     expect(snapshot.annotations[0].taskId).toBe('inner-task');
+  });
+
+  it('preserves screenshot payload on annotations', () => {
+    const r0 = makeRecord({
+      id: 'r0',
+      annotations: [{ ...makeTextAnnotation('t-shot'), screenshot: sampleScreenshot }],
+    });
+
+    const snapshot = buildSnapshotFromTaskRecords([r0]);
+    expect(snapshot.annotations[0]?.payload).toMatchObject({
+      id: 't-shot',
+      screenshot: sampleScreenshot,
+    });
   });
 });
