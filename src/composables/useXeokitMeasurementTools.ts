@@ -2,12 +2,15 @@ import { computed, ref, watch, type Ref } from 'vue';
 
 import { Box3, Matrix4, Raycaster, Vector2, Vector3 } from 'three';
 
+import { useUnitSettingsStore } from './useUnitSettingsStore';
 import { useXeokitMeasurementStyleStore } from './useXeokitMeasurementStyleStore';
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { XeokitAngleMeasurementParams } from '@/utils/three/annotation/annotations/XeokitAngleMeasurement';
 import type { XeokitDistanceMeasurementParams } from '@/utils/three/annotation/annotations/XeokitDistanceMeasurement';
+import type { XeokitElevationDeltaMeasurementParams } from '@/utils/three/annotation/annotations/XeokitElevationDeltaMeasurement';
+import type { XeokitElevationPointMeasurementParams } from '@/utils/three/annotation/annotations/XeokitElevationPointMeasurement';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
@@ -20,13 +23,27 @@ import {
   type XeokitAngleMeasurementRecord,
   type XeokitDistanceDraft,
   type XeokitDistanceMeasurementRecord,
+  type XeokitElevationDeltaDraft,
+  type XeokitElevationDeltaMeasurementRecord,
+  type XeokitElevationPointMeasurementRecord,
   type XeokitMarkerRole,
   type XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
 import { XeokitAngleMeasurement } from '@/utils/three/annotation/annotations/XeokitAngleMeasurement';
 import { XeokitDistanceMeasurement } from '@/utils/three/annotation/annotations/XeokitDistanceMeasurement';
+import { XeokitElevationDeltaMeasurement } from '@/utils/three/annotation/annotations/XeokitElevationDeltaMeasurement';
+import { XeokitElevationPointMeasurement } from '@/utils/three/annotation/annotations/XeokitElevationPointMeasurement';
+import {
+  buildElevationDeltaLabelTexts,
+  buildElevationPointLabelLines,
+  getMeasurementPointElevation,
+} from '@/utils/xeokitMeasurementFormat';
 
-type AnnotationInstance = XeokitDistanceMeasurement | XeokitAngleMeasurement;
+type AnnotationInstance =
+  | XeokitDistanceMeasurement
+  | XeokitAngleMeasurement
+  | XeokitElevationPointMeasurement
+  | XeokitElevationDeltaMeasurement;
 
 type ClickTracker = {
   down: { x: number; y: number } | null;
@@ -36,6 +53,8 @@ type ClickTracker = {
 const XEOKIT_PREFIX = 'xmeas_';
 const XEOKIT_DISTANCE_DRAFT_ID = `${XEOKIT_PREFIX}draft_distance`;
 const XEOKIT_ANGLE_DRAFT_ID = `${XEOKIT_PREFIX}draft_angle`;
+const XEOKIT_ELEVATION_POINT_DRAFT_ID = `${XEOKIT_PREFIX}draft_elevation_point`;
+const XEOKIT_ELEVATION_DELTA_DRAFT_ID = `${XEOKIT_PREFIX}draft_elevation_delta`;
 const CLICK_TOLERANCE = 20;
 
 function nowId(prefix: string): string {
@@ -100,6 +119,7 @@ export function useXeokitMeasurementTools(options: {
   } = options;
   const requestRender = options.requestRender ?? null;
   const measurementStyle = useXeokitMeasurementStyleStore();
+  const unitSettings = useUnitSettingsStore();
 
   const readyRevision = ref(0);
   const clickTracker = ref<ClickTracker>({ down: null, moved: false });
@@ -108,7 +128,11 @@ export function useXeokitMeasurementTools(options: {
   let pointerLensEl: HTMLDivElement | null = null;
 
   const currentMeasurement = computed(() => {
-    return store.currentXeokitDistanceDraft.value ?? store.currentXeokitAngleDraft.value ?? null;
+    return store.currentXeokitDistanceDraft.value
+      ?? store.currentXeokitAngleDraft.value
+      ?? store.currentXeokitElevationPointDraft.value
+      ?? store.currentXeokitElevationDeltaDraft.value
+      ?? null;
   });
   const selectedMeasurement = computed(() => {
     const id = store.activeXeokitMeasurementId.value;
@@ -133,7 +157,12 @@ export function useXeokitMeasurementTools(options: {
 
   const statusText = computed(() => {
     const mode = store.toolMode.value;
-    if (mode !== 'xeokit_measure_distance' && mode !== 'xeokit_measure_angle') {
+    if (
+      mode !== 'xeokit_measure_distance' &&
+      mode !== 'xeokit_measure_angle' &&
+      mode !== 'xeokit_measure_elevation_point' &&
+      mode !== 'xeokit_measure_elevation_delta'
+    ) {
       return '当前非测量模式';
     }
     if (!dtxViewerRef.value) return '三维查看器未初始化';
@@ -147,10 +176,20 @@ export function useXeokitMeasurementTools(options: {
         : '距离测量：第一击创建测量，随后 hover 预览';
     }
 
-    const draft = store.currentXeokitAngleDraft.value;
-    if (!draft) return '角度测量：第一击创建测量';
-    if (draft.stage === 'finding_corner') return '角度测量：第二击锁定拐点；点空白取消';
-    return '角度测量：第三击完成；点空白取消';
+    if (mode === 'xeokit_measure_angle') {
+      const draft = store.currentXeokitAngleDraft.value;
+      if (!draft) return '角度测量：第一击创建测量';
+      if (draft.stage === 'finding_corner') return '角度测量：第二击锁定拐点；点空白取消';
+      return '角度测量：第三击完成；点空白取消';
+    }
+
+    if (mode === 'xeokit_measure_elevation_point') {
+      return '点标高：hover 预览当前点位，单击完成；点空白取消';
+    }
+
+    return store.currentXeokitElevationDeltaDraft.value
+      ? '高差测量：第二击完成；点空白取消'
+      : '高差测量：第一击锁定起点，第二点 hover 预览';
   });
 
   function refreshReadyState() {
@@ -158,7 +197,10 @@ export function useXeokitMeasurementTools(options: {
   }
 
   function isActiveMode() {
-    return store.toolMode.value === 'xeokit_measure_distance' || store.toolMode.value === 'xeokit_measure_angle';
+    return store.toolMode.value === 'xeokit_measure_distance'
+      || store.toolMode.value === 'xeokit_measure_angle'
+      || store.toolMode.value === 'xeokit_measure_elevation_point'
+      || store.toolMode.value === 'xeokit_measure_elevation_delta';
   }
 
   function buildMeasurementAnnotationId(id: string): string {
@@ -344,6 +386,12 @@ export function useXeokitMeasurementTools(options: {
   }
 
   function getHoverMarkerRole(): XeokitMarkerRole {
+    if (store.toolMode.value === 'xeokit_measure_elevation_point') {
+      return 'target';
+    }
+    if (store.toolMode.value === 'xeokit_measure_elevation_delta') {
+      return store.currentXeokitElevationDeltaDraft.value ? 'target' : 'origin';
+    }
     if (store.toolMode.value === 'xeokit_measure_angle' && store.currentXeokitAngleDraft.value?.stage === 'finding_target') {
       return 'target';
     }
@@ -356,9 +404,43 @@ export function useXeokitMeasurementTools(options: {
     return 'hover';
   }
 
+  function getPointerLensText(snapped: boolean, markerRole: XeokitMarkerRole): { title: string; subtitle: string } {
+    const mode = store.toolMode.value;
+    if (!snapped) {
+      if (mode === 'xeokit_measure_elevation_point') {
+        return { title: '等待可拾取点', subtitle: '当前未命中可拾取面' };
+      }
+      if (mode === 'xeokit_measure_elevation_delta') {
+        return {
+          title: store.currentXeokitElevationDeltaDraft.value ? '等待终点' : '等待起点',
+          subtitle: '当前未命中可拾取面',
+        };
+      }
+      return {
+        title: markerRole === 'corner' ? '等待拐点' : markerRole === 'target' ? '等待终点' : '等待可拾取点',
+        subtitle: '当前未命中可拾取面',
+      };
+    }
+
+    if (mode === 'xeokit_measure_elevation_point') {
+      return { title: '锁定标高点', subtitle: '' };
+    }
+    if (mode === 'xeokit_measure_elevation_delta') {
+      return {
+        title: store.currentXeokitElevationDeltaDraft.value ? '更新终点' : '锁定起点',
+        subtitle: '',
+      };
+    }
+    return {
+      title: markerRole === 'corner' ? '锁定拐点' : markerRole === 'target' ? '更新终点' : '可拾取点',
+      subtitle: '',
+    };
+  }
+
   function updateHoverFeedback(canvas: HTMLCanvasElement, e: PointerEvent, hit: { entityId: string; worldPos: Vector3; objectId: string } | null) {
     const canvasPos = getCanvasPos(canvas, e);
     const markerRole = getHoverMarkerRole();
+    const lensText = getPointerLensText(Boolean(hit), markerRole);
 
     if (!hit) {
       store.setXeokitHoverState({
@@ -379,8 +461,8 @@ export function useXeokitMeasurementTools(options: {
       store.setXeokitPointerLensState({
         visible: true,
         snapped: false,
-        title: markerRole === 'corner' ? '等待拐点' : markerRole === 'target' ? '等待终点' : '等待可拾取点',
-        subtitle: '当前未命中可拾取面',
+        title: lensText.title,
+        subtitle: lensText.subtitle,
         canvasPos: { x: canvasPos.x, y: canvasPos.y },
       });
       updateOverlayElements();
@@ -405,8 +487,8 @@ export function useXeokitMeasurementTools(options: {
     store.setXeokitPointerLensState({
       visible: true,
       snapped: true,
-      title: markerRole === 'corner' ? '锁定拐点' : markerRole === 'target' ? '更新终点' : '可拾取点',
-      subtitle: hit.entityId,
+      title: lensText.title,
+      subtitle: lensText.subtitle || hit.entityId,
       canvasPos: { x: canvasPos.x, y: canvasPos.y },
     });
     updateOverlayElements();
@@ -441,6 +523,8 @@ export function useXeokitMeasurementTools(options: {
 
     const existing = annotations.get(annotationId);
     const displayTransform = dtxLayerRef.value?.getGlobalModelMatrix?.() ?? new Matrix4();
+    const displayUnit = unitSettings.displayUnit.value;
+    const precision = unitSettings.precision.value;
     const visible = isDraft || record.visible === undefined ? true : record.visible;
     const common = {
       approximate: isDraft || record.approximate,
@@ -476,6 +560,85 @@ export function useXeokitMeasurementTools(options: {
 
       if (existing) removeAnnotationById(annotationId);
       const next = new XeokitDistanceMeasurement(annotationSystem.materials, params);
+      next.userData.pickable = !isDraft;
+      next.userData.draggable = false;
+      annotationSystem.annotationGroup.add(next);
+      annotations.set(annotationId, next);
+      annotationSystem.registerExternalAnnotation(annotationId, next);
+      return;
+    }
+
+    if (record.kind === 'elevation_point') {
+      const params: XeokitElevationPointMeasurementParams = {
+        point: worldToAnnotationLocal(record.point.worldPos, dtxLayerRef),
+        labelLines: buildElevationPointLabelLines({
+          absoluteElevation: record.absoluteElevation,
+          relativeElevation: record.relativeElevation,
+          unit: displayUnit,
+          precision,
+          showAbsolute: measurementStyle.state.elevationPointShowAbsoluteLabel,
+          showRelative: measurementStyle.state.elevationPointShowRelativeLabel,
+        }),
+        visible,
+        markerVisible: measurementStyle.state.elevationPointShowMarker,
+        leaderVisible: visible && measurementStyle.state.elevationPointShowLeader,
+        labelVisible: visible && (
+          measurementStyle.state.elevationPointShowAbsoluteLabel
+          || measurementStyle.state.elevationPointShowRelativeLabel
+        ),
+      };
+
+      if (existing instanceof XeokitElevationPointMeasurement) {
+        existing.userData.pickable = !isDraft;
+        existing.setParams(params);
+        if (existing.parent !== annotationSystem.annotationGroup) {
+          annotationSystem.annotationGroup.add(existing);
+        }
+        return;
+      }
+
+      if (existing) removeAnnotationById(annotationId);
+      const next = new XeokitElevationPointMeasurement(annotationSystem.materials, params);
+      next.userData.pickable = !isDraft;
+      next.userData.draggable = false;
+      annotationSystem.annotationGroup.add(next);
+      annotations.set(annotationId, next);
+      annotationSystem.registerExternalAnnotation(annotationId, next);
+      return;
+    }
+
+    if (record.kind === 'elevation_delta') {
+      const labels = buildElevationDeltaLabelTexts({
+        originElevation: record.originElevation,
+        targetElevation: record.targetElevation,
+        deltaElevation: record.deltaElevation,
+        unit: displayUnit,
+        precision,
+      });
+      const params: XeokitElevationDeltaMeasurementParams = {
+        origin: worldToAnnotationLocal(record.origin.worldPos, dtxLayerRef),
+        target: worldToAnnotationLocal(record.target.worldPos, dtxLayerRef),
+        originLabelText: labels.origin,
+        targetLabelText: labels.target,
+        deltaLabelText: labels.delta,
+        visible,
+        markerVisible: measurementStyle.state.elevationDeltaShowMarkers,
+        endpointLabelsVisible: visible && measurementStyle.state.elevationDeltaShowEndpointLabels,
+        deltaLabelVisible: visible && measurementStyle.state.elevationDeltaShowDeltaLabel,
+        verticalGuideVisible: visible && measurementStyle.state.elevationDeltaShowVerticalGuide,
+      };
+
+      if (existing instanceof XeokitElevationDeltaMeasurement) {
+        existing.userData.pickable = !isDraft;
+        existing.setParams(params);
+        if (existing.parent !== annotationSystem.annotationGroup) {
+          annotationSystem.annotationGroup.add(existing);
+        }
+        return;
+      }
+
+      if (existing) removeAnnotationById(annotationId);
+      const next = new XeokitElevationDeltaMeasurement(annotationSystem.materials, params);
       next.userData.pickable = !isDraft;
       next.userData.draggable = false;
       annotationSystem.annotationGroup.add(next);
@@ -551,6 +714,16 @@ export function useXeokitMeasurementTools(options: {
       nextIds.add(annotationId);
       syncRecordAnnotation(annotationId, record, false);
     }
+    for (const record of store.xeokitElevationPointMeasurements.value) {
+      const annotationId = buildMeasurementAnnotationId(record.id);
+      nextIds.add(annotationId);
+      syncRecordAnnotation(annotationId, record, false);
+    }
+    for (const record of store.xeokitElevationDeltaMeasurements.value) {
+      const annotationId = buildMeasurementAnnotationId(record.id);
+      nextIds.add(annotationId);
+      syncRecordAnnotation(annotationId, record, false);
+    }
 
     // 仅在 Xeokit 测量模式激活时渲染草稿；否则列表/工具状态已切走，草稿不应留在场景里。
     if (isActiveMode()) {
@@ -564,6 +737,18 @@ export function useXeokitMeasurementTools(options: {
       if (draftAngle) {
         nextIds.add(XEOKIT_ANGLE_DRAFT_ID);
         syncRecordAnnotation(XEOKIT_ANGLE_DRAFT_ID, draftAngle, true);
+      }
+
+      const draftElevationPoint = store.currentXeokitElevationPointDraft.value;
+      if (draftElevationPoint) {
+        nextIds.add(XEOKIT_ELEVATION_POINT_DRAFT_ID);
+        syncRecordAnnotation(XEOKIT_ELEVATION_POINT_DRAFT_ID, draftElevationPoint, true);
+      }
+
+      const draftElevationDelta = store.currentXeokitElevationDeltaDraft.value;
+      if (draftElevationDelta) {
+        nextIds.add(XEOKIT_ELEVATION_DELTA_DRAFT_ID);
+        syncRecordAnnotation(XEOKIT_ELEVATION_DELTA_DRAFT_ID, draftElevationDelta, true);
       }
     }
 
@@ -590,7 +775,11 @@ export function useXeokitMeasurementTools(options: {
     const points =
       record.kind === 'distance'
         ? [record.origin.worldPos, record.target.worldPos]
-        : [record.origin.worldPos, record.corner.worldPos, record.target.worldPos];
+        : record.kind === 'angle'
+          ? [record.origin.worldPos, record.corner.worldPos, record.target.worldPos]
+          : record.kind === 'elevation_point'
+            ? [record.point.worldPos]
+            : [record.origin.worldPos, record.target.worldPos];
     const aabb = aabbFromPoints(points);
     if (!aabb) return;
     viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
@@ -618,7 +807,7 @@ export function useXeokitMeasurementTools(options: {
     requestRender?.();
   }
 
-  function activate(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle') {
+  function activate(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle' | 'xeokit_measure_elevation_point' | 'xeokit_measure_elevation_delta') {
     store.setMeasurementDetailsDrawerOpen(false);
     store.setToolMode(mode);
   }
@@ -663,6 +852,33 @@ export function useXeokitMeasurementTools(options: {
     const hit = pickSurfacePoint(canvas, e);
     updateHoverFeedback(canvas, e, hit);
 
+    if (store.toolMode.value === 'xeokit_measure_elevation_point') {
+      if (!hit) {
+        store.setCurrentXeokitElevationPointDraft(null);
+      } else {
+        const absoluteElevation = getMeasurementPointElevation({
+          entityId: hit.entityId,
+          worldPos: vec3ToTuple(hit.worldPos),
+        });
+        const datumElevation = measurementStyle.state.elevationDatum;
+        const currentDraft = store.currentXeokitElevationPointDraft.value;
+        store.setCurrentXeokitElevationPointDraft({
+          id: currentDraft?.id ?? nowId('xelevp'),
+          kind: 'elevation_point',
+          point: { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) },
+          absoluteElevation,
+          datumElevation,
+          relativeElevation: absoluteElevation - datumElevation,
+          visible: true,
+          approximate: true,
+          createdAt: currentDraft?.createdAt ?? Date.now(),
+        });
+      }
+      syncFromStore();
+      requestRender?.();
+      return;
+    }
+
     if (store.toolMode.value === 'xeokit_measure_distance' && store.currentXeokitDistanceDraft.value) {
       if (!hit) {
         store.setCurrentXeokitDistanceDraft({
@@ -673,6 +889,32 @@ export function useXeokitMeasurementTools(options: {
         store.setCurrentXeokitDistanceDraft({
           ...store.currentXeokitDistanceDraft.value,
           target: { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) },
+          visible: true,
+        });
+      }
+      syncFromStore();
+      requestRender?.();
+      return;
+    }
+
+    const elevationDeltaDraft = store.currentXeokitElevationDeltaDraft.value;
+    if (store.toolMode.value === 'xeokit_measure_elevation_delta' && elevationDeltaDraft) {
+      if (!hit) {
+        store.setCurrentXeokitElevationDeltaDraft({
+          ...elevationDeltaDraft,
+          visible: false,
+        });
+      } else {
+        const targetElevation = getMeasurementPointElevation({
+          entityId: hit.entityId,
+          worldPos: vec3ToTuple(hit.worldPos),
+        });
+        store.setCurrentXeokitElevationDeltaDraft({
+          ...elevationDeltaDraft,
+          target: { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) },
+          targetElevation,
+          deltaElevation: targetElevation - elevationDeltaDraft.originElevation,
+          datumElevation: measurementStyle.state.elevationDatum,
           visible: true,
         });
       }
@@ -719,6 +961,52 @@ export function useXeokitMeasurementTools(options: {
 
     const hit = pickSurfacePoint(canvas, e);
     const toolMode = store.toolMode.value;
+    const datumElevation = measurementStyle.state.elevationDatum;
+
+    if (toolMode === 'xeokit_measure_elevation_point') {
+      if (!hit) {
+        store.clearCurrentXeokitDraft();
+        clearHoverFeedback();
+        syncFromStore();
+        requestRender?.();
+        return;
+      }
+
+      const absoluteElevation = getMeasurementPointElevation({
+        entityId: hit.entityId,
+        worldPos: vec3ToTuple(hit.worldPos),
+      });
+      const draft = store.currentXeokitElevationPointDraft.value ?? {
+        id: nowId('xelevp'),
+        kind: 'elevation_point' as const,
+        point: { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) },
+        absoluteElevation,
+        datumElevation,
+        relativeElevation: absoluteElevation - datumElevation,
+        visible: true,
+        approximate: true as const,
+        createdAt: Date.now(),
+      };
+      const rec: XeokitElevationPointMeasurementRecord = {
+        id: draft.id,
+        kind: 'elevation_point',
+        point: { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) },
+        absoluteElevation,
+        datumElevation,
+        relativeElevation: absoluteElevation - datumElevation,
+        visible: true,
+        approximate: false,
+        createdAt: draft.createdAt,
+        sourceAnnotationId: store.activeAnnotationContext.value?.id,
+        sourceAnnotationType: store.activeAnnotationContext.value?.type,
+      };
+      store.addXeokitElevationPointMeasurement(rec);
+      store.clearCurrentXeokitDraft();
+      syncFromStore();
+      updateSelectionBinding(rec.id);
+      requestRender?.();
+      return;
+    }
 
     if (toolMode === 'xeokit_measure_distance') {
       const draft = store.currentXeokitDistanceDraft.value;
@@ -760,6 +1048,65 @@ export function useXeokitMeasurementTools(options: {
         sourceAnnotationType: store.activeAnnotationContext.value?.type,
       };
       store.addXeokitDistanceMeasurement(rec);
+      store.clearCurrentXeokitDraft();
+      syncFromStore();
+      updateSelectionBinding(rec.id);
+      requestRender?.();
+      return;
+    }
+
+    if (toolMode === 'xeokit_measure_elevation_delta') {
+      const draft = store.currentXeokitElevationDeltaDraft.value;
+      if (!draft) {
+        if (!hit) return;
+        const point: MeasurementPoint = { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) };
+        const absoluteElevation = getMeasurementPointElevation(point);
+        const nextDraft: XeokitElevationDeltaDraft = {
+          id: nowId('xelevd'),
+          kind: 'elevation_delta',
+          origin: point,
+          target: point,
+          originElevation: absoluteElevation,
+          targetElevation: absoluteElevation,
+          deltaElevation: 0,
+          datumElevation,
+          stage: 'finding_target',
+          visible: true,
+          approximate: true,
+          createdAt: Date.now(),
+        };
+        store.setCurrentXeokitElevationDeltaDraft(nextDraft);
+        syncFromStore();
+        requestRender?.();
+        return;
+      }
+
+      if (!hit) {
+        store.clearCurrentXeokitDraft();
+        clearHoverFeedback();
+        syncFromStore();
+        requestRender?.();
+        return;
+      }
+
+      const targetPoint: MeasurementPoint = { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) };
+      const targetElevation = getMeasurementPointElevation(targetPoint);
+      const rec: XeokitElevationDeltaMeasurementRecord = {
+        id: draft.id,
+        kind: 'elevation_delta',
+        origin: draft.origin,
+        target: targetPoint,
+        originElevation: draft.originElevation,
+        targetElevation,
+        deltaElevation: targetElevation - draft.originElevation,
+        datumElevation,
+        visible: true,
+        approximate: false,
+        createdAt: draft.createdAt,
+        sourceAnnotationId: store.activeAnnotationContext.value?.id,
+        sourceAnnotationType: store.activeAnnotationContext.value?.type,
+      };
+      store.addXeokitElevationDeltaMeasurement(rec);
       store.clearCurrentXeokitDraft();
       syncFromStore();
       updateSelectionBinding(rec.id);
@@ -831,6 +1178,11 @@ export function useXeokitMeasurementTools(options: {
 
   function onCanvasPointerCancel(_canvas: HTMLCanvasElement, _e: PointerEvent) {
     clickTracker.value = { down: null, moved: false };
+    if (store.toolMode.value === 'xeokit_measure_elevation_point') {
+      store.setCurrentXeokitElevationPointDraft(null);
+      syncFromStore();
+      requestRender?.();
+    }
     clearHoverFeedback();
   }
 
@@ -853,8 +1205,12 @@ export function useXeokitMeasurementTools(options: {
     () => [
       store.xeokitDistanceMeasurements.value,
       store.xeokitAngleMeasurements.value,
+      store.xeokitElevationPointMeasurements.value,
+      store.xeokitElevationDeltaMeasurements.value,
       store.currentXeokitDistanceDraft.value,
       store.currentXeokitAngleDraft.value,
+      store.currentXeokitElevationPointDraft.value,
+      store.currentXeokitElevationDeltaDraft.value,
       options.annotationSystemRef?.value ?? null,
     ],
     () => {
@@ -880,7 +1236,12 @@ export function useXeokitMeasurementTools(options: {
         return;
       }
       const nextId = selectedId.slice(XEOKIT_PREFIX.length);
-      if (nextId === 'draft_distance' || nextId === 'draft_angle') return;
+      if (
+        nextId === 'draft_distance' ||
+        nextId === 'draft_angle' ||
+        nextId === 'draft_elevation_point' ||
+        nextId === 'draft_elevation_delta'
+      ) return;
       if (store.activeXeokitMeasurementId.value !== nextId) {
         store.activeXeokitMeasurementId.value = nextId;
       }
@@ -900,6 +1261,28 @@ export function useXeokitMeasurementTools(options: {
     () => [store.xeokitMarkerState.value, store.xeokitPointerLensState.value],
     () => {
       updateOverlayElements();
+    },
+    { deep: true },
+  );
+
+  watch(
+    () => measurementStyle.state.elevationDatum,
+    (datumElevation) => {
+      store.syncXeokitElevationDatum(datumElevation);
+      syncFromStore();
+      requestRender?.();
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => ({
+      displayUnit: unitSettings.displayUnit.value,
+      precision: unitSettings.precision.value,
+    }),
+    () => {
+      syncFromStore();
+      requestRender?.();
     },
     { deep: true },
   );

@@ -13,9 +13,11 @@ import {
 
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import {
+  type XeokitMeasurementKind,
   type XeokitMeasurementRecord,
   useToolStore,
 } from '@/composables/useToolStore';
+import { formatMeasurementKindLabel } from '@/utils/xeokitMeasurementFormat';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -40,7 +42,9 @@ const store = useToolStore();
 const isVisible = computed(() => {
   return (
     store.toolMode.value === 'xeokit_measure_distance' ||
-    store.toolMode.value === 'xeokit_measure_angle'
+    store.toolMode.value === 'xeokit_measure_angle' ||
+    store.toolMode.value === 'xeokit_measure_elevation_point' ||
+    store.toolMode.value === 'xeokit_measure_elevation_delta'
   );
 });
 
@@ -65,7 +69,13 @@ const allVisibilityLabel = computed(() => {
 const hasAnyMeasurements = computed(() => sorted.value.length > 0);
 const currentActionDisabled = computed(() => !activeMeasurement.value);
 const modeLabel = computed(() => {
-  return store.toolMode.value === 'xeokit_measure_angle' ? '角度测量' : '距离测量';
+  const modeToKind: Record<string, XeokitMeasurementKind> = {
+    xeokit_measure_distance: 'distance',
+    xeokit_measure_angle: 'angle',
+    xeokit_measure_elevation_point: 'elevation_point',
+    xeokit_measure_elevation_delta: 'elevation_delta',
+  };
+  return formatMeasurementKindLabel(modeToKind[store.toolMode.value] ?? 'distance');
 });
 
 function openMeasurementPanel(): void {

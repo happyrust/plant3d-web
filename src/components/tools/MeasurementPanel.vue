@@ -6,8 +6,13 @@ import {
   type XeokitMeasurementRecord,
   useToolStore,
 } from '@/composables/useToolStore';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import {
+  formatMeasurementKindLabel,
+  formatMeasurementSummary,
+} from '@/utils/xeokitMeasurementFormat';
 
 type ToolsApi = {
   ready: Ref<boolean>;
@@ -24,12 +29,15 @@ const store = useToolStore();
 const ctx = useViewerContext();
 const xeokitTools = computed(() => ctx.xeokitMeasurementTools.value);
 const measurementStyle = useXeokitMeasurementStyleStore();
+const unitSettings = useUnitSettingsStore();
 const measurementRowEls = ref(new Map<string, HTMLElement>());
 
 const isXeokitMode = computed(() => {
   return (
     store.toolMode.value === 'xeokit_measure_distance' ||
-    store.toolMode.value === 'xeokit_measure_angle'
+    store.toolMode.value === 'xeokit_measure_angle' ||
+    store.toolMode.value === 'xeokit_measure_elevation_point' ||
+    store.toolMode.value === 'xeokit_measure_elevation_delta'
   );
 });
 
@@ -70,6 +78,22 @@ const angleStylePreview = computed(() => {
   if (measurementStyle.state.angleShowMarkers) items.push('端点');
   return items.length > 0 ? items.join(' · ') : '仅保留角度连线';
 });
+const elevationPointStylePreview = computed(() => {
+  const items: string[] = [];
+  if (measurementStyle.state.elevationPointShowAbsoluteLabel) items.push('绝对标高');
+  if (measurementStyle.state.elevationPointShowRelativeLabel) items.push('相对基准');
+  if (measurementStyle.state.elevationPointShowMarker) items.push('点标记');
+  if (measurementStyle.state.elevationPointShowLeader) items.push('引线');
+  return items.length > 0 ? items.join(' · ') : '仅保留标签容器';
+});
+const elevationDeltaStylePreview = computed(() => {
+  const items: string[] = [];
+  if (measurementStyle.state.elevationDeltaShowEndpointLabels) items.push('起终点标高');
+  if (measurementStyle.state.elevationDeltaShowDeltaLabel) items.push('高差标签');
+  if (measurementStyle.state.elevationDeltaShowVerticalGuide) items.push('竖向辅助线');
+  if (measurementStyle.state.elevationDeltaShowMarkers) items.push('端点');
+  return items.length > 0 ? items.join(' · ') : '仅保留基础几何';
+});
 const distanceStyleNote = computed(() => {
   return measurementStyle.state.distanceShowAxisBreakdown
     ? '当前会同时显示总长和 X / Y / Z 分量标签。'
@@ -81,10 +105,11 @@ function isApproximateMeasurement(record: MeasurementRecord | XeokitMeasurementR
 }
 
 function getMeasurementSummary(record: MeasurementRecord | XeokitMeasurementRecord): string {
-  if (record.kind === 'distance') {
-    return `起点 ${record.origin.entityId} · 终点 ${record.target.entityId}`;
-  }
-  return `起点 ${record.origin.entityId} · 拐点 ${record.corner.entityId} · 终点 ${record.target.entityId}`;
+  return formatMeasurementSummary(
+    record,
+    unitSettings.displayUnit.value,
+    unitSettings.precision.value,
+  );
 }
 
 function getVisibilityActionLabel(visible: boolean): string {
@@ -99,7 +124,7 @@ function setMeasurementRowRef(id: string, el: Element | null) {
   measurementRowEls.value.delete(id);
 }
 
-function setMode(mode: 'none' | 'measure_distance' | 'measure_angle') {
+function setMode(mode: 'none' | 'measure_distance' | 'measure_angle' | 'measure_elevation_point' | 'measure_elevation_delta') {
   if (!isXeokitMode.value && store.toolMode.value === mode) {
     store.setToolMode('none');
     return;
@@ -114,7 +139,14 @@ function setMode(mode: 'none' | 'measure_distance' | 'measure_angle') {
     return;
   }
 
-  const nextMode = mode === 'measure_distance' ? 'xeokit_measure_distance' : 'xeokit_measure_angle';
+  const nextMode =
+    mode === 'measure_distance'
+      ? 'xeokit_measure_distance'
+      : mode === 'measure_angle'
+        ? 'xeokit_measure_angle'
+        : mode === 'measure_elevation_point'
+          ? 'xeokit_measure_elevation_point'
+          : 'xeokit_measure_elevation_delta';
   if (xeokitTools.value) {
     xeokitTools.value.activate(nextMode);
     return;
@@ -187,12 +219,39 @@ function clearMeasurements() {
   store.clearMeasurements();
 }
 
-function updateMeasurementStyle(key: 'distanceShowTotalLabel' | 'distanceShowMarkers' | 'distanceShowAxisBreakdown' | 'angleShowLabel' | 'angleShowMarkers', checked: boolean) {
+function updateMeasurementStyle(
+  key:
+    | 'distanceShowTotalLabel'
+    | 'distanceShowMarkers'
+    | 'distanceShowAxisBreakdown'
+    | 'angleShowLabel'
+    | 'angleShowMarkers'
+    | 'elevationPointShowAbsoluteLabel'
+    | 'elevationPointShowRelativeLabel'
+    | 'elevationPointShowMarker'
+    | 'elevationPointShowLeader'
+    | 'elevationDeltaShowEndpointLabels'
+    | 'elevationDeltaShowDeltaLabel'
+    | 'elevationDeltaShowVerticalGuide'
+    | 'elevationDeltaShowMarkers',
+  checked: boolean,
+) {
   measurementStyle.updateStyle({ [key]: checked });
 }
 
 function resetMeasurementStyle() {
   measurementStyle.resetStyle();
+}
+
+function updateDatumElevation(raw: string): void {
+  const parsed = Number(raw);
+  measurementStyle.updateStyle({
+    elevationDatum: Number.isFinite(parsed) ? parsed : 0,
+  });
+}
+
+function resetDatumElevation(): void {
+  measurementStyle.updateStyle({ elevationDatum: 0 });
 }
 
 watch(
@@ -235,11 +294,44 @@ watch(
 
         <button type="button"
           class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          :class="store.toolMode.value === 'xeokit_measure_elevation_point' ? 'bg-muted' : ''"
+          :disabled="!isMeasurementReady"
+          @click="setMode('measure_elevation_point')">
+          点标高
+        </button>
+
+        <button type="button"
+          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          :class="store.toolMode.value === 'xeokit_measure_elevation_delta' ? 'bg-muted' : ''"
+          :disabled="!isMeasurementReady"
+          @click="setMode('measure_elevation_delta')">
+          高差
+        </button>
+
+        <button type="button"
+          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
           :class="store.toolMode.value === 'xeokit_measure_angle' ? 'bg-muted' : ''"
           :disabled="!isMeasurementReady"
           @click="setMode('measure_angle')">
           角度
         </button>
+      </div>
+
+      <div class="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="text-xs font-medium text-foreground">标高基准</div>
+          <input type="number"
+            step="0.001"
+            class="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm"
+            :value="measurementStyle.state.elevationDatum"
+            @change="updateDatumElevation(($event.target as HTMLInputElement).value)" />
+          <span class="text-xs text-muted-foreground">{{ unitSettings.displayUnit.value }}</span>
+          <button type="button"
+            class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+            @click="resetDatumElevation">
+            恢复 0
+          </button>
+        </div>
       </div>
 
       <div class="mt-2 text-xs text-muted-foreground">
@@ -329,6 +421,78 @@ watch(
               </label>
             </div>
           </div>
+
+          <div class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+            <div class="font-medium">点标高</div>
+            <div class="mt-1 text-xs text-muted-foreground">
+              同时控制绝对标高、相对基准、点标记与引线显示。
+            </div>
+            <div class="mt-2 rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
+              当前效果：{{ elevationPointStylePreview }}
+            </div>
+            <div class="mt-2 flex flex-col gap-2">
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationPointShowAbsoluteLabel"
+                  @change="updateMeasurementStyle('elevationPointShowAbsoluteLabel', ($event.target as HTMLInputElement).checked)" />
+                <span>显示绝对标高</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationPointShowRelativeLabel"
+                  @change="updateMeasurementStyle('elevationPointShowRelativeLabel', ($event.target as HTMLInputElement).checked)" />
+                <span>显示相对基准</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationPointShowMarker"
+                  @change="updateMeasurementStyle('elevationPointShowMarker', ($event.target as HTMLInputElement).checked)" />
+                <span>显示点标记</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationPointShowLeader"
+                  @change="updateMeasurementStyle('elevationPointShowLeader', ($event.target as HTMLInputElement).checked)" />
+                <span>显示引线</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+            <div class="font-medium">高差</div>
+            <div class="mt-1 text-xs text-muted-foreground">
+              控制起终点标高、高差标签、竖向辅助线与端点显示。
+            </div>
+            <div class="mt-2 rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
+              当前效果：{{ elevationDeltaStylePreview }}
+            </div>
+            <div class="mt-2 flex flex-col gap-2">
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationDeltaShowEndpointLabels"
+                  @change="updateMeasurementStyle('elevationDeltaShowEndpointLabels', ($event.target as HTMLInputElement).checked)" />
+                <span>显示起终点标高</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationDeltaShowDeltaLabel"
+                  @change="updateMeasurementStyle('elevationDeltaShowDeltaLabel', ($event.target as HTMLInputElement).checked)" />
+                <span>显示高差标签</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationDeltaShowVerticalGuide"
+                  @change="updateMeasurementStyle('elevationDeltaShowVerticalGuide', ($event.target as HTMLInputElement).checked)" />
+                <span>显示竖向辅助线</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="checkbox"
+                  :checked="measurementStyle.state.elevationDeltaShowMarkers"
+                  @change="updateMeasurementStyle('elevationDeltaShowMarkers', ($event.target as HTMLInputElement).checked)" />
+                <span>显示端点</span>
+              </label>
+            </div>
+          </div>
         </div>
       </details>
     </div>
@@ -360,7 +524,7 @@ watch(
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
-                  {{ m.kind === 'distance' ? '距离测量' : '角度测量' }}
+                  {{ formatMeasurementKindLabel(m.kind) }}
                 </span>
                 <span v-if="isApproximateMeasurement(m)"
                   :data-testid="`measurement-approximate-badge-${m.id}`"

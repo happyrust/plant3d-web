@@ -2,14 +2,19 @@
 import { computed, watch, type Ref } from 'vue';
 
 import { useToolStore } from '@/composables/useToolStore';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { formatXeokitHoverHint } from '@/composables/xeokitMeasurementUi';
+import {
+  formatMeasurementKindLabel,
+  formatMeasurementSummary,
+} from '@/utils/xeokitMeasurementFormat';
 
 type ToolsApi = {
   ready: Ref<boolean>;
   statusText: Ref<string>;
   currentMeasurement: Ref<unknown>;
-  activate: (mode: 'xeokit_measure_distance' | 'xeokit_measure_angle') => void;
+  activate: (mode: 'xeokit_measure_distance' | 'xeokit_measure_angle' | 'xeokit_measure_elevation_point' | 'xeokit_measure_elevation_delta') => void;
   deactivate: () => void;
   reset: () => void;
   flyToMeasurement: (id: string) => void;
@@ -23,6 +28,7 @@ const props = defineProps<{
 
 const store = useToolStore();
 const ctx = useViewerContext();
+const unitSettings = useUnitSettingsStore();
 
 const sorted = computed(() => {
   return [...store.allXeokitMeasurements.value].sort((a, b) => b.createdAt - a.createdAt);
@@ -32,6 +38,12 @@ const statusText = computed(() => ctx.viewerError.value || props.tools.statusTex
 const draftHint = computed(() => {
   if (store.currentXeokitDistanceDraft.value) {
     return '距离草稿已创建，移动鼠标预览后第二击完成。';
+  }
+  if (store.currentXeokitElevationPointDraft.value) {
+    return '点标高 hover 预览中，单击即可完成。';
+  }
+  if (store.currentXeokitElevationDeltaDraft.value) {
+    return '高差起点已锁定，请选择终点。';
   }
   const angleDraft = store.currentXeokitAngleDraft.value;
   if (!angleDraft) return '尚未创建草稿。';
@@ -51,7 +63,7 @@ function selectMeasurement(id: string) {
   ctx.annotationSystem.value?.selectAnnotation?.(`xmeas_${id}`);
 }
 
-function setMode(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle') {
+function setMode(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle' | 'xeokit_measure_elevation_point' | 'xeokit_measure_elevation_delta') {
   props.tools.activate(mode);
 }
 
@@ -105,6 +117,20 @@ watch(
         </button>
         <button type="button"
           class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          :class="store.toolMode.value === 'xeokit_measure_elevation_point' ? 'bg-muted' : ''"
+          :disabled="!props.tools.ready.value"
+          @click="setMode('xeokit_measure_elevation_point')">
+          点标高
+        </button>
+        <button type="button"
+          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          :class="store.toolMode.value === 'xeokit_measure_elevation_delta' ? 'bg-muted' : ''"
+          :disabled="!props.tools.ready.value"
+          @click="setMode('xeokit_measure_elevation_delta')">
+          高差
+        </button>
+        <button type="button"
+          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
           @click="props.tools.reset()">
           重置草稿
         </button>
@@ -141,11 +167,11 @@ watch(
           <div class="flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm">
-                <span class="font-semibold">{{ m.kind === 'distance' ? '距离' : '角度' }}</span>
+                <span class="font-semibold">{{ formatMeasurementKindLabel(m.kind) }}</span>
                 <span v-if="m.approximate" class="ml-2 text-xs text-muted-foreground">草稿</span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">
-                {{ m.kind === 'distance' ? `${m.origin.entityId} → ${m.target.entityId}` : `${m.origin.entityId} / ${m.corner.entityId} / ${m.target.entityId}` }}
+                {{ formatMeasurementSummary(m, unitSettings.displayUnit.value, unitSettings.precision.value) }}
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-1">

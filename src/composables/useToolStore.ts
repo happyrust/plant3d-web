@@ -33,6 +33,8 @@ export type ToolMode =
   | 'measure_angle'
   | 'xeokit_measure_distance'
   | 'xeokit_measure_angle'
+  | 'xeokit_measure_elevation_point'
+  | 'xeokit_measure_elevation_delta'
   | 'measure_point_to_object'
   | 'measure_object_to_object'
   | 'measure_pipe_to_structure'
@@ -50,7 +52,7 @@ export type AttributeDisplayMode = 'all' | 'general' | 'component' | 'uda';
 
 export type Vec3 = [number, number, number];
 
-export type MeasurementKind = 'distance' | 'angle';
+export type MeasurementKind = 'distance' | 'angle' | 'elevation_point' | 'elevation_delta';
 
 export type MeasurementPoint = {
   entityId: string;
@@ -81,9 +83,37 @@ export type AngleMeasurementRecord = {
   createdAt: number;
 } & MeasurementSourceLink;
 
-export type MeasurementRecord = DistanceMeasurementRecord | AngleMeasurementRecord;
+export type ElevationPointMeasurementRecord = {
+  id: string;
+  kind: 'elevation_point';
+  point: MeasurementPoint;
+  absoluteElevation: number;
+  datumElevation: number;
+  relativeElevation: number;
+  visible: boolean;
+  createdAt: number;
+} & MeasurementSourceLink;
 
-export type XeokitMeasurementKind = 'distance' | 'angle';
+export type ElevationDeltaMeasurementRecord = {
+  id: string;
+  kind: 'elevation_delta';
+  origin: MeasurementPoint;
+  target: MeasurementPoint;
+  originElevation: number;
+  targetElevation: number;
+  deltaElevation: number;
+  datumElevation: number;
+  visible: boolean;
+  createdAt: number;
+} & MeasurementSourceLink;
+
+export type MeasurementRecord =
+  | DistanceMeasurementRecord
+  | AngleMeasurementRecord
+  | ElevationPointMeasurementRecord
+  | ElevationDeltaMeasurementRecord;
+
+export type XeokitMeasurementKind = 'distance' | 'angle' | 'elevation_point' | 'elevation_delta';
 
 export type XeokitDistanceMeasurementRecord = {
   id: string;
@@ -106,7 +136,37 @@ export type XeokitAngleMeasurementRecord = {
   createdAt: number;
 } & MeasurementSourceLink;
 
-export type XeokitMeasurementRecord = XeokitDistanceMeasurementRecord | XeokitAngleMeasurementRecord;
+export type XeokitElevationPointMeasurementRecord = {
+  id: string;
+  kind: 'elevation_point';
+  point: MeasurementPoint;
+  absoluteElevation: number;
+  datumElevation: number;
+  relativeElevation: number;
+  visible: boolean;
+  approximate: boolean;
+  createdAt: number;
+} & MeasurementSourceLink;
+
+export type XeokitElevationDeltaMeasurementRecord = {
+  id: string;
+  kind: 'elevation_delta';
+  origin: MeasurementPoint;
+  target: MeasurementPoint;
+  originElevation: number;
+  targetElevation: number;
+  deltaElevation: number;
+  datumElevation: number;
+  visible: boolean;
+  approximate: boolean;
+  createdAt: number;
+} & MeasurementSourceLink;
+
+export type XeokitMeasurementRecord =
+  | XeokitDistanceMeasurementRecord
+  | XeokitAngleMeasurementRecord
+  | XeokitElevationPointMeasurementRecord
+  | XeokitElevationDeltaMeasurementRecord;
 
 export type XeokitDistanceDraft = {
   id: string;
@@ -127,6 +187,35 @@ export type XeokitAngleDraft = {
   corner: MeasurementPoint;
   target: MeasurementPoint;
   stage: XeokitAngleDraftStage;
+  visible: boolean;
+  approximate: true;
+  createdAt: number;
+};
+
+export type XeokitElevationPointDraft = {
+  id: string;
+  kind: 'elevation_point';
+  point: MeasurementPoint;
+  absoluteElevation: number;
+  datumElevation: number;
+  relativeElevation: number;
+  visible: boolean;
+  approximate: true;
+  createdAt: number;
+};
+
+export type XeokitElevationDeltaDraftStage = 'finding_target';
+
+export type XeokitElevationDeltaDraft = {
+  id: string;
+  kind: 'elevation_delta';
+  origin: MeasurementPoint;
+  target: MeasurementPoint;
+  originElevation: number;
+  targetElevation: number;
+  deltaElevation: number;
+  datumElevation: number;
+  stage: XeokitElevationDeltaDraftStage;
   visible: boolean;
   approximate: true;
   createdAt: number;
@@ -158,6 +247,28 @@ export type XeokitPointerLensState = {
   subtitle: string;
   canvasPos: { x: number; y: number } | null;
 };
+
+function rebaseXeokitElevationPointRecord(
+  record: XeokitElevationPointMeasurementRecord | XeokitElevationPointDraft,
+  datumElevation: number,
+): XeokitElevationPointMeasurementRecord | XeokitElevationPointDraft {
+  return {
+    ...record,
+    datumElevation,
+    relativeElevation: record.absoluteElevation - datumElevation,
+  };
+}
+
+function rebaseXeokitElevationDeltaRecord(
+  record: XeokitElevationDeltaMeasurementRecord | XeokitElevationDeltaDraft,
+  datumElevation: number,
+): XeokitElevationDeltaMeasurementRecord | XeokitElevationDeltaDraft {
+  return {
+    ...record,
+    datumElevation,
+    deltaElevation: record.targetElevation - record.originElevation,
+  };
+}
 
 export type DimensionKind = 'linear_distance' | 'angle';
 
@@ -378,6 +489,8 @@ type PersistedStateV5 = {
   dimensions: DimensionRecord[];
   xeokitDistanceMeasurements: XeokitDistanceMeasurementRecord[];
   xeokitAngleMeasurements: XeokitAngleMeasurementRecord[];
+  xeokitElevationPointMeasurements: XeokitElevationPointMeasurementRecord[];
+  xeokitElevationDeltaMeasurements: XeokitElevationDeltaMeasurementRecord[];
 };
 
 const STORAGE_KEY_V1 = 'plant3d-web-tools-v1';
@@ -499,6 +612,8 @@ function normalizeV1(parsed: PersistedStateV1): PersistedStateV5 {
     dimensions: [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],
+    xeokitElevationPointMeasurements: [],
+    xeokitElevationDeltaMeasurements: [],
   };
 }
 
@@ -513,6 +628,8 @@ function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
     dimensions: [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],
+    xeokitElevationPointMeasurements: [],
+    xeokitElevationDeltaMeasurements: [],
   };
 }
 
@@ -527,6 +644,8 @@ function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
     dimensions: [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],
+    xeokitElevationPointMeasurements: [],
+    xeokitElevationDeltaMeasurements: [],
   };
 }
 
@@ -541,6 +660,8 @@ function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
     dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],
+    xeokitElevationPointMeasurements: [],
+    xeokitElevationDeltaMeasurements: [],
   };
 }
 
@@ -555,6 +676,12 @@ function normalizeV5(parsed: PersistedStateV5): PersistedStateV5 {
     dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
     xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements) ? parsed.xeokitDistanceMeasurements : [],
     xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements) ? parsed.xeokitAngleMeasurements : [],
+    xeokitElevationPointMeasurements: Array.isArray(parsed.xeokitElevationPointMeasurements)
+      ? parsed.xeokitElevationPointMeasurements
+      : [],
+    xeokitElevationDeltaMeasurements: Array.isArray(parsed.xeokitElevationDeltaMeasurements)
+      ? parsed.xeokitElevationDeltaMeasurements
+      : [],
   };
 }
 
@@ -570,6 +697,8 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV5 {
       dimensions: [],
       xeokitDistanceMeasurements: [],
       xeokitAngleMeasurements: [],
+      xeokitElevationPointMeasurements: [],
+      xeokitElevationDeltaMeasurements: [],
     };
   }
 
@@ -627,6 +756,8 @@ function loadPersisted(scope = getCurrentStorageScope()): PersistedStateV5 {
     dimensions: [],
     xeokitDistanceMeasurements: [],
     xeokitAngleMeasurements: [],
+    xeokitElevationPointMeasurements: [],
+    xeokitElevationDeltaMeasurements: [],
   };
 }
 
@@ -641,6 +772,8 @@ const rectAnnotations = ref<RectAnnotationRecord[]>(persisted.rectAnnotations);
 const dimensions = ref<DimensionRecord[]>(persisted.dimensions);
 const xeokitDistanceMeasurements = ref<XeokitDistanceMeasurementRecord[]>(persisted.xeokitDistanceMeasurements);
 const xeokitAngleMeasurements = ref<XeokitAngleMeasurementRecord[]>(persisted.xeokitAngleMeasurements);
+const xeokitElevationPointMeasurements = ref<XeokitElevationPointMeasurementRecord[]>(persisted.xeokitElevationPointMeasurements);
+const xeokitElevationDeltaMeasurements = ref<XeokitElevationDeltaMeasurementRecord[]>(persisted.xeokitElevationDeltaMeasurements);
 
 const activeTab = ref<'tree' | 'measurement' | 'annotation' | 'obb_annotation' | 'manager' | 'properties'>('tree');
 const toolMode = ref<ToolMode>('none');
@@ -678,6 +811,8 @@ const pendingDimensionEditId = ref<string | null>(null);
 
 const currentXeokitDistanceDraft = ref<XeokitDistanceDraft | null>(null);
 const currentXeokitAngleDraft = ref<XeokitAngleDraft | null>(null);
+const currentXeokitElevationPointDraft = ref<XeokitElevationPointDraft | null>(null);
+const currentXeokitElevationDeltaDraft = ref<XeokitElevationDeltaDraft | null>(null);
 const xeokitHoverState = ref<XeokitHoverState>({
   visible: false,
   snapped: false,
@@ -721,6 +856,8 @@ function resetTransientUiState() {
   pendingDimensionEditId.value = null;
   currentXeokitDistanceDraft.value = null;
   currentXeokitAngleDraft.value = null;
+  currentXeokitElevationPointDraft.value = null;
+  currentXeokitElevationDeltaDraft.value = null;
   xeokitHoverState.value = {
     visible: false,
     snapped: false,
@@ -755,6 +892,8 @@ function applyPersistedState(state: PersistedStateV5) {
   dimensions.value = state.dimensions;
   xeokitDistanceMeasurements.value = state.xeokitDistanceMeasurements;
   xeokitAngleMeasurements.value = state.xeokitAngleMeasurements;
+  xeokitElevationPointMeasurements.value = state.xeokitElevationPointMeasurements;
+  xeokitElevationDeltaMeasurements.value = state.xeokitElevationDeltaMeasurements;
   resetTransientUiState();
 }
 
@@ -792,6 +931,8 @@ watch(
     dimensions: dimensions.value,
     xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
     xeokitAngleMeasurements: xeokitAngleMeasurements.value,
+    xeokitElevationPointMeasurements: xeokitElevationPointMeasurements.value,
+    xeokitElevationDeltaMeasurements: xeokitElevationDeltaMeasurements.value,
   }),
   (state) => {
     if (typeof localStorage === 'undefined') return;
@@ -805,6 +946,8 @@ watch(
       dimensions: state.dimensions,
       xeokitDistanceMeasurements: state.xeokitDistanceMeasurements,
       xeokitAngleMeasurements: state.xeokitAngleMeasurements,
+      xeokitElevationPointMeasurements: state.xeokitElevationPointMeasurements,
+      xeokitElevationDeltaMeasurements: state.xeokitElevationDeltaMeasurements,
     };
     try {
       localStorage.setItem(withStorageScope(STORAGE_KEY_V5, storageScope.value), JSON.stringify(payload));
@@ -818,7 +961,12 @@ watch(
 function setToolMode(mode: ToolMode) {
   // 离开 Xeokit 测量模式时丢弃未完成的预览草稿，避免场景里残留“幽灵测量线”，
   // 而测量面板（非 Xeokit 模式下列的是 DTX 经典 measurements）显示 0 条。
-  if (mode !== 'xeokit_measure_distance' && mode !== 'xeokit_measure_angle') {
+  if (
+    mode !== 'xeokit_measure_distance' &&
+    mode !== 'xeokit_measure_angle' &&
+    mode !== 'xeokit_measure_elevation_point' &&
+    mode !== 'xeokit_measure_elevation_delta'
+  ) {
     clearCurrentXeokitDraft();
   }
   toolMode.value = mode;
@@ -912,6 +1060,24 @@ function updateXeokitAngleMeasurement(id: string, patch: Partial<XeokitAngleMeas
   xeokitAngleMeasurements.value = xeokitAngleMeasurements.value.map((m) => (m.id === id ? { ...m, ...patch } : m));
 }
 
+function addXeokitElevationPointMeasurement(rec: XeokitElevationPointMeasurementRecord) {
+  xeokitElevationPointMeasurements.value = [...xeokitElevationPointMeasurements.value, rec];
+  activeXeokitMeasurementId.value = rec.id;
+}
+
+function updateXeokitElevationPointMeasurement(id: string, patch: Partial<XeokitElevationPointMeasurementRecord>) {
+  xeokitElevationPointMeasurements.value = xeokitElevationPointMeasurements.value.map((m) => (m.id === id ? { ...m, ...patch } : m));
+}
+
+function addXeokitElevationDeltaMeasurement(rec: XeokitElevationDeltaMeasurementRecord) {
+  xeokitElevationDeltaMeasurements.value = [...xeokitElevationDeltaMeasurements.value, rec];
+  activeXeokitMeasurementId.value = rec.id;
+}
+
+function updateXeokitElevationDeltaMeasurement(id: string, patch: Partial<XeokitElevationDeltaMeasurementRecord>) {
+  xeokitElevationDeltaMeasurements.value = xeokitElevationDeltaMeasurements.value.map((m) => (m.id === id ? { ...m, ...patch } : m));
+}
+
 function updateXeokitMeasurementVisible(id: string, visible: boolean) {
   let updated = false;
   xeokitDistanceMeasurements.value = xeokitDistanceMeasurements.value.map((m) => {
@@ -920,7 +1086,19 @@ function updateXeokitMeasurementVisible(id: string, visible: boolean) {
     return { ...m, visible };
   });
   if (updated) return;
-  xeokitAngleMeasurements.value = xeokitAngleMeasurements.value.map((m) => (m.id === id ? { ...m, visible } : m));
+  xeokitAngleMeasurements.value = xeokitAngleMeasurements.value.map((m) => {
+    if (m.id !== id) return m;
+    updated = true;
+    return { ...m, visible };
+  });
+  if (updated) return;
+  xeokitElevationPointMeasurements.value = xeokitElevationPointMeasurements.value.map((m) => {
+    if (m.id !== id) return m;
+    updated = true;
+    return { ...m, visible };
+  });
+  if (updated) return;
+  xeokitElevationDeltaMeasurements.value = xeokitElevationDeltaMeasurements.value.map((m) => (m.id === id ? { ...m, visible } : m));
 }
 
 function removeXeokitMeasurement(id: string) {
@@ -933,7 +1111,25 @@ function removeXeokitMeasurement(id: string) {
     return;
   }
 
+  const prevAngleLength = xeokitAngleMeasurements.value.length;
   xeokitAngleMeasurements.value = xeokitAngleMeasurements.value.filter((m) => m.id !== id);
+  if (xeokitAngleMeasurements.value.length !== prevAngleLength) {
+    if (activeXeokitMeasurementId.value === id) {
+      activeXeokitMeasurementId.value = null;
+    }
+    return;
+  }
+
+  const prevPointLength = xeokitElevationPointMeasurements.value.length;
+  xeokitElevationPointMeasurements.value = xeokitElevationPointMeasurements.value.filter((m) => m.id !== id);
+  if (xeokitElevationPointMeasurements.value.length !== prevPointLength) {
+    if (activeXeokitMeasurementId.value === id) {
+      activeXeokitMeasurementId.value = null;
+    }
+    return;
+  }
+
+  xeokitElevationDeltaMeasurements.value = xeokitElevationDeltaMeasurements.value.filter((m) => m.id !== id);
   if (activeXeokitMeasurementId.value === id) {
     activeXeokitMeasurementId.value = null;
   }
@@ -942,6 +1138,8 @@ function removeXeokitMeasurement(id: string) {
 function clearXeokitMeasurements() {
   xeokitDistanceMeasurements.value = [];
   xeokitAngleMeasurements.value = [];
+  xeokitElevationPointMeasurements.value = [];
+  xeokitElevationDeltaMeasurements.value = [];
   activeXeokitMeasurementId.value = null;
   measurementDetailsDrawerOpen.value = false;
 }
@@ -962,9 +1160,40 @@ function setCurrentXeokitAngleDraft(draft: XeokitAngleDraft | null) {
   currentXeokitAngleDraft.value = draft ? { ...draft } : null;
 }
 
+function setCurrentXeokitElevationPointDraft(draft: XeokitElevationPointDraft | null) {
+  currentXeokitElevationPointDraft.value = draft ? { ...draft } : null;
+}
+
+function setCurrentXeokitElevationDeltaDraft(draft: XeokitElevationDeltaDraft | null) {
+  currentXeokitElevationDeltaDraft.value = draft ? { ...draft } : null;
+}
+
+function syncXeokitElevationDatum(datumElevation: number) {
+  xeokitElevationPointMeasurements.value = xeokitElevationPointMeasurements.value.map((record) => (
+    rebaseXeokitElevationPointRecord(record, datumElevation)
+  ));
+  xeokitElevationDeltaMeasurements.value = xeokitElevationDeltaMeasurements.value.map((record) => (
+    rebaseXeokitElevationDeltaRecord(record, datumElevation)
+  ));
+  if (currentXeokitElevationPointDraft.value) {
+    currentXeokitElevationPointDraft.value = rebaseXeokitElevationPointRecord(
+      currentXeokitElevationPointDraft.value,
+      datumElevation,
+    ) as XeokitElevationPointDraft;
+  }
+  if (currentXeokitElevationDeltaDraft.value) {
+    currentXeokitElevationDeltaDraft.value = rebaseXeokitElevationDeltaRecord(
+      currentXeokitElevationDeltaDraft.value,
+      datumElevation,
+    ) as XeokitElevationDeltaDraft;
+  }
+}
+
 function clearCurrentXeokitDraft() {
   currentXeokitDistanceDraft.value = null;
   currentXeokitAngleDraft.value = null;
+  currentXeokitElevationPointDraft.value = null;
+  currentXeokitElevationDeltaDraft.value = null;
 }
 
 function setXeokitHoverState(state: XeokitHoverState) {
@@ -1672,6 +1901,8 @@ function exportJSON(): string {
     dimensions: dimensions.value,
     xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
     xeokitAngleMeasurements: xeokitAngleMeasurements.value,
+    xeokitElevationPointMeasurements: xeokitElevationPointMeasurements.value,
+    xeokitElevationDeltaMeasurements: xeokitElevationDeltaMeasurements.value,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -1701,6 +1932,8 @@ function importJSON(raw: string) {
   dimensions.value = v5.dimensions;
   xeokitDistanceMeasurements.value = v5.xeokitDistanceMeasurements;
   xeokitAngleMeasurements.value = v5.xeokitAngleMeasurements;
+  xeokitElevationPointMeasurements.value = v5.xeokitElevationPointMeasurements;
+  xeokitElevationDeltaMeasurements.value = v5.xeokitElevationDeltaMeasurements;
 
   activeAnnotationId.value = null;
   activeObbAnnotationId.value = null;
@@ -1725,7 +1958,12 @@ const obbAnnotationCount = computed(() => obbAnnotations.value.length);
 const cloudAnnotationCount = computed(() => cloudAnnotations.value.length);
 const rectAnnotationCount = computed(() => rectAnnotations.value.length);
 const dimensionCount = computed(() => dimensions.value.length);
-const xeokitMeasurementCount = computed(() => xeokitDistanceMeasurements.value.length + xeokitAngleMeasurements.value.length);
+const xeokitMeasurementCount = computed(() => (
+  xeokitDistanceMeasurements.value.length +
+  xeokitAngleMeasurements.value.length +
+  xeokitElevationPointMeasurements.value.length +
+  xeokitElevationDeltaMeasurements.value.length
+));
 const activeAnnotationContext = computed<ActiveAnnotationContext | null>(() => {
   const mode = toolMode.value;
   const byMode: { mode: ToolMode; type: AnnotationType; id: string | null; records: AnyAnnotationRecord[] }[] = [
@@ -1766,7 +2004,12 @@ const activeAnnotationContext = computed<ActiveAnnotationContext | null>(() => {
   return null;
 });
 const allXeokitMeasurements = computed<XeokitMeasurementRecord[]>(() => {
-  return [...xeokitDistanceMeasurements.value, ...xeokitAngleMeasurements.value];
+  return [
+    ...xeokitDistanceMeasurements.value,
+    ...xeokitAngleMeasurements.value,
+    ...xeokitElevationPointMeasurements.value,
+    ...xeokitElevationDeltaMeasurements.value,
+  ];
 });
 
 const allItems = computed(() => {
@@ -1779,6 +2022,8 @@ const allItems = computed(() => {
     rectAnnotations: rectAnnotations.value,
     xeokitDistanceMeasurements: xeokitDistanceMeasurements.value,
     xeokitAngleMeasurements: xeokitAngleMeasurements.value,
+    xeokitElevationPointMeasurements: xeokitElevationPointMeasurements.value,
+    xeokitElevationDeltaMeasurements: xeokitElevationDeltaMeasurements.value,
   };
 });
 
@@ -1803,6 +2048,8 @@ export function useToolStore() {
     measurements,
     xeokitDistanceMeasurements,
     xeokitAngleMeasurements,
+    xeokitElevationPointMeasurements,
+    xeokitElevationDeltaMeasurements,
     dimensions,
     annotations,
     obbAnnotations,
@@ -1837,6 +2084,10 @@ export function useToolStore() {
     updateXeokitDistanceMeasurement,
     addXeokitAngleMeasurement,
     updateXeokitAngleMeasurement,
+    addXeokitElevationPointMeasurement,
+    updateXeokitElevationPointMeasurement,
+    addXeokitElevationDeltaMeasurement,
+    updateXeokitElevationDeltaMeasurement,
     updateXeokitMeasurementVisible,
     removeXeokitMeasurement,
     clearXeokitMeasurements,
@@ -1844,8 +2095,13 @@ export function useToolStore() {
     toggleMeasurementDetailsDrawerOpen,
     currentXeokitDistanceDraft,
     currentXeokitAngleDraft,
+    currentXeokitElevationPointDraft,
+    currentXeokitElevationDeltaDraft,
     setCurrentXeokitDistanceDraft,
     setCurrentXeokitAngleDraft,
+    setCurrentXeokitElevationPointDraft,
+    setCurrentXeokitElevationDeltaDraft,
+    syncXeokitElevationDatum,
     clearCurrentXeokitDraft,
     xeokitHoverState,
     setXeokitHoverState,
