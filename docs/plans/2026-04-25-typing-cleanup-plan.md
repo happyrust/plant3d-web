@@ -86,17 +86,23 @@
 
 - 避免后续回归又累积
 
-## 三、进度追踪（commit 后回填）
+## 三、进度追踪
 
 | Batch | 预估 | 实际 | 新基线 | commit |
 |-------|-----|------|-------|--------|
-| 1 matrixUtils | -146 | **-152** | 537 → 385 | (待提交) |
-| 2 troika declare | -5~-10 | | | |
-| 3 toolStore tests | -26 | | | |
-| 4 pdmsOrientation | -11 | | | |
-| 5 three type augment | -20~-30 | | | |
+| 1 matrixUtils（16-tuple + Float64Array） | -146 | **-152** | 537 → 385 | `cb5ea4b` |
+| 2 troika declare | -5~-10 | **-1**（仅 1 处 import；vi.mock 不走声明） | 385 → 384 | `d401b2b` (与 Batch 4 合并) |
+| 4 pdmsOrientation 空集守卫 + `!` | -11 | **-5**（matrixUtils 修完后只剩 5 条函数内部） | 384 → 379 | `d401b2b` (与 Batch 2 合并) |
+| 3 `useToolStore.*.test.ts` 批量加 `!` | -26 | **-26** | 379 → 353 | `84776fc` |
+| 5a LineMaterial.scale augment | -8 | **-8** | 353 → 345 | `3ba6553` |
+| 5b LineBasicMaterial→LineMaterial 类型不匹配 | ~-30 | **deferred**（看起来是真 bug，需人工裁定） | - | - |
 | 6 其他测试 | -40+ | | | |
 | 7 业务 TS2322 | -50+ | | | |
+
+**当前累计**：537 → 345（**-192，-36%**）
+
+**本轮发现的待人工裁定项**：
+- AlignedDimension / AngleDimension / LinearDimension / SlopeAnnotation / WeldAnnotation / LeaderAnnotation / RadiusDimension 等文件里 `new Line2(geometry, this.materialSet.line)` 传的是 `LineBasicMaterial`，但 `Line2` 要 `LineMaterial` —— 这可能是真 bug：`AnnotationMaterialSet` 里有 `line: LineBasicMaterial` 和 `fatLine: LineMaterial`，这些位置也许本应传 `.fatLine`。不在本自动化清零轮次里处理，交回给做 annotation 渲染的开发。
 
 ## 四、风险
 
