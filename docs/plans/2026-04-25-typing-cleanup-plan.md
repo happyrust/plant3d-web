@@ -96,7 +96,7 @@
 | 3 `useToolStore.*.test.ts` 批量加 `!` | -26 | **-26** | 379 → 353 | `84776fc` |
 | 5a LineMaterial.scale augment | -8 | **-8** | 353 → 345 | `3ba6553` |
 | 5b LineBasicMaterial→LineMaterial 类型不匹配 | ~-30 | **deferred**（看起来是真 bug，需人工裁定） | - | - |
-| 6 mbdV2 / flyTo / ReviewPanel / AnnotationPanel / parquetLoader 测试 | -40+ | **-34**（含工作树预热 -8 + 本批 -26；详见 `2026-04-25-typing-cleanup-batch6-execution.md`） | 345 → 311 | TBD |
+| 6 mbdV2 / flyTo / ReviewPanel / AnnotationPanel / parquetLoader 测试 | -40+ | **-34**（含工作树预热 -8 + 本批 -26；详见 `2026-04-25-typing-cleanup-batch6-execution.md`） | 345 → 311 | `40da2e1` |
 | 6.5 SolveSpaceBillboardVectorText.test + 8 个新发现测试 | -49 | (未执行) | - | - |
 | 7 业务 TS2322 | -50+ | | | |
 
