@@ -126,6 +126,10 @@ bun run pms:simulator -- --cases=return,approved,stop  # 三场景 all PASS
 | 前端可视回退逻辑改动影响"新增"入口判定 | SJ 自救条件收紧到 `taskStatus=draft && currentNode=sj && requesterId === currentPmsUser`，不影响新入口分支 |
 | 计划执行期间 vite 3101 未启动 | 开发时以单元测试覆盖主要分支，E2E 回归请求具体启动命令后再跑 |
 
+## 后续 Wave 2
+
+完整的 runtime 验证 + root cause 收敛任务详见 [`2026-04-25-pms-reject-flow-fix-wave2.md`](./2026-04-25-pms-reject-flow-fix-wave2.md)。
+
 ## 执行顺序（强耦合，请按序）
 
 1. 写单元测试（先验证当前假设）→ 确认失败现象 → **第 1 阶段** E1.1 + E1.2 + E1.3 + E1.4。

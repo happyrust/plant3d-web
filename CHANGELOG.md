@@ -38,6 +38,7 @@
 
 - E2 PZ return → SJ 实际落到 jd 的根因仍需起 `vite (3101) + plant-model-gen (3100)`、跑 `bun run test:pms:simulator -- --cases=return,stop,approved` 后看新 JSON 三元组（`return-verify` / `return-sync` / `return-backend-current-node`）
 - E4 gate-return 403（SH 不是 checker 节点负责人 JH）需 owner 拍板由测试改身份还是后端放权
+- 完整 Wave 2 任务清单与决策树详见 `docs/plans/2026-04-25-pms-reject-flow-fix-wave2.md`
 
 ## 2026-04-24（晚间 · Wave 3D）
 
