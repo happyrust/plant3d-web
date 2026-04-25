@@ -457,25 +457,25 @@ describe('useDbnoInstancesParquetLoader', () => {
     const branList = out.get('24381_145712') ?? [];
 
     expect(elboList).toHaveLength(2);
-    expect(elboList[0]?.uniforms.noun).toBe('ELBO');
-    expect(elboList[0]?.uniforms.owner_noun).toBe('BRAN');
-    expect(elboList[0]?.uniforms.owner_refno).toBe('24381_145712');
-    expect(elboList[1]?.uniforms.noun).toBe('TUBI');
-    expect(elboList[1]?.uniforms.refno).toBe('24381_145714');
-    expect(elboList[1]?.matrix[12]).toBe(1);
-    expect(elboList[1]?.matrix[13]).toBe(2);
-    expect(elboList[1]?.matrix[14]).toBe(3);
+    expect(elboList[0]!.uniforms!.noun).toBe('ELBO');
+    expect(elboList[0]!.uniforms!.owner_noun).toBe('BRAN');
+    expect(elboList[0]!.uniforms!.owner_refno).toBe('24381_145712');
+    expect(elboList[1]!.uniforms!.noun).toBe('TUBI');
+    expect(elboList[1]!.uniforms!.refno).toBe('24381_145714');
+    expect(elboList[1]!.matrix[12]).toBe(1);
+    expect(elboList[1]!.matrix[13]).toBe(2);
+    expect(elboList[1]!.matrix[14]).toBe(3);
 
     expect(branList).toHaveLength(2);
-    expect(branList[0]?.uniforms.noun).toBe('TUBI');
-    expect(branList[0]?.uniforms.owner_refno).toBe('24381_145712');
-    expect(branList[0]?.matrix[12]).toBe(100);
-    expect(branList[0]?.matrix[13]).toBe(200);
-    expect(branList[0]?.matrix[14]).toBe(300);
-    expect(branList[1]?.uniforms.refno).toBe('24381_145714');
-    expect(branList[1]?.matrix[12]).toBe(1);
-    expect(branList[1]?.matrix[13]).toBe(2);
-    expect(branList[1]?.matrix[14]).toBe(3);
+    expect(branList[0]!.uniforms!.noun).toBe('TUBI');
+    expect(branList[0]!.uniforms!.owner_refno).toBe('24381_145712');
+    expect(branList[0]!.matrix[12]).toBe(100);
+    expect(branList[0]!.matrix[13]).toBe(200);
+    expect(branList[0]!.matrix[14]).toBe(300);
+    expect(branList[1]!.uniforms!.refno).toBe('24381_145714');
+    expect(branList[1]!.matrix[12]).toBe(1);
+    expect(branList[1]!.matrix[13]).toBe(2);
+    expect(branList[1]!.matrix[14]).toBe(3);
     expect(queryMock).toHaveBeenCalledTimes(2);
   });
 

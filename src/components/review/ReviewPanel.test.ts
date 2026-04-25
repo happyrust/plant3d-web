@@ -89,7 +89,7 @@ vi.mock('@/composables/useToolStore', () => ({
 vi.mock('@/api/reviewApi', () => ({
   reviewSyncExport: vi.fn(async () => ({ success: true })),
   reviewSyncImport: vi.fn(async () => ({ success: true })),
-  reviewAnnotationCheck: (...args: unknown[]) => reviewAnnotationCheckMock(...args),
+  reviewAnnotationCheck: (...args: any[]) => (reviewAnnotationCheckMock as any)(...args),
 }));
 
 const viewerWaitForReadyMock = vi.hoisted(() => vi.fn(async () => false));
@@ -100,8 +100,8 @@ vi.mock('@/composables/useViewerContext', () => ({
     viewerRef: { value: null },
     tools: { value: null },
   }),
-  waitForViewerReady: (...args: unknown[]) => viewerWaitForReadyMock(...args),
-  showModelByRefnosWithAck: (...args: unknown[]) => showModelByRefnosWithAckMock(...args),
+  waitForViewerReady: (...args: any[]) => (viewerWaitForReadyMock as any)(...args),
+  showModelByRefnosWithAck: (...args: any[]) => (showModelByRefnosWithAckMock as any)(...args),
 }));
 
 const toolStoreMock = vi.hoisted(() => ({
@@ -110,11 +110,11 @@ const toolStoreMock = vi.hoisted(() => ({
   rectAnnotationCount: { value: 0 },
   obbAnnotationCount: { value: 0 },
   measurementCount: { value: 0 },
-  annotations: { value: [] },
-  cloudAnnotations: { value: [] },
-  rectAnnotations: { value: [] },
-  obbAnnotations: { value: [] },
-  measurements: { value: [] },
+  annotations: { value: [] as any[] },
+  cloudAnnotations: { value: [] as any[] },
+  rectAnnotations: { value: [] as any[] },
+  obbAnnotations: { value: [] as any[] },
+  measurements: { value: [] as any[] },
   activeAnnotationId: { value: null },
   activeCloudAnnotationId: { value: null },
   activeRectAnnotationId: { value: null },
@@ -157,7 +157,7 @@ const emitToastMock = vi.hoisted(() => vi.fn());
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: emitToastMock }));
 
 vi.mock('./embedFormSnapshotRestore', () => ({
-  restoreEmbedFormSnapshotContext: (...args: unknown[]) => restoreEmbedFormSnapshotContextMock(...args),
+  restoreEmbedFormSnapshotContext: (...args: any[]) => (restoreEmbedFormSnapshotContextMock as any)(...args),
 }));
 
 vi.mock('./CollisionResultList.vue', () => ({ default: { template: '<div />' } }));
@@ -419,7 +419,7 @@ describe('ReviewPanel', () => {
         },
       ],
     });
-    restoreEmbedFormSnapshotContextMock.mockImplementationOnce(async (options: {
+    (restoreEmbedFormSnapshotContextMock.mockImplementationOnce as any)(async (options: {
       updateTask?: (task: ReviewTask) => Promise<void>;
     }) => {
       await options.updateTask?.(refreshedTask);

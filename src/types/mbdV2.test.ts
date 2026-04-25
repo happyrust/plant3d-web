@@ -44,9 +44,9 @@ import {
 function commonFields(id: string) {
   return {
     id,
-    node_names: [],
+    node_names: [] as string[],
     visible: true,
-  } as const;
+  };
 }
 
 const sampleLinearDim: LinearDimPrimitive = {

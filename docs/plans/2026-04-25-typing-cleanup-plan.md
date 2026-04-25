@@ -96,10 +96,11 @@
 | 3 `useToolStore.*.test.ts` 批量加 `!` | -26 | **-26** | 379 → 353 | `84776fc` |
 | 5a LineMaterial.scale augment | -8 | **-8** | 353 → 345 | `3ba6553` |
 | 5b LineBasicMaterial→LineMaterial 类型不匹配 | ~-30 | **deferred**（看起来是真 bug，需人工裁定） | - | - |
-| 6 其他测试 | -40+ | | | |
+| 6 mbdV2 / flyTo / ReviewPanel / AnnotationPanel / parquetLoader 测试 | -40+ | **-34**（含工作树预热 -8 + 本批 -26；详见 `2026-04-25-typing-cleanup-batch6-execution.md`） | 345 → 311 | TBD |
+| 6.5 SolveSpaceBillboardVectorText.test + 8 个新发现测试 | -49 | (未执行) | - | - |
 | 7 业务 TS2322 | -50+ | | | |
 
-**当前累计**：537 → 345（**-192，-36%**）
+**当前累计**：537 → 311（**-226，-42%**）
 
 **本轮发现的待人工裁定项**：
 - AlignedDimension / AngleDimension / LinearDimension / SlopeAnnotation / WeldAnnotation / LeaderAnnotation / RadiusDimension 等文件里 `new Line2(geometry, this.materialSet.line)` 传的是 `LineBasicMaterial`，但 `Line2` 要 `LineMaterial` —— 这可能是真 bug：`AnnotationMaterialSet` 里有 `line: LineBasicMaterial` 和 `fatLine: LineMaterial`，这些位置也许本应传 `.fatLine`。不在本自动化清零轮次里处理，交回给做 annotation 渲染的开发。

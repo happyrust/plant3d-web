@@ -723,7 +723,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
 
     const params = dim?.getParams();
     const expectedDir = computePipeAlignedOffsetDirs(segments)[0]!;
-    expect(params?.direction.angleTo(expectedDir)).toBeLessThan(1e-6);
+    expect(params?.direction!.angleTo(expectedDir)).toBeLessThan(1e-6);
     expect(params?.offset ?? 0).toBeGreaterThan(computeMbdDimOffset(1000));
   });
 
@@ -2831,7 +2831,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
         {
           id: 'weld-1',
           position: [1000, 0, 0],
-          weld_type: 'BW',
+          weld_type: 'Butt',
           is_shop: false,
           label: 'W1',
           left_refno: 'S:1',
@@ -2997,13 +2997,13 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     const initialParams = initial!.getParams();
 
     vis.updateDimOverride('dim-1', {
-      offset: initialParams.offset + 200,
+      offset: initialParams.offset! + 200,
       labelT: 0.2,
       direction: [0, -1, 0],
     });
 
     const overridden = vis.getDimAnnotations().get('dim-1');
-    expect(overridden?.getParams().offset).toBe(initialParams.offset + 200);
+    expect(overridden?.getParams().offset).toBe(initialParams.offset! + 200);
     expect(overridden?.getParams().labelT).toBe(0.2);
     expect(overridden?.getParams().direction?.toArray()).toEqual([0, -1, 0]);
 
@@ -3014,7 +3014,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     const reset = vis.getDimAnnotations().get('dim-1');
     expect(reset).toBeTruthy();
     expect(reset).not.toBe(initial);
-    expect(reset?.getParams().offset).toBeCloseTo(initialParams.offset, 6);
+    expect(reset?.getParams().offset).toBeCloseTo(initialParams.offset!, 6);
     expect(reset?.getParams().labelT).toBeCloseTo(initialParams.labelT ?? 0.5, 6);
     expect(reset?.getParams().direction?.toArray()).toEqual(
       initialParams.direction?.toArray() ?? [],
@@ -3156,14 +3156,14 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
       chainParamsBefore.direction?.toArray() ?? [],
     );
     expect(chainAfterClassic!.getParams().offset).toBeCloseTo(
-      chainParamsBefore.offset,
+      chainParamsBefore.offset!,
       6,
     );
     expect(cutAfterClassic!.getParams().direction?.toArray()).toEqual(
       cutParamsBefore.direction?.toArray() ?? [],
     );
     expect(cutAfterClassic!.getParams().offset).toBeCloseTo(
-      cutParamsBefore.offset,
+      cutParamsBefore.offset!,
       6,
     );
 
@@ -3179,11 +3179,11 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(duplicateAfterReset).toBeFalsy();
     expect(cutAfterReset).toBeTruthy();
     expect(chainAfterReset!.getParams().offset).toBeCloseTo(
-      chainParamsBefore.offset,
+      chainParamsBefore.offset!,
       6,
     );
     expect(cutAfterReset!.getParams().offset).toBeCloseTo(
-      cutParamsBefore.offset,
+      cutParamsBefore.offset!,
       6,
     );
   });
@@ -3287,7 +3287,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
           .filter(Boolean)
           .sort(),
         cutIds: cutTubis
-          .map((annotation) => (annotation.userData as any)?.mbdAuxId)
+          .map((annotation: any) => (annotation.userData as any)?.mbdAuxId)
           .filter(Boolean)
           .sort(),
         directions: {

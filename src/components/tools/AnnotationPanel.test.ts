@@ -271,14 +271,14 @@ describe('AnnotationPanel', () => {
 
     toggleButton?.click();
     await nextTick();
-    expect(store.annotations.value[0].collapsed).toBe(true);
+    expect(store.annotations.value[0]!.collapsed).toBe(true);
 
     const expandButton = host.querySelector('[data-testid="annotation-panel-text-collapse-toggle"]') as HTMLButtonElement | null;
     expect(expandButton?.textContent).toContain('恢复展开');
 
     expandButton?.click();
     await nextTick();
-    expect(store.annotations.value[0].collapsed).toBe(false);
+    expect(store.annotations.value[0]!.collapsed).toBe(false);
 
     app.unmount();
     host.remove();
