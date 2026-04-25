@@ -204,6 +204,70 @@ async function postJson<T>(url: string, payload: unknown, bearerToken?: string):
   return { status: response.status, body };
 }
 
+async function getJson<T>(url: string, bearerToken?: string): Promise<{ status: number; body: T }> {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {},
+  });
+  const text = await response.text();
+  let body: T;
+  try {
+    body = JSON.parse(text) as T;
+  } catch {
+    throw new Error(`GET ${url} 返回非 JSON：HTTP ${response.status} ${text}`);
+  }
+  if (!response.ok) {
+    throw new Error(`GET ${url} 失败：HTTP ${response.status} ${text}`);
+  }
+  return { status: response.status, body };
+}
+
+type BackendTaskProbe = {
+  taskId: string | null;
+  currentNode: string | null;
+  status: string | null;
+  raw: unknown;
+};
+
+async function probeBackendTaskByFormId(
+  runtime: ScenarioRuntime,
+  formId: string,
+): Promise<BackendTaskProbe | null> {
+  try {
+    const token = await createCleanupToken(runtime.env);
+    type TasksResponse = {
+      success?: boolean;
+      tasks?: Array<{
+        id?: string;
+        formId?: string;
+        form_id?: string;
+        currentNode?: string;
+        current_node?: string;
+        status?: string;
+      }>;
+    };
+    const response = await getJson<TasksResponse>(
+      `${runtime.env.backendBaseUrl}/api/review/tasks?limit=5000&offset=0`,
+      token,
+    );
+    const tasks = Array.isArray(response.body.tasks) ? response.body.tasks : [];
+    const found = tasks.find((task) => {
+      const fid = String(task.formId || task.form_id || '').trim();
+      return fid === formId;
+    });
+    if (!found) return null;
+    return {
+      taskId: String(found.id || '').trim() || null,
+      currentNode: String(found.currentNode || found.current_node || '').trim() || null,
+      status: String(found.status || '').trim() || null,
+      raw: found,
+    };
+  } catch (error) {
+    traceSimulator(`probeBackendTaskByFormId form_id=${formId} 失败：${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
 async function waitFor<T>(
   producer: () => Promise<T | null> | T | null,
   options: {
@@ -417,6 +481,48 @@ function assertResult(key: string, passed: boolean, detail?: string, expected?: 
 function normalizeNode(value: string | null | undefined): string | null {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized || null;
+}
+
+function describeWorkflowVerifyDetail(
+  snapshot: SimulatorTestSnapshot,
+  expectedAction: SimulatorWorkflowAction,
+): string {
+  return [
+    `expected_action=${expectedAction}`,
+    `actual_action=${snapshot.lastVerifyAction || '--'}`,
+    `ok=${snapshot.lastVerifyOk === null ? '--' : snapshot.lastVerifyOk}`,
+    `message=${snapshot.lastVerifyMessage || ''}`,
+  ].join(' ｜ ');
+}
+
+function describeWorkflowSyncDetail(
+  snapshot: SimulatorTestSnapshot,
+  expectedAction: SimulatorWorkflowAction,
+): string {
+  return [
+    `expected_action=${expectedAction}`,
+    `actual_action=${snapshot.lastAction || '--'}`,
+    `ok=${snapshot.lastOk === null ? '--' : snapshot.lastOk}`,
+    `message=${snapshot.lastMessage || ''}`,
+  ].join(' ｜ ');
+}
+
+function assertWorkflowVerify(
+  key: string,
+  snapshot: SimulatorTestSnapshot,
+  expectedAction: SimulatorWorkflowAction,
+): PmsSimulatorAssertionResult {
+  const passed = snapshot.lastVerifyAction === expectedAction && snapshot.lastVerifyOk === true;
+  return assertResult(key, passed, describeWorkflowVerifyDetail(snapshot, expectedAction));
+}
+
+function assertWorkflowSync(
+  key: string,
+  snapshot: SimulatorTestSnapshot,
+  expectedAction: SimulatorWorkflowAction,
+): PmsSimulatorAssertionResult {
+  const passed = snapshot.lastAction === expectedAction && snapshot.lastOk === true;
+  return assertResult(key, passed, describeWorkflowSyncDetail(snapshot, expectedAction));
 }
 
 function finalizeScenarioReport(base: Omit<PmsSimulatorScenarioReport, 'ok'>): PmsSimulatorScenarioReport {
@@ -675,24 +781,24 @@ async function scenarioApproved(runtime: ScenarioRuntime): Promise<PmsSimulatorS
   const assertions: PmsSimulatorAssertionResult[] = [];
 
   let snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  assertions.push(assertResult('sj-active-verify', snapshot.lastVerifyAction === 'active' && snapshot.lastVerifyOk === true, snapshot.lastVerifyMessage || ''));
+  assertions.push(assertWorkflowVerify('sj-active-verify', snapshot, 'active'));
   assertions.push(assertResult('sj-active-order', snapshot.lastVerifyAt != null && snapshot.lastActionAt != null && snapshot.lastVerifyAt <= snapshot.lastActionAt));
-  assertions.push(assertResult('sj-active-sync', snapshot.lastAction === 'active' && snapshot.lastOk === true, snapshot.lastMessage || ''));
+  assertions.push(assertWorkflowSync('sj-active-sync', snapshot, 'active'));
 
   await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 自动化' });
-  assertions.push(assertResult('jh-agree-verify', snapshot.lastVerifyAction === 'agree' && snapshot.lastVerifyOk === true, snapshot.lastVerifyMessage || ''));
-  assertions.push(assertResult('jh-agree-sync', snapshot.lastAction === 'agree' && snapshot.lastOk === true, snapshot.lastMessage || ''));
+  assertions.push(assertWorkflowVerify('jh-agree-verify', snapshot, 'agree'));
+  assertions.push(assertWorkflowSync('jh-agree-sync', snapshot, 'agree'));
 
   await openTaskForRole(runtime.page, created.formId, 'SH', { taskId: created.taskId });
   snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'SH agree 自动化' });
-  assertions.push(assertResult('sh-agree-verify', snapshot.lastVerifyAction === 'agree' && snapshot.lastVerifyOk === true, snapshot.lastVerifyMessage || ''));
-  assertions.push(assertResult('sh-agree-sync', snapshot.lastAction === 'agree' && snapshot.lastOk === true, snapshot.lastMessage || ''));
+  assertions.push(assertWorkflowVerify('sh-agree-verify', snapshot, 'agree'));
+  assertions.push(assertWorkflowSync('sh-agree-sync', snapshot, 'agree'));
 
   await openTaskForRole(runtime.page, created.formId, 'PZ', { taskId: created.taskId });
   snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'PZ agree 自动化' });
-  assertions.push(assertResult('pz-agree-verify', snapshot.lastVerifyAction === 'agree' && snapshot.lastVerifyOk === true, snapshot.lastVerifyMessage || ''));
-  assertions.push(assertResult('pz-agree-sync', snapshot.lastAction === 'agree' && snapshot.lastOk === true, snapshot.lastMessage || ''));
+  assertions.push(assertWorkflowVerify('pz-agree-verify', snapshot, 'agree'));
+  assertions.push(assertWorkflowSync('pz-agree-sync', snapshot, 'agree'));
 
   await callSimulatorApi<void>(runtime.page, 'reopenLast');
   const finalSnapshot = await waitForSnapshotByFormId(runtime.page, created.formId, {
@@ -727,8 +833,19 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
     comment: 'PZ return 自动化',
     targetNode: 'sj',
   });
-  assertions.push(assertResult('return-verify', returnSnapshot.lastVerifyAction === 'return' && returnSnapshot.lastVerifyOk === true, returnSnapshot.lastVerifyMessage || ''));
-  assertions.push(assertResult('return-sync', returnSnapshot.lastAction === 'return' && returnSnapshot.lastOk === true, returnSnapshot.lastMessage || ''));
+  assertions.push(assertWorkflowVerify('return-verify', returnSnapshot, 'return'));
+  assertions.push(assertWorkflowSync('return-sync', returnSnapshot, 'return'));
+
+  const backendAfterReturn = await probeBackendTaskByFormId(runtime, created.formId);
+  assertions.push(assertResult(
+    'return-backend-current-node',
+    backendAfterReturn?.currentNode === 'sj',
+    backendAfterReturn
+      ? `backend task_id=${backendAfterReturn.taskId} current_node=${backendAfterReturn.currentNode} status=${backendAfterReturn.status}`
+      : '后端未返回 form_id 对应任务',
+    'sj',
+    backendAfterReturn?.currentNode ?? null,
+  ));
 
   const reopened = await openTaskForRole(runtime.page, created.formId, 'SJ', {
     source: 'task-reopen',
@@ -776,8 +893,8 @@ async function scenarioStop(runtime: ScenarioRuntime): Promise<PmsSimulatorScena
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
   await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   const stopSnapshot = await runWorkflowAction(runtime.page, 'stop', { comment: 'JH stop 自动化' });
-  assertions.push(assertResult('stop-verify', stopSnapshot.lastVerifyAction === 'stop' && stopSnapshot.lastVerifyOk === true, stopSnapshot.lastVerifyMessage || ''));
-  assertions.push(assertResult('stop-sync', stopSnapshot.lastAction === 'stop' && stopSnapshot.lastOk === true, stopSnapshot.lastMessage || ''));
+  assertions.push(assertWorkflowVerify('stop-verify', stopSnapshot, 'stop'));
+  assertions.push(assertWorkflowSync('stop-sync', stopSnapshot, 'stop'));
 
   await callSimulatorApi<void>(runtime.page, 'reopenLast');
   const finalSnapshot = await waitForSnapshotByFormId(runtime.page, created.formId, {

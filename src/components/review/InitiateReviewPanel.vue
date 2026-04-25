@@ -422,6 +422,26 @@ const externalWorkflowMode = ref(true);
 const hydratedRestoreTaskId = ref<string | null>(null);
 const showDebugUi = isReviewDebugUiEnabled();
 
+type EmbeddedFormSavedMessage = {
+  type: 'plant3d.form_saved';
+  source: 'initiate-review-panel';
+  formId: string | null;
+  taskId: string;
+  componentCount: number;
+  packageName: string;
+};
+
+function notifyParentFormSaved(payload: Omit<EmbeddedFormSavedMessage, 'type' | 'source'>): void {
+  if (typeof window === 'undefined') return;
+  if (window.parent === window) return;
+  const message: EmbeddedFormSavedMessage = {
+    type: 'plant3d.form_saved',
+    source: 'initiate-review-panel',
+    ...payload,
+  };
+  window.parent.postMessage(message, '*');
+}
+
 function toUploadedFilesFromAttachments(
   attachments?: {
     id: string;
@@ -793,6 +813,15 @@ async function handleSubmit() {
     };
     submitted.value = true;
     emit('created', task.id);
+
+    if (isExternal) {
+      notifyParentFormSaved({
+        formId: task.formId ?? requestFormId ?? null,
+        taskId: task.id,
+        componentCount: selectedComponents.value.length,
+        packageName: task.title,
+      });
+    }
 
     // 重置表单数据（为下次新建做准备）
     formData.packageName = '';

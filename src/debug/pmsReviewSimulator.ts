@@ -158,15 +158,12 @@ function normalizeWorkflowVerifyAnnotationCheck(
   };
 }
 
-type EmbeddedWorkflowActionMessage = {
-  type: 'plant3d.workflow_action';
-  action: WorkflowMutationAction;
-  formId?: string;
-  taskId?: string;
-  comments?: string;
-  targetNode?: string;
-  source?: string;
-};
+import {
+  parseEmbeddedFormSavedMessage,
+  parseEmbeddedWorkflowActionMessage,
+  type EmbeddedFormSavedMessage,
+  type EmbeddedWorkflowActionMessage,
+} from './pmsReviewSimulatorEmbedMessages';
 
 type WorkflowExecuteOverrides = {
   taskId?: string | null;
@@ -451,7 +448,6 @@ const NODE_LABELS: Record<string, string> = {
 };
 
 const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
-const WORKFLOW_MUTATION_ACTIONS: WorkflowMutationAction[] = ['active', 'agree', 'return', 'stop'];
 let PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
 const SIMULATOR_SESSION_STORAGE_KEY = 'pms-review-simulator-session-v1';
 const PMS_LIKE_IFRAME_QUERY_STORAGE_KEY = 'pms_simulator_pms_like_iframe';
@@ -497,10 +493,6 @@ function isSimulatorDebugUiEnabled(): boolean {
   }
 
   return false;
-}
-
-function isWorkflowMutationAction(value: unknown): value is WorkflowMutationAction {
-  return typeof value === 'string' && WORKFLOW_MUTATION_ACTIONS.includes(value as WorkflowMutationAction);
 }
 
 function readPersistedSimulatorSession(): SimulatorPersistedSession | null {
@@ -2280,6 +2272,16 @@ async function refreshList(): Promise<void> {
     if (!state.selectedTaskId && state.selectedTaskIds.length > 0) {
       state.selectedTaskId = state.selectedTaskIds[0];
     }
+    if (!state.selectedTaskId) {
+      const focusFormId = state.iframeMeta?.formId || state.lastOpenedFormId || null;
+      if (focusFormId) {
+        const focusRow = state.rows.find((row) => row.formId === focusFormId);
+        if (focusRow?.taskId) {
+          state.selectedTaskId = focusRow.taskId;
+          state.selectedTaskIds = [focusRow.taskId];
+        }
+      }
+    }
   } catch (error) {
     state.rows = [];
     state.selectedTaskId = null;
@@ -2629,6 +2631,19 @@ async function executeWorkflowAction(
   const context = resolveWorkflowContext();
   const taskId = overrides?.taskId?.trim() || context.taskId;
   const formId = overrides?.formId?.trim() || context.formId?.trim();
+  if (taskId || formId) {
+    const needsTaskDetail = !!taskId
+      && (!state.diagnostics.taskDetail || state.diagnostics.taskDetail.id !== taskId);
+    const needsWorkflowSnapshot = !!formId && !state.diagnostics.workflowSnapshot;
+    if (needsTaskDetail || needsWorkflowSnapshot) {
+      try {
+        await refreshDiagnosticsSnapshot({ taskId: taskId || null, formId: formId || null });
+      } catch (refreshError) {
+        state.diagnostics.error = `执行前同步任务诊断失败：${refreshError instanceof Error ? refreshError.message : String(refreshError)}`;
+        renderDiagnostics();
+      }
+    }
+  }
   const workflowRoleState = resolveCurrentWorkflowRoleState();
   const currentWorkflowRole = workflowRoleState.workflowRole;
   const accessState = resolveWorkflowAccessState(workflowRoleState);
@@ -2646,6 +2661,13 @@ async function executeWorkflowAction(
     state.workflowAction.lastAt = Date.now();
     state.workflowAction.lastSubmittedWorkflowComment = buildWorkflowCommentPayload(action, comment, targetNode);
     state.workflowAction.lastReturnTargetNode = action === 'return' ? normalizeWorkflowNodeId(targetNode) : null;
+    updateWorkflowVerifyState(action, {
+      ok: false,
+      message: accessState.access.reason,
+      errorCode: null,
+      recommendedAction: null,
+      annotationCheck: null,
+    });
     state.diagnostics.error = accessState.access.reason;
     renderActionStates();
     renderDiagnostics();
@@ -2653,12 +2675,20 @@ async function executeWorkflowAction(
     throw new Error(accessState.access.reason);
   }
   if (!formId) {
+    const missingFormMessage = '缺少 form_id，无法执行 workflow/sync 动作。';
     state.workflowAction.lastAction = action;
     state.workflowAction.lastOk = false;
-    state.workflowAction.lastMessage = '缺少 form_id，无法执行 workflow/sync 动作。';
+    state.workflowAction.lastMessage = missingFormMessage;
     state.workflowAction.lastAt = Date.now();
     state.workflowAction.lastSubmittedWorkflowComment = buildWorkflowCommentPayload(action, comment, targetNode);
     state.workflowAction.lastReturnTargetNode = action === 'return' ? normalizeWorkflowNodeId(targetNode) : null;
+    updateWorkflowVerifyState(action, {
+      ok: false,
+      message: missingFormMessage,
+      errorCode: null,
+      recommendedAction: null,
+      annotationCheck: null,
+    });
     state.diagnostics.error = state.workflowAction.lastMessage;
     renderActionStates();
     renderDiagnostics();
@@ -3233,22 +3263,6 @@ async function confirmWorkflowDialog(): Promise<void> {
   }
 }
 
-function parseEmbeddedWorkflowActionMessage(data: unknown): EmbeddedWorkflowActionMessage | null {
-  if (!data || typeof data !== 'object') return null;
-  const message = data as Partial<EmbeddedWorkflowActionMessage>;
-  if (message.type !== 'plant3d.workflow_action') return null;
-  if (!isWorkflowMutationAction(message.action)) return null;
-  return {
-    type: 'plant3d.workflow_action',
-    action: message.action,
-    formId: typeof message.formId === 'string' ? message.formId : undefined,
-    taskId: typeof message.taskId === 'string' ? message.taskId : undefined,
-    comments: typeof message.comments === 'string' ? message.comments : undefined,
-    targetNode: typeof message.targetNode === 'string' ? message.targetNode : undefined,
-    source: typeof message.source === 'string' ? message.source : undefined,
-  };
-}
-
 async function handleEmbeddedWorkflowAction(message: EmbeddedWorkflowActionMessage): Promise<void> {
   const taskId = message.taskId?.trim() || null;
   const formId = message.formId?.trim() || null;
@@ -3278,14 +3292,55 @@ async function handleEmbeddedWorkflowAction(message: EmbeddedWorkflowActionMessa
   });
 }
 
+async function handleEmbeddedFormSaved(message: EmbeddedFormSavedMessage): Promise<void> {
+  const taskId = message.taskId;
+  const formId = message.formId;
+
+  if (state.iframeMeta) {
+    state.iframeMeta = {
+      ...state.iframeMeta,
+      taskId,
+      formId: formId || state.iframeMeta.formId,
+    };
+  }
+  if (formId) {
+    state.lastOpenedFormId = formId;
+  }
+
+  renderLastOpened();
+  renderSidePanelState();
+
+  try {
+    await refreshList();
+    setSelectedTask(taskId);
+    await refreshDiagnosticsSnapshot({ taskId, formId });
+  } catch (error) {
+    state.diagnostics.error = `同步嵌入页保存状态失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    persistSimulatorSession();
+    renderRoleHeader();
+    renderTable();
+    renderActionStates();
+    renderDiagnostics();
+    renderSidePanelState();
+  }
+}
+
 function handleWindowMessage(event: MessageEvent): void {
   if (!state.iframeMeta) return;
   const iframeWindow = refs.iframeEl.contentWindow;
   if (!iframeWindow || event.source !== iframeWindow) return;
 
-  const message = parseEmbeddedWorkflowActionMessage(event.data);
-  if (!message) return;
-  void handleEmbeddedWorkflowAction(message);
+  const workflowMessage = parseEmbeddedWorkflowActionMessage(event.data);
+  if (workflowMessage) {
+    void handleEmbeddedWorkflowAction(workflowMessage);
+    return;
+  }
+
+  const formSavedMessage = parseEmbeddedFormSavedMessage(event.data);
+  if (formSavedMessage) {
+    void handleEmbeddedFormSaved(formSavedMessage);
+  }
 }
 
 function bindEvents(): void {

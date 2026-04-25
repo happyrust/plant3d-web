@@ -1,5 +1,44 @@
 # 变更日志
 
+## 2026-04-25（仿 PMS 驳回链路修复）
+
+### 嵌入页保存 → PMS 模拟器无感知（P0）
+
+- **新增** `src/components/review/InitiateReviewPanel.vue`
+  - 新增 `EmbeddedFormSavedMessage` 类型与 `notifyParentFormSaved` 帮助函数
+  - `handleSubmit` 在 `externalWorkflowMode=true` 成功保存后向 `window.parent` 发送 `plant3d.form_saved`，携带 `taskId / formId / componentCount / packageName`
+- **新增** `src/debug/pmsReviewSimulatorEmbedMessages.ts`（新模块）
+  - 抽离 `EmbeddedWorkflowActionMessage` / `EmbeddedFormSavedMessage` 类型
+  - 抽离 `parseEmbeddedWorkflowActionMessage` / `parseEmbeddedFormSavedMessage` 类型守卫，纯函数零状态
+- **新增** `src/debug/pmsReviewSimulator.ts`
+  - 新增 `handleEmbeddedFormSaved`：收到 `form_saved` 后更新 `iframeMeta` → `refreshList` → `setSelectedTask` → `refreshDiagnosticsSnapshot`
+  - `handleWindowMessage` 分两路分发 workflow_action 与 form_saved
+  - `refreshList` 若没有 `selectedTaskId`，按 `iframeMeta.formId || lastOpenedFormId` 自动回选
+  - `executeWorkflowAction` 进入决策前先 await `refreshDiagnosticsSnapshot`，避免角色切换 / 重开 iframe 后 diagnostics 异步刷新与 `runWorkflowAction` 之间的 race
+  - 访问被阻 / 缺 formId 路径也写入 `workflowVerify.lastVerifyAction = action / lastVerifyOk = false`，避免下一轮 JSON 报告里 detail 沿用上一步成功动作的"验证通过"残文
+
+### scenarioReturn 断言口径与后端独立证据
+
+- **新增** `scripts/pms-simulator-runner.ts`
+  - 新增 `describeWorkflowVerifyDetail` / `describeWorkflowSyncDetail` / `assertWorkflowVerify` / `assertWorkflowSync` 帮助函数
+  - scenarioApproved / scenarioReturn / scenarioStop 的所有 `*-verify` / `*-sync` 断言改用新帮助函数；detail 直接输出 `expected_action / actual_action / ok / message` 四元组，便于读出 action 错位
+  - 新增 `getJson` 通用 helper
+  - 新增 `probeBackendTaskByFormId(runtime, formId)`：直接 `GET /api/review/tasks` 读后端真实 `current_node / status`
+  - scenarioReturn 在 PZ return 之后、reopen 为 SJ 之前新增 `return-backend-current-node` 断言，给 root cause 三选一提供独立证据
+
+### 测试与文档
+
+- **新增** `src/debug/pmsReviewSimulatorEmbedMessages.test.ts` — 10 个单测，覆盖类型守卫的全部分支
+- **新增** `src/components/review/form-binding.test.ts` 中 external mode 场景对 `window.parent.postMessage('plant3d.form_saved', ...)` 的断言
+- **新增** `docs/plans/2026-04-25-pms-reject-flow-fix.md` — 失败链路定位 / 修复目标 / 改动清单 / 风险对策 / 追踪表格 / 已提交改动摘要
+- **回归** `npx vue-tsc --noEmit --pretty false` → 0 errors
+- **回归** `npx vitest run` → **162 files / 1236 tests / 0 failed**
+
+### 待 runtime 验证（未提交）
+
+- E2 PZ return → SJ 实际落到 jd 的根因仍需起 `vite (3101) + plant-model-gen (3100)`、跑 `bun run test:pms:simulator -- --cases=return,stop,approved` 后看新 JSON 三元组（`return-verify` / `return-sync` / `return-backend-current-node`）
+- E4 gate-return 403（SH 不是 checker 节点负责人 JH）需 owner 拍板由测试改身份还是后端放权
+
 ## 2026-04-24（晚间 · Wave 3D）
 
 ### ReleaseNotesDialog 回归修复
