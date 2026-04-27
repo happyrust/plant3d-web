@@ -155,10 +155,9 @@ const SEVERITY_FILTER_BUCKETS: {
   colorClass: string;
   dotClass: string;
 }[] = [
-  { key: 'critical', label: '致命', colorClass: 'bg-red-100 text-red-700 border-red-200', dotClass: 'bg-red-500' },
-  { key: 'severe', label: '严重', colorClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-500' },
-  { key: 'normal', label: '一般', colorClass: 'bg-blue-100 text-blue-700 border-blue-200', dotClass: 'bg-blue-500' },
-  { key: 'suggestion', label: '建议', colorClass: 'bg-slate-100 text-slate-600 border-slate-200', dotClass: 'bg-slate-400' },
+  { key: 'principle', label: '原则错误 ×', colorClass: 'bg-red-100 text-red-700 border-red-200', dotClass: 'bg-red-500' },
+  { key: 'general', label: '一般错误 △', colorClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-500' },
+  { key: 'drawing', label: '图面错误 ○', colorClass: 'bg-blue-100 text-blue-700 border-blue-200', dotClass: 'bg-blue-500' },
   { key: 'unset', label: '未设置', colorClass: 'bg-muted text-muted-foreground border-border', dotClass: 'bg-gray-300' },
 ];
 
@@ -787,10 +786,10 @@ function formatCommentTime(timestamp: number): string {
         </div>
       </div>
 
-      <!-- 严重度概览与筛选 -->
+      <!-- 错误类型概览与筛选 -->
       <div data-testid="annotation-panel-severity-overview" class="mt-3">
         <div class="flex items-center justify-between">
-          <div class="text-[11px] text-muted-foreground">按严重度筛选（点击切换）</div>
+          <div class="text-[11px] text-muted-foreground">按错误类型筛选（点击切换）</div>
           <button type="button"
             data-testid="annotation-panel-severity-filter-clear"
             class="h-6 rounded border px-2 text-[11px] transition-colors"
@@ -848,8 +847,8 @@ function formatCommentTime(timestamp: number): string {
                 <span v-if="a.refno" class="ml-1 inline-block rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950 dark:text-blue-400" :title="'RefNo: ' + a.refno">{{ a.refno }}</span>
                 <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
                   :class="getAnnotationSeverityDisplay(a.severity).color"
-                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
-                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                  :title="getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
                 </span>
                 <span v-if="a.collapsed" class="ml-1 inline-block rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">
                   已最小化
@@ -918,8 +917,8 @@ function formatCommentTime(timestamp: number): string {
                 <span class="font-semibold">{{ a.title }}</span>
                 <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
                   :class="getAnnotationSeverityDisplay(a.severity).color"
-                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
-                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                  :title="getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
                 </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
@@ -1007,8 +1006,8 @@ function formatCommentTime(timestamp: number): string {
                 <span class="font-semibold">{{ a.title }}</span>
                 <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
                   :class="getAnnotationSeverityDisplay(a.severity).color"
-                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
-                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                  :title="getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
                 </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
@@ -1081,7 +1080,7 @@ function formatCommentTime(timestamp: number): string {
           @input="updateDescription(($event.target as HTMLTextAreaElement).value)" />
 
         <label class="mt-1 text-xs text-muted-foreground">
-          严重程度
+          错误类型
           <span v-if="!canEditActiveSeverity" class="ml-1 text-[10px] text-muted-foreground">（仅批注作者或校对/审核可修改）</span>
         </label>
         <div class="flex items-center gap-2">
@@ -1097,8 +1096,7 @@ function formatCommentTime(timestamp: number): string {
           <span v-if="(activeAny as any).severity"
             class="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px]"
             :class="getAnnotationSeverityDisplay((activeAny as any).severity).color">
-            <span class="inline-block h-1.5 w-1.5 rounded-full"
-              :class="getAnnotationSeverityDisplay((activeAny as any).severity).dot" />
+            {{ getAnnotationSeverityDisplay((activeAny as any).severity).symbol }}
             {{ getAnnotationSeverityDisplay((activeAny as any).severity).label }}
           </span>
         </div>

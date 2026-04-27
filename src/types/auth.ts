@@ -18,25 +18,58 @@ export type AnnotationResolutionStatus = 'open' | 'fixed' | 'wont_fix';
 export type AnnotationDecisionStatus = 'pending' | 'agreed' | 'rejected';
 export type AnnotationReviewAction = 'fixed' | 'wont_fix' | 'agree' | 'reject';
 
+export type AnnotationScreenshot = {
+  url: string;
+  attachmentId?: string;
+  name?: string;
+  capturedAt?: number;
+};
+
 /**
- * 批注严重度（问题严重程度）。
- * 语义区别于任务级 `ReviewTask.priority`：这里描述"问题严重程度"而非"紧急度"。
+ * 批注错误类型。
+ * - principle：原则错误（×）
+ * - general：一般错误（△）
+ * - drawing：图面错误（○）
  */
-export type AnnotationSeverity = 'suggestion' | 'normal' | 'severe' | 'critical';
+export type AnnotationSeverity = 'principle' | 'general' | 'drawing';
 
 export const ANNOTATION_SEVERITY_VALUES: readonly AnnotationSeverity[] = [
-  'critical',
-  'severe',
-  'normal',
-  'suggestion',
+  'principle',
+  'general',
+  'drawing',
 ] as const;
 
 export function isAnnotationSeverity(value: unknown): value is AnnotationSeverity {
-  return value === 'suggestion' || value === 'normal' || value === 'severe' || value === 'critical';
+  return value === 'principle' || value === 'general' || value === 'drawing';
 }
 
 export function normalizeAnnotationSeverity(value: unknown): AnnotationSeverity | undefined {
   return isAnnotationSeverity(value) ? value : undefined;
+}
+
+function readStringField(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+export function normalizeAnnotationScreenshot(value: unknown): AnnotationScreenshot | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const record = value as Record<string, unknown>;
+  const url = readStringField(record, 'url') || readStringField(record, 'thumbnailUrl');
+  if (!url) return undefined;
+
+  const capturedAtRaw = record.capturedAt;
+  const capturedAt = typeof capturedAtRaw === 'number' && Number.isFinite(capturedAtRaw)
+    ? capturedAtRaw
+    : undefined;
+
+  return {
+    url,
+    attachmentId: readStringField(record, 'attachmentId'),
+    name: readStringField(record, 'name'),
+    capturedAt,
+  };
 }
 
 export type AnnotationReviewEvent = {
@@ -409,26 +442,23 @@ export function getPriorityDisplayName(
 // ============================================================================
 
 /**
- * 获取批注严重度的显示配置。
- * - 致命 critical：红，最严重
- * - 严重 severe：橙
- * - 一般 normal：蓝
- * - 建议 suggestion：灰，最轻
+ * 获取批注错误类型的显示配置。
+ * - 原则错误 principle：红，× 标记
+ * - 一般错误 general：橙，△ 标记
+ * - 图面错误 drawing：蓝，○ 标记
  */
 export function getAnnotationSeverityDisplay(
   severity: AnnotationSeverity | undefined | null
-): { label: string; color: string; dot: string; rank: number } {
+): { label: string; color: string; dot: string; rank: number; symbol: string } {
   switch (severity) {
-    case 'critical':
-      return { label: '致命', color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500', rank: 4 };
-    case 'severe':
-      return { label: '严重', color: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-500', rank: 3 };
-    case 'normal':
-      return { label: '一般', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500', rank: 2 };
-    case 'suggestion':
-      return { label: '建议', color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', rank: 1 };
+    case 'principle':
+      return { label: '原则错误', color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500', rank: 3, symbol: '×' };
+    case 'general':
+      return { label: '一般错误', color: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-500', rank: 2, symbol: '△' };
+    case 'drawing':
+      return { label: '图面错误', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500', rank: 1, symbol: '○' };
     default:
-      return { label: '未设置', color: 'bg-transparent text-muted-foreground border-dashed border-border', dot: 'bg-gray-300', rank: 0 };
+      return { label: '未设置', color: 'bg-transparent text-muted-foreground border-dashed border-border', dot: 'bg-gray-300', rank: 0, symbol: '' };
   }
 }
 

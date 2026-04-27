@@ -237,9 +237,9 @@ export type AnnotationRecord = {
   refnos?: string[];
   comments?: AnnotationComment[]; // 多角色意见列表
   reviewState?: AnnotationReviewState;
-  /** 问题严重度（建议/一般/严重/致命），默认未设置 */
+  /** 错误类型（原则错误/一般错误/图面错误），默认未设置 */
   severity?: AnnotationSeverity;
-  /** 批注创建者 ID（用于权限判断：作者可编辑严重度） */
+  /** 批注创建者 ID（用于权限判断：作者可编辑错误类型） */
   authorId?: string;
   formId?: string;
   screenshot?: AnnotationScreenshot;
@@ -1585,37 +1585,44 @@ function addCommentToAnnotation(
 
 /**
  * 覆盖批注评论列表（用于后端同步）。
+ *
+ * 必须同时更新 commentThreadStore（读路径真源）和 inline annotation.comments
+ * （兼容投影）。否则后端返回的最新评论列表会被读路径忽略，导致 UI 显示空或旧数据。
  */
 function setAnnotationComments(
   annotationType: AnnotationType,
   annotationId: string,
   comments: AnnotationComment[]
 ): boolean {
+  const exists =
+    annotationType === 'text'
+      ? annotations.value.some((a) => a.id === annotationId)
+      : annotationType === 'cloud'
+        ? cloudAnnotations.value.some((a) => a.id === annotationId)
+        : annotationType === 'rect'
+          ? rectAnnotations.value.some((a) => a.id === annotationId)
+          : obbAnnotations.value.some((a) => a.id === annotationId);
+  if (!exists) return false;
+
+  const key = buildCommentThreadKey(annotationType, annotationId);
+  const lifted = comments.map((c) =>
+    liftAnnotationComment({ ...c, annotationId }, { annotationType }),
+  );
+  _getThreadStore().setThreadComments(key, lifted);
+
   switch (annotationType) {
-    case 'text': {
-      const annotation = annotations.value.find((a) => a.id === annotationId);
-      if (!annotation) return false;
+    case 'text':
       updateAnnotation(annotationId, { comments });
       return true;
-    }
-    case 'cloud': {
-      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
-      if (!annotation) return false;
+    case 'cloud':
       updateCloudAnnotation(annotationId, { comments });
       return true;
-    }
-    case 'rect': {
-      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
-      if (!annotation) return false;
+    case 'rect':
       updateRectAnnotation(annotationId, { comments });
       return true;
-    }
-    case 'obb': {
-      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
-      if (!annotation) return false;
+    case 'obb':
       updateObbAnnotation(annotationId, { comments });
       return true;
-    }
   }
   return false;
 }
