@@ -101,4 +101,68 @@ describe('detectPipeClearances', () => {
     const result = detectPipeClearances(branches, 500);
     expect(result.length).toBe(0);
   });
+
+  it('should respect configured angle threshold', () => {
+    const branches = {
+      'bran1': [
+        {
+          id: 'seg1',
+          refno: 'pipe1',
+          noun: 'PIPE',
+          arrive: [0, 0, 0],
+          leave: [0, 10, 0],
+          length: 10,
+          straight_length: 10,
+          outside_diameter: 100,
+        } as MbdPipeSegmentDto,
+      ],
+      'bran2': [
+        {
+          id: 'seg2',
+          refno: 'pipe2',
+          noun: 'PIPE',
+          arrive: [200, 0, 0],
+          leave: [201.76, 10, 0],
+          length: 10,
+          straight_length: 10,
+          outside_diameter: 100,
+        } as MbdPipeSegmentDto,
+      ],
+    };
+
+    const result = detectPipeClearances(branches, 500, 15);
+    expect(result.length).toBe(1);
+  });
+
+  it('should use finite segment endpoints instead of infinite parallel axes', () => {
+    const branches = {
+      'bran1': [
+        {
+          id: 'seg1',
+          refno: 'pipe1',
+          noun: 'PIPE',
+          arrive: [0, 0, 0],
+          leave: [0, 10, 0],
+          length: 10,
+          straight_length: 10,
+          outside_diameter: 100,
+        } as MbdPipeSegmentDto,
+      ],
+      'bran2': [
+        {
+          id: 'seg2',
+          refno: 'pipe2',
+          noun: 'PIPE',
+          arrive: [150, 200, 0],
+          leave: [150, 210, 0],
+          length: 10,
+          straight_length: 10,
+          outside_diameter: 100,
+        } as MbdPipeSegmentDto,
+      ],
+    };
+
+    const result = detectPipeClearances(branches, 75);
+    expect(result.length).toBe(0);
+  });
 });

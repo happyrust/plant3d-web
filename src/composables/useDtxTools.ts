@@ -21,7 +21,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
-import { getMbdPipeAnnotations, type MbdPipeData } from '@/api/mbdPipeApi';
+import { getMbdPipeAnnotations, type MbdPipeData, type MbdPipeSegmentDto } from '@/api/mbdPipeApi';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import {
   findNounByRefnoAcrossAllDbnos,
@@ -35,6 +35,7 @@ import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
+import { computePipeSegmentToPipeSegmentClearance } from '@/utils/three/geometry/clearance';
 import { formatLengthMeters } from '@/utils/unitFormat';
 
 type DragRect = {
@@ -293,6 +294,24 @@ type ObjectMeasureCandidate = {
   hitPoint?: Vec3 | null
 }
 
+type PipeSegmentGeometry = {
+  segmentRefno: string
+  start: Vector3
+  end: Vector3
+  radius: number
+}
+
+type PipeToPipeMeasureCandidate = ObjectMeasureCandidate & {
+  segment?: PipeSegmentGeometry
+}
+
+type WorldPipeSegment = {
+  refno: string
+  start: Vector3
+  end: Vector3
+  radius: number
+}
+
 export type ApproxNearestBetweenObjectsInput = {
   sourceObjectId: string
   targetObjectId: string
@@ -433,6 +452,14 @@ function collectApproxNearestSeedPoints(
 
 function buildObjectMeasurePairKey(sourceRefno: string, targetRefno: string): string {
   return [normalizeRefnoKey(sourceRefno), normalizeRefnoKey(targetRefno)].sort().join('::');
+}
+
+function distancePointToSegmentSquared(point: Vector3, start: Vector3, end: Vector3): number {
+  const axis = end.clone().sub(start);
+  const lenSq = axis.lengthSq();
+  if (lenSq < 1e-12) return point.distanceToSquared(start);
+  const t = clamp(point.clone().sub(start).dot(axis) / lenSq, 0, 1);
+  return point.distanceToSquared(start.clone().addScaledVector(axis, t));
 }
 
 function resolveLoadedVisibleObjectCandidateByRefno(
@@ -1709,6 +1736,7 @@ export function useDtxTools(options: {
   const lastAppliedObjectMeasurePairKey = ref<string | null>(null);
   const pipeMeasureBusy = ref(false);
   const pipeMeasureStatus = ref<string>('');
+  const pipeToPipeSourceCandidate = ref<PipeToPipeMeasureCandidate | null>(null);
   const mbdBranchCache = new Map<string, { expiresAt: number; data: MbdPipeData | null }>();
 
   // dimensions (独立于测量)
@@ -2292,6 +2320,22 @@ export function useDtxTools(options: {
     objectToObjectStatus.value = message;
   }
 
+  function clearPipeToPipeCandidate(options?: { clearStatus?: boolean }): void {
+    pipeToPipeSourceCandidate.value = null;
+    if (options?.clearStatus) {
+      pipeMeasureStatus.value = '';
+    }
+  }
+
+  function pipeToPipeCandidateLabel(candidate: PipeToPipeMeasureCandidate): string {
+    return candidate.segment?.segmentRefno ?? candidate.refno;
+  }
+
+  function applyPipeToPipeSourceCandidate(candidate: PipeToPipeMeasureCandidate): void {
+    pipeToPipeSourceCandidate.value = candidate;
+    setPipeMeasureStatus(`管-管快速标注：已选第一根管道 ${pipeToPipeCandidateLabel(candidate)}，请选择第二根管道`);
+  }
+
   function clearObjectMeasureCandidates(options?: { clearStatus?: boolean; clearLastPairKey?: boolean }): void {
     objectToObjectSourceCandidate.value = null;
     objectToObjectTargetCandidate.value = null;
@@ -2477,6 +2521,91 @@ export function useDtxTools(options: {
     return data;
   }
 
+  function toWorldPipeSegment(
+    segment: MbdPipeSegmentDto,
+    globalMatrix: any,
+  ): WorldPipeSegment | null {
+    const refno = normalizeRefnoKey(segment.refno || '');
+    const arrive = asVec3(segment.arrive ?? null);
+    const leave = asVec3(segment.leave ?? null);
+    const outsideDiameter = Number(segment.outside_diameter);
+    if (!refno || !arrive || !leave || !Number.isFinite(outsideDiameter) || outsideDiameter <= 0) {
+      return null;
+    }
+
+    const startTuple = vec3ByMatrix(arrive, globalMatrix);
+    const endTuple = vec3ByMatrix(leave, globalMatrix);
+    const start = new Vector3(startTuple[0], startTuple[1], startTuple[2]);
+    const end = new Vector3(endTuple[0], endTuple[1], endTuple[2]);
+    if (start.distanceToSquared(end) < 1e-9) return null;
+
+    return {
+      refno,
+      start,
+      end,
+      radius: Math.max(0, outsideDiameter / 2),
+    };
+  }
+
+  function choosePipeSegmentForHit(
+    segments: WorldPipeSegment[],
+    sourceRefno: string,
+    hitPoint: Vector3,
+  ): WorldPipeSegment | null {
+    const normalizedSource = normalizeRefnoKey(sourceRefno);
+    const direct = segments.filter((segment) => segment.refno === normalizedSource);
+    const pool = direct.length > 0 ? direct : segments;
+    let best: { segment: WorldPipeSegment; distanceSq: number } | null = null;
+
+    for (const segment of pool) {
+      const distanceSq = distancePointToSegmentSquared(hitPoint, segment.start, segment.end);
+      if (!best || distanceSq < best.distanceSq) {
+        best = { segment, distanceSq };
+      }
+    }
+
+    return best?.segment ?? null;
+  }
+
+  async function resolvePipeSegmentMeasureCandidate(hit: {
+    entityId: string
+    worldPos: Vector3
+    objectId: string
+  }): Promise<PipeToPipeMeasureCandidate | null> {
+    const layer = dtxLayerRef.value;
+    if (!layer) return null;
+
+    const sourceRefno = normalizeRefnoKey(hit.entityId || parseRefnoFromDtxObjectId(hit.objectId) || '');
+    const dbnum = parseDbnumFromRefno(sourceRefno);
+    if (!sourceRefno || !hit.objectId) return null;
+
+    const candidate: PipeToPipeMeasureCandidate = {
+      refno: sourceRefno,
+      objectId: hit.objectId,
+      entityId: hit.entityId || sourceRefno,
+      hitPoint: vec3ToTuple(hit.worldPos),
+    };
+
+    if (!dbnum) return candidate;
+
+    const branchRefno = resolvePipeOwnerBranchRefno(sourceRefno);
+    const mbdData = await queryMbdPipeWithBranchCache(branchRefno);
+    const globalMatrix = layer.getGlobalModelMatrix();
+    const segments = (mbdData?.segments || [])
+      .map((segment) => toWorldPipeSegment(segment, globalMatrix))
+      .filter((segment): segment is WorldPipeSegment => !!segment);
+    const segment = choosePipeSegmentForHit(segments, sourceRefno, hit.worldPos);
+    if (!segment) return candidate;
+
+    candidate.segment = {
+      segmentRefno: segment.refno,
+      start: segment.start.clone(),
+      end: segment.end.clone(),
+      radius: segment.radius,
+    };
+    return candidate;
+  }
+
   function collectPipeReferencePointsWorld(params: {
     sourceRefno: string
     sourceObjectId: string
@@ -2632,6 +2761,122 @@ export function useDtxTools(options: {
 
     if (!best) return null;
     return fromSeed(best.seed, best.targetObjectId, best.targetRefno);
+  }
+
+  function commitPipeToPipeDimension(
+    source: PipeToPipeMeasureCandidate,
+    target: PipeToPipeMeasureCandidate,
+  ): boolean {
+    if (
+      source.objectId === target.objectId ||
+      source.refno === target.refno ||
+      (!!source.segment && !!target.segment && source.segment.segmentRefno === target.segment.segmentRefno)
+    ) {
+      setPipeMeasureStatus('管-管快速标注：请选择另一根管道');
+      return false;
+    }
+
+    let start: Vector3 | null = null;
+    let end: Vector3 | null = null;
+    if (source.segment && target.segment) {
+      const clearance = computePipeSegmentToPipeSegmentClearance({
+        pipe1Start: source.segment.start,
+        pipe1End: source.segment.end,
+        pipe1Radius: source.segment.radius,
+        pipe2Start: target.segment.start,
+        pipe2End: target.segment.end,
+        pipe2Radius: target.segment.radius,
+      });
+      if (!clearance) {
+        setPipeMeasureStatus('管-管快速标注：最近点计算失败');
+        return false;
+      }
+      start = clearance.pipeSurfacePoint;
+      end = clearance.otherSurfacePoint;
+    } else {
+      const layer = dtxLayerRef.value;
+      const approx = layer
+        ? computeApproxNearestBetweenObjects(layer, {
+          sourceObjectId: source.objectId,
+          targetObjectId: target.objectId,
+          sourceHitPoint: source.hitPoint ?? null,
+          targetHitPoint: target.hitPoint ?? null,
+        })
+        : null;
+      if (!approx) {
+        setPipeMeasureStatus('管-管快速标注：最近点计算失败');
+        return false;
+      }
+      start = new Vector3(...approx.sourcePoint);
+      end = new Vector3(...approx.targetPoint);
+    }
+
+    const viewer = dtxViewerRef.value;
+    const direction = viewer?.camera
+      ? computeDimensionOffsetDirectionByCamera(start, end, viewer.camera as any)
+      : null;
+    const distance = start.distanceTo(end);
+    const sourceLabel = pipeToPipeCandidateLabel(source);
+    const targetLabel = pipeToPipeCandidateLabel(target);
+    const offset = Math.max(0.2, Math.min(2, distance * 0.15));
+    const rec: LinearDistanceDimensionRecord = {
+      id: nowId('dim-pipe-pipe'),
+      kind: 'linear_distance',
+      origin: { entityId: sourceLabel, worldPos: vec3ToTuple(start) },
+      target: { entityId: targetLabel, worldPos: vec3ToTuple(end) },
+      offset,
+      direction: direction ? vec3ToTuple(direction) : null,
+      labelT: 0.5,
+      visible: true,
+      createdAt: Date.now(),
+    };
+
+    store.addDimension(rec);
+    clearPipeToPipeCandidate();
+    setPipeMeasureStatus(
+      `已生成管-管标注：${sourceLabel} ↔ ${targetLabel}，距离 ${formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value)}`,
+    );
+    requestRender?.();
+    return true;
+  }
+
+  async function runPipeToPipeMeasurement(canvas: HTMLCanvasElement, e: PointerEvent): Promise<void> {
+    if (pipeMeasureBusy.value) {
+      setPipeMeasureStatus('正在计算上一条标注，请稍候…');
+      return;
+    }
+
+    const hit = pickSurfacePoint(canvas, e);
+    if (!hit) {
+      setPipeMeasureStatus('管-管快速标注：未拾取到有效管道对象');
+      return;
+    }
+
+    pipeMeasureBusy.value = true;
+    try {
+      setPipeMeasureStatus(
+        pipeToPipeSourceCandidate.value
+          ? '管-管快速标注：正在解析第二根管道…'
+          : '管-管快速标注：正在解析第一根管道…',
+      );
+      const candidate = await resolvePipeSegmentMeasureCandidate(hit);
+      if (!candidate) {
+        setPipeMeasureStatus('管-管快速标注：未找到可用管道对象');
+        return;
+      }
+
+      const source = pipeToPipeSourceCandidate.value;
+      if (!source) {
+        applyPipeToPipeSourceCandidate(candidate);
+        return;
+      }
+
+      commitPipeToPipeDimension(source, candidate);
+    } catch (error) {
+      setPipeMeasureStatus(`管-管快速标注计算失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      pipeMeasureBusy.value = false;
+    }
   }
 
   async function runPipeToStructureMeasurement(canvas: HTMLCanvasElement, e: PointerEvent): Promise<void> {
@@ -2796,7 +3041,15 @@ export function useDtxTools(options: {
       return pipeMeasureStatus.value || '管-墙/柱快速标注：点击管道，自动生成最近距离尺寸';
     }
     if (mode === 'measure_pipe_to_pipe') {
-      return pipeMeasureStatus.value || '管-管快速标注：当前版本仅完成模式接线（后续复用双阶段算法）';
+      if (pipeMeasureBusy.value) {
+        return pipeMeasureStatus.value || '管-管快速标注：正在计算…';
+      }
+      if (pipeMeasureStatus.value) {
+        return pipeMeasureStatus.value;
+      }
+      return pipeToPipeSourceCandidate.value
+        ? `管-管快速标注：已选第一根管道 ${pipeToPipeCandidateLabel(pipeToPipeSourceCandidate.value)}，请选择第二根管道`
+        : '管-管快速标注：请选择第一根管道';
     }
     if (mode === 'dimension_linear') {
       return dimensionPoints.value.length === 0 ? '尺寸标注（距离）：请选择起点' : '尺寸标注（距离）：请选择终点';
@@ -2882,6 +3135,7 @@ export function useDtxTools(options: {
     progressPoints.value = [];
     pointToObjectStart.value = null;
     clearObjectMeasureCandidates({ clearStatus: true, clearLastPairKey: true });
+    clearPipeToPipeCandidate({ clearStatus: true });
     dimensionPoints.value = [];
     pipeMeasureBusy.value = false;
     pipeMeasureStatus.value = '';
@@ -4133,7 +4387,7 @@ export function useDtxTools(options: {
     }
 
     if (mode === 'measure_pipe_to_pipe') {
-      setPipeMeasureStatus('管-管快速标注尚未启用，当前版本优先支持管-墙/柱');
+      void runPipeToPipeMeasurement(canvas, e);
       return;
     }
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { computePipeToPipeClearance } from './pipeClearance';
+import { computePipeSegmentToPipeSegmentClearance } from './pipeClearance';
 
 import type { MbdPipeSegmentDto, MbdPipeClearanceDto, Vec3 } from '@/api/mbdPipeApi';
 
@@ -9,6 +9,12 @@ export type PipePair = {
   pipe2: MbdPipeSegmentDto
   bran1: string
   bran2: string
+}
+
+function areAxesWithinAngle(axis1: THREE.Vector3, axis2: THREE.Vector3, maxAngleDeg: number): boolean {
+  if (axis1.lengthSq() < 1e-12 || axis2.lengthSq() < 1e-12) return false;
+  const maxAngleRad = (Math.max(0, Math.min(180, maxAngleDeg)) * Math.PI) / 180;
+  return Math.abs(axis1.clone().normalize().dot(axis2.clone().normalize())) >= Math.cos(maxAngleRad);
 }
 
 /**
@@ -39,35 +45,30 @@ export function detectPipeClearances(
         for (const seg2 of segs2) {
           if (!seg2.arrive || !seg2.leave || !seg2.outside_diameter) continue;
 
-          const center1 = new THREE.Vector3(
-            (seg1.arrive[0] + seg1.leave[0]) / 2,
-            (seg1.arrive[1] + seg1.leave[1]) / 2,
-            (seg1.arrive[2] + seg1.leave[2]) / 2,
-          );
+          const start1 = new THREE.Vector3(seg1.arrive[0], seg1.arrive[1], seg1.arrive[2]);
+          const end1 = new THREE.Vector3(seg1.leave[0], seg1.leave[1], seg1.leave[2]);
           const axis1 = new THREE.Vector3(
             seg1.leave[0] - seg1.arrive[0],
             seg1.leave[1] - seg1.arrive[1],
             seg1.leave[2] - seg1.arrive[2],
           );
           
-          const center2 = new THREE.Vector3(
-            (seg2.arrive[0] + seg2.leave[0]) / 2,
-            (seg2.arrive[1] + seg2.leave[1]) / 2,
-            (seg2.arrive[2] + seg2.leave[2]) / 2,
-          );
+          const start2 = new THREE.Vector3(seg2.arrive[0], seg2.arrive[1], seg2.arrive[2]);
+          const end2 = new THREE.Vector3(seg2.leave[0], seg2.leave[1], seg2.leave[2]);
           const axis2 = new THREE.Vector3(
             seg2.leave[0] - seg2.arrive[0],
             seg2.leave[1] - seg2.arrive[1],
             seg2.leave[2] - seg2.arrive[2],
           );
+          if (!areAxesWithinAngle(axis1, axis2, maxAngleDeg)) continue;
 
-          const result = computePipeToPipeClearance({
-            pipe1Center: center1,
+          const result = computePipeSegmentToPipeSegmentClearance({
+            pipe1Start: start1,
+            pipe1End: end1,
             pipe1Radius: seg1.outside_diameter / 2,
-            pipe1Axis: axis1,
-            pipe2Center: center2,
+            pipe2Start: start2,
+            pipe2End: end2,
             pipe2Radius: seg2.outside_diameter / 2,
-            pipe2Axis: axis2,
           });
 
           if (result && result.distance > 0 && result.distance <= maxDistance) {

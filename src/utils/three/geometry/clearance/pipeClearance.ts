@@ -158,3 +158,111 @@ export function computePipeToPipeClearance(params: PipeToPipeClearanceParams): C
   return { pipeSurfacePoint: pipe1SurfacePoint, otherSurfacePoint: pipe2SurfacePoint, distance, normal };
 }
 
+export type PipeSegmentToPipeSegmentClearanceParams = {
+  pipe1Start: THREE.Vector3
+  pipe1End: THREE.Vector3
+  pipe1Radius: number
+  pipe2Start: THREE.Vector3
+  pipe2End: THREE.Vector3
+  pipe2Radius: number
+}
+
+type SegmentClosestPoints = {
+  point1: THREE.Vector3
+  point2: THREE.Vector3
+}
+
+function closestPointsBetweenSegments(
+  p1: THREE.Vector3,
+  q1: THREE.Vector3,
+  p2: THREE.Vector3,
+  q2: THREE.Vector3,
+): SegmentClosestPoints | null {
+  const d1 = q1.clone().sub(p1);
+  const d2 = q2.clone().sub(p2);
+  const r = p1.clone().sub(p2);
+  const a = d1.dot(d1);
+  const e = d2.dot(d2);
+  const eps = 1e-12;
+
+  if (a < eps || e < eps) return null;
+
+  const b = d1.dot(d2);
+  const c = d1.dot(r);
+  const f = d2.dot(r);
+  const denom = a * e - b * b;
+  let s = 0;
+  let t = 0;
+
+  if (denom > eps) {
+    s = THREE.MathUtils.clamp((b * f - c * e) / denom, 0, 1);
+  }
+
+  t = (b * s + f) / e;
+
+  if (t < 0) {
+    t = 0;
+    s = THREE.MathUtils.clamp(-c / a, 0, 1);
+  } else if (t > 1) {
+    t = 1;
+    s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+  }
+
+  return {
+    point1: p1.clone().addScaledVector(d1, s),
+    point2: p2.clone().addScaledVector(d2, t),
+  };
+}
+
+/**
+ * 两根有限直管段之间的最小净距（外表面到外表面）。
+ *
+ * 将管道视为“有限线段胶囊”：先求两段中心线最近点，再扣除两侧外半径。
+ * 覆盖平行、斜交和端部最近场景；穿透时返回 0 距离。
+ */
+export function computePipeSegmentToPipeSegmentClearance(
+  params: PipeSegmentToPipeSegmentClearanceParams,
+): ClearanceResult | null {
+  const closest = closestPointsBetweenSegments(
+    params.pipe1Start,
+    params.pipe1End,
+    params.pipe2Start,
+    params.pipe2End,
+  );
+  if (!closest) return null;
+
+  const r1 = Math.max(0, params.pipe1Radius);
+  const r2 = Math.max(0, params.pipe2Radius);
+  const delta = closest.point2.clone().sub(closest.point1);
+  const centerDistance = delta.length();
+  let normal = new THREE.Vector3(0, 0, 0);
+
+  if (centerDistance > 1e-9) {
+    normal = delta.clone().multiplyScalar(1 / centerDistance);
+  } else {
+    const axis1 = params.pipe1End.clone().sub(params.pipe1Start);
+    const axis2 = params.pipe2End.clone().sub(params.pipe2Start);
+    normal = axis1.cross(axis2);
+    if (normal.lengthSq() > 1e-12) {
+      normal.normalize();
+    }
+  }
+
+  const raw = centerDistance - (r1 + r2);
+  const distance = Math.max(0, raw);
+  const pipe1SurfacePoint = closest.point1.clone().addScaledVector(normal, r1);
+  const pipe2SurfacePoint = closest.point2.clone().addScaledVector(normal, -r2);
+
+  if (distance <= 1e-9) {
+    const mid = pipe1SurfacePoint.clone().lerp(pipe2SurfacePoint, 0.5);
+    return { pipeSurfacePoint: mid.clone(), otherSurfacePoint: mid, distance: 0, normal };
+  }
+
+  return {
+    pipeSurfacePoint: pipe1SurfacePoint,
+    otherSurfacePoint: pipe2SurfacePoint,
+    distance,
+    normal,
+  };
+}
+
