@@ -13,8 +13,11 @@ import { getAnnotationRefnos } from '@/composables/useToolStore';
 import {
   compareAnnotationSeverity,
   getAnnotationReviewDisplay,
+  getAnnotationSeverityDisplay,
+  normalizeAnnotationScreenshot,
   normalizeAnnotationReviewState,
   type AnnotationReviewState,
+  type AnnotationScreenshot,
   type AnnotationSeverity,
 } from '@/types/auth';
 
@@ -37,6 +40,8 @@ export type AnnotationWorkspaceItem = {
   commentCount: number;
   reviewState?: AnnotationReviewState;
   severity?: AnnotationSeverity;
+  screenshot?: AnnotationScreenshot;
+  thumbnailUrl?: string;
   authorId?: string;
   statusKey: 'pending' | 'fixed' | 'rejected' | 'approved' | 'wont_fix';
   statusLabel: string;
@@ -127,31 +132,31 @@ function resolveWorkspaceStatus(
 export function getAnnotationWorkspacePriorityDisplay(
   severity?: AnnotationSeverity,
 ): { priority: AnnotationWorkspacePriority; label: string; tone: string } {
+  const display = getAnnotationSeverityDisplay(severity);
   switch (severity) {
-    case 'critical':
+    case 'principle':
       return {
         priority: 'urgent',
-        label: '紧急',
-        tone: 'bg-red-100 text-red-700 border-red-200',
+        label: display.label,
+        tone: display.color,
       };
-    case 'severe':
-      return {
-        priority: 'high',
-        label: '高',
-        tone: 'bg-orange-100 text-orange-700 border-orange-200',
-      };
-    case 'normal':
+    case 'general':
       return {
         priority: 'medium',
-        label: '中',
-        tone: 'bg-blue-100 text-blue-700 border-blue-200',
+        label: display.label,
+        tone: display.color,
       };
-    case 'suggestion':
+    case 'drawing':
+      return {
+        priority: 'low',
+        label: display.label,
+        tone: display.color,
+      };
     default:
       return {
         priority: 'low',
-        label: '低',
-        tone: 'bg-slate-100 text-slate-600 border-slate-200',
+        label: display.label,
+        tone: display.color,
       };
   }
 }
@@ -166,6 +171,7 @@ function createWorkspaceItem(
   const reviewState = normalizeAnnotationReviewState(record.reviewState);
   const status = resolveWorkspaceStatus(reviewState);
   const priorityDisplay = getAnnotationWorkspacePriorityDisplay(record.severity);
+  const screenshot = resolveAnnotationScreenshot(record);
 
   return {
     id: record.id,
@@ -180,6 +186,8 @@ function createWorkspaceItem(
     commentCount: getCommentCount ? getCommentCount(type, record.id) : 0,
     reviewState,
     severity: record.severity,
+    screenshot,
+    thumbnailUrl: screenshot?.url,
     authorId: (record as { authorId?: string }).authorId,
     statusKey: status.statusKey,
     statusLabel: status.statusLabel,
@@ -188,6 +196,15 @@ function createWorkspaceItem(
     priorityLabel: priorityDisplay.label,
     priorityTone: priorityDisplay.tone,
   };
+}
+
+function resolveAnnotationScreenshot(record: AnyAnnotationRecord): AnnotationScreenshot | undefined {
+  const legacy = record as { thumbnailUrl?: string; attachmentId?: string };
+  return normalizeAnnotationScreenshot(record.screenshot)
+    ?? normalizeAnnotationScreenshot({
+      thumbnailUrl: legacy.thumbnailUrl,
+      attachmentId: legacy.attachmentId,
+    });
 }
 
 function compareStatusRank(a: AnnotationWorkspaceItem, b: AnnotationWorkspaceItem): number {
@@ -326,7 +343,7 @@ export function getAnnotationWorkspaceTypeDisplay(type: AnnotationType): { label
     case 'rect':
       return { label: '矩形', tone: 'bg-amber-100 text-amber-700 border-amber-200' };
     case 'obb':
-      return { label: '包围盒', tone: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200' };
+      return { label: '包围盒（辅助证据）', tone: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200' };
   }
 }
 
@@ -338,7 +355,7 @@ export const ANNOTATION_WORKSPACE_FILTER_OPTIONS: {
   { value: 'pending', label: '待处理' },
   { value: 'fixed', label: '已修改' },
   { value: 'rejected', label: '已驳回' },
-  { value: 'high_priority', label: '高优' },
+  { value: 'high_priority', label: '原则错误' },
 ];
 
 export const ANNOTATION_WORKSPACE_PRIORITY_OPTIONS: {
@@ -346,8 +363,8 @@ export const ANNOTATION_WORKSPACE_PRIORITY_OPTIONS: {
   label: string;
   tone: string;
 }[] = [
-  { value: undefined, label: '低', tone: 'bg-slate-100 text-slate-600 border-slate-200' },
-  { value: 'normal', label: '中', tone: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { value: 'severe', label: '高', tone: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { value: 'critical', label: '紧急', tone: 'bg-red-100 text-red-700 border-red-200' },
+  { value: undefined, label: '未设置', tone: getAnnotationSeverityDisplay(undefined).color },
+  { value: 'drawing', label: '图面错误', tone: getAnnotationSeverityDisplay('drawing').color },
+  { value: 'general', label: '一般错误', tone: getAnnotationSeverityDisplay('general').color },
+  { value: 'principle', label: '原则错误', tone: getAnnotationSeverityDisplay('principle').color },
 ];

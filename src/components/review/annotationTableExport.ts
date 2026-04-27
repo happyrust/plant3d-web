@@ -8,6 +8,7 @@
  */
 
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
+import { getAnnotationSeverityDisplay } from '@/types/auth';
 
 // ------------------------------------------------------------
 // Types
@@ -62,7 +63,7 @@ export const DEFAULT_ANNOTATION_TABLE_COLUMNS: AnnotationTableCsvColumn[] = [
   { header: '序号', accessor: (_, index) => index + 1 },
   {
     header: '错误标记',
-    accessor: (item) => `${item.priorityLabel ?? ''}${item.severity ? `·${item.severity}` : ''}`.trim() || '—',
+    accessor: (item) => getAnnotationSeverityDisplay(item.severity).label,
   },
   { header: '校核发现问题', accessor: (item) => item.title },
   { header: '问题描述', accessor: (item) => item.description },

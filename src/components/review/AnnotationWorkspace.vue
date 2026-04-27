@@ -58,8 +58,8 @@ const props = withDefaults(defineProps<{
   confirmError: null,
   canEditSeverity: false,
   showToolLauncher: false,
-  confirmActionLabel: '确认当前数据',
-  confirmHint: '确认后会以当前批注和测量快照生成处理留痕。',
+  confirmActionLabel: '保存新增证据',
+  confirmHint: '保存后会以当前新增批注和测量快照生成处理留痕。',
   emptyTitle: '当前还没有批注数据',
   emptyDescription: '请在模型中创建批注，或切换到有批注的任务。',
   timelineDesignerOnly: false,
@@ -88,6 +88,7 @@ const emit = defineEmits<{
 
 const showMeasurementMenu = ref(false);
 const listPaneRef = ref<HTMLElement | null>(null);
+const screenshotPreviewUrl = ref<string | null>(null);
 
 const selectedTypeDisplay = computed(() => (
   props.selectedAnnotation ? getAnnotationWorkspaceTypeDisplay(props.selectedAnnotation.type) : null
@@ -131,6 +132,10 @@ function updateListScrollTop(event: Event) {
   emit('update:list-scroll-top', target?.scrollTop ?? 0);
 }
 
+function openScreenshotPreview(item: AnnotationWorkspaceItem | null) {
+  screenshotPreviewUrl.value = item?.screenshot?.url || item?.thumbnailUrl || null;
+}
+
 function handleClickOutside(event: MouseEvent) {
   const target = event.target as HTMLElement | null;
   if (!target?.closest('[data-annotation-measure-menu]')) {
@@ -164,7 +169,7 @@ watch(
     <div v-if="showTopSummary" class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
       <div>
         <div class="text-sm font-semibold text-slate-950">
-          当前批注（{{ summary.total }}） / 待处理 {{ summary.pending }} / 高优 {{ summary.highPriority }}
+          当前批注（{{ summary.total }}） / 待处理 {{ summary.pending }} / 原则错误 {{ summary.highPriority }}
         </div>
         <p class="mt-1 text-xs leading-5 text-slate-500">
           先完成单条批注处理，再执行任务级流转。
@@ -235,7 +240,7 @@ watch(
         <div class="mt-2 text-2xl font-semibold text-amber-700">{{ summary.pending }}</div>
       </div>
       <div class="rounded-2xl border border-slate-200 bg-rose-50 px-4 py-3">
-        <div class="text-xs text-rose-500">高优</div>
+        <div class="text-xs text-rose-500">原则错误</div>
         <div class="mt-2 text-2xl font-semibold text-rose-700">{{ summary.highPriority }}</div>
       </div>
     </div>
@@ -262,7 +267,7 @@ watch(
         <div class="flex items-center justify-between gap-3 px-2 pb-3">
           <div>
             <div class="text-sm font-semibold text-slate-900">批注列表</div>
-            <div class="mt-1 text-xs text-slate-500">按状态与优先级筛选当前任务的批注。</div>
+            <div class="mt-1 text-xs text-slate-500">按状态与错误类型筛选当前任务的批注。</div>
           </div>
           <div class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">
             {{ items.length }} 条
@@ -313,6 +318,13 @@ watch(
                   <span v-if="item.commentCount > 0">{{ item.commentCount }} 条意见</span>
                 </div>
               </div>
+              <button v-if="item.thumbnailUrl"
+                type="button"
+                class="h-16 w-20 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+                title="查看批注截图"
+                @click.stop="openScreenshotPreview(item)">
+                <img :src="item.thumbnailUrl" alt="批注截图" class="h-full w-full object-cover" />
+              </button>
               <button type="button"
                 class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white"
                 @click.stop="emit('locate-annotation', item)">
@@ -348,13 +360,20 @@ watch(
                     {{ selectedAnnotation.statusLabel }}
                   </span>
                   <span class="rounded-full border px-2.5 py-1 text-xs font-semibold" :class="selectedAnnotation.priorityTone">
-                    {{ selectedAnnotation.priorityLabel }}优先
+                    {{ selectedAnnotation.priorityLabel }}
                   </span>
                 </div>
                 <h3 class="mt-3 text-xl font-semibold text-slate-950">{{ selectedAnnotation.title }}</h3>
                 <p class="mt-2 text-sm leading-6 text-slate-600">
                   {{ selectedAnnotation.description || '可继续补充处理说明、回复意见与测量证据。' }}
                 </p>
+                <button v-if="selectedAnnotation.thumbnailUrl"
+                  type="button"
+                  class="mt-4 block h-36 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
+                  title="查看批注截图"
+                  @click="openScreenshotPreview(selectedAnnotation)">
+                  <img :src="selectedAnnotation.thumbnailUrl" alt="批注截图" class="h-full w-full object-cover" />
+                </button>
                 <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                   <span v-if="selectedAnnotation.refnos.length">RefNo {{ selectedAnnotation.refnos.join(', ') }}</span>
                   <span>{{ new Date(selectedAnnotation.activityAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</span>
@@ -377,8 +396,8 @@ watch(
             <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div class="flex items-center justify-between gap-3">
                 <div>
-                  <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">优先级设置</div>
-                  <div class="mt-1 text-sm text-slate-500">使用现有 severity 映射为低 / 中 / 高 / 紧急。</div>
+                  <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">错误类型设置</div>
+                  <div class="mt-1 text-sm text-slate-500">原则错误、一般错误、图面错误用于记录校审问题类型。</div>
                 </div>
                 <div class="text-xs text-slate-400">{{ canEditSeverity ? '点击即可调整' : '当前角色只读' }}</div>
               </div>
@@ -402,6 +421,7 @@ watch(
             <ReviewCommentsTimeline :annotation-type="selectedAnnotation.type"
               :annotation-id="selectedAnnotation.id"
               :annotation-label="selectedAnnotation.title"
+              :screenshot="selectedAnnotation.screenshot"
               :composer-placeholder="timelinePlaceholder"
               :composer-submit-label="timelineSubmitLabel"
               :designer-only="timelineDesignerOnly" />
@@ -456,7 +476,7 @@ watch(
           <div class="mt-4 rounded-[24px] bg-slate-950 px-4 py-4 text-white shadow-xl">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div class="text-sm font-semibold">确认当前数据</div>
+                <div class="text-sm font-semibold">保存新增证据</div>
                 <div class="mt-1 text-xs leading-5 text-slate-300">
                   {{ confirmHint }}
                 </div>
@@ -492,7 +512,7 @@ watch(
         <div v-else class="flex h-full min-h-[520px] flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-center">
           <MessageSquare class="h-10 w-10 text-slate-300" />
           <div class="mt-4 text-base font-semibold text-slate-700">先选择一条批注</div>
-          <div class="mt-2 max-w-sm text-sm leading-6 text-slate-500">左侧列表会按状态和高优规则自动排序；选择后可继续回复、补测量和确认处理数据。</div>
+          <div class="mt-2 max-w-sm text-sm leading-6 text-slate-500">左侧列表会按状态和错误类型自动排序；选择后可继续回复、补测量和确认处理数据。</div>
         </div>
 
         <div v-if="$slots.workflow && layout !== 'list'" class="mt-4 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -500,5 +520,16 @@ watch(
         </div>
       </section>
     </div>
+
+    <Teleport v-if="screenshotPreviewUrl" to="body">
+      <div class="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/70 p-6"
+        data-testid="annotation-workspace-screenshot-preview"
+        @click="screenshotPreviewUrl = null">
+        <img :src="screenshotPreviewUrl"
+          alt="批注截图预览"
+          class="max-h-full max-w-full rounded-2xl bg-white object-contain shadow-2xl"
+          @click.stop />
+      </div>
+    </Teleport>
   </section>
 </template>

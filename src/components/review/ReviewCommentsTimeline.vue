@@ -3,9 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import {
   BadgeCheck,
-  Camera,
   CircleSlash,
-  Paperclip,
   Reply,
   Send,
   ThumbsDown,
@@ -17,6 +15,8 @@ import type { AnnotationType } from '@/composables/useToolStore';
 
 import {
   annotationReviewStateApply,
+  annotationReviewStatesQuery,
+  normalizeAnnotationReviewStateView,
   reviewCommentCreate,
   reviewCommentDelete,
   reviewCommentGetByAnnotation,
@@ -30,6 +30,7 @@ import {
   type AnnotationComment,
   type AnnotationReviewAction,
   type AnnotationReviewEvent,
+  type AnnotationScreenshot,
   getAnnotationReviewActionLabel,
   getAnnotationReviewDisplay,
   getRoleDisplayName,
@@ -44,11 +45,13 @@ const props = withDefaults(defineProps<{
   composerPlaceholder?: string;
   composerSubmitLabel?: string;
   designerOnly?: boolean;
+  screenshot?: AnnotationScreenshot;
 }>(), {
   annotationLabel: undefined,
   composerPlaceholder: '输入意见...',
   composerSubmitLabel: '发表',
   designerOnly: false,
+  screenshot: undefined,
 });
 
 const emit = defineEmits<(e: 'close') => void>();
@@ -63,6 +66,8 @@ const replyToCommentId = ref<string | null>(null);
 const editingCommentId = ref<string | null>(null);
 const editingCommentContent = ref('');
 const actionNote = ref('');
+const selectedReviewAction = ref<AnnotationReviewAction | null>(null);
+const screenshotPreviewUrl = ref<string | null>(null);
 
 type TimelineItem =
   | {
@@ -123,6 +128,7 @@ onUnmounted(() => {
 
 watch(() => [props.annotationId, props.annotationType], () => {
   actionNote.value = '';
+  selectedReviewAction.value = null;
   replyToCommentId.value = null;
   editingCommentId.value = null;
   editingCommentContent.value = '';
@@ -203,6 +209,29 @@ const reviewActionHint = computed(() => {
   if (canReviewDecide.value) return '校对/审核人员可对设计处理结果执行同意或驳回，并继续补充意见。';
   return `当前角色为${getRoleDisplayName(currentUser.value.role)}，仅可查看处理状态与讨论。`;
 });
+
+const reviewActionSubmitLabel = computed(() => (
+  canDesignHandle.value ? '提交处理结果' : '提交确认结果'
+));
+
+function canSelectReviewAction(action: AnnotationReviewAction): boolean {
+  if (action === 'fixed' || action === 'wont_fix') return canDesignHandle.value;
+  if (action === 'agree' || action === 'reject') return canDecisionAct.value;
+  return false;
+}
+
+function selectReviewAction(action: AnnotationReviewAction) {
+  if (!canSelectReviewAction(action)) return;
+  selectedReviewAction.value = action;
+}
+
+function actionButtonClass(action: AnnotationReviewAction): string {
+  const isSelected = selectedReviewAction.value === action;
+  const disabled = !canSelectReviewAction(action);
+  const selectedClass = isSelected ? 'ring-2 ring-offset-1 ring-slate-400' : '';
+  const disabledClass = disabled ? 'cursor-not-allowed opacity-50' : '';
+  return [selectedClass, disabledClass].filter(Boolean).join(' ');
+}
 
 const timelineItems = computed<TimelineItem[]>(() => {
   const commentItems = allComments.value.map<TimelineItem>((comment) => ({
@@ -374,6 +403,32 @@ async function submitComment() {
 
 const actionSubmitting = ref(false);
 
+async function submitSelectedReviewAction() {
+  if (!selectedReviewAction.value || actionSubmitting.value) return;
+  await applyReviewAction(selectedReviewAction.value);
+}
+
+async function resolvePersistedReviewState(options: {
+  formId: string;
+  taskId: string;
+  annotationId: string;
+  annotationType: AnnotationType;
+  actionResponseState?: import('@/api/reviewApi').AnnotationReviewStateView;
+}) {
+  if (options.actionResponseState) {
+    return normalizeAnnotationReviewStateView(options.actionResponseState);
+  }
+
+  const queryResp = await annotationReviewStatesQuery({
+    formId: options.formId,
+    taskId: options.taskId,
+  });
+  const matched = queryResp.states?.find((state) => (
+    state.annotationId === options.annotationId && state.annotationType === options.annotationType
+  ));
+  return matched ? normalizeAnnotationReviewStateView(matched) : null;
+}
+
 async function applyReviewAction(action: AnnotationReviewAction) {
   if (!props.annotationType || !props.annotationId) return;
   const user = currentUser.value;
@@ -382,9 +437,20 @@ async function applyReviewAction(action: AnnotationReviewAction) {
   if ((action === 'fixed' || action === 'wont_fix') && !canDesignHandle.value) return;
   if ((action === 'agree' || action === 'reject') && !canDecisionAct.value) return;
 
+  const note = actionNote.value.trim();
+  if (action === 'wont_fix' && !note) {
+    emitToast({ message: '请填写不需解决原因', level: 'warning' });
+    return;
+  }
+  if (action === 'reject' && !note) {
+    emitToast({ message: '请填写驳回原因', level: 'warning' });
+    return;
+  }
+
   const task = reviewStore.currentTask.value;
   const formId = task?.formId;
   const taskId = task?.id;
+  let persistedState: ReturnType<typeof normalizeAnnotationReviewStateView> | null = null;
 
   if (formId && taskId) {
     actionSubmitting.value = true;
@@ -395,10 +461,21 @@ async function applyReviewAction(action: AnnotationReviewAction) {
         annotationId: props.annotationId,
         annotationType: props.annotationType as 'text' | 'cloud' | 'rect' | 'obb',
         action,
-        note: actionNote.value || undefined,
+        note: note || undefined,
       });
       if (!resp.success) {
         emitToast({ message: resp.errorMessage || '更新批注处理状态失败', level: 'error' });
+        return;
+      }
+      persistedState = await resolvePersistedReviewState({
+        formId,
+        taskId,
+        annotationId: props.annotationId,
+        annotationType: props.annotationType,
+        actionResponseState: resp.state,
+      });
+      if (!persistedState) {
+        emitToast({ message: '处理状态已提交，请刷新后查看最新状态', level: 'warning' });
         return;
       }
     } catch (err) {
@@ -412,11 +489,13 @@ async function applyReviewAction(action: AnnotationReviewAction) {
     }
   }
 
-  const nextState = store.applyAnnotationReviewAction(props.annotationType, props.annotationId, {
-    action,
-    actor: user,
-    note: actionNote.value,
-  });
+  const nextState = persistedState
+    ? (store.setAnnotationReviewState(props.annotationType, props.annotationId, persistedState) ? persistedState : null)
+    : store.applyAnnotationReviewAction(props.annotationType, props.annotationId, {
+      action,
+      actor: user,
+      note,
+    });
 
   if (!nextState) {
     emitToast({ message: '更新批注处理状态失败', level: 'error' });
@@ -424,6 +503,7 @@ async function applyReviewAction(action: AnnotationReviewAction) {
   }
 
   actionNote.value = '';
+  selectedReviewAction.value = null;
   const successMessageMap: Record<AnnotationReviewAction, string> = {
     fixed: '批注已标记为已修改',
     wont_fix: '批注已标记为不需解决',
@@ -492,23 +572,35 @@ function canEditComment(comment: AnnotationComment): boolean {
           {{ reviewState.note }}
         </div>
 
+        <button v-if="screenshot?.url"
+          type="button"
+          class="mt-3 flex max-w-sm items-center gap-3 rounded-xl border border-slate-200 bg-white p-2 text-left hover:bg-slate-50"
+          @click="screenshotPreviewUrl = screenshot.url">
+          <img :src="screenshot.url" alt="批注截图" class="h-14 w-20 rounded-lg object-cover" />
+          <span class="min-w-0">
+            <span class="block text-[12px] font-semibold text-slate-700">批注截图</span>
+            <span class="block truncate text-[11px] text-slate-400">{{ screenshot.name || '点击查看大图' }}</span>
+          </span>
+        </button>
+
         <div v-if="showReviewActions" class="mt-3">
-          <div class="rounded-md border border-[#D1D5DB] bg-white px-3 py-2">
-            <textarea v-model="actionNote"
-              class="min-h-[2.75rem] w-full resize-none text-[12px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
-              :placeholder="reviewActionPlaceholder" />
-          </div>
-          <div class="mt-2 flex flex-wrap gap-2">
+          <div class="rounded-lg border border-[#E5E7EB] bg-white p-3">
+            <div class="text-[12px] font-semibold text-[#111827]">处理结果</div>
+            <div class="mt-2 flex flex-wrap gap-2">
             <template v-if="canDesignHandle">
               <button type="button"
                 class="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"
-                @click="applyReviewAction('fixed')">
+                :class="actionButtonClass('fixed')"
+                :aria-pressed="selectedReviewAction === 'fixed'"
+                @click="selectReviewAction('fixed')">
                 <BadgeCheck class="h-3.5 w-3.5" />
                 已修改
               </button>
               <button type="button"
                 class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-700 hover:bg-amber-100"
-                @click="applyReviewAction('wont_fix')">
+                :class="actionButtonClass('wont_fix')"
+                :aria-pressed="selectedReviewAction === 'wont_fix'"
+                @click="selectReviewAction('wont_fix')">
                 <CircleSlash class="h-3.5 w-3.5" />
                 不需解决
               </button>
@@ -517,21 +609,42 @@ function canEditComment(comment: AnnotationComment): boolean {
               <button type="button"
                 class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="!canDecisionAct"
-                @click="applyReviewAction('agree')">
+                :class="actionButtonClass('agree')"
+                :aria-pressed="selectedReviewAction === 'agree'"
+                @click="selectReviewAction('agree')">
                 <ThumbsUp class="h-3.5 w-3.5" />
                 同意
               </button>
               <button type="button"
                 class="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[12px] font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="!canDecisionAct"
-                @click="applyReviewAction('reject')">
+                :class="actionButtonClass('reject')"
+                :aria-pressed="selectedReviewAction === 'reject'"
+                @click="selectReviewAction('reject')">
                 <ThumbsDown class="h-3.5 w-3.5" />
                 驳回
               </button>
             </template>
-          </div>
-          <div class="mt-2 text-[11px] text-[#9CA3AF]">
-            {{ reviewActionHint }}
+            </div>
+            <div class="mt-2 rounded-md border border-[#D1D5DB] bg-white px-3 py-2">
+              <textarea v-model="actionNote"
+                class="min-h-[2.75rem] w-full resize-none text-[12px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
+                :placeholder="reviewActionPlaceholder" />
+            </div>
+            <div class="mt-2 flex items-center justify-between gap-3">
+              <div class="text-[11px] text-[#9CA3AF]">
+                {{ reviewActionHint }}
+              </div>
+              <button type="button"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white"
+                :class="selectedReviewAction && !actionSubmitting
+                  ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
+                  : 'cursor-not-allowed bg-[#D1D5DB]'"
+                :disabled="!selectedReviewAction || actionSubmitting"
+                @click="submitSelectedReviewAction">
+                {{ actionSubmitting ? '提交中...' : reviewActionSubmitLabel }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -683,15 +796,7 @@ function canEditComment(comment: AnnotationComment): boolean {
           @keyup.enter.ctrl="submitComment" />
       </div>
 
-      <div class="mt-2 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <button type="button" class="rounded p-1 text-[#9CA3AF] hover:bg-[#E5E7EB] hover:text-[#6B7280]">
-            <Paperclip class="h-4 w-4" />
-          </button>
-          <button type="button" class="rounded p-1 text-[#9CA3AF] hover:bg-[#E5E7EB] hover:text-[#6B7280]">
-            <Camera class="h-4 w-4" />
-          </button>
-        </div>
+      <div class="mt-2 flex items-center justify-end">
         <button type="button"
           class="inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[13px] font-semibold text-white"
           :class="newCommentContent.trim()
@@ -704,5 +809,16 @@ function canEditComment(comment: AnnotationComment): boolean {
         </button>
       </div>
     </div>
+
+    <Teleport v-if="screenshotPreviewUrl" to="body">
+      <div class="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/70 p-6"
+        data-testid="review-comments-screenshot-preview"
+        @click="screenshotPreviewUrl = null">
+        <img :src="screenshotPreviewUrl"
+          alt="批注截图预览"
+          class="max-h-full max-w-full rounded-2xl bg-white object-contain shadow-2xl"
+          @click.stop />
+      </div>
+    </Teleport>
   </div>
 </template>

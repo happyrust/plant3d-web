@@ -163,6 +163,28 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
+  it('显示批注截图缩略图入口', async () => {
+    const { host, destroy } = mountTable({
+      items: [
+        createItem({
+          id: 'with-shot',
+          thumbnailUrl: 'https://example.com/shot.png',
+          screenshot: {
+            url: 'https://example.com/shot.png',
+            attachmentId: 'att-shot',
+          },
+        }),
+      ],
+    });
+    await nextTick();
+
+    const thumbnail = host.querySelector<HTMLImageElement>('[data-testid="annotation-table-thumbnail-with-shot"]');
+    expect(thumbnail).not.toBeNull();
+    expect(thumbnail?.getAttribute('src')).toBe('https://example.com/shot.png');
+
+    destroy();
+  });
+
   it('2. 空数组显示 empty state · 不显示表头和行', async () => {
     const { host, destroy } = mountTable({ items: [] });
     await nextTick();
@@ -223,9 +245,9 @@ describe('AnnotationTableView', () => {
 
   it('5. 点击"错误标记"表头 · 触发排序 · 行顺序变化', async () => {
     const items = [
-      createItem({ id: 's1', title: '中度', severity: 'normal' }),
-      createItem({ id: 's2', title: '紧急', severity: 'critical' }),
-      createItem({ id: 's3', title: '严重', severity: 'severe' }),
+      createItem({ id: 's1', title: '图面', severity: 'drawing' }),
+      createItem({ id: 's2', title: '原则', severity: 'principle' }),
+      createItem({ id: 's3', title: '一般', severity: 'general' }),
     ];
     const { host, destroy } = mountTable({ items });
     await nextTick();
@@ -236,11 +258,11 @@ describe('AnnotationTableView', () => {
     await nextTick();
 
     const rows = host.querySelectorAll<HTMLElement>('[role="row"]');
-    // 按严重度 desc 后：critical · severe · normal
+    // 按错误类型 desc 后：principle · general · drawing
     const titles = Array.from(rows).map((r) => r.textContent || '');
-    expect(titles[0]).toContain('紧急');
-    expect(titles[1]).toContain('严重');
-    expect(titles[2]).toContain('中度');
+    expect(titles[0]).toContain('原则');
+    expect(titles[1]).toContain('一般');
+    expect(titles[2]).toContain('图面');
 
     destroy();
   });
@@ -277,17 +299,17 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
-  it('7. 严重度筛选 · select 变更后行数变化', async () => {
+  it('7. 错误类型筛选 · select 变更后行数变化', async () => {
     const items = [
-      createItem({ id: 'c', severity: 'critical' }),
-      createItem({ id: 's', severity: 'severe' }),
-      createItem({ id: 'n', severity: 'normal' }),
+      createItem({ id: 'p', severity: 'principle' }),
+      createItem({ id: 'g', severity: 'general' }),
+      createItem({ id: 'd', severity: 'drawing' }),
     ];
     const { host, destroy } = mountTable({ items });
     await nextTick();
 
     const select = host.querySelector<HTMLSelectElement>('[data-testid="annotation-table-severity-filter"]');
-    select!.value = 'critical';
+    select!.value = 'principle';
     select!.dispatchEvent(new Event('change'));
     await nextTick();
 
@@ -329,6 +351,25 @@ describe('AnnotationTableView', () => {
 
     expect(locateSpy).toHaveBeenCalledTimes(1);
     expect(locateSpy.mock.calls[0][0].id).toBe('loc-target');
+    expect(selectSpy).not.toHaveBeenCalled();
+
+    destroy();
+  });
+
+  it('9b. 操作列详情按钮直接打开处理详情 · 不只选中行', async () => {
+    vi.useFakeTimers();
+    const item = createItem({ id: 'comment-open-target' });
+    const { host, selectSpy, openSpy, destroy } = mountTable({ items: [item] });
+    await nextTick();
+
+    const commentBtn = host.querySelector<HTMLButtonElement>(`[data-testid="annotation-table-comment-${item.id}"]`);
+    commentBtn?.click();
+
+    vi.advanceTimersByTime(300);
+    await nextTick();
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(openSpy.mock.calls[0][0].id).toBe('comment-open-target');
     expect(selectSpy).not.toHaveBeenCalled();
 
     destroy();
@@ -567,7 +608,34 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
-  it('20. 菜单外点击关闭 contextMenu · 不影响行 click', async () => {
+  it('20. 菜单"打开处理详情"触发 open-annotation · 不触发 select-annotation', async () => {
+    vi.useFakeTimers();
+    const items = [createItem({ id: 'ctx-open', title: 'DN800' })];
+    const { host, selectSpy, openSpy, destroy } = mountTable({ items });
+    await nextTick();
+
+    const row = host.querySelector<HTMLElement>('[role="row"]');
+    row?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+    await nextTick();
+
+    const openBtn = document.querySelector<HTMLButtonElement>('[data-testid="annotation-table-ctx-open"]');
+    expect(openBtn).not.toBeNull();
+    expect(openBtn?.textContent).toContain('打开处理详情');
+    expect(openBtn?.textContent).not.toContain('drawer');
+
+    openBtn?.click();
+    await vi.runAllTimersAsync();
+    await nextTick();
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(openSpy.mock.calls[0][0].id).toBe('ctx-open');
+    expect(selectSpy).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-testid="annotation-table-context-menu"]')).toBeNull();
+
+    destroy();
+  });
+
+  it('21. 菜单外点击关闭 contextMenu · 不影响行 click', async () => {
     const items = [createItem({ id: 'ctx-3', title: 'DN800' })];
     const { host, destroy } = mountTable({ items });
     await nextTick();

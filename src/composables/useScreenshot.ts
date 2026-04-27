@@ -7,7 +7,7 @@ import { useViewerContext } from './useViewerContext';
 
 import type { ReviewAttachment } from '@/types/auth';
 
-import { reviewAttachmentUploadWithProgress } from '@/api/reviewApi';
+import { reviewAttachmentUploadWithProgress, type ReviewAttachmentUploadOptions } from '@/api/reviewApi';
 
 export type ScreenshotKind = 'manual' | 'annotation_shot' | 'auto_cloud_finish';
 
@@ -15,7 +15,13 @@ export interface CaptureOptions {
   filename?: string;
   kind?: ScreenshotKind;
   sourceAnnotationId?: string;
+  description?: string;
+  fileType?: string;
 }
+
+export type CapturedReviewAttachment = ReviewAttachment & {
+  capturedAt: number;
+};
 
 export function useScreenshot() {
   const { viewerRef } = useViewerContext();
@@ -103,7 +109,7 @@ export function useScreenshot() {
   async function captureAndUpload(
     taskId: string | null = null,
     optionsOrFilename?: CaptureOptions | string
-  ): Promise<ReviewAttachment | null> {
+  ): Promise<CapturedReviewAttachment | null> {
     if (isCapturing.value) return null;
 
     const opts: CaptureOptions =
@@ -116,6 +122,7 @@ export function useScreenshot() {
 
     try {
       const blob = await captureToBlob('image/png');
+      const capturedAt = Date.now();
       if (!blob) {
         console.error('Failed to capture screenshot');
         return null;
@@ -130,11 +137,15 @@ export function useScreenshot() {
         file,
         (percent) => {
           uploadProgress.value = percent;
-        }
+        },
+        buildUploadOptions(opts)
       );
 
       if (response.success && response.attachment) {
-        return response.attachment;
+        return {
+          ...response.attachment,
+          capturedAt: response.attachment.uploadedAt || capturedAt,
+        };
       }
 
       console.error('Upload failed:', response.error_message);
@@ -157,6 +168,21 @@ export function useScreenshot() {
       return `cloud-${opts.sourceAnnotationId}-${ts}.png`;
     }
     return `screenshot-${ts}.png`;
+  }
+
+  function buildUploadOptions(opts: CaptureOptions): ReviewAttachmentUploadOptions | undefined {
+    const options: ReviewAttachmentUploadOptions = {};
+    if (opts.sourceAnnotationId) {
+      options.sourceAnnotationId = opts.sourceAnnotationId;
+    }
+    if (opts.description) {
+      options.description = opts.description;
+    }
+    const fileType = opts.fileType || (opts.kind === 'annotation_shot' ? 'annotation_screenshot' : undefined);
+    if (fileType) {
+      options.fileType = fileType;
+    }
+    return Object.keys(options).length > 0 ? options : undefined;
   }
 
   return {

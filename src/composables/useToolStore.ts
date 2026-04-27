@@ -487,6 +487,19 @@ function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
   };
 }
 
+function normalizeRecordScreenshot(record: {
+  screenshot?: AnnotationScreenshot;
+  thumbnailUrl?: string;
+  attachmentId?: string;
+} | null | undefined): AnnotationScreenshot | undefined {
+  if (!record) return undefined;
+  return normalizeAnnotationScreenshot(record.screenshot)
+    ?? normalizeAnnotationScreenshot({
+      thumbnailUrl: record.thumbnailUrl,
+      attachmentId: record.attachmentId,
+    });
+}
+
 /**
  * 统一读取任意批注类型的关联 refnos，供消费代码（面板/交互）无差别使用。
  * - text 批注：优先用 `refnos`，缺失时从 `refno` 单字段推导。
@@ -516,12 +529,15 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
 }
 
 function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnotationRecord {
+  const screenshot = normalizeRecordScreenshot(rec);
   return {
     ...rec,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     formId: normalizeOptionalString(rec.formId),
-    screenshot: normalizeAnnotationScreenshot(rec.screenshot),
+    thumbnailUrl: screenshot?.url,
+    attachmentId: screenshot?.attachmentId,
+    screenshot,
   };
 }
 
@@ -1455,7 +1471,7 @@ function getAnnotationScreenshot(
   annotationId: string
 ): AnnotationScreenshot | null {
   const record = getAnnotationRecordByType(annotationType, annotationId);
-  return normalizeAnnotationScreenshot(record?.screenshot) ?? null;
+  return normalizeRecordScreenshot(record) ?? null;
 }
 
 function setAnnotationScreenshot(
@@ -1476,7 +1492,11 @@ function setAnnotationScreenshot(
     case 'cloud': {
       const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
       if (!annotation) return false;
-      updateCloudAnnotation(annotationId, { screenshot: normalized });
+      updateCloudAnnotation(annotationId, {
+        screenshot: normalized,
+        thumbnailUrl: normalized.url,
+        attachmentId: normalized.attachmentId,
+      });
       return true;
     }
     case 'rect': {
@@ -1508,7 +1528,11 @@ function clearAnnotationScreenshot(
     case 'cloud': {
       const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
       if (!annotation) return false;
-      updateCloudAnnotation(annotationId, { screenshot: undefined });
+      updateCloudAnnotation(annotationId, {
+        screenshot: undefined,
+        thumbnailUrl: undefined,
+        attachmentId: undefined,
+      });
       return true;
     }
     case 'rect': {

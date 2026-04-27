@@ -39,7 +39,7 @@ import { highlightMatches } from './annotationTableHighlight';
 
 import type { AnnotationTableSortKey } from './annotationTableSorting';
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
-import type { AnnotationType } from '@/types/auth';
+import { getAnnotationSeverityDisplay, type AnnotationType } from '@/types/auth';
 
 import { useAnnotationTableFilter } from '@/composables/useAnnotationTableFilter';
 import { useContainerQuery } from '@/composables/useContainerQuery';
@@ -206,7 +206,7 @@ async function menuLocate() {
 async function menuOpenDetail() {
   const state = contextMenu.value;
   if (!state) return;
-  emit('select-annotation', state.item);
+  emit('open-annotation', state.item);
   closeContextMenu();
 }
 
@@ -335,6 +335,7 @@ const summaryCounts = computed(() => {
 
 let clickDelayTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingClickItem = shallowRef<AnnotationWorkspaceItem | null>(null);
+const screenshotPreviewUrl = ref<string | null>(null);
 
 function handleRowClick(item: AnnotationWorkspaceItem) {
   if (clickDelayTimer) return;
@@ -353,6 +354,10 @@ function handleRowDblClick(item: AnnotationWorkspaceItem) {
     pendingClickItem.value = null;
   }
   emit('open-annotation', item);
+}
+
+function openScreenshotPreview(item: AnnotationWorkspaceItem) {
+  screenshotPreviewUrl.value = item.screenshot?.url || item.thumbnailUrl || null;
 }
 
 // ----------------------------------------------------------------------
@@ -388,32 +393,16 @@ function sortIconState(key: AnnotationTableSortKey): 'asc' | 'desc' | 'off' {
 // ----------------------------------------------------------------------
 
 function severityPillClass(item: AnnotationWorkspaceItem): string {
-  switch (item.severity) {
-    case 'critical':
-      return 'bg-rose-100 text-rose-700 ring-1 ring-rose-200';
-    case 'severe':
-      return 'bg-orange-100 text-orange-800 ring-1 ring-orange-200';
-    case 'normal':
-      return 'bg-blue-100 text-blue-700 ring-1 ring-blue-200';
-    case 'suggestion':
-    default:
-      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
-  }
+  return getAnnotationSeverityDisplay(item.severity).color;
 }
 
 function severityDotClass(item: AnnotationWorkspaceItem): string {
-  switch (item.severity) {
-    case 'critical': return 'bg-rose-500';
-    case 'severe':   return 'bg-orange-500';
-    case 'normal':   return 'bg-blue-500';
-    case 'suggestion':
-    default:         return 'bg-slate-400';
-  }
+  return getAnnotationSeverityDisplay(item.severity).dot;
 }
 
 function severityLabel(item: AnnotationWorkspaceItem): string {
-  const prefix = item.severity === 'critical' ? 'A · ' : item.severity === 'severe' ? 'B · ' : item.severity === 'normal' ? 'C · ' : '';
-  return `${prefix}${item.priorityLabel || '低'}`;
+  const display = getAnnotationSeverityDisplay(item.severity);
+  return display.symbol ? `${display.symbol} ${display.label}` : display.label;
 }
 
 function statusTextClass(item: AnnotationWorkspaceItem): string {
@@ -462,11 +451,11 @@ const statusOptions: { value: import('./annotationTableSorting').AnnotationTable
 ];
 
 const severityOptions: { value: import('./annotationTableSorting').AnnotationTableSeverityFilter; label: string }[] = [
-  { value: 'all',        label: '全部严重度' },
-  { value: 'critical',   label: 'A · 紧急' },
-  { value: 'severe',     label: 'B · 高' },
-  { value: 'normal',     label: 'C · 中' },
-  { value: 'suggestion', label: '建议' },
+  { value: 'all',        label: '全部错误类型' },
+  { value: 'principle',  label: '× 原则错误' },
+  { value: 'general',    label: '△ 一般错误' },
+  { value: 'drawing',    label: '○ 图面错误' },
+  { value: 'unset',      label: '未设置' },
 ];
 </script>
 
@@ -613,15 +602,27 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           </div>
 
           <!-- 校核发现问题 · Medium 下隐藏 description 只保留 title -->
-          <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
-          <div class="flex-1 pr-4 text-xs leading-snug text-slate-700 line-clamp-2">
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <span class="font-semibold text-slate-950" v-html="highlightTitle(item)" />
-            <template v-if="isWide && item.description">
-              <span class="text-slate-500"> · </span>
+          <div class="flex flex-1 items-center gap-3 pr-4 text-xs leading-snug text-slate-700">
+            <button v-if="item.thumbnailUrl"
+              type="button"
+              class="h-11 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+              title="查看批注截图"
+              @click.stop="openScreenshotPreview(item)">
+              <img :src="item.thumbnailUrl"
+                alt="批注截图"
+                class="h-full w-full object-cover"
+                :data-testid="`annotation-table-thumbnail-${item.id}`" />
+            </button>
+            <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
+            <div class="min-w-0 flex-1 line-clamp-2">
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <span class="text-slate-500" v-html="highlightDescription(item)" />
-            </template>
+              <span class="font-semibold text-slate-950" v-html="highlightTitle(item)" />
+              <template v-if="isWide && item.description">
+                <span class="text-slate-500"> · </span>
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <span class="text-slate-500" v-html="highlightDescription(item)" />
+              </template>
+            </div>
           </div>
 
           <!-- 处理情况 · Medium 下收窄 -->
@@ -648,7 +649,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
             <button type="button"
               class="hover:text-slate-900"
               :data-testid="`annotation-table-comment-${item.id}`"
-              @click.stop="handleRowClick(item)">
+              @click.stop="emit('open-annotation', item)">
               <MessageSquare class="h-3.5 w-3.5" />
             </button>
           </div>
@@ -688,17 +689,31 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               <button type="button"
                 class="hover:text-slate-900"
                 :data-testid="`annotation-table-comment-${item.id}`"
-                @click.stop="handleRowClick(item)">
+                @click.stop="emit('open-annotation', item)">
                 <MessageSquare class="h-4 w-4" />
               </button>
             </span>
           </header>
 
           <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <h3 class="mt-1.5 text-sm font-semibold text-slate-950 line-clamp-1" v-html="highlightTitle(item)" />
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2" v-html="highlightDescription(item)" />
+          <div class="mt-2 flex gap-3">
+            <button v-if="item.thumbnailUrl"
+              type="button"
+              class="h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+              title="查看批注截图"
+              @click.stop="openScreenshotPreview(item)">
+              <img :src="item.thumbnailUrl"
+                alt="批注截图"
+                class="h-full w-full object-cover"
+                :data-testid="`annotation-table-thumbnail-${item.id}`" />
+            </button>
+            <div class="min-w-0 flex-1">
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <h3 class="text-sm font-semibold text-slate-950 line-clamp-1" v-html="highlightTitle(item)" />
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2" v-html="highlightDescription(item)" />
+            </div>
+          </div>
 
           <footer class="mt-2 flex items-center gap-2 text-[11px]">
             <span class="font-semibold" :class="statusTextClass(item)">
@@ -759,7 +774,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           data-testid="annotation-table-ctx-open"
           @click="menuOpenDetail">
           <MessageSquare class="h-4 w-4 text-slate-500" />
-          <span class="flex-1">打开处理详情 drawer</span>
+          <span class="flex-1">打开处理详情</span>
         </button>
         <div class="my-1 h-px bg-slate-100" />
         <button type="button"
@@ -781,6 +796,17 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           <span class="inline-flex h-4 w-4 items-center justify-center text-[13px] text-slate-500">📋</span>
           <span class="flex-1">复制为记录卡一行</span>
         </button>
+      </div>
+    </Teleport>
+
+    <Teleport v-if="screenshotPreviewUrl" to="body">
+      <div class="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/70 p-6"
+        data-testid="annotation-table-screenshot-preview"
+        @click="screenshotPreviewUrl = null">
+        <img :src="screenshotPreviewUrl"
+          alt="批注截图预览"
+          class="max-h-full max-w-full rounded-2xl bg-white object-contain shadow-2xl"
+          @click.stop />
       </div>
     </Teleport>
   </section>

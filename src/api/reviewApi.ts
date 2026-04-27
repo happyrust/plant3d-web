@@ -4,6 +4,7 @@
 import {
   fromBackendRole,
   type AnnotationComment,
+  type AnnotationReviewAction,
   type AnnotationReviewState,
   type AnnotationSeverity,
   type ReviewAttachment,
@@ -1286,7 +1287,7 @@ export type AnnotationSeverityUpdateResponse = {
  * 更新批注的严重度（问题严重程度）。
  * 后端约定：PATCH /api/review/annotations/{annotationId}/severity?type={annotationType}
  *
- * Body: { severity: 'suggestion' | 'normal' | 'severe' | 'critical' | null }
+ * Body: { severity: 'principle' | 'general' | 'drawing' | null }
  * - 传 null 表示清空。
  *
  * 调用方需自行做权限校验（canEditAnnotationSeverity），并在失败时降级到本地 store。
@@ -1345,6 +1346,56 @@ export type AnnotationReviewStatesQueryResponse = {
   states?: AnnotationReviewStateView[];
   errorMessage?: string;
 };
+
+function normalizeAnnotationReviewAction(value: unknown): AnnotationReviewAction | null {
+  return value === 'fixed' || value === 'wont_fix' || value === 'agree' || value === 'reject'
+    ? value
+    : null;
+}
+
+/**
+ * Convert the backend annotation-state row into the frontend review-state shape.
+ *
+ * The backend state table is the truth source when formId/taskId are present;
+ * this adapter prevents the UI from synthesizing a second local history event
+ * after the backend has already persisted the action.
+ */
+export function normalizeAnnotationReviewStateView(
+  view: AnnotationReviewStateView
+): AnnotationReviewState {
+  const history = Array.isArray(view.history)
+    ? view.history.flatMap((event): AnnotationReviewState['history'] => {
+      if (!isPlainObject(event)) return [];
+      const action = normalizeAnnotationReviewAction(event.action);
+      if (!action) return [];
+      const createdAt = normalizeTimestamp(event.createdAt || event.created_at || event.timestamp) || view.updatedAt;
+      return [{
+        id: String(event.id || `annotation_review_${createdAt}_${action}`),
+        action,
+        operatorId: String(event.operatorId || event.operator_id || view.updatedById || ''),
+        operatorName: String(event.operatorName || event.operator_name || view.updatedByName || ''),
+        operatorRole: normalizeUserRole(event.operatorRole || event.operator_role || view.updatedByRole),
+        note: typeof event.note === 'string' && event.note.trim() ? event.note.trim() : undefined,
+        createdAt,
+      }];
+    })
+    : [];
+
+  return {
+    resolutionStatus: view.resolutionStatus === 'fixed' || view.resolutionStatus === 'wont_fix'
+      ? view.resolutionStatus
+      : 'open',
+    decisionStatus: view.decisionStatus === 'agreed' || view.decisionStatus === 'rejected'
+      ? view.decisionStatus
+      : 'pending',
+    note: view.note?.trim() || undefined,
+    updatedAt: view.updatedAt,
+    updatedById: view.updatedById,
+    updatedByName: view.updatedByName,
+    updatedByRole: normalizeUserRole(view.updatedByRole),
+    history,
+  };
+}
 
 /**
  * 提交批注处理动作（fixed / wont_fix / agree / reject）到后端独立状态表。
@@ -1414,6 +1465,7 @@ export type ReviewAttachmentUploadOptions = {
   modelRefnos?: string[];
   fileType?: string;
   description?: string;
+  sourceAnnotationId?: string;
 };
 
 /**
@@ -1440,6 +1492,9 @@ export async function reviewAttachmentUpload(
   }
   if (options?.description) {
     formData.append('description', options.description);
+  }
+  if (options?.sourceAnnotationId) {
+    formData.append('sourceAnnotationId', options.sourceAnnotationId);
   }
 
   const token = getAuthToken();
@@ -1488,6 +1543,9 @@ export function reviewAttachmentUploadWithProgress(
     }
     if (options?.description) {
       formData.append('description', options.description);
+    }
+    if (options?.sourceAnnotationId) {
+      formData.append('sourceAnnotationId', options.sourceAnnotationId);
     }
 
     const xhr = new XMLHttpRequest();

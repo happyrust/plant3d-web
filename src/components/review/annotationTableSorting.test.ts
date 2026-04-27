@@ -158,9 +158,9 @@ describe('filterByStatus', () => {
 
 describe('filterBySeverity', () => {
   const items = [
-    createItem({ id: 'c', severity: 'critical' }),
-    createItem({ id: 's', severity: 'severe' }),
-    createItem({ id: 'n', severity: 'normal' }),
+    createItem({ id: 'p', severity: 'principle' }),
+    createItem({ id: 'g', severity: 'general' }),
+    createItem({ id: 'd', severity: 'drawing' }),
     createItem({ id: 'u', severity: undefined }),
   ];
 
@@ -168,38 +168,38 @@ describe('filterBySeverity', () => {
     expect(filterBySeverity(items, 'all')).toHaveLength(4);
   });
 
-  it('critical 只保留 critical', () => {
-    expect(filterBySeverity(items, 'critical').map((i) => i.id)).toEqual(['c']);
+  it('principle 只保留 principle', () => {
+    expect(filterBySeverity(items, 'principle').map((i) => i.id)).toEqual(['p']);
   });
 
-  it('severe 只保留 severe', () => {
-    expect(filterBySeverity(items, 'severe').map((i) => i.id)).toEqual(['s']);
+  it('general 只保留 general', () => {
+    expect(filterBySeverity(items, 'general').map((i) => i.id)).toEqual(['g']);
   });
 
-  it('未设置严重度时不会匹配任何具体严重度', () => {
-    expect(filterBySeverity(items, 'normal').map((i) => i.id)).toEqual(['n']);
+  it('unset 只保留未设置错误类型', () => {
+    expect(filterBySeverity(items, 'unset').map((i) => i.id)).toEqual(['u']);
   });
 });
 
 describe('sortAnnotationTableRows', () => {
-  it('按严重度降序：critical 在最前', () => {
+  it('按错误类型降序：principle 在最前', () => {
     const items = [
-      createItem({ id: 'n', severity: 'normal' }),
-      createItem({ id: 'c', severity: 'critical' }),
-      createItem({ id: 's', severity: 'severe' }),
+      createItem({ id: 'd', severity: 'drawing' }),
+      createItem({ id: 'p', severity: 'principle' }),
+      createItem({ id: 'g', severity: 'general' }),
     ];
     const sorted = sortAnnotationTableRows(items, { key: 'severity', direction: 'desc' });
-    expect(sorted.map((i) => i.id)).toEqual(['c', 's', 'n']);
+    expect(sorted.map((i) => i.id)).toEqual(['p', 'g', 'd']);
   });
 
-  it('按严重度升序：suggestion 在最前（未设置视为 0）', () => {
+  it('按错误类型升序：未设置视为 0', () => {
     const items = [
-      createItem({ id: 'n', severity: 'normal' }),
+      createItem({ id: 'd', severity: 'drawing' }),
       createItem({ id: 'u', severity: undefined }),
-      createItem({ id: 'c', severity: 'critical' }),
+      createItem({ id: 'p', severity: 'principle' }),
     ];
     const sorted = sortAnnotationTableRows(items, { key: 'severity', direction: 'asc' });
-    expect(sorted.map((i) => i.id)).toEqual(['u', 'n', 'c']);
+    expect(sorted.map((i) => i.id)).toEqual(['u', 'd', 'p']);
   });
 
   it('按 status 降序：pending 最前 · approved 最后', () => {
@@ -255,8 +255,8 @@ describe('sortAnnotationTableRows', () => {
 
   it('不修改原数组', () => {
     const items = [
-      createItem({ id: 'n', severity: 'normal' }),
-      createItem({ id: 'c', severity: 'critical' }),
+      createItem({ id: 'd', severity: 'drawing' }),
+      createItem({ id: 'p', severity: 'principle' }),
     ];
     const snapshot = items.map((i) => i.id);
     sortAnnotationTableRows(items, { key: 'severity', direction: 'desc' });
@@ -271,31 +271,31 @@ describe('sortAnnotationTableRows', () => {
 describe('applyAnnotationTablePipeline', () => {
   const items = [
     createItem({
-      id: 'p-crit',
+      id: 'p-principle',
       title: 'DN800 管段',
       statusKey: 'pending',
-      severity: 'critical',
+      severity: 'principle',
       activityAt: 1_000,
     }),
     createItem({
-      id: 'f-sev',
+      id: 'f-general',
       title: 'DN150 开口',
       statusKey: 'fixed',
-      severity: 'severe',
+      severity: 'general',
       activityAt: 2_000,
     }),
     createItem({
-      id: 'a-normal',
+      id: 'a-drawing',
       title: '电缆桥架',
       statusKey: 'approved',
-      severity: 'normal',
+      severity: 'drawing',
       activityAt: 3_000,
     }),
   ];
 
   it('默认参数 · 返回全部按 status desc 排序', () => {
     const result = applyAnnotationTablePipeline(items, DEFAULT_FILTERS, DEFAULT_SORT);
-    expect(result.map((i) => i.id)).toEqual(['p-crit', 'f-sev', 'a-normal']);
+    expect(result.map((i) => i.id)).toEqual(['p-principle', 'f-general', 'a-drawing']);
   });
 
   it('filter + search + sort 链式生效', () => {
@@ -304,17 +304,17 @@ describe('applyAnnotationTablePipeline', () => {
       { status: 'all', severity: 'all', search: 'DN' },
       { key: 'severity', direction: 'desc' },
     );
-    // 过滤后剩 'DN800' 和 'DN150'，按严重度降：critical > severe
-    expect(result.map((i) => i.id)).toEqual(['p-crit', 'f-sev']);
+    // 过滤后剩 'DN800' 和 'DN150'，按错误类型降：principle > general
+    expect(result.map((i) => i.id)).toEqual(['p-principle', 'f-general']);
   });
 
-  it('status 过滤 + 严重度过滤复合条件', () => {
+  it('status 过滤 + 错误类型过滤复合条件', () => {
     const result = applyAnnotationTablePipeline(
       items,
-      { status: 'pending', severity: 'critical', search: '' },
+      { status: 'pending', severity: 'principle', search: '' },
       DEFAULT_SORT,
     );
-    expect(result.map((i) => i.id)).toEqual(['p-crit']);
+    expect(result.map((i) => i.id)).toEqual(['p-principle']);
   });
 
   it('无匹配返回空数组', () => {

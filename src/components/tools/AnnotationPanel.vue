@@ -4,6 +4,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { Camera, LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
 
 import {
+  reviewAttachmentDelete,
   reviewCommentCreate,
   reviewCommentDelete,
   reviewCommentGetByAnnotation,
@@ -54,7 +55,7 @@ const props = defineProps<{
 const store = useToolStore();
 const userStore = useUserStore();
 const reviewStore = useReviewStore();
-const { captureAndUpload, isCapturing } = useScreenshot();
+const { captureAndUpload, isCapturing, uploadProgress } = useScreenshot();
 
 const capturingAnnotationId = ref<string | null>(null);
 
@@ -65,7 +66,7 @@ const canCaptureAnnotation = computed(() => {
 
 /**
  * 为批注拍摄一张代表截图并挂到 record 上。
- * 语义：覆盖（再次拍摄时替换旧图）；批注被删除时不级联删 attachment（由后端保留）。
+ * 语义：覆盖（再次拍摄时替换旧图）；重拍成功后异步清理旧 attachment。
  */
 async function captureCloudAnnotationShot(annotationId: string) {
   const task = reviewStore.currentTask.value;
@@ -74,25 +75,58 @@ async function captureCloudAnnotationShot(annotationId: string) {
     return;
   }
   if (isCapturing.value) return;
+  const existingScreenshot = store.getAnnotationScreenshot('cloud', annotationId);
+  if (
+    existingScreenshot
+    && typeof window !== 'undefined'
+    && !window.confirm('该批注已有截图，是否重新拍摄并替换？')
+  ) {
+    return;
+  }
 
   capturingAnnotationId.value = annotationId;
   try {
+    const annotation = store.cloudAnnotations.value.find((item) => item.id === annotationId);
+    const previousAttachmentId = store.getAnnotationScreenshot('cloud', annotationId)?.attachmentId;
+    const severityLabel = getAnnotationSeverityDisplay(annotation?.severity).label;
+    const description = [
+      severityLabel !== '未设置' ? severityLabel : null,
+      annotation?.title?.trim() || null,
+    ].filter((part): part is string => !!part).join(' - ');
     const attachment = await captureAndUpload(task.id, {
       kind: 'annotation_shot',
       sourceAnnotationId: annotationId,
+      description: description || undefined,
     });
     if (!attachment) {
       emitToast({ message: '截图失败，请重试', level: 'error' });
       return;
     }
-    store.updateCloudAnnotation(annotationId, {
-      thumbnailUrl: attachment.url,
+    store.setAnnotationScreenshot('cloud', annotationId, {
+      url: attachment.url,
       attachmentId: attachment.id,
+      name: attachment.name,
+      capturedAt: attachment.capturedAt,
     });
+    cleanupScreenshotAttachment(previousAttachmentId, '旧截图附件清理失败', attachment.id);
     emitToast({ message: '截图已添加', level: 'success' });
   } finally {
     capturingAnnotationId.value = null;
   }
+}
+
+function cleanupScreenshotAttachment(
+  attachmentId: string | undefined,
+  failureMessage: string,
+  skipAttachmentId?: string
+) {
+  if (!attachmentId || attachmentId === skipAttachmentId) return;
+  void reviewAttachmentDelete(attachmentId).catch((error) => {
+    emitToast({
+      message: error instanceof Error ? `${failureMessage}：${error.message}` : failureMessage,
+      level: 'warning',
+    });
+  });
 }
 
 /**
@@ -122,10 +156,9 @@ function matchesSeverityFilter<T extends { severity?: AnnotationSeverity }>(a: T
  */
 const severityCounts = computed(() => {
   const counts: Record<AnnotationSeverity | 'unset', number> = {
-    critical: 0,
-    severe: 0,
-    normal: 0,
-    suggestion: 0,
+    principle: 0,
+    general: 0,
+    drawing: 0,
     unset: 0,
   };
   const all = [
@@ -142,7 +175,7 @@ const severityCounts = computed(() => {
 
 const totalAnnotations = computed(() => {
   const c = severityCounts.value;
-  return c.critical + c.severe + c.normal + c.suggestion + c.unset;
+  return c.principle + c.general + c.drawing + c.unset;
 });
 
 function toggleSeverityFilter(next: AnnotationSeverity | 'unset' | null) {
@@ -333,23 +366,29 @@ function flyRect(id: string) {
 }
 
 function removeText(id: string) {
+  const attachmentId = store.getAnnotationScreenshot('text', id)?.attachmentId;
   props.tools.removeAnnotation(id);
+  cleanupScreenshotAttachment(attachmentId, '截图附件删除失败');
 }
 
 function removeCloud(id: string) {
+  const attachmentId = store.getAnnotationScreenshot('cloud', id)?.attachmentId;
   if (props.tools.removeCloudAnnotation) {
     props.tools.removeCloudAnnotation(id);
   } else {
     store.removeCloudAnnotation(id);
   }
+  cleanupScreenshotAttachment(attachmentId, '截图附件删除失败');
 }
 
 function removeRect(id: string) {
+  const attachmentId = store.getAnnotationScreenshot('rect', id)?.attachmentId;
   if (props.tools.removeRectAnnotation) {
     props.tools.removeRectAnnotation(id);
   } else {
     store.removeRectAnnotation(id);
   }
+  cleanupScreenshotAttachment(attachmentId, '截图附件删除失败');
 }
 
 function updateTitle(v: string) {
@@ -934,6 +973,14 @@ function formatCommentTime(timestamp: number): string {
             class="group relative mt-2 overflow-hidden rounded border border-[#E5E7EB]"
             style="height: 120px;">
             <img :src="a.thumbnailUrl" alt="批注截图" class="h-full w-full object-cover" />
+            <div v-if="capturingAnnotationId === a.id"
+              class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/55 px-4 text-white">
+              <div class="text-xs font-semibold">{{ uploadProgress > 0 ? `${uploadProgress}%` : '截图上传中…' }}</div>
+              <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/25">
+                <div class="h-full rounded-full bg-white transition-all"
+                  :style="{ width: `${Math.max(uploadProgress, 8)}%` }" />
+              </div>
+            </div>
             <button v-if="canCaptureAnnotation" type="button"
               class="absolute right-1 top-1 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] text-[#111827] opacity-0 shadow-sm transition-opacity hover:bg-white group-hover:opacity-100"
               :disabled="capturingAnnotationId === a.id"
@@ -944,11 +991,17 @@ function formatCommentTime(timestamp: number): string {
             </button>
           </div>
           <button v-else-if="canCaptureAnnotation" type="button"
-            class="mt-2 flex h-[80px] w-full items-center justify-center gap-2 rounded border border-dashed border-[#D1D5DB] text-xs text-[#6B7280] hover:border-[#FDBA74] hover:bg-[#FFF7ED] hover:text-[#EA580C]"
+            class="mt-2 flex h-[80px] w-full flex-col items-center justify-center gap-2 rounded border border-dashed border-[#D1D5DB] text-xs text-[#6B7280] hover:border-[#FDBA74] hover:bg-[#FFF7ED] hover:text-[#EA580C]"
             :disabled="capturingAnnotationId === a.id"
             @click.stop="captureCloudAnnotationShot(a.id)">
-            <Camera class="h-3.5 w-3.5" />
-            <span>{{ capturingAnnotationId === a.id ? '正在截图…' : '添加截图 · 记录当前视角' }}</span>
+            <span class="inline-flex items-center gap-2">
+              <Camera class="h-3.5 w-3.5" />
+              <span>{{ capturingAnnotationId === a.id ? '正在截图…' : '添加截图 · 记录当前视角' }}</span>
+            </span>
+            <span v-if="capturingAnnotationId === a.id" class="w-40 overflow-hidden rounded-full bg-slate-200">
+              <span class="block h-1.5 rounded-full bg-[#FF6B00] transition-all"
+                :style="{ width: `${Math.max(uploadProgress, 8)}%` }" />
+            </span>
           </button>
 
           <div class="mt-2 flex flex-wrap gap-2">

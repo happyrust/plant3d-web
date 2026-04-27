@@ -9,6 +9,7 @@ const uploadMock = vi.hoisted(() =>
       url: 'https://example.com/att-1.png',
       name: 'uploaded.png',
       size: 123,
+      uploadedAt: 1777041600000,
     },
   }))
 );
@@ -85,6 +86,30 @@ describe('useScreenshot', () => {
 
       const [, file] = uploadMock.mock.calls[0];
       expect((file as File).name).toBe('override.png');
+    });
+
+    it('传递批注截图元数据并返回 capturedAt', async () => {
+      installCanvas();
+      const { captureAndUpload } = useScreenshot();
+
+      const attachment = await captureAndUpload('task-1', {
+        filename: 'annotation.png',
+        kind: 'annotation_shot',
+        sourceAnnotationId: 'ann-1',
+        description: '原则错误 - 管线间距不足',
+      });
+
+      expect(uploadMock).toHaveBeenCalledTimes(1);
+      const options = uploadMock.mock.calls[0][3];
+      expect(options).toEqual({
+        sourceAnnotationId: 'ann-1',
+        description: '原则错误 - 管线间距不足',
+        fileType: 'annotation_screenshot',
+      });
+      expect(attachment).toMatchObject({
+        id: 'att-1',
+        capturedAt: 1777041600000,
+      });
     });
 
     it('省略 options → 使用默认 filename (screenshot-<ts>.png)', async () => {

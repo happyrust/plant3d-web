@@ -43,10 +43,8 @@ export type AnnotationTableStatusFilter =
 
 export type AnnotationTableSeverityFilter =
   | 'all'
-  | 'critical'
-  | 'severe'
-  | 'normal'
-  | 'suggestion';
+  | AnnotationSeverity
+  | 'unset';
 
 export type AnnotationTableFilters = {
   status: AnnotationTableStatusFilter;
@@ -58,12 +56,11 @@ export type AnnotationTableFilters = {
 // Severity / Status ranks（用于排序）
 // ------------------------------------------------------------
 
-/** 严重度降序排名：critical 排最前 */
+/** 错误类型降序排名：原则错误排最前 */
 const SEVERITY_RANK: Record<AnnotationSeverity, number> = {
-  critical: 4,
-  severe: 3,
-  normal: 2,
-  suggestion: 1,
+  principle: 3,
+  general: 2,
+  drawing: 1,
 };
 
 /** 状态排名：pending 最优先（设计师最需处理）*/
@@ -106,7 +103,7 @@ function matchSubstring(haystack: string | undefined, needle: string): boolean {
  *   · title
  *   · description
  *   · refnos（以 `/` 和 `_` 都可匹配：搜 `24381_145018` 和 `24381/145018` 都生效）
- *   · 严重度中文名（"紧急" / "高" / "中" / "低"）
+ *   · 错误类型中文名（"原则错误" / "一般错误" / "图面错误"）
  *   · 状态中文名（item.statusLabel）
  *
  * 空 query 一律返回 true（不过滤）。
@@ -140,7 +137,7 @@ export function searchAnnotationTableRows(
 }
 
 // ------------------------------------------------------------
-// Filter · 按状态 / 严重度
+// Filter · 按状态 / 错误类型
 // ------------------------------------------------------------
 
 export function filterByStatus(
@@ -156,6 +153,7 @@ export function filterBySeverity(
   severity: AnnotationTableSeverityFilter,
 ): AnnotationWorkspaceItem[] {
   if (severity === 'all') return items;
+  if (severity === 'unset') return items.filter((item) => !item.severity);
   return items.filter((item) => item.severity === severity);
 }
 
