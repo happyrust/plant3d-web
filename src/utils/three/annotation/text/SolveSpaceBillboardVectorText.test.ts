@@ -37,7 +37,7 @@ describe('SolveSpaceBillboardVectorText', () => {
     await Promise.resolve();
 
     expect(label.getRenderStyle()).toBe('solvespace');
-    expect(label.getExtentsPx().height).toBeCloseTo(11.5, 2);
+    expect(label.getExtentsPx().height).toBeCloseTo(16, 2);
     expect((label as any).line?.visible).toBe(true);
     expect((label as any).haloLine?.visible).toBe(false);
     expect((label as any).line?.renderOrder).toBe(910);

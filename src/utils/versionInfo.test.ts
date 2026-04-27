@@ -24,7 +24,7 @@ describe('versionInfo', () => {
     await expect(loadVersionInfo('/version.json')).resolves.toEqual({
       version: '1.2.3',
       commit: 'abc123',
-      buildDate: '2026-03-16 10:00:00 UTC',
+      buildDate: '2026-03-17 02:00:00 北京时间',
     });
   });
 

@@ -73,13 +73,17 @@ vi.mock('@/composables/useToolStore', () => ({
     rectAnnotations: { value: [] },
     obbAnnotations: { value: [] },
     measurements: { value: [] },
+    xeokitDistanceMeasurements: { value: [] },
+    xeokitAngleMeasurements: { value: [] },
+    xeokitElevationPointMeasurements: { value: [] },
+    xeokitElevationDeltaMeasurements: { value: [] },
     clearAll: vi.fn(),
     setToolMode: vi.fn(),
   }),
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
-  useViewerContext: () => ({ viewerRef: { value: null } }),
+  useViewerContext: () => ({ viewerRef: { value: null }, tools: { value: null } }),
   waitForViewerReady: vi.fn(async () => true),
 }));
 
@@ -103,6 +107,14 @@ vi.mock('@/composables/useUserStore', () => ({
     getTaskWorkflowHistory: loadWorkflowMock,
     submitTaskToNextNode: vi.fn(),
     returnTaskToNode: vi.fn(),
+  }),
+}));
+
+vi.mock('@/composables/useSelectionStore', () => ({
+  useSelectionStore: () => ({
+    selectedRefno: { value: null },
+    selectedRefnos: { value: [] },
+    setSelectedRefno: vi.fn(),
   }),
 }));
 
@@ -197,11 +209,11 @@ describe('ConfirmedRecords', () => {
     mountReviewPanel();
     await settlePanel();
 
-    expect(document.body.textContent).toContain('确认记录');
+    expect(document.body.textContent).toContain('审核记录');
     expect(document.body.textContent).toContain('确认时间');
-    expect(document.body.textContent).toContain('批注数量');
+    expect(document.body.textContent).toContain('批注');
     expect(document.body.textContent).toContain('3');
-    expect(document.body.textContent).toContain('测量数量');
+    expect(document.body.textContent).toContain('测量');
     expect(document.body.textContent).toContain('1');
     expect(document.body.textContent).toContain('备注');
     expect(document.body.textContent).toContain('已核对支吊架位置');

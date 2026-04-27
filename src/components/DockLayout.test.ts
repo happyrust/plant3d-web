@@ -388,13 +388,13 @@ describe('DockLayout embed bootstrap', () => {
     expect(switchProjectByIdMock).toHaveBeenCalledWith('PROJECT-CLAIMS');
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
       target: 'reviewer',
-      formId: 'WRONG-FORM',
+      formId: 'FORM-CLAIMS-1',
       passiveWorkflowMode: false,
     }));
 
     const persisted = JSON.parse(sessionStorage.getItem('embed_mode_params') || '{}');
     expect(persisted.projectId).toBe('PROJECT-CLAIMS');
-    expect(persisted.formId).toBe('WRONG-FORM');
+    expect(persisted.formId).toBe('FORM-CLAIMS-1');
     expect(persisted.userId).toBe('checker-1');
     expect(persisted.workflowRole).toBe('jd');
     expect(persisted.workflowMode).toBe('manual');

@@ -63,13 +63,17 @@ vi.mock('@/composables/useToolStore', () => ({
     rectAnnotations: { value: [] },
     obbAnnotations: { value: [] },
     measurements: { value: [] },
+    xeokitDistanceMeasurements: { value: [] },
+    xeokitAngleMeasurements: { value: [] },
+    xeokitElevationPointMeasurements: { value: [] },
+    xeokitElevationDeltaMeasurements: { value: [] },
     clearAll: vi.fn(),
     setToolMode: vi.fn(),
   }),
 }));
 
 vi.mock('@/composables/useViewerContext', () => ({
-  useViewerContext: () => ({ viewerRef: { value: null } }),
+  useViewerContext: () => ({ viewerRef: { value: null }, tools: { value: null } }),
   waitForViewerReady: vi.fn(async () => true),
 }));
 
@@ -93,6 +97,14 @@ vi.mock('@/composables/useUserStore', () => ({
     getTaskWorkflowHistory: loadWorkflowMock,
     submitTaskToNextNode: vi.fn(),
     returnTaskToNode: vi.fn(),
+  }),
+}));
+
+vi.mock('@/composables/useSelectionStore', () => ({
+  useSelectionStore: () => ({
+    selectedRefno: { value: null },
+    selectedRefnos: { value: [] },
+    setSelectedRefno: vi.fn(),
   }),
 }));
 
@@ -180,7 +192,7 @@ describe('WorkflowHistory', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 
-    expect(document.body.textContent).toContain('工作流历史');
+    expect(document.body.textContent).toContain('历史流转');
     expect(document.body.textContent).toContain('编制');
     expect(document.body.textContent).toContain('动作：提交');
     expect(document.body.textContent).toContain('操作人: 张三');

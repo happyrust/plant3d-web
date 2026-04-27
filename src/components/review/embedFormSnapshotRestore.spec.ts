@@ -164,6 +164,8 @@ describe('restoreEmbedFormSnapshot', () => {
       dimensions: [],
       xeokitDistanceMeasurements: [],
       xeokitAngleMeasurements: [],
+      xeokitElevationPointMeasurements: [],
+      xeokitElevationDeltaMeasurements: [],
     });
   });
 
@@ -261,6 +263,8 @@ describe('restoreEmbedFormSnapshot', () => {
       dimensions: [],
       xeokitDistanceMeasurements: [],
       xeokitAngleMeasurements: [],
+      xeokitElevationPointMeasurements: [],
+      xeokitElevationDeltaMeasurements: [],
     });
   });
 
@@ -299,6 +303,8 @@ describe('restoreEmbedFormSnapshot', () => {
       dimensions: [],
       xeokitDistanceMeasurements: [],
       xeokitAngleMeasurements: [],
+      xeokitElevationPointMeasurements: [],
+      xeokitElevationDeltaMeasurements: [],
     }));
   });
 

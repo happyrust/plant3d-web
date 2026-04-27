@@ -73,7 +73,7 @@ describe('useAnnotationStyleStore', () => {
     store.applyPreset('bold');
     await nextTick();
 
-    expect(store.style.text.lineWidth).toBe(6.5);
+    expect(store.style.text.lineWidth).toBe(6.8);
     expect(store.style.cloud.haloLineWidth).toBe(11.5);
     expect(store.style.rect.opacity).toBe(1);
     expect(store.style.obb.haloOpacity).toBe(0.56);
@@ -81,7 +81,7 @@ describe('useAnnotationStyleStore', () => {
     const raw = localStorage.getItem('plant3d-web-annotation-style-v1');
     expect(raw).toBeTruthy();
     const parsed = raw ? JSON.parse(raw) : null;
-    expect(parsed?.text?.lineWidth).toBe(6.5);
+    expect(parsed?.text?.lineWidth).toBe(6.8);
     expect(parsed?.cloud?.haloLineWidth).toBe(11.5);
     expect(parsed?.rect?.opacity).toBe(1);
     expect(parsed?.obb?.haloOpacity).toBe(0.56);

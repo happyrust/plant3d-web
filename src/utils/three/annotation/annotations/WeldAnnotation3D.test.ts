@@ -22,8 +22,7 @@ describe('WeldAnnotation3D', () => {
     expect(ann.getParams().label).toBe('W1');
     ann.setLabelVisible(false);
 
-    // SolveSpaceBillboardVectorText.object3d is a Group (LineSegments + pickProxy)
-    const textGroup = ann.children.find((c: any) => c.isGroup && c.children?.some((cc: any) => cc.isLineSegments)) as any;
+    const textGroup = (ann as any).textLabel.object3d as THREE.Group;
     expect(textGroup).toBeTruthy();
     expect(textGroup.visible).toBe(false);
 

@@ -68,6 +68,8 @@ describe('buildSnapshotFromImportPayload', () => {
       dimensions: [],
       xeokitDistanceMeasurements: [{ id: 'dist-1', visible: true }],
       xeokitAngleMeasurements: [{ id: 'angle-1', visible: true }],
+      xeokitElevationPointMeasurements: [],
+      xeokitElevationDeltaMeasurements: [],
     }));
   });
 });
