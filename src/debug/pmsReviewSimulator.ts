@@ -2647,11 +2647,15 @@ async function executeWorkflowAction(
   const workflowRoleState = resolveCurrentWorkflowRoleState();
   const currentWorkflowRole = workflowRoleState.workflowRole;
   const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const freshSidePanelMode = state.iframeMeta ? deriveSidePanelMode() : 'readonly';
+  if (freshSidePanelMode !== state.sidePanelMode) {
+    state.sidePanelMode = freshSidePanelMode;
+  }
   const syncDrivenAction = shouldUseSyncOnlyWorkflowAction({
     passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
     currentPmsUser: state.currentPmsUser,
     currentWorkflowRole,
-    sidePanelMode: state.sidePanelMode,
+    sidePanelMode: freshSidePanelMode,
     action,
   });
   if (!accessState.access.canMutateWorkflow) {
@@ -3159,11 +3163,15 @@ function openWorkflowDialog(action: WorkflowMutationAction): void {
   const workflowRoleState = resolveCurrentWorkflowRoleState();
   const currentWorkflowRole = workflowRoleState.workflowRole;
   const accessState = resolveWorkflowAccessState(workflowRoleState);
+  const freshSidePanelMode = state.iframeMeta ? deriveSidePanelMode() : 'readonly';
+  if (freshSidePanelMode !== state.sidePanelMode) {
+    state.sidePanelMode = freshSidePanelMode;
+  }
   const syncDrivenAction = shouldUseSyncOnlyWorkflowAction({
     passiveWorkflowMode: PASSIVE_WORKFLOW_MODE,
     currentPmsUser: state.currentPmsUser,
     currentWorkflowRole,
-    sidePanelMode: state.sidePanelMode,
+    sidePanelMode: freshSidePanelMode,
     action,
   });
 
