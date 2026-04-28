@@ -171,6 +171,7 @@ export type XeokitPointerLensState = {
 };
 
 export type DimensionKind = 'linear_distance' | 'angle';
+export type MeasurementGeneratedDimensionSource = 'measure_pipe_to_structure';
 
 export type LinearDistanceDimensionRecord = {
   id: string;
@@ -186,6 +187,7 @@ export type LinearDistanceDimensionRecord = {
   /** 参考尺寸（仅显示，不参与约束计算） */
   isReference?: boolean;
   textOverride?: string;
+  sourceToolMode?: MeasurementGeneratedDimensionSource;
   visible: boolean;
   createdAt: number;
 };
@@ -207,6 +209,7 @@ export type AngleDimensionRecord = {
   /** 显示补角（minor/major 模式切换） */
   supplementary?: boolean;
   textOverride?: string;
+  sourceToolMode?: MeasurementGeneratedDimensionSource;
   visible: boolean;
   createdAt: number;
 };
@@ -1072,6 +1075,27 @@ function removeDimension(id: string) {
 function clearDimensions() {
   dimensions.value = [];
   activeDimensionId.value = null;
+}
+
+function isMeasurementGeneratedDimension(rec: DimensionRecord): boolean {
+  return rec.sourceToolMode === 'measure_pipe_to_structure'
+    || rec.id.startsWith('dim-pipe-structure-');
+}
+
+function clearMeasurementGeneratedDimensions() {
+  const next = dimensions.value.filter((rec) => !isMeasurementGeneratedDimension(rec));
+  if (next.length === dimensions.value.length) return;
+  dimensions.value = next;
+  if (activeDimensionId.value && !dimensions.value.some((rec) => rec.id === activeDimensionId.value)) {
+    activeDimensionId.value = null;
+  }
+}
+
+function clearMeasurementResults() {
+  clearMeasurements();
+  clearXeokitMeasurements();
+  clearCurrentXeokitDraft();
+  clearMeasurementGeneratedDimensions();
 }
 
 function addAnnotation(rec: AnnotationRecord) {
@@ -1985,6 +2009,7 @@ export function useToolStore() {
     updateMeasurementVisible,
     removeMeasurement,
     clearMeasurements,
+    clearMeasurementResults,
 
     addXeokitDistanceMeasurement,
     updateXeokitDistanceMeasurement,

@@ -1383,14 +1383,7 @@ function handleRibbonCommand(commandId: string) {
       openPipeDistanceDrawer();
       return;
     case 'measurement.clear':
-      if (
-        store.toolMode.value === 'xeokit_measure_distance' ||
-        store.toolMode.value === 'xeokit_measure_angle'
-      ) {
-        xeokitMeasurementToolsRef.value?.clearMeasurements();
-      } else {
-        store.clearMeasurements();
-      }
+      store.clearMeasurementResults();
       requestRender();
       return;
     case 'dimension.linear':

@@ -2790,6 +2790,7 @@ export function useDtxTools(options: {
         offset,
         direction: direction ? vec3ToTuple(direction) : null,
         labelT: 0.5,
+        sourceToolMode: 'measure_pipe_to_structure',
         visible: true,
         createdAt: Date.now(),
       };
