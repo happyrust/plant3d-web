@@ -1,4 +1,11 @@
 import {
+  parseEmbeddedFormSavedMessage,
+  parseEmbeddedWorkflowActionMessage,
+  type EmbeddedFormSavedMessage,
+  type EmbeddedWorkflowActionMessage,
+} from './pmsReviewSimulatorEmbedMessages';
+
+import {
   authVerifyToken,
   clearAuthToken,
   getAuthToken,
@@ -19,7 +26,11 @@ import {
   resolveDefaultSimulatorProjectId,
   resolvePmsLaunchFormId,
 } from '@/debug/pmsReviewSimulatorLaunchPlan';
-import { beginWorkflowVerifyCycle } from '@/debug/pmsReviewSimulatorState';
+import {
+  beginWorkflowVerifyCycle,
+  summarizeWorkflowVerifyDiagnostics,
+  type WorkflowVerifyDiagnostics,
+} from '@/debug/pmsReviewSimulatorState';
 import {
   buildSimulatorAuthLoginRequest,
   buildSimulatorEmbedUrlPayload,
@@ -69,6 +80,28 @@ type WorkflowVerifyResponse = {
     taskStatus?: string;
     next_step?: string;
     nextStep?: string;
+    block_code?: string;
+    blockCode?: string;
+    actor_id?: string;
+    actorId?: string;
+    owner_id?: string;
+    ownerId?: string;
+    owner_source?: string;
+    ownerSource?: string;
+    expected_next_node?: string;
+    expectedNextNode?: string;
+    requested_next_step?: {
+      assignee_id?: string;
+      assigneeId?: string;
+      name?: string;
+      roles?: string;
+    };
+    requestedNextStep?: {
+      assignee_id?: string;
+      assigneeId?: string;
+      name?: string;
+      roles?: string;
+    };
     reason?: string;
     recommended_action?: string;
     recommendedAction?: string;
@@ -157,13 +190,6 @@ function normalizeWorkflowVerifyAnnotationCheck(
     message: String(candidate.message || ''),
   };
 }
-
-import {
-  parseEmbeddedFormSavedMessage,
-  parseEmbeddedWorkflowActionMessage,
-  type EmbeddedFormSavedMessage,
-  type EmbeddedWorkflowActionMessage,
-} from './pmsReviewSimulatorEmbedMessages';
 
 type WorkflowExecuteOverrides = {
   taskId?: string | null;
@@ -304,6 +330,7 @@ type WorkflowVerifyState = {
   lastErrorCode: string | null;
   lastRecommendedAction: ReviewAnnotationCheckResult['recommendedAction'] | null;
   lastAt: number | null;
+  lastDiagnostics: WorkflowVerifyDiagnostics | null;
   lastAnnotationCheck: ReviewAnnotationCheckResult | null;
 };
 
@@ -328,6 +355,7 @@ type SimulatorState = {
   workflowVerify: WorkflowVerifyState;
   sidePanelMode: SidePanelMode;
   sidePanelDraftComment: string;
+  sidePanelCollapsed: boolean;
   workflowNodeRaw: string | null;
   workflowDialog: WorkflowDialogState;
   platformEmbedWorkflowMode: string;
@@ -405,6 +433,12 @@ type SimulatorTestApi = {
   setWorkflowDialogComment: (comment: string) => void;
   confirmWorkflowDialog: () => Promise<void>;
   getSnapshot: () => SimulatorTestSnapshot;
+  /**
+   * 强制展开送审信息面板（仅供自动化使用）。
+   * 折叠态下侧栏 display:none，会让 selector 拿不到内部元素；
+   * 自动化脚本在驱动 workflow 操作前调用一次即可。
+   */
+  ensureSidePanelExpanded: () => void;
 };
 
 type SimulatorPersistedIframeMeta = {
@@ -451,6 +485,7 @@ const WORKFLOW_NODE_ORDER = ['sj', 'jd', 'sh', 'pz'] as const;
 let PASSIVE_WORKFLOW_MODE = resolvePassiveWorkflowMode();
 const SIMULATOR_SESSION_STORAGE_KEY = 'pms-review-simulator-session-v1';
 const PMS_LIKE_IFRAME_QUERY_STORAGE_KEY = 'pms_simulator_pms_like_iframe';
+const SIDE_PANEL_COLLAPSED_STORAGE_KEY = 'pms-review-simulator:side-panel-collapsed';
 
 function readPmsLikeIframeQueryPreference(): boolean {
   try {
@@ -460,6 +495,24 @@ function readPmsLikeIframeQueryPreference(): boolean {
     // ignore
   }
   return false;
+}
+
+function readSidePanelCollapsedPreference(): boolean {
+  try {
+    const v = localStorage.getItem(SIDE_PANEL_COLLAPSED_STORAGE_KEY);
+    if (v === '1' || v === 'true') return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function persistSidePanelCollapsedPreference(value: boolean): void {
+  try {
+    localStorage.setItem(SIDE_PANEL_COLLAPSED_STORAGE_KEY, value ? '1' : '0');
+  } catch {
+    // ignore
+  }
 }
 
 const IFRAME_SOURCE_LABELS: Record<IframeSource, string> = {
@@ -573,10 +626,12 @@ const state: SimulatorState = {
     lastErrorCode: null,
     lastRecommendedAction: null,
     lastAt: null,
+    lastDiagnostics: null,
     lastAnnotationCheck: null,
   },
   sidePanelMode: 'readonly',
   sidePanelDraftComment: '',
+  sidePanelCollapsed: readSidePanelCollapsedPreference(),
   workflowNodeRaw: null,
   workflowDialog: {
     open: false,
@@ -641,8 +696,13 @@ let refs: {
   modalSubtitle: HTMLDivElement;
   modalReopenBtn: HTMLButtonElement;
   modalCloseBtn: HTMLButtonElement;
+  modalFullscreenBtn: HTMLButtonElement;
+  appFullscreenBtn: HTMLButtonElement;
   iframeEl: HTMLIFrameElement;
   iframeBlocker: HTMLDivElement;
+  simulatorLayout: HTMLDivElement;
+  sidePanelCollapseBtn: HTMLButtonElement;
+  sidePanelExpandHandle: HTMLButtonElement;
   diagTaskBtn: HTMLButtonElement;
   diagWorkflowBtn: HTMLButtonElement;
   workflowActionHint: HTMLSpanElement;
@@ -838,6 +898,9 @@ function exposeSimulatorTestApi(): void {
       await confirmWorkflowDialog();
     },
     getSnapshot: () => buildSimulatorTestSnapshot(),
+    ensureSidePanelExpanded: () => {
+      setSidePanelCollapsed(false);
+    },
   };
 }
 
@@ -864,8 +927,13 @@ function initRefs(): void {
     modalSubtitle: getEl<HTMLDivElement>('modal-subtitle'),
     modalReopenBtn: getEl<HTMLButtonElement>('modal-reopen-btn'),
     modalCloseBtn: getEl<HTMLButtonElement>('modal-close-btn'),
+    modalFullscreenBtn: getEl<HTMLButtonElement>('modal-fullscreen-btn'),
+    appFullscreenBtn: getEl<HTMLButtonElement>('app-fullscreen-btn'),
     iframeEl: getEl<HTMLIFrameElement>('review-iframe'),
     iframeBlocker: getEl<HTMLDivElement>('iframe-blocker'),
+    simulatorLayout: getEl<HTMLDivElement>('simulator-layout'),
+    sidePanelCollapseBtn: getEl<HTMLButtonElement>('side-panel-collapse-btn'),
+    sidePanelExpandHandle: getEl<HTMLButtonElement>('side-panel-expand-handle'),
     diagTaskBtn: getEl<HTMLButtonElement>('diag-task-btn'),
     diagWorkflowBtn: getEl<HTMLButtonElement>('diag-workflow-btn'),
     workflowActionHint: getEl<HTMLSpanElement>('workflow-action-hint'),
@@ -2086,6 +2154,7 @@ function renderDiagnostics(): void {
     diagnosisHints.push('页面有任务上下文但后端双视角均无构件，可归类为「类型3：页面看似成功但后端事实未落库」。');
   }
   const verifyAnnotationSummary = summarizeVerifyAnnotationCheck(state.workflowVerify.lastAnnotationCheck);
+  const verifyDiagnosticsSummary = summarizeWorkflowVerifyDiagnostics(state.workflowVerify.lastDiagnostics);
 
   refs.diagContent.innerHTML = `
     <div class="diag-card">
@@ -2136,6 +2205,8 @@ function renderDiagnostics(): void {
         <div class="diag-value">${escapeHtml(state.workflowVerify.lastAction || '--')} ｜ ${state.workflowVerify.lastOk === null ? '--' : state.workflowVerify.lastOk ? '通过' : '拦截'}</div>
         <div class="diag-key">verify error_code</div>
         <div class="diag-value">${escapeHtml(state.workflowVerify.lastErrorCode || '--')}</div>
+        <div class="diag-key">verify diagnostics</div>
+        <div class="diag-value">${escapeHtml(verifyDiagnosticsSummary)}</div>
         <div class="diag-key">components 数</div>
         <div class="diag-value">${taskRefnos.length}</div>
         <div class="diag-key">workflow models 数</div>
@@ -2189,6 +2260,7 @@ function renderDiagnostics(): void {
           <div>结果：${state.workflowVerify.lastOk === null ? '处理中' : state.workflowVerify.lastOk ? '通过' : '拦截'}</div>
           <div>原因：${escapeHtml(state.workflowVerify.lastMessage || '--')}</div>
           <div>error_code：${escapeHtml(state.workflowVerify.lastErrorCode || '--')}</div>
+          <div>diagnostics：${escapeHtml(verifyDiagnosticsSummary)}</div>
           <div>annotation_check：${escapeHtml(verifyAnnotationSummary)}</div>
           <div>时间：${escapeHtml(toDateTime(state.workflowVerify.lastAt))}</div>
         </div>`
@@ -2416,11 +2488,24 @@ async function postWorkflowRequest<T extends { code?: number; message?: string }
   headers: Record<string, string>,
   actionName: 'workflow/sync' | 'workflow/verify',
 ): Promise<T> {
-  const resp = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 12_000);
+  let resp: Response;
+  try {
+    resp = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`${actionName} 请求超时`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
@@ -2603,6 +2688,33 @@ function summarizeVerifyAnnotationCheck(
   ].join(' ｜ ');
 }
 
+function trimVerifyDiagnosticField(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function buildWorkflowVerifyDiagnostics(
+  data: WorkflowVerifyResponse['data'] | undefined,
+  fallbackBlockCode?: string | null,
+): WorkflowVerifyDiagnostics | null {
+  if (!data) return fallbackBlockCode ? { blockCode: fallbackBlockCode } : null;
+
+  const requestedNextStep = data.requestedNextStep || data.requested_next_step;
+  const diagnostics: WorkflowVerifyDiagnostics = {
+    blockCode: trimVerifyDiagnosticField(data.blockCode || data.block_code || fallbackBlockCode || undefined),
+    actorId: trimVerifyDiagnosticField(data.actorId || data.actor_id),
+    ownerId: trimVerifyDiagnosticField(data.ownerId || data.owner_id),
+    ownerSource: trimVerifyDiagnosticField(data.ownerSource || data.owner_source),
+    expectedNextNode: trimVerifyDiagnosticField(data.expectedNextNode || data.expected_next_node),
+    requestedNextStep: requestedNextStep ? {
+      assigneeId: trimVerifyDiagnosticField(requestedNextStep.assigneeId || requestedNextStep.assignee_id),
+      name: trimVerifyDiagnosticField(requestedNextStep.name),
+      roles: trimVerifyDiagnosticField(requestedNextStep.roles),
+    } : undefined,
+  };
+  const hasDiagnostics = Object.values(diagnostics).some((value) => value !== undefined);
+  return hasDiagnostics ? diagnostics : null;
+}
+
 function updateWorkflowVerifyState(
   action: WorkflowMutationAction,
   result: {
@@ -2610,6 +2722,7 @@ function updateWorkflowVerifyState(
     message: string;
     errorCode?: string | null;
     recommendedAction?: ReviewAnnotationCheckResult['recommendedAction'] | null;
+    diagnostics?: WorkflowVerifyDiagnostics | null;
     annotationCheck?: ReviewAnnotationCheckResult | null;
   },
 ): void {
@@ -2618,6 +2731,7 @@ function updateWorkflowVerifyState(
   state.workflowVerify.lastMessage = result.message;
   state.workflowVerify.lastErrorCode = result.errorCode?.trim() || null;
   state.workflowVerify.lastRecommendedAction = result.recommendedAction || null;
+  state.workflowVerify.lastDiagnostics = result.diagnostics || null;
   state.workflowVerify.lastAnnotationCheck = result.annotationCheck || null;
   state.workflowVerify.lastAt = Date.now();
 }
@@ -2738,18 +2852,21 @@ async function executeWorkflowAction(
     const verifyRecommendedAction = normalizeWorkflowVerifyRecommendedAction(
       String(verifyResponse.data?.recommendedAction || verifyResponse.data?.recommended_action || ''),
     ) || verifyAnnotationCheck?.recommendedAction || null;
+    const verifyDiagnostics = buildWorkflowVerifyDiagnostics(verifyResponse.data, verifyErrorCode);
     const verifyPassed = verifyResponse.data?.passed === true;
     updateWorkflowVerifyState(action, {
       ok: verifyPassed,
       message: verifyReason,
       errorCode: verifyErrorCode,
       recommendedAction: verifyRecommendedAction,
+      diagnostics: verifyDiagnostics,
       annotationCheck: verifyAnnotationCheck,
     });
     if (!verifyPassed) {
       const blockedMessage = [
         `workflow/verify 拦截：${verifyReason}`,
         verifyErrorCode ? `error_code=${verifyErrorCode}` : '',
+        verifyDiagnostics ? summarizeWorkflowVerifyDiagnostics(verifyDiagnostics) : '',
         verifyAnnotationCheck ? summarizeVerifyAnnotationCheck(verifyAnnotationCheck) : '',
       ]
         .filter(Boolean)
@@ -2806,26 +2923,31 @@ async function refreshDiagnosticsSnapshot(params?: {
   const errors: string[] = [];
   state.diagnostics.error = null;
 
-  if (taskId) {
-    try {
-      await fetchTaskDetail(taskId);
-    } catch (error) {
-      errors.push(`任务详情：${error instanceof Error ? error.message : String(error)}`);
-    }
-  } else {
-    state.diagnostics.taskDetail = null;
-  }
-
-  if (formId) {
-    try {
-      await fetchWorkflowQuery(formId);
-    } catch (error) {
-      errors.push(`form_id 聚合：${error instanceof Error ? error.message : String(error)}`);
-      state.diagnostics.workflowSnapshot = null;
-    }
-  } else {
-    state.diagnostics.workflowSnapshot = null;
-  }
+  await Promise.all([
+    (async () => {
+      if (taskId) {
+        try {
+          await fetchTaskDetail(taskId);
+        } catch (error) {
+          errors.push(`任务详情：${error instanceof Error ? error.message : String(error)}`);
+        }
+      } else {
+        state.diagnostics.taskDetail = null;
+      }
+    })(),
+    (async () => {
+      if (formId) {
+        try {
+          await fetchWorkflowQuery(formId);
+        } catch (error) {
+          errors.push(`form_id 聚合：${error instanceof Error ? error.message : String(error)}`);
+          state.diagnostics.workflowSnapshot = null;
+        }
+      } else {
+        state.diagnostics.workflowSnapshot = null;
+      }
+    })(),
+  ]);
 
   state.diagnostics.error = errors.length ? errors.join('；') : null;
   state.diagnostics.lastRefreshedAt = Date.now();
@@ -2875,11 +2997,24 @@ async function requestEmbedUrlData(
     extraParameters: parsedExtraParameters,
   });
 
-  const resp = await fetch(`${base}/api/review/embed-url`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 12_000);
+  let resp: Response;
+  try {
+    resp = await fetch(`${base}/api/review/embed-url`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('embed-url 请求超时');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
@@ -3098,6 +3233,103 @@ function closeWorkflowDialog(): void {
   renderWorkflowDialogState();
 }
 
+function getMainModalWindow(): HTMLDivElement | null {
+  return refs.modalEl.querySelector<HTMLDivElement>('.main-modal-window');
+}
+
+function isModalFullscreen(): boolean {
+  const win = getMainModalWindow();
+  return !!(win && win.classList.contains('fullscreen'));
+}
+
+function setModalFullscreen(value: boolean): void {
+  const win = getMainModalWindow();
+  if (!win) return;
+  const next = Boolean(value);
+  win.classList.toggle('fullscreen', next);
+  refs.modalFullscreenBtn.setAttribute('aria-pressed', next ? 'true' : 'false');
+  refs.modalFullscreenBtn.textContent = next ? '⤡ 退出全屏' : '⤢ 全屏';
+  refs.modalFullscreenBtn.title = next
+    ? '退出全屏（按 Esc 也可退出全屏）'
+    : '将嵌入页面全屏（隐藏侧栏，按 Esc 退出全屏）';
+}
+
+function toggleModalFullscreen(): void {
+  setModalFullscreen(!isModalFullscreen());
+}
+
+function applySidePanelCollapsed(): void {
+  refs.simulatorLayout.classList.toggle('side-collapsed', state.sidePanelCollapsed);
+  refs.sidePanelExpandHandle.hidden = !state.sidePanelCollapsed;
+  refs.sidePanelCollapseBtn.textContent = state.sidePanelCollapsed ? '‹' : '›';
+  refs.sidePanelCollapseBtn.title = state.sidePanelCollapsed
+    ? '展开送审信息面板'
+    : '收起送审信息面板';
+  refs.sidePanelCollapseBtn.setAttribute('aria-label', refs.sidePanelCollapseBtn.title);
+}
+
+function setSidePanelCollapsed(value: boolean): void {
+  const next = Boolean(value);
+  if (state.sidePanelCollapsed === next) return;
+  state.sidePanelCollapsed = next;
+  persistSidePanelCollapsedPreference(next);
+  applySidePanelCollapsed();
+}
+
+function toggleSidePanelCollapsed(): void {
+  setSidePanelCollapsed(!state.sidePanelCollapsed);
+}
+
+type FullscreenCapableElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void>;
+};
+type FullscreenCapableDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void>;
+};
+
+function isAppFullscreen(): boolean {
+  const doc = document as FullscreenCapableDocument;
+  return !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+}
+
+function applyAppFullscreenButton(): void {
+  const active = isAppFullscreen();
+  refs.appFullscreenBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  refs.appFullscreenBtn.textContent = active ? '⛶ 退出全屏' : '⛶ 全屏';
+  refs.appFullscreenBtn.title = active
+    ? '退出整个浏览器全屏（按 Esc 也可退出）'
+    : '将整个浏览器进入全屏（按 Esc 退出）';
+}
+
+async function toggleAppFullscreen(): Promise<void> {
+  const doc = document as FullscreenCapableDocument;
+  if (!isAppFullscreen()) {
+    const target = document.documentElement as FullscreenCapableElement;
+    const req = target.requestFullscreen?.bind(target) || target.webkitRequestFullscreen?.bind(target);
+    if (!req) {
+      // 降级：浏览器不支持时回退到 modal-window CSS 全屏（仅在 modal 已打开时）
+      if (state.iframeMeta) setModalFullscreen(true);
+      return;
+    }
+    try {
+      await req();
+    } catch {
+      // 用户取消或权限被拒；不再降级，避免与 modal CSS 全屏混淆
+    }
+  } else {
+    const exit = doc.exitFullscreen?.bind(doc) || doc.webkitExitFullscreen?.bind(doc);
+    if (exit) {
+      try {
+        await exit();
+      } catch {
+        // ignore
+      }
+    }
+  }
+  applyAppFullscreenButton();
+}
+
 function closeIframe(): void {
   closeWorkflowDialog();
   state.iframeUrl = null;
@@ -3106,6 +3338,7 @@ function closeIframe(): void {
   state.sidePanelMode = 'readonly';
   persistSimulatorSession();
   refs.iframeEl.src = 'about:blank';
+  setModalFullscreen(false);
   refs.modalEl.classList.remove('show');
   renderIframeState();
   renderActionStates();
@@ -3411,6 +3644,24 @@ function bindEvents(): void {
     closeIframe();
   });
 
+  refs.modalFullscreenBtn.addEventListener('click', () => {
+    toggleModalFullscreen();
+  });
+
+  refs.sidePanelCollapseBtn.addEventListener('click', () => {
+    toggleSidePanelCollapsed();
+  });
+
+  refs.sidePanelExpandHandle.addEventListener('click', () => {
+    setSidePanelCollapsed(false);
+  });
+
+  refs.appFullscreenBtn.addEventListener('click', () => {
+    void toggleAppFullscreen();
+  });
+  document.addEventListener('fullscreenchange', applyAppFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', applyAppFullscreenButton);
+
   refs.modalReopenBtn.addEventListener('click', async () => {
     if (!state.iframeMeta) return;
     await openIframe({
@@ -3495,6 +3746,11 @@ function bindEvents(): void {
     if (event.key !== 'Escape') return;
     if (state.workflowDialog.open) {
       closeWorkflowDialog();
+      event.preventDefault();
+      return;
+    }
+    if (isModalFullscreen()) {
+      setModalFullscreen(false);
       event.preventDefault();
       return;
     }
@@ -3722,6 +3978,8 @@ async function bootstrap(): Promise<void> {
   renderIframeState();
   renderSidePanelState();
   renderWorkflowDialogState();
+  applySidePanelCollapsed();
+  applyAppFullscreenButton();
   exposeSimulatorTestApi();
   (window as Window & {
     __pmsReviewSimulatorReady?: boolean;

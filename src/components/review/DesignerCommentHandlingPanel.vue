@@ -20,7 +20,7 @@ import {
   type AnnotationProcessingEntryTarget,
 } from './annotationProcessingEntry';
 import AnnotationTableView from './AnnotationTableView.vue';
-import AnnotationWorkspace from './AnnotationWorkspace.vue';
+import AnnotationWorkspace, { type AnnotationWorkspaceTextCollapsePayload } from './AnnotationWorkspace.vue';
 import {
   buildAnnotationWorkspaceItems,
   buildAnnotationWorkspaceSummary,
@@ -41,19 +41,22 @@ import {
 } from './embedRoleLanding';
 import ResubmissionTaskList from './ResubmissionTaskList.vue';
 import {
-  buildReviewConfirmSnapshotKey,
+  buildReviewEvidenceSnapshotKey,
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
-  buildUnsavedReviewConfirmPayload,
+  buildUnsavedReviewEvidencePayload,
   confirmCurrentDataSafely,
   hasReviewConfirmPayloadData,
+  runReviewSubmitPreflight,
 } from './reviewPanelActions';
 import {
   getCanonicalReturnedMetadata,
   getResubmissionLatestReturnTime,
   isCanonicalReturnedTask,
+  isDesignerResubmissionTask,
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
+import { notifyParentWorkflowAction } from './workflowBridge';
 
 import { reviewAnnotationCheck, getReviewAnnotationCheckFromError } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
@@ -169,6 +172,7 @@ navigationState.bindRef<AnnotationListViewMode>('annotationListViewMode', annota
 
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
   toolStore,
   waitForViewerReady,
@@ -231,13 +235,35 @@ const canReturnToAnnotationList = computed(() => (
   && !hasExternalEntryWithoutMatchedTask.value
 ));
 
-const allAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => buildAnnotationWorkspaceItems({
-  annotations: toolStore.annotations.value,
-  cloudAnnotations: toolStore.cloudAnnotations.value,
-  rectAnnotations: toolStore.rectAnnotations.value,
-  obbAnnotations: toolStore.obbAnnotations.value,
-  getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id).length,
-}));
+/**
+ * 评论时间线的正式单据上下文。
+ *
+ * - 如果当前任务已匹配 → 用 `currentTask.formId / id`，并允许处理动作；
+ * - 仅外部入口给出 formId 但未匹配任务 → `formId / null`，禁止处理动作；
+ * - 没有任何上下文 → 全部为 null，按本地草稿语义处理。
+ */
+const timelineContextFormId = computed<string | null>(() => (
+  normalizeFormId(currentTask.value?.formId)
+    ?? normalizeFormId(externalEntryTarget.value?.formId)
+));
+const timelineContextTaskId = computed<string | null>(() => (
+  currentTask.value?.id ?? null
+));
+const timelineAllowReviewActions = computed(() => (
+  !hasExternalEntryWithoutMatchedTask.value
+));
+
+const allAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
+  const formIdContext = timelineContextFormId.value;
+  const taskIdContext = timelineContextTaskId.value;
+  return buildAnnotationWorkspaceItems({
+    annotations: toolStore.annotations.value,
+    cloudAnnotations: toolStore.cloudAnnotations.value,
+    rectAnnotations: toolStore.rectAnnotations.value,
+    obbAnnotations: toolStore.obbAnnotations.value,
+    getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id, formIdContext, taskIdContext).length,
+  });
+});
 
 const scopedAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
   const currentFormId = currentTask.value?.formId ?? null;
@@ -261,7 +287,7 @@ const scopedAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
 const annotationWorkspaceSummary = computed(() => buildAnnotationWorkspaceSummary(scopedAnnotationItems.value));
 const filteredAnnotationItems = computed(() => filterAnnotationWorkspaceItems(scopedAnnotationItems.value, annotationFilter.value));
 const selectedAnnotation = computed<AnnotationWorkspaceItem | null>(() => (
-  filteredAnnotationItems.value.find((item) => item.id === selectedAnnotationId.value && item.type === selectedAnnotationType.value) ?? null
+  scopedAnnotationItems.value.find((item) => item.id === selectedAnnotationId.value && item.type === selectedAnnotationType.value) ?? null
 ));
 const linkedMeasurements = computed(() => buildLinkedMeasurementItems(
   selectedAnnotation.value,
@@ -288,11 +314,11 @@ const confirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
 ));
 const unsavedConfirmPayload = computed(() => (
-  buildUnsavedReviewConfirmPayload(currentDraftConfirmPayload.value, confirmedSnapshotPayload.value)
+  buildUnsavedReviewEvidencePayload(currentDraftConfirmPayload.value, confirmedSnapshotPayload.value)
 ));
 const hasUnsavedPendingData = computed(() => (
-  buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
-    !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value)
+  buildReviewEvidenceSnapshotKey(currentDraftConfirmPayload.value)
+    !== buildReviewEvidenceSnapshotKey(confirmedSnapshotPayload.value)
 ));
 const unsavedAnnotationCount = computed(() => (
   unsavedConfirmPayload.value.annotations.length
@@ -305,7 +331,7 @@ const canConfirmCurrentData = computed(() => (
   !!currentTask.value && hasUnsavedPendingData.value && hasReviewConfirmPayloadData(unsavedConfirmPayload.value)
 ));
 const canResubmitCurrentTask = computed(() => (
-  isCurrentTaskReturned.value && !!currentTask.value && currentTask.value.currentNode === 'sj' && currentTask.value.status === 'draft'
+  !!currentTask.value && isDesignerResubmissionTask(currentTask.value)
 ));
 
 function syncStoredEmbedLandingState() {
@@ -371,16 +397,37 @@ function selectWorkspaceAnnotation(item: AnnotationWorkspaceItem | null, source:
   setActiveWorkspaceAnnotation(item.type, item.id);
 }
 
+function handleTextAnnotationCollapseCommand(payload: AnnotationWorkspaceTextCollapsePayload) {
+  const ids = payload.ids.filter((id) => id.trim().length > 0);
+  if (ids.length === 0) return;
+
+  if (payload.mode === 'collapse-all') {
+    toolStore.setTextAnnotationsCollapsed(ids, true);
+    return;
+  }
+
+  if (payload.mode === 'expand-all') {
+    toolStore.setTextAnnotationsCollapsed(ids, false);
+    return;
+  }
+
+  toolStore.setTextAnnotationsCollapsed(ids, true);
+  if (payload.selectedId && ids.includes(payload.selectedId)) {
+    toolStore.setTextAnnotationsCollapsed([payload.selectedId], false);
+    setActiveWorkspaceAnnotation('text', payload.selectedId);
+  }
+}
+
 function resolvePreferredWorkspaceAnnotation(): AnnotationWorkspaceItem | null {
   const target = externalEntryTarget.value;
   if (target) {
-    const matched = filteredAnnotationItems.value.find((item) => item.id === target.annotationId && item.type === target.annotationType);
+    const matched = scopedAnnotationItems.value.find((item) => item.id === target.annotationId && item.type === target.annotationType);
     if (matched) return matched;
   }
 
   const persisted = persistedAnnotationKey.value;
   if (persisted) {
-    const matched = filteredAnnotationItems.value.find((item) => (
+    const matched = scopedAnnotationItems.value.find((item) => (
       buildAnnotationSelectionKey(currentTask.value?.id ?? null, item.type, item.id) === persisted
     ));
     if (matched) return matched;
@@ -538,6 +585,7 @@ function handleCopyFeedback(payload: {
 }
 
 async function handleTableOpenAnnotation(item: AnnotationWorkspaceItem) {
+  annotationFilter.value = 'all';
   await locateAnnotation(item);
   enterAnnotationDetail(item);
 }
@@ -545,14 +593,17 @@ async function handleTableOpenAnnotation(item: AnnotationWorkspaceItem) {
 async function updateSelectedAnnotationSeverity(severity: AnnotationSeverity | undefined) {
   if (!selectedAnnotation.value || !canEditSelectedSeverity.value) return;
   const { saveAnnotationSeverity } = await import('@/composables/useAnnotationSeveritySync');
-  await saveAnnotationSeverity(selectedAnnotation.value.type, selectedAnnotation.value.id, severity);
+  await saveAnnotationSeverity(selectedAnnotation.value.type, selectedAnnotation.value.id, severity, {
+    formId: currentTask.value?.formId ?? null,
+    taskId: currentTask.value?.id ?? null,
+  });
 }
 
 const annotationCheckBlockers = ref<{ annotationId: string; annotationType: string; stateLabel: string }[]>([]);
 
 async function confirmCurrentData() {
   if (!currentTask.value) {
-    confirmError.value = '当前未匹配到对应单据，无法确认当前数据';
+    confirmError.value = '当前未匹配到对应单据，无法保存新增证据';
     return;
   }
   if (confirmSaving.value || !canConfirmCurrentData.value) return;
@@ -624,12 +675,12 @@ async function confirmCurrentData() {
       },
     });
     if (saved) {
-      emitToast({ message: '确认数据已保存，可回外部平台继续流转', level: 'success' });
+      emitToast({ message: '新增证据已保存，可继续流转', level: 'success' });
       await nextTick();
       await confirmedRecordsRestorer.restoreConfirmedRecordsIntoScene(true);
     }
   } catch (error) {
-    confirmError.value = error instanceof Error ? error.message : '确认当前数据失败';
+    confirmError.value = error instanceof Error ? error.message : '保存新增证据失败';
   } finally {
     confirmSaving.value = false;
   }
@@ -638,10 +689,39 @@ async function confirmCurrentData() {
 async function handleResubmitTask() {
   if (!currentTask.value || !canResubmitCurrentTask.value || resubmitLoading.value) return;
 
+  const task = currentTask.value;
   resubmitLoading.value = true;
   confirmError.value = null;
   try {
-    await userStore.submitTaskToNextNode(currentTask.value.id);
+    const preflight = await runReviewSubmitPreflight({
+      hasUnsavedBlockingData: hasUnsavedPendingData.value,
+      taskId: task.id,
+      currentNode: task.currentNode,
+      checkAnnotations: () => reviewAnnotationCheck({
+        taskId: task.id,
+        formId: task.formId || undefined,
+        currentNode: task.currentNode,
+        intent: 'submit_next',
+        includedTypes: ['text', 'cloud', 'rect'],
+      }),
+    });
+    if (!preflight.allowed) {
+      confirmError.value = preflight.message || '批注检查失败，请稍后重试';
+      return;
+    }
+
+    const notifiedExternalWorkflow = notifyParentWorkflowAction({
+      action: 'active',
+      taskId: task.id,
+      formId: task.formId?.trim() || undefined,
+      source: 'designer-comment-handling-panel',
+    });
+    if (notifiedExternalWorkflow) {
+      emitToast({ message: '已通知外部流程重新流转', level: 'success' });
+      return;
+    }
+
+    await userStore.submitTaskToNextNode(task.id);
     await refreshCurrentTask();
     emitToast({ message: '已确认再次提交流转', level: 'success' });
   } catch (error) {
@@ -961,13 +1041,16 @@ onBeforeUnmount(() => {
               :can-edit-severity="canEditSelectedSeverity"
               :show-tool-launcher="false"
               :timeline-designer-only="true"
+              :timeline-context-form-id="timelineContextFormId"
+              :timeline-context-task-id="timelineContextTaskId"
+              :timeline-allow-review-actions="timelineAllowReviewActions"
               :list-scroll-top="annotationListScrollTop"
               timeline-placeholder="输入处理说明，或补充给校核人的说明..."
               timeline-submit-label="发送回复"
-              confirm-action-label="确认当前数据"
+              confirm-action-label="保存新增证据"
               :confirm-hint="currentTask
-                ? '处理动作与测量证据需要先确认保存，后续外部流转才能继续。'
-                : '当前未匹配到对应单据，回复和历史可继续查看，但本页不能确认保存处理结果。'"
+                ? '批注处理结果会自动保存；仅新增测量、几何批注或截图证据时需要保存。'
+                : '当前未匹配到对应单据，回复和历史可继续查看，但本页不能保存新增证据。'"
               empty-title="当前范围内还没有可处理的批注"
               empty-description="请选择退回任务，或等待对应 form_id 的批注同步后再处理。"
               @update:active-filter="annotationFilter = $event"
@@ -975,6 +1058,7 @@ onBeforeUnmount(() => {
               @update:list-scroll-top="annotationListScrollTop = $event"
               @select-annotation="selectWorkspaceAnnotation"
               @open-annotation="enterAnnotationDetail"
+              @collapse-text-annotations="handleTextAnnotationCollapseCommand"
               @locate-annotation="(item) => void locateAnnotation(item)"
               @locate-measurement="locateMeasurement"
               @start-measurement="(kind) => void startMeasurement(kind)"
@@ -1014,20 +1098,24 @@ onBeforeUnmount(() => {
               :can-edit-severity="canEditSelectedSeverity"
               :show-tool-launcher="false"
               :timeline-designer-only="true"
+              :timeline-context-form-id="timelineContextFormId"
+              :timeline-context-task-id="timelineContextTaskId"
+              :timeline-allow-review-actions="timelineAllowReviewActions"
               :show-detail-back="canReturnToAnnotationList"
               detail-back-label="返回批注列表"
               timeline-placeholder="输入处理说明，或补充给校核人的说明..."
               timeline-submit-label="发送回复"
-              confirm-action-label="确认当前数据"
+              confirm-action-label="保存新增证据"
               :confirm-hint="currentTask
-                ? '处理动作与测量证据需要先确认保存，后续外部流转才能继续。'
-                : '当前未匹配到对应单据，回复和历史可继续查看，但本页不能确认保存处理结果。'"
+                ? '批注处理结果会自动保存；仅新增测量、几何批注或截图证据时需要保存。'
+                : '当前未匹配到对应单据，回复和历史可继续查看，但本页不能保存新增证据。'"
               empty-title="当前范围内还没有可处理的批注"
               empty-description="请选择退回任务，或等待对应 form_id 的批注同步后再处理。"
               @back="backToAnnotationList"
               @update:active-filter="annotationFilter = $event"
               @update:confirm-note="confirmNote = $event"
               @select-annotation="selectWorkspaceAnnotation"
+              @collapse-text-annotations="handleTextAnnotationCollapseCommand"
               @locate-annotation="(item) => void locateAnnotation(item)"
               @locate-measurement="locateMeasurement"
               @start-measurement="(kind) => void startMeasurement(kind)"
@@ -1038,7 +1126,7 @@ onBeforeUnmount(() => {
                   <div>
                     <div class="text-sm font-semibold text-slate-950">任务级动作</div>
                     <div class="mt-1 text-xs leading-5 text-slate-500">
-                      这里是设计侧的任务级动作入口。先确认当前数据，再回外部平台或再次提交。
+                      这里是设计侧的任务级动作入口。批注处理结果会自动保存；如补充了测量或几何证据，请先保存新增证据。
                     </div>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
@@ -1068,7 +1156,7 @@ onBeforeUnmount(() => {
                       :disabled="!canResubmitCurrentTask || hasUnsavedPendingData || resubmitLoading"
                       @click="void handleResubmitTask()">
                       <Send class="h-4 w-4" />
-                      {{ resubmitLoading ? '提交中...' : '处理完成后再次提交' }}
+                      {{ resubmitLoading ? '提交中...' : '流转回校对' }}
                     </button>
                   </div>
                   <div v-if="currentTask" class="text-xs text-slate-500">

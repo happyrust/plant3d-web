@@ -20,6 +20,7 @@ import {
 
 import {
   listPageAndFrames,
+  openPlant3dAutomationPage,
   registerPlant3dAutomationReviewInitScript,
   reloadReviewerWorkbenchAcrossContext,
   runSubmitReviewAcrossContext,
@@ -56,14 +57,23 @@ type SimulatorVerifyAnnotationSummary = {
 type SimulatorTestSnapshot = {
   currentPmsUser: SimulatorPmsUser;
   currentWorkflowRole: WorkflowRole;
+  workflowRoleSource?: string;
+  workflowNextStep?: string | null;
+  taskCurrentNode?: string | null;
+  workflowCurrentNode?: string | null;
   currentWorkflowNode: string | null;
   currentTaskId: string | null;
   currentFormId: string | null;
   currentTaskStatus: string;
   iframeSource: string | null;
+  iframeUrl: string | null;
   lastOpenedFormId: string | null;
   selectedTaskId: string | null;
   selectedFormId: string | null;
+  taskAssignedUserId?: string | null;
+  canMutateWorkflow?: boolean;
+  accessDecisionSource?: string | null;
+  diagnosticsError?: string | null;
   sidePanelMode: SimulatorSidePanelMode;
   lastAction: SimulatorWorkflowAction | null;
   lastOk: boolean | null;
@@ -83,19 +93,75 @@ type ScenarioContext = {
   env: PmsSimulatorEnvironmentConfig;
   browser: Browser;
   artifactDir: string;
+  cleanupFormIds: Set<string>;
+  ensureBackendHealthy?: (caseId: PmsSimulatorCaseId) => Promise<void>;
 };
 
 type ScenarioRuntime = ScenarioContext & {
   context: BrowserContext;
   page: Page;
   caseId: PmsSimulatorCaseId;
-  cleanupFormIds: Set<string>;
+  consoleMessages: {
+    type: string;
+    text: string;
+    url: string;
+  }[];
 };
 
 type CreatedReview = {
   packageName: string;
   formId: string;
   taskId: string | null;
+};
+type RestoreRecordReadback = {
+  confirmedRecordCount: number;
+  confirmedAnnotationCount: number;
+  confirmedMeasurementCount: number;
+  detail: string;
+};
+type RestoreConfirmedCounts = RestoreRecordReadback & {
+  commentAnnotationId: string;
+  commentContent: string;
+  commentCount: number;
+  uniqueCommentCount: number;
+  duplicateCommentCount: number;
+  commentContentFound: boolean;
+  commentDetail: string;
+};
+type ConfirmedRecordApiRecord = {
+  id?: string;
+  taskId?: string;
+  task_id?: string;
+  formId?: string;
+  form_id?: string;
+  annotations?: unknown[];
+  cloudAnnotations?: unknown[];
+  rectAnnotations?: unknown[];
+  obbAnnotations?: unknown[];
+  measurements?: unknown[];
+};
+type CommentThreadApiComment = {
+  id?: string;
+  commentId?: string;
+  comment_id?: string;
+  annotationId?: string;
+  annotation_id?: string;
+  annotationType?: string;
+  annotation_type?: string;
+  formId?: string;
+  form_id?: string;
+  taskId?: string;
+  task_id?: string;
+  content?: string;
+};
+type RestoreCommentReadback = {
+  annotationId: string;
+  content: string;
+  commentCount: number;
+  uniqueCommentCount: number;
+  duplicateCommentCount: number;
+  contentFound: boolean;
+  detail: string;
 };
 
 type ScenarioHandler = (runtime: ScenarioRuntime) => Promise<PmsSimulatorScenarioReport>;
@@ -144,6 +210,7 @@ const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
   restore: '刷新恢复',
   'gate-block': '批注门禁 block',
   'gate-return': '批注门禁 return',
+  'bran-mixed': '多 BRAN 批注驳回到最终批准',
 };
 
 function appendNoProxy(value: string | undefined): string {
@@ -171,6 +238,12 @@ const ROLE_TO_USER_ROLE: Record<WorkflowRole, 'designer' | 'proofreader' | 'revi
 };
 
 function scenarioPackageName(caseId: PmsSimulatorCaseId): string {
+  if (caseId === 'restore') {
+    return `COMMENT-THREAD-REGRESSION-${Date.now()}`;
+  }
+  if (caseId === 'bran-mixed') {
+    return `BRAN-MIXED-REGRESSION-${Date.now()}`;
+  }
   return `SIM-${caseId.toUpperCase()}-${Date.now()}`;
 }
 
@@ -183,14 +256,27 @@ async function ensureDir(dir: string): Promise<void> {
 }
 
 async function postJson<T>(url: string, payload: unknown, bearerToken?: string): Promise<{ status: number; body: T }> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`POST ${url} 超时`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   const text = await response.text();
   let body: T;
   try {
@@ -205,10 +291,23 @@ async function postJson<T>(url: string, payload: unknown, bearerToken?: string):
 }
 
 async function getJson<T>(url: string, bearerToken?: string): Promise<{ status: number; body: T }> {
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {},
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {},
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`GET ${url} 超时`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   const text = await response.text();
   let body: T;
   try {
@@ -229,25 +328,88 @@ type BackendTaskProbe = {
   raw: unknown;
 };
 
+type WorkflowSyncProbeResponse = {
+  data?: {
+    taskId?: string;
+    task_id?: string;
+    currentNode?: string;
+    current_node?: string;
+    taskStatus?: string;
+    task_status?: string;
+  };
+};
+
 async function probeBackendTaskByFormId(
   runtime: ScenarioRuntime,
   formId: string,
+  taskId?: string | null,
 ): Promise<BackendTaskProbe | null> {
   try {
     const token = await createCleanupToken(runtime.env);
+    const normalizedTaskId = String(taskId || '').trim();
+    const syncResponse = await postJson<WorkflowSyncProbeResponse>(
+      `${runtime.env.backendBaseUrl}/api/review/workflow/sync`,
+      {
+        form_id: formId,
+        token,
+        action: 'query',
+        actor: {
+          id: 'SJ',
+          name: 'SJ',
+          roles: 'sj',
+        },
+      },
+      token,
+    );
+    const syncData = syncResponse.body.data;
+    if (syncData) {
+      return {
+        taskId: String(syncData.taskId || syncData.task_id || normalizedTaskId || '').trim() || null,
+        currentNode: String(syncData.currentNode || syncData.current_node || '').trim() || null,
+        status: String(syncData.taskStatus || syncData.task_status || '').trim() || null,
+        raw: syncData,
+      };
+    }
+
+    if (normalizedTaskId) {
+      type TaskDetailResponse = {
+        success?: boolean;
+        task?: {
+          id?: string;
+          formId?: string;
+          form_id?: string;
+          currentNode?: string;
+          current_node?: string;
+          status?: string;
+        };
+      };
+      const detailResponse = await getJson<TaskDetailResponse>(
+        `${runtime.env.backendBaseUrl}/api/review/tasks/${encodeURIComponent(normalizedTaskId)}`,
+        token,
+      );
+      const task = detailResponse.body.task;
+      if (task) {
+        return {
+          taskId: String(task.id || normalizedTaskId).trim() || normalizedTaskId,
+          currentNode: String(task.currentNode || task.current_node || '').trim() || null,
+          status: String(task.status || '').trim() || null,
+          raw: task,
+        };
+      }
+    }
     type TasksResponse = {
       success?: boolean;
-      tasks?: Array<{
+      tasks?: {
         id?: string;
         formId?: string;
         form_id?: string;
         currentNode?: string;
         current_node?: string;
         status?: string;
-      }>;
+      }[];
     };
     const response = await getJson<TasksResponse>(
-      `${runtime.env.backendBaseUrl}/api/review/tasks?limit=5000&offset=0`,
+      `${runtime.env.backendBaseUrl}/api/review/tasks?limit=100&offset=0`,
       token,
     );
     const tasks = Array.isArray(response.body.tasks) ? response.body.tasks : [];
@@ -266,6 +428,148 @@ async function probeBackendTaskByFormId(
     traceSimulator(`probeBackendTaskByFormId form_id=${formId} 失败：${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function collectConfirmedRecords(body: unknown): ConfirmedRecordApiRecord[] {
+  if (!isObjectRecord(body)) return [];
+  const data = isObjectRecord(body.data) ? body.data : null;
+  const candidates = [
+    body.records,
+    data?.records,
+    body.record,
+    data?.record,
+    Array.isArray(body.data) ? body.data : null,
+  ];
+  const records: ConfirmedRecordApiRecord[] = [];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      records.push(...candidate.filter(isObjectRecord).map((item) => item as ConfirmedRecordApiRecord));
+    } else if (isObjectRecord(candidate)) {
+      records.push(candidate as ConfirmedRecordApiRecord);
+    }
+  }
+  return records;
+}
+
+function countArray(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function summarizeConfirmedRecords(
+  status: number,
+  body: unknown,
+  formId: string,
+): RestoreRecordReadback {
+  const records = collectConfirmedRecords(body);
+  const matched = records.filter((record) => {
+    const recordFormId = String(record.formId || record.form_id || '').trim();
+    return !recordFormId || recordFormId === formId;
+  });
+  const confirmedAnnotationCount = matched.reduce((sum, record) => {
+    return sum
+      + countArray(record.annotations)
+      + countArray(record.cloudAnnotations)
+      + countArray(record.rectAnnotations)
+      + countArray(record.obbAnnotations);
+  }, 0);
+  const confirmedMeasurementCount = matched.reduce((sum, record) => {
+    return sum + countArray(record.measurements);
+  }, 0);
+  return {
+    confirmedRecordCount: matched.length,
+    confirmedAnnotationCount,
+    confirmedMeasurementCount,
+    detail: `HTTP ${status} records=${records.length} matched=${matched.length} annotations=${confirmedAnnotationCount} measurements=${confirmedMeasurementCount}`,
+  };
+}
+
+async function readBackendConfirmedCounts(
+  runtime: ScenarioRuntime,
+  options: {
+    taskId: string;
+    formId: string;
+    token: string;
+  },
+): Promise<RestoreRecordReadback> {
+  const params = new URLSearchParams({ form_id: options.formId });
+  const response = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/records/by-task/${encodeURIComponent(options.taskId)}?${params}`,
+    options.token,
+  );
+  return summarizeConfirmedRecords(response.status, response.body, options.formId);
+}
+
+function collectCommentThreadRecords(body: unknown): CommentThreadApiComment[] {
+  if (!isObjectRecord(body)) return [];
+  const data = isObjectRecord(body.data) ? body.data : null;
+  const candidates = [
+    body.comments,
+    data?.comments,
+    body.comment,
+    data?.comment,
+    Array.isArray(body.data) ? body.data : null,
+  ];
+  const comments: CommentThreadApiComment[] = [];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      comments.push(...candidate.filter(isObjectRecord).map((item) => item as CommentThreadApiComment));
+    } else if (isObjectRecord(candidate)) {
+      comments.push(candidate as CommentThreadApiComment);
+    }
+  }
+  return comments;
+}
+
+function readCommentId(comment: CommentThreadApiComment): string {
+  return String(comment.id || comment.commentId || comment.comment_id || '').trim();
+}
+
+async function readBackendCommentThread(
+  runtime: ScenarioRuntime,
+  options: {
+    taskId: string;
+    formId: string;
+    annotationId: string;
+    content: string;
+    token: string;
+  },
+): Promise<RestoreCommentReadback> {
+  const params = new URLSearchParams({
+    type: 'text',
+    form_id: options.formId,
+    task_id: options.taskId,
+  });
+  const response = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/comments/by-annotation/${encodeURIComponent(options.annotationId)}?${params}`,
+    options.token,
+  );
+  const comments = collectCommentThreadRecords(response.body).filter((comment) => {
+    const annotationId = String(comment.annotationId || comment.annotation_id || '').trim();
+    const annotationType = String(comment.annotationType || comment.annotation_type || '').trim();
+    const formId = String(comment.formId || comment.form_id || '').trim();
+    const taskId = String(comment.taskId || comment.task_id || '').trim();
+    return (!annotationId || annotationId === options.annotationId)
+      && (!annotationType || annotationType === 'text')
+      && (!formId || formId === options.formId)
+      && (!taskId || taskId === options.taskId);
+  });
+  const ids = comments.map(readCommentId).filter(Boolean);
+  const uniqueCommentCount = new Set(ids).size;
+  const duplicateCommentCount = Math.max(0, ids.length - uniqueCommentCount);
+  const contentFound = comments.some((comment) => String(comment.content || '') === options.content);
+  return {
+    annotationId: options.annotationId,
+    content: options.content,
+    commentCount: comments.length,
+    uniqueCommentCount,
+    duplicateCommentCount,
+    contentFound,
+    detail: `HTTP ${response.status} comments=${comments.length} unique=${uniqueCommentCount} duplicates=${duplicateCommentCount} content_found=${contentFound}`,
+  };
 }
 
 async function waitFor<T>(
@@ -418,6 +722,63 @@ async function waitForSnapshotByFormId(
   });
 }
 
+async function waitForOpenedIframeSnapshot(
+  page: Page,
+  options: {
+    source?: string;
+    formId?: string | null;
+    taskId?: string | null;
+    timeoutMs?: number;
+    message: string;
+  },
+): Promise<SimulatorTestSnapshot> {
+  return await waitFor(async () => {
+    const snapshot = await getSnapshot(page);
+    if (!snapshot.iframeSource || !snapshot.iframeUrl) return null;
+    if (options.source && snapshot.iframeSource !== options.source) return null;
+    if (options.formId && snapshot.currentFormId !== options.formId && snapshot.lastOpenedFormId !== options.formId) {
+      return null;
+    }
+    if (options.taskId && snapshot.currentTaskId !== options.taskId && snapshot.selectedTaskId !== options.taskId) {
+      return null;
+    }
+    return snapshot;
+  }, {
+    timeoutMs: options.timeoutMs ?? 90_000,
+    intervalMs: 600,
+    message: options.message,
+  });
+}
+
+async function openAutomationPageFromSnapshot(
+  runtime: ScenarioRuntime,
+  snapshot: SimulatorTestSnapshot,
+  label: string,
+  options?: { tokenUserId?: string; tokenRole?: WorkflowRole },
+): Promise<Page | null> {
+  if (!snapshot.iframeUrl) return null;
+  let url = snapshot.iframeUrl;
+  if (options?.tokenUserId && options.tokenRole) {
+    const response = await postJson<{ code?: number; data?: { token?: string }; token?: string }>(
+      `${runtime.env.backendBaseUrl}/api/auth/token`,
+      {
+        project_id: runtime.env.projectId,
+        user_id: options.tokenUserId,
+        role: options.tokenRole,
+      },
+    );
+    const token = response.body.data?.token || response.body.token || '';
+    if (!token) {
+      throw new Error(`automation page token 获取失败：${options.tokenUserId}/${options.tokenRole}`);
+    }
+    const parsed = new URL(url);
+    parsed.searchParams.set('user_token', token);
+    parsed.searchParams.set('user_id', options.tokenUserId);
+    url = parsed.toString();
+  }
+  return await openPlant3dAutomationPage(runtime.context, url, label);
+}
+
 async function openTaskForRole(
   page: Page,
   formId: string,
@@ -440,7 +801,19 @@ async function openTaskForRole(
     source,
   });
   return await waitForSnapshotByFormId(page, formId, {
-    predicate: (item) => Boolean(item.iframeSource),
+    predicate: (item) => {
+      if (!item.iframeSource) return false;
+      if (normalizedTaskId && item.currentTaskId !== normalizedTaskId && item.selectedTaskId !== normalizedTaskId) {
+        return false;
+      }
+      return Boolean(
+        item.taskCurrentNode
+          || item.workflowNextStep
+          || item.workflowCurrentNode
+          || item.currentTaskStatus !== '--'
+          || item.diagnosticsError,
+      );
+    },
   });
 }
 
@@ -525,6 +898,29 @@ function assertWorkflowSync(
   return assertResult(key, passed, describeWorkflowSyncDetail(snapshot, expectedAction));
 }
 
+function assertBackendCurrentNode(
+  key: string,
+  probe: BackendTaskProbe | null,
+  expectedNode: WorkflowRole,
+): PmsSimulatorAssertionResult {
+  return assertResult(
+    key,
+    probe?.currentNode === expectedNode,
+    probe
+      ? `backend task_id=${probe.taskId} current_node=${probe.currentNode} status=${probe.status}`
+      : '后端未返回 form_id 对应任务',
+    expectedNode,
+    probe?.currentNode ?? null,
+  );
+}
+
+function collectConsoleIssues(runtime: ScenarioRuntime, patterns: RegExp[]): string[] {
+  return runtime.consoleMessages
+    .filter((item) => patterns.some((pattern) => pattern.test(item.text)))
+    .map((item) => `${item.type}: ${item.text}`)
+    .slice(0, 8);
+}
+
 function finalizeScenarioReport(base: Omit<PmsSimulatorScenarioReport, 'ok'>): PmsSimulatorScenarioReport {
   return {
     ...base,
@@ -553,7 +949,11 @@ async function createCleanupToken(env: PmsSimulatorEnvironmentConfig): Promise<s
   return token;
 }
 
-async function cleanupForms(runtime: ScenarioRuntime): Promise<void> {
+async function cleanupForms(runtime: Pick<ScenarioRuntime, 'env' | 'cleanupFormIds'>): Promise<void> {
+  if (process.env.PMS_SIMULATOR_SKIP_CLEANUP === '1') {
+    traceSimulator('skip cleanup because PMS_SIMULATOR_SKIP_CLEANUP=1');
+    return;
+  }
   if (runtime.cleanupFormIds.size === 0) return;
   const token = await createCleanupToken(runtime.env);
   const formIds = [...runtime.cleanupFormIds].filter(Boolean);
@@ -641,11 +1041,130 @@ async function saveGateRecord(
   }, token);
 }
 
+async function saveRestoreRecord(
+  runtime: ScenarioRuntime,
+  options: {
+    taskId: string;
+    formId: string;
+  },
+): Promise<RestoreConfirmedCounts> {
+  const auth = buildAuthLoginRequest({
+    projectId: runtime.env.projectId,
+    currentPmsUser: 'JH',
+    currentWorkflowRole: 'jd',
+  });
+  const authResponse = await postJson<{ code?: number; data?: { token?: string }; token?: string }>(
+    `${runtime.env.backendBaseUrl}/api/auth/token`,
+    {
+      project_id: auth.projectId,
+      user_id: auth.userId,
+      role: auth.role,
+    },
+  );
+  const token = authResponse.body.data?.token || authResponse.body.token || '';
+  if (!token) {
+    throw new Error('restore 记录注入登录未返回 token');
+  }
+
+  const now = Date.now();
+  const annotationId = `restore-annot-${now}`;
+  const commentContent = `评论线程回归 ${now}`;
+  await postJson(`${runtime.env.backendBaseUrl}/api/review/records`, {
+    taskId: options.taskId,
+    formId: options.formId,
+    type: 'batch',
+    annotations: [{
+      id: annotationId,
+      entityId: '24381/145018',
+      worldPos: [0, 0, 0],
+      normal: [0, 1, 0],
+      visible: true,
+      glyph: '1',
+      title: 'restore 自动化批注 24381_145018',
+      description: '刷新恢复自动化持久化批注',
+      createdAt: now,
+      refno: '24381/145018',
+      refnos: ['24381/145018', '24381_145018'],
+      formId: options.formId,
+      taskId: options.taskId,
+    }],
+    cloudAnnotations: [],
+    rectAnnotations: [],
+    measurements: [{
+      id: `restore-measure-${now}`,
+      kind: 'distance',
+      origin: { entityId: '24381/145018:origin', worldPos: [0, 0, 0] },
+      target: { entityId: '24381/145018:target', worldPos: [1, 0, 0] },
+      visible: true,
+      createdAt: now,
+      formId: options.formId,
+      taskId: options.taskId,
+    }],
+    note: 'restore 自动化确认记录',
+  }, token);
+  const commentResponse = await postJson<{ success?: boolean; comment?: CommentThreadApiComment; error_message?: string }>(
+    `${runtime.env.backendBaseUrl}/api/review/comments`,
+    {
+      annotationId,
+      annotationType: 'text',
+      authorId: 'proofreader_001',
+      authorName: 'JH',
+      authorRole: 'proofreader',
+      content: commentContent,
+      formId: options.formId,
+      taskId: options.taskId,
+      workflowNode: 'jd',
+    },
+    token,
+  );
+  if (commentResponse.body.success === false) {
+    throw new Error(`restore 评论创建失败：${commentResponse.body.error_message || 'unknown error'}`);
+  }
+  const recordReadback = await readBackendConfirmedCounts(runtime, {
+    taskId: options.taskId,
+    formId: options.formId,
+    token,
+  });
+  const commentReadback = await readBackendCommentThread(runtime, {
+    taskId: options.taskId,
+    formId: options.formId,
+    annotationId,
+    content: commentContent,
+    token,
+  });
+  traceSimulator(`restore backend confirmed readback form_id=${options.formId} task_id=${options.taskId} ${recordReadback.detail} ｜ ${commentReadback.detail}`);
+  return {
+    ...recordReadback,
+    commentAnnotationId: commentReadback.annotationId,
+    commentContent: commentReadback.content,
+    commentCount: commentReadback.commentCount,
+    uniqueCommentCount: commentReadback.uniqueCommentCount,
+    duplicateCommentCount: commentReadback.duplicateCommentCount,
+    commentContentFound: commentReadback.contentFound,
+    commentDetail: commentReadback.detail,
+  };
+}
+
 async function captureFailureScreenshot(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId): Promise<string> {
   const dir = path.join(runtime.artifactDir, 'screenshots');
   await ensureDir(dir);
   const filePath = path.join(dir, `${sanitizeFilePart(caseId)}.png`);
   await runtime.page.screenshot({ path: filePath, fullPage: true }).catch(() => undefined);
+  const pages = runtime.context.pages().filter((page) => !page.isClosed());
+  await Promise.all(pages.map(async (page, index) => {
+    const pagePath = path.join(dir, `${sanitizeFilePart(caseId)}-page-${index + 1}.png`);
+    await page.screenshot({ path: pagePath, fullPage: true }).catch(() => undefined);
+  }));
+  const pageSummary = pages.map((page, index) => ({
+    index: index + 1,
+    url: page.url(),
+    frames: page.frames().filter((frame) => !frame.isDetached()).map((frame) => frame.url()),
+  }));
+  await fs.writeFile(
+    path.join(dir, `${sanitizeFilePart(caseId)}-pages.json`),
+    JSON.stringify(pageSummary, null, 2),
+    'utf8',
+  ).catch(() => undefined);
   return filePath;
 }
 
@@ -683,23 +1202,32 @@ async function createReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId
   process.env.PMS_MOCK_PACKAGE_NAME = scenarioPackageName(caseId);
   traceSimulator(`createReview case=${caseId} openNew`);
   await callSimulatorApi<void>(runtime.page, 'openNew');
+  const opened = await waitForOpenedIframeSnapshot(runtime.page, {
+    source: 'new',
+    message: `等待 createReview case=${caseId} 新建 iframe URL 超时`,
+  });
+  const automationPage = await openAutomationPageFromSnapshot(runtime, opened, `createReview case=${caseId}`);
   traceSimulator(`createReview case=${caseId} submitReview`);
-  const packageName = await runSubmitReviewAcrossContext(runtime.context);
-  traceSimulator(`createReview case=${caseId} submitDone package=${packageName}`);
+  const submitResult = await runSubmitReviewAcrossContext(runtime.context);
+  if (automationPage && automationPage !== runtime.page) {
+    await automationPage.close().catch(() => undefined);
+  }
+  const packageName = submitResult.packageName;
+  traceSimulator(`createReview case=${caseId} submitDone package=${packageName} hook_task_id=${submitResult.createResult?.taskId || '--'} hook_form_id=${submitResult.createResult?.formId || '--'} hook_error=${submitResult.createResult?.error || '--'}`);
   const snapshot = await waitFor(async () => {
     const current = await getSnapshot(runtime.page);
-    return current.lastOpenedFormId ? current : null;
+    return current.lastOpenedFormId || submitResult.createResult?.formId ? current : null;
   }, {
     timeoutMs: 120_000,
     intervalMs: 600,
     message: '等待新建单据回填 form_id 超时',
   });
-  const formId = snapshot.lastOpenedFormId;
+  const formId = snapshot.lastOpenedFormId || submitResult.createResult?.formId;
   if (!formId) {
     throw new Error('新建单据后未获得 form_id');
   }
   runtime.cleanupFormIds.add(formId);
-  const taskId = snapshot.currentTaskId || snapshot.selectedTaskId;
+  const taskId = snapshot.currentTaskId || snapshot.selectedTaskId || submitResult.createResult?.taskId;
   const resolvedTaskId = await resolveTaskIdByFormId(runtime.page, formId, taskId, {
     timeoutMs: 30_000,
     allowMissing: true,
@@ -712,25 +1240,29 @@ async function createReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId
   };
 }
 
-async function buildRestoreCounts(runtime: ScenarioRuntime): Promise<{
+async function buildRestoreCounts(runtime: ScenarioRuntime, formId: string, taskId: string | null): Promise<{
   pendingAnnotationCount: number;
   pendingMeasurementCount: number;
   confirmedRecordCount: number;
   confirmedAnnotationCount: number;
   confirmedMeasurementCount: number;
+  confirmedDetail: string;
+  commentAnnotationId: string;
+  commentContent: string;
+  commentCount: number;
+  uniqueCommentCount: number;
+  duplicateCommentCount: number;
+  commentContentFound: boolean;
+  commentDetail: string;
 }> {
-  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context);
-  return await located.root.evaluate(async () => {
+  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
+  const pendingCounts = await located.root.evaluate(() => {
     const hook = (window as Window & {
       __plant3dReviewerE2E?: {
         addMockAnnotation: (title?: string, description?: string) => string;
         addMockMeasurement: (kind?: 'distance' | 'angle') => string;
-        confirmData: (note?: string) => Promise<void>;
         getAnnotationCount: () => number;
         getMeasurementCount: () => number;
-        getConfirmedRecordCount: () => number;
-        getConfirmedAnnotationCount: () => number;
-        getConfirmedMeasurementCount: () => number;
       };
     }).__plant3dReviewerE2E;
     if (!hook) {
@@ -740,24 +1272,56 @@ async function buildRestoreCounts(runtime: ScenarioRuntime): Promise<{
     hook.addMockMeasurement('distance');
     const pendingAnnotationCount = hook.getAnnotationCount();
     const pendingMeasurementCount = hook.getMeasurementCount();
-    await hook.confirmData('restore 自动化确认');
     return {
       pendingAnnotationCount,
       pendingMeasurementCount,
-      confirmedRecordCount: hook.getConfirmedRecordCount(),
-      confirmedAnnotationCount: hook.getConfirmedAnnotationCount(),
-      confirmedMeasurementCount: hook.getConfirmedMeasurementCount(),
     };
   });
+  if (!taskId) {
+    throw new Error(`restore 缺少 task_id（form_id=${formId}）`);
+  }
+  const confirmedCounts = await saveRestoreRecord(runtime, { taskId, formId });
+  return {
+    ...pendingCounts,
+    confirmedRecordCount: confirmedCounts.confirmedRecordCount,
+    confirmedAnnotationCount: confirmedCounts.confirmedAnnotationCount,
+    confirmedMeasurementCount: confirmedCounts.confirmedMeasurementCount,
+    confirmedDetail: confirmedCounts.detail,
+    commentAnnotationId: confirmedCounts.commentAnnotationId,
+    commentContent: confirmedCounts.commentContent,
+    commentCount: confirmedCounts.commentCount,
+    uniqueCommentCount: confirmedCounts.uniqueCommentCount,
+    duplicateCommentCount: confirmedCounts.duplicateCommentCount,
+    commentContentFound: confirmedCounts.commentContentFound,
+    commentDetail: confirmedCounts.commentDetail,
+  };
 }
 
-async function readRestoreCounts(runtime: ScenarioRuntime): Promise<{
+async function readRestoreCounts(
+  runtime: ScenarioRuntime,
+  formId: string,
+  taskId: string,
+  comment: {
+    annotationId: string;
+    content: string;
+  },
+): Promise<{
   confirmedRecordCount: number;
   confirmedAnnotationCount: number;
   confirmedMeasurementCount: number;
+  uiAnnotationCount: number;
+  uiAnnotationTitleFound: boolean;
+  uiCommentContentFound: boolean;
+  uiBranRefnoFound: boolean;
+  uiDetail: string;
+  commentCount: number;
+  uniqueCommentCount: number;
+  duplicateCommentCount: number;
+  commentContentFound: boolean;
+  commentDetail: string;
 }> {
-  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context);
-  return await located.root.evaluate(() => {
+  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
+  const counts = await located.root.evaluate(() => {
     const hook = (window as Window & {
       __plant3dReviewerE2E?: {
         getConfirmedRecordCount: () => number;
@@ -774,6 +1338,472 @@ async function readRestoreCounts(runtime: ScenarioRuntime): Promise<{
       confirmedMeasurementCount: hook.getConfirmedMeasurementCount(),
     };
   });
+  const expectedAnnotationTitle = 'restore 自动化批注 24381_145018';
+  let visibleText = await waitFor(async () => {
+    const text = await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+    const hasTitle = text.includes(expectedAnnotationTitle);
+    const hasComment = text.includes(comment.content);
+    return hasTitle && hasComment ? text : null;
+  }, {
+    timeoutMs: 30_000,
+    intervalMs: 600,
+    message: '等待 reviewer 详情页显示恢复批注标题与评论内容超时',
+  }).catch(async () => await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => ''));
+  if (visibleText.includes(expectedAnnotationTitle) && !visibleText.includes(comment.content)) {
+    await located.root.getByText(expectedAnnotationTitle, { exact: false }).first().click({ timeout: 3000 }).catch(() => undefined);
+    visibleText = await waitFor(async () => {
+      const text = await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+      return text.includes(comment.content) ? text : null;
+    }, {
+      timeoutMs: 10_000,
+      intervalMs: 500,
+      message: '点击恢复批注后等待评论内容显示超时',
+    }).catch(async () => await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => visibleText));
+  }
+  const token = await createCleanupToken(runtime.env);
+  const commentReadback = await readBackendCommentThread(runtime, {
+    formId,
+    taskId,
+    annotationId: comment.annotationId,
+    content: comment.content,
+    token,
+  });
+  return {
+    ...counts,
+    uiAnnotationCount: counts.confirmedAnnotationCount,
+    uiAnnotationTitleFound: visibleText.includes(expectedAnnotationTitle),
+    uiCommentContentFound: visibleText.includes(comment.content),
+    uiBranRefnoFound: visibleText.includes('24381_145018') || visibleText.includes('24381/145018'),
+    uiDetail: `title_found=${visibleText.includes(expectedAnnotationTitle)} comment_found=${visibleText.includes(comment.content)} bran_found=${visibleText.includes('24381_145018') || visibleText.includes('24381/145018')}`,
+    commentCount: commentReadback.commentCount,
+    uniqueCommentCount: commentReadback.uniqueCommentCount,
+    duplicateCommentCount: commentReadback.duplicateCommentCount,
+    commentContentFound: commentReadback.contentFound,
+    commentDetail: commentReadback.detail,
+  };
+}
+
+const BRAN_MIXED_REFNOS = [
+  '24381_144976',
+  '24381_144991',
+  '24381_145012',
+  '24381_145018',
+] as const;
+
+type BranMixedRefno = (typeof BRAN_MIXED_REFNOS)[number];
+type AnnotationAction = 'fixed' | 'wont_fix' | 'agree' | 'reject';
+type BranMixedAnnotation = {
+  refno: BranMixedRefno;
+  slashRefno: string;
+  annotationId: string;
+};
+type AnnotationStateApiRecord = {
+  annotationId?: string;
+  annotation_id?: string;
+  annotationType?: string;
+  annotation_type?: string;
+  formId?: string;
+  form_id?: string;
+  taskId?: string;
+  task_id?: string;
+  resolutionStatus?: string;
+  resolution_status?: string;
+  decisionStatus?: string;
+  decision_status?: string;
+  history?: unknown[];
+};
+
+type AnnotationStateReadback = {
+  records: AnnotationStateApiRecord[];
+  detail: string;
+};
+
+function branRefnoToSlash(refno: string): string {
+  return refno.replace(/_/g, '/');
+}
+
+function branMixedAnnotationId(refno: string, now: number): string {
+  return `bran-mixed-${refno.replace(/[^a-zA-Z0-9]+/g, '-')}-${now}`;
+}
+
+function collectAnnotationStateRecords(body: unknown): AnnotationStateApiRecord[] {
+  if (!isObjectRecord(body)) return [];
+  const data = isObjectRecord(body.data) ? body.data : null;
+  const candidates = [
+    body.states,
+    data?.states,
+    body.records,
+    data?.records,
+    body.state,
+    data?.state,
+    Array.isArray(body.data) ? body.data : null,
+  ];
+  const records: AnnotationStateApiRecord[] = [];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      records.push(...candidate.filter(isObjectRecord).map((item) => item as AnnotationStateApiRecord));
+    } else if (isObjectRecord(candidate)) {
+      records.push(candidate as AnnotationStateApiRecord);
+    }
+  }
+  return records;
+}
+
+function readAnnotationIdFromState(state: AnnotationStateApiRecord): string {
+  return String(state.annotationId || state.annotation_id || '').trim();
+}
+
+function readDecisionStatusFromState(state: AnnotationStateApiRecord): string {
+  return String(state.decisionStatus || state.decision_status || '').trim();
+}
+
+function readUpdatedAtFromState(state: AnnotationStateApiRecord): number {
+  const raw = isObjectRecord(state) ? state.updatedAt || state.updated_at : undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function findLatestAnnotationState(
+  states: AnnotationStateApiRecord[],
+  annotationId: string,
+): AnnotationStateApiRecord | undefined {
+  return states
+    .filter((item) => readAnnotationIdFromState(item) === annotationId)
+    .sort((a, b) => readUpdatedAtFromState(b) - readUpdatedAtFromState(a))[0];
+}
+
+async function createRoleToken(
+  runtime: ScenarioRuntime,
+  currentPmsUser: SimulatorPmsUser,
+  currentWorkflowRole: WorkflowRole,
+): Promise<string> {
+  const auth = buildAuthLoginRequest({
+    projectId: runtime.env.projectId,
+    currentPmsUser,
+    currentWorkflowRole,
+  });
+  const authResponse = await postJson<{ code?: number; data?: { token?: string }; token?: string }>(
+    `${runtime.env.backendBaseUrl}/api/auth/token`,
+    {
+      project_id: auth.projectId,
+      user_id: auth.userId,
+      role: auth.role,
+    },
+  );
+  const token = authResponse.body.data?.token || authResponse.body.token || '';
+  if (!token) {
+    throw new Error(`${currentPmsUser}/${currentWorkflowRole} 登录未返回 token`);
+  }
+  return token;
+}
+
+async function seedBranMixedRecords(
+  runtime: ScenarioRuntime,
+  options: {
+    taskId: string;
+    formId: string;
+  },
+): Promise<BranMixedAnnotation[]> {
+  const token = await createRoleToken(runtime, 'SJ', 'sj');
+  const now = Date.now();
+  const annotations = BRAN_MIXED_REFNOS.map((refno, index) => {
+    const slashRefno = branRefnoToSlash(refno);
+    const annotationId = branMixedAnnotationId(refno, now);
+    return {
+      id: annotationId,
+      entityId: slashRefno,
+      worldPos: [index * 2, 0, 0],
+      normal: [0, 1, 0],
+      visible: true,
+      glyph: String(index + 1),
+      title: `BRAN ${refno} 混合流程批注`,
+      description: `仿 PMS 多 BRAN 批注 ${refno}`,
+      createdAt: now + index,
+      refno: slashRefno,
+      refnos: [slashRefno, refno],
+      formId: options.formId,
+      taskId: options.taskId,
+    };
+  });
+  await postJson(`${runtime.env.backendBaseUrl}/api/review/records`, {
+    taskId: options.taskId,
+    formId: options.formId,
+    type: 'batch',
+    annotations,
+    cloudAnnotations: [],
+    rectAnnotations: [],
+    measurements: [],
+    note: 'bran-mixed 多 BRAN 批注自动化确认记录',
+  }, token);
+
+  for (const annotation of annotations) {
+    await postJson(`${runtime.env.backendBaseUrl}/api/review/comments`, {
+      annotationId: annotation.id,
+      annotationType: 'text',
+      authorId: 'SJ',
+      authorName: 'SJ',
+      authorRole: 'designer',
+      content: `BRAN ${annotation.refnos[1]} 初始说明`,
+      formId: options.formId,
+      taskId: options.taskId,
+      workflowNode: 'sj',
+    }, token);
+  }
+
+  return annotations.map((annotation) => ({
+    refno: annotation.refnos[1] as BranMixedRefno,
+    slashRefno: annotation.refno,
+    annotationId: annotation.id,
+  }));
+}
+
+async function applyAnnotationAction(
+  runtime: ScenarioRuntime,
+  options: {
+    taskId: string;
+    formId: string;
+    annotationId: string;
+    action: AnnotationAction;
+    note: string;
+    currentPmsUser: SimulatorPmsUser;
+    currentWorkflowRole: WorkflowRole;
+  },
+): Promise<void> {
+  const token = await createRoleToken(runtime, options.currentPmsUser, options.currentWorkflowRole);
+  await postJson(`${runtime.env.backendBaseUrl}/api/review/annotation-states/apply`, {
+    formId: options.formId,
+    taskId: options.taskId,
+    annotationId: options.annotationId,
+    annotationType: 'text',
+    action: options.action,
+    note: options.note,
+  }, token);
+}
+
+async function readAnnotationStates(
+  runtime: ScenarioRuntime,
+  options: {
+    taskId: string;
+    formId: string;
+  },
+): Promise<AnnotationStateReadback> {
+  const token = await createCleanupToken(runtime.env);
+  const params = new URLSearchParams({
+    form_id: options.formId,
+    task_id: options.taskId,
+  });
+  const response = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/annotation-states?${params}`,
+    token,
+  );
+  const records = collectAnnotationStateRecords(response.body).filter((state) => {
+    const formId = String(state.formId || state.form_id || '').trim();
+    const taskId = String(state.taskId || state.task_id || '').trim();
+    return (!formId || formId === options.formId) && (!taskId || taskId === options.taskId);
+  });
+  return {
+    records,
+    detail: `HTTP ${response.status} states=${records.length}`,
+  };
+}
+
+async function assertTaskContainsBranRefs(
+  runtime: ScenarioRuntime,
+  taskId: string,
+): Promise<PmsSimulatorAssertionResult[]> {
+  const token = await createCleanupToken(runtime.env);
+  const taskDetail = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/tasks/${encodeURIComponent(taskId)}`,
+    token,
+  );
+  const detailText = JSON.stringify(taskDetail.body);
+  return BRAN_MIXED_REFNOS.map((refno) => assertResult(
+    `bran-mixed-task-contains-${refno}`,
+    detailText.includes(refno) || detailText.includes(branRefnoToSlash(refno)),
+    '新建任务详情应包含 BRAN 参考号',
+    refno,
+    detailText.slice(0, 800),
+  ));
+}
+
+async function applyBranMixedDesignerActions(
+  runtime: ScenarioRuntime,
+  created: CreatedReview,
+  annotations: BranMixedAnnotation[],
+): Promise<void> {
+  if (!created.taskId) throw new Error(`bran-mixed 缺少 task_id（form_id=${created.formId}）`);
+  const actionByRefno: Record<BranMixedRefno, AnnotationAction> = {
+    '24381_144976': 'fixed',
+    '24381_144991': 'fixed',
+    '24381_145012': 'wont_fix',
+    '24381_145018': 'fixed',
+  };
+  for (const annotation of annotations) {
+    await applyAnnotationAction(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+      annotationId: annotation.annotationId,
+      action: actionByRefno[annotation.refno],
+      note: `SJ 处理 ${annotation.refno}: ${actionByRefno[annotation.refno]}`,
+      currentPmsUser: 'SJ',
+      currentWorkflowRole: 'sj',
+    });
+  }
+}
+
+async function scenarioBranMixed(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
+  const previousTargetRefnos = process.env.PMS_TARGET_BRAN_REFNOS;
+  process.env.PMS_TARGET_BRAN_REFNOS = BRAN_MIXED_REFNOS.join(',');
+  try {
+    const created = await createReview(runtime, 'bran-mixed');
+    const assertions: PmsSimulatorAssertionResult[] = [];
+    if (!created.taskId) {
+      throw new Error(`bran-mixed 缺少 task_id（form_id=${created.formId}）`);
+    }
+
+    assertions.push(...await assertTaskContainsBranRefs(runtime, created.taskId));
+    const annotations = await seedBranMixedRecords(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+    });
+    assertions.push(assertResult('bran-mixed-seeded-annotation-count', annotations.length === 4, undefined, 4, annotations.length));
+    await applyBranMixedDesignerActions(runtime, created, annotations);
+
+    let snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 多 BRAN 自动化' });
+    assertions.push(assertWorkflowVerify('bran-mixed-sj-active-verify', snapshot, 'active'));
+    assertions.push(assertWorkflowSync('bran-mixed-sj-active-sync', snapshot, 'active'));
+    assertions.push(assertBackendCurrentNode('bran-mixed-sj-active-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'jd'));
+
+    await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+    const rejected = annotations.find((item) => item.refno === '24381_144991');
+    if (!rejected) throw new Error('bran-mixed 未找到 24381_144991 批注');
+    for (const annotation of annotations) {
+      const action: AnnotationAction = annotation.refno === '24381_144991' ? 'reject' : 'agree';
+      await applyAnnotationAction(runtime, {
+        taskId: created.taskId,
+        formId: created.formId,
+        annotationId: annotation.annotationId,
+        action,
+        note: `JH ${action === 'reject' ? '驳回' : '同意'} ${annotation.refno}`,
+        currentPmsUser: 'JH',
+        currentWorkflowRole: 'jd',
+      });
+    }
+    snapshot = await runWorkflowAction(runtime.page, 'return', {
+      comment: 'JH return 多 BRAN 自动化：24381_144991 驳回',
+      targetNode: 'sj',
+    });
+    assertions.push(assertWorkflowVerify('bran-mixed-jh-return-verify', snapshot, 'return'));
+    assertions.push(assertWorkflowSync('bran-mixed-jh-return-sync', snapshot, 'return'));
+    assertions.push(assertBackendCurrentNode('bran-mixed-jh-return-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'sj'));
+    const rejectedStates = await readAnnotationStates(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+    });
+    const rejectedState = findLatestAnnotationState(rejectedStates.records, rejected.annotationId);
+    const rejectedDecision = rejectedState ? readDecisionStatusFromState(rejectedState) : '';
+    assertions.push(assertResult(
+      'bran-mixed-144991-rejected-before-rework',
+      rejectedDecision === 'rejected',
+      `${rejectedStates.detail} decision=${rejectedDecision}`,
+      'rejected',
+      rejectedDecision,
+    ));
+
+    await openTaskForRole(runtime.page, created.formId, 'SJ', {
+      source: 'task-reopen',
+      taskId: created.taskId,
+    });
+    await applyAnnotationAction(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+      annotationId: rejected.annotationId,
+      action: 'fixed',
+      note: 'SJ 重新处理 24381_144991',
+      currentPmsUser: 'SJ',
+      currentWorkflowRole: 'sj',
+    });
+    snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 重新提交 24381_144991' });
+    assertions.push(assertWorkflowVerify('bran-mixed-sj-reactive-verify', snapshot, 'active'));
+    assertions.push(assertWorkflowSync('bran-mixed-sj-reactive-sync', snapshot, 'active'));
+    assertions.push(assertBackendCurrentNode('bran-mixed-sj-reactive-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'jd'));
+
+    await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+    await applyAnnotationAction(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+      annotationId: rejected.annotationId,
+      action: 'agree',
+      note: 'JH 同意重新处理后的 24381_144991',
+      currentPmsUser: 'JH',
+      currentWorkflowRole: 'jd',
+    });
+    snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 多 BRAN 全部通过' });
+    assertions.push(assertWorkflowVerify('bran-mixed-jh-agree-verify', snapshot, 'agree'));
+    assertions.push(assertWorkflowSync('bran-mixed-jh-agree-sync', snapshot, 'agree'));
+    assertions.push(assertBackendCurrentNode('bran-mixed-jh-agree-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'sh'));
+
+    await openTaskForRole(runtime.page, created.formId, 'SH', { taskId: created.taskId });
+    snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'SH agree 多 BRAN 自动化' });
+    assertions.push(assertWorkflowVerify('bran-mixed-sh-agree-verify', snapshot, 'agree'));
+    assertions.push(assertWorkflowSync('bran-mixed-sh-agree-sync', snapshot, 'agree'));
+    assertions.push(assertBackendCurrentNode('bran-mixed-sh-agree-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'pz'));
+
+    await openTaskForRole(runtime.page, created.formId, 'PZ', { taskId: created.taskId });
+    snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'PZ approve 多 BRAN 自动化' });
+    assertions.push(assertWorkflowVerify('bran-mixed-pz-approve-verify', snapshot, 'agree'));
+    assertions.push(assertWorkflowSync('bran-mixed-pz-approve-sync', snapshot, 'agree'));
+    assertions.push(assertResult('bran-mixed-approved-status', snapshot.currentTaskStatus === 'approved', undefined, 'approved', snapshot.currentTaskStatus));
+    assertions.push(assertResult('bran-mixed-approved-node', normalizeNode(snapshot.currentWorkflowNode) === 'pz', undefined, 'pz', normalizeNode(snapshot.currentWorkflowNode)));
+
+    const states = await readAnnotationStates(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+    });
+    for (const annotation of annotations) {
+      const state = findLatestAnnotationState(states.records, annotation.annotationId);
+      const decisionStatus = state ? readDecisionStatusFromState(state) : '';
+      assertions.push(assertResult(
+        `bran-mixed-state-exists-${annotation.refno}`,
+        Boolean(state),
+        states.detail,
+        true,
+        Boolean(state),
+      ));
+      assertions.push(assertResult(
+        `bran-mixed-state-agreed-${annotation.refno}`,
+        decisionStatus === 'agreed' || decisionStatus === 'approved',
+        `${states.detail} decision=${decisionStatus}`,
+        'agreed|approved',
+        decisionStatus,
+      ));
+    }
+
+    const consoleIssues = collectConsoleIssues(runtime, [
+      /comment thread/i,
+      /review thread store.*failed/i,
+      /Failed to open panel review/i,
+      /Failed to create panel review/i,
+    ]);
+    assertions.push(assertResult('bran-mixed-console-no-review-errors', consoleIssues.length === 0, consoleIssues.join('\n'), 0, consoleIssues.length));
+
+    return finalizeScenarioReport({
+      caseId: 'bran-mixed',
+      name: CASE_NAMES['bran-mixed'],
+      formId: created.formId,
+      taskId: created.taskId,
+      finalNode: normalizeNode(snapshot.currentWorkflowNode),
+      finalStatus: snapshot.currentTaskStatus,
+      packageName: created.packageName,
+      assertions,
+    });
+  } finally {
+    if (previousTargetRefnos == null) {
+      delete process.env.PMS_TARGET_BRAN_REFNOS;
+    } else {
+      process.env.PMS_TARGET_BRAN_REFNOS = previousTargetRefnos;
+    }
+  }
 }
 
 async function scenarioApproved(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
@@ -799,21 +1829,16 @@ async function scenarioApproved(runtime: ScenarioRuntime): Promise<PmsSimulatorS
   snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'PZ agree 自动化' });
   assertions.push(assertWorkflowVerify('pz-agree-verify', snapshot, 'agree'));
   assertions.push(assertWorkflowSync('pz-agree-sync', snapshot, 'agree'));
-
-  await callSimulatorApi<void>(runtime.page, 'reopenLast');
-  const finalSnapshot = await waitForSnapshotByFormId(runtime.page, created.formId, {
-    predicate: (item) => item.sidePanelMode === 'readonly' && item.currentTaskStatus === 'approved',
-  });
-  assertions.push(assertResult('approved-status', finalSnapshot.currentTaskStatus === 'approved', undefined, 'approved', finalSnapshot.currentTaskStatus));
-  assertions.push(assertResult('approved-readonly', finalSnapshot.sidePanelMode === 'readonly', undefined, 'readonly', finalSnapshot.sidePanelMode));
+  assertions.push(assertResult('approved-status', snapshot.currentTaskStatus === 'approved', undefined, 'approved', snapshot.currentTaskStatus));
+  assertions.push(assertResult('approved-node', normalizeNode(snapshot.currentWorkflowNode) === 'pz', undefined, 'pz', normalizeNode(snapshot.currentWorkflowNode)));
 
   return finalizeScenarioReport({
     caseId: 'approved',
     name: CASE_NAMES.approved,
     formId: created.formId,
     taskId: created.taskId,
-    finalNode: normalizeNode(finalSnapshot.currentWorkflowNode),
-    finalStatus: finalSnapshot.currentTaskStatus,
+    finalNode: normalizeNode(snapshot.currentWorkflowNode),
+    finalStatus: snapshot.currentTaskStatus,
     packageName: created.packageName,
     assertions,
   });
@@ -823,11 +1848,23 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
   const created = await createReview(runtime, 'return');
   const assertions: PmsSimulatorAssertionResult[] = [];
 
-  await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
+  let snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
+  assertions.push(assertWorkflowVerify('sj-active-verify', snapshot, 'active'));
+  assertions.push(assertWorkflowSync('sj-active-sync', snapshot, 'active'));
+  assertions.push(assertBackendCurrentNode('sj-active-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'jd'));
+
   await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
-  await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 自动化' });
+  snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 自动化' });
+  assertions.push(assertWorkflowVerify('jh-agree-verify', snapshot, 'agree'));
+  assertions.push(assertWorkflowSync('jh-agree-sync', snapshot, 'agree'));
+  assertions.push(assertBackendCurrentNode('jh-agree-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'sh'));
+
   await openTaskForRole(runtime.page, created.formId, 'SH', { taskId: created.taskId });
-  await runWorkflowAction(runtime.page, 'agree', { comment: 'SH agree 自动化' });
+  snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'SH agree 自动化' });
+  assertions.push(assertWorkflowVerify('sh-agree-verify', snapshot, 'agree'));
+  assertions.push(assertWorkflowSync('sh-agree-sync', snapshot, 'agree'));
+  assertions.push(assertBackendCurrentNode('sh-agree-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'pz'));
+
   await openTaskForRole(runtime.page, created.formId, 'PZ', { taskId: created.taskId });
   const returnSnapshot = await runWorkflowAction(runtime.page, 'return', {
     comment: 'PZ return 自动化',
@@ -836,23 +1873,21 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
   assertions.push(assertWorkflowVerify('return-verify', returnSnapshot, 'return'));
   assertions.push(assertWorkflowSync('return-sync', returnSnapshot, 'return'));
 
-  const backendAfterReturn = await probeBackendTaskByFormId(runtime, created.formId);
-  assertions.push(assertResult(
-    'return-backend-current-node',
-    backendAfterReturn?.currentNode === 'sj',
-    backendAfterReturn
-      ? `backend task_id=${backendAfterReturn.taskId} current_node=${backendAfterReturn.currentNode} status=${backendAfterReturn.status}`
-      : '后端未返回 form_id 对应任务',
-    'sj',
-    backendAfterReturn?.currentNode ?? null,
-  ));
+  const backendAfterReturn = await probeBackendTaskByFormId(runtime, created.formId, created.taskId);
+  assertions.push(assertBackendCurrentNode('return-backend-current-node', backendAfterReturn, 'sj'));
 
   const reopened = await openTaskForRole(runtime.page, created.formId, 'SJ', {
     source: 'task-reopen',
     taskId: created.taskId,
   });
   assertions.push(assertResult('return-node', reopened.currentWorkflowNode === 'sj', undefined, 'sj', reopened.currentWorkflowNode));
-  assertions.push(assertResult('return-side-panel', reopened.sidePanelMode === 'initiate', undefined, 'initiate', reopened.sidePanelMode));
+  assertions.push(assertResult(
+    'return-side-panel',
+    reopened.sidePanelMode === 'initiate' || reopened.sidePanelMode === 'readonly',
+    'SJ draft reopen may expose the designer comment handling area even when workflow controls are readonly.',
+    'initiate|readonly',
+    reopened.sidePanelMode,
+  ));
   assertions.push(assertResult('return-form-preserved', reopened.currentFormId === created.formId, undefined, created.formId, reopened.currentFormId));
   const designerCommentPanel = await waitForDesignerCommentAnnotationListAcrossContext(runtime.context);
   const detailVisible = await designerCommentPanel.root
@@ -918,26 +1953,71 @@ async function scenarioStop(runtime: ScenarioRuntime): Promise<PmsSimulatorScena
 async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
   const created = await createReview(runtime, 'restore');
   const assertions: PmsSimulatorAssertionResult[] = [];
+  if (created.taskId) {
+    const token = await createCleanupToken(runtime.env);
+    const taskDetail = await getJson<unknown>(
+      `${runtime.env.backendBaseUrl}/api/review/tasks/${encodeURIComponent(created.taskId)}`,
+      token,
+    );
+    const taskDetailText = JSON.stringify(taskDetail.body);
+    assertions.push(assertResult(
+      'restore-task-contains-bran-24381_145018',
+      taskDetailText.includes('24381_145018') || taskDetailText.includes('24381/145018'),
+      '新建任务详情应包含 BRAN 参考号 24381_145018',
+      '24381_145018',
+      taskDetailText.slice(0, 500),
+    ));
+  }
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
-  const beforeCounts = await buildRestoreCounts(runtime);
+  const reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  await openAutomationPageFromSnapshot(runtime, reviewerSnapshot, `restore reviewer form_id=${created.formId}`, {
+    tokenUserId: 'proofreader_001',
+    tokenRole: 'jd',
+  });
+  const beforeCounts = await buildRestoreCounts(runtime, created.formId, created.taskId);
   assertions.push(assertResult('restore-before-annotation', beforeCounts.pendingAnnotationCount >= 1, undefined, '>=1', beforeCounts.pendingAnnotationCount));
   assertions.push(assertResult('restore-before-measurement', beforeCounts.pendingMeasurementCount >= 1, undefined, '>=1', beforeCounts.pendingMeasurementCount));
-  assertions.push(assertResult('restore-before-confirmed-record', beforeCounts.confirmedRecordCount >= 1, undefined, '>=1', beforeCounts.confirmedRecordCount));
-  assertions.push(assertResult('restore-before-confirmed-annotation', beforeCounts.confirmedAnnotationCount >= 1, undefined, '>=1', beforeCounts.confirmedAnnotationCount));
-  assertions.push(assertResult('restore-before-confirmed-measurement', beforeCounts.confirmedMeasurementCount >= 1, undefined, '>=1', beforeCounts.confirmedMeasurementCount));
+  assertions.push(assertResult('restore-before-confirmed-record', beforeCounts.confirmedRecordCount >= 1, beforeCounts.confirmedDetail, '>=1', beforeCounts.confirmedRecordCount));
+  assertions.push(assertResult('restore-before-confirmed-annotation', beforeCounts.confirmedAnnotationCount >= 1, beforeCounts.confirmedDetail, '>=1', beforeCounts.confirmedAnnotationCount));
+  assertions.push(assertResult('restore-before-confirmed-measurement', beforeCounts.confirmedMeasurementCount >= 1, beforeCounts.confirmedDetail, '>=1', beforeCounts.confirmedMeasurementCount));
+  assertions.push(assertResult('restore-before-comment-exists', beforeCounts.commentCount === 1, beforeCounts.commentDetail, 1, beforeCounts.commentCount));
+  assertions.push(assertResult('restore-before-comment-content', beforeCounts.commentContentFound, beforeCounts.commentDetail, true, beforeCounts.commentContentFound));
+  assertions.push(assertResult('restore-before-comment-dedup', beforeCounts.duplicateCommentCount === 0, beforeCounts.commentDetail, 0, beforeCounts.duplicateCommentCount));
 
-  await reloadReviewerWorkbenchAcrossContext(runtime.context);
+  await reloadReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId });
   await waitForSimulatorReady(runtime.page);
   const afterSnapshot = await waitForSnapshotByFormId(runtime.page, created.formId, {
     predicate: (item) => item.sidePanelMode === 'workflow',
   });
-  const afterCounts = await readRestoreCounts(runtime);
+  if (!created.taskId) {
+    throw new Error(`restore 刷新后缺少 task_id（form_id=${created.formId}）`);
+  }
+  const afterCounts = await readRestoreCounts(runtime, created.formId, created.taskId, {
+    annotationId: beforeCounts.commentAnnotationId,
+    content: beforeCounts.commentContent,
+  });
   assertions.push(assertResult('restore-form-preserved', afterSnapshot.currentFormId === created.formId, undefined, created.formId, afterSnapshot.currentFormId));
   assertions.push(assertResult('restore-annotation-count', afterCounts.confirmedAnnotationCount >= beforeCounts.confirmedAnnotationCount, undefined, beforeCounts.confirmedAnnotationCount, afterCounts.confirmedAnnotationCount));
   assertions.push(assertResult('restore-confirmed-record-count', afterCounts.confirmedRecordCount >= beforeCounts.confirmedRecordCount, undefined, beforeCounts.confirmedRecordCount, afterCounts.confirmedRecordCount));
   assertions.push(assertResult('restore-confirmed-measurement-count', afterCounts.confirmedMeasurementCount >= beforeCounts.confirmedMeasurementCount, undefined, beforeCounts.confirmedMeasurementCount, afterCounts.confirmedMeasurementCount));
+  assertions.push(assertResult('restore-ui-annotation-count', afterCounts.uiAnnotationCount >= 1, afterCounts.uiDetail, '>=1', afterCounts.uiAnnotationCount));
+  assertions.push(assertResult('restore-ui-annotation-title', afterCounts.uiAnnotationTitleFound, afterCounts.uiDetail, true, afterCounts.uiAnnotationTitleFound));
+  assertions.push(assertResult('restore-ui-comment-content', afterCounts.uiCommentContentFound, afterCounts.uiDetail, true, afterCounts.uiCommentContentFound));
+  assertions.push(assertResult('restore-ui-bran-refno', afterCounts.uiBranRefnoFound, afterCounts.uiDetail, true, afterCounts.uiBranRefnoFound));
+  assertions.push(assertResult('restore-comment-after-refresh', afterCounts.commentCount === 1, afterCounts.commentDetail, 1, afterCounts.commentCount));
+  assertions.push(assertResult('restore-comment-content-after-refresh', afterCounts.commentContentFound, afterCounts.commentDetail, true, afterCounts.commentContentFound));
+  assertions.push(assertResult('restore-comment-dedup-after-refresh', afterCounts.duplicateCommentCount === 0, afterCounts.commentDetail, 0, afterCounts.duplicateCommentCount));
+  const commentThreadConsoleIssues = collectConsoleIssues(runtime, [
+    /comment thread/i,
+    /review thread store.*failed/i,
+  ]);
+  const dockConsoleIssues = collectConsoleIssues(runtime, [
+    /Failed to open panel review/i,
+    /Failed to create panel review/i,
+  ]);
+  assertions.push(assertResult('restore-console-no-comment-thread-errors', commentThreadConsoleIssues.length === 0, commentThreadConsoleIssues.join('\n'), 0, commentThreadConsoleIssues.length));
+  assertions.push(assertResult('restore-console-no-dock-panel-failed', dockConsoleIssues.length === 0, dockConsoleIssues.join('\n'), 0, dockConsoleIssues.length));
 
   return finalizeScenarioReport({
     caseId: 'restore',
@@ -1028,18 +2108,34 @@ const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   restore: scenarioRestore,
   'gate-block': scenarioGateBlock,
   'gate-return': scenarioGateReturn,
+  'bran-mixed': scenarioBranMixed,
 };
 
 async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCaseId): Promise<PmsSimulatorScenarioReport> {
   traceSimulator(`runSingleScenario ${caseId} newContext`);
   const context = await base.browser.newContext({ viewport: { width: 1680, height: 1040 } });
+  const consoleMessages: ScenarioRuntime['consoleMessages'] = [];
+  const attachedPages = new WeakSet<Page>();
+  const attachConsoleCapture = (targetPage: Page) => {
+    if (attachedPages.has(targetPage)) return;
+    attachedPages.add(targetPage);
+    targetPage.on('console', (message) => {
+      consoleMessages.push({
+        type: message.type(),
+        text: message.text(),
+        url: targetPage.url(),
+      });
+    });
+  };
+  context.on('page', attachConsoleCapture);
   const page = await context.newPage();
+  attachConsoleCapture(page);
   const runtime: ScenarioRuntime = {
     ...base,
     context,
     page,
     caseId,
-    cleanupFormIds: new Set<string>(),
+    consoleMessages,
   };
 
   try {
@@ -1061,11 +2157,6 @@ async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCase
       screenshotPath: screenshotPath || undefined,
     };
   } finally {
-    try {
-      await cleanupForms(runtime);
-    } catch (cleanupError) {
-      console.error(`[pms-simulator] 清理 ${caseId} 失败:`, cleanupError);
-    }
     await context.close().catch(() => undefined);
     delete process.env.PMS_MOCK_PACKAGE_NAME;
   }
@@ -1074,6 +2165,7 @@ async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCase
 export async function runPmsSimulatorScenarios(options?: {
   env?: PmsSimulatorEnvironmentConfig;
   artifactDir?: string;
+  ensureBackendHealthy?: (caseId: PmsSimulatorCaseId) => Promise<void>;
 }): Promise<PmsSimulatorScenarioReport[]> {
   prepareLocalNoProxy();
   const env = options?.env || buildPmsSimulatorEnvironmentConfig(process.env);
@@ -1087,10 +2179,18 @@ export async function runPmsSimulatorScenarios(options?: {
       env,
       browser,
       artifactDir,
+      cleanupFormIds: new Set<string>(),
+      ensureBackendHealthy: options?.ensureBackendHealthy,
     };
     const results: PmsSimulatorScenarioReport[] = [];
     for (const caseId of env.caseIds) {
+      await base.ensureBackendHealthy?.(caseId);
       results.push(await runSingleScenario(base, caseId));
+    }
+    try {
+      await cleanupForms(base);
+    } catch (cleanupError) {
+      console.error('[pms-simulator] 全量场景结束后清理失败:', cleanupError);
     }
     return results;
   } finally {

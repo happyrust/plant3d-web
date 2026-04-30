@@ -8,6 +8,7 @@ import type { ReviewTask, WorkflowStep } from '@/types/auth';
 const reviewTaskGetWorkflowMock = vi.fn();
 const reviewRecordGetByTaskIdMock = vi.fn();
 const submitTaskToNextNodeMock = vi.fn();
+const notifyParentWorkflowActionMock = vi.fn(() => false);
 const emitToastMock = vi.fn();
 const reviewTasksRef = { value: [] as ReviewTask[] };
 
@@ -27,12 +28,18 @@ vi.mock('@/ribbon/toastBus', () => ({
   emitToast: (...args: unknown[]) => emitToastMock(...args),
 }));
 
+vi.mock('./workflowBridge', () => ({
+  notifyParentWorkflowAction: (...args: unknown[]) => notifyParentWorkflowActionMock(...args),
+}));
+
 describe('TaskReviewDetail', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     reviewTaskGetWorkflowMock.mockReset();
     reviewRecordGetByTaskIdMock.mockReset();
     submitTaskToNextNodeMock.mockReset();
+    notifyParentWorkflowActionMock.mockReset();
+    notifyParentWorkflowActionMock.mockReturnValue(false);
     emitToastMock.mockReset();
     reviewTasksRef.value = [];
     reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [] });
@@ -144,8 +151,8 @@ describe('TaskReviewDetail', () => {
             {
               id: 'measure-distance-1',
               kind: 'distance',
-              origin: { entityId: 'PIPE-100', worldPos: [0, 0, 0] },
-              target: { entityId: 'PIPE-200', worldPos: [1, 0, 0] },
+              origin: { entityId: 'o:24381_145018:0', worldPos: [0, 0, 0] },
+              target: { entityId: '24381_145019', worldPos: [1, 0, 0] },
               visible: true,
               createdAt: new Date('2026-03-16T07:30:00+08:00').getTime(),
             },
@@ -172,7 +179,7 @@ describe('TaskReviewDetail', () => {
     expect(document.body.textContent).toContain('已确认测量回放');
     expect(document.body.textContent).toContain('1 条测量');
     expect(document.body.textContent).toContain('距离测量');
-    expect(document.body.textContent).toContain('PIPE-100 -> 终点 PIPE-200');
+    expect(document.body.textContent).toContain('起点 24381/145018 -> 终点 24381/145019');
     expect(document.body.textContent).toContain('保留确认后的测量回放');
     expect(document.body.textContent).toContain('提交');
     expect(document.body.textContent).toContain('驳回');
@@ -392,6 +399,37 @@ describe('TaskReviewDetail', () => {
     expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1');
     expect(reviewTaskGetWorkflowMock).toHaveBeenCalledTimes(2);
     expect(reviewRecordGetByTaskIdMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('notifies parent workflow bridge instead of internal submit in external embedded workflow', async () => {
+    notifyParentWorkflowActionMock.mockReturnValue(true);
+    reviewTaskGetWorkflowMock.mockResolvedValue({
+      success: true,
+      currentNode: 'sj',
+      currentNodeName: '编制',
+      history: [],
+    });
+    reviewRecordGetByTaskIdMock.mockResolvedValue({ success: true, records: [] });
+
+    await mountComponent(createTask({
+      status: 'draft',
+      currentNode: 'sj',
+      formId: 'FORM-DETAIL-1',
+    }));
+
+    const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('再次提交'));
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(notifyParentWorkflowActionMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'active',
+      taskId: 'task-1',
+      formId: 'FORM-DETAIL-1',
+      source: 'task-review-detail',
+    }));
+    expect(submitTaskToNextNodeMock).not.toHaveBeenCalled();
   });
 
   it('shows an empty measurement replay state when no confirmed measurements are available', async () => {

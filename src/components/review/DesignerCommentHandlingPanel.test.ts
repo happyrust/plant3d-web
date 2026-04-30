@@ -39,6 +39,24 @@ const flyToXeokitMeasurementMock = vi.fn();
 const syncFromStoreMock = vi.fn();
 const clearDraftDataByPayloadMock = vi.fn();
 const submitTaskToNextNodeMock = vi.fn(async () => undefined);
+const notifyParentWorkflowActionMock = vi.fn(() => false);
+const reviewAnnotationCheckMock = vi.fn(async () => ({
+  success: true,
+  data: {
+    passed: true,
+    recommendedAction: 'submit',
+    currentNode: 'sj',
+    summary: {
+      total: 0,
+      open: 0,
+      pendingReview: 0,
+      approved: 0,
+      rejected: 0,
+    },
+    blockers: [],
+    message: 'ok',
+  },
+}));
 const persistenceState = new Map<string, unknown>();
 const persistenceStorageKeys: string[] = [];
 
@@ -95,6 +113,10 @@ vi.mock('./TaskReviewDetail.vue', () => ({
     name: 'TaskReviewDetailStub',
     template: '<div data-testid="task-review-detail-stub"></div>',
   },
+}));
+
+vi.mock('./workflowBridge', () => ({
+  notifyParentWorkflowAction: (...args: unknown[]) => notifyParentWorkflowActionMock(...args),
 }));
 
 vi.mock('@/composables/useDockApi', () => ({
@@ -174,6 +196,11 @@ vi.mock('@/composables/useViewerContext', () => ({
   }),
   showModelByRefnosWithAck: showModelByRefnosWithAckMock,
   waitForViewerReady: vi.fn(async () => true),
+}));
+
+vi.mock('@/api/reviewApi', () => ({
+  reviewAnnotationCheck: (...args: unknown[]) => reviewAnnotationCheckMock(...args),
+  getReviewAnnotationCheckFromError: vi.fn(() => undefined),
 }));
 
 vi.mock('@/ribbon/commandBus', () => ({
@@ -319,6 +346,26 @@ describe('DesignerCommentHandlingPanel', () => {
     showModelByRefnosWithAckMock.mockClear();
     clearDraftDataByPayloadMock.mockClear();
     submitTaskToNextNodeMock.mockClear();
+    notifyParentWorkflowActionMock.mockClear();
+    notifyParentWorkflowActionMock.mockReturnValue(false);
+    reviewAnnotationCheckMock.mockClear();
+    reviewAnnotationCheckMock.mockResolvedValue({
+      success: true,
+      data: {
+        passed: true,
+        recommendedAction: 'submit',
+        currentNode: 'sj',
+        summary: {
+          total: 0,
+          open: 0,
+          pendingReview: 0,
+          approved: 0,
+          rejected: 0,
+        },
+        blockers: [],
+        message: 'ok',
+      },
+    });
     clearDesignerCommentViewModeRequest();
   });
 
@@ -382,7 +429,7 @@ describe('DesignerCommentHandlingPanel', () => {
     expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeTruthy();
     expect(document.body.textContent).toContain('designerOnly|发送回复|待处理批注');
     expect(document.body.textContent).toContain('测量证据');
-    expect(document.body.textContent).toContain('确认当前数据');
+    expect(document.body.textContent).toContain('保存新增证据');
 
     mounted.unmount();
   });
@@ -573,6 +620,120 @@ describe('DesignerCommentHandlingPanel', () => {
     // locateAnnotation 副作用：调用 showModelByRefnosWithAck + ensurePanelAndActivate('viewer')
     expect(showModelByRefnosWithAckMock).toHaveBeenCalled();
     expect(ensurePanelAndActivateMock).toHaveBeenCalledWith('viewer');
+
+    mounted.unmount();
+  });
+
+  it('卡片筛选为待处理时，表格打开已修改批注仍进入该批注详情', async () => {
+    currentTaskRef.value = createTask();
+    annotationsRef.value = [
+      {
+        id: 'annot-pending',
+        title: '待处理批注',
+        description: '先处理这条返回批注',
+        createdAt: 10,
+        visible: true,
+        refnos: ['24381_145018'],
+        formId: 'FORM-1001',
+        reviewState: undefined,
+      },
+      {
+        id: 'annot-fixed',
+        title: '已修改批注',
+        description: '这条批注已经修改过',
+        createdAt: 20,
+        visible: true,
+        refnos: ['24381_145020'],
+        formId: 'FORM-1001',
+        reviewState: {
+          resolutionStatus: 'fixed',
+          decisionStatus: 'pending',
+          updatedAt: 1710000000000,
+          history: [],
+        },
+      },
+    ];
+
+    const mounted = await mountPanel();
+    const pendingFilter = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('待处理'));
+    pendingFilter?.click();
+    await flushUi();
+
+    const tableTab = document.querySelector<HTMLElement>('[data-testid="annotation-list-view-mode-table"]');
+    tableTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushUi();
+
+    const fixedRow = document.querySelector<HTMLElement>('[data-testid="annotation-table-row-annot-fixed"]');
+    expect(fixedRow).toBeTruthy();
+    fixedRow!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await flushUi();
+
+    expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeTruthy();
+    expect(document.body.textContent).toContain('已修改批注');
+    expect(document.body.textContent).toContain('designerOnly|发送回复|已修改批注');
+
+    mounted.unmount();
+  });
+
+  it('设计侧再次提交前执行批注检查，通过后才提交任务', async () => {
+    currentTaskRef.value = createTask();
+    confirmedRecordsRef.value = [{
+      annotations: [...annotationsRef.value],
+      measurements: [...measurementsRef.value],
+    }];
+
+    const mounted = await mountPanel();
+    const row = document.querySelector('[data-testid="annotation-row-text-annot-open"]') as HTMLElement;
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await flushUi();
+
+    const resubmitButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('流转回校对'));
+    expect(resubmitButton).toBeTruthy();
+    expect(resubmitButton?.disabled).toBe(false);
+
+    resubmitButton?.click();
+    await flushUi();
+
+    expect(reviewAnnotationCheckMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-designer-1',
+      formId: 'FORM-1001',
+      currentNode: 'sj',
+      intent: 'submit_next',
+      includedTypes: ['text', 'cloud', 'rect'],
+    }));
+    expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-designer-1');
+
+    mounted.unmount();
+  });
+
+  it('外部流程嵌入模式下再次提交改为通知父窗口 workflow/sync active', async () => {
+    notifyParentWorkflowActionMock.mockReturnValue(true);
+    currentTaskRef.value = createTask();
+    confirmedRecordsRef.value = [{
+      annotations: [...annotationsRef.value],
+      measurements: [...measurementsRef.value],
+    }];
+
+    const mounted = await mountPanel();
+    const row = document.querySelector('[data-testid="annotation-row-text-annot-open"]') as HTMLElement;
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await flushUi();
+
+    const resubmitButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('流转回校对'));
+    resubmitButton?.click();
+    await flushUi();
+
+    expect(reviewAnnotationCheckMock).toHaveBeenCalled();
+    expect(notifyParentWorkflowActionMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'active',
+      taskId: 'task-designer-1',
+      formId: 'FORM-1001',
+      source: 'designer-comment-handling-panel',
+    }));
+    expect(submitTaskToNextNodeMock).not.toHaveBeenCalled();
 
     mounted.unmount();
   });

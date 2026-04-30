@@ -22,6 +22,7 @@ import {
   isCanonicalReturnedTask,
 } from './reviewTaskFilters';
 import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
+import { notifyParentWorkflowAction } from './workflowBridge';
 
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
@@ -291,6 +292,19 @@ async function handleResubmit() {
   resubmitError.value = null;
 
   try {
+    const task = taskView.value;
+    const notifiedExternalWorkflow = notifyParentWorkflowAction({
+      action: 'active',
+      taskId: task.id,
+      formId: task.formId?.trim() || undefined,
+      source: 'task-review-detail',
+    });
+    if (notifiedExternalWorkflow) {
+      emitToast({ message: '已通知外部流程重新流转' });
+      open.value = false;
+      return;
+    }
+
     await userStore.submitTaskToNextNode(props.task.id);
     localTaskOverride.value = userStore.reviewTasks.value.find((task) => task.id === props.task.id) ?? localTaskOverride.value;
     await Promise.all([loadWorkflowHistory(), loadConfirmedRecords()]);
