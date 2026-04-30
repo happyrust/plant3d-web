@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
+import { useMeasurementPathSummaries } from '@/components/review/useMeasurementPathSummaries';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import {
   type MeasurementRecord,
@@ -42,6 +43,7 @@ const sorted = computed<(MeasurementRecord | XeokitMeasurementRecord)[]>(() => {
     : [...store.measurements.value];
   return records.sort((a, b) => b.createdAt - a.createdAt);
 });
+const { getMeasurementSummary } = useMeasurementPathSummaries(sorted);
 
 const isMeasurementReady = computed(() => {
   return isXeokitMode.value
@@ -98,13 +100,6 @@ const pipeDistanceStatusText = computed(() => {
 
 function isApproximateMeasurement(record: MeasurementRecord | XeokitMeasurementRecord): boolean {
   return 'approximate' in record && Boolean(record.approximate);
-}
-
-function getMeasurementSummary(record: MeasurementRecord | XeokitMeasurementRecord): string {
-  if (record.kind === 'distance') {
-    return `起点 ${record.origin.entityId} · 终点 ${record.target.entityId}`;
-  }
-  return `起点 ${record.origin.entityId} · 拐点 ${record.corner.entityId} · 终点 ${record.target.entityId}`;
 }
 
 function getVisibilityActionLabel(visible: boolean): string {
@@ -451,7 +446,8 @@ watch(
                 {{ new Date(m.createdAt).toLocaleString() }}
               </div>
               <div :data-testid="`measurement-summary-${m.id}`"
-                class="mt-1 truncate text-xs text-muted-foreground">
+                class="mt-1 truncate text-xs text-muted-foreground"
+                :title="getMeasurementSummary(m)">
                 {{ getMeasurementSummary(m) }}
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">ID: {{ m.id }}</div>

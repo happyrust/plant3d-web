@@ -25,6 +25,7 @@ import {
   type LinkedMeasurementItem,
 } from './annotationWorkspaceModel';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
+import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
 
 import type { AnnotationSeverity, AnnotationType } from '@/types/auth';
 
@@ -103,6 +104,19 @@ const filterCounts = computed(() => ({
   rejected: props.summary.rejected,
   high_priority: props.summary.highPriority,
 }));
+const linkedMeasurementPathRecords = computed(() => (
+  props.linkedMeasurements.flatMap((measurement) => (
+    measurement.measurement
+      ? [{
+        ...measurement.measurement,
+        pathDisplayId: measurement.pathDisplayId || `${measurement.engine}:${measurement.id}`,
+      }]
+      : []
+  ))
+));
+const {
+  getMeasurementSummary: getLinkedMeasurementPathSummary,
+} = useMeasurementPathSummaries(linkedMeasurementPathRecords);
 const showListPane = computed(() => props.layout !== 'detail');
 const showDetailPane = computed(() => props.layout !== 'list');
 const showTopSummary = computed(() => props.layout !== 'detail');
@@ -121,6 +135,15 @@ const detailPaneClass = computed(() => (
     ? 'min-h-0 rounded-[24px] border border-slate-200 bg-[#FCFDFE] p-4'
     : 'rounded-[24px] border border-slate-200 bg-[#FCFDFE] p-4'
 ));
+
+function getLinkedMeasurementSummary(measurement: LinkedMeasurementItem): string {
+  if (!measurement.measurement) return measurement.summary;
+
+  return getLinkedMeasurementPathSummary({
+    ...measurement.measurement,
+    pathDisplayId: measurement.pathDisplayId || `${measurement.engine}:${measurement.id}`,
+  });
+}
 
 function updateConfirmNote(event: Event) {
   const target = event.target as HTMLTextAreaElement | HTMLInputElement | null;
@@ -458,7 +481,10 @@ watch(
                 :key="`${measurement.engine}:${measurement.id}`"
                 class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
                 <div class="min-w-0">
-                  <div class="truncate text-sm font-medium text-slate-900">{{ measurement.summary }}</div>
+                  <div class="truncate text-sm font-medium text-slate-900"
+                    :title="getLinkedMeasurementSummary(measurement)">
+                    {{ getLinkedMeasurementSummary(measurement) }}
+                  </div>
                   <div class="mt-1 text-xs text-slate-400">
                     {{ new Date(measurement.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}
                   </div>

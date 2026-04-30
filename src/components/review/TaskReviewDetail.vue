@@ -21,6 +21,7 @@ import {
   getCanonicalReturnedTaskView,
   isCanonicalReturnedTask,
 } from './reviewTaskFilters';
+import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
 
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type { ReviewTask, WorkflowNode, WorkflowStep } from '@/types/auth';
@@ -149,6 +150,17 @@ const measurementRecords = computed(() => {
     .sort((a, b) => b.confirmedAt - a.confirmedAt)
     .filter((record) => record.measurements.length > 0);
 });
+const confirmedMeasurementPathRecords = computed(() => {
+  return measurementRecords.value.flatMap((record) =>
+    record.measurements.map((measurement) => ({
+      ...measurement,
+      pathDisplayId: `${record.id}:${measurement.id}`,
+    })),
+  );
+});
+const {
+  getMeasurementSummary: getConfirmedMeasurementSummary,
+} = useMeasurementPathSummaries(confirmedMeasurementPathRecords);
 const isReturnedTask = computed(() => isCanonicalReturnedTask(canonicalTask.value));
 const canResubmit = computed(() => isReturnedTask.value && canonicalTask.value.currentNode === 'sj' && canonicalTask.value.status === 'draft');
 const returnedTaskHint = computed(() => (
@@ -161,11 +173,14 @@ function formatMeasurementKind(kind: ConfirmedRecord['measurements'][number]['ki
   return kind === 'distance' ? '距离测量' : '角度测量';
 }
 
-function formatMeasurementSummary(measurement: ConfirmedRecord['measurements'][number]): string {
-  if (measurement.kind === 'distance') {
-    return `起点 ${measurement.origin.entityId} -> 终点 ${measurement.target.entityId}`;
-  }
-  return `起点 ${measurement.origin.entityId} -> 拐点 ${measurement.corner.entityId} -> 终点 ${measurement.target.entityId}`;
+function formatMeasurementSummary(
+  recordId: string,
+  measurement: ConfirmedRecord['measurements'][number],
+): string {
+  return getConfirmedMeasurementSummary({
+    ...measurement,
+    pathDisplayId: `${recordId}:${measurement.id}`,
+  });
 }
 
 async function loadConfirmedRecords() {
@@ -526,7 +541,10 @@ onMounted(() => {
                     </span>
                     <span class="text-xs text-slate-400">{{ measurement.id }}</span>
                   </div>
-                  <div class="mt-1 text-sm text-slate-700">{{ formatMeasurementSummary(measurement) }}</div>
+                  <div class="mt-1 text-sm text-slate-700"
+                    :title="formatMeasurementSummary(record.id, measurement)">
+                    {{ formatMeasurementSummary(record.id, measurement) }}
+                  </div>
                 </div>
               </div>
             </div>

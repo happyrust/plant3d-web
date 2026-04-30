@@ -1,3 +1,5 @@
+import { formatMeasurementPath } from './measurementDisplay';
+
 import type {
   AnyAnnotationRecord,
   AnnotationRecord,
@@ -68,6 +70,8 @@ export type LinkedMeasurementItem = {
   createdAt: number;
   visible: boolean;
   summary: string;
+  pathDisplayId?: string;
+  measurement?: MeasurementRecord | XeokitMeasurementRecord;
 };
 
 type BuildAnnotationWorkspaceItemsOptions = {
@@ -311,9 +315,7 @@ export function buildLinkedMeasurementItems(
     engine: 'xeokit' | 'classic',
   ) => {
     if (measurement.sourceAnnotationId !== annotation.id || measurement.sourceAnnotationType !== annotation.type) return;
-    const summary = measurement.kind === 'angle'
-      ? `角度 · ${measurement.origin.entityId} → ${measurement.corner.entityId} → ${measurement.target.entityId}`
-      : `距离 · ${measurement.origin.entityId} → ${measurement.target.entityId}`;
+    const summary = `${measurement.kind === 'angle' ? '角度' : '距离'} · ${formatMeasurementPath(measurement)}`;
     combined.set(`${engine}:${measurement.id}`, {
       id: measurement.id,
       engine,
@@ -321,6 +323,8 @@ export function buildLinkedMeasurementItems(
       createdAt: measurement.createdAt,
       visible: measurement.visible,
       summary,
+      pathDisplayId: `${engine}:${measurement.id}`,
+      measurement,
     });
   };
 
