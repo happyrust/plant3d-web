@@ -4,9 +4,9 @@ import { computed, ref } from 'vue';
 import { CheckCircle, MessageSquare, Ruler, X } from 'lucide-vue-next';
 
 import {
+  buildReviewEvidenceSnapshotKey,
   buildReviewConfirmSnapshotPayload,
-  buildUnsavedReviewConfirmPayload,
-  buildReviewConfirmSnapshotKey,
+  buildUnsavedReviewEvidencePayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
   confirmCurrentDataSafely,
   hasReviewConfirmPayloadData,
@@ -59,15 +59,15 @@ const confirmedSnapshotPayload = computed(() => (
 ));
 
 const unsavedConfirmPayload = computed(() => (
-  buildUnsavedReviewConfirmPayload(
+  buildUnsavedReviewEvidencePayload(
     currentDraftConfirmPayload.value,
     confirmedSnapshotPayload.value,
   )
 ));
 
 const hasUnsavedChanges = computed(() => {
-  return buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
-    !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value);
+  return buildReviewEvidenceSnapshotKey(currentDraftConfirmPayload.value)
+    !== buildReviewEvidenceSnapshotKey(confirmedSnapshotPayload.value);
 });
 
 const hasUnsavedPendingData = computed(() => (
@@ -103,10 +103,10 @@ async function confirmCurrentData() {
       },
     });
     if (saved) {
-      emitToast({ message: '确认数据已保存', level: 'success' });
+      emitToast({ message: '新增证据已保存', level: 'success' });
     }
   } catch (e) {
-    confirmError.value = e instanceof Error ? e.message : '确认当前数据失败';
+    confirmError.value = e instanceof Error ? e.message : '保存新增证据失败';
   } finally {
     confirmSaving.value = false;
   }
@@ -129,7 +129,7 @@ function cancel() {
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <div class="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-          <span class="text-sm font-medium text-white">待确认数据</span>
+          <span class="text-sm font-medium text-white">待保存证据</span>
         </div>
         <button type="button" class="rounded-lg p-1 text-slate-300 hover:bg-white/10 hover:text-white" title="关闭校审模式"
           @click="reviewStore.setReviewMode(false)">
@@ -186,7 +186,7 @@ function cancel() {
 
       <!-- 提示 -->
       <div class="mt-3 text-xs text-slate-400">
-        {{ !hasUnsavedPendingData && !confirmError ? '当前批注/测量已保存，修改后可再次确认' : '确认后数据将移入已确认列表' }}
+        {{ !hasUnsavedPendingData && !confirmError ? '当前新增证据已保存，修改后可再次保存' : '保存后证据将进入确认记录' }}
       </div>
       <div v-if="confirmError" class="mt-2 text-xs text-rose-300">
         {{ confirmError }}

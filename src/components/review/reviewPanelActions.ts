@@ -179,6 +179,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function omitSnapshotPresentationFields(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => omitSnapshotPresentationFields(item));
+  }
+  if (!isPlainObject(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'collapsed')
+      .map(([key, entry]) => [key, omitSnapshotPresentationFields(entry)])
+  );
+}
+
 function getSnapshotObjectSortKey(value: unknown): string {
   if (!isPlainObject(value)) return JSON.stringify(value);
   const id = typeof value.id === 'string' ? value.id : '';
@@ -208,18 +221,22 @@ function normalizeSnapshotValue(value: unknown): unknown {
   );
 }
 
+function normalizeSnapshotForComparison(value: unknown): unknown {
+  return normalizeSnapshotValue(omitSnapshotPresentationFields(value));
+}
+
 export function buildReviewConfirmSnapshotKey(payload: ReviewConfirmSnapshotPayload): string {
   return JSON.stringify({
-    annotations: normalizeSnapshotValue(payload.annotations),
-    cloudAnnotations: normalizeSnapshotValue(payload.cloudAnnotations),
-    rectAnnotations: normalizeSnapshotValue(payload.rectAnnotations),
-    obbAnnotations: normalizeSnapshotValue(payload.obbAnnotations),
-    measurements: normalizeSnapshotValue(payload.measurements),
+    annotations: normalizeSnapshotForComparison(payload.annotations),
+    cloudAnnotations: normalizeSnapshotForComparison(payload.cloudAnnotations),
+    rectAnnotations: normalizeSnapshotForComparison(payload.rectAnnotations),
+    obbAnnotations: normalizeSnapshotForComparison(payload.obbAnnotations),
+    measurements: normalizeSnapshotForComparison(payload.measurements),
   });
 }
 
 function buildSnapshotItemKey(item: unknown): string {
-  return JSON.stringify(normalizeSnapshotValue(item));
+  return JSON.stringify(normalizeSnapshotForComparison(item));
 }
 
 function getSnapshotItemId(item: unknown): string | null {
@@ -277,11 +294,50 @@ export function buildUnsavedReviewConfirmPayload(
   };
 }
 
+function omitReviewState(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => omitReviewState(item));
+  }
+  if (!isPlainObject(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'reviewState')
+      .map(([key, entry]) => [key, omitReviewState(entry)])
+  );
+}
+
+export function buildReviewEvidenceSnapshotPayload(
+  payload: ReviewConfirmSnapshotPayload
+): ReviewConfirmSnapshotPayload {
+  return {
+    annotations: payload.annotations.map((item) => omitReviewState(item)),
+    cloudAnnotations: payload.cloudAnnotations.map((item) => omitReviewState(item)),
+    rectAnnotations: payload.rectAnnotations.map((item) => omitReviewState(item)),
+    obbAnnotations: payload.obbAnnotations.map((item) => omitReviewState(item)),
+    measurements: payload.measurements,
+  };
+}
+
+export function buildReviewEvidenceSnapshotKey(payload: ReviewConfirmSnapshotPayload): string {
+  return buildReviewConfirmSnapshotKey(buildReviewEvidenceSnapshotPayload(payload));
+}
+
+export function buildUnsavedReviewEvidencePayload(
+  current: ReviewConfirmSnapshotPayload,
+  baseline: ReviewConfirmSnapshotPayload
+): ReviewConfirmSnapshotPayload {
+  return buildUnsavedReviewConfirmPayload(
+    buildReviewEvidenceSnapshotPayload(current),
+    buildReviewEvidenceSnapshotPayload(baseline)
+  );
+}
+
 export function buildSubmitBlockingReviewConfirmPayload(
   current: ReviewConfirmSnapshotPayload,
   baseline: ReviewConfirmSnapshotPayload
 ): ReviewConfirmSnapshotPayload {
-  const payload = buildUnsavedReviewConfirmPayload(current, baseline);
+  const payload = buildUnsavedReviewEvidencePayload(current, baseline);
   return {
     ...payload,
     obbAnnotations: [],

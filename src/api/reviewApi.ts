@@ -114,9 +114,18 @@ export function clearAuthToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+const DEFAULT_FETCH_TIMEOUT_MS = 12_000;
+
+async function fetchJson<T>(
+  path: string,
+  init?: RequestInit,
+  options?: { timeoutMs?: number },
+): Promise<T> {
   const base = getBaseUrl().replace(/\/$/, '');
   const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+  const controller = init?.signal ? null : new AbortController();
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  const timeout = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   // 自动添加 Authorization Header（如果有 token）
   const token = getAuthToken();
@@ -128,10 +137,21 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const resp = await fetch(url, {
-    ...init,
-    headers,
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      ...init,
+      headers,
+      signal: init?.signal || controller?.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`${init?.method || 'GET'} ${url} 超时`);
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
@@ -347,6 +367,13 @@ export type WorkflowRecordData = {
   confirmedAt: string;
 };
 
+export type WorkflowNextStepDetail = {
+  node: string;
+  roles: string;
+  assigneeId: string;
+  assigneeName: string;
+};
+
 export type WorkflowSyncData = {
   title?: string;
   models: (string | Record<string, unknown>)[];
@@ -359,6 +386,7 @@ export type WorkflowSyncData = {
   taskCreated?: boolean;
   currentNode?: string;
   taskStatus?: string;
+  nextStepDetail?: WorkflowNextStepDetail;
   annotationStates?: AnnotationReviewStateView[];
 };
 
@@ -388,9 +416,15 @@ export type WorkflowVerifyRequest = {
 export type WorkflowVerifyData = {
   passed: boolean;
   action: string;
+  blockCode?: string;
   currentNode: string;
   taskStatus: string;
   nextStep?: string;
+  actorId?: string;
+  ownerId?: string;
+  ownerSource?: string;
+  expectedNextNode?: string;
+  requestedNextStep?: WorkflowVerifyNextStep;
   reason: string;
   recommendedAction: 'proceed' | 'return' | 'block';
 };
@@ -493,6 +527,15 @@ type RawWorkflowRecordData = {
   confirmedAt?: string;
 };
 
+type RawWorkflowNextStepDetail = {
+  node?: string;
+  roles?: string;
+  assignee_id?: string;
+  assigneeId?: string;
+  assignee_name?: string;
+  assigneeName?: string;
+};
+
 type RawWorkflowSyncData = {
   title?: string;
   models?: (string | Record<string, unknown>)[];
@@ -512,6 +555,8 @@ type RawWorkflowSyncData = {
   currentNode?: string;
   task_status?: string;
   taskStatus?: string;
+  next_step_detail?: RawWorkflowNextStepDetail;
+  nextStepDetail?: RawWorkflowNextStepDetail;
 };
 
 type RawWorkflowSyncResponse = {
@@ -524,15 +569,34 @@ type RawWorkflowSyncResponse = {
 type RawWorkflowVerifyData = {
   passed?: boolean;
   action?: string;
+  block_code?: string;
+  blockCode?: string;
   current_node?: string;
   currentNode?: string;
   task_status?: string;
   taskStatus?: string;
   next_step?: string;
   nextStep?: string;
+  actor_id?: string;
+  actorId?: string;
+  owner_id?: string;
+  ownerId?: string;
+  owner_source?: string;
+  ownerSource?: string;
+  expected_next_node?: string;
+  expectedNextNode?: string;
+  requested_next_step?: RawWorkflowVerifyNextStep;
+  requestedNextStep?: RawWorkflowVerifyNextStep;
   reason?: string;
   recommended_action?: 'proceed' | 'return' | 'block';
   recommendedAction?: 'proceed' | 'return' | 'block';
+};
+
+type RawWorkflowVerifyNextStep = {
+  assignee_id?: string;
+  assigneeId?: string;
+  name?: string;
+  roles?: string;
 };
 
 type RawWorkflowVerifyResponse = {
@@ -803,7 +867,39 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
       taskCreated: data.taskCreated ?? data.task_created,
       currentNode: data.currentNode || data.current_node,
       taskStatus: data.taskStatus || data.task_status,
+      nextStepDetail: normalizeWorkflowNextStepDetail(
+        data.nextStepDetail || data.next_step_detail
+      ),
     } : undefined,
+  };
+}
+
+function normalizeWorkflowNextStepDetail(
+  raw: RawWorkflowNextStepDetail | null | undefined
+): WorkflowNextStepDetail | undefined {
+  if (!raw) return undefined;
+  const node = raw.node || '';
+  const assigneeId = raw.assigneeId || raw.assignee_id || '';
+  if (!node && !assigneeId) return undefined;
+  return {
+    node,
+    roles: raw.roles || node,
+    assigneeId,
+    assigneeName: raw.assigneeName || raw.assignee_name || assigneeId,
+  };
+}
+
+function normalizeWorkflowVerifyNextStep(
+  raw: RawWorkflowVerifyNextStep | null | undefined
+): WorkflowVerifyNextStep | undefined {
+  if (!raw) return undefined;
+  const assigneeId = raw.assigneeId || raw.assignee_id || '';
+  const roles = raw.roles || '';
+  if (!assigneeId && !roles) return undefined;
+  return {
+    assigneeId,
+    name: raw.name || assigneeId,
+    roles,
   };
 }
 
@@ -815,9 +911,17 @@ function normalizeWorkflowVerifyResponse(raw: RawWorkflowVerifyResponse): Workfl
     data: data ? {
       passed: data.passed === true,
       action: data.action || '',
+      blockCode: data.blockCode || data.block_code || undefined,
       currentNode: data.currentNode || data.current_node || '',
       taskStatus: data.taskStatus || data.task_status || '',
       nextStep: data.nextStep || data.next_step || undefined,
+      actorId: data.actorId || data.actor_id || undefined,
+      ownerId: data.ownerId || data.owner_id || undefined,
+      ownerSource: data.ownerSource || data.owner_source || undefined,
+      expectedNextNode: data.expectedNextNode || data.expected_next_node || undefined,
+      requestedNextStep: normalizeWorkflowVerifyNextStep(
+        data.requestedNextStep || data.requested_next_step
+      ),
       reason: data.reason || '',
       recommendedAction: data.recommendedAction || data.recommended_action || 'block',
     } : undefined,
@@ -1175,9 +1279,18 @@ export async function reviewRecordCreate(
  * 获取任务的确认记录
  * GET /api/review/records/by-task/{taskId}
  */
-export async function reviewRecordGetByTaskId(taskId: string): Promise<ConfirmedRecordResponse> {
+export async function reviewRecordGetByTaskId(
+  taskId: string,
+  options?: { formId?: string | null },
+): Promise<ConfirmedRecordResponse> {
+  const params = new URLSearchParams();
+  const formId = options?.formId?.trim();
+  if (formId) {
+    params.set('form_id', formId);
+  }
+  const query = params.toString();
   return await fetchJson<ConfirmedRecordResponse>(
-    `/api/review/records/by-task/${encodeURIComponent(taskId)}`
+    `/api/review/records/by-task/${encodeURIComponent(taskId)}${query ? `?${query}` : ''}`
   );
 }
 
@@ -1217,6 +1330,19 @@ export async function reviewTaskGetHistory(taskId: string): Promise<ReviewHistor
 
 // ============ 评论 API ============
 
+type ReviewCommentContext = {
+  formId?: string;
+  taskId?: string;
+};
+
+function appendReviewCommentContextQuery(path: string, context?: ReviewCommentContext): string {
+  if (!context?.formId && !context?.taskId) return path;
+  const params = new URLSearchParams();
+  if (context.formId) params.set('form_id', context.formId);
+  if (context.taskId) params.set('task_id', context.taskId);
+  return `${path}?${params}`;
+}
+
 /**
  * 添加批注评论
  * POST /api/review/comments
@@ -1241,11 +1367,16 @@ export async function reviewCommentCreate(
  */
 export async function reviewCommentUpdate(
   commentId: string,
-  content: string
+  content: string,
+  context?: ReviewCommentContext,
 ): Promise<{ success: boolean; comment?: AnnotationComment; error_message?: string }> {
   return await fetchJson(`/api/review/comments/item/${encodeURIComponent(commentId)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({
+      content,
+      formId: context?.formId,
+      taskId: context?.taskId,
+    }),
   });
 }
 
@@ -1261,17 +1392,33 @@ export async function reviewCommentGetByAnnotation(
   const params = new URLSearchParams({ type: annotationType });
   if (context?.formId) params.set('form_id', context.formId);
   if (context?.taskId) params.set('task_id', context.taskId);
-  return await fetchJson(`/api/review/comments/by-annotation/${encodeURIComponent(annotationId)}?${params}`);
+  const response = await fetchJson<{
+    success: boolean;
+    comments?: Record<string, unknown>[];
+    error_message?: string;
+  }>(`/api/review/comments/by-annotation/${encodeURIComponent(annotationId)}?${params}`);
+  return {
+    success: response.success,
+    comments: Array.isArray(response.comments)
+      ? response.comments.map((comment) => normalizeAnnotationComment(comment))
+      : [],
+    error_message: response.error_message,
+  };
 }
 
 /**
  * 删除评论
  * DELETE /api/review/comments/item/{commentId}
  */
-export async function reviewCommentDelete(commentId: string): Promise<ReviewActionResponse> {
-  return await fetchJson(`/api/review/comments/item/${encodeURIComponent(commentId)}`, {
-    method: 'DELETE',
-  });
+export async function reviewCommentDelete(
+  commentId: string,
+  context?: ReviewCommentContext,
+): Promise<ReviewActionResponse> {
+  const path = appendReviewCommentContextQuery(
+    `/api/review/comments/item/${encodeURIComponent(commentId)}`,
+    context,
+  );
+  return await fetchJson(path, { method: 'DELETE' });
 }
 
 // ============ 批注严重度 API ============
@@ -1281,6 +1428,11 @@ export type AnnotationSeverityUpdateResponse = {
   severity?: AnnotationSeverity | null;
   updatedAt?: number;
   error_message?: string;
+};
+
+export type AnnotationUpdateContext = {
+  formId?: string | null;
+  taskId?: string | null;
 };
 
 /**
@@ -1295,14 +1447,56 @@ export type AnnotationSeverityUpdateResponse = {
 export async function annotationSeverityUpdate(
   annotationId: string,
   annotationType: AnnotationComment['annotationType'],
-  severity: AnnotationSeverity | null
+  severity: AnnotationSeverity | null,
+  context?: AnnotationUpdateContext,
 ): Promise<AnnotationSeverityUpdateResponse> {
   const params = new URLSearchParams({ type: annotationType });
   return await fetchJson(
     `/api/review/annotations/${encodeURIComponent(annotationId)}/severity?${params}`,
     {
       method: 'PATCH',
-      body: JSON.stringify({ severity }),
+      body: JSON.stringify({
+        severity,
+        formId: context?.formId ?? undefined,
+        taskId: context?.taskId ?? undefined,
+      }),
+    }
+  );
+}
+
+export type AnnotationBasicFieldsUpdateRequest = {
+  title?: string;
+  description?: string;
+};
+
+export type AnnotationBasicFieldsUpdateResponse = {
+  success: boolean;
+  title?: string;
+  description?: string;
+  updatedAt?: number;
+  error_message?: string;
+};
+
+/**
+ * 更新批注基础字段。
+ * 只更新标题/描述，不修改几何字段。
+ */
+export async function annotationBasicFieldsUpdate(
+  annotationId: string,
+  annotationType: AnnotationComment['annotationType'],
+  patch: AnnotationBasicFieldsUpdateRequest,
+  context?: AnnotationUpdateContext,
+): Promise<AnnotationBasicFieldsUpdateResponse> {
+  const params = new URLSearchParams({ type: annotationType });
+  return await fetchJson(
+    `/api/review/annotations/${encodeURIComponent(annotationId)}?${params}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...patch,
+        formId: context?.formId ?? undefined,
+        taskId: context?.taskId ?? undefined,
+      }),
     }
   );
 }

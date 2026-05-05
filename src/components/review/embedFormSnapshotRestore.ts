@@ -108,17 +108,19 @@ export async function restoreEmbedFormSnapshot(
 
     try {
       const snapshot = shadowResult?.snapshot ?? buildSnapshotFromWorkflowSync(data);
-      const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
-      if (merge.changed) {
-        getReviewCommentEventLog().push({
-          kind: 'snapshot_merged',
-          key: 'workflow_sync',
-          payload: {
-            formId: options.formId,
-            comments: snapshot.comments.length,
-            annotations: snapshot.annotations.length,
-          },
-        });
+      if (snapshot.comments.length > 0) {
+        const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+        if (merge.changed) {
+          getReviewCommentEventLog().push({
+            kind: 'snapshot_merged',
+            key: 'workflow_sync',
+            payload: {
+              formId: options.formId,
+              comments: snapshot.comments.length,
+              annotations: snapshot.annotations.length,
+            },
+          });
+        }
       }
     } catch (err) {
       if (typeof console !== 'undefined') {

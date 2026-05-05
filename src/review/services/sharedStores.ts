@@ -10,8 +10,6 @@
  *   - 不在模块加载阶段做任何副作用，便于在 SSR / 单测里安全 import。
  */
 
-import type { AnnotationComment } from '@/types/auth';
-
 import { buildCommentThreadKey } from '../domain/commentThread';
 import { lowerSnapshotComment } from '../domain/reviewSnapshot';
 import { isReviewFlagEnabled } from '../flags';
@@ -24,6 +22,8 @@ import {
   createCommentThreadStore,
   type CommentThreadStore,
 } from './commentThreadStore';
+
+import type { AnnotationComment } from '@/types/auth';
 
 let _threadStore: CommentThreadStore | null = null;
 let _eventLog: CommentEventLog | null = null;
@@ -55,13 +55,20 @@ export function isReviewCommentThreadStoreActive(): boolean {
 /**
  * 从 commentThreadStore 读取指定批注的评论，
  * 返回 AnnotationComment[] 格式（与 useToolStore.getAnnotationComments 兼容）。
+ *
+ * formId 语义：
+ * - 提供 formId/taskId 时，仅返回该上下文范围下的评论；不会回退到无上下文 key。
+ * - 不提供 formId/taskId 时，仅返回无上下文 key 评论，避免把正式单据评论
+ *   错混入到草稿/无单据上下文中。
  */
 export function getCommentsFromStore(
   annotationType: 'text' | 'cloud' | 'rect' | 'obb',
   annotationId: string,
+  formId?: string | null,
+  taskId?: string | null,
 ): AnnotationComment[] {
   const store = getReviewCommentThreadStore();
-  const key = buildCommentThreadKey(annotationType, annotationId);
+  const key = buildCommentThreadKey(annotationType, annotationId, formId, taskId);
   const thread = store.getThread(key);
   if (!thread) return [];
   return thread.entries.map(lowerSnapshotComment);

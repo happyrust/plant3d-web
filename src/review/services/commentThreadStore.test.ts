@@ -84,6 +84,30 @@ describe('createCommentThreadStore', () => {
     expect(store.getThread(buildCommentThreadKey('text', 'a-1'))?.entries[0].createdAt).toBe(5);
   });
 
+  it('upsertComment keeps the same commentId isolated by formId and taskId', () => {
+    const store = createCommentThreadStore();
+    store.upsertComment(makeComment({
+      commentId: 'c-1',
+      annotationId: 'a-1',
+      createdAt: 1,
+      formId: 'FORM-1',
+      taskId: 'task-1',
+      content: 'task-1',
+    }));
+    store.upsertComment(makeComment({
+      commentId: 'c-1',
+      annotationId: 'a-1',
+      createdAt: 2,
+      formId: 'FORM-1',
+      taskId: 'task-2',
+      content: 'task-2',
+    }));
+
+    expect(store.getIndex().totalEntries).toBe(2);
+    expect(store.getThread(buildCommentThreadKey('text', 'a-1', 'FORM-1', 'task-1'))?.entries[0].content).toBe('task-1');
+    expect(store.getThread(buildCommentThreadKey('text', 'a-1', 'FORM-1', 'task-2'))?.entries[0].content).toBe('task-2');
+  });
+
   it('deleteComment removes entry and clears empty thread', () => {
     const store = createCommentThreadStore();
     store.upsertComment(makeComment({ commentId: 'c-1', annotationId: 'a-1', createdAt: 1 }));
@@ -124,6 +148,56 @@ describe('createCommentThreadStore', () => {
 
     expect(store.clear().changed).toBe(false);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('setThreadComments replaces only the targeted thread', () => {
+    const store = createCommentThreadStore();
+    store.upsertComment(makeComment({ commentId: 'c-1', annotationId: 'a-1', createdAt: 1, content: 'old-1' }));
+    store.upsertComment(makeComment({ commentId: 'c-2', annotationId: 'a-1', createdAt: 2, content: 'old-2' }));
+    store.upsertComment(
+      makeComment({ commentId: 'c-3', annotationId: 'a-2', annotationType: 'cloud', createdAt: 1 }),
+    );
+
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    const targetKey = buildCommentThreadKey('text', 'a-1');
+    const replacement = [
+      makeComment({ commentId: 'c-9', annotationId: 'a-1', createdAt: 10, content: 'new-9' }),
+    ];
+    expect(store.setThreadComments(targetKey, replacement).changed).toBe(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    expect(store.getThread(targetKey)?.entries.map((e) => e.commentId)).toEqual(['c-9']);
+    // Other threads must be untouched.
+    expect(
+      store.getThread(buildCommentThreadKey('cloud', 'a-2'))?.entries.map((e) => e.commentId),
+    ).toEqual(['c-3']);
+  });
+
+  it('setThreadComments with the same content is a no-op', () => {
+    const store = createCommentThreadStore();
+    const c = makeComment({ commentId: 'c-1', annotationId: 'a-1', createdAt: 1, content: 'same' });
+    store.upsertComment(c);
+
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    expect(store.setThreadComments(buildCommentThreadKey('text', 'a-1'), [c]).changed).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('setThreadComments with empty array clears the thread', () => {
+    const store = createCommentThreadStore();
+    store.upsertComment(makeComment({ commentId: 'c-1', annotationId: 'a-1', createdAt: 1 }));
+    store.upsertComment(
+      makeComment({ commentId: 'c-2', annotationId: 'a-2', annotationType: 'cloud', createdAt: 2 }),
+    );
+
+    expect(store.setThreadComments(buildCommentThreadKey('text', 'a-1'), []).changed).toBe(true);
+    expect(store.getThread(buildCommentThreadKey('text', 'a-1'))).toBeUndefined();
+    // Cloud thread is untouched.
+    expect(store.getThread(buildCommentThreadKey('cloud', 'a-2'))?.entries).toHaveLength(1);
   });
 
   it('subscribe returns unsubscribe handle', () => {

@@ -30,7 +30,7 @@ import {
   useAnnotationProcessingEntryTarget,
 } from './annotationProcessingEntry';
 import AnnotationTableView from './AnnotationTableView.vue';
-import AnnotationWorkspace from './AnnotationWorkspace.vue';
+import AnnotationWorkspace, { type AnnotationWorkspaceTextCollapsePayload } from './AnnotationWorkspace.vue';
 import {
   buildAnnotationWorkspaceItems,
   buildAnnotationWorkspaceSummary,
@@ -60,11 +60,11 @@ import {
 } from './reviewerWorkbenchViewModeBus';
 import {
   buildSubmitBlockingReviewConfirmPayload,
+  buildReviewEvidenceSnapshotKey,
   buildReviewConfirmSnapshotPayload,
-  buildUnsavedReviewConfirmPayload,
+  buildUnsavedReviewEvidencePayload,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
-  buildReviewConfirmSnapshotKey,
   buildReviewConfirmSnapshotPayloadFromRecords,
   confirmCurrentDataSafely,
   getSubmitActionLabel,
@@ -86,6 +86,8 @@ import {
   reviewSyncExport,
   reviewSyncImport,
 } from '@/api/reviewApi';
+import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
+import { refreshCommentThread } from '@/composables/useCommentThread';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
@@ -131,6 +133,14 @@ type NormalizedTaskContext = {
   componentCount: number;
   returnReason: string | null;
 };
+type ReviewPanelDensity = 'normal' | 'dock';
+
+const props = withDefaults(defineProps<{
+  density?: ReviewPanelDensity;
+}>(), {
+  density: 'normal',
+});
+const isDockDensity = computed(() => props.density === 'dock');
 
 const reviewStore = useReviewStore();
 const toolStore = useToolStore();
@@ -143,10 +153,12 @@ const annotationProcessingEntryTarget = useAnnotationProcessingEntryTarget();
 // 确认记录场景恢复（公共模块）
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
+  skipClearOnEmpty: true,
 });
 const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
 
@@ -309,6 +321,7 @@ function downloadAttachment(attachment: ReviewAttachment) {
 // 模型过滤相关
 const isFilteringByTask = ref(false);
 const selectedTaskComponentRefno = ref<string | null>(null);
+const expandedWorkflowTransfer = ref(false);
 
 function normalizeComponentRefno(rawRefno?: string | null): string {
   const raw = String(rawRefno ?? '').trim();
@@ -798,6 +811,7 @@ async function handleTaskComponentSelect(rawRefno?: string | null): Promise<void
 watch(currentTask, async (newTask) => {
   selectedTaskComponentRefno.value = null;
   lastRestoredSceneKey.value = null;
+  expandedWorkflowTransfer.value = false;
 
   if (newTask && newTask.components.length > 0) {
     // 有新任务时自动应用过滤
@@ -844,6 +858,7 @@ watch(currentTask, async (newTask) => {
 watch(
   () => ({
     taskId: currentTask.value?.id ?? null,
+    formId: currentTask.value?.formId ?? null,
     recordKeys: currentTaskConfirmedRecords.value.map((record) => `${record.id}:${record.confirmedAt}`).join('|'),
     viewerReady: !!viewerContext.viewerRef.value,
     toolsReady: !!viewerContext.tools.value,
@@ -880,14 +895,14 @@ const confirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
 ));
 const unsavedConfirmPayload = computed(() => (
-  buildUnsavedReviewConfirmPayload(
+  buildUnsavedReviewEvidencePayload(
     currentDraftConfirmPayload.value,
     confirmedSnapshotPayload.value,
   )
 ));
 const hasUnsavedChanges = computed(() => {
-  return buildReviewConfirmSnapshotKey(currentDraftConfirmPayload.value)
-    !== buildReviewConfirmSnapshotKey(confirmedSnapshotPayload.value);
+  return buildReviewEvidenceSnapshotKey(currentDraftConfirmPayload.value)
+    !== buildReviewEvidenceSnapshotKey(confirmedSnapshotPayload.value);
 });
 const hasUnsavedPendingData = computed(() => hasUnsavedChanges.value);
 const submitBlockingConfirmPayload = computed(() => (
@@ -934,17 +949,41 @@ watch(reviewerWorkbenchViewModeRequest, (request) => {
   clearReviewerWorkbenchViewModeRequest();
 });
 
-const allAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => buildAnnotationWorkspaceItems({
-  annotations: toolStore.annotations.value,
-  cloudAnnotations: toolStore.cloudAnnotations.value,
-  rectAnnotations: toolStore.rectAnnotations.value,
-  obbAnnotations: toolStore.obbAnnotations.value,
-  getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id).length,
-}));
+const allAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
+  const formIdContext = currentTask.value?.formId ?? null;
+  const taskIdContext = currentTask.value?.id ?? null;
+  return buildAnnotationWorkspaceItems({
+    annotations: toolStore.annotations.value,
+    cloudAnnotations: toolStore.cloudAnnotations.value,
+    rectAnnotations: toolStore.rectAnnotations.value,
+    obbAnnotations: toolStore.obbAnnotations.value,
+    getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id, formIdContext, taskIdContext).length,
+  });
+});
 
 const scopedAnnotationItems = computed(() => (
   scopeAnnotationWorkspaceItemsByFormId(allAnnotationItems.value, currentTask.value?.formId)
 ));
+
+const confirmedRecordAnnotationTotal = computed(() => (
+  currentTaskConfirmedRecords.value.reduce((sum, record) => sum + getConfirmedAnnotationCount(record), 0)
+));
+
+const emptyAnnotationRestoreDiagnostic = computed(() => {
+  const task = currentTask.value;
+  if (!task) return null;
+  const recordCount = currentTaskConfirmedRecords.value.length;
+  const annotationCount = confirmedRecordAnnotationTotal.value;
+  if (recordCount === 0 || annotationCount === 0 || scopedAnnotationItems.value.length > 0) {
+    return null;
+  }
+  return {
+    formId: task.formId?.trim() || '-',
+    taskId: task.id,
+    recordCount,
+    annotationCount,
+  };
+});
 
 const annotationWorkspaceSummary = computed(() => (
   buildAnnotationWorkspaceSummary(scopedAnnotationItems.value)
@@ -955,7 +994,7 @@ const filteredAnnotationItems = computed(() => (
 ));
 
 const selectedAnnotation = computed<AnnotationWorkspaceItem | null>(() => (
-  filteredAnnotationItems.value.find((item) => (
+  scopedAnnotationItems.value.find((item) => (
     item.id === selectedAnnotationId.value && item.type === selectedAnnotationType.value
   )) ?? null
 ));
@@ -974,6 +1013,26 @@ const linkedMeasurements = computed(() => (
 const canEditSelectedSeverity = computed(() => (
   canEditAnnotationSeverity(userStore.currentUser.value, selectedAnnotation.value?.authorId)
 ));
+const savingAnnotationSeverityKeys = ref<string[]>([]);
+const savingAnnotationTitleKeys = ref<string[]>([]);
+
+function annotationItemKey(item: Pick<AnnotationWorkspaceItem, 'type' | 'id'>): string {
+  return `${item.type}:${item.id}`;
+}
+
+function setSavingKey(target: typeof savingAnnotationSeverityKeys, key: string, saving: boolean) {
+  const next = new Set(target.value);
+  if (saving) {
+    next.add(key);
+  } else {
+    next.delete(key);
+  }
+  target.value = Array.from(next);
+}
+
+function canEditAnnotationTableItem(item: AnnotationWorkspaceItem): boolean {
+  return canEditAnnotationSeverity(userStore.currentUser.value, item.authorId);
+}
 
 function setActiveWorkspaceAnnotation(type: AnnotationType | null, id: string | null) {
   toolStore.activeAnnotationId.value = type === 'text' ? id : null;
@@ -994,10 +1053,31 @@ function selectWorkspaceAnnotation(item: AnnotationWorkspaceItem | null) {
   setActiveWorkspaceAnnotation(item.type, item.id);
 }
 
+function handleTextAnnotationCollapseCommand(payload: AnnotationWorkspaceTextCollapsePayload) {
+  const ids = payload.ids.filter((id) => id.trim().length > 0);
+  if (ids.length === 0) return;
+
+  if (payload.mode === 'collapse-all') {
+    toolStore.setTextAnnotationsCollapsed(ids, true);
+    return;
+  }
+
+  if (payload.mode === 'expand-all') {
+    toolStore.setTextAnnotationsCollapsed(ids, false);
+    return;
+  }
+
+  toolStore.setTextAnnotationsCollapsed(ids, true);
+  if (payload.selectedId && ids.includes(payload.selectedId)) {
+    toolStore.setTextAnnotationsCollapsed([payload.selectedId], false);
+    setActiveWorkspaceAnnotation('text', payload.selectedId);
+  }
+}
+
 function resolvePreferredWorkspaceAnnotation(): AnnotationWorkspaceItem | null {
   const target = externalProcessingTarget.value;
   if (target) {
-    const matched = filteredAnnotationItems.value.find((item) => (
+    const matched = scopedAnnotationItems.value.find((item) => (
       item.id === target.annotationId && item.type === target.annotationType
     ));
     if (matched) return matched;
@@ -1071,6 +1151,7 @@ async function locateWorkspaceAnnotation(item: AnnotationWorkspaceItem | null) {
 }
 
 async function handleReviewerTableOpenAnnotation(item: AnnotationWorkspaceItem) {
+  annotationFilter.value = 'all';
   annotationListViewMode.value = 'split';
   await locateWorkspaceAnnotation(item);
 }
@@ -1102,9 +1183,56 @@ function locateMeasurement(item: (typeof linkedMeasurements.value)[number]) {
   viewerContext.tools.value?.flyToMeasurement(item.id);
 }
 
+async function saveWorkspaceAnnotationSeverity(
+  item: AnnotationWorkspaceItem,
+  severity: AnnotationSeverity | undefined,
+) {
+  if (!canEditAnnotationTableItem(item)) {
+    emitToast({ message: '当前账号不能修改该批注的错误标记', level: 'warning' });
+    return;
+  }
+  const key = annotationItemKey(item);
+  if (savingAnnotationSeverityKeys.value.includes(key)) return;
+
+  setSavingKey(savingAnnotationSeverityKeys, key, true);
+  try {
+    await saveAnnotationSeverity(item.type, item.id, severity, {
+      formId: currentTask.value?.formId ?? null,
+      taskId: currentTask.value?.id ?? null,
+    });
+  } finally {
+    setSavingKey(savingAnnotationSeverityKeys, key, false);
+  }
+}
+
 function updateSelectedAnnotationSeverity(severity: AnnotationSeverity | undefined) {
   if (!selectedAnnotation.value || !canEditSelectedSeverity.value) return;
-  toolStore.updateAnnotationSeverity(selectedAnnotation.value.type, selectedAnnotation.value.id, severity);
+  void saveWorkspaceAnnotationSeverity(selectedAnnotation.value, severity);
+}
+
+async function updateAnnotationTitleFromTable(payload: {
+  item: AnnotationWorkspaceItem;
+  title: string;
+}) {
+  const title = payload.title.trim();
+  if (!title || title === payload.item.title.trim()) return;
+  if (!canEditAnnotationTableItem(payload.item)) {
+    emitToast({ message: '当前账号不能修改该批注标题', level: 'warning' });
+    return;
+  }
+
+  const key = annotationItemKey(payload.item);
+  if (savingAnnotationTitleKeys.value.includes(key)) return;
+
+  setSavingKey(savingAnnotationTitleKeys, key, true);
+  try {
+    await saveAnnotationBasicFields(payload.item.type, payload.item.id, { title }, {
+      formId: currentTask.value?.formId ?? null,
+      taskId: currentTask.value?.id ?? null,
+    });
+  } finally {
+    setSavingKey(savingAnnotationTitleKeys, key, false);
+  }
 }
 
 async function confirmCurrentData() {
@@ -1133,12 +1261,12 @@ async function confirmCurrentData() {
       },
     });
     if (saved) {
-      emitToast({ message: '确认数据已保存', level: 'success' });
+      emitToast({ message: '新增证据已保存', level: 'success' });
       await nextTick();
       await restoreConfirmedRecordsIntoScene(true);
     }
   } catch (e) {
-    confirmError.value = e instanceof Error ? e.message : '确认当前数据失败';
+    confirmError.value = e instanceof Error ? e.message : '保存新增证据失败';
   } finally {
     confirmSaving.value = false;
   }
@@ -1188,11 +1316,15 @@ onMounted(() => {
         const id = `e2e-annot-${Date.now()}`;
         toolStore.addAnnotation({
           id,
+          entityId: '24381/145018',
+          worldPos: [0, 0, 0],
           title: title || `E2E 批注 ${new Date().toLocaleTimeString('zh-CN')}`,
           description: description || '自动化测试创建的批注',
-          position: [0, 0, 0],
           normal: [0, 1, 0],
           visible: true,
+          glyph: '1',
+          refno: '24381/145018',
+          refnos: ['24381/145018'],
           createdAt: Date.now(),
         } as Parameters<typeof toolStore.addAnnotation>[0]);
         return id;
@@ -1241,6 +1373,29 @@ onMounted(() => {
       },
       getConfirmedMeasurementCount() {
         return reviewStore.totalConfirmedMeasurements.value;
+      },
+      async refreshAnnotationCommentThread(annotationType?: AnnotationType, annotationId?: string) {
+        const targetType = annotationType || selectedAnnotation.value?.type;
+        const targetId = annotationId || selectedAnnotation.value?.id;
+        if (!targetType || !targetId) return 0;
+
+        const item = scopedAnnotationItems.value.find((candidate) => (
+          candidate.type === targetType && candidate.id === targetId
+        ));
+        if (item) {
+          selectWorkspaceAnnotation(item);
+        }
+
+        const formId = currentTask.value?.formId?.trim() || null;
+        const taskId = currentTask.value?.id ?? null;
+        await refreshCommentThread({
+          annotationType: targetType,
+          annotationId: targetId,
+          formId,
+          taskId,
+        });
+        await nextTick();
+        return toolStore.getAnnotationComments(targetType, targetId, formId, taskId).length;
       },
     };
   }
@@ -1370,15 +1525,19 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
 </script>
 
 <template>
-  <div class="flex h-full flex-col gap-3 overflow-y-auto p-3" data-panel="review">
+  <div class="flex h-full min-w-0 flex-col overflow-y-auto"
+    :class="isDockDensity ? 'gap-2 p-2' : 'gap-3 p-3'"
+    data-panel="review"
+    :data-density="props.density">
     <!-- ═══════ A. 任务头部 (紧凑) ═══════ -->
     <div v-if="currentTask"
-      class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+      class="rounded-xl border border-slate-200 bg-white shadow-sm"
+      :class="isDockDensity ? 'p-2' : 'p-4'"
       data-testid="reviewer-landing-workspace">
       <!-- 标题行: 任务名 + 节点徽章 + 操作 -->
-      <div class="flex items-center justify-between gap-2" data-guide="review-panel-header">
-        <div class="flex items-center gap-2 min-w-0">
-          <ClipboardCheck class="h-5 w-5 shrink-0 text-primary" />
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-2" data-guide="review-panel-header">
+        <div class="flex min-w-0 items-center gap-2">
+          <ClipboardCheck :class="isDockDensity ? 'h-4 w-4 shrink-0 text-primary' : 'h-5 w-5 shrink-0 text-primary'" />
           <h2 class="truncate text-base font-semibold text-slate-950">{{ currentTask.title }}</h2>
           <span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
             {{ currentTaskNodeLabel }}
@@ -1405,12 +1564,20 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
         </div>
       </div>
 
+      <div v-if="isDockDensity" class="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-slate-500">
+        <span class="truncate">项目 {{ taskContext?.modelName || '-' }}</span>
+        <span>{{ taskContext?.componentCount || 0 }} 构件</span>
+        <span class="max-w-full truncate rounded-full bg-slate-100 px-2 py-0.5">{{ currentTaskFormId }}</span>
+        <span>{{ currentTaskStatusLabel }}</span>
+      </div>
+
       <!-- 流程步骤条 -->
-      <WorkflowStepBar v-if="taskContext" :current-node="taskContext.currentNodeCode" class="mt-3" data-guide="workflow-step-bar" />
+      <WorkflowStepBar v-if="expandedWorkflowTransfer && taskContext && !isDockDensity" :current-node="taskContext.currentNodeCode" class="mt-3" data-guide="workflow-step-bar" />
 
       <!-- 打回原因提示 -->
       <div v-if="taskContext?.returnReason"
-        class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
+        :class="isDockDensity ? 'text-xs' : 'text-sm'">
         <span class="font-semibold">打回原因：</span>{{ taskContext.returnReason }}
       </div>
     </div>
@@ -1438,10 +1605,11 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
     </div>
 
     <!-- ═══════ B. 任务详情 (可折叠) ═══════ -->
-    <div v-if="currentTask" class="rounded-lg border border-slate-200 bg-slate-50"
+    <div v-if="currentTask && !isDockDensity" class="rounded-lg border border-slate-200 bg-slate-50"
       data-testid="review-workbench-context-zone">
       <button type="button"
-        class="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg"
+        class="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg"
+        :class="isDockDensity ? 'px-3 py-2' : 'px-4 py-2.5'"
         @click="expandedTaskDetails = !expandedTaskDetails">
         <div class="flex items-center gap-2">
           <ClipboardCheck class="h-4 w-4 text-primary" />
@@ -1456,23 +1624,24 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
         </div>
         <ChevronDown class="h-4 w-4 transition-transform" :class="{ 'rotate-180': expandedTaskDetails }" />
       </button>
-      <div v-show="expandedTaskDetails" class="border-t border-slate-200 p-4 space-y-4">
+      <div v-show="expandedTaskDetails" class="border-t border-slate-200"
+        :class="isDockDensity ? 'space-y-2 p-3' : 'space-y-4 p-4'">
         <section>
           <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 mb-2">流程上下文</div>
           <div class="grid gap-2 sm:grid-cols-2">
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="rounded-lg border border-slate-200 bg-white" :class="isDockDensity ? 'px-3 py-2' : 'px-4 py-3'">
               <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">编校审发起人</div>
               <div class="mt-1 text-sm font-semibold text-slate-900">{{ taskContext?.requesterName || '-' }}</div>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="rounded-lg border border-slate-200 bg-white" :class="isDockDensity ? 'px-3 py-2' : 'px-4 py-3'">
               <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">校核人</div>
               <div class="mt-1 text-sm font-semibold text-slate-900">{{ taskContext?.checkerName || '-' }}</div>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="rounded-lg border border-slate-200 bg-white" :class="isDockDensity ? 'px-3 py-2' : 'px-4 py-3'">
               <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">审核人</div>
               <div class="mt-1 text-sm font-semibold text-slate-900">{{ taskContext?.approverName || '-' }}</div>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div class="rounded-lg border border-slate-200 bg-white" :class="isDockDensity ? 'px-3 py-2' : 'px-4 py-3'">
               <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">当前节点</div>
               <div class="mt-1 text-sm font-semibold text-slate-900">{{ currentTaskNodeLabel }}</div>
             </div>
@@ -1482,7 +1651,7 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
         <!-- 模型清单 -->
         <section>
           <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 mb-2">模型清单</div>
-          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div class="rounded-lg border border-slate-200 bg-white" :class="isDockDensity ? 'px-3 py-2' : 'px-4 py-3'">
             <div class="text-sm font-semibold text-slate-900">{{ taskContext?.modelName || '-' }}</div>
             <div class="mt-1 text-xs text-slate-500">共 {{ taskContext?.componentCount || 0 }} 个构件</div>
           </div>
@@ -1527,13 +1696,15 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
       </div>
     </div>
 
-    <div v-if="currentTask" class="rounded-2xl border border-slate-200 bg-white p-1">
-      <div class="flex flex-wrap items-center gap-1 rounded-[18px] bg-slate-100 p-1">
+    <div v-if="currentTask" class="border border-slate-200 bg-white p-1"
+      :class="isDockDensity ? 'rounded-xl' : 'rounded-2xl'">
+      <div class="flex flex-wrap items-center gap-1 bg-slate-100 p-1"
+        :class="isDockDensity ? 'rounded-lg' : 'rounded-[18px]'">
         <button type="button"
-          class="rounded-2xl px-3 py-2 text-xs font-semibold transition"
-          :class="activeReviewTab === 'records'
+          class="text-xs font-semibold transition"
+          :class="[isDockDensity ? 'rounded-lg px-2.5 py-1.5' : 'rounded-2xl px-3 py-2', activeReviewTab === 'records'
             ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
+            : 'text-slate-500 hover:text-slate-700']"
           @click="activeReviewTab = 'records'">
           审核记录
           <span v-if="confirmedRecordListCount > 0"
@@ -1542,10 +1713,10 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
           </span>
         </button>
         <button type="button"
-          class="rounded-2xl px-3 py-2 text-xs font-semibold transition"
-          :class="activeReviewTab === 'history'
+          class="text-xs font-semibold transition"
+          :class="[isDockDensity ? 'rounded-lg px-2.5 py-1.5' : 'rounded-2xl px-3 py-2', activeReviewTab === 'history'
             ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
+            : 'text-slate-500 hover:text-slate-700']"
           @click="activeReviewTab = 'history'">
           历史流转
           <span v-if="workflowHistoryCount > 0"
@@ -1554,14 +1725,22 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
           </span>
         </button>
         <button type="button"
-          class="rounded-2xl px-3 py-2 text-xs font-semibold transition"
-          :class="activeReviewTab === 'attachments'
+          class="text-xs font-semibold transition"
+          :class="[isDockDensity ? 'rounded-lg px-2.5 py-1.5' : 'rounded-2xl px-3 py-2', activeReviewTab === 'attachments'
             ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700'"
+            : 'text-slate-500 hover:text-slate-700']"
           @click="activeReviewTab = 'attachments'">
           附件材料
         </button>
         <div class="ml-auto flex items-center gap-2 px-2">
+          <button type="button"
+            class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+            data-testid="review-workflow-toggle"
+            :aria-expanded="expandedWorkflowTransfer"
+            @click="expandedWorkflowTransfer = !expandedWorkflowTransfer">
+            <ChevronDown class="h-3.5 w-3.5 transition-transform" :class="{ 'rotate-180': expandedWorkflowTransfer }" />
+            {{ expandedWorkflowTransfer ? '隐藏流程流转' : '展开流程流转' }}
+          </button>
           <button type="button"
             class="rounded-xl px-3 py-1.5 text-xs font-semibold transition"
             :class="reviewStore.reviewMode.value
@@ -1574,18 +1753,20 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
       </div>
     </div>
 
-    <div v-if="currentTask" class="flex min-h-0 flex-1 flex-col">
-      <div class="mb-3 inline-flex items-center gap-1 self-start rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
+    <div v-if="currentTask" class="flex flex-col"
+      :class="isDockDensity ? 'min-w-0' : 'min-h-0 flex-1'">
+      <div class="inline-flex items-center gap-1 self-start rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
+        :class="isDockDensity ? 'mb-2' : 'mb-3'"
         role="tablist"
         aria-label="批注视图切换"
         data-testid="reviewer-annotation-list-view-mode-tabs">
         <button type="button"
           role="tab"
           :aria-selected="annotationListViewMode === 'split'"
-          class="inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition"
-          :class="annotationListViewMode === 'split'
+          class="inline-flex items-center rounded-lg text-xs font-semibold transition"
+          :class="[isDockDensity ? 'h-7 px-2.5' : 'h-8 px-3', annotationListViewMode === 'split'
             ? 'bg-slate-900 text-white shadow-sm'
-            : 'text-slate-600 hover:bg-slate-100'"
+            : 'text-slate-600 hover:bg-slate-100']"
           data-testid="reviewer-annotation-list-view-mode-split"
           @click="annotationListViewMode = 'split'">
           卡片列表
@@ -1593,14 +1774,26 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
         <button type="button"
           role="tab"
           :aria-selected="annotationListViewMode === 'table'"
-          class="inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition"
-          :class="annotationListViewMode === 'table'
+          class="inline-flex items-center rounded-lg text-xs font-semibold transition"
+          :class="[isDockDensity ? 'h-7 px-2.5' : 'h-8 px-3', annotationListViewMode === 'table'
             ? 'bg-slate-900 text-white shadow-sm'
-            : 'text-slate-600 hover:bg-slate-100'"
+            : 'text-slate-600 hover:bg-slate-100']"
           data-testid="reviewer-annotation-list-view-mode-table"
           @click="annotationListViewMode = 'table'">
           批注表格
         </button>
+      </div>
+
+      <div v-if="emptyAnnotationRestoreDiagnostic"
+        data-testid="annotation-restore-diagnostic"
+        class="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+        <div class="font-semibold">批注恢复诊断</div>
+        <div>
+          formId={{ emptyAnnotationRestoreDiagnostic.formId }}
+          taskId={{ emptyAnnotationRestoreDiagnostic.taskId }}
+          recordCount={{ emptyAnnotationRestoreDiagnostic.recordCount }}
+          annotationCount={{ emptyAnnotationRestoreDiagnostic.annotationCount }}
+        </div>
       </div>
 
       <AnnotationWorkspace v-if="annotationListViewMode === 'split'"
@@ -1618,11 +1811,17 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
         :confirm-error="confirmError"
         :show-tool-launcher="true"
         :can-edit-severity="canEditSelectedSeverity"
+        :timeline-context-form-id="currentTask?.formId ?? null"
+        :timeline-context-task-id="currentTask?.id ?? null"
+        :density="props.density"
+        :show-workflow="expandedWorkflowTransfer"
         timeline-placeholder="输入处理说明，或补充给校核人的说明..."
         timeline-submit-label="发送回复"
         @update:active-filter="annotationFilter = $event"
         @update:confirm-note="confirmNote = $event"
         @select-annotation="selectWorkspaceAnnotation"
+        @open-annotation="(item) => void handleReviewerTableOpenAnnotation(item)"
+        @collapse-text-annotations="handleTextAnnotationCollapseCommand"
         @locate-annotation="void locateWorkspaceAnnotation($event)"
         @locate-measurement="locateMeasurement"
         @start-tool="(tool) => {
@@ -1638,18 +1837,20 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
         @confirm="void confirmCurrentData()">
         <template #workflow>
           <div data-testid="review-workbench-workflow-zone" data-guide="workflow-actions">
-            <div class="flex flex-wrap items-start justify-between gap-4">
-              <div class="space-y-2">
+            <div class="flex flex-wrap items-start justify-between"
+              :class="isDockDensity ? 'gap-2' : 'gap-4'">
+              <div :class="isDockDensity ? 'space-y-1' : 'space-y-2'">
                 <div class="text-sm font-semibold text-slate-950">任务级流转</div>
-                <div class="text-xs leading-5 text-slate-500">
-                  以下按钮属于任务级流转，不替代单条批注处理。请先确认当前数据，再决定继续提交或驳回。
+                <div class="text-xs text-slate-500" :class="isDockDensity ? 'leading-4' : 'leading-5'">
+                  {{ isDockDensity ? '单条批注处理完成后再执行任务流转。' : '以下按钮属于任务级流转，不替代单条批注处理。批注状态会自动保存；如补充了测量或几何证据，请先保存新增证据。' }}
                 </div>
                 <div v-if="workflowError" class="text-xs text-rose-600">{{ workflowError }}</div>
               </div>
 
-              <div v-if="isPassiveWorkflow" class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+              <div v-if="isPassiveWorkflow" class="border border-blue-200 bg-blue-50 text-blue-900"
+                :class="isDockDensity ? 'rounded-xl px-3 py-2 text-xs' : 'rounded-2xl px-4 py-3 text-sm'">
                 <div class="font-medium">外部流程模式</div>
-                <div class="mt-1 text-xs text-blue-700">
+                <div v-if="!isDockDensity" class="mt-1 text-xs text-blue-700">
                   当前流程由外部平台驱动，此处仅展示状态，不提供内部提交与驳回。
                 </div>
                 <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-800">
@@ -1659,9 +1860,10 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
               </div>
             </div>
 
-            <div class="mt-4 flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2" :class="isDockDensity ? 'mt-2' : 'mt-4'">
               <button v-if="isPassiveWorkflow" type="button"
-                class="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                :class="isDockDensity ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm'"
                 :disabled="workflowLoading || workflowActionLoading || workflowRefreshing"
                 @click="void refreshWorkflowContext()">
                 <RefreshCw :class="['h-4 w-4', (workflowLoading || workflowActionLoading || workflowRefreshing) && 'animate-spin']" />
@@ -1669,23 +1871,27 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
               </button>
               <template v-else>
                 <button type="button"
-                  class="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  class="inline-flex items-center justify-center rounded-xl border border-slate-200 font-medium text-slate-600 hover:bg-slate-50"
+                  :class="isDockDensity ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm'"
                   @click="filterModelByTask">
                   <Filter class="mr-1 inline h-3.5 w-3.5" />只显示任务构件
                 </button>
                 <button v-if="isFilteringByTask" type="button"
-                  class="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  class="inline-flex items-center justify-center rounded-xl border border-slate-200 font-medium text-slate-600 hover:bg-slate-50"
+                  :class="isDockDensity ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm'"
                   @click="clearModelFilter">
                   显示全部
                 </button>
                 <button type="button"
-                  class="inline-flex h-10 items-center justify-center rounded-xl border border-rose-200 px-4 text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  class="inline-flex items-center justify-center rounded-xl border border-rose-200 font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  :class="isDockDensity ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm'"
                   :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
                   @click="toggleReturnDialog">
                   驳回到设计
                 </button>
                 <button type="button"
-                  class="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                  class="inline-flex items-center justify-center rounded-xl bg-emerald-500 font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                  :class="isDockDensity ? 'h-8 px-3 text-xs' : 'h-10 px-5 text-sm'"
                   :disabled="workflowLoading || workflowActionLoading || !canSubmitToNextNode"
                   @click="toggleSubmitDialog">
                   {{ submitActionLabel }}
@@ -1702,9 +1908,14 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
         :current-annotation-type="selectedAnnotationType"
         :task-key="currentTask?.id ?? null"
         :subtitle="currentTask?.title ?? null"
+        :can-edit-item="canEditAnnotationTableItem"
+        :saving-severity-keys="savingAnnotationSeverityKeys"
+        :saving-title-keys="savingAnnotationTitleKeys"
         @select-annotation="selectWorkspaceAnnotation"
         @open-annotation="(item) => void handleReviewerTableOpenAnnotation(item)"
         @locate-annotation="(item) => void locateWorkspaceAnnotation(item)"
+        @update-severity="({ item, severity }) => void saveWorkspaceAnnotationSeverity(item, severity)"
+        @update-title="(payload) => void updateAnnotationTitleFromTable(payload)"
         @copy-feedback="handleReviewerTableCopyFeedback" />
     </div>
 
@@ -1726,60 +1937,107 @@ const confirmedMeasurementTotal = computed(() => reviewStore.totalConfirmedMeasu
 
     <div class="rounded-lg border border-slate-200 bg-white">
       <!-- Tab: 审核记录 -->
-      <div v-show="activeReviewTab === 'records'" class="p-4"
+      <div v-show="activeReviewTab === 'records'"
+        :class="isDockDensity ? 'p-2.5' : 'p-4'"
         data-testid="review-workbench-confirmed-records-zone">
         <div v-if="confirmedRecordListCount === 0" class="py-4 text-center text-sm text-muted-foreground">暂无确认记录</div>
-        <div v-else class="flex max-h-72 flex-col gap-2 overflow-y-auto">
+        <div v-else class="flex flex-col overflow-y-auto"
+          :class="isDockDensity ? 'max-h-48 gap-1.5' : 'max-h-72 gap-2'">
           <div v-for="record in reviewStore.sortedConfirmedRecords.value"
-            :key="record.id"
-            class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
-            <div class="flex items-start justify-between gap-3">
-              <div class="space-y-1">
-                <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">确认时间</div>
-                <span class="block text-sm font-semibold text-slate-900">{{ formatDateTime(record.confirmedAt) }}</span>
+            :key="record.id">
+            <div v-if="isDockDensity"
+              data-testid="confirmed-record-compact-row"
+              class="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-2">
+              <div class="flex min-w-0 items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span class="font-semibold text-slate-900">{{ formatDateTime(record.confirmedAt) }}</span>
+                    <span class="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-600">
+                      批注 {{ getConfirmedAnnotationCount(record) }}
+                    </span>
+                    <span class="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-600">
+                      测量 {{ getConfirmedMeasurementCount(record) }}
+                    </span>
+                  </div>
+                  <div class="mt-1 truncate text-[11px] text-slate-500">
+                    备注：{{ getConfirmedRecordNote(record) }}
+                  </div>
+                  <div v-if="getConfirmedAnnotationCount(record) > 0"
+                    data-testid="confirmed-record-severity-breakdown"
+                    class="mt-1.5 flex min-w-0 flex-wrap items-center gap-1">
+                    <template v-for="bucket in CONFIRMED_SEVERITY_ORDER" :key="bucket">
+                      <span v-if="getConfirmedSeverityBreakdown(record)[bucket] > 0"
+                        class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px]"
+                        :class="bucket === 'unset' ? 'border-border text-muted-foreground' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).color"
+                        :title="bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label">
+                        {{ bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label }}
+                        <span class="font-semibold">{{ getConfirmedSeverityBreakdown(record)[bucket] }}</span>
+                      </span>
+                    </template>
+                  </div>
+                </div>
+                <button type="button" class="shrink-0 rounded p-1 text-destructive hover:bg-muted" title="删除"
+                  @click="reviewStore.removeConfirmedRecord(record.id)">
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
               </div>
-              <button type="button" class="rounded p-1 text-destructive hover:bg-muted" title="删除"
-                @click="reviewStore.removeConfirmedRecord(record.id)">
-                <Trash2 class="h-3.5 w-3.5" />
-              </button>
             </div>
-            <div class="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-              <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注</div>
-                <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
+            <div v-else
+              class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <div class="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">确认时间</div>
+                  <span class="block text-sm font-semibold text-slate-900">{{ formatDateTime(record.confirmedAt) }}</span>
+                </div>
+                <button type="button" class="rounded p-1 text-destructive hover:bg-muted" title="删除"
+                  @click="reviewStore.removeConfirmedRecord(record.id)">
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
               </div>
-              <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">测量</div>
-                <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedMeasurementCount(record) }}</div>
+              <div class="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">批注</div>
+                  <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedAnnotationCount(record) }}</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">测量</div>
+                  <div class="mt-1 text-base font-semibold text-slate-900">{{ getConfirmedMeasurementCount(record) }}</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
+                  <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
+                </div>
               </div>
-              <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
-                <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
+              <!-- 严重度分布：只渲染有批注的记录 -->
+              <div v-if="getConfirmedAnnotationCount(record) > 0"
+                data-testid="confirmed-record-severity-breakdown"
+                class="mt-2 flex flex-wrap items-center gap-1.5">
+                <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">严重度</span>
+                <template v-for="bucket in CONFIRMED_SEVERITY_ORDER" :key="bucket">
+                  <span v-if="getConfirmedSeverityBreakdown(record)[bucket] > 0"
+                    class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px]"
+                    :class="bucket === 'unset' ? 'border-border text-muted-foreground' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).color"
+                    :title="bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label">
+                    {{ bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label }}
+                    <span class="font-semibold">{{ getConfirmedSeverityBreakdown(record)[bucket] }}</span>
+                  </span>
+                </template>
               </div>
-            </div>
-            <!-- 严重度分布：只渲染有批注的记录 -->
-            <div v-if="getConfirmedAnnotationCount(record) > 0"
-              data-testid="confirmed-record-severity-breakdown"
-              class="mt-2 flex flex-wrap items-center gap-1.5">
-              <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">严重度</span>
-              <template v-for="bucket in CONFIRMED_SEVERITY_ORDER" :key="bucket">
-                <span v-if="getConfirmedSeverityBreakdown(record)[bucket] > 0"
-                  class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px]"
-                  :class="bucket === 'unset' ? 'border-border text-muted-foreground' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).color"
-                  :title="bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label">
-                  {{ bucket === 'unset' ? '未设置' : getAnnotationSeverityDisplay(bucket as AnnotationSeverity).label }}
-                  <span class="font-semibold">{{ getConfirmedSeverityBreakdown(record)[bucket] }}</span>
-                </span>
-              </template>
             </div>
           </div>
         </div>
         <!-- 统计 + 操作 -->
-        <div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-          <div class="flex items-center gap-3 text-xs text-slate-500">
-            <span>{{ confirmedRecordListCount }} 批次</span>
-            <span>批注 {{ confirmedAnnotationTotal }}</span>
-            <span>测量 {{ confirmedMeasurementTotal }}</span>
+        <div class="flex items-center justify-between border-t border-slate-100"
+          :class="isDockDensity ? 'mt-2 pt-2' : 'mt-3 pt-3'">
+          <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <template v-if="isDockDensity">
+              <span>{{ confirmedRecordListCount }} 批次 · 批注 {{ confirmedAnnotationTotal }} · 测量 {{ confirmedMeasurementTotal }}</span>
+            </template>
+            <template v-else>
+              <span>{{ confirmedRecordListCount }} 批次</span>
+              <span>批注 {{ confirmedAnnotationTotal }}</span>
+              <span>测量 {{ confirmedMeasurementTotal }}</span>
+            </template>
           </div>
           <div class="flex gap-1.5">
             <button type="button"

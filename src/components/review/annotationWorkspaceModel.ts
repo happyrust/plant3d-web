@@ -293,13 +293,29 @@ export function buildAnnotationWorkspaceSummary(
   });
 }
 
+export type ScopeAnnotationWorkspaceItemsOptions = {
+  /**
+   * 是否允许把没有 `formId` 的批注（草稿 / 离线导入 / 旧数据）一并展示。
+   *
+   * 默认 `false`：正式单据视图必须只看同 `formId` 的批注，不再让无主批注
+   * 跟着混入。需要兼容旧数据（例如外部入口 fallback 视图）时显式传 `true`。
+   */
+  includeUnbound?: boolean;
+};
+
 export function scopeAnnotationWorkspaceItemsByFormId(
   items: AnnotationWorkspaceItem[],
   formId?: string | null,
+  options: ScopeAnnotationWorkspaceItemsOptions = {},
 ): AnnotationWorkspaceItem[] {
   const normalized = normalizeFormId(formId);
   if (!normalized) return items;
-  return items.filter((item) => item.formId === normalized || !item.formId);
+  const includeUnbound = options.includeUnbound === true;
+  return items.filter((item) => {
+    if (item.formId === normalized) return true;
+    if (includeUnbound && !item.formId) return true;
+    return false;
+  });
 }
 
 export function buildLinkedMeasurementItems(

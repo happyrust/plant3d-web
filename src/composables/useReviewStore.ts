@@ -257,15 +257,34 @@ async function clearConfirmedRecords(): Promise<boolean> {
   return true;
 }
 
-async function loadConfirmedRecords(taskId: string): Promise<void> {
+async function loadConfirmedRecords(
+  taskId: string,
+  options?: { formId?: string | null },
+): Promise<void> {
   if (!USE_BACKEND.value) return;
 
   loading.value = true;
   error.value = null;
   try {
-    const response = await reviewRecordGetByTaskId(taskId);
+    let response = await reviewRecordGetByTaskId(taskId, {
+      formId: options?.formId,
+    });
+    const scopedFormId = options?.formId?.trim();
+    let usedTaskScopeFallback = false;
+    if (response.success && scopedFormId && (response.records?.length ?? 0) === 0) {
+      response = await reviewRecordGetByTaskId(taskId, {
+        formId: undefined,
+      });
+      usedTaskScopeFallback = true;
+    }
     if (response.success && response.records) {
-      confirmedRecords.value = response.records.map((r) => ({
+      const records = usedTaskScopeFallback && scopedFormId
+        ? response.records.filter((r) => {
+          const recordFormId = r.formId?.trim();
+          return !recordFormId || recordFormId === scopedFormId;
+        })
+        : response.records;
+      confirmedRecords.value = records.map((r) => ({
         id: r.id,
         taskId: r.taskId,
         formId: r.formId,
@@ -296,16 +315,13 @@ async function loadReviewHistory(taskId: string): Promise<void> {
     return;
   }
 
-  loading.value = true;
   try {
     const response = await reviewTaskGetHistory(taskId);
     if (response.success) {
       reviewHistory.value = response.history;
     }
   } catch (e) {
-    console.error('Failed to load review history:', e);
-  } finally {
-    loading.value = false;
+    console.warn('[ReviewStore] Failed to load review history:', e);
   }
 }
 
@@ -338,11 +354,9 @@ async function setCurrentTask(task: ReviewTask | null) {
   currentTask.value = task;
   if (task) {
     reviewMode.value = true;
-    // 加载任务的确认记录和历史
-    await Promise.all([
-      loadConfirmedRecords(task.id),
-      loadReviewHistory(task.id),
-    ]);
+    // 任务详情与确认记录先恢复，历史流转失败或超时不阻断详情页批注/评论。
+    await loadConfirmedRecords(task.id, { formId: task.formId });
+    void loadReviewHistory(task.id);
     // 连接 WebSocket 获取实时更新
     connectWebSocket(resolveRealtimeUserId());
   } else {
@@ -475,7 +489,7 @@ function handleWebSocketMessage(message: {
   switch (message.type) {
     case 'record_saved': {
       // 其他用户保存了确认记录，刷新列表
-      loadConfirmedRecords(taskId);
+      loadConfirmedRecords(taskId, { formId: currentTask.value?.formId });
       break;
     }
     case 'task_updated':

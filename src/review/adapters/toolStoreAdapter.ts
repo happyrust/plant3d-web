@@ -13,10 +13,9 @@
  */
 
 import type { ReviewSnapshot } from '../domain/reviewSnapshot';
+import type { ReviewSnapshotMeasurementPayload } from '@/api/reviewApi';
 
 import { buildReviewRecordReplayPayload } from '@/components/review/reviewRecordReplay';
-
-import type { ReviewSnapshotMeasurementPayload } from '@/api/reviewApi';
 
 type ReplayRecordLike = {
   annotations: unknown[];

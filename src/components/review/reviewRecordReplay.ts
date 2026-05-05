@@ -15,7 +15,17 @@ import { fromBackendRole, type AnnotationComment } from '@/types/auth';
 type ReplayRecordLike = Pick<
   WorkflowRecordData,
   'annotations' | 'cloudAnnotations' | 'rectAnnotations' | 'obbAnnotations' | 'measurements'
->;
+> & {
+  id?: unknown;
+  taskId?: unknown;
+  formId?: unknown;
+  confirmedAt?: unknown;
+};
+
+export type ReviewRecordReplayOptions = {
+  formId?: string | null;
+  taskId?: string | null;
+};
 
 type AnnotationTypeKey = 'text' | 'cloud' | 'rect' | 'obb';
 
@@ -69,26 +79,81 @@ function attachCommentsToItems(
   });
 }
 
-function injectFormIdIntoItems(items: unknown[], formId?: string): unknown[] {
-  const normalizedFormId = typeof formId === 'string' ? formId.trim() : '';
-  if (!normalizedFormId) return items;
+function normalizeOptionalContext(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function getRecordFormId(record: ReplayRecordLike, options: ReviewRecordReplayOptions): string | undefined {
+  return normalizeOptionalContext(record.formId) ?? normalizeOptionalContext(options.formId);
+}
+
+function getRecordTaskId(record: ReplayRecordLike, options: ReviewRecordReplayOptions): string | undefined {
+  return normalizeOptionalContext(record.taskId) ?? normalizeOptionalContext(options.taskId);
+}
+
+function injectContextIntoItems(
+  items: unknown[],
+  context: { formId?: string; taskId?: string },
+): unknown[] {
+  if (!context.formId && !context.taskId) return items;
 
   return items.map((item) => {
     if (!item || typeof item !== 'object') return item;
     const record = item as Record<string, unknown>;
-    const currentFormId = typeof record.formId === 'string' ? record.formId.trim() : '';
-    if (currentFormId) {
-      if (currentFormId === record.formId) return item;
-      return {
-        ...record,
-        formId: currentFormId,
-      };
+    const currentFormId = normalizeOptionalContext(record.formId);
+    const currentTaskId = normalizeOptionalContext(record.taskId);
+    const nextFormId = currentFormId ?? context.formId;
+    const nextTaskId = currentTaskId ?? context.taskId;
+    if (
+      nextFormId === record.formId
+      && nextTaskId === record.taskId
+    ) {
+      return item;
     }
     return {
       ...record,
-      formId: normalizedFormId,
+      ...(nextFormId ? { formId: nextFormId } : {}),
+      ...(nextTaskId ? { taskId: nextTaskId } : {}),
     };
   });
+}
+
+function parseReplayRecordTimestamp(record: ReplayRecordLike): number {
+  const raw = record.confirmedAt;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    const parsed = Date.parse(raw.replace(' ', 'T'));
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return Number.NEGATIVE_INFINITY;
+}
+
+function normalizeReplayRecords(
+  records: ReplayRecordLike[],
+  options: ReviewRecordReplayOptions,
+): ReplayRecordLike[] {
+  return records
+    .map((record, index) => ({ record, index }))
+    .sort((a, b) => {
+      const diff = parseReplayRecordTimestamp(a.record) - parseReplayRecordTimestamp(b.record);
+      return diff === 0 ? a.index - b.index : diff;
+    })
+    .map(({ record }) => {
+      const context = {
+        formId: getRecordFormId(record, options),
+        taskId: getRecordTaskId(record, options),
+      };
+      return {
+        ...record,
+        annotations: injectContextIntoItems(record.annotations ?? [], context),
+        cloudAnnotations: injectContextIntoItems(record.cloudAnnotations ?? [], context),
+        rectAnnotations: injectContextIntoItems(record.rectAnnotations ?? [], context),
+        obbAnnotations: injectContextIntoItems(record.obbAnnotations ?? [], context),
+        measurements: injectContextIntoItems(record.measurements ?? [], context) as ReviewSnapshotMeasurementPayload[],
+      };
+    });
 }
 
 function dedupeReplayItems(items: unknown[]): unknown[] {
@@ -139,6 +204,9 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
   const formId = typeof record.formId === 'string'
     ? record.formId.trim() || undefined
     : undefined;
+  const taskId = typeof record.taskId === 'string'
+    ? record.taskId.trim() || undefined
+    : undefined;
 
   if (!id || !origin || !target) return null;
 
@@ -153,6 +221,7 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       sourceAnnotationId,
       sourceAnnotationType,
       formId,
+      taskId,
     };
   }
 
@@ -169,6 +238,7 @@ function normalizeReplayMeasurement(value: unknown): MeasurementRecord | null {
       sourceAnnotationId,
       sourceAnnotationType,
       formId,
+      taskId,
     };
   }
 
@@ -191,6 +261,7 @@ function toXeokitMeasurement(
       sourceAnnotationId: measurement.sourceAnnotationId,
       sourceAnnotationType: measurement.sourceAnnotationType,
       formId: measurement.formId,
+      taskId: measurement.taskId,
     };
   }
 
@@ -205,6 +276,7 @@ function toXeokitMeasurement(
     sourceAnnotationId: measurement.sourceAnnotationId,
     sourceAnnotationType: measurement.sourceAnnotationType,
     formId: measurement.formId,
+    taskId: measurement.taskId,
   };
 }
 
@@ -254,34 +326,41 @@ export function mergeWorkflowCommentsIntoRecords(
 
   return records.map((record) => ({
     ...record,
-    annotations: injectFormIdIntoItems(
+    annotations: injectContextIntoItems(
       attachCommentsToItems(record.annotations ?? [], 'text', groupedComments),
-      formId,
+      { formId, taskId: normalizeOptionalContext(record.taskId) },
     ),
-    cloudAnnotations: injectFormIdIntoItems(
+    cloudAnnotations: injectContextIntoItems(
       attachCommentsToItems(record.cloudAnnotations ?? [], 'cloud', groupedComments),
-      formId,
+      { formId, taskId: normalizeOptionalContext(record.taskId) },
     ),
-    rectAnnotations: injectFormIdIntoItems(
+    rectAnnotations: injectContextIntoItems(
       attachCommentsToItems(record.rectAnnotations ?? [], 'rect', groupedComments),
-      formId,
+      { formId, taskId: normalizeOptionalContext(record.taskId) },
     ),
-    obbAnnotations: injectFormIdIntoItems(
+    obbAnnotations: injectContextIntoItems(
       attachCommentsToItems(record.obbAnnotations ?? [], 'obb', groupedComments),
-      formId,
+      { formId, taskId: normalizeOptionalContext(record.taskId) },
     ),
-    measurements: injectFormIdIntoItems(record.measurements ?? [], formId),
+    measurements: injectContextIntoItems(
+      record.measurements ?? [],
+      { formId, taskId: normalizeOptionalContext(record.taskId) },
+    ) as ReviewSnapshotMeasurementPayload[],
   }));
 }
 
-export function buildReviewRecordReplayPayload(records: ReplayRecordLike[]): string {
+export function buildReviewRecordReplayPayload(
+  records: ReplayRecordLike[],
+  options: ReviewRecordReplayOptions = {},
+): string {
+  const normalizedRecords = normalizeReplayRecords(records, options);
   const replayMeasurements = buildReplayMeasurements(
-    dedupeReplayItems(records.flatMap((record) => record.measurements ?? []))
+    dedupeReplayItems(normalizedRecords.flatMap((record) => record.measurements ?? []))
   );
-  const annotations = dedupeReplayItems(records.flatMap((record) => record.annotations ?? []));
-  const obbAnnotations = dedupeReplayItems(records.flatMap((record) => record.obbAnnotations ?? []));
-  const cloudAnnotations = dedupeReplayItems(records.flatMap((record) => record.cloudAnnotations ?? []));
-  const rectAnnotations = dedupeReplayItems(records.flatMap((record) => record.rectAnnotations ?? []));
+  const annotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.annotations ?? []));
+  const obbAnnotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.obbAnnotations ?? []));
+  const cloudAnnotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.cloudAnnotations ?? []));
+  const rectAnnotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.rectAnnotations ?? []));
   return JSON.stringify({
     version: 5,
     measurements: replayMeasurements.measurements,
@@ -300,7 +379,10 @@ export function buildWorkflowSnapshotReplayPayload(
   comments: WorkflowAnnotationCommentData[] = [],
   formId?: string,
 ): string {
-  return buildReviewRecordReplayPayload(mergeWorkflowCommentsIntoRecords(records, comments, formId));
+  return buildReviewRecordReplayPayload(
+    mergeWorkflowCommentsIntoRecords(records, comments, formId),
+    { formId },
+  );
 }
 
 export function extractWorkflowModelRefnos(models: (string | Record<string, unknown>)[] = []): string[] {

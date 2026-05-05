@@ -8,6 +8,7 @@
  */
 
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
+
 import { getAnnotationSeverityDisplay } from '@/types/auth';
 
 // ------------------------------------------------------------

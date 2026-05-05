@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
+  buildReviewConfirmSnapshotKey,
+  buildUnsavedReviewConfirmPayload,
+  buildUnsavedReviewEvidencePayload,
   canFinalizeAtCurrentNode,
   canReturnAtCurrentNode,
   canSubmitAtCurrentNode,
@@ -207,6 +210,94 @@ describe('reviewPanelActions', () => {
       expect.objectContaining({ id: 'xeokit-angle-final', kind: 'angle' }),
     ]);
     expect(payload.measurements).not.toContainEqual(expect.objectContaining({ id: 'xeokit-distance-draft' }));
+  });
+
+  it('buildUnsavedReviewEvidencePayload 忽略纯 reviewState 状态变化', () => {
+    const baseline = buildReviewConfirmSnapshotPayload({
+      annotations: [{
+        id: 'annotation-1',
+        title: '同一条批注',
+        description: '几何与说明未变化',
+        reviewState: {
+          resolutionStatus: 'open',
+          decisionStatus: 'pending',
+          history: [],
+        },
+      }],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      measurements: [],
+    });
+    const current = buildReviewConfirmSnapshotPayload({
+      annotations: [{
+        id: 'annotation-1',
+        title: '同一条批注',
+        description: '几何与说明未变化',
+        reviewState: {
+          resolutionStatus: 'fixed',
+          decisionStatus: 'pending',
+          updatedAt: 1710000000000,
+          updatedByName: '设计甲',
+          history: [{
+            id: 'event-1',
+            action: 'fixed',
+            operatorId: 'designer-1',
+            operatorName: '设计甲',
+            operatorRole: 'designer',
+            createdAt: 1710000000000,
+          }],
+        },
+      }],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      measurements: [],
+    });
+
+    const unsaved = buildUnsavedReviewEvidencePayload(current, baseline);
+
+    expect(unsaved.annotations).toEqual([]);
+    expect(unsaved.cloudAnnotations).toEqual([]);
+    expect(unsaved.rectAnnotations).toEqual([]);
+    expect(unsaved.obbAnnotations).toEqual([]);
+    expect(unsaved.measurements).toEqual([]);
+  });
+
+  it('折叠状态 collapsed 只作为视图状态，不产生未保存确认差异', () => {
+    const baseline = buildReviewConfirmSnapshotPayload({
+      annotations: [{
+        id: 'annotation-1',
+        title: '同一条批注',
+        description: '几何与说明未变化',
+        collapsed: false,
+      }],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      measurements: [],
+    });
+    const current = buildReviewConfirmSnapshotPayload({
+      annotations: [{
+        id: 'annotation-1',
+        title: '同一条批注',
+        description: '几何与说明未变化',
+        collapsed: true,
+      }],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      obbAnnotations: [],
+      measurements: [],
+    });
+
+    const unsaved = buildUnsavedReviewConfirmPayload(current, baseline);
+
+    expect(buildReviewConfirmSnapshotKey(current)).toBe(buildReviewConfirmSnapshotKey(baseline));
+    expect(unsaved.annotations).toEqual([]);
+    expect(unsaved.cloudAnnotations).toEqual([]);
+    expect(unsaved.rectAnnotations).toEqual([]);
+    expect(unsaved.obbAnnotations).toEqual([]);
+    expect(unsaved.measurements).toEqual([]);
   });
 
   it('confirmCurrentDataSafely 应等待保存成功后再清理工具数据', async () => {

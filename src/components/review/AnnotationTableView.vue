@@ -9,7 +9,7 @@
  * 事件命名与 AnnotationWorkspace.vue 对齐，PR 3 接入时可无缝复用现有处理函数。
  */
 
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue';
 
 import {
   ArrowDown,
@@ -17,6 +17,7 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Inbox,
   LocateFixed,
@@ -39,10 +40,14 @@ import { highlightMatches } from './annotationTableHighlight';
 
 import type { AnnotationTableSortKey } from './annotationTableSorting';
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
-import { getAnnotationSeverityDisplay, type AnnotationType } from '@/types/auth';
 
 import { useAnnotationTableFilter } from '@/composables/useAnnotationTableFilter';
 import { useContainerQuery } from '@/composables/useContainerQuery';
+import {
+  getAnnotationSeverityDisplay,
+  type AnnotationSeverity,
+  type AnnotationType,
+} from '@/types/auth';
 
 // ----------------------------------------------------------------------
 // Props & Emits
@@ -60,6 +65,12 @@ const props = withDefaults(defineProps<{
   subtitle?: string | null;
   /** 每页行数，默认 10 */
   pageSize?: number;
+  /** 是否允许当前行做表格内轻量编辑。权限由父组件判断。 */
+  canEditItem?: (item: AnnotationWorkspaceItem) => boolean;
+  /** 正在保存错误标记的行 key（type:id）。 */
+  savingSeverityKeys?: string[];
+  /** 正在保存标题的行 key（type:id）。 */
+  savingTitleKeys?: string[];
 }>(), {
   currentAnnotationId: null,
   currentAnnotationType: null,
@@ -68,6 +79,9 @@ const props = withDefaults(defineProps<{
   taskKey: null,
   subtitle: null,
   pageSize: 10,
+  canEditItem: () => false,
+  savingSeverityKeys: () => [],
+  savingTitleKeys: () => [],
 });
 
 const emit = defineEmits<{
@@ -75,6 +89,8 @@ const emit = defineEmits<{
   (e: 'open-annotation', item: AnnotationWorkspaceItem): void;
   (e: 'locate-annotation', item: AnnotationWorkspaceItem): void;
   (e: 'copy-feedback', payload: { kind: 'refno' | 'row'; result: ClipboardResult; item: AnnotationWorkspaceItem }): void;
+  (e: 'update-severity', payload: { item: AnnotationWorkspaceItem; severity: AnnotationSeverity | undefined }): void;
+  (e: 'update-title', payload: { item: AnnotationWorkspaceItem; title: string }): void;
 }>();
 
 // ----------------------------------------------------------------------
@@ -337,6 +353,13 @@ let clickDelayTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingClickItem = shallowRef<AnnotationWorkspaceItem | null>(null);
 const screenshotPreviewUrl = ref<string | null>(null);
 
+function cancelPendingRowClick() {
+  if (!clickDelayTimer) return;
+  clearTimeout(clickDelayTimer);
+  clickDelayTimer = null;
+  pendingClickItem.value = null;
+}
+
 function handleRowClick(item: AnnotationWorkspaceItem) {
   if (clickDelayTimer) return;
   pendingClickItem.value = item;
@@ -348,11 +371,7 @@ function handleRowClick(item: AnnotationWorkspaceItem) {
 }
 
 function handleRowDblClick(item: AnnotationWorkspaceItem) {
-  if (clickDelayTimer) {
-    clearTimeout(clickDelayTimer);
-    clickDelayTimer = null;
-    pendingClickItem.value = null;
-  }
+  cancelPendingRowClick();
   emit('open-annotation', item);
 }
 
@@ -403,6 +422,95 @@ function severityDotClass(item: AnnotationWorkspaceItem): string {
 function severityLabel(item: AnnotationWorkspaceItem): string {
   const display = getAnnotationSeverityDisplay(item.severity);
   return display.symbol ? `${display.symbol} ${display.label}` : display.label;
+}
+
+function itemKey(item: AnnotationWorkspaceItem): string {
+  return `${item.type}:${item.id}`;
+}
+
+const savingSeverityKeySet = computed(() => new Set(props.savingSeverityKeys));
+const savingTitleKeySet = computed(() => new Set(props.savingTitleKeys));
+
+const severityEditOptions: { value: '' | AnnotationSeverity; label: string }[] = [
+  { value: '', label: '未设置' },
+  { value: 'drawing', label: '○ 图面错误' },
+  { value: 'general', label: '△ 一般错误' },
+  { value: 'principle', label: '× 原则错误' },
+];
+
+function canEditInline(item: AnnotationWorkspaceItem): boolean {
+  return props.canEditItem(item);
+}
+
+function isSeveritySaving(item: AnnotationWorkspaceItem): boolean {
+  return savingSeverityKeySet.value.has(itemKey(item));
+}
+
+function isTitleSaving(item: AnnotationWorkspaceItem): boolean {
+  return savingTitleKeySet.value.has(itemKey(item));
+}
+
+function handleSeverityChange(event: Event, item: AnnotationWorkspaceItem) {
+  event.stopPropagation();
+  cancelPendingRowClick();
+  if (!canEditInline(item) || isSeveritySaving(item)) return;
+
+  const value = (event.target as HTMLSelectElement | null)?.value ?? '';
+  const next = value === '' ? undefined : value as AnnotationSeverity;
+  if (next === item.severity) return;
+  emit('update-severity', { item, severity: next });
+}
+
+const editingTitleKey = ref<string | null>(null);
+const editingTitleValue = ref('');
+
+function isTitleEditing(item: AnnotationWorkspaceItem): boolean {
+  return editingTitleKey.value === itemKey(item);
+}
+
+async function startTitleEdit(event: MouseEvent, item: AnnotationWorkspaceItem) {
+  event.preventDefault();
+  event.stopPropagation();
+  cancelPendingRowClick();
+  if (!canEditInline(item) || isTitleSaving(item)) return;
+
+  editingTitleKey.value = itemKey(item);
+  editingTitleValue.value = item.title;
+  await nextTick();
+  rootEl.value
+    ?.querySelector<HTMLInputElement>(`[data-testid="annotation-table-title-input-${item.id}"]`)
+    ?.focus();
+  rootEl.value
+    ?.querySelector<HTMLInputElement>(`[data-testid="annotation-table-title-input-${item.id}"]`)
+    ?.select();
+}
+
+function cancelTitleEdit(event?: Event) {
+  event?.stopPropagation();
+  editingTitleKey.value = null;
+  editingTitleValue.value = '';
+}
+
+function commitTitleEdit(event: Event | null, item: AnnotationWorkspaceItem) {
+  event?.stopPropagation();
+  cancelPendingRowClick();
+  if (!isTitleEditing(item) || isTitleSaving(item)) return;
+
+  const nextTitle = editingTitleValue.value.trim();
+  if (!nextTitle || nextTitle === item.title.trim()) {
+    cancelTitleEdit();
+    return;
+  }
+
+  emit('update-title', { item, title: nextTitle });
+  cancelTitleEdit();
+}
+
+async function copyRowInline(item: AnnotationWorkspaceItem) {
+  cancelPendingRowClick();
+  const csvLine = buildRowClipboardLine(item);
+  const result = await copyToClipboard(csvLine);
+  emit('copy-feedback', { kind: 'row', result, item });
 }
 
 function statusTextClass(item: AnnotationWorkspaceItem): string {
@@ -566,7 +674,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           <ArrowDown v-else-if="sortIconState('status') === 'desc'" class="h-3 w-3 text-orange-500" />
           <ArrowUpDown v-else class="h-3 w-3 text-slate-300" />
         </button>
-        <div class="w-16 text-center">操作</div>
+        <div class="w-24 text-center">操作</div>
       </div>
 
       <!-- Body · Wide / Medium: 表格行 -->
@@ -594,8 +702,23 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
 
           <!-- 错误标记 -->
           <div class="w-24">
-            <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none"
-              :class="severityPillClass(item)">
+            <select v-if="canEditInline(item)"
+              :value="item.severity ?? ''"
+              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none transition focus:ring-1 focus:ring-blue-300 disabled:cursor-wait disabled:opacity-60"
+              :class="severityPillClass(item)"
+              :disabled="isSeveritySaving(item)"
+              :aria-label="`修改错误标记：${item.title}`"
+              :data-testid="`annotation-table-severity-editor-${item.id}`"
+              @click.stop
+              @mousedown.stop
+              @dblclick.stop
+              @change="handleSeverityChange($event, item)">
+              <option v-for="opt in severityEditOptions" :key="opt.value || 'unset'" :value="opt.value">{{ opt.label }}</option>
+            </select>
+            <span v-else
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none"
+              :class="severityPillClass(item)"
+              :data-testid="`annotation-table-severity-pill-${item.id}`">
               <span class="h-1.5 w-1.5 rounded-full" :class="severityDotClass(item)" />
               {{ severityLabel(item) }}
             </span>
@@ -614,9 +737,34 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
                 :data-testid="`annotation-table-thumbnail-${item.id}`" />
             </button>
             <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
-            <div class="min-w-0 flex-1 line-clamp-2">
+            <div class="min-w-0 flex-1">
+              <input v-if="isTitleEditing(item)"
+                v-model="editingTitleValue"
+                type="text"
+                class="w-full rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-slate-950 shadow-sm outline-none focus:ring-1 focus:ring-blue-300"
+                :data-testid="`annotation-table-title-input-${item.id}`"
+                :disabled="isTitleSaving(item)"
+                @click.stop
+                @mousedown.stop
+                @dblclick.stop
+                @keydown.enter.prevent="commitTitleEdit($event, item)"
+                @keydown.esc.prevent="cancelTitleEdit($event)"
+                @blur="commitTitleEdit($event, item)" />
+              <button v-else-if="canEditInline(item)"
+                type="button"
+                class="max-w-full text-left font-semibold text-slate-950 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                :disabled="isTitleSaving(item)"
+                :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
+                :data-testid="`annotation-table-title-${item.id}`"
+                @click.stop
+                @mousedown.stop
+                @dblclick="startTitleEdit($event, item)">
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <span class="line-clamp-2" v-html="highlightTitle(item)" />
+              </button>
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <span class="font-semibold text-slate-950" v-html="highlightTitle(item)" />
+              <span v-else class="font-semibold text-slate-950 line-clamp-2" v-html="highlightTitle(item)" />
+              <span v-if="isTitleSaving(item)" class="ml-2 text-[11px] font-medium text-blue-500">保存中</span>
               <template v-if="isWide && item.description">
                 <span class="text-slate-500"> · </span>
                 <!-- eslint-disable-next-line vue/no-v-html -->
@@ -639,18 +787,27 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           </div>
 
           <!-- 操作列 -->
-          <div class="w-16 flex justify-center gap-2 text-slate-400">
+          <div class="w-24 flex justify-center gap-2 text-slate-400">
             <button type="button"
               class="hover:text-slate-900"
+              title="定位"
               :data-testid="`annotation-table-locate-${item.id}`"
               @click.stop="emit('locate-annotation', item)">
               <LocateFixed class="h-3.5 w-3.5" />
             </button>
             <button type="button"
               class="hover:text-slate-900"
+              title="详情"
               :data-testid="`annotation-table-comment-${item.id}`"
               @click.stop="emit('open-annotation', item)">
               <MessageSquare class="h-3.5 w-3.5" />
+            </button>
+            <button type="button"
+              class="hover:text-slate-900"
+              title="复制"
+              :data-testid="`annotation-table-copy-${item.id}`"
+              @click.stop="() => void copyRowInline(item)">
+              <Copy class="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -674,23 +831,47 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           @keydown.space.prevent="handleRowDblClick(item)">
           <header class="flex items-center gap-2">
             <span class="text-[11px] font-mono text-slate-400">#{{ (currentPage - 1) * pageSize + localIdx + 1 }}</span>
-            <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none"
-              :class="severityPillClass(item)">
+            <select v-if="canEditInline(item)"
+              :value="item.severity ?? ''"
+              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none focus:ring-1 focus:ring-blue-300 disabled:cursor-wait disabled:opacity-60"
+              :class="severityPillClass(item)"
+              :disabled="isSeveritySaving(item)"
+              :aria-label="`修改错误标记：${item.title}`"
+              :data-testid="`annotation-table-severity-editor-${item.id}`"
+              @click.stop
+              @mousedown.stop
+              @dblclick.stop
+              @change="handleSeverityChange($event, item)">
+              <option v-for="opt in severityEditOptions" :key="opt.value || 'unset'" :value="opt.value">{{ opt.label }}</option>
+            </select>
+            <span v-else
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none"
+              :class="severityPillClass(item)"
+              :data-testid="`annotation-table-severity-pill-${item.id}`">
               <span class="h-1.5 w-1.5 rounded-full" :class="severityDotClass(item)" />
               {{ severityLabel(item) }}
             </span>
             <span class="ml-auto flex gap-1.5 text-slate-400">
               <button type="button"
                 class="hover:text-slate-900"
+                title="定位"
                 :data-testid="`annotation-table-locate-${item.id}`"
                 @click.stop="emit('locate-annotation', item)">
                 <LocateFixed class="h-4 w-4" />
               </button>
               <button type="button"
                 class="hover:text-slate-900"
+                title="详情"
                 :data-testid="`annotation-table-comment-${item.id}`"
                 @click.stop="emit('open-annotation', item)">
                 <MessageSquare class="h-4 w-4" />
+              </button>
+              <button type="button"
+                class="hover:text-slate-900"
+                title="复制"
+                :data-testid="`annotation-table-copy-${item.id}`"
+                @click.stop="() => void copyRowInline(item)">
+                <Copy class="h-4 w-4" />
               </button>
             </span>
           </header>
@@ -708,8 +889,33 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
                 :data-testid="`annotation-table-thumbnail-${item.id}`" />
             </button>
             <div class="min-w-0 flex-1">
+              <input v-if="isTitleEditing(item)"
+                v-model="editingTitleValue"
+                type="text"
+                class="w-full rounded-md border border-blue-200 bg-white px-2 py-1 text-sm font-semibold text-slate-950 outline-none focus:ring-1 focus:ring-blue-300"
+                :data-testid="`annotation-table-title-input-${item.id}`"
+                :disabled="isTitleSaving(item)"
+                @click.stop
+                @mousedown.stop
+                @dblclick.stop
+                @keydown.enter.prevent="commitTitleEdit($event, item)"
+                @keydown.esc.prevent="cancelTitleEdit($event)"
+                @blur="commitTitleEdit($event, item)" />
+              <button v-else-if="canEditInline(item)"
+                type="button"
+                class="max-w-full text-left text-sm font-semibold text-slate-950 line-clamp-1 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                :disabled="isTitleSaving(item)"
+                :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
+                :data-testid="`annotation-table-title-${item.id}`"
+                @click.stop
+                @mousedown.stop
+                @dblclick="startTitleEdit($event, item)">
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <span v-html="highlightTitle(item)" />
+              </button>
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <h3 class="text-sm font-semibold text-slate-950 line-clamp-1" v-html="highlightTitle(item)" />
+              <h3 v-else class="text-sm font-semibold text-slate-950 line-clamp-1" v-html="highlightTitle(item)" />
+              <span v-if="isTitleSaving(item)" class="text-[11px] font-medium text-blue-500">保存中</span>
               <!-- eslint-disable-next-line vue/no-v-html -->
               <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2" v-html="highlightDescription(item)" />
             </div>

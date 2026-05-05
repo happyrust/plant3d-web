@@ -24,6 +24,7 @@ type ViewerToolsHandle = {
 
 export type ConfirmedRecordsRestoreOptions = {
   currentTaskId: () => string | null;
+  currentFormId?: () => string | null;
   confirmedRecords: () => ConfirmedRecordEntry[];
   toolStore: ToolStoreForRestore;
   waitForViewerReady: (options?: { timeoutMs?: number }) => Promise<boolean>;
@@ -32,14 +33,22 @@ export type ConfirmedRecordsRestoreOptions = {
   skipClearOnEmpty?: boolean;
 };
 
-function buildSceneKey(taskId: string | null, records: ConfirmedRecordEntry[]): string {
+function buildSceneKey(
+  taskId: string | null,
+  formId: string | null,
+  records: ConfirmedRecordEntry[],
+): string {
   if (!taskId) return '__no-task__';
-  if (records.length === 0) return `${taskId}:empty`;
-  return `${taskId}:${records.map((r) => `${r.id}:${r.confirmedAt}`).join('|')}`;
+  const scope = formId ? `${taskId}@${formId}` : taskId;
+  if (records.length === 0) return `${scope}:empty`;
+  return `${scope}:${records.map((r) => `${r.id}:${r.confirmedAt}`).join('|')}`;
 }
 
-function buildReplayPayload(records: ConfirmedRecordEntry[]): string {
-  return buildReviewRecordReplayPayload(records);
+function buildReplayPayload(
+  records: ConfirmedRecordEntry[],
+  context: { taskId?: string; formId?: string },
+): string {
+  return buildReviewRecordReplayPayload(records, context);
 }
 
 /**
@@ -56,17 +65,24 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
 
   const currentTaskRecords = computed<ConfirmedRecordEntry[]>(() => {
     const taskId = options.currentTaskId();
+    const formId = options.currentFormId?.();
     if (!taskId) return [];
     return options.confirmedRecords()
-      .filter((r) => (r.taskId || '') === taskId)
+      .filter((r) => {
+        if ((r.taskId || '') !== taskId) return false;
+        if (!formId) return true;
+        const recordFormId = r.formId?.trim();
+        return !recordFormId || recordFormId === formId;
+      })
       .slice()
       .sort((a, b) => a.confirmedAt - b.confirmedAt);
   });
 
   async function restoreConfirmedRecordsIntoScene(force = false): Promise<void> {
     const taskId = options.currentTaskId();
+    const formId = options.currentFormId?.()?.trim() || null;
     const records = currentTaskRecords.value;
-    const restoreKey = buildSceneKey(taskId, records);
+    const restoreKey = buildSceneKey(taskId, formId, records);
     if (!force && lastRestoredSceneKey.value === restoreKey) return;
 
     const viewerReady = await options.waitForViewerReady({ timeoutMs: 4000 });
@@ -74,6 +90,7 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
     if (!viewerReady || !tools) return;
     // 任务可能在等待 viewer 期间变了
     if (options.currentTaskId() !== taskId) return;
+    if ((options.currentFormId?.()?.trim() || null) !== formId) return;
 
     if (!taskId || records.length === 0) {
       const shouldClear =
@@ -88,7 +105,7 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
           getReviewCommentEventLog().push({
             kind: 'thread_clear',
             key: 'task_records',
-            payload: { taskId: taskId ?? null },
+            payload: { taskId: taskId ?? null, formId },
           });
         }
       }
@@ -96,27 +113,34 @@ export function createConfirmedRecordsRestorer(options: ConfirmedRecordsRestoreO
       return;
     }
 
-    const legacyPayload = buildReplayPayload(records);
+    const buildContext = {
+      taskId: taskId ?? undefined,
+      formId: formId ?? undefined,
+    };
+    const legacyPayload = buildReplayPayload(records, buildContext);
     const shadowResult = runTaskRecordsShadow({
       legacyPayload,
       records,
-      build: { taskId: taskId ?? undefined },
+      build: buildContext,
     });
 
     try {
       const snapshot = shadowResult?.snapshot
-        ?? buildSnapshotFromTaskRecords(records, { taskId: taskId ?? undefined });
-      const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
-      if (merge.changed) {
-        getReviewCommentEventLog().push({
-          kind: 'snapshot_merged',
-          key: 'task_records',
-          payload: {
-            taskId: taskId ?? null,
-            comments: snapshot.comments.length,
-            annotations: snapshot.annotations.length,
-          },
-        });
+        ?? buildSnapshotFromTaskRecords(records, buildContext);
+      if (snapshot.comments.length > 0) {
+        const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
+        if (merge.changed) {
+          getReviewCommentEventLog().push({
+            kind: 'snapshot_merged',
+            key: 'task_records',
+            payload: {
+              taskId: taskId ?? null,
+              formId,
+              comments: snapshot.comments.length,
+              annotations: snapshot.annotations.length,
+            },
+          });
+        }
       }
     } catch (err) {
       if (typeof console !== 'undefined') {

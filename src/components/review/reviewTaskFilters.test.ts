@@ -109,6 +109,42 @@ describe('reviewTaskFilters', () => {
     expect(isDesignerResubmissionTask(task)).toBe(false);
   });
 
+  it('treats rejected + sj as a designer resubmission task even without draft status', () => {
+    const task = createTask({
+      currentNode: 'sj',
+      status: 'rejected',
+      returnReason: '继续修改',
+      workflowHistory: [
+        { node: 'jd', action: 'return', operatorId: 'u1', operatorName: 'A', comment: '继续修改', timestamp: 10 },
+      ],
+    });
+
+    expect(isCanonicalReturnedTask(task)).toBe(true);
+    expect(isDesignerResubmissionTask(task)).toBe(true);
+  });
+
+  it('does not treat rejected at jd or sh as designer resubmission task', () => {
+    const taskAtJd = createTask({ currentNode: 'jd', status: 'rejected', returnReason: '校核驳回' });
+    const taskAtSh = createTask({ currentNode: 'sh', status: 'rejected', returnReason: '审核驳回' });
+
+    expect(isDesignerResubmissionTask(taskAtJd)).toBe(false);
+    expect(isDesignerResubmissionTask(taskAtSh)).toBe(false);
+  });
+
+  it('blocks resubmission when the latest submit step is not earlier than the latest return', () => {
+    const taskRejected = createTask({
+      currentNode: 'sj',
+      status: 'rejected',
+      returnReason: '旧退回原因',
+      workflowHistory: [
+        { node: 'jd', action: 'return', operatorId: 'u1', operatorName: '校核员', comment: '继续修改', timestamp: 10 },
+        { node: 'sj', action: 'submit', operatorId: 'u2', operatorName: '设计员', comment: '已重新提交', timestamp: 20 },
+      ],
+    });
+
+    expect(isDesignerResubmissionTask(taskRejected)).toBe(false);
+  });
+
   it('maps active workflow tasks to pending bucket', () => {
     const task = createTask({ currentNode: 'jd', status: 'submitted' });
     expect(getDesignerTaskStatusBucket(task)).toBe('pending');

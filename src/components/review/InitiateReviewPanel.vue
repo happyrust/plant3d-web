@@ -39,6 +39,14 @@ import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { getRoleDisplayName } from '@/types/auth';
 
+type InitiateReviewAutomationCreateResult = {
+  taskId: string | null;
+  formId: string | null;
+  title: string | null;
+  error: string | null;
+  at: number;
+};
+
 const emit = defineEmits<{
   (e: 'created', taskId: string): void;
   (e: 'close'): void;
@@ -54,6 +62,7 @@ const onboarding = useOnboardingGuide();
 // 确认记录场景恢复：设计端重开退回任务时，回放审核侧已确认的批注/测量
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
   confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
   toolStore,
   waitForViewerReady,
@@ -397,6 +406,7 @@ const createdTaskFormId = ref<string | null>(null);
 const isSubmitting = ref(false);
 const submitted = ref(false);
 const lastCreatedTask = ref<{ id: string; title: string; checkerName: string; approverName: string; componentCount: number } | null>(null);
+const automationCreateResult = ref<InitiateReviewAutomationCreateResult | null>(null);
 const notification = ref<{ type: 'success' | 'error' | null; message: string; details?: string }>({
   type: null,
   message: '',
@@ -528,16 +538,19 @@ onMounted(() => {
   }
   if (automationReviewEnabled) {
     const w = window as Window & {
-      __plant3dInitiateReviewE2E?: { addMockComponent: (refNo?: string, name?: string) => Promise<void> };
+      __plant3dInitiateReviewE2E?: {
+        addMockComponent: (refNo?: string, name?: string) => Promise<void>;
+        getLastCreateResult: () => InitiateReviewAutomationCreateResult | null;
+      };
     };
     w.__plant3dInitiateReviewE2E = {
       async addMockComponent(refNo, name) {
         const ref = refNo || `E2E-AUTO-${Date.now()}`;
         notification.value = { type: null, message: '', details: '' };
-        const added = await addComponentByRefno(ref);
-        if (!added && name) {
-          ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name);
-        }
+        ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name);
+      },
+      getLastCreateResult() {
+        return automationCreateResult.value;
       },
     };
   }
@@ -744,6 +757,7 @@ async function handleSubmit() {
   if (!canSubmit.value) return;
 
   notification.value = { type: null, message: '', details: '' };
+  automationCreateResult.value = null;
   isSubmitting.value = true;
 
   try {
@@ -784,6 +798,13 @@ async function handleSubmit() {
 
     createdTaskId.value = task.id;
     createdTaskFormId.value = task.formId || null;
+    automationCreateResult.value = {
+      taskId: task.id || null,
+      formId: task.formId || requestFormId || null,
+      title: task.title || formData.packageName || null,
+      error: null,
+      at: Date.now(),
+    };
 
     const hasPendingUploads = uploadedFiles.value.some((f) => f.status === 'pending');
     if (hasPendingUploads) {
@@ -836,6 +857,13 @@ async function handleSubmit() {
     createdTaskId.value = null;
     createdTaskFormId.value = null;
   } catch (error) {
+    automationCreateResult.value = {
+      taskId: null,
+      formId: formId.value || embedModeParams.value.launchInput?.formId || null,
+      title: formData.packageName || null,
+      error: error instanceof Error ? error.message : '未知错误，请重试',
+      at: Date.now(),
+    };
     notification.value = {
       type: 'error',
       message: externalWorkflowMode.value ? '编校审单保存失败' : '编校审单创建失败',
@@ -920,7 +948,7 @@ function closePanel() {
       <div v-if="externalWorkflowMode" class="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5">
         <p class="text-xs font-medium text-blue-700">流程提示</p>
         <p class="mt-1 text-xs text-blue-600">
-          编校审单已保存；若后续被外部流程退回，请进入设计批注处理页，对批注执行“已修改”或“不需解决”，并先确认当前数据，再继续外部流转。
+          编校审单已保存；若后续被外部流程退回，请进入设计批注处理页，对批注执行“已修改”或“不需解决”。如补充测量或几何证据，请先保存新增证据，再继续外部流转。
         </p>
       </div>
 
@@ -972,7 +1000,7 @@ function closePanel() {
       </div>
       <div v-if="showDebugUi && externalWorkflowMode" data-testid="external-workflow-mode-banner"
         class="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-        外部流程模式 — 仅保存编校审数据；收到退回后，请进入设计批注处理页处理批注，并先确认当前数据。
+        外部流程模式 — 仅保存编校审数据；收到退回后，请进入设计批注处理页处理批注；如补充证据，请保存新增证据。
       </div>
 
       <Card class="border border-[#F3F4F6] shadow-none" body-class="p-3">

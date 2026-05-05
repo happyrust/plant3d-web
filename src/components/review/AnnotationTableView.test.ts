@@ -4,6 +4,7 @@ import { createApp, h, nextTick, ref } from 'vue';
 import AnnotationTableView from './AnnotationTableView.vue';
 
 import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
+import type { AnnotationSeverity } from '@/types/auth';
 
 // ------------------------------------------------------------
 // ResizeObserver mock · 用于响应式断点测试
@@ -82,11 +83,17 @@ function mountTable(setup: {
   currentAnnotationType?: 'text' | 'cloud' | 'rect' | 'obb' | null;
   taskKey?: string | null;
   pageSize?: number;
+  canEditItem?: (item: AnnotationWorkspaceItem) => boolean;
+  savingSeverityKeys?: string[];
+  savingTitleKeys?: string[];
 } & Record<string, unknown>): {
   host: HTMLElement;
   selectSpy: ReturnType<typeof vi.fn>;
   openSpy: ReturnType<typeof vi.fn>;
   locateSpy: ReturnType<typeof vi.fn>;
+  copySpy: ReturnType<typeof vi.fn>;
+  updateSeveritySpy: ReturnType<typeof vi.fn>;
+  updateTitleSpy: ReturnType<typeof vi.fn>;
   itemsRef: ReturnType<typeof ref<AnnotationWorkspaceItem[]>>;
   destroy: () => void;
 } {
@@ -96,6 +103,9 @@ function mountTable(setup: {
   const selectSpy = vi.fn();
   const openSpy = vi.fn();
   const locateSpy = vi.fn();
+  const copySpy = vi.fn();
+  const updateSeveritySpy = vi.fn();
+  const updateTitleSpy = vi.fn();
 
   const app = createApp({
     render: () => h(AnnotationTableView, {
@@ -104,9 +114,15 @@ function mountTable(setup: {
       currentAnnotationType: setup.currentAnnotationType ?? null,
       taskKey: setup.taskKey ?? null,
       pageSize: setup.pageSize ?? 10,
+      canEditItem: setup.canEditItem ?? (() => false),
+      savingSeverityKeys: setup.savingSeverityKeys ?? [],
+      savingTitleKeys: setup.savingTitleKeys ?? [],
       onSelectAnnotation: selectSpy,
       onOpenAnnotation: openSpy,
       onLocateAnnotation: locateSpy,
+      onCopyFeedback: copySpy,
+      onUpdateSeverity: updateSeveritySpy,
+      onUpdateTitle: updateTitleSpy,
     }),
   });
   app.mount(host);
@@ -116,6 +132,9 @@ function mountTable(setup: {
     selectSpy,
     openSpy,
     locateSpy,
+    copySpy,
+    updateSeveritySpy,
+    updateTitleSpy,
     itemsRef,
     destroy: () => {
       app.unmount();
@@ -318,6 +337,45 @@ describe('AnnotationTableView', () => {
     destroy();
   });
 
+  it('7b. 行内错误标记可选择并发出 update-severity，不触发行选择', async () => {
+    vi.useFakeTimers();
+    const item = createItem({ id: 'sev-edit', severity: undefined });
+    const { host, selectSpy, updateSeveritySpy, destroy } = mountTable({
+      items: [item],
+      canEditItem: () => true,
+    });
+    await nextTick();
+
+    const select = host.querySelector<HTMLSelectElement>('[data-testid="annotation-table-severity-editor-sev-edit"]');
+    expect(select).not.toBeNull();
+    select!.value = 'drawing';
+    select!.dispatchEvent(new Event('change', { bubbles: true }));
+    vi.advanceTimersByTime(300);
+    await nextTick();
+
+    expect(updateSeveritySpy).toHaveBeenCalledWith({
+      item: expect.objectContaining({ id: 'sev-edit' }),
+      severity: 'drawing' satisfies AnnotationSeverity,
+    });
+    expect(selectSpy).not.toHaveBeenCalled();
+
+    destroy();
+  });
+
+  it('7c. 无权限时错误标记只读', async () => {
+    const item = createItem({ id: 'sev-readonly', severity: 'general' });
+    const { host, destroy } = mountTable({
+      items: [item],
+      canEditItem: () => false,
+    });
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="annotation-table-severity-editor-sev-readonly"]')).toBeNull();
+    expect(host.querySelector('[data-testid="annotation-table-severity-pill-sev-readonly"]')).not.toBeNull();
+
+    destroy();
+  });
+
   it('8. 状态筛选 · 只保留 pending', async () => {
     const items = [
       createItem({ id: 'p', statusKey: 'pending' }),
@@ -371,6 +429,86 @@ describe('AnnotationTableView', () => {
     expect(openSpy).toHaveBeenCalledTimes(1);
     expect(openSpy.mock.calls[0][0].id).toBe('comment-open-target');
     expect(selectSpy).not.toHaveBeenCalled();
+
+    destroy();
+  });
+
+  it('9c. 操作列复制按钮触发 copy-feedback，不触发行选择', async () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const item = createItem({ id: 'copy-target', title: '复制目标' });
+    const { host, selectSpy, copySpy, destroy } = mountTable({ items: [item] });
+    await nextTick();
+
+    const copyBtn = host.querySelector<HTMLButtonElement>('[data-testid="annotation-table-copy-copy-target"]');
+    copyBtn?.click();
+    await vi.runAllTimersAsync();
+    await nextTick();
+
+    expect(writeText).toHaveBeenCalled();
+    expect(copySpy).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'row',
+      result: 'copied',
+      item: expect.objectContaining({ id: 'copy-target' }),
+    }));
+    expect(selectSpy).not.toHaveBeenCalled();
+
+    destroy();
+  });
+
+  it('9d. 双击标题进入编辑，Enter 保存标题', async () => {
+    const item = createItem({ id: 'title-enter', title: '旧标题' });
+    const { host, updateTitleSpy, destroy } = mountTable({
+      items: [item],
+      canEditItem: () => true,
+    });
+    await nextTick();
+
+    const titleButton = host.querySelector<HTMLButtonElement>('[data-testid="annotation-table-title-title-enter"]');
+    titleButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await nextTick();
+
+    const input = host.querySelector<HTMLInputElement>('[data-testid="annotation-table-title-input-title-enter"]');
+    expect(input).not.toBeNull();
+    input!.value = '新标题';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await nextTick();
+
+    expect(updateTitleSpy).toHaveBeenCalledWith({
+      item: expect.objectContaining({ id: 'title-enter' }),
+      title: '新标题',
+    });
+
+    destroy();
+  });
+
+  it('9e. 标题编辑 Esc 取消，空标题不保存', async () => {
+    const item = createItem({ id: 'title-cancel', title: '原标题' });
+    const { host, updateTitleSpy, destroy } = mountTable({
+      items: [item],
+      canEditItem: () => true,
+    });
+    await nextTick();
+
+    const titleButton = host.querySelector<HTMLButtonElement>('[data-testid="annotation-table-title-title-cancel"]');
+    titleButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await nextTick();
+    let input = host.querySelector<HTMLInputElement>('[data-testid="annotation-table-title-input-title-cancel"]');
+    input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await nextTick();
+    expect(updateTitleSpy).not.toHaveBeenCalled();
+
+    titleButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await nextTick();
+    input = host.querySelector<HTMLInputElement>('[data-testid="annotation-table-title-input-title-cancel"]');
+    input!.value = '   ';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await nextTick();
+
+    expect(updateTitleSpy).not.toHaveBeenCalled();
 
     destroy();
   });
