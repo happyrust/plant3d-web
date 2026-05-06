@@ -159,3 +159,18 @@ scripts/                  # 构建和验证脚本
 - SolveSpace 3D 尺寸数据流: `docs/notes/solvespace-dimension-dataflow.md`
 - 实现计划: `docs/plans/`
 - LLM 文档索引: `llmdoc/index.md`
+
+## Business Context
+
+<!-- Fill in your business details. The AI CEO reads this at every session. -->
+
+- **Product:** [What you're building — 1 sentence]
+- **Stage:** [idea | building | launched | growing]
+- **Revenue:** [$0 | $X MRR | $X ARR]
+- **Users:** [count or "pre-launch"]
+- **Target audience:** [Who buys this]
+- **Business model:** [SaaS | e-commerce | marketplace | freemium | ads | other]
+- **Goal (90 days):** [What success looks like]
+- **Biggest challenge:** [The #1 thing blocking progress]
+- **Tech stack:** [Languages, frameworks, infra]
+- **Deploy:** [How you ship — Vercel, AWS, Railway, etc.]

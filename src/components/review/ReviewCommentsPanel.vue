@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 import { Edit3, MessageSquare, Plus, Reply, Trash2 } from 'lucide-vue-next';
 
@@ -8,72 +8,47 @@ import type { AnnotationType } from '@/composables/useToolStore';
 import {
   reviewCommentCreate,
   reviewCommentDelete,
-  reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
+import { useCommentThread } from '@/composables/useCommentThread';
 import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
-import {
-  getReviewCommentEventLog,
-  getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
-} from '@/review/services/sharedStores';
 import { emitToast } from '@/ribbon/toastBus';
 import { type AnnotationComment, getRoleDisplayName, getRoleTheme, UserRole } from '@/types/auth';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   annotationType: AnnotationType | null;
   annotationId: string | null;
-}>();
+  contextFormId?: string | null;
+  contextTaskId?: string | null;
+}>(), {
+  contextFormId: undefined,
+  contextTaskId: undefined,
+});
 
 const store = useToolStore();
 const userStore = useUserStore();
-const commentLoading = ref(false);
-const commentError = ref<string | null>(null);
-
-function dualReadSync() {
-  if (!isReviewCommentThreadStoreActive()) return;
-  if (!props.annotationType || !props.annotationId) return;
-  const inline = store.getAnnotationComments(props.annotationType, props.annotationId);
-  syncInlineToStore(props.annotationType, props.annotationId, inline, {
-    store: getReviewCommentThreadStore(),
-    log: getReviewCommentEventLog(),
-  });
+function normalizeContextString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
-async function loadCommentsFromBackend() {
-  if (!props.annotationType || !props.annotationId) return;
-  commentLoading.value = true;
-  commentError.value = null;
-  try {
-    const resp = await reviewCommentGetByAnnotation(props.annotationId, props.annotationType);
-    if (resp.success && resp.comments) {
-      const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
-      store.setAnnotationComments(props.annotationType, props.annotationId, normalized);
-      dualReadSync();
-    }
-  } catch (e) {
-    commentError.value = e instanceof Error ? e.message : '加载评论失败';
-    console.error('[ReviewCommentsPanel] Failed to load comments:', e);
-  } finally {
-    commentLoading.value = false;
-  }
-}
+const commentContext = computed(() => ({
+  formId: normalizeContextString(props.contextFormId),
+  taskId: normalizeContextString(props.contextTaskId),
+}));
 
-onMounted(() => {
-  loadCommentsFromBackend();
-});
-
-watch(() => [props.annotationId, props.annotationType], () => {
-  loadCommentsFromBackend();
-});
-
-// 获取当前批注的所有评论
-const allComments = computed<AnnotationComment[]>(() => {
-  if (!props.annotationType || !props.annotationId) return [];
-  return store.getAnnotationComments(props.annotationType, props.annotationId);
-});
+const {
+  comments: allComments,
+  loading: commentLoading,
+  error: commentError,
+} = useCommentThread(() => ({
+  annotationType: props.annotationType,
+  annotationId: props.annotationId,
+  formId: commentContext.value.formId,
+  taskId: commentContext.value.taskId,
+}));
 
 const designerTheme = getRoleTheme(UserRole.DESIGNER);
 const proofreaderTheme = getRoleTheme(UserRole.PROOFREADER);
@@ -150,6 +125,7 @@ async function addComment(columnKey: string) {
   if (!user) return;
 
   const replyToId = replyToColumnKey.value === columnKey ? replyToCommentId.value || undefined : undefined;
+  const ctx = commentContext.value;
 
   // 先尝试后端持久化
   try {
@@ -161,10 +137,11 @@ async function addComment(columnKey: string) {
       authorRole: user.role,
       content,
       replyToId,
+      formId: ctx.formId ?? undefined,
+      taskId: ctx.taskId ?? undefined,
     });
     if (resp.success && resp.comment) {
-      store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment);
-      dualReadSync();
+      store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment, ctx.formId, ctx.taskId);
     } else {
       emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
       return;
@@ -193,21 +170,31 @@ async function saveEditComment() {
 
   const content = editingCommentContent.value.trim();
   const commentId = editingCommentId.value;
+  const ctx = commentContext.value;
   const prevContent = allComments.value.find(c => c.id === commentId)?.content;
 
-  store.updateAnnotationComment(props.annotationType, props.annotationId, commentId, { content });
+  store.updateAnnotationComment(props.annotationType, props.annotationId, commentId, { content }, ctx.formId, ctx.taskId);
 
   try {
-    const resp = await reviewCommentUpdate(commentId, content);
+    const resp = await reviewCommentUpdate(commentId, content, {
+      formId: ctx.formId ?? undefined,
+      taskId: ctx.taskId ?? undefined,
+    });
     if (resp && resp.success === false) {
-      store.updateAnnotationComment(props.annotationType, props.annotationId, commentId, { content: prevContent });
+      store.updateAnnotationComment(
+        props.annotationType,
+        props.annotationId,
+        commentId,
+        { content: prevContent },
+        ctx.formId,
+        ctx.taskId,
+      );
       emitToast({ message: resp.error_message || '评论更新被拒绝，已回滚', level: 'warning' });
     }
   } catch {
     // 网络异常保留本地
   }
 
-  dualReadSync();
   editingCommentId.value = null;
   editingCommentContent.value = '';
 }
@@ -221,14 +208,17 @@ function cancelEditComment() {
 async function deleteComment(commentId: string) {
   if (!props.annotationType || !props.annotationId) return;
 
+  const ctx = commentContext.value;
   try {
-    await reviewCommentDelete(commentId);
+    await reviewCommentDelete(commentId, {
+      formId: ctx.formId ?? undefined,
+      taskId: ctx.taskId ?? undefined,
+    });
   } catch {
     // 后端失败降级本地
   }
 
-  store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
-  dualReadSync();
+  store.removeAnnotationComment(props.annotationType, props.annotationId, commentId, ctx.formId, ctx.taskId);
 }
 
 // 设置回复目标

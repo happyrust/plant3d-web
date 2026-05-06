@@ -115,7 +115,23 @@ describe('ResubmissionTaskList', () => {
     expect(document.body.textContent).toContain('仍可再次提交的任务');
     expect(document.body.textContent).toContain('已退回');
     expect(document.body.textContent).toContain('退回原因: 请补充净高说明');
+    expect(document.body.textContent).toContain('已回到设计节点，可处理后再次提交');
     expect(document.body.textContent).toContain('进入批注处理');
+  });
+
+  it('shows non-resubmittable returned tasks with a processing-only hint', async () => {
+    await mountComponent([
+      createTask({
+        id: 'returned-task-review-only',
+        title: '仍需处理批注的任务',
+        status: 'rejected',
+        currentNode: 'sh',
+        returnReason: '请先补充说明',
+      }),
+    ]);
+
+    expect(document.body.textContent).toContain('仍需处理批注的任务');
+    expect(document.body.textContent).toContain('当前可先处理退回批注，暂不可再次提交');
   });
 
   it('uses the latest workflow return reason and node semantics in returned list cards', async () => {

@@ -4,6 +4,7 @@ import {
   applyEmbedLandingState,
   buildPersistedEmbedModeParams,
   getEmbedLandingPanelIds,
+  getEmbedLandingPanelIdsWithOptions,
   readEmbedModeParamsFromSearch,
   resolvePassiveEmbedViewTarget,
   resolveTrustedEmbedIdentity,
@@ -115,6 +116,7 @@ describe('embed role landing', () => {
     })).toBe('designer');
 
     expect(getEmbedLandingPanelIds('designer')).toEqual(['initiateReview']);
+    expect(getEmbedLandingPanelIdsWithOptions('designer', { passiveWorkflowMode: true })).toEqual(['initiateReview']);
   });
 
   it('omits myTasks from designer landing when workflow is externally driven', () => {
@@ -170,7 +172,7 @@ describe('embed role landing', () => {
     expect(resolveEmbedLandingTargetFromRole('manager')).toBeNull();
   });
 
-  it('falls back to reviewer view when passive external reopen uses sj token for a non-sj task', () => {
+  it('keeps designer landing when passive external reopen already carries form lineage', () => {
     expect(resolvePassiveEmbedViewTarget({
       workflowRole: 'sj',
       passiveWorkflowMode: true,
@@ -180,6 +182,17 @@ describe('embed role landing', () => {
         currentNode: 'jd',
       },
     })).toBe('reviewer');
+
+    expect(resolvePassiveEmbedViewTarget({
+      workflowRole: 'sj',
+      passiveWorkflowMode: true,
+      formId: 'FORM-RETURN-1',
+      restoredTaskSummary: {
+        title: '三维校审单',
+        status: 'submitted',
+        currentNode: 'jd',
+      },
+    })).toBeNull();
 
     expect(resolvePassiveEmbedViewTarget({
       workflowRole: 'sj',

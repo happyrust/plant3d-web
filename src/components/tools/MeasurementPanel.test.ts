@@ -22,6 +22,8 @@ describe('MeasurementPanel', () => {
     };
     localStorage.clear();
     vi.resetModules();
+    vi.doUnmock('@/composables/usePipeDistanceStore');
+    vi.doUnmock('@/ribbon/commandBus');
   });
 
   it('应支持列表选中、外部选中回写和清空测量', async () => {
@@ -113,6 +115,109 @@ describe('MeasurementPanel', () => {
     expect(store.measurements.value).toEqual([]);
     expect(store.activeMeasurementId.value).toBeNull();
     expect(selectAnnotation).toHaveBeenLastCalledWith(null);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('应展示管-管净距入口、同步状态并触发统一命令', async () => {
+    const emitCommand = vi.fn();
+    const selectedBranRefnos = ref(['BRAN-001', 'BRAN-002']);
+    const results = ref([
+      {
+        id: 'clearance-1',
+        distance: 120,
+        pipeA: 'BRAN-001',
+        pipeB: 'BRAN-002',
+        start: [0, 0, 0],
+        end: [120, 0, 0],
+      },
+    ]);
+    const isDetecting = ref(false);
+    const detectError = ref<string | null>(null);
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/ribbon/commandBus', () => ({
+      emitCommand,
+    }));
+    vi.doMock('@/composables/usePipeDistanceStore', () => ({
+      usePipeDistanceStore: () => ({
+        showAnnotations: ref(true),
+        maxDistance: ref(500),
+        maxAngle: ref(5),
+        selectedBranRefnos,
+        results,
+        activeResultIndex: ref(0),
+        isDetecting,
+        detectError,
+        addBranRefno: vi.fn(),
+        removeBranRefno: vi.fn(),
+        clearBranRefnos: vi.fn(),
+        setActiveResult: vi.fn(),
+        runDetection: vi.fn(),
+        clearResults: vi.fn(),
+      }),
+    }));
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef(null),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        mbdPipeVis: shallowRef(null),
+        annotationSystem: shallowRef(null),
+      }),
+    }));
+
+    const { default: MeasurementPanel } = await import('./MeasurementPanel.vue');
+
+    const app = createApp(MeasurementPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        flyToMeasurement: vi.fn(),
+        removeMeasurement: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const card = host.querySelector('[data-testid="measurement-pipe-distance-card"]') as HTMLElement | null;
+    const selectedCount = host.querySelector(
+      '[data-testid="measurement-pipe-distance-selected-count"]',
+    ) as HTMLElement | null;
+    const resultCount = host.querySelector(
+      '[data-testid="measurement-pipe-distance-result-count"]',
+    ) as HTMLElement | null;
+    const status = host.querySelector('[data-testid="measurement-pipe-distance-status"]') as HTMLElement | null;
+    const openButton = host.querySelector(
+      '[data-testid="measurement-open-pipe-distance"]',
+    ) as HTMLButtonElement | null;
+
+    expect(card?.textContent).toContain('管-管净距');
+    expect(card?.textContent).toContain('选择多根 BRAN 管道');
+    expect(selectedCount?.textContent).toContain('2');
+    expect(resultCount?.textContent).toContain('1');
+    expect(status?.textContent).toContain('已生成 1 条净距结果');
+
+    isDetecting.value = true;
+    await nextTick();
+    expect(status?.textContent).toContain('正在检测管道间净距');
+
+    isDetecting.value = false;
+    detectError.value = '检测失败: 管段数据缺失';
+    await nextTick();
+    expect(status?.textContent).toContain('检测失败: 管段数据缺失');
+
+    openButton?.click();
+    await nextTick();
+
+    expect(emitCommand).toHaveBeenCalledWith('measurement.pipe_to_pipe');
 
     app.unmount();
     host.remove();

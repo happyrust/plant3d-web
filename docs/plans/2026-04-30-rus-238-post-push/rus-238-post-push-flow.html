@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RUS-238 推送后开发与验收流程</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #eef2f6;
+      --paper-2: #f8fbfe;
+      --ink: #21364d;
+      --muted: #6b7f95;
+      --soft: #8aa0b6;
+      --rule: rgba(33, 54, 77, 0.12);
+      --rule-solid: rgba(33, 54, 77, 0.24);
+      --accent: #2d67b2;
+      --accent-tint: rgba(45, 103, 178, 0.10);
+      --link: #1f4f8d;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--soft);
+      font-family: "Geist Mono", monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: "Instrument Serif", serif;
+      font-size: 40px;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      max-width: 760px;
+      margin: 12px 0 28px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .diagram {
+      overflow-x: auto;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--paper-2);
+    }
+
+    svg {
+      display: block;
+      min-width: 1040px;
+      height: auto;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 0.9fr;
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .card {
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: #fff;
+      padding: 18px;
+    }
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    footer {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px solid var(--rule);
+      color: var(--soft);
+      font-family: "Geist Mono", monospace;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">RUS-238 / POST-PUSH PLAN</p>
+    <h1>测量完整路径展示的后续开发与验收流程</h1>
+    <p class="subtitle">
+      本图对应 planning-with-files 目录中的任务计划。焦点是：先补齐真实验收输入，再验证三处展示入口；只有验收暴露问题时才进入二次开发。
+    </p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1040 660" role="img" aria-label="RUS-238 推送后开发与验收流程图">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(33,54,77,0.10)" />
+          </pattern>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#6b7f95" />
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2d67b2" />
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#1f4f8d" />
+          </marker>
+        </defs>
+
+        <rect width="1040" height="660" fill="#f8fbfe" />
+        <rect width="1040" height="660" fill="url(#dots)" opacity="0.35" />
+
+        <!-- arrows -->
+        <path d="M520 88 L520 136" stroke="#2d67b2" stroke-width="1.2" marker-end="url(#arrow-accent)" />
+        <path d="M520 216 L520 264" stroke="#6b7f95" stroke-width="1" marker-end="url(#arrow)" />
+        <path d="M520 344 L520 392" stroke="#6b7f95" stroke-width="1" marker-end="url(#arrow)" />
+        <path d="M520 472 L520 516" stroke="#6b7f95" stroke-width="1" marker-end="url(#arrow)" />
+        <path d="M640 176 C752 176 752 300 640 300" fill="none" stroke="#6b7f95" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)" />
+        <path d="M400 432 C272 432 272 300 400 300" fill="none" stroke="#1f4f8d" stroke-width="1" marker-end="url(#arrow-link)" />
+
+        <!-- arrow labels -->
+        <rect x="492" y="108" width="56" height="16" rx="2" fill="#f8fbfe" />
+        <text x="520" y="120" fill="#2d67b2" font-family="Geist Mono" font-size="8" text-anchor="middle" letter-spacing="0.06em">START</text>
+        <rect x="492" y="236" width="56" height="16" rx="2" fill="#f8fbfe" />
+        <text x="520" y="248" fill="#6b7f95" font-family="Geist Mono" font-size="8" text-anchor="middle" letter-spacing="0.06em">VERIFY</text>
+        <rect x="492" y="364" width="56" height="16" rx="2" fill="#f8fbfe" />
+        <text x="520" y="376" fill="#6b7f95" font-family="Geist Mono" font-size="8" text-anchor="middle" letter-spacing="0.06em">REVIEW</text>
+        <rect x="492" y="492" width="56" height="16" rx="2" fill="#f8fbfe" />
+        <text x="520" y="504" fill="#6b7f95" font-family="Geist Mono" font-size="8" text-anchor="middle" letter-spacing="0.06em">CLOSE</text>
+        <rect x="704" y="232" width="88" height="16" rx="2" fill="#f8fbfe" />
+        <text x="748" y="244" fill="#6b7f95" font-family="Geist Mono" font-size="8" text-anchor="middle" letter-spacing="0.06em">INPUT MISSING</text>
+        <rect x="248" y="356" width="72" height="16" rx="2" fill="#f8fbfe" />
+        <text x="284" y="368" fill="#1f4f8d" font-family="Geist Mono" font-size="8" text-anchor="middle" letter-spacing="0.06em">FIX NEEDED</text>
+
+        <!-- nodes -->
+        <rect x="384" y="40" width="272" height="48" rx="24" fill="#eef2f6" stroke="#2d67b2" stroke-width="1.2" />
+        <text x="520" y="68" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">已推送 RUS-238 完整路径展示</text>
+        <text x="520" y="82" fill="#6b7f95" font-family="Geist Mono" font-size="8" text-anchor="middle">commit 0819772</text>
+
+        <polygon points="520,136 640,176 520,216 400,176" fill="rgba(45,103,178,0.10)" stroke="#2d67b2" stroke-width="1.2" />
+        <text x="520" y="172" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">验收输入齐全？</text>
+        <text x="520" y="188" fill="#6b7f95" font-family="Geist Mono" font-size="9" text-anchor="middle">BRAN / 包名 / 角色 / 入口</text>
+
+        <rect x="400" y="264" width="240" height="80" rx="6" fill="#fff" stroke="#21364d" stroke-width="1" />
+        <rect x="412" y="276" width="36" height="12" rx="2" fill="transparent" stroke="rgba(33,54,77,0.40)" stroke-width="0.8" />
+        <text x="430" y="285" fill="#21364d" font-family="Geist Mono" font-size="7" text-anchor="middle">LOCAL</text>
+        <text x="520" y="304" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">本地真实模型验收</text>
+        <text x="520" y="320" fill="#6b7f95" font-family="Geist Mono" font-size="9" text-anchor="middle">列表 / fallback / 操作行为</text>
+
+        <rect x="400" y="392" width="240" height="80" rx="6" fill="#fff" stroke="#21364d" stroke-width="1" />
+        <rect x="412" y="404" width="36" height="12" rx="2" fill="transparent" stroke="rgba(33,54,77,0.40)" stroke-width="0.8" />
+        <text x="430" y="413" fill="#21364d" font-family="Geist Mono" font-size="7" text-anchor="middle">REVIEW</text>
+        <text x="520" y="432" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">批注证据与确认回放</text>
+        <text x="520" y="448" fill="#6b7f95" font-family="Geist Mono" font-size="9" text-anchor="middle">三处入口展示一致</text>
+
+        <rect x="400" y="516" width="240" height="80" rx="6" fill="#fff" stroke="#21364d" stroke-width="1" />
+        <rect x="412" y="528" width="36" height="12" rx="2" fill="transparent" stroke="rgba(33,54,77,0.40)" stroke-width="0.8" />
+        <text x="430" y="537" fill="#21364d" font-family="Geist Mono" font-size="7" text-anchor="middle">PMS</text>
+        <text x="520" y="556" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">PMS / 编校审验收</text>
+        <text x="520" y="572" fill="#6b7f95" font-family="Geist Mono" font-size="9" text-anchor="middle">截图 / BRAN / 包名 / 角色</text>
+
+        <rect x="704" y="136" width="220" height="80" rx="6" fill="rgba(33,54,77,0.03)" stroke="rgba(33,54,77,0.30)" stroke-width="1" stroke-dasharray="5 4" />
+        <rect x="716" y="148" width="44" height="12" rx="2" fill="transparent" stroke="rgba(33,54,77,0.35)" stroke-width="0.8" />
+        <text x="738" y="157" fill="#6b7f95" font-family="Geist Mono" font-size="7" text-anchor="middle">BLOCK</text>
+        <text x="814" y="176" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">等待外部输入</text>
+        <text x="814" y="192" fill="#6b7f95" font-family="Geist Mono" font-size="9" text-anchor="middle">不能声称真实验收完成</text>
+
+        <rect x="116" y="392" width="216" height="80" rx="6" fill="rgba(45,103,178,0.10)" stroke="#2d67b2" stroke-width="1.2" />
+        <rect x="128" y="404" width="36" height="12" rx="2" fill="transparent" stroke="rgba(45,103,178,0.45)" stroke-width="0.8" />
+        <text x="146" y="413" fill="#2d67b2" font-family="Geist Mono" font-size="7" text-anchor="middle">DEV</text>
+        <text x="224" y="432" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">二次开发判断</text>
+        <text x="224" y="448" fill="#6b7f95" font-family="Geist Mono" font-size="9" text-anchor="middle">长路径 / 性能 / fallback</text>
+
+        <rect x="712" y="516" width="216" height="80" rx="6" fill="#fff" stroke="#8aa0b6" stroke-width="1" />
+        <rect x="724" y="528" width="44" height="12" rx="2" fill="transparent" stroke="rgba(138,160,182,0.45)" stroke-width="0.8" />
+        <text x="746" y="537" fill="#6b7f95" font-family="Geist Mono" font-size="7" text-anchor="middle">CLEAN</text>
+        <text x="820" y="556" fill="#21364d" font-family="Geist" font-size="12" font-weight="600" text-anchor="middle">工作区独立收敛</text>
+        <text x="820" y="572" fill="#6b7f95" font-family="Geist Mono" font-size="9" text-anchor="middle">不混入 RUS-238 补丁</text>
+
+        <line x1="32" y1="620" x2="1008" y2="620" stroke="rgba(33,54,77,0.12)" stroke-width="0.8" />
+        <text x="32" y="640" fill="#6b7f95" font-family="Geist Mono" font-size="8" letter-spacing="0.14em">LEGEND</text>
+        <circle cx="124" cy="636" r="4" fill="#2d67b2" />
+        <text x="136" y="640" fill="#6b7f95" font-family="Geist Mono" font-size="8">关键决策</text>
+        <line x1="224" y1="636" x2="260" y2="636" stroke="#6b7f95" stroke-width="1" marker-end="url(#arrow)" />
+        <text x="272" y="640" fill="#6b7f95" font-family="Geist Mono" font-size="8">验收路径</text>
+        <line x1="356" y1="636" x2="392" y2="636" stroke="#1f4f8d" stroke-width="1" marker-end="url(#arrow-link)" />
+        <text x="404" y="640" fill="#6b7f95" font-family="Geist Mono" font-size="8">返工路径</text>
+        <line x1="492" y1="636" x2="528" y2="636" stroke="#6b7f95" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)" />
+        <text x="540" y="640" fill="#6b7f95" font-family="Geist Mono" font-size="8">阻塞等待</text>
+      </svg>
+    </div>
+
+    <section class="cards">
+      <article class="card">
+        <h2>先验收，不扩范围</h2>
+        <p>真实数据没有到位前，只维护计划和记录，不继续扩大代码改动。</p>
+      </article>
+      <article class="card">
+        <h2>三处入口一致</h2>
+        <p>测量列表、批注证据、确认回放必须共享 fallback 与完整路径展示口径。</p>
+      </article>
+      <article class="card">
+        <h2>脏工作区隔离</h2>
+        <p>当前大量无关变更需要单独收敛，不混入 RUS-238 后续补丁。</p>
+      </article>
+    </section>
+
+    <footer>Generated for plant3d-web · RUS-238 · planning-with-files + diagram-design</footer>
+  </main>
+</body>
+</html>

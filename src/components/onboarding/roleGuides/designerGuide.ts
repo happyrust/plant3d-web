@@ -115,6 +115,16 @@ export function buildDesignerGuide(ctx: GuideContext): GuideDefinition {
       actionHint: isRibbon ? '请点击「校审」标签页，找到「批注处理」按钮。' : '请先展开「校审」菜单，再点「批注处理」；或在右侧面板打开对应标签页。',
       onBeforeShow: () => ensurePanelAndActivate('resubmissionTasks'),
     });
+    steps.push({
+      id: 'annotation-table-btn',
+      targetSelector: '[data-command="panel.annotationTable"]',
+      title: '批注表格视图',
+      description: '批量查看与排序时用「批注表格」更高效：支持搜索、严重度筛选、CSV 导出、键盘导航与右键复制。单击行选中、双击行飞到 3D 并进入处理详情。',
+      placement: isRibbon ? 'bottom' : 'left',
+      canSkip: true,
+      actionHint: isRibbon ? '请点击「校审」标签页，找到「批注处理」旁边的「批注表格」按钮。面板内也可随时用顶部的「卡片列表 / 批注表格」切换视图。' : '请先展开「校审」菜单，再点「批注表格」；或在「批注处理」面板顶部用「卡片列表 / 批注表格」切换。',
+      onBeforeShow: () => ensurePanelAndActivate('designerCommentHandling'),
+    });
   }
 
   return {

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue';
 
-import { LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
+import { Camera, LayoutGrid, List, MessageSquareMore } from 'lucide-vue-next';
 
 import {
-  annotationSeverityUpdate,
+  reviewAttachmentDelete,
   reviewCommentCreate,
   reviewCommentDelete,
   reviewCommentGetByAnnotation,
@@ -12,18 +12,14 @@ import {
 } from '@/api/reviewApi';
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
+import { useReviewStore } from '@/composables/useReviewStore';
+import { useScreenshot } from '@/composables/useScreenshot';
 import {
   getAnnotationRefnos,
   useToolStore,
   type AnnotationType,
 } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
-import {
-  getReviewCommentThreadStore,
-  getReviewCommentEventLog,
-  isReviewCommentThreadStoreActive,
-} from '@/review/services/sharedStores';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   ANNOTATION_SEVERITY_VALUES,
@@ -58,6 +54,80 @@ const props = defineProps<{
 
 const store = useToolStore();
 const userStore = useUserStore();
+const reviewStore = useReviewStore();
+const { captureAndUpload, isCapturing, uploadProgress } = useScreenshot();
+
+const capturingAnnotationId = ref<string | null>(null);
+
+const canCaptureAnnotation = computed(() => {
+  const task = reviewStore.currentTask.value;
+  return !!task?.id && !isCapturing.value;
+});
+
+/**
+ * 为批注拍摄一张代表截图并挂到 record 上。
+ * 语义：覆盖（再次拍摄时替换旧图）；重拍成功后异步清理旧 attachment。
+ */
+async function captureCloudAnnotationShot(annotationId: string) {
+  const task = reviewStore.currentTask.value;
+  if (!task?.id) {
+    emitToast({ message: '请先进入校审任务后再截图', level: 'warning' });
+    return;
+  }
+  if (isCapturing.value) return;
+  const existingScreenshot = store.getAnnotationScreenshot('cloud', annotationId);
+  if (
+    existingScreenshot
+    && typeof window !== 'undefined'
+    && !window.confirm('该批注已有截图，是否重新拍摄并替换？')
+  ) {
+    return;
+  }
+
+  capturingAnnotationId.value = annotationId;
+  try {
+    const annotation = store.cloudAnnotations.value.find((item) => item.id === annotationId);
+    const previousAttachmentId = store.getAnnotationScreenshot('cloud', annotationId)?.attachmentId;
+    const severityLabel = getAnnotationSeverityDisplay(annotation?.severity).label;
+    const description = [
+      severityLabel !== '未设置' ? severityLabel : null,
+      annotation?.title?.trim() || null,
+    ].filter((part): part is string => !!part).join(' - ');
+    const attachment = await captureAndUpload(task.id, {
+      kind: 'annotation_shot',
+      sourceAnnotationId: annotationId,
+      description: description || undefined,
+    });
+    if (!attachment) {
+      emitToast({ message: '截图失败，请重试', level: 'error' });
+      return;
+    }
+    store.setAnnotationScreenshot('cloud', annotationId, {
+      url: attachment.url,
+      attachmentId: attachment.id,
+      name: attachment.name,
+      capturedAt: attachment.capturedAt,
+    });
+    cleanupScreenshotAttachment(previousAttachmentId, '旧截图附件清理失败', attachment.id);
+    emitToast({ message: '截图已添加', level: 'success' });
+  } finally {
+    capturingAnnotationId.value = null;
+  }
+}
+
+function cleanupScreenshotAttachment(
+  attachmentId: string | undefined,
+  failureMessage: string,
+  skipAttachmentId?: string
+) {
+  if (!attachmentId || attachmentId === skipAttachmentId) return;
+  void reviewAttachmentDelete(attachmentId).catch((error) => {
+    emitToast({
+      message: error instanceof Error ? `${failureMessage}：${error.message}` : failureMessage,
+      level: 'warning',
+    });
+  });
+}
 
 /**
  * 列表顶部的"严重度筛选"：
@@ -86,10 +156,9 @@ function matchesSeverityFilter<T extends { severity?: AnnotationSeverity }>(a: T
  */
 const severityCounts = computed(() => {
   const counts: Record<AnnotationSeverity | 'unset', number> = {
-    critical: 0,
-    severe: 0,
-    normal: 0,
-    suggestion: 0,
+    principle: 0,
+    general: 0,
+    drawing: 0,
     unset: 0,
   };
   const all = [
@@ -106,7 +175,7 @@ const severityCounts = computed(() => {
 
 const totalAnnotations = computed(() => {
   const c = severityCounts.value;
-  return c.critical + c.severe + c.normal + c.suggestion + c.unset;
+  return c.principle + c.general + c.drawing + c.unset;
 });
 
 function toggleSeverityFilter(next: AnnotationSeverity | 'unset' | null) {
@@ -119,10 +188,9 @@ const SEVERITY_FILTER_BUCKETS: {
   colorClass: string;
   dotClass: string;
 }[] = [
-  { key: 'critical', label: '致命', colorClass: 'bg-red-100 text-red-700 border-red-200', dotClass: 'bg-red-500' },
-  { key: 'severe', label: '严重', colorClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-500' },
-  { key: 'normal', label: '一般', colorClass: 'bg-blue-100 text-blue-700 border-blue-200', dotClass: 'bg-blue-500' },
-  { key: 'suggestion', label: '建议', colorClass: 'bg-slate-100 text-slate-600 border-slate-200', dotClass: 'bg-slate-400' },
+  { key: 'principle', label: '原则错误 ×', colorClass: 'bg-red-100 text-red-700 border-red-200', dotClass: 'bg-red-500' },
+  { key: 'general', label: '一般错误 △', colorClass: 'bg-orange-100 text-orange-700 border-orange-200', dotClass: 'bg-orange-500' },
+  { key: 'drawing', label: '图面错误 ○', colorClass: 'bg-blue-100 text-blue-700 border-blue-200', dotClass: 'bg-blue-500' },
   { key: 'unset', label: '未设置', colorClass: 'bg-muted text-muted-foreground border-border', dotClass: 'bg-gray-300' },
 ];
 
@@ -298,23 +366,29 @@ function flyRect(id: string) {
 }
 
 function removeText(id: string) {
+  const attachmentId = store.getAnnotationScreenshot('text', id)?.attachmentId;
   props.tools.removeAnnotation(id);
+  cleanupScreenshotAttachment(attachmentId, '截图附件删除失败');
 }
 
 function removeCloud(id: string) {
+  const attachmentId = store.getAnnotationScreenshot('cloud', id)?.attachmentId;
   if (props.tools.removeCloudAnnotation) {
     props.tools.removeCloudAnnotation(id);
   } else {
     store.removeCloudAnnotation(id);
   }
+  cleanupScreenshotAttachment(attachmentId, '截图附件删除失败');
 }
 
 function removeRect(id: string) {
+  const attachmentId = store.getAnnotationScreenshot('rect', id)?.attachmentId;
   if (props.tools.removeRectAnnotation) {
     props.tools.removeRectAnnotation(id);
   } else {
     store.removeRectAnnotation(id);
   }
+  cleanupScreenshotAttachment(attachmentId, '截图附件删除失败');
 }
 
 function updateTitle(v: string) {
@@ -373,10 +447,6 @@ const canEditActiveSeverity = computed<boolean>(() => {
   return canEditAnnotationSeverity(userStore.currentUser.value, rec?.authorId);
 });
 
-function applyLocalSeverity(type: AnnotationType, id: string, severity: AnnotationSeverity | undefined) {
-  store.updateAnnotationSeverity(type, id, severity);
-}
-
 async function handleChangeSeverity(event: Event) {
   const target = event.target as HTMLSelectElement | null;
   if (!target) return;
@@ -388,20 +458,10 @@ async function handleChangeSeverity(event: Event) {
   const next: AnnotationSeverity | undefined = raw === '' ? undefined : (raw as AnnotationSeverity);
   const prev = (active.record as { severity?: AnnotationSeverity }).severity;
 
-  applyLocalSeverity(active.type, active.id, next);
-
-  try {
-    const resp = await annotationSeverityUpdate(active.id, active.type, next ?? null);
-    if (resp && resp.success === false) {
-      applyLocalSeverity(active.type, active.id, prev);
-      target.value = prev ?? '';
-       
-      console.warn('[annotation] 严重度同步后端被拒绝，已回滚：', resp.error_message);
-    }
-  } catch (err) {
-    // 后端接口不可用/网络异常时保留本地（与现有评论流程一致），避免用户输入丢失
-     
-    console.warn('[annotation] 严重度接口暂不可用，保留本地：', err);
+  const { saveAnnotationSeverity } = await import('@/composables/useAnnotationSeveritySync');
+  const ok = await saveAnnotationSeverity(active.type, active.id, next);
+  if (!ok) {
+    target.value = prev ?? '';
   }
 }
 
@@ -515,19 +575,6 @@ function getRoleInlineStyle(role: UserRole): Record<string, string> {
   };
 }
 
-/**
- * DUAL_READ 同步：每次 inline 评论变更后，如果 thread store 已激活，
- * 把 inline 数据推入 store 并记录差异日志。
- */
-function dualReadSync(annType: AnnotationType, annId: string) {
-  if (!isReviewCommentThreadStoreActive()) return;
-  const inline = store.getAnnotationComments(annType, annId);
-  syncInlineToStore(annType, annId, inline, {
-    store: getReviewCommentThreadStore(),
-    log: getReviewCommentEventLog(),
-  });
-}
-
 async function loadCommentsForListView() {
   if (commentsViewMode.value !== 'list') return;
   if (!activeAny.value || !activeAnnotationType.value) return;
@@ -538,7 +585,6 @@ async function loadCommentsForListView() {
     if (resp.success && resp.comments) {
       const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
       store.setAnnotationComments(annType, annId, normalized);
-      dualReadSync(annType, annId);
     }
   } catch {
     // 列表模式拉取失败时保留本地缓存
@@ -579,7 +625,6 @@ async function addComment() {
     });
     if (resp.success && resp.comment) {
       store.addCommentToAnnotation(annType, annId, resp.comment);
-      dualReadSync(annType, annId);
     } else {
       emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
       return;
@@ -621,7 +666,6 @@ async function saveEditComment() {
     // 网络异常保留本地（与严重度策略一致）
   }
 
-  dualReadSync(annType, annId);
   editingCommentId.value = null;
   editingCommentContent.value = '';
 }
@@ -645,7 +689,6 @@ async function deleteComment(commentId: string) {
   }
 
   store.removeAnnotationComment(annType, annId, commentId);
-  dualReadSync(annType, annId);
 }
 
 // 设置回复目标
@@ -782,10 +825,10 @@ function formatCommentTime(timestamp: number): string {
         </div>
       </div>
 
-      <!-- 严重度概览与筛选 -->
+      <!-- 错误类型概览与筛选 -->
       <div data-testid="annotation-panel-severity-overview" class="mt-3">
         <div class="flex items-center justify-between">
-          <div class="text-[11px] text-muted-foreground">按严重度筛选（点击切换）</div>
+          <div class="text-[11px] text-muted-foreground">按错误类型筛选（点击切换）</div>
           <button type="button"
             data-testid="annotation-panel-severity-filter-clear"
             class="h-6 rounded border px-2 text-[11px] transition-colors"
@@ -843,8 +886,8 @@ function formatCommentTime(timestamp: number): string {
                 <span v-if="a.refno" class="ml-1 inline-block rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950 dark:text-blue-400" :title="'RefNo: ' + a.refno">{{ a.refno }}</span>
                 <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
                   :class="getAnnotationSeverityDisplay(a.severity).color"
-                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
-                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                  :title="getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
                 </span>
                 <span v-if="a.collapsed" class="ml-1 inline-block rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">
                   已最小化
@@ -913,8 +956,8 @@ function formatCommentTime(timestamp: number): string {
                 <span class="font-semibold">{{ a.title }}</span>
                 <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
                   :class="getAnnotationSeverityDisplay(a.severity).color"
-                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
-                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                  :title="getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
                 </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
@@ -924,6 +967,42 @@ function formatCommentTime(timestamp: number): string {
               <span class="text-xs text-muted-foreground">{{ new Date(a.createdAt).toLocaleString() }}</span>
             </div>
           </div>
+
+          <!-- 代表截图：有则显示，hover 显示「重拍」角标；无且可拍则显示虚线「添加截图」入口 -->
+          <div v-if="a.thumbnailUrl"
+            class="group relative mt-2 overflow-hidden rounded border border-[#E5E7EB]"
+            style="height: 120px;">
+            <img :src="a.thumbnailUrl" alt="批注截图" class="h-full w-full object-cover" />
+            <div v-if="capturingAnnotationId === a.id"
+              class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/55 px-4 text-white">
+              <div class="text-xs font-semibold">{{ uploadProgress > 0 ? `${uploadProgress}%` : '截图上传中…' }}</div>
+              <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/25">
+                <div class="h-full rounded-full bg-white transition-all"
+                  :style="{ width: `${Math.max(uploadProgress, 8)}%` }" />
+              </div>
+            </div>
+            <button v-if="canCaptureAnnotation" type="button"
+              class="absolute right-1 top-1 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] text-[#111827] opacity-0 shadow-sm transition-opacity hover:bg-white group-hover:opacity-100"
+              :disabled="capturingAnnotationId === a.id"
+              title="重新截图"
+              @click.stop="captureCloudAnnotationShot(a.id)">
+              <Camera class="h-3 w-3" />
+              <span>{{ capturingAnnotationId === a.id ? '截图中…' : '重拍' }}</span>
+            </button>
+          </div>
+          <button v-else-if="canCaptureAnnotation" type="button"
+            class="mt-2 flex h-[80px] w-full flex-col items-center justify-center gap-2 rounded border border-dashed border-[#D1D5DB] text-xs text-[#6B7280] hover:border-[#FDBA74] hover:bg-[#FFF7ED] hover:text-[#EA580C]"
+            :disabled="capturingAnnotationId === a.id"
+            @click.stop="captureCloudAnnotationShot(a.id)">
+            <span class="inline-flex items-center gap-2">
+              <Camera class="h-3.5 w-3.5" />
+              <span>{{ capturingAnnotationId === a.id ? '正在截图…' : '添加截图 · 记录当前视角' }}</span>
+            </span>
+            <span v-if="capturingAnnotationId === a.id" class="w-40 overflow-hidden rounded-full bg-slate-200">
+              <span class="block h-1.5 rounded-full bg-[#FF6B00] transition-all"
+                :style="{ width: `${Math.max(uploadProgress, 8)}%` }" />
+            </span>
+          </button>
 
           <div class="mt-2 flex flex-wrap gap-2">
             <button type="button"
@@ -980,8 +1059,8 @@ function formatCommentTime(timestamp: number): string {
                 <span class="font-semibold">{{ a.title }}</span>
                 <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
                   :class="getAnnotationSeverityDisplay(a.severity).color"
-                  :title="'严重度：' + getAnnotationSeverityDisplay(a.severity).label">
-                  {{ getAnnotationSeverityDisplay(a.severity).label }}
+                  :title="getAnnotationSeverityDisplay(a.severity).label">
+                  {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
                 </span>
               </div>
               <div class="mt-0.5 truncate text-xs text-muted-foreground">{{ a.description || '（无描述）' }}</div>
@@ -1054,7 +1133,7 @@ function formatCommentTime(timestamp: number): string {
           @input="updateDescription(($event.target as HTMLTextAreaElement).value)" />
 
         <label class="mt-1 text-xs text-muted-foreground">
-          严重程度
+          错误类型
           <span v-if="!canEditActiveSeverity" class="ml-1 text-[10px] text-muted-foreground">（仅批注作者或校对/审核可修改）</span>
         </label>
         <div class="flex items-center gap-2">
@@ -1070,8 +1149,7 @@ function formatCommentTime(timestamp: number): string {
           <span v-if="(activeAny as any).severity"
             class="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px]"
             :class="getAnnotationSeverityDisplay((activeAny as any).severity).color">
-            <span class="inline-block h-1.5 w-1.5 rounded-full"
-              :class="getAnnotationSeverityDisplay((activeAny as any).severity).dot" />
+            {{ getAnnotationSeverityDisplay((activeAny as any).severity).symbol }}
             {{ getAnnotationSeverityDisplay((activeAny as any).severity).label }}
           </span>
         </div>

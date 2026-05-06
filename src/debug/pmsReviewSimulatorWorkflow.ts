@@ -45,6 +45,7 @@ export type WorkflowAccessDecisionSource =
   | 'new-entry'
   | 'task-terminal'
   | 'workflow-next-step'
+  | 'task-current-node'
   | 'workflow-unresolved';
 
 export type WorkflowAccessResolution = {
@@ -304,6 +305,8 @@ export function resolveSimulatorWorkflowAccess(options: {
   currentPmsWorkflowRole: WorkflowRole | null;
   workflowNextStepUserId: string | null;
   workflowNextStepRole: WorkflowRole | null;
+  taskCurrentNode?: string | null;
+  taskAssignedUserId?: string | null;
 }): WorkflowAccessResolution {
   if (options.iframeSource === 'new') {
     return {
@@ -326,7 +329,27 @@ export function resolveSimulatorWorkflowAccess(options: {
     };
   }
 
+  const taskCurrentNode = normalizeWorkflowRole(options.taskCurrentNode);
+  const taskAssignedUserId = options.taskAssignedUserId?.trim() || '';
+  const currentPmsUserId = options.currentPmsUserId.trim();
+
   if (!options.workflowNextStepRole || !options.workflowNextStepUserId) {
+    if (taskCurrentNode && taskAssignedUserId) {
+      const matchesTaskCurrentNode =
+        options.currentPmsWorkflowRole === taskCurrentNode
+        && currentPmsUserId.length > 0
+        && currentPmsUserId === taskAssignedUserId;
+
+      return {
+        canView: true,
+        canMutateWorkflow: matchesTaskCurrentNode,
+        decisionSource: 'task-current-node',
+        reason: matchesTaskCurrentNode
+          ? `workflow next_step 缺失，已回退到任务当前节点与指派（${taskAssignedUserId} / ${taskCurrentNode}），允许当前用户执行对应操作。`
+          : `workflow next_step 缺失，当前仅能按任务当前节点与指派判断（${taskAssignedUserId} / ${taskCurrentNode}）；当前用户仅可查看。`,
+      };
+    }
+
     return {
       canView: true,
       canMutateWorkflow: false,
@@ -335,7 +358,6 @@ export function resolveSimulatorWorkflowAccess(options: {
     };
   }
 
-  const currentPmsUserId = options.currentPmsUserId.trim();
   const matchesNextStep =
     options.currentPmsWorkflowRole === options.workflowNextStepRole
     && currentPmsUserId.length > 0

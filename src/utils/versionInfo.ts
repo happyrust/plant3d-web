@@ -33,13 +33,27 @@ function pickString(obj: Record<string, unknown>, ...keys: string[]): string | u
   return undefined;
 }
 
-/** 将构建时刻的 ISO 时间格式化为北京时间显示 */
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
+const TWO_DIGIT = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * 把 UTC 毫秒时间戳格式化为固定的"北京时间"字符串。
+ *
+ * 做法：先把时间戳加 8 小时，再用 `getUTC*` 方法读出年月日时分秒——
+ * 这样无论运行时机器的 local timezone 如何（UTC+0 的 CI / UTC+8 的工位 / UTC-5 的海外），
+ * 输出都等价于 `Asia/Shanghai` 下的墙钟时间。避免以前 `getFullYear()` 在 CI 与本地各自拉出
+ * 不同"北京时间"导致 version.json 解析测试跨机器红绿不一致的 bug。
+ */
+function formatMsAsBeijing(ms: number): string {
+  const d = new Date(ms + BEIJING_OFFSET_MS);
+  return `${d.getUTCFullYear()}-${TWO_DIGIT(d.getUTCMonth() + 1)}-${TWO_DIGIT(d.getUTCDate())} ${TWO_DIGIT(d.getUTCHours())}:${TWO_DIGIT(d.getUTCMinutes())}:${TWO_DIGIT(d.getUTCSeconds())} 北京时间`;
+}
+
+/** 将构建时刻的 ISO 时间格式化为北京时间显示（跨时区稳定） */
 function formatBuildDateFromIso(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return iso || '未知';
-  const d = new Date(t);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} 北京时间`;
+  return formatMsAsBeijing(t);
 }
 
 function normalizeVersionInfo(raw: unknown): VersionInfo | null {
@@ -50,20 +64,23 @@ function normalizeVersionInfo(raw: unknown): VersionInfo | null {
   const commit = pickString(obj, 'commit') ?? '未知';
   let buildDate = pickString(obj, 'buildDate', 'build_date') ?? '未知';
   
-  // 如果后端返回的时间包含 UTC+8 或 UTC，转换为北京时间显示
+  // 如果后端返回的时间包含 UTC+8 或 UTC，转换为北京时间显示（跨时区稳定）
   if (buildDate !== '未知' && (buildDate.includes('UTC') || buildDate.includes('UTC+8'))) {
-    // 解析后端时间并转换为北京时间格式
     const utcMatch = buildDate.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
     if (utcMatch) {
       const dateStr = utcMatch[1];
-      const d = new Date(dateStr + (buildDate.includes('UTC+8') ? '' : ' UTC'));
-      const p = (n: number) => String(n).padStart(2, '0');
-      // 如果是UTC+8，直接使用；如果是UTC，转换为北京时间
-      const beijingTime = buildDate.includes('UTC+8') ? d : new Date(d.getTime() + 8 * 60 * 60 * 1000);
-      buildDate = `${beijingTime.getFullYear()}-${p(beijingTime.getMonth() + 1)}-${p(beijingTime.getDate())} ${p(beijingTime.getHours())}:${p(beijingTime.getMinutes())}:${p(beijingTime.getSeconds())} 北京时间`;
+      // UTC+8 → 字符串已经是北京墙钟时间，用 'Z' 作为 UTC 解析再直接 formatMsAsBeijing 保形
+      // UTC    → 字符串是 UTC 时间，formatMsAsBeijing 会自动加 8 小时
+      const isoLike = buildDate.includes('UTC+8')
+        ? `${dateStr.replace(' ', 'T')}+08:00`
+        : `${dateStr.replace(' ', 'T')}Z`;
+      const parsed = Date.parse(isoLike);
+      if (!Number.isNaN(parsed)) {
+        buildDate = formatMsAsBeijing(parsed);
+      }
     }
   } else if (buildDate !== '未知' && !buildDate.includes('北京时间')) {
-    // 对于其他格式的时间，尝试解析为ISO格式转换
+    // 对于其他格式的时间，尝试解析为 ISO 格式转换
     buildDate = formatBuildDateFromIso(buildDate);
   }
   

@@ -1,68 +1,46 @@
-# Changelog
+# 更新日志
 
-本文件记录 `plant3d-web` 面向部署与用户可见行为的变更摘要。
+## [未发布]
 
-## [Unreleased]
+### 变更
 
-### Fixed
+- **RUS-239 驳回后重新流转修复** (2026-04-30)
+  - 新增外部流程桥接判断，仅在 PMS/仿 PMS 嵌入模式下向父窗口发送 `plant3d.workflow_action`
+  - 设计批注处理页“流转回校对”和任务详情“再次提交”接入 `workflow/sync active` 语义，避免外部流程场景继续走内部 submit
+  - 仿 PMS runner 在发起后关闭额外 `3d-view` 页面并降低诊断等待耦合，`bran-mixed` 已验证通过至 `PZ approve`
+  - 保留独立/内部模式的旧提交流转路径，并补充 RUS-239 计划、发现和执行记录
 
-- **评论降级去重（P1）**：`AnnotationPanel` 和 `ReviewCommentsPanel` 的 `addComment` 后端失败或返回非成功时，不再写入本地 store（避免本地生成的 ID 与后端不一致导致后续列表视图拉取后评论重复显示），改为 `emitToast` 提示用户重试。
-- **评论编辑回滚（P2）**：两个面板的 `saveEditComment` 改为乐观更新 + 后端拒绝时回滚模式（与严重度编辑策略一致），后端返回 `success: false` 时自动回滚内容并 toast 提示。
-- **移除 @ts-nocheck（P3）**：`AnnotationPanel.vue` 移除顶部 `@ts-nocheck`，TypeScript 零报错，恢复类型安全。
+- **RUS-238 测量路径展示增强** (2026-04-30)
+  - 测量列表、确认测量回放和批注测量证据支持异步展示模型树完整路径
+  - 新增统一展示层 `useMeasurementPathSummaries`，保持 refno fallback，路径解析成功后再替换为完整路径
+  - lookup 失败、模型树数据不可用或历史记录缺上下文时继续显示规范化 refno，不影响定位、隐藏、删除和回放行为
+  - 补充 RUS-238 UI 接入、验收与 PMS/编校审后续验证计划文档
 
-### Changed
+- **RUS-238 推送后验收规划** (2026-04-30)
+  - 新增 planning-with-files 规划目录，沉淀任务计划、findings、progress、验收输入清单和工作区盘点
+  - 新增自包含 HTML/SVG 流程图，说明从验收输入收集到 PMS/编校审验收与工作区收敛的路径
+  - 明确真实验收继续依赖 BRAN、PMS 包名/任务单、角色和入口输入
 
-- **ConfirmedRecordData 类型文档（P4）**：为 `ConfirmedRecordData` 的 `unknown[]` 字段添加 JSDoc 说明设计意图（后端历史记录序列化兼容）。
-- **annotationKey 冲突概率文档（P5）**：`computeAnnotationKeyV1` JSDoc 补充 64-bit key 的冲突概率数据（10k: ≈2.7×10⁻¹²）及 10 万条以上升级建议。
-- **useToolStore 评论方法标记 @deprecated**：`addCommentToAnnotation` / `setAnnotationComments` / `updateAnnotationComment` / `removeAnnotationComment` 添加 `@deprecated` JSDoc，引导新代码使用 `commentThreadStore`。
+- **RUS-238 仿 PMS 验收记录** (2026-04-30)
+  - 使用 BRAN `24381_145018` 跑通 approved 主链，最终 `status=approved` / `node=pz`
+  - restore 场景中 BRAN、测量和确认记录读回通过，剩余失败定位为刷新前评论内容 UI 断言
+  - Chrome CDP full flow 通过真实 PMS 入口创建三维校审单，并在嵌入站点接口命中包名或 BRAN
 
-### Added（批注体系 Phase C 评论解耦）
+- **批注错误类型替换** (2026-04-27)
+  - 将批注"严重度"体系（致命/严重/一般/建议）替换为"错误类型"体系
+  - 新增三种错误类型：原则错误（×）、一般错误（△）、图面错误（○）
+  - 涉及文件：`auth.ts`、`AnnotationPanel.vue`、`AnnotationOverlayBar.vue`、`useToolStore.ts`
 
-- **AnnotationPanel DUAL_READ 接入**：新增 `dualReadSync()` 辅助函数，评论写入成功后同步推入共享 `commentThreadStore`，通过 `REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ` flag 开关控制，默认关闭。
-- **ReviewCommentsPanel DUAL_READ 接入**：三栏视图面板同步接入 `commentThreadStore`，所有评论写入点（加载/添加/编辑/删除）完成后均触发 DUAL_READ 同步。
+### 修复
 
-### Added
+- **测量清空修复** (2026-04-29)
+  - 修复顶部菜单“测量 → 清空”只按当前测量模式清理，导致画面上已有测量标签残留的问题
+  - 统一清理普通测量、xeokit 测量、未完成测量草稿，以及测量模式生成的管-墙/柱距离标注
+  - 保留普通“尺寸标注”，避免误删用户手动创建的尺寸内容
 
-- **批注流转门禁前端接入（V1）**：ReviewPanel 增加提交前双层校验，包含未确认草稿阻断与后端 `review/annotations/check` 校验。
-  - 未确认批注/测量草稿不允许提交流转，提示明确为「请先确认数据，再执行流转」。
-  - 后端返回 `recommendedAction=return` 时提示「当前应驳回，不可直接流转到下一节点」，`recommendedAction=block` 时提示待确认批注阻塞。
-  - `passive / external` 只读场景仍不新增内部流转按钮，提交链路保持外部约定。
-
-
-- **批注严重度（问题严重程度）**：为四类批注（文字/云线/矩形/OBB）新增 `severity` 字段，4 档`致命 / 严重 / 一般 / 建议`。
-  - **权限**：批注作者本人或审核侧（校对/审核/经理/Admin）可修改；Viewer 与其他设计人员只读。
-  - **AnnotationPanel**：顶部新增"严重度概览"条（5 档徽章+数量，点击筛选列表）；编辑区新增下拉选择；列表先按严重度降序再按创建时间降序。
-  - **AnnotationOverlayBar**：画布底部悬浮条抽屉新增"当前批注严重度"与"当前类型批量严重度"两组快捷按钮，按权限自动启用/禁用，并显示"可改 N/总数"。
-  - **3D 场景高亮**：`useDtxTools` 给图钉与卡片 DOM 注入 `data-severity`，`tailwind.css` 新增 `.dtx-anno-label[data-severity=...]` 彩色左边条与图钉角标，不改动 Three.js 材质。
-  - **审核可见**：确认快照（`confirmCurrentData`）与导出数据（`exportReviewData`）自动携带 `severity`；`ReviewPanel` 审核 Tab 的确认记录卡片新增"严重度分布"徽章条。
-  - **后端约定**：新增 `PATCH /api/review/annotations/{id}/severity?type=...` 预留接口；未上线时自动降级到本地 store + localStorage，避免用户输入丢失。
-  - **创建者归属**：`addAnnotation` 系列在创建批注时自动从 `useUserStore` 回填 `authorId`，供严重度权限判断使用；已显式传入的 `authorId` 保留。
-  - **单元测试**：`auth.severity.test.ts`（10）、`useToolStore.severity.test.ts`（5）、`AnnotationPanel.test.ts` +2、`AnnotationOverlayBar.test.ts` +2、`useReviewStore.confirm.test.ts` +1。
-- **批注审核动作**：批注级别新增通过（approve）、驳回（reject）、撤回（revert）审核动作；`ReviewCommentsTimeline` 混合展示评论与审核事件时间线，支持附带备注。
-- **OBB 包围盒批注**：`ReviewPanel` 批注列表新增 OBB 类型，支持显示、评论及审核。
-- **auth 类型增强**：新增 `AnnotationReviewState`、`AnnotationReviewAction`、`AnnotationReviewEvent` 类型及 `getAnnotationReviewDisplay`、`getAnnotationReviewActionLabel`、`getRoleDisplayName` 辅助函数。
-- **output_project 直达**：`App.vue` 支持 URL 参数 `output_project` 直接选中对应项目，优先级高于 token 中的 `project_id`。
-- **E2E 测试**：新增 `e2e/output-project-direct-entry.spec.ts`。
-- **校审流程追踪文档**：新增三维校审当前流程追踪文档与外部被动模式流程图。
-
-### Fixed
-
-- **隔离 XRay 显示**：隔离模型时，其他模型不再被直接隐藏，只会以半透明方式保留在场景中；原本就隐藏的对象在取消隔离后也不会被误显示。
-- **校审批注与 Dock**：校核/校对在工作台启动文字/云线/矩形批注，或在三维视图中完成批注创建时，不再自动打开右侧 Dock 的「批注」页签；需查看列表或编辑详情时，仍可通过 Ribbon「批注」或画布批注悬浮条中的「打开批注面板」手动打开。批注列表中的「定位」仅做场景内选中与飞行，提示文案已与行为一致。
-- **任务类型归一化**：任务列表中的 `RefnoModelGeneration` 现在会按模型生成展示，`ModelExport` 会按导出模型展示，避免前端把后端新任务类型误判成错误分类。
-
-### Added
-
-- **更新说明**：新增「更新说明」入口，可直接查看当前版本对应的 changelog 内容。
-- **菜单模式与引导**：补充 `useMenuMode` composable 与 `hierarchicalMenuGuide`，使设计师/校核角色 onboarding 与分层菜单、`GuideContext.menuMode` 等既有类型约定一致并可正常构建。
-- **空间查询专业筛选与批量加载**：空间查询新增专业筛选、按专业仅显示、加载当前结果、只加载未加载结果、按专业批量加载等操作，便于直接把查询结果带入三维场景。
-
-### Changed
-
-- **模型生成向导高级项**：高级参数区收敛为网格容差和 Noun 相关选项，不再显示 Web 数据包导出与并发数输入，预览区同步简化。
-- **"提资"→"编校审"术语统一**：Ribbon 菜单标签（"发起编校审"/"我的编校审"）、API 注释、错误提示及工作流流转按钮文案（"确认流转至校对/审核/批准"/"确认最终批准"）全面对齐新术语；Toast 提示由"任务已提交到下一节点"改为"已确认提交流转"。
-
-### Added（内部基础设施）
-
-- **批注体系 Feature Flag 系统**（`src/review/flags.ts`）：引入 `REVIEW_<PHASE>_<FEATURE>_<STAGE>` 命名规范的 feature flag，支持 `localStorage` / `VITE_*` 环境变量 / 代码默认值三级覆盖，并提供 `isReviewFlagEnabled` / `clearReviewFlagOverrides` 工具函数，为批注体系多阶段重构提供安全的渐进切换能力。
-- **annotationKey v1 生成策略**（`src/review/domain/annotationKey.ts`）：前端基于批注类型、任务 ID、几何签名（text/cloud/rect/obb）与文本内容计算 SHA-1 截断 key，用于跨快照/跨恢复稳定归并评论与批注；提供 `computeAnnotationKeyV1` / `resolveAnnotationKey` / `isAnnotationKeyConsistent` 接口，兼容后端 v2 UUID 回写后的平滑迁移。
+- **PMS 模拟器驳回流程修复** (2026-04-27)
+  - 修复 `openWorkflowDialog` 和 `executeWorkflowAction` 中 `shouldUseSyncOnlyWorkflowAction` 使用过期的 `state.sidePanelMode` 导致 SH 节点无法执行 agree 操作的问题
+  - 根因：`openIframe` 异步加载诊断数据（`refreshDiagnosticsSnapshot`）后才更新 `sidePanelMode`，但 `openWorkflowDialog` 在诊断加载完成前就读取了旧值 `'readonly'`，导致 `shouldUseSyncOnlyWorkflowAction` 返回 `false`，阻止了外部流程模式下的 workflow/sync 操作
+  - 修复方式：在 `openWorkflowDialog` 和 `executeWorkflowAction` 中使用 `deriveSidePanelMode()` 实时计算最新的面板模式，取代可能过期的 `state.sidePanelMode`
+  - 影响范围：PMS 模拟器中的三维校审驳回（return）流程，特别是 SH→PZ→SJ 的驳回链路
+  - 验证：`PMS_SIMULATOR_CASE=return` 场景 17/17 断言全部通过

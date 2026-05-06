@@ -62,6 +62,18 @@ const reviewAnnotationCheckMock = vi.hoisted(() => vi.fn(async () => ({
 })));
 const submitTaskToNextNodeMock = vi.hoisted(() => vi.fn(async () => {}));
 const returnTaskToNodeMock = vi.hoisted(() => vi.fn(async () => {}));
+const saveAnnotationSeverityMock = vi.hoisted(() => vi.fn(async () => true));
+const saveAnnotationBasicFieldsMock = vi.hoisted(() => vi.fn(async () => true));
+const refreshCommentThreadMock = vi.hoisted(() => vi.fn(async () => {}));
+
+vi.mock('@/composables/useAnnotationSeveritySync', () => ({
+  saveAnnotationSeverity: (...args: unknown[]) => saveAnnotationSeverityMock(...args),
+  saveAnnotationBasicFields: (...args: unknown[]) => saveAnnotationBasicFieldsMock(...args),
+}));
+
+vi.mock('@/composables/useCommentThread', () => ({
+  refreshCommentThread: (...args: unknown[]) => refreshCommentThreadMock(...args),
+}));
 
 vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
@@ -84,6 +96,7 @@ vi.mock('@/composables/useReviewStore', () => ({
 
 vi.mock('@/composables/useToolStore', () => ({
   useToolStore: () => toolStoreMock,
+  getAnnotationRefnos: (annotation: { refnos?: string[]; refno?: string }) => annotation.refnos ?? (annotation.refno ? [annotation.refno] : []),
 }));
 
 vi.mock('@/api/reviewApi', () => ({
@@ -127,6 +140,8 @@ const toolStoreMock = vi.hoisted(() => ({
   getAnnotationComments: vi.fn(() => []),
   importJSON: vi.fn(),
   setToolMode: vi.fn(),
+  setTextAnnotationsCollapsed: vi.fn(),
+  updateAnnotationSeverity: vi.fn(),
 }));
 
 const dockApiMock = vi.hoisted(() => ({
@@ -156,11 +171,41 @@ const emitToastMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/ribbon/toastBus', () => ({ emitToast: emitToastMock }));
 
+const persistenceState = new Map<string, unknown>();
+const persistenceStorageKeys: string[] = [];
+
+vi.mock('@/composables/useNavigationStatePersistence', () => ({
+  useNavigationStatePersistence: (storageKey: string) => {
+    persistenceStorageKeys.push(storageKey);
+    return {
+      bindRef: (key: string, target: { value: unknown }, defaultValue: unknown) => {
+        target.value = persistenceState.has(key) ? persistenceState.get(key) : defaultValue;
+      },
+      saveValue: (key: string, value: unknown) => {
+        persistenceState.set(key, value);
+      },
+      getValue: (key: string, defaultValue: unknown) => persistenceState.get(key) ?? defaultValue,
+    };
+  },
+}));
+
 vi.mock('./embedFormSnapshotRestore', () => ({
   restoreEmbedFormSnapshotContext: (...args: any[]) => (restoreEmbedFormSnapshotContextMock as any)(...args),
 }));
 
 vi.mock('./CollisionResultList.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./ReviewCommentsTimeline.vue', () => ({
+  default: {
+    name: 'ReviewCommentsTimelineStub',
+    props: {
+      designerOnly: { type: Boolean, default: false },
+      composerSubmitLabel: { type: String, default: '' },
+      annotationLabel: { type: String, default: '' },
+      density: { type: String, default: 'normal' },
+    },
+    template: '<div data-testid="timeline-stub" :data-density="density">{{ designerOnly ? "designerOnly" : "review" }}|{{ composerSubmitLabel }}|{{ annotationLabel }}</div>',
+  },
+}));
 vi.mock('./ReviewAuxData.vue', () => ({ default: { template: '<div data-testid="review-aux-data-stub">辅助校审数据</div>' } }));
 vi.mock('./ReviewDataSync.vue', () => ({ default: { template: '<div data-testid="review-data-sync-stub">数据同步（后端）</div>' } }));
 vi.mock('./WorkflowSubmitDialog.vue', async () => {
@@ -233,12 +278,24 @@ async function settlePanel() {
   await nextTick();
 }
 
-async function mountReviewPanel() {
+async function settleVue() {
+  await nextTick();
+  await Promise.resolve();
+  await nextTick();
+}
+
+async function expandWorkflowTransfer() {
+  const toggle = document.querySelector('[data-testid="review-workflow-toggle"]') as HTMLButtonElement | null;
+  toggle?.click();
+  await settleVue();
+}
+
+async function mountReviewPanel(props: Record<string, unknown> = {}) {
   vi.resetModules();
   const { default: ReviewPanel } = await import('./ReviewPanel.vue');
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const app = createApp({ render: () => h(ReviewPanel) });
+  const app = createApp({ render: () => h(ReviewPanel, props) });
   app.mount(host);
   return {
     host,
@@ -254,6 +311,8 @@ describe('ReviewPanel', () => {
     document.body.innerHTML = '';
     sessionStorage.clear();
     sessionStorage.setItem('plant3d_workflow_mode', 'manual');
+    persistenceState.clear();
+    persistenceStorageKeys.length = 0;
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
         getItem: vi.fn((key: string) => {
@@ -298,6 +357,7 @@ describe('ReviewPanel', () => {
     toolStoreMock.addMeasurement.mockClear();
     toolStoreMock.importJSON.mockClear();
     toolStoreMock.setToolMode.mockClear();
+    toolStoreMock.setTextAnnotationsCollapsed.mockClear();
     toolStoreMock.annotations.value = [];
     toolStoreMock.cloudAnnotations.value = [];
     toolStoreMock.rectAnnotations.value = [];
@@ -305,6 +365,12 @@ describe('ReviewPanel', () => {
     toolStoreMock.measurements.value = [];
     toolStoreMock.xeokitDistanceMeasurements.value = [];
     toolStoreMock.xeokitAngleMeasurements.value = [];
+    toolStoreMock.activeAnnotationId.value = null;
+    toolStoreMock.activeCloudAnnotationId.value = null;
+    toolStoreMock.activeRectAnnotationId.value = null;
+    toolStoreMock.activeObbAnnotationId.value = null;
+    toolStoreMock.getAnnotationComments.mockReset();
+    toolStoreMock.getAnnotationComments.mockReturnValue([]);
     viewerWaitForReadyMock.mockClear();
     viewerWaitForReadyMock.mockResolvedValue(false);
     showModelByRefnosWithAckMock.mockClear();
@@ -334,6 +400,12 @@ describe('ReviewPanel', () => {
     submitTaskToNextNodeMock.mockResolvedValue(undefined);
     returnTaskToNodeMock.mockReset();
     returnTaskToNodeMock.mockResolvedValue(undefined);
+    saveAnnotationSeverityMock.mockReset();
+    saveAnnotationSeverityMock.mockResolvedValue(true);
+    saveAnnotationBasicFieldsMock.mockReset();
+    saveAnnotationBasicFieldsMock.mockResolvedValue(true);
+    refreshCommentThreadMock.mockReset();
+    refreshCommentThreadMock.mockResolvedValue(undefined);
     vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
@@ -368,11 +440,199 @@ describe('ReviewPanel', () => {
     await settlePanel();
 
     expect(document.querySelector('[data-testid="review-workbench-context-zone"]')).not.toBeNull();
-    expect(document.querySelector('[data-testid="review-workbench-workflow-zone"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="review-workbench-workflow-zone"]')).toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).not.toBeNull();
     expect(document.body.textContent).toContain('历史流转');
     expect(document.body.textContent).toContain('审核记录');
-    expect(document.body.textContent).toContain('批注与测量');
+    expect(document.body.textContent).toContain('当前批注');
+    expect(document.body.textContent).not.toContain('任务级流转');
     expect(document.body.textContent).not.toContain('旧审核字段');
+    mounted.unmount();
+  });
+
+  it('Dock 紧凑模式保留批注、详情、处理区和确认记录紧凑行', async () => {
+    sortedConfirmedRecords.value = [
+      {
+        id: 'record-dock-1',
+        taskId: 'task-1',
+        formId: 'FORM-001',
+        confirmedAt: 1710000000000,
+        note: 'Dock 紧凑备注摘要',
+        annotations: [{
+          id: 'anno-dock-1',
+          title: 'Dock 批注标题',
+          severity: 'high',
+        }],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        obbAnnotations: [],
+        measurements: [],
+      },
+    ] as never[];
+    confirmedRecordCount.value = 1;
+    totalConfirmedAnnotations.value = 1;
+    totalConfirmedMeasurements.value = 0;
+    toolStoreMock.annotations.value = [
+      {
+        id: 'anno-dock-1',
+        formId: 'FORM-001',
+        entityId: '24381/145018',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'Dock 批注标题',
+        description: 'Dock 批注详情说明',
+        severity: 'high',
+        refno: '24381/145018',
+        refnos: ['24381/145018'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel({ density: 'dock' });
+    await settlePanel();
+
+    expect(document.querySelector('[data-panel="review"]')?.getAttribute('data-density')).toBe('dock');
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')?.getAttribute('data-density')).toBe('dock');
+    expect(document.querySelector('[data-testid="confirmed-record-compact-row"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="timeline-stub"]')?.getAttribute('data-density')).toBe('dock');
+    expect(document.body.textContent).toContain('Dock 批注标题');
+    expect(document.body.textContent).toContain('批注 1 · 待处理');
+    expect(document.body.textContent).toContain('错误类型设置');
+    expect(document.body.textContent).toContain('保存新增证据');
+    expect(document.body.textContent).toContain('1 批次 · 批注 1 · 测量 0');
+
+    mounted.unmount();
+  });
+
+  it('Dock 批注列表批量收起只下发当前文字批注', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'anno-text-1',
+        formId: 'FORM-001',
+        entityId: '24381/145018',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '文字批注 1',
+        description: 'text 1',
+        refnos: ['24381/145018'],
+        createdAt: 1710000000000,
+      },
+      {
+        id: 'anno-text-2',
+        formId: 'FORM-001',
+        entityId: '24381/145012',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '2',
+        title: '文字批注 2',
+        description: 'text 2',
+        refnos: ['24381/145012'],
+        createdAt: 1710000001000,
+      },
+    ];
+    toolStoreMock.cloudAnnotations.value = [
+      {
+        id: 'cloud-1',
+        formId: 'FORM-001',
+        objectIds: ['24381/145018'],
+        anchorWorldPos: [0, 0, 0],
+        visible: true,
+        title: '云线批注',
+        description: 'cloud',
+        refnos: ['24381/145018'],
+        createdAt: 1710000002000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel({ density: 'dock' });
+    await settlePanel();
+
+    const collapseButton = document.querySelector('[data-testid="annotation-collapse-all-text"]') as HTMLButtonElement | null;
+    expect(collapseButton).not.toBeNull();
+    collapseButton?.click();
+    await settlePanel();
+
+    expect(toolStoreMock.setTextAnnotationsCollapsed).toHaveBeenCalledWith(['anno-text-2', 'anno-text-1'], true);
+    expect(toolStoreMock.setTextAnnotationsCollapsed).not.toHaveBeenCalledWith(expect.arrayContaining(['cloud-1']), true);
+
+    mounted.unmount();
+  });
+
+  it('后端有确认记录但批注列表为空时显示恢复诊断信息', async () => {
+    sortedConfirmedRecords.value = [
+      {
+        id: 'record-diagnostic-1',
+        taskId: 'task-1',
+        formId: 'FORM-001',
+        confirmedAt: 1710000000000,
+        note: '诊断记录',
+        annotations: [{ id: 'anno-diagnostic-1', title: '后端批注' }],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        obbAnnotations: [],
+        measurements: [],
+      },
+    ] as never[];
+    confirmedRecordCount.value = 1;
+    totalConfirmedAnnotations.value = 1;
+    totalConfirmedMeasurements.value = 0;
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const diagnostic = document.querySelector('[data-testid="annotation-restore-diagnostic"]');
+    expect(diagnostic).not.toBeNull();
+    expect(diagnostic?.textContent).toContain('formId=FORM-001');
+    expect(diagnostic?.textContent).toContain('taskId=task-1');
+    expect(diagnostic?.textContent).toContain('recordCount=1');
+    expect(diagnostic?.textContent).toContain('annotationCount=1');
+
+    mounted.unmount();
+  });
+
+  it('后端有 1 条确认记录和 1 条批注时，详情页批注列表显示 1 条', async () => {
+    sortedConfirmedRecords.value = [
+      {
+        id: 'record-visible-1',
+        taskId: 'task-1',
+        formId: 'FORM-001',
+        confirmedAt: 1710000000000,
+        note: '可见记录',
+        annotations: [{ id: 'anno-visible-1', title: 'BRAN 详情批注' }],
+        cloudAnnotations: [],
+        rectAnnotations: [],
+        obbAnnotations: [],
+        measurements: [],
+      },
+    ] as never[];
+    confirmedRecordCount.value = 1;
+    totalConfirmedAnnotations.value = 1;
+    totalConfirmedMeasurements.value = 0;
+    toolStoreMock.annotations.value = [
+      {
+        id: 'anno-visible-1',
+        formId: 'FORM-001',
+        entityId: '24381/145018',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'BRAN 详情批注',
+        description: '评论详情页批注',
+        refno: '24381/145018',
+        refnos: ['24381/145018'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-restore-diagnostic"]')).toBeNull();
+    expect(document.body.textContent).toContain('当前批注');
+    expect(document.body.textContent).toContain('BRAN 详情批注');
+
     mounted.unmount();
   });
 
@@ -380,6 +640,10 @@ describe('ReviewPanel', () => {
     sessionStorage.setItem('plant3d_workflow_mode', 'external');
 
     const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const toggle = document.querySelector('[data-testid="review-workflow-toggle"]') as HTMLButtonElement | null;
+    toggle?.click();
     await settlePanel();
 
     const zone = document.querySelector('[data-testid="review-workbench-workflow-zone"]');
@@ -439,6 +703,7 @@ describe('ReviewPanel', () => {
     setCurrentTaskMock.mockClear();
     showModelByRefnosWithAckMock.mockClear();
 
+    await expandWorkflowTransfer();
     const refreshButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('刷新')) as HTMLButtonElement | undefined;
     refreshButton?.click();
     await settlePanel();
@@ -525,6 +790,7 @@ describe('ReviewPanel', () => {
 
     const mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     expect(document.body.textContent).toContain('确认流转至校对');
     expect(document.body.textContent).not.toContain('确认流转至审核');
@@ -556,6 +822,7 @@ describe('ReviewPanel', () => {
 
     let mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     expect(document.body.textContent).toContain('FORM-A');
     expect(document.body.textContent).toContain('确认流转至审核');
@@ -572,6 +839,7 @@ describe('ReviewPanel', () => {
     });
     mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     expect(document.body.textContent).toContain('FORM-B');
     expect(document.body.textContent).toContain('审核乙');
@@ -692,6 +960,96 @@ describe('ReviewPanel', () => {
     mounted.unmount();
   });
 
+  it('exposes automation hook to create new-shape text annotations for reviewer e2e', async () => {
+    window.history.replaceState({}, '', '/?automation_review=1');
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const hook = (window as Window & {
+      __plant3dReviewerE2E?: {
+        addMockAnnotation?: (title?: string, description?: string) => string;
+      };
+    }).__plant3dReviewerE2E;
+
+    expect(typeof hook?.addMockAnnotation).toBe('function');
+    const annotationId = hook?.addMockAnnotation?.('新结构批注', '评论线程回归批注');
+    expect(annotationId).toBeTruthy();
+    expect(toolStoreMock.addAnnotation).toHaveBeenCalledWith(expect.objectContaining({
+      id: annotationId,
+      entityId: '24381/145018',
+      worldPos: [0, 0, 0],
+      glyph: '1',
+      refno: '24381/145018',
+      refnos: ['24381/145018'],
+      title: '新结构批注',
+      description: '评论线程回归批注',
+      visible: true,
+      createdAt: expect.any(Number),
+    }));
+
+    mounted.unmount();
+  });
+
+  it('automation hook refreshes a persisted comment thread with formal review context', async () => {
+    window.history.replaceState({}, '', '/?automation_review=1');
+    toolStoreMock.annotations.value = [
+      {
+        id: 'restore-annot-1',
+        entityId: '24381/145018',
+        formId: 'FORM-001',
+        taskId: 'task-1',
+        worldPos: [0, 0, 0],
+        glyph: '1',
+        refno: '24381/145018',
+        refnos: ['24381/145018'],
+        title: 'restore 自动化批注 24381_145018',
+        description: '刷新恢复自动化持久化批注',
+        visible: true,
+        createdAt: 1710000000000,
+      },
+    ];
+    toolStoreMock.getAnnotationComments.mockReturnValue([
+      {
+        id: 'comment-1',
+        annotationId: 'restore-annot-1',
+        annotationType: 'text',
+        authorId: 'proofreader_001',
+        authorName: 'JH',
+        authorRole: 'proofreader',
+        content: '评论线程回归',
+        createdAt: 1710000000100,
+      },
+    ]);
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const hook = (window as Window & {
+      __plant3dReviewerE2E?: {
+        refreshAnnotationCommentThread?: (type?: string, id?: string) => Promise<number>;
+      };
+    }).__plant3dReviewerE2E;
+
+    expect(typeof hook?.refreshAnnotationCommentThread).toBe('function');
+    await expect(hook?.refreshAnnotationCommentThread?.('text', 'restore-annot-1')).resolves.toBe(1);
+    expect(refreshCommentThreadMock).toHaveBeenCalledWith({
+      annotationType: 'text',
+      annotationId: 'restore-annot-1',
+      formId: 'FORM-001',
+      taskId: 'task-1',
+    });
+    expect(toolStoreMock.activeAnnotationId.value).toBe('restore-annot-1');
+    expect(toolStoreMock.getAnnotationComments).toHaveBeenCalledWith(
+      'text',
+      'restore-annot-1',
+      'FORM-001',
+      'task-1',
+    );
+
+    mounted.unmount();
+  }, 10_000);
+
   it('shows explicit missing-task embed empty state for reviewer landing', async () => {
     currentTask.value = null;
     sessionStorage.setItem('embed_landing_state', JSON.stringify({
@@ -775,6 +1133,7 @@ describe('ReviewPanel', () => {
 
     const mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     const openDialogButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
@@ -809,6 +1168,7 @@ describe('ReviewPanel', () => {
 
     const mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     const openDialogButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
@@ -851,6 +1211,7 @@ describe('ReviewPanel', () => {
 
     const mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     const openDialogButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
@@ -899,6 +1260,7 @@ describe('ReviewPanel', () => {
 
     const mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     const openDialogButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('确认流转至批准')) as HTMLButtonElement | undefined;
@@ -918,6 +1280,7 @@ describe('ReviewPanel', () => {
   it('批注检查通过时，保持原有提交流转链路', async () => {
     const mounted = await mountReviewPanel();
     await settlePanel();
+    await expandWorkflowTransfer();
 
     const openDialogButton = Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('确认流转至审核')) as HTMLButtonElement | undefined;
@@ -936,6 +1299,319 @@ describe('ReviewPanel', () => {
     expect(submitTaskToNextNodeMock).toHaveBeenCalledWith('task-1', 'mock submit comment');
     expect(loadReviewTasksMock).toHaveBeenCalled();
     expect(loadWorkflowMock).toHaveBeenCalledWith('task-1');
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 工作台默认显示卡片列表，tab 切换到批注表格后渲染 AnnotationTableView · PR 8', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-1',
+        formId: 'FORM-001',
+        entityId: 'entity-1',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'reviewer 批注',
+        description: 'description',
+        severity: 'medium',
+        refnos: ['comp-1'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="reviewer-annotation-list-view-mode-tabs"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    const tableTabButton = document.querySelector('[data-testid="reviewer-annotation-list-view-mode-table"]') as HTMLButtonElement | null;
+    expect(tableTabButton).not.toBeNull();
+    tableTabButton?.click();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格行双击 → 飞到 3D + 自动切回卡片列表 · PR 8', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-2',
+        formId: 'FORM-001',
+        entityId: 'entity-2',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '需双击的批注',
+        description: 'dbl click',
+        severity: 'medium',
+        refnos: ['comp-2'],
+        createdAt: 1710000000000,
+      },
+    ];
+    showModelByRefnosWithAckMock.mockResolvedValue({ ok: ['comp-2'], fail: [], error: null });
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const tableTabButton = document.querySelector('[data-testid="reviewer-annotation-list-view-mode-table"]') as HTMLButtonElement | null;
+    tableTabButton?.click();
+    await settlePanel();
+
+    const row = document.querySelector('[data-testid="annotation-table-row-ann-reviewer-2"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await settlePanel();
+
+    expect(showModelByRefnosWithAckMock).toHaveBeenCalled();
+    expect(dockApiMock.ensurePanelAndActivate).toHaveBeenCalledWith('viewer');
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 卡片筛选为待处理时，表格打开已修改批注仍定位该批注', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-pending',
+        formId: 'FORM-001',
+        entityId: 'entity-pending',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '待处理 reviewer 批注',
+        description: 'pending',
+        severity: 'medium',
+        refnos: ['comp-pending'],
+        createdAt: 1710000000000,
+      },
+      {
+        id: 'ann-reviewer-fixed',
+        formId: 'FORM-001',
+        entityId: 'entity-fixed',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '2',
+        title: '已修改 reviewer 批注',
+        description: 'fixed',
+        severity: 'medium',
+        refnos: ['comp-fixed'],
+        createdAt: 1710000000100,
+        reviewState: {
+          resolutionStatus: 'fixed',
+          decisionStatus: 'pending',
+          updatedAt: 1710000000200,
+          history: [],
+        },
+      },
+    ];
+    showModelByRefnosWithAckMock.mockResolvedValue({ ok: ['comp-fixed'], fail: [], error: null });
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const pendingFilter = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('待处理'));
+    pendingFilter?.click();
+    await settlePanel();
+
+    const tableTabButton = document.querySelector('[data-testid="reviewer-annotation-list-view-mode-table"]') as HTMLButtonElement | null;
+    tableTabButton?.click();
+    await settlePanel();
+
+    const fixedRow = document.querySelector('[data-testid="annotation-table-row-ann-reviewer-fixed"]') as HTMLElement | null;
+    expect(fixedRow).not.toBeNull();
+    fixedRow?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+    expect(document.body.textContent).toContain('已修改 reviewer 批注');
+    expect(toolStoreMock.activeAnnotationId.value).toBe('ann-reviewer-fixed');
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格持久化 viewMode：预置 table 后首屏即表格视图 · PR 8', async () => {
+    persistenceState.set('annotationListViewMode', 'table');
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-3',
+        formId: 'FORM-001',
+        entityId: 'entity-3',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '持久化恢复测试',
+        description: 'persist restore',
+        severity: 'low',
+        refnos: ['comp-3'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).toBeNull();
+    expect(persistenceStorageKeys).toContain('plant3d-web-nav-state-reviewer-workbench-v1');
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 响应 reviewerWorkbenchViewModeBus.request("table") · PR 9', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-bus-1',
+        formId: 'FORM-001',
+        entityId: 'entity-bus-1',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'bus test',
+        description: 'bus test',
+        severity: 'medium',
+        refnos: ['comp-bus-1'],
+        createdAt: 1710000000000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).toBeNull();
+
+    const { requestReviewerWorkbenchViewMode, clearReviewerWorkbenchViewModeRequest } = await import('./reviewerWorkbenchViewModeBus');
+    requestReviewerWorkbenchViewMode('table');
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="annotation-workspace-root"]')).toBeNull();
+
+    clearReviewerWorkbenchViewModeRequest();
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格内修改错误标记时，保存会带当前 formId 和 taskId', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-inline-severity',
+        formId: 'FORM-001',
+        authorId: 'reviewer-1',
+        entityId: 'entity-inline-1',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '表格错误标记',
+        description: 'inline severity',
+        severity: undefined,
+        refnos: ['comp-inline-1'],
+        createdAt: 1710000000000,
+      },
+    ];
+    persistenceState.set('annotationListViewMode', 'table');
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const select = document.querySelector<HTMLSelectElement>('[data-testid="annotation-table-severity-editor-ann-inline-severity"]');
+    expect(select).not.toBeNull();
+    select!.value = 'drawing';
+    select!.dispatchEvent(new Event('change', { bubbles: true }));
+    await settlePanel();
+
+    expect(saveAnnotationSeverityMock).toHaveBeenCalledWith('text', 'ann-inline-severity', 'drawing', {
+      formId: 'FORM-001',
+      taskId: 'task-1',
+    });
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格内修改标题时，保存会带当前 formId 和 taskId', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-inline-title',
+        formId: 'FORM-001',
+        authorId: 'reviewer-1',
+        entityId: 'entity-inline-2',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: '旧标题',
+        description: 'inline title',
+        severity: 'general',
+        refnos: ['comp-inline-2'],
+        createdAt: 1710000000000,
+      },
+    ];
+    persistenceState.set('annotationListViewMode', 'table');
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const titleButton = document.querySelector<HTMLButtonElement>('[data-testid="annotation-table-title-ann-inline-title"]');
+    expect(titleButton).not.toBeNull();
+    titleButton!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await settlePanel();
+
+    const input = document.querySelector<HTMLInputElement>('[data-testid="annotation-table-title-input-ann-inline-title"]');
+    expect(input).not.toBeNull();
+    input!.value = '新标题';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await settlePanel();
+
+    expect(saveAnnotationBasicFieldsMock).toHaveBeenCalledWith('text', 'ann-inline-title', { title: '新标题' }, {
+      formId: 'FORM-001',
+      taskId: 'task-1',
+    });
+
+    mounted.unmount();
+  });
+
+  it('Reviewer 表格 copy-feedback 事件正确分发 toast · PR 8', async () => {
+    toolStoreMock.annotations.value = [
+      {
+        id: 'ann-reviewer-4',
+        formId: 'FORM-001',
+        entityId: 'entity-4',
+        worldPos: [0, 0, 0],
+        visible: true,
+        glyph: '1',
+        title: 'copy feedback',
+        description: 'copy feedback',
+        severity: 'high',
+        refnos: ['comp-4'],
+        createdAt: 1710000000000,
+      },
+    ];
+    persistenceState.set('annotationListViewMode', 'table');
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const tableEl = document.querySelector('[data-testid="annotation-table-view"]');
+    expect(tableEl).not.toBeNull();
+
+    const vueInternals = (tableEl as unknown as { __vueParentComponent?: { emit: (event: string, payload: unknown) => void } }).__vueParentComponent;
+    vueInternals?.emit('copy-feedback', {
+      kind: 'refno',
+      result: 'copied',
+      item: { id: 'ann-reviewer-4' },
+    });
+    await settlePanel();
+
+    expect(emitToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      message: '已复制RefNo',
+      level: 'success',
+    }));
 
     mounted.unmount();
   });

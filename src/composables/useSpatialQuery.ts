@@ -815,6 +815,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           distance: request.radius,
           include_self: false,
           nouns: serverOptions.nouns,
+          spec_values: serverOptions.spec_values,
           max_results: serverOptions.max_results,
           shape: serverOptions.shape,
         });

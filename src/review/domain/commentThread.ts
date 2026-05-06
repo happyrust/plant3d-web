@@ -4,9 +4,11 @@
  * 设计要点：
  *   - 复用 M2 引入的 `SnapshotComment`，避免类型重复；
  *   - thread 内顺序按 `(createdAt ASC, commentId ASC)`，store 与 inline 投影
- *     使用相同规则，便于 DUAL_READ 阶段比对；
- *   - 索引 key 为 `${annotationType}:${annotationId}`，与 M2
- *     `snapshotInlineCommentKey` 对齐，方便后续从 snapshot 直接构造 index。
+ *     使用相同排序规则；
+ *   - 索引 key 为 `${annotationType}:${annotationId}`（无正式上下文）、
+ *     `${annotationType}:${annotationId}@${formId}`（正式单据）或
+ *     `${annotationType}:${annotationId}@${formId}#${taskId}`（单据内任务）。
+ *     后两者用于在同一 `annotationId` 下按单据/任务隔离评论，避免串数据。
  */
 
 import {
@@ -34,10 +36,41 @@ export type CommentThreadIndex = {
   totalEntries: number;
 }
 
+function normalizeFormIdForKey(formId?: string | null): string | null {
+  if (typeof formId !== 'string') return null;
+  const trimmed = formId.trim();
+  return trimmed || null;
+}
+
+function normalizeTaskIdForKey(taskId?: string | null): string | null {
+  if (typeof taskId !== 'string') return null;
+  const trimmed = taskId.trim();
+  return trimmed || null;
+}
+
+function encodeKeySegment(value: string): string {
+  return value.replace(/%/g, '%25').replace(/@/g, '%40').replace(/#/g, '%23');
+}
+
 export function buildCommentThreadKey(
   annotationType: SnapshotAnnotationType,
   annotationId: string,
+  formId?: string | null,
+  taskId?: string | null,
 ): CommentThreadKey {
+  const normalizedFormId = normalizeFormIdForKey(formId);
+  const normalizedTaskId = normalizeTaskIdForKey(taskId);
+  const escapedFormId = normalizedFormId ? encodeKeySegment(normalizedFormId) : null;
+  const escapedTaskId = normalizedTaskId ? encodeKeySegment(normalizedTaskId) : null;
+  if (escapedFormId && escapedTaskId) {
+    return `${annotationType}:${annotationId}@${escapedFormId}#${escapedTaskId}` as CommentThreadKey;
+  }
+  if (escapedFormId) {
+    return `${annotationType}:${annotationId}@${escapedFormId}` as CommentThreadKey;
+  }
+  if (escapedTaskId) {
+    return `${annotationType}:${annotationId}#${escapedTaskId}` as CommentThreadKey;
+  }
   return `${annotationType}:${annotationId}` as CommentThreadKey;
 }
 
@@ -64,7 +97,7 @@ export function buildCommentThreadIndex(
   const buckets = new Map<CommentThreadKey, CommentThreadEntry[]>();
 
   for (const comment of comments) {
-    const key = buildCommentThreadKey(comment.annotationType, comment.annotationId);
+    const key = buildCommentThreadKey(comment.annotationType, comment.annotationId, comment.formId, comment.taskId);
     let bucket = buckets.get(key);
     if (!bucket) {
       bucket = [];

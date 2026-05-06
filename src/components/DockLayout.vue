@@ -6,6 +6,7 @@ import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 import type { ReviewTask } from '@/types/auth';
 
 import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
+import { requestDesignerCommentViewMode } from '@/components/review/designerCommentViewModeBus';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import { restoreEmbedFormSnapshotContext } from '@/components/review/embedFormSnapshotRestore';
 import {
@@ -14,6 +15,7 @@ import {
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
   EMBED_MODE_PARAMS_STORAGE_KEY,
+  getEmbedLandingPanelIdsWithOptions,
   getVerifiedEmbedFormId,
   getVerifiedEmbedWorkflowMode,
   readEmbedModeParamsFromSearch,
@@ -23,8 +25,10 @@ import {
   type EmbedLandingState,
   type EmbedModeParams,
 } from '@/components/review/embedRoleLanding';
+import { requestReviewerWorkbenchViewMode } from '@/components/review/reviewerWorkbenchViewModeBus';
+import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { resolvePassiveWorkflowMode } from '@/components/review/workflowMode';
-import { ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
+import { dockPanelExists, ensurePanelAndActivate, setDockApi, notifyDockLayoutChange } from '@/composables/useDockApi';
 import { useModelProjects } from '@/composables/useModelProjects';
 import {
   initPanelZones,
@@ -88,6 +92,11 @@ let offCommand: (() => void) | null = null;
 let userStoreInitializationPromise: Promise<void> | null = null;
 const embedTokenVerified = ref(false);
 const embedSessionError = ref<string | null>(null);
+
+function normalizeDockPanelId(panelId: string): string {
+  if (panelId === 'resubmissionTasks') return 'designerCommentHandling';
+  return panelId;
+}
 
 function isPassiveWorkflowMode(): boolean {
   return resolvePassiveWorkflowMode({
@@ -168,6 +177,19 @@ async function ensureModelRefnosVisible(
 ): Promise<void> {
   if (componentRefnos.length === 0) return;
 
+  const normalizedRefnos = componentRefnos
+    .map((refno) => normalizeRefnoSlash(refno))
+    .filter(Boolean);
+
+  if (typeof console !== 'undefined') {
+    console.info('[embed][viewer-restore] preparing showModelByRefnos', {
+      taskId: context.taskId,
+      formId: context.formId,
+      sourceRefnos: componentRefnos,
+      normalizedRefnos,
+    });
+  }
+
   const viewerReady = await waitForViewerReady({ timeoutMs: 6000 });
   if (!viewerReady) {
     console.warn('[DockLayout] Viewer 未就绪，跳过 form_id 默认模型加载', {
@@ -178,11 +200,22 @@ async function ensureModelRefnosVisible(
   }
 
   const result = await showModelByRefnosWithAck({
-    refnos: componentRefnos.map((refno) => normalizeRefnoSlash(refno)),
+    refnos: normalizedRefnos,
     flyTo: true,
     ensureViewerReady: false,
     timeoutMs: 15_000,
   });
+
+  if (typeof console !== 'undefined') {
+    console.info('[embed][viewer-restore] showModelByRefnos result', {
+      taskId: context.taskId,
+      formId: context.formId,
+      requestedRefnos: normalizedRefnos,
+      ok: result.ok,
+      fail: result.fail,
+      error: result.error,
+    });
+  }
 
   if (result.error && result.ok.length === 0) {
     console.warn('[DockLayout] form_id 默认模型加载失败', {
@@ -281,7 +314,7 @@ function ensureUserStoreInitialized(): Promise<void> {
 }
 
 function closePanelIfExists(dockApi: DockApi, id: string) {
-  const panel = dockApi.getPanel(id);
+  const panel = dockApi.getPanel(normalizeDockPanelId(id));
   if (panel) {
     panel.api.close();
   }
@@ -300,7 +333,7 @@ function closeEmbedLandingPanels() {
   const dockApi = api.value;
   if (!dockApi) return;
 
-  ['initiateReview', 'review', 'reviewerTasks', 'myTasks', 'manager'].forEach((panelId) => {
+  ['initiateReview', 'review', 'reviewerTasks', 'myTasks', 'manager', 'designerCommentHandling'].forEach((panelId) => {
     closePanelIfExists(dockApi, panelId);
   });
 }
@@ -410,7 +443,7 @@ function createDefaultLayout(dockApi: DockApi) {
 
 function createEmbedFocusedLayout(
   dockApi: DockApi,
-  options: { primaryPanelId?: 'review' | 'initiateReview' } = {},
+  options: { primaryPanelId?: 'review' | 'initiateReview' | 'designerCommentHandling' } = {},
 ) {
   [
     'properties',
@@ -431,6 +464,7 @@ function createEmbedFocusedLayout(
     'initiateReview',
     'reviewerTasks',
     'myTasks',
+    'designerCommentHandling',
     'resubmissionTasks',
     'taskMonitor',
     'taskCreation',
@@ -477,7 +511,7 @@ function createEmbedFocusedLayout(
 function activatePanel(panelId: string) {
   const dockApi = api.value;
   if (!dockApi) return;
-  const panel = dockApi.getPanel(panelId);
+  const panel = dockApi.getPanel(normalizeDockPanelId(panelId));
   if (!panel) return;
   panel.api.setActive();
 }
@@ -485,10 +519,11 @@ function activatePanel(panelId: string) {
 function ensurePanel(panelId: string) {
   const dockApi = api.value;
   if (!dockApi) return;
-  const existing = dockApi.getPanel(panelId);
+  const normalizedPanelId = normalizeDockPanelId(panelId);
+  const existing = dockApi.getPanel(normalizedPanelId);
   if (existing) return existing;
 
-  if (panelId === 'myTasks' && isPassiveWorkflowMode()) {
+  if (normalizedPanelId === 'myTasks' && isPassiveWorkflowMode()) {
     console.info('[DockLayout] 被动流程模式下跳过创建 myTasks 面板');
     return;
   }
@@ -496,7 +531,7 @@ function ensurePanel(panelId: string) {
   const viewerPanel = dockApi.getPanel('viewer');
   const measurementPanel = dockApi.getPanel('measurement');
 
-  if (panelId === 'modelTree') {
+  if (normalizedPanelId === 'modelTree') {
     return dockApi.addPanel({
       id: 'modelTree',
       component: 'ModelTreePanel',
@@ -505,7 +540,7 @@ function ensurePanel(panelId: string) {
       position: viewerPanel ? { referencePanel: viewerPanel, direction: 'left' } : undefined,
     });
   }
-  if (panelId === 'measurement') {
+  if (normalizedPanelId === 'measurement') {
     return dockApi.addPanel({
       id: 'measurement',
       component: 'MeasurementPanel',
@@ -513,7 +548,7 @@ function ensurePanel(panelId: string) {
       position: viewerPanel ? { referencePanel: viewerPanel, direction: 'right' } : undefined,
     });
   }
-  if (panelId === 'dimension') {
+  if (normalizedPanelId === 'dimension') {
     return dockApi.addPanel({
       id: 'dimension',
       component: 'DimensionPanel',
@@ -525,7 +560,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'annotation') {
+  if (normalizedPanelId === 'annotation') {
     return dockApi.addPanel({
       id: 'annotation',
       component: 'AnnotationPanel',
@@ -537,7 +572,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'manager') {
+  if (normalizedPanelId === 'manager') {
     return dockApi.addPanel({
       id: 'manager',
       component: 'ManagerPanel',
@@ -549,7 +584,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'hydraulic') {
+  if (normalizedPanelId === 'hydraulic') {
     return dockApi.addPanel({
       id: 'hydraulic',
       component: 'HydraulicPanel',
@@ -561,7 +596,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'properties') {
+  if (normalizedPanelId === 'properties') {
     return dockApi.addPanel({
       id: 'properties',
       component: 'PropertiesPanel',
@@ -573,7 +608,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'ptset') {
+  if (normalizedPanelId === 'ptset') {
     return dockApi.addPanel({
       id: 'ptset',
       component: 'PtsetPanel',
@@ -585,7 +620,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'mbdPipe') {
+  if (normalizedPanelId === 'mbdPipe') {
     return dockApi.addPanel({
       id: 'mbdPipe',
       component: 'MbdPipePanel',
@@ -633,7 +668,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'review') {
+  if (normalizedPanelId === 'review') {
     return dockApi.addPanel({
       id: 'review',
       component: 'ReviewPanel',
@@ -645,7 +680,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'initiateReview') {
+  if (normalizedPanelId === 'initiateReview') {
     return dockApi.addPanel({
       id: 'initiateReview',
       component: 'InitiateReviewPanel',
@@ -657,7 +692,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'reviewerTasks') {
+  if (normalizedPanelId === 'reviewerTasks') {
     return dockApi.addPanel({
       id: 'reviewerTasks',
       component: 'ReviewerTaskListPanel',
@@ -669,7 +704,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'myTasks') {
+  if (normalizedPanelId === 'myTasks') {
     return dockApi.addPanel({
       id: 'myTasks',
       component: 'DesignerTaskListPanel',
@@ -681,10 +716,10 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'resubmissionTasks') {
+  if (normalizedPanelId === 'designerCommentHandling') {
     return dockApi.addPanel({
-      id: 'resubmissionTasks',
-      component: 'ResubmissionTaskListPanel',
+      id: 'designerCommentHandling',
+      component: 'DesignerCommentHandlingPanel',
       title: '批注处理',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
@@ -693,7 +728,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'taskMonitor') {
+  if (normalizedPanelId === 'taskMonitor') {
     return dockApi.addPanel({
       id: 'taskMonitor',
       component: 'TaskMonitorPanel',
@@ -705,7 +740,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'taskCreation') {
+  if (normalizedPanelId === 'taskCreation') {
     return dockApi.addPanel({
       id: 'taskCreation',
       component: 'TaskCreationPanel',
@@ -717,7 +752,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'modelExport') {
+  if (normalizedPanelId === 'modelExport') {
     return dockApi.addPanel({
       id: 'modelExport',
       component: 'ModelExportPanel',
@@ -729,7 +764,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'dashboard') {
+  if (normalizedPanelId === 'dashboard') {
     return dockApi.addPanel({
       id: 'dashboard',
       component: 'DashboardPanel',
@@ -741,7 +776,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'console') {
+  if (normalizedPanelId === 'console') {
     return dockApi.addPanel({
       id: 'console',
       component: 'ConsolePanel',
@@ -751,7 +786,7 @@ function ensurePanel(panelId: string) {
         : undefined,
     });
   }
-  if (panelId === 'parquetDebug') {
+  if (normalizedPanelId === 'parquetDebug') {
     return dockApi.addPanel({
       id: 'parquetDebug',
       component: 'ParquetDebugPanel',
@@ -761,7 +796,7 @@ function ensurePanel(panelId: string) {
         : undefined,
     });
   }
-  if (panelId === 'roomStatus') {
+  if (normalizedPanelId === 'roomStatus') {
     return dockApi.addPanel({
       id: 'roomStatus',
       component: 'RoomStatusPanel',
@@ -773,7 +808,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (panelId === 'spatialCompute') {
+  if (normalizedPanelId === 'spatialCompute') {
     return dockApi.addPanel({
       id: 'spatialCompute',
       component: 'SpatialComputePanel',
@@ -788,60 +823,62 @@ function ensurePanel(panelId: string) {
 }
 
 function togglePanel(panelId: string) {
+  const normalizedPanelId = normalizeDockPanelId(panelId);
   const dockApi = api.value;
   if (!dockApi) {
     console.warn('[DockLayout] togglePanel: dockApi is null');
     return;
   }
 
-  console.log(`[DockLayout] togglePanel: ${panelId}`);
-  if (panelId === 'myTasks' && isPassiveWorkflowMode()) {
+  console.log(`[DockLayout] togglePanel: ${normalizedPanelId}`);
+  if (normalizedPanelId === 'myTasks' && isPassiveWorkflowMode()) {
     console.info('[DockLayout] 被动流程模式下忽略 myTasks 切换');
     return;
   }
-  const panel = dockApi.getPanel(panelId);
+  const panel = dockApi.getPanel(normalizedPanelId);
   if (panel) {
-    console.log(`[DockLayout] Panel ${panelId} exists, closing it`);
+    console.log(`[DockLayout] Panel ${normalizedPanelId} exists, closing it`);
     panel.api.close();
     return;
   }
 
-  console.log(`[DockLayout] Creating panel ${panelId}`);
-  onPanelOpened(panelId); // auto-expand zone if collapsed
-  const created = ensurePanel(panelId);
+  console.log(`[DockLayout] Creating panel ${normalizedPanelId}`);
+  onPanelOpened(normalizedPanelId); // auto-expand zone if collapsed
+  const created = ensurePanel(normalizedPanelId);
   if (created) {
-    console.log(`[DockLayout] Panel ${panelId} created, setting active`);
+    console.log(`[DockLayout] Panel ${normalizedPanelId} created, setting active`);
     created.api.setActive();
   } else {
-    console.error(`[DockLayout] Failed to create panel ${panelId}`);
+    console.error(`[DockLayout] Failed to create panel ${normalizedPanelId}`);
   }
 }
 
 function openPanel(panelId: string) {
+  const normalizedPanelId = normalizeDockPanelId(panelId);
   const dockApi = api.value;
   if (!dockApi) {
     console.warn('[DockLayout] openPanel: dockApi is null');
     return;
   }
 
-  console.log(`[DockLayout] openPanel: ${panelId}`);
-  if (panelId === 'myTasks' && isPassiveWorkflowMode()) {
+  console.log(`[DockLayout] openPanel: ${normalizedPanelId}`);
+  if (normalizedPanelId === 'myTasks' && isPassiveWorkflowMode()) {
     console.info('[DockLayout] 被动流程模式下忽略 myTasks 打开');
     return;
   }
-  onPanelOpened(panelId);
+  onPanelOpened(normalizedPanelId);
 
-  const panel = dockApi.getPanel(panelId);
+  const panel = dockApi.getPanel(normalizedPanelId);
   if (panel) {
     panel.api.setActive();
     return;
   }
 
-  const created = ensurePanel(panelId);
+  const created = ensurePanel(normalizedPanelId);
   if (created) {
     created.api.setActive();
   } else {
-    console.error(`[DockLayout] Failed to open panel ${panelId}`);
+    console.error(`[DockLayout] Failed to open panel ${normalizedPanelId}`);
   }
 }
 
@@ -1035,8 +1072,32 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('dashboard');
       return;
     case 'panel.resubmissionTasks':
-      togglePanel('resubmissionTasks');
+      togglePanel('designerCommentHandling');
       return;
+    case 'panel.designerCommentHandling':
+      togglePanel('designerCommentHandling');
+      return;
+    case 'panel.annotationTable': {
+      if (dockPanelExists('review')) {
+        ensurePanelAndActivate('review');
+        requestReviewerWorkbenchViewMode('table');
+        return;
+      }
+      if (dockPanelExists('designerCommentHandling')) {
+        ensurePanelAndActivate('designerCommentHandling');
+        requestDesignerCommentViewMode('table');
+        return;
+      }
+      const preferReviewer = userStore.isReviewer.value && !userStore.isDesigner.value;
+      if (preferReviewer) {
+        ensurePanelAndActivate('review');
+        requestReviewerWorkbenchViewMode('table');
+      } else {
+        ensurePanelAndActivate('designerCommentHandling');
+        requestDesignerCommentViewMode('table');
+      }
+      return;
+    }
     case 'panel.monitor':
       togglePanel('taskMonitor');
       return;
@@ -1312,7 +1373,7 @@ async function applyInitialLanding() {
         formId: getVerifiedEmbedFormId(embedModeParams.value),
         loadReviewTasks: userStore.loadReviewTasks,
         reviewerTasks: () => userStore.pendingReviewTasks.value,
-        designerTasks: () => userStore.myInitiatedTasks.value,
+        designerTasks: () => userStore.returnedInitiatedTasks.value,
         allTasks: () => userStore.reviewTasks.value,
         setCurrentTask: reviewStore.setCurrentTask,
         openPanel,
@@ -1323,6 +1384,7 @@ async function applyInitialLanding() {
       const fallbackLandingTarget = resolvePassiveEmbedViewTarget({
         workflowRole: trustedEmbedIdentity?.workflowRole,
         passiveWorkflowMode,
+        formId: getVerifiedEmbedFormId(embedModeParams.value),
         restoredTaskSummary: restoreResult.restoredTaskSummary,
       });
 
@@ -1362,6 +1424,7 @@ async function applyInitialLanding() {
             if (restoreResult.restoredTaskDraft) {
               restoreResult.restoredTaskDraft = {
                 ...restoreResult.restoredTaskDraft,
+                components: [],
                 attachments: mergedTask.attachments || [],
               };
             }
@@ -1382,9 +1445,17 @@ async function applyInitialLanding() {
       }
 
       if (landingState) {
+        const verifiedFormId = getVerifiedEmbedFormId(embedModeParams.value);
+        const shouldShowDesignerCommentHandling = landingTarget === 'designer'
+          && (
+            !!restoreResult.restoredTask
+            && (passiveWorkflowMode || isCanonicalReturnedTask(restoreResult.restoredTask))
+          );
         persistEmbedLandingState({
           ...landingState,
-          formId: getVerifiedEmbedFormId(embedModeParams.value),
+          primaryPanelId: shouldShowDesignerCommentHandling ? 'designerCommentHandling' : landingState.primaryPanelId,
+          visiblePanelIds: shouldShowDesignerCommentHandling ? ['designerCommentHandling'] : landingState.visiblePanelIds,
+          formId: verifiedFormId,
           restoreStatus: restoreResult.restoreStatus,
           restoredTaskId: restoreResult.restoredTaskId,
           restoredTaskSummary: restoreResult.restoredTaskSummary,
@@ -1409,12 +1480,14 @@ function onReady(event: DockviewReadyEvent) {
   );
 
   if (isEmbedLayoutMode()) {
+    const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
+    const primaryPanelId = landingTarget
+      ? getEmbedLandingPanelIdsWithOptions(landingTarget, {
+        passiveWorkflowMode: isPassiveWorkflowMode(),
+      })[0] as 'review' | 'initiateReview' | 'designerCommentHandling' | undefined
+      : undefined;
     createEmbedFocusedLayout(api.value, {
-      primaryPanelId: resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole) === 'designer'
-        ? 'initiateReview'
-        : resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole) === 'reviewer'
-          ? 'review'
-          : undefined,
+      primaryPanelId,
     });
   } else {
     const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);

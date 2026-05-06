@@ -704,7 +704,12 @@ export async function waitForReviewerWorkbenchAcrossContext(context: BrowserCont
     const pages = context.pages().filter((p) => !p.isClosed());
     for (const p of pages) {
       for (const root of listPageAndFrames(p)) {
-        const n = await root.locator('[data-testid="review-workbench-workflow-zone"]').count();
+        let n = 0;
+        try {
+          n = await root.locator('[data-testid="review-workbench-workflow-zone"]').count();
+        } catch {
+          continue;
+        }
         if (!n) continue;
         const vis = await root
           .locator('[data-testid="review-workbench-workflow-zone"]')
@@ -745,7 +750,12 @@ export async function runSubmitReviewAcrossContext(context: BrowserContext): Pro
     const pages = context.pages().filter((p) => !p.isClosed());
     for (const p of pages) {
       for (const root of listPageAndFrames(p)) {
-        const n = await root.locator('[data-testid="designer-landing-workspace"]').count();
+        let n = 0;
+        try {
+          n = await root.locator('[data-testid="designer-landing-workspace"]').count();
+        } catch {
+          continue;
+        }
         if (!n) continue;
         const vis = await root
           .locator('[data-testid="designer-landing-workspace"]')

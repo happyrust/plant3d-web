@@ -114,6 +114,10 @@ export function buildSnapshotFromTaskRecords(
     appendMeasurements(
       snapshot,
       record.measurements as readonly MeasurementLike[] | undefined,
+      {
+        taskId: recordTaskId,
+        formId: recordFormId,
+      },
     );
   }
 
@@ -147,7 +151,10 @@ function appendAnnotationGroup(opts: AppendAnnotationGroupOptions): void {
       taskId: opts.taskId,
       formId: opts.formId,
       workflowNode: opts.workflowNode,
-      payload: { ...raw },
+      payload: withSnapshotContext(raw, {
+        taskId: opts.taskId,
+        formId: opts.formId,
+      }),
     };
     opts.snapshot.annotations.push(annotation);
 
@@ -183,6 +190,7 @@ function normalizeKind(raw: unknown): SnapshotMeasurementKind {
 function appendMeasurements(
   snapshot: ReviewSnapshot,
   items: readonly MeasurementLike[] | undefined,
+  context: { taskId?: string; formId?: string },
 ): void {
   if (!items?.length) return;
   for (const raw of items) {
@@ -192,7 +200,29 @@ function appendMeasurements(
     snapshot.measurements.push({
       measurementId,
       kind: normalizeKind(raw.kind),
-      payload: { ...raw },
+      payload: withSnapshotContext(raw, {
+        taskId: context.taskId,
+        formId: context.formId,
+      }) as import('@/api/reviewApi').ReviewSnapshotMeasurementPayload,
     });
   }
+}
+
+function normalizeOptionalContext(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function withSnapshotContext<T extends Record<string, unknown>>(
+  raw: T,
+  context: { taskId?: string; formId?: string },
+): T {
+  const currentTaskId = normalizeOptionalContext(raw.taskId);
+  const currentFormId = normalizeOptionalContext(raw.formId);
+  return {
+    ...raw,
+    ...(currentTaskId ? { taskId: currentTaskId } : context.taskId ? { taskId: context.taskId } : {}),
+    ...(currentFormId ? { formId: currentFormId } : context.formId ? { formId: context.formId } : {}),
+  };
 }

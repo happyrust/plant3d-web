@@ -5,14 +5,18 @@ import {
   getReviewUserWebSocketUrl,
   getReviewWebSocketUrl,
   reviewAnnotationCheck,
+  reviewCommentDelete,
+  reviewCommentUpdate,
   reviewGetEmbedUrl,
   reviewRecordCreate,
+  reviewRecordGetByTaskId,
   reviewTaskSubmitToNext,
   reviewVerifyWorkflow,
   reviewWorkflowSyncQuery,
   normalizeReviewTask,
   normalizeReviewAttachment,
   normalizeAnnotationComment,
+  normalizeAnnotationReviewStateView,
 } from './reviewApi';
 
 describe('reviewApi base url defaults', () => {
@@ -99,6 +103,22 @@ describe('reviewApi base url defaults', () => {
       fetchMock,
       '/api/review/embed-url',
       JSON.stringify({ project_id: 'project-1', user_id: 'user-1', workflow_role: 'jd', role: 'jd' })
+    );
+  });
+
+  it('adds form_id when loading task confirmed records with form scope', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        records: [],
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await reviewRecordGetByTaskId('task-form-scope', { formId: 'FORM-SCOPE' });
+
+    expect(fetchMock.mock.calls[0][0]).toEqual(
+      expect.stringMatching(/\/api\/review\/records\/by-task\/task-form-scope\?form_id=FORM-SCOPE$/),
     );
   });
 
@@ -551,9 +571,19 @@ describe('reviewApi base url defaults', () => {
         data: {
           passed: false,
           action: 'agree',
+          block_code: 'ANNOTATION_CHECK_FAILED',
           current_node: 'jd',
           task_status: 'in_review',
           next_step: 'sh',
+          actor_id: 'JH',
+          owner_id: 'JH',
+          owner_source: 'checker',
+          expected_next_node: 'sh',
+          requested_next_step: {
+            assignee_id: 'SH',
+            name: 'SH',
+            roles: 'sh',
+          },
           reason: '存在待确认批注',
           recommended_action: 'return',
         },
@@ -579,9 +609,19 @@ describe('reviewApi base url defaults', () => {
       data: {
         passed: false,
         action: 'agree',
+        blockCode: 'ANNOTATION_CHECK_FAILED',
         currentNode: 'jd',
         taskStatus: 'in_review',
         nextStep: 'sh',
+        actorId: 'JH',
+        ownerId: 'JH',
+        ownerSource: 'checker',
+        expectedNextNode: 'sh',
+        requestedNextStep: {
+          assigneeId: 'SH',
+          name: 'SH',
+          roles: 'sh',
+        },
         reason: '存在待确认批注',
         recommendedAction: 'return',
       },
@@ -651,6 +691,114 @@ describe('reviewApi base url defaults', () => {
         currentNode: 'jd',
       }),
     });
+  });
+
+  it('includes formId and taskId when updating a review comment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await reviewCommentUpdate('comment-1', 'updated', {
+      formId: 'FORM-1',
+      taskId: 'task-1',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/review\/comments\/item\/comment-1$/),
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({
+          content: 'updated',
+          formId: 'FORM-1',
+          taskId: 'task-1',
+        }),
+      }),
+    );
+  });
+
+  it('includes formId and taskId when deleting a review comment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await reviewCommentDelete('comment-1', {
+      formId: 'FORM-1',
+      taskId: 'task-1',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/review\/comments\/item\/comment-1\?form_id=FORM-1&task_id=task-1$/),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+});
+
+describe('normalizeAnnotationReviewStateView', () => {
+  it('normalizes backend annotation-state history entries that use timestamp', () => {
+    const state = normalizeAnnotationReviewStateView({
+      formId: 'FORM-1',
+      taskId: 'task-1',
+      annotationId: 'annot-1',
+      annotationType: 'text',
+      workflowNode: 'sj',
+      reviewRound: 2,
+      resolutionStatus: 'fixed',
+      decisionStatus: 'pending',
+      note: '已修改管线',
+      updatedById: 'SJ',
+      updatedByName: '设计甲',
+      updatedByRole: 'sj',
+      updatedAt: 1710000000999,
+      history: [{
+        action: 'fixed',
+        resolutionStatus: 'fixed',
+        decisionStatus: 'pending',
+        note: '已修改管线',
+        operatorId: 'SJ',
+        operatorName: '设计甲',
+        operatorRole: 'sj',
+        workflowNode: 'sj',
+        timestamp: 1710000000123,
+      }],
+    });
+
+    expect(state.resolutionStatus).toBe('fixed');
+    expect(state.decisionStatus).toBe('pending');
+    expect(state.updatedByRole).toBe('designer');
+    expect(state.updatedAt).toBe(1710000000999);
+    expect(state.history).toEqual([
+      expect.objectContaining({
+        action: 'fixed',
+        operatorName: '设计甲',
+        operatorRole: 'designer',
+        note: '已修改管线',
+        createdAt: 1710000000123,
+      }),
+    ]);
+  });
+
+  it('filters invalid backend history actions without dropping the current state', () => {
+    const state = normalizeAnnotationReviewStateView({
+      formId: 'FORM-1',
+      taskId: 'task-1',
+      annotationId: 'annot-1',
+      annotationType: 'text',
+      workflowNode: 'jd',
+      reviewRound: 2,
+      resolutionStatus: 'open',
+      decisionStatus: 'rejected',
+      updatedById: 'JH',
+      updatedByName: '校核甲',
+      updatedByRole: 'jd',
+      updatedAt: 1710000000456,
+      history: [{ action: 'unknown', timestamp: 1710000000456 }],
+    });
+
+    expect(state.decisionStatus).toBe('rejected');
+    expect(state.updatedByRole).toBe('proofreader');
+    expect(state.history).toEqual([]);
   });
 });
 

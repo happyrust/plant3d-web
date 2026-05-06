@@ -17,7 +17,6 @@ import { runWorkflowSyncShadow } from '@/review/services/reviewSnapshotService';
 import {
   getReviewCommentEventLog,
   getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
 } from '@/review/services/sharedStores';
 
 export type EmbedFormSnapshotRestoreOptions = {
@@ -44,6 +43,25 @@ export type EmbedFormSnapshotContextOptions = EmbedFormSnapshotRestoreOptions & 
 export type EmbedFormSnapshotContextResult = EmbedFormSnapshotRestoreResult & {
   task: ReviewTask | null;
 };
+
+function mergeSnapshotModelRefnosIntoTask(
+  task: ReviewTask,
+  modelRefnos: string[],
+): ReviewTask {
+  if (!modelRefnos.length) return task;
+
+  const mergedComponents = modelRefnos.map((refno, index) => ({
+    id: `form-model-${index + 1}-${refno}`,
+    name: refno,
+    refNo: refno,
+    type: 'BRAN',
+  }));
+
+  return {
+    ...task,
+    components: mergedComponents,
+  };
+}
 
 export function mergeSnapshotAttachmentsIntoTask(
   task: ReviewTask,
@@ -85,12 +103,12 @@ export async function restoreEmbedFormSnapshot(
     : [];
 
   if (options.importTools) {
-    const legacyPayload = buildWorkflowSnapshotReplayPayload(records, comments);
+    const legacyPayload = buildWorkflowSnapshotReplayPayload(records, comments, options.formId);
     const shadowResult = runWorkflowSyncShadow({ legacyPayload, data });
 
-    if (isReviewCommentThreadStoreActive()) {
-      try {
-        const snapshot = shadowResult?.snapshot ?? buildSnapshotFromWorkflowSync(data);
+    try {
+      const snapshot = shadowResult?.snapshot ?? buildSnapshotFromWorkflowSync(data);
+      if (snapshot.comments.length > 0) {
         const merge = getReviewCommentThreadStore().mergeFromSnapshot(snapshot);
         if (merge.changed) {
           getReviewCommentEventLog().push({
@@ -103,15 +121,26 @@ export async function restoreEmbedFormSnapshot(
             },
           });
         }
-      } catch (err) {
-        if (typeof console !== 'undefined') {
-          console.warn('[review/M3 thread store] workflow_sync merge failed', err);
-        }
+      }
+    } catch (err) {
+      if (typeof console !== 'undefined') {
+        console.warn('[review thread store] workflow_sync merge failed', err);
       }
     }
 
     options.importTools(legacyPayload);
     options.syncTools?.();
+  }
+
+  if (typeof console !== 'undefined') {
+    console.info('[embed][form-restore] workflow snapshot resolved', {
+      formId: options.formId,
+      taskId: data?.taskId || null,
+      modelCount: modelRefnos.length,
+      modelRefnos,
+      recordCount: records.length,
+      attachmentCount: attachments.length,
+    });
   }
 
   return {
@@ -127,6 +156,19 @@ export async function restoreEmbedFormSnapshotContext(
 ): Promise<EmbedFormSnapshotContextResult> {
   const snapshot = await restoreEmbedFormSnapshot(options);
   let nextTask = options.task ?? null;
+
+  if (nextTask && snapshot.modelRefnos.length > 0) {
+    nextTask = mergeSnapshotModelRefnosIntoTask(nextTask, snapshot.modelRefnos);
+    if (typeof console !== 'undefined') {
+      console.info('[embed][form-restore] task components replaced from workflow snapshot', {
+        formId: options.formId,
+        taskId: nextTask.id,
+        componentCount: nextTask.components.length,
+        componentRefnos: nextTask.components.map((component) => component.refNo),
+      });
+    }
+    await options.updateTask?.(nextTask);
+  }
 
   if (nextTask && snapshot.attachments.length > 0) {
     nextTask = mergeSnapshotAttachmentsIntoTask(nextTask, snapshot.attachments);

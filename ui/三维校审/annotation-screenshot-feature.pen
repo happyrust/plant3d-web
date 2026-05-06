@@ -1,0 +1,809 @@
+{
+  "version": "2.11",
+  "children": [
+    {
+      "type": "frame",
+      "id": "Root",
+      "x": 0,
+      "y": 0,
+      "name": "Canvas",
+      "clip": true,
+      "width": 2400,
+      "height": 960,
+      "fill": "#F9FAFB",
+      "layout": "none"
+    },
+    {
+      "type": "text",
+      "id": "Title",
+      "x": 40,
+      "y": 40,
+      "name": "title",
+      "fill": "$--fg-primary",
+      "content": "批注截图功能 · 单条批注卡片状态展示",
+      "fontFamily": "Fira Sans",
+      "fontSize": 18,
+      "fontWeight": "600"
+    },
+    {
+      "type": "text",
+      "id": "SubTitle",
+      "x": 40,
+      "y": 66,
+      "name": "subtitle",
+      "fill": "$--fg-muted",
+      "content": "云线批注 · 4 态 + 列表全景 · huashu-design 克制型工业软件",
+      "fontFamily": "Fira Sans",
+      "fontSize": 12,
+      "fontWeight": "normal"
+    },
+    {
+      "type": "frame",
+      "id": "StateA",
+      "x": 40,
+      "y": 120,
+      "name": "态A-空状态·可添加截图",
+      "width": 360,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 4 }, "blur": 16 },
+      "layout": "vertical",
+      "gap": 4,
+      "padding": 0,
+      "children": [
+        {
+          "type": "text",
+          "id": "staLab",
+          "fill": "#3B82F6",
+          "content": "■ 态 A · 空状态（可添加截图）",
+          "fontFamily": "Fira Sans",
+          "fontSize": 11,
+          "fontWeight": "600",
+          "padding": [8, 12]
+        },
+        {
+          "type": "frame",
+          "id": "staCard",
+          "name": "card",
+          "width": "fill_container",
+          "fill": "$--bg-panel",
+          "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+          "layout": "vertical",
+          "gap": 8,
+          "padding": 10,
+          "children": [
+            {
+              "type": "frame",
+              "id": "staHdr",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "staHL",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    { "type": "text", "id": "staTit", "fill": "$--fg-primary", "content": "机房泵组复核", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                    {
+                      "type": "frame",
+                      "id": "staSev",
+                      "fill": "#FEF3C7",
+                      "cornerRadius": 3,
+                      "stroke": { "align": "inside", "thickness": 1, "fill": "#FDE68A" },
+                      "padding": [1, 4],
+                      "children": [
+                        { "type": "text", "id": "staSevT", "fill": "#B45309", "content": "一般", "fontFamily": "Fira Sans", "fontSize": 9, "fontWeight": "500" }
+                      ]
+                    }
+                  ]
+                },
+                { "type": "text", "id": "staTime", "fill": "$--fg-muted", "content": "3 分钟前", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "staDesc", "width": "fill_container", "fill": "$--fg-muted", "content": "阀门布局需要复核，操作空间不足", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame",
+              "id": "staBtn",
+              "name": "addScreenshotBtn",
+              "width": "fill_container",
+              "height": 80,
+              "fill": "$--bg-panel",
+              "cornerRadius": 6,
+              "strokeDashes": [4, 4],
+              "stroke": { "align": "inside", "thickness": 1, "fill": "#D1D5DB" },
+              "gap": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                { "type": "icon_font", "id": "staBtI", "width": 14, "height": 14, "iconFontName": "camera", "iconFontFamily": "lucide", "fill": "$--fg-muted" },
+                { "type": "text", "id": "staBtT", "fill": "$--fg-muted", "content": "添加截图 · 记录当前视角", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "staAct",
+              "name": "actRow",
+              "width": "fill_container",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "frame", "id": "staA1", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8],
+                  "children": [ { "type": "text", "id": "staA1T", "fill": "$--fg-primary", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" } ]
+                },
+                {
+                  "type": "frame", "id": "staA2", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8],
+                  "children": [ { "type": "text", "id": "staA2T", "fill": "$--fg-primary", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" } ]
+                },
+                {
+                  "type": "frame", "id": "staA3", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8],
+                  "children": [ { "type": "text", "id": "staA3T", "fill": "$--fg-primary", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" } ]
+                },
+                {
+                  "type": "frame", "id": "staA4", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8],
+                  "children": [ { "type": "text", "id": "staA4T", "fill": "#EF4444", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" } ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "StateB",
+      "x": 440,
+      "y": 120,
+      "name": "态B-正在截图",
+      "width": 360,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 4 }, "blur": 16 },
+      "layout": "vertical",
+      "gap": 4,
+      "padding": 0,
+      "children": [
+        { "type": "text", "id": "stbLab", "fill": "$--orange-primary", "content": "● 态 B · 正在截图", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600", "padding": [8, 12] },
+        {
+          "type": "frame",
+          "id": "stbCard",
+          "width": "fill_container",
+          "fill": "$--bg-panel",
+          "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+          "layout": "vertical",
+          "gap": 8,
+          "padding": 10,
+          "children": [
+            {
+              "type": "frame",
+              "id": "stbHdr",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                { "type": "text", "id": "stbTit", "fill": "$--fg-primary", "content": "机房泵组复核", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                { "type": "text", "id": "stbTime", "fill": "$--fg-muted", "content": "3 分钟前", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "stbDesc", "width": "fill_container", "fill": "$--fg-muted", "content": "阀门布局需要复核，操作空间不足", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame",
+              "id": "stbBtn",
+              "width": "fill_container",
+              "height": 80,
+              "fill": "$--orange-light",
+              "cornerRadius": 6,
+              "strokeDashes": [4, 4],
+              "stroke": { "align": "inside", "thickness": 1, "fill": "#FDBA74" },
+              "gap": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                { "type": "icon_font", "id": "stbBtI", "width": 14, "height": 14, "iconFontName": "loader-circle", "iconFontFamily": "lucide", "fill": "$--orange-primary" },
+                { "type": "text", "id": "stbBtT", "fill": "$--orange-primary", "content": "正在截图…", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "stbPg",
+              "width": "fill_container",
+              "height": 3,
+              "fill": "#F3F4F6",
+              "cornerRadius": 2,
+              "children": [
+                { "type": "rectangle", "id": "stbPgF", "fill": "$--orange-primary", "cornerRadius": 2, "width": 180, "height": 3 }
+              ]
+            },
+            {
+              "type": "frame", "id": "stbAct", "width": "fill_container", "gap": 6,
+              "children": [
+                { "type": "frame", "id": "stbA1", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stbA1T", "fill": "#9CA3AF", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stbA2", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stbA2T", "fill": "#9CA3AF", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stbA3", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stbA3T", "fill": "#9CA3AF", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stbA4", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stbA4T", "fill": "#9CA3AF", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "StateC",
+      "x": 840,
+      "y": 120,
+      "name": "态C-已有截图",
+      "width": 360,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 4 }, "blur": 16 },
+      "layout": "vertical",
+      "gap": 4,
+      "padding": 0,
+      "children": [
+        { "type": "text", "id": "stcLab", "fill": "#10B981", "content": "✓ 态 C · 已有截图（静默态）", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600", "padding": [8, 12] },
+        {
+          "type": "frame",
+          "id": "stcCard",
+          "width": "fill_container",
+          "fill": "$--bg-panel",
+          "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+          "layout": "vertical",
+          "gap": 8,
+          "padding": 10,
+          "children": [
+            {
+              "type": "frame", "id": "stcHdr", "width": "fill_container", "justifyContent": "space_between", "alignItems": "center",
+              "children": [
+                { "type": "text", "id": "stcTit", "fill": "$--fg-primary", "content": "机房泵组复核", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                { "type": "text", "id": "stcTime", "fill": "$--fg-muted", "content": "3 分钟前", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "stcDesc", "width": "fill_container", "fill": "$--fg-muted", "content": "阀门布局需要复核，操作空间不足", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame", "id": "stcThumb", "name": "thumbnail",
+              "width": "fill_container", "height": 120, "fill": "#E5E7EB", "cornerRadius": 6,
+              "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+              "justifyContent": "center", "alignItems": "center", "clip": true,
+              "children": [
+                {
+                  "type": "frame", "id": "stcThMock", "width": "fill_container", "height": 120, "fill": "#9CA3AF", "layout": "none",
+                  "children": [
+                    { "type": "rectangle", "id": "stcTh1", "x": 80, "y": 30, "fill": "#6B7280", "cornerRadius": 2, "width": 60, "height": 55 },
+                    { "type": "rectangle", "id": "stcTh2", "x": 150, "y": 40, "fill": "#4B5563", "cornerRadius": 2, "width": 90, "height": 45 },
+                    { "type": "rectangle", "id": "stcTh3", "x": 250, "y": 35, "fill": "#6B7280", "cornerRadius": 2, "width": 40, "height": 50 },
+                    { "type": "text", "id": "stcThT", "x": 130, "y": 98, "fill": "#FFFFFF", "content": "3D 视角截图", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame", "id": "stcAct", "width": "fill_container", "gap": 6,
+              "children": [
+                { "type": "frame", "id": "stcA1", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stcA1T", "fill": "$--fg-primary", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stcA2", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stcA2T", "fill": "$--fg-primary", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stcA3", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stcA3T", "fill": "$--fg-primary", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stcA4", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stcA4T", "fill": "#EF4444", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "StateD",
+      "x": 1240,
+      "y": 120,
+      "name": "态D-hover重拍",
+      "width": 360,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 4 }, "blur": 16 },
+      "layout": "vertical",
+      "gap": 4,
+      "padding": 0,
+      "children": [
+        { "type": "text", "id": "stdLab", "fill": "$--orange-primary", "content": "⌐ 态 D · Hover 缩略图·显示重拍", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600", "padding": [8, 12] },
+        {
+          "type": "frame", "id": "stdCard", "width": "fill_container", "fill": "$--bg-panel", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+          "layout": "vertical", "gap": 8, "padding": 10,
+          "children": [
+            {
+              "type": "frame", "id": "stdHdr", "width": "fill_container", "justifyContent": "space_between", "alignItems": "center",
+              "children": [
+                { "type": "text", "id": "stdTit", "fill": "$--fg-primary", "content": "机房泵组复核", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                { "type": "text", "id": "stdTime", "fill": "$--fg-muted", "content": "3 分钟前", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "stdDesc", "width": "fill_container", "fill": "$--fg-muted", "content": "阀门布局需要复核，操作空间不足", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame", "id": "stdThumb",
+              "width": "fill_container", "height": 120, "fill": "#E5E7EB", "cornerRadius": 6,
+              "stroke": { "align": "inside", "thickness": 1, "fill": "#FDBA74" },
+              "layout": "none", "clip": true,
+              "children": [
+                { "type": "rectangle", "id": "stdBg", "x": 0, "y": 0, "fill": "#9CA3AF", "width": 338, "height": 120 },
+                { "type": "rectangle", "id": "stdRe1", "x": 80, "y": 30, "fill": "#6B7280", "cornerRadius": 2, "width": 60, "height": 55 },
+                { "type": "rectangle", "id": "stdRe2", "x": 150, "y": 40, "fill": "#4B5563", "cornerRadius": 2, "width": 90, "height": 45 },
+                { "type": "rectangle", "id": "stdRe3", "x": 250, "y": 35, "fill": "#6B7280", "cornerRadius": 2, "width": 40, "height": 50 },
+                {
+                  "type": "frame", "id": "stdOverlay",
+                  "x": 0, "y": 0, "width": 338, "height": 120,
+                  "fill": "#00000020", "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame", "id": "stdBtn",
+                      "x": 248, "y": 8,
+                      "fill": "#FFFFFF", "cornerRadius": 14,
+                      "effect": { "type": "shadow", "shadowType": "outer", "color": "#0000001a", "offset": { "x": 0, "y": 2 }, "blur": 6 },
+                      "gap": 4, "padding": [5, 10], "alignItems": "center",
+                      "children": [
+                        { "type": "icon_font", "id": "stdBtI", "width": 11, "height": 11, "iconFontName": "camera", "iconFontFamily": "lucide", "fill": "$--fg-primary" },
+                        { "type": "text", "id": "stdBtT", "fill": "$--fg-primary", "content": "重拍", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame", "id": "stdAct", "width": "fill_container", "gap": 6,
+              "children": [
+                { "type": "frame", "id": "stdA1", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stdA1T", "fill": "$--fg-primary", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stdA2", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stdA2T", "fill": "$--fg-primary", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stdA3", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stdA3T", "fill": "$--fg-primary", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "stdA4", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "stdA4T", "fill": "#EF4444", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "StateE",
+      "x": 1640,
+      "y": 120,
+      "name": "态E-无任务·禁用",
+      "width": 360,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 4 }, "blur": 16 },
+      "layout": "vertical",
+      "gap": 4,
+      "padding": 0,
+      "children": [
+        { "type": "text", "id": "steLab", "fill": "#9CA3AF", "content": "○ 态 E · 无任务上下文（按钮隐藏）", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600", "padding": [8, 12] },
+        {
+          "type": "frame", "id": "steCard", "width": "fill_container", "fill": "$--bg-panel", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+          "layout": "vertical", "gap": 8, "padding": 10,
+          "children": [
+            {
+              "type": "frame", "id": "steHdr", "width": "fill_container", "justifyContent": "space_between", "alignItems": "center",
+              "children": [
+                { "type": "text", "id": "steTit", "fill": "$--fg-primary", "content": "机房泵组复核", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                { "type": "text", "id": "steTime", "fill": "$--fg-muted", "content": "3 分钟前", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "steDesc", "width": "fill_container", "fill": "$--fg-muted", "content": "阀门布局需要复核，操作空间不足", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame", "id": "steTip", "width": "fill_container", "fill": "#F9FAFB", "cornerRadius": 4, "gap": 6, "padding": [8, 10], "alignItems": "center",
+              "children": [
+                { "type": "icon_font", "id": "steI", "width": 12, "height": 12, "iconFontName": "info", "iconFontFamily": "lucide", "fill": "$--fg-muted" },
+                { "type": "text", "id": "steT", "textGrowth": "fixed-width", "width": "fill_container", "fill": "$--fg-muted", "content": "进入校审任务后可添加截图", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }
+              ]
+            },
+            {
+              "type": "frame", "id": "steAct", "width": "fill_container", "gap": 6,
+              "children": [
+                { "type": "frame", "id": "steA1", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "steA1T", "fill": "$--fg-primary", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "steA2", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "steA2T", "fill": "$--fg-primary", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "steA3", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "steA3T", "fill": "$--fg-primary", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "steA4", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "steA4T", "fill": "#EF4444", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "ListTitle",
+      "x": 40,
+      "y": 500,
+      "name": "listTitle",
+      "fill": "$--fg-primary",
+      "content": "批注列表全景图 · 混合状态",
+      "fontFamily": "Fira Sans",
+      "fontSize": 16,
+      "fontWeight": "600"
+    },
+    {
+      "type": "text",
+      "id": "ListSub",
+      "x": 40,
+      "y": 526,
+      "name": "listSub",
+      "fill": "$--fg-muted",
+      "content": "展示一个真实列表里多条批注的状态混合表现",
+      "fontFamily": "Fira Sans",
+      "fontSize": 12,
+      "fontWeight": "normal"
+    },
+    {
+      "type": "frame",
+      "id": "ListPanel",
+      "x": 40,
+      "y": 560,
+      "name": "批注面板-云线批注区",
+      "width": 400,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 6 }, "blur": 24 },
+      "layout": "vertical",
+      "gap": 12,
+      "padding": 14,
+      "children": [
+        {
+          "type": "frame", "id": "lpHdr", "width": "fill_container", "justifyContent": "space_between", "alignItems": "center",
+          "children": [
+            {
+              "type": "frame", "id": "lpHL", "gap": 6, "alignItems": "center",
+              "children": [
+                { "type": "icon_font", "id": "lpHI", "width": 14, "height": 14, "iconFontName": "cloud", "iconFontFamily": "lucide", "fill": "$--orange-primary" },
+                { "type": "text", "id": "lpHT", "fill": "$--fg-primary", "content": "云线批注", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" }
+              ]
+            },
+            { "type": "text", "id": "lpHC", "fill": "$--fg-muted", "content": "共 3 条", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }
+          ]
+        },
+        {
+          "type": "frame", "id": "lpF", "width": "fill_container", "gap": 6,
+          "children": [
+            {
+              "type": "frame", "id": "lpF1", "fill": "$--orange-light", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--orange-primary" }, "padding": [3, 8],
+              "children": [ { "type": "text", "id": "lpF1T", "fill": "$--orange-primary", "content": "全部 3", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" } ]
+            },
+            {
+              "type": "frame", "id": "lpF2", "fill": "#FEF2F2", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "#FCA5A5" }, "padding": [3, 8],
+              "children": [ { "type": "text", "id": "lpF2T", "fill": "#B91C1C", "content": "严重 1", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" } ]
+            },
+            {
+              "type": "frame", "id": "lpF3", "fill": "#FEF3C7", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "#FDE68A" }, "padding": [3, 8],
+              "children": [ { "type": "text", "id": "lpF3T", "fill": "#B45309", "content": "一般 2", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" } ]
+            }
+          ]
+        },
+        {
+          "type": "frame", "id": "lpI1", "name": "item-severe-with-screenshot",
+          "width": "fill_container", "fill": "#FFF7ED", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "#FDBA74" },
+          "layout": "vertical", "gap": 6, "padding": 10,
+          "children": [
+            {
+              "type": "frame", "id": "li1H", "width": "fill_container", "justifyContent": "space_between", "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame", "id": "li1HL", "gap": 6, "alignItems": "center",
+                  "children": [
+                    { "type": "text", "id": "li1T", "fill": "$--fg-primary", "content": "关键阀门缺失", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                    {
+                      "type": "frame", "id": "li1S", "fill": "#FEE2E2", "cornerRadius": 3, "stroke": { "align": "inside", "thickness": 1, "fill": "#FCA5A5" }, "padding": [1, 4],
+                      "children": [ { "type": "text", "id": "li1ST", "fill": "#B91C1C", "content": "严重", "fontFamily": "Fira Sans", "fontSize": 9, "fontWeight": "500" } ]
+                    }
+                  ]
+                },
+                { "type": "text", "id": "li1Time", "fill": "$--fg-muted", "content": "10 分钟前", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "li1D", "width": "fill_container", "fill": "$--fg-muted", "content": "DN200 供水主管缺少隔离阀，需补充", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame", "id": "li1Th", "width": "fill_container", "height": 110, "fill": "#9CA3AF", "cornerRadius": 6,
+              "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "layout": "none", "clip": true,
+              "children": [
+                { "type": "rectangle", "id": "li1Pipe1", "x": 20, "y": 45, "fill": "#6B7280", "cornerRadius": 1, "width": 320, "height": 14 },
+                { "type": "rectangle", "id": "li1Pipe2", "x": 100, "y": 20, "fill": "#4B5563", "cornerRadius": 1, "width": 14, "height": 50 },
+                { "type": "rectangle", "id": "li1Pipe3", "x": 240, "y": 55, "fill": "#4B5563", "cornerRadius": 1, "width": 14, "height": 45 },
+                { "type": "ellipse", "id": "li1Marker", "x": 100, "y": 40, "fill": "#EF4444", "width": 14, "height": 14 },
+                { "type": "text", "id": "li1ThT", "x": 130, "y": 90, "fill": "#FFFFFF", "content": "DN200 供水主管 / 俯视", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            {
+              "type": "frame", "id": "li1A", "width": "fill_container", "gap": 6,
+              "children": [
+                { "type": "frame", "id": "li1A1", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li1A1T", "fill": "$--fg-primary", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li1A2", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li1A2T", "fill": "$--fg-primary", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li1A3", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li1A3T", "fill": "$--fg-primary", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li1A4", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li1A4T", "fill": "#EF4444", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame", "id": "lpI2", "name": "item-general-no-screenshot",
+          "width": "fill_container", "fill": "$--bg-panel", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+          "layout": "vertical", "gap": 6, "padding": 10,
+          "children": [
+            {
+              "type": "frame", "id": "li2H", "width": "fill_container", "justifyContent": "space_between", "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame", "id": "li2HL", "gap": 6, "alignItems": "center",
+                  "children": [
+                    { "type": "text", "id": "li2T", "fill": "$--fg-primary", "content": "机房泵组复核", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                    {
+                      "type": "frame", "id": "li2S", "fill": "#FEF3C7", "cornerRadius": 3, "stroke": { "align": "inside", "thickness": 1, "fill": "#FDE68A" }, "padding": [1, 4],
+                      "children": [ { "type": "text", "id": "li2ST", "fill": "#B45309", "content": "一般", "fontFamily": "Fira Sans", "fontSize": 9, "fontWeight": "500" } ]
+                    }
+                  ]
+                },
+                { "type": "text", "id": "li2Time", "fill": "$--fg-muted", "content": "3 分钟前", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "li2D", "width": "fill_container", "fill": "$--fg-muted", "content": "阀门布局需要复核，操作空间不足", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame", "id": "li2Btn", "width": "fill_container", "height": 80, "fill": "$--bg-panel", "cornerRadius": 6,
+              "strokeDashes": [4, 4], "stroke": { "align": "inside", "thickness": 1, "fill": "#D1D5DB" },
+              "gap": 8, "justifyContent": "center", "alignItems": "center",
+              "children": [
+                { "type": "icon_font", "id": "li2BtI", "width": 14, "height": 14, "iconFontName": "camera", "iconFontFamily": "lucide", "fill": "$--fg-muted" },
+                { "type": "text", "id": "li2BtT", "fill": "$--fg-muted", "content": "添加截图 · 记录当前视角", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+              ]
+            },
+            {
+              "type": "frame", "id": "li2A", "width": "fill_container", "gap": 6,
+              "children": [
+                { "type": "frame", "id": "li2A1", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li2A1T", "fill": "$--fg-primary", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li2A2", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li2A2T", "fill": "$--fg-primary", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li2A3", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li2A3T", "fill": "$--fg-primary", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li2A4", "fill": "$--bg-panel", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li2A4T", "fill": "#EF4444", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame", "id": "lpI3", "name": "item-general-capturing",
+          "width": "fill_container", "fill": "$--bg-panel", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+          "layout": "vertical", "gap": 6, "padding": 10,
+          "children": [
+            {
+              "type": "frame", "id": "li3H", "width": "fill_container", "justifyContent": "space_between", "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame", "id": "li3HL", "gap": 6, "alignItems": "center",
+                  "children": [
+                    { "type": "text", "id": "li3T", "fill": "$--fg-primary", "content": "消防喷淋覆盖不足", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "600" },
+                    {
+                      "type": "frame", "id": "li3S", "fill": "#FEF3C7", "cornerRadius": 3, "stroke": { "align": "inside", "thickness": 1, "fill": "#FDE68A" }, "padding": [1, 4],
+                      "children": [ { "type": "text", "id": "li3ST", "fill": "#B45309", "content": "一般", "fontFamily": "Fira Sans", "fontSize": 9, "fontWeight": "500" } ]
+                    }
+                  ]
+                },
+                { "type": "text", "id": "li3Time", "fill": "$--fg-muted", "content": "刚刚", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "normal" }
+              ]
+            },
+            { "type": "text", "id": "li3D", "width": "fill_container", "fill": "$--fg-muted", "content": "机房顶部存在约 2 m² 死角", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            {
+              "type": "frame", "id": "li3Btn", "width": "fill_container", "height": 80, "fill": "$--orange-light", "cornerRadius": 6,
+              "strokeDashes": [4, 4], "stroke": { "align": "inside", "thickness": 1, "fill": "#FDBA74" },
+              "gap": 8, "justifyContent": "center", "alignItems": "center",
+              "children": [
+                { "type": "icon_font", "id": "li3BtI", "width": 14, "height": 14, "iconFontName": "loader-circle", "iconFontFamily": "lucide", "fill": "$--orange-primary" },
+                { "type": "text", "id": "li3BtT", "fill": "$--orange-primary", "content": "正在截图…", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+              ]
+            },
+            {
+              "type": "frame", "id": "li3A", "width": "fill_container", "gap": 6,
+              "children": [
+                { "type": "frame", "id": "li3A1", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li3A1T", "fill": "#9CA3AF", "content": "定位", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li3A2", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li3A2T", "fill": "#9CA3AF", "content": "高亮", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li3A3", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li3A3T", "fill": "#9CA3AF", "content": "隐藏", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] },
+                { "type": "frame", "id": "li3A4", "fill": "#F9FAFB", "cornerRadius": 4, "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" }, "padding": [4, 8], "children": [{ "type": "text", "id": "li3A4T", "fill": "#9CA3AF", "content": "删除", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Spec",
+      "x": 480,
+      "y": 560,
+      "name": "设计规范速查",
+      "width": 360,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 6 }, "blur": 24 },
+      "layout": "vertical",
+      "gap": 12,
+      "padding": 14,
+      "children": [
+        { "type": "text", "id": "spT", "fill": "$--fg-primary", "content": "设计规范速查", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+        { "type": "line", "id": "spD1", "width": "fill_container", "height": 1, "stroke": { "align": "center", "thickness": 1, "fill": "$--border" } },
+        {
+          "type": "frame", "id": "spS1", "width": "fill_container", "layout": "vertical", "gap": 6,
+          "children": [
+            { "type": "text", "id": "spS1T", "fill": "$--fg-primary", "content": "截图按钮（空态）", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "600" },
+            { "type": "text", "id": "spS1L1", "fill": "$--fg-muted", "content": "高度 80 · 虚线边框 #D1D5DB · 圆角 6", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS1L2", "fill": "$--fg-muted", "content": "hover：橙浅背景 #FFF7ED · 边框 #FDBA74", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS1L3", "fill": "$--fg-muted", "content": "图标 camera 14×14 · 文案 12px 500", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+          ]
+        },
+        { "type": "line", "id": "spD2", "width": "fill_container", "height": 1, "stroke": { "align": "center", "thickness": 1, "fill": "$--border" } },
+        {
+          "type": "frame", "id": "spS2", "width": "fill_container", "layout": "vertical", "gap": 6,
+          "children": [
+            { "type": "text", "id": "spS2T", "fill": "$--fg-primary", "content": "截图中（loading 态）", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "600" },
+            { "type": "text", "id": "spS2L1", "fill": "$--fg-muted", "content": "背景改为 $--orange-light · 边框 #FDBA74", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS2L2", "fill": "$--fg-muted", "content": "loader-circle 图标 + 橙色文字", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS2L3", "fill": "$--fg-muted", "content": "action row 整体置灰 · disabled", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+          ]
+        },
+        { "type": "line", "id": "spD3", "width": "fill_container", "height": 1, "stroke": { "align": "center", "thickness": 1, "fill": "$--border" } },
+        {
+          "type": "frame", "id": "spS3", "width": "fill_container", "layout": "vertical", "gap": 6,
+          "children": [
+            { "type": "text", "id": "spS3T", "fill": "$--fg-primary", "content": "缩略图（已有截图）", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "600" },
+            { "type": "text", "id": "spS3L1", "fill": "$--fg-muted", "content": "高度 120 · object-cover · 圆角 6", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS3L2", "fill": "$--fg-muted", "content": "hover 浮出重拍按钮（右上角 absolute）", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS3L3", "fill": "$--fg-muted", "content": "按钮底：rgba(255,255,255,0.9) + shadow", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" }
+          ]
+        },
+        { "type": "line", "id": "spD4", "width": "fill_container", "height": 1, "stroke": { "align": "center", "thickness": 1, "fill": "$--border" } },
+        {
+          "type": "frame", "id": "spS4", "width": "fill_container", "layout": "vertical", "gap": 6,
+          "children": [
+            { "type": "text", "id": "spS4T", "fill": "$--fg-primary", "content": "行为合约", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "600" },
+            { "type": "text", "id": "spS4L1", "fill": "$--fg-muted", "content": "① 直接拍：无预览，点击即触发", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS4L2", "fill": "$--fg-muted", "content": "② 覆盖：重拍替换旧 thumbnail", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "spS4L3", "fill": "$--fg-muted", "content": "③ 保留：删除批注不级联删 attachment", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Flow",
+      "x": 880,
+      "y": 560,
+      "name": "状态流转",
+      "width": 360,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 6 }, "blur": 24 },
+      "layout": "vertical",
+      "gap": 14,
+      "padding": 14,
+      "children": [
+        { "type": "text", "id": "flT", "fill": "$--fg-primary", "content": "状态流转图", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+        { "type": "line", "id": "flD", "width": "fill_container", "height": 1, "stroke": { "align": "center", "thickness": 1, "fill": "$--border" } },
+        {
+          "type": "frame", "id": "fl1", "width": "fill_container", "fill": "#EFF6FF", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "#BFDBFE" },
+          "gap": 8, "padding": [10, 12], "alignItems": "center",
+          "children": [
+            { "type": "text", "id": "fl1n", "fill": "#3B82F6", "content": "①", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+            { "type": "text", "id": "fl1t", "fill": "#1E40AF", "content": "批注创建 → 态 A（空状态）", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+          ]
+        },
+        { "type": "text", "id": "flA1", "align": "center", "textGrowth": "fixed-width", "width": "fill_container", "fill": "$--fg-muted", "content": "↓ 点击「添加截图」", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+        {
+          "type": "frame", "id": "fl2", "width": "fill_container", "fill": "$--orange-light", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "#FDBA74" },
+          "gap": 8, "padding": [10, 12], "alignItems": "center",
+          "children": [
+            { "type": "text", "id": "fl2n", "fill": "$--orange-primary", "content": "②", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+            { "type": "text", "id": "fl2t", "fill": "#C2410C", "content": "态 B（正在截图 · 0.3~1s）", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+          ]
+        },
+        { "type": "text", "id": "flA2", "align": "center", "textGrowth": "fixed-width", "width": "fill_container", "fill": "$--fg-muted", "content": "↓ captureAndUpload 成功", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+        {
+          "type": "frame", "id": "fl3", "width": "fill_container", "fill": "#ECFDF5", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "#A7F3D0" },
+          "gap": 8, "padding": [10, 12], "alignItems": "center",
+          "children": [
+            { "type": "text", "id": "fl3n", "fill": "#10B981", "content": "③", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+            { "type": "text", "id": "fl3t", "fill": "#047857", "content": "态 C（已有截图）+ toast 成功", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+          ]
+        },
+        { "type": "text", "id": "flA3", "align": "center", "textGrowth": "fixed-width", "width": "fill_container", "fill": "$--fg-muted", "content": "↻ hover 缩略图 → 态 D → 再拍 → 回态 B", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" },
+        {
+          "type": "frame", "id": "flErr", "width": "fill_container", "fill": "#FEF2F2", "cornerRadius": 6,
+          "stroke": { "align": "inside", "thickness": 1, "fill": "#FCA5A5" },
+          "gap": 6, "padding": [8, 10], "alignItems": "flex_start",
+          "children": [
+            { "type": "icon_font", "id": "flEI", "width": 12, "height": 12, "iconFontName": "alert-triangle", "iconFontFamily": "lucide", "fill": "#B91C1C" },
+            {
+              "type": "frame", "id": "flEC", "width": "fill_container", "layout": "vertical", "gap": 2,
+              "children": [
+                { "type": "text", "id": "flET", "fill": "#991B1B", "content": "失败分支", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "600" },
+                { "type": "text", "id": "flED", "textGrowth": "fixed-width", "width": "fill_container", "fill": "#991B1B", "content": "canvas 不可用 / 网络失败 → toast 错误 · 回态 A/C", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "normal" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Cov",
+      "x": 1280,
+      "y": 560,
+      "name": "代码落地对照",
+      "width": 380,
+      "fill": "$--bg-panel",
+      "cornerRadius": 10,
+      "stroke": { "align": "inside", "thickness": 1, "fill": "$--border" },
+      "effect": { "type": "shadow", "shadowType": "outer", "color": "#00000010", "offset": { "x": 0, "y": 6 }, "blur": 24 },
+      "layout": "vertical",
+      "gap": 10,
+      "padding": 14,
+      "children": [
+        { "type": "text", "id": "coT", "fill": "$--fg-primary", "content": "代码落地对照", "fontFamily": "Fira Sans", "fontSize": 14, "fontWeight": "600" },
+        { "type": "line", "id": "coD", "width": "fill_container", "height": 1, "stroke": { "align": "center", "thickness": 1, "fill": "$--border" } },
+        {
+          "type": "frame", "id": "coF1", "width": "fill_container", "fill": "#F9FAFB", "cornerRadius": 6, "layout": "vertical", "gap": 4, "padding": 10,
+          "children": [
+            { "type": "text", "id": "coF1T", "fill": "$--fg-primary", "content": "useScreenshot.ts", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "600" },
+            { "type": "text", "id": "coF1D", "fill": "$--fg-muted", "content": "captureAndUpload(taskId, opts)", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "coF1X", "fill": "$--fg-muted", "content": "+ CaptureOptions { kind, sourceAnnotationId }", "fontFamily": "Fira Code", "fontSize": 10, "fontWeight": "normal" }
+          ]
+        },
+        {
+          "type": "frame", "id": "coF2", "width": "fill_container", "fill": "#F9FAFB", "cornerRadius": 6, "layout": "vertical", "gap": 4, "padding": 10,
+          "children": [
+            { "type": "text", "id": "coF2T", "fill": "$--fg-primary", "content": "useToolStore.ts", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "600" },
+            { "type": "text", "id": "coF2D", "fill": "$--fg-muted", "content": "CloudAnnotationRecord", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "coF2X", "fill": "$--fg-muted", "content": "+ thumbnailUrl?: string", "fontFamily": "Fira Code", "fontSize": 10, "fontWeight": "normal" },
+            { "type": "text", "id": "coF2Y", "fill": "$--fg-muted", "content": "+ attachmentId?: string", "fontFamily": "Fira Code", "fontSize": 10, "fontWeight": "normal" }
+          ]
+        },
+        {
+          "type": "frame", "id": "coF3", "width": "fill_container", "fill": "#F9FAFB", "cornerRadius": 6, "layout": "vertical", "gap": 4, "padding": 10,
+          "children": [
+            { "type": "text", "id": "coF3T", "fill": "$--fg-primary", "content": "AnnotationPanel.vue", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "600" },
+            { "type": "text", "id": "coF3D", "fill": "$--fg-muted", "content": "captureCloudAnnotationShot(id)", "fontFamily": "Fira Code", "fontSize": 11, "fontWeight": "normal" },
+            { "type": "text", "id": "coF3X", "fill": "$--fg-muted", "content": "canCaptureAnnotation = !!currentTask && !isCapturing", "fontFamily": "Fira Code", "fontSize": 10, "fontWeight": "normal" },
+            { "type": "text", "id": "coF3Y", "fill": "$--fg-muted", "content": "capturingAnnotationId: ref<string | null>", "fontFamily": "Fira Code", "fontSize": 10, "fontWeight": "normal" }
+          ]
+        },
+        { "type": "line", "id": "coD2", "width": "fill_container", "height": 1, "stroke": { "align": "center", "thickness": 1, "fill": "$--border" } },
+        {
+          "type": "frame", "id": "coV", "width": "fill_container", "fill": "#ECFDF5", "cornerRadius": 6, "gap": 6, "padding": [8, 10], "alignItems": "center",
+          "children": [
+            { "type": "icon_font", "id": "coVI", "width": 12, "height": 12, "iconFontName": "check-circle-2", "iconFontFamily": "lucide", "fill": "#10B981" },
+            { "type": "text", "id": "coVT", "textGrowth": "fixed-width", "width": "fill_container", "fill": "#047857", "content": "测试 13/13 通过 · persistence + severity", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "--bg-panel": { "type": "color", "value": "#FFFFFF" },
+    "--border": { "type": "color", "value": "#E5E7EB" },
+    "--fg-muted": { "type": "color", "value": "#6B7280" },
+    "--fg-primary": { "type": "color", "value": "#111827" },
+    "--font-mono": { "type": "string", "value": "Fira Code" },
+    "--font-ui": { "type": "string", "value": "Fira Sans" },
+    "--orange-light": { "type": "color", "value": "#FFF0E6" },
+    "--orange-primary": { "type": "color", "value": "#FF6B00" }
+  }
+}

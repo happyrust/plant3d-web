@@ -17,9 +17,12 @@ import {
   X,
 } from 'lucide-vue-next';
 
+import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
+import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import AnnotationColorPicker from '@/components/tools/AnnotationColorPicker.vue';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useReviewStore } from '@/composables/useReviewStore';
 import {
   type ActiveAnnotationContext,
   type AnnotationType,
@@ -31,6 +34,7 @@ import {
   canEditAnnotationSeverity,
   getAnnotationSeverityDisplay,
   type AnnotationSeverity,
+  UserRole,
 } from '@/types/auth';
 
 type ToolsApi = {
@@ -50,6 +54,7 @@ const props = defineProps<{
 
 const store = useToolStore();
 const styleStore = useAnnotationStyleStore();
+const reviewStore = useReviewStore();
 
 const drawerOpen = ref(false);
 const drawerRef = ref<HTMLElement | null>(null);
@@ -167,7 +172,23 @@ function setMode(mode: 'annotation' | 'annotation_cloud' | 'annotation_rect') {
 }
 
 function openAnnotationPanel(): void {
-  ensurePanelAndActivate('annotation');
+  const currentTask = reviewStore.currentTask.value;
+  const currentUser = userStore.currentUser.value;
+  const shouldUseDesignerPanel = (
+    currentUser?.role === UserRole.DESIGNER ||
+    (currentTask ? isCanonicalReturnedTask(currentTask) : false)
+  );
+
+  if (currentAnnotation.value) {
+    const record = currentAnnotation.value.record as { formId?: string } | null;
+    setAnnotationProcessingEntryTarget({
+      annotationId: currentAnnotation.value.id,
+      annotationType: currentAnnotation.value.type,
+      formId: record?.formId ?? currentTask?.formId ?? null,
+    });
+  }
+
+  ensurePanelAndActivate(shouldUseDesignerPanel ? 'designerCommentHandling' : 'review');
 }
 
 function flyCurrent(): void {
@@ -256,12 +277,10 @@ function clearAll(): void {
 
 const userStore = useUserStore();
 
-/** 严重度快捷按钮的 4 档（不含"清除"，清除单独处理） */
 const SEVERITY_QUICK_BUCKETS: { key: AnnotationSeverity; label: string; dotClass: string }[] = [
-  { key: 'critical', label: '致命', dotClass: 'bg-red-500' },
-  { key: 'severe', label: '严重', dotClass: 'bg-orange-500' },
-  { key: 'normal', label: '一般', dotClass: 'bg-blue-500' },
-  { key: 'suggestion', label: '建议', dotClass: 'bg-slate-400' },
+  { key: 'principle', label: '原则错误 ×', dotClass: 'bg-red-500' },
+  { key: 'general', label: '一般错误 △', dotClass: 'bg-orange-500' },
+  { key: 'drawing', label: '图面错误 ○', dotClass: 'bg-blue-500' },
 ];
 
 /** 当前选中批注的严重度（undefined 表示未设置） */
@@ -374,9 +393,9 @@ onUnmounted(() => {
 <template>
   <div v-if="isVisible"
     data-testid="annotation-overlay-root"
-    class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center"
+    class="pointer-events-none absolute right-4 top-4 flex justify-end"
     style="z-index: 940">
-    <div class="pointer-events-auto flex flex-col items-center gap-2"
+    <div class="pointer-events-auto flex flex-col items-end gap-2"
       @pointerdown.stop
       @wheel.stop>
       <!-- 状态信息 -->
@@ -531,10 +550,10 @@ onUnmounted(() => {
                 class="mt-1 rounded-lg border border-dashed border-border/60 px-2 py-1.5"
                 :class="currentActionDisabled ? 'opacity-40' : ''">
                 <div class="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>严重度</span>
+                  <span>错误类型</span>
                   <span v-if="currentSeverity" class="font-medium"
                     :class="getAnnotationSeverityDisplay(currentSeverity).color + ' border rounded px-1'">
-                    {{ getAnnotationSeverityDisplay(currentSeverity).label }}
+                    {{ getAnnotationSeverityDisplay(currentSeverity).symbol }} {{ getAnnotationSeverityDisplay(currentSeverity).label }}
                   </span>
                   <span v-else>未设置</span>
                 </div>
@@ -555,7 +574,7 @@ onUnmounted(() => {
                     data-testid="annotation-overlay-severity-clear"
                     class="inline-flex items-center justify-center rounded border border-input px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
                     :disabled="!canEditCurrentSeverity || !currentSeverity"
-                    title="清除严重度"
+                    title="清除错误类型"
                     @click="setCurrentSeverity(undefined)">
                     ✕
                   </button>
@@ -612,7 +631,7 @@ onUnmounted(() => {
                 class="mt-1 rounded-lg border border-dashed border-border/60 px-2 py-1.5"
                 :class="batchActionDisabled ? 'opacity-40' : ''">
                 <div class="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>当前类型批量严重度</span>
+                  <span>当前类型批量错误类型</span>
                   <span class="font-medium">可改 {{ currentTypeEditableCount }}/{{ currentTypeRecords.length }}</span>
                 </div>
                 <div class="flex gap-1">
@@ -631,7 +650,7 @@ onUnmounted(() => {
                     data-testid="annotation-overlay-batch-severity-clear"
                     class="inline-flex items-center justify-center rounded border border-input px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
                     :disabled="batchActionDisabled"
-                    title="批量清除严重度"
+                    title="批量清除错误类型"
                     @click="batchSetCurrentTypeSeverity(undefined)">
                     ✕
                   </button>

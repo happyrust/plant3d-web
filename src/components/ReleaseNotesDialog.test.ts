@@ -31,8 +31,7 @@ describe('ReleaseNotesDialog', () => {
     const dialog = document.body.querySelector('[role="dialog"]');
     expect(dialog?.textContent).toContain('更新说明');
     expect(dialog?.textContent).toContain('当前版本');
-    expect(dialog?.textContent).toContain('Unreleased');
-    expect(dialog?.textContent).toContain('校审批注与 Dock');
+    expect(dialog?.textContent).toMatch(/2026-04-\d{2}|Unreleased/);
 
     unmount();
   });

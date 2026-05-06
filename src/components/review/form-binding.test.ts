@@ -235,6 +235,14 @@ describe('InitiateReviewPanel form binding', () => {
     sessionStorage.setItem('plant3d_workflow_mode', 'external');
     localStorage.setItem('plant3d_automation_review', '1');
 
+    const parentPostMessage = vi.fn();
+    const originalParentDescriptor = Object.getOwnPropertyDescriptor(window, 'parent');
+    Object.defineProperty(window, 'parent', {
+      value: { postMessage: parentPostMessage },
+      configurable: true,
+      writable: true,
+    });
+
     const { default: InitiateReviewPanel } = await import('./InitiateReviewPanel.vue');
 
     const host = document.createElement('div');
@@ -285,9 +293,29 @@ describe('InitiateReviewPanel form binding', () => {
     expect(host.textContent).not.toContain('任务监控');
     expect(host.textContent).not.toContain('审核工作台');
 
+    expect(parentPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'plant3d.form_saved',
+        source: 'initiate-review-panel',
+        taskId: 'task-1',
+        formId: 'FORM-1',
+        componentCount: 1,
+      }),
+      '*',
+    );
+
     app.unmount();
     host.remove();
     localStorage.removeItem('plant3d_automation_review');
+    if (originalParentDescriptor) {
+      Object.defineProperty(window, 'parent', originalParentDescriptor);
+    } else {
+      Object.defineProperty(window, 'parent', {
+        value: window,
+        configurable: true,
+        writable: true,
+      });
+    }
   }, 10000);
 
   it('shows success feedback, closes the panel, and emits created/close after submit succeeds', async () => {

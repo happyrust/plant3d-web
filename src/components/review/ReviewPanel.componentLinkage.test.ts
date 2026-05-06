@@ -69,6 +69,7 @@ vi.mock('@/composables/useToolStore', () => ({
     activeAnnotationId: { value: null },
     activeCloudAnnotationId: { value: null },
     activeRectAnnotationId: { value: null },
+    activeObbAnnotationId: { value: null },
   }),
 }));
 

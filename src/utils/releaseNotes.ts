@@ -8,7 +8,14 @@ export type ReleaseNotesVersion = {
   sections: ReleaseNotesSection[];
 };
 
-const VERSION_HEADING_RE = /^##\s+\[(.+?)\](?:\s+-\s+.+)?$/gm;
+/**
+ * 匹配版本标题，支持两种格式：
+ *   - `## [Unreleased]` 或 `## [0.1.0] - 2026-04-24`（带方括号，keep-a-changelog 风格）
+ *   - `## 2026-04-24（晚间 · Wave 3D 决策）`（中文自由式）
+ *
+ * group 1：方括号内容；group 2：自由式标题全文。取 `match[1] ?? match[2]`。
+ */
+const VERSION_HEADING_RE = /^##\s+(?:\[([^\]]+)\](?:\s+-\s+.+)?|(\S[^\n]*))$/gm;
 const SECTION_HEADING_RE = /^###\s+(.+)$/gm;
 
 function normalizeVersion(value: string): string {
@@ -59,8 +66,9 @@ export function parseReleaseNotes(changelog: string): ReleaseNotesVersion[] {
     .map((match, index) => {
       const start = (match.index ?? 0) + match[0].length;
       const end = matches[index + 1]?.index ?? changelog.length;
+      const rawVersion = match[1] ?? match[2] ?? '';
       return {
-        version: stripInlineMarkdown(match[1] ?? ''),
+        version: stripInlineMarkdown(rawVersion),
         sections: parseSections(changelog.slice(start, end)),
       };
     })

@@ -7,7 +7,7 @@
  *   - 真源：`CommentThreadIndex`（不可变 snapshot），所有写入操作返回
  *     `{ changed }`，未变化时 listener 不会被触发。
  *   - 与 M2 衔接：`mergeFromSnapshot(reviewSnapshot)` 直接消费 `SnapshotComment[]`
- *     重建 index；该 API 是 M3 DUAL_READ 阶段从 restore 链路初始化 store 的入口。
+ *     重建 index；该 API 是 restore 链路初始化 store 的入口。
  *
  * 不在本阶段引入：
  *   - WebSocket 实时推送（由 M5/F `commentSyncService` 接管）；
@@ -35,6 +35,16 @@ export type CommentThreadStore = {
   mergeFromSnapshot(snapshot: ReviewSnapshot): { changed: boolean };
   mergeComments(comments: readonly SnapshotComment[]): { changed: boolean };
   upsertComment(comment: SnapshotComment): { changed: boolean };
+  /**
+   * 用 `comments` 原子地替换 `key` 对应线程的全部条目。其他线程保持不变。
+   *
+   * 适用于后端同步路径（例如 `useToolStore.setAnnotationComments`）：
+   * 后端返回的列表是该批注当前的真源，旧条目应整批被取代而不是逐条 diff。
+   *
+   * `comments` 中条目的 `annotationType / annotationId` 必须与 `key` 一致，否则会
+   * 因为 `buildCommentThreadIndex` 重新分组而落到错误的线程里。
+   */
+  setThreadComments(key: CommentThreadKey, comments: readonly SnapshotComment[]): { changed: boolean };
   deleteComment(key: CommentThreadKey, commentId: string): { changed: boolean };
   clear(): { changed: boolean };
   subscribe(listener: CommentThreadStoreListener): () => void;
@@ -83,7 +93,9 @@ export function createCommentThreadStore(): CommentThreadStore {
         for (const entry of thread.entries) {
           if (entry.commentId === comment.commentId
             && entry.annotationType === comment.annotationType
-            && entry.annotationId === comment.annotationId) {
+            && entry.annotationId === comment.annotationId
+            && entry.formId === comment.formId
+            && entry.taskId === comment.taskId) {
             all.push(comment);
             replaced = true;
             continue;
@@ -93,6 +105,18 @@ export function createCommentThreadStore(): CommentThreadStore {
       }
       if (!replaced) all.push(comment);
 
+      const next = buildCommentThreadIndex(all);
+      const changed = setIndex(next);
+      if (changed) notify();
+      return { changed };
+    },
+    setThreadComments(key, comments) {
+      const all: SnapshotComment[] = [];
+      for (const thread of index.byKey.values()) {
+        if (thread.key === key) continue;
+        all.push(...thread.entries);
+      }
+      all.push(...comments);
       const next = buildCommentThreadIndex(all);
       const changed = setIndex(next);
       if (changed) notify();

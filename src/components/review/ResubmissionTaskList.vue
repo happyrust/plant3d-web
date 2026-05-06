@@ -16,6 +16,7 @@ import {
   getResubmissionLatestReturnTime,
   getResubmissionSubmissionCount,
   isCanonicalReturnedTask,
+  isDesignerResubmissionTask,
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
 
@@ -166,6 +167,12 @@ function getReturnedNodeLabel(task: ReviewTask): string | null {
   return node;
 }
 
+function getTaskActionHint(task: ReviewTask): string {
+  return isDesignerResubmissionTask(task)
+    ? '已回到设计节点，可处理后再次提交'
+    : '当前可先处理退回批注，暂不可再次提交';
+}
+
 onMounted(() => {
   if (props.autoLoad) {
     refreshTasks();
@@ -266,6 +273,9 @@ onMounted(() => {
                 </span>
               </div>
               <p class="text-sm text-gray-600 mb-3 line-clamp-2">{{ task.description || '暂无描述' }}</p>
+              <p class="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {{ getTaskActionHint(task) }}
+              </p>
               <div class="flex items-center gap-4 text-xs text-gray-500">
                 <div class="flex items-center gap-1">
                   <Package class="h-3 w-3" />

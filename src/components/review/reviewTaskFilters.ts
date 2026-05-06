@@ -45,23 +45,33 @@ export function getCanonicalReturnedTaskView(task: ReviewTask, workflowHistory?:
   };
 }
 
+function isLatestSubmitNotEarlierThanLatestReturn(task: ReviewTask): boolean {
+  const latestReturnStep = getLatestReturnStep(task);
+  const latestSubmitStep = getLatestSubmitStep(task);
+  return !!(
+    latestSubmitStep
+    && latestReturnStep
+    && latestSubmitStep.timestamp >= latestReturnStep.timestamp
+  );
+}
+
 export function isCanonicalReturnedTask(task: ReviewTask): boolean {
   if (task.status === 'rejected') return true;
   if (task.currentNode !== 'sj' || task.status !== 'draft') return false;
 
-  const latestReturnStep = getLatestReturnStep(task);
-  const latestSubmitStep = getLatestSubmitStep(task);
-  if (latestSubmitStep && latestReturnStep && latestSubmitStep.timestamp >= latestReturnStep.timestamp) {
-    return false;
-  }
+  if (isLatestSubmitNotEarlierThanLatestReturn(task)) return false;
 
   if (task.returnReason?.trim() || task.reviewComment?.trim()) return true;
 
-  return !!latestReturnStep;
+  return !!getLatestReturnStep(task);
 }
 
 export function isDesignerResubmissionTask(task: ReviewTask): boolean {
-  return isCanonicalReturnedTask(task) && task.currentNode === 'sj' && task.status === 'draft';
+  if (!isCanonicalReturnedTask(task)) return false;
+  if (task.currentNode !== 'sj') return false;
+  if (task.status !== 'draft' && task.status !== 'rejected') return false;
+  if (isLatestSubmitNotEarlierThanLatestReturn(task)) return false;
+  return true;
 }
 
 export function isRejectedDesignerTask(task: ReviewTask): boolean {

@@ -1,13 +1,9 @@
 /**
- * Comment Event Log —— M3 DUAL_READ 阶段的诊断信道。
- *
- * 来源：批注体系重构补遗 §8 的 "client-side event log 前置" 要求。
+ * Comment Event Log —— 前端评论操作审计信道。
  *
  * 用途：
- *   - 在 `REVIEW_C_COMMENT_THREAD_STORE_DUAL_READ` 灰度阶段，把 inline 真源与
- *     thread store 真源在每个评论生命周期事件（add/update/delete/restore）上
- *     的差异写入环形 buffer，供排障与告警；
- *   - CUTOVER 后保留作为通用前端审计；
+ *   - 把 thread store 上的评论生命周期事件（add/update/delete/restore）
+ *     写入环形 buffer，供排障与告警；
  *   - 不持久化，进程退出即丢，避免影响线上数据契约。
  *
  * 设计：
@@ -21,7 +17,6 @@ export type CommentEventKind =
   | 'thread_upsert'
   | 'thread_delete'
   | 'thread_clear'
-  | 'dual_read_diff'
   | 'restore_skipped';
 
 export type CommentEventEntry = {

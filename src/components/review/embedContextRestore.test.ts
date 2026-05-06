@@ -99,6 +99,7 @@ describe('resolveEmbedRestoreResult', () => {
         taskId: 'task-designer',
         formId: 'FORM-D',
         components: [],
+        draftComponents: [],
         attachments: [],
       },
     });
@@ -121,7 +122,8 @@ describe('resolveEmbedRestoreResult', () => {
       allTasks: [],
     });
 
-    expect(result.restoredTaskDraft?.components).toEqual([
+    expect(result.restoredTaskDraft?.components).toEqual([]);
+    expect(result.restoredTaskDraft?.draftComponents).toEqual([
       { id: 'comp-1', name: '支管', refNo: '24381_145018', type: 'BRAN' },
     ]);
   });
@@ -158,7 +160,8 @@ describe('resolveEmbedRestoreResult', () => {
         title: '设计侧回填兜底',
         taskId: 'task-designer-fallback',
         formId: 'FORM-D-FALLBACK',
-        components: [
+        components: [],
+        draftComponents: [
           { id: 'comp-1', name: '支管', refNo: '24381_145018', type: 'BRAN' },
         ],
       },
@@ -242,7 +245,7 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(result.restoreStatus).toBe('missing');
   });
 
-  it('designer restore switches to resubmission panel when the matched task is already returned to sj', async () => {
+  it('designer restore switches to designer comment handling when the matched task is already returned to sj', async () => {
     const task = createTask({
       id: 'task-designer-returned',
       formId: 'FORM-D-RETURNED',
@@ -268,8 +271,62 @@ describe('restoreEmbedWorkbenchContext', () => {
     });
 
     expect(setCurrentTask).toHaveBeenCalledWith(task);
-    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview', 'resubmissionTasks']);
-    expect(activatePanel).toHaveBeenLastCalledWith('resubmissionTasks');
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['designerCommentHandling']);
+    expect(activatePanel).toHaveBeenLastCalledWith('designerCommentHandling');
     expect(result.restoreStatus).toBe('matched');
+  });
+
+  it('designer passive restore keeps designer comment handling for the matched form even before task状态回到 sj', async () => {
+    const task = createTask({
+      id: 'task-designer-passive',
+      formId: 'FORM-D-PASSIVE',
+      status: 'submitted',
+      currentNode: 'jd',
+    });
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-D-PASSIVE',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [task],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['designerCommentHandling']);
+    expect(activatePanel).toHaveBeenLastCalledWith('designerCommentHandling');
+    expect(result.restoreStatus).toBe('matched');
+  });
+
+  it('designer passive restore without matched task falls back to initiate-review workspace', async () => {
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-D-MISSING',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(null);
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview']);
+    expect(activatePanel).toHaveBeenLastCalledWith('initiateReview');
+    expect(result.restoreStatus).toBe('missing');
   });
 });

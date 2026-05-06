@@ -1,0 +1,1019 @@
+<script setup lang="ts">
+/**
+ * AnnotationTableView · 批注表格视图
+ *
+ * MVP PR 2 · 独立可跑，不接入 DesignerCommentHandlingPanel（PR 3 再做）
+ * 数据层复用 PR 1 的 annotationTableSorting / annotationTableExport 纯函数
+ * 状态层通过 useAnnotationTableFilter composable 持有（session 级）
+ *
+ * 事件命名与 AnnotationWorkspace.vue 对齐，PR 3 接入时可无缝复用现有处理函数。
+ */
+
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue';
+
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Download,
+  Inbox,
+  LocateFixed,
+  MessageSquare,
+  Search,
+} from 'lucide-vue-next';
+
+import {
+  buildRowClipboardLine,
+  copyToClipboard,
+  pickItemRefno,
+  type ClipboardResult,
+} from './annotationTableClipboard';
+import {
+  buildCsvFilename,
+  downloadCsv,
+  toAnnotationTableCsv,
+} from './annotationTableExport';
+import { highlightMatches } from './annotationTableHighlight';
+
+import type { AnnotationTableSortKey } from './annotationTableSorting';
+import type { AnnotationWorkspaceItem } from './annotationWorkspaceModel';
+
+import { useAnnotationTableFilter } from '@/composables/useAnnotationTableFilter';
+import { useContainerQuery } from '@/composables/useContainerQuery';
+import {
+  getAnnotationSeverityDisplay,
+  type AnnotationSeverity,
+  type AnnotationType,
+} from '@/types/auth';
+
+// ----------------------------------------------------------------------
+// Props & Emits
+// ----------------------------------------------------------------------
+
+const props = withDefaults(defineProps<{
+  items: AnnotationWorkspaceItem[];
+  currentAnnotationId?: string | null;
+  currentAnnotationType?: AnnotationType | null;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  /** 任务 key，用于生成 CSV 文件名 */
+  taskKey?: string | null;
+  /** 副标题：显示在标题右侧（如任务编号 · 描述） */
+  subtitle?: string | null;
+  /** 每页行数，默认 10 */
+  pageSize?: number;
+  /** 是否允许当前行做表格内轻量编辑。权限由父组件判断。 */
+  canEditItem?: (item: AnnotationWorkspaceItem) => boolean;
+  /** 正在保存错误标记的行 key（type:id）。 */
+  savingSeverityKeys?: string[];
+  /** 正在保存标题的行 key（type:id）。 */
+  savingTitleKeys?: string[];
+}>(), {
+  currentAnnotationId: null,
+  currentAnnotationType: null,
+  emptyTitle: '当前范围内还没有可处理的批注',
+  emptyDescription: '请选择退回任务，或等待对应 form_id 的批注同步后再处理。',
+  taskKey: null,
+  subtitle: null,
+  pageSize: 10,
+  canEditItem: () => false,
+  savingSeverityKeys: () => [],
+  savingTitleKeys: () => [],
+});
+
+const emit = defineEmits<{
+  (e: 'select-annotation', item: AnnotationWorkspaceItem): void;
+  (e: 'open-annotation', item: AnnotationWorkspaceItem): void;
+  (e: 'locate-annotation', item: AnnotationWorkspaceItem): void;
+  (e: 'copy-feedback', payload: { kind: 'refno' | 'row'; result: ClipboardResult; item: AnnotationWorkspaceItem }): void;
+  (e: 'update-severity', payload: { item: AnnotationWorkspaceItem; severity: AnnotationSeverity | undefined }): void;
+  (e: 'update-title', payload: { item: AnnotationWorkspaceItem; title: string }): void;
+}>();
+
+// ----------------------------------------------------------------------
+// State
+// ----------------------------------------------------------------------
+
+const itemsRef = toRef(props, 'items');
+const {
+  sort,
+  filters,
+  filteredItems,
+  currentPage,
+  toggleSort,
+  setStatusFilter,
+  setSeverityFilter,
+  setSearch,
+  setPage,
+} = useAnnotationTableFilter(itemsRef);
+
+// ----------------------------------------------------------------------
+// Responsive container query
+// ----------------------------------------------------------------------
+
+const rootEl = ref<HTMLElement | null>(null);
+const { mode: layoutMode } = useContainerQuery(rootEl);
+
+const isCompact = computed(() => layoutMode.value === 'compact');
+const isMedium = computed(() => layoutMode.value === 'medium');
+const isWide = computed(() => layoutMode.value === 'wide');
+
+// ----------------------------------------------------------------------
+// 搜索高亮 helpers
+// ----------------------------------------------------------------------
+
+function highlightTitle(item: AnnotationWorkspaceItem): string {
+  return highlightMatches(item.title, filters.value.search);
+}
+
+function highlightDescription(item: AnnotationWorkspaceItem): string {
+  return highlightMatches(item.description, filters.value.search);
+}
+
+// ----------------------------------------------------------------------
+// 键盘导航 · ↑ ↓ Home End PageUp PageDown
+// ----------------------------------------------------------------------
+
+function getRowElements(): HTMLElement[] {
+  if (!rootEl.value) return [];
+  return Array.from(rootEl.value.querySelectorAll<HTMLElement>('[role="row"], [role="listitem"]'));
+}
+
+function focusRowByIndex(index: number) {
+  const rows = getRowElements();
+  if (rows.length === 0) return;
+  const clamped = Math.max(0, Math.min(rows.length - 1, index));
+  rows[clamped]?.focus();
+}
+
+function findCurrentRowIndex(): number {
+  const active = document.activeElement as HTMLElement | null;
+  if (!active) return -1;
+  return getRowElements().indexOf(active);
+}
+
+// ----------------------------------------------------------------------
+// 右键菜单（contextMenu）
+// ----------------------------------------------------------------------
+
+type ContextMenuState = {
+  x: number;
+  y: number;
+  item: AnnotationWorkspaceItem;
+};
+
+const contextMenu = ref<ContextMenuState | null>(null);
+
+const CONTEXT_MENU_WIDTH = 228;
+const CONTEXT_MENU_MAX_HEIGHT = 260;
+
+function handleRowContextMenu(event: MouseEvent, item: AnnotationWorkspaceItem) {
+  event.preventDefault();
+  event.stopPropagation();
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1920;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 1080;
+  contextMenu.value = {
+    x: Math.min(event.clientX, vw - CONTEXT_MENU_WIDTH - 8),
+    y: Math.min(event.clientY, vh - CONTEXT_MENU_MAX_HEIGHT - 8),
+    item,
+  };
+}
+
+function closeContextMenu() {
+  contextMenu.value = null;
+}
+
+function onDocMouseDown(event: MouseEvent) {
+  if (!contextMenu.value) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('[data-testid="annotation-table-context-menu"]')) return;
+  closeContextMenu();
+}
+
+function onDocKeyDown(event: KeyboardEvent) {
+  if (contextMenu.value && event.key === 'Escape') {
+    event.preventDefault();
+    closeContextMenu();
+  }
+}
+
+onMounted(() => {
+  if (typeof document === 'undefined') return;
+  document.addEventListener('mousedown', onDocMouseDown, true);
+  document.addEventListener('keydown', onDocKeyDown);
+});
+
+onBeforeUnmount(() => {
+  if (typeof document === 'undefined') return;
+  document.removeEventListener('mousedown', onDocMouseDown, true);
+  document.removeEventListener('keydown', onDocKeyDown);
+});
+
+async function menuLocate() {
+  const state = contextMenu.value;
+  if (!state) return;
+  emit('locate-annotation', state.item);
+  closeContextMenu();
+}
+
+async function menuOpenDetail() {
+  const state = contextMenu.value;
+  if (!state) return;
+  emit('open-annotation', state.item);
+  closeContextMenu();
+}
+
+async function menuCopyRefno() {
+  const state = contextMenu.value;
+  if (!state) return;
+  const refno = pickItemRefno(state.item);
+  if (!refno) {
+    emit('copy-feedback', { kind: 'refno', result: 'failed', item: state.item });
+    closeContextMenu();
+    return;
+  }
+  const result = await copyToClipboard(refno);
+  emit('copy-feedback', { kind: 'refno', result, item: state.item });
+  closeContextMenu();
+}
+
+async function menuCopyRowAsCsv() {
+  const state = contextMenu.value;
+  if (!state) return;
+  const csvLine = buildRowClipboardLine(state.item);
+  const result = await copyToClipboard(csvLine);
+  emit('copy-feedback', { kind: 'row', result, item: state.item });
+  closeContextMenu();
+}
+
+function handleRowKeyNav(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null;
+  if (!target) return;
+  // 仅当焦点在行上时响应（不拦截搜索框输入）
+  const isOnRow = target.getAttribute('role') === 'row' || target.getAttribute('role') === 'listitem';
+  if (!isOnRow) return;
+
+  const current = findCurrentRowIndex();
+  const rows = getRowElements();
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault();
+      focusRowByIndex(current < 0 ? 0 : current + 1);
+      return;
+    case 'ArrowUp':
+      event.preventDefault();
+      focusRowByIndex(current < 0 ? rows.length - 1 : current - 1);
+      return;
+    case 'Home':
+      event.preventDefault();
+      focusRowByIndex(0);
+      return;
+    case 'End':
+      event.preventDefault();
+      focusRowByIndex(rows.length - 1);
+      return;
+    case 'PageDown':
+      event.preventDefault();
+      if (currentPage.value < totalPages.value) {
+        setPage(currentPage.value + 1);
+      }
+      return;
+    case 'PageUp':
+      event.preventDefault();
+      if (currentPage.value > 1) {
+        setPage(currentPage.value - 1);
+      }
+      return;
+    default:
+      return;
+  }
+}
+
+const searchInput = ref('');
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(searchInput, (query) => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    setSearch(query);
+    searchDebounceTimer = null;
+  }, 300);
+});
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  if (clickDelayTimer) clearTimeout(clickDelayTimer);
+});
+
+// ----------------------------------------------------------------------
+// Pagination
+// ----------------------------------------------------------------------
+
+const totalCount = computed(() => filteredItems.value.length);
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / props.pageSize)));
+const showFooter = computed(() => totalCount.value > props.pageSize);
+const pagedItems = computed(() => {
+  const start = (currentPage.value - 1) * props.pageSize;
+  return filteredItems.value.slice(start, start + props.pageSize);
+});
+const pageStart = computed(() => (totalCount.value === 0 ? 0 : (currentPage.value - 1) * props.pageSize + 1));
+const pageEnd = computed(() => Math.min(totalCount.value, currentPage.value * props.pageSize));
+
+function goPrev() {
+  if (currentPage.value > 1) setPage(currentPage.value - 1);
+}
+function goNext() {
+  if (currentPage.value < totalPages.value) setPage(currentPage.value + 1);
+}
+
+// ----------------------------------------------------------------------
+// Summary pill counts（不受筛选影响，基于全量 items）
+// ----------------------------------------------------------------------
+
+const summaryCounts = computed(() => {
+  const result = { total: 0, pending: 0, fixed: 0, approved: 0 };
+  for (const item of props.items) {
+    result.total += 1;
+    if (item.statusKey === 'pending') result.pending += 1;
+    if (item.statusKey === 'fixed') result.fixed += 1;
+    if (item.statusKey === 'approved') result.approved += 1;
+  }
+  return result;
+});
+
+// ----------------------------------------------------------------------
+// Click / Double-click 区分（220ms delay）
+// ----------------------------------------------------------------------
+
+let clickDelayTimer: ReturnType<typeof setTimeout> | null = null;
+const pendingClickItem = shallowRef<AnnotationWorkspaceItem | null>(null);
+const screenshotPreviewUrl = ref<string | null>(null);
+
+function cancelPendingRowClick() {
+  if (!clickDelayTimer) return;
+  clearTimeout(clickDelayTimer);
+  clickDelayTimer = null;
+  pendingClickItem.value = null;
+}
+
+function handleRowClick(item: AnnotationWorkspaceItem) {
+  if (clickDelayTimer) return;
+  pendingClickItem.value = item;
+  clickDelayTimer = setTimeout(() => {
+    if (pendingClickItem.value) emit('select-annotation', pendingClickItem.value);
+    pendingClickItem.value = null;
+    clickDelayTimer = null;
+  }, 220);
+}
+
+function handleRowDblClick(item: AnnotationWorkspaceItem) {
+  cancelPendingRowClick();
+  emit('open-annotation', item);
+}
+
+function openScreenshotPreview(item: AnnotationWorkspaceItem) {
+  screenshotPreviewUrl.value = item.screenshot?.url || item.thumbnailUrl || null;
+}
+
+// ----------------------------------------------------------------------
+// Row highlight
+// ----------------------------------------------------------------------
+
+function isActiveRow(item: AnnotationWorkspaceItem): boolean {
+  return item.id === props.currentAnnotationId && item.type === props.currentAnnotationType;
+}
+
+// ----------------------------------------------------------------------
+// Sort header
+// ----------------------------------------------------------------------
+
+const SORTABLE_KEYS: AnnotationTableSortKey[] = ['index', 'severity', 'status'];
+
+function isSortable(key: AnnotationTableSortKey): boolean {
+  return SORTABLE_KEYS.includes(key);
+}
+
+function onHeaderClick(key: AnnotationTableSortKey) {
+  if (!isSortable(key)) return;
+  toggleSort(key);
+}
+
+function sortIconState(key: AnnotationTableSortKey): 'asc' | 'desc' | 'off' {
+  if (sort.value.key !== key) return 'off';
+  return sort.value.direction;
+}
+
+// ----------------------------------------------------------------------
+// Severity / Status pill tone
+// ----------------------------------------------------------------------
+
+function severityPillClass(item: AnnotationWorkspaceItem): string {
+  return getAnnotationSeverityDisplay(item.severity).color;
+}
+
+function severityDotClass(item: AnnotationWorkspaceItem): string {
+  return getAnnotationSeverityDisplay(item.severity).dot;
+}
+
+function severityLabel(item: AnnotationWorkspaceItem): string {
+  const display = getAnnotationSeverityDisplay(item.severity);
+  return display.symbol ? `${display.symbol} ${display.label}` : display.label;
+}
+
+function itemKey(item: AnnotationWorkspaceItem): string {
+  return `${item.type}:${item.id}`;
+}
+
+const savingSeverityKeySet = computed(() => new Set(props.savingSeverityKeys));
+const savingTitleKeySet = computed(() => new Set(props.savingTitleKeys));
+
+const severityEditOptions: { value: '' | AnnotationSeverity; label: string }[] = [
+  { value: '', label: '未设置' },
+  { value: 'drawing', label: '○ 图面错误' },
+  { value: 'general', label: '△ 一般错误' },
+  { value: 'principle', label: '× 原则错误' },
+];
+
+function canEditInline(item: AnnotationWorkspaceItem): boolean {
+  return props.canEditItem(item);
+}
+
+function isSeveritySaving(item: AnnotationWorkspaceItem): boolean {
+  return savingSeverityKeySet.value.has(itemKey(item));
+}
+
+function isTitleSaving(item: AnnotationWorkspaceItem): boolean {
+  return savingTitleKeySet.value.has(itemKey(item));
+}
+
+function handleSeverityChange(event: Event, item: AnnotationWorkspaceItem) {
+  event.stopPropagation();
+  cancelPendingRowClick();
+  if (!canEditInline(item) || isSeveritySaving(item)) return;
+
+  const value = (event.target as HTMLSelectElement | null)?.value ?? '';
+  const next = value === '' ? undefined : value as AnnotationSeverity;
+  if (next === item.severity) return;
+  emit('update-severity', { item, severity: next });
+}
+
+const editingTitleKey = ref<string | null>(null);
+const editingTitleValue = ref('');
+
+function isTitleEditing(item: AnnotationWorkspaceItem): boolean {
+  return editingTitleKey.value === itemKey(item);
+}
+
+async function startTitleEdit(event: MouseEvent, item: AnnotationWorkspaceItem) {
+  event.preventDefault();
+  event.stopPropagation();
+  cancelPendingRowClick();
+  if (!canEditInline(item) || isTitleSaving(item)) return;
+
+  editingTitleKey.value = itemKey(item);
+  editingTitleValue.value = item.title;
+  await nextTick();
+  rootEl.value
+    ?.querySelector<HTMLInputElement>(`[data-testid="annotation-table-title-input-${item.id}"]`)
+    ?.focus();
+  rootEl.value
+    ?.querySelector<HTMLInputElement>(`[data-testid="annotation-table-title-input-${item.id}"]`)
+    ?.select();
+}
+
+function cancelTitleEdit(event?: Event) {
+  event?.stopPropagation();
+  editingTitleKey.value = null;
+  editingTitleValue.value = '';
+}
+
+function commitTitleEdit(event: Event | null, item: AnnotationWorkspaceItem) {
+  event?.stopPropagation();
+  cancelPendingRowClick();
+  if (!isTitleEditing(item) || isTitleSaving(item)) return;
+
+  const nextTitle = editingTitleValue.value.trim();
+  if (!nextTitle || nextTitle === item.title.trim()) {
+    cancelTitleEdit();
+    return;
+  }
+
+  emit('update-title', { item, title: nextTitle });
+  cancelTitleEdit();
+}
+
+async function copyRowInline(item: AnnotationWorkspaceItem) {
+  cancelPendingRowClick();
+  const csvLine = buildRowClipboardLine(item);
+  const result = await copyToClipboard(csvLine);
+  emit('copy-feedback', { kind: 'row', result, item });
+}
+
+function statusTextClass(item: AnnotationWorkspaceItem): string {
+  switch (item.statusKey) {
+    case 'pending':  return 'text-orange-700';
+    case 'fixed':    return 'text-emerald-700';
+    case 'rejected': return 'text-rose-700';
+    case 'approved': return 'text-emerald-800';
+    case 'wont_fix': return 'text-amber-700';
+    default:         return 'text-slate-700';
+  }
+}
+
+function statusPrefix(item: AnnotationWorkspaceItem): string {
+  switch (item.statusKey) {
+    case 'pending':  return '⏱';
+    case 'fixed':    return '✓';
+    case 'rejected': return '✕';
+    case 'approved': return '★';
+    case 'wont_fix': return '—';
+    default:         return '';
+  }
+}
+
+// ----------------------------------------------------------------------
+// Export
+// ----------------------------------------------------------------------
+
+function handleExport() {
+  const csv = toAnnotationTableCsv(filteredItems.value);
+  const filename = buildCsvFilename({ taskKey: props.taskKey ?? undefined });
+  downloadCsv(filename, csv);
+}
+
+// ----------------------------------------------------------------------
+// Filter UI bindings
+// ----------------------------------------------------------------------
+
+const statusOptions: { value: import('./annotationTableSorting').AnnotationTableStatusFilter; label: string }[] = [
+  { value: 'all',      label: '全部状态' },
+  { value: 'pending',  label: '待处理' },
+  { value: 'fixed',    label: '已修改' },
+  { value: 'rejected', label: '已驳回' },
+  { value: 'approved', label: '已通过' },
+  { value: 'wont_fix', label: '不修改' },
+];
+
+const severityOptions: { value: import('./annotationTableSorting').AnnotationTableSeverityFilter; label: string }[] = [
+  { value: 'all',        label: '全部错误类型' },
+  { value: 'principle',  label: '× 原则错误' },
+  { value: 'general',    label: '△ 一般错误' },
+  { value: 'drawing',    label: '○ 图面错误' },
+  { value: 'unset',      label: '未设置' },
+];
+</script>
+
+<template>
+  <section ref="rootEl"
+    class="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+    :data-testid="'annotation-table-view'"
+    :data-layout-mode="layoutMode"
+    @keydown="handleRowKeyNav">
+    <!-- Toolbar -->
+    <header class="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2.5">
+      <div class="min-w-0">
+        <h2 class="text-sm font-semibold text-slate-950">批注表格</h2>
+        <p v-if="subtitle" class="text-[11px] text-slate-400 truncate">{{ subtitle }}</p>
+      </div>
+
+      <div class="flex-1" />
+
+      <!-- Search -->
+      <label class="relative flex items-center">
+        <Search class="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+        <input v-model="searchInput"
+          type="search"
+          placeholder="搜索问题、refno、处理说明..."
+          class="h-8 w-64 rounded-md border border-slate-200 bg-slate-50 pl-8 pr-2 text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
+          data-testid="annotation-table-search" />
+      </label>
+
+      <!-- Severity filter -->
+      <select :value="filters.severity"
+        class="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300"
+        data-testid="annotation-table-severity-filter"
+        @change="setSeverityFilter(($event.target as HTMLSelectElement).value as any)">
+        <option v-for="opt in severityOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+
+      <!-- Status filter -->
+      <select :value="filters.status"
+        class="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300"
+        data-testid="annotation-table-status-filter"
+        @change="setStatusFilter(($event.target as HTMLSelectElement).value as any)">
+        <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+    </header>
+
+    <!-- Stats -->
+    <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[11px]">
+      <span class="font-semibold text-slate-950">共 {{ summaryCounts.total }} 条</span>
+      <span class="h-1 w-1 rounded-full bg-slate-300" />
+      <span class="font-medium text-orange-700">待处理 {{ summaryCounts.pending }}</span>
+      <span class="h-1 w-1 rounded-full bg-slate-300" />
+      <span class="font-medium text-emerald-700">已处理 {{ summaryCounts.fixed }}</span>
+      <span v-if="totalCount !== summaryCounts.total" class="ml-2 italic text-slate-400"
+        data-testid="annotation-table-filter-hint">
+        · 筛选后 {{ totalCount }} 条
+      </span>
+      <div class="flex-1" />
+
+      <button type="button"
+        class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        :disabled="totalCount === 0"
+        data-testid="annotation-table-export"
+        @click="handleExport">
+        <Download class="h-3 w-3" />
+        导出 CSV
+      </button>
+    </div>
+
+    <!-- Empty state -->
+    <div v-if="totalCount === 0"
+      class="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-12 text-center"
+      data-testid="annotation-table-empty">
+      <Inbox class="h-9 w-9 text-slate-300" />
+      <div class="text-sm font-semibold text-slate-700">{{ emptyTitle }}</div>
+      <div class="text-xs leading-5 text-slate-500 max-w-md">{{ emptyDescription }}</div>
+    </div>
+
+    <!-- Table head + body · Wide / Medium 档 -->
+    <template v-else>
+      <!-- Head（Compact 不显示表头）-->
+      <div v-if="!isCompact" role="rowgroup" class="flex h-9 items-center border-b border-slate-200 bg-slate-50 px-4 text-[11px] font-semibold text-slate-950">
+        <button type="button"
+          class="w-10 text-center flex items-center justify-center gap-1 hover:text-orange-600"
+          data-testid="annotation-table-sort-index"
+          @click="onHeaderClick('index')">
+          <span>序号</span>
+          <ArrowUp v-if="sortIconState('index') === 'asc'" class="h-3 w-3 text-orange-500" />
+          <ArrowDown v-else-if="sortIconState('index') === 'desc'" class="h-3 w-3 text-orange-500" />
+          <ArrowUpDown v-else class="h-3 w-3 text-slate-300" />
+        </button>
+        <button type="button"
+          class="w-24 text-left flex items-center gap-1 hover:text-orange-600"
+          data-testid="annotation-table-sort-severity"
+          @click="onHeaderClick('severity')">
+          <span>错误标记</span>
+          <ArrowUp v-if="sortIconState('severity') === 'asc'" class="h-3 w-3 text-orange-500" />
+          <ArrowDown v-else-if="sortIconState('severity') === 'desc'" class="h-3 w-3 text-orange-500" />
+          <ArrowUpDown v-else class="h-3 w-3 text-slate-300" />
+        </button>
+        <div class="flex-1">校核发现问题</div>
+        <button type="button"
+          class="text-left flex items-center gap-1 hover:text-orange-600"
+          :class="isWide ? 'w-56' : 'w-40'"
+          data-testid="annotation-table-sort-status"
+          @click="onHeaderClick('status')">
+          <span>处理情况</span>
+          <ArrowUp v-if="sortIconState('status') === 'asc'" class="h-3 w-3 text-orange-500" />
+          <ArrowDown v-else-if="sortIconState('status') === 'desc'" class="h-3 w-3 text-orange-500" />
+          <ArrowUpDown v-else class="h-3 w-3 text-slate-300" />
+        </button>
+        <div class="w-24 text-center">操作</div>
+      </div>
+
+      <!-- Body · Wide / Medium: 表格行 -->
+      <div v-if="!isCompact" role="rowgroup" class="flex-1 overflow-y-auto">
+        <div v-for="(item, localIdx) in pagedItems"
+          :key="`${item.type}:${item.id}`"
+          role="row"
+          tabindex="0"
+          :aria-selected="isActiveRow(item)"
+          :data-testid="`annotation-table-row-${item.id}`"
+          class="flex items-center h-16 border-b border-slate-100 px-4 cursor-pointer transition-colors"
+          :class="[
+            isActiveRow(item) ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-amber-50',
+            localIdx % 2 === 1 && !isActiveRow(item) ? 'bg-slate-50/40' : '',
+          ]"
+          @click="handleRowClick(item)"
+          @dblclick="handleRowDblClick(item)"
+          @contextmenu="handleRowContextMenu($event, item)"
+          @keydown.enter.prevent="handleRowClick(item)"
+          @keydown.space.prevent="handleRowDblClick(item)">
+          <!-- 序号 -->
+          <div class="w-10 text-center text-sm font-semibold text-slate-950">
+            {{ (currentPage - 1) * pageSize + localIdx + 1 }}
+          </div>
+
+          <!-- 错误标记 -->
+          <div class="w-24">
+            <select v-if="canEditInline(item)"
+              :value="item.severity ?? ''"
+              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none transition focus:ring-1 focus:ring-blue-300 disabled:cursor-wait disabled:opacity-60"
+              :class="severityPillClass(item)"
+              :disabled="isSeveritySaving(item)"
+              :aria-label="`修改错误标记：${item.title}`"
+              :data-testid="`annotation-table-severity-editor-${item.id}`"
+              @click.stop
+              @mousedown.stop
+              @dblclick.stop
+              @change="handleSeverityChange($event, item)">
+              <option v-for="opt in severityEditOptions" :key="opt.value || 'unset'" :value="opt.value">{{ opt.label }}</option>
+            </select>
+            <span v-else
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none"
+              :class="severityPillClass(item)"
+              :data-testid="`annotation-table-severity-pill-${item.id}`">
+              <span class="h-1.5 w-1.5 rounded-full" :class="severityDotClass(item)" />
+              {{ severityLabel(item) }}
+            </span>
+          </div>
+
+          <!-- 校核发现问题 · Medium 下隐藏 description 只保留 title -->
+          <div class="flex flex-1 items-center gap-3 pr-4 text-xs leading-snug text-slate-700">
+            <button v-if="item.thumbnailUrl"
+              type="button"
+              class="h-11 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+              title="查看批注截图"
+              @click.stop="openScreenshotPreview(item)">
+              <img :src="item.thumbnailUrl"
+                alt="批注截图"
+                class="h-full w-full object-cover"
+                :data-testid="`annotation-table-thumbnail-${item.id}`" />
+            </button>
+            <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
+            <div class="min-w-0 flex-1">
+              <input v-if="isTitleEditing(item)"
+                v-model="editingTitleValue"
+                type="text"
+                class="w-full rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-slate-950 shadow-sm outline-none focus:ring-1 focus:ring-blue-300"
+                :data-testid="`annotation-table-title-input-${item.id}`"
+                :disabled="isTitleSaving(item)"
+                @click.stop
+                @mousedown.stop
+                @dblclick.stop
+                @keydown.enter.prevent="commitTitleEdit($event, item)"
+                @keydown.esc.prevent="cancelTitleEdit($event)"
+                @blur="commitTitleEdit($event, item)" />
+              <button v-else-if="canEditInline(item)"
+                type="button"
+                class="max-w-full text-left font-semibold text-slate-950 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                :disabled="isTitleSaving(item)"
+                :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
+                :data-testid="`annotation-table-title-${item.id}`"
+                @click.stop
+                @mousedown.stop
+                @dblclick="startTitleEdit($event, item)">
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <span class="line-clamp-2" v-html="highlightTitle(item)" />
+              </button>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <span v-else class="font-semibold text-slate-950 line-clamp-2" v-html="highlightTitle(item)" />
+              <span v-if="isTitleSaving(item)" class="ml-2 text-[11px] font-medium text-blue-500">保存中</span>
+              <template v-if="isWide && item.description">
+                <span class="text-slate-500"> · </span>
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <span class="text-slate-500" v-html="highlightDescription(item)" />
+              </template>
+            </div>
+          </div>
+
+          <!-- 处理情况 · Medium 下收窄 -->
+          <div class="pr-2 min-w-0" :class="isWide ? 'w-56' : 'w-40'">
+            <div class="text-[11px] font-semibold" :class="statusTextClass(item)">
+              {{ statusPrefix(item) }} {{ item.statusLabel }}
+            </div>
+            <div v-if="item.commentCount > 0" class="text-[11px] text-slate-500 truncate">
+              {{ item.commentCount }} 条讨论
+            </div>
+            <div v-else-if="item.statusKey === 'pending'" class="text-[11px] text-slate-400">
+              尚未录入处理说明
+            </div>
+          </div>
+
+          <!-- 操作列 -->
+          <div class="w-24 flex justify-center gap-2 text-slate-400">
+            <button type="button"
+              class="hover:text-slate-900"
+              title="定位"
+              :data-testid="`annotation-table-locate-${item.id}`"
+              @click.stop="emit('locate-annotation', item)">
+              <LocateFixed class="h-3.5 w-3.5" />
+            </button>
+            <button type="button"
+              class="hover:text-slate-900"
+              title="详情"
+              :data-testid="`annotation-table-comment-${item.id}`"
+              @click.stop="emit('open-annotation', item)">
+              <MessageSquare class="h-3.5 w-3.5" />
+            </button>
+            <button type="button"
+              class="hover:text-slate-900"
+              title="复制"
+              :data-testid="`annotation-table-copy-${item.id}`"
+              @click.stop="() => void copyRowInline(item)">
+              <Copy class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Body · Compact: 纵向卡片列表 -->
+      <div v-else role="list" class="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/30"
+        data-testid="annotation-table-compact-list">
+        <article v-for="(item, localIdx) in pagedItems"
+          :key="`${item.type}:${item.id}`"
+          role="listitem"
+          tabindex="0"
+          :aria-selected="isActiveRow(item)"
+          :data-testid="`annotation-table-row-${item.id}`"
+          class="rounded-lg border bg-white p-3 cursor-pointer transition-shadow hover:shadow-sm"
+          :class="isActiveRow(item) ? 'border-amber-400 ring-1 ring-amber-300' : 'border-slate-200'"
+          @click="handleRowClick(item)"
+          @dblclick="handleRowDblClick(item)"
+          @contextmenu="handleRowContextMenu($event, item)"
+          @keydown.enter.prevent="handleRowClick(item)"
+          @keydown.space.prevent="handleRowDblClick(item)">
+          <header class="flex items-center gap-2">
+            <span class="text-[11px] font-mono text-slate-400">#{{ (currentPage - 1) * pageSize + localIdx + 1 }}</span>
+            <select v-if="canEditInline(item)"
+              :value="item.severity ?? ''"
+              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none focus:ring-1 focus:ring-blue-300 disabled:cursor-wait disabled:opacity-60"
+              :class="severityPillClass(item)"
+              :disabled="isSeveritySaving(item)"
+              :aria-label="`修改错误标记：${item.title}`"
+              :data-testid="`annotation-table-severity-editor-${item.id}`"
+              @click.stop
+              @mousedown.stop
+              @dblclick.stop
+              @change="handleSeverityChange($event, item)">
+              <option v-for="opt in severityEditOptions" :key="opt.value || 'unset'" :value="opt.value">{{ opt.label }}</option>
+            </select>
+            <span v-else
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none"
+              :class="severityPillClass(item)"
+              :data-testid="`annotation-table-severity-pill-${item.id}`">
+              <span class="h-1.5 w-1.5 rounded-full" :class="severityDotClass(item)" />
+              {{ severityLabel(item) }}
+            </span>
+            <span class="ml-auto flex gap-1.5 text-slate-400">
+              <button type="button"
+                class="hover:text-slate-900"
+                title="定位"
+                :data-testid="`annotation-table-locate-${item.id}`"
+                @click.stop="emit('locate-annotation', item)">
+                <LocateFixed class="h-4 w-4" />
+              </button>
+              <button type="button"
+                class="hover:text-slate-900"
+                title="详情"
+                :data-testid="`annotation-table-comment-${item.id}`"
+                @click.stop="emit('open-annotation', item)">
+                <MessageSquare class="h-4 w-4" />
+              </button>
+              <button type="button"
+                class="hover:text-slate-900"
+                title="复制"
+                :data-testid="`annotation-table-copy-${item.id}`"
+                @click.stop="() => void copyRowInline(item)">
+                <Copy class="h-4 w-4" />
+              </button>
+            </span>
+          </header>
+
+          <!-- v-html is SAFE here: highlightMatches() escapes text first then wraps <mark> -->
+          <div class="mt-2 flex gap-3">
+            <button v-if="item.thumbnailUrl"
+              type="button"
+              class="h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+              title="查看批注截图"
+              @click.stop="openScreenshotPreview(item)">
+              <img :src="item.thumbnailUrl"
+                alt="批注截图"
+                class="h-full w-full object-cover"
+                :data-testid="`annotation-table-thumbnail-${item.id}`" />
+            </button>
+            <div class="min-w-0 flex-1">
+              <input v-if="isTitleEditing(item)"
+                v-model="editingTitleValue"
+                type="text"
+                class="w-full rounded-md border border-blue-200 bg-white px-2 py-1 text-sm font-semibold text-slate-950 outline-none focus:ring-1 focus:ring-blue-300"
+                :data-testid="`annotation-table-title-input-${item.id}`"
+                :disabled="isTitleSaving(item)"
+                @click.stop
+                @mousedown.stop
+                @dblclick.stop
+                @keydown.enter.prevent="commitTitleEdit($event, item)"
+                @keydown.esc.prevent="cancelTitleEdit($event)"
+                @blur="commitTitleEdit($event, item)" />
+              <button v-else-if="canEditInline(item)"
+                type="button"
+                class="max-w-full text-left text-sm font-semibold text-slate-950 line-clamp-1 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                :disabled="isTitleSaving(item)"
+                :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
+                :data-testid="`annotation-table-title-${item.id}`"
+                @click.stop
+                @mousedown.stop
+                @dblclick="startTitleEdit($event, item)">
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <span v-html="highlightTitle(item)" />
+              </button>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <h3 v-else class="text-sm font-semibold text-slate-950 line-clamp-1" v-html="highlightTitle(item)" />
+              <span v-if="isTitleSaving(item)" class="text-[11px] font-medium text-blue-500">保存中</span>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2" v-html="highlightDescription(item)" />
+            </div>
+          </div>
+
+          <footer class="mt-2 flex items-center gap-2 text-[11px]">
+            <span class="font-semibold" :class="statusTextClass(item)">
+              {{ statusPrefix(item) }} {{ item.statusLabel }}
+            </span>
+            <span v-if="item.commentCount > 0" class="text-slate-400">· {{ item.commentCount }} 条讨论</span>
+          </footer>
+        </article>
+      </div>
+
+      <!-- Footer · Pagination -->
+      <div v-if="showFooter"
+        class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-1.5 text-[11px] text-slate-500">
+        <span>当前 {{ pageStart }}-{{ pageEnd }} · 共 {{ totalCount }} 条</span>
+        <div class="flex items-center gap-1.5">
+          <button type="button"
+            class="rounded border border-slate-200 bg-white p-1 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="currentPage <= 1"
+            data-testid="annotation-table-prev"
+            @click="goPrev">
+            <ChevronLeft class="h-3 w-3" />
+          </button>
+          <span class="rounded bg-slate-900 px-2 py-0.5 font-semibold text-white">
+            {{ currentPage }}/{{ totalPages }}
+          </span>
+          <button type="button"
+            class="rounded border border-slate-200 bg-white p-1 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            :disabled="currentPage >= totalPages"
+            data-testid="annotation-table-next"
+            @click="goNext">
+            <ChevronRight class="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Context Menu (teleport-style overlay · fixed) -->
+    <Teleport v-if="contextMenu" to="body">
+      <div role="menu"
+        data-testid="annotation-table-context-menu"
+        class="fixed z-[1200] min-w-[228px] rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-[0_10px_30px_rgba(15,23,42,0.18)]"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+        @click.stop
+        @contextmenu.prevent>
+        <div class="px-3 py-1 text-[10px] font-mono-ui text-slate-400 uppercase tracking-wider">
+          批注 #{{ (currentPage - 1) * pageSize + filteredItems.indexOf(contextMenu.item) + 1 }}
+        </div>
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          data-testid="annotation-table-ctx-locate"
+          @click="menuLocate">
+          <LocateFixed class="h-4 w-4 text-slate-500" />
+          <span class="flex-1">定位到三维模型</span>
+          <span class="text-[11px] text-slate-400">Enter</span>
+        </button>
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          data-testid="annotation-table-ctx-open"
+          @click="menuOpenDetail">
+          <MessageSquare class="h-4 w-4 text-slate-500" />
+          <span class="flex-1">打开处理详情</span>
+        </button>
+        <div class="my-1 h-px bg-slate-100" />
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="!pickItemRefno(contextMenu.item)"
+          data-testid="annotation-table-ctx-copy-refno"
+          @click="menuCopyRefno">
+          <span class="inline-flex h-4 w-4 items-center justify-center text-[13px] text-slate-500">🔗</span>
+          <span class="flex-1 truncate">复制 refno
+            <span v-if="pickItemRefno(contextMenu.item)" class="text-slate-400">
+              · {{ pickItemRefno(contextMenu.item) }}
+            </span>
+          </span>
+        </button>
+        <button type="button"
+          class="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-slate-50"
+          data-testid="annotation-table-ctx-copy-row"
+          @click="menuCopyRowAsCsv">
+          <span class="inline-flex h-4 w-4 items-center justify-center text-[13px] text-slate-500">📋</span>
+          <span class="flex-1">复制为记录卡一行</span>
+        </button>
+      </div>
+    </Teleport>
+
+    <Teleport v-if="screenshotPreviewUrl" to="body">
+      <div class="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/70 p-6"
+        data-testid="annotation-table-screenshot-preview"
+        @click="screenshotPreviewUrl = null">
+        <img :src="screenshotPreviewUrl"
+          alt="批注截图预览"
+          class="max-h-full max-w-full rounded-2xl bg-white object-contain shadow-2xl"
+          @click.stop />
+      </div>
+    </Teleport>
+  </section>
+</template>

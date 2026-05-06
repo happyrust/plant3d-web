@@ -18,11 +18,28 @@ function makeComment(partial: Partial<SnapshotComment> & { commentId: string; an
 }
 
 describe('buildCommentThreadKey', () => {
-  it('joins type and id with colon', () => {
+  it('joins type and id with colon when no formId is provided', () => {
     expect(buildCommentThreadKey('text', 'a-1')).toBe('text:a-1');
     expect(buildCommentThreadKey('cloud', 'c-1')).toBe('cloud:c-1');
     expect(buildCommentThreadKey('rect', 'r-1')).toBe('rect:r-1');
     expect(buildCommentThreadKey('obb', 'o-1')).toBe('obb:o-1');
+  });
+
+  it('appends formId so the same annotationId is bucketed per form', () => {
+    expect(buildCommentThreadKey('text', 'a-1', 'FORM-1')).toBe('text:a-1@FORM-1');
+    expect(buildCommentThreadKey('cloud', 'c-1', 'FORM-2')).toBe('cloud:c-1@FORM-2');
+  });
+
+  it('appends taskId so the same annotationId is bucketed per task', () => {
+    expect(buildCommentThreadKey('text', 'a-1', 'FORM-1', 'task-1')).toBe('text:a-1@FORM-1#task-1');
+    expect(buildCommentThreadKey('text', 'a-1', null, 'task-1')).toBe('text:a-1#task-1');
+  });
+
+  it('falls back to the legacy key when formId is empty or whitespace', () => {
+    expect(buildCommentThreadKey('text', 'a-1', null)).toBe('text:a-1');
+    expect(buildCommentThreadKey('text', 'a-1', undefined)).toBe('text:a-1');
+    expect(buildCommentThreadKey('text', 'a-1', '')).toBe('text:a-1');
+    expect(buildCommentThreadKey('text', 'a-1', '   ')).toBe('text:a-1');
   });
 });
 
@@ -107,5 +124,31 @@ describe('buildCommentThreadIndex', () => {
     expect(entry?.content).toBe('hello');
     expect(entry?.authorId).toBe('u-1');
     expect(entry?.threadOrder).toBe(0);
+  });
+
+  it('isolates comments by formId so the same annotationId stays in separate buckets', () => {
+    const comments: SnapshotComment[] = [
+      makeComment({ commentId: 'c-form-1', annotationId: 'a-1', createdAt: 1, formId: 'FORM-1' }),
+      makeComment({ commentId: 'c-form-2', annotationId: 'a-1', createdAt: 2, formId: 'FORM-2' }),
+      makeComment({ commentId: 'c-legacy', annotationId: 'a-1', createdAt: 3 }),
+    ];
+    const index = buildCommentThreadIndex(comments);
+
+    expect(index.size).toBe(3);
+    expect(index.byKey.get('text:a-1@FORM-1')?.entries.map((e) => e.commentId)).toEqual(['c-form-1']);
+    expect(index.byKey.get('text:a-1@FORM-2')?.entries.map((e) => e.commentId)).toEqual(['c-form-2']);
+    expect(index.byKey.get('text:a-1')?.entries.map((e) => e.commentId)).toEqual(['c-legacy']);
+  });
+
+  it('isolates comments by taskId inside the same form bucket', () => {
+    const comments: SnapshotComment[] = [
+      makeComment({ commentId: 'c-task-1', annotationId: 'a-1', createdAt: 1, formId: 'FORM-1', taskId: 'task-1' }),
+      makeComment({ commentId: 'c-task-2', annotationId: 'a-1', createdAt: 2, formId: 'FORM-1', taskId: 'task-2' }),
+    ];
+    const index = buildCommentThreadIndex(comments);
+
+    expect(index.size).toBe(2);
+    expect(index.byKey.get('text:a-1@FORM-1#task-1')?.entries.map((e) => e.commentId)).toEqual(['c-task-1']);
+    expect(index.byKey.get('text:a-1@FORM-1#task-2')?.entries.map((e) => e.commentId)).toEqual(['c-task-2']);
   });
 });

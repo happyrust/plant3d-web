@@ -12,6 +12,7 @@ import AnnotationPanelDock from '@/components/dock_panels/AnnotationPanelDock.vu
 import AnnotationStylePanelDock from '@/components/dock_panels/AnnotationStylePanelDock.vue';
 import ConsolePanelDock from '@/components/dock_panels/ConsolePanelDock.vue';
 import DashboardPanelDock from '@/components/dock_panels/DashboardPanelDock.vue';
+import DesignerCommentHandlingPanelDock from '@/components/dock_panels/DesignerCommentHandlingPanelDock.vue';
 import DesignerTaskListPanelDock from '@/components/dock_panels/DesignerTaskListPanelDock.vue';
 import DimensionPanelDock from '@/components/dock_panels/DimensionPanelDock.vue';
 import DimensionStylePanelDock from '@/components/dock_panels/DimensionStylePanelDock.vue';
@@ -54,6 +55,7 @@ app.component('ReviewPanel', ReviewPanelDock);
 app.component('InitiateReviewPanel', InitiateReviewPanelDock);
 app.component('ReviewerTaskListPanel', ReviewerTaskListPanelDock);
 app.component('DesignerTaskListPanel', DesignerTaskListPanelDock);
+app.component('DesignerCommentHandlingPanel', DesignerCommentHandlingPanelDock);
 app.component('ResubmissionTaskListPanel', ResubmissionTaskListPanelDock);
 app.component('TaskMonitorPanel', TaskMonitorPanelDock);
 app.component('TaskCreationPanel', TaskCreationPanelDock);
