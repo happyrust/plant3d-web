@@ -40,6 +40,7 @@ type BackendConfigSnapshot = {
 
 const FRONTEND_HEALTH_TIMEOUT_MS = 120_000;
 const BACKEND_HEALTH_TIMEOUT_MS = 180_000;
+const FETCH_TIMEOUT_MS = 30_000;
 
 function appendNoProxy(value: string | undefined): string {
   const items = new Set(
@@ -58,26 +59,45 @@ function prepareLocalNoProxy(): void {
   process.env.no_proxy = appendNoProxy(process.env.no_proxy);
 }
 
-async function postJson<T>(url: string, payload: unknown, bearerToken?: string): Promise<{ status: number; body: T }> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-  const text = await response.text();
-  let body: T;
+async function withTimeout<T>(label: string, run: (signal: AbortSignal) => Promise<T>, timeoutMs = FETCH_TIMEOUT_MS): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    body = JSON.parse(text) as T;
-  } catch {
-    throw new Error(`POST ${url} 返回非 JSON：HTTP ${response.status} ${text}`);
+    return await run(controller.signal);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`${label} 超时`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  if (!response.ok) {
-    throw new Error(`POST ${url} 失败：HTTP ${response.status} ${text}`);
-  }
-  return { status: response.status, body };
+}
+
+async function postJson<T>(url: string, payload: unknown, bearerToken?: string): Promise<{ status: number; body: T }> {
+  return await withTimeout(`POST ${url}`, async (signal) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Connection: 'close',
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    const text = await response.text();
+    let body: T;
+    try {
+      body = JSON.parse(text) as T;
+    } catch {
+      throw new Error(`POST ${url} 返回非 JSON：HTTP ${response.status} ${text}`);
+    }
+    if (!response.ok) {
+      throw new Error(`POST ${url} 失败：HTTP ${response.status} ${text}`);
+    }
+    return { status: response.status, body };
+  });
 }
 
 async function waitForBackendContractReadiness(env: ReturnType<typeof buildPmsSimulatorEnvironmentConfig>, artifactDir: string): Promise<void> {
@@ -114,7 +134,7 @@ async function waitForBackendContractReadiness(env: ReturnType<typeof buildPmsSi
       throw new Error(embedResponse.body.message || `embed-url code=${embedResponse.body.code}`);
     } catch (error) {
       lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
   }
   const logPath = path.join(artifactDir, 'backend.log');
@@ -139,7 +159,9 @@ function stripTomlValue(raw: string): string {
 }
 
 async function loadBackendConfigSnapshot(backendRepoRoot: string): Promise<BackendConfigSnapshot> {
-  const configArg = 'db_options/DbOption-mac.toml';
+  const defaultConfigStem = process.platform === 'win32' ? 'db_options/DbOption' : 'db_options/DbOption-mac';
+  const configStem = process.env.PMS_SIMULATOR_BACKEND_CONFIG?.trim() || defaultConfigStem;
+  const configArg = configStem.endsWith('.toml') ? configStem : `${configStem}.toml`;
   const configPath = path.join(backendRepoRoot, configArg);
   const content = await fsp.readFile(configPath, 'utf8');
   let currentSection = '';
@@ -252,7 +274,11 @@ async function ensureDir(dir: string): Promise<void> {
 
 async function isUrlHealthy(url: string): Promise<boolean> {
   try {
-    const response = await fetch(url, { method: 'GET' });
+    const response = await withTimeout(`GET ${url}`, async (signal) => await fetch(url, {
+      method: 'GET',
+      headers: { Connection: 'close' },
+      signal,
+    }), 5_000);
     return response.ok;
   } catch {
     return false;
@@ -289,15 +315,41 @@ async function captureCommandOutput(options: {
 }
 
 async function resolveListeningProcess(port: number): Promise<{ pid: number; command: string } | null> {
+  if (process.platform === 'win32') {
+    const result = await captureCommandOutput({
+      cwd: process.cwd(),
+      command: 'powershell',
+      args: [
+        '-NoProfile',
+        '-Command',
+        `$conn = Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($conn) { $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue; [pscustomobject]@{ pid = $conn.OwningProcess; command = $proc.ProcessName } | ConvertTo-Json -Compress }`,
+      ],
+    });
+    if (result.exitCode !== 0 || !result.stdout) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(result.stdout) as { pid?: unknown; command?: unknown };
+      const pid = Number(parsed.pid);
+      if (!Number.isInteger(pid) || pid <= 0) return null;
+      return {
+        pid,
+        command: String(parsed.command || ''),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   const pidResult = await captureCommandOutput({
     cwd: process.cwd(),
     command: 'sh',
-    args: ['-lc', `lsof -nP -iTCP:${port} -sTCP:LISTEN -t | head -1`],
+    args: ['-lc', `lsof -nP -iTCP:${port} -sTCP:LISTEN -t`],
   });
   if (pidResult.exitCode !== 0 || !pidResult.stdout) {
     return null;
   }
-  const pid = Number.parseInt(pidResult.stdout, 10);
+  const pid = Number.parseInt(pidResult.stdout.split(/\r?\n/)[0] || '', 10);
   if (!Number.isInteger(pid) || pid <= 0) {
     return null;
   }
@@ -387,7 +439,8 @@ async function runForegroundCommand(options: {
 }
 
 async function ensureBackendBinary(backendRepoRoot: string, logPath: string): Promise<void> {
-  const binaryPath = path.join(backendRepoRoot, 'target/debug/web_server');
+  const binaryName = process.platform === 'win32' ? 'web_server.exe' : 'web_server';
+  const binaryPath = path.join(backendRepoRoot, 'target/debug', binaryName);
   try {
     await fsp.access(binaryPath);
     return;
@@ -464,11 +517,16 @@ async function ensureBackend(env: ReturnType<typeof buildPmsSimulatorEnvironment
   await ensureBackendBinary(backendRepoRoot, buildLogPath);
 
   const logPath = path.join(artifactDir, 'backend.log');
+  const backendBinary = process.platform === 'win32'
+    ? path.join(backendRepoRoot, 'target/debug/web_server.exe')
+    : path.join(backendRepoRoot, 'target/debug/web_server');
+  const backendConfig = process.env.PMS_SIMULATOR_BACKEND_CONFIG?.trim()
+    || (process.platform === 'win32' ? 'db_options/DbOption' : 'db_options/DbOption-mac');
   const managed = spawnBackgroundProcess({
     name: 'backend',
     cwd: backendRepoRoot,
-    command: path.join(backendRepoRoot, 'target/debug/web_server'),
-    args: ['--config', 'db_options/DbOption-mac'],
+    command: backendBinary,
+    args: ['--config', backendConfig],
     logPath,
   });
   await waitForHealth(healthUrl, BACKEND_HEALTH_TIMEOUT_MS, `backend 未在 ${healthUrl} 就绪，详见 ${logPath}`);

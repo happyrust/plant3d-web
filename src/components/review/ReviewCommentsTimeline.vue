@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import {
   BadgeCheck,
-  Camera,
   CircleSlash,
-  Paperclip,
   Reply,
   Send,
   ThumbsDown,
@@ -16,28 +14,23 @@ import {
 import type { AnnotationType } from '@/composables/useToolStore';
 
 import {
+  annotationReviewStateApply,
+  annotationReviewStatesQuery,
+  normalizeAnnotationReviewStateView,
   reviewCommentCreate,
   reviewCommentDelete,
-  reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
-import { useScreenshot } from '@/composables/useScreenshot';
+import { useCommentThread } from '@/composables/useCommentThread';
 import { useReviewStore } from '@/composables/useReviewStore';
-import { getAnnotationRefnos, useToolStore } from '@/composables/useToolStore';
+import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
-import { syncInlineToStore } from '@/review/services/commentThreadDualRead';
-import {
-  getReviewCommentEventLog,
-  getReviewCommentThreadStore,
-  isReviewCommentThreadStoreActive,
-} from '@/review/services/sharedStores';
 import { emitToast } from '@/ribbon/toastBus';
 import {
   type AnnotationComment,
   type AnnotationReviewAction,
   type AnnotationReviewEvent,
   type AnnotationScreenshot,
-  type ReviewAttachment,
   getAnnotationReviewActionLabel,
   getAnnotationReviewDisplay,
   getRoleDisplayName,
@@ -52,11 +45,33 @@ const props = withDefaults(defineProps<{
   composerPlaceholder?: string;
   composerSubmitLabel?: string;
   designerOnly?: boolean;
+  screenshot?: AnnotationScreenshot;
+  /**
+   * 当前批注归属的正式单据 formId。
+   * 为空表示当前是无单据上下文（草稿或外部入口未匹配单据）。
+   */
+  contextFormId?: string | null;
+  /**
+   * 当前批注对应的内部任务 taskId。
+   * 没有匹配到正式任务时应传 null，组件会据此关闭处理动作提交。
+   */
+  contextTaskId?: string | null;
+  /**
+   * 是否允许在该面板提交批注处理动作（已修改 / 不需解决 / 同意 / 驳回）。
+   * 默认为 true；调用方可在仅查看场景显式传 false。
+   */
+  allowReviewActions?: boolean;
+  density?: 'normal' | 'dock';
 }>(), {
   annotationLabel: undefined,
   composerPlaceholder: '输入意见...',
   composerSubmitLabel: '发表',
   designerOnly: false,
+  screenshot: undefined,
+  contextFormId: undefined,
+  contextTaskId: undefined,
+  allowReviewActions: true,
+  density: 'normal',
 });
 
 const emit = defineEmits<(e: 'close') => void>();
@@ -64,14 +79,44 @@ const emit = defineEmits<(e: 'close') => void>();
 const store = useToolStore();
 const reviewStore = useReviewStore();
 const userStore = useUserStore();
-const { captureAndUpload, getCanvas, isCapturing, uploadProgress } = useScreenshot();
-const commentLoading = ref(false);
-const commentError = ref<string | null>(null);
 const newCommentContent = ref('');
 const replyToCommentId = ref<string | null>(null);
 const editingCommentId = ref<string | null>(null);
 const editingCommentContent = ref('');
 const actionNote = ref('');
+const selectedReviewAction = ref<AnnotationReviewAction | null>(null);
+const screenshotPreviewUrl = ref<string | null>(null);
+const isDockDensity = computed(() => props.density === 'dock');
+
+function normalizeContextString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+/**
+ * 集中计算评论 / 处理动作的上下文：
+ * - 调用方显式传入的 `contextFormId / contextTaskId` 优先；
+ * - 都未提供时（调用方未明确）退回 `reviewStore.currentTask` 兜底，保持向后兼容；
+ * - 正式 `formId` 存在但 `taskId` 缺失时仍要求显式表态，避免假成功。
+ *
+ * 该 computed 是读取后端、加载 store、写入与本地降级的唯一上下文来源。
+ */
+const commentContext = computed(() => {
+  const explicitFormId = normalizeContextString(props.contextFormId);
+  const explicitTaskId = normalizeContextString(props.contextTaskId);
+  if (props.contextFormId !== undefined || props.contextTaskId !== undefined) {
+    return {
+      formId: explicitFormId,
+      taskId: explicitTaskId,
+    };
+  }
+  const task = reviewStore.currentTask.value;
+  return {
+    formId: normalizeContextString(task?.formId ?? null),
+    taskId: normalizeContextString(task?.id ?? null),
+  };
+});
 
 type TimelineItem =
   | {
@@ -87,88 +132,29 @@ type TimelineItem =
     event: AnnotationReviewEvent;
   };
 
-let stopCommentAddedListener: (() => void) | null = null;
+const {
+  comments: allComments,
+  loading: commentLoading,
+  error: commentError,
+  refresh: refreshComments,
+} = useCommentThread(() => ({
+  annotationType: props.annotationType,
+  annotationId: props.annotationId,
+  formId: commentContext.value.formId,
+  taskId: commentContext.value.taskId,
+}));
 
-async function loadCommentsFromBackend() {
-  if (!props.annotationType || !props.annotationId) return;
-  commentLoading.value = true;
-  commentError.value = null;
-  try {
-    const resp = await reviewCommentGetByAnnotation(props.annotationId, props.annotationType);
-    if (resp.success && resp.comments) {
-      const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
-      store.setAnnotationComments(props.annotationType, props.annotationId, normalized);
-    }
-  } catch (e) {
-    commentError.value = e instanceof Error ? e.message : '加载评论失败';
-  } finally {
-    commentLoading.value = false;
-  }
-}
-
-function matchesIncomingCommentEvent(data: unknown): boolean {
-  if (!props.annotationType || !props.annotationId || !data || typeof data !== 'object') return false;
-
-  const source = 'comment' in data && data.comment && typeof data.comment === 'object'
-    ? data.comment as Record<string, unknown>
-    : data as Record<string, unknown>;
-
-  return String(source.annotationId ?? '') === props.annotationId
-    && String(source.annotationType ?? '') === props.annotationType;
-}
-
-onMounted(() => {
-  loadCommentsFromBackend();
-  stopCommentAddedListener = reviewStore.onCommentAdded((data) => {
-    if (!matchesIncomingCommentEvent(data)) return;
-    void loadCommentsFromBackend();
-  });
-});
-
-onUnmounted(() => {
-  stopCommentAddedListener?.();
-  stopCommentAddedListener = null;
-});
-
-watch(() => [props.annotationId, props.annotationType], () => {
-  actionNote.value = '';
-  replyToCommentId.value = null;
-  editingCommentId.value = null;
-  editingCommentContent.value = '';
-  loadCommentsFromBackend();
-});
-
-const allComments = computed<AnnotationComment[]>(() => {
-  if (!props.annotationType || !props.annotationId) return [];
-  return [...store.getAnnotationComments(props.annotationType, props.annotationId)]
-    .sort((a, b) => a.createdAt - b.createdAt);
-});
-
-// M3 DUAL_READ：把 inline 评论同步到 commentThreadStore，并在差异时写入 commentEventLog。
-// flag 关闭时整段早返回；store 异常被吞没，保护既有 UI 行为。
 watch(
-  () => allComments.value,
-  (next) => {
-    if (!props.annotationType || !props.annotationId) return;
-    if (!isReviewCommentThreadStoreActive()) return;
-    try {
-      const task = reviewStore.currentTask.value;
-      syncInlineToStore(props.annotationType, props.annotationId, next, {
-        store: getReviewCommentThreadStore(),
-        log: getReviewCommentEventLog(),
-        context: {
-          taskId: task?.id,
-          formId: task?.formId,
-          workflowNode: task?.currentNode,
-        },
-      });
-    } catch (err) {
-      if (typeof console !== 'undefined') {
-        console.warn('[review/M3 DUAL_READ] inline → store sync failed', err);
-      }
-    }
+  () => [props.annotationId, props.annotationType, commentContext.value.formId, commentContext.value.taskId],
+  () => {
+    actionNote.value = '';
+    selectedReviewAction.value = null;
+    replyToCommentId.value = null;
+    editingCommentId.value = null;
+    editingCommentContent.value = '';
+    void refreshComments();
   },
-  { deep: true, immediate: true },
+  { immediate: true },
 );
 
 const displayLabel = computed(() => {
@@ -181,16 +167,6 @@ const replyToComment = computed<AnnotationComment | null>(() => {
 });
 
 const currentUser = computed(() => userStore.currentUser.value);
-const currentTask = computed(() => reviewStore.currentTask.value);
-const currentAnnotationRecord = computed(() => {
-  if (!props.annotationType || !props.annotationId) return null;
-  return store.getAnnotationRecordsByType(props.annotationType)
-    .find((item) => item.id === props.annotationId) ?? null;
-});
-const annotationScreenshot = computed(() => {
-  if (!props.annotationType || !props.annotationId) return null;
-  return store.getAnnotationScreenshot(props.annotationType, props.annotationId);
-});
 
 const reviewState = computed(() => {
   if (!props.annotationType || !props.annotationId) return null;
@@ -202,6 +178,7 @@ const reviewDisplay = computed(() => (
 ));
 
 const showReviewActions = computed(() => {
+  if (props.allowReviewActions === false) return false;
   const role = currentUser.value?.role;
   if (!role) return false;
   if (props.designerOnly) {
@@ -214,6 +191,30 @@ const showReviewActions = computed(() => {
     UserRole.MANAGER,
     UserRole.ADMIN,
   ].includes(role);
+});
+
+/**
+ * 处理动作提交门禁。
+ *
+ * 设计原则：
+ * - 任何正式流程动作都必须同时具备 `formId + taskId`，否则直接屏蔽提交，
+ *   避免无任务上下文写本地状态再被当作流转依据；
+ * - 没有 `formId` 的纯草稿（例如外部入口未匹配到单据）允许本地处理，
+ *   但本组件本身仍由调用方通过 `allowReviewActions` 决定是否暴露按钮。
+ */
+const hasFormalReviewContext = computed(() => (
+  !!commentContext.value.formId && !!commentContext.value.taskId
+));
+const isLocalDraftReviewContext = computed(() => !commentContext.value.formId);
+const canSubmitReviewAction = computed(() => (
+  props.allowReviewActions !== false
+  && (hasFormalReviewContext.value || isLocalDraftReviewContext.value)
+));
+const reviewContextWarning = computed(() => {
+  if (props.allowReviewActions === false) return null;
+  if (!commentContext.value.formId) return null;
+  if (commentContext.value.taskId) return null;
+  return '未匹配到内部任务，不能保存处理状态';
 });
 
 const canDesignHandle = computed(() => {
@@ -250,20 +251,28 @@ const reviewActionHint = computed(() => {
   return `当前角色为${getRoleDisplayName(currentUser.value.role)}，仅可查看处理状态与讨论。`;
 });
 
-const screenshotHint = computed(() => {
-  if (isCapturing.value) {
-    return uploadProgress.value > 0
-      ? `正在上传截图 ${uploadProgress.value}%`
-      : '正在上传截图...';
-  }
-  if (annotationScreenshot.value) {
-    return '截图已关联到当前批注。再次点击下方相机按钮，可重拍覆盖旧图。';
-  }
-  if (!currentTask.value?.id) {
-    return '当前任务未关联，暂不可上传截图。';
-  }
-  return '尚未添加截图。点击下方相机按钮，可抓取当前三维视图作为批注证据。';
-});
+const reviewActionSubmitLabel = computed(() => (
+  canDesignHandle.value ? '提交处理结果' : '提交确认结果'
+));
+
+function canSelectReviewAction(action: AnnotationReviewAction): boolean {
+  if (action === 'fixed' || action === 'wont_fix') return canDesignHandle.value;
+  if (action === 'agree' || action === 'reject') return canDecisionAct.value;
+  return false;
+}
+
+function selectReviewAction(action: AnnotationReviewAction) {
+  if (!canSelectReviewAction(action)) return;
+  selectedReviewAction.value = action;
+}
+
+function actionButtonClass(action: AnnotationReviewAction): string {
+  const isSelected = selectedReviewAction.value === action;
+  const disabled = !canSelectReviewAction(action);
+  const selectedClass = isSelected ? 'ring-2 ring-offset-1 ring-slate-400' : '';
+  const disabledClass = disabled ? 'cursor-not-allowed opacity-50' : '';
+  return [selectedClass, disabledClass].filter(Boolean).join(' ');
+}
 
 const timelineItems = computed<TimelineItem[]>(() => {
   const commentItems = allComments.value.map<TimelineItem>((comment) => ({
@@ -334,15 +343,34 @@ async function saveEdit() {
   if (!editingCommentId.value || !editingCommentContent.value.trim()) return;
   if (!props.annotationType || !props.annotationId) return;
 
+  const ctx = commentContext.value;
+  const trimmed = editingCommentContent.value.trim();
   try {
-    await reviewCommentUpdate(editingCommentId.value, editingCommentContent.value.trim());
-  } catch { /* fallback to local */ }
+    const resp = await reviewCommentUpdate(editingCommentId.value, trimmed, {
+      formId: ctx.formId ?? undefined,
+      taskId: ctx.taskId ?? undefined,
+    });
+    if (resp && resp.success === false) {
+      emitToast({ message: resp.error_message || '评论更新失败', level: 'error' });
+      return;
+    }
+  } catch (err) {
+    if (ctx.formId) {
+      emitToast({
+        message: err instanceof Error ? err.message : '评论更新失败',
+        level: 'error',
+      });
+      return;
+    }
+  }
 
   store.updateAnnotationComment(
     props.annotationType,
     props.annotationId,
     editingCommentId.value,
-    { content: editingCommentContent.value.trim() },
+    { content: trimmed },
+    ctx.formId,
+    ctx.taskId,
   );
   editingCommentId.value = null;
   editingCommentContent.value = '';
@@ -355,10 +383,27 @@ function cancelEdit() {
 
 async function deleteComment(commentId: string) {
   if (!props.annotationType || !props.annotationId) return;
+  const ctx = commentContext.value;
   try {
-    await reviewCommentDelete(commentId);
-  } catch { /* fallback */ }
-  store.removeAnnotationComment(props.annotationType, props.annotationId, commentId);
+    const resp = await reviewCommentDelete(commentId, {
+      formId: ctx.formId ?? undefined,
+      taskId: ctx.taskId ?? undefined,
+    });
+    if (!resp.success) {
+      emitToast({ message: resp.error_message || '删除评论失败', level: 'error' });
+      return;
+    }
+    store.removeAnnotationComment(props.annotationType, props.annotationId, commentId, ctx.formId, ctx.taskId);
+  } catch (err) {
+    if (ctx.formId) {
+      emitToast({
+        message: err instanceof Error ? err.message : '删除评论失败',
+        level: 'error',
+      });
+      return;
+    }
+    store.removeAnnotationComment(props.annotationType, props.annotationId, commentId, ctx.formId, ctx.taskId);
+  }
 }
 
 async function submitComment() {
@@ -369,6 +414,7 @@ async function submitComment() {
   if (!user) return;
 
   const replyToId = replyToCommentId.value || undefined;
+  const ctx = commentContext.value;
 
   try {
     const resp = await reviewCommentCreate({
@@ -379,45 +425,162 @@ async function submitComment() {
       authorRole: user.role,
       content,
       replyToId,
+      formId: ctx.formId ?? undefined,
+      taskId: ctx.taskId ?? undefined,
     });
     if (resp.success && resp.comment) {
-      store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment);
+      store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment, ctx.formId, ctx.taskId);
+    } else if (!ctx.formId) {
+      store.addCommentToAnnotation(
+        props.annotationType,
+        props.annotationId,
+        {
+          authorId: user.id,
+          authorName: user.name,
+          authorRole: user.role,
+          content,
+          replyToId,
+        },
+        ctx.formId,
+        ctx.taskId,
+      );
     } else {
-      store.addCommentToAnnotation(props.annotationType, props.annotationId, {
+      emitToast({ message: resp.error_message || '评论创建失败', level: 'error' });
+      return;
+    }
+  } catch (err) {
+    if (ctx.formId) {
+      emitToast({
+        message: err instanceof Error ? err.message : '评论创建失败',
+        level: 'error',
+      });
+      return;
+    }
+    store.addCommentToAnnotation(
+      props.annotationType,
+      props.annotationId,
+      {
         authorId: user.id,
         authorName: user.name,
         authorRole: user.role,
         content,
         replyToId,
-      });
-    }
-  } catch {
-    store.addCommentToAnnotation(props.annotationType, props.annotationId, {
-      authorId: user.id,
-      authorName: user.name,
-      authorRole: user.role,
-      content,
-      replyToId,
-    });
+      },
+      ctx.formId,
+      ctx.taskId,
+    );
   }
 
   newCommentContent.value = '';
   replyToCommentId.value = null;
 }
 
-function applyReviewAction(action: AnnotationReviewAction) {
+const actionSubmitting = ref(false);
+
+async function submitSelectedReviewAction() {
+  if (!selectedReviewAction.value || actionSubmitting.value) return;
+  await applyReviewAction(selectedReviewAction.value);
+}
+
+async function resolvePersistedReviewState(options: {
+  formId: string;
+  taskId: string;
+  annotationId: string;
+  annotationType: AnnotationType;
+  actionResponseState?: import('@/api/reviewApi').AnnotationReviewStateView;
+}) {
+  if (options.actionResponseState) {
+    return normalizeAnnotationReviewStateView(options.actionResponseState);
+  }
+
+  const queryResp = await annotationReviewStatesQuery({
+    formId: options.formId,
+    taskId: options.taskId,
+  });
+  const matched = queryResp.states?.find((state) => (
+    state.annotationId === options.annotationId && state.annotationType === options.annotationType
+  ));
+  return matched ? normalizeAnnotationReviewStateView(matched) : null;
+}
+
+async function applyReviewAction(action: AnnotationReviewAction) {
   if (!props.annotationType || !props.annotationId) return;
   const user = currentUser.value;
   if (!user) return;
 
+  if (props.allowReviewActions === false) return;
+
   if ((action === 'fixed' || action === 'wont_fix') && !canDesignHandle.value) return;
   if ((action === 'agree' || action === 'reject') && !canDecisionAct.value) return;
 
-  const nextState = store.applyAnnotationReviewAction(props.annotationType, props.annotationId, {
-    action,
-    actor: user,
-    note: actionNote.value,
-  });
+  const note = actionNote.value.trim();
+  if (action === 'wont_fix' && !note) {
+    emitToast({ message: '请填写不需解决原因', level: 'warning' });
+    return;
+  }
+  if (action === 'reject' && !note) {
+    emitToast({ message: '请填写驳回原因', level: 'warning' });
+    return;
+  }
+
+  const ctx = commentContext.value;
+  const formId = ctx.formId;
+  const taskId = ctx.taskId;
+
+  // 正式上下文必须同时具备 formId + taskId 才允许后端落库；
+  // 仅 formId 没有 taskId（例如外部入口未匹配到内部任务）属于"无内部任务"状态，
+  // 不再走本地 applyAnnotationReviewAction 假成功，避免本地状态被当作流转依据。
+  if (formId && !taskId) {
+    emitToast({ message: '未匹配到内部任务，不能保存处理状态', level: 'warning' });
+    return;
+  }
+
+  let persistedState: ReturnType<typeof normalizeAnnotationReviewStateView> | null = null;
+
+  if (formId && taskId) {
+    actionSubmitting.value = true;
+    try {
+      const resp = await annotationReviewStateApply({
+        formId,
+        taskId,
+        annotationId: props.annotationId,
+        annotationType: props.annotationType as 'text' | 'cloud' | 'rect' | 'obb',
+        action,
+        note: note || undefined,
+      });
+      if (!resp.success) {
+        emitToast({ message: resp.errorMessage || '更新批注处理状态失败', level: 'error' });
+        return;
+      }
+      persistedState = await resolvePersistedReviewState({
+        formId,
+        taskId,
+        annotationId: props.annotationId,
+        annotationType: props.annotationType,
+        actionResponseState: resp.state,
+      });
+      if (!persistedState) {
+        emitToast({ message: '处理状态已提交，请刷新后查看最新状态', level: 'warning' });
+        return;
+      }
+    } catch (err) {
+      emitToast({
+        message: err instanceof Error ? err.message : '更新批注处理状态失败',
+        level: 'error',
+      });
+      return;
+    } finally {
+      actionSubmitting.value = false;
+    }
+  }
+
+  const nextState = persistedState
+    ? (store.setAnnotationReviewState(props.annotationType, props.annotationId, persistedState) ? persistedState : null)
+    : store.applyAnnotationReviewAction(props.annotationType, props.annotationId, {
+      action,
+      actor: user,
+      note,
+    });
 
   if (!nextState) {
     emitToast({ message: '更新批注处理状态失败', level: 'error' });
@@ -425,6 +588,7 @@ function applyReviewAction(action: AnnotationReviewAction) {
   }
 
   actionNote.value = '';
+  selectedReviewAction.value = null;
   const successMessageMap: Record<AnnotationReviewAction, string> = {
     fixed: '批注已标记为已修改',
     wont_fix: '批注已标记为不需解决',
@@ -442,130 +606,21 @@ function canEditComment(comment: AnnotationComment): boolean {
   if (!user) return false;
   return comment.authorId === user.id || user.role === UserRole.ADMIN;
 }
-
-function buildScreenshotFilename(annotationType: AnnotationType, annotationId: string): string {
-  const safeId = annotationId.replace(/[^a-zA-Z0-9_-]+/g, '-');
-  return `annotation-${annotationType}-${safeId}-${Date.now()}.png`;
-}
-
-function buildAnnotationScreenshot(
-  attachment: ReviewAttachment,
-  width: number,
-  height: number,
-  capturedAt: number
-): AnnotationScreenshot {
-  return {
-    attachmentId: attachment.id,
-    name: attachment.name,
-    url: attachment.url,
-    mimeType: attachment.mimeType || attachment.type,
-    size: attachment.size,
-    width,
-    height,
-    uploadedAt: attachment.uploadedAt,
-    capturedAt,
-  };
-}
-
-function mergeAttachmentIntoCurrentTask(attachment: ReviewAttachment): void {
-  const task = currentTask.value;
-  if (!task) return;
-
-  const merged = new Map<string, ReviewAttachment>();
-  for (const item of task.attachments || []) {
-    const key = String(item.id || item.url || item.name || '');
-    if (key) {
-      merged.set(key, item);
-    }
-  }
-
-  const nextKey = String(attachment.id || attachment.url || attachment.name || '');
-  if (nextKey) {
-    merged.set(nextKey, attachment);
-  }
-
-  reviewStore.currentTask.value = {
-    ...task,
-    attachments: [...merged.values()],
-  };
-}
-
-async function captureAnnotationScreenshot() {
-  if (!props.annotationType || !props.annotationId) return;
-  const task = currentTask.value;
-  if (!task?.id) {
-    emitToast({ message: '当前任务未关联，无法上传批注截图', level: 'error' });
-    return;
-  }
-
-  const canvas = getCanvas();
-  if (!canvas) {
-    emitToast({ message: '当前三维视图未就绪，无法截图', level: 'error' });
-    return;
-  }
-
-  const width = canvas.width || canvas.clientWidth || 0;
-  const height = canvas.height || canvas.clientHeight || 0;
-  if (!width || !height) {
-    emitToast({ message: '当前三维画布尺寸异常，无法截图', level: 'error' });
-    return;
-  }
-
-  const hadScreenshot = !!annotationScreenshot.value;
-
-  try {
-    const result = await captureAndUpload(task.id, {
-      filename: buildScreenshotFilename(props.annotationType, props.annotationId),
-      upload: {
-        formId: task.formId ?? null,
-        modelRefnos: currentAnnotationRecord.value
-          ? getAnnotationRefnos(currentAnnotationRecord.value)
-          : undefined,
-        fileType: 'annotation_screenshot',
-        description: `${props.annotationType}:${props.annotationId}`,
-      },
-    });
-
-    if (!result?.attachment) {
-      emitToast({ message: '批注截图上传失败', level: 'error' });
-      return;
-    }
-
-    const screenshot = buildAnnotationScreenshot(
-      result.attachment,
-      result.width || width,
-      result.height || height,
-      result.capturedAt,
-    );
-    const saved = store.setAnnotationScreenshot(props.annotationType, props.annotationId, screenshot);
-    if (!saved) {
-      emitToast({ message: '当前批注不存在，截图未能绑定', level: 'error' });
-      return;
-    }
-
-    mergeAttachmentIntoCurrentTask(result.attachment);
-    emitToast({
-      message: hadScreenshot ? '批注截图已覆盖更新' : '批注截图已关联',
-      level: 'success',
-    });
-  } catch (error) {
-    emitToast({
-      message: error instanceof Error ? error.message : '批注截图上传失败',
-      level: 'error',
-    });
-  }
-}
 </script>
 
 <template>
-  <div class="flex flex-col overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-md">
+  <div class="flex flex-col overflow-hidden border border-[#E5E7EB] bg-white"
+    :class="isDockDensity ? 'rounded-lg shadow-sm' : 'rounded-xl shadow-md'"
+    data-testid="review-comments-timeline"
+    :data-density="props.density">
     <!-- Header -->
-    <div class="flex items-center justify-between border-b border-[#E5E7EB] px-4 py-3">
-      <div class="flex items-center gap-2">
+    <div class="flex items-center justify-between border-b border-[#E5E7EB]"
+      :class="isDockDensity ? 'px-2.5 py-1.5' : 'px-4 py-3'">
+      <div class="flex min-w-0 items-center gap-2">
         <svg class="h-4 w-4 text-[#FF6B00]" viewBox="0 0 24 24" fill="currentColor">
           <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
         </svg>
-        <span class="text-sm font-semibold text-[#111827]">{{ displayLabel }}</span>
+        <span class="truncate text-sm font-semibold text-[#111827]">{{ displayLabel }}</span>
       </div>
       <div class="flex items-center gap-1">
         <button type="button"
@@ -578,13 +633,15 @@ async function captureAnnotationScreenshot() {
 
     <!-- Empty state -->
     <div v-if="!annotationType || !annotationId"
-      class="px-4 py-8 text-center text-sm text-[#9CA3AF]">
+      class="text-center text-sm text-[#9CA3AF]"
+      :class="isDockDensity ? 'px-3 py-4' : 'px-4 py-8'">
       请先选择一个批注以查看讨论
     </div>
 
     <!-- Messages body -->
     <div v-else class="flex-1 overflow-y-auto">
-      <div class="border-b border-[#E5E7EB] bg-[#FCFCFD] px-4 py-3">
+      <div class="border-b border-[#E5E7EB] bg-[#FCFCFD]"
+        :class="isDockDensity ? 'px-2.5 py-1.5' : 'px-4 py-3'">
         <div class="flex flex-wrap items-center gap-2">
           <span v-if="reviewDisplay"
             class="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold"
@@ -596,120 +653,163 @@ async function captureAnnotationScreenshot() {
           </span>
         </div>
         <div v-if="reviewState?.updatedByName"
-          class="mt-1 text-[11px] text-[#9CA3AF]">
+          class="mt-1 text-[11px] text-[#9CA3AF]"
+          :class="isDockDensity ? 'truncate' : ''">
           最近处理：{{ reviewState.updatedByName }}
           <span v-if="reviewState.updatedByRole">（{{ getRoleDisplayName(reviewState.updatedByRole) }}）</span>
           · {{ formatDateTime(reviewState.updatedAt) }}
         </div>
         <div v-if="reviewState?.note"
-          class="mt-2 rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] leading-relaxed text-[#4B5563]">
+          class="rounded-md border border-[#E5E7EB] bg-white text-[12px] text-[#4B5563]"
+          :class="isDockDensity ? 'mt-1 truncate px-2 py-1' : 'mt-2 px-3 py-2 leading-relaxed'">
           {{ reviewState.note }}
         </div>
 
-        <div class="mt-3 rounded-lg border border-[#E5E7EB] bg-white p-3">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <div class="text-[12px] font-semibold text-[#111827]">批注截图</div>
-              <div class="mt-1 text-[11px] leading-relaxed text-[#9CA3AF]">
-                {{ screenshotHint }}
+        <button v-if="screenshot?.url"
+          type="button"
+          class="flex max-w-sm items-center gap-3 rounded-xl border border-slate-200 bg-white p-2 text-left hover:bg-slate-50"
+          :class="isDockDensity ? 'mt-1' : 'mt-3'"
+          @click="screenshotPreviewUrl = screenshot.url">
+          <img :src="screenshot.url" alt="批注截图" class="h-14 w-20 rounded-lg object-cover" />
+          <span class="min-w-0">
+            <span class="block text-[12px] font-semibold text-slate-700">批注截图</span>
+            <span class="block truncate text-[11px] text-slate-400">{{ screenshot.name || '点击查看大图' }}</span>
+          </span>
+        </button>
+
+        <div v-if="showReviewActions" :class="isDockDensity ? 'mt-1.5' : 'mt-3'">
+          <div class="rounded-lg border border-[#E5E7EB] bg-white"
+            :class="isDockDensity ? 'p-1.5' : 'p-3'">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <div class="mr-1 text-[12px] font-semibold text-[#111827]">处理结果</div>
+              <template v-if="canDesignHandle">
+                <button type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"
+                  :class="[isDockDensity ? 'px-2 py-0.5' : 'px-3 py-1.5', actionButtonClass('fixed')]"
+                  :aria-pressed="selectedReviewAction === 'fixed'"
+                  @click="selectReviewAction('fixed')">
+                  <BadgeCheck class="h-3.5 w-3.5" />
+                  已修改
+                </button>
+                <button type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 text-[12px] font-semibold text-amber-700 hover:bg-amber-100"
+                  :class="[isDockDensity ? 'px-2 py-0.5' : 'px-3 py-1.5', actionButtonClass('wont_fix')]"
+                  :aria-pressed="selectedReviewAction === 'wont_fix'"
+                  @click="selectReviewAction('wont_fix')">
+                  <CircleSlash class="h-3.5 w-3.5" />
+                  不需解决
+                </button>
+              </template>
+              <template v-if="canReviewDecide">
+                <button type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  :class="[isDockDensity ? 'px-2 py-0.5' : 'px-3 py-1.5', actionButtonClass('agree')]"
+                  :disabled="!canDecisionAct"
+                  :aria-pressed="selectedReviewAction === 'agree'"
+                  @click="selectReviewAction('agree')">
+                  <ThumbsUp class="h-3.5 w-3.5" />
+                  同意
+                </button>
+                <button type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 text-[12px] font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  :class="[isDockDensity ? 'px-2 py-0.5' : 'px-3 py-1.5', actionButtonClass('reject')]"
+                  :disabled="!canDecisionAct"
+                  :aria-pressed="selectedReviewAction === 'reject'"
+                  @click="selectReviewAction('reject')">
+                  <ThumbsDown class="h-3.5 w-3.5" />
+                  驳回
+                </button>
+              </template>
+              <button type="button"
+                class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md text-[12px] font-semibold text-white"
+                :class="[isDockDensity ? 'px-2 py-1' : 'px-3 py-1.5', selectedReviewAction && canSubmitReviewAction && !actionSubmitting
+                  ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
+                  : 'cursor-not-allowed bg-[#D1D5DB]']"
+                :disabled="!selectedReviewAction || !canSubmitReviewAction || actionSubmitting"
+                @click="submitSelectedReviewAction">
+                {{ actionSubmitting ? '提交中...' : reviewActionSubmitLabel }}
+              </button>
+            </div>
+            <div v-if="isDockDensity && annotationType && annotationId"
+              class="mt-1.5 rounded-md border border-[#E5E7EB] bg-[#FAFAFA] p-1.5">
+              <div v-if="replyToComment"
+                class="mb-1.5 flex items-center gap-2 rounded bg-[#F3F4F6] px-2 py-1 text-[11px]">
+                <Reply class="h-3 w-3 shrink-0 text-[#9CA3AF]" />
+                <span class="truncate text-[#6B7280]">
+                  回复 {{ replyToComment.authorName }}:
+                  "{{ replyToComment.content.slice(0, 30) }}{{ replyToComment.content.length > 30 ? '...' : '' }}"
+                </span>
+                <button type="button" class="ml-auto shrink-0 text-[#9CA3AF] hover:text-[#6B7280]" @click="cancelReply">
+                  <X class="h-3 w-3" />
+                </button>
+              </div>
+              <div class="flex items-end gap-1.5">
+                <textarea v-model="newCommentContent"
+                  class="min-h-[2rem] flex-1 resize-none rounded-md border border-[#D1D5DB] bg-white px-2 py-1 text-[12px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
+                  :placeholder="props.composerPlaceholder"
+                  @keyup.enter.ctrl="submitComment" />
+                <button type="button"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white"
+                  :class="newCommentContent.trim()
+                    ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
+                    : 'cursor-not-allowed bg-[#D1D5DB]'"
+                  :disabled="!newCommentContent.trim()"
+                  @click="submitComment">
+                  {{ props.composerSubmitLabel }}
+                  <Send class="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
-            <span v-if="annotationScreenshot"
-              class="shrink-0 rounded-full bg-[#FFF7ED] px-2 py-1 text-[10px] font-semibold text-[#C2410C]">
-              已关联
-            </span>
-          </div>
-
-          <div v-if="annotationScreenshot" class="mt-3">
-            <a v-if="annotationScreenshot.url"
-              :href="annotationScreenshot.url"
-              target="_blank"
-              rel="noreferrer"
-              class="block overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F8FAFC]">
-              <img :src="annotationScreenshot.url"
-                :alt="`${displayLabel} 截图`"
-                class="h-40 w-full object-cover" />
-            </a>
-            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280]">
-              <span class="max-w-full truncate">{{ annotationScreenshot.name }}</span>
-              <span>{{ annotationScreenshot.width }} × {{ annotationScreenshot.height }}</span>
-              <span>抓拍于 {{ formatDateTime(annotationScreenshot.capturedAt) }}</span>
-              <a v-if="annotationScreenshot.url"
-                :href="annotationScreenshot.url"
-                target="_blank"
-                rel="noreferrer"
-                class="font-semibold text-[#FF6B00] hover:text-[#EA580C]">
-                查看原图
-              </a>
+            <div class="rounded-md border border-[#D1D5DB] bg-white"
+              :class="isDockDensity ? 'mt-1.5 px-2 py-1' : 'mt-2 px-3 py-2'">
+              <textarea v-model="actionNote"
+                class="w-full resize-none text-[12px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
+                :class="isDockDensity ? 'min-h-[1.75rem]' : 'min-h-[2.75rem]'"
+                :placeholder="reviewActionPlaceholder" />
             </div>
-          </div>
-          <div v-else
-            class="mt-3 flex items-center justify-center rounded-lg border border-dashed border-[#D1D5DB] bg-[#F9FAFB] px-3 py-6 text-[12px] text-[#9CA3AF]">
-            暂无批注截图
-          </div>
-        </div>
-
-        <div v-if="showReviewActions" class="mt-3">
-          <div class="rounded-md border border-[#D1D5DB] bg-white px-3 py-2">
-            <textarea v-model="actionNote"
-              class="min-h-[2.75rem] w-full resize-none text-[12px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
-              :placeholder="reviewActionPlaceholder" />
-          </div>
-          <div class="mt-2 flex flex-wrap gap-2">
-            <template v-if="canDesignHandle">
+            <div v-if="reviewContextWarning"
+              class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700"
+              data-testid="review-actions-context-warning">
+              {{ reviewContextWarning }}
+            </div>
+            <div v-if="!isDockDensity" class="mt-2 flex items-center justify-between gap-3">
+              <div class="text-[11px] text-[#9CA3AF]">
+                {{ reviewActionHint }}
+              </div>
               <button type="button"
-                class="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"
-                @click="applyReviewAction('fixed')">
-                <BadgeCheck class="h-3.5 w-3.5" />
-                已修改
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-md text-[12px] font-semibold text-white"
+                :class="[isDockDensity ? 'px-2.5 py-1.5' : 'px-3 py-1.5', selectedReviewAction && canSubmitReviewAction && !actionSubmitting
+                  ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
+                  : 'cursor-not-allowed bg-[#D1D5DB]']"
+                :disabled="!selectedReviewAction || !canSubmitReviewAction || actionSubmitting"
+                @click="submitSelectedReviewAction">
+                {{ actionSubmitting ? '提交中...' : reviewActionSubmitLabel }}
               </button>
-              <button type="button"
-                class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-700 hover:bg-amber-100"
-                @click="applyReviewAction('wont_fix')">
-                <CircleSlash class="h-3.5 w-3.5" />
-                不需解决
-              </button>
-            </template>
-            <template v-if="canReviewDecide">
-              <button type="button"
-                class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="!canDecisionAct"
-                @click="applyReviewAction('agree')">
-                <ThumbsUp class="h-3.5 w-3.5" />
-                同意
-              </button>
-              <button type="button"
-                class="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[12px] font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="!canDecisionAct"
-                @click="applyReviewAction('reject')">
-                <ThumbsDown class="h-3.5 w-3.5" />
-                驳回
-              </button>
-            </template>
-          </div>
-          <div class="mt-2 text-[11px] text-[#9CA3AF]">
-            {{ reviewActionHint }}
+            </div>
           </div>
         </div>
       </div>
 
-      <div v-if="commentError" class="px-4 py-2 text-xs text-[#DC2626]">
+      <div v-if="commentError" class="py-2 text-xs text-[#DC2626]"
+        :class="isDockDensity ? 'px-3' : 'px-4'">
         {{ commentError }}
       </div>
 
-      <div v-if="commentLoading && timelineItems.length === 0" class="px-4 py-8 text-center text-sm text-[#9CA3AF]">
+      <div v-if="commentLoading && timelineItems.length === 0" class="text-center text-sm text-[#9CA3AF]"
+        :class="isDockDensity ? 'px-3 py-4' : 'px-4 py-8'">
         正在加载讨论...
       </div>
 
-      <div v-else-if="timelineItems.length === 0" class="px-4 py-8 text-center text-sm text-[#9CA3AF]">
-        暂无处理记录或评论，发表第一条意见
+      <div v-else-if="timelineItems.length === 0" class="text-center text-sm text-[#9CA3AF]"
+        :class="isDockDensity ? 'px-3 py-3' : 'px-4 py-8'">
+        {{ isDockDensity ? '暂无评论，输入后发送' : '暂无处理记录或评论，发表第一条意见' }}
       </div>
 
-      <div v-else class="flex flex-col gap-0.5 py-2">
+      <div v-else class="flex flex-col gap-0.5" :class="isDockDensity ? 'py-1' : 'py-2'">
         <div v-for="(item, idx) in timelineItems"
           :key="item.id"
-          class="flex gap-2.5 px-4 py-2"
-          :class="idx % 2 === 1 ? 'bg-[#F9FAFB]' : ''">
+          class="flex gap-2.5"
+          :class="[isDockDensity ? 'px-3 py-1.5' : 'px-4 py-2', idx % 2 === 1 ? 'bg-[#F9FAFB]' : '']">
           <template v-if="item.kind === 'comment'">
             <!-- Role color bar (3px) -->
             <div class="w-[3px] shrink-0 self-stretch rounded-sm"
@@ -818,8 +918,9 @@ async function captureAnnotationScreenshot() {
     </div>
 
     <!-- Input area -->
-    <div v-if="annotationType && annotationId"
-      class="border-t border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3">
+    <div v-if="annotationType && annotationId && !isDockDensity"
+      class="border-t border-[#E5E7EB] bg-[#FAFAFA]"
+      :class="isDockDensity ? 'px-3 py-2' : 'px-4 py-3'">
       <!-- Reply indicator -->
       <div v-if="replyToComment"
         class="mb-2 flex items-center gap-2 rounded bg-[#F3F4F6] px-2.5 py-1.5 text-xs">
@@ -833,35 +934,21 @@ async function captureAnnotationScreenshot() {
         </button>
       </div>
 
-      <div class="rounded-md border border-[#D1D5DB] bg-white px-3 py-2">
+      <div class="rounded-md border border-[#D1D5DB] bg-white"
+        :class="isDockDensity ? 'px-2.5 py-1.5' : 'px-3 py-2'">
         <textarea v-model="newCommentContent"
-          class="min-h-[3rem] w-full resize-none text-[13px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
+          class="w-full resize-none text-[13px] text-[#374151] placeholder:text-[#9CA3AF] focus:outline-none"
+          :class="isDockDensity ? 'min-h-[2.5rem]' : 'min-h-[3rem]'"
           :placeholder="props.composerPlaceholder"
           @keyup.enter.ctrl="submitComment" />
       </div>
 
-      <div class="mt-2 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <button type="button" class="rounded p-1 text-[#9CA3AF] hover:bg-[#E5E7EB] hover:text-[#6B7280]">
-            <Paperclip class="h-4 w-4" />
-          </button>
-          <button type="button"
-            class="rounded p-1 hover:bg-[#E5E7EB]"
-            :class="[
-              isCapturing ? 'cursor-not-allowed text-[#D1D5DB]' : 'text-[#9CA3AF] hover:text-[#6B7280]',
-              annotationScreenshot && !isCapturing ? 'text-[#FF6B00]' : '',
-            ]"
-            :disabled="isCapturing"
-            :title="annotationScreenshot ? '重新截屏并覆盖当前批注截图' : '为当前批注截取三维视图'"
-            @click="captureAnnotationScreenshot">
-            <Camera class="h-4 w-4" />
-          </button>
-        </div>
+      <div class="mt-2 flex items-center justify-end">
         <button type="button"
-          class="inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[13px] font-semibold text-white"
-          :class="newCommentContent.trim()
+          class="inline-flex items-center gap-1.5 rounded-md font-semibold text-white"
+          :class="[isDockDensity ? 'px-3 py-1.5 text-xs' : 'px-4 py-1.5 text-[13px]', newCommentContent.trim()
             ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
-            : 'cursor-not-allowed bg-[#D1D5DB]'"
+            : 'cursor-not-allowed bg-[#D1D5DB]']"
           :disabled="!newCommentContent.trim()"
           @click="submitComment">
           {{ props.composerSubmitLabel }}
@@ -869,5 +956,16 @@ async function captureAnnotationScreenshot() {
         </button>
       </div>
     </div>
+
+    <Teleport v-if="screenshotPreviewUrl" to="body">
+      <div class="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/70 p-6"
+        data-testid="review-comments-screenshot-preview"
+        @click="screenshotPreviewUrl = null">
+        <img :src="screenshotPreviewUrl"
+          alt="批注截图预览"
+          class="max-h-full max-w-full rounded-2xl bg-white object-contain shadow-2xl"
+          @click.stop />
+      </div>
+    </Teleport>
   </div>
 </template>

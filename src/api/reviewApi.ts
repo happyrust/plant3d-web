@@ -951,7 +951,7 @@ export async function reviewTaskCreate(
   return await fetchJson<ReviewTaskResponse>('/api/review/tasks', {
     method: 'POST',
     body: JSON.stringify(request),
-  });
+  }, { timeoutMs: 30_000 });
 }
 
 /**

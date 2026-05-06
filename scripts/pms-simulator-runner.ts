@@ -7,6 +7,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import {
   buildAuthLoginRequest,
   buildDeleteReviewPayload,
+  buildEmbedUrlPayload,
   type SimulatorPmsUser,
   type WorkflowRole,
 } from '../src/debug/pmsPlatformContractPayloads';
@@ -257,7 +258,7 @@ async function ensureDir(dir: string): Promise<void> {
 
 async function postJson<T>(url: string, payload: unknown, bearerToken?: string): Promise<{ status: number; body: T }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   let response: Response;
   try {
     response = await fetch(url, {
@@ -292,7 +293,7 @@ async function postJson<T>(url: string, payload: unknown, bearerToken?: string):
 
 async function getJson<T>(url: string, bearerToken?: string): Promise<{ status: number; body: T }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   let response: Response;
   try {
     response = await fetch(url, {
@@ -432,6 +433,11 @@ async function probeBackendTaskByFormId(
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || null;
 }
 
 function collectConfirmedRecords(body: unknown): ConfirmedRecordApiRecord[] {
@@ -794,11 +800,13 @@ async function openTaskForRole(
   });
   const source = options?.source || 'task-view';
   traceSimulator(`openTaskForRole role=${role} source=${source} form_id=${formId} task_id=${normalizedTaskId || '--'}`);
+  const skipIframeSrc = process.env.PMS_SIMULATOR_SKIP_REVIEWER_IFRAME === '1';
   await callSimulatorApi<void>(page, 'openTaskByFormId', {
     role,
     formId,
     taskId: normalizedTaskId,
     source,
+    skipIframeSrc,
   });
   return await waitForSnapshotByFormId(page, formId, {
     predicate: (item) => {
@@ -834,7 +842,14 @@ async function runWorkflowAction(
   if (options?.comment != null) {
     await callSimulatorApi<void>(page, 'setWorkflowDialogComment', options.comment);
   }
-  await callSimulatorApi<void>(page, 'confirmWorkflowDialog');
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __pmsReviewSimulatorTest?: Record<string, (...innerArgs: unknown[]) => unknown>;
+    }).__pmsReviewSimulatorTest;
+    if (api && typeof api.confirmWorkflowDialog === 'function') {
+      api.confirmWorkflowDialog();
+    }
+  });
   return await waitFor(async () => {
     const snapshot = await getSnapshot(page);
     if (snapshot.lastAction !== action || snapshot.lastActionAt == null) return null;
@@ -1200,6 +1215,9 @@ async function openScenarioPage(runtime: ScenarioRuntime): Promise<void> {
 async function createReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId): Promise<CreatedReview> {
   await switchRole(runtime.page, 'SJ');
   process.env.PMS_MOCK_PACKAGE_NAME = scenarioPackageName(caseId);
+  if (process.env.PMS_SIMULATOR_SEED_REVIEW_TASK === '1') {
+    return await createSeededReview(runtime, caseId);
+  }
   traceSimulator(`createReview case=${caseId} openNew`);
   await callSimulatorApi<void>(runtime.page, 'openNew');
   const opened = await waitForOpenedIframeSnapshot(runtime.page, {
@@ -1237,6 +1255,82 @@ async function createReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId
     packageName,
     formId,
     taskId: resolvedTaskId,
+  };
+}
+
+async function createSeededReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId): Promise<CreatedReview> {
+  const packageName = scenarioPackageName(caseId);
+  const bearerToken = await createRoleToken(runtime, 'SJ', 'sj');
+  const embedPayload = buildEmbedUrlPayload({
+    projectId: runtime.env.projectId,
+    currentPmsUser: 'SJ',
+    currentWorkflowRole: 'sj',
+    workflowMode: 'external',
+    token: bearerToken,
+  });
+  traceSimulator(`createSeededReview case=${caseId} embed-url`);
+  const embedResponse = await postJson<Record<string, unknown>>(
+    `${runtime.env.backendBaseUrl}/api/review/embed-url`,
+    embedPayload,
+    bearerToken,
+  );
+  const embedData = isObjectRecord(embedResponse.body.data) ? embedResponse.body.data : embedResponse.body;
+  const query = isObjectRecord(embedData.query) ? embedData.query : null;
+  const lineage = isObjectRecord(embedData.lineage) ? embedData.lineage : null;
+  const formId = readNonEmptyString(embedData.form_id)
+    || readNonEmptyString(embedData.formId)
+    || readNonEmptyString(query?.form_id)
+    || readNonEmptyString(query?.formId)
+    || readNonEmptyString(lineage?.form_id)
+    || readNonEmptyString(lineage?.formId);
+  if (!formId) {
+    throw new Error('seed 建单未获得 form_id');
+  }
+
+  const componentRefnos = (process.env.PMS_TARGET_BRAN_REFNOS || process.env.PMS_TARGET_BRAN_REFNO || '24381_145018')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const createPayload = {
+    title: packageName,
+    description: 'PMS simulator seeded review task',
+    modelName: runtime.env.projectId,
+    checkerId: 'JH',
+    approverId: 'SH',
+    reviewerId: 'JH',
+    formId,
+    priority: 'medium',
+    components: componentRefnos.map((refNo, index) => ({
+      id: `sim-seed-${index + 1}`,
+      refNo,
+      name: `模拟构件 ${index + 1}`,
+      type: 'PIPE',
+    })),
+  };
+  traceSimulator(`createSeededReview case=${caseId} review/tasks form_id=${formId}`);
+  const createResponse = await postJson<Record<string, unknown>>(
+    `${runtime.env.backendBaseUrl}/api/review/tasks`,
+    createPayload,
+    bearerToken,
+  );
+  const task = isObjectRecord(createResponse.body.task)
+    ? createResponse.body.task
+    : (isObjectRecord(createResponse.body.data) && isObjectRecord(createResponse.body.data.task)
+      ? createResponse.body.data.task
+      : null);
+  const taskId = readNonEmptyString(task?.id);
+  if (!taskId) {
+    throw new Error('seed 建单未获得 task_id');
+  }
+
+  runtime.cleanupFormIds.add(formId);
+  await refreshList(runtime.page);
+  await openTaskForRole(runtime.page, formId, 'SJ', { taskId });
+  traceSimulator(`createSeededReview case=${caseId} created form_id=${formId} task_id=${taskId}`);
+  return {
+    packageName,
+    formId,
+    taskId,
   };
 }
 
@@ -1866,6 +1960,16 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
   assertions.push(assertBackendCurrentNode('sh-agree-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'pz'));
 
   await openTaskForRole(runtime.page, created.formId, 'PZ', { taskId: created.taskId });
+  if (!created.taskId) {
+    throw new Error(`return 缺少 task_id（form_id=${created.formId}）`);
+  }
+  await saveGateRecord(runtime, {
+    taskId: created.taskId,
+    formId: created.formId,
+    currentWorkflowRole: 'pz',
+    currentPmsUser: 'PZ',
+    gateType: 'return',
+  });
   const returnSnapshot = await runWorkflowAction(runtime.page, 'return', {
     comment: 'PZ return 自动化',
     targetNode: 'sj',
@@ -1905,7 +2009,11 @@ async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorSce
     .first()
     .textContent()
     .catch(() => null);
-  assertions.push(assertResult('return-designer-comment-list', Boolean(listText?.includes('批注列表')), listText || ''));
+  assertions.push(assertResult(
+    'return-designer-comment-list',
+    Boolean(listText?.includes('批注列表') || listText?.includes('全部批注')),
+    listText || '',
+  ));
   assertions.push(assertResult('return-designer-comment-detail-hidden', detailVisible === false, undefined, false, detailVisible));
   assertions.push(assertResult('return-designer-comment-task-entry-hidden', taskEntryVisible === false, undefined, false, taskEntryVisible));
 

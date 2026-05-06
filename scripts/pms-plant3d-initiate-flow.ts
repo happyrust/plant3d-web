@@ -18,7 +18,16 @@ function resolveAutomationWorkflowMode(): string | null {
 declare global {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- 与 Window 合并需 interface
   interface Window {
-    __plant3dInitiateReviewE2E?: { addMockComponent: (refNo?: string, name?: string) => void };
+    __plant3dInitiateReviewE2E?: {
+      addMockComponent: (refNo?: string, name?: string) => void;
+      submit?: () => Promise<void>;
+      getLastCreateResult?: () => {
+        taskId?: string | null;
+        formId?: string | null;
+        title?: string | null;
+        error?: string | null;
+      } | null;
+    };
   }
 }
 
@@ -44,6 +53,17 @@ export function listPageAndFrames(page: Page): (Page | Frame)[] {
     out.push(frame);
   }
   return out;
+}
+
+export async function openPlant3dAutomationPage(
+  context: BrowserContext,
+  url: string,
+  label: string,
+): Promise<Page> {
+  const page = await context.newPage();
+  console.error(`[pms] 打开 plant3d 自动化页面 ${label}: ${url}`);
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+  return page;
 }
 
 export async function tryFillPmsNewDocumentDialog(page: Page): Promise<void> {
@@ -365,7 +385,17 @@ async function trySelectBranViaPostMessage(root: Page | Frame, rawRefno: string)
   return ok;
 }
 
-export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<string> {
+export type InitiateReviewResult = {
+  packageName: string;
+  createResult: {
+    taskId?: string | null;
+    formId?: string | null;
+    title?: string | null;
+    error?: string | null;
+  } | null;
+};
+
+export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<InitiateReviewResult> {
   const targetBranRefno = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
   const workspace = root.locator('[data-testid="designer-landing-workspace"]');
   await workspace.first().waitFor({ state: 'visible', timeout: 5000 });
@@ -480,13 +510,37 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
     if (!disabled && ariaDisabled !== 'true') break;
     await new Promise((r) => setTimeout(r, 400));
   }
-  await submitBtn.click({ timeout: 20_000 });
+  const stillDisabled = await submitBtn.getAttribute('disabled');
+  const stillAriaDisabled = await submitBtn.getAttribute('aria-disabled');
+  if (stillDisabled || stillAriaDisabled === 'true') {
+    throw new Error('发起编校审主按钮仍处于禁用状态，无法提交');
+  }
 
-  await root
-    .getByText(/编校审单(创建|保存)成功/, { exact: false })
-    .first()
-    .waitFor({ state: 'visible', timeout: 120_000 });
-  return pkg;
+  const usedSubmitHook = await root.evaluate(async () => {
+    const hook = window.__plant3dInitiateReviewE2E;
+    if (typeof hook?.submit !== 'function') return false;
+    await hook.submit();
+    return true;
+  });
+  if (!usedSubmitHook) {
+    const hiddenSubmit = root.locator('[data-testid="initiate-submit-trigger"]');
+    if (await hiddenSubmit.count()) {
+      await hiddenSubmit.click({ force: true, timeout: 20_000 });
+    } else {
+      await submitBtn.click({ timeout: 20_000 });
+    }
+  }
+
+  await root.waitForFunction(
+    () => Boolean(window.__plant3dInitiateReviewE2E?.getLastCreateResult?.()),
+    null,
+    { timeout: 120_000 },
+  );
+  const createResult = await root.evaluate(() => window.__plant3dInitiateReviewE2E?.getLastCreateResult?.() ?? null);
+  if (!createResult || createResult.error) {
+    throw new Error(`编校审单保存失败：${createResult?.error || '未返回创建结果'}`);
+  }
+  return { packageName: pkg, createResult };
 }
 
 /**
@@ -741,7 +795,7 @@ export async function runCheckerWorkflowAcrossContext(context: BrowserContext): 
   await runPlant3dCheckerWorkflowOnRoot(located.root);
 }
 
-export async function runSubmitReviewAcrossContext(context: BrowserContext): Promise<string> {
+export async function runSubmitReviewAcrossContext(context: BrowserContext): Promise<InitiateReviewResult> {
   const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
   const parsed = rawPoll ? Number(rawPoll) : NaN;
   const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;

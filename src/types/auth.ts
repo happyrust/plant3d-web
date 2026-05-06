@@ -133,53 +133,6 @@ export type ReviewAttachment = {
   uploadedAt: number;
 };
 
-export type AnnotationScreenshot = {
-  attachmentId: string;
-  name: string;
-  url: string;
-  mimeType?: string;
-  size?: number;
-  width: number;
-  height: number;
-  uploadedAt: number;
-  capturedAt: number;
-};
-
-function normalizePositiveNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-function normalizeTimestamp(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-export function normalizeAnnotationScreenshot(value: unknown): AnnotationScreenshot | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const raw = value as Record<string, unknown>;
-  const attachmentId = String(raw.attachmentId || raw.attachment_id || '').trim();
-  const name = String(raw.name || '').trim();
-  const url = String(raw.url || '').trim();
-  const width = normalizePositiveNumber(raw.width);
-  const height = normalizePositiveNumber(raw.height);
-  if (!attachmentId || !name || !url || !width || !height) return undefined;
-
-  return {
-    attachmentId,
-    name,
-    url,
-    mimeType: raw.mimeType
-      ? String(raw.mimeType)
-      : (raw.mime_type ? String(raw.mime_type) : undefined),
-    size: typeof raw.size === 'number' && Number.isFinite(raw.size) && raw.size >= 0
-      ? raw.size
-      : undefined,
-    width,
-    height,
-    uploadedAt: normalizeTimestamp(raw.uploadedAt || raw.uploaded_at) || Date.now(),
-    capturedAt: normalizeTimestamp(raw.capturedAt || raw.captured_at) || Date.now(),
-  };
-}
-
 // 工作流节点类型
 export type WorkflowNode = 'sj' | 'jd' | 'sh' | 'pz';
 
