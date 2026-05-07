@@ -13,6 +13,7 @@ import {
 } from 'lucide-vue-next';
 
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
+import NonReturnedGuidanceCard from './NonReturnedGuidanceCard.vue';
 import ResubmissionTaskList from './ResubmissionTaskList.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import {
@@ -114,11 +115,14 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
 });
 
 const returnedTasks = computed(() => userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
-const currentTask = computed(() => {
-  const task = reviewStore.currentTask.value;
-  if (task && isCanonicalReturnedTask(task)) return task;
-  return null;
-});
+const currentTask = computed(() => reviewStore.currentTask.value);
+const currentTaskIsReturned = computed(
+  () => !!(currentTask.value && isCanonicalReturnedTask(currentTask.value)),
+);
+
+function goToReviewPanel() {
+  ensurePanelAndActivate('review');
+}
 const currentTaskStatus = computed(() => currentTask.value ? getTaskStatusDisplayName(currentTask.value.status) : null);
 const currentTaskPriority = computed(() => currentTask.value ? getPriorityDisplayName(currentTask.value.priority) : null);
 const returnedMetadata = computed(() => (currentTask.value ? getCanonicalReturnedMetadata(currentTask.value) : null));
@@ -282,6 +286,7 @@ const linkedMeasurements = computed<LinkedMeasurementItem[]>(() => {
     engine: 'xeokit' | 'classic',
   ) => {
     if (measurement.sourceAnnotationId !== annotation.id || measurement.sourceAnnotationType !== annotation.type) return;
+    if (measurement.kind !== 'distance' && measurement.kind !== 'angle') return;
     const summary = `${formatMeasurementKindLabel(measurement.kind)} · ${formatMeasurementSummary(
       measurement,
       unitSettings.displayUnit.value,
@@ -294,6 +299,8 @@ const linkedMeasurements = computed<LinkedMeasurementItem[]>(() => {
       createdAt: measurement.createdAt,
       visible: measurement.visible,
       summary,
+      measurement,
+      pathDisplayId: `${engine}:${measurement.id}`,
     });
   };
 
@@ -548,8 +555,8 @@ onMounted(() => {
 
     <section class="min-w-0 flex-1 overflow-hidden border-r border-slate-200 bg-[#FCFDFE]">
       <div class="flex h-full min-h-0 flex-col overflow-hidden p-4">
-        <template v-if="currentTask">
-          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <template v-if="currentTaskIsReturned">
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="designer-state-1">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0 space-y-3">
                 <div class="flex flex-wrap items-center gap-2">
@@ -620,7 +627,8 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+            data-testid="designer-comment-annotation-list">
             <div class="flex items-center justify-between gap-3">
               <div>
                 <h3 class="text-base font-semibold text-slate-950">全部批注</h3>
@@ -689,6 +697,12 @@ onMounted(() => {
             </div>
           </div>
         </template>
+
+        <NonReturnedGuidanceCard
+          v-else-if="currentTask"
+          :task="currentTask"
+          @navigate-to-review="goToReviewPanel"
+        />
 
         <div v-else class="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white">
           <div class="text-center text-sm text-slate-500">
