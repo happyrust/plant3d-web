@@ -9,6 +9,7 @@ import { authVerifyToken, clearAuthToken, setAuthToken } from '@/api/reviewApi';
 import { requestDesignerCommentViewMode } from '@/components/review/designerCommentViewModeBus';
 import { restoreEmbedWorkbenchContext } from '@/components/review/embedContextRestore';
 import { restoreEmbedFormSnapshotContext } from '@/components/review/embedFormSnapshotRestore';
+import { attachEmbedPostMessageBridge } from '@/components/review/embedPostMessageBridge';
 import {
   applyEmbedLandingState,
   buildPersistedEmbedModeParams,
@@ -237,6 +238,29 @@ async function ensureModelRefnosVisible(
 }
 
 let offEmbedPostMessage: (() => void) | null = null;
+let offWorkflowSyncBridge: (() => void) | null = null;
+
+function tryRegisterWorkflowSyncBridge() {
+  const shouldEnable = embedModeParams.value.isEmbedMode && embedTokenVerified.value;
+  if (!shouldEnable) {
+    if (offWorkflowSyncBridge) {
+      offWorkflowSyncBridge();
+      offWorkflowSyncBridge = null;
+    }
+    return;
+  }
+  if (offWorkflowSyncBridge) return;
+
+  offWorkflowSyncBridge = attachEmbedPostMessageBridge({
+    onPmsWorkflowPreAction: async (msg) => reviewStore.flushPendingConfirmForExternalAction(msg.formId),
+    onPmsWorkflowChanged: async (msg) => reviewStore.applyExternalWorkflowChange({
+      formId: msg.formId,
+      action: msg.action,
+      targetNode: msg.targetNode,
+      comments: msg.comments,
+    }),
+  });
+}
 
 function tryRegisterEmbedPostMessageBridge() {
   const shouldEnable = embedModeParams.value.isEmbedMode && embedTokenVerified.value;
@@ -1299,6 +1323,7 @@ async function bootstrapEmbedSession(): Promise<void> {
   }
 
   tryRegisterEmbedPostMessageBridge();
+  tryRegisterWorkflowSyncBridge();
 
   const trustedEmbedIdentity = resolveTrustedEmbedIdentity(embedModeParams.value);
   if (token && (!embedTokenVerified.value || !trustedEmbedIdentity)) {
@@ -1549,6 +1574,11 @@ onUnmounted(() => {
   if (offEmbedPostMessage) {
     offEmbedPostMessage();
     offEmbedPostMessage = null;
+  }
+
+  if (offWorkflowSyncBridge) {
+    offWorkflowSyncBridge();
+    offWorkflowSyncBridge = null;
   }
 
   disposePanelZones();
