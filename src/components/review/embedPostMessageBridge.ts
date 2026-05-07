@@ -7,7 +7,7 @@ import {
   type PmsWorkflowPreActionMessage,
 } from './embedPostMessageMessages';
 
-interface BridgeOptions {
+type BridgeOptions = {
   onPmsWorkflowPreAction: (msg: PmsWorkflowPreActionMessage) => Promise<{ ok: boolean; error?: string }>;
   onPmsWorkflowChanged: (msg: PmsWorkflowChangedMessage) => Promise<{
     ok: boolean;
@@ -17,7 +17,7 @@ interface BridgeOptions {
     error?: string;
   }>;
   trustedOrigins?: string[];
-}
+};
 
 export function attachEmbedPostMessageBridge(options: BridgeOptions): () => void {
   const handler = async (event: MessageEvent) => {

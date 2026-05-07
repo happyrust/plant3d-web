@@ -1,11 +1,11 @@
-export interface PmsWorkflowPreActionMessage {
+export type PmsWorkflowPreActionMessage = {
   type: 'pms.workflow_pre_action';
   formId: string;
   action: 'agree' | 'return' | 'redirect' | 'terminate';
   requestId?: string;
-}
+};
 
-export interface PmsWorkflowChangedMessage {
+export type PmsWorkflowChangedMessage = {
   type: 'pms.workflow_changed';
   formId: string;
   action: 'agree' | 'return' | 'redirect' | 'terminate';
@@ -13,18 +13,18 @@ export interface PmsWorkflowChangedMessage {
   comments?: string;
   pmsActor?: string;
   requestId?: string;
-}
+};
 
 export type PmsInboundMessage = PmsWorkflowPreActionMessage | PmsWorkflowChangedMessage;
 
-export interface Plant3dWorkflowPreActionAckedMessage {
+export type Plant3dWorkflowPreActionAckedMessage = {
   type: 'plant3d.workflow_pre_action_acked';
   ok: boolean;
   error?: string;
   requestId?: string;
-}
+};
 
-export interface Plant3dWorkflowSyncedMessage {
+export type Plant3dWorkflowSyncedMessage = {
   type: 'plant3d.workflow_synced';
   formId: string;
   action: string;
@@ -34,7 +34,7 @@ export interface Plant3dWorkflowSyncedMessage {
   currentNode?: string;
   error?: string;
   requestId?: string;
-}
+};
 
 export type Plant3dOutboundSyncMessage =
   | Plant3dWorkflowPreActionAckedMessage
