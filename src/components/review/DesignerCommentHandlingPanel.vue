@@ -698,11 +698,9 @@ onMounted(() => {
           </div>
         </template>
 
-        <NonReturnedGuidanceCard
-          v-else-if="currentTask"
+        <NonReturnedGuidanceCard v-else-if="currentTask"
           :task="currentTask"
-          @navigate-to-review="goToReviewPanel"
-        />
+          @navigate-to-review="goToReviewPanel" />
 
         <div v-else class="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white">
           <div class="text-center text-sm text-slate-500">
