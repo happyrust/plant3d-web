@@ -2587,17 +2587,23 @@ async function emitPmsWorkflowMessageAndAwaitAck(
   timeoutMs = 10000,
 ): Promise<WorkflowSyncAckRaw> {
   return await page.evaluate(
-    async ({ method, payload, ackType, timeout }) => {
-      return await new Promise<WorkflowSyncAckRaw>((resolve) => {
-        const listener = (event: MessageEvent) => {
+    ({ method, payload, ackType, timeout }) => {
+      // tsx 编译产物在 Playwright evaluate context 中缺 __name helper，先 polyfill 避免 ReferenceError。
+      const g = globalThis as { __name?: <T>(fn: T, n?: string) => T };
+      if (typeof g.__name !== 'function') {
+        g.__name = (fn) => fn;
+      }
+      return new Promise<WorkflowSyncAckRaw>((resolve) => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        function listener(event: MessageEvent) {
           const data = event.data as { type?: string };
-          if (data?.type === ackType) {
+          if (data && data.type === ackType) {
             window.removeEventListener('message', listener);
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             resolve(event.data as WorkflowSyncAckRaw);
           }
-        };
-        const timer = setTimeout(() => {
+        }
+        timer = setTimeout(() => {
           window.removeEventListener('message', listener);
           resolve({ type: ackType, ok: false, error: 'ack_timeout' });
         }, timeout);
@@ -2609,7 +2615,7 @@ async function emitPmsWorkflowMessageAndAwaitAck(
         const api = host.__pmsReviewSimulatorTest;
         if (!api || typeof api[method] !== 'function') {
           window.removeEventListener('message', listener);
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           resolve({ type: ackType, ok: false, error: `simulator_api_missing_${method}` });
           return;
         }
@@ -2617,7 +2623,7 @@ async function emitPmsWorkflowMessageAndAwaitAck(
           api[method](payload);
         } catch (e) {
           window.removeEventListener('message', listener);
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           resolve({ type: ackType, ok: false, error: e instanceof Error ? e.message : String(e) });
         }
       });
@@ -2650,8 +2656,10 @@ async function scenarioBugRus244DesignerEmptyAfterReturn(
   ));
 
   const reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  // 关键：standalone automation tab 与 simulator iframe 的 token 必须用同一 PMS user (JH) 才能匹配
+  // task.checkerId（JH），否则 plant3d iframe 内调用 reviewTaskReturn 会被后端拒绝。
   await openAutomationPageFromSnapshot(runtime, reviewerSnapshot, `bug-rus-244 reviewer form_id=${created.formId}`, {
-    tokenUserId: 'proofreader_001',
+    tokenUserId: 'JH',
     tokenRole: 'jd',
   });
   const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId });
