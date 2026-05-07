@@ -1,5 +1,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 
+import { useToolStore } from './useToolStore';
+
 import type {
   AnnotationRecord,
   CloudAnnotationRecord,
@@ -14,12 +16,20 @@ import {
   reviewRecordDelete,
   reviewRecordGetByTaskId,
   reviewRecordClearByTaskId,
+  reviewTaskApprove,
   reviewTaskGetById,
   reviewTaskGetHistory,
+  reviewTaskReturn,
   getReviewUserWebSocketUrl,
   type ConfirmedRecordData,
   type ReviewHistoryItem,
 } from '@/api/reviewApi';
+import {
+  buildReviewConfirmSnapshotPayload,
+  buildReviewConfirmSnapshotPayloadFromRecords,
+  buildUnsavedReviewConfirmPayload,
+  hasReviewConfirmPayloadData,
+} from '@/components/review/reviewPanelActions';
 import { useUserStore } from '@/composables/useUserStore';
 
 export type ConfirmedRecord = {
@@ -514,6 +524,109 @@ function handleWebSocketMessage(message: {
   }
 }
 
+// ============ PMS 跨平台 workflow 同步入口 ============
+
+type FlushPendingConfirmResult = { ok: boolean; error?: string };
+
+type ApplyExternalWorkflowChangePayload = {
+  formId: string;
+  action: 'agree' | 'return' | 'redirect' | 'terminate';
+  targetNode?: string;
+  comments?: string;
+};
+
+type ApplyExternalWorkflowChangeResult = {
+  ok: boolean;
+  taskId?: string;
+  status?: string;
+  currentNode?: string;
+  error?: string;
+};
+
+async function flushPendingConfirmForExternalAction(
+  formId: string,
+): Promise<FlushPendingConfirmResult> {
+  const task = currentTask.value;
+  if (!task) return { ok: false, error: 'no_current_task' };
+  const taskFormId = task.formId?.trim();
+  const targetFormId = formId.trim();
+  if (!taskFormId || taskFormId !== targetFormId) {
+    return { ok: false, error: 'form_id_mismatch' };
+  }
+
+  const toolStore = useToolStore();
+  const draftPayload = buildReviewConfirmSnapshotPayload({
+    annotations: [...toolStore.annotations.value],
+    cloudAnnotations: [...toolStore.cloudAnnotations.value],
+    rectAnnotations: [...toolStore.rectAnnotations.value],
+    obbAnnotations: [...toolStore.obbAnnotations.value],
+    measurements: [...toolStore.measurements.value],
+    xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
+    xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+    xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
+    xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
+  });
+  const confirmedSnapshot = buildReviewConfirmSnapshotPayloadFromRecords(
+    sortedConfirmedRecords.value,
+  );
+  const unsavedPayload = buildUnsavedReviewConfirmPayload(draftPayload, confirmedSnapshot);
+  if (!hasReviewConfirmPayloadData(unsavedPayload)) {
+    return { ok: true };
+  }
+
+  try {
+    await addConfirmedRecord({
+      type: 'batch',
+      annotations: unsavedPayload.annotations as AnnotationRecord[],
+      cloudAnnotations: unsavedPayload.cloudAnnotations as CloudAnnotationRecord[],
+      rectAnnotations: unsavedPayload.rectAnnotations as RectAnnotationRecord[],
+      obbAnnotations: unsavedPayload.obbAnnotations as ObbAnnotationRecord[],
+      measurements: unsavedPayload.measurements as unknown as MeasurementRecord[],
+      note: 'PMS workflow_pre_action 自动保存',
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function applyExternalWorkflowChange(
+  payload: ApplyExternalWorkflowChangePayload,
+): Promise<ApplyExternalWorkflowChangeResult> {
+  const task = currentTask.value;
+  if (!task) return { ok: false, error: 'no_current_task' };
+  const taskFormId = task.formId?.trim();
+  const targetFormId = payload.formId.trim();
+  if (!taskFormId || taskFormId !== targetFormId) {
+    return { ok: false, error: 'form_id_mismatch' };
+  }
+
+  try {
+    if (payload.action === 'agree') {
+      await reviewTaskApprove(task.id, payload.comments ?? '');
+    } else if (payload.action === 'return') {
+      const targetNode = payload.targetNode?.trim() || 'sj';
+      await reviewTaskReturn(task.id, targetNode, payload.comments ?? '');
+    } else if (payload.action === 'redirect' || payload.action === 'terminate') {
+      return { ok: false, error: `action_${payload.action}_not_implemented` };
+    } else {
+      return { ok: false, error: `unknown_action_${payload.action}` };
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const userStore = useUserStore();
+  await userStore.loadReviewTasks();
+  const refreshed = userStore.reviewTasks.value.find((t: ReviewTask) => t.id === task.id);
+  return {
+    ok: true,
+    taskId: task.id,
+    status: refreshed?.status ?? task.status,
+    currentNode: refreshed?.currentNode ?? task.currentNode,
+  };
+}
+
 // ============ 导出功能 ============
 
 function exportReviewData(): string {
@@ -603,6 +716,10 @@ export function useReviewStore() {
     exportReviewData,
     setCurrentTask,
     clearCurrentTask,
+
+    // PMS 跨平台 workflow 同步
+    flushPendingConfirmForExternalAction,
+    applyExternalWorkflowChange,
 
     // WebSocket
     connectWebSocket,
