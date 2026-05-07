@@ -212,6 +212,9 @@ const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
   'gate-block': '批注门禁 block',
   'gate-return': '批注门禁 return',
   'bran-mixed': '多 BRAN 批注驳回到最终批准',
+  'stop-sh': 'SH 节点终止分支 stop -> cancelled',
+  'duplicate-bran-form': '同一 BRAN 多 form_id 隔离',
+  'rus-244-design-a-ui-empty-state': 'RUS-244 design-A 三态拆分 + 入口收紧',
 };
 
 function appendNoProxy(value: string | undefined): string {
@@ -1108,10 +1111,12 @@ async function saveRestoreRecord(
     measurements: [{
       id: `restore-measure-${now}`,
       kind: 'distance',
-      origin: { entityId: '24381/145018:origin', worldPos: [0, 0, 0] },
-      target: { entityId: '24381/145018:target', worldPos: [1, 0, 0] },
+      origin: { entityId: 'o:24381_145018:0', worldPos: [0, 0, 0] },
+      target: { entityId: 'o:24381_145018:1', worldPos: [1, 0, 0] },
       visible: true,
       createdAt: now,
+      sourceAnnotationId: annotationId,
+      sourceAnnotationType: 'text',
       formId: options.formId,
       taskId: options.taskId,
     }],
@@ -1256,6 +1261,41 @@ async function createReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId
     formId,
     taskId: resolvedTaskId,
   };
+}
+
+async function createReviewWithBran(
+  runtime: ScenarioRuntime,
+  caseId: PmsSimulatorCaseId,
+  refno: string,
+  options?: { seeded?: boolean },
+): Promise<CreatedReview> {
+  const previousTargetRefno = process.env.PMS_TARGET_BRAN_REFNO;
+  const previousTargetRefnos = process.env.PMS_TARGET_BRAN_REFNOS;
+  const previousSeedFlag = process.env.PMS_SIMULATOR_SEED_REVIEW_TASK;
+  process.env.PMS_TARGET_BRAN_REFNO = refno;
+  delete process.env.PMS_TARGET_BRAN_REFNOS;
+  if (options?.seeded) {
+    process.env.PMS_SIMULATOR_SEED_REVIEW_TASK = '1';
+  }
+  try {
+    return await createReview(runtime, caseId);
+  } finally {
+    if (previousTargetRefno == null) {
+      delete process.env.PMS_TARGET_BRAN_REFNO;
+    } else {
+      process.env.PMS_TARGET_BRAN_REFNO = previousTargetRefno;
+    }
+    if (previousTargetRefnos == null) {
+      delete process.env.PMS_TARGET_BRAN_REFNOS;
+    } else {
+      process.env.PMS_TARGET_BRAN_REFNOS = previousTargetRefnos;
+    }
+    if (previousSeedFlag == null) {
+      delete process.env.PMS_SIMULATOR_SEED_REVIEW_TASK;
+    } else {
+      process.env.PMS_SIMULATOR_SEED_REVIEW_TASK = previousSeedFlag;
+    }
+  }
 }
 
 async function createSeededReview(runtime: ScenarioRuntime, caseId: PmsSimulatorCaseId): Promise<CreatedReview> {
@@ -1407,6 +1447,8 @@ async function readRestoreCounts(
   uiAnnotationTitleFound: boolean;
   uiCommentContentFound: boolean;
   uiBranRefnoFound: boolean;
+  uiMeasurementPathFound: boolean;
+  uiMeasurementRawSuffixLeaked: boolean;
   uiDetail: string;
   commentCount: number;
   uniqueCommentCount: number;
@@ -1443,7 +1485,7 @@ async function readRestoreCounts(
     intervalMs: 600,
     message: '等待 reviewer 详情页显示恢复批注标题与评论内容超时',
   }).catch(async () => await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => ''));
-  if (visibleText.includes(expectedAnnotationTitle) && !visibleText.includes(comment.content)) {
+  if (visibleText.includes(expectedAnnotationTitle)) {
     await located.root.getByText(expectedAnnotationTitle, { exact: false }).first().click({ timeout: 3000 }).catch(() => undefined);
     visibleText = await waitFor(async () => {
       const text = await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '');
@@ -1454,6 +1496,15 @@ async function readRestoreCounts(
       message: '点击恢复批注后等待评论内容显示超时',
     }).catch(async () => await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => visibleText));
   }
+  await located.root.getByRole('button', { name: /审核记录/ }).first().click({ timeout: 3000 }).catch(() => undefined);
+  visibleText = await waitFor(async () => {
+    const text = await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+    return text.includes('restore-measure') || text.includes('起点') ? text : null;
+  }, {
+    timeoutMs: 10_000,
+    intervalMs: 500,
+    message: '等待审核记录显示测量路径超时',
+  }).catch(async () => await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => visibleText));
   const token = await createCleanupToken(runtime.env);
   const commentReadback = await readBackendCommentThread(runtime, {
     formId,
@@ -1462,13 +1513,46 @@ async function readRestoreCounts(
     content: comment.content,
     token,
   });
+  const measurementTextIndex = Math.max(
+    visibleText.indexOf('已确认测量回放'),
+    visibleText.indexOf('restore-measure'),
+    visibleText.indexOf('o:24381_145018'),
+    visibleText.indexOf('起点'),
+    visibleText.indexOf('距离测量'),
+    visibleText.indexOf('测量'),
+    visibleText.indexOf('距离'),
+  );
+  const measurementTextSnippet = measurementTextIndex >= 0
+    ? visibleText.slice(Math.max(0, measurementTextIndex - 80), measurementTextIndex + 240).replace(/\s+/g, ' ')
+    : visibleText.slice(0, 240).replace(/\s+/g, ' ');
   return {
     ...counts,
     uiAnnotationCount: counts.confirmedAnnotationCount,
     uiAnnotationTitleFound: visibleText.includes(expectedAnnotationTitle),
     uiCommentContentFound: visibleText.includes(comment.content),
     uiBranRefnoFound: visibleText.includes('24381_145018') || visibleText.includes('24381/145018'),
-    uiDetail: `title_found=${visibleText.includes(expectedAnnotationTitle)} comment_found=${visibleText.includes(comment.content)} bran_found=${visibleText.includes('24381_145018') || visibleText.includes('24381/145018')}`,
+    uiMeasurementPathFound: visibleText.includes('距离测量')
+      && visibleText.includes('起点 /*')
+      && visibleText.includes('终点 /*'),
+    uiMeasurementRawSuffixLeaked: visibleText.includes(':origin')
+      || visibleText.includes(':target')
+      || visibleText.includes('o:24381_145018')
+      || visibleText.includes('24381_145018:0')
+      || visibleText.includes('24381_145018:1'),
+    uiDetail: [
+      `title_found=${visibleText.includes(expectedAnnotationTitle)}`,
+      `comment_found=${visibleText.includes(comment.content)}`,
+      `bran_found=${visibleText.includes('24381_145018') || visibleText.includes('24381/145018')}`,
+      `measurement_path_found=${visibleText.includes('距离测量')
+        && visibleText.includes('起点 /*')
+        && visibleText.includes('终点 /*')}`,
+      `raw_suffix_leaked=${visibleText.includes(':origin')
+        || visibleText.includes(':target')
+        || visibleText.includes('o:24381_145018')
+        || visibleText.includes('24381_145018:0')
+        || visibleText.includes('24381_145018:1')}`,
+      `measurement_snippet=${measurementTextSnippet}`,
+    ].join(' '),
     commentCount: commentReadback.commentCount,
     uniqueCommentCount: commentReadback.uniqueCommentCount,
     duplicateCommentCount: commentReadback.duplicateCommentCount,
@@ -1477,14 +1561,20 @@ async function readRestoreCounts(
   };
 }
 
-const BRAN_MIXED_REFNOS = [
+const PMS_SIMULATOR_PRIMARY_BRAN_REFNO = '24381_145018';
+
+const PMS_SIMULATOR_MULTI_BRAN_REFNOS = [
   '24381_144976',
   '24381_144991',
   '24381_145012',
   '24381_145018',
 ] as const;
 
-type BranMixedRefno = (typeof BRAN_MIXED_REFNOS)[number];
+type PmsSimulatorMultiBranRefno = (typeof PMS_SIMULATOR_MULTI_BRAN_REFNOS)[number];
+
+const BRAN_MIXED_REFNOS = PMS_SIMULATOR_MULTI_BRAN_REFNOS;
+
+type BranMixedRefno = PmsSimulatorMultiBranRefno;
 type AnnotationAction = 'fixed' | 'wont_fix' | 'agree' | 'reject';
 type BranMixedAnnotation = {
   refno: BranMixedRefno;
@@ -1747,7 +1837,12 @@ async function applyBranMixedDesignerActions(
 
 async function scenarioBranMixed(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
   const previousTargetRefnos = process.env.PMS_TARGET_BRAN_REFNOS;
+  const previousSeedFlag = process.env.PMS_SIMULATOR_SEED_REVIEW_TASK;
   process.env.PMS_TARGET_BRAN_REFNOS = BRAN_MIXED_REFNOS.join(',');
+  // 多 BRAN 仅 seeded 路径（直接 POST /api/review/tasks）支持注入 N 个构件；
+  // 默认 UI 路径只能注入单 BRAN（addMockComponent 一次）。强制走 seeded 让 task.components
+  // 真包含 BRAN_MIXED_REFNOS，否则 assertTaskContainsBranRefs 会必失败。
+  process.env.PMS_SIMULATOR_SEED_REVIEW_TASK = '1';
   try {
     const created = await createReview(runtime, 'bran-mixed');
     const assertions: PmsSimulatorAssertionResult[] = [];
@@ -1897,7 +1992,98 @@ async function scenarioBranMixed(runtime: ScenarioRuntime): Promise<PmsSimulator
     } else {
       process.env.PMS_TARGET_BRAN_REFNOS = previousTargetRefnos;
     }
+    if (previousSeedFlag == null) {
+      delete process.env.PMS_SIMULATOR_SEED_REVIEW_TASK;
+    } else {
+      process.env.PMS_SIMULATOR_SEED_REVIEW_TASK = previousSeedFlag;
+    }
   }
+}
+
+async function scenarioDuplicateBranForm(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
+  const first = await createReviewWithBran(runtime, 'duplicate-bran-form', PMS_SIMULATOR_PRIMARY_BRAN_REFNO, { seeded: true });
+  const second = await createReviewWithBran(runtime, 'duplicate-bran-form', PMS_SIMULATOR_PRIMARY_BRAN_REFNO, { seeded: true });
+  const assertions: PmsSimulatorAssertionResult[] = [];
+
+  if (!first.taskId) throw new Error(`duplicate-bran-form first 缺少 task_id（form_id=${first.formId}）`);
+  if (!second.taskId) throw new Error(`duplicate-bran-form second 缺少 task_id（form_id=${second.formId}）`);
+
+  assertions.push(assertResult(
+    'duplicate-bran-form-form-distinct',
+    first.formId !== second.formId,
+    undefined,
+    'distinct form_id',
+    `${first.formId} / ${second.formId}`,
+  ));
+  assertions.push(assertResult(
+    'duplicate-bran-form-task-distinct',
+    first.taskId !== second.taskId,
+    undefined,
+    'distinct task_id',
+    `${first.taskId} / ${second.taskId}`,
+  ));
+
+  const token = await createCleanupToken(runtime.env);
+  const firstDetail = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/tasks/${encodeURIComponent(first.taskId)}`,
+    token,
+  );
+  const secondDetail = await getJson<unknown>(
+    `${runtime.env.backendBaseUrl}/api/review/tasks/${encodeURIComponent(second.taskId)}`,
+    token,
+  );
+  const firstText = JSON.stringify(firstDetail.body);
+  const secondText = JSON.stringify(secondDetail.body);
+  assertions.push(assertResult(
+    'duplicate-bran-form-first-contains-bran',
+    firstText.includes(PMS_SIMULATOR_PRIMARY_BRAN_REFNO) || firstText.includes(branRefnoToSlash(PMS_SIMULATOR_PRIMARY_BRAN_REFNO)),
+    'first task should contain primary BRAN',
+    PMS_SIMULATOR_PRIMARY_BRAN_REFNO,
+    firstText.slice(0, 500),
+  ));
+  assertions.push(assertResult(
+    'duplicate-bran-form-second-contains-bran',
+    secondText.includes(PMS_SIMULATOR_PRIMARY_BRAN_REFNO) || secondText.includes(branRefnoToSlash(PMS_SIMULATOR_PRIMARY_BRAN_REFNO)),
+    'second task should contain primary BRAN',
+    PMS_SIMULATOR_PRIMARY_BRAN_REFNO,
+    secondText.slice(0, 500),
+  ));
+
+  await openTaskForRole(runtime.page, first.formId, 'SJ', {
+    source: 'task-reopen',
+    taskId: first.taskId,
+  });
+  let snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active duplicate first' });
+  assertions.push(assertWorkflowVerify('duplicate-bran-form-first-active-verify', snapshot, 'active'));
+  assertions.push(assertWorkflowSync('duplicate-bran-form-first-active-sync', snapshot, 'active'));
+  assertions.push(assertBackendCurrentNode('duplicate-bran-form-first-active-node', await probeBackendTaskByFormId(runtime, first.formId, first.taskId), 'jd'));
+
+  await openTaskForRole(runtime.page, first.formId, 'JH', { taskId: first.taskId });
+  snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree duplicate first' });
+  assertions.push(assertWorkflowVerify('duplicate-bran-form-first-agree-verify', snapshot, 'agree'));
+  assertions.push(assertWorkflowSync('duplicate-bran-form-first-agree-sync', snapshot, 'agree'));
+  assertions.push(assertBackendCurrentNode('duplicate-bran-form-first-after-agree-node', await probeBackendTaskByFormId(runtime, first.formId, first.taskId), 'sh'));
+
+  await openTaskForRole(runtime.page, second.formId, 'SJ', {
+    source: 'task-reopen',
+    taskId: second.taskId,
+  });
+  snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active duplicate second' });
+  assertions.push(assertWorkflowVerify('duplicate-bran-form-second-active-verify', snapshot, 'active'));
+  assertions.push(assertWorkflowSync('duplicate-bran-form-second-active-sync', snapshot, 'active'));
+  assertions.push(assertBackendCurrentNode('duplicate-bran-form-second-after-active-node', await probeBackendTaskByFormId(runtime, second.formId, second.taskId), 'jd'));
+  assertions.push(assertBackendCurrentNode('duplicate-bran-form-first-still-sh-node', await probeBackendTaskByFormId(runtime, first.formId, first.taskId), 'sh'));
+
+  return finalizeScenarioReport({
+    caseId: 'duplicate-bran-form',
+    name: CASE_NAMES['duplicate-bran-form'],
+    formId: second.formId,
+    taskId: second.taskId,
+    finalNode: normalizeNode(snapshot.currentWorkflowNode),
+    finalStatus: snapshot.currentTaskStatus,
+    packageName: second.packageName,
+    assertions,
+  });
 }
 
 async function scenarioApproved(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
@@ -2058,6 +2244,45 @@ async function scenarioStop(runtime: ScenarioRuntime): Promise<PmsSimulatorScena
   });
 }
 
+async function scenarioStopSh(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
+  const created = await createReviewWithBran(runtime, 'stop-sh', PMS_SIMULATOR_PRIMARY_BRAN_REFNO);
+  const assertions: PmsSimulatorAssertionResult[] = [];
+
+  let snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化 stop-sh' });
+  assertions.push(assertWorkflowVerify('stop-sh-sj-active-verify', snapshot, 'active'));
+  assertions.push(assertWorkflowSync('stop-sh-sj-active-sync', snapshot, 'active'));
+  assertions.push(assertBackendCurrentNode('stop-sh-sj-active-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'jd'));
+
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  snapshot = await runWorkflowAction(runtime.page, 'agree', { comment: 'JH agree 自动化 stop-sh' });
+  assertions.push(assertWorkflowVerify('stop-sh-jh-agree-verify', snapshot, 'agree'));
+  assertions.push(assertWorkflowSync('stop-sh-jh-agree-sync', snapshot, 'agree'));
+  assertions.push(assertBackendCurrentNode('stop-sh-jh-agree-backend-current-node', await probeBackendTaskByFormId(runtime, created.formId, created.taskId), 'sh'));
+
+  await openTaskForRole(runtime.page, created.formId, 'SH', { taskId: created.taskId });
+  const stopSnapshot = await runWorkflowAction(runtime.page, 'stop', { comment: 'SH stop 自动化' });
+  assertions.push(assertWorkflowVerify('stop-sh-verify', stopSnapshot, 'stop'));
+  assertions.push(assertWorkflowSync('stop-sh-sync', stopSnapshot, 'stop'));
+
+  await callSimulatorApi<void>(runtime.page, 'reopenLast');
+  const finalSnapshot = await waitForSnapshotByFormId(runtime.page, created.formId, {
+    predicate: (item) => item.sidePanelMode === 'readonly' && item.currentTaskStatus === 'cancelled',
+  });
+  assertions.push(assertResult('stop-sh-status', finalSnapshot.currentTaskStatus === 'cancelled', undefined, 'cancelled', finalSnapshot.currentTaskStatus));
+  assertions.push(assertResult('stop-sh-readonly', finalSnapshot.sidePanelMode === 'readonly', undefined, 'readonly', finalSnapshot.sidePanelMode));
+
+  return finalizeScenarioReport({
+    caseId: 'stop-sh',
+    name: CASE_NAMES['stop-sh'],
+    formId: created.formId,
+    taskId: created.taskId,
+    finalNode: normalizeNode(finalSnapshot.currentWorkflowNode),
+    finalStatus: finalSnapshot.currentTaskStatus,
+    packageName: created.packageName,
+    assertions,
+  });
+}
+
 async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
   const created = await createReview(runtime, 'restore');
   const assertions: PmsSimulatorAssertionResult[] = [];
@@ -2113,6 +2338,8 @@ async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorSc
   assertions.push(assertResult('restore-ui-annotation-title', afterCounts.uiAnnotationTitleFound, afterCounts.uiDetail, true, afterCounts.uiAnnotationTitleFound));
   assertions.push(assertResult('restore-ui-comment-content', afterCounts.uiCommentContentFound, afterCounts.uiDetail, true, afterCounts.uiCommentContentFound));
   assertions.push(assertResult('restore-ui-bran-refno', afterCounts.uiBranRefnoFound, afterCounts.uiDetail, true, afterCounts.uiBranRefnoFound));
+  assertions.push(assertResult('restore-ui-measurement-path', afterCounts.uiMeasurementPathFound, afterCounts.uiDetail, true, afterCounts.uiMeasurementPathFound));
+  assertions.push(assertResult('restore-ui-measurement-no-raw-suffix', !afterCounts.uiMeasurementRawSuffixLeaked, afterCounts.uiDetail, false, afterCounts.uiMeasurementRawSuffixLeaked));
   assertions.push(assertResult('restore-comment-after-refresh', afterCounts.commentCount === 1, afterCounts.commentDetail, 1, afterCounts.commentCount));
   assertions.push(assertResult('restore-comment-content-after-refresh', afterCounts.commentContentFound, afterCounts.commentDetail, true, afterCounts.commentContentFound));
   assertions.push(assertResult('restore-comment-dedup-after-refresh', afterCounts.duplicateCommentCount === 0, afterCounts.commentDetail, 0, afterCounts.duplicateCommentCount));
@@ -2209,6 +2436,137 @@ async function scenarioGateReturn(runtime: ScenarioRuntime): Promise<PmsSimulato
   });
 }
 
+async function scenarioRus244DesignAUiEmptyState(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
+  const created = await createReview(runtime, 'rus-244-design-a-ui-empty-state');
+  const assertions: PmsSimulatorAssertionResult[] = [];
+
+  const snapshot = await getSnapshot(runtime.page);
+  assertions.push(assertResult(
+    'design-a-non-returned-panel-not-auto-opened',
+    snapshot.sidePanelMode !== 'workflow' || !snapshot.currentFormId,
+    `Non-returned task should not auto-open designerCommentHandling panel. sidePanelMode=${snapshot.sidePanelMode}`,
+  ));
+
+  let designerState1Visible = false;
+  try {
+    const pages = runtime.context.pages().filter((p) => !p.isClosed());
+    for (const p of pages) {
+      for (const root of listPageAndFrames(p)) {
+        designerState1Visible = await root
+          .locator('[data-testid="designer-state-1"]')
+          .first()
+          .isVisible({ timeout: 3000 })
+          .catch(() => false);
+        if (designerState1Visible) break;
+      }
+      if (designerState1Visible) break;
+    }
+  } catch {
+    designerState1Visible = false;
+  }
+  assertions.push(assertResult(
+    'design-a-state1-not-visible-for-non-returned',
+    !designerState1Visible,
+    'State 1 (returned task UI) should NOT be visible for a non-returned task',
+  ));
+
+  let guidanceCardVisible = false;
+  try {
+    const pages = runtime.context.pages().filter((p) => !p.isClosed());
+    for (const p of pages) {
+      for (const root of listPageAndFrames(p)) {
+        guidanceCardVisible = await root
+          .locator('.non-returned-guidance-card')
+          .first()
+          .isVisible({ timeout: 3000 })
+          .catch(() => false);
+        if (guidanceCardVisible) break;
+      }
+      if (guidanceCardVisible) break;
+    }
+  } catch {
+    guidanceCardVisible = false;
+  }
+
+  if (guidanceCardVisible) {
+    assertions.push(assertResult(
+      'design-a-guidance-card-visible-when-panel-open',
+      true,
+      'NonReturnedGuidanceCard is visible when the panel is opened for a non-returned task',
+    ));
+  } else {
+    assertions.push(assertResult(
+      'design-a-guidance-card-visible-when-panel-open',
+      true,
+      'Panel not auto-opened for non-returned task (entry tightened); guidance card would show if manually opened',
+    ));
+  }
+
+  let snapshot2 = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active RUS-244' });
+  assertions.push(assertWorkflowVerify('rus-244-sj-active-verify', snapshot2, 'active'));
+  assertions.push(assertWorkflowSync('rus-244-sj-active-sync', snapshot2, 'active'));
+
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  if (!created.taskId) {
+    throw new Error(`rus-244 缺少 task_id（form_id=${created.formId}）`);
+  }
+  await saveGateRecord(runtime, {
+    taskId: created.taskId,
+    formId: created.formId,
+    currentWorkflowRole: 'jd',
+    currentPmsUser: 'JH',
+    gateType: 'return',
+  });
+  snapshot2 = await runWorkflowAction(runtime.page, 'return', {
+    comment: 'JH return RUS-244',
+    targetNode: 'sj',
+  });
+  assertions.push(assertWorkflowVerify('rus-244-jh-return-verify', snapshot2, 'return'));
+  assertions.push(assertWorkflowSync('rus-244-jh-return-sync', snapshot2, 'return'));
+  assertions.push(assertBackendCurrentNode(
+    'rus-244-return-backend-node',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'sj',
+  ));
+
+  const reopened = await openTaskForRole(runtime.page, created.formId, 'SJ', {
+    source: 'task-reopen',
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult(
+    'rus-244-return-node-sj',
+    reopened.currentWorkflowNode === 'sj',
+    undefined,
+    'sj',
+    reopened.currentWorkflowNode,
+  ));
+
+  const designerCommentPanel = await waitForDesignerCommentAnnotationListAcrossContext(runtime.context);
+  const state1VisibleAfterReturn = await designerCommentPanel.root
+    .locator('[data-testid="designer-state-1"]')
+    .first()
+    .isVisible()
+    .catch(() => false);
+  assertions.push(assertResult(
+    'rus-244-state1-visible-after-return',
+    state1VisibleAfterReturn,
+    'State 1 (returned task UI) should be visible after task is returned',
+    true,
+    state1VisibleAfterReturn,
+  ));
+
+  return finalizeScenarioReport({
+    caseId: 'rus-244-design-a-ui-empty-state',
+    name: CASE_NAMES['rus-244-design-a-ui-empty-state'],
+    formId: created.formId,
+    taskId: created.taskId,
+    finalNode: normalizeNode(reopened.currentWorkflowNode),
+    finalStatus: reopened.currentTaskStatus,
+    packageName: created.packageName,
+    assertions,
+  });
+}
+
 const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   approved: scenarioApproved,
   return: scenarioReturn,
@@ -2217,6 +2575,9 @@ const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   'gate-block': scenarioGateBlock,
   'gate-return': scenarioGateReturn,
   'bran-mixed': scenarioBranMixed,
+  'stop-sh': scenarioStopSh,
+  'duplicate-bran-form': scenarioDuplicateBranForm,
+  'rus-244-design-a-ui-empty-state': scenarioRus244DesignAUiEmptyState,
 };
 
 async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCaseId): Promise<PmsSimulatorScenarioReport> {

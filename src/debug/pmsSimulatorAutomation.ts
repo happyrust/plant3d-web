@@ -5,6 +5,10 @@ export const PMS_SIMULATOR_CASE_ORDER = [
   'restore',
   'gate-block',
   'gate-return',
+  'bran-mixed',
+  'stop-sh',
+  'duplicate-bran-form',
+  'rus-244-design-a-ui-empty-state',
 ] as const;
 
 export type PmsSimulatorCaseId = (typeof PMS_SIMULATOR_CASE_ORDER)[number];
