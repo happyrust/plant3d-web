@@ -53,6 +53,7 @@ import {
   runReviewSubmitPreflight,
   submitTaskToNextNodeSafely,
 } from './reviewPanelActions';
+import { useMeasurementPathSummaries } from './useMeasurementPathSummaries';
 import { resolvePassiveWorkflowMode } from './workflowMode';
 import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
@@ -70,6 +71,7 @@ import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
+import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { emitCommand } from '@/ribbon/commandBus';
@@ -82,6 +84,10 @@ import {
   WORKFLOW_NODE_NAMES,
   type AnnotationSeverity,
 } from '@/types/auth';
+import {
+  formatMeasurementKindLabel,
+  formatMeasurementSummary,
+} from '@/utils/xeokitMeasurementFormat';
 
 type WorkflowHistoryEntry = NonNullable<Awaited<ReturnType<typeof userStore.getTaskWorkflowHistory>>['history']>[number];
 type ConfirmedRecordEntry = typeof reviewStore.sortedConfirmedRecords.value[number];
@@ -114,6 +120,7 @@ const userStore = useUserStore();
 const onboarding = useOnboardingGuide();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
+const unitSettings = useUnitSettingsStore();
 
 // 确认记录场景恢复（公共模块）
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
@@ -242,7 +249,36 @@ function getConfirmedRecordNote(record: ConfirmedRecordEntry): string {
   return record.note?.trim() || '-';
 }
 
+function getConfirmedMeasurementSummary(record: ConfirmedRecordEntry, measurement: ConfirmedRecordEntry['measurements'][number]): string {
+  if (measurement.kind === 'distance' || measurement.kind === 'angle') {
+    return getConfirmedMeasurementPathSummary({
+      ...measurement,
+      pathDisplayId: `${record.id}:${measurement.id}`,
+    });
+  }
+
+  return formatMeasurementSummary(
+    measurement,
+    unitSettings.displayUnit.value,
+    unitSettings.precision.value,
+  );
+}
+
 type SeverityBucket = AnnotationSeverity | 'unset';
+
+const confirmedMeasurementPathRecords = computed(() => (
+  reviewStore.sortedConfirmedRecords.value.flatMap((record) => (
+    record.measurements
+      .filter((measurement) => measurement.kind === 'distance' || measurement.kind === 'angle')
+      .map((measurement) => ({
+        ...measurement,
+        pathDisplayId: `${record.id}:${measurement.id}`,
+      }))
+  ))
+));
+const {
+  getMeasurementSummary: getConfirmedMeasurementPathSummary,
+} = useMeasurementPathSummaries(confirmedMeasurementPathRecords);
 
 /** 汇总一条确认记录内所有批注的严重度分布，供审核侧一眼看到批次风险画像。 */
 function getConfirmedSeverityBreakdown(record: ConfirmedRecordEntry): Record<SeverityBucket, number> {
@@ -550,7 +586,8 @@ async function refreshEmbedSnapshot(task: ReviewTask): Promise<void> {
 }
 
 async function handleSubmitToNextNode() {
-  if (isPassiveWorkflow.value) return;
+  // 注：passive 模式下按钮仍 disabled（template :disabled），UI 不会触发；
+  // 仅由 imperative 调用（如 PMS workflow_changed）触达。
   const taskId = currentTask.value?.id;
   const formId = currentTask.value?.formId?.trim();
   const comments = submitComment.value.trim();
@@ -592,7 +629,8 @@ async function handleSubmitToNextNode() {
 }
 
 async function handleReturnToNode() {
-  if (isPassiveWorkflow.value) return;
+  // 注：passive 模式下按钮仍 disabled（template :disabled），UI 不会触发；
+  // 仅由 imperative 调用（如 PMS workflow_changed）触达。
   if (!currentTask.value || !canReturnToPrevNode.value) return;
   const taskId = currentTask.value.id;
   const formId = currentTask.value.formId?.trim();
@@ -1828,6 +1866,24 @@ function flyToAnnotationItem(item: AnnotationListItem) {
               <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                 <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">备注</div>
                 <div class="mt-1 break-words text-sm font-medium text-slate-900">{{ getConfirmedRecordNote(record) }}</div>
+              </div>
+            </div>
+            <div v-if="record.measurements.length > 0"
+              class="mt-3 space-y-1.5"
+              data-testid="review-workbench-confirmed-measurements">
+              <div v-for="measurement in record.measurements"
+                :key="measurement.id"
+                class="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    {{ formatMeasurementKindLabel(measurement.kind) }}
+                  </span>
+                  <span class="text-[11px] text-slate-400">{{ measurement.id }}</span>
+                </div>
+                <div class="mt-1 break-words text-xs text-slate-700"
+                  :title="getConfirmedMeasurementSummary(record, measurement)">
+                  {{ getConfirmedMeasurementSummary(record, measurement) }}
+                </div>
               </div>
             </div>
             <!-- 严重度分布：只渲染有批注的记录 -->
