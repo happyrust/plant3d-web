@@ -13,6 +13,13 @@ export type WorkflowSyncBridgeMessage = {
   source?: string;
 };
 
+type WorkflowBridgeAckMessage = {
+  type: 'plant3d.workflow_action_ack';
+  action: WorkflowSyncBridgeAction;
+  success: boolean;
+  error?: string;
+};
+
 type WorkflowBridgeParent = {
   postMessage: (message: WorkflowSyncBridgeMessage, targetOrigin: string) => void;
 };
@@ -57,4 +64,51 @@ export function notifyParentWorkflowAction(
     ...payload,
   }, '*');
   return true;
+}
+
+function isAckMessage(data: unknown): data is WorkflowBridgeAckMessage {
+  if (!data || typeof data !== 'object') return false;
+  const msg = data as Partial<WorkflowBridgeAckMessage>;
+  return msg.type === 'plant3d.workflow_action_ack' && typeof msg.action === 'string';
+}
+
+/**
+ * Send a workflow action to the parent window and wait for an ack.
+ * Returns 'bridged' if the parent acknowledged, 'timeout' if no ack
+ * within the deadline, or 'unavailable' if the bridge is not available.
+ */
+export async function notifyParentWorkflowActionWithAck(
+  payload: Omit<WorkflowSyncBridgeMessage, 'type'>,
+  options: WorkflowBridgeOptions & { timeoutMs?: number } = {},
+): Promise<'bridged' | 'timeout' | 'unavailable'> {
+  const sent = notifyParentWorkflowAction(payload, options);
+  if (!sent) return 'unavailable';
+
+  const timeoutMs = options.timeoutMs ?? 5000;
+
+  return new Promise<'bridged' | 'timeout'>((resolve) => {
+    let settled = false;
+
+    const onMessage = (event: MessageEvent) => {
+      if (settled) return;
+      if (!isAckMessage(event.data)) return;
+      if (event.data.action !== payload.action) return;
+
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      resolve('bridged');
+    };
+
+    window.addEventListener('message', onMessage);
+
+    setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      console.warn(
+        `[workflowBridge] No ack received for action=${payload.action} within ${timeoutMs}ms`,
+      );
+      resolve('timeout');
+    }, timeoutMs);
+  });
 }

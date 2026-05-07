@@ -177,6 +177,7 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   toolStore,
   waitForViewerReady,
   getViewerTools: () => viewerContext.tools.value ?? null,
+  skipClearOnEmpty: true,
 });
 
 const returnedTasks = computed(() => userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
@@ -197,6 +198,9 @@ const currentTask = computed(() => {
   if (task && isPassiveRestoredTask(task)) return task;
   return null;
 });
+const passiveFormScopeWithoutTask = computed(() => (
+  !currentTask.value && !!passiveRestoredTaskFormId.value
+));
 const isCurrentTaskReturned = computed(() => !!currentTask.value && isCanonicalReturnedTask(currentTask.value));
 const currentTaskStatus = computed(() => currentTask.value ? getTaskStatusDisplayName(currentTask.value.status) : null);
 const currentTaskPriority = computed(() => currentTask.value ? getPriorityDisplayName(currentTask.value.priority) : null);
@@ -220,6 +224,9 @@ const matchedExternalTask = computed(() => {
 const hasExternalEntryWithoutMatchedTask = computed(() => (
   externalEntryLock.value && !!externalEntryTarget.value && !matchedExternalTask.value && !currentTask.value
 ));
+const hasFormScopeWithoutMatchedTask = computed(() => (
+  hasExternalEntryWithoutMatchedTask.value || passiveFormScopeWithoutTask.value
+));
 const showTaskEntry = computed(() => workspaceView.value === 'task_entry');
 const showAnnotationList = computed(() => workspaceView.value === 'annotation_list');
 const showAnnotationDetail = computed(() => workspaceView.value === 'annotation_detail');
@@ -231,7 +238,7 @@ const canReturnToTaskEntry = computed(() => (
 ));
 const canReturnToAnnotationList = computed(() => (
   showAnnotationDetail.value
-  && !!currentTask.value
+  && (!!currentTask.value || passiveFormScopeWithoutTask.value)
   && !hasExternalEntryWithoutMatchedTask.value
 ));
 
@@ -245,12 +252,13 @@ const canReturnToAnnotationList = computed(() => (
 const timelineContextFormId = computed<string | null>(() => (
   normalizeFormId(currentTask.value?.formId)
     ?? normalizeFormId(externalEntryTarget.value?.formId)
+    ?? passiveRestoredTaskFormId.value
 ));
 const timelineContextTaskId = computed<string | null>(() => (
   currentTask.value?.id ?? null
 ));
 const timelineAllowReviewActions = computed(() => (
-  !hasExternalEntryWithoutMatchedTask.value
+  !hasFormScopeWithoutMatchedTask.value
 ));
 
 const allAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
@@ -270,7 +278,7 @@ const scopedAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
   const externalFormId = externalEntryTarget.value?.formId ?? null;
   let items = scopeAnnotationWorkspaceItemsByFormId(
     allAnnotationItems.value,
-    currentFormId || externalFormId,
+    currentFormId || externalFormId || passiveRestoredTaskFormId.value,
   );
 
   const target = externalEntryTarget.value;
@@ -336,6 +344,16 @@ const canResubmitCurrentTask = computed(() => (
 
 function syncStoredEmbedLandingState() {
   storedEmbedLandingState.value = readStoredEmbedLandingState();
+  void nextTick(() => {
+    enterPassiveFormScopeIfReady();
+  });
+}
+
+function enterPassiveFormScopeIfReady() {
+  if (!passiveFormScopeWithoutTask.value) return;
+  if (scopedAnnotationItems.value.length === 0) return;
+  if (workspaceView.value === 'annotation_list' || workspaceView.value === 'annotation_detail') return;
+  enterAnnotationList({ fromTaskEntry: false });
 }
 
 function setActiveWorkspaceAnnotation(type: AnnotationType | null, id: string | null) {
@@ -366,7 +384,7 @@ function enterAnnotationDetail(item: AnnotationWorkspaceItem | null, source: 'ma
 }
 
 function backToAnnotationList() {
-  if (!currentTask.value) {
+  if (!currentTask.value && !passiveFormScopeWithoutTask.value) {
     enterTaskEntry();
     return;
   }
@@ -769,7 +787,9 @@ watch(
     if (externalEntryLock.value) return;
 
     if (!taskId) {
-      if (!hasExternalEntryWithoutMatchedTask.value) {
+      if (passiveFormScopeWithoutTask.value && scopedAnnotationItems.value.length > 0) {
+        enterAnnotationList({ fromTaskEntry: false });
+      } else if (!hasExternalEntryWithoutMatchedTask.value) {
         enterTaskEntry();
       }
       return;
@@ -785,6 +805,8 @@ watch(
 watch(
   () => filteredAnnotationItems.value.map((item) => `${item.type}:${item.id}:${item.activityAt}`).join('|'),
   () => {
+    enterPassiveFormScopeIfReady();
+
     const current = selectedAnnotation.value;
     if (current) {
       setActiveWorkspaceAnnotation(current.type, current.id);
@@ -803,6 +825,8 @@ watch(
 );
 
 watch(annotationFilter, () => {
+  enterPassiveFormScopeIfReady();
+
   if (selectedAnnotation.value) return;
   const preferred = resolvePreferredWorkspaceAnnotation();
   if (preferred) {
@@ -825,7 +849,9 @@ watch(
 
 onMounted(async () => {
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, syncStoredEmbedLandingState as EventListener);
+  syncStoredEmbedLandingState();
   await loadTasks();
+  enterPassiveFormScopeIfReady();
 
   if (externalEntryLock.value) {
     await applyExternalAnnotationEntry();
@@ -908,7 +934,7 @@ onBeforeUnmount(() => {
                 <span v-if="currentTaskPriority" class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="currentTaskPriority.color">
                   {{ currentTaskPriority.label }}
                 </span>
-                <span v-if="hasExternalEntryWithoutMatchedTask"
+                <span v-if="hasFormScopeWithoutMatchedTask"
                   class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
                   未匹配到单据
                 </span>
@@ -978,7 +1004,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-else-if="hasExternalEntryWithoutMatchedTask"
+          <div v-else-if="hasFormScopeWithoutMatchedTask"
             class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
             data-testid="external-entry-unmatched-task">
             <div class="flex items-start gap-2">
@@ -986,7 +1012,7 @@ onBeforeUnmount(() => {
               <div>
                 <div class="font-semibold">未匹配到对应单据</div>
                 <div class="mt-1 leading-6">
-                  当前批注的 form_id 为 {{ externalEntryTarget?.formId || '—' }}，返回任务列表中没有同 form_id 的单据。
+                  当前批注的 form_id 为 {{ externalEntryTarget?.formId || passiveRestoredTaskFormId || '—' }}，返回任务列表中没有同 form_id 的单据。
                   页面保留这条批注的处理详情，不自动切到其他单据。
                 </div>
               </div>
@@ -1123,6 +1149,16 @@ onBeforeUnmount(() => {
               @confirm="void confirmCurrentData()">
               <template #workflow>
                 <div class="space-y-4" data-testid="designer-comment-workflow-zone">
+                  <div v-if="currentTask?.returnReason" class="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div class="flex items-start gap-2">
+                      <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                      <div>
+                        <div class="text-sm font-semibold text-amber-800">校核驳回原因</div>
+                        <div class="mt-0.5 text-xs leading-5 text-amber-700">{{ currentTask.returnReason }}</div>
+                        <div class="mt-1 text-xs text-amber-600">请处理批注后点击下方「流转回校对」重新提交。</div>
+                      </div>
+                    </div>
+                  </div>
                   <div>
                     <div class="text-sm font-semibold text-slate-950">任务级动作</div>
                     <div class="mt-1 text-xs leading-5 text-slate-500">
@@ -1152,14 +1188,25 @@ onBeforeUnmount(() => {
                       流转历史
                     </button>
                     <button type="button"
-                      class="inline-flex h-10 items-center gap-2 rounded-xl bg-orange-500 px-4 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      class="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                      :class="canResubmitCurrentTask && !hasUnsavedPendingData && !resubmitLoading
+                        ? 'bg-orange-500 hover:bg-orange-600 ring-2 ring-orange-300 ring-offset-1'
+                        : 'bg-orange-500 hover:bg-orange-600'"
                       :disabled="!canResubmitCurrentTask || hasUnsavedPendingData || resubmitLoading"
+                      :title="!canResubmitCurrentTask
+                        ? '请先处理所有批注后再提交'
+                        : hasUnsavedPendingData
+                          ? '请先保存未保存的证据数据'
+                          : '点击将任务重新提交给校核人员'"
                       @click="void handleResubmitTask()">
                       <Send class="h-4 w-4" />
                       {{ resubmitLoading ? '提交中...' : '流转回校对' }}
                     </button>
                   </div>
-                  <div v-if="currentTask" class="text-xs text-slate-500">
+                  <div v-if="currentTask && hasUnsavedPendingData" class="text-xs text-amber-700">
+                    有未保存的证据数据，请先保存后再提交流转。
+                  </div>
+                  <div v-else-if="currentTask" class="text-xs text-slate-500">
                     再次提交前，需要先确认当前批注与测量证据。当前单据：{{ currentTask.title }}。
                   </div>
                   <div v-else class="text-xs text-amber-700">
