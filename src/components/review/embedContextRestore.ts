@@ -134,10 +134,8 @@ export async function restoreEmbedWorkbenchContext(
   });
 
   const shouldOpenDesignerCommentHandling = options.target === 'designer'
-    && (
-      (!!result.restoredTask && options.passiveWorkflowMode)
-      || (!!result.restoredTask && isCanonicalReturnedTask(result.restoredTask))
-    );
+    && !!result.restoredTask
+    && isCanonicalReturnedTask(result.restoredTask);
   const panelIds = shouldOpenDesignerCommentHandling
     ? ['designerCommentHandling']
     : getEmbedLandingPanelIdsWithOptions(options.target, {
