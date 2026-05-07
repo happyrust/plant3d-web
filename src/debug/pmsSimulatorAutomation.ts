@@ -9,6 +9,7 @@ export const PMS_SIMULATOR_CASE_ORDER = [
   'stop-sh',
   'duplicate-bran-form',
   'rus-244-design-a-ui-empty-state',
+  'bug-rus-244-designer-empty-after-return',
 ] as const;
 
 export type PmsSimulatorCaseId = (typeof PMS_SIMULATOR_CASE_ORDER)[number];

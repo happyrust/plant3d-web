@@ -215,6 +215,7 @@ const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
   'stop-sh': 'SH 节点终止分支 stop -> cancelled',
   'duplicate-bran-form': '同一 BRAN 多 form_id 隔离',
   'rus-244-design-a-ui-empty-state': 'RUS-244 design-A 三态拆分 + 入口收紧',
+  'bug-rus-244-designer-empty-after-return': 'RUS-244 design-B PMS<->plant3d workflow 同步桥端到端',
 };
 
 function appendNoProxy(value: string | undefined): string {
@@ -2567,6 +2568,168 @@ async function scenarioRus244DesignAUiEmptyState(runtime: ScenarioRuntime): Prom
   });
 }
 
+type WorkflowSyncAckType = 'plant3d.workflow_pre_action_acked' | 'plant3d.workflow_synced';
+
+type WorkflowSyncAckRaw = {
+  type?: string;
+  ok?: boolean;
+  error?: string;
+  taskId?: string;
+  status?: string;
+  currentNode?: string;
+};
+
+async function emitPmsWorkflowMessageAndAwaitAck(
+  page: Page,
+  emitMethod: 'emitPmsWorkflowPreAction' | 'emitPmsWorkflowChanged',
+  emitPayload: Record<string, unknown>,
+  expectedAckType: WorkflowSyncAckType,
+  timeoutMs = 10000,
+): Promise<WorkflowSyncAckRaw> {
+  return await page.evaluate(
+    async ({ method, payload, ackType, timeout }) => {
+      return await new Promise<WorkflowSyncAckRaw>((resolve) => {
+        const listener = (event: MessageEvent) => {
+          const data = event.data as { type?: string };
+          if (data?.type === ackType) {
+            window.removeEventListener('message', listener);
+            clearTimeout(timer);
+            resolve(event.data as WorkflowSyncAckRaw);
+          }
+        };
+        const timer = setTimeout(() => {
+          window.removeEventListener('message', listener);
+          resolve({ type: ackType, ok: false, error: 'ack_timeout' });
+        }, timeout);
+        window.addEventListener('message', listener);
+
+        const host = window as Window & {
+          __pmsReviewSimulatorTest?: Record<string, (...innerArgs: unknown[]) => unknown>;
+        };
+        const api = host.__pmsReviewSimulatorTest;
+        if (!api || typeof api[method] !== 'function') {
+          window.removeEventListener('message', listener);
+          clearTimeout(timer);
+          resolve({ type: ackType, ok: false, error: `simulator_api_missing_${method}` });
+          return;
+        }
+        try {
+          api[method](payload);
+        } catch (e) {
+          window.removeEventListener('message', listener);
+          clearTimeout(timer);
+          resolve({ type: ackType, ok: false, error: e instanceof Error ? e.message : String(e) });
+        }
+      });
+    },
+    {
+      method: emitMethod,
+      payload: emitPayload,
+      ackType: expectedAckType,
+      timeout: timeoutMs,
+    },
+  ) as WorkflowSyncAckRaw;
+}
+
+async function scenarioBugRus244DesignerEmptyAfterReturn(
+  runtime: ScenarioRuntime,
+): Promise<PmsSimulatorScenarioReport> {
+  const created = await createReview(runtime, 'bug-rus-244-designer-empty-after-return');
+  const assertions: PmsSimulatorAssertionResult[] = [];
+  if (!created.taskId) {
+    throw new Error(`bug-rus-244 缺少 task_id（form_id=${created.formId}）`);
+  }
+
+  const snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active design-B' });
+  assertions.push(assertWorkflowVerify('bug-rus-244-sj-active-verify', snapshot, 'active'));
+  assertions.push(assertWorkflowSync('bug-rus-244-sj-active-sync', snapshot, 'active'));
+  assertions.push(assertBackendCurrentNode(
+    'bug-rus-244-sj-active-backend-node',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'jd',
+  ));
+
+  const reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  await openAutomationPageFromSnapshot(runtime, reviewerSnapshot, `bug-rus-244 reviewer form_id=${created.formId}`, {
+    tokenUserId: 'proofreader_001',
+    tokenRole: 'jd',
+  });
+  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId });
+  await located.root.evaluate(() => {
+    const hook = (window as Window & {
+      __plant3dReviewerE2E?: {
+        addMockAnnotation: (title?: string, description?: string) => string;
+      };
+    }).__plant3dReviewerE2E;
+    if (!hook) throw new Error('__plant3dReviewerE2E 未挂载');
+    hook.addMockAnnotation(`design-b-${Date.now()}`, 'PMS pre_action 验证批注');
+  });
+
+  const preActionAck = await emitPmsWorkflowMessageAndAwaitAck(
+    runtime.page,
+    'emitPmsWorkflowPreAction',
+    { formId: created.formId, action: 'return' },
+    'plant3d.workflow_pre_action_acked',
+  );
+  assertions.push(assertResult(
+    'bug-rus-244-pre-action-ack',
+    preActionAck.ok === true,
+    `ack=${JSON.stringify(preActionAck)}`,
+    true,
+    preActionAck.ok,
+  ));
+
+  const changedAck = await emitPmsWorkflowMessageAndAwaitAck(
+    runtime.page,
+    'emitPmsWorkflowChanged',
+    {
+      formId: created.formId,
+      action: 'return',
+      targetNode: 'sj',
+      comments: 'PMS 工具栏 [驳回]',
+    },
+    'plant3d.workflow_synced',
+  );
+  assertions.push(assertResult(
+    'bug-rus-244-workflow-changed-ack',
+    changedAck.ok === true,
+    `ack=${JSON.stringify(changedAck)}`,
+    true,
+    changedAck.ok,
+  ));
+  assertions.push(assertResult(
+    'bug-rus-244-workflow-synced-status',
+    changedAck.status === 'rejected' || changedAck.currentNode === 'sj',
+    `status=${changedAck.status} currentNode=${changedAck.currentNode}`,
+  ));
+
+  const probedAfterReturn = await probeBackendTaskByFormId(runtime, created.formId, created.taskId);
+  assertions.push(assertBackendCurrentNode('bug-rus-244-backend-after-return', probedAfterReturn, 'sj'));
+
+  const reopened = await openTaskForRole(runtime.page, created.formId, 'SJ', {
+    source: 'task-reopen',
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult(
+    'bug-rus-244-sj-reopen-node',
+    reopened.currentWorkflowNode === 'sj',
+    undefined,
+    'sj',
+    reopened.currentWorkflowNode,
+  ));
+
+  return finalizeScenarioReport({
+    caseId: 'bug-rus-244-designer-empty-after-return',
+    name: CASE_NAMES['bug-rus-244-designer-empty-after-return'],
+    formId: created.formId,
+    taskId: created.taskId,
+    finalNode: normalizeNode(reopened.currentWorkflowNode),
+    finalStatus: reopened.currentTaskStatus,
+    packageName: created.packageName,
+    assertions,
+  });
+}
+
 const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   approved: scenarioApproved,
   return: scenarioReturn,
@@ -2578,6 +2741,7 @@ const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   'stop-sh': scenarioStopSh,
   'duplicate-bran-form': scenarioDuplicateBranForm,
   'rus-244-design-a-ui-empty-state': scenarioRus244DesignAUiEmptyState,
+  'bug-rus-244-designer-empty-after-return': scenarioBugRus244DesignerEmptyAfterReturn,
 };
 
 async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCaseId): Promise<PmsSimulatorScenarioReport> {

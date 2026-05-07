@@ -425,6 +425,7 @@ type SimulatorTestApi = {
     formId: string;
     taskId?: string | null;
     source?: 'task-view' | 'task-reopen';
+    skipIframeSrc?: boolean;
   }) => Promise<void>;
   openSelected: (source?: 'task-view' | 'task-reopen') => Promise<void>;
   setDraftComment: (comment: string) => void;
@@ -439,6 +440,26 @@ type SimulatorTestApi = {
    * 自动化脚本在驱动 workflow 操作前调用一次即可。
    */
   ensureSidePanelExpanded: () => void;
+  /**
+   * 模拟 PMS 端在工具栏按 [agree/return/...] 按钮前发送 pre_action 给 plant3d。
+   * 用于 RUS-244 design-B Mode B 端到端验证。
+   */
+  emitPmsWorkflowPreAction: (payload: {
+    formId: string;
+    action: 'agree' | 'return' | 'redirect' | 'terminate';
+    requestId?: string;
+  }) => void;
+  /**
+   * 模拟 PMS 端在工具栏按钮 click 后发送 workflow_changed 给 plant3d。
+   * 用于 RUS-244 design-B Mode C 端到端验证。
+   */
+  emitPmsWorkflowChanged: (payload: {
+    formId: string;
+    action: 'agree' | 'return' | 'redirect' | 'terminate';
+    targetNode?: string;
+    comments?: string;
+    requestId?: string;
+  }) => void;
 };
 
 type SimulatorPersistedIframeMeta = {
@@ -874,6 +895,7 @@ function exposeSimulatorTestApi(): void {
         source: options?.source || 'task-view',
         taskId: normalizedTaskId,
         formId: normalizedFormId,
+        skipIframeSrc: options?.skipIframeSrc === true,
       });
     },
     openSelected: async (source: 'task-view' | 'task-reopen' = 'task-view') => {
@@ -900,6 +922,32 @@ function exposeSimulatorTestApi(): void {
     getSnapshot: () => buildSimulatorTestSnapshot(),
     ensureSidePanelExpanded: () => {
       setSidePanelCollapsed(false);
+    },
+    emitPmsWorkflowPreAction: (payload) => {
+      const iframeWindow = refs.iframeEl?.contentWindow;
+      if (!iframeWindow) {
+        throw new Error('emitPmsWorkflowPreAction: iframe contentWindow 未就绪');
+      }
+      iframeWindow.postMessage({
+        type: 'pms.workflow_pre_action',
+        formId: payload.formId,
+        action: payload.action,
+        requestId: payload.requestId,
+      }, '*');
+    },
+    emitPmsWorkflowChanged: (payload) => {
+      const iframeWindow = refs.iframeEl?.contentWindow;
+      if (!iframeWindow) {
+        throw new Error('emitPmsWorkflowChanged: iframe contentWindow 未就绪');
+      }
+      iframeWindow.postMessage({
+        type: 'pms.workflow_changed',
+        formId: payload.formId,
+        action: payload.action,
+        targetNode: payload.targetNode,
+        comments: payload.comments,
+        requestId: payload.requestId,
+      }, '*');
     },
   };
 }
@@ -3151,6 +3199,7 @@ async function openIframe(params: {
   source: IframeSource;
   taskId?: string | null;
   formId?: string | null;
+  skipIframeSrc?: boolean;
 }): Promise<void> {
   const { taskId, formId } = params;
 
@@ -3184,7 +3233,9 @@ async function openIframe(params: {
     }
 
     persistSimulatorSession();
-    refs.iframeEl.src = url;
+    if (!params.skipIframeSrc) {
+      refs.iframeEl.src = url;
+    }
     renderLastOpened();
     closeWorkflowDialog();
     renderIframeState();
