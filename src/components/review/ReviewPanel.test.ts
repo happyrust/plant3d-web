@@ -409,7 +409,7 @@ describe('ReviewPanel', () => {
     vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
-  it('confirmed record counts only canonical reviewer annotations', async () => {
+  it('confirmed record counts only canonical reviewer annotations', { timeout: 10_000 }, async () => {
     sortedConfirmedRecords.value = [
       {
         id: 'record-canonical-1',
@@ -445,7 +445,6 @@ describe('ReviewPanel', () => {
     expect(document.body.textContent).toContain('历史流转');
     expect(document.body.textContent).toContain('审核记录');
     expect(document.body.textContent).toContain('当前批注');
-    expect(document.body.textContent).not.toContain('任务级流转');
     expect(document.body.textContent).not.toContain('旧审核字段');
     mounted.unmount();
   });

@@ -37,7 +37,7 @@ export type WorkflowAssignmentResolution = {
 
 export type TaskAssignmentResolution = {
   assignedUserId: string | null;
-  source: 'requester' | 'checker' | 'reviewer' | 'approver' | 'none';
+  source: 'requester' | 'checker' | 'reviewer' | 'approver' | 'invalid' | 'none';
   matchesCurrentPmsUser: boolean;
 };
 
@@ -46,6 +46,7 @@ export type WorkflowAccessDecisionSource =
   | 'task-terminal'
   | 'workflow-next-step'
   | 'task-current-node'
+  | 'task-assignment-invalid'
   | 'workflow-unresolved';
 
 export type WorkflowAccessResolution = {
@@ -56,6 +57,7 @@ export type WorkflowAccessResolution = {
 };
 
 const SIMULATOR_INBOX_TASK_STATUSES = new Set(['submitted', 'in_review', 'approved', 'rejected']);
+const SIMULATOR_PMS_HUMAN_CODES: readonly SimulatorPmsUser[] = ['SJ', 'JH', 'SH', 'PZ'];
 
 type DeriveSimulatorSidePanelModeOptions = {
   passiveWorkflowMode: boolean;
@@ -111,6 +113,36 @@ const DEFAULT_PMS_USER_BY_WORKFLOW_ROLE: Record<WorkflowRole, SimulatorPmsUser> 
   sh: 'SH',
   pz: 'PZ',
 };
+
+function normalizeSimulatorPmsHumanCode(value?: string | null): SimulatorPmsUser | null {
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase();
+  return SIMULATOR_PMS_HUMAN_CODES.includes(normalized as SimulatorPmsUser)
+    ? normalized as SimulatorPmsUser
+    : null;
+}
+
+function resolveTaskAssignmentField(
+  rawAssignedUserId: string,
+  source: Exclude<TaskAssignmentResolution['source'], 'invalid' | 'none'>,
+  currentPmsUser: SimulatorPmsUser
+): TaskAssignmentResolution {
+  const assignedUserId = rawAssignedUserId.trim();
+  const humanCode = normalizeSimulatorPmsHumanCode(assignedUserId);
+  if (!humanCode) {
+    return {
+      assignedUserId,
+      source: 'invalid',
+      matchesCurrentPmsUser: false,
+    };
+  }
+  return {
+    assignedUserId: humanCode,
+    source,
+    matchesCurrentPmsUser: humanCode === currentPmsUser,
+  };
+}
 
 function normalizeWorkflowRole(value?: string | null): WorkflowRole | null {
   const normalized = String(value || '')
@@ -269,32 +301,37 @@ export function resolveSimulatorTaskAssignment(options: {
   const approverId = String(options.approverId || '').trim();
 
   if (options.currentWorkflowRole === 'sj') {
+    if (requesterId) {
+      return resolveTaskAssignmentField(requesterId, 'requester', options.currentPmsUser);
+    }
     return {
-      assignedUserId: requesterId || null,
-      source: requesterId ? 'requester' : 'none',
-      matchesCurrentPmsUser: Boolean(requesterId) && requesterId === options.currentPmsUser,
+      assignedUserId: null,
+      source: 'none',
+      matchesCurrentPmsUser: false,
     };
   }
 
   if (options.currentWorkflowRole === 'jd') {
     if (checkerId) {
-      return {
-        assignedUserId: checkerId,
-        source: 'checker',
-        matchesCurrentPmsUser: checkerId === options.currentPmsUser,
-      };
+      return resolveTaskAssignmentField(checkerId, 'checker', options.currentPmsUser);
+    }
+    if (reviewerId) {
+      return resolveTaskAssignmentField(reviewerId, 'reviewer', options.currentPmsUser);
     }
     return {
-      assignedUserId: reviewerId || null,
-      source: reviewerId ? 'reviewer' : 'none',
-      matchesCurrentPmsUser: Boolean(reviewerId) && reviewerId === options.currentPmsUser,
+      assignedUserId: null,
+      source: 'none',
+      matchesCurrentPmsUser: false,
     };
   }
 
+  if (approverId) {
+    return resolveTaskAssignmentField(approverId, 'approver', options.currentPmsUser);
+  }
   return {
-    assignedUserId: approverId || null,
-    source: approverId ? 'approver' : 'none',
-    matchesCurrentPmsUser: Boolean(approverId) && approverId === options.currentPmsUser,
+    assignedUserId: null,
+    source: 'none',
+    matchesCurrentPmsUser: false,
   };
 }
 
@@ -335,18 +372,28 @@ export function resolveSimulatorWorkflowAccess(options: {
 
   if (!options.workflowNextStepRole || !options.workflowNextStepUserId) {
     if (taskCurrentNode && taskAssignedUserId) {
+      const normalizedTaskAssignedUserId = normalizeSimulatorPmsHumanCode(taskAssignedUserId);
+      if (!normalizedTaskAssignedUserId) {
+        return {
+          canView: true,
+          canMutateWorkflow: false,
+          decisionSource: 'task-assignment-invalid',
+          reason: `任务指派不是合法 PMS HumanCode（${taskAssignedUserId} / ${taskCurrentNode}），请修正仿 PMS 或后端任务数据源。`,
+        };
+      }
+
       const matchesTaskCurrentNode =
         options.currentPmsWorkflowRole === taskCurrentNode
         && currentPmsUserId.length > 0
-        && currentPmsUserId === taskAssignedUserId;
+        && currentPmsUserId === normalizedTaskAssignedUserId;
 
       return {
         canView: true,
         canMutateWorkflow: matchesTaskCurrentNode,
         decisionSource: 'task-current-node',
         reason: matchesTaskCurrentNode
-          ? `workflow next_step 缺失，已回退到任务当前节点与指派（${taskAssignedUserId} / ${taskCurrentNode}），允许当前用户执行对应操作。`
-          : `workflow next_step 缺失，当前仅能按任务当前节点与指派判断（${taskAssignedUserId} / ${taskCurrentNode}）；当前用户仅可查看。`,
+          ? `workflow next_step 缺失，已回退到任务当前节点与指派（${normalizedTaskAssignedUserId} / ${taskCurrentNode}），允许当前用户执行对应操作。`
+          : `workflow next_step 缺失，当前仅能按任务当前节点与指派判断（${normalizedTaskAssignedUserId} / ${taskCurrentNode}）；当前用户仅可查看。`,
       };
     }
 

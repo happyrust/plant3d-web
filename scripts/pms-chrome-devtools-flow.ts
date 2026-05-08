@@ -700,7 +700,8 @@ async function main(): Promise<void> {
 
     if (submitReview) {
       console.error('[cdp] PMS_CDP_SUBMIT_REVIEW=1：扫描各页/iframe 发起编校审并提交…');
-      const pkg = await runSubmitReviewAcrossContext(context);
+      const submitResult = await runSubmitReviewAcrossContext(context);
+      const pkg = submitResult.packageName;
       console.error('[cdp] plant3d：已检测到「编校审单创建/保存成功」');
       console.error(`[cdp] 本次编校审包名（用于 PMS 检索）: ${pkg}`);
 

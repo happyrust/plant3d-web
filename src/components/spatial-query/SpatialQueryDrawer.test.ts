@@ -5,6 +5,7 @@ import SpatialQueryDrawer from './SpatialQueryDrawer.vue';
 
 import type {
   SpatialQueryDraft,
+  SpatialQueryResultItem,
   SpatialQueryResultSet,
   SpatialQueryStatus,
 } from '@/types/spatialQuery';
@@ -107,6 +108,69 @@ function resetDraft() {
   stubState.canSubmit.value = true;
 }
 
+function makeResultSet(count: number, options: { page?: number; perPage?: number; total?: number; hasMore?: boolean; startIndex?: number } = {}): SpatialQueryResultSet {
+  const page = options.page ?? 1;
+  const perPage = options.perPage ?? count;
+  const total = options.total ?? count;
+  const startIndex = options.startIndex ?? 0;
+  const items: SpatialQueryResultItem[] = Array.from({ length: count }, (_, idx) => {
+    const refno = `24381_${String(100001 + startIndex + idx)}`;
+    return {
+      refno,
+      noun: 'PIPE',
+      specValue: 0,
+      specName: '未知',
+      distance: idx,
+      loaded: false,
+      visible: true,
+      matchedBy: 'server-spatial-index',
+      position: null,
+      bbox: null,
+      name: refno,
+      sourceModel: null,
+    };
+  });
+
+  return {
+    request: {
+      mode: 'distance',
+      centerSource: 'refno',
+      center: { x: 0, y: 0, z: 0 },
+      radius: 1000,
+      shape: 'sphere',
+      filters: {
+        nouns: [],
+        keyword: '',
+        onlyLoaded: false,
+        onlyVisible: false,
+        specValues: [],
+      },
+      limit: perPage,
+      sortBy: 'distanceAsc',
+      refno: '24381_145018',
+    },
+    items,
+    page,
+    perPage,
+    returnedCount: count,
+    totalPages: Math.max(1, Math.ceil(total / perPage)),
+    hasMore: options.hasMore ?? page * perPage < total,
+    total,
+    loadedCount: 0,
+    unloadedCount: count,
+    truncated: options.hasMore ?? page * perPage < total,
+    warnings: [],
+    groups: [
+      {
+        specValue: 0,
+        specName: '未知',
+        count,
+        items,
+      },
+    ],
+  };
+}
+
 describe('SpatialQueryDrawer (distance 模式)', () => {
   beforeEach(() => {
     applyCurrentSelection.mockReset();
@@ -194,14 +258,14 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     unmount();
   });
 
-  it('distance 模式下不显示半径 number input（只留最大结果数）', async () => {
+  it('distance 模式下不显示半径 number input（只留每页数量）', async () => {
     const { host, unmount } = mountDrawer();
     await nextTick();
 
     const allLabels = Array.from(host.querySelectorAll('label')) as HTMLLabelElement[];
     const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (mm)'));
     expect(radiusLabel).toBeUndefined();
-    const limitLabel = allLabels.find((label) => label.textContent?.includes('最大结果数'));
+    const limitLabel = allLabels.find((label) => label.textContent?.includes('每页数量'));
     expect(limitLabel).toBeDefined();
 
     unmount();
@@ -224,6 +288,45 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     const allLabels = Array.from(host.querySelectorAll('label')) as HTMLLabelElement[];
     const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (mm)'));
     expect(radiusLabel).toBeDefined();
+
+    unmount();
+  });
+
+  it('查询结果按服务端分页显示，并在翻页时重新查询后端', async () => {
+    stubState.resultSet.value = makeResultSet(20, {
+      page: 1,
+      perPage: 20,
+      total: 25,
+      hasMore: true,
+    });
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    expect(host.textContent).toContain('每页 20 项');
+    expect(host.textContent).toContain('当前 1-20 / 25');
+    expect(host.textContent).toContain('第 1 / 2 页');
+    expect(host.textContent).toContain('24381_100001');
+    expect(host.textContent).not.toContain('24381_100021');
+
+    const nextButton = host.querySelector('[data-testid="spatial-result-page-next"]') as HTMLButtonElement | null;
+    expect(nextButton).toBeTruthy();
+    nextButton?.click();
+    await nextTick();
+    expect(submitQuery).toHaveBeenCalledWith(2);
+
+    stubState.resultSet.value = makeResultSet(5, {
+      page: 2,
+      perPage: 20,
+      total: 25,
+      hasMore: false,
+      startIndex: 20,
+    });
+    await nextTick();
+    expect(host.textContent).toContain('当前 21-25 / 25');
+    expect(host.textContent).toContain('第 2 / 2 页');
+    expect(host.textContent).not.toContain('24381_100001');
+    expect(host.textContent).toContain('24381_100021');
 
     unmount();
   });

@@ -32,20 +32,19 @@ export type {
   VisibleInstsResponse,
 } from '@/api/genModelE3dTypes';
 
-type E3dSource = 'backend' | 'parquet' | 'auto';
+type E3dSource = 'backend' | 'parquet';
 
 function getE3dSource(): E3dSource {
   try {
     const v = new URLSearchParams(window.location.search).get('e3d_source') || '';
     const s = v.trim().toLowerCase();
     if (s === 'parquet') return 'parquet';
-    if (s === 'auto') return 'auto';
     if (s === 'backend') return 'backend';
   } catch {
     // ignore
   }
-  // 默认 auto：后端 Surreal 不可用时（如仅部署静态 output）自动回退 Parquet + DuckDB-WASM
-  return 'auto';
+  // 默认只走后端数据库查询；不再在后端失败时回退 DuckDB/Parquet。
+  return 'backend';
 }
 
 function getBaseUrl(): string {
@@ -75,36 +74,17 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 export async function e3dGetWorldRoot(): Promise<NodeResponse> {
   const source = getE3dSource();
   if (source === 'parquet') return await e3dParquetGetWorldRoot();
-  if (source === 'backend') return await fetchJson<NodeResponse>('/api/e3d/world-root');
-
-  try {
-    const resp = await fetchJson<NodeResponse>('/api/e3d/world-root');
-    if (resp?.success) return resp;
-  } catch {
-    // ignore
-  }
-  return await e3dParquetGetWorldRoot();
+  return await fetchJson<NodeResponse>('/api/e3d/world-root');
 }
 
 export async function e3dGetNode(refno: string): Promise<NodeResponse> {
   const source = getE3dSource();
   if (source === 'parquet') return await e3dParquetGetNode(refno);
-  if (source === 'backend') {
-    return await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
-  }
-
-  try {
-    const resp = await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
-    if (resp?.success) return resp;
-  } catch {
-    // ignore
-  }
-  return await e3dParquetGetNode(refno);
+  return await fetchJson<NodeResponse>(`/api/e3d/node/${encodeURIComponent(refno)}`);
 }
 
 export async function e3dGetChildren(refno: string, limit?: number): Promise<ChildrenResponse> {
   const source = getE3dSource();
-  // parquet 模式下树操作仍走后端 SurrealDB API（不走 parquet children）
 
   const url = new URL('http://localhost');
   url.pathname = `/api/e3d/children/${encodeURIComponent(refno)}`;
@@ -115,17 +95,7 @@ export async function e3dGetChildren(refno: string, limit?: number): Promise<Chi
   if (source === 'parquet') {
     return await e3dParquetGetChildren(refno, limit);
   }
-  if (source === 'backend') {
-    return await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
-  }
-
-  try {
-    const resp = await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
-    if (resp?.success) return resp;
-  } catch {
-    // ignore
-  }
-  return await e3dParquetGetChildren(refno, limit);
+  return await fetchJson<ChildrenResponse>(`${url.pathname}${url.search}`);
 }
 
 async function backendE3dGetAncestors(refno: string): Promise<AncestorsResponse> {
@@ -147,26 +117,14 @@ export async function e3dGetAncestors(refno: string): Promise<AncestorsResponse>
   const source = getE3dSource();
   if (source === 'parquet') return await e3dParquetGetAncestors(refno);
 
-  if (source === 'backend') {
-    try {
-      return await backendE3dGetAncestors(refno);
-    } catch (e) {
-      console.error('[vis][api] /api/e3d/ancestors failed', { refno, error: e });
-      const { addLog } = useConsoleStore();
-      addLog('error', `[vis][api] /api/e3d/ancestors failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`);
-      throw e;
-    }
-  }
-
-  // auto：优先后端，失败/非 success 回退 Parquet
   try {
-    const resp = await backendE3dGetAncestors(refno);
-    if (resp?.success) return resp;
+    return await backendE3dGetAncestors(refno);
   } catch (e) {
-    console.warn('[vis][api] /api/e3d/ancestors backend failed, fallback to parquet', { refno, error: e });
+    console.error('[vis][api] /api/e3d/ancestors failed', { refno, error: e });
+    const { addLog } = useConsoleStore();
+    addLog('error', `[vis][api] /api/e3d/ancestors failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`);
+    throw e;
   }
-
-  return await e3dParquetGetAncestors(refno);
 }
 
 async function backendE3dGetSubtreeRefnos(
@@ -212,41 +170,23 @@ export async function e3dGetSubtreeRefnos(
     return await e3dParquetGetSubtreeRefnos(refno, params);
   }
 
-  if (source === 'backend') {
-    try {
-      return await backendE3dGetSubtreeRefnos(refno, params);
-    } catch (e) {
-      console.error('[vis][api] /api/e3d/subtree-refnos failed', {
-        refno,
-        include_self: params?.includeSelf,
-        max_depth: params?.maxDepth,
-        limit: params?.limit,
-        error: e,
-      });
-      const { addLog } = useConsoleStore();
-      addLog(
-        'error',
-        `[vis][api] /api/e3d/subtree-refnos failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
-      );
-      throw e;
-    }
-  }
-
-  // auto：优先后端
   try {
-    const resp = await backendE3dGetSubtreeRefnos(refno, params);
-    if (resp?.success) return resp;
+    return await backendE3dGetSubtreeRefnos(refno, params);
   } catch (e) {
-    console.warn('[vis][api] /api/e3d/subtree-refnos backend failed, fallback to parquet', {
+    console.error('[vis][api] /api/e3d/subtree-refnos failed', {
       refno,
       include_self: params?.includeSelf,
       max_depth: params?.maxDepth,
       limit: params?.limit,
       error: e,
     });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'error',
+      `[vis][api] /api/e3d/subtree-refnos failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
+    );
+    throw e;
   }
-
-  return await e3dParquetGetSubtreeRefnos(refno, params);
 }
 
 async function backendE3dGetVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
@@ -269,7 +209,7 @@ async function backendE3dGetVisibleInsts(refno: string): Promise<VisibleInstsRes
       ? ` candidates=${debugAny.candidates_count ?? ''} filtered=${debugAny.filtered_count ?? ''} visible=${debugAny.visible_count ?? ''} source=${debugAny.source ?? ''}`
       : '');
   if (resp.success && refnoCount === 0) {
-    addLog('warning', `${line} → 可见实例为空（若为容器节点，可能需从 Parquet 或其它入口加载几何）`);
+    addLog('warning', `${line} → 可见实例为空（请检查后端数据库的空间索引或模型树数据）`);
   } else {
     addLog('info', line);
   }
@@ -280,34 +220,26 @@ export async function e3dGetVisibleInsts(refno: string): Promise<VisibleInstsRes
   const source = getE3dSource();
   if (source === 'parquet') return await e3dParquetGetVisibleInsts(refno);
 
-  if (source === 'backend') {
-    try {
-      return await backendE3dGetVisibleInsts(refno);
-    } catch (e) {
-      console.error('[vis][api] /api/e3d/visible-insts failed', { refno, error: e });
-      const { addLog } = useConsoleStore();
-      addLog(
-        'error',
-        `[vis][api] /api/e3d/visible-insts failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
-      );
-      throw e;
-    }
-  }
-
-  // auto：优先后端
   try {
-    const resp = await backendE3dGetVisibleInsts(refno);
-    if (resp?.success) return resp;
+    return await backendE3dGetVisibleInsts(refno);
   } catch (e) {
-    console.warn('[vis][api] /api/e3d/visible-insts backend failed, fallback to parquet', { refno, error: e });
+    console.error('[vis][api] /api/e3d/visible-insts failed', { refno, error: e });
+    const { addLog } = useConsoleStore();
+    addLog(
+      'error',
+      `[vis][api] /api/e3d/visible-insts failed refno=${refno} err=${e instanceof Error ? e.message : String(e)}`
+    );
+    throw e;
   }
-
-  return await e3dParquetGetVisibleInsts(refno);
 }
 
 export async function e3dSearch(req: SearchRequest): Promise<SearchResponse> {
-  // 搜索只走 Parquet（DuckDB-WASM），不再 fallback 后端
-  return await e3dParquetSearch(req);
+  const source = getE3dSource();
+  if (source === 'parquet') return await e3dParquetSearch(req);
+  return await fetchJson<SearchResponse>('/api/e3d/search', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }
 
 // ========================

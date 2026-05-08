@@ -4,6 +4,6 @@ import ReviewPanel from '@/components/review/ReviewPanel.vue';
 
 <template>
   <div class="h-full overflow-hidden">
-    <ReviewPanel />
+    <ReviewPanel density="dock" />
   </div>
 </template>

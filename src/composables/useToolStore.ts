@@ -71,6 +71,7 @@ export type MeasurementSourceLink = {
   sourceAnnotationId?: string;
   sourceAnnotationType?: AnnotationType;
   formId?: string;
+  taskId?: string;
 };
 
 export type DistanceMeasurementRecord = {
@@ -463,6 +464,7 @@ function normalizeMeasurementRecord(rec: MeasurementRecord): MeasurementRecord {
     sourceAnnotationId: normalizeOptionalString(rec.sourceAnnotationId),
     sourceAnnotationType: normalizeOptionalString(rec.sourceAnnotationType) as AnnotationType | undefined,
     formId: normalizeOptionalString(rec.formId),
+    taskId: normalizeOptionalString(rec.taskId),
   };
 }
 
@@ -472,6 +474,7 @@ function normalizeXeokitMeasurementRecord<T extends XeokitMeasurementRecord>(rec
     sourceAnnotationId: normalizeOptionalString(rec.sourceAnnotationId),
     sourceAnnotationType: normalizeOptionalString(rec.sourceAnnotationType) as AnnotationType | undefined,
     formId: normalizeOptionalString(rec.formId),
+    taskId: normalizeOptionalString(rec.taskId),
   };
 }
 
@@ -1113,6 +1116,14 @@ function updateAnnotationVisible(id: string, visible: boolean) {
   updateAnnotation(id, { visible });
 }
 
+function setTextAnnotationsCollapsed(ids: string[], collapsed: boolean) {
+  const targetIds = new Set(ids.map((id) => id.trim()).filter(Boolean));
+  if (targetIds.size === 0) return;
+  annotations.value = annotations.value.map((annotation) => (
+    targetIds.has(annotation.id) ? { ...annotation, collapsed } : annotation
+  ));
+}
+
 function removeAnnotation(id: string) {
   annotations.value = annotations.value.filter((a) => a.id !== id);
   if (activeAnnotationId.value === id) {
@@ -1490,6 +1501,49 @@ function updateAnnotationSeverity(
   }
 }
 
+function updateAnnotationBasicFields(
+  annotationType: AnnotationType,
+  annotationId: string,
+  patch: Partial<Pick<AnyAnnotationRecord, 'title' | 'description'>>
+): boolean {
+  const nextPatch: Partial<Pick<AnyAnnotationRecord, 'title' | 'description'>> = {};
+  if (typeof patch.title === 'string') nextPatch.title = patch.title;
+  if (typeof patch.description === 'string') nextPatch.description = patch.description;
+
+  if (Object.keys(nextPatch).length === 0) return true;
+
+  switch (annotationType) {
+    case 'text': {
+      const annotation = annotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateAnnotation(annotationId, nextPatch as Partial<AnnotationRecord>);
+      return true;
+    }
+    case 'cloud': {
+      const annotation = cloudAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateCloudAnnotation(annotationId, nextPatch as Partial<CloudAnnotationRecord>);
+      return true;
+    }
+    case 'rect': {
+      const annotation = rectAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateRectAnnotation(annotationId, nextPatch as Partial<RectAnnotationRecord>);
+      return true;
+    }
+    case 'obb': {
+      const annotation = obbAnnotations.value.find((a) => a.id === annotationId);
+      if (!annotation) return false;
+      updateObbAnnotation(annotationId, nextPatch as Partial<ObbAnnotationRecord>);
+      return true;
+    }
+    default: {
+      const _exhaustive: never = annotationType;
+      return false;
+    }
+  }
+}
+
 function getAnnotationScreenshot(
   annotationType: AnnotationType,
   annotationId: string
@@ -1578,11 +1632,15 @@ function clearAnnotationScreenshot(
  * 为批注添加评论/意见。
  *
  * 写入时同时更新 commentThreadStore 与 inline annotation.comments（兼容投影）。
+ * `formId` 可选；提供时评论按 `${type}:${id}@${formId}` 隔离到正式单据 bucket，
+ * 不提供时落到旧 key 的本地草稿 bucket，避免互相覆盖。
  */
 function addCommentToAnnotation(
   annotationType: AnnotationType,
   annotationId: string,
-  comment: AnnotationCommentInput
+  comment: AnnotationCommentInput,
+  formId?: string | null,
+  taskId?: string | null
 ): AnnotationComment | null {
   const fallbackCreatedAt = Date.now();
   const newComment: AnnotationComment = {
@@ -1594,7 +1652,11 @@ function addCommentToAnnotation(
   };
 
   _getThreadStore().upsertComment(
-    liftAnnotationComment(newComment, { annotationType }),
+    liftAnnotationComment(newComment, {
+      annotationType,
+      formId: formId ?? undefined,
+      taskId: taskId ?? undefined,
+    }),
   );
 
   switch (annotationType) {
@@ -1636,11 +1698,15 @@ function addCommentToAnnotation(
  *
  * 必须同时更新 commentThreadStore（读路径真源）和 inline annotation.comments
  * （兼容投影）。否则后端返回的最新评论列表会被读路径忽略，导致 UI 显示空或旧数据。
+ *
+ * `formId` 可选；提供时只覆盖正式单据 bucket，不影响其他 form 的评论。
  */
 function setAnnotationComments(
   annotationType: AnnotationType,
   annotationId: string,
-  comments: AnnotationComment[]
+  comments: AnnotationComment[],
+  formId?: string | null,
+  taskId?: string | null
 ): boolean {
   const exists =
     annotationType === 'text'
@@ -1652,9 +1718,13 @@ function setAnnotationComments(
           : obbAnnotations.value.some((a) => a.id === annotationId);
   if (!exists) return false;
 
-  const key = buildCommentThreadKey(annotationType, annotationId);
+  const key = buildCommentThreadKey(annotationType, annotationId, formId, taskId);
   const lifted = comments.map((c) =>
-    liftAnnotationComment({ ...c, annotationId }, { annotationType }),
+    liftAnnotationComment({ ...c, annotationId }, {
+      annotationType,
+      formId: formId ?? undefined,
+      taskId: taskId ?? undefined,
+    }),
   );
   _getThreadStore().setThreadComments(key, lifted);
 
@@ -1677,19 +1747,27 @@ function setAnnotationComments(
 
 /**
  * 更新批注中的某条评论。
+ *
+ * `formId` 可选；提供时只更新正式单据 bucket 的对应评论，避免回退到旧 key。
  */
 function updateAnnotationComment(
   annotationType: AnnotationType,
   annotationId: string,
   commentId: string,
-  patch: Partial<Pick<AnnotationComment, 'content' | 'updatedAt'>>
+  patch: Partial<Pick<AnnotationComment, 'content' | 'updatedAt'>>,
+  formId?: string | null,
+  taskId?: string | null
 ): boolean {
   const existing = _getCommentsFromInline(annotationType, annotationId)
     .find((c) => c.id === commentId);
   if (existing) {
     const updated = { ...existing, ...patch, updatedAt: Date.now() };
     _getThreadStore().upsertComment(
-      liftAnnotationComment(updated, { annotationType }),
+      liftAnnotationComment(updated, {
+        annotationType,
+        formId: formId ?? undefined,
+        taskId: taskId ?? undefined,
+      }),
     );
   }
 
@@ -1731,13 +1809,17 @@ function updateAnnotationComment(
 
 /**
  * 删除批注中的某条评论。
+ *
+ * `formId` 可选；提供时只删除正式单据 bucket 的对应评论。
  */
 function removeAnnotationComment(
   annotationType: AnnotationType,
   annotationId: string,
-  commentId: string
+  commentId: string,
+  formId?: string | null,
+  taskId?: string | null
 ): boolean {
-  const key = buildCommentThreadKey(annotationType, annotationId);
+  const key = buildCommentThreadKey(annotationType, annotationId, formId, taskId);
   _getThreadStore().deleteComment(key, commentId);
 
   const filterComments = (comments: AnnotationComment[] | undefined): AnnotationComment[] | undefined => {
@@ -1778,12 +1860,15 @@ function removeAnnotationComment(
  * 获取批注的所有评论。
  *
  * commentThreadStore 为唯一真源，inline annotation.comments 仅作兼容投影。
+ * `formId` 可选；提供时仅返回该单据 bucket 的评论，不会回退到旧 key。
  */
 function getAnnotationComments(
   annotationType: AnnotationType,
-  annotationId: string
+  annotationId: string,
+  formId?: string | null,
+  taskId?: string | null
 ): AnnotationComment[] {
-  return _getCommentsFromStore(annotationType, annotationId);
+  return _getCommentsFromStore(annotationType, annotationId, formId, taskId);
 }
 
 function _getCommentsFromInline(
@@ -1814,9 +1899,11 @@ function _getCommentsFromInline(
 function _getCommentsFromStore(
   annotationType: AnnotationType,
   annotationId: string,
+  formId?: string | null,
+  taskId?: string | null,
 ): AnnotationComment[] {
   try {
-    return _storeGetComments(annotationType, annotationId);
+    return _storeGetComments(annotationType, annotationId, formId, taskId);
   } catch {
     return _getCommentsFromInline(annotationType, annotationId);
   }
@@ -2041,6 +2128,7 @@ export function useToolStore() {
     addAnnotation,
     updateAnnotation,
     updateAnnotationVisible,
+    setTextAnnotationsCollapsed,
     setAnnotationTypeVisible,
     removeAnnotation,
     clearAnnotations,
@@ -2080,6 +2168,7 @@ export function useToolStore() {
     setAnnotationReviewState,
     applyAnnotationReviewAction,
     updateAnnotationSeverity,
+    updateAnnotationBasicFields,
     getAnnotationScreenshot,
     setAnnotationScreenshot,
     clearAnnotationScreenshot,

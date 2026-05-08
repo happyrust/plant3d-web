@@ -19,8 +19,8 @@
       "x": 0,
       "y": 0,
       "name": "card",
-      "width": 340,
-      "height": 920,
+      "width": 453,
+      "height": 938,
       "fill": "$card",
       "cornerRadius": 16,
       "effect": {

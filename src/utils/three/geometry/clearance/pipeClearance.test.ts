@@ -45,5 +45,68 @@ describe('pipeClearance', () => {
     });
     expect(res).toBeNull();
   });
+
+  it('pipe-to-pipe: respects the configured max angle', () => {
+    const eightDeg = (8 * Math.PI) / 180;
+    const pipe2Axis = new THREE.Vector3(Math.sin(eightDeg), Math.cos(eightDeg), 0);
+
+    const rejected = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
+      pipe1Radius: 1,
+      pipe1Axis: new THREE.Vector3(0, 1, 0),
+      pipe2Center: new THREE.Vector3(4, 0, 0),
+      pipe2Radius: 1,
+      pipe2Axis,
+      maxAngleDeg: 5,
+    });
+    const accepted = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
+      pipe1Radius: 1,
+      pipe1Axis: new THREE.Vector3(0, 1, 0),
+      pipe2Center: new THREE.Vector3(4, 0, 0),
+      pipe2Radius: 1,
+      pipe2Axis,
+      maxAngleDeg: 10,
+    });
+
+    expect(rejected).toBeNull();
+    expect(accepted).not.toBeNull();
+  });
+
+  it('pipe-to-pipe: uses finite segment endpoints instead of infinite axes', () => {
+    const res = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
+      pipe1Radius: 1,
+      pipe1Axis: new THREE.Vector3(0, 10, 0),
+      pipe2Center: new THREE.Vector3(3, 100, 0),
+      pipe2Radius: 1,
+      pipe2Axis: new THREE.Vector3(0, 10, 0),
+      pipe1Start: new THREE.Vector3(0, 0, 0),
+      pipe1End: new THREE.Vector3(0, 10, 0),
+      pipe2Start: new THREE.Vector3(3, 100, 0),
+      pipe2End: new THREE.Vector3(3, 110, 0),
+    });
+
+    expect(res).not.toBeNull();
+    expect(res!.distance).toBeGreaterThan(80);
+  });
+
+  it('pipe-to-pipe: keeps touching pipes as zero clearance', () => {
+    const res = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
+      pipe1Radius: 1,
+      pipe1Axis: new THREE.Vector3(0, 10, 0),
+      pipe2Center: new THREE.Vector3(2, 0, 0),
+      pipe2Radius: 1,
+      pipe2Axis: new THREE.Vector3(0, 10, 0),
+      pipe1Start: new THREE.Vector3(0, 0, 0),
+      pipe1End: new THREE.Vector3(0, 10, 0),
+      pipe2Start: new THREE.Vector3(2, 0, 0),
+      pipe2End: new THREE.Vector3(2, 10, 0),
+    });
+
+    expect(res).not.toBeNull();
+    expect(res!.distance).toBeCloseTo(0, 8);
+  });
 });
 

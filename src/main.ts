@@ -52,6 +52,7 @@ app.component('PropertiesPanel', PropertiesPanelDock);
 app.component('PtsetPanel', PtsetPanelDock);
 app.component('MbdPipePanel', MbdPipePanelDock);
 app.component('ReviewPanel', ReviewPanelDock);
+app.component('ReviewPanelDock', ReviewPanelDock);
 app.component('InitiateReviewPanel', InitiateReviewPanelDock);
 app.component('ReviewerTaskListPanel', ReviewerTaskListPanelDock);
 app.component('DesignerTaskListPanel', DesignerTaskListPanelDock);

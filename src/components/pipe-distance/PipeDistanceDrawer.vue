@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, onUnmounted } from 'vue';
+import { computed, onUnmounted } from 'vue';
 
 import {
   Check,
@@ -44,14 +44,6 @@ function startPickBran() {
     }
   });
 }
-
-// 监听拾取模式实时变化（实时同步选中的管道到 store）
-watch(() => toolStore.pickedRefnos.value, (refnos) => {
-  if (!isPicking.value) return;
-  for (const refno of refnos) {
-    store.addBranRefno(refno);
-  }
-}, { deep: true });
 
 // --- detection ---
 async function handleDetect() {
@@ -244,7 +236,7 @@ const clampedMaxAngle = computed({
               class="max-h-[200px] overflow-auto rounded-md border border-border">
               <div v-for="(result, idx) in store.results.value"
                 :key="result.id"
-                class="flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2.5 transition-colors last:border-b-0"
+                class="group flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2.5 transition-colors last:border-b-0"
                 :class="store.activeResultIndex.value === idx
                   ? 'bg-[#FFF0E6] border-l-2 border-l-[#FF6B00]'
                   : 'hover:bg-muted'"

@@ -57,6 +57,11 @@ describe('createSpatialQueryStore', () => {
     const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: false,
+      total_count: 3,
+      returned_count: 2,
+      page: 1,
+      per_page: 100,
+      has_more: false,
       results: [
         { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
         { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
@@ -78,7 +83,8 @@ describe('createSpatialQueryStore', () => {
 
     expect(store.status.value).toBe('ready');
     expect(queryNearbyByPosition).toHaveBeenCalledWith(5, 5, 5, 50, expect.any(Object));
-    expect(store.resultSet.value?.total).toBe(2);
+    expect(store.resultSet.value?.total).toBe(3);
+    expect(store.resultSet.value?.returnedCount).toBe(2);
     expect(store.resultSet.value?.loadedCount).toBe(1);
     expect(store.resultSet.value?.unloadedCount).toBe(1);
     expect(store.resultSet.value?.items.map((item) => [item.refno, item.loaded])).toEqual([
@@ -92,6 +98,11 @@ describe('createSpatialQueryStore', () => {
     const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
       success: true,
       truncated: false,
+      total_count: 2,
+      returned_count: 2,
+      page: 1,
+      per_page: 100,
+      has_more: false,
       results: [
         { refno: 'loaded_a', noun: 'PIPE', spec_value: 1, distance: 5 },
         { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
@@ -114,9 +125,51 @@ describe('createSpatialQueryStore', () => {
 
     expect(queryNearbyByPosition).toHaveBeenCalledWith(5, 5, 5, 50, expect.objectContaining({
       spec_values: '1',
+      page: 1,
+      per_page: 100,
     }));
     expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
     expect(store.resultSet.value?.groups.map((group) => group.specValue)).toEqual([1]);
+  });
+
+  it('翻页查询应把 page 和 per_page 传给服务端并保留总数', async () => {
+    const viewer = createViewerStub();
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      truncated: true,
+      total_count: 25,
+      returned_count: 1,
+      page: 2,
+      per_page: 20,
+      has_more: false,
+      results: [
+        { refno: 'server_only', noun: 'EQUI', spec_value: 2, distance: 18 },
+      ],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+    });
+
+    store.draft.mode = 'range';
+    store.draft.rangeCenterSource = 'selected';
+    store.draft.radius = 50;
+    store.draft.limit = 20;
+
+    await store.submitQuery(2);
+
+    expect(queryNearbyByPosition).toHaveBeenCalledWith(5, 5, 5, 50, expect.objectContaining({
+      page: 2,
+      per_page: 20,
+      max_results: 20,
+    }));
+    expect(store.resultSet.value?.page).toBe(2);
+    expect(store.resultSet.value?.perPage).toBe(20);
+    expect(store.resultSet.value?.total).toBe(25);
+    expect(store.resultSet.value?.totalPages).toBe(2);
   });
 
   it('批量加载当前筛选结果时应走精确 refno 批量加载并刷新统计', async () => {
@@ -166,6 +219,11 @@ describe('createSpatialQueryStore', () => {
           matchedBy: 'server-spatial-index',
         },
       ],
+      page: 1,
+      perPage: 100,
+      returnedCount: 2,
+      totalPages: 1,
+      hasMore: false,
       total: 2,
       loadedCount: 1,
       unloadedCount: 1,
@@ -220,6 +278,11 @@ describe('createSpatialQueryStore', () => {
           matchedBy: 'server-spatial-index',
         },
       ],
+      page: 1,
+      perPage: 100,
+      returnedCount: 1,
+      totalPages: 1,
+      hasMore: false,
       total: 1,
       loadedCount: 0,
       unloadedCount: 1,

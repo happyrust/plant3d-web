@@ -113,13 +113,14 @@ npx eslint "src/components/review/measurementDisplay.ts" "src/components/review/
 - 运行 `npm run type-check`，通过。
 - 运行定向 ESLint，通过。
 - 完成完整路径增强的前置技术预研。
-- 新增只读基础模块 `src/components/review/measurementPathLookup.ts`，提供 refno 路径查询、缓存和 fallback；暂未接入 UI。
+- 新增只读基础模块 `src/components/review/measurementPathLookup.ts`，提供 refno 路径查询、缓存和 fallback；后续已接入测量列表、确认回放与批注测量证据展示层。
+- 仿 PMS restore 自动化已通过，覆盖刷新/重新进入后 confirmed record、confirmed measurement、UI 批注标题、UI 评论正文和 UI BRAN/refno 恢复。
 
 待推进：
 
 - 获取展示文案确认。
 - 获取 PMS/编校审验收输入。
-- 根据确认结果决定是否把 `measurementPathLookup` 接入测量列表、批注测量证据和确认回放。
+- 使用真实 PMS 输入复核完整路径/fallback 在角色链路中的最终展示。
 
 ## 7. 技术预研记录
 
@@ -190,6 +191,59 @@ npm run type-check
 ```
 
 结果均通过。
+
+### 2026-04-30 · 仿 PMS restore 验收通过
+
+背景：
+
+- 前序 restore 自动化先后暴露两个非测量路径问题：
+  - backend 运行态下 `/api/review/records` 写入超时，重启 backend 后 HTTP 合同脚本 35/35 通过；
+  - UI 评论正文断言未命中，定位为恢复后需要激活批注详情线程。
+- 已在 `scripts/pms-simulator-runner.ts` 中让 restore 断言在看到恢复批注标题但未看到评论正文时，先点击该批注标题，再等待评论正文。
+
+验证：
+
+```bash
+npx eslint "scripts/pms-plant3d-initiate-flow.ts" "scripts/pms-simulator-runner.ts"
+npm run type-check
+PMS_SIMULATOR_CASE=restore PMS_SIMULATOR_OUTPUT=artifacts/rus-238-closure-restore-click-report.json npm run test:pms:simulator
+npm test -- "src/composables/useReviewStore.test.ts" "src/components/review/confirmedRecordsRestore.test.ts" "src/components/review/reviewRecordReplay.test.ts" "src/components/review/measurementDisplay.test.ts" "src/components/review/annotationWorkspaceModel.test.ts" "src/components/tools/MeasurementPanel.test.ts" "src/components/review/TaskReviewDetail.test.ts"
+```
+
+结果：
+
+- 定向 ESLint 通过。
+- `npm run type-check` 通过。
+- 仿 PMS restore 通过。
+- RUS-238 目标测试 7 个文件、44 个测试通过。
+
+restore 报告：
+
+| 项 | 值 |
+| --- | --- |
+| 报告 | `artifacts/rus-238-closure-restore-click-report.json` |
+| formId | `FORM-EFC6A720B837` |
+| taskId | `task-712392cb-9966-4f68-8fb7-c3f45deb3478` |
+| packageName | `COMMENT-THREAD-REGRESSION-1777535048226` |
+| finalNode | `jd` |
+| finalStatus | `submitted` |
+
+关键通过断言：
+
+- `restore-before-confirmed-record`
+- `restore-before-confirmed-measurement`
+- `restore-form-preserved`
+- `restore-confirmed-record-count`
+- `restore-confirmed-measurement-count`
+- `restore-ui-annotation-title`
+- `restore-ui-comment-content`
+- `restore-ui-bran-refno`
+- `restore-comment-content-after-refresh`
+
+结论：
+
+- 仿 PMS restore 已为“关闭/刷新后重新进入仍能恢复测量与记录”提供自动化通过证据。
+- 这仍不等同于真实 PMS 环境最终验收；真实 PMS 仍需目标 BRAN、包名/任务单、角色和入口输入。
 
 未完成：
 

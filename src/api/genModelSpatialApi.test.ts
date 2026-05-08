@@ -84,4 +84,27 @@ describe('genModelSpatialApi', () => {
     expect(url.searchParams.get('spec_values')).toBe('1,3');
     expect(url.searchParams.get('nouns')).toBe('PIPE,EQUI');
   });
+
+  it('应透传服务端分页参数', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true, results: [] }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await querySpatialIndex({
+      mode: 'refno',
+      refno: '24381_145018',
+      distance: 10000,
+      max_results: 100,
+      page: 2,
+      per_page: 100,
+    });
+
+    const requestUrl = String(fetchMock.mock.calls[0]?.[0]);
+    const url = new URL(requestUrl, 'http://localhost');
+
+    expect(url.searchParams.get('page')).toBe('2');
+    expect(url.searchParams.get('per_page')).toBe('100');
+    expect(url.searchParams.get('max_results')).toBe('100');
+  });
 });

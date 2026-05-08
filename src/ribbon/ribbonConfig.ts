@@ -146,20 +146,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
     ],
   },
   {
-    id: 'tools',
-    label: '工具',
-    groups: [
-      {
-        id: 'tools.core',
-        label: '核心',
-        items: [
-          { kind: 'button', id: 'tools.clear_all', label: '清空全部', icon: 'trash', commandId: 'tools.clear_all' },
-          { kind: 'button', id: 'panel.hydraulic', label: '水力计算', icon: 'calculator', commandId: 'panel.hydraulic' },
-        ],
-      },
-    ],
-  },
-  {
     id: 'measurement',
     label: '测量',
     groups: [
@@ -180,55 +166,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '管理',
         items: [
           { kind: 'button', id: 'measurement.clear', label: '清空', icon: 'trash', commandId: 'measurement.clear' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'dimension',
-    label: '尺寸标注',
-    groups: [
-      {
-        id: 'dimension.create',
-        label: '创建',
-        items: [
-          { kind: 'button', id: 'dimension.linear', label: '距离', icon: 'ruler', commandId: 'dimension.linear' },
-          { kind: 'button', id: 'dimension.angle', label: '角度', icon: 'ruler', commandId: 'dimension.angle' },
-        ],
-      },
-      {
-        id: 'dimension.manage',
-        label: '管理',
-        items: [
-          { kind: 'button', id: 'dimension.clear', label: '清空', icon: 'trash', commandId: 'dimension.clear' },
-        ],
-      },
-      {
-        id: 'dimension.config',
-        label: '配置',
-        items: [
-          { kind: 'button', id: 'dimension.settings', label: '样式设置', icon: 'settings', commandId: 'dimension.settings' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'annotation',
-    label: '批注',
-    groups: [
-      {
-        id: 'annotation.create',
-        label: '创建',
-        items: [
-          { kind: 'button', id: 'annotation.create.note', label: '创建', icon: 'square_pen', commandId: 'annotation.create' },
-        ],
-      },
-      {
-        id: 'annotation.manage',
-        label: '管理',
-        items: [
-          { kind: 'button', id: 'annotation.style.settings', label: '样式设置', icon: 'settings', commandId: 'annotation.settings' },
-          { kind: 'button', id: 'annotation.clear', label: '清空', icon: 'trash', commandId: 'annotation.clear' },
         ],
       },
     ],
@@ -421,6 +358,19 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
     ],
   },
   {
+    id: 'settings',
+    label: '设置',
+    groups: [
+      {
+        id: 'settings.style',
+        label: '样式',
+        items: [
+          { kind: 'button', id: 'settings.annotationStyle', label: '批注样式', icon: 'settings', commandId: 'annotation.settings' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'help',
     label: '帮助',
     groups: [
@@ -441,6 +391,23 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
 const BASE_RIBBON_TABS: RibbonTabConfig[] = showDebugUi
   ? ALL_RIBBON_TABS
   : ALL_RIBBON_TABS.filter((tab) => tab.id !== 'debug');
+
+export function shouldHideAnnotationTabForReviewDock(url: URL): boolean {
+  return url.pathname.includes('/review/3d-view')
+    || url.searchParams.has('form_id')
+    || url.searchParams.has('task_id')
+    || url.searchParams.get('automation_review') === '1';
+}
+
+function shouldHideAnnotationTabForCurrentPage(): boolean {
+  if (typeof window === 'undefined') return false;
+  return shouldHideAnnotationTabForReviewDock(new URL(window.location.href));
+}
+
+export function filterReviewDockAnnotationTab(tabs: RibbonTabConfig[], hideAnnotationTab: boolean): RibbonTabConfig[] {
+  if (!hideAnnotationTab) return tabs;
+  return tabs.filter((tab) => tab.id !== 'annotation');
+}
 
 function filterPassiveWorkflowEntries(tabs: RibbonTabConfig[]): RibbonTabConfig[] {
   if (showMyTasksEntry) return tabs;
@@ -463,4 +430,7 @@ function filterPassiveWorkflowEntries(tabs: RibbonTabConfig[]): RibbonTabConfig[
   }));
 }
 
-export const RIBBON_TABS: RibbonTabConfig[] = filterPassiveWorkflowEntries(BASE_RIBBON_TABS);
+export const RIBBON_TABS: RibbonTabConfig[] = filterReviewDockAnnotationTab(
+  filterPassiveWorkflowEntries(BASE_RIBBON_TABS),
+  shouldHideAnnotationTabForCurrentPage(),
+);

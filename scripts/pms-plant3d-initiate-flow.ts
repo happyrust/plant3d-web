@@ -10,6 +10,15 @@ import type { BrowserContext, Frame, Page } from 'playwright';
 /** 与 PMS 列表/详情一致的联调用 BRAN RefNo；可通过 `PMS_TARGET_BRAN_REFNO` 覆盖 */
 export const PMS_DEFAULT_TEST_BRAN_REFNO = '24381_145018';
 
+function resolveTargetBranRefnos(): string[] {
+  const raw = (process.env.PMS_TARGET_BRAN_REFNOS || process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
+  const refs = raw
+    .split(/[,\s|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return refs.length > 0 ? [...new Set(refs)] : [PMS_DEFAULT_TEST_BRAN_REFNO];
+}
+
 function resolveAutomationWorkflowMode(): string | null {
   const normalized = (process.env.PMS_CDP_WORKFLOW_MODE || '').trim().toLowerCase();
   return normalized || null;
@@ -18,9 +27,25 @@ function resolveAutomationWorkflowMode(): string | null {
 declare global {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions -- 与 Window 合并需 interface
   interface Window {
-    __plant3dInitiateReviewE2E?: { addMockComponent: (refNo?: string, name?: string) => void };
+    __plant3dInitiateReviewE2E?: {
+      addMockComponent: (refNo?: string, name?: string) => void | Promise<void>;
+      getLastCreateResult?: () => Plant3dInitiateCreateResult | null;
+    };
   }
 }
+
+export type Plant3dInitiateCreateResult = {
+  taskId: string | null;
+  formId: string | null;
+  title: string | null;
+  error: string | null;
+  at: number;
+};
+
+export type Plant3dSubmitReviewResult = {
+  packageName: string;
+  createResult: Plant3dInitiateCreateResult | null;
+};
 
 export async function registerPlant3dAutomationReviewInitScript(context: BrowserContext): Promise<void> {
   const workflowMode = resolveAutomationWorkflowMode();
@@ -44,6 +69,136 @@ export function listPageAndFrames(page: Page): (Page | Frame)[] {
     out.push(frame);
   }
   return out;
+}
+
+function isPlant3dTraceEnabled(): boolean {
+  return process.env.PMS_SIMULATOR_TRACE === '1' || process.env.PMS_CDP_TRACE === '1';
+}
+
+function tracePlant3dAutomation(message: string): void {
+  if (!isPlant3dTraceEnabled()) return;
+  console.error(`[cdp] plant3d automation: ${message}`);
+}
+
+function normalizeFormId(value: string | null | undefined): string | null {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+}
+
+function rootUrl(root: Page | Frame): string {
+  return root.url();
+}
+
+function rootMatchesFormId(root: Page | Frame, formId: string | null): boolean {
+  if (!formId) return true;
+  try {
+    const parsed = new URL(rootUrl(root));
+    return parsed.searchParams.get('form_id') === formId;
+  } catch {
+    return false;
+  }
+}
+
+function rootCandidateRank(page: Page, root: Page | Frame): number {
+  const isMainPage = root === page;
+  try {
+    const parsed = new URL(rootUrl(root));
+    if (parsed.pathname.includes('/review/3d-view')) {
+      return isMainPage ? 0 : 1;
+    }
+    if (parsed.pathname.includes('/pms-review-simulator')) {
+      return isMainPage ? 4 : 5;
+    }
+  } catch {
+    // Keep opaque/cross-origin roots behind direct Plant3D pages.
+  }
+  return isMainPage ? 2 : 3;
+}
+
+async function waitForWorkspaceAcrossContext(
+  context: BrowserContext,
+  options: {
+    marker: string;
+    description: string;
+    formId?: string | null;
+    urlIncludes?: string | null;
+    ready?: (root: Page | Frame) => Promise<boolean>;
+    timeoutMessage: string;
+  },
+): Promise<{ page: Page; root: Page | Frame }> {
+  const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
+  const parsed = rawPoll ? Number(rawPoll) : NaN;
+  const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;
+  const deadline = Date.now() + pollMs;
+  const expectedFormId = normalizeFormId(options.formId);
+  while (Date.now() < deadline) {
+    const pages = context.pages().filter((p) => !p.isClosed());
+    const roots: { page: Page; root: Page | Frame }[] = [
+      ...pages.map((page) => ({ page, root: page })),
+      ...pages.flatMap((page) => page.frames()
+        .filter((frame) => !frame.isDetached() && frame !== page.mainFrame())
+        .map((frame) => ({ page, root: frame }))),
+    ].sort((a, b) => rootCandidateRank(a.page, a.root) - rootCandidateRank(b.page, b.root));
+    for (const { page, root } of roots) {
+      const url = rootUrl(root);
+      if (options.urlIncludes && !url.includes(options.urlIncludes)) {
+        tracePlant3dAutomation(`${options.description} skip url root=${url}`);
+        continue;
+      }
+      if (!rootMatchesFormId(root, expectedFormId)) {
+        tracePlant3dAutomation(`${options.description} skip form_id root=${url}`);
+        continue;
+      }
+      let n = 0;
+      try {
+        n = await root.locator(options.marker).count();
+      } catch {
+        continue;
+      }
+      if (!n) {
+        tracePlant3dAutomation(`${options.description} marker missing root=${url}`);
+        continue;
+      }
+      const vis = await root
+        .locator(options.marker)
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (!vis) continue;
+      if (options.ready) {
+        const ready = await options.ready(root).catch(() => false);
+        if (!ready) {
+          tracePlant3dAutomation(`${options.description} marker visible but ready pending root=${url}`);
+          continue;
+        }
+      }
+      tracePlant3dAutomation(`${options.description} matched root=${url}`);
+      return { page, root };
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  throw new Error(options.timeoutMessage);
+}
+
+export async function openPlant3dAutomationPage(
+  context: BrowserContext,
+  rawUrl: string | null | undefined,
+  label: string,
+): Promise<Page | null> {
+  const url = String(rawUrl || '').trim();
+  if (!url || url === 'about:blank') return null;
+  const existing = context.pages().find((page) => !page.isClosed() && page.url() === url);
+  if (existing) {
+    tracePlant3dAutomation(`${label} reuse page ${url}`);
+    await existing.bringToFront().catch(() => undefined);
+    return existing;
+  }
+
+  tracePlant3dAutomation(`${label} open page ${url}`);
+  const page = await context.newPage();
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);
+  return page;
 }
 
 export async function tryFillPmsNewDocumentDialog(page: Page): Promise<void> {
@@ -365,8 +520,9 @@ async function trySelectBranViaPostMessage(root: Page | Frame, rawRefno: string)
   return ok;
 }
 
-export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<string> {
-  const targetBranRefno = (process.env.PMS_TARGET_BRAN_REFNO || PMS_DEFAULT_TEST_BRAN_REFNO).trim();
+export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<Plant3dSubmitReviewResult> {
+  const targetBranRefnos = resolveTargetBranRefnos();
+  const targetBranRefno = targetBranRefnos[0];
   const workspace = root.locator('[data-testid="designer-landing-workspace"]');
   await workspace.first().waitFor({ state: 'visible', timeout: 5000 });
 
@@ -397,19 +553,31 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
   }
 
   if (!selected) {
-    await root.evaluate((refNo) => {
-      const displayName = refNo.includes('_') ? `BRAN ${refNo}` : `BRAN/${refNo}`;
-      window.__plant3dInitiateReviewE2E?.addMockComponent?.(refNo, displayName);
-    }, targetBranRefno);
-    console.error(`[cdp] plant3d：已使用 __plant3dInitiateReviewE2E.addMockComponent 注入 BRAN ${targetBranRefno}`);
+    await root.evaluate(async (refNos) => {
+      for (const refNo of refNos) {
+        const displayName = refNo.includes('_') ? `BRAN ${refNo}` : `BRAN/${refNo}`;
+        await window.__plant3dInitiateReviewE2E?.addMockComponent?.(refNo, displayName);
+      }
+    }, targetBranRefnos);
+    console.error(`[cdp] plant3d：已使用 __plant3dInitiateReviewE2E.addMockComponent 注入 BRAN ${targetBranRefnos.join(', ')}`);
   } else {
     const added = await clickAddComponentAndWaitForRefno(root, targetBranRefno).catch(() => false);
     if (!added) {
-      await root.evaluate((refNo) => {
+      await root.evaluate(async (refNo) => {
         const displayName = refNo.includes('_') ? `BRAN ${refNo}` : `BRAN/${refNo}`;
-        window.__plant3dInitiateReviewE2E?.addMockComponent?.(refNo, displayName);
+        await window.__plant3dInitiateReviewE2E?.addMockComponent?.(refNo, displayName);
       }, targetBranRefno);
       console.error('[cdp] plant3d：「添加构件」流程未确认到列表 RefNo，已回退 mock 注入');
+    }
+    const restRefnos = targetBranRefnos.slice(1);
+    if (restRefnos.length > 0) {
+      await root.evaluate(async (refNos) => {
+        for (const refNo of refNos) {
+          const displayName = refNo.includes('_') ? `BRAN ${refNo}` : `BRAN/${refNo}`;
+          await window.__plant3dInitiateReviewE2E?.addMockComponent?.(refNo, displayName);
+        }
+      }, restRefnos);
+      console.error(`[cdp] plant3d：已补充注入 BRAN ${restRefnos.join(', ')}`);
     }
   }
 
@@ -482,11 +650,22 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<stri
   }
   await submitBtn.click({ timeout: 20_000 });
 
-  await root
+  const successToastVisible = await root
     .getByText(/编校审单(创建|保存)成功/, { exact: false })
     .first()
-    .waitFor({ state: 'visible', timeout: 120_000 });
-  return pkg;
+    .waitFor({ state: 'visible', timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!successToastVisible) {
+    console.error('[cdp] plant3d：提交后未捕获成功提示，将交由 simulator form_id 回填等待确认创建结果');
+  }
+  const createResult = await root.evaluate(() => {
+    return window.__plant3dInitiateReviewE2E?.getLastCreateResult?.() || null;
+  }).catch(() => null);
+  if (createResult) {
+    console.error(`[cdp] plant3d：发起结果 task_id=${createResult.taskId || '--'} form_id=${createResult.formId || '--'} error=${createResult.error || '--'}`);
+  }
+  return { packageName: pkg, createResult };
 }
 
 /**
@@ -563,7 +742,15 @@ export async function tryOpenReviewEntryByNeedles(
           await hit.click({ timeout: 8000 }).catch(() => undefined);
         });
       }
-      await new Promise((r) => setTimeout(r, 2000));
+
+      // 真实 PMS 的表格有时双击只会选中行，不会进入详情；此时需要点击顶部「查看」。
+      await new Promise((r) => setTimeout(r, 800));
+      const viewButton = root.getByText('查看', { exact: true }).first();
+      if (await viewButton.isVisible().catch(() => false)) {
+        await viewButton.click({ timeout: 8000 }).catch(() => undefined);
+      }
+
+      await new Promise((r) => setTimeout(r, 2500));
       return { opened: true, matchedNeedle: needle };
     }
   }
@@ -695,45 +882,40 @@ export async function runReviewerAnnotationAcrossContext(context: BrowserContext
   throw new Error('超时：未在任何标签页/iframe 内找到校审面板自动化钩子 __plant3dReviewerE2E');
 }
 
-export async function waitForReviewerWorkbenchAcrossContext(context: BrowserContext): Promise<{ page: Page; root: Page | Frame }> {
-  const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
-  const parsed = rawPoll ? Number(rawPoll) : NaN;
-  const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;
-  const deadline = Date.now() + pollMs;
-  while (Date.now() < deadline) {
-    const pages = context.pages().filter((p) => !p.isClosed());
-    for (const p of pages) {
-      for (const root of listPageAndFrames(p)) {
-        let n = 0;
-        try {
-          n = await root.locator('[data-testid="review-workbench-workflow-zone"]').count();
-        } catch {
-          continue;
-        }
-        if (!n) continue;
-        const vis = await root
-          .locator('[data-testid="review-workbench-workflow-zone"]')
-          .first()
-          .isVisible()
-          .catch(() => false);
-        if (!vis) continue;
-        return { page: p, root };
-      }
-    }
-    await new Promise((r) => setTimeout(r, 600));
-  }
-  throw new Error(
-    '超时：未在任何标签页/iframe 内找到校核工作区 [data-testid=review-workbench-workflow-zone]（请确认 JH 已从 PMS 打开含该编校审单的三维/校审入口）',
-  );
+export async function waitForReviewerWorkbenchAcrossContext(
+  context: BrowserContext,
+  options?: { formId?: string | null; urlIncludes?: string | null },
+): Promise<{ page: Page; root: Page | Frame }> {
+  return await waitForWorkspaceAcrossContext(context, {
+    marker: '[data-testid="review-workbench-workflow-zone"]',
+    description: 'reviewer-workbench',
+    formId: options?.formId,
+    urlIncludes: options?.urlIncludes,
+    ready: async (root) => {
+      const landingVisible = await root
+        .locator('[data-testid="reviewer-landing-workspace"]')
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (!landingVisible) return false;
+      return await root.evaluate(() =>
+        typeof (window as unknown as Record<string, unknown>).__plant3dReviewerE2E === 'object',
+      ).catch(() => false);
+    },
+    timeoutMessage: '超时：未在任何标签页/iframe 内找到校核工作区 [data-testid=review-workbench-workflow-zone]（请确认 JH 已从 PMS 打开含该编校审单的三维/校审入口）',
+  });
 }
 
-export async function reloadReviewerWorkbenchAcrossContext(context: BrowserContext): Promise<void> {
-  const located = await waitForReviewerWorkbenchAcrossContext(context);
+export async function reloadReviewerWorkbenchAcrossContext(
+  context: BrowserContext,
+  options?: { formId?: string | null; urlIncludes?: string | null },
+): Promise<void> {
+  const located = await waitForReviewerWorkbenchAcrossContext(context, options);
   const pageUrl = located.page.url();
   console.error(`[cdp] 校核刷新恢复：刷新当前 reviewer 页面 ${pageUrl || '(blank)'}`);
   await located.page.bringToFront().catch(() => undefined);
   await located.page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 });
-  await waitForReviewerWorkbenchAcrossContext(context);
+  await waitForReviewerWorkbenchAcrossContext(context, options);
 }
 
 export async function runCheckerWorkflowAcrossContext(context: BrowserContext): Promise<void> {
@@ -741,34 +923,11 @@ export async function runCheckerWorkflowAcrossContext(context: BrowserContext): 
   await runPlant3dCheckerWorkflowOnRoot(located.root);
 }
 
-export async function runSubmitReviewAcrossContext(context: BrowserContext): Promise<string> {
-  const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
-  const parsed = rawPoll ? Number(rawPoll) : NaN;
-  const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;
-  const deadline = Date.now() + pollMs;
-  while (Date.now() < deadline) {
-    const pages = context.pages().filter((p) => !p.isClosed());
-    for (const p of pages) {
-      for (const root of listPageAndFrames(p)) {
-        let n = 0;
-        try {
-          n = await root.locator('[data-testid="designer-landing-workspace"]').count();
-        } catch {
-          continue;
-        }
-        if (!n) continue;
-        const vis = await root
-          .locator('[data-testid="designer-landing-workspace"]')
-          .first()
-          .isVisible()
-          .catch(() => false);
-        if (!vis) continue;
-        return await runPlant3dInitiateOnRoot(root);
-      }
-    }
-    await new Promise((r) => setTimeout(r, 600));
-  }
-  throw new Error(
-    '超时：未在任何标签页/iframe 内找到发起编校审面板 [data-testid=designer-landing-workspace]（跨域 iframe 无法用 Playwright 注入，请改为新开同源标签或调整嵌入方式）',
-  );
+export async function runSubmitReviewAcrossContext(context: BrowserContext): Promise<Plant3dSubmitReviewResult> {
+  const located = await waitForWorkspaceAcrossContext(context, {
+    marker: '[data-testid="designer-landing-workspace"]',
+    description: 'designer-landing',
+    timeoutMessage: '超时：未在任何标签页/iframe 内找到发起编校审面板 [data-testid=designer-landing-workspace]（跨域 iframe 无法用 Playwright 注入，请改为新开同源标签或调整嵌入方式）',
+  });
+  return await runPlant3dInitiateOnRoot(located.root);
 }

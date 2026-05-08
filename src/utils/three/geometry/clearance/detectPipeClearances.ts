@@ -65,12 +65,17 @@ export function detectPipeClearances(
             pipe1Center: center1,
             pipe1Radius: seg1.outside_diameter / 2,
             pipe1Axis: axis1,
+            pipe1Start: new THREE.Vector3(...seg1.arrive),
+            pipe1End: new THREE.Vector3(...seg1.leave),
             pipe2Center: center2,
             pipe2Radius: seg2.outside_diameter / 2,
             pipe2Axis: axis2,
+            pipe2Start: new THREE.Vector3(...seg2.arrive),
+            pipe2End: new THREE.Vector3(...seg2.leave),
+            maxAngleDeg,
           });
 
-          if (result && result.distance > 0 && result.distance <= maxDistance) {
+          if (result && result.distance >= -1e-9 && result.distance <= maxDistance) {
             clearances.push({
               id: `clearance_${seg1.id}_${seg2.id}`,
               pipe1_refno: seg1.refno,

@@ -98,6 +98,7 @@ export function useXeokitMeasurementTools(options: {
   store: ReturnType<typeof useToolStore>;
   compatViewerRef: Ref<DtxCompatViewer | null>;
   requestRender?: (() => void) | null;
+  suppressStoreMeasurements?: boolean;
 }) {
   const {
     dtxViewerRef,
@@ -108,6 +109,7 @@ export function useXeokitMeasurementTools(options: {
     store,
   } = options;
   const requestRender = options.requestRender ?? null;
+  const suppressStoreMeasurements = options.suppressStoreMeasurements === true;
   const measurementStyle = useXeokitMeasurementStyleStore();
   const reviewStore = useReviewStore();
 
@@ -555,6 +557,15 @@ export function useXeokitMeasurementTools(options: {
     const annotationSystem = options.annotationSystemRef?.value ?? null;
     if (!annotationSystem) return;
 
+    if (suppressStoreMeasurements) {
+      clearHoverFeedback();
+      for (const id of Array.from(annotations.keys())) {
+        removeAnnotationById(id);
+      }
+      requestRender?.();
+      return;
+    }
+
     const nextIds = new Set<string>();
     for (const record of store.xeokitDistanceMeasurements.value) {
       const annotationId = buildMeasurementAnnotationId(record.id);
@@ -634,6 +645,7 @@ export function useXeokitMeasurementTools(options: {
   }
 
   function activate(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle') {
+    if (suppressStoreMeasurements) return;
     store.setMeasurementDetailsDrawerOpen(false);
     store.setToolMode(mode);
   }
@@ -653,12 +665,14 @@ export function useXeokitMeasurementTools(options: {
   }
 
   function onCanvasPointerDown(_canvas: HTMLCanvasElement, e: PointerEvent) {
+    if (suppressStoreMeasurements) return;
     if (!isActiveMode()) return;
     if (e.button !== 0) return;
     clickTracker.value = { down: { x: e.clientX, y: e.clientY }, moved: false };
   }
 
   function onCanvasPointerMove(canvas: HTMLCanvasElement, e: PointerEvent) {
+    if (suppressStoreMeasurements) return;
     if (!isActiveMode()) return;
 
     const down = clickTracker.value.down;
@@ -723,6 +737,7 @@ export function useXeokitMeasurementTools(options: {
   }
 
   function onCanvasPointerUp(canvas: HTMLCanvasElement, e: PointerEvent) {
+    if (suppressStoreMeasurements) return;
     if (!isActiveMode()) return;
     if (!ready.value) return;
 

@@ -70,3 +70,20 @@ SELECT id, start_pt.d, end_pt.d, world_trans.d FROM tubi_relate WHERE id[0] = pe
 -- Check TUBI children of this BRAN
 SELECT refno, noun, name, attrs.LLEN, attrs.TEFR, attrs.TOFR, attrs.BORE, attrs.AOD FROM pe WHERE owner = pe:⟨24381_145712⟩ AND noun IN ['TUBI', 'ELBO', 'BEND', 'TEE'] ORDER BY refno LIMIT 20;
 INFO FOR DB;
+SELECT count() AS total FROM review_tasks GROUP ALL;
+INFO FOR NS;
+SELECT count() AS total FROM review_tasks GROUP ALL;
+SELECT count() AS total FROM review_forms GROUP ALL;
+-- 直接查 review_tasks 看是否快
+SELECT id, formId, status, currentNode FROM review_tasks LIMIT 5;
+SELECT count() FROM review_records GROUP ALL;
+SELECT count() FROM review_annotation_states GROUP ALL;
+SELECT count() FROM review_tasks WHERE (deleted IS NONE OR deleted = false) GROUP ALL;
+-- 1. 查最近 30 个 review_workflow_history 中 action=return 的 task_id + 时间
+SELECT task_id, action, operator_id, timestamp FROM review_workflow_history WHERE action = 'return' ORDER BY timestamp DESC LIMIT 10;
+-- 2. 看 review_tasks 里这些 task 的 form_id / current_node / status
+SELECT count() AS history_returns FROM review_workflow_history WHERE action = 'return' GROUP ALL;
+SELECT count() AS distinct_returned_tasks FROM (SELECT VALUE task_id FROM review_workflow_history WHERE action = 'return' GROUP BY task_id) GROUP ALL;
+SELECT count() AS records_total FROM review_records GROUP ALL;
+SELECT count() AS distinct_records_tasks FROM (SELECT VALUE task_id FROM review_records GROUP BY task_id) GROUP ALL;
+SELECT count() AS annotation_states_total FROM review_annotation_states GROUP ALL;

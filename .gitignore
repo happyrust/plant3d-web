@@ -68,3 +68,10 @@ scripts/*
 
 # Agent Memory (跨会话记忆)
 .agent-memory/
+.gstack/
+
+# 本地临时实验产物 / agent skill 残留
+.tmp/
+bin/business-review
+state/
+.claude/

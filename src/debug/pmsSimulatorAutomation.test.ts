@@ -12,6 +12,7 @@ describe('resolvePmsSimulatorCaseSelection', () => {
     expect(resolvePmsSimulatorCaseSelection()).toEqual([
       'approved',
       'return',
+      'bran-mixed',
       'stop',
       'restore',
       'gate-block',
@@ -20,6 +21,7 @@ describe('resolvePmsSimulatorCaseSelection', () => {
     expect(resolvePmsSimulatorCaseSelection('all')).toEqual([
       'approved',
       'return',
+      'bran-mixed',
       'stop',
       'restore',
       'gate-block',

@@ -78,6 +78,8 @@ const formData = reactive({
   priority: 'medium' as 'low' | 'medium' | 'high',
   dueDate: '',
 });
+const DEFAULT_EXTERNAL_CHECKER_ID = 'JH';
+const DEFAULT_EXTERNAL_APPROVER_ID = 'SH';
 const selectedComponents = ref<ReviewComponent[]>([]);
 const selectedComponentRefno = ref<string | null>(null);
 const addingComponent = ref(false);
@@ -612,6 +614,10 @@ const availableApprovers = computed(() => {
   return approvers.length > 0 ? approvers : userStore.availableReviewers.value;
 });
 
+function isPmsHumanCode(value: string): boolean {
+  return /^[A-Z]{2,6}$/.test(value.trim());
+}
+
 const resolvedAssignees = computed(() => {
   if (!externalWorkflowMode.value) {
     const checkerId = formData.checkerId;
@@ -623,15 +629,17 @@ const resolvedAssignees = computed(() => {
     };
   }
 
-  const checkerId = formData.checkerId || reviewerOptions.value[0]?.id || '';
+  const checkerId = formData.checkerId || availableCheckers.value[0]?.id || DEFAULT_EXTERNAL_CHECKER_ID;
   const approverPool = availableApprovers.value.length > 0 ? availableApprovers.value : reviewerOptions.value;
   const approverId =
-    formData.approverId || approverPool.find((user) => user.id !== checkerId)?.id || approverPool[0]?.id || '';
+    formData.approverId
+    || approverPool.find((user) => user.id !== checkerId)?.id
+    || (DEFAULT_EXTERNAL_APPROVER_ID !== checkerId ? DEFAULT_EXTERNAL_APPROVER_ID : 'PZ');
 
   return {
     checkerId,
     approverId,
-    valid: !!checkerId && !!approverId && checkerId !== approverId,
+    valid: isPmsHumanCode(checkerId) && isPmsHumanCode(approverId) && checkerId !== approverId,
   };
 });
 
@@ -655,9 +663,10 @@ const hasValidationErrors = computed(() => {
 });
 
 function validateForm() {
+  const assignees = resolvedAssignees.value;
   const nextErrors: FormErrors = {
     packageName: formData.packageName.trim() ? '' : '请输入数据包名称',
-    checkerId: externalWorkflowMode.value ? '' : (formData.checkerId ? '' : '请选择审核人'),
+    checkerId: assignees.valid ? '' : 'HumanCode 须为 2-6 位大写字母（如 SJ、JH），请检查校核人和审核人配置',
   };
   formErrors.value = nextErrors;
   return !nextErrors.packageName && !nextErrors.checkerId;
@@ -679,7 +688,7 @@ const canSubmit = computed(() => {
   const hasName = !!formData.packageName.trim();
   const hasComponents = selectedComponents.value.length > 0;
   if (externalWorkflowMode.value) {
-    return hasName && hasComponents;
+    return hasName && hasComponents && resolvedAssignees.value.valid;
   }
   return hasName && hasComponents && !!formData.checkerId && !!formData.approverId && !samePersonError.value;
 });
@@ -770,9 +779,9 @@ async function handleSubmit() {
       throw new Error('缺少业务单据号，请重新从编校审入口打开当前单据');
     }
 
-    const checkerIdToSubmit = isExternal ? undefined : resolvedAssignees.value.checkerId;
-    const approverIdToSubmit = isExternal ? undefined : resolvedAssignees.value.approverId;
-    if (!isExternal && (!checkerIdToSubmit || !approverIdToSubmit || checkerIdToSubmit === approverIdToSubmit)) {
+    const checkerIdToSubmit = resolvedAssignees.value.checkerId;
+    const approverIdToSubmit = resolvedAssignees.value.approverId;
+    if (!resolvedAssignees.value.valid) {
       throw new Error('校核人与审核人配置无效，请检查后重试');
     }
 

@@ -1,8 +1,48 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref } from 'vue';
 
+import { UserRole, type AnnotationComment } from '@/types/auth';
+
+const reviewCommentGetByAnnotationMock = vi.hoisted(() => vi.fn(async () => ({
+  success: true,
+  comments: [],
+})));
+
+vi.mock('@/api/reviewApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/reviewApi')>();
+  return {
+    ...actual,
+    reviewCommentGetByAnnotation: (...args: unknown[]) => reviewCommentGetByAnnotationMock(...args),
+  };
+});
+
+function makeComment(id: string, annotationId: string, content: string): AnnotationComment {
+  return {
+    id,
+    annotationId,
+    annotationType: 'text',
+    authorId: 'designer-1',
+    authorName: '设计甲',
+    authorRole: UserRole.DESIGNER,
+    content,
+    createdAt: Number(id.replace(/\D/g, '')) || 1,
+  };
+}
+
+async function flushUi() {
+  await vi.dynamicImportSettled();
+  await nextTick();
+  await Promise.resolve();
+  await nextTick();
+}
+
 describe('AnnotationPanel', () => {
   beforeEach(() => {
+    reviewCommentGetByAnnotationMock.mockReset();
+    reviewCommentGetByAnnotationMock.mockImplementation(async () => ({
+      success: true,
+      comments: [],
+    }));
     const storage = new Map<string, string>();
     (globalThis as any).localStorage = {
       getItem: (key: string) => (storage.has(key) ? storage.get(key)! : null),
@@ -318,8 +358,8 @@ describe('AnnotationPanel', () => {
       id: 't-unset', entityId: 'e3', worldPos: [0, 0, 0],
       visible: true, glyph: 'C', title: '未设置文字', description: '', createdAt: 30,
     });
-    store.updateAnnotationSeverity('text', 't-crit', 'critical');
-    store.updateAnnotationSeverity('text', 't-normal', 'normal');
+    store.updateAnnotationSeverity('text', 't-crit', 'principle');
+    store.updateAnnotationSeverity('text', 't-normal', 'drawing');
 
     const app = createApp(AnnotationPanel, {
       tools: {
@@ -332,23 +372,23 @@ describe('AnnotationPanel', () => {
     app.mount(host);
     await nextTick();
 
-    const critBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-critical"]') as HTMLButtonElement | null;
-    const normalBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-normal"]') as HTMLButtonElement | null;
+    const principleBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-principle"]') as HTMLButtonElement | null;
+    const drawingBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-drawing"]') as HTMLButtonElement | null;
     const unsetBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-unset"]') as HTMLButtonElement | null;
     const clearBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-clear"]') as HTMLButtonElement | null;
-    expect(critBtn?.textContent).toContain('1');
-    expect(normalBtn?.textContent).toContain('1');
+    expect(principleBtn?.textContent).toContain('1');
+    expect(drawingBtn?.textContent).toContain('1');
     expect(unsetBtn?.textContent).toContain('1');
     expect(clearBtn?.textContent).toContain('3');
 
-    critBtn?.click();
+    principleBtn?.click();
     await nextTick();
     const textSection = host.querySelector('[data-testid="annotation-panel-section-text"]') as HTMLElement | null;
     expect(textSection?.textContent).toContain('致命文字');
     expect(textSection?.textContent).not.toContain('一般文字');
     expect(textSection?.textContent).not.toContain('未设置文字');
 
-    critBtn?.click();
+    principleBtn?.click();
     await nextTick();
     const textSectionAfter = host.querySelector('[data-testid="annotation-panel-section-text"]') as HTMLElement | null;
     expect(textSectionAfter?.textContent).toContain('致命文字');
@@ -385,7 +425,7 @@ describe('AnnotationPanel', () => {
       id: 't-1', entityId: 'e1', worldPos: [0, 0, 0],
       visible: true, glyph: '1', title: 'T', description: '', createdAt: 1,
     });
-    store.updateAnnotationSeverity('text', 't-1', 'severe');
+    store.updateAnnotationSeverity('text', 't-1', 'general');
 
     const app = createApp(AnnotationPanel, {
       tools: {
@@ -398,9 +438,9 @@ describe('AnnotationPanel', () => {
     app.mount(host);
     await nextTick();
 
-    const critBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-critical"]') as HTMLButtonElement | null;
-    expect(critBtn?.hasAttribute('disabled')).toBe(true);
-    expect(critBtn?.textContent).toContain('0');
+    const principleBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-principle"]') as HTMLButtonElement | null;
+    expect(principleBtn?.hasAttribute('disabled')).toBe(true);
+    expect(principleBtn?.textContent).toContain('0');
 
     app.unmount();
     host.remove();
@@ -440,7 +480,7 @@ describe('AnnotationPanel', () => {
       description: '',
       createdAt: 1,
     });
-    store.updateAnnotationSeverity('text', 't-visible', 'critical');
+    store.updateAnnotationSeverity('text', 't-visible', 'principle');
 
     // 2 条 OBB 批注（在 reviewer 面板里被隐藏），不应计入顶部筛选条数量
     const sampleObb = {
@@ -477,8 +517,8 @@ describe('AnnotationPanel', () => {
       description: '',
       createdAt: 3,
     });
-    store.updateAnnotationSeverity('obb', 'obb-hidden-1', 'severe');
-    store.updateAnnotationSeverity('obb', 'obb-hidden-2', 'normal');
+    store.updateAnnotationSeverity('obb', 'obb-hidden-1', 'general');
+    store.updateAnnotationSeverity('obb', 'obb-hidden-2', 'drawing');
 
     const app = createApp(AnnotationPanel, {
       tools: {
@@ -498,19 +538,19 @@ describe('AnnotationPanel', () => {
     await nextTick();
 
     const clearBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-clear"]') as HTMLButtonElement | null;
-    const critBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-critical"]') as HTMLButtonElement | null;
-    const severeBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-severe"]') as HTMLButtonElement | null;
-    const normalBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-normal"]') as HTMLButtonElement | null;
+    const principleBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-principle"]') as HTMLButtonElement | null;
+    const generalBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-general"]') as HTMLButtonElement | null;
+    const drawingBtn = host.querySelector('[data-testid="annotation-panel-severity-filter-drawing"]') as HTMLButtonElement | null;
 
     // "全部 (N)" 只应反映面板里能看到的批注数（即 text/cloud/rect），OBB 不计入
     expect(clearBtn?.textContent).toContain('1');
-    expect(critBtn?.textContent).toContain('1');
-    // 不能因为 obb 上有 severe/normal 就把它们计入
-    expect(severeBtn?.textContent).toContain('0');
-    expect(normalBtn?.textContent).toContain('0');
-    // severe/normal 桶应因为计数为 0 而被禁用，避免用户点击后发现列表空
-    expect(severeBtn?.hasAttribute('disabled')).toBe(true);
-    expect(normalBtn?.hasAttribute('disabled')).toBe(true);
+    expect(principleBtn?.textContent).toContain('1');
+    // 不能因为 obb 上有 general/drawing 就把它们计入
+    expect(generalBtn?.textContent).toContain('0');
+    expect(drawingBtn?.textContent).toContain('0');
+    // general/drawing 桶应因为计数为 0 而被禁用，避免用户点击后发现列表空
+    expect(generalBtn?.hasAttribute('disabled')).toBe(true);
+    expect(drawingBtn?.hasAttribute('disabled')).toBe(true);
 
     // 页面文本不应出现 OBB 相关字样（维持 hide legacy OBB 协议）
     expect(host.textContent).not.toContain('OBB hidden 1');
@@ -601,6 +641,96 @@ describe('AnnotationPanel', () => {
       window.removeEventListener('showModelByRefnos', listener);
     }
 
+    host.remove();
+    host = null;
+  });
+
+  it('列表页切换批注时只显示当前批注评论，不残留旧线程或重复评论', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/components/review/ReviewCommentsTimeline.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({ currentUser: ref({ id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER }) }),
+    }));
+
+    reviewCommentGetByAnnotationMock.mockImplementation(async (annotationId: string) => ({
+      success: true,
+      comments: annotationId === 'text-thread-1'
+        ? [
+          makeComment('c-1', 'text-thread-1', '列表页批注一评论'),
+          makeComment('c-1', 'text-thread-1', '列表页批注一评论'),
+        ]
+        : [makeComment('c-2', 'text-thread-2', '列表页批注二评论')],
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.addAnnotation({
+      id: 'text-thread-1',
+      entityId: 'entity-thread-1',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: '1',
+      title: '批注一',
+      description: '',
+      createdAt: 1,
+    });
+    store.addAnnotation({
+      id: 'text-thread-2',
+      entityId: 'entity-thread-2',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: '2',
+      title: '批注二',
+      description: '',
+      createdAt: 2,
+    });
+    store.activeAnnotationId.value = 'text-thread-1';
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        flyToAnnotation: vi.fn(),
+        removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(),
+        flyToRectAnnotation: vi.fn(),
+        flyToObbAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(),
+        removeRectAnnotation: vi.fn(),
+        removeObbAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await flushUi();
+
+    const listButton = host.querySelector('button[title="列表视图"]') as HTMLButtonElement | null;
+    expect(listButton).toBeTruthy();
+    listButton?.click();
+    await flushUi();
+
+    expect(host.textContent).toContain('列表页批注一评论');
+    expect((host.textContent?.match(/列表页批注一评论/g) ?? []).length).toBe(1);
+    expect(host.textContent).not.toContain('列表页批注二评论');
+
+    store.activeAnnotationId.value = 'text-thread-2';
+    await flushUi();
+
+    expect(host.textContent).toContain('列表页批注二评论');
+    expect(host.textContent).not.toContain('列表页批注一评论');
+
+    app.unmount();
     host.remove();
     host = null;
   });

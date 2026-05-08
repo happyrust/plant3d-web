@@ -142,6 +142,30 @@
         font-size: 12px;
       }
 
+      .topbar-btn {
+        padding: 4px 10px;
+        height: 26px;
+        border: 1px solid var(--line-strong);
+        border-radius: 4px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: var(--primary-strong);
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .topbar-btn:hover {
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
+      }
+
+      .topbar-btn[aria-pressed='true'] {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dce9f9);
+      }
+
       .roles {
         padding: 8px 16px;
         border-bottom: 1px solid var(--line-soft);
@@ -537,6 +561,102 @@
         color: #973636;
       }
 
+      .modal-btn.ghost {
+        border-color: #b6c3d4;
+        background: #fff;
+        color: #34506e;
+      }
+
+      .modal-btn.ghost[aria-pressed='true'] {
+        border-color: #6b96cc;
+        background: linear-gradient(180deg, #edf4ff, #dce9f9);
+        color: var(--primary-strong);
+      }
+
+      .main-modal-window.fullscreen {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+
+      .main-modal-window.fullscreen .simulator-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .main-modal-window.fullscreen .side-panel {
+        display: none;
+      }
+
+      .main-modal-window.fullscreen .side-panel.drawer-open {
+        display: flex;
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: min(420px, 40vw);
+        height: 100%;
+        z-index: 200;
+        box-shadow: -4px 0 24px rgba(0, 0, 0, 0.18);
+        border-left: 1px solid var(--line-soft);
+        animation: drawer-slide-in 0.22s ease-out;
+        overflow-y: auto;
+      }
+
+      @keyframes drawer-slide-in {
+        from { transform: translateX(100%); }
+        to   { transform: translateX(0); }
+      }
+
+      .drawer-backdrop {
+        display: none;
+        position: absolute;
+        inset: 0;
+        z-index: 190;
+        background: rgba(0, 0, 0, 0.08);
+      }
+
+      .drawer-backdrop.visible {
+        display: block;
+      }
+
+      .floating-workflow-btn {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        z-index: 100;
+        padding: 10px 22px;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #2d67b2, #1f4f8d);
+        color: #fff;
+        border: 1px solid #1a4278;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        letter-spacing: 0.3px;
+        transition: box-shadow 0.15s, transform 0.15s;
+      }
+
+      .floating-workflow-btn:hover {
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+        transform: translateY(-1px);
+      }
+
+      .floating-workflow-btn:active {
+        transform: translateY(0);
+      }
+
+      .floating-workflow-btn[hidden] {
+        display: none !important;
+      }
+
+      .main-modal-window.fullscreen .iframe-region {
+        border-right: none;
+      }
+
       .modal-body {
         position: relative;
         flex: 1;
@@ -544,10 +664,24 @@
       }
 
       .simulator-layout {
+        --side-panel-width: 360px;
         height: 100%;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 360px;
+        grid-template-columns: minmax(0, 1fr) var(--side-panel-width);
+        transition: grid-template-columns 0.18s ease;
+      }
+
+      .simulator-layout.side-collapsed {
+        --side-panel-width: 0px;
+      }
+
+      .simulator-layout.side-collapsed > .side-panel {
+        display: none;
+      }
+
+      .simulator-layout.side-collapsed .iframe-region {
+        border-right: none;
       }
 
       .iframe-region {
@@ -556,6 +690,47 @@
         min-height: 0;
         background: #dfe7ef;
         border-right: 1px solid var(--line-soft);
+      }
+
+      .iframe-edge-handle {
+        position: absolute;
+        top: 50%;
+        right: 0;
+        transform: translateY(-50%);
+        width: 22px;
+        padding: 14px 0;
+        border: 1px solid var(--line-strong);
+        border-right: none;
+        border-top-left-radius: 4px;
+        border-bottom-left-radius: 4px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: var(--primary-strong);
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        z-index: 3;
+        box-shadow: -2px 0 4px rgba(18, 35, 53, 0.08);
+      }
+
+      .iframe-edge-handle:hover {
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
+      }
+
+      .side-panel-collapse-btn {
+        margin-left: auto;
+        padding: 0 8px;
+        height: 22px;
+        border: 1px solid var(--line-strong);
+        border-radius: 2px;
+        background: linear-gradient(180deg, #ffffff, #eef4f9);
+        color: #34506e;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .side-panel-collapse-btn:hover {
+        background: linear-gradient(180deg, #edf4ff, #d8e7fb);
       }
 
       .iframe-region iframe {
@@ -840,7 +1015,7 @@
         }
 
         .simulator-layout {
-          grid-template-columns: minmax(0, 1fr) 320px;
+          --side-panel-width: 320px;
         }
       }
 
@@ -872,6 +1047,16 @@
           border-right: none;
           border-bottom: 1px solid var(--line-soft);
         }
+
+        /* 窄视口已是上下布局；折叠相关 UI 在该断点下不再适用 */
+        .side-panel-collapse-btn,
+        .iframe-edge-handle {
+          display: none !important;
+        }
+
+        .simulator-layout.side-collapsed > .side-panel {
+          display: grid;
+        }
       }
     </style>
   </head>
@@ -895,6 +1080,12 @@
           <div class="header-meta">
             <span id="current-user-label">当前用户：SJ</span>
             <span id="current-role-label">当前工作流角色：sj（编制）</span>
+            <button
+              id="app-fullscreen-btn"
+              class="topbar-btn"
+              type="button"
+              title="将整个浏览器进入全屏（按 Esc 退出）"
+              aria-pressed="false">⛶ 全屏</button>
           </div>
         </section>
 
@@ -1069,22 +1260,38 @@
             <div id="modal-subtitle" class="modal-subtitle">请从任务列表或新增入口打开校审页面。</div>
           </div>
           <div class="modal-actions">
+            <button id="modal-fullscreen-btn" class="modal-btn ghost" type="button" title="将嵌入页面全屏（按 Esc 退出全屏）" aria-pressed="false">⤢ 全屏</button>
             <button id="modal-reopen-btn" class="modal-btn primary" disabled>刷新重开</button>
             <button id="modal-close-btn" class="modal-btn danger">关闭</button>
           </div>
         </div>
         <div class="modal-body">
-          <div class="simulator-layout">
+          <div id="simulator-layout" class="simulator-layout">
             <section class="iframe-region">
               <iframe id="review-iframe" title="PMS 三维校审 iframe" src="about:blank"></iframe>
               <div id="iframe-blocker" class="iframe-blocker" hidden></div>
+              <button
+                id="side-panel-expand-handle"
+                class="iframe-edge-handle"
+                type="button"
+                title="展开送审信息面板"
+                aria-label="展开送审信息面板"
+                hidden>‹</button>
+              <button id="floating-workflow-btn" class="floating-workflow-btn" type="button" hidden>📋 流转操作</button>
             </section>
+            <div id="drawer-backdrop" class="drawer-backdrop"></div>
 
             <aside class="side-panel">
               <div class="side-panel-header">
                 <div class="panel-heading">
                   <span id="side-panel-title" class="panel-title-main">流程单据面板</span>
                   <span id="side-panel-badge" class="panel-badge">只读</span>
+                  <button
+                    id="side-panel-collapse-btn"
+                    class="side-panel-collapse-btn"
+                    type="button"
+                    title="收起送审信息面板"
+                    aria-label="收起送审信息面板">›</button>
                 </div>
                 <div id="side-panel-subtitle" class="panel-subtitle">打开单据后显示当前流程节点、意见及最近提交结果。</div>
               </div>

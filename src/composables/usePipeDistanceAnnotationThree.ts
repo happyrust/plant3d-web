@@ -36,16 +36,15 @@ export function usePipeDistanceAnnotationThree(
 
   function clearAnnotations() {
     const viewer = viewerRef.value;
-    if (!viewer) return;
     
     for (const dim of annotations.values()) {
-      viewer.scene.remove(dim);
+      viewer?.scene.remove(dim);
       dim.dispose();
     }
     annotations.clear();
   }
 
-  watch([results, showAnnotations], renderAnnotations, { deep: true });
+  watch([viewerRef, results, showAnnotations], renderAnnotations, { deep: true });
 
   return { renderAnnotations, clearAnnotations };
 }

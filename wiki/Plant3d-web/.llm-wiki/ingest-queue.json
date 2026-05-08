@@ -1,0 +1,1739 @@
+[
+  {
+    "id": "ingest-2eb22064-5566-4d3a-88db-29b7d9901e1b",
+    "sourcePath": "src/components/review/workflowMode.ts",
+    "folderContext": "raw/sources",
+    "status": "processing",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-60cb8499-638a-49dd-8606-12bb01136ddf",
+    "sourcePath": "src/components/ribbon/HierarchicalMenuBar.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-010cc810-75f7-4d5a-aa4d-b0d44d9224fc",
+    "sourcePath": "src/components/ribbon/RibbonBar.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-0d01e028-5752-44a5-9a9a-bbe57fc1c25f",
+    "sourcePath": "src/components/site/SiteCreationWizard.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7932d733-6efa-47ec-891f-d4446eabad0a",
+    "sourcePath": "src/components/site/SiteDashboardPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-0d908307-fea3-4e8b-ba28-96036c9830e8",
+    "sourcePath": "src/components/site/SiteDetailDrawer.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-32232538-ec27-4b16-9335-64b283050d82",
+    "sourcePath": "src/components/site/SiteEditWizard.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-f65067ba-0f06-4533-897f-49076d5b617e",
+    "sourcePath": "src/components/spatial-query/SpatialComputePanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-8ffb08e3-3779-4f3b-a65e-e6948613fac2",
+    "sourcePath": "src/components/spatial-query/SpatialQueryDrawer.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ee00518b-4aa2-4e54-91c0-5dac6f0e6cf4",
+    "sourcePath": "src/components/task/ModelExportPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-dd2d3776-e5a5-46cd-913c-832d074c2c51",
+    "sourcePath": "src/components/task/TaskCreationPanelShadcnDraft.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-88becaab-2b40-46e9-808d-8ef9df8fabc9",
+    "sourcePath": "src/components/task/TaskCreationWizard.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-07dea695-5caf-4740-8357-80d41db42fbc",
+    "sourcePath": "src/components/task/TaskDetailModal.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c8582c1c-6884-47ce-85e0-c3af85eafaf4",
+    "sourcePath": "src/components/task/TaskMonitorPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-6e4fd002-a742-42d2-93fc-d423128af41e",
+    "sourcePath": "src/components/task/TaskStatusCard.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-38b83618-8a8c-472b-8556-d6f0de792d66",
+    "sourcePath": "src/components/tools/AnnotationCard.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1c3d428f-20a2-4ca2-ae71-78372b9db969",
+    "sourcePath": "src/components/tools/AnnotationColorPicker.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-eb4e3c14-21c4-414a-a9c8-0fb070ad6aa6",
+    "sourcePath": "src/components/tools/AnnotationOverlayBar.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-0bf9d251-50b2-4db7-9b3e-9a37aec83f7d",
+    "sourcePath": "src/components/tools/AnnotationPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ea646661-2f38-4676-8f4a-59862a2088f7",
+    "sourcePath": "src/components/tools/AnnotationStylePanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5c5eeef5-2b41-458c-8daa-298b5195c0df",
+    "sourcePath": "src/components/tools/DimensionPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-db0bf13b-ea3f-4ee1-b4d5-598fd0c880f8",
+    "sourcePath": "src/components/tools/DimensionStylePanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1a2e17d6-7171-47ac-b3b7-245e24275719",
+    "sourcePath": "src/components/tools/DtxMaterialConfigPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-210a7f48-804a-4f05-8a9f-7deffa0d4def",
+    "sourcePath": "src/components/tools/HydraulicPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-9961c01c-9634-4d1f-88d1-7a079abc1a90",
+    "sourcePath": "src/components/tools/MbdPipePanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-2178f161-b4bc-4262-a483-d7535c144f22",
+    "sourcePath": "src/components/tools/MeasurementOverlayBar.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-0a32a73e-712b-4309-94c2-d2e456f9935c",
+    "sourcePath": "src/components/tools/MeasurementPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-9c04cd9b-431d-40ae-a105-3548f50b677a",
+    "sourcePath": "src/components/tools/MeasurementWizard.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1019b694-854f-45b5-ba82-dc1dbe3d96a7",
+    "sourcePath": "src/components/tools/PropertiesPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-78546455-a5b6-45f3-96d6-09b22ef65519",
+    "sourcePath": "src/components/tools/PtsetPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-99b31c51-368a-480e-b128-1a85af02eb9c",
+    "sourcePath": "src/components/tools/ToolManagerPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1a240de0-ad5c-4786-9144-d513e12bb0be",
+    "sourcePath": "src/components/tools/XeokitMeasurementPanel.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-51973d96-ede0-4438-b280-8158e0eb329f",
+    "sourcePath": "src/components/ui/Badge.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5fb0abae-b539-4b70-b203-28a21fcf3078",
+    "sourcePath": "src/components/ui/Button.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-48300110-6c7e-4c6c-b0f5-53f9c5203a73",
+    "sourcePath": "src/components/ui/Card.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1f70c9fb-4c3b-4774-b831-17f86dd22dc6",
+    "sourcePath": "src/components/ui/ConfirmDialog.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-38e1a144-ad47-4b86-befe-d3bcf23dd376",
+    "sourcePath": "src/components/ui/Dialog.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-27ac156a-87d2-40c7-93aa-a5eab66a815c",
+    "sourcePath": "src/components/ui/Input.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-8cdcdec3-0ba8-4945-aa00-49d65c0987e6",
+    "sourcePath": "src/components/ui/LayoutToggleButtons.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-8a8332ed-046b-4142-a045-03959c5f1a3e",
+    "sourcePath": "src/components/ui/ScrollArea.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d1c54ba5-9d74-48a2-bb32-b67d1ef70e63",
+    "sourcePath": "src/components/user/UserAvatar.vue",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-a051c575-4a9d-409d-872d-605e3d87e54b",
+    "sourcePath": "src/composables/dashboardRecentProjects.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-75e079d5-9155-400e-928b-fbd2a0927580",
+    "sourcePath": "src/composables/mbd/branchLayoutEngine.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-b62d128f-083b-4830-a531-c8157b4894cb",
+    "sourcePath": "src/composables/mbd/computeMbdDimOffset.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7de516e4-3511-4bbe-aa88-424349c48ff6",
+    "sourcePath": "src/composables/mbd/computePipeAlignedOffsetDirs.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-60b08ccf-8501-4081-8d7c-7394c6aee6e9",
+    "sourcePath": "src/composables/mbd/mbdDimensionMode.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5f18003e-69e7-447e-88ae-b0bd842f25f1",
+    "sourcePath": "src/composables/mbd/mbdRequestSync.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-27d2cd3e-abd5-4c27-8d38-ff58a1870bc4",
+    "sourcePath": "src/composables/useAnnotationStyleStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-2dcd3bac-31ce-4b6f-95e8-e71cc067a742",
+    "sourcePath": "src/composables/useAnnotationThree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-65d11df2-5fde-41ce-a7f1-99596510830f",
+    "sourcePath": "src/composables/useBackgroundStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-69a48042-fa9d-460b-965b-73239636f15f",
+    "sourcePath": "src/composables/useConfirmDialogStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-91f70af2-2e74-4b44-9aad-550fd43a60d3",
+    "sourcePath": "src/composables/useConsoleStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e3401aec-5c2a-4a62-81f4-2ca008e37982",
+    "sourcePath": "src/composables/useCurrentSiteIdentity.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ab34a681-2deb-420c-b617-aa50c7e5de92",
+    "sourcePath": "src/composables/useDashboardWorkbench.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-6cd85862-6e6e-4591-8d4d-2fb60a58c68a",
+    "sourcePath": "src/composables/useDbMetaInfo.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-02ffcd99-1f81-4798-b4ab-b9b1ed785b54",
+    "sourcePath": "src/composables/useDbnoInstancesDtxLoader.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-6f4cdc56-4535-4257-8d21-69f382b6fd05",
+    "sourcePath": "src/composables/useDbnoInstancesJsonLoader.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-78240b1c-5955-4b8b-8c26-49f960ec84d5",
+    "sourcePath": "src/composables/useDbnoInstancesParquetLoader.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d17823c7-6318-4d79-93e5-cae90c1dc8de",
+    "sourcePath": "src/composables/useDeploymentSites.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1e235abc-ccf4-4092-b637-3e5a32e58a11",
+    "sourcePath": "src/composables/useDimensionAnnotation.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-dd9565c5-c8f2-4b39-8aae-13ca843f4fda",
+    "sourcePath": "src/composables/useDimensionStyleStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1319f2d9-c213-44c0-b70c-b946f4e6e3a2",
+    "sourcePath": "src/composables/useDisplayThemeStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-25950ebf-3254-4d9a-98f4-ce682496c163",
+    "sourcePath": "src/composables/useDockApi.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-be105f27-4309-4fec-814b-2f5f1358a6bd",
+    "sourcePath": "src/composables/useDtxTools.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-792e0871-e222-4ce2-98d0-05aaf51edc16",
+    "sourcePath": "src/composables/useDuckDBModelLoader.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-59dbec5b-d840-4a73-89ff-8315abd9f5e1",
+    "sourcePath": "src/composables/useMbdPipeAnnotationThree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-09c70eb2-ba83-4216-974c-f3fc08dbe90e",
+    "sourcePath": "src/composables/useMeasurementAnnotation.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-6361ca6d-3427-4b07-8fdf-649ad6947bdd",
+    "sourcePath": "src/composables/useMenuMode.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-dae5582c-d2aa-4909-8426-f7bf4d21c026",
+    "sourcePath": "src/composables/useModelGeneration.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-13b770c4-cd68-48f9-81a5-3299dbdc92e0",
+    "sourcePath": "src/composables/useModelLoadStatus.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e0a4955a-9c3e-413f-ac25-91a5febb5464",
+    "sourcePath": "src/composables/useModelProjects.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-bb7e5e64-b859-4c5d-ae25-2d2bd25cd107",
+    "sourcePath": "src/composables/useModelSettingsStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e35cf802-a093-46ce-9688-b62461ddc771",
+    "sourcePath": "src/composables/useModelTree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-6703a4b0-54a5-455a-9cf6-47d0b4982036",
+    "sourcePath": "src/composables/useModelTreeStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c09af2c3-0e3c-4bb5-bb1b-bbc26e3ef7b7",
+    "sourcePath": "src/composables/useNavigationStatePersistence.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-eedbac4c-47bf-40d5-93f4-fe2ee45b4433",
+    "sourcePath": "src/composables/useOnboardingGuide.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-bf061196-71e6-4b62-9b39-0081aca5b466",
+    "sourcePath": "src/composables/usePanelZones.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-f4fe9c8c-9bef-44bb-b4f5-1dd600f90e58",
+    "sourcePath": "src/composables/useParquetSqlStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-4bb715b5-f185-4570-b3df-f698018b2a85",
+    "sourcePath": "src/composables/usePdmsConsoleCommands.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7eb44acf-7409-4734-bc31-ed358e9a53fe",
+    "sourcePath": "src/composables/usePdmsOwnerTree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-3356a15e-3371-4d0d-9cb5-bb0cab230bdc",
+    "sourcePath": "src/composables/usePipeDistanceAnnotationThree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-f38dfb97-7bc2-4a6b-bac3-ebdc27a03cdc",
+    "sourcePath": "src/composables/usePipeDistanceStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-4eb78d85-583b-42a8-8389-7c6cca7ed45c",
+    "sourcePath": "src/composables/usePtsetVisualizationThree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d03d812a-7a8f-4d3e-b585-3aae6f87e596",
+    "sourcePath": "src/composables/useQuickViewRequestStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-afd6ed41-d0e6-45c4-b990-1b02a9094644",
+    "sourcePath": "src/composables/useReviewDeliveryUnit.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-3fc6b5ec-02ea-4cd8-a8f0-1b651cdf9209",
+    "sourcePath": "src/composables/useReviewStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-23b1a063-7803-4360-a310-21e79a1e1d43",
+    "sourcePath": "src/composables/useRoomTree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-794d35d6-efbc-4f11-aa98-0fd67d677286",
+    "sourcePath": "src/composables/useSceneGraph.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e0716a63-0860-4da7-a163-a27067b29fc8",
+    "sourcePath": "src/composables/useSceneTreeLoader.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1f505c0b-71f1-473e-98e0-bf18b614ea52",
+    "sourcePath": "src/composables/useScreenshot.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d35ab591-881c-4de5-a353-a329283a51ba",
+    "sourcePath": "src/composables/useSelectionStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-27f1db20-07e8-4bce-83ee-51eec69dadd0",
+    "sourcePath": "src/composables/useSpatialCompute.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d5d6255d-4023-4dc7-acf5-e5638c3a19d4",
+    "sourcePath": "src/composables/useSpatialQuery.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-cc808a47-cd80-48b1-90c4-7fc2ea4a322c",
+    "sourcePath": "src/composables/useSurrealDB.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-85009874-1b1b-4163-be6a-ee6c6d304943",
+    "sourcePath": "src/composables/useSurrealModelQuery.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-785772c4-2fd9-4079-837b-4a63f24cee01",
+    "sourcePath": "src/composables/useTaskCreation.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-4665a88e-8048-45d6-bf6c-37d59af09aeb",
+    "sourcePath": "src/composables/useTaskCreationStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-0d703935-7921-4c59-977f-2ff5160186e1",
+    "sourcePath": "src/composables/useTaskMonitor.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-8a461ff0-ae72-494c-a8b4-3bd8bc024529",
+    "sourcePath": "src/composables/useToolStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d6803f1f-4fda-409c-991c-04d21e3570e0",
+    "sourcePath": "src/composables/useUnitSettingsStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d10583e8-d8cf-4268-acc1-5e64be3b206c",
+    "sourcePath": "src/composables/useUserStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-107215ff-bb43-4643-a446-eec1d4a39218",
+    "sourcePath": "src/composables/useViewerContext.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5890fc11-fefd-413c-8862-9868c50c9707",
+    "sourcePath": "src/composables/useWebSocket.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e2c30e06-c131-43ca-b05d-bfe4b31691eb",
+    "sourcePath": "src/composables/useXeokitMeasurementStyleStore.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-861c5695-b284-42e8-a578-c87d204ccb01",
+    "sourcePath": "src/composables/useXeokitMeasurementTools.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-69752b55-f1d0-4476-a50f-98867c293be3",
+    "sourcePath": "src/composables/xeokitMeasurementUi.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c5ac5812-d7d7-46fe-af7c-9451207f37a1",
+    "sourcePath": "src/debug/dimensionPipeSandbox.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-f480bd54-a295-4081-8234-73e4212a4348",
+    "sourcePath": "src/debug/injectMbdPipeDemo.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1f7e0f32-f59a-4a3b-814f-96bc38398ee3",
+    "sourcePath": "src/debug/mbdPipeSandbox.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-b12de6d1-9aed-4ab5-8e0e-378a44c0a8ac",
+    "sourcePath": "src/debug/pmsPlatformContractPayloads.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-6cc7a7ea-03ec-40e5-a1d8-0eafb0c2f7f9",
+    "sourcePath": "src/debug/pmsReviewSimulator.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-3b4e2922-d6ea-4310-aac8-72af06dcb7c6",
+    "sourcePath": "src/debug/pmsReviewSimulatorLaunchPlan.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-78425adc-da42-4738-9101-ecfa645bfd92",
+    "sourcePath": "src/debug/pmsReviewSimulatorWorkflow.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-66b1d3fa-7a08-4f5e-9109-6ac124180771",
+    "sourcePath": "src/debug/rebarBeamDemo.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-37870a43-44be-4906-ad3b-d08b4331a94a",
+    "sourcePath": "src/fixtures/README.md",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1b3427e4-5b1f-4e97-86c5-de42e6d671ad",
+    "sourcePath": "src/fixtures/bran-test-data.json",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7dd1ea06-e513-4660-a1f6-20dcfb039e6a",
+    "sourcePath": "src/lib/filesOutput.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ec34e492-7be1-4735-a82f-e2207982c4f4",
+    "sourcePath": "src/lib/pdmsTypeIcon.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c90ab459-764e-4d5f-97eb-51234ca9c74d",
+    "sourcePath": "src/lib/utils.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5322ead4-ba04-4607-be5e-806d9188a9da",
+    "sourcePath": "src/main.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c5c73b76-ca39-4ff0-b37e-e83cd9eef2cb",
+    "sourcePath": "src/plugins/vuetify.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c0bb5a76-65dc-46b5-9c75-1149d18116ed",
+    "sourcePath": "src/review/domain/annotationKey.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-600dc2fd-65c8-4009-aeec-3575098cdf37",
+    "sourcePath": "src/review/flags.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-eab212f3-9481-412b-b11c-d937d0bbd2ee",
+    "sourcePath": "src/ribbon/commandBus.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-f76b5205-6802-47f3-ad6d-f2fe4e8b6c83",
+    "sourcePath": "src/ribbon/hierarchicalMenu.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-02bb32e4-bac3-4579-b309-a12033b70073",
+    "sourcePath": "src/ribbon/ribbonConfig.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-981e0767-de8f-42d7-a909-3926a88f95ca",
+    "sourcePath": "src/ribbon/ribbonIcons.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-16bb3c85-dfc9-42fd-bad9-47665772afae",
+    "sourcePath": "src/ribbon/ribbonTypes.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-b5fff73d-514b-463a-a182-e7ab34d60ee8",
+    "sourcePath": "src/ribbon/toastBus.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ee8b7792-df5b-47f3-8731-afb1eeaeaa0b",
+    "sourcePath": "src/types/auth.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-0ca4010b-6de0-49fc-897c-02ce9fe82c98",
+    "sourcePath": "src/types/site.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-6a6b2149-4343-4235-95f6-4d7b17738db6",
+    "sourcePath": "src/types/spatialQuery.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e5c6a729-3b26-41ab-b783-ff0d26dc0f9e",
+    "sourcePath": "src/types/spec.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e7fac4d5-e5c4-42e9-b61e-e54899320f07",
+    "sourcePath": "src/types/task.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-9fd50303-e01a-4bbd-ab7c-3c49ac56a63d",
+    "sourcePath": "src/utils/apiBase.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-84ade9ae-1d15-4c5d-a822-75d7f745e3f2",
+    "sourcePath": "src/utils/instances/instanceManifest.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-2b7c763e-4dfb-4a21-bda6-e82d6e0e9726",
+    "sourcePath": "src/utils/matrixUtils.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-a6ccff6e-249e-4b9b-90e0-5576927fad76",
+    "sourcePath": "src/utils/parseGlbGeometry.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-39f7f342-a2a2-4ee0-961b-756965aa71e5",
+    "sourcePath": "src/utils/releaseNotes.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d49d0f58-f439-4c9b-b453-93247e9907b1",
+    "sourcePath": "src/utils/storage/indexedDbCache.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7a2d8198-728c-4a34-b4b3-d1a9379f0a2d",
+    "sourcePath": "src/utils/three/annotation/annotations/AlignedDimension.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-030fd90c-8357-4ec5-a21d-30a4f851ee8b",
+    "sourcePath": "src/utils/three/annotation/annotations/AngleDimension.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-86504248-d1b4-496a-be5c-560ac151d766",
+    "sourcePath": "src/utils/three/annotation/annotations/AngleDimension3D.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-a1927756-48ef-411b-8676-fc19e4749b39",
+    "sourcePath": "src/utils/three/annotation/annotations/LeaderAnnotation.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-f4e26035-a7e5-4df4-a0cb-93539d1f7ae3",
+    "sourcePath": "src/utils/three/annotation/annotations/LinearDimension.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ca7f5864-428b-4c7e-8bfe-8b4e95117ce1",
+    "sourcePath": "src/utils/three/annotation/annotations/LinearDimension3D.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c842db80-f6ed-43a4-8beb-f95d98ed411b",
+    "sourcePath": "src/utils/three/annotation/annotations/RadiusDimension.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-b75c5935-e1eb-4b50-a4c8-f3849775224b",
+    "sourcePath": "src/utils/three/annotation/annotations/SlopeAnnotation.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1b26e655-cb33-42a3-aac8-e4c9dd0316c2",
+    "sourcePath": "src/utils/three/annotation/annotations/SlopeAnnotation3D.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-a5e47e8d-1141-4d4b-b3ad-e666f07d2323",
+    "sourcePath": "src/utils/three/annotation/annotations/WeldAnnotation.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5b50f163-d0a6-4ad9-8362-2ccbd6a6451c",
+    "sourcePath": "src/utils/three/annotation/annotations/WeldAnnotation3D.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-3405c283-0081-4f1c-9117-caf048c2d274",
+    "sourcePath": "src/utils/three/annotation/annotations/XeokitAngleMeasurement.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d55d309b-24b4-49fb-ad42-5a39e17c7faf",
+    "sourcePath": "src/utils/three/annotation/annotations/XeokitDistanceMeasurement.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d6106e56-763b-4e3c-a0d9-d8b88b9e8186",
+    "sourcePath": "src/utils/three/annotation/core/AnnotationBase.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1e0a8a5d-7b51-4c40-a4f3-5f70903faecf",
+    "sourcePath": "src/utils/three/annotation/core/AnnotationMaterials.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-e720b41d-8ede-4455-8fa0-f7cda10d3652",
+    "sourcePath": "src/utils/three/annotation/index.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-1d2d5870-1d1a-4225-a879-0ef590cd0a24",
+    "sourcePath": "src/utils/three/annotation/interaction/AnnotationInteractionController.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-b7686967-9157-468c-aa35-c0cf30db18a9",
+    "sourcePath": "src/utils/three/annotation/interaction/index.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-9c5ab99f-624f-4737-912b-417e2f15bb4c",
+    "sourcePath": "src/utils/three/annotation/text/SolveSpaceBillboardVectorText.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-8318676a-9eab-44c9-8611-b4c506a6e150",
+    "sourcePath": "src/utils/three/annotation/text/SolveSpaceVectorFont.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ace48c0d-abf1-40d2-ae06-8a5c07a79418",
+    "sourcePath": "src/utils/three/annotation/text/TroikaBillboardText.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-72e88bfb-7765-4977-b89c-9f6b0cc1f7ea",
+    "sourcePath": "src/utils/three/annotation/text/defaultFontUrl.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-be3701c7-530e-4cf9-8ba9-1b103dcf0857",
+    "sourcePath": "src/utils/three/annotation/utils/computeDimensionOffsetDir.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-020069d2-886d-4ab2-a0d7-2daa180dc323",
+    "sourcePath": "src/utils/three/annotation/utils/computeDimensionOffsetDirInLocal.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7d3a7cec-6275-430c-8661-a12e9f5cd126",
+    "sourcePath": "src/utils/three/annotation/utils/solvespaceLike.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-3a0eac79-049e-4a1a-b35c-1cedb9228823",
+    "sourcePath": "src/utils/three/dtx/DTXGeometry.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-52c5fe45-5eb1-4d92-af31-9559d33bc34a",
+    "sourcePath": "src/utils/three/dtx/DTXLayer.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-0badda85-4f07-4be8-9a15-41860a639999",
+    "sourcePath": "src/utils/three/dtx/DTXMaterial.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-8ebb4714-5466-43c0-b63c-f2f6a03a5db9",
+    "sourcePath": "src/utils/three/dtx/DTXPickingMaterial.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7add2126-6ff1-418f-86aa-ba56bb99cdf2",
+    "sourcePath": "src/utils/three/dtx/DynamicPivotController.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-14fdf4e9-737c-460a-8e11-7b284f1ef46b",
+    "sourcePath": "src/utils/three/dtx/culling/DTXViewCullController.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-8c1ac0f8-2e84-4cad-80d7-0e41388455bd",
+    "sourcePath": "src/utils/three/dtx/index.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-d4c99c15-4dd7-451d-b3b5-53b5c72ae96c",
+    "sourcePath": "src/utils/three/dtx/materialConfig.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-63a1a68c-f5c6-4812-b1de-06ffbcffbf6a",
+    "sourcePath": "src/utils/three/dtx/outline/DTXOutlineHelper.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7e10a458-8ab1-4279-9b1e-9b60e19c8d60",
+    "sourcePath": "src/utils/three/dtx/outline/index.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5c7b9e02-da48-4619-ad5a-74ea5d18193b",
+    "sourcePath": "src/utils/three/dtx/selection/DTXOverlayHighlighter.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-847ecbeb-7f96-4896-b89a-64e7fb670630",
+    "sourcePath": "src/utils/three/dtx/selection/DTXSelectionController.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-756c3270-b644-4c57-8207-5ed577be9cd2",
+    "sourcePath": "src/utils/three/dtx/selection/EventEmitter.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-cfd586b4-8223-4516-b77d-1943459515c1",
+    "sourcePath": "src/utils/three/dtx/selection/GPUPicker.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-811f1ce5-9160-4d96-aeb0-a560cd149c35",
+    "sourcePath": "src/utils/three/dtx/selection/ObjectsKdTree.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-678f16b4-d7e6-4280-a686-deaf28fad78c",
+    "sourcePath": "src/utils/three/dtx/selection/SelectionManager.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-9c48b7f7-2a51-4486-882c-2dbcadf43350",
+    "sourcePath": "src/utils/three/dtx/selection/index.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-999d7ebb-94e2-4fd9-9a96-46d62f2f7145",
+    "sourcePath": "src/utils/three/geometry/clearance/detectPipeClearances.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-ec3adcbf-00c5-4ff4-8e31-727fb32cab0a",
+    "sourcePath": "src/utils/three/geometry/clearance/index.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-7e8ce35c-2f8f-44a8-88f6-18cf6976814e",
+    "sourcePath": "src/utils/three/geometry/clearance/pipeClearance.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-5ce2d6ed-9849-47da-a123-218ee9691d0b",
+    "sourcePath": "src/utils/three/patches/applyMeshLineShaderCompat.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-39c0da98-7eee-409d-90c9-bc6c64dfbf33",
+    "sourcePath": "src/utils/unitFormat.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-bede5823-5a8c-4c73-8b10-f0ce488551e5",
+    "sourcePath": "src/utils/versionInfo.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-3286e62f-d3ea-44f1-8f41-3161ad220670",
+    "sourcePath": "src/viewer/dtx/DTXTileLodController.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-19d43e97-6d0f-429e-8dad-1388a9d7628d",
+    "sourcePath": "src/viewer/dtx/DtxCompatViewer.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-50060b25-1d1f-43c8-91a9-4e91b695d174",
+    "sourcePath": "src/viewer/dtx/DtxViewer.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-c1f56e13-a326-4d29-89a4-38b1145de494",
+    "sourcePath": "src/viewer/dtx/dtxCadGrid.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  },
+  {
+    "id": "ingest-643d80c8-6edf-4832-9496-906bb83b9ade",
+    "sourcePath": "src/viewer/dtx/dtxPrimitiveDemo.ts",
+    "folderContext": "raw/sources",
+    "status": "pending",
+    "addedAt": 1776695334907,
+    "error": null,
+    "retryCount": 0
+  }
+]

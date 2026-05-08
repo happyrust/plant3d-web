@@ -160,4 +160,59 @@ describe('useDbnoInstancesDtxLoader', () => {
 
     expect(mod.resolveDtxObjectIdsByRefno(dbno, elboRefno)).toHaveLength(1);
   });
+
+  it('已知 404 的 geoHash 默认不跨批次重复请求，forceReload 时允许重试', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+
+    const dbno = 99003;
+    const geoHash = 'missing-geo-hash';
+    const makeEntry = (refno: string) => ({
+      geo_hash: geoHash,
+      matrix: [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+      ],
+      uniforms: {
+        refno,
+        noun: 'EQUI',
+        owner_refno: '',
+        owner_noun: '',
+        spec_value: 0,
+      },
+    });
+    const fetchMock = vi.fn(async () => new Response(null, { status: 404 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+    parquetLoaderMocks.queryInstanceEntriesByRefnos.mockImplementation(async (_dbno: number, refnos: string[]) => {
+      return new Map(refnos.map((refno) => [refno, [makeEntry(refno)]]));
+    });
+
+    const dtxLayer = new DTXLayer({
+      maxVertices: 256,
+      maxIndices: 512,
+      maxObjects: 16,
+    });
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, ['24381_1'], {
+      dataSource: 'parquet',
+      debug: false,
+    });
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, ['24381_2'], {
+      dataSource: 'parquet',
+      debug: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await mod.loadDbnoInstancesForVisibleRefnosDtx(dtxLayer, dbno, ['24381_2'], {
+      dataSource: 'parquet',
+      debug: false,
+      forceReloadRefnos: ['24381_2'],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

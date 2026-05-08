@@ -16,16 +16,19 @@ import UserAvatar from '@/components/user/UserAvatar.vue';
 import { useMenuMode } from '@/composables/useMenuMode';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
+import { isMbdStandaloneUrl } from '@/utils/mbdStandaloneUrl';
 
+const isMbdStandaloneMode = isMbdStandaloneUrl(window.location.search);
 const { isRibbonMode, toggleMenuMode } = useMenuMode();
 const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
 const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
-const extensionHeight = computed(() =>
-  isRibbonMode.value ? (ribbonCollapsed.value ? 32 : 120) : 48,
-);
+const extensionHeight = computed(() => {
+  if (isMbdStandaloneMode) return 0;
+  return isRibbonMode.value ? (ribbonCollapsed.value ? 32 : 120) : 48;
+});
 
 const urlParams = new URLSearchParams(window.location.search);
-const showBenchmark = urlParams.get('benchmark') === 'true';
+const showBenchmark = !isMbdStandaloneMode && urlParams.get('benchmark') === 'true';
 const requestedOutputProject = urlParams.get('output_project')?.trim() ?? '';
 const hasRequestedOutputProject = requestedOutputProject.length > 0;
 
@@ -34,7 +37,7 @@ const { currentProject, loadProjects, switchProjectById, projects } = useModelPr
 const onboarding = useOnboardingGuide();
 const embedBootstrapPending = ref(false);
 const showDashboardLayout = computed(() =>
-  !currentProject.value && !embedBootstrapPending.value && !hasRequestedOutputProject,
+  !isMbdStandaloneMode && !currentProject.value && !embedBootstrapPending.value && !hasRequestedOutputProject,
 );
 
 function isCurrentProjectMatched(projectId: string): boolean {
@@ -81,7 +84,7 @@ async function bootstrapEmbedProjectFromToken() {
 }
 
 watch(currentProject, async (project) => {
-  if (project) {
+  if (project && !isMbdStandaloneMode) {
     await nextTick();
     onboarding.autoStartIfNeeded();
   }
@@ -95,14 +98,14 @@ onMounted(() => {
 <template>
   <v-app class="h-screen">
     <ConfirmDialog />
-    <OnboardingOverlay />
-    <ReviewGuideCenter />
+    <OnboardingOverlay v-if="!isMbdStandaloneMode" />
+    <ReviewGuideCenter v-if="!isMbdStandaloneMode" />
     
     <DashboardLayout v-if="showDashboardLayout" />
     <div v-else-if="embedBootstrapPending" class="h-screen w-full" data-testid="embed-bootstrap-loading" />
     
     <template v-else>
-      <v-app-bar class="ribbon-app-bar" :class="{ 'hierarchical-app-bar': !isRibbonMode }"
+      <v-app-bar v-if="!isMbdStandaloneMode" class="ribbon-app-bar" :class="{ 'hierarchical-app-bar': !isRibbonMode }"
         :height="0"
         :extension-height="extensionHeight">
         <template #extension>

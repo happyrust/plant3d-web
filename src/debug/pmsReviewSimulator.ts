@@ -934,6 +934,8 @@ function initRefs(): void {
     simulatorLayout: getEl<HTMLDivElement>('simulator-layout'),
     sidePanelCollapseBtn: getEl<HTMLButtonElement>('side-panel-collapse-btn'),
     sidePanelExpandHandle: getEl<HTMLButtonElement>('side-panel-expand-handle'),
+    floatingWorkflowBtn: getEl<HTMLButtonElement>('floating-workflow-btn'),
+    drawerBackdrop: getEl<HTMLDivElement>('drawer-backdrop'),
     diagTaskBtn: getEl<HTMLButtonElement>('diag-task-btn'),
     diagWorkflowBtn: getEl<HTMLButtonElement>('diag-workflow-btn'),
     workflowActionHint: getEl<HTMLSpanElement>('workflow-action-hint'),
@@ -1385,7 +1387,19 @@ function deriveWorkflowCurrentNodeRaw(): string | null {
     || null;
 }
 
+function getWorkflowNextStepDetailPayload(): Record<string, unknown> | null {
+  const detail = state.diagnostics.workflowSnapshot?.data?.next_step_detail
+    ?? state.diagnostics.workflowSnapshot?.data?.nextStepDetail
+    ?? null;
+  return detail && typeof detail === 'object'
+    ? detail as Record<string, unknown>
+    : null;
+}
+
 function getWorkflowNextStepPayload(): Record<string, unknown> | null {
+  const detail = getWorkflowNextStepDetailPayload();
+  if (detail) return detail;
+
   const nextStep = state.diagnostics.workflowSnapshot?.data?.next_step
     ?? state.diagnostics.workflowSnapshot?.data?.nextStep
     ?? null;
@@ -1395,6 +1409,13 @@ function getWorkflowNextStepPayload(): Record<string, unknown> | null {
 }
 
 function deriveWorkflowNextStepRaw(): string | null {
+  const detail = getWorkflowNextStepDetailPayload();
+  if (detail) {
+    const node = normalizeWorkflowNodeId(detail.node as string | undefined)
+      || normalizeWorkflowNodeId(detail.roles as string | undefined);
+    if (node) return node;
+  }
+
   const nextStepPayload = getWorkflowNextStepPayload();
   return normalizeWorkflowNodeId(nextStepPayload?.roles as string | undefined)
     || normalizeWorkflowNodeId(nextStepPayload?.role as string | undefined)
@@ -1404,6 +1425,14 @@ function deriveWorkflowNextStepRaw(): string | null {
 }
 
 function deriveWorkflowNextStepAssigneeIdRaw(): string | null {
+  const detail = getWorkflowNextStepDetailPayload();
+  if (detail) {
+    const assigneeId = String(
+      detail.assignee_id ?? detail.assigneeId ?? '',
+    ).trim();
+    if (assigneeId) return assigneeId;
+  }
+
   const nextStepPayload = getWorkflowNextStepPayload();
   const assigneeId = String(
     nextStepPayload?.assignee_id
@@ -1820,6 +1849,8 @@ function renderIframeState(): void {
   refs.modalEl.classList.add('show');
   refs.modalEl.setAttribute('aria-hidden', 'false');
   refs.body.classList.add('modal-open');
+  setModalFullscreen(true);
+  applyFloatingWorkflowBtn();
 }
 
 function summarizeWorkflowModels(workflowSnapshot: WorkflowSyncResponse | null): string[] {
@@ -2266,6 +2297,8 @@ function renderDiagnostics(): void {
         </div>`
     : ''}
 
+    ${buildAnnotationCheckBlockersHtml(state.workflowVerify.lastAnnotationCheck)}
+
     <div class="diag-card">
       <div><strong>task.components</strong></div>
       ${taskRefnos.length
@@ -2686,6 +2719,48 @@ function summarizeVerifyAnnotationCheck(
     `rejected=${annotationCheck.summary.rejected}`,
     `blockers=${annotationCheck.blockers.length}`,
   ].join(' ｜ ');
+}
+
+function buildAnnotationCheckBlockersHtml(
+  annotationCheck: ReviewAnnotationCheckResult | null,
+): string {
+  if (!annotationCheck || annotationCheck.passed || annotationCheck.blockers.length === 0) {
+    return '';
+  }
+  const blockersHtml = annotationCheck.blockers
+    .slice(0, 10)
+    .map((b) => {
+      const title = b.title?.trim() || b.annotationId;
+      const refnos = b.refnos.length > 0 ? ` (${b.refnos.join(', ')})` : '';
+      return `<li>${escapeHtml(b.annotationType)}/${escapeHtml(b.stateLabel)} — ${escapeHtml(title)}${escapeHtml(refnos)}</li>`;
+    })
+    .join('');
+  const moreNote = annotationCheck.blockers.length > 10
+    ? `<div class="text-xs text-slate-400">...还有 ${annotationCheck.blockers.length - 10} 条</div>`
+    : '';
+  const actions = [
+    annotationCheck.summary.pendingReview > 0
+      ? '请先逐条确认待确认的批注'
+      : null,
+    annotationCheck.summary.open > 0
+      ? '请先处理未处理的批注'
+      : null,
+    annotationCheck.summary.rejected > 0
+      ? '存在被驳回批注，请修改后重新提交'
+      : null,
+  ].filter(Boolean);
+  const actionsHtml = actions.length > 0
+    ? `<div class="mt-1 text-xs" style="color:#f59e0b"><strong>建议操作：</strong>${escapeHtml(actions.join('；'))}</div>`
+    : '';
+  return `
+    <div class="diag-card" style="border-color:#ef4444;background:#fef2f2">
+      <div><strong style="color:#ef4444">批注门禁拦截（${annotationCheck.blockers.length} 条 blocker）</strong></div>
+      <div>${escapeHtml(annotationCheck.message)}</div>
+      <ul class="diag-list" style="margin-top:4px">${blockersHtml}</ul>
+      ${moreNote}
+      ${actionsHtml}
+    </div>
+  `;
 }
 
 function trimVerifyDiagnosticField(value: unknown): string | undefined {
@@ -3252,10 +3327,35 @@ function setModalFullscreen(value: boolean): void {
   refs.modalFullscreenBtn.title = next
     ? '退出全屏（按 Esc 也可退出全屏）'
     : '将嵌入页面全屏（隐藏侧栏，按 Esc 退出全屏）';
+  if (!next) setDrawerOpen(false);
+  applyFloatingWorkflowBtn();
 }
 
 function toggleModalFullscreen(): void {
   setModalFullscreen(!isModalFullscreen());
+}
+
+function applyFloatingWorkflowBtn(): void {
+  refs.floatingWorkflowBtn.hidden = !isModalFullscreen();
+}
+
+function getSidePanel(): HTMLElement | null {
+  return refs.simulatorLayout.querySelector<HTMLElement>('.side-panel');
+}
+
+function isDrawerOpen(): boolean {
+  return getSidePanel()?.classList.contains('drawer-open') ?? false;
+}
+
+function setDrawerOpen(open: boolean): void {
+  const panel = getSidePanel();
+  if (!panel) return;
+  panel.classList.toggle('drawer-open', open);
+  refs.drawerBackdrop.classList.toggle('visible', open);
+}
+
+function toggleDrawer(): void {
+  setDrawerOpen(!isDrawerOpen());
 }
 
 function applySidePanelCollapsed(): void {
@@ -3491,6 +3591,7 @@ async function confirmWorkflowDialog(): Promise<void> {
     state.sidePanelDraftComment = comment;
     if (state.workflowAction.lastOk === true) {
       closeWorkflowDialog();
+      if (isModalFullscreen()) setDrawerOpen(false);
     } else {
       state.workflowDialog.error = state.workflowAction.lastMessage || '当前动作未完成。';
       renderWorkflowDialogState();
@@ -3649,11 +3750,23 @@ function bindEvents(): void {
   });
 
   refs.sidePanelCollapseBtn.addEventListener('click', () => {
-    toggleSidePanelCollapsed();
+    if (isModalFullscreen()) {
+      setDrawerOpen(false);
+    } else {
+      toggleSidePanelCollapsed();
+    }
   });
 
   refs.sidePanelExpandHandle.addEventListener('click', () => {
     setSidePanelCollapsed(false);
+  });
+
+  refs.floatingWorkflowBtn.addEventListener('click', () => {
+    toggleDrawer();
+  });
+
+  refs.drawerBackdrop.addEventListener('click', () => {
+    setDrawerOpen(false);
   });
 
   refs.appFullscreenBtn.addEventListener('click', () => {

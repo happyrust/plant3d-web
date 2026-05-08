@@ -1,6 +1,7 @@
 import {
   ACESFilmicToneMapping,
   AmbientLight,
+  Box3,
   CanvasTexture,
   Color,
   CubeTexture,
@@ -220,6 +221,36 @@ export class DtxViewer {
       this.renderer.dispose();
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * 根据场景 AABB 自适应相机 near/far，提升对数深度缓冲精度，缓解 z-fighting。
+   *
+   * 经验配比：near = max(0.05, diag * 0.0005)，far = max(diag * 5, 5_000)
+   * - far 给 5x diag 缓冲，避免相机在场景外漫游时远剪裁
+   * - near 取 5e-4 * diag 防止极近物体被裁
+   * - diag 不可用（空场景或 NaN）时保持现值，不强制覆盖
+   *
+   * 见 docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md Tier 2.1。
+   */
+  fitClipPlanesToBox(box: Box3): void {
+    if (!box || box.isEmpty()) return;
+    const size = new Vector3();
+    box.getSize(size);
+    const diag = Math.hypot(size.x, size.y, size.z);
+    if (!Number.isFinite(diag) || diag <= 0) return;
+    const nextNear = Math.max(0.05, diag * 0.0005);
+    const nextFar = Math.max(diag * 5, 5_000);
+    if (Math.abs(this.camera.near - nextNear) < 1e-3 && Math.abs(this.camera.far - nextFar) < 1e-3) {
+      return;
+    }
+    this.camera.near = nextNear;
+    this.camera.far = nextFar;
+    this.camera.updateProjectionMatrix();
+    if (this._debug) {
+      // eslint-disable-next-line no-console
+      console.log('[DtxViewer] fitClipPlanesToBox', { diag, near: nextNear, far: nextFar });
     }
   }
 

@@ -8,6 +8,7 @@ const finishMock = vi.fn();
 const loadInstancesMock = vi.fn();
 const getSubtreeRefnosMock = vi.fn();
 const isParquetAvailableMock = vi.fn();
+const isDtxRefnoLoadedMock = vi.fn();
 
 vi.mock('@/api/genModelE3dApi', () => ({
   e3dGetSubtreeRefnos: getSubtreeRefnosMock,
@@ -37,9 +38,11 @@ vi.mock('@/composables/useConsoleStore', () => ({
 vi.mock('@/composables/useDbMetaInfo', () => ({
   ensureDbMetaInfoLoaded: vi.fn(async () => {}),
   getDbnumByRefno: vi.fn(() => 7997),
+  tryGetDbnumByRefno: vi.fn(() => 7997),
 }));
 
 vi.mock('@/composables/useDbnoInstancesDtxLoader', () => ({
+  isDtxRefnoLoaded: isDtxRefnoLoadedMock,
   loadDbnoInstancesForVisibleRefnosDtx: loadInstancesMock,
 }));
 
@@ -69,6 +72,7 @@ vi.mock('@/ribbon/toastBus', () => ({
 describe('useModelGeneration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    isDtxRefnoLoadedMock.mockReturnValue(false);
     getSubtreeRefnosMock.mockResolvedValue({
       success: true,
       refnos: ['24381_145018'],
@@ -162,5 +166,25 @@ describe('useModelGeneration', () => {
       'info',
       expect.stringContaining('命中占位节点，转入真实模型加载')
     );
+  });
+
+  it('能识别已经通过 DTX refno 缓存加载的子节点', async () => {
+    isDtxRefnoLoadedMock.mockImplementation((dbno: number, refno: string) => {
+      return dbno === 7997 && refno === '24381_145019';
+    });
+    const viewer = {
+      __dtxLayer: {
+        hasObject: vi.fn(() => false),
+      },
+    } as any;
+
+    const { useModelGeneration } = await import('./useModelGeneration');
+    const gen = useModelGeneration({
+      viewer,
+      db_num: 7997,
+    });
+
+    expect(gen.isModelActuallyLoaded('24381/145019')).toBe(true);
+    expect(viewer.__dtxLayer.hasObject).not.toHaveBeenCalled();
   });
 });

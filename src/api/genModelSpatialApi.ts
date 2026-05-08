@@ -45,8 +45,18 @@ export type SpatialQueryResultItem = {
 export type SpatialQueryResult = {
   success: boolean;
   results?: SpatialQueryResultItem[];
-  /** 是否因 max_results 截断 */
+  /** 是否还有更多结果；兼容旧字段名 */
   truncated?: boolean;
+  /** 本次查询完整命中数量 */
+  total_count?: number;
+  /** 当前页返回数量 */
+  returned_count?: number;
+  /** 当前页码 */
+  page?: number;
+  /** 当前每页数量 */
+  per_page?: number;
+  /** 是否还有下一页 */
+  has_more?: boolean;
   /** 实际查询使用的 AABB */
   query_bbox?: {
     min: { x: number; y: number; z: number };
@@ -70,8 +80,12 @@ export type SpatialQueryParams = {
   maxx?: number;
   maxy?: number;
   maxz?: number;
-  /** 最大返回数量（默认 5000） */
+  /** 兼容旧参数：未传 per_page 时作为每页数量 */
   max_results?: number;
+  /** 分页页码，从 1 开始 */
+  page?: number;
+  /** 每页数量 */
+  per_page?: number;
   /** noun 过滤（逗号分隔，如 "EQUI,PIPE,TUBI"） */
   nouns?: string;
   /** 专业过滤（逗号分隔，如 "1,3"） */
@@ -270,6 +284,8 @@ export async function querySpatialIndex(params: SpatialQueryParams): Promise<Spa
   if (params.maxz !== undefined) sp.set('maxz', String(params.maxz));
 
   if (params.max_results !== undefined) sp.set('max_results', String(params.max_results));
+  if (params.page !== undefined) sp.set('page', String(params.page));
+  if (params.per_page !== undefined) sp.set('per_page', String(params.per_page));
   if (params.nouns) sp.set('nouns', params.nouns);
   if (params.spec_values) sp.set('spec_values', params.spec_values);
   if (params.include_self !== undefined) sp.set('include_self', String(params.include_self));
@@ -384,17 +400,17 @@ export async function queryNearbyByCenter(
   cy: number,
   cz: number,
   radius: number,
-  options?: { nouns?: string; spec_values?: string; max_results?: number; shape?: 'cube' | 'sphere' },
+  options?: { nouns?: string; spec_values?: string; max_results?: number; page?: number; per_page?: number; shape?: 'cube' | 'sphere' },
 ): Promise<SpatialQueryResult> {
   return querySpatialIndex({
-    mode: 'bbox',
-    minx: cx - radius,
-    miny: cy - radius,
-    minz: cz - radius,
-    maxx: cx + radius,
-    maxy: cy + radius,
-    maxz: cz + radius,
+    mode: 'position',
+    x: cx,
+    y: cy,
+    z: cz,
+    radius,
     max_results: options?.max_results,
+    page: options?.page,
+    per_page: options?.per_page,
     nouns: options?.nouns,
     spec_values: options?.spec_values,
     shape: options?.shape,
@@ -409,7 +425,7 @@ export async function queryNearbyByPosition(
   y: number,
   z: number,
   radius: number,
-  options?: { nouns?: string; spec_values?: string; max_results?: number; shape?: 'cube' | 'sphere' },
+  options?: { nouns?: string; spec_values?: string; max_results?: number; page?: number; per_page?: number; shape?: 'cube' | 'sphere' },
 ): Promise<SpatialQueryResult> {
   return querySpatialIndex({
     mode: 'position',
@@ -418,6 +434,8 @@ export async function queryNearbyByPosition(
     z,
     radius,
     max_results: options?.max_results,
+    page: options?.page,
+    per_page: options?.per_page,
     nouns: options?.nouns,
     spec_values: options?.spec_values,
     shape: options?.shape,
