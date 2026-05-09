@@ -216,6 +216,7 @@ const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
   'duplicate-bran-form': '同一 BRAN 多 form_id 隔离',
   'rus-244-design-a-ui-empty-state': 'RUS-244 design-A 三态拆分 + 入口收紧',
   'bug-rus-244-designer-empty-after-return': 'RUS-244 design-B PMS<->plant3d workflow 同步桥端到端',
+  'bug-resubmit-creates-duplicate-task': '驳回后真按"发起编校审"按钮会再次 createReviewTask（生产 bug）',
 };
 
 function appendNoProxy(value: string | undefined): string {
@@ -343,6 +344,55 @@ type WorkflowSyncProbeResponse = {
     task_status?: string;
   };
 };
+
+/**
+ * 数同 form_id 下 backend `review_tasks` 表里非软删的 task 条数。
+ *
+ * 用途：验证 InitiateReviewPanel.handleSubmit 在 PMS 嵌入态下被多次触发时，
+ *   是否会重复创建 review_task（bug-resubmit-creates-duplicate-task）。
+ */
+async function countBackendTasksByFormId(
+  runtime: ScenarioRuntime,
+  formId: string,
+): Promise<{ total: number; activeTasks: { id: string; currentNode: string | null; status: string | null }[] }> {
+  try {
+    const token = await createCleanupToken(runtime.env);
+    type TasksResponse = {
+      success?: boolean;
+      tasks?: {
+        id?: string;
+        formId?: string;
+        form_id?: string;
+        currentNode?: string;
+        current_node?: string;
+        status?: string;
+        deleted?: boolean;
+      }[];
+    };
+    const response = await getJson<TasksResponse>(
+      `${runtime.env.backendBaseUrl}/api/review/tasks?limit=200&offset=0`,
+      token,
+    );
+    const tasks = Array.isArray(response.body.tasks) ? response.body.tasks : [];
+    const matched = tasks.filter((task) => {
+      const fid = String(task.formId || task.form_id || '').trim();
+      if (fid !== formId) return false;
+      if (task.deleted === true) return false;
+      return true;
+    });
+    return {
+      total: matched.length,
+      activeTasks: matched.map((task) => ({
+        id: String(task.id || '').trim(),
+        currentNode: String(task.currentNode || task.current_node || '').trim() || null,
+        status: String(task.status || '').trim() || null,
+      })),
+    };
+  } catch (error) {
+    traceSimulator(`countBackendTasksByFormId form_id=${formId} 失败：${error instanceof Error ? error.message : String(error)}`);
+    return { total: 0, activeTasks: [] };
+  }
+}
 
 async function probeBackendTaskByFormId(
   runtime: ScenarioRuntime,
@@ -2738,6 +2788,152 @@ async function scenarioBugRus244DesignerEmptyAfterReturn(
   });
 }
 
+/**
+ * Bug 复现：驳回后真按 InitiateReviewPanel "发起编校审" 按钮会再次 createReviewTask。
+ *
+ * 路径：
+ *   1. SJ 第一次发起 → createReviewTask 创建 task1 (sj/draft)
+ *   2. PMS 工具栏 sync(action='active') 把 task1 推到 jd 节点
+ *   3. JH return → task1 回 sj 节点
+ *   4. SJ 重新打开嵌入页 → **再次按真实"发起编校审"按钮** → createReviewTask 又创建 task2
+ *      (因为 InitiateReviewPanel.handleSubmit 在 isExternal=true 时无去重逻辑)
+ *   5. 此时 backend 同 form_id 出现 2 条 review_task → bug 复现
+ *
+ * 期望（修复后）：第 4 步应复用 task1 调 sync(action='active')，count 仍为 1。
+ */
+async function scenarioBugResubmitCreatesDuplicateTask(
+  runtime: ScenarioRuntime,
+): Promise<PmsSimulatorScenarioReport> {
+  const created = await createReview(runtime, 'bug-resubmit-creates-duplicate-task');
+  const assertions: PmsSimulatorAssertionResult[] = [];
+
+  const initialCount = await countBackendTasksByFormId(runtime, created.formId);
+  assertions.push(assertResult(
+    'bug-resubmit-initial-count-1',
+    initialCount.total === 1,
+    `初次发起后 form_id=${created.formId} 期望 1 条 task，实际 ${initialCount.total} 条；activeTasks=${JSON.stringify(initialCount.activeTasks)}`,
+    1,
+    initialCount.total,
+  ));
+
+  // 注：修复后 InitiateReviewPanel 在嵌入态会主动调 submit_to_next_node 把 task 推进到 jd，
+  // 所以这里 simulator UI 再调 sync(action='active') 可能返回 noop（上下文已无可执行动作）。
+  // 关键校验放在 after-active-node-jd 上：只要 task 落到 jd 节点就算 sj→jd 流转成功。
+  const snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化（bug-resubmit）' });
+  void snapshot;
+  assertions.push(assertBackendCurrentNode(
+    'bug-resubmit-after-active-node-jd',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'jd',
+  ));
+
+  if (!created.taskId) {
+    throw new Error(`bug-resubmit 缺少 task_id（form_id=${created.formId}）`);
+  }
+  // 不走 simulator UI 的 JH return（路径脆弱），直接调 backend sync(action='return')
+  // 模拟 PMS 工具栏在 jd 节点点驳回 → plant3d 后端把 task 推回 sj
+  const returnToken = await createCleanupToken(runtime.env);
+  type SyncReturnResp = { code?: number; message?: string; data?: { taskStatus?: string; currentNode?: string } };
+  const returnResponse = await postJson<SyncReturnResp>(
+    `${runtime.env.backendBaseUrl}/api/review/workflow/sync`,
+    {
+      form_id: created.formId,
+      token: returnToken,
+      action: 'return',
+      actor: { id: 'JH', name: 'JH', roles: 'jd' },
+      next_step: { assignee_id: 'SJ', name: 'SJ', roles: 'sj' },
+      comments: 'JH return 自动化（bug-resubmit）',
+    },
+    returnToken,
+  );
+  assertions.push(assertResult(
+    'bug-resubmit-jh-return-sync-ok',
+    returnResponse.status === 200 && (returnResponse.body?.code ?? 0) === 200,
+    `backend sync(action=return) 期望 HTTP 200 code=200，实际 status=${returnResponse.status} code=${returnResponse.body?.code} message=${returnResponse.body?.message}`,
+    200,
+    returnResponse.status,
+  ));
+  assertions.push(assertBackendCurrentNode(
+    'bug-resubmit-after-return-node-sj',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'sj',
+  ));
+
+  // 模拟 SJ 在 plant3d 嵌入页里再次点击「发起编校审」时触发的 backend 调用：
+  //   POST /api/review/tasks（同 form_id）—— 这是 InitiateReviewPanel.vue:790
+  //   userStore.createReviewTask 在 isExternal=true 下走的真实路径。
+  // 注意：实际生产中 SJ 重打开嵌入页时 UI 路径可能已切换（DesignerCommentHandlingPanel 优先），
+  // 但任何调用方（PMS 自身、plant3d-web 内部按钮）只要再发 POST /api/review/tasks 就会触发这个 bug。
+  type SecondCreateResp = {
+    success?: boolean;
+    task?: { id?: string; formId?: string; form_id?: string; currentNode?: string; current_node?: string; status?: string };
+    error_message?: string;
+  };
+  const secondCreateToken = await createCleanupToken(runtime.env);
+  const secondCreate = await postJson<SecondCreateResp>(
+    `${runtime.env.backendBaseUrl}/api/review/tasks`,
+    {
+      title: created.packageName,
+      description: '模拟 SJ 驳回后第二次点「发起编校审」（bug-resubmit）',
+      modelName: created.packageName,
+      formId: created.formId,
+      priority: 'medium',
+      components: [],
+      reviewer_id: '',
+    },
+    secondCreateToken,
+  );
+  const secondTaskId = String(secondCreate.body?.task?.id || '').trim() || null;
+  const secondFormId = String(secondCreate.body?.task?.formId || secondCreate.body?.task?.form_id || '').trim() || null;
+  assertions.push(assertResult(
+    'bug-resubmit-second-create-http-ok',
+    secondCreate.status === 200 && secondCreate.body?.success === true,
+    `第二次 createReviewTask 期望 HTTP 200 success=true，实际 status=${secondCreate.status} success=${secondCreate.body?.success} error=${secondCreate.body?.error_message ?? ''}`,
+    true,
+    secondCreate.body?.success === true,
+  ));
+  // 修复后预期：第二次 createReviewTask 应复用现有 task（同 task_id）
+  assertions.push(assertResult(
+    'bug-resubmit-second-task-id-stable',
+    !!secondTaskId && secondTaskId === created.taskId,
+    `第二次 createReviewTask 应复用现有 task_id（form_id 去重生效）；first=${created.taskId} second=${secondTaskId}；不一致说明后端去重未生效（bug 仍存在）`,
+    created.taskId,
+    secondTaskId,
+  ));
+
+  await new Promise((r) => setTimeout(r, 1500));
+
+  const finalCount = await countBackendTasksByFormId(runtime, created.formId);
+  // 这条 assertion 是 bug 复现的"主断言"：
+  //   修复前 — 期望 1 条但实际 2 条 → assertion FAIL → bug 复现
+  //   修复后 — backend create_task 拒绝同 form_id 重复 / 前端 InitiateReviewPanel 走 sync(active) → 仍 1 条 → assertion PASS
+  assertions.push(assertResult(
+    'bug-resubmit-no-duplicate-task',
+    finalCount.total === 1,
+    `驳回后 SJ 第二次发起，form_id=${created.formId} 期望仍 1 条 review_task（应复用现有 task）；实际 ${finalCount.total} 条 → bug 复现，activeTasks=${JSON.stringify(finalCount.activeTasks)}`,
+    1,
+    finalCount.total,
+  ));
+  assertions.push(assertResult(
+    'bug-resubmit-second-form-id-stable',
+    !secondFormId || secondFormId === created.formId,
+    `第二次发起返回的 form_id 应与首次相同；first=${created.formId} second=${secondFormId || '<null>'}`,
+    created.formId,
+    secondFormId,
+  ));
+
+  return finalizeScenarioReport({
+    caseId: 'bug-resubmit-creates-duplicate-task',
+    name: CASE_NAMES['bug-resubmit-creates-duplicate-task'],
+    formId: created.formId,
+    taskId: created.taskId,
+    finalNode: null,
+    finalStatus: null,
+    packageName: created.packageName,
+    assertions,
+  });
+}
+
 const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   approved: scenarioApproved,
   return: scenarioReturn,
@@ -2750,6 +2946,7 @@ const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   'duplicate-bran-form': scenarioDuplicateBranForm,
   'rus-244-design-a-ui-empty-state': scenarioRus244DesignAUiEmptyState,
   'bug-rus-244-designer-empty-after-return': scenarioBugRus244DesignerEmptyAfterReturn,
+  'bug-resubmit-creates-duplicate-task': scenarioBugResubmitCreatesDuplicateTask,
 };
 
 async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCaseId): Promise<PmsSimulatorScenarioReport> {
