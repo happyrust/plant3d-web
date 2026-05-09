@@ -92,25 +92,25 @@ vi.mock('@/composables/useViewerContext', () => ({
 vi.mock('@/composables/useUserStore', () => ({
   useUserStore: () => ({
     currentUser: {
-      value: { id: 'designer_001', name: '设计员', role: 'designer' },
+      value: { id: 'SJ', name: '设计员', role: 'designer' },
     },
     currentUserId: {
-      value: 'designer_001',
+      value: 'SJ',
     },
     availableCheckers: {
       value: [
-        { id: 'checker-1', name: '张校对员', role: 'proofreader' },
+        { id: 'JH', name: '张校对员', role: 'proofreader' },
       ],
     },
     availableApprovers: {
       value: [
-        { id: 'approver-1', name: '李审核员', role: 'reviewer' },
+        { id: 'SH', name: '李审核员', role: 'reviewer' },
       ],
     },
     availableReviewers: {
       value: [
-        { id: 'checker-1', name: '张校对员', role: 'proofreader' },
-        { id: 'approver-1', name: '李审核员', role: 'reviewer' },
+        { id: 'JH', name: '张校对员', role: 'proofreader' },
+        { id: 'SH', name: '李审核员', role: 'reviewer' },
       ],
     },
     createReviewTask: createTaskMock,
@@ -182,7 +182,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     const checkerSelect = host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement | null;
     expect(checkerSelect).not.toBeNull();
-    checkerSelect!.value = 'checker-1';
+    checkerSelect!.value = 'JH';
     checkerSelect!.dispatchEvent(new Event('change', { bubbles: true }));
 
     const prioritySelect = host.querySelector('[data-testid="initiate-priority-select"]') as HTMLSelectElement | null;
@@ -193,7 +193,7 @@ describe('InitiateReviewPanel form binding', () => {
 
     const approverSelect = host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement | null;
     expect(approverSelect).not.toBeNull();
-    approverSelect!.value = 'approver-1';
+    approverSelect!.value = 'SH';
     approverSelect!.dispatchEvent(new Event('change', { bubbles: true }));
 
     const dueDateInput = host.querySelector('[data-testid="initiate-due-date"]') as HTMLInputElement | null;
@@ -215,8 +215,8 @@ describe('InitiateReviewPanel form binding', () => {
       title: '综合校审数据包',
       description: '需要在本周完成校审',
       modelName: '综合校审数据包',
-      checkerId: 'checker-1',
-      approverId: 'approver-1',
+      checkerId: 'JH',
+      approverId: 'SH',
       priority: 'high',
       dueDate: new Date('2026-03-20').getTime(),
       components: [
@@ -277,8 +277,8 @@ describe('InitiateReviewPanel form binding', () => {
 
     expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       title: '外部流程编校审包',
-      checkerId: undefined,
-      approverId: undefined,
+      checkerId: 'JH',
+      approverId: 'SH',
       priority: undefined,
       components: [
         expect.objectContaining({
@@ -351,11 +351,11 @@ describe('InitiateReviewPanel form binding', () => {
     packageInput.dispatchEvent(new Event('input', { bubbles: true }));
 
     const checkerSelect = host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement;
-    checkerSelect.value = 'checker-1';
+    checkerSelect.value = 'JH';
     checkerSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     const approverSelect = host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement;
-    approverSelect.value = 'approver-1';
+    approverSelect.value = 'SH';
     approverSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     await nextTick();
@@ -399,11 +399,11 @@ describe('InitiateReviewPanel form binding', () => {
     packageInput.dispatchEvent(new Event('input', { bubbles: true }));
 
     const checkerSelect = host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement;
-    checkerSelect.value = 'checker-1';
+    checkerSelect.value = 'JH';
     checkerSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     const approverSelect = host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement;
-    approverSelect.value = 'approver-1';
+    approverSelect.value = 'SH';
     approverSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     await nextTick();
@@ -502,11 +502,11 @@ describe('InitiateReviewPanel form binding', () => {
     descriptionInput.dispatchEvent(new Event('input', { bubbles: true }));
 
     const checkerSelect = host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement;
-    checkerSelect.value = 'checker-1';
+    checkerSelect.value = 'JH';
     checkerSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     const approverSelect = host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement;
-    approverSelect.value = 'approver-1';
+    approverSelect.value = 'SH';
     approverSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     await nextTick();
@@ -589,8 +589,8 @@ describe('InitiateReviewPanel form binding', () => {
       restoredTaskDraft: {
         title: '已保存编校审单',
         description: '复开后应回填',
-        checkerId: 'checker-1',
-        approverId: 'approver-1',
+        checkerId: 'JH',
+        approverId: 'SH',
         priority: 'high',
         dueDate: '2026-03-21',
         components: [
@@ -632,9 +632,9 @@ describe('InitiateReviewPanel form binding', () => {
     expect((host.querySelector('textarea[placeholder="添加补充说明或设计注意事项..."]') as HTMLTextAreaElement | null)?.value)
       .toBe('复开后应回填');
     expect((host.querySelector('[data-testid="initiate-checker-select"]') as HTMLSelectElement | null)?.value)
-      .toBe('checker-1');
+      .toBe('JH');
     expect((host.querySelector('[data-testid="initiate-approver-select"]') as HTMLSelectElement | null)?.value)
-      .toBe('approver-1');
+      .toBe('SH');
     expect((host.querySelector('[data-testid="initiate-priority-select"]') as HTMLSelectElement | null)?.value)
       .toBe('high');
     expect((host.querySelector('[data-testid="initiate-due-date"]') as HTMLInputElement | null)?.value)
@@ -689,8 +689,8 @@ describe('InitiateReviewPanel form binding', () => {
       restoredTaskDraft: {
         title: '晚到草稿',
         description: '挂载后补写入的恢复数据',
-        checkerId: 'checker-1',
-        approverId: 'approver-1',
+        checkerId: 'JH',
+        approverId: 'SH',
         priority: 'high',
         dueDate: '2026-03-26',
         components: [

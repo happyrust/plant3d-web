@@ -1458,23 +1458,27 @@ async function readRestoreCounts(
   commentDetail: string;
 }> {
   const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId });
-  const counts = await located.root.evaluate(() => {
+  const counts = await located.root.evaluate(async ({ annotationId }) => {
     const hook = (window as Window & {
       __plant3dReviewerE2E?: {
         getConfirmedRecordCount: () => number;
         getConfirmedAnnotationCount: () => number;
         getConfirmedMeasurementCount: () => number;
+        refreshAnnotationCommentThread?: (annotationType?: 'text' | 'cloud' | 'rect' | 'obb', annotationId?: string) => Promise<number>;
       };
     }).__plant3dReviewerE2E;
     if (!hook) {
       throw new Error('__plant3dReviewerE2E 未挂载');
+    }
+    if (typeof hook.refreshAnnotationCommentThread === 'function') {
+      await hook.refreshAnnotationCommentThread('text', annotationId);
     }
     return {
       confirmedRecordCount: hook.getConfirmedRecordCount(),
       confirmedAnnotationCount: hook.getConfirmedAnnotationCount(),
       confirmedMeasurementCount: hook.getConfirmedMeasurementCount(),
     };
-  });
+  }, { annotationId: comment.annotationId });
   const expectedAnnotationTitle = 'restore 自动化批注 24381_145018';
   let visibleText = await waitFor(async () => {
     const text = await located.root.locator('body').innerText({ timeout: 3000 }).catch(() => '');
@@ -2304,11 +2308,7 @@ async function scenarioRestore(runtime: ScenarioRuntime): Promise<PmsSimulatorSc
   }
 
   await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 自动化' });
-  const reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
-  await openAutomationPageFromSnapshot(runtime, reviewerSnapshot, `restore reviewer form_id=${created.formId}`, {
-    tokenUserId: 'proofreader_001',
-    tokenRole: 'jd',
-  });
+  await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
   const beforeCounts = await buildRestoreCounts(runtime, created.formId, created.taskId);
   assertions.push(assertResult('restore-before-annotation', beforeCounts.pendingAnnotationCount >= 1, undefined, '>=1', beforeCounts.pendingAnnotationCount));
   assertions.push(assertResult('restore-before-measurement', beforeCounts.pendingMeasurementCount >= 1, undefined, '>=1', beforeCounts.pendingMeasurementCount));

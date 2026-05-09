@@ -395,16 +395,16 @@ describe('resolveSimulatorWorkflowAssignment', () => {
 });
 
 describe('resolveSimulatorTaskAssignment', () => {
-  it('按当前工作流角色解析任务真实指派对象', () => {
+  it('按当前工作流角色解析任务真实 PMS HumanCode 指派对象', () => {
     expect(resolveSimulatorTaskAssignment({
       currentPmsUser: 'JH',
       currentWorkflowRole: 'jd',
-      checkerId: 'proofreader_001',
-      reviewerId: 'reviewer_legacy',
+      checkerId: 'JH',
+      reviewerId: 'SH',
     })).toEqual({
-      assignedUserId: 'proofreader_001',
+      assignedUserId: 'JH',
       source: 'checker',
-      matchesCurrentPmsUser: false,
+      matchesCurrentPmsUser: true,
     });
 
     expect(resolveSimulatorTaskAssignment({
@@ -418,23 +418,35 @@ describe('resolveSimulatorTaskAssignment', () => {
     });
   });
 
+  it('将内部账号指派识别为数据不一致，而不是兼容为可审批 owner', () => {
+    expect(resolveSimulatorTaskAssignment({
+      currentPmsUser: 'JH',
+      currentWorkflowRole: 'jd',
+      checkerId: 'proofreader_001',
+    })).toEqual({
+      assignedUserId: 'proofreader_001',
+      source: 'invalid',
+      matchesCurrentPmsUser: false,
+    });
+  });
+
   it('校核缺少 checkerId 时回退 reviewerId；审核/批准统一看 approverId', () => {
     expect(resolveSimulatorTaskAssignment({
       currentPmsUser: 'JH',
       currentWorkflowRole: 'jd',
-      reviewerId: 'reviewer_legacy',
+      reviewerId: 'JH',
     })).toEqual({
-      assignedUserId: 'reviewer_legacy',
+      assignedUserId: 'JH',
       source: 'reviewer',
-      matchesCurrentPmsUser: false,
+      matchesCurrentPmsUser: true,
     });
 
     expect(resolveSimulatorTaskAssignment({
       currentPmsUser: 'SH',
       currentWorkflowRole: 'sh',
-      approverId: 'manager_001',
+      approverId: 'PZ',
     })).toEqual({
-      assignedUserId: 'manager_001',
+      assignedUserId: 'PZ',
       source: 'approver',
       matchesCurrentPmsUser: false,
     });
@@ -525,6 +537,24 @@ describe('resolveSimulatorWorkflowAccess', () => {
     });
   });
 
+  it('已有单据缺少 workflow next_step 且任务指派不是 PMS HumanCode 时，只读并提示数据不一致', () => {
+    expect(resolveSimulatorWorkflowAccess({
+      iframeSource: 'task-view',
+      taskStatus: 'submitted',
+      currentPmsUserId: 'JH',
+      currentPmsWorkflowRole: 'jd',
+      workflowNextStepUserId: null,
+      workflowNextStepRole: null,
+      taskCurrentNode: 'jd',
+      taskAssignedUserId: 'proofreader_001',
+    })).toEqual({
+      canView: true,
+      canMutateWorkflow: false,
+      decisionSource: 'task-assignment-invalid',
+      reason: '任务指派不是合法 PMS HumanCode（proofreader_001 / jd），请修正仿 PMS 或后端任务数据源。',
+    });
+  });
+
   it('已有单据缺少 workflow next_step 和任务指派时，只允许查看', () => {
     expect(resolveSimulatorWorkflowAccess({
       iframeSource: 'task-view',
@@ -586,6 +616,13 @@ describe('resolveSimulatorInboxTaskVisibility', () => {
       taskStatus: 'submitted',
       taskCurrentNode: 'jd',
       checkerId: 'SH',
+    })).toBe(false);
+
+    expect(resolveSimulatorInboxTaskVisibility({
+      currentPmsUser: 'JH',
+      taskStatus: 'submitted',
+      taskCurrentNode: 'jd',
+      checkerId: 'proofreader_001',
     })).toBe(false);
   });
 

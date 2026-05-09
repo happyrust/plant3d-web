@@ -294,7 +294,10 @@ void main() {
   fragColor = vec4(finalColor, vColor.a);
 
   #ifdef USE_LOGDEPTHBUF
-    gl_FragDepth = log2(vFragDepth) * logDepthBufFC * 0.5 + vDepthBias;
+    // z-fighting 抑制：DoubleSide 下背面再退后 5e-7 深度，破除同 object 自身闪烁。
+    // 量级介于同 object 自然差值与 vDepthBias 最大值（7 * 1.5e-7 = 1.05e-6）之间。
+    float backFaceBias = gl_FrontFacing ? 0.0 : 5.0e-7;
+    gl_FragDepth = log2(vFragDepth) * logDepthBufFC * 0.5 + vDepthBias + backFaceBias;
   #endif
 }
 `;
@@ -374,6 +377,15 @@ export class DTXMaterial extends ShaderMaterial {
     this.transparent = options.transparent ?? false;
     this.depthWrite = options.depthWrite ?? true;
     this.depthTest = options.depthTest ?? true;
+
+    // z-fighting 抑制：仅对不透明通道启用 polygonOffset，整体撑开 ~1 单位深度
+    // 避免共面几何（如 BBOX 包络体与本体）随相机抖动跳变像素颜色。
+    // 透明通道 depthWrite=false，开 polygonOffset 反而会让排序更不稳定。
+    if (!this.transparent) {
+      this.polygonOffset = true;
+      this.polygonOffsetFactor = 1;
+      this.polygonOffsetUnits = 1;
+    }
   }
 
   /**
@@ -388,7 +400,8 @@ export class DTXMaterial extends ShaderMaterial {
   customProgramCacheKey(): string {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
-    return 'DTXMaterial_v10';
+    // v11: fragment shader 加 backFaceBias（z-fighting Tier 1，docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md）
+    return 'DTXMaterial_v11';
   }
 
   /**

@@ -21,7 +21,9 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
-import { getMbdPipeAnnotations, type MbdPipeData, type MbdPipeSegmentDto } from '@/api/mbdPipeApi';
+import { getMbdPipeAnnotations, type MbdPipeData } from '@/api/mbdPipeApi';
+import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
+import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import {
   findNounByRefnoAcrossAllDbnos,
@@ -29,9 +31,13 @@ import {
   getDtxRefnoTransform,
   resolveDtxObjectIdsByRefno,
 } from '@/composables/useDbnoInstancesDtxLoader';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
+import { useUserStore } from '@/composables/useUserStore';
+import { UserRole } from '@/types/auth';
 import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
@@ -344,9 +350,10 @@ function parseDbnumFromRefno(raw: string): number | null {
   return Math.floor(value);
 }
 
-function asVec3(value: Vec3 | null | undefined): Vec3 | null {
-  if (!value) return null;
+function asVec3(value: unknown): Vec3 | null {
+  if (!Array.isArray(value) || value.length !== 3) return null;
   const [x, y, z] = value;
+  if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') return null;
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
   return [x, y, z];
 }
@@ -952,12 +959,19 @@ export function toggleTextAnnotationCollapsed(collapsed?: boolean): boolean {
   return collapsed !== true;
 }
 
+/** @deprecated Use `resolveTextAnnotationMarkerSingleClickAction` instead. Kept for backward compat. */
 export function resolveTextAnnotationMarkerClickAction(
-  prevState: TextAnnotationMarkerClickState | null,
-  annotationId: string,
-  timestamp: number,
+  _prevState: TextAnnotationMarkerClickState | null,
+  _annotationId: string,
+  _timestamp: number,
   collapsed?: boolean,
-  thresholdMs = 400,
+  _thresholdMs = 400,
+): TextAnnotationMarkerClickResult {
+  return resolveTextAnnotationMarkerSingleClickAction(collapsed);
+}
+
+export function resolveTextAnnotationMarkerSingleClickAction(
+  collapsed?: boolean,
 ): TextAnnotationMarkerClickResult {
   if (collapsed === true) {
     return {
@@ -967,25 +981,20 @@ export function resolveTextAnnotationMarkerClickAction(
     };
   }
 
-  const isDoubleClick = !!prevState
-    && prevState.annotationId === annotationId
-    && timestamp - prevState.timestamp < thresholdMs;
-
-  if (isDoubleClick) {
-    return {
-      activate: false,
-      nextCollapsed: true,
-      nextState: null,
-    };
-  }
-
   return {
     activate: true,
     nextCollapsed: null,
-    nextState: {
-      annotationId,
-      timestamp,
-    },
+    nextState: null,
+  };
+}
+
+export function resolveTextAnnotationMarkerDoubleClickAction(
+  collapsed?: boolean,
+): TextAnnotationMarkerClickResult {
+  return {
+    activate: true,
+    nextCollapsed: toggleTextAnnotationCollapsed(collapsed),
+    nextState: null,
   };
 }
 
@@ -1616,6 +1625,8 @@ function makeTextAnnotationMarkerEl(parent: HTMLElement, glyph: string, collapse
     buildTextAnnotationMarkerStyleText(collapsed),
   );
   el.innerHTML = buildTextAnnotationMarkerHtml(glyph, collapsed);
+  el.title = '单击选中，双击展开/收起';
+  el.setAttribute('aria-label', '文字批注图钉，单击选中，双击展开或收起');
   if (collapsed) {
     el.dataset.markerKind = 'location-pin';
   } else {
@@ -1705,17 +1716,21 @@ export function useDtxTools(options: {
   store: ReturnType<typeof useToolStore>
   compatViewerRef: Ref<DtxCompatViewer | null>
   requestRender?: (() => void) | null
+  suppressStoreOverlays?: boolean
 }) {
   const { dtxViewerRef, dtxLayerRef, selectionRef, overlayContainerRef, store, compatViewerRef } = options;
   const requestRender = options.requestRender ?? null;
+  const suppressStoreOverlays = options.suppressStoreOverlays === true;
 
   const selectionStore = useSelectionStore();
+  const reviewStore = useReviewStore();
+  const userStore = useUserStore();
   const unitSettings = useUnitSettingsStore();
   const annotationStyleStore = useAnnotationStyleStore();
   const readyRevision = ref(0);
 
   let lastAnnotationLabelClick: AnnotationLabelClickState | null = null;
-  let lastTextMarkerClick: { annotationId: string; timestamp: number } | null = null;
+  let textAnnotationMarkerClickTimer: ReturnType<typeof setTimeout> | null = null;
 
   // pick_refno：仅在拾取会话内维护，不写入 store
   const pickedHighlightByBran = new Map<string, string>();
@@ -1777,6 +1792,45 @@ export function useDtxTools(options: {
     store.activeCloudAnnotationId.value = kind === 'cloud' ? id : null;
     store.activeRectAnnotationId.value = kind === 'rect' ? id : null;
     store.activeObbAnnotationId.value = kind === 'obb' ? id : null;
+  }
+
+  function getAnnotationRecordByKind(
+    kind: 'text' | 'cloud' | 'rect' | 'obb',
+    annotationId: string,
+  ): AnnotationRecord | CloudAnnotationRecord | RectAnnotationRecord | ObbAnnotationRecord | null {
+    if (kind === 'text') {
+      return store.annotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    if (kind === 'cloud') {
+      return store.cloudAnnotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    if (kind === 'rect') {
+      return store.rectAnnotations.value.find((item) => item.id === annotationId) ?? null;
+    }
+    return store.obbAnnotations.value.find((item) => item.id === annotationId) ?? null;
+  }
+
+  function resolveCurrentFormId(): string | undefined {
+    return normalizeOptionalString(store.activeAnnotationContext.value?.record.formId)
+      ?? normalizeOptionalString(reviewStore.currentTask.value?.formId);
+  }
+
+  function openAnnotationProcessingPage(kind: AnnotationOverlayKind, id: string) {
+    commitInlineAnnotationDraft(kind, id);
+    const currentTask = reviewStore.currentTask.value;
+    const currentUser = userStore.currentUser.value;
+    const shouldUseDesignerPanel = (
+      currentUser?.role === UserRole.DESIGNER
+      || (currentTask ? isCanonicalReturnedTask(currentTask) : false)
+    );
+    const formId = normalizeOptionalString(getAnnotationRecordByKind(kind, id)?.formId) ?? resolveCurrentFormId();
+    activateAnnotation(kind, id);
+    setAnnotationProcessingEntryTarget({
+      annotationId: id,
+      annotationType: kind,
+      formId: formId ?? null,
+    });
+    ensurePanelAndActivate(shouldUseDesignerPanel ? 'designerCommentHandling' : 'review');
   }
 
   function openAnnotationEditor(kind: AnnotationOverlayKind, id: string) {
@@ -1881,18 +1935,13 @@ export function useDtxTools(options: {
     activateAnnotation(kind, id);
   }
 
-  function handleTextAnnotationMarkerClick(id: string) {
-    commitInlineAnnotationDraft('text', id);
-    const rec = store.annotations.value.find((item) => item.id === id);
-    if (!rec) return;
-    const now = Date.now();
-    const result = resolveTextAnnotationMarkerClickAction(
-      lastTextMarkerClick,
-      id,
-      now,
-      rec.collapsed,
-    );
+  function clearTextAnnotationMarkerClickTimer() {
+    if (!textAnnotationMarkerClickTimer) return;
+    clearTimeout(textAnnotationMarkerClickTimer);
+    textAnnotationMarkerClickTimer = null;
+  }
 
+  function applyTextAnnotationMarkerAction(id: string, result: TextAnnotationMarkerClickResult) {
     if (result.nextCollapsed !== null) {
       store.updateAnnotation(id, { collapsed: result.nextCollapsed });
     }
@@ -1900,8 +1949,29 @@ export function useDtxTools(options: {
     if (result.activate) {
       activateAnnotation('text', id);
     }
+  }
 
-    lastTextMarkerClick = result.nextState;
+  function handleTextAnnotationMarkerSingleClick(id: string) {
+    commitInlineAnnotationDraft('text', id);
+    const rec = store.annotations.value.find((item) => item.id === id);
+    if (!rec) return;
+    applyTextAnnotationMarkerAction(id, resolveTextAnnotationMarkerSingleClickAction(rec.collapsed));
+  }
+
+  function handleTextAnnotationMarkerDoubleClick(id: string) {
+    clearTextAnnotationMarkerClickTimer();
+    commitInlineAnnotationDraft('text', id);
+    const rec = store.annotations.value.find((item) => item.id === id);
+    if (!rec) return;
+    applyTextAnnotationMarkerAction(id, resolveTextAnnotationMarkerDoubleClickAction(rec.collapsed));
+  }
+
+  function scheduleTextAnnotationMarkerSingleClick(id: string) {
+    clearTextAnnotationMarkerClickTimer();
+    textAnnotationMarkerClickTimer = setTimeout(() => {
+      textAnnotationMarkerClickTimer = null;
+      handleTextAnnotationMarkerSingleClick(id);
+    }, 220);
   }
 
   function commitDraggedTextAnnotation(annotationId: string, labelWorldPos: Vector3) {
@@ -3259,18 +3329,28 @@ export function useDtxTools(options: {
     textLeaders.clear();
     pruneInlineTextAnnotationDrafts();
 
+    if (suppressStoreOverlays) return;
+
     // ---------------- Text annotations ----------------
     for (const a of store.annotations.value) {
       if (!a.visible) continue;
 
-      const wp = new Vector3(...a.worldPos);
-      const labelWorldPos = new Vector3(...(a.labelWorldPos ?? getDefaultTextAnnotationLabelWorldPos(a.worldPos)));
+      const worldPos = asVec3(a.worldPos);
+      if (!worldPos) continue;
+      const labelPos = asVec3(a.labelWorldPos) ?? getDefaultTextAnnotationLabelWorldPos(worldPos);
+      const wp = new Vector3(...worldPos);
+      const labelWorldPos = new Vector3(...labelPos);
       const marker = makeTextAnnotationMarkerEl(overlay, a.glyph || 'A', a.collapsed === true);
       if (a.severity) marker.dataset.severity = a.severity;
       markers.set(`anno:${a.id}`, { id: `anno:${a.id}`, worldPos: wp, el: marker });
       marker.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        handleTextAnnotationMarkerClick(a.id);
+        if (ev.detail > 1) return;
+        scheduleTextAnnotationMarkerSingleClick(a.id);
+      });
+      marker.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+        handleTextAnnotationMarkerDoubleClick(a.id);
       });
 
       if (shouldRenderTextAnnotationCard(a.collapsed)) {
@@ -3885,6 +3965,7 @@ export function useDtxTools(options: {
   }
 
   function clearAllInScene() {
+    clearTextAnnotationMarkerClickTimer();
     clearGroup(toolsGroup);
     clearOverlayEls();
     hideMarquee();
@@ -3901,6 +3982,7 @@ export function useDtxTools(options: {
   }
 
   function dispose() {
+    clearTextAnnotationMarkerClickTimer();
     const viewer = dtxViewerRef.value;
     if (viewer && toolsGroup.parent === viewer.scene) {
       try { viewer.scene.remove(toolsGroup); } catch { /* ignore */ }
@@ -4197,6 +4279,7 @@ export function useDtxTools(options: {
     clickTracker.value = { down: { x: e.clientX, y: e.clientY }, moved: false };
 
     const mode = store.toolMode.value;
+    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_query_center') return;
     if (mode === 'annotation_obb') {
       beginMarquee(canvas, e, mode);
       return;
@@ -4221,6 +4304,7 @@ export function useDtxTools(options: {
     }
 
     const mode = store.toolMode.value;
+    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_query_center') return;
     if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
       moveMarquee(canvas, e, mode);
       return;
@@ -4242,6 +4326,10 @@ export function useDtxTools(options: {
     if (!ready.value) return;
 
     const mode = store.toolMode.value;
+    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_query_center') {
+      clickTracker.value = { down: null, moved: false };
+      return;
+    }
     if (mode === 'annotation_obb') {
       endMarquee(canvas, e, mode);
       return;
@@ -4553,6 +4641,10 @@ export function useDtxTools(options: {
 
   function onCanvasPointerCancel(canvas: HTMLCanvasElement, e: PointerEvent) {
     void e;
+    if (suppressStoreOverlays) {
+      clickTracker.value = { down: null, moved: false };
+      return;
+    }
     const viewer = dtxViewerRef.value;
     if (viewer) viewer.controls.enabled = true;
     hideMarquee();

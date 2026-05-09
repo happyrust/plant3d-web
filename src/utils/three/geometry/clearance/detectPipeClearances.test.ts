@@ -102,7 +102,7 @@ describe('detectPipeClearances', () => {
     expect(result.length).toBe(0);
   });
 
-  it('should respect configured angle threshold', () => {
+  it('should respect max angle threshold', () => {
     const branches = {
       'bran1': [
         {
@@ -110,9 +110,9 @@ describe('detectPipeClearances', () => {
           refno: 'pipe1',
           noun: 'PIPE',
           arrive: [0, 0, 0],
-          leave: [0, 10, 0],
-          length: 10,
-          straight_length: 10,
+          leave: [0, 100, 0],
+          length: 100,
+          straight_length: 100,
           outside_diameter: 100,
         } as MbdPipeSegmentDto,
       ],
@@ -122,19 +122,19 @@ describe('detectPipeClearances', () => {
           refno: 'pipe2',
           noun: 'PIPE',
           arrive: [200, 0, 0],
-          leave: [201.76, 10, 0],
-          length: 10,
-          straight_length: 10,
+          leave: [214, 99, 0],
+          length: 100,
+          straight_length: 100,
           outside_diameter: 100,
         } as MbdPipeSegmentDto,
       ],
     };
 
-    const result = detectPipeClearances(branches, 500, 15);
-    expect(result.length).toBe(1);
+    expect(detectPipeClearances(branches, 500, 5).length).toBe(0);
+    expect(detectPipeClearances(branches, 500, 10).length).toBe(1);
   });
 
-  it('should use finite segment endpoints instead of infinite parallel axes', () => {
+  it('should keep zero-clearance touching pipes', () => {
     const branches = {
       'bran1': [
         {
@@ -153,8 +153,8 @@ describe('detectPipeClearances', () => {
           id: 'seg2',
           refno: 'pipe2',
           noun: 'PIPE',
-          arrive: [150, 200, 0],
-          leave: [150, 210, 0],
+          arrive: [100, 0, 0],
+          leave: [100, 10, 0],
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
@@ -162,7 +162,40 @@ describe('detectPipeClearances', () => {
       ],
     };
 
-    const result = detectPipeClearances(branches, 75);
+    const result = detectPipeClearances(branches, 500);
+    expect(result.length).toBe(1);
+    expect(result[0]!.distance).toBeCloseTo(0, 8);
+  });
+
+  it('should not report far offset finite pipe segments as close', () => {
+    const branches = {
+      'bran1': [
+        {
+          id: 'seg1',
+          refno: 'pipe1',
+          noun: 'PIPE',
+          arrive: [0, 0, 0],
+          leave: [0, 10, 0],
+          length: 10,
+          straight_length: 10,
+          outside_diameter: 100,
+        } as MbdPipeSegmentDto,
+      ],
+      'bran2': [
+        {
+          id: 'seg2',
+          refno: 'pipe2',
+          noun: 'PIPE',
+          arrive: [200, 1000, 0],
+          leave: [200, 1010, 0],
+          length: 10,
+          straight_length: 10,
+          outside_diameter: 100,
+        } as MbdPipeSegmentDto,
+      ],
+    };
+
+    const result = detectPipeClearances(branches, 500);
     expect(result.length).toBe(0);
   });
 });

@@ -117,7 +117,7 @@ describe('isApproverRole', () => {
 });
 
 describe('loadReviewTasks', () => {
-  it('queries checker inbox tasks with checkerId when switched into reviewer alias', async () => {
+  it('queries checker inbox tasks with the current HumanCode only', async () => {
     userGetCurrentMock.mockResolvedValue({ success: false });
     reviewTaskGetListMock.mockResolvedValue({
       success: true,
@@ -128,12 +128,63 @@ describe('loadReviewTasks', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('reviewer_001');
+    await store.switchUser('JH');
 
-    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ checkerId: 'user-002' });
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ checkerId: 'JH' });
   });
 
-  it('keeps reviewer alias identity while exposing backend checker-seeded jd tasks in pending inbox collections', async () => {
+  it('does not query legacy proofreader ids for embedded jd inbox restore', async () => {
+    userGetCurrentMock.mockResolvedValue({ success: false });
+    reviewTaskGetListMock.mockImplementation(async (options?: { checkerId?: string }) => {
+      if (options?.checkerId === 'JH') {
+        return {
+          success: true,
+          tasks: [
+            {
+              id: 'task-jh-direct',
+              title: 'PMS JH direct task',
+              description: 'desc',
+              modelName: 'Hull',
+              status: 'submitted',
+              priority: 'high',
+              requesterId: 'SJ',
+              requesterName: '王设计师',
+              checkerId: 'JH',
+              checkerName: 'JH',
+              approverId: 'SH',
+              approverName: 'SH',
+              reviewerId: 'JH',
+              reviewerName: 'JH',
+              currentNode: 'jd',
+              formId: 'FORM-JH-DIRECT',
+              components: [],
+              createdAt: 1700000000000,
+              updatedAt: 1700000001000,
+            },
+          ],
+          total: 1,
+        };
+      }
+      return { success: true, tasks: [], total: 0 };
+    });
+
+    const { useUserStore } = await import('./useUserStore');
+    const store = useUserStore();
+
+    store.setEmbedUser('JH', 'jd', { verified: true });
+    await store.loadReviewTasks();
+
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ checkerId: 'JH' });
+    expect(reviewTaskGetListMock).not.toHaveBeenCalledWith({ checkerId: 'proofreader_001' });
+    expect(store.reviewTasks.value.map((task) => task.id)).toEqual([
+      'task-jh-direct',
+    ]);
+    expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual([
+      'task-jh-direct',
+    ]);
+  });
+
+  it('keeps HumanCode checker identity while exposing jd tasks in pending inbox collections', async () => {
     userGetCurrentMock.mockResolvedValue({ success: false });
     reviewTaskGetListMock.mockResolvedValue({
       success: true,
@@ -145,13 +196,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'submitted',
           priority: 'high',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李审核员',
-          approverId: 'manager_001',
+          approverId: 'SH',
           approverName: '陈经理',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李审核员',
           currentNode: 'jd',
           components: [],
@@ -165,20 +216,20 @@ describe('loadReviewTasks', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('reviewer_001');
+    await store.switchUser('JH');
 
-    expect(store.currentUserId.value).toBe('reviewer_001');
-    expect(store.currentUser.value?.role).toBe(UserRole.REVIEWER);
+    expect(store.currentUserId.value).toBe('JH');
+    expect(store.currentUser.value?.role).toBe(UserRole.PROOFREADER);
     expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual([
       'seed-m2-reviewer-confirmed',
     ]);
   });
 
-  it('queries approver inbox tasks with approverId for manager roles using backend canonical identity', async () => {
+  it('queries approver inbox tasks with HumanCode for manager roles', async () => {
     userGetCurrentMock.mockResolvedValue({
       success: true,
       user: {
-        id: 'manager_001',
+        id: 'PZ',
         username: 'manager',
         email: 'manager@example.com',
         name: '陈经理',
@@ -194,9 +245,9 @@ describe('loadReviewTasks', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('manager_001');
+    await store.switchUser('PZ');
 
-    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ approverId: 'user-002' });
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ approverId: 'PZ' });
   });
 
   it('queries designer initiated tasks by requesterId and keeps seeded loop tasks discoverable for designer surfaces', async () => {
@@ -211,13 +262,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Loop Model',
           status: 'submitted',
           priority: 'urgent',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'manager_001',
+          approverId: 'SH',
           approverName: '陈经理',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'jd',
           formId: 'FORM-M6M7-LOOP-001',
@@ -234,7 +285,7 @@ describe('loadReviewTasks', () => {
 
     await store.loadReviewTasks();
 
-    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ requesterId: 'designer_001' });
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ requesterId: 'SJ' });
     expect(store.myInitiatedTasks.value.map((task) => task.id)).toContain('seed-loop-task');
     expect(store.myInitiatedTasks.value[0]).toEqual(
       expect.objectContaining({
@@ -246,7 +297,7 @@ describe('loadReviewTasks', () => {
     );
   });
 
-  it('keeps approved and rejected tasks visible in reviewer inbox collections', async () => {
+  it('keeps approved and rejected tasks visible in checker inbox collections', async () => {
     userGetCurrentMock.mockResolvedValue({ success: false });
     reviewTaskGetListMock.mockResolvedValue({
       success: true,
@@ -258,13 +309,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'submitted',
           priority: 'high',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'user-002',
+          approverId: 'SH',
           approverName: '李审核员',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'sh',
           components: [],
@@ -278,13 +329,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'approved',
           priority: 'medium',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'user-002',
+          approverId: 'SH',
           approverName: '李审核员',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'sh',
           components: [],
@@ -298,13 +349,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'rejected',
           priority: 'low',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'user-002',
+          approverId: 'SH',
           approverName: '李审核员',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'sj',
           components: [],
@@ -318,13 +369,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'draft',
           priority: 'low',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'user-002',
+          approverId: 'SH',
           approverName: '李审核员',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'sh',
           components: [],
@@ -338,12 +389,11 @@ describe('loadReviewTasks', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('reviewer_001');
+    await store.switchUser('JH');
 
     expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual([
-      'task-submitted',
-      'task-approved',
       'task-rejected',
+      'task-approved',
     ]);
   });
 
@@ -351,7 +401,7 @@ describe('loadReviewTasks', () => {
     userGetCurrentMock.mockResolvedValue({
       success: true,
       user: {
-        id: 'manager_001',
+        id: 'PZ',
         username: 'manager',
         email: 'manager@example.com',
         name: '陈经理',
@@ -368,13 +418,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'approved',
           priority: 'medium',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'manager_001',
+          approverId: 'PZ',
           approverName: '陈经理',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'pz',
           components: [],
@@ -388,13 +438,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'rejected',
           priority: 'high',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'manager_001',
+          approverId: 'PZ',
           approverName: '陈经理',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'pz',
           components: [],
@@ -408,11 +458,11 @@ describe('loadReviewTasks', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('manager_001');
+    await store.switchUser('PZ');
 
     expect(store.pendingReviewTasks.value.map((task) => task.id)).toEqual([
-      'task-pz-approved',
       'task-pz-rejected',
+      'task-pz-approved',
     ]);
   });
 
@@ -421,7 +471,7 @@ describe('loadReviewTasks', () => {
     userGetCurrentMock.mockResolvedValue({
       success: true,
       user: {
-        id: 'user-002',
+        id: 'JH',
         username: 'reviewer',
         email: 'reviewer@example.com',
         name: '李审核员',
@@ -438,13 +488,13 @@ describe('loadReviewTasks', () => {
           modelName: 'Hull',
           status: 'submitted',
           priority: 'medium',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'manager_001',
+          approverId: 'SH',
           approverName: '陈经理',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'jd',
           formId: 'FORM-EMBED-1',
@@ -459,13 +509,13 @@ describe('loadReviewTasks', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('reviewer_001');
+    await store.switchUser('JH');
     store.setEmbedUser('JH', 'jd');
     await store.loadReviewTasks();
 
-    expect(store.currentUserId.value).toBe('reviewer_001');
+    expect(store.currentUserId.value).toBe('JH');
     expect(store.currentUser.value?.name).toBe('李审核员');
-    expect(reviewTaskGetListMock).toHaveBeenLastCalledWith({ checkerId: 'user-002' });
+    expect(reviewTaskGetListMock).toHaveBeenLastCalledWith({ checkerId: 'JH' });
     expect(store.reviewTasks.value.map((task) => task.formId)).toContain('FORM-EMBED-1');
   });
 
@@ -538,13 +588,13 @@ describe('cross-role task visibility after task creation and submit', () => {
       modelName: '主装置模型',
       status: 'draft',
       priority: 'medium',
-      requesterId: 'designer_001',
+      requesterId: 'SJ',
       requesterName: '王设计师',
-      checkerId: 'proofreader_001',
+      checkerId: 'JH',
       checkerName: '张校对员',
-      approverId: 'reviewer_001',
+      approverId: 'SH',
       approverName: '李审核员',
-      reviewerId: 'proofreader_001',
+      reviewerId: 'JH',
       reviewerName: '张校对员',
       components: [{ id: 'comp-1', name: 'BRAN-001', refNo: 'BRAN-001', type: 'pipe' }],
       createdAt: 1700000000000,
@@ -578,15 +628,15 @@ describe('cross-role task visibility after task creation and submit', () => {
       title: '跨角色联调任务',
       description: '用于验证发起后完整流转',
       modelName: '主装置模型',
-      checkerId: 'proofreader_001',
-      approverId: 'reviewer_001',
+      checkerId: 'JH',
+      approverId: 'SH',
       priority: 'medium',
       components: [{ id: 'comp-1', name: 'BRAN-001', refNo: 'BRAN-001', type: 'pipe' }],
     });
 
     await store.submitTaskToNextNode(task.id, '发起编校审');
 
-    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ requesterId: 'designer_001' });
+    expect(reviewTaskGetListMock).toHaveBeenCalledWith({ requesterId: 'SJ' });
     expect(store.myInitiatedTasks.value.map((item) => item.id)).toContain('task-cross-1');
     expect(store.myInitiatedTasks.value[0]?.status).toBe('submitted');
     expect(store.myInitiatedTasks.value[0]?.currentNode).toBe('jd');
@@ -610,7 +660,7 @@ describe('review task websocket notifications', () => {
     const webSocketCtor = vi.fn(MockWebSocket as any);
 
     vi.stubGlobal('WebSocket', webSocketCtor as unknown as typeof WebSocket);
-    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SJ');
     userGetCurrentMock.mockResolvedValue({ success: false });
     reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
 
@@ -620,8 +670,8 @@ describe('review task websocket notifications', () => {
     store.connectWebSocket();
     onOpenHandlers.forEach((handler) => handler());
 
-    expect(getReviewUserWebSocketUrlMock).toHaveBeenCalledWith('designer_001');
-    expect(webSocketCtor).toHaveBeenCalledWith('ws://localhost/ws/review/user/designer_001');
+    expect(getReviewUserWebSocketUrlMock).toHaveBeenCalledWith('SJ');
+    expect(webSocketCtor).toHaveBeenCalledWith('ws://localhost/ws/review/user/SJ');
     expect(store.wsConnected.value).toBe(true);
   });
 
@@ -646,7 +696,7 @@ describe('review task websocket notifications', () => {
     const webSocketCtor = vi.fn(MockWebSocket as any);
 
     vi.stubGlobal('WebSocket', webSocketCtor as unknown as typeof WebSocket);
-    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SJ');
     reviewTaskGetListMock
       .mockResolvedValueOnce({ success: true, tasks: [], total: 0 })
       .mockResolvedValueOnce({
@@ -659,13 +709,13 @@ describe('review task websocket notifications', () => {
             modelName: 'Model-A',
             status: 'submitted',
             priority: 'medium',
-            requesterId: 'designer_001',
+            requesterId: 'SJ',
             requesterName: '王设计师',
-            checkerId: 'user-002',
+            checkerId: 'JH',
             checkerName: '李校核员',
-            approverId: 'manager_001',
+            approverId: 'SH',
             approverName: '陈经理',
-            reviewerId: 'user-002',
+            reviewerId: 'JH',
             reviewerName: '李校核员',
             components: [],
             createdAt: 1700000000000,
@@ -689,10 +739,12 @@ describe('review task websocket notifications', () => {
       }),
     });
 
-    await Promise.resolve();
-
-    expect(reviewTaskGetListMock).toHaveBeenCalledTimes(2);
-    expect(store.myInitiatedTasks.value.map((task) => task.id)).toContain('task-created-1');
+    await vi.waitFor(() => {
+      expect(reviewTaskGetListMock).toHaveBeenCalledTimes(2);
+    });
+    await vi.waitFor(() => {
+      expect(store.myInitiatedTasks.value.map((task) => task.id)).toContain('task-created-1');
+    });
   });
 
   it('deduplicates concurrent task_created refreshes so the new task appears after one reload', async () => {
@@ -713,7 +765,7 @@ describe('review task websocket notifications', () => {
     }
 
     vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
-    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SJ');
 
     let resolveRefresh: ((value: { success: true; tasks: any[]; total: number }) => void) | null = null;
     reviewTaskGetListMock
@@ -757,13 +809,13 @@ describe('review task websocket notifications', () => {
           modelName: 'Model-Dedupe',
           status: 'submitted',
           priority: 'medium',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'manager_001',
+          approverId: 'SH',
           approverName: '陈经理',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           components: [],
           createdAt: 1700000000000,
@@ -799,7 +851,7 @@ describe('review task websocket notifications', () => {
     const webSocketCtor = vi.fn(MockWebSocket as any);
 
     vi.stubGlobal('WebSocket', webSocketCtor as unknown as typeof WebSocket);
-    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SJ');
     reviewTaskGetListMock.mockResolvedValue({
       success: true,
       tasks: [
@@ -810,13 +862,13 @@ describe('review task websocket notifications', () => {
           modelName: 'Model-B',
           status: 'submitted',
           priority: 'high',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'manager_001',
+          approverId: 'SH',
           approverName: '陈经理',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           components: [],
           createdAt: 1700000000000,
@@ -843,13 +895,13 @@ describe('review task websocket notifications', () => {
             modelName: 'Model-B',
             status: 'in_review',
             priority: 'high',
-            requesterId: 'designer_001',
+            requesterId: 'SJ',
             requesterName: '王设计师',
-            checkerId: 'user-002',
+            checkerId: 'JH',
             checkerName: '李校核员',
-            approverId: 'manager_001',
+            approverId: 'SH',
             approverName: '陈经理',
-            reviewerId: 'user-002',
+            reviewerId: 'JH',
             reviewerName: '李校核员',
             components: [],
             createdAt: 1700000000000,
@@ -889,7 +941,7 @@ describe('review task websocket notifications', () => {
     }
 
     vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
-    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/reviewer_001');
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SH');
     userGetCurrentMock.mockResolvedValue({ success: false });
     reviewTaskGetListMock
       .mockResolvedValueOnce({ success: true, tasks: [], total: 0 })
@@ -903,13 +955,13 @@ describe('review task websocket notifications', () => {
             modelName: 'Model-Resubmit',
             status: 'submitted',
             priority: 'high',
-            requesterId: 'designer_001',
+            requesterId: 'SJ',
             requesterName: '王设计师',
-            checkerId: 'user-002',
+            checkerId: 'JH',
             checkerName: '李校核员',
-            approverId: 'user-002',
+            approverId: 'SH',
             approverName: '李审核员',
-            reviewerId: 'user-002',
+            reviewerId: 'JH',
             reviewerName: '李校核员',
             currentNode: 'sh',
             createdAt: 1700000000000,
@@ -918,7 +970,7 @@ describe('review task websocket notifications', () => {
               {
                 node: 'jd',
                 action: 'return',
-                operatorId: 'user-002',
+                operatorId: 'JH',
                 operatorName: '李校核员',
                 comment: '请补充材料',
                 timestamp: 1700000005000,
@@ -926,7 +978,7 @@ describe('review task websocket notifications', () => {
               {
                 node: 'sj',
                 action: 'submit',
-                operatorId: 'designer_001',
+                operatorId: 'SJ',
                 operatorName: '王设计师',
                 comment: '已补充后重新提交',
                 timestamp: 1700000009000,
@@ -941,7 +993,7 @@ describe('review task websocket notifications', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('reviewer_001');
+    await store.switchUser('SH');
     store.connectWebSocket();
 
     sockets[0]?.onmessage?.({
@@ -955,13 +1007,13 @@ describe('review task websocket notifications', () => {
             model_name: 'Model-Resubmit',
             status: 'submitted',
             priority: 'high',
-            requester_id: 'designer_001',
+            requester_id: 'SJ',
             requester_name: '王设计师',
-            checker_id: 'user-002',
+            checker_id: 'JH',
             checker_name: '李校核员',
-            approver_id: 'user-002',
+            approver_id: 'SH',
             approver_name: '李审核员',
-            reviewer_id: 'user-002',
+            reviewer_id: 'JH',
             reviewer_name: '李校核员',
             current_node: 'sh',
             created_at: 1700000000000,
@@ -970,7 +1022,7 @@ describe('review task websocket notifications', () => {
               {
                 node: 'jd',
                 action: 'return',
-                operator_id: 'user-002',
+                operator_id: 'JH',
                 operator_name: '李校核员',
                 comment: '请补充材料',
                 timestamp: 1700000005000,
@@ -978,7 +1030,7 @@ describe('review task websocket notifications', () => {
               {
                 node: 'sj',
                 action: 'submit',
-                operator_id: 'designer_001',
+                operator_id: 'SJ',
                 operator_name: '王设计师',
                 comment: '已补充后重新提交',
                 timestamp: 1700000009000,
@@ -1033,7 +1085,7 @@ describe('review task websocket notifications', () => {
     }
 
     vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
-    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/designer_001');
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SJ');
     reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
 
     const { useUserStore } = await import('./useUserStore');
@@ -1052,13 +1104,13 @@ describe('review task websocket notifications', () => {
             model_name: 'Model-C',
             status: 'draft',
             priority: 'medium',
-            requester_id: 'designer_001',
+            requester_id: 'SJ',
             requester_name: '王设计师',
-            checker_id: 'user-002',
+            checker_id: 'JH',
             checker_name: '李校核员',
-            approver_id: 'manager_001',
+            approver_id: 'SH',
             approver_name: '陈经理',
-            reviewer_id: 'user-002',
+            reviewer_id: 'JH',
             reviewer_name: '李校核员',
             current_node: 'sj',
             return_reason: '请补充尺寸',
@@ -1069,7 +1121,7 @@ describe('review task websocket notifications', () => {
               {
                 node: 'jd',
                 action: 'return',
-                operator_id: 'user-002',
+                operator_id: 'JH',
                 operator_name: '李校核员',
                 comment: '请补充尺寸',
                 timestamp: 1700000008000,
@@ -1085,7 +1137,7 @@ describe('review task websocket notifications', () => {
     expect(store.myInitiatedTasks.value.find((task) => task.id === 'task-returned-1')).toEqual(
       expect.objectContaining({
         modelName: 'Model-C',
-        requesterId: 'designer_001',
+        requesterId: 'SJ',
         currentNode: 'sj',
         returnReason: '请补充尺寸',
         status: 'draft',
@@ -1112,14 +1164,14 @@ describe('review task websocket notifications', () => {
     }
 
     vi.stubGlobal('WebSocket', vi.fn(MockWebSocket as any) as unknown as typeof WebSocket);
-    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/reviewer_001');
+    getReviewUserWebSocketUrlMock.mockReturnValue('ws://localhost/ws/review/user/SH');
     userGetCurrentMock.mockResolvedValue({ success: false });
     reviewTaskGetListMock.mockResolvedValue({ success: true, tasks: [], total: 0 });
 
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('reviewer_001');
+    await store.switchUser('SH');
     store.connectWebSocket();
     sockets[0]?.onmessage?.({
       data: JSON.stringify({
@@ -1132,13 +1184,13 @@ describe('review task websocket notifications', () => {
             model_name: 'Model-D',
             status: 'rejected',
             priority: 'high',
-            requester_id: 'designer_001',
+            requester_id: 'SJ',
             requester_name: '王设计师',
-            checker_id: 'user-002',
+            checker_id: 'JH',
             checker_name: '李校核员',
-            reviewer_id: 'user-002',
+            reviewer_id: 'JH',
             reviewer_name: '李校核员',
-            approver_id: 'user-002',
+            approver_id: 'SH',
             approver_name: '李审核员',
             current_node: 'sh',
             created_at: 1700000000000,
@@ -1154,7 +1206,7 @@ describe('review task websocket notifications', () => {
     expect(store.pendingReviewTasks.value.find((task) => task.id === 'task-reviewer-returned-1')).toEqual(
       expect.objectContaining({
         currentNode: 'sh',
-        approverId: 'user-002',
+        approverId: 'SH',
         status: 'rejected',
       })
     );
@@ -1170,13 +1222,13 @@ describe('normalizeReviewTask', () => {
       model_name: 'Model-N',
       status: 'draft',
       priority: 'medium',
-      requester_id: 'designer_001',
+      requester_id: 'SJ',
       requester_name: '王设计师',
-      reviewer_id: 'user-002',
+      reviewer_id: 'JH',
       reviewer_name: '李校核员',
-      checker_id: 'user-002',
+      checker_id: 'JH',
       checker_name: '李校核员',
-      approver_id: 'manager_001',
+      approver_id: 'SH',
       approver_name: '陈经理',
       current_node: 'sj',
       return_reason: '请修改',
@@ -1188,7 +1240,7 @@ describe('normalizeReviewTask', () => {
         {
           node: 'jd',
           action: 'return',
-          operator_id: 'user-002',
+          operator_id: 'JH',
           operator_name: '李校核员',
           comment: '请修改',
           timestamp: 1700000000500,
@@ -1198,16 +1250,16 @@ describe('normalizeReviewTask', () => {
 
     expect(task).toEqual(expect.objectContaining({
       modelName: 'Model-N',
-      requesterId: 'designer_001',
-      reviewerId: 'user-002',
-      checkerId: 'user-002',
-      approverId: 'manager_001',
+      requesterId: 'SJ',
+      reviewerId: 'JH',
+      checkerId: 'JH',
+      approverId: 'SH',
       currentNode: 'sj',
       returnReason: '请修改',
       reviewComment: '请修改',
     }));
     expect(task.workflowHistory?.[0]).toEqual(expect.objectContaining({
-      operatorId: 'user-002',
+      operatorId: 'JH',
       operatorName: '李校核员',
     }));
   });
@@ -1287,16 +1339,16 @@ describe('normalizeBackendUser', () => {
 });
 
 describe('switch user auth helpers', () => {
-  it('resolves aliased local reviewer ids to backend-visible ids for task matching', () => {
-    expect(resolveEffectiveUserId({ id: 'reviewer_001' })).toBe('user-002');
-    expect(resolveEffectiveUserId({ id: 'user-002' })).toBe('user-002');
+  it('uses the selected HumanCode directly for task matching', () => {
+    expect(resolveEffectiveUserId({ id: 'SH' })).toBe('SH');
+    expect(resolveEffectiveUserId({ id: 'reviewer_001' })).toBe('reviewer_001');
     expect(resolveEffectiveUserId(null)).toBeNull();
   });
 
-  it('maps the local reviewer identity to the seeded backend reviewer user id', () => {
+  it('does not map HumanCode reviewer identity to legacy seeded ids', () => {
     const request = buildSwitchUserTokenRequest(
       {
-        id: 'reviewer_001',
+        id: 'SH',
         username: 'reviewer',
         email: 'reviewer@example.com',
         name: '审核员',
@@ -1308,14 +1360,14 @@ describe('switch user auth helpers', () => {
       'project-123',
     );
 
-    expect(request.userId).toBe('user-002');
+    expect(request.userId).toBe('SH');
     expect(request.role).toBe('sh');
   });
 
   it('builds a token request using backend workflow role codes', () => {
     const request = buildSwitchUserTokenRequest(
       {
-        id: 'reviewer_001',
+        id: 'SH',
         username: 'reviewer',
         email: 'reviewer@example.com',
         name: '审核员',
@@ -1329,7 +1381,7 @@ describe('switch user auth helpers', () => {
 
     expect(request).toEqual({
       projectId: 'project-123',
-      userId: 'user-002',
+      userId: 'SH',
       role: 'sh',
     });
   });
@@ -1352,12 +1404,12 @@ describe('switch user auth helpers', () => {
     expect(projectId).toBe('debug-project');
   });
 
-  it('keeps the aliased reviewer identity after backend reload so jd-stage inbox tasks still materialize', async () => {
+  it('keeps the HumanCode reviewer identity after backend reload so sh-stage inbox tasks still materialize', async () => {
     authGetTokenMock.mockResolvedValue({ success: true, token: 'token-reviewer' });
     userGetCurrentMock.mockResolvedValue({
       success: true,
       user: {
-        id: 'user-002',
+        id: 'SH',
         username: 'reviewer',
         email: 'reviewer@example.com',
         name: '李审核员',
@@ -1374,13 +1426,13 @@ describe('switch user auth helpers', () => {
           modelName: 'Hull',
           status: 'submitted',
           priority: 'high',
-          requesterId: 'designer_001',
+          requesterId: 'SJ',
           requesterName: '王设计师',
-          checkerId: 'user-002',
+          checkerId: 'JH',
           checkerName: '李校核员',
-          approverId: 'user-002',
+          approverId: 'SH',
           approverName: '李审核员',
-          reviewerId: 'user-002',
+          reviewerId: 'JH',
           reviewerName: '李校核员',
           currentNode: 'sh',
           components: [],
@@ -1394,9 +1446,9 @@ describe('switch user auth helpers', () => {
     const { useUserStore } = await import('./useUserStore');
     const store = useUserStore();
 
-    await store.switchUser('reviewer_001');
+    await store.switchUser('SH');
 
-    expect(store.currentUserId.value).toBe('reviewer_001');
+    expect(store.currentUserId.value).toBe('SH');
     expect(store.currentUser.value?.role).toBe(UserRole.REVIEWER);
     expect(store.isChecker.value).toBe(true);
     expect(store.isApprover.value).toBe(false);

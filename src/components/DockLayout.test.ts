@@ -59,6 +59,7 @@ type PanelStub = {
 };
 
 const dockPanels = new Map<string, PanelStub>();
+const addPanelFailures = new Map<string, Error>();
 const activatedPanels: string[] = [];
 let lastDockApi: ReturnType<typeof createDockApi> | null = null;
 
@@ -84,6 +85,8 @@ function createPanel(id: string): PanelStub {
 function createDockApi() {
   const dockApi = {
     addPanel: vi.fn((options: { id: string }) => {
+      const failure = addPanelFailures.get(options.id);
+      if (failure) throw failure;
       const panel = createPanel(options.id);
       dockPanels.set(options.id, panel);
       return panel;
@@ -302,6 +305,7 @@ describe('DockLayout embed bootstrap', () => {
   beforeEach(() => {
     vi.resetModules();
     dockPanels.clear();
+    addPanelFailures.clear();
     activatedPanels.length = 0;
     lastDockApi = null;
     document.body.innerHTML = '';
@@ -351,6 +355,9 @@ describe('DockLayout embed bootstrap', () => {
     });
     restoreEmbedFormSnapshotContextMock.mockResolvedValue({
       modelRefnos: [],
+      recordCount: 0,
+      attachmentCount: 0,
+      attachments: [],
       task: createTask(),
     });
     waitForViewerReadyMock.mockResolvedValue(true);
@@ -478,6 +485,63 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
+  it('设计端被动恢复未匹配内部任务但 workflow/sync 有批注记录时仍进入批注处理', async () => {
+    returnedInitiatedTasksRef.value = [];
+    reviewTasksRef.value = [];
+    restoreEmbedWorkbenchContextMock.mockResolvedValue({
+      target: 'designer',
+      restoreStatus: 'missing',
+      restoredTaskId: null,
+      restoredTaskSummary: null,
+      restoredTaskDraft: null,
+      restoredTask: null,
+    });
+    restoreEmbedFormSnapshotContextMock.mockResolvedValue({
+      modelRefnos: ['24381_141703'],
+      recordCount: 2,
+      attachmentCount: 0,
+      attachments: [],
+      task: null,
+    });
+
+    window.history.replaceState({}, '', '/?user_token=jwt-designer&workflow_mode=external&form_id=FORM-FB4EF9F13DF1');
+    authVerifyTokenMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: {
+        valid: true,
+        claims: {
+          projectId: 'PROJECT-CLAIMS',
+          userId: 'U020',
+          formId: 'FORM-FB4EF9F13DF1',
+          role: 'sj',
+          workflowMode: 'external',
+          exp: 1999999999,
+          iat: 1700000000,
+        },
+      },
+    });
+
+    const mounted = await mountDockLayout();
+
+    expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
+      target: 'designer',
+      formId: 'FORM-FB4EF9F13DF1',
+      passiveWorkflowMode: true,
+    }));
+    expect(dockPanels.has('designerCommentHandling')).toBe(true);
+    expect(activatedPanels).toContain('designerCommentHandling');
+    expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
+      target: 'designer',
+      formId: 'FORM-FB4EF9F13DF1',
+      primaryPanelId: 'designerCommentHandling',
+      visiblePanelIds: ['designerCommentHandling'],
+      restoreStatus: 'missing',
+    });
+
+    mounted.unmount();
+  });
+
   it('嵌入模式忽略普通布局缓存并重建 reviewer 精简布局', async () => {
     localStorage.setItem('plant3d-web-dock-layout-v3', JSON.stringify({
       grid: {},
@@ -521,6 +585,42 @@ describe('DockLayout embed bootstrap', () => {
     expect(dockPanels.has('measurement')).toBe(false);
     expect(dockPanels.has('initiateReview')).toBe(false);
 
+    mounted.unmount();
+  });
+
+  it('嵌入模式下主面板遇到无效 grid 不阻断基础布局', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    addPanelFailures.set('initiateReview', new Error('Invalid grid element'));
+    window.history.replaceState({}, '', '/?user_token=jwt-designer&workflow_mode=external');
+    authVerifyTokenMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: {
+        valid: true,
+        claims: {
+          projectId: 'PROJECT-CLAIMS',
+          userId: 'designer-1',
+          formId: 'FORM-CLAIMS-1',
+          role: 'sj',
+          workflowMode: 'external',
+          exp: 1999999999,
+          iat: 1700000000,
+        },
+      },
+    });
+
+    const mounted = await mountDockLayout();
+
+    expect(lastDockApi?.fromJSON).not.toHaveBeenCalled();
+    expect(Array.from(dockPanels.keys())).toEqual(expect.arrayContaining([
+      'viewer',
+      'modelTree',
+    ]));
+    expect(dockPanels.has('initiateReview')).toBe(false);
+    expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to open panel'));
+    expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to create panel'));
+
+    errorSpy.mockRestore();
     mounted.unmount();
   });
 

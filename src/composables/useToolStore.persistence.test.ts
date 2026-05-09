@@ -340,6 +340,170 @@ describe('useToolStore - persistence', () => {
     });
   });
 
+  it('should isolate annotation comments per formId bucket', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addAnnotation({
+      id: 'text-form',
+      entityId: 'entity-form',
+      worldPos: [1, 1, 1],
+      visible: true,
+      glyph: 'F',
+      title: 'Text Form',
+      description: '',
+      createdAt: 1,
+    });
+
+    store.setAnnotationComments(
+      'text',
+      'text-form',
+      [
+        {
+          id: 'c-form-1',
+          annotationId: 'text-form',
+          annotationType: 'text',
+          authorId: 'u-1',
+          authorName: 'A',
+          authorRole: 'designer',
+          content: 'comment in form 1',
+          createdAt: 10,
+        },
+      ],
+      'FORM-1',
+    );
+    store.setAnnotationComments(
+      'text',
+      'text-form',
+      [
+        {
+          id: 'c-form-2',
+          annotationId: 'text-form',
+          annotationType: 'text',
+          authorId: 'u-1',
+          authorName: 'A',
+          authorRole: 'designer',
+          content: 'comment in form 2',
+          createdAt: 11,
+        },
+      ],
+      'FORM-2',
+    );
+    store.setAnnotationComments(
+      'text',
+      'text-form',
+      [
+        {
+          id: 'c-unscoped',
+          annotationId: 'text-form',
+          annotationType: 'text',
+          authorId: 'u-1',
+          authorName: 'A',
+          authorRole: 'designer',
+          content: 'unscoped comment',
+          createdAt: 12,
+        },
+      ],
+    );
+
+    expect(store.getAnnotationComments('text', 'text-form', 'FORM-1').map((c) => c.id)).toEqual(['c-form-1']);
+    expect(store.getAnnotationComments('text', 'text-form', 'FORM-2').map((c) => c.id)).toEqual(['c-form-2']);
+    expect(store.getAnnotationComments('text', 'text-form').map((c) => c.id)).toEqual(['c-unscoped']);
+  });
+
+  it('should not fall back to the unscoped bucket when reading annotation comments with a formId', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addAnnotation({
+      id: 'text-only-unscoped',
+      entityId: 'entity-only-unscoped',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: 'U',
+      title: 'Unscoped only',
+      description: '',
+      createdAt: 1,
+    });
+
+    store.setAnnotationComments(
+      'text',
+      'text-only-unscoped',
+      [
+        {
+          id: 'c-unscoped',
+          annotationId: 'text-only-unscoped',
+          annotationType: 'text',
+          authorId: 'u-1',
+          authorName: 'A',
+          authorRole: 'designer',
+          content: 'unscoped comment',
+          createdAt: 5,
+        },
+      ],
+    );
+
+    expect(store.getAnnotationComments('text', 'text-only-unscoped').map((c) => c.id)).toEqual(['c-unscoped']);
+    expect(store.getAnnotationComments('text', 'text-only-unscoped', 'FORM-NEW')).toEqual([]);
+  });
+
+  it('should isolate annotation comments per formId and taskId bucket', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addAnnotation({
+      id: 'text-task',
+      entityId: 'entity-task',
+      worldPos: [2, 2, 2],
+      visible: true,
+      glyph: 'T',
+      title: 'Task scoped',
+      description: '',
+      createdAt: 1,
+    });
+
+    store.setAnnotationComments(
+      'text',
+      'text-task',
+      [
+        {
+          id: 'c-task-1',
+          annotationId: 'text-task',
+          annotationType: 'text',
+          authorId: 'u-1',
+          authorName: 'A',
+          authorRole: 'designer',
+          content: 'comment in task 1',
+          createdAt: 10,
+        },
+      ],
+      'FORM-1',
+      'task-1',
+    );
+    store.setAnnotationComments(
+      'text',
+      'text-task',
+      [
+        {
+          id: 'c-task-2',
+          annotationId: 'text-task',
+          annotationType: 'text',
+          authorId: 'u-1',
+          authorName: 'A',
+          authorRole: 'designer',
+          content: 'comment in task 2',
+          createdAt: 11,
+        },
+      ],
+      'FORM-1',
+      'task-2',
+    );
+
+    expect(store.getAnnotationComments('text', 'text-task', 'FORM-1', 'task-1').map((c) => c.id)).toEqual(['c-task-1']);
+    expect(store.getAnnotationComments('text', 'text-task', 'FORM-1', 'task-2').map((c) => c.id)).toEqual(['c-task-2']);
+    expect(store.getAnnotationComments('text', 'text-task', 'FORM-1')).toEqual([]);
+  });
+
   it('should support annotation batch visibility and clear helpers without touching measurements', async () => {
     const store = await loadStore();
     store.clearAll();

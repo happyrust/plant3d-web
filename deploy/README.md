@@ -36,6 +36,25 @@ BACKEND_ORIGIN=http://127.0.0.1:3100 \
 
 兼容入口 `deploy_remote.sh` 仍可使用，但其内部已转发到 `deploy_frontend_bundle.sh`。
 
+## GitHub Actions（Ubuntu CI）
+
+仓库已提供可手动触发的 workflow：`Deploy Frontend To Ubuntu`（见 `.github/workflows/deploy-ubuntu.yml`）。
+
+使用前先在 GitHub 仓库配置：
+
+- Variables:
+  - `DEPLOY_REMOTE_HOST`
+  - `DEPLOY_REMOTE_USER`（可选，默认 `root`）
+  - `DEPLOY_PATH`（可选，默认 `/var/www/plant3d-web`）
+  - `SERVER_NAME`（可选，默认与 host 相同）
+  - `BACKEND_ORIGIN`（可选，默认 `http://127.0.0.1:3100`）
+- Secrets:
+  - `DEPLOY_REMOTE_PASS`
+
+触发方式：
+
+- GitHub → Actions → `Deploy Frontend To Ubuntu` → Run workflow（可在表单里覆盖 remote_host / deploy_path 等）。
+
 ## 与后端联动
 
 若在 `plant-model-gen` 仓库执行：

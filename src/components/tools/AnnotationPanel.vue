@@ -7,11 +7,11 @@ import {
   reviewAttachmentDelete,
   reviewCommentCreate,
   reviewCommentDelete,
-  reviewCommentGetByAnnotation,
   reviewCommentUpdate,
 } from '@/api/reviewApi';
 import ReviewCommentsPanel from '@/components/review/ReviewCommentsPanel.vue';
 import ReviewCommentsTimeline from '@/components/review/ReviewCommentsTimeline.vue';
+import { useCommentThread } from '@/composables/useCommentThread';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useScreenshot } from '@/composables/useScreenshot';
 import {
@@ -459,7 +459,10 @@ async function handleChangeSeverity(event: Event) {
   const prev = (active.record as { severity?: AnnotationSeverity }).severity;
 
   const { saveAnnotationSeverity } = await import('@/composables/useAnnotationSeveritySync');
-  const ok = await saveAnnotationSeverity(active.type, active.id, next);
+  const ok = await saveAnnotationSeverity(active.type, active.id, next, {
+    formId: reviewStore.currentTask.value?.formId ?? null,
+    taskId: reviewStore.currentTask.value?.id ?? null,
+  });
   if (!ok) {
     target.value = prev ?? '';
   }
@@ -537,11 +540,33 @@ const activeAnnotationType = computed<AnnotationType | null>(() => {
   return null;
 });
 
-// 获取当前选中批注的评论列表
-const activeComments = computed<AnnotationComment[]>(() => {
-  if (!activeAny.value || !activeAnnotationType.value) return [];
-  return store.getAnnotationComments(activeAnnotationType.value, activeAny.value.id);
+/**
+ * 当前批注评论的正式单据上下文。
+ *
+ * 来源 `reviewStore.currentTask`：在工具面板里我们没有更细的任务上下文，
+ * 但仍要按 form_id / task_id 切片读写，避免和其他单据的评论互相覆盖。
+ */
+const annotationCommentContextFormId = computed<string | null>(() => {
+  const value = reviewStore.currentTask.value?.formId;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
 });
+const annotationCommentContextTaskId = computed<string | null>(() => {
+  const value = reviewStore.currentTask.value?.id;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+});
+
+const {
+  comments: activeComments,
+} = useCommentThread(() => ({
+  annotationType: activeAnnotationType.value,
+  annotationId: activeAny.value?.id ?? null,
+  formId: annotationCommentContextFormId.value,
+  taskId: annotationCommentContextTaskId.value,
+}));
 
 // 按角色分组的评论
 const commentsByRole = computed(() => {
@@ -575,30 +600,6 @@ function getRoleInlineStyle(role: UserRole): Record<string, string> {
   };
 }
 
-async function loadCommentsForListView() {
-  if (commentsViewMode.value !== 'list') return;
-  if (!activeAny.value || !activeAnnotationType.value) return;
-  const annType = activeAnnotationType.value;
-  const annId = activeAny.value.id;
-  try {
-    const resp = await reviewCommentGetByAnnotation(annId, annType);
-    if (resp.success && resp.comments) {
-      const normalized = [...resp.comments].sort((a, b) => a.createdAt - b.createdAt);
-      store.setAnnotationComments(annType, annId, normalized);
-    }
-  } catch {
-    // 列表模式拉取失败时保留本地缓存
-  }
-}
-
-watch(
-  () => [commentsViewMode.value, activeAnnotationType.value, activeAny.value?.id],
-  () => {
-    void loadCommentsForListView();
-  },
-  { immediate: true }
-);
-
 // 添加评论
 async function addComment() {
   if (!newCommentContent.value.trim()) return;
@@ -612,6 +613,8 @@ async function addComment() {
 
   const annType = activeAnnotationType.value;
   const annId = activeAny.value.id;
+  const formId = annotationCommentContextFormId.value;
+  const taskId = annotationCommentContextTaskId.value;
 
   try {
     const resp = await reviewCommentCreate({
@@ -622,9 +625,11 @@ async function addComment() {
       authorRole: user.role,
       content,
       replyToId,
+      formId: formId ?? undefined,
+      taskId: taskId ?? undefined,
     });
     if (resp.success && resp.comment) {
-      store.addCommentToAnnotation(annType, annId, resp.comment);
+      store.addCommentToAnnotation(annType, annId, resp.comment, formId, taskId);
     } else {
       emitToast({ message: resp.error_message || '评论发送失败，请重试', level: 'warning' });
       return;
@@ -652,14 +657,19 @@ async function saveEditComment() {
   const commentId = editingCommentId.value;
   const annType = activeAnnotationType.value;
   const annId = activeAny.value.id;
+  const formId = annotationCommentContextFormId.value;
+  const taskId = annotationCommentContextTaskId.value;
   const prevContent = activeComments.value.find(c => c.id === commentId)?.content;
 
-  store.updateAnnotationComment(annType, annId, commentId, { content });
+  store.updateAnnotationComment(annType, annId, commentId, { content }, formId, taskId);
 
   try {
-    const resp = await reviewCommentUpdate(commentId, content);
+    const resp = await reviewCommentUpdate(commentId, content, {
+      formId: formId ?? undefined,
+      taskId: taskId ?? undefined,
+    });
     if (resp && resp.success === false) {
-      store.updateAnnotationComment(annType, annId, commentId, { content: prevContent });
+      store.updateAnnotationComment(annType, annId, commentId, { content: prevContent }, formId, taskId);
       emitToast({ message: resp.error_message || '评论更新被拒绝，已回滚', level: 'warning' });
     }
   } catch {
@@ -681,14 +691,19 @@ async function deleteComment(commentId: string) {
 
   const annType = activeAnnotationType.value;
   const annId = activeAny.value.id;
+  const formId = annotationCommentContextFormId.value;
+  const taskId = annotationCommentContextTaskId.value;
 
   try {
-    await reviewCommentDelete(commentId);
+    await reviewCommentDelete(commentId, {
+      formId: formId ?? undefined,
+      taskId: taskId ?? undefined,
+    });
   } catch {
     // 后端失败降级本地
   }
 
-  store.removeAnnotationComment(annType, annId, commentId);
+  store.removeAnnotationComment(annType, annId, commentId, formId, taskId);
 }
 
 // 设置回复目标
@@ -1201,13 +1216,17 @@ function formatCommentTime(timestamp: number): string {
       <div v-else-if="commentsViewMode === 'timeline'" class="mt-3">
         <ReviewCommentsTimeline :annotation-type="activeAnnotationType"
           :annotation-id="activeAny?.id || null"
-          :annotation-label="activeAny ? currentSelectionSummary : undefined" />
+          :annotation-label="activeAny ? currentSelectionSummary : undefined"
+          :context-form-id="annotationCommentContextFormId"
+          :context-task-id="annotationCommentContextTaskId" />
       </div>
 
       <!-- 三栏视图 -->
       <div v-else-if="commentsViewMode === 'columns'" class="mt-3">
         <ReviewCommentsPanel :annotation-type="activeAnnotationType"
-          :annotation-id="activeAny?.id || null" />
+          :annotation-id="activeAny?.id || null"
+          :context-form-id="annotationCommentContextFormId"
+          :context-task-id="annotationCommentContextTaskId" />
       </div>
 
       <!-- 列表视图 (原有逻辑) -->

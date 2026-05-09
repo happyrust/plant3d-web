@@ -288,10 +288,14 @@ function toSpatialItemFromApi(item: ApiSpatialQueryResultItem, loaded: boolean, 
 
 function syncResultSetSummary(current: SpatialQueryResultSet): SpatialQueryResultSet {
   const items = sortItems(current.items, current.request.sortBy);
+  const total = Math.max(current.total, items.length);
+  const perPage = Math.max(1, current.perPage || current.request.limit || items.length || 1);
   return {
     ...current,
     items,
-    total: items.length,
+    total,
+    returnedCount: items.length,
+    totalPages: Math.max(1, Math.ceil(total / perPage)),
     loadedCount: items.filter((item) => item.loaded).length,
     unloadedCount: items.filter((item) => !item.loaded).length,
     groups: buildGroups(items),
@@ -682,61 +686,77 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const merged = new Map<string, SpatialQueryResultItem>();
     const loadedRefnos = new Set(localItems.map((item) => item.refno));
     const warnings: string[] = [];
+    const localByRefno = new Map(localItems.map((item) => [item.refno, item]));
+    const serverResults = serverResp?.results ?? [];
+    const page = Math.max(1, Math.floor(serverResp?.page ?? 1));
+    const perPage = Math.max(1, Math.floor(serverResp?.per_page ?? request.limit));
+    const hasMore = Boolean(serverResp?.has_more ?? serverResp?.truncated ?? false);
 
-    for (const item of localItems) {
-      merged.set(item.refno, item);
-    }
-
-    if (serverResp?.truncated) {
-      warnings.push('服务端结果已按最大结果数截断');
-    }
-
-    for (const raw of serverResp?.results ?? []) {
-      const existing = merged.get(raw.refno);
-      const visible = existing?.visible ?? true;
-      const loaded = loadedRefnos.has(raw.refno);
-      const normalized = toSpatialItemFromApi(raw, loaded, visible);
-
-      if (existing) {
-        merged.set(raw.refno, {
-          ...normalized,
-          ...existing,
-          noun: existing.noun !== 'UNKNOWN' ? existing.noun : normalized.noun,
-          specValue: existing.specValue !== 0 ? existing.specValue : normalized.specValue,
-          specName: existing.specValue !== 0 ? existing.specName : normalized.specName,
-          distance: existing.distance ?? normalized.distance,
-          matchedBy: 'merged',
-          bbox: existing.bbox ?? normalized.bbox,
-          position: existing.position ?? normalized.position,
-          loaded: true,
-        });
-        continue;
+    if (serverResp) {
+      if (hasMore) {
+        warnings.push('服务端还有更多结果，请使用分页继续查看');
+      } else if (serverResp.truncated) {
+        warnings.push('服务端结果已按当前页数量返回');
       }
 
-      if (!matchFilters({
-        refno: normalized.refno,
-        noun: normalized.noun,
-        specValue: normalized.specValue,
-        loaded: normalized.loaded,
-        visible: normalized.visible,
-      }, request.filters)) {
-        continue;
-      }
+      for (const raw of serverResults) {
+        const existing = localByRefno.get(raw.refno);
+        const visible = existing?.visible ?? true;
+        const loaded = loadedRefnos.has(raw.refno);
+        const normalized = toSpatialItemFromApi(raw, loaded, visible);
 
-      merged.set(raw.refno, normalized);
+        if (existing) {
+          merged.set(raw.refno, {
+            ...normalized,
+            ...existing,
+            noun: existing.noun !== 'UNKNOWN' ? existing.noun : normalized.noun,
+            specValue: existing.specValue !== 0 ? existing.specValue : normalized.specValue,
+            specName: existing.specValue !== 0 ? existing.specName : normalized.specName,
+            distance: existing.distance ?? normalized.distance,
+            matchedBy: 'merged',
+            bbox: existing.bbox ?? normalized.bbox,
+            position: existing.position ?? normalized.position,
+            loaded: true,
+          });
+          continue;
+        }
+
+        if (!matchFilters({
+          refno: normalized.refno,
+          noun: normalized.noun,
+          specValue: normalized.specValue,
+          loaded: normalized.loaded,
+          visible: normalized.visible,
+        }, request.filters)) {
+          continue;
+        }
+
+        merged.set(raw.refno, normalized);
+      }
+    } else {
+      for (const item of localItems) {
+        merged.set(item.refno, item);
+      }
     }
 
-    const items = sortItems(Array.from(merged.values()), request.sortBy).slice(0, request.limit);
+    const items = sortItems(Array.from(merged.values()), request.sortBy);
+    const inferredTotal = hasMore ? Math.max(items.length, page * perPage + 1) : items.length;
+    const total = Math.max(serverResp?.total_count ?? inferredTotal, items.length);
     const loadedCount = items.filter((item) => item.loaded).length;
     const unloadedCount = items.length - loadedCount;
 
     return {
       request,
       items,
-      total: items.length,
+      page,
+      perPage,
+      returnedCount: serverResp?.returned_count ?? items.length,
+      totalPages: Math.max(1, Math.ceil(total / perPage)),
+      hasMore,
+      total,
       loadedCount,
       unloadedCount,
-      truncated: !!serverResp?.truncated,
+      truncated: hasMore,
       warnings,
       groups: buildGroups(items),
     };
@@ -785,7 +805,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     return { request: normalizeRequestFromCenter(draft.center, centerSource) };
   }
 
-  async function submitQuery() {
+  async function submitQuery(page = 1) {
     error.value = null;
     activeResultRefno.value = null;
 
@@ -805,6 +825,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         nouns: request.filters.nouns.length > 0 ? request.filters.nouns.join(',') : undefined,
         spec_values: request.filters.specValues.length > 0 ? request.filters.specValues.join(',') : undefined,
         max_results: request.limit,
+        page,
+        per_page: request.limit,
         shape: request.shape,
       };
 
@@ -817,6 +839,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           nouns: serverOptions.nouns,
           spec_values: serverOptions.spec_values,
           max_results: serverOptions.max_results,
+          page: serverOptions.page,
+          per_page: serverOptions.per_page,
           shape: serverOptions.shape,
         });
       } else {

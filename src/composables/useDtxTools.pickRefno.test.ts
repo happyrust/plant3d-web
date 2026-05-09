@@ -10,6 +10,8 @@ import {
   isDtxInteractionReady,
   resolvePickedRefnoForFilter,
   resolveTextAnnotationMarkerClickAction,
+  resolveTextAnnotationMarkerDoubleClickAction,
+  resolveTextAnnotationMarkerSingleClickAction,
   useDtxTools,
 } from './useDtxTools';
 import { useToolStore } from './useToolStore';
@@ -216,15 +218,47 @@ describe('computeCloudLayout', () => {
 
 describe('resolveTextAnnotationMarkerClickAction', () => {
   it('已最小化的文字批注水滴图钉，单击后应恢复展开并保持选中', () => {
-    const result = resolveTextAnnotationMarkerClickAction(
-      null,
-      'anno-1',
-      1000,
-      true,
-    );
+    const result = resolveTextAnnotationMarkerSingleClickAction(true);
 
     expect(result.activate).toBe(true);
     expect(result.nextCollapsed).toBe(false);
+    expect(result.nextState).toBeNull();
+  });
+
+  it('已展开的文字批注图钉，单击只选中不收起', () => {
+    const result = resolveTextAnnotationMarkerSingleClickAction(false);
+
+    expect(result.activate).toBe(true);
+    expect(result.nextCollapsed).toBeNull();
+    expect(result.nextState).toBeNull();
+  });
+
+  it('已展开的文字批注图钉，双击后收起', () => {
+    const result = resolveTextAnnotationMarkerDoubleClickAction(false);
+
+    expect(result.activate).toBe(true);
+    expect(result.nextCollapsed).toBe(true);
+    expect(result.nextState).toBeNull();
+  });
+
+  it('已收起的文字批注图钉，双击后展开', () => {
+    const result = resolveTextAnnotationMarkerDoubleClickAction(true);
+
+    expect(result.activate).toBe(true);
+    expect(result.nextCollapsed).toBe(false);
+    expect(result.nextState).toBeNull();
+  });
+
+  it('兼容旧 helper 名称时仍按单击语义处理，不把二次点击当详情入口', () => {
+    const result = resolveTextAnnotationMarkerClickAction(
+      { annotationId: 'anno-1', timestamp: 1000 },
+      'anno-1',
+      1100,
+      false,
+    );
+
+    expect(result.activate).toBe(true);
+    expect(result.nextCollapsed).toBeNull();
     expect(result.nextState).toBeNull();
   });
 });

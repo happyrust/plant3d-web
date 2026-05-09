@@ -23,6 +23,7 @@ const activeCloudAnnotationIdRef = ref<string | null>(null);
 const activeRectAnnotationIdRef = ref<string | null>(null);
 const activeObbAnnotationIdRef = ref<string | null>(null);
 const annotationProcessingEntryTargetRef = ref<any>(null);
+const confirmedRecordsRestorerOptions: any[] = [];
 
 const loadReviewTasksMock = vi.fn(async () => undefined);
 const setCurrentTaskMock = vi.fn(async (task: ReviewTask | null) => {
@@ -72,11 +73,14 @@ function setExternalEntryTarget(target: {
 }
 
 vi.mock('./confirmedRecordsRestore', () => ({
-  createConfirmedRecordsRestorer: () => ({
-    currentTaskRecords: computed(() => confirmedRecordsRef.value as any[]),
-    lastRestoredSceneKey: ref<string | null>(null),
-    restoreConfirmedRecordsIntoScene: restoreConfirmedRecordsIntoSceneMock,
-  }),
+  createConfirmedRecordsRestorer: (options: unknown) => {
+    confirmedRecordsRestorerOptions.push(options);
+    return {
+      currentTaskRecords: computed(() => confirmedRecordsRef.value as any[]),
+      lastRestoredSceneKey: ref<string | null>(null),
+      restoreConfirmedRecordsIntoScene: restoreConfirmedRecordsIntoSceneMock,
+    };
+  },
 }));
 
 vi.mock('./annotationProcessingEntry', () => ({
@@ -289,6 +293,7 @@ describe('DesignerCommentHandlingPanel', () => {
     persistenceState.clear();
     persistenceStorageKeys.length = 0;
     annotationProcessingEntryTargetRef.value = null;
+    confirmedRecordsRestorerOptions.length = 0;
     currentTaskRef.value = null;
     returnedTasksRef.value = [createTask()];
     confirmedRecordsRef.value = [];
@@ -412,6 +417,30 @@ describe('DesignerCommentHandlingPanel', () => {
     expect(document.querySelector('[data-testid="designer-comment-task-entry"]')).toBeNull();
     expect(document.body.textContent).toContain('待处理批注');
     expect(document.body.textContent).not.toContain('其他单据批注');
+
+    mounted.unmount();
+  });
+
+  it('被动恢复未匹配内部任务但已有 form 级批注时直接显示批注列表', async () => {
+    returnedTasksRef.value = [];
+    currentTaskRef.value = null;
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'designer',
+      formId: 'FORM-1001',
+      primaryPanelId: 'designerCommentHandling',
+      visiblePanelIds: ['designerCommentHandling'],
+      restoreStatus: 'missing',
+    }));
+
+    const mounted = await mountPanel();
+
+    expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="designer-comment-task-entry"]')).toBeNull();
+    expect(document.body.textContent).toContain('待处理批注');
+    expect(document.body.textContent).not.toContain('其他单据批注');
+    expect(confirmedRecordsRestorerOptions.at(-1)).toEqual(expect.objectContaining({
+      skipClearOnEmpty: true,
+    }));
 
     mounted.unmount();
   });

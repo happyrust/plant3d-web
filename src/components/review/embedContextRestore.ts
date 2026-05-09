@@ -37,6 +37,11 @@ type RestoreEmbedWorkbenchOptions = {
   setCurrentTask: (task: ReviewTask | null) => Promise<void>;
   openPanel: (panelId: string) => void;
   activatePanel: (panelId: string) => void;
+  /**
+   * 可选：当确定走「批注处理」流程时，由调用方负责关闭与之冲突的面板
+   * （如「发起编校审」），保证设计端嵌入视角不会同时显示两类入口。
+   */
+  closePanel?: (panelId: string) => void;
   passiveWorkflowMode?: boolean;
 };
 

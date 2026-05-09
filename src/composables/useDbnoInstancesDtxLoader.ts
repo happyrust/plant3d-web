@@ -261,14 +261,15 @@ async function ensureGeometriesForGeoHashes(
   geoHashes: string[],
   lodAssetKey: string,
   debug: boolean,
-  options: { concurrency?: number } = {}
+  options: { concurrency?: number; forceRetryNotFound?: boolean } = {}
 ): Promise<string[]> {
   const cache = getCache(dbno);
+  const forceRetryNotFound = options.forceRetryNotFound === true;
   const unique = Array.from(new Set(geoHashes)).filter((h) => {
     if (!h) return false;
     if (!cache.loadedGeoHash.has(h)) return true;
     // 对曾经 404 的几何体：允许重试拉取（用于生成完成后的 forceReload）。
-    return cache.notFoundGeoHash.has(h);
+    return forceRetryNotFound && cache.notFoundGeoHash.has(h);
   });
   if (unique.length === 0) return [];
 
@@ -539,7 +540,10 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
       set.add(refno);
     }
   }
-  const missingGeoHashes = await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, { concurrency: 8 });
+  const missingGeoHashes = await ensureGeometriesForGeoHashes(dtxLayer, dbno, Array.from(neededGeoHashes), lodAssetKey, debug, {
+    concurrency: 8,
+    forceRetryNotFound: normalizedForceReload !== null,
+  });
   if (missingGeoHashes.length > 0) {
     const extraMissing = new Set<string>();
     for (const gh of missingGeoHashes) {

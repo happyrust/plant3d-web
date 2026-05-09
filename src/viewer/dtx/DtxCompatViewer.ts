@@ -601,6 +601,16 @@ export class DtxCompatViewer {
       if (!aabbInput) return;
       if (!Array.isArray(aabbInput) || aabbInput.length !== 6) return;
       const aabb = aabbInput as Aabb6;
+      // z-fighting Tier 2.1：每次 flyTo 顺便用场景级 AABB 适配 near/far，
+      // 而非传入的对象级 aabb，避免远景被裁。空场景时 fitClipPlanesToBox 自身会跳过。
+      try {
+        const sceneBox = this.__dtxLayer.getBoundingBox?.();
+        if (sceneBox) {
+          this.__dtxViewer.fitClipPlanesToBox(sceneBox);
+        }
+      } catch {
+        // ignore
+      }
       const { position, target } = computeFlyToPositionFromAabb(aabb);
       const durationMs =
         typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) ? Math.max(0, durationSeconds) * 1000 : 800;

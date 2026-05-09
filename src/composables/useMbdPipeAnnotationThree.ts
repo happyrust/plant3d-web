@@ -51,6 +51,7 @@ import type {
   MbdBendDto,
   MbdPipeSegmentDto,
   MbdPipeViewMode,
+  MbdV2LeaderLinePrimitive,
   Vec3 as ApiVec3,
 } from '@/api/mbdPipeApi';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
@@ -1067,6 +1068,7 @@ export function useMbdPipeAnnotationThree(
   const envelopeObjects = new Map<string, LineSegments>();
   const anchorDebugMarkers = new Map<string, LineSegments>();
   const ownerSegmentDebugLines = new Map<string, Line>();
+  const v2LeaderLines = new Map<string, Line>();
 
   const segmentMaterial = new LineBasicMaterial({
     color: 0x9ca3af,
@@ -1084,15 +1086,11 @@ export function useMbdPipeAnnotationThree(
     transparent: true,
     opacity: 0.9,
   });
-  const envelopeMaterial = new LineBasicMaterial({
-    color: 0x0891b2,
-    transparent: true,
-    opacity: 0.8,
-  });
-  const envelopeHighlightMaterial = new LineBasicMaterial({
-    color: 0xf97316,
+  const v2LeaderLineMaterial = new LineBasicMaterial({
+    color: 0x111827,
     transparent: true,
     opacity: 0.95,
+    depthTest: false,
   });
 
   // 历史兼容：保留 initCSS2DRenderer API（但不再实际参与渲染）
@@ -1133,9 +1131,11 @@ export function useMbdPipeAnnotationThree(
     if (mode === 'layout_first') {
       dimMode.value = 'classic';
       bendDisplayMode.value = 'size';
-      showDimSegment.value = true;
+      // layout_first 对齐 PML mainDim：默认只看链式主尺寸。
+      // raw segment 是 tubi 几何长度，overall 对折线 BRAN 暂不能用单条直线可靠表达。
+      showDimSegment.value = false;
       showDimChain.value = true;
-      showDimOverall.value = true;
+      showDimOverall.value = false;
       showDimPort.value = false;
       showPipeClearances.value = false;
       showStructureClearances.value = false;
@@ -1359,6 +1359,16 @@ export function useMbdPipeAnnotationThree(
     }
     ownerSegmentDebugLines.clear();
 
+    for (const line of v2LeaderLines.values()) {
+      try {
+        (line.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      line.removeFromParent();
+    }
+    v2LeaderLines.clear();
+
     // 清理管段骨架线
     for (const line of segmentLines.values()) {
       try {
@@ -1512,6 +1522,10 @@ export function useMbdPipeAnnotationThree(
 
     for (const line of ownerSegmentDebugLines.values()) {
       line.visible = isVisible.value && showOwnerSegmentDebug.value;
+    }
+
+    for (const line of v2LeaderLines.values()) {
+      line.visible = isVisible.value && showLabels.value;
     }
 
     // 管段骨架线可见性
@@ -2236,6 +2250,110 @@ export function useMbdPipeAnnotationThree(
       group.add(rawDim);
       dimAnnotations.set(item.id, rawDim);
       dimTextById.value.set(item.id, String(item.text ?? ''));
+    }
+  }
+
+  function projectLabelToScreen(
+    point: Vector3,
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): { x: number; y: number } | null {
+    const ndc = point.clone().project(camera);
+    if (
+      !Number.isFinite(ndc.x) ||
+      !Number.isFinite(ndc.y) ||
+      !Number.isFinite(ndc.z)
+    ) {
+      return null;
+    }
+    return {
+      x: (ndc.x * 0.5 + 0.5) * viewport.width,
+      y: (-ndc.y * 0.5 + 0.5) * viewport.height,
+    };
+  }
+
+  function labelScreenBox(
+    center: { x: number; y: number },
+    text: string,
+  ): { x: number; y: number; width: number; height: number } {
+    return {
+      x: center.x,
+      y: center.y,
+      width: clampNumber(String(text || '').length * 10 + 28, 52, 132, 76),
+      height: 28,
+    };
+  }
+
+  function labelBoxesOverlap(
+    a: { x: number; y: number; width: number; height: number },
+    b: { x: number; y: number; width: number; height: number },
+  ): boolean {
+    const margin = 10;
+    return !(
+      a.x + a.width * 0.5 + margin < b.x - b.width * 0.5 ||
+      a.x - a.width * 0.5 - margin > b.x + b.width * 0.5 ||
+      a.y + a.height * 0.5 + margin < b.y - b.height * 0.5 ||
+      a.y - a.height * 0.5 - margin > b.y + b.height * 0.5
+    );
+  }
+
+  function applyLaidOutDimLabelDeclutter(): void {
+    const viewer = dtxViewerRef.value;
+    if (!viewer || dimAnnotations.size <= 1) return;
+
+    const camera = viewer.camera;
+    camera.updateMatrixWorld?.(true);
+    const rect = viewer.canvas.getBoundingClientRect();
+    const viewport = {
+      width: Math.max(1, Number(rect.width) || 1),
+      height: Math.max(1, Number(rect.height) || 1),
+    };
+    const cameraUp = new Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+    const cameraRight = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    const step = 0.95;
+    const candidateOffsets = [
+      null,
+      cameraUp.clone().multiplyScalar(-step),
+      cameraUp.clone().multiplyScalar(step),
+      cameraUp.clone().multiplyScalar(-step * 1.7).addScaledVector(cameraRight, step * 0.35),
+      cameraUp.clone().multiplyScalar(step * 1.7).addScaledVector(cameraRight, -step * 0.35),
+      cameraUp.clone().multiplyScalar(-step * 2.5),
+      cameraUp.clone().multiplyScalar(step * 2.5),
+      cameraRight.clone().multiplyScalar(step * 1.2),
+      cameraRight.clone().multiplyScalar(-step * 1.2),
+    ];
+    const placed: { x: number; y: number; width: number; height: number }[] = [];
+
+    for (const dim of dimAnnotations.values()) {
+      const rawDim = asRaw(dim);
+      if (!rawDim.visible) continue;
+      const kind = ((rawDim.userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
+      if (kind !== 'chain' && kind !== 'overall') continue;
+
+      let chosenOffset: Vector3 | null = null;
+      let chosenBox: { x: number; y: number; width: number; height: number } | null = null;
+      const text = String(rawDim.getParams().text ?? '');
+
+      for (const offset of candidateOffsets) {
+        rawDim.setParams({ labelOffsetWorld: offset });
+        const labelPos = getAnnotationLabelWorldPos(rawDim);
+        const screen = projectLabelToScreen(labelPos, camera, viewport);
+        if (!screen) continue;
+        const box = labelScreenBox(screen, text);
+        if (!placed.some((prev) => labelBoxesOverlap(box, prev))) {
+          chosenOffset = offset?.clone() ?? null;
+          chosenBox = box;
+          break;
+        }
+      }
+
+      rawDim.setParams({ labelOffsetWorld: chosenOffset });
+      if (!chosenBox) {
+        const labelPos = getAnnotationLabelWorldPos(rawDim);
+        const screen = projectLabelToScreen(labelPos, camera, viewport);
+        if (screen) chosenBox = labelScreenBox(screen, text);
+      }
+      if (chosenBox) placed.push(chosenBox);
     }
   }
 
@@ -3060,6 +3178,31 @@ export function useMbdPipeAnnotationThree(
     }
   }
 
+  function renderV2LeaderLines(leaders: MbdV2LeaderLinePrimitive[]): void {
+    for (const leader of leaders) {
+      const points = (leader.points ?? [])
+        .map((point) => toVector3(point))
+        .filter((point): point is Vector3 => !!point);
+      if (points.length < 2) continue;
+
+      const geom = new BufferGeometry();
+      const pos = new Float32Array(points.length * 3);
+      points.forEach((point, index) => {
+        pos[index * 3] = point.x;
+        pos[index * 3 + 1] = point.y;
+        pos[index * 3 + 2] = point.z;
+      });
+      geom.setAttribute('position', new Float32BufferAttribute(pos, 3));
+      const line = new Line(geom, v2LeaderLineMaterial);
+      line.name = `mbd-v2-leader:${leader.id}`;
+      (line.userData as any).mbdAuxKind = 'v2_leader_line';
+      (line.userData as any).mbdLeaderId = leader.id;
+      const rawLine = markRaw(line);
+      group.add(rawLine);
+      v2LeaderLines.set(leader.id, rawLine);
+    }
+  }
+
   function createDebugAnchorMarker(
     id: string,
     point: Vector3,
@@ -3196,12 +3339,7 @@ export function useMbdPipeAnnotationThree(
         renderLaidOutFittings(data.layout_result.fittings);
       }
       if (data.layout_result.tags?.length) renderLaidOutTags(data.layout_result.tags);
-      applyPortDimLabelDeclutter();
-      applyCutTubiLabelDeclutter();
-      applyTagLabelDeclutter();
-      applyCutTubiLabelDeclutter(true);
-      if (effectiveElevationMarks.length > 0) renderElevationMarks(effectiveElevationMarks);
-      renderEnvelope(effectiveEnvelope);
+      applyLaidOutDimLabelDeclutter();
     } else {
       if (mbdViewMode.value === 'layout_first') {
         console.info('[mbd-layout-first] 缺少 layout_result，已回退到旧渲染路径', {
@@ -3234,6 +3372,7 @@ export function useMbdPipeAnnotationThree(
       if (effectiveElevationMarks.length > 0) renderElevationMarks(effectiveElevationMarks);
       renderEnvelope(effectiveEnvelope);
     }
+    if (data.v2_leader_lines?.length) renderV2LeaderLines(data.v2_leader_lines);
     if (data.segments?.length) renderSegments(data.segments);
     renderDebugOverlays(data);
 
@@ -3352,21 +3491,10 @@ export function useMbdPipeAnnotationThree(
       expand(tag.position);
       if (tag.layout_hint?.anchor_point) expand(tag.layout_hint.anchor_point);
     }
-    for (const clearance of data.pipe_clearances || []) {
-      expand(clearance.start);
-      expand(clearance.end);
-    }
-    for (const clearance of data.structure_clearances || []) {
-      expand(clearance.anchor_point);
-      expand(clearance.closest_point);
-    }
-    for (const mark of resolveEffectiveElevationMarks(data)) {
-      expand(mark.point);
-    }
-    const effectiveEnvelope = resolveEffectiveEnvelope(data);
-    if (effectiveEnvelope) {
-      expand(effectiveEnvelope.min);
-      expand(effectiveEnvelope.max);
+    for (const leader of data.v2_leader_lines || []) {
+      for (const point of leader.points || []) {
+        expand(point);
+      }
     }
     for (const seg of data.segments || []) {
       if (seg.arrive) expand(seg.arrive);
@@ -3381,6 +3509,11 @@ export function useMbdPipeAnnotationThree(
 
     const { position, target } = computeFlyToPositionFromBox(box);
     viewer.flyTo(position, target, { duration: 800 });
+    window.setTimeout(() => {
+      applyLaidOutDimLabelDeclutter();
+      updateLabelPositions();
+      requestRender?.();
+    }, 900);
   }
 
   function updateLabelPositions(): void {
@@ -3550,8 +3683,7 @@ export function useMbdPipeAnnotationThree(
     segmentHighlightMaterial.dispose();
     anchorDebugMaterial.dispose();
     ownerSegmentDebugMaterial.dispose();
-    envelopeMaterial.dispose();
-    envelopeHighlightMaterial.dispose();
+    v2LeaderLineMaterial.dispose();
     group.removeFromParent();
   }
 

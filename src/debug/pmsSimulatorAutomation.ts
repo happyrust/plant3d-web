@@ -1,6 +1,7 @@
 export const PMS_SIMULATOR_CASE_ORDER = [
   'approved',
   'return',
+  'bran-mixed',
   'stop',
   'restore',
   'gate-block',

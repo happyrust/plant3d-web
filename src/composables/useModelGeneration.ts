@@ -8,8 +8,8 @@ import { modelShowByRefno } from '@/api/genModelTaskApi';
 import { getMbdPipeAnnotations, type MbdPipeData, type Vec3 } from '@/api/mbdPipeApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
-import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
+import { ensureDbMetaInfoLoaded, getDbnumByRefno, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
+import { isDtxRefnoLoaded, loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
 import {
   getDbnoInstancesManifest,
   InstancesJsonNotFoundError,
@@ -668,6 +668,8 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
     if (loadedRoots.has(normalizedRoot)) return true;
+    const dbno = tryGetDbnumByRefno(normalizedRoot);
+    if (dbno != null && isDtxRefnoLoaded(dbno, normalizedRoot)) return true;
     const anyViewer = viewer as any;
     const dtxLayer = anyViewer?.__dtxLayer;
     return !!dtxLayer?.hasObject?.(normalizedRoot);

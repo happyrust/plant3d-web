@@ -327,7 +327,7 @@ async function step14_cleanup() {
 }
 
 async function main() {
-  console.log(`\n━━━━ 批注状态独立真源 - HTTP 合同验证 ━━━━`);
+  console.log('\n━━━━ 批注状态独立真源 - HTTP 合同验证 ━━━━');
   console.log(`  BASE: ${BASE}`);
   console.log(`  PROJECT: ${PROJECT_ID}`);
 

@@ -7,18 +7,18 @@ import {
   Eye,
   EyeOff,
   Focus,
-  Eraser,
   GitCompare,
   Ruler,
   ScanEye,
   Search,
   Settings,
+  X,
 } from 'lucide-vue-next';
 import { Matrix4, Plane, Vector2, Vector3 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetPtsetWithContext } from '@/api/genModelPdmsAttrApi';
-import { getMbdPipeAnnotations } from '@/api/mbdPipeApi';
+import { getMbdPipeAnnotations, getMbdPipeV2Annotations } from '@/api/mbdPipeApi';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
@@ -66,6 +66,7 @@ import {
 } from '@/debug/injectMbdPipeDemo';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
+import { isMbdStandaloneUrl, normalizeMbdRefnoFromUrl } from '@/utils/mbdStandaloneUrl';
 import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
@@ -88,6 +89,7 @@ defineProps<{
 
 const containerRef = ref<HTMLDivElement | null>(null);
 const mainCanvas = ref<HTMLCanvasElement>();
+const isMbdStandaloneMode = isMbdStandaloneUrl(window.location.search);
 const overlayContainer = ref<HTMLElement | null>(null);
 
 const store = useToolStore();
@@ -160,6 +162,19 @@ function isMbdApiDebugFromUrl(): boolean {
   try {
     const q = new URLSearchParams(window.location.search);
     return isTruthyUrlQueryFlag(q.get('mbd_debug'));
+  } catch {
+    return false;
+  }
+}
+
+function isMbdV2DisabledFromUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const raw = String(q.get('mbd_api') ?? q.get('mbd_version') ?? '')
+      .trim()
+      .toLowerCase();
+    return raw === 'v1' || raw === '1';
   } catch {
     return false;
   }
@@ -372,8 +387,7 @@ function onFocusDimOpacityInput(value: number | string): void {
     const demo = String(q.get('dtx_demo') || '').toLowerCase();
     if (demo === 'primitives') return;
 
-    const raw = q.get('mbd_refno') ?? q.get('mbd_pipe');
-    const refno = raw ? String(raw).trim() : '';
+    const refno = normalizeMbdRefnoFromUrl(window.location.search) ?? '';
     if (!refno) return;
     store.requestMbdPipeAnnotation(refno);
   } catch {
@@ -2419,6 +2433,7 @@ onMounted(async () => {
     store,
     compatViewerRef,
     requestRender,
+    suppressStoreOverlays: isMbdStandaloneMode,
   });
   toolsRef.value = tools;
   tools.refreshReadyState();
@@ -2432,6 +2447,7 @@ onMounted(async () => {
     store,
     compatViewerRef,
     requestRender,
+    suppressStoreMeasurements: isMbdStandaloneMode,
   });
   xeokitMeasurementToolsRef.value = xeokitMeasurementTools;
   xeokitMeasurementTools.refreshReadyState();
@@ -3140,13 +3156,13 @@ onMounted(async () => {
     };
     mgr.setUnit(unitSettings.displayUnit.value as any);
     mgr.setPrecision(unitSettings.precision.value);
-    mgr.sync(store.measurements.value as any);
+    mgr.sync(isMbdStandaloneMode ? [] : store.measurements.value as any);
     syncSelectedMeasurementAnnotation();
 
     watch(
       () => store.measurements.value,
       (measurements) => {
-        mgr.sync(measurements as any);
+        mgr.sync(isMbdStandaloneMode ? [] : measurements as any);
         syncSelectedMeasurementAnnotation();
         requestRender();
       },
@@ -3166,7 +3182,7 @@ onMounted(async () => {
       ([unit, precision]) => {
         mgr.setUnit(unit as any);
         mgr.setPrecision(precision);
-        mgr.sync(store.measurements.value as any);
+        mgr.sync(isMbdStandaloneMode ? [] : store.measurements.value as any);
         syncSelectedMeasurementAnnotation();
         requestRender();
       },
@@ -3182,13 +3198,13 @@ onMounted(async () => {
     mgr.setPrecision(unitSettings.precision.value);
     const bgPreset = backgroundStore.getPreset(backgroundStore.mode.value);
     mgr.setBackgroundColor(bgPreset.bottomColor);
-    mgr.sync(store.dimensions.value as any);
+    mgr.sync(isMbdStandaloneMode ? [] : store.dimensions.value as any);
     dimensionAnnoMgrRef.value = mgr;
 
     watch(
       () => store.dimensions.value,
       (dims) => {
-        mgr.sync(dims as any);
+        mgr.sync(isMbdStandaloneMode ? [] : dims as any);
         requestRender();
       },
       { deep: true },
@@ -3199,7 +3215,7 @@ onMounted(async () => {
       ([unit, precision]) => {
         mgr.setUnit(unit as any);
         mgr.setPrecision(precision);
-        mgr.sync(store.dimensions.value as any);
+        mgr.sync(isMbdStandaloneMode ? [] : store.dimensions.value as any);
         requestRender();
       },
     );
@@ -3931,7 +3947,8 @@ onMounted(async () => {
         }
         let batchId: string | null = null;
 
-        const resp = await getMbdPipeAnnotations(refnoKey, {
+        const isLayoutFirstMbd = mbdPipeVis.mbdViewMode.value === 'layout_first';
+        const mbdParams = {
           mode: resolveMbdApiMode(mbdPipeVis.mbdViewMode.value),
           // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
           source: 'db',
@@ -3943,21 +3960,30 @@ onMounted(async () => {
           max_slope: 0.1,
           dim_min_length: 1.0,
           weld_merge_threshold: 1.0,
-          include_dims: true,
+          // layout_first 的主尺寸按 PML mainDim 语义走链式尺寸；
+          // raw segment 会与链式尺寸重复，默认不请求。
+          include_dims: !isLayoutFirstMbd,
           // 一期默认切到施工视图：链式/总长/焊口/坡度优先
           include_chain_dims: true,
-          include_overall_dim: true,
+          // 折线 BRAN 的 overall 是路径总长，不能用首尾直连的一条尺寸线表达。
+          include_overall_dim: !isLayoutFirstMbd,
           include_port_dims: false,
           include_cut_tubis: true,
           include_fittings: true,
           include_tags: true,
           include_layout_hints: true,
-          include_layout_result: mbdPipeVis.mbdViewMode.value === 'layout_first',
+          include_layout_result: isLayoutFirstMbd,
           include_welds: true,
           include_slopes: true,
           include_bends: true,
           bend_mode: 'facecenter',
-        });
+        } as const;
+        const useV2Mbd =
+          isLayoutFirstMbd &&
+          !isMbdV2DisabledFromUrl();
+        const resp = useV2Mbd
+          ? await getMbdPipeV2Annotations(refnoKey, mbdParams)
+          : await getMbdPipeAnnotations(refnoKey, mbdParams);
         if (resp.success && resp.data) {
           if (mbdPipeVis.mbdViewMode.value === 'layout_first' && !resp.data.layout_result) {
             console.warn('[mbd-pipe] layout_first 未拿到 layout_result，保持当前模式并回退到 fallback 渲染', {
@@ -4444,7 +4470,12 @@ onUnmounted(() => {
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
         title="全部隐藏"
         @click.stop="hideAll">
-        <Eraser class="h-5 w-5" />
+        <span class="relative inline-flex h-5 w-5 items-center justify-center" aria-hidden="true">
+          <EyeOff class="h-5 w-5" />
+          <span class="absolute -bottom-1 -right-1 rounded-[3px] border border-background bg-foreground px-[2px] text-[6px] font-bold leading-[8px] tracking-[0.02em] text-background">
+            ALL
+          </span>
+        </span>
       </button>
       <button type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
@@ -4454,7 +4485,7 @@ onUnmounted(() => {
       </button>
 
       <!-- 测量（下拉：长度/角度） -->
-      <div class="relative">
+      <div v-if="!isMbdStandaloneMode" class="relative">
         <button type="button"
           class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
           :class="isMeasureModeActive ? 'bg-muted' : ''"
@@ -4748,7 +4779,7 @@ onUnmounted(() => {
       @click="closeDimContextMenu"
       @contextmenu.prevent="closeDimContextMenu" />
 
-    <ObjectMeasureDrawer v-if="store.toolMode.value === 'measure_object_to_object' && toolsRef"
+    <ObjectMeasureDrawer v-if="!isMbdStandaloneMode && store.toolMode.value === 'measure_object_to_object' && toolsRef"
       :title="'构件最近点测量'"
       :subtitle="'点击模型或在模型树中双选两个构件'"
       :status-text="toolsRef.objectToObjectUiState.value.statusText"
@@ -4760,6 +4791,7 @@ onUnmounted(() => {
       @reset="resetObjectMeasureSelection" />
 
     <MeasurementWizard v-else-if="
+                         !isMbdStandaloneMode &&
                          (store.toolMode.value === 'measure_point_to_object' ||
                            store.toolMode.value === 'measure_pipe_to_structure' ||
                            store.toolMode.value === 'measure_pipe_to_pipe') &&
@@ -4777,9 +4809,9 @@ onUnmounted(() => {
       @pointerdown.stop
       @wheel.stop />
 
-    <AnnotationOverlayBar v-if="toolsRef" :tools="toolsRef" />
+    <AnnotationOverlayBar v-if="!isMbdStandaloneMode && toolsRef" :tools="toolsRef" />
 
-    <MeasurementOverlayBar v-if="isXeokitMeasureMode && xeokitMeasurementToolsRef" :tools="xeokitMeasurementToolsRef" />
+    <MeasurementOverlayBar v-if="!isMbdStandaloneMode && isXeokitMeasureMode && xeokitMeasurementToolsRef" :tools="xeokitMeasurementToolsRef" />
 
     <ReviewConfirmation />
   </div>

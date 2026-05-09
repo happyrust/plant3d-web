@@ -159,6 +159,37 @@ function createDuckdbRemoteQueryToken(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function toDuckdbLocalFileToken(token: string): string {
+  return token.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+function appendDuckdbLocalFileToken(localName: string, token: string): string {
+  const safeToken = toDuckdbLocalFileToken(token);
+  if (localName.endsWith('.parquet')) {
+    return `${localName.slice(0, -'.parquet'.length)}_${safeToken}.parquet`;
+  }
+  return `${localName}_${safeToken}`;
+}
+
+function isDuckdbFileAlreadyRegisteredError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('File already registered');
+}
+
+function buildRegisteredDbnoFiles(
+  dbno: number,
+  localFileToken?: string,
+): RegisteredDbno['files'] {
+  const suffix = localFileToken ? `_${localFileToken}` : '';
+  return {
+    instances: `p_${dbno}_instances${suffix}.parquet`,
+    geo_instances: `p_${dbno}_geo_instances${suffix}.parquet`,
+    tubings: `p_${dbno}_tubings${suffix}.parquet`,
+    transforms: `p_${dbno}_transforms${suffix}.parquet`,
+    aabb: `p_${dbno}_aabb${suffix}.parquet`,
+  };
+}
+
 async function urlExists(url: string): Promise<boolean> {
   const abs = toAbsoluteUrl(url);
   try {
@@ -413,22 +444,28 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
     const { manifest, baseDir } = await fetchManifest(dbno);
     const baseDirUrl = buildFilesOutputUrl(baseDir);
 
-    const files = {
-      instances: `p_${dbno}_instances.parquet`,
-      geo_instances: `p_${dbno}_geo_instances.parquet`,
-      tubings: `p_${dbno}_tubings.parquet`,
-      transforms: `p_${dbno}_transforms.parquet`,
-      aabb: `p_${dbno}_aabb.parquet`,
-    };
     const requestToken = createDuckdbRemoteQueryToken();
+    const files = buildRegisteredDbnoFiles(
+      dbno,
+      forceRefresh ? toDuckdbLocalFileToken(requestToken) : undefined,
+    );
 
     // 注册远程文件（HTTP Range）
-    const registerOne = async (localName: string, remoteFile: string) => {
+    const registerOne = async (localName: string, remoteFile: string): Promise<string> => {
       const remoteUrl = buildParquetRemoteFileUrl(baseDirUrl, remoteFile, requestToken);
-      await db!.registerFileURL(localName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, true);
+      try {
+        await db!.registerFileURL(localName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, true);
+        return localName;
+      } catch (error) {
+        if (!isDuckdbFileAlreadyRegisteredError(error)) throw error;
+
+        const retryLocalName = appendDuckdbLocalFileToken(localName, requestToken);
+        await db!.registerFileURL(retryLocalName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, true);
+        return retryLocalName;
+      }
     };
 
-    await Promise.all([
+    const [instances, geoInstances, tubings, transforms, aabb] = await Promise.all([
       registerOne(files.instances, manifest.tables.instances.file),
       registerOne(files.geo_instances, manifest.tables.geo_instances.file),
       registerOne(files.tubings, manifest.tables.tubings.file),
@@ -436,7 +473,18 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
       registerOne(files.aabb, manifest.tables.aabb.file),
     ]);
 
-    const reg: RegisteredDbno = { dbno, baseDirUrl, manifest, files };
+    const reg: RegisteredDbno = {
+      dbno,
+      baseDirUrl,
+      manifest,
+      files: {
+        instances,
+        geo_instances: geoInstances,
+        tubings,
+        transforms,
+        aabb,
+      },
+    };
     registeredByDbno.set(dbno, reg);
     return reg;
   })();

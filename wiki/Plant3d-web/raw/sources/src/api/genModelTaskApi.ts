@@ -1,0 +1,531 @@
+// 任务管理 API 模块
+// 基于后端 Rust/Axum 实现调整
+// 后端不支持 pause/resume 功能，任务状态只有：Pending, Running, Completed, Failed, Cancelled
+
+import type {
+  Task,
+  TaskCreationRequest,
+  TaskCreationResponse,
+  TaskListResponse,
+  TaskResponse,
+  TaskActionResponse,
+  SystemMetricsResponse,
+} from '@/types/task';
+
+import { useConsoleStore } from '@/composables/useConsoleStore';
+import { getBackendApiBaseUrl } from '@/utils/apiBase';
+
+// ============ 后端配置类型 ============
+
+/** 后端 DatabaseConfig 结构（对应 Rust web_server::models::DatabaseConfig） */
+export type DatabaseConfig = {
+  name: string;
+  manual_db_nums: number[];
+  manual_refnos: string[];
+  enabled_nouns?: string[] | null;
+  excluded_nouns?: string[] | null;
+  debug_limit_per_noun_type?: number | null;
+  project_name: string;
+  project_path: string;
+  project_code: number;
+  mdb_name: string;
+  module: string;
+  db_type: string;
+  surreal_ns: number;
+  db_ip: string;
+  db_port: string;
+  db_user: string;
+  db_password: string;
+  gen_model: boolean;
+  gen_mesh: boolean;
+  gen_spatial_tree: boolean;
+  apply_boolean_operation: boolean;
+  mesh_tol_ratio: number;
+  room_keyword: string;
+  target_sesno?: number;
+  meshes_path?: string;
+  export_json: boolean;
+  export_parquet: boolean;
+};
+
+// ============ 基础配置 ============
+
+// 暴露基础地址构造，便于其他模块复用同一配置
+export function getBaseUrl(): string {
+  return getBackendApiBaseUrl({ fallbackUrl: 'http://localhost:3100' });
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+
+  const resp = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
+  }
+
+  return (await resp.json()) as T;
+}
+
+// ============ 服务器配置 API ============
+
+/**
+ * 获取服务器当前 DatabaseConfig
+ * GET /api/config
+ */
+export async function getServerConfig(): Promise<DatabaseConfig> {
+  return await fetchJson<DatabaseConfig>('/api/config');
+}
+
+/**
+ * 下载导出文件
+ * GET /api/tasks/{taskId}/download
+ * 触发浏览器下载
+ */
+export async function taskDownloadExport(taskId: string): Promise<void> {
+  const base = getBaseUrl().replace(/\/$/, '');
+  const url = `${base}/api/tasks/${encodeURIComponent(taskId)}/download`;
+
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Download failed: HTTP ${resp.status} ${resp.statusText}: ${text}`);
+  }
+
+  const blob = await resp.blob();
+  const contentDisposition = resp.headers.get('Content-Disposition');
+  const filename = contentDisposition?.match(/filename="?([^"]+)"?/)?.[1] || `export-${taskId}.obj`;
+
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
+// ============ 任务查询 API ============
+
+/**
+ * 获取所有任务列表
+ * GET /api/tasks
+ * 支持 status 和 limit 查询参数
+ */
+export async function taskGetList(options?: {
+  status?: Task['status'];
+  limit?: number;
+}): Promise<TaskListResponse> {
+  let path = '/api/tasks';
+  const params = new URLSearchParams();
+  if (options?.status) params.set('status', options.status);
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (params.toString()) path += `?${params.toString()}`;
+  return await fetchJson<TaskListResponse>(path);
+}
+
+/**
+ * 获取任务详情
+ * GET /api/tasks/{taskId}
+ */
+export async function taskGetById(taskId: string): Promise<TaskResponse> {
+  return await fetchJson<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}`);
+}
+
+/**
+ * 获取任务错误详情
+ * GET /api/tasks/{taskId}/error
+ */
+export async function taskGetError(
+  taskId: string
+): Promise<{ success: boolean; error_details?: { message: string; stack?: string }; error_message?: string }> {
+  return await fetchJson(`/api/tasks/${encodeURIComponent(taskId)}/error`);
+}
+
+/**
+ * 获取任务日志
+ * GET /api/tasks/{taskId}/logs
+ * 支持 level 和 search 查询参数
+ */
+export async function taskGetLogs(
+  taskId: string,
+  options?: { level?: string; search?: string }
+): Promise<{ success: boolean; logs?: { level: string; message: string; timestamp: string }[]; error_message?: string }> {
+  let path = `/api/tasks/${encodeURIComponent(taskId)}/logs`;
+  const params = new URLSearchParams();
+  if (options?.level) params.set('level', options.level);
+  if (options?.search) params.set('search', options.search);
+  if (params.toString()) path += `?${params.toString()}`;
+  return await fetchJson(path);
+}
+
+/**
+ * 获取系统指标
+ * GET /api/status
+ * 返回 CPU 使用率、内存使用率、活动任务数
+ */
+export async function taskGetSystemMetrics(): Promise<SystemMetricsResponse> {
+  type RawStatusResponse = {
+    uptime?: { secs: number } | number;
+    cpu_usage: number;
+    memory_usage: number;
+    active_tasks: number;
+    queued_task_count?: number;
+    database_connected?: boolean;
+    surrealdb_connected?: boolean;
+  };
+  const raw = await fetchJson<RawStatusResponse>('/api/status');
+  return {
+    success: true,
+    metrics: {
+      cpuUsage: raw.cpu_usage,
+      memoryUsage: raw.memory_usage,
+      activeTaskCount: raw.active_tasks,
+      queuedTaskCount: raw.queued_task_count ?? 0,
+      databaseConnected: raw.database_connected,
+      surrealdbConnected: raw.surrealdb_connected,
+      uptimeSeconds: typeof raw.uptime === 'number'
+        ? raw.uptime
+        : (raw.uptime && typeof raw.uptime === 'object' && 'secs' in raw.uptime
+          ? Number(raw.uptime.secs)
+          : undefined),
+    },
+  };
+}
+
+/**
+ * 获取节点状态（包含 LiteFS 复制状态）
+ * GET /api/node-status
+ */
+export async function taskGetNodeStatus(): Promise<{
+  success: boolean;
+  is_primary?: boolean;
+  database_path?: string;
+  litefs_status?: unknown;
+  error_message?: string;
+}> {
+  return await fetchJson('/api/node-status');
+}
+
+// ============ 任务创建 API ============
+
+/**
+ * 创建新任务
+ * POST /api/tasks
+ */
+export async function taskCreate(request: TaskCreationRequest): Promise<TaskCreationResponse> {
+  return await fetchJson<TaskCreationResponse>('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+/**
+ * 批量创建任务
+ * POST /api/tasks/batch
+ */
+export async function taskCreateBatch(
+  requests: TaskCreationRequest[]
+): Promise<{ success: boolean; tasks?: Task[]; error_message?: string }> {
+  return await fetchJson('/api/tasks/batch', {
+    method: 'POST',
+    body: JSON.stringify({ tasks: requests }),
+  });
+}
+
+/**
+ * 验证任务名称是否可用
+ * GET /api/task-creation/validate-name
+ * 注意：后端当前是 stub 实现，始终返回 available: true
+ */
+export async function taskValidateName(
+  name: string
+): Promise<{ success: boolean; available: boolean; error_message?: string }> {
+  return await fetchJson<{ success: boolean; available: boolean; error_message?: string }>(
+    `/api/task-creation/validate-name?name=${encodeURIComponent(name)}`
+  );
+}
+
+/**
+ * 预览任务配置（获取预估时长和资源需求）
+ * POST /api/task-creation/preview
+ */
+export async function taskPreviewConfig(
+  request: TaskCreationRequest
+): Promise<{
+  success: boolean;
+  estimated_duration_ms?: number;
+  resource_requirements?: { cpu: number; memory: number };
+  error_message?: string;
+}> {
+  return await fetchJson('/api/task-creation/preview', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+// ============ 基于 Refno 的模型生成 API ============
+
+/**
+ * 按需显示模型（零时任务，不保存记录）
+ * POST /api/model/show-by-refno
+ */
+export async function modelShowByRefno(params: {
+  refnos: string[];
+  db_num?: number;
+  regen_model?: boolean;
+  gen_mesh?: boolean;
+  gen_model?: boolean;
+}): Promise<{
+  success: boolean;
+  bundle_url?: string;
+  message: string;
+  metadata?: {
+    refno_count: number;
+    dbno: number;
+    temp_id: string;
+  };
+  parquet_files?: string[];
+}> {
+  const refnoCount = Array.isArray(params.refnos) ? params.refnos.length : 0;
+  const { addLog } = useConsoleStore();
+
+  console.info('[vis][api] /api/model/show-by-refno', {
+    refno_count: refnoCount,
+    db_num: params.db_num,
+    regen_model: params.regen_model,
+    gen_mesh: params.gen_mesh,
+    gen_model: params.gen_model,
+  });
+  addLog(
+    'info',
+    `[vis][api] /api/model/show-by-refno refno_count=${refnoCount} db_num=${params.db_num ?? ''} regen_model=${params.regen_model ? 1 : 0}`
+  );
+
+  try {
+    const resp = await fetchJson('/api/model/show-by-refno', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+
+    console.info('[vis][api] /api/model/show-by-refno resp', {
+      success: (resp as any)?.success,
+      refno_count: (resp as any)?.metadata?.refno_count ?? null,
+      dbno: (resp as any)?.metadata?.dbno ?? null,
+      parquet_files: Array.isArray((resp as any)?.parquet_files) ? (resp as any).parquet_files.length : 0,
+    });
+    addLog(
+      'info',
+      `[vis][api] /api/model/show-by-refno resp success=${(resp as any)?.success ? 1 : 0} refno_count=${(resp as any)?.metadata?.refno_count ?? ''} dbno=${(resp as any)?.metadata?.dbno ?? ''} parquet_files=${Array.isArray((resp as any)?.parquet_files) ? (resp as any).parquet_files.length : 0}`
+    );
+
+    return resp;
+  } catch (e) {
+    console.error('[vis][api] /api/model/show-by-refno failed', {
+      refno_count: refnoCount,
+      db_num: params.db_num,
+      error: e,
+    });
+    addLog(
+      'error',
+      `[vis][api] /api/model/show-by-refno failed refno_count=${refnoCount} db_num=${params.db_num ?? ''} err=${e instanceof Error ? e.message : String(e)}`
+    );
+    throw e;
+  }
+}
+
+// ============ 延迟删除 ============
+
+/**
+ * 启动任务
+ * POST /api/tasks/{taskId}/start
+ * 将任务从 Pending 状态转换为 Running 状态
+ */
+export async function taskStart(taskId: string): Promise<TaskActionResponse> {
+  return await fetchJson<TaskActionResponse>(`/api/tasks/${encodeURIComponent(taskId)}/start`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * 停止任务
+ * POST /api/tasks/{taskId}/stop
+ * 取消正在运行的任务，转换为 Cancelled 状态
+ */
+export async function taskStop(taskId: string): Promise<TaskActionResponse> {
+  return await fetchJson<TaskActionResponse>(`/api/tasks/${encodeURIComponent(taskId)}/stop`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * 重启失败的任务
+ * POST /api/tasks/{taskId}/restart
+ * 为失败的任务创建新的任务实例
+ */
+export async function taskRestart(taskId: string): Promise<TaskActionResponse> {
+  return await fetchJson<TaskActionResponse>(`/api/tasks/${encodeURIComponent(taskId)}/restart`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * 删除任务
+ * DELETE /api/tasks/{taskId}
+ * 从活动或历史列表中移除任务
+ */
+export async function taskDelete(taskId: string): Promise<TaskActionResponse> {
+  return await fetchJson<TaskActionResponse>(`/api/tasks/${encodeURIComponent(taskId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============ WebSocket URL 构建 ============
+
+/**
+ * 获取任务更新 WebSocket URL
+ * WebSocket 端点: /ws/tasks
+ */
+export function getTaskWebSocketUrl(): string {
+  const base = getBaseUrl();
+  if (!base) {
+    // 使用当前页面的 host
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws/tasks`;
+  }
+
+  // 转换 http(s) 为 ws(s)
+  const wsBase = base.replace(/^http/, 'ws');
+  return `${wsBase}/ws/tasks`;
+}
+
+/**
+ * 获取单个任务进度 WebSocket URL
+ * WebSocket 端点: /ws/progress/{taskId}
+ */
+export function getTaskProgressWebSocketUrl(taskId: string): string {
+  const base = getBaseUrl();
+  if (!base) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws/progress/${encodeURIComponent(taskId)}`;
+  }
+
+  const wsBase = base.replace(/^http/, 'ws');
+  return `${wsBase}/ws/progress/${encodeURIComponent(taskId)}`;
+}
+
+// ============ 辅助函数 ============
+
+/**
+ * 规范化任务数据（处理后端返回的不一致格式）
+ */
+export function normalizeTask(raw: Record<string, unknown>): Task {
+  // Backend returns progress as an object with percentage, processed_items, etc.
+  const progressObj = raw.progress as Record<string, unknown> | undefined;
+  const progressNumber = typeof raw.progress === 'number' 
+    ? raw.progress 
+    : (progressObj?.percentage != null ? Number(progressObj.percentage) : 0);
+
+  return {
+    id: String(raw.id || raw.task_id || ''),
+    name: String(raw.name || raw.task_name || ''),
+    type: normalizeTaskType(raw.type || raw.task_type),
+    status: normalizeTaskStatus(raw.status),
+    progress: progressNumber,
+    processedItems: progressObj?.processed_items != null ? Number(progressObj.processed_items) : undefined,
+    totalItems: progressObj?.total_items != null ? Number(progressObj.total_items) : undefined,
+    currentStep: progressObj?.current_step != null ? String(progressObj.current_step) : undefined,
+    stepIndex: progressObj?.current_step_number != null ? Number(progressObj.current_step_number) : undefined,
+    totalSteps: progressObj?.total_steps != null ? Number(progressObj.total_steps) : undefined,
+    startTime: normalizeTimestamp(raw.started_at || raw.start_time || raw.startTime),
+    endTime: normalizeTimestamp(raw.completed_at || raw.end_time || raw.endTime),
+    durationMs: raw.actual_duration != null ? Number(raw.actual_duration) : (raw.duration_ms != null ? Number(raw.duration_ms) : undefined),
+    estimatedTimeMs: raw.estimated_time_ms != null ? Number(raw.estimated_time_ms) : undefined,
+    priority: normalizePriority(raw.priority),
+    parameters: raw.parameters as Task['parameters'],
+    result: raw.result as Task['result'],
+    error: raw.error ? String(raw.error) : undefined,
+    metadata: (raw.metadata || undefined) as Record<string, any> | undefined,
+  };
+}
+
+function normalizePriority(priority: unknown): Task['priority'] {
+  const p = String(priority || 'normal').toLowerCase();
+  const map: Record<string, Task['priority']> = {
+    'low': 'low',
+    'normal': 'normal',
+    'high': 'high',
+    'urgent': 'critical',
+    'critical': 'critical',
+  };
+  return map[p] || 'normal';
+}
+
+/**
+ * 规范化任务类型
+ * 后端支持: DataParsingWizard, ModelGeneration, SpatialTreeGeneration, FullSync, IncrementalSync
+ */
+function normalizeTaskType(type: unknown): Task['type'] {
+  const typeStr = String(type || 'DataParsing');
+  // 映射后端类型到前端类型
+  const typeMap: Record<string, Task['type']> = {
+    'DataParsingWizard': 'DataParsingWizard',
+    'DataParsing': 'DataParsingWizard',
+    'ModelGeneration': 'DataGeneration',
+    'DataGeneration': 'DataGeneration',
+    'RefnoModelGeneration': 'DataGeneration',
+    'SpatialTreeGeneration': 'DataGeneration',
+    'FullSync': 'DataParsingWizard',
+    'IncrementalSync': 'DataParsingWizard',
+    'ModelExport': 'ModelExport',
+  };
+  return typeMap[typeStr] || 'DataParsingWizard';
+}
+
+/**
+ * 规范化任务状态
+ * 后端状态: Pending, Running, Completed, Failed, Cancelled
+ * 注意：后端不支持 Paused 状态
+ */
+function normalizeTaskStatus(status: unknown): Task['status'] {
+  const statusStr = String(status || 'pending').toLowerCase();
+  // 后端只有这5种状态，没有 paused
+  const validStatuses: Task['status'][] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
+  return validStatuses.includes(statusStr as Task['status'])
+    ? (statusStr as Task['status'])
+    : 'pending';
+}
+
+/**
+ * 规范化时间戳（处理多种格式）
+ */
+function normalizeTimestamp(value: unknown): string | undefined {
+  if (!value) return undefined;
+
+  // 如果是数字（Unix 时间戳）
+  if (typeof value === 'number') {
+    // 如果是秒级时间戳，转换为毫秒
+    const ms = value < 1e12 ? value * 1000 : value;
+    return new Date(ms).toISOString();
+  }
+
+  // 如果是字符串
+  if (typeof value === 'string') {
+    // 尝试解析为日期
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+    return value;
+  }
+
+  return undefined;
+}

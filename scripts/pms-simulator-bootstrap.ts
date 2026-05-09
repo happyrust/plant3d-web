@@ -59,9 +59,30 @@ function prepareLocalNoProxy(): void {
   process.env.no_proxy = appendNoProxy(process.env.no_proxy);
 }
 
-async function withTimeout<T>(label: string, run: (signal: AbortSignal) => Promise<T>, timeoutMs = FETCH_TIMEOUT_MS): Promise<T> {
+async function postJson<T>(url: string, payload: unknown, bearerToken?: string): Promise<{ status: number; body: T }> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`POST ${url} 超时`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+  const text = await response.text();
+  let body: T;
   try {
     return await run(controller.signal);
   } catch (error) {
@@ -273,15 +294,94 @@ async function ensureDir(dir: string): Promise<void> {
 }
 
 async function isUrlHealthy(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
-    const response = await withTimeout(`GET ${url}`, async (signal) => await fetch(url, {
-      method: 'GET',
-      headers: { Connection: 'close' },
-      signal,
-    }), 5_000);
+    const response = await fetch(url, { method: 'GET', signal: controller.signal });
     return response.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getJsonWithTimeout<T>(url: string, bearerToken?: string): Promise<{ status: number; body: T; elapsedMs: number }> {
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {},
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`GET ${url} 超时`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+  const text = await response.text();
+  let body: T;
+  try {
+    body = JSON.parse(text) as T;
+  } catch {
+    throw new Error(`GET ${url} 返回非 JSON：HTTP ${response.status} ${text}`);
+  }
+  if (!response.ok) {
+    throw new Error(`GET ${url} 失败：HTTP ${response.status} ${text}`);
+  }
+  return { status: response.status, body, elapsedMs: Date.now() - startedAt };
+}
+
+async function appendBackendHealthArtifact(
+  artifactDir: string,
+  entry: Record<string, unknown>,
+): Promise<void> {
+  await ensureDir(artifactDir);
+  await fsp.appendFile(
+    path.join(artifactDir, 'backend-health.jsonl'),
+    `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`,
+  );
+}
+
+async function probeBackendScenarioHealth(
+  env: ReturnType<typeof buildPmsSimulatorEnvironmentConfig>,
+): Promise<{ ok: true; detail: string } | { ok: false; detail: string }> {
+  const base = trimTrailingSlash(env.backendBaseUrl);
+  const healthStartedAt = Date.now();
+  if (!(await isUrlHealthy(`${base}/api/health`))) {
+    return { ok: false, detail: `GET /api/health failed elapsed=${Date.now() - healthStartedAt}ms` };
+  }
+
+  try {
+    const authStartedAt = Date.now();
+    const authResponse = await postJson<{ code?: number; data?: { token?: string }; token?: string }>(
+      `${base}/api/auth/token`,
+      {
+        project_id: env.projectId,
+        user_id: 'SJ',
+        role: 'sj',
+      },
+    );
+    const token = authResponse.body.data?.token || authResponse.body.token || '';
+    if (!token) {
+      return { ok: false, detail: `POST /api/auth/token missing token elapsed=${Date.now() - authStartedAt}ms` };
+    }
+    const tasksResponse = await getJsonWithTimeout<{ success?: boolean; tasks?: unknown[] }>(
+      `${base}/api/review/tasks?limit=1&offset=0`,
+      token,
+    );
+    return {
+      ok: true,
+      detail: `health ok auth=${Date.now() - authStartedAt}ms tasks=${tasksResponse.elapsedMs}ms count=${Array.isArray(tasksResponse.body.tasks) ? tasksResponse.body.tasks.length : '-'}`,
+    };
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -616,6 +716,35 @@ async function main(): Promise<void> {
   let ok = false;
   const startedAt = new Date().toISOString();
 
+  async function ensureBackendHealthyForScenario(caseId: string): Promise<void> {
+    const firstProbe = await probeBackendScenarioHealth(env);
+    await appendBackendHealthArtifact(artifactDir, {
+      caseId,
+      phase: 'before',
+      ok: firstProbe.ok,
+      detail: firstProbe.detail,
+    });
+    if (firstProbe.ok) {
+      console.error(`[pms-simulator] backend health before ${caseId}: ${firstProbe.detail}`);
+      return;
+    }
+
+    console.error(`[pms-simulator] backend health before ${caseId} failed: ${firstProbe.detail}`);
+    await stopManagedProcess(backend.process);
+    backend = await ensureBackend(env, artifactDir);
+    const secondProbe = await probeBackendScenarioHealth(env);
+    await appendBackendHealthArtifact(artifactDir, {
+      caseId,
+      phase: 'after-restart',
+      ok: secondProbe.ok,
+      detail: secondProbe.detail,
+    });
+    if (!secondProbe.ok) {
+      throw new Error(`backend-health-failed before ${caseId}: ${secondProbe.detail}`);
+    }
+    console.error(`[pms-simulator] backend restarted before ${caseId}: ${secondProbe.detail}`);
+  }
+
   try {
     surreal = await ensureSurreal(artifactDir);
     backend = await ensureBackend(env, artifactDir);
@@ -623,7 +752,11 @@ async function main(): Promise<void> {
 
     contractSmoke = await runContractSmoke(env, artifactDir);
     if (contractSmoke.ok) {
-      scenarios = await runPmsSimulatorScenarios({ env, artifactDir });
+      scenarios = await runPmsSimulatorScenarios({
+        env,
+        artifactDir,
+        ensureBackendHealthy: ensureBackendHealthyForScenario,
+      });
     }
     ok = contractSmoke.ok && scenarios.every((item) => item.ok);
   } finally {

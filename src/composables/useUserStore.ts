@@ -47,12 +47,7 @@ const STORAGE_KEY = 'plant3d-web-user-v3';
 const STORAGE_KEY_V2 = 'plant3d-web-user-v2';
 const STORAGE_KEY_V1 = 'plant3d-web-user-v1';
 const DEFAULT_REVIEW_PROJECT_ID = 'debug-project';
-
-const LOCAL_REVIEW_IDENTITY_ALIASES: Record<string, string> = {
-  proofreader_001: 'user-002',
-  reviewer_001: 'user-002',
-  manager_001: 'user-002',
-};
+const DEFAULT_CURRENT_USER_ID = 'SJ';
 
 // 配置：是否使用后端 API
 const USE_BACKEND = ref(true);
@@ -127,14 +122,33 @@ export function buildSwitchUserTokenRequest(
 ): TokenRequest {
   return {
     projectId,
-    userId: LOCAL_REVIEW_IDENTITY_ALIASES[user.id] ?? user.id,
+    userId: user.id,
     role: toBackendRole(user.role),
   };
 }
 
 export function resolveEffectiveUserId(user: Pick<User, 'id'> | null | undefined): string | null {
   if (!user?.id) return null;
-  return LOCAL_REVIEW_IDENTITY_ALIASES[user.id] ?? user.id;
+  return user.id;
+}
+
+function uniqueNonEmpty(values: (string | null | undefined)[]): string[] {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => !!value)));
+}
+
+function resolveReviewIdentityCandidates(
+  user: Pick<User, 'id'> | null | undefined,
+  _role: UserRole | undefined,
+): string[] {
+  if (!user?.id) return [];
+  return uniqueNonEmpty([user.id]);
+}
+
+
+function identityCandidatesIntersect(left: string[], right: string[]): boolean {
+  if (left.length === 0 || right.length === 0) return false;
+  const rightSet = new Set(right);
+  return left.some((item) => rightSet.has(item));
 }
 
 export function isCheckerRole(role: UserRole | undefined): boolean {
@@ -247,17 +261,17 @@ function applyLocalSubmitTransition(task: ReviewTask, comment?: string): ReviewT
   };
 }
 
-function shouldKeepTerminalTaskInInbox(task: ReviewTask, role: UserRole, effectiveUserId: string): boolean {
+function shouldKeepTerminalTaskInInbox(task: ReviewTask, role: UserRole, currentUserIds: string[]): boolean {
   if (task.status !== 'approved' && task.status !== 'rejected') return false;
 
-  const checkerId = resolveEffectiveUserId({ id: task.checkerId || task.reviewerId });
-  const approverId = resolveEffectiveUserId(task.approverId ? { id: task.approverId } : null);
+  const checkerIds = resolveReviewIdentityCandidates({ id: task.checkerId || task.reviewerId }, UserRole.PROOFREADER);
+  const approverIds = resolveReviewIdentityCandidates(task.approverId ? { id: task.approverId } : null, role);
 
   if (role === UserRole.PROOFREADER) {
-    return checkerId === effectiveUserId;
+    return identityCandidatesIntersect(checkerIds, currentUserIds);
   }
   if (role === UserRole.REVIEWER || role === UserRole.MANAGER || role === UserRole.ADMIN) {
-    return approverId === effectiveUserId;
+    return identityCandidatesIntersect(approverIds, currentUserIds);
   }
   return false;
 }
@@ -390,9 +404,9 @@ export function normalizeReviewTask(raw: unknown): ReviewTask | null {
 // 模拟用户数据（后端不可用时使用）
 const mockUsers: User[] = [
   {
-    id: 'designer_001',
-    username: 'designer',
-    email: 'designer@company.com',
+    id: 'SJ',
+    username: 'SJ',
+    email: 'sj@company.com',
     name: '王设计师',
     role: UserRole.DESIGNER,
     department: '设计部',
@@ -403,22 +417,9 @@ const mockUsers: User[] = [
     lastLoginAt: new Date(),
   },
   {
-    id: 'reviewer_001',
-    username: 'reviewer',
-    email: 'reviewer@company.com',
-    name: '李审核员',
-    role: UserRole.REVIEWER,
-    department: '技术部',
-    phone: '13800138002',
-    status: UserStatus.ACTIVE,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date(),
-    lastLoginAt: new Date(),
-  },
-  {
-    id: 'proofreader_001',
-    username: 'proofreader',
-    email: 'proofreader@company.com',
+    id: 'JH',
+    username: 'JH',
+    email: 'jh@company.com',
     name: '张校对员',
     role: UserRole.PROOFREADER,
     department: '质量部',
@@ -429,26 +430,26 @@ const mockUsers: User[] = [
     lastLoginAt: new Date(),
   },
   {
-    id: 'manager_001',
-    username: 'manager',
-    email: 'manager@company.com',
-    name: '陈经理',
-    role: UserRole.MANAGER,
-    department: '工程部',
-    phone: '13800138001',
+    id: 'SH',
+    username: 'SH',
+    email: 'sh@company.com',
+    name: '李审核员',
+    role: UserRole.REVIEWER,
+    department: '技术部',
+    phone: '13800138002',
     status: UserStatus.ACTIVE,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date(),
     lastLoginAt: new Date(),
   },
   {
-    id: 'admin_001',
-    username: 'admin',
-    email: 'admin@company.com',
-    name: '系统管理员',
-    role: UserRole.ADMIN,
-    department: '信息技术部',
-    phone: '13800138000',
+    id: 'PZ',
+    username: 'PZ',
+    email: 'pz@company.com',
+    name: '陈经理',
+    role: UserRole.MANAGER,
+    department: '工程部',
+    phone: '13800138001',
     status: UserStatus.ACTIVE,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date(),
@@ -463,7 +464,7 @@ const mockReviewerUsers = mockUsers.filter((u) =>
 
 function loadPersisted(): UserPersistedState {
   if (typeof localStorage === 'undefined') {
-    return { version: 3, currentUserId: 'designer_001', useBackend: true, reviewTasks: [] };
+    return { version: 3, currentUserId: DEFAULT_CURRENT_USER_ID, useBackend: true, reviewTasks: [] };
   }
 
   try {
@@ -474,7 +475,7 @@ function loadPersisted(): UserPersistedState {
       if (parsed.version === 3) {
         return {
           version: 3,
-          currentUserId: parsed.currentUserId || 'designer_001',
+          currentUserId: parsed.currentUserId || DEFAULT_CURRENT_USER_ID,
           useBackend: parsed.useBackend ?? true,
           reviewTasks: Array.isArray(parsed.reviewTasks) ? parsed.reviewTasks : [],
         };
@@ -488,7 +489,7 @@ function loadPersisted(): UserPersistedState {
       if (parsed.version === 2) {
         return {
           version: 3,
-          currentUserId: parsed.currentUserId || 'designer_001',
+          currentUserId: parsed.currentUserId || DEFAULT_CURRENT_USER_ID,
           useBackend: parsed.useBackend ?? true,
           reviewTasks: [], // V2 没有 reviewTasks
         };
@@ -502,7 +503,7 @@ function loadPersisted(): UserPersistedState {
       if (parsed.version === 1) {
         return {
           version: 3,
-          currentUserId: parsed.currentUserId || 'designer_001',
+          currentUserId: parsed.currentUserId || DEFAULT_CURRENT_USER_ID,
           useBackend: true,
           reviewTasks: [],
         };
@@ -512,7 +513,7 @@ function loadPersisted(): UserPersistedState {
     console.warn('[useUserStore] Failed to load persisted state:', e);
   }
 
-  return { version: 3, currentUserId: 'designer_001', useBackend: true, reviewTasks: [] };
+  return { version: 3, currentUserId: DEFAULT_CURRENT_USER_ID, useBackend: true, reviewTasks: [] };
 }
 
 function savePersisted(state: Partial<UserPersistedState> & { version: 3 }): void {
@@ -589,35 +590,35 @@ const reviewerInboxStatuses: ReviewTask['status'][] = ['submitted', 'in_review',
 // 仅允许当前岗位看到自己节点上的进行态任务；终态里仅保留与当前岗位相关的 rejected。
 const pendingReviewTasks = computed(() => {
   if (!currentUser.value) return [];
-  const uid = resolveEffectiveUserId(currentUser.value);
-  if (!uid) return [];
   const role = currentUser.value.role;
+  const currentUserIds = resolveReviewIdentityCandidates(currentUser.value, role);
+  if (currentUserIds.length === 0) return [];
 
   return reviewTasks.value.filter((t) => {
     const node = t.currentNode ?? 'sj';
-    const checkerId = resolveEffectiveUserId({ id: t.checkerId || t.reviewerId });
-    const approverId = resolveEffectiveUserId(t.approverId ? { id: t.approverId } : null);
+    const checkerIds = resolveReviewIdentityCandidates({ id: t.checkerId || t.reviewerId }, UserRole.PROOFREADER);
+    const approverIds = resolveReviewIdentityCandidates(t.approverId ? { id: t.approverId } : null, role);
     const isTerminal = t.status === 'approved' || t.status === 'rejected';
-    const isCheckerOwner = checkerId === uid;
-    const isApproverOwner = approverId === uid;
+    const isCheckerOwner = identityCandidatesIntersect(checkerIds, currentUserIds);
+    const isApproverOwner = identityCandidatesIntersect(approverIds, currentUserIds);
 
     if (!reviewerInboxStatuses.includes(t.status)) return false;
 
     if (role === UserRole.PROOFREADER) {
-      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, currentUserIds);
       return isCheckerOwner && node === 'jd';
     }
     if (role === UserRole.REVIEWER) {
-      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, currentUserIds);
       return (isCheckerOwner && node === 'jd') || (isApproverOwner && node === 'sh');
     }
     if (role === UserRole.MANAGER) {
-      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, currentUserIds);
       return isApproverOwner && node === 'pz';
     }
     if (role === UserRole.ADMIN) {
-      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, uid);
-      return approverId === uid && (node === 'sh' || node === 'pz');
+      if (isTerminal) return shouldKeepTerminalTaskInInbox(t, role, currentUserIds);
+      return isApproverOwner && (node === 'sh' || node === 'pz');
     }
     return false;
   });
@@ -715,7 +716,7 @@ async function loadCurrentUser(): Promise<void> {
       const normalizedUser = normalizeBackendUser(response.user as Partial<User> & Record<string, unknown>);
       // Prefer the locally selected alias when the backend returns the canonical id,
       // so computed role gates still point at the correct frontend identity.
-      const existingUser = users.value.find((u) => resolveEffectiveUserId(u) === normalizedUser.id);
+      const existingUser = users.value.find((u) => u.id === normalizedUser.id);
       const effectiveUserId = existingUser?.id ?? normalizedUser.id;
       currentUserId.value = effectiveUserId;
 
@@ -783,24 +784,60 @@ async function loadReviewTasks(): Promise<void> {
     loading.value = true;
     error.value = null;
     try {
-      const effectiveUserId = resolveEffectiveUserId(currentUser.value);
       const queryRole = currentUser.value?.role;
+      const taskQueryUserIds = resolveReviewIdentityCandidates(currentUser.value, queryRole);
       const requesterId = currentUser.value?.role === UserRole.DESIGNER
         ? resolveEffectiveUserId(currentUser.value)
         : undefined;
-      const response = await reviewTaskGetList(
-        isCheckerRole(queryRole)
-          ? { checkerId: effectiveUserId ?? undefined }
-          : isApproverRole(queryRole)
-            ? { approverId: effectiveUserId ?? undefined }
-            : requesterId
-              ? { requesterId }
-              : undefined
-      );
-      if (response.success) {
-        const normalizedTasks = (response.tasks || [])
-          .map((task) => normalizeReviewTask(task))
-          .filter((task): task is ReviewTask => task !== null);
+      const queryOptions = isCheckerRole(queryRole)
+        ? taskQueryUserIds.map((checkerId) => ({ checkerId }))
+        : isApproverRole(queryRole)
+          ? taskQueryUserIds.map((approverId) => ({ approverId }))
+          : requesterId
+            ? [{ requesterId }]
+            : [undefined];
+      const results = await Promise.allSettled(queryOptions.map((options) => reviewTaskGetList(options)));
+      const successResponses = results
+        .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof reviewTaskGetList>>> =>
+          r.status === 'fulfilled' && r.value.success)
+        .map((r) => r.value);
+      const hasAnySuccess = successResponses.length > 0;
+      const allFailed = successResponses.length === 0;
+
+      if (allFailed) {
+        const firstFailed = results.find(
+          (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof reviewTaskGetList>>> =>
+            r.status === 'fulfilled' && !r.value.success
+        );
+        const firstRejected = results.find(
+          (r): r is PromiseRejectedResult => r.status === 'rejected'
+        );
+        throw new Error(
+          firstFailed?.value?.error_message
+          || (firstRejected?.reason instanceof Error ? firstRejected.reason.message : null)
+          || '加载任务列表失败'
+        );
+      }
+
+      if (hasAnySuccess) {
+        const mergedById = new Map<string, ReviewTask>();
+        for (const response of successResponses) {
+          for (const task of response.tasks || []) {
+            const normalizedTask = normalizeReviewTask(task);
+            if (!normalizedTask) continue;
+            const existingTask = mergedById.get(normalizedTask.id);
+            if (!existingTask || normalizedTask.updatedAt >= existingTask.updatedAt) {
+              mergedById.set(normalizedTask.id, normalizedTask);
+            }
+          }
+        }
+        const normalizedTasks = Array.from(mergedById.values());
+
+        if (results.length > successResponses.length) {
+          console.warn(
+            `[UserStore] loadReviewTasks: ${results.length - successResponses.length}/${results.length} 查询失败，已使用成功部分的结果`
+          );
+        }
 
         // Designer queries fetch the requester-scoped slice, so merge it to retain any task state
         // that arrived via websocket or local transitions until the backend reflects it.
@@ -813,15 +850,15 @@ async function loadReviewTasks(): Promise<void> {
           }
           for (const task of normalizedTasks) {
             const existingTask = mergedTasks.get(task.id);
-            mergedTasks.set(task.id, existingTask ? { ...existingTask, ...task } : task);
+            if (!existingTask || task.updatedAt >= existingTask.updatedAt) {
+              mergedTasks.set(task.id, task);
+            }
           }
 
           reviewTasks.value = Array.from(mergedTasks.values()).sort((a, b) => b.updatedAt - a.updatedAt);
         } else {
-          reviewTasks.value = normalizedTasks;
+          reviewTasks.value = normalizedTasks.sort((a, b) => b.updatedAt - a.updatedAt);
         }
-      } else {
-        throw new Error(response.error_message || '加载任务列表失败');
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : '加载任务列表失败';

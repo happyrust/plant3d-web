@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   beginWorkflowVerifyCycle,
+  summarizeWorkflowVerifyDiagnostics,
   type WorkflowVerifyStateSnapshot,
 } from './pmsReviewSimulatorState';
 
@@ -15,6 +16,18 @@ describe('beginWorkflowVerifyCycle', () => {
       lastErrorCode: 'ANNOTATION_CHECK_FAILED',
       lastRecommendedAction: 'return',
       lastAt: 1710000000000,
+      lastDiagnostics: {
+        blockCode: 'OWNER_MISMATCH',
+        actorId: 'SH',
+        ownerId: 'JH',
+        ownerSource: 'checker',
+        expectedNextNode: 'sh',
+        requestedNextStep: {
+          assigneeId: 'PZ',
+          name: 'PZ',
+          roles: 'pz',
+        },
+      },
       lastAnnotationCheck: {
         passed: false,
         recommendedAction: 'return',
@@ -39,7 +52,29 @@ describe('beginWorkflowVerifyCycle', () => {
       lastErrorCode: null,
       lastRecommendedAction: null,
       lastAt: 1710000000000,
+      lastDiagnostics: null,
       lastAnnotationCheck: null,
     });
+  });
+});
+
+describe('summarizeWorkflowVerifyDiagnostics', () => {
+  it('把结构化 verify 诊断字段格式化为可展示摘要', () => {
+    expect(summarizeWorkflowVerifyDiagnostics({
+      blockCode: 'OWNER_MISMATCH',
+      actorId: 'SH',
+      ownerId: 'JH',
+      ownerSource: 'checker',
+      expectedNextNode: 'sh',
+      requestedNextStep: {
+        assigneeId: 'PZ',
+        name: 'PZ',
+        roles: 'pz',
+      },
+    })).toBe('block=OWNER_MISMATCH ｜ actor=SH ｜ owner=JH(checker) ｜ expected_next=sh ｜ requested_next=PZ/pz');
+  });
+
+  it('没有结构化字段时返回占位符', () => {
+    expect(summarizeWorkflowVerifyDiagnostics(null)).toBe('--');
   });
 });

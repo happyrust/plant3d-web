@@ -24,6 +24,33 @@ describe('MeasurementPanel', () => {
     vi.resetModules();
     vi.doUnmock('@/composables/usePipeDistanceStore');
     vi.doUnmock('@/ribbon/commandBus');
+    vi.doMock('@/components/review/measurementPathLookup', () => {
+      const normalize = (raw: unknown) => {
+        let value = String(raw ?? '').trim();
+        const objectId = value.match(/^o:([^:]+):\d+$/i);
+        if (objectId?.[1]) value = objectId[1].trim();
+        return /^\d+[/,_]\d+$/.test(value) ? value.replace(/[/,]/g, '_') : value;
+      };
+      const format = (raw: unknown) => {
+        const normalized = normalize(raw);
+        const refno = normalized.match(/^(\d+)_(\d+)$/);
+        return refno ? `${refno[1]}/${refno[2]}` : normalized || '-';
+      };
+      return {
+        resolveMeasurementEntityPath: vi.fn(async (rawEntityId: unknown) => {
+          const fallbackLabel = format(rawEntityId);
+          return {
+            rawEntityId: String(rawEntityId ?? ''),
+            refno: normalize(rawEntityId),
+            fallbackLabel,
+            displayName: fallbackLabel,
+            displayPath: fallbackLabel,
+            nodes: [],
+            status: 'fallback',
+          };
+        }),
+      };
+    });
   });
 
   it('应支持列表选中、外部选中回写和清空测量', async () => {
@@ -61,8 +88,8 @@ describe('MeasurementPanel', () => {
     store.addMeasurement({
       id: 'm1',
       kind: 'distance',
-      origin: { entityId: 'e1', worldPos: [0, 0, 0] },
-      target: { entityId: 'e2', worldPos: [1, 0, 0] },
+      origin: { entityId: 'o:24381_145018:0', worldPos: [0, 0, 0] },
+      target: { entityId: '24381_145019', worldPos: [1, 0, 0] },
       visible: true,
       createdAt: 1,
     });
@@ -93,6 +120,9 @@ describe('MeasurementPanel', () => {
 
     const row1 = host.querySelector('[data-testid="measurement-row-m1"]') as HTMLElement | null;
     expect(row1).toBeTruthy();
+    expect(host.querySelector('[data-testid="measurement-summary-m1"]')?.textContent).toContain(
+      '起点 24381/145018 -> 终点 24381/145019',
+    );
     row1?.click();
     await nextTick();
 

@@ -200,7 +200,7 @@
                 class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
             </label>
             <label class="text-xs text-gray-500">
-              <span class="mb-1 block">最大结果数</span>
+              <span class="mb-1 block">每页数量</span>
               <input v-model.number="draft.limit"
                 type="number"
                 min="1"
@@ -220,17 +220,47 @@
                 class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
             </label>
             <div class="text-xs text-gray-500">
-              <div class="mb-1 block">专业筛选</div>
+              <div class="mb-1 flex items-center justify-between">
+                <span>专业筛选</span>
+                <div class="flex items-center gap-2 text-[11px]">
+                  <button type="button"
+                    class="text-gray-500 transition-colors hover:text-[#C84D00] disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="allSpecSelected"
+                    data-testid="spec-select-all"
+                    @click="selectAllSpecs">
+                    全选
+                  </button>
+                  <span class="text-gray-300">·</span>
+                  <button type="button"
+                    class="text-gray-500 transition-colors hover:text-[#C84D00] disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="draft.specValues.length === 0"
+                    data-testid="spec-clear"
+                    @click="clearSpecs">
+                    清空
+                  </button>
+                </div>
+              </div>
               <div class="flex flex-wrap gap-1.5">
                 <button v-for="spec in specOptions"
                   :key="spec.value"
                   type="button"
-                  class="rounded-full border px-2.5 py-1 text-[11px] transition-colors"
-                  :class="selectedSpecValues.has(spec.value) ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                  class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors"
+                  :class="selectedSpecValues.has(spec.value)
+                    ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]'
+                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                  :title="spec.fullLabel"
+                  data-testid="spec-chip"
+                  :data-spec-value="spec.value"
                   @click="toggleSpecValue(spec.value)">
+                  <span class="inline-block h-2 w-2 rounded-full"
+                    :style="{ backgroundColor: getSpecBadgeStyle(spec.value).fg }"
+                    aria-hidden="true" />
                   {{ spec.label }}
                 </button>
               </div>
+              <p class="mt-1 text-[10px] text-gray-400">
+                未选 = 不过滤，显示全部专业；已选多项 = 仅显示选中的专业。
+              </p>
             </div>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">关键字（Refno / 名称）</span>
@@ -299,13 +329,13 @@
                 class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="isQueryBusy"
                 @click="loadCurrentResults">
-                加载当前筛选结果
+                加载当前页模型
               </button>
               <button type="button"
                 class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="isQueryBusy"
                 @click="loadUnloadedResults">
-                只加载未加载结果
+                只加载当前页未加载
               </button>
             </div>
           </div>
@@ -326,8 +356,31 @@
             当前条件下没有匹配结果。
           </div>
 
-          <div v-else class="max-h-[280px] overflow-y-auto px-3 py-2.5">
-            <div v-for="group in resultSet?.groups ?? []" :key="group.specValue" class="mb-3 last:mb-0">
+          <div v-if="resultSet && resultSet.items.length > 0" class="flex items-center justify-between border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500">
+            <div>
+              每页 {{ resultSet.perPage }} 项 · 当前 {{ resultPageStart }}-{{ resultPageEnd }} / {{ resultSet.total }}
+            </div>
+            <div v-if="resultTotalPages > 1" class="flex items-center gap-1.5">
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isQueryBusy || currentResultPage <= 1"
+                data-testid="spatial-result-page-prev"
+                @click="setResultPage(currentResultPage - 1)">
+                上一页
+              </button>
+              <span class="font-mono text-gray-600">第 {{ currentResultPage }} / {{ resultTotalPages }} 页</span>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isQueryBusy || !resultSet.hasMore"
+                data-testid="spatial-result-page-next"
+                @click="setResultPage(currentResultPage + 1)">
+                下一页
+              </button>
+            </div>
+          </div>
+
+          <div v-if="resultSet && resultSet.items.length > 0" class="max-h-[280px] overflow-y-auto px-3 py-2.5">
+            <div v-for="group in pagedResultGroups" :key="group.specValue" class="mb-3 last:mb-0">
               <div class="mb-1.5 flex items-center justify-between">
                 <div>
                   <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -403,10 +456,14 @@ import { computed } from 'vue';
 
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Search, X } from 'lucide-vue-next';
 
-import type { SpatialQueryMode, SpatialQueryResultItem } from '@/types/spatialQuery';
+import type { SpatialQueryMode, SpatialQueryResultGroup, SpatialQueryResultItem } from '@/types/spatialQuery';
 
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
-import { SITE_SPEC_OPTIONS } from '@/types/spec';
+import {
+  SITE_SPEC_OPTIONS_WITH_UNKNOWN,
+  getSpecBadgeStyle,
+  getSpecValueShortName,
+} from '@/types/spec';
 
 defineProps<{
   open: boolean;
@@ -444,8 +501,29 @@ const DISTANCE_RADIUS_STEP = 100;
 const DISTANCE_RADIUS_PRESETS = [100, 500, 1000, 5000] as const;
 
 const isQueryBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
-const specOptions = SITE_SPEC_OPTIONS;
+const specOptions = SITE_SPEC_OPTIONS_WITH_UNKNOWN;
 const selectedSpecValues = computed(() => new Set(draft.specValues));
+
+const allSpecSelected = computed(() => draft.specValues.length === specOptions.length);
+
+function selectAllSpecs(): void {
+  draft.specValues = specOptions.map((option) => option.value);
+}
+
+function clearSpecs(): void {
+  draft.specValues = [];
+}
+
+const resultBreakdown = computed<string>(() => {
+  if (!resultSet.value) return '';
+  const parts = resultSet.value.groups
+    .filter((group) => group.count > 0)
+    .map((group) => `${group.count} ${getSpecValueShortName(group.specValue)}`);
+  if (parts.length === 0) {
+    return `共 ${resultSet.value.total} 项`;
+  }
+  return `共 ${resultSet.value.total} 项 · ${parts.join(' · ')}`;
+});
 
 const showCoordinateInputs = computed(() => {
   return (draft.mode === 'range' && (draft.rangeCenterSource === 'coordinates' || draft.rangeCenterSource === 'pick'))
@@ -481,11 +559,60 @@ const summaryText = computed(() => {
   if (!resultSet.value) {
     return '支持范围查询与距离查询，结果会按专业分组。';
   }
-  return `共 ${resultSet.value.total} 项，已加载 ${resultSet.value.loadedCount} 项，未加载 ${resultSet.value.unloadedCount} 项`;
+  return `共 ${resultSet.value.total} 项，当前页 ${resultSet.value.returnedCount} 项，已加载 ${resultSet.value.loadedCount} 项，未加载 ${resultSet.value.unloadedCount} 项`;
+});
+
+const resultTotalPages = computed(() => {
+  return resultSet.value?.totalPages ?? 1;
+});
+
+const currentResultPage = computed(() => {
+  return resultSet.value?.page ?? 1;
+});
+
+const pagedResultItems = computed(() => {
+  return resultSet.value?.items ?? [];
+});
+
+const pagedResultGroups = computed<SpatialQueryResultGroup[]>(() => {
+  const grouped = new Map<number, SpatialQueryResultItem[]>();
+  for (const item of pagedResultItems.value) {
+    const list = grouped.get(item.specValue) ?? [];
+    list.push(item);
+    grouped.set(item.specValue, list);
+  }
+
+  return Array.from(grouped.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([specValue, items]) => ({
+      specValue,
+      specName: items[0]?.specName ?? getSpecValueShortName(specValue),
+      count: items.length,
+      items,
+    }));
+});
+
+const resultPageStart = computed(() => {
+  const result = resultSet.value;
+  if (!result || result.items.length === 0) return 0;
+  return (result.page - 1) * result.perPage + 1;
+});
+
+const resultPageEnd = computed(() => {
+  const result = resultSet.value;
+  if (!result || result.items.length === 0) return 0;
+  return resultPageStart.value + result.items.length - 1;
 });
 
 function closePanel() {
   emit('update:open', false);
+}
+
+function setResultPage(page: number) {
+  if (!Number.isFinite(page)) return;
+  const nextPage = Math.min(Math.max(Math.floor(page), 1), resultTotalPages.value);
+  if (nextPage === currentResultPage.value || isQueryBusy.value) return;
+  void submitQuery(nextPage);
 }
 
 function runQuery() {

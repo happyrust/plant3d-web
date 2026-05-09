@@ -51,80 +51,67 @@ describe('pipeClearance', () => {
     expect(res).toBeNull();
   });
 
-  it('pipe-segment-to-pipe-segment: should compute parallel pipe surface clearance', () => {
-    const res = computePipeSegmentToPipeSegmentClearance({
+  it('pipe-to-pipe: respects the configured max angle', () => {
+    const eightDeg = (8 * Math.PI) / 180;
+    const pipe2Axis = new THREE.Vector3(Math.sin(eightDeg), Math.cos(eightDeg), 0);
+
+    const rejected = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
+      pipe1Radius: 1,
+      pipe1Axis: new THREE.Vector3(0, 1, 0),
+      pipe2Center: new THREE.Vector3(4, 0, 0),
+      pipe2Radius: 1,
+      pipe2Axis,
+      maxAngleDeg: 5,
+    });
+    const accepted = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
+      pipe1Radius: 1,
+      pipe1Axis: new THREE.Vector3(0, 1, 0),
+      pipe2Center: new THREE.Vector3(4, 0, 0),
+      pipe2Radius: 1,
+      pipe2Axis,
+      maxAngleDeg: 10,
+    });
+
+    expect(rejected).toBeNull();
+    expect(accepted).not.toBeNull();
+  });
+
+  it('pipe-to-pipe: uses finite segment endpoints instead of infinite axes', () => {
+    const res = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
+      pipe1Radius: 1,
+      pipe1Axis: new THREE.Vector3(0, 10, 0),
+      pipe2Center: new THREE.Vector3(3, 100, 0),
+      pipe2Radius: 1,
+      pipe2Axis: new THREE.Vector3(0, 10, 0),
       pipe1Start: new THREE.Vector3(0, 0, 0),
       pipe1End: new THREE.Vector3(0, 10, 0),
-      pipe1Radius: 1,
-      pipe2Start: new THREE.Vector3(4, 3, 0),
-      pipe2End: new THREE.Vector3(4, 8, 0),
-      pipe2Radius: 1.5,
+      pipe2Start: new THREE.Vector3(3, 100, 0),
+      pipe2End: new THREE.Vector3(3, 110, 0),
     });
 
     expect(res).not.toBeNull();
-    expect(res!.distance).toBeCloseTo(1.5, 8);
-    expect(res!.pipeSurfacePoint.x).toBeCloseTo(1, 8);
-    expect(res!.otherSurfacePoint.x).toBeCloseTo(2.5, 8);
+    expect(res!.distance).toBeGreaterThan(80);
   });
 
-  it('pipe-segment-to-pipe-segment: should use segment endpoints for finite pipes', () => {
-    const res = computePipeSegmentToPipeSegmentClearance({
-      pipe1Start: new THREE.Vector3(0, 0, 0),
-      pipe1End: new THREE.Vector3(0, 2, 0),
-      pipe1Radius: 0.5,
-      pipe2Start: new THREE.Vector3(0, 5, 0),
-      pipe2End: new THREE.Vector3(0, 7, 0),
-      pipe2Radius: 0.5,
-    });
-
-    expect(res).not.toBeNull();
-    expect(res!.distance).toBeCloseTo(2, 8);
-    expect(res!.pipeSurfacePoint.y).toBeCloseTo(2.5, 8);
-    expect(res!.otherSurfacePoint.y).toBeCloseTo(4.5, 8);
-  });
-
-  it('pipe-segment-to-pipe-segment: should support skew pipe segments', () => {
-    const res = computePipeSegmentToPipeSegmentClearance({
-      pipe1Start: new THREE.Vector3(0, 0, 0),
-      pipe1End: new THREE.Vector3(10, 0, 0),
+  it('pipe-to-pipe: keeps touching pipes as zero clearance', () => {
+    const res = computePipeToPipeClearance({
+      pipe1Center: new THREE.Vector3(0, 0, 0),
       pipe1Radius: 1,
-      pipe2Start: new THREE.Vector3(5, -2, 4),
-      pipe2End: new THREE.Vector3(5, 2, 4),
+      pipe1Axis: new THREE.Vector3(0, 10, 0),
+      pipe2Center: new THREE.Vector3(2, 0, 0),
       pipe2Radius: 1,
+      pipe2Axis: new THREE.Vector3(0, 10, 0),
+      pipe1Start: new THREE.Vector3(0, 0, 0),
+      pipe1End: new THREE.Vector3(0, 10, 0),
+      pipe2Start: new THREE.Vector3(2, 0, 0),
+      pipe2End: new THREE.Vector3(2, 10, 0),
     });
 
     expect(res).not.toBeNull();
-    expect(res!.distance).toBeCloseTo(2, 8);
-    expect(res!.pipeSurfacePoint.z).toBeCloseTo(1, 8);
-    expect(res!.otherSurfacePoint.z).toBeCloseTo(3, 8);
-  });
-
-  it('pipe-segment-to-pipe-segment: should clamp penetrating pipes to zero clearance', () => {
-    const res = computePipeSegmentToPipeSegmentClearance({
-      pipe1Start: new THREE.Vector3(0, 0, 0),
-      pipe1End: new THREE.Vector3(10, 0, 0),
-      pipe1Radius: 2,
-      pipe2Start: new THREE.Vector3(5, -2, 3),
-      pipe2End: new THREE.Vector3(5, 2, 3),
-      pipe2Radius: 2,
-    });
-
-    expect(res).not.toBeNull();
-    expect(res!.distance).toBe(0);
-    expect(res!.pipeSurfacePoint.distanceTo(res!.otherSurfacePoint)).toBeCloseTo(0, 8);
-  });
-
-  it('pipe-segment-to-pipe-segment: should reject degenerate segments', () => {
-    const res = computePipeSegmentToPipeSegmentClearance({
-      pipe1Start: new THREE.Vector3(0, 0, 0),
-      pipe1End: new THREE.Vector3(0, 0, 0),
-      pipe1Radius: 1,
-      pipe2Start: new THREE.Vector3(0, 5, 0),
-      pipe2End: new THREE.Vector3(0, 10, 0),
-      pipe2Radius: 1,
-    });
-
-    expect(res).toBeNull();
+    expect(res!.distance).toBeCloseTo(0, 8);
   });
 });
 

@@ -507,11 +507,11 @@ export class LinearDimension3D extends AnnotationBase {
 
   private resolveLabelAnchorWorld(out: THREE.Vector3): THREE.Vector3 {
     if (this.params.laidOutGeometry?.textAnchor) {
-      return this.localToWorld(out.copy(this.params.laidOutGeometry.textAnchor));
+      out.copy(this.params.laidOutGeometry.textAnchor);
+    } else {
+      const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
+      out.copy(this.dimStart).lerp(this.dimEnd, t);
     }
-
-    const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
-    out.copy(this.dimStart).lerp(this.dimEnd, t);
     this.localToWorld(out);
     if (this.params.labelOffsetWorld) {
       out.add(this.params.labelOffsetWorld);
@@ -1280,7 +1280,7 @@ export class LinearDimension3D extends AnnotationBase {
     const baseLabelPos = laidOut?.textAnchor
       ? this.tempVec.copy(laidOut.textAnchor)
       : this.tempVec.copy(this.dimStart).lerp(this.dimEnd, t);
-    if (!laidOut?.textAnchor && this.params.labelOffsetWorld) {
+    if (this.params.labelOffsetWorld) {
       this.textLabel.object3d.position
         .copy(baseLabelPos)
         .add(this.params.labelOffsetWorld);

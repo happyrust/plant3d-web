@@ -114,6 +114,8 @@ npm run test:pms:cdp:extended
 
 发起编校审时，extended 默认会把 **`PMS_INITIATE_CHECKER_SUBSTRING` 设为与 `PMS_CHECKER_USERNAME` 相同**，以便在校核/审核人下拉里优先选到 JH（选项文案中须包含 `JH` 等子串）。若你们下拉展示的是中文姓名，请显式设置 `PMS_INITIATE_CHECKER_SUBSTRING=某姓名片段`。
 
+> 2026-05-08 RUS-241 补充：模型中心任务创建阶段已收紧身份契约，`checkerId / reviewerId / approverId` 必须是 PMS HumanCode（默认 `JH / JH / SH`），旧内部账号 `proofreader_001 / reviewer_001 / manager_001` 会被视为错误输入并拒绝。真实 PMS 回归时若远端 task owner 仍出现这些旧值，应判定为建单 payload 或 PMS 入参未切换完成，而不是 reviewer 打开或 `agree` 校验问题。
+
 ### 环境变量补充（CDP 脚本）
 
 | 变量 | 说明 |

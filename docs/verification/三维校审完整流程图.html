@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>三维校审完整流程图</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #eef2f6;
+      --paper-2: #f8fbfe;
+      --ink: #21364d;
+      --muted: #6b7f95;
+      --soft: #8aa0b6;
+      --rule: rgba(33, 54, 77, 0.12);
+      --rule-solid: rgba(33, 54, 77, 0.24);
+      --accent: #2d67b2;
+      --accent-tint: rgba(45, 103, 178, 0.10);
+      --link: #1f4f8d;
+      --warn: #9b5a1a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'Geist', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .page {
+      width: min(1280px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 48px 0 56px;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-family: 'Geist Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 42px;
+      font-weight: 400;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      max-width: 78ch;
+      margin: 16px 0 26px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .diagram-shell {
+      overflow-x: auto;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--paper-2);
+      padding: 16px;
+    }
+    svg {
+      display: block;
+      width: 100%;
+      min-width: 1180px;
+      height: auto;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+    .card {
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: #fff;
+      padding: 16px;
+    }
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    code {
+      font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">Swimlane · Diagram Design</p>
+    <h1>三维校审完整流程</h1>
+    <p class="subtitle">
+      当前主线是外部平台驱动：PMS 或仿 PMS 负责发起和流程动作，plant3d-web 负责三维数据保存、上下文恢复、批注处理、测量、附件和留痕展示。
+      <code>form_id</code> 是跨系统单据锚点，<code>task_id</code> 是平台内部任务锚点。
+    </p>
+
+    <section class="diagram-shell" aria-label="三维校审完整流程泳道图">
+      <svg viewBox="0 0 1240 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+        <title id="title">三维校审完整流程泳道图</title>
+        <desc id="desc">按 PMS、平台 API、plant3d-web iframe、办理角色四条泳道展示三维校审从发起到批准或驳回重提的完整主线。</desc>
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(33,54,77,0.10)"/>
+          </pattern>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#6b7f95"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2d67b2"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#1f4f8d"/>
+          </marker>
+          <style>
+            .bg { fill: #eef2f6; }
+            .dot { fill: url(#dots); opacity: .6; }
+            .lane-label { fill: #6b7f95; font: 600 9px 'Geist Mono', monospace; letter-spacing: .14em; }
+            .lane-line { stroke: rgba(33,54,77,.14); stroke-width: 1; }
+            .box { fill: #fff; stroke: #21364d; stroke-width: 1; }
+            .box-focal { fill: rgba(45,103,178,.10); stroke: #2d67b2; stroke-width: 1.2; }
+            .box-store { fill: rgba(33,54,77,.05); stroke: #6b7f95; stroke-width: 1; }
+            .box-optional { fill: rgba(33,54,77,.02); stroke: rgba(33,54,77,.30); stroke-width: 1; stroke-dasharray: 4 3; }
+            .tag { fill: transparent; stroke: rgba(33,54,77,.36); stroke-width: .8; }
+            .tag-text { fill: #6b7f95; font: 600 7px 'Geist Mono', monospace; letter-spacing: .12em; text-anchor: middle; }
+            .node { fill: #21364d; font: 600 12px 'Geist', sans-serif; text-anchor: middle; }
+            .sub { fill: #6b7f95; font: 400 9px 'Geist Mono', monospace; text-anchor: middle; }
+            .arrow { stroke: #6b7f95; stroke-width: 1.1; fill: none; marker-end: url(#arrow); }
+            .arrow-link { stroke: #1f4f8d; stroke-width: 1.2; fill: none; marker-end: url(#arrow-link); }
+            .arrow-accent { stroke: #2d67b2; stroke-width: 1.4; fill: none; marker-end: url(#arrow-accent); }
+            .arrow-dash { stroke-dasharray: 5 4; }
+            .label-mask { fill: #f8fbfe; }
+            .arrow-label { fill: #6b7f95; font: 500 8px 'Geist Mono', monospace; text-anchor: middle; letter-spacing: .06em; }
+            .note { fill: #6b7f95; font: italic 14px 'Instrument Serif', Georgia, serif; }
+            .legend { fill: #6b7f95; font: 500 8px 'Geist Mono', monospace; letter-spacing: .12em; }
+          </style>
+        </defs>
+
+        <rect class="bg" width="1240" height="760" rx="8"/>
+        <rect class="dot" width="1240" height="760" rx="8"/>
+
+        <text class="lane-label" x="32" y="76">PMS / 仿 PMS</text>
+        <text class="lane-label" x="32" y="228">平台 API</text>
+        <text class="lane-label" x="32" y="380">plant3d-web iframe</text>
+        <text class="lane-label" x="32" y="532">办理角色</text>
+        <line class="lane-line" x1="24" y1="152" x2="1216" y2="152"/>
+        <line class="lane-line" x1="24" y1="304" x2="1216" y2="304"/>
+        <line class="lane-line" x1="24" y1="456" x2="1216" y2="456"/>
+        <line class="lane-line" x1="24" y1="640" x2="1216" y2="640"/>
+
+        <!-- arrows behind boxes -->
+        <path class="arrow-link" d="M 208 84 L 288 84"/>
+        <path class="arrow-link" d="M 408 84 C 444 84, 444 236, 480 236"/>
+        <path class="arrow" d="M 600 236 C 636 236, 636 388, 672 388"/>
+        <path class="arrow" d="M 792 388 C 828 388, 828 540, 864 540"/>
+        <path class="arrow-accent" d="M 984 540 C 1020 540, 1020 236, 1056 236"/>
+        <path class="arrow-link" d="M 1056 252 C 1012 324, 1012 388, 960 388"/>
+        <path class="arrow" d="M 208 540 L 288 540"/>
+        <path class="arrow" d="M 408 540 L 488 540"/>
+        <path class="arrow" d="M 608 540 L 688 540"/>
+        <path class="arrow-accent" d="M 808 540 L 864 540"/>
+        <path class="arrow-dash arrow" d="M 984 556 C 1068 624, 292 624, 288 556"/>
+        <path class="arrow-dash arrow-link" d="M 600 252 C 636 252, 636 84, 672 84"/>
+
+        <rect class="label-mask" x="230" y="70" width="42" height="14" rx="2"/>
+        <text class="arrow-label" x="252" y="80">EMBED</text>
+        <rect class="label-mask" x="422" y="150" width="58" height="14" rx="2"/>
+        <text class="arrow-label" x="452" y="160">TOKEN</text>
+        <rect class="label-mask" x="622" y="302" width="64" height="14" rx="2"/>
+        <text class="arrow-label" x="654" y="312">LANDING</text>
+        <rect class="label-mask" x="812" y="454" width="54" height="14" rx="2"/>
+        <text class="arrow-label" x="840" y="464">HANDLE</text>
+        <rect class="label-mask" x="1004" y="382" width="64" height="14" rx="2"/>
+        <text class="arrow-label" x="1036" y="392">SYNC</text>
+        <rect class="label-mask" x="628" y="70" width="54" height="14" rx="2"/>
+        <text class="arrow-label" x="656" y="80">QUERY</text>
+        <rect class="label-mask" x="536" y="610" width="64" height="14" rx="2"/>
+        <text class="arrow-label" x="568" y="620">RETURN</text>
+
+        <!-- row 1 -->
+        <g transform="translate(72 52)">
+          <rect class="box-focal" width="136" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="32" height="12" rx="2"/>
+          <text class="tag-text" x="24" y="16">PMS</text>
+          <text class="node" x="68" y="35">发起入口</text>
+          <text class="sub" x="68" y="51">新增 / 重开</text>
+        </g>
+        <g transform="translate(288 52)">
+          <rect class="box" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="36" height="12" rx="2"/>
+          <text class="tag-text" x="26" y="16">URL</text>
+          <text class="node" x="60" y="35">embed-url</text>
+          <text class="sub" x="60" y="51">token + form</text>
+        </g>
+        <g transform="translate(672 52)">
+          <rect class="box-store" width="152" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="44" height="12" rx="2"/>
+          <text class="tag-text" x="30" y="16">READ</text>
+          <text class="node" x="76" y="35">重开同单据</text>
+          <text class="sub" x="76" y="51">form_id query</text>
+        </g>
+
+        <!-- row 2 -->
+        <g transform="translate(480 204)">
+          <rect class="box" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="36" height="12" rx="2"/>
+          <text class="tag-text" x="26" y="16">AUTH</text>
+          <text class="node" x="60" y="35">校验 token</text>
+          <text class="sub" x="60" y="51">claims first</text>
+        </g>
+        <g transform="translate(1056 204)">
+          <rect class="box-focal" width="128" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="40" height="12" rx="2"/>
+          <text class="tag-text" x="28" y="16">FLOW</text>
+          <text class="node" x="64" y="35">verify → sync</text>
+          <text class="sub" x="64" y="51">active/agree/return</text>
+        </g>
+
+        <!-- row 3 -->
+        <g transform="translate(672 356)">
+          <rect class="box" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="44" height="12" rx="2"/>
+          <text class="tag-text" x="30" y="16">VIEW</text>
+          <text class="node" x="60" y="35">角色落点</text>
+          <text class="sub" x="60" y="51">SJ / JH / SH / PZ</text>
+        </g>
+        <g transform="translate(840 356)">
+          <rect class="box-store" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="44" height="12" rx="2"/>
+          <text class="tag-text" x="30" y="16">DATA</text>
+          <text class="node" x="60" y="35">恢复快照</text>
+          <text class="sub" x="60" y="51">records/comments</text>
+        </g>
+
+        <!-- row 4 -->
+        <g transform="translate(72 508)">
+          <rect class="box" width="136" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="28" height="12" rx="2"/>
+          <text class="tag-text" x="22" y="16">SJ</text>
+          <text class="node" x="68" y="35">保存编校审</text>
+          <text class="sub" x="68" y="51">构件 / 附件</text>
+        </g>
+        <g transform="translate(288 508)">
+          <rect class="box" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="28" height="12" rx="2"/>
+          <text class="tag-text" x="22" y="16">JH</text>
+          <text class="node" x="60" y="35">批注测量</text>
+          <text class="sub" x="60" y="51">confirm data</text>
+        </g>
+        <g transform="translate(488 508)">
+          <rect class="box" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="28" height="12" rx="2"/>
+          <text class="tag-text" x="22" y="16">SH</text>
+          <text class="node" x="60" y="35">复核处理</text>
+          <text class="sub" x="60" y="51">agree / return</text>
+        </g>
+        <g transform="translate(688 508)">
+          <rect class="box" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="28" height="12" rx="2"/>
+          <text class="tag-text" x="22" y="16">PZ</text>
+          <text class="node" x="60" y="35">最终批准</text>
+          <text class="sub" x="60" y="51">approved / stop</text>
+        </g>
+        <g transform="translate(864 508)">
+          <rect class="box-optional" width="120" height="64" rx="6"/>
+          <rect class="tag" x="8" y="7" width="44" height="12" rx="2"/>
+          <text class="tag-text" x="30" y="16">BACK</text>
+          <text class="node" x="60" y="35">驳回处理</text>
+          <text class="sub" x="60" y="51">SJ 全部收口</text>
+        </g>
+
+        <text class="note" x="72" y="680">主线：external/passive。前端不抢外部平台的流程推进权，只负责保存、恢复、处理与留痕。</text>
+        <line x1="72" y1="704" x2="1168" y2="704" stroke="rgba(33,54,77,.12)" stroke-width=".8"/>
+        <text class="legend" x="72" y="728">LEGEND</text>
+        <rect x="152" y="717" width="18" height="10" rx="2" fill="rgba(45,103,178,.10)" stroke="#2d67b2"/>
+        <text class="legend" x="180" y="726">关键交接</text>
+        <line x1="284" y1="722" x2="326" y2="722" stroke="#1f4f8d" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text class="legend" x="340" y="726">接口调用</text>
+        <line x1="448" y1="722" x2="490" y2="722" stroke="#6b7f95" stroke-width="1.1" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+        <text class="legend" x="504" y="726">驳回回路</text>
+      </svg>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <h2>第一锚点</h2>
+        <p><code>form_id</code> 串起 PMS、仿 PMS、嵌入页、任务恢复和 workflow 查询。排障优先查它。</p>
+      </article>
+      <article class="card">
+        <h2>流程边界</h2>
+        <p>默认外部驱动。plant3d-web 保存和恢复三维校审数据，真正流转由 <code>workflow/verify → workflow/sync</code> 完成。</p>
+      </article>
+      <article class="card">
+        <h2>驳回语义</h2>
+        <p>驳回后不是重填表单，而是处理全部批注、确认当前数据，再重新发起并继续流转。</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

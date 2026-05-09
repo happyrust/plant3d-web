@@ -44,9 +44,25 @@ bun run test:pms:simulator -- --cases=return,stop,approved
 ## Wave 2 任务（按依赖顺序）
 
 - [ ] **W2.1 采证**：跑一轮 `bun run test:pms:simulator -- --cases=return`，把生成的 JSON 与 `dev.log` / `frontend.log` 一并归档到 `artifacts/wave2-evidence/`。
+  - 2026-04-25 现场增量：3100/3101 均可访问，但 `scenarioReturn` 卡在 `createReview case=return openNew`，尚未进入 PZ return 业务段。
+  - 证据文件：`artifacts/wave2-evidence/pms-simulator-return-20260425-202643.json` / `.log`。该次由 watchdog 在 240s 后终止，JSON 记录 `Target page, context or browser has been closed`，log 最后一行是 `createReview case=return openNew`。
+  - 最小探针：Playwright 直接调用 `__pmsReviewSimulatorTest.openNew()` 时，`POST /api/review/embed-url` 30s 未响应。
+  - 后端探针：`POST /api/review/embed-url`、`GET /api/review/tasks?limit=5`、`POST /api/review/workflow/sync(action=query)` 均超时；`/api/auth/token`、`/api/projects`、`/api/health` 正常。
+  - SurrealDB 探针：`surreal sql --endpoint ws://127.0.0.1:8020 --namespace 1516 --database AvevaMarineSample 'INFO FOR DB;'` < 1s 返回，说明 8020 本身可用。
+  - 临时结论：当前阻塞点不是 return 决策树的 1/2/3/4，而是运行了约 11 小时的 3100 后端内 `review_primary_db` / review DB 访问路径疑似 stale/hung。下一步应重启后端或修复 review DB 连接超时/重连后，再重新采 `return-verify` / `return-sync` / `return-backend-current-node`。
+  - 重启 3100 后端后复跑成功进入业务段：`artifacts/wave2-evidence/pms-simulator-return-20260425-203950.json` / `.log`。
+  - 新三元组：`return-verify` 失败，detail 为 `expected_action=return ｜ actual_action=active ｜ ok=true`；`return-sync` 失败，detail 为 `actual_action=return ｜ ok=false ｜ 当前单据缺少 workflow next_step 指定的处理角色或处理人，仅可查看。`；`return-backend-current-node` 为 `current_node=jd status=submitted`。
+  - 关键时间线：log 显示 PZ 执行 return 前 `runWorkflowAction action=return ... node=jd`，说明问题发生在 PZ return 之前：JH/SH agree 链路没有把后端任务推进到 `pz`，PZ return 因访问判定为只读而未真正写库。
+  - 修复采证 runner 后复跑：`artifacts/wave2-evidence/pms-simulator-return-waitfix-20260425-204321.json` / `.log`，`ok=true`，最终 `finalNode=sj`、`finalStatus=draft`。
+  - 新增断言结果：SJ active 后端节点 `jd/submitted`、JH agree 后端节点 `sh/in_review`、SH agree 后端节点 `pz/in_review`、PZ return 后端节点 `sj/draft`，全部通过。
 - [ ] **W2.2 根因决策**：按决策树读 JSON + 日志，归类落到 1/2/3/4 哪条。
+  - 当前归类：先落入“访问检查在 verify 之前已挡住”，但更准确的子问题是中间 `active/agree/agree` 没有逐步断言，导致 JH/SH 推进失败被吞掉，最终才在 PZ return 暴露为 `jd/submitted`。
+  - 下一步：给 `scenarioReturn` 增加与 `scenarioApproved` 相同的 `sj-active` / `jh-agree` / `sh-agree` verify+sync 断言，并在每个阶段直接 probe 后端 current_node，先证明是哪一步没有推进。
+  - 已完成：`scenarioReturn` 现在等待角色打开后的 diagnostics 上下文，再执行 workflow action；并加入上述中间阶段 verify/sync + 后端节点断言。根因是自动化 runner 过早点击 workflow action，不是 `apply_workflow_return` 业务写库错误。
 - [ ] **W2.3 修复落地**：根据 W2.2 的归类，最多动 1–2 处代码（前端 / plant-model-gen / 两端各一）。修完跑同一命令验证三个断言全 pass。
 - [ ] **W2.4 回归**：再跑 `--cases=return,stop,approved` 三场景全绿，加上契约 smoke。
+  - 2026-04-25 回归：`artifacts/wave2-evidence/pms-simulator-main-three-20260425-204429.json` 中 `approved` 与 `return` 均通过。
+  - 同次 `stop` 失败在 `createReview case=stop openNew` 之后，报“未找到发起编校审面板”；单独跑 `stop` 也卡在 `openNew`。这发生在 workflow action 前，暂归为既有 iframe 自动化可达性/创建面板启动问题，不是本次 diagnostics 等待修复引入的 return/agree 回归。
 - [ ] **W2.5 gate-return 裁定**（owner 决策后开工）：
   - 若选"改测试身份"：在 `pms-simulator-runner.ts` 的 `scenarioGateReturn` 把保存批注的角色切到 JH。
   - 若选"放权后端"：plant-model-gen 的 `/api/review/records` 把 owner 检查放宽到"checker 节点同节点上下游 + 显式协办"，并补单测。

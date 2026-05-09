@@ -360,6 +360,344 @@ function formatWorkflowNode(node?: ReviewTask['currentNode'] | null): string {
   return WORKFLOW_NODE_NAMES[node] || node;
 }
 
+function toViewerRefno(refno: string): string {
+  const normalized = String(refno || '').trim();
+  const match = normalized.match(/^(\d+)_(\d+)$/);
+  return match ? `${match[1]}/${match[2]}` : normalized;
+}
+
+function readStoredEmbedLandingState(): StoredEmbedLandingState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(EMBED_LANDING_STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredEmbedLandingState | null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const userStore = useUserStore();
+const reviewStore = useReviewStore();
+const toolStore = useToolStore();
+const viewerContext = useViewerContext();
+const navigationState = useNavigationStatePersistence('plant3d-web-nav-state-designer-comment-handling-v2');
+const annotationProcessingEntryTarget = useAnnotationProcessingEntryTarget();
+const designerCommentViewModeRequest = useDesignerCommentViewModeRequest();
+
+const selectedTaskId = ref<string | null>(null);
+const selectedAnnotationId = ref<string | null>(null);
+const selectedAnnotationType = ref<AnnotationType | null>(null);
+const persistedAnnotationKey = ref<string | null>(null);
+const showInitiateDrawer = ref(false);
+const detailTask = ref<ReviewTask | null>(null);
+const confirmNote = ref('');
+const confirmSaving = ref(false);
+const confirmError = ref<string | null>(null);
+const refreshingTask = ref(false);
+const resubmitLoading = ref(false);
+const externalEntryTarget = ref<AnnotationProcessingEntryTarget | null>(null);
+const externalEntryLock = ref(false);
+const applyingExternalEntry = ref(false);
+const annotationFilter = ref<AnnotationWorkspaceFilter>('all');
+const workspaceView = ref<DesignerCommentWorkspaceView>('task_entry');
+const annotationListViewMode = ref<AnnotationListViewMode>('split');
+const enteredWorkspaceFromTaskEntry = ref(false);
+const annotationListScrollTop = ref(0);
+const storedEmbedLandingState = ref<StoredEmbedLandingState | null>(readStoredEmbedLandingState());
+
+navigationState.bindRef('selectedTaskId', selectedTaskId, null);
+navigationState.bindRef('selectedAnnotationKey', persistedAnnotationKey, null);
+navigationState.bindRef('showInitiateDrawer', showInitiateDrawer, false);
+navigationState.bindRef<AnnotationListViewMode>('annotationListViewMode', annotationListViewMode, 'split');
+
+const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
+  currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
+  currentFormId: () => reviewStore.currentTask.value?.formId ?? null,
+  confirmedRecords: () => reviewStore.sortedConfirmedRecords.value,
+  toolStore,
+  waitForViewerReady,
+  getViewerTools: () => viewerContext.tools.value ?? null,
+  skipClearOnEmpty: true,
+});
+
+const returnedTasks = computed(() => userStore.returnedInitiatedTasks.value.filter((task) => isCanonicalReturnedTask(task)));
+const passiveRestoredTaskFormId = computed(() => {
+  const landingState = storedEmbedLandingState.value;
+  if (!landingState || landingState.target !== 'designer' || landingState.primaryPanelId !== 'designerCommentHandling') {
+    return null;
+  }
+  return normalizeFormId(landingState.formId);
+});
+function isPassiveRestoredTask(task: ReviewTask | null): boolean {
+  const formId = normalizeFormId(task?.formId);
+  return !!formId && formId === passiveRestoredTaskFormId.value;
+}
+const currentTask = computed(() => {
+  const task = reviewStore.currentTask.value;
+  if (task && isCanonicalReturnedTask(task)) return task;
+  if (task && isPassiveRestoredTask(task)) return task;
+  return null;
+});
+const passiveFormScopeWithoutTask = computed(() => (
+  !currentTask.value && !!passiveRestoredTaskFormId.value
+));
+const isCurrentTaskReturned = computed(() => !!currentTask.value && isCanonicalReturnedTask(currentTask.value));
+const currentTaskStatus = computed(() => currentTask.value ? getTaskStatusDisplayName(currentTask.value.status) : null);
+const currentTaskPriority = computed(() => currentTask.value ? getPriorityDisplayName(currentTask.value.priority) : null);
+const returnedMetadata = computed(() => (
+  isCurrentTaskReturned.value && currentTask.value
+    ? getCanonicalReturnedMetadata(currentTask.value)
+    : null
+));
+const latestReturnTimestamp = computed(() => (
+  isCurrentTaskReturned.value && currentTask.value
+    ? getResubmissionLatestReturnTime(currentTask.value.workflowHistory || [])
+    : null
+));
+const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
+const currentTaskDueDate = computed(() => formatDateOnly(currentTask.value?.dueDate));
+const matchedExternalTask = computed(() => {
+  const formId = normalizeFormId(externalEntryTarget.value?.formId);
+  if (!formId) return null;
+  return returnedTasks.value.find((task) => normalizeFormId(task.formId) === formId) ?? null;
+});
+const hasExternalEntryWithoutMatchedTask = computed(() => (
+  externalEntryLock.value && !!externalEntryTarget.value && !matchedExternalTask.value && !currentTask.value
+));
+const hasFormScopeWithoutMatchedTask = computed(() => (
+  hasExternalEntryWithoutMatchedTask.value || passiveFormScopeWithoutTask.value
+));
+const showTaskEntry = computed(() => workspaceView.value === 'task_entry');
+const showAnnotationList = computed(() => workspaceView.value === 'annotation_list');
+const showAnnotationDetail = computed(() => workspaceView.value === 'annotation_detail');
+const canReturnToTaskEntry = computed(() => (
+  showAnnotationList.value
+  && enteredWorkspaceFromTaskEntry.value
+  && returnedTasks.value.length > 0
+  && !externalEntryLock.value
+));
+const canReturnToAnnotationList = computed(() => (
+  showAnnotationDetail.value
+  && (!!currentTask.value || passiveFormScopeWithoutTask.value)
+  && !hasExternalEntryWithoutMatchedTask.value
+));
+
+/**
+ * 评论时间线的正式单据上下文。
+ *
+ * - 如果当前任务已匹配 → 用 `currentTask.formId / id`，并允许处理动作；
+ * - 仅外部入口给出 formId 但未匹配任务 → `formId / null`，禁止处理动作；
+ * - 没有任何上下文 → 全部为 null，按本地草稿语义处理。
+ */
+const timelineContextFormId = computed<string | null>(() => (
+  normalizeFormId(currentTask.value?.formId)
+    ?? normalizeFormId(externalEntryTarget.value?.formId)
+    ?? passiveRestoredTaskFormId.value
+));
+const timelineContextTaskId = computed<string | null>(() => (
+  currentTask.value?.id ?? null
+));
+const timelineAllowReviewActions = computed(() => (
+  !hasFormScopeWithoutMatchedTask.value
+));
+
+const allAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
+  const formIdContext = timelineContextFormId.value;
+  const taskIdContext = timelineContextTaskId.value;
+  return buildAnnotationWorkspaceItems({
+    annotations: toolStore.annotations.value,
+    cloudAnnotations: toolStore.cloudAnnotations.value,
+    rectAnnotations: toolStore.rectAnnotations.value,
+    obbAnnotations: toolStore.obbAnnotations.value,
+    getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id, formIdContext, taskIdContext).length,
+  });
+});
+
+const scopedAnnotationItems = computed<AnnotationWorkspaceItem[]>(() => {
+  const currentFormId = currentTask.value?.formId ?? null;
+  const externalFormId = externalEntryTarget.value?.formId ?? null;
+  let items = scopeAnnotationWorkspaceItemsByFormId(
+    allAnnotationItems.value,
+    currentFormId || externalFormId || passiveRestoredTaskFormId.value,
+  );
+
+  const target = externalEntryTarget.value;
+  if (target) {
+    const matched = allAnnotationItems.value.find((item) => item.id === target.annotationId && item.type === target.annotationType);
+    if (matched && !items.some((item) => item.id === matched.id && item.type === matched.type)) {
+      items = [matched];
+    }
+  }
+
+  return items;
+});
+
+const annotationWorkspaceSummary = computed(() => buildAnnotationWorkspaceSummary(scopedAnnotationItems.value));
+const filteredAnnotationItems = computed(() => filterAnnotationWorkspaceItems(scopedAnnotationItems.value, annotationFilter.value));
+const selectedAnnotation = computed<AnnotationWorkspaceItem | null>(() => (
+  scopedAnnotationItems.value.find((item) => item.id === selectedAnnotationId.value && item.type === selectedAnnotationType.value) ?? null
+));
+const linkedMeasurements = computed(() => buildLinkedMeasurementItems(
+  selectedAnnotation.value,
+  toolStore.measurements.value,
+  [
+    ...toolStore.xeokitDistanceMeasurements.value,
+    ...toolStore.xeokitAngleMeasurements.value,
+  ],
+));
+const canEditSelectedSeverity = computed(() => (
+  canEditAnnotationSeverity(userStore.currentUser.value, selectedAnnotation.value?.authorId)
+));
+
+const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
+  annotations: [...toolStore.annotations.value],
+  cloudAnnotations: [...toolStore.cloudAnnotations.value],
+  rectAnnotations: [...toolStore.rectAnnotations.value],
+  obbAnnotations: [...toolStore.obbAnnotations.value],
+  measurements: [...toolStore.measurements.value],
+  xeokitDistanceMeasurements: [...toolStore.xeokitDistanceMeasurements.value],
+  xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
+}));
+const confirmedSnapshotPayload = computed(() => (
+  buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
+));
+const unsavedConfirmPayload = computed(() => (
+  buildUnsavedReviewEvidencePayload(currentDraftConfirmPayload.value, confirmedSnapshotPayload.value)
+));
+const hasUnsavedPendingData = computed(() => (
+  buildReviewEvidenceSnapshotKey(currentDraftConfirmPayload.value)
+    !== buildReviewEvidenceSnapshotKey(confirmedSnapshotPayload.value)
+));
+const unsavedAnnotationCount = computed(() => (
+  unsavedConfirmPayload.value.annotations.length
+  + unsavedConfirmPayload.value.cloudAnnotations.length
+  + unsavedConfirmPayload.value.rectAnnotations.length
+  + unsavedConfirmPayload.value.obbAnnotations.length
+));
+const unsavedMeasurementCount = computed(() => unsavedConfirmPayload.value.measurements.length);
+const canConfirmCurrentData = computed(() => (
+  !!currentTask.value && hasUnsavedPendingData.value && hasReviewConfirmPayloadData(unsavedConfirmPayload.value)
+));
+const canResubmitCurrentTask = computed(() => (
+  !!currentTask.value && isDesignerResubmissionTask(currentTask.value)
+));
+
+function syncStoredEmbedLandingState() {
+  storedEmbedLandingState.value = readStoredEmbedLandingState();
+  void nextTick(() => {
+    enterPassiveFormScopeIfReady();
+  });
+}
+
+function enterPassiveFormScopeIfReady() {
+  if (!passiveFormScopeWithoutTask.value) return;
+  if (scopedAnnotationItems.value.length === 0) return;
+  if (workspaceView.value === 'annotation_list' || workspaceView.value === 'annotation_detail') return;
+  enterAnnotationList({ fromTaskEntry: false });
+}
+
+function setActiveWorkspaceAnnotation(type: AnnotationType | null, id: string | null) {
+  toolStore.activeAnnotationId.value = type === 'text' ? id : null;
+  toolStore.activeCloudAnnotationId.value = type === 'cloud' ? id : null;
+  toolStore.activeRectAnnotationId.value = type === 'rect' ? id : null;
+  toolStore.activeObbAnnotationId.value = type === 'obb' ? id : null;
+}
+
+function enterTaskEntry() {
+  workspaceView.value = 'task_entry';
+  enteredWorkspaceFromTaskEntry.value = false;
+  annotationListScrollTop.value = 0;
+}
+
+function enterAnnotationList(options?: { fromTaskEntry?: boolean }) {
+  workspaceView.value = 'annotation_list';
+  if (options?.fromTaskEntry != null) {
+    enteredWorkspaceFromTaskEntry.value = options.fromTaskEntry;
+  }
+}
+
+function enterAnnotationDetail(item: AnnotationWorkspaceItem | null, source: 'manual' | 'external' = 'manual') {
+  if (!item) return;
+  selectWorkspaceAnnotation(item, source);
+  workspaceView.value = 'annotation_detail';
+  annotationListViewMode.value = 'split';
+}
+
+function backToAnnotationList() {
+  if (!currentTask.value && !passiveFormScopeWithoutTask.value) {
+    enterTaskEntry();
+    return;
+  }
+  workspaceView.value = 'annotation_list';
+}
+
+function clearExternalEntryLock() {
+  externalEntryLock.value = false;
+  externalEntryTarget.value = null;
+}
+
+function selectWorkspaceAnnotation(item: AnnotationWorkspaceItem | null, source: 'manual' | 'external' = 'manual') {
+  if (source === 'manual') {
+    clearExternalEntryLock();
+  }
+
+  if (!item) {
+    selectedAnnotationId.value = null;
+    selectedAnnotationType.value = null;
+    persistedAnnotationKey.value = null;
+    setActiveWorkspaceAnnotation(null, null);
+    return;
+  }
+
+  selectedAnnotationId.value = item.id;
+  selectedAnnotationType.value = item.type;
+  persistedAnnotationKey.value = buildAnnotationSelectionKey(currentTask.value?.id ?? null, item.type, item.id);
+  setActiveWorkspaceAnnotation(item.type, item.id);
+}
+
+function handleTextAnnotationCollapseCommand(payload: AnnotationWorkspaceTextCollapsePayload) {
+  const ids = payload.ids.filter((id) => id.trim().length > 0);
+  if (ids.length === 0) return;
+
+  if (payload.mode === 'collapse-all') {
+    toolStore.setTextAnnotationsCollapsed(ids, true);
+    return;
+  }
+
+  if (payload.mode === 'expand-all') {
+    toolStore.setTextAnnotationsCollapsed(ids, false);
+    return;
+  }
+
+  toolStore.setTextAnnotationsCollapsed(ids, true);
+  if (payload.selectedId && ids.includes(payload.selectedId)) {
+    toolStore.setTextAnnotationsCollapsed([payload.selectedId], false);
+    setActiveWorkspaceAnnotation('text', payload.selectedId);
+  }
+}
+
+function resolvePreferredWorkspaceAnnotation(): AnnotationWorkspaceItem | null {
+  const target = externalEntryTarget.value;
+  if (target) {
+    const matched = scopedAnnotationItems.value.find((item) => item.id === target.annotationId && item.type === target.annotationType);
+    if (matched) return matched;
+  }
+
+  const persisted = persistedAnnotationKey.value;
+  if (persisted) {
+    const matched = scopedAnnotationItems.value.find((item) => (
+      buildAnnotationSelectionKey(currentTask.value?.id ?? null, item.type, item.id) === persisted
+    ));
+    if (matched) return matched;
+  }
+
+  const pending = filteredAnnotationItems.value.find((item) => item.statusKey === 'pending');
+  if (pending) return pending;
+  return filteredAnnotationItems.value[0] ?? null;
+}
+
 async function loadTasks() {
   await userStore.loadReviewTasks();
 }
@@ -483,6 +821,136 @@ async function confirmCurrentData() {
   }
 }
 
+async function handleResubmitTask() {
+  if (!currentTask.value || !canResubmitCurrentTask.value || resubmitLoading.value) return;
+
+  const task = currentTask.value;
+  resubmitLoading.value = true;
+  confirmError.value = null;
+  try {
+    const preflight = await runReviewSubmitPreflight({
+      hasUnsavedBlockingData: hasUnsavedPendingData.value,
+      taskId: task.id,
+      currentNode: task.currentNode,
+      checkAnnotations: () => reviewAnnotationCheck({
+        taskId: task.id,
+        formId: task.formId || undefined,
+        currentNode: task.currentNode,
+        intent: 'submit_next',
+        includedTypes: ['text', 'cloud', 'rect'],
+      }),
+    });
+    if (!preflight.allowed) {
+      confirmError.value = preflight.message || '批注检查失败，请稍后重试';
+      return;
+    }
+
+    const notifiedExternalWorkflow = notifyParentWorkflowAction({
+      action: 'active',
+      taskId: task.id,
+      formId: task.formId?.trim() || undefined,
+      source: 'designer-comment-handling-panel',
+    });
+    if (notifiedExternalWorkflow) {
+      emitToast({ message: '已通知外部流程重新流转', level: 'success' });
+      return;
+    }
+
+    await userStore.submitTaskToNextNode(task.id);
+    await refreshCurrentTask();
+    emitToast({ message: '已确认再次提交流转', level: 'success' });
+  } catch (error) {
+    confirmError.value = error instanceof Error ? error.message : '再次提交流转失败';
+  } finally {
+    resubmitLoading.value = false;
+  }
+}
+
+watch(
+  () => annotationProcessingEntryTarget.value?.requestedAt ?? null,
+  () => {
+    const target = annotationProcessingEntryTarget.value;
+    if (!target) return;
+    externalEntryTarget.value = { ...target };
+    externalEntryLock.value = true;
+    annotationFilter.value = 'all';
+    clearAnnotationProcessingEntryTarget();
+    void applyExternalAnnotationEntry();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => designerCommentViewModeRequest.value?.requestedAt ?? null,
+  () => {
+    const request = designerCommentViewModeRequest.value;
+    if (!request) return;
+    annotationListViewMode.value = request.mode;
+    if (request.mode === 'table' && workspaceView.value === 'annotation_detail') {
+      workspaceView.value = 'annotation_list';
+    }
+    clearDesignerCommentViewModeRequest();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => currentTask.value?.id ?? null,
+  (taskId, previousTaskId) => {
+    if (taskId) {
+      selectedTaskId.value = taskId;
+    }
+    confirmError.value = null;
+    if (externalEntryLock.value) return;
+
+    if (!taskId) {
+      if (passiveFormScopeWithoutTask.value && scopedAnnotationItems.value.length > 0) {
+        enterAnnotationList({ fromTaskEntry: false });
+      } else if (!hasExternalEntryWithoutMatchedTask.value) {
+        enterTaskEntry();
+      }
+      return;
+    }
+
+    if (taskId !== previousTaskId || workspaceView.value === 'task_entry') {
+      enterAnnotationList();
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => filteredAnnotationItems.value.map((item) => `${item.type}:${item.id}:${item.activityAt}`).join('|'),
+  () => {
+    enterPassiveFormScopeIfReady();
+
+    const current = selectedAnnotation.value;
+    if (current) {
+      setActiveWorkspaceAnnotation(current.type, current.id);
+      return;
+    }
+
+    const preferred = resolvePreferredWorkspaceAnnotation();
+    if (preferred) {
+      selectWorkspaceAnnotation(preferred, externalEntryLock.value ? 'external' : 'manual');
+      return;
+    }
+
+    selectWorkspaceAnnotation(null, externalEntryLock.value ? 'external' : 'manual');
+  },
+  { immediate: true },
+);
+
+watch(annotationFilter, () => {
+  enterPassiveFormScopeIfReady();
+
+  if (selectedAnnotation.value) return;
+  const preferred = resolvePreferredWorkspaceAnnotation();
+  if (preferred) {
+    selectWorkspaceAnnotation(preferred, externalEntryLock.value ? 'external' : 'manual');
+  }
+});
+
 watch(
   () => ({
     taskId: reviewStore.currentTask.value?.id ?? null,
@@ -499,16 +967,11 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => returnedTasks.value.map((task) => task.id).join('|'),
-  async () => {
-    if (!returnedTasks.value.length) return;
-    const activeTask = reviewStore.currentTask.value;
-    if (activeTask && returnedTasks.value.some((task) => task.id === activeTask.id)) return;
-    await selectTask(returnedTasks.value[0]);
-  },
-  { immediate: true },
-);
+onMounted(async () => {
+  window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, syncStoredEmbedLandingState as EventListener);
+  syncStoredEmbedLandingState();
+  await loadTasks();
+  enterPassiveFormScopeIfReady();
 
 watch(
   () => reviewStore.currentTask.value?.id ?? null,
@@ -721,11 +1184,306 @@ onMounted(() => {
                 <span v-if="selectedAnnotationDisplay" class="rounded-full px-2 py-0.5 font-semibold" :class="selectedAnnotationDisplay.color">
                   {{ selectedAnnotationDisplay.label }}
                 </span>
-                <span v-if="selectedAnnotationSeverity" class="rounded-full px-2 py-0.5 font-semibold" :class="selectedAnnotationSeverity.color">
-                  {{ selectedAnnotationSeverity.label }}
+                <span v-if="currentTaskPriority" class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="currentTaskPriority.color">
+                  {{ currentTaskPriority.label }}
+                </span>
+                <span v-if="hasFormScopeWithoutMatchedTask"
+                  class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                  未匹配到单据
                 </span>
                 <span v-if="selectedAnnotation?.refnos.length">RefNo {{ selectedAnnotation.refnos.join(', ') }}</span>
               </div>
+              <p class="text-sm leading-6 text-slate-600">
+                {{ currentTask?.description || '当前批注来自外部入口，但未匹配到退回单据；可继续查看回复与测量证据。' }}
+              </p>
+              <div v-if="currentTask" class="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+                <div class="rounded-xl bg-slate-50 px-3 py-2.5">
+                  <div class="text-xs text-slate-400">退回节点</div>
+                  <div class="mt-1 font-medium text-slate-900">{{ formatWorkflowNode(returnedMetadata?.returnNode || null) }}</div>
+                </div>
+                <div class="rounded-xl bg-slate-50 px-3 py-2.5">
+                  <div class="text-xs text-slate-400">退回时间</div>
+                  <div class="mt-1 font-medium text-slate-900">{{ formatDateTime(latestReturnTimestamp) }}</div>
+                </div>
+                <div class="rounded-xl bg-slate-50 px-3 py-2.5">
+                  <div class="text-xs text-slate-400">当前节点</div>
+                  <div class="mt-1 font-medium text-slate-900">{{ formatWorkflowNode(currentTask.currentNode) }}</div>
+                </div>
+                <div class="rounded-xl bg-slate-50 px-3 py-2.5">
+                  <div class="text-xs text-slate-400">构件数</div>
+                  <div class="mt-1 font-medium text-slate-900">{{ currentTask.components.length }} 个</div>
+                </div>
+              </div>
+            </div>
+            <div class="flex shrink-0 flex-col gap-2">
+              <button v-if="canReturnToTaskEntry"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                data-testid="back-to-task-entry"
+                @click="void clearTaskContext()">
+                返回任务页
+              </button>
+              <button type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                :disabled="refreshingTask"
+                @click="void refreshCurrentTask()">
+                <RefreshCw class="h-4 w-4" :class="refreshingTask ? 'animate-spin' : ''" />
+                刷新任务
+              </button>
+              <button v-if="currentTask"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                @click="showInitiateDrawer = true">
+                <FileText class="h-4 w-4" />
+                查看发起单
+              </button>
+              <button v-if="currentTask"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                @click="openTaskHistory(currentTask)">
+                <Calendar class="h-4 w-4" />
+                流转历史
+              </button>
+            </div>
+          </div>
+
+          <div v-if="isCurrentTaskReturned || currentTask?.returnReason"
+            class="mt-4 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div class="flex items-start gap-2">
+              <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <div class="font-semibold">退回意见</div>
+                <div class="mt-1 leading-6">{{ returnedMetadata?.returnReason || '未填写退回意见' }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="hasFormScopeWithoutMatchedTask"
+            class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            data-testid="external-entry-unmatched-task">
+            <div class="flex items-start gap-2">
+              <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <div class="font-semibold">未匹配到对应单据</div>
+                <div class="mt-1 leading-6">
+                  当前批注的 form_id 为 {{ externalEntryTarget?.formId || passiveRestoredTaskFormId || '—' }}，返回任务列表中没有同 form_id 的单据。
+                  页面保留这条批注的处理详情，不自动切到其他单据。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 min-h-0 flex-1 overflow-y-auto pb-2">
+          <div v-if="showAnnotationList" data-testid="designer-comment-annotation-list">
+            <div class="mb-3 inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
+              role="tablist"
+              aria-label="批注视图切换"
+              data-testid="annotation-list-view-mode-tabs">
+              <button type="button"
+                role="tab"
+                :aria-selected="annotationListViewMode === 'split'"
+                class="inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition"
+                :class="annotationListViewMode === 'split'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'"
+                data-testid="annotation-list-view-mode-split"
+                @click="annotationListViewMode = 'split'">
+                卡片列表
+              </button>
+              <button type="button"
+                role="tab"
+                :aria-selected="annotationListViewMode === 'table'"
+                class="inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition"
+                :class="annotationListViewMode === 'table'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'"
+                data-testid="annotation-list-view-mode-table"
+                @click="annotationListViewMode = 'table'">
+                批注表格
+              </button>
+            </div>
+
+            <AnnotationWorkspace v-if="annotationListViewMode === 'split'"
+              role="designer"
+              layout="list"
+              :items="filteredAnnotationItems"
+              :summary="annotationWorkspaceSummary"
+              :active-filter="annotationFilter"
+              :selected-annotation="selectedAnnotation"
+              :linked-measurements="linkedMeasurements"
+              :confirm-note="confirmNote"
+              :unsaved-annotation-count="unsavedAnnotationCount"
+              :unsaved-measurement-count="unsavedMeasurementCount"
+              :can-confirm="canConfirmCurrentData"
+              :confirm-saving="confirmSaving"
+              :confirm-error="confirmError"
+              :can-edit-severity="canEditSelectedSeverity"
+              :show-tool-launcher="false"
+              :timeline-designer-only="true"
+              :timeline-context-form-id="timelineContextFormId"
+              :timeline-context-task-id="timelineContextTaskId"
+              :timeline-allow-review-actions="timelineAllowReviewActions"
+              :list-scroll-top="annotationListScrollTop"
+              timeline-placeholder="输入处理说明，或补充给校核人的说明..."
+              timeline-submit-label="发送回复"
+              confirm-action-label="保存新增证据"
+              :confirm-hint="currentTask
+                ? '批注处理结果会自动保存；仅新增测量、几何批注或截图证据时需要保存。'
+                : '当前未匹配到对应单据，回复和历史可继续查看，但本页不能保存新增证据。'"
+              empty-title="当前范围内还没有可处理的批注"
+              empty-description="请选择退回任务，或等待对应 form_id 的批注同步后再处理。"
+              @update:active-filter="annotationFilter = $event"
+              @update:confirm-note="confirmNote = $event"
+              @update:list-scroll-top="annotationListScrollTop = $event"
+              @select-annotation="selectWorkspaceAnnotation"
+              @open-annotation="enterAnnotationDetail"
+              @collapse-text-annotations="handleTextAnnotationCollapseCommand"
+              @locate-annotation="(item) => void locateAnnotation(item)"
+              @locate-measurement="locateMeasurement"
+              @start-measurement="(kind) => void startMeasurement(kind)"
+              @update-severity="updateSelectedAnnotationSeverity"
+              @confirm="void confirmCurrentData()" />
+
+            <div v-else class="h-[680px] min-h-[560px]"
+              data-testid="designer-comment-annotation-table">
+              <AnnotationTableView :items="scopedAnnotationItems"
+                :current-annotation-id="selectedAnnotationId"
+                :current-annotation-type="selectedAnnotationType"
+                :task-key="currentTask?.formId || currentTask?.id || null"
+                :subtitle="currentTask?.title || null"
+                empty-title="当前范围内还没有可处理的批注"
+                empty-description="请选择退回任务，或等待对应 form_id 的批注同步后再处理。"
+                @select-annotation="selectWorkspaceAnnotation"
+                @open-annotation="(item) => void handleTableOpenAnnotation(item)"
+                @locate-annotation="(item) => void locateAnnotation(item)"
+                @copy-feedback="handleCopyFeedback" />
+            </div>
+          </div>
+
+          <div v-else-if="showAnnotationDetail" data-testid="designer-comment-annotation-detail">
+            <AnnotationWorkspace role="designer"
+              layout="detail"
+              :items="filteredAnnotationItems"
+              :summary="annotationWorkspaceSummary"
+              :active-filter="annotationFilter"
+              :selected-annotation="selectedAnnotation"
+              :linked-measurements="linkedMeasurements"
+              :confirm-note="confirmNote"
+              :unsaved-annotation-count="unsavedAnnotationCount"
+              :unsaved-measurement-count="unsavedMeasurementCount"
+              :can-confirm="canConfirmCurrentData"
+              :confirm-saving="confirmSaving"
+              :confirm-error="confirmError"
+              :can-edit-severity="canEditSelectedSeverity"
+              :show-tool-launcher="false"
+              :timeline-designer-only="true"
+              :timeline-context-form-id="timelineContextFormId"
+              :timeline-context-task-id="timelineContextTaskId"
+              :timeline-allow-review-actions="timelineAllowReviewActions"
+              :show-detail-back="canReturnToAnnotationList"
+              detail-back-label="返回批注列表"
+              timeline-placeholder="输入处理说明，或补充给校核人的说明..."
+              timeline-submit-label="发送回复"
+              confirm-action-label="保存新增证据"
+              :confirm-hint="currentTask
+                ? '批注处理结果会自动保存；仅新增测量、几何批注或截图证据时需要保存。'
+                : '当前未匹配到对应单据，回复和历史可继续查看，但本页不能保存新增证据。'"
+              empty-title="当前范围内还没有可处理的批注"
+              empty-description="请选择退回任务，或等待对应 form_id 的批注同步后再处理。"
+              @back="backToAnnotationList"
+              @update:active-filter="annotationFilter = $event"
+              @update:confirm-note="confirmNote = $event"
+              @select-annotation="selectWorkspaceAnnotation"
+              @collapse-text-annotations="handleTextAnnotationCollapseCommand"
+              @locate-annotation="(item) => void locateAnnotation(item)"
+              @locate-measurement="locateMeasurement"
+              @start-measurement="(kind) => void startMeasurement(kind)"
+              @update-severity="updateSelectedAnnotationSeverity"
+              @confirm="void confirmCurrentData()">
+              <template #workflow>
+                <div class="space-y-4" data-testid="designer-comment-workflow-zone">
+                  <div v-if="currentTask?.returnReason" class="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div class="flex items-start gap-2">
+                      <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                      <div>
+                        <div class="text-sm font-semibold text-amber-800">校核驳回原因</div>
+                        <div class="mt-0.5 text-xs leading-5 text-amber-700">{{ currentTask.returnReason }}</div>
+                        <div class="mt-1 text-xs text-amber-600">请处理批注后点击下方「流转回校对」重新提交。</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-sm font-semibold text-slate-950">任务级动作</div>
+                    <div class="mt-1 text-xs leading-5 text-slate-500">
+                      这里是设计侧的任务级动作入口。批注处理结果会自动保存；如补充了测量或几何证据，请先保存新增证据。
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button type="button"
+                      class="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                      :disabled="refreshingTask"
+                      @click="void refreshCurrentTask()">
+                      <RefreshCw class="h-4 w-4" :class="refreshingTask ? 'animate-spin' : ''" />
+                      刷新任务
+                    </button>
+                    <button v-if="currentTask"
+                      type="button"
+                      class="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                      @click="showInitiateDrawer = true">
+                      <FileText class="h-4 w-4" />
+                      查看发起单
+                    </button>
+                    <button v-if="currentTask"
+                      type="button"
+                      class="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                      @click="openTaskHistory(currentTask)">
+                      <Calendar class="h-4 w-4" />
+                      流转历史
+                    </button>
+                    <button type="button"
+                      class="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                      :class="canResubmitCurrentTask && !hasUnsavedPendingData && !resubmitLoading
+                        ? 'bg-orange-500 hover:bg-orange-600 ring-2 ring-orange-300 ring-offset-1'
+                        : 'bg-orange-500 hover:bg-orange-600'"
+                      :disabled="!canResubmitCurrentTask || hasUnsavedPendingData || resubmitLoading"
+                      :title="!canResubmitCurrentTask
+                        ? '请先处理所有批注后再提交'
+                        : hasUnsavedPendingData
+                          ? '请先保存未保存的证据数据'
+                          : '点击将任务重新提交给校核人员'"
+                      @click="void handleResubmitTask()">
+                      <Send class="h-4 w-4" />
+                      {{ resubmitLoading ? '提交中...' : '流转回校对' }}
+                    </button>
+                  </div>
+                  <div v-if="currentTask && hasUnsavedPendingData" class="text-xs text-amber-700">
+                    有未保存的证据数据，请先保存后再提交流转。
+                  </div>
+                  <div v-else-if="currentTask" class="text-xs text-slate-500">
+                    再次提交前，需要先确认当前批注与测量证据。当前单据：{{ currentTask.title }}。
+                  </div>
+                  <div v-else class="text-xs text-amber-700">
+                    当前没有匹配到退回单据，因此本页只保留批注查看与回复，不提供确认和再次提交。
+                  </div>
+                </div>
+              </template>
+            </AnnotationWorkspace>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="translate-x-full opacity-0"
+      enter-to-class="translate-x-0 opacity-100" leave-active-class="transition duration-150 ease-in"
+      leave-from-class="translate-x-0 opacity-100" leave-to-class="translate-x-full opacity-0">
+      <aside v-if="showInitiateDrawer && currentTask"
+        class="absolute inset-y-0 right-0 z-20 w-[460px] border-l border-slate-200 bg-white shadow-2xl">
+        <div class="flex h-full min-h-0 flex-col overflow-hidden">
+          <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">查看发起单</div>
+              <div class="mt-1 text-lg font-semibold text-slate-950">我发起的校审单</div>
             </div>
             <button type="button"
               class="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"

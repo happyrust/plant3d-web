@@ -74,6 +74,11 @@ export type SpatialQueryResultGroup = {
 export type SpatialQueryResultSet = {
   request: SpatialQueryRequest;
   items: SpatialQueryResultItem[];
+  page: number;
+  perPage: number;
+  returnedCount: number;
+  totalPages: number;
+  hasMore: boolean;
   total: number;
   loadedCount: number;
   unloadedCount: number;

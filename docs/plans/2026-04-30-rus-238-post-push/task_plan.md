@@ -13,13 +13,14 @@
 - 三处入口均保留 refno fallback。
 - 中文 changelog 已更新并推送。
 - 推送后的下一步计划文件已创建：`../2026-04-30-rus-238-post-push-next-plan.md`。
-- 真实验收缺少外部输入：目标 BRAN、PMS 包名/任务单、角色、入口。
+- 仿 PMS 与 Chrome CDP 已使用目标 BRAN `24381_145018` 完成主要验收。
 - 验收输入清单已创建：`acceptance-inputs.md`。
+- restore 刷新恢复场景已通过，覆盖确认测量回放、BRAN fallback 和评论正文 UI 恢复。
 
 ## Phase 1 · 验收输入收集
 
-状态：阻塞。
-执行进度：已创建可填写清单，等待输入。
+状态：仿 PMS / CDP 输入已完成。
+执行进度：已写入目标 BRAN、仿 PMS 单据、角色、入口与 restore 样例；真实 PMS 指定包名/任务单仍可按需补充。
 
 任务：
 
@@ -54,7 +55,7 @@
 
 ## Phase 3 · 批注证据与确认回放验收
 
-状态：待执行。
+状态：仿 PMS restore 已完成。
 
 任务：
 
@@ -71,7 +72,7 @@
 
 ## Phase 4 · PMS/编校审验收
 
-状态：待执行。
+状态：仿 PMS 与 Chrome CDP 已完成；真实指定单据可按需补验。
 
 任务：
 

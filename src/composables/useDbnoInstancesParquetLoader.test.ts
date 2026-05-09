@@ -245,6 +245,104 @@ describe('useDbnoInstancesParquetLoader', () => {
     expect(registerFileURLMock).toHaveBeenCalledTimes(5);
   });
 
+  it('show_dbnum 先查询全量 refno 再分批加载时不会重复注册同名 DuckDB 文件', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockResolvedValue({
+      toArray: () => [],
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await loader.queryAllRefnosByDbno(7997);
+    await loader.queryInstanceEntriesByRefnos(7997, ['24381_145018']);
+
+    expect(registerFileURLMock).toHaveBeenCalledTimes(10);
+    const allRefnoQueryNames = registerFileURLMock.mock.calls.slice(0, 5).map((call) => String(call[0]));
+    const instanceQueryNames = registerFileURLMock.mock.calls.slice(5, 10).map((call) => String(call[0]));
+
+    expect(allRefnoQueryNames).toContain('p_7997_instances.parquet');
+    for (const name of instanceQueryNames) {
+      expect(allRefnoQueryNames).not.toContain(name);
+    }
+  });
+
+  it('DuckDB 报本地文件名已注册时改用唯一文件名继续查询', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockResolvedValue({
+      toArray: () => [],
+    });
+    registerFileURLMock.mockImplementation(async (localName: string) => {
+      if (localName === 'p_7997_instances.parquet') {
+        throw new Error('File already registered: p_7997_instances.parquet');
+      }
+      return undefined;
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await loader.queryAllRefnosByDbno(7997);
+
+    const registeredNames = registerFileURLMock.mock.calls.map((call) => String(call[0]));
+    const retryName = registeredNames.find((name) =>
+      /^p_7997_instances_[a-zA-Z0-9_]+\.parquet$/.test(name)
+    );
+
+    expect(retryName).toBeTruthy();
+    expect(queryMock).toHaveBeenCalledTimes(1);
+    const sql = String(queryMock.mock.calls[0][0]);
+    expect(sql).toContain(`parquet_scan('${retryName}')`);
+  });
+
   it('mesh validation 报告沿 manifest 所在目录读取', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -704,8 +802,9 @@ describe('useDbnoInstancesParquetLoader', () => {
       expect(call[3]).toBe(true);
     }
 
-    expect(firstQueryCalls[0]?.[0]).toBe('p_7997_instances.parquet');
-    expect(secondQueryCalls[0]?.[0]).toBe('p_7997_instances.parquet');
+    expect(String(firstQueryCalls[0]?.[0])).toMatch(/^p_7997_instances_.+\.parquet$/);
+    expect(String(secondQueryCalls[0]?.[0])).toMatch(/^p_7997_instances_.+\.parquet$/);
+    expect(String(firstQueryCalls[0]?.[0])).not.toBe(String(secondQueryCalls[0]?.[0]));
     expect(String(firstQueryCalls[0]?.[1])).toContain('/files/output/instances/instances_7997.parquet');
     expect(String(secondQueryCalls[0]?.[1])).toContain('/files/output/instances/instances_7997.parquet');
     expect(String(firstQueryCalls[0]?.[1])).not.toBe(String(secondQueryCalls[0]?.[1]));

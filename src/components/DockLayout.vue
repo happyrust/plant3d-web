@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 
 import { DockviewVue, type DockviewReadyEvent, themeLight } from 'dockview-vue';
 
@@ -46,6 +46,7 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { onCommand } from '@/ribbon/commandBus';
+import { isMbdStandaloneUrl } from '@/utils/mbdStandaloneUrl';
 
 const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
 
@@ -70,8 +71,13 @@ type DockviewPanelLike = {
   group?: DockviewGroupLike;
 };
 
+type DockPanelAddOptions = {
+  id: string;
+  [key: string]: unknown;
+};
+
 type DockApi = {
-  addPanel: (options: unknown) => DockviewPanelLike;
+  addPanel: (options: DockPanelAddOptions) => DockviewPanelLike;
   getPanel: (id: string) => DockviewPanelLike | undefined;
   getGroup: (id: string) => DockviewGroupLike | undefined;
   toJSON: () => unknown;
@@ -93,6 +99,11 @@ let offCommand: (() => void) | null = null;
 let userStoreInitializationPromise: Promise<void> | null = null;
 const embedTokenVerified = ref(false);
 const embedSessionError = ref<string | null>(null);
+const invalidGridRetryScheduledIds = new Set<string>();
+const invalidGridRetryCountById = new Map<string, number>();
+const MAX_GRID_RETRY = 3;
+const RETRY_DELAYS = [0, 50, 200];
+const panelOpenWarningIds = new Set<string>();
 
 function normalizeDockPanelId(panelId: string): string {
   if (panelId === 'resubmissionTasks') return 'designerCommentHandling';
@@ -110,6 +121,69 @@ function closeBlockedReviewPanels() {
   const dockApi = api.value;
   if (!dockApi || !isPassiveWorkflowMode()) return;
   closePanelIfExists(dockApi, 'myTasks');
+}
+
+function isInvalidGridElementError(error: unknown): boolean {
+  return error instanceof Error && /Invalid grid element/i.test(error.message);
+}
+
+function warnPanelOpenSkipped(panelId: string, reason: string) {
+  if (panelOpenWarningIds.has(panelId)) return;
+  panelOpenWarningIds.add(panelId);
+  console.warn('[DockLayout] 面板暂未打开', {
+    panelId,
+    reason,
+  });
+}
+
+function scheduleInvalidGridRetry(panelId: string) {
+  const normalizedPanelId = normalizeDockPanelId(panelId);
+  if (invalidGridRetryScheduledIds.has(normalizedPanelId)) return;
+  const attempt = invalidGridRetryCountById.get(normalizedPanelId) ?? 0;
+  if (attempt >= MAX_GRID_RETRY) {
+    warnPanelOpenSkipped(normalizedPanelId, `exceeded ${MAX_GRID_RETRY} retry attempts`);
+    return;
+  }
+  invalidGridRetryScheduledIds.add(normalizedPanelId);
+  const delay = RETRY_DELAYS[attempt] ?? 200;
+  const doRetry = () => {
+    invalidGridRetryScheduledIds.delete(normalizedPanelId);
+    invalidGridRetryCountById.set(normalizedPanelId, attempt + 1);
+    const panel = ensurePanel(normalizedPanelId);
+    if (panel) {
+      panel.api.setActive();
+      return;
+    }
+    warnPanelOpenSkipped(normalizedPanelId, `retry ${attempt + 1}/${MAX_GRID_RETRY} did not create panel`);
+  };
+  if (delay === 0) {
+    void nextTick(doRetry);
+  } else {
+    setTimeout(doRetry, delay);
+  }
+}
+
+function isPanelOpenDeferred(panelId: string): boolean {
+  const normalizedPanelId = normalizeDockPanelId(panelId);
+  return invalidGridRetryScheduledIds.has(normalizedPanelId);
+}
+
+function addPanelSafely(
+  dockApi: DockApi,
+  options: DockPanelAddOptions,
+): DockviewPanelLike | undefined {
+  const existing = dockApi.getPanel(options.id);
+  if (existing) return existing;
+  try {
+    return dockApi.addPanel(options);
+  } catch (error) {
+    if (!isInvalidGridElementError(error)) throw error;
+    console.warn('[DockLayout] Dock 布局暂未就绪，延后创建面板', {
+      panelId: options.id,
+    });
+    scheduleInvalidGridRetry(options.id);
+    return dockApi.getPanel(options.id);
+  }
 }
 
 // 右键菜单状态
@@ -353,6 +427,10 @@ function isEmbedLayoutMode(): boolean {
   return !!embedModeParams.value.isEmbedMode;
 }
 
+function isMbdStandaloneLayoutMode(): boolean {
+  return isMbdStandaloneUrl(window.location.search);
+}
+
 function closeEmbedLandingPanels() {
   const dockApi = api.value;
   if (!dockApi) return;
@@ -364,8 +442,8 @@ function closeEmbedLandingPanels() {
 
 function saveLayout() {
   if (!api.value) return;
-  if (isEmbedLayoutMode()) {
-    console.info('[DockLayout] 嵌入模式跳过普通布局持久化');
+  if (isEmbedLayoutMode() || isMbdStandaloneLayoutMode()) {
+    console.info('[DockLayout] 当前专用布局跳过普通布局持久化');
     return;
   }
   try {
@@ -532,6 +610,72 @@ function createEmbedFocusedLayout(
   });
 }
 
+function createMbdFocusedLayout(dockApi: DockApi) {
+  [
+    'properties',
+    'manager',
+    'hydraulic',
+    'annotation',
+    'measurement',
+    'dimension',
+    'ptset',
+    'mbdPipe',
+    'modelTree',
+    'modelQuery',
+    'nearbyQuery',
+    'viewer',
+    'console',
+    'dashboard',
+    'review',
+    'initiateReview',
+    'reviewerTasks',
+    'myTasks',
+    'designerCommentHandling',
+    'resubmissionTasks',
+    'taskMonitor',
+    'taskCreation',
+    'modelExport',
+    'materialConfig',
+    'roomStatus',
+    'spatialCompute',
+    'parquetDebug',
+  ].forEach((panelId) => {
+    closePanelIfExists(dockApi, panelId);
+  });
+
+  const viewerPanel = dockApi.addPanel({
+    id: 'viewer',
+    component: 'ViewerPanel',
+    title: '三维查看器',
+    renderer: 'always',
+  });
+
+  dockApi.addPanel({
+    id: 'modelTree',
+    component: 'ModelTreePanel',
+    title: '模型树',
+    renderer: 'always',
+    position: { referencePanel: viewerPanel, direction: 'left' },
+  });
+
+  const mbdPanel = dockApi.addPanel({
+    id: 'mbdPipe',
+    component: 'MbdPipePanel',
+    title: 'MBD-管道标注',
+    position: { referencePanel: viewerPanel, direction: 'right' },
+  });
+
+  viewerPanel.api.setActive();
+  mbdPanel.api.setActive();
+
+  const leftGroup = dockApi.getPanel('modelTree')?.group;
+  const rightGroup = dockApi.getPanel('mbdPipe')?.group;
+  if (leftGroup) leftGroup.api.setSize({ width: 350 });
+  if (rightGroup) rightGroup.api.setSize({ width: 420 });
+
+  console.log('[DockLayout] MBD-focused layout created');
+}
+
 function activatePanel(panelId: string) {
   const dockApi = api.value;
   if (!dockApi) return;
@@ -556,7 +700,7 @@ function ensurePanel(panelId: string) {
   const measurementPanel = dockApi.getPanel('measurement');
 
   if (normalizedPanelId === 'modelTree') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'modelTree',
       component: 'ModelTreePanel',
       title: '模型树',
@@ -565,7 +709,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'measurement') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'measurement',
       component: 'MeasurementPanel',
       title: '测量',
@@ -573,7 +717,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'dimension') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'dimension',
       component: 'DimensionPanel',
       title: '尺寸标注',
@@ -585,7 +729,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'annotation') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'annotation',
       component: 'AnnotationPanel',
       title: '批注',
@@ -597,7 +741,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'manager') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'manager',
       component: 'ManagerPanel',
       title: '管理',
@@ -609,7 +753,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'hydraulic') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'hydraulic',
       component: 'HydraulicPanel',
       title: '水力计算',
@@ -621,7 +765,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'properties') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'properties',
       component: 'PropertiesPanel',
       title: '属性',
@@ -633,7 +777,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'ptset') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'ptset',
       component: 'PtsetPanel',
       title: '点集',
@@ -645,7 +789,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'mbdPipe') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'mbdPipe',
       component: 'MbdPipePanel',
       title: 'MBD-管道标注',
@@ -657,7 +801,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (panelId === 'dimensionStyle') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'dimensionStyle',
       component: 'DimensionStylePanel',
       title: '尺寸样式',
@@ -669,7 +813,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (panelId === 'annotationStyle') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'annotationStyle',
       component: 'AnnotationStylePanel',
       title: '批注样式',
@@ -681,7 +825,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (panelId === 'materialConfig') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'materialConfig',
       component: 'DtxMaterialConfigPanel',
       title: '颜色配置',
@@ -693,9 +837,9 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'review') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'review',
-      component: 'ReviewPanel',
+      component: 'ReviewPanelDock',
       title: '校审',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
@@ -705,7 +849,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'initiateReview') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'initiateReview',
       component: 'InitiateReviewPanel',
       title: '发起编校审',
@@ -717,7 +861,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'reviewerTasks') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'reviewerTasks',
       component: 'ReviewerTaskListPanel',
       title: '待审核任务',
@@ -729,7 +873,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'myTasks') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'myTasks',
       component: 'DesignerTaskListPanel',
       title: '我的编校审',
@@ -741,7 +885,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'designerCommentHandling') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'designerCommentHandling',
       component: 'DesignerCommentHandlingPanel',
       title: '批注处理',
@@ -753,7 +897,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'taskMonitor') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'taskMonitor',
       component: 'TaskMonitorPanel',
       title: '任务监控',
@@ -765,7 +909,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'taskCreation') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'taskCreation',
       component: 'TaskCreationPanel',
       title: '创建任务',
@@ -777,7 +921,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'modelExport') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'modelExport',
       component: 'ModelExportPanel',
       title: '导出模型',
@@ -789,7 +933,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'dashboard') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'dashboard',
       component: 'DashboardPanel',
       title: '概览',
@@ -801,7 +945,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'console') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'console',
       component: 'ConsolePanel',
       title: '控制台',
@@ -811,7 +955,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'parquetDebug') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'parquetDebug',
       component: 'ParquetDebugPanel',
       title: 'Parquet SQL',
@@ -821,7 +965,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'roomStatus') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'roomStatus',
       component: 'RoomStatusPanel',
       title: '房间计算状态',
@@ -833,7 +977,7 @@ function ensurePanel(panelId: string) {
     });
   }
   if (normalizedPanelId === 'spatialCompute') {
-    return dockApi.addPanel({
+    return addPanelSafely(dockApi, {
       id: 'spatialCompute',
       component: 'SpatialComputePanel',
       title: '支架空间计算',
@@ -872,8 +1016,8 @@ function togglePanel(panelId: string) {
   if (created) {
     console.log(`[DockLayout] Panel ${normalizedPanelId} created, setting active`);
     created.api.setActive();
-  } else {
-    console.error(`[DockLayout] Failed to create panel ${normalizedPanelId}`);
+  } else if (!isPanelOpenDeferred(normalizedPanelId)) {
+    warnPanelOpenSkipped(normalizedPanelId, 'panel creation returned empty');
   }
 }
 
@@ -901,8 +1045,8 @@ function openPanel(panelId: string) {
   const created = ensurePanel(normalizedPanelId);
   if (created) {
     created.api.setActive();
-  } else {
-    console.error(`[DockLayout] Failed to open panel ${normalizedPanelId}`);
+  } else if (!isPanelOpenDeferred(normalizedPanelId)) {
+    warnPanelOpenSkipped(normalizedPanelId, 'panel open returned empty');
   }
 }
 
@@ -910,6 +1054,10 @@ function resetLayout() {
   if (!api.value) return;
   resetZoneState();
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  if (isMbdStandaloneLayoutMode()) {
+    createMbdFocusedLayout(api.value);
+    return;
+  }
   if (isEmbedLayoutMode()) {
     const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
     createEmbedFocusedLayout(api.value, {
@@ -1427,6 +1575,7 @@ async function applyInitialLanding() {
       }
 
       let restoredModelRefnos: string[] = [];
+      let restoredWorkflowRecordCount = 0;
       const verifiedToken = embedModeParams.value.userToken;
       if (
         embedTokenVerified.value
@@ -1457,6 +1606,7 @@ async function applyInitialLanding() {
           },
         });
         restoredModelRefnos = snapshotRestore.modelRefnos;
+        restoredWorkflowRecordCount = snapshotRestore.recordCount;
         restoreResult.restoredTask = snapshotRestore.task;
       }
 
@@ -1473,9 +1623,25 @@ async function applyInitialLanding() {
         const verifiedFormId = getVerifiedEmbedFormId(embedModeParams.value);
         const shouldShowDesignerCommentHandling = landingTarget === 'designer'
           && (
-            !!restoreResult.restoredTask
-            && (passiveWorkflowMode || isCanonicalReturnedTask(restoreResult.restoredTask))
+            (
+              !!restoreResult.restoredTask
+              && (passiveWorkflowMode || isCanonicalReturnedTask(restoreResult.restoredTask))
+            )
+            || (
+              passiveWorkflowMode
+              && restoredWorkflowRecordCount > 0
+              && !!verifiedFormId
+            )
           );
+        if (shouldShowDesignerCommentHandling) {
+          // 设计端进入「批注处理」流程时不再展示「发起编校审」面板，
+          // 该面板仅服务于新建编校审场景，与处理已退回单据的语义冲突。
+          if (api.value) {
+            closePanelIfExists(api.value, 'initiateReview');
+          }
+          openPanel('designerCommentHandling');
+          activatePanel('designerCommentHandling');
+        }
         persistEmbedLandingState({
           ...landingState,
           primaryPanelId: shouldShowDesignerCommentHandling ? 'designerCommentHandling' : landingState.primaryPanelId,
@@ -1504,7 +1670,9 @@ function onReady(event: DockviewReadyEvent) {
     ensurePanel as (panelId: string) => { api: { setActive: () => void } } | undefined,
   );
 
-  if (isEmbedLayoutMode()) {
+  if (isMbdStandaloneLayoutMode()) {
+    createMbdFocusedLayout(api.value);
+  } else if (isEmbedLayoutMode()) {
     const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
     const primaryPanelId = landingTarget
       ? getEmbedLandingPanelIdsWithOptions(landingTarget, {
@@ -1543,13 +1711,13 @@ function onReady(event: DockviewReadyEvent) {
   closeBlockedReviewPanels();
 
   event.api.onDidLayoutChange(() => {
-    if (!isEmbedLayoutMode()) {
+    if (!isEmbedLayoutMode() && !isMbdStandaloneLayoutMode()) {
       saveLayout();
     }
     notifyDockLayoutChange();
   });
 
-  if (!isEmbedLayoutMode()) {
+  if (!isEmbedLayoutMode() && !isMbdStandaloneLayoutMode()) {
     migratePropertiesPanelOnce();
   }
 
