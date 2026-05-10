@@ -217,6 +217,8 @@ const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
   'rus-244-design-a-ui-empty-state': 'RUS-244 design-A 三态拆分 + 入口收紧',
   'bug-rus-244-designer-empty-after-return': 'RUS-244 design-B PMS<->plant3d workflow 同步桥端到端',
   'bug-resubmit-creates-duplicate-task': '驳回后真按"发起编校审"按钮会再次 createReviewTask（生产 bug）',
+  'resubmit-reviewer-reopen': '驳回后设计重新发起，校对/审核可重开审核面板',
+  'returned-sj-active-block': '驳回后 sj 节点 verify(active) 仍被未处理批注阻断',
 };
 
 function appendNoProxy(value: string | undefined): string {
@@ -2051,6 +2053,182 @@ async function scenarioBranMixed(runtime: ScenarioRuntime): Promise<PmsSimulator
   }
 }
 
+/**
+ * 驳回后 sj 节点 verify(active) 阻断验证（v3 关键场景）。
+ *
+ * 流程：
+ * 1. SJ seed 单据 + 1 条 fixed/pending 批注（满足 active 的 open=0）
+ * 2. SJ active → jd
+ * 3. JH 在 jd 节点 reject 那条初始批注 + POST 一条新的 open 批注
+ * 4. JH return → sj
+ * 5. **关键**：SJ 立即调 verify(active) → 期望阻断（recommended_action=block）
+ * 6. SJ 把 jd 加的 open 批注标 fixed
+ * 7. SJ 再 verify(active) → 期望通过
+ *
+ * 这个 case 直接对应「驳回后无法通过」的业务诉求。
+ */
+async function scenarioReturnedSjActiveBlock(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
+  const previousSeedFlag = process.env.PMS_SIMULATOR_SEED_REVIEW_TASK;
+  process.env.PMS_SIMULATOR_SEED_REVIEW_TASK = '1';
+  try {
+    const created = await createReview(runtime, 'returned-sj-active-block');
+    if (!created.taskId) {
+      throw new Error(`returned-sj-active-block 缺少 task_id（form_id=${created.formId}）`);
+    }
+    const assertions: PmsSimulatorAssertionResult[] = [];
+
+    const sjToken = await createRoleToken(runtime, 'SJ', 'sj');
+    const initialAnnotationId = `returned-sj-active-block-init-${Date.now()}`;
+    await postJson(`${runtime.env.backendBaseUrl}/api/review/records`, {
+      taskId: created.taskId,
+      formId: created.formId,
+      type: 'batch',
+      annotations: [{
+        id: initialAnnotationId,
+        title: '初始批注',
+        description: 'SJ 起单时的初始批注',
+        refnos: ['24381_145018'],
+        reviewState: { resolutionStatus: 'fixed', decisionStatus: 'pending' },
+      }],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      note: 'returned-sj-active-block SJ seed',
+    }, sjToken);
+
+    let snapshot = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 起单' });
+    assertions.push(assertWorkflowVerify('returned-sj-active-block-sj-active-verify', snapshot, 'active'));
+    assertions.push(assertWorkflowSync('returned-sj-active-block-sj-active-sync', snapshot, 'active'));
+    assertions.push(assertBackendCurrentNode(
+      'returned-sj-active-block-sj-active-backend-current-node',
+      await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+      'jd',
+    ));
+
+    await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+    await applyAnnotationAction(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+      annotationId: initialAnnotationId,
+      action: 'reject',
+      note: 'JH reject 初始批注（提供 return 理由）',
+      currentPmsUser: 'JH',
+      currentWorkflowRole: 'jd',
+    });
+
+    const jhToken = await createRoleToken(runtime, 'JH', 'jd');
+    const jdAddedAnnotationId = `returned-sj-active-block-jd-added-${Date.now()}`;
+    await postJson(`${runtime.env.backendBaseUrl}/api/review/records`, {
+      taskId: created.taskId,
+      formId: created.formId,
+      type: 'batch',
+      annotations: [{
+        id: jdAddedAnnotationId,
+        title: 'JH 新增批注',
+        description: 'JH 在 jd 节点新增的未处理批注',
+        refnos: ['24381_145018'],
+      }],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      note: 'returned-sj-active-block JH 新增 open 批注',
+    }, jhToken);
+
+    snapshot = await runWorkflowAction(runtime.page, 'return', {
+      comment: 'JH return',
+      targetNode: 'sj',
+    });
+    assertions.push(assertWorkflowVerify('returned-sj-active-block-jh-return-verify', snapshot, 'return'));
+    assertions.push(assertWorkflowSync('returned-sj-active-block-jh-return-sync', snapshot, 'return'));
+    assertions.push(assertBackendCurrentNode(
+      'returned-sj-active-block-jh-return-backend-current-node',
+      await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+      'sj',
+    ));
+
+    await openTaskForRole(runtime.page, created.formId, 'SJ', {
+      source: 'task-reopen',
+      taskId: created.taskId,
+    });
+    const blocked = await runWorkflowAction(runtime.page, 'active', {
+      comment: 'SJ active 期望被未处理批注阻断',
+    });
+    assertions.push(assertResult(
+      'returned-sj-active-block-verify-blocked',
+      blocked.lastVerifyOk === false,
+      blocked.lastVerifyMessage || '',
+      false,
+      blocked.lastVerifyOk,
+    ));
+    assertions.push(assertResult(
+      'returned-sj-active-block-recommended-block',
+      blocked.lastVerifyRecommendedAction === 'block',
+      undefined,
+      'block',
+      blocked.lastVerifyRecommendedAction,
+    ));
+    assertions.push(assertResult(
+      'returned-sj-active-block-sync-blocked',
+      blocked.lastOk === false,
+      blocked.lastMessage || '',
+      false,
+      blocked.lastOk,
+    ));
+    assertions.push(assertResult(
+      'returned-sj-active-block-reason-text',
+      (blocked.lastVerifyMessage || '').includes('未处理批注')
+        || (blocked.lastMessage || '').includes('未处理批注')
+        || blocked.lastVerifyAnnotationSummary?.recommendedAction === 'block',
+      `verify=${blocked.lastVerifyMessage || ''} sync=${blocked.lastMessage || ''}`,
+      'reason 含 "未处理批注" 或 verify summary recommendedAction=block',
+      `verify=${blocked.lastVerifyMessage || ''} | summary=${
+        blocked.lastVerifyAnnotationSummary?.recommendedAction || '--'
+      }`,
+    ));
+    assertions.push(assertBackendCurrentNode(
+      'returned-sj-active-block-blocked-backend-current-node',
+      await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+      'sj',
+    ));
+
+    await applyAnnotationAction(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+      annotationId: jdAddedAnnotationId,
+      action: 'fixed',
+      note: 'SJ 处理 JH 新加的批注',
+      currentPmsUser: 'SJ',
+      currentWorkflowRole: 'sj',
+    });
+
+    const recovered = await runWorkflowAction(runtime.page, 'active', { comment: 'SJ active 处理后重新提交' });
+    assertions.push(assertWorkflowVerify('returned-sj-active-block-recovery-verify', recovered, 'active'));
+    assertions.push(assertWorkflowSync('returned-sj-active-block-recovery-sync', recovered, 'active'));
+    assertions.push(assertBackendCurrentNode(
+      'returned-sj-active-block-recovery-backend-current-node',
+      await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+      'jd',
+    ));
+
+    return finalizeScenarioReport({
+      caseId: 'returned-sj-active-block',
+      name: CASE_NAMES['returned-sj-active-block'],
+      formId: created.formId,
+      taskId: created.taskId,
+      finalNode: normalizeNode(recovered.currentWorkflowNode),
+      finalStatus: recovered.currentTaskStatus,
+      packageName: created.packageName,
+      assertions,
+    });
+  } finally {
+    if (previousSeedFlag == null) {
+      delete process.env.PMS_SIMULATOR_SEED_REVIEW_TASK;
+    } else {
+      process.env.PMS_SIMULATOR_SEED_REVIEW_TASK = previousSeedFlag;
+    }
+  }
+}
+
 async function scenarioDuplicateBranForm(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
   const first = await createReviewWithBran(runtime, 'duplicate-bran-form', PMS_SIMULATOR_PRIMARY_BRAN_REFNO, { seeded: true });
   const second = await createReviewWithBran(runtime, 'duplicate-bran-form', PMS_SIMULATOR_PRIMARY_BRAN_REFNO, { seeded: true });
@@ -2934,6 +3112,259 @@ async function scenarioBugResubmitCreatesDuplicateTask(
   });
 }
 
+async function scenarioResubmitReviewerReopen(
+  runtime: ScenarioRuntime,
+): Promise<PmsSimulatorScenarioReport> {
+  const created = await createReview(runtime, 'resubmit-reviewer-reopen');
+  const assertions: PmsSimulatorAssertionResult[] = [];
+
+  if (!created.taskId) {
+    throw new Error(`resubmit-reviewer-reopen 缺少 task_id（form_id=${created.formId}）`);
+  }
+
+  const initialCount = await countBackendTasksByFormId(runtime, created.formId);
+  assertions.push(assertResult(
+    'resubmit-reopen-initial-single-task',
+    initialCount.total === 1,
+    `首次发起后 form_id=${created.formId} 应只有 1 条 task；activeTasks=${JSON.stringify(initialCount.activeTasks)}`,
+    1,
+    initialCount.total,
+  ));
+
+  const beforeFirstSubmit = await probeBackendTaskByFormId(runtime, created.formId, created.taskId);
+  if (normalizeNode(beforeFirstSubmit?.currentNode) !== 'jd') {
+    const firstSubmitToken = await createCleanupToken(runtime.env);
+    type SyncResp = { code?: number; message?: string; data?: { taskStatus?: string; currentNode?: string } };
+    const firstSubmitResponse = await postJson<SyncResp>(
+      `${runtime.env.backendBaseUrl}/api/review/workflow/sync`,
+      {
+        form_id: created.formId,
+        token: firstSubmitToken,
+        action: 'active',
+        actor: { id: 'SJ', name: 'SJ', roles: 'sj' },
+        next_step: { assignee_id: 'JH', name: 'JH', roles: 'jd' },
+        comments: 'SJ 首次发起自动化（resubmit-reopen）',
+      },
+      firstSubmitToken,
+    );
+    assertions.push(assertResult(
+      'resubmit-reopen-first-active-sync-ok',
+      firstSubmitResponse.status === 200 && (firstSubmitResponse.body?.code ?? 0) === 200,
+      `first active sync status=${firstSubmitResponse.status} code=${firstSubmitResponse.body?.code} message=${firstSubmitResponse.body?.message}`,
+      200,
+      firstSubmitResponse.status,
+    ));
+  }
+
+  assertions.push(assertBackendCurrentNode(
+    'resubmit-reopen-after-create-node-jd',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'jd',
+  ));
+
+  let reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', {
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult(
+    'resubmit-reopen-jh-first-open-workflow',
+    reviewerSnapshot.sidePanelMode === 'workflow',
+    `JH 首次打开应进入流程面板；mode=${reviewerSnapshot.sidePanelMode} node=${reviewerSnapshot.currentWorkflowNode}`,
+    'workflow',
+    reviewerSnapshot.sidePanelMode,
+  ));
+  assertions.push(assertResult(
+    'resubmit-reopen-jh-first-open-node-jd',
+    normalizeNode(reviewerSnapshot.currentWorkflowNode) === 'jd',
+    undefined,
+    'jd',
+    normalizeNode(reviewerSnapshot.currentWorkflowNode),
+  ));
+
+  const returnToken = await createCleanupToken(runtime.env);
+  const returnResponse = await postJson<SyncResp>(
+    `${runtime.env.backendBaseUrl}/api/review/workflow/sync`,
+    {
+      form_id: created.formId,
+      token: returnToken,
+      action: 'return',
+      actor: { id: 'JH', name: 'JH', roles: 'jd' },
+      next_step: { assignee_id: 'SJ', name: 'SJ', roles: 'sj' },
+      comments: 'JH return 自动化（resubmit-reopen）',
+    },
+    returnToken,
+  );
+  assertions.push(assertResult(
+    'resubmit-reopen-jh-return-sync-ok',
+    returnResponse.status === 200 && (returnResponse.body?.code ?? 0) === 200,
+    `return sync status=${returnResponse.status} code=${returnResponse.body?.code} message=${returnResponse.body?.message}`,
+    200,
+    returnResponse.status,
+  ));
+  assertions.push(assertBackendCurrentNode(
+    'resubmit-reopen-after-return-node-sj',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'sj',
+  ));
+
+  const designerReopened = await openTaskForRole(runtime.page, created.formId, 'SJ', {
+    source: 'task-reopen',
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult(
+    'resubmit-reopen-sj-reopen-form-preserved',
+    designerReopened.currentFormId === created.formId || designerReopened.lastOpenedFormId === created.formId,
+    `current=${designerReopened.currentFormId} last=${designerReopened.lastOpenedFormId}`,
+    created.formId,
+    designerReopened.currentFormId || designerReopened.lastOpenedFormId,
+  ));
+  assertions.push(assertResult(
+    'resubmit-reopen-sj-reopen-node-sj',
+    normalizeNode(designerReopened.currentWorkflowNode) === 'sj',
+    undefined,
+    'sj',
+    normalizeNode(designerReopened.currentWorkflowNode),
+  ));
+
+  const reactiveToken = await createCleanupToken(runtime.env);
+  const reactiveResponse = await postJson<SyncResp>(
+    `${runtime.env.backendBaseUrl}/api/review/workflow/sync`,
+    {
+      form_id: created.formId,
+      token: reactiveToken,
+      action: 'active',
+      actor: { id: 'SJ', name: 'SJ', roles: 'sj' },
+      next_step: { assignee_id: 'JH', name: 'JH', roles: 'jd' },
+      comments: 'SJ 重新发起自动化（resubmit-reopen）',
+    },
+    reactiveToken,
+  );
+  assertions.push(assertResult(
+    'resubmit-reopen-sj-reactive-sync-ok',
+    reactiveResponse.status === 200 && (reactiveResponse.body?.code ?? 0) === 200,
+    `reactive sync status=${reactiveResponse.status} code=${reactiveResponse.body?.code} message=${reactiveResponse.body?.message}`,
+    200,
+    reactiveResponse.status,
+  ));
+  assertions.push(assertBackendCurrentNode(
+    'resubmit-reopen-after-reactive-node-jd',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'jd',
+  ));
+
+  const afterReactiveCount = await countBackendTasksByFormId(runtime, created.formId);
+  assertions.push(assertResult(
+    'resubmit-reopen-no-duplicate-after-reactive',
+    afterReactiveCount.total === 1,
+    `重新发起后 form_id=${created.formId} 应仍只有 1 条 task；activeTasks=${JSON.stringify(afterReactiveCount.activeTasks)}`,
+    1,
+    afterReactiveCount.total,
+  ));
+
+  reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', {
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult(
+    'resubmit-reopen-jh-reopen-workflow',
+    reviewerSnapshot.sidePanelMode === 'workflow',
+    `JH 重新打开应进入流程面板；mode=${reviewerSnapshot.sidePanelMode} node=${reviewerSnapshot.currentWorkflowNode}`,
+    'workflow',
+    reviewerSnapshot.sidePanelMode,
+  ));
+  assertions.push(assertResult(
+    'resubmit-reopen-jh-reopen-form-preserved',
+    reviewerSnapshot.currentFormId === created.formId || reviewerSnapshot.lastOpenedFormId === created.formId,
+    `current=${reviewerSnapshot.currentFormId} last=${reviewerSnapshot.lastOpenedFormId}`,
+    created.formId,
+    reviewerSnapshot.currentFormId || reviewerSnapshot.lastOpenedFormId,
+  ));
+  assertions.push(assertResult(
+    'resubmit-reopen-jh-reopen-node-jd',
+    normalizeNode(reviewerSnapshot.currentWorkflowNode) === 'jd',
+    undefined,
+    'jd',
+    normalizeNode(reviewerSnapshot.currentWorkflowNode),
+  ));
+
+  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, {
+    formId: created.formId,
+  });
+  const reviewWorkbenchVisible = await located.root
+    .locator('[data-testid="review-workbench-workflow-zone"]')
+    .first()
+    .isVisible({ timeout: 5000 })
+    .catch(() => false);
+  assertions.push(assertResult(
+    'resubmit-reopen-plant3d-review-workbench-visible',
+    reviewWorkbenchVisible,
+    'JH 重新打开单据后 plant3d 审核工作区应可见',
+    true,
+    reviewWorkbenchVisible,
+  ));
+
+  const shSnapshot = await openTaskForRole(runtime.page, created.formId, 'SH', {
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult(
+    'resubmit-reopen-sh-before-jh-agree-readonly',
+    shSnapshot.sidePanelMode === 'readonly',
+    `SH 在 jd 节点提前打开应只读；mode=${shSnapshot.sidePanelMode} node=${shSnapshot.currentWorkflowNode}`,
+    'readonly',
+    shSnapshot.sidePanelMode,
+  ));
+
+  await openTaskForRole(runtime.page, created.formId, 'JH', {
+    taskId: created.taskId,
+  });
+  const jhAgree = await runWorkflowAction(runtime.page, 'agree', {
+    comment: 'JH agree 重新发起后进入审核',
+  });
+  assertions.push(assertWorkflowVerify('resubmit-reopen-jh-agree-verify', jhAgree, 'agree'));
+  assertions.push(assertWorkflowSync('resubmit-reopen-jh-agree-sync', jhAgree, 'agree'));
+  assertions.push(assertBackendCurrentNode(
+    'resubmit-reopen-after-jh-agree-node-sh',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'sh',
+  ));
+
+  const approverSnapshot = await openTaskForRole(runtime.page, created.formId, 'SH', {
+    taskId: created.taskId,
+  });
+  assertions.push(assertResult(
+    'resubmit-reopen-sh-open-workflow-after-jh-agree',
+    approverSnapshot.sidePanelMode === 'workflow',
+    `SH 在 sh 节点打开应进入流程面板；mode=${approverSnapshot.sidePanelMode} node=${approverSnapshot.currentWorkflowNode}`,
+    'workflow',
+    approverSnapshot.sidePanelMode,
+  ));
+  assertions.push(assertResult(
+    'resubmit-reopen-sh-open-node-sh',
+    normalizeNode(approverSnapshot.currentWorkflowNode) === 'sh',
+    undefined,
+    'sh',
+    normalizeNode(approverSnapshot.currentWorkflowNode),
+  ));
+
+  const finalCount = await countBackendTasksByFormId(runtime, created.formId);
+  assertions.push(assertResult(
+    'resubmit-reopen-final-single-task',
+    finalCount.total === 1,
+    `完整重开链路后 form_id=${created.formId} 应仍只有 1 条 task；activeTasks=${JSON.stringify(finalCount.activeTasks)}`,
+    1,
+    finalCount.total,
+  ));
+
+  return finalizeScenarioReport({
+    caseId: 'resubmit-reviewer-reopen',
+    name: CASE_NAMES['resubmit-reviewer-reopen'],
+    formId: created.formId,
+    taskId: created.taskId,
+    finalNode: normalizeNode(approverSnapshot.currentWorkflowNode),
+    finalStatus: approverSnapshot.currentTaskStatus,
+    packageName: created.packageName,
+    assertions,
+  });
+}
+
 const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   approved: scenarioApproved,
   return: scenarioReturn,
@@ -2947,6 +3378,8 @@ const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   'rus-244-design-a-ui-empty-state': scenarioRus244DesignAUiEmptyState,
   'bug-rus-244-designer-empty-after-return': scenarioBugRus244DesignerEmptyAfterReturn,
   'bug-resubmit-creates-duplicate-task': scenarioBugResubmitCreatesDuplicateTask,
+  'resubmit-reviewer-reopen': scenarioResubmitReviewerReopen,
+  'returned-sj-active-block': scenarioReturnedSjActiveBlock,
 };
 
 async function runSingleScenario(base: ScenarioContext, caseId: PmsSimulatorCaseId): Promise<PmsSimulatorScenarioReport> {

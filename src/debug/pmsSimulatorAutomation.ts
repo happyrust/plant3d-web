@@ -11,6 +11,8 @@ export const PMS_SIMULATOR_CASE_ORDER = [
   'rus-244-design-a-ui-empty-state',
   'bug-rus-244-designer-empty-after-return',
   'bug-resubmit-creates-duplicate-task',
+  'resubmit-reviewer-reopen',
+  'returned-sj-active-block',
 ] as const;
 
 export type PmsSimulatorCaseId = (typeof PMS_SIMULATOR_CASE_ORDER)[number];
