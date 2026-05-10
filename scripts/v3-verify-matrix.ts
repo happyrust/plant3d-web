@@ -10,7 +10,7 @@
  *   PLANT3D_API_BASE=http://127.0.0.1:3100 npx tsx scripts/v3-verify-matrix.ts
  *   PLANT3D_API_BASE=http://127.0.0.1:3100 npx tsx scripts/v3-verify-matrix.ts --verbose
  *
- * 矩阵设计（共 15 case）：
+ * 矩阵设计（共 19 case）：
  *   组 A · sj 节点（直接创建后任务在 sj）
  *     A1 active · 无批注 → pass
  *     A2 active · 有 1 open 批注 → block "未处理批注"
@@ -29,6 +29,12 @@
  *     B8 return · 有 open → pass
  *     B9 return · 有 rejected → pass
  *     B10 stop · 任意状态 → pass（不查 annotation）
+ *
+ *   组 C · 驳回后 sj 节点（关键：sj 收到驳回后再 verify(active) 的拦截）
+ *     C1 sj 收到驳回 + jd 加的 open 仍在 → block "未处理批注"
+ *     C2 sj 把 jd 加的 open 标 fixed 后 → pass
+ *     C3 全部已 reply（含 rejected，open=0） → pass
+ *     C4 sj 节点上 verify(agree/return/stop) → 全 block（节点不匹配）
  */
 
 const BASE = (process.env.PLANT3D_API_BASE || 'http://127.0.0.1:3100').replace(/\/$/, '');
@@ -533,6 +539,175 @@ async function caseB10_stop_jd_with_pending(): Promise<void> {
   }
 }
 
+// ============================================================================
+// 组 C · 驳回后 sj 节点（关键场景：用户明确要求测试"驳回后无法通过"的情况）
+// ============================================================================
+//
+// 流转：sj 起单 → active → jd 介入加批注 → return → sj 拿到驳回
+// 在 sj 节点上执行 verify(active)，检查 v3 规则是否正确拦截：
+// active 要求 open == 0；如果 jd 在 jd 节点加了新的 open 批注、或还有 open
+// 没被 sj 重新处理，verify 必须阻断。
+//
+// 这覆盖 v3 之前没有专项 e2e 验证的「sj 收到驳回后再 active」边角。
+
+/**
+ * 把任务从 sj 流转到 jd（要求当前批注 open=0）→ jd 给指定批注集合添加新状态 →
+ * jd 调 sync(return) 把任务退回 sj。返回 taskId 与所有 token，便于继续测试。
+ */
+async function setupReturnedToSjState(
+  formId: string,
+  initialAnnotations: AnnotationSeed[],
+  jdAddedAnnotations: AnnotationSeed[],
+): Promise<{ taskId: string; sjToken: string; jhToken: string }> {
+  const sjToken = await getToken('SJ', 'sj');
+  const { taskId } = await seedFormAndTask(formId, sjToken);
+  if (initialAnnotations.length > 0) {
+    await seedAnnotations(taskId, formId, initialAnnotations, sjToken);
+  }
+  await activateToJd(formId, sjToken);
+
+  const jhToken = await getToken('JH', 'jd');
+  // jd 在 jd 节点加自己的批注（merged 进 record），保留 sj 已 seed 的批注
+  const merged = [...initialAnnotations, ...jdAddedAnnotations];
+  if (merged.length > 0) {
+    await seedAnnotations(taskId, formId, merged, jhToken);
+  }
+
+  // jd 调 sync(return) 退回 sj。此处必须满足 v3 return 规则：(open + rejected) >= 1。
+  // 调用方负责保证 jdAddedAnnotations 包含至少一条 open 或 rejected，否则 sync(return) 会被拒。
+  const ret = await http(
+    'POST',
+    '/api/review/workflow/sync',
+    {
+      form_id: formId,
+      token: jhToken,
+      action: 'return',
+      actor: { id: 'JH', name: 'JH', roles: 'jd' },
+      next_step: { assignee_id: 'SJ', name: 'SJ', roles: 'sj' },
+    },
+    jhToken,
+  );
+  if (ret.status !== 200) {
+    throw new Error(
+      `setupReturnedToSjState: sync(return) failed: HTTP ${ret.status} ${JSON.stringify(ret.body).slice(0, 200)}`,
+    );
+  }
+  return { taskId, sjToken, jhToken };
+}
+
+// C1：sj 拿到驳回，jd 在 jd 节点新加了一条未处理（open）批注 → verify(active) 必须 block
+async function caseC1_returned_sj_with_jd_added_open(): Promise<void> {
+  const formId = `V3-C1-${Date.now()}`;
+  console.log(`\n[C1] sj 收到驳回 + jd 加的 1 条 open 仍在 → 期望 verify(active) block`);
+  const { sjToken } = await setupReturnedToSjState(
+    formId,
+    [
+      { id: 'c1-orig-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
+    ],
+    [
+      { id: 'c1-jd-rejected', resolutionStatus: 'fixed', decisionStatus: 'rejected' }, // 给 sync(return) 提供问题批注
+      { id: 'c1-jd-new-open' }, // 没传 reviewState → Open
+    ],
+  );
+  try {
+    await verifyAndAssert('C1', formId, sjToken, 'active', {
+      passed: false,
+      recommendedAction: 'block',
+      reasonContains: '未处理批注',
+    });
+  } finally {
+    await cleanup(formId, sjToken);
+  }
+}
+
+// C2：sj 拿到驳回，把 jd 加的那条 open 标记 fixed 后 → verify(active) 应通过
+async function caseC2_returned_sj_after_fixing_jd_added_open(): Promise<void> {
+  const formId = `V3-C2-${Date.now()}`;
+  console.log(`\n[C2] sj 收到驳回 + sj 把 jd 加的 open 标 fixed → 期望 verify(active) pass`);
+  const { taskId, sjToken } = await setupReturnedToSjState(
+    formId,
+    [
+      { id: 'c2-orig-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
+    ],
+    [
+      { id: 'c2-jd-rejected', resolutionStatus: 'fixed', decisionStatus: 'rejected' },
+      { id: 'c2-jd-new-open' },
+    ],
+  );
+  // sj 重新 fix 那条 jd 加的 open
+  await seedAnnotations(
+    taskId,
+    formId,
+    [
+      { id: 'c2-orig-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
+      { id: 'c2-jd-rejected', resolutionStatus: 'fixed', decisionStatus: 'rejected' },
+      { id: 'c2-jd-new-open', resolutionStatus: 'fixed', decisionStatus: 'pending' }, // 改为已修复
+    ],
+    sjToken,
+  );
+  try {
+    await verifyAndAssert('C2', formId, sjToken, 'active', { passed: true, recommendedAction: 'proceed' });
+  } finally {
+    await cleanup(formId, sjToken);
+  }
+}
+
+// C3：sj 拿到驳回，jd 加的批注集全部都已被 reply 过（rejected 也算 reply），
+//     v3 active 规则仅要求 open=0，所以 sj 直接 verify(active) 应通过
+async function caseC3_returned_sj_with_only_replied_annotations(): Promise<void> {
+  const formId = `V3-C3-${Date.now()}`;
+  console.log(`\n[C3] sj 收到驳回 + 全部批注都已 reply 过（含 rejected）→ 期望 verify(active) pass`);
+  const { sjToken } = await setupReturnedToSjState(
+    formId,
+    [
+      { id: 'c3-orig-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
+    ],
+    [
+      { id: 'c3-jd-rejected', resolutionStatus: 'fixed', decisionStatus: 'rejected' },
+      { id: 'c3-jd-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
+    ],
+  );
+  try {
+    await verifyAndAssert('C3', formId, sjToken, 'active', { passed: true, recommendedAction: 'proceed' });
+  } finally {
+    await cleanup(formId, sjToken);
+  }
+}
+
+// C4：sj 拿到驳回，验证 sj 节点上不能直接 verify(agree) / verify(return) / verify(stop)
+async function caseC4_returned_sj_node_action_constraints(): Promise<void> {
+  const formId = `V3-C4-${Date.now()}`;
+  console.log(`\n[C4] sj 收到驳回 + verify(agree/return/stop) → 全 block 节点不匹配`);
+  const { sjToken } = await setupReturnedToSjState(
+    formId,
+    [
+      { id: 'c4-orig-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
+    ],
+    [
+      { id: 'c4-jd-rejected', resolutionStatus: 'fixed', decisionStatus: 'rejected' },
+    ],
+  );
+  try {
+    await verifyAndAssert('C4-agree', formId, sjToken, 'agree', {
+      passed: false,
+      recommendedAction: 'block',
+      reasonContains: 'agree 仅允许在 jd/sh/pz',
+    });
+    await verifyAndAssert('C4-return', formId, sjToken, 'return', {
+      passed: false,
+      recommendedAction: 'block',
+      reasonContains: 'return 仅允许在 jd/sh/pz',
+    });
+    await verifyAndAssert('C4-stop', formId, sjToken, 'stop', {
+      passed: false,
+      recommendedAction: 'block',
+      reasonContains: 'stop 仅允许在 jd/sh/pz',
+    });
+  } finally {
+    await cleanup(formId, sjToken);
+  }
+}
+
 async function main(): Promise<void> {
   console.log('━━━━ v3 verify 矩阵专项验证 ━━━━');
   console.log(`  BASE: ${BASE}`);
@@ -554,6 +729,11 @@ async function main(): Promise<void> {
     caseB8_return_jd_open,
     caseB9_return_jd_rejected,
     caseB10_stop_jd_with_pending,
+    // 组 C · 驳回后 sj 节点（关键：驳回后 verify 是否仍能正确拦截）
+    caseC1_returned_sj_with_jd_added_open,
+    caseC2_returned_sj_after_fixing_jd_added_open,
+    caseC3_returned_sj_with_only_replied_annotations,
+    caseC4_returned_sj_node_action_constraints,
   ];
 
   for (const fn of cases) {
