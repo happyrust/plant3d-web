@@ -822,24 +822,10 @@ async function handleSubmit() {
 
     await syncTaskAttachments(task.id);
 
-    // 把 task 从 sj 节点推到 jd（校对）节点，让 reviewer 工作区可激活：
-    //   非嵌入态 — 始终调用，与原逻辑一致；
-    //   嵌入态 — 也主动调用，避免依赖 PMS 在驳回后再次主动调 sync(action='active')；
-    //         若 task 已经被 PMS 推进（current_node!='sj'），backend 会返回 403/409，
-    //         此处吞掉异常防止阻断 UI 和后续 formSaved 通知。
-    if (task?.id) {
-      try {
-        await userStore.submitTaskToNextNode(task.id, isExternal ? '外部流程发起编校审' : '发起编校审');
-      } catch (error) {
-        if (isExternal) {
-          console.warn(
-            '[InitiateReviewPanel] 嵌入态 submitTaskToNextNode 跳过（可能 task 已推进或 PMS 同步并发）：',
-            error instanceof Error ? error.message : error,
-          );
-        } else {
-          throw error;
-        }
-      }
+    // 非外部流程由 plant3d 内部推进到 jd；外部流程只保存 task，
+    // 后续 active/agree/return 必须由 PMS workflow/sync 驱动。
+    if (task?.id && !isExternal) {
+      await userStore.submitTaskToNextNode(task.id, '发起编校审');
     }
 
     const checker = checkerIdToSubmit ? reviewerOptions.value.find((r) => r.id === checkerIdToSubmit) : null;

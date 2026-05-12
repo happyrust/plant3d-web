@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 
 const createTaskMock = vi.fn();
@@ -134,6 +134,7 @@ describe('InitiateReviewPanel form binding', () => {
       formId: 'FORM-1',
       title: '综合校审数据包',
     });
+    vi.stubEnv('VITE_REVIEW_ENABLE_INTERNAL_WORKFLOW_MODE', '1');
     sessionStorage.clear();
     Object.defineProperty(window, 'localStorage', {
       value: {
@@ -146,6 +147,10 @@ describe('InitiateReviewPanel form binding', () => {
     });
     // 让 InitiateReviewPanel 的 resolveExternalWorkflowMode 返回 false（手动模式）
     sessionStorage.setItem('plant3d_workflow_mode', 'manual');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('binds all fields and submits collected reactive form data', async () => {

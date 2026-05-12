@@ -3040,7 +3040,6 @@ async function requestEmbedUrlData(
     currentPmsUser: state.currentPmsUser,
     currentWorkflowRole: workflowRole,
     preferredFormId,
-    workflowMode: state.platformEmbedWorkflowMode || null,
     token: state.platformEmbedToken || token || null,
     extraParameters: parsedExtraParameters,
   });

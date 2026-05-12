@@ -1961,7 +1961,6 @@ export type TokenRequest = {
   userId: string;
   formId?: string;
   role?: string;
-  workflowMode?: string;
 };
 
 export type TokenResponse = {
@@ -2063,7 +2062,6 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
       user_id: request.userId,
       form_id: request.formId,
       role: request.role,
-      workflow_mode: request.workflowMode,
     }),
   });
 
