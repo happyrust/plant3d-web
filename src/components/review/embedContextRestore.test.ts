@@ -48,6 +48,8 @@ describe('resolveEmbedRestoreResult', () => {
       restoredTaskId: null,
       restoredTaskSummary: null,
       target: 'reviewer',
+      matchedSource: null,
+      missReason: 'no_form',
     });
   });
 
@@ -328,5 +330,94 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview']);
     expect(activatePanel).toHaveBeenLastCalledWith('initiateReview');
     expect(result.restoreStatus).toBe('missing');
+  });
+
+  it('uses a form scoped loader when designer slices miss a trusted form id', async () => {
+    const task = createTask({
+      id: 'task-form-loader',
+      formId: 'FORM-LOADER',
+      status: 'draft',
+      currentNode: 'sj',
+      returnReason: '请处理批注',
+    });
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+    const loadTaskByFormId = vi.fn(async () => task);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-LOADER',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+      loadTaskByFormId,
+    });
+
+    expect(loadTaskByFormId).toHaveBeenCalledWith('FORM-LOADER');
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+    expect(openPanel).toHaveBeenCalledWith('designerCommentHandling');
+    expect(result.restoreStatus).toBe('matched');
+    expect(result.restoredTaskId).toBe('task-form-loader');
+    expect(result.matchedSource).toBe('form_loader');
+  });
+
+  it('uses a form scoped loader when reviewer owner slices miss a trusted form id', async () => {
+    const task = createTask({
+      id: 'task-reviewer-form-loader',
+      formId: 'FORM-REVIEWER-LOADER',
+      status: 'in_review',
+      currentNode: 'pz',
+    });
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+    const loadTaskByFormId = vi.fn(async () => task);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'reviewer',
+      formId: 'FORM-REVIEWER-LOADER',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+      loadTaskByFormId,
+    });
+
+    expect(loadTaskByFormId).toHaveBeenCalledWith('FORM-REVIEWER-LOADER');
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+    expect(openPanel).toHaveBeenCalledWith('review');
+    expect(result.restoreStatus).toBe('matched');
+    expect(result.restoredTaskId).toBe('task-reviewer-form-loader');
+    expect(result.matchedSource).toBe('form_loader');
+  });
+
+  it('returns explicit missing diagnostics when trusted form id cannot be restored', async () => {
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-NOT-FOUND',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [],
+      allTasks: () => [],
+      setCurrentTask: vi.fn(async () => undefined),
+      openPanel: vi.fn(),
+      activatePanel: vi.fn(),
+      passiveWorkflowMode: true,
+      loadTaskByFormId: vi.fn(async () => null),
+    });
+
+    expect(result.restoreStatus).toBe('missing');
+    expect(result.missReason).toBe('form_not_found');
+    expect(result.matchedSource).toBeNull();
   });
 });

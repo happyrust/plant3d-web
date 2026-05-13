@@ -12,11 +12,16 @@ import type { ReviewTask, WorkflowNode } from '@/types/auth';
 
 import { normalizeReviewDeliveryRefno } from '@/composables/useReviewDeliveryUnit';
 
+export type EmbedRestoreMatchedSource = 'reviewer_tasks' | 'designer_tasks' | 'all_tasks' | 'form_loader' | null;
+export type EmbedRestoreMissReason = 'no_form' | 'form_not_found' | 'not_returned' | null;
+
 type EmbedRestoreResult = Pick<
   EmbedLandingState,
   'target' | 'restoreStatus' | 'restoredTaskId' | 'restoredTaskSummary' | 'restoredTaskDraft'
 > & {
   restoredTask: ReviewTask | null;
+  matchedSource: EmbedRestoreMatchedSource;
+  missReason: EmbedRestoreMissReason;
 };
 
 type ResolveEmbedRestoreOptions = {
@@ -38,6 +43,7 @@ type RestoreEmbedWorkbenchOptions = {
   openPanel: (panelId: string) => void;
   activatePanel: (panelId: string) => void;
   passiveWorkflowMode?: boolean;
+  loadTaskByFormId?: (formId: string) => Promise<ReviewTask | null>;
 };
 
 function normalizeFormId(formId?: string | null): string | null {
@@ -48,6 +54,18 @@ function normalizeFormId(formId?: string | null): string | null {
 function findTaskByFormId(tasks: ReviewTask[], formId: string | null): ReviewTask | null {
   if (!formId) return null;
   return tasks.find((task) => normalizeFormId(task.formId) === formId) ?? null;
+}
+
+function findTaskByFormIdWithSource(
+  candidates: { source: Exclude<EmbedRestoreMatchedSource, null>; tasks: ReviewTask[] }[],
+  formId: string | null,
+): { task: ReviewTask | null; source: EmbedRestoreMatchedSource } {
+  if (!formId) return { task: null, source: null };
+  for (const candidate of candidates) {
+    const task = findTaskByFormId(candidate.tasks, formId);
+    if (task) return { task, source: candidate.source };
+  }
+  return { task: null, source: null };
 }
 
 function buildTaskSummary(task: ReviewTask | null): EmbedLandingTaskSummary | null {
@@ -92,6 +110,10 @@ function createRestoreResult(
   restoreStatus: EmbedRestoreStatus,
   restoredTask: ReviewTask | null,
   restoredTaskSummary: EmbedLandingTaskSummary | null = buildTaskSummary(restoredTask),
+  meta: {
+    matchedSource?: EmbedRestoreMatchedSource;
+    missReason?: EmbedRestoreMissReason;
+  } = {},
 ): EmbedRestoreResult {
   return {
     target,
@@ -100,24 +122,36 @@ function createRestoreResult(
     restoredTaskId: restoredTask?.id ?? null,
     restoredTaskSummary,
     restoredTaskDraft: buildTaskDraft(restoredTask),
+    matchedSource: meta.matchedSource ?? null,
+    missReason: meta.missReason ?? (restoreStatus === 'no_form' ? 'no_form' : null),
   };
 }
 
 export function resolveEmbedRestoreResult(options: ResolveEmbedRestoreOptions): EmbedRestoreResult {
   const normalizedFormId = normalizeFormId(options.formId);
   if (!normalizedFormId) {
-    return createRestoreResult(options.target, 'no_form', null, null);
+    return createRestoreResult(options.target, 'no_form', null, null, { missReason: 'no_form' });
   }
 
   if (options.target === 'reviewer') {
-    const matchedTask = findTaskByFormId(options.reviewerTasks, normalizedFormId)
-      ?? findTaskByFormId(options.allTasks, normalizedFormId);
-    return createRestoreResult(options.target, matchedTask ? 'matched' : 'missing', matchedTask, null);
+    const { task, source } = findTaskByFormIdWithSource([
+      { source: 'reviewer_tasks', tasks: options.reviewerTasks },
+      { source: 'all_tasks', tasks: options.allTasks },
+    ], normalizedFormId);
+    return createRestoreResult(
+      options.target, task ? 'matched' : 'missing', task, null,
+      { matchedSource: source, missReason: task ? null : 'form_not_found' },
+    );
   }
 
-  const matchedTask = findTaskByFormId(options.designerTasks, normalizedFormId)
-    ?? findTaskByFormId(options.allTasks, normalizedFormId);
-  return createRestoreResult(options.target, matchedTask ? 'matched' : 'missing', matchedTask);
+  const { task, source } = findTaskByFormIdWithSource([
+    { source: 'designer_tasks', tasks: options.designerTasks },
+    { source: 'all_tasks', tasks: options.allTasks },
+  ], normalizedFormId);
+  return createRestoreResult(
+    options.target, task ? 'matched' : 'missing', task, undefined,
+    { matchedSource: source, missReason: task ? null : 'form_not_found' },
+  );
 }
 
 export async function restoreEmbedWorkbenchContext(
@@ -125,7 +159,7 @@ export async function restoreEmbedWorkbenchContext(
 ): Promise<EmbedRestoreResult> {
   await options.loadReviewTasks();
 
-  const result = resolveEmbedRestoreResult({
+  let result = resolveEmbedRestoreResult({
     target: options.target,
     formId: options.formId,
     reviewerTasks: options.reviewerTasks(),
@@ -133,9 +167,30 @@ export async function restoreEmbedWorkbenchContext(
     allTasks: options.allTasks(),
   });
 
+  const normalizedFormId = normalizeFormId(options.formId);
+  if (
+    result.restoreStatus === 'missing'
+    && normalizedFormId
+    && options.loadTaskByFormId
+  ) {
+    const loadedTask = await options.loadTaskByFormId(normalizedFormId);
+    if (loadedTask) {
+      result = createRestoreResult(options.target, 'matched', loadedTask, undefined, {
+        matchedSource: 'form_loader',
+        missReason: null,
+      });
+    } else {
+      result = {
+        ...result,
+        matchedSource: null,
+        missReason: 'form_not_found',
+      };
+    }
+  }
+
   const shouldOpenDesignerCommentHandling = options.target === 'designer'
     && !!result.restoredTask
-    && isCanonicalReturnedTask(result.restoredTask);
+    && (options.passiveWorkflowMode || isCanonicalReturnedTask(result.restoredTask));
   const panelIds = shouldOpenDesignerCommentHandling
     ? ['designerCommentHandling']
     : getEmbedLandingPanelIdsWithOptions(options.target, {
@@ -153,7 +208,6 @@ export async function restoreEmbedWorkbenchContext(
   if (options.target === 'reviewer') {
     await options.setCurrentTask(result.restoredTask);
   } else {
-    // 设计端：如果匹配到了已有任务，也绑定 currentTask，以触发确认记录加载与批注回放
     await options.setCurrentTask(result.restoredTask ?? null);
   }
 

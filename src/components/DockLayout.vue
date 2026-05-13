@@ -1407,6 +1407,7 @@ async function applyInitialLanding() {
         openPanel,
         activatePanel,
         passiveWorkflowMode,
+        loadTaskByFormId: userStore.loadReviewTaskByFormId,
       });
 
       const fallbackLandingTarget = resolvePassiveEmbedViewTarget({
@@ -1488,6 +1489,8 @@ async function applyInitialLanding() {
           restoredTaskId: restoreResult.restoredTaskId,
           restoredTaskSummary: restoreResult.restoredTaskSummary,
           restoredTaskDraft: restoreResult.restoredTaskDraft,
+          matchedSource: restoreResult.matchedSource,
+          missReason: restoreResult.missReason,
         });
       }
       return;

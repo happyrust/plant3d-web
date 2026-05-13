@@ -10,6 +10,7 @@ import {
   reviewGetEmbedUrl,
   reviewRecordCreate,
   reviewRecordGetByTaskId,
+  reviewTaskGetList,
   reviewTaskSubmitToNext,
   reviewVerifyWorkflow,
   reviewWorkflowSyncQuery,
@@ -103,6 +104,23 @@ describe('reviewApi base url defaults', () => {
       fetchMock,
       '/api/review/embed-url',
       JSON.stringify({ project_id: 'project-1', user_id: 'user-1', workflow_role: 'jd', role: 'jd' })
+    );
+  });
+
+  it('adds form_id when loading review tasks by form id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        tasks: [],
+        total: 0,
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await reviewTaskGetList({ formId: 'FORM-FB4EF9F13DF1' });
+
+    expect(fetchMock.mock.calls[0][0]).toEqual(
+      expect.stringMatching(/\/api\/review\/tasks\?form_id=FORM-FB4EF9F13DF1$/),
     );
   });
 

@@ -966,6 +966,7 @@ export async function reviewTaskGetList(options?: {
   checkerId?: string;
   approverId?: string;
   reviewerId?: string;
+  formId?: string;
   limit?: number;
   offset?: number;
 }): Promise<ReviewTaskListResponse> {
@@ -976,6 +977,7 @@ export async function reviewTaskGetList(options?: {
   if (options?.checkerId) params.set('checker_id', options.checkerId);
   if (options?.approverId) params.set('approver_id', options.approverId);
   if (options?.reviewerId) params.set('reviewer_id', options.reviewerId);
+  if (options?.formId) params.set('form_id', options.formId);
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.offset) params.set('offset', String(options.offset));
 

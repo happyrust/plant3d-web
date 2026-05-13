@@ -54,6 +54,8 @@ export type EmbedLandingState = {
   restoredTaskId?: string | null;
   restoredTaskSummary?: EmbedLandingTaskSummary | null;
   restoredTaskDraft?: EmbedLandingTaskDraft | null;
+  matchedSource?: string | null;
+  missReason?: string | null;
 };
 
 export const EMBED_LANDING_STATE_STORAGE_KEY = 'embed_landing_state';
