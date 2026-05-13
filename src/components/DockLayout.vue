@@ -252,7 +252,10 @@ function tryRegisterWorkflowSyncBridge() {
   if (offWorkflowSyncBridge) return;
 
   offWorkflowSyncBridge = attachEmbedPostMessageBridge({
-    onPmsWorkflowPreAction: async (msg) => reviewStore.flushPendingConfirmForExternalAction(msg.formId),
+    onPmsWorkflowPreAction: async (msg) => reviewStore.prepareExternalWorkflowAction({
+      formId: msg.formId,
+      action: msg.action,
+    }),
     onPmsWorkflowChanged: async (msg) => reviewStore.applyExternalWorkflowChange({
       formId: msg.formId,
       action: msg.action,

@@ -20,10 +20,17 @@ import {
   reviewTaskGetById,
   reviewTaskGetHistory,
   reviewTaskReturn,
+  reviewVerifyWorkflow,
   getReviewUserWebSocketUrl,
   type ConfirmedRecordData,
+  type ReviewAnnotationCheckResult,
   type ReviewHistoryItem,
+  type WorkflowVerifyData,
 } from '@/api/reviewApi';
+import {
+  readPersistedEmbedModeParams,
+  resolveTrustedEmbedIdentity,
+} from '@/components/review/embedRoleLanding';
 import {
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
@@ -527,10 +534,28 @@ function handleWebSocketMessage(message: {
 // ============ PMS 跨平台 workflow 同步入口 ============
 
 type FlushPendingConfirmResult = { ok: boolean; error?: string };
+type ExternalWorkflowPreAction = 'agree' | 'return' | 'redirect' | 'terminate';
+
+type PrepareExternalWorkflowActionPayload = {
+  formId: string;
+  action: ExternalWorkflowPreAction;
+};
+
+type PrepareExternalWorkflowActionResult = {
+  ok: boolean;
+  action: ExternalWorkflowPreAction;
+  saveOk: boolean;
+  verifyPassed?: boolean;
+  recommendedAction?: WorkflowVerifyData['recommendedAction'];
+  blockCode?: string;
+  message?: string;
+  annotationCheck?: ReviewAnnotationCheckResult;
+  error?: string;
+};
 
 type ApplyExternalWorkflowChangePayload = {
   formId: string;
-  action: 'agree' | 'return' | 'redirect' | 'terminate';
+  action: ExternalWorkflowPreAction;
   targetNode?: string;
   comments?: string;
 };
@@ -587,6 +612,119 @@ async function flushPendingConfirmForExternalAction(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function mapExternalActionToVerifyAction(
+  action: ExternalWorkflowPreAction,
+): 'agree' | 'return' | 'stop' | null {
+  if (action === 'agree' || action === 'return') return action;
+  if (action === 'terminate') return 'stop';
+  return null;
+}
+
+function resolveExternalWorkflowVerifyContext(formId: string) {
+  const embedParams = readPersistedEmbedModeParams();
+  const trustedIdentity = embedParams ? resolveTrustedEmbedIdentity(embedParams) : null;
+  const task = currentTask.value;
+  const actorId =
+    trustedIdentity?.userId
+    || embedParams?.userId
+    || task?.checkerId
+    || task?.reviewerId
+    || task?.approverId
+    || task?.requesterId
+    || '';
+  const actorRole =
+    trustedIdentity?.workflowRole
+    || embedParams?.workflowRole
+    || task?.currentNode
+    || '';
+
+  return {
+    token: embedParams?.userToken?.trim() || '',
+    formId: trustedIdentity?.formId || embedParams?.formId || task?.formId || formId,
+    actor: {
+      id: actorId,
+      name: actorId || 'PMS',
+      roles: actorRole || 'jd',
+    },
+  };
+}
+
+async function prepareExternalWorkflowAction(
+  payload: PrepareExternalWorkflowActionPayload,
+): Promise<PrepareExternalWorkflowActionResult> {
+  const saveResult = await flushPendingConfirmForExternalAction(payload.formId);
+  if (!saveResult.ok) {
+    const message = saveResult.error || 'PMS workflow_pre_action 自动保存失败';
+    return {
+      ok: false,
+      action: payload.action,
+      saveOk: false,
+      verifyPassed: false,
+      message,
+      error: message,
+    };
+  }
+
+  const verifyAction = mapExternalActionToVerifyAction(payload.action);
+  if (!verifyAction) {
+    return {
+      ok: true,
+      action: payload.action,
+      saveOk: true,
+      message: `action_${payload.action}_skipped_pre_action_verify`,
+    };
+  }
+
+  const verifyContext = resolveExternalWorkflowVerifyContext(payload.formId);
+  if (!verifyContext.token) {
+    const message = 'missing_embed_token_for_workflow_verify';
+    return {
+      ok: false,
+      action: payload.action,
+      saveOk: true,
+      verifyPassed: false,
+      message,
+      error: message,
+    };
+  }
+
+  try {
+    const response = await reviewVerifyWorkflow({
+      formId: verifyContext.formId,
+      token: verifyContext.token,
+      action: verifyAction,
+      actor: verifyContext.actor,
+      metadata: {
+        source: 'pms.workflow_pre_action',
+        externalAction: payload.action,
+      },
+    });
+    const verifyPassed = response.data?.passed === true;
+    const message = response.data?.reason || response.message || (verifyPassed ? '验证通过' : 'workflow/verify 未通过');
+    return {
+      ok: verifyPassed,
+      action: payload.action,
+      saveOk: true,
+      verifyPassed,
+      recommendedAction: response.data?.recommendedAction,
+      blockCode: response.data?.blockCode || response.errorCode,
+      message,
+      annotationCheck: response.annotationCheck,
+      error: verifyPassed ? undefined : message,
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      action: payload.action,
+      saveOk: true,
+      verifyPassed: false,
+      message,
+      error: message,
+    };
   }
 }
 
@@ -719,6 +857,7 @@ export function useReviewStore() {
 
     // PMS 跨平台 workflow 同步
     flushPendingConfirmForExternalAction,
+    prepareExternalWorkflowAction,
     applyExternalWorkflowChange,
 
     // WebSocket
