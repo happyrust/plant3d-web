@@ -1076,6 +1076,7 @@ function handleClickOutside(event: MouseEvent) {
 }
 
 onMounted(() => {
+  syncEmbedLandingStateFromStorage();
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   document.addEventListener('click', handleClickOutside);
 
