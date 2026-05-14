@@ -261,6 +261,7 @@ function tryRegisterWorkflowSyncBridge() {
       action: msg.action,
       targetNode: msg.targetNode,
       comments: msg.comments,
+      nextStep: msg.nextStep,
     }),
   });
 }

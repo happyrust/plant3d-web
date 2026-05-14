@@ -18,6 +18,7 @@ import {
   reviewTaskSubmitToNext,
   type ReviewAnnotationCheckResult,
   type ReviewTask,
+  type WorkflowVerifyNextStep,
 } from '@/api/reviewApi';
 import { resolvePassiveWorkflowMode, resolveWorkflowMode } from '@/components/review/workflowMode';
 import {
@@ -446,7 +447,7 @@ type SimulatorTestApi = {
    */
   emitPmsWorkflowPreAction: (payload: {
     formId: string;
-    action: 'agree' | 'return' | 'redirect' | 'terminate';
+    action: 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
     requestId?: string;
   }) => void;
   /**
@@ -455,9 +456,10 @@ type SimulatorTestApi = {
    */
   emitPmsWorkflowChanged: (payload: {
     formId: string;
-    action: 'agree' | 'return' | 'redirect' | 'terminate';
+    action: 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
     targetNode?: string;
     comments?: string;
+    nextStep?: WorkflowVerifyNextStep | null;
     requestId?: string;
   }) => void;
 };
@@ -940,12 +942,26 @@ function exposeSimulatorTestApi(): void {
       if (!iframeWindow) {
         throw new Error('emitPmsWorkflowChanged: iframe contentWindow 未就绪');
       }
+      const workflowAction = payload.action === 'redirect'
+        ? null
+        : payload.action === 'terminate'
+          ? 'stop'
+          : payload.action;
+      const workflowRoleState = resolveCurrentWorkflowRoleState();
+      const nextStep = payload.nextStep ?? (workflowAction
+        ? resolveWorkflowMutationNextStep(
+          workflowAction,
+          workflowRoleState.workflowRole,
+          payload.targetNode ?? null,
+        )
+        : null);
       iframeWindow.postMessage({
         type: 'pms.workflow_changed',
         formId: payload.formId,
         action: payload.action,
         targetNode: payload.targetNode,
         comments: payload.comments,
+        nextStep,
         requestId: payload.requestId,
       }, '*');
     },

@@ -1,22 +1,24 @@
 import type {
   ReviewAnnotationCheckResult,
   WorkflowVerifyData,
+  WorkflowVerifyNextStep,
 } from '@/api/reviewApi';
 
 export type PmsWorkflowPreActionMessage = {
   type: 'pms.workflow_pre_action';
   formId: string;
-  action: 'agree' | 'return' | 'redirect' | 'terminate';
+  action: 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
   requestId?: string;
 };
 
 export type PmsWorkflowChangedMessage = {
   type: 'pms.workflow_changed';
   formId: string;
-  action: 'agree' | 'return' | 'redirect' | 'terminate';
+  action: 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
   targetNode?: string;
   comments?: string;
   pmsActor?: string;
+  nextStep?: WorkflowVerifyNextStep | null;
   requestId?: string;
 };
 

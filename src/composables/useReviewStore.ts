@@ -9,23 +9,23 @@ import type {
   ObbAnnotationRecord,
   RectAnnotationRecord,
 } from './useToolStore';
-import type { ReviewTask } from '@/types/auth';
+import type { ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
   reviewRecordCreate,
   reviewRecordDelete,
   reviewRecordGetByTaskId,
   reviewRecordClearByTaskId,
-  reviewTaskApprove,
   reviewTaskGetById,
   reviewTaskGetHistory,
-  reviewTaskReturn,
+  reviewWorkflowSyncMutation,
   reviewVerifyWorkflow,
   getReviewUserWebSocketUrl,
   type ConfirmedRecordData,
   type ReviewAnnotationCheckResult,
   type ReviewHistoryItem,
   type WorkflowVerifyData,
+  type WorkflowVerifyNextStep,
 } from '@/api/reviewApi';
 import {
   readPersistedEmbedModeParams,
@@ -534,7 +534,7 @@ function handleWebSocketMessage(message: {
 // ============ PMS 跨平台 workflow 同步入口 ============
 
 type FlushPendingConfirmResult = { ok: boolean; error?: string };
-type ExternalWorkflowPreAction = 'agree' | 'return' | 'redirect' | 'terminate';
+type ExternalWorkflowPreAction = 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
 
 type PrepareExternalWorkflowActionPayload = {
   formId: string;
@@ -558,6 +558,7 @@ type ApplyExternalWorkflowChangePayload = {
   action: ExternalWorkflowPreAction;
   targetNode?: string;
   comments?: string;
+  nextStep?: WorkflowVerifyNextStep | null;
 };
 
 type ApplyExternalWorkflowChangeResult = {
@@ -617,10 +618,86 @@ async function flushPendingConfirmForExternalAction(
 
 function mapExternalActionToVerifyAction(
   action: ExternalWorkflowPreAction,
-): 'agree' | 'return' | 'stop' | null {
+): 'active' | 'agree' | 'return' | 'stop' | null {
+  if (action === 'active') return 'active';
   if (action === 'agree' || action === 'return') return action;
   if (action === 'terminate') return 'stop';
   return null;
+}
+
+function normalizeWorkflowNodeValue(value?: string | null): WorkflowNode | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'sj' || normalized === 'jd' || normalized === 'sh' || normalized === 'pz'
+    ? normalized
+    : null;
+}
+
+function getTaskAssigneeForNode(
+  task: ReviewTask,
+  node: WorkflowNode,
+): { id: string; name: string } {
+  if (node === 'sj') {
+    return {
+      id: task.requesterId?.trim() || '',
+      name: task.requesterName?.trim() || task.requesterId?.trim() || '',
+    };
+  }
+
+  if (node === 'jd') {
+    const id = task.checkerId?.trim() || task.reviewerId?.trim() || '';
+    return {
+      id,
+      name: task.checkerName?.trim() || task.reviewerName?.trim() || id,
+    };
+  }
+
+  const id = task.approverId?.trim() || '';
+  return {
+    id,
+    name: task.approverName?.trim() || id,
+  };
+}
+
+function getDefaultAgreeTargetNode(currentNode?: WorkflowNode): WorkflowNode | null {
+  if (currentNode === 'jd') return 'sh';
+  if (currentNode === 'sh') return 'pz';
+  return null;
+}
+
+function resolveExternalWorkflowNextStep(
+  task: ReviewTask,
+  payload: ApplyExternalWorkflowChangePayload,
+): WorkflowVerifyNextStep | null {
+  if (payload.nextStep?.assigneeId?.trim() && payload.nextStep.roles?.trim()) {
+    return {
+      assigneeId: payload.nextStep.assigneeId.trim(),
+      name: payload.nextStep.name?.trim() || payload.nextStep.assigneeId.trim(),
+      roles: payload.nextStep.roles.trim(),
+    };
+  }
+
+  const currentNode = normalizeWorkflowNodeValue(task.currentNode);
+  let targetNode: WorkflowNode | null = normalizeWorkflowNodeValue(payload.targetNode);
+
+  if (!targetNode && payload.action === 'active') {
+    targetNode = 'jd';
+  }
+  if (!targetNode && payload.action === 'return') {
+    targetNode = 'sj';
+  }
+  if (!targetNode && payload.action === 'agree') {
+    targetNode = getDefaultAgreeTargetNode(currentNode ?? undefined);
+  }
+
+  if (!targetNode) return null;
+  const assignee = getTaskAssigneeForNode(task, targetNode);
+  if (!assignee.id) return null;
+
+  return {
+    assigneeId: assignee.id,
+    name: assignee.name || assignee.id,
+    roles: targetNode,
+  };
 }
 
 function resolveExternalWorkflowVerifyContext(formId: string) {
@@ -739,17 +816,42 @@ async function applyExternalWorkflowChange(
     return { ok: false, error: 'form_id_mismatch' };
   }
 
+  const syncAction = mapExternalActionToVerifyAction(payload.action);
+  if (!syncAction) {
+    return { ok: false, error: `action_${payload.action}_not_implemented` };
+  }
+
+  const syncContext = resolveExternalWorkflowVerifyContext(payload.formId);
+  if (!syncContext.token) {
+    return { ok: false, error: 'missing_embed_token_for_workflow_sync' };
+  }
+
+  const nextStep = resolveExternalWorkflowNextStep(task, payload);
+  const requiresNextStep = syncAction === 'active'
+    || syncAction === 'return'
+    || (syncAction === 'agree' && task.currentNode !== 'pz');
+  if (requiresNextStep && !nextStep) {
+    return { ok: false, error: `missing_next_step_for_${syncAction}` };
+  }
+
+  let responseStatus: string | undefined;
+  let responseCurrentNode: string | undefined;
   try {
-    if (payload.action === 'agree') {
-      await reviewTaskApprove(task.id, payload.comments ?? '');
-    } else if (payload.action === 'return') {
-      const targetNode = payload.targetNode?.trim() || 'sj';
-      await reviewTaskReturn(task.id, targetNode, payload.comments ?? '');
-    } else if (payload.action === 'redirect' || payload.action === 'terminate') {
-      return { ok: false, error: `action_${payload.action}_not_implemented` };
-    } else {
-      return { ok: false, error: `unknown_action_${payload.action}` };
-    }
+    const response = await reviewWorkflowSyncMutation({
+      formId: syncContext.formId,
+      token: syncContext.token,
+      action: syncAction,
+      actor: syncContext.actor,
+      nextStep,
+      comments: payload.comments,
+      metadata: {
+        source: 'pms.workflow_changed',
+        externalAction: payload.action,
+        targetNode: payload.targetNode,
+      },
+    });
+    responseStatus = response.data?.taskStatus;
+    responseCurrentNode = response.data?.currentNode;
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -760,8 +862,8 @@ async function applyExternalWorkflowChange(
   return {
     ok: true,
     taskId: task.id,
-    status: refreshed?.status ?? task.status,
-    currentNode: refreshed?.currentNode ?? task.currentNode,
+    status: refreshed?.status ?? responseStatus ?? task.status,
+    currentNode: refreshed?.currentNode ?? responseCurrentNode ?? task.currentNode,
   };
 }
 
