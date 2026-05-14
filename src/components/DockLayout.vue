@@ -1350,16 +1350,17 @@ async function bootstrapEmbedSession(): Promise<void> {
     return;
   }
 
-  await ensureUserStoreInitialized();
-
   if (trustedEmbedIdentity) {
     userStore.setEmbedUser(
       trustedEmbedIdentity.userId,
       trustedEmbedIdentity.workflowRole || undefined,
       { verified: true },
     );
+    await userStore.loadReviewTasks();
+    return;
   }
 
+  await ensureUserStoreInitialized();
   await userStore.loadReviewTasks();
 }
 
