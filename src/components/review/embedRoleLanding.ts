@@ -214,6 +214,20 @@ export function resolvePassiveEmbedViewTarget(options: {
   return 'reviewer';
 }
 
+export function resolveExternalFormFocusedLandingTarget(options: {
+  target: EmbedLandingTarget | null;
+  workflowRole?: string | null;
+  passiveWorkflowMode?: boolean;
+  formId?: string | null;
+}): EmbedLandingTarget | null {
+  if (!options.target) return null;
+  if (!options.passiveWorkflowMode) return options.target;
+  if (options.target !== 'designer') return options.target;
+  if (normalizeEmbedRole(options.workflowRole) !== 'sj') return options.target;
+  if (!normalizeEmbedValue(options.formId ?? null)) return options.target;
+  return 'reviewer';
+}
+
 export function getVerifiedEmbedProjectId(params: EmbedModeParams): string | null {
   return params.verifiedClaims?.projectId || params.projectId || null;
 }
@@ -243,10 +257,15 @@ export function getEmbedLandingPanelIds(target: EmbedLandingTarget): string[] {
 
 export function getEmbedLandingPanelIdsWithOptions(
   target: EmbedLandingTarget,
-  options: { passiveWorkflowMode?: boolean; formId?: string | null } = {},
+  options: { passiveWorkflowMode?: boolean; formId?: string | null; workflowRole?: string | null } = {},
 ): string[] {
-  void options;
-  if (target === 'designer') {
+  const effectiveTarget = resolveExternalFormFocusedLandingTarget({
+    target,
+    workflowRole: options.workflowRole,
+    passiveWorkflowMode: options.passiveWorkflowMode,
+    formId: options.formId,
+  });
+  if (effectiveTarget === 'designer') {
     return ['initiateReview'];
   }
 
@@ -270,8 +289,19 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
 
   const passiveWorkflowMode = options.passiveWorkflowMode
     ?? resolvePassiveWorkflowMode({ embedParams: options.embedModeParams });
-  const panelIds = getEmbedLandingPanelIdsWithOptions(options.target, {
+  const formId = getVerifiedEmbedFormId(options.embedModeParams);
+  const workflowRole = normalizeEmbedRole(options.embedModeParams.verifiedClaims?.role)
+    || normalizeEmbedRole(options.embedModeParams.workflowRole);
+  const effectiveTarget = resolveExternalFormFocusedLandingTarget({
+    target: options.target,
+    workflowRole,
     passiveWorkflowMode,
+    formId,
+  }) ?? options.target;
+  const panelIds = getEmbedLandingPanelIdsWithOptions(effectiveTarget, {
+    passiveWorkflowMode,
+    formId,
+    workflowRole,
   });
   const primaryPanelId = panelIds[0];
   if (!primaryPanelId) return null;
@@ -292,8 +322,8 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
     storage.setItem(
       EMBED_LANDING_STATE_STORAGE_KEY,
       JSON.stringify(({
-        target: options.target,
-        formId: getVerifiedEmbedFormId(options.embedModeParams),
+        target: effectiveTarget,
+        formId,
         primaryPanelId,
         visiblePanelIds: panelIds,
       } as EmbedLandingState))
@@ -301,7 +331,7 @@ export function applyEmbedLandingState<TPanel extends { api: { setActive: () => 
   }
 
   return {
-    target: options.target,
+    target: effectiveTarget,
     primaryPanelId,
     visiblePanelIds: panelIds,
   };
