@@ -978,7 +978,7 @@ async function confirmCurrentData() {
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
-      clearAll: () => {
+      clearDraftData: () => {
         toolStore.clearAll();
       },
       resetNote: () => {
