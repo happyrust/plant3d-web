@@ -133,10 +133,12 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
 const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
+const persistedEmbedParams = ref(readPersistedEmbedModeParams());
 const showDebugUi = isReviewDebugUiEnabled();
 
 function syncEmbedLandingStateFromStorage() {
   if (typeof sessionStorage === 'undefined') return;
+  persistedEmbedParams.value = readPersistedEmbedModeParams();
   const storedLandingState = sessionStorage.getItem(EMBED_LANDING_STATE_STORAGE_KEY);
   if (!storedLandingState) return;
 
@@ -182,8 +184,9 @@ const taskContext = computed<NormalizedTaskContext | null>(() => {
 const currentTaskNodeLabel = computed(() => taskContext.value?.currentNodeLabel || '-');
 const currentTaskFormId = computed(() => taskContext.value?.formId || '未绑定 formId');
 const currentTaskHasFormalFormId = computed(() => !!taskContext.value?.formId);
-const isPassiveWorkflow = computed(() => resolvePassiveWorkflowMode());
-const persistedEmbedParams = computed(() => readPersistedEmbedModeParams());
+const isPassiveWorkflow = computed(() => resolvePassiveWorkflowMode({
+  embedParams: persistedEmbedParams.value,
+}));
 function normalizeFormId(value?: string | null): string | null {
   const normalized = value?.trim();
   return normalized || null;
