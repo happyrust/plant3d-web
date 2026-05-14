@@ -1076,8 +1076,9 @@ function handleClickOutside(event: MouseEvent) {
 }
 
 onMounted(() => {
-  syncEmbedLandingStateFromStorage();
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
+  syncEmbedLandingStateFromStorage();
+  window.setTimeout(syncEmbedLandingStateFromStorage, 0);
   document.addEventListener('click', handleClickOutside);
 
   const isAutomation = localStorage.getItem('plant3d_automation_review') === '1'
