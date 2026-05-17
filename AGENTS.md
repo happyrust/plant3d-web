@@ -47,6 +47,17 @@
 - 提交信息建议遵循 Conventional Commits：`feat(scope): ...`、`fix(scope): ...`、`chore(scope): ...`（scope 示例：`mbd`、`review`、`ci`、`lint`、`dtx`）  
 - PR 需写清楚“做了什么/为什么/如何验证”，涉及 UI 或 3D 交互请附截图或录屏  
 - 合并前本地至少跑：`npm run type-check`、`npm run lint`、`npm test`；改动 E2E 相关时再跑 `npm run test:e2e`
+- 任何改动 `src/components/review/ReviewPanel.vue` 或 `DesignerCommentHandlingPanel.vue` 的 PR，**本地必须**额外跑下列 5 套测试做"双胞胎面板"回归守护（防止 rebase / cherry-pick 整段消失式回归，参见 `开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md`）：
+
+  ```bash
+  npx vitest run \
+    src/components/review/ReviewPanel.test.ts \
+    src/components/review/DesignerCommentHandlingPanel.test.ts \
+    src/components/review/AnnotationTableView.test.ts \
+    src/components/review/reviewerWorkbenchViewModeBus.test.ts
+  ```
+
+  PR 描述中应记录 baseline vs after 的 pass/fail 数差量，确保**不新增** fail。
 
 ## 配置与安全
 
