@@ -490,6 +490,13 @@ export type WorkflowSyncQueryRequest = {
   actor: WorkflowSyncActor;
 };
 
+export type WorkflowSyncMutationRequest = WorkflowSyncQueryRequest & {
+  action: 'active' | 'agree' | 'return' | 'stop';
+  nextStep?: WorkflowVerifyNextStep | null;
+  comments?: string;
+  metadata?: Record<string, unknown> | null;
+};
+
 type RawWorkflowAnnotationCommentData = {
   id?: string;
   annotation_id?: string;
@@ -966,6 +973,7 @@ export async function reviewTaskGetList(options?: {
   checkerId?: string;
   approverId?: string;
   reviewerId?: string;
+  formId?: string;
   limit?: number;
   offset?: number;
 }): Promise<ReviewTaskListResponse> {
@@ -976,6 +984,7 @@ export async function reviewTaskGetList(options?: {
   if (options?.checkerId) params.set('checker_id', options.checkerId);
   if (options?.approverId) params.set('approver_id', options.approverId);
   if (options?.reviewerId) params.set('reviewer_id', options.reviewerId);
+  if (options?.formId) params.set('form_id', options.formId);
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.offset) params.set('offset', String(options.offset));
 
@@ -1203,6 +1212,30 @@ export async function reviewWorkflowSyncQuery(
       token: request.token,
       action: 'query',
       actor: request.actor,
+    }),
+  });
+  return normalizeWorkflowSyncResponse(raw);
+}
+
+export async function reviewWorkflowSyncMutation(
+  request: WorkflowSyncMutationRequest,
+): Promise<WorkflowSyncResponse> {
+  const raw = await fetchJson<RawWorkflowSyncResponse>('/api/review/workflow/sync', {
+    method: 'POST',
+    body: JSON.stringify({
+      form_id: request.formId,
+      token: request.token,
+      action: request.action,
+      actor: request.actor,
+      next_step: request.nextStep
+        ? {
+          assignee_id: request.nextStep.assigneeId,
+          name: request.nextStep.name,
+          roles: request.nextStep.roles,
+        }
+        : undefined,
+      comments: request.comments,
+      metadata: request.metadata ?? undefined,
     }),
   });
   return normalizeWorkflowSyncResponse(raw);
@@ -1961,7 +1994,6 @@ export type TokenRequest = {
   userId: string;
   formId?: string;
   role?: string;
-  workflowMode?: string;
 };
 
 export type TokenResponse = {
@@ -2063,7 +2095,6 @@ export async function authGetToken(request: TokenRequest): Promise<TokenResponse
       user_id: request.userId,
       form_id: request.formId,
       role: request.role,
-      workflow_mode: request.workflowMode,
     }),
   });
 

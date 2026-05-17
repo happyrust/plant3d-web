@@ -10,6 +10,13 @@
   - 有未保存证据数据时额外显示 amber 警告提示
   - `workflowBridge.ts` 新增 `notifyParentWorkflowActionWithAck()`：发送 workflow action 后等待父窗口回执（`plant3d.workflow_action_ack`），5 秒超时返回 `'timeout'`，便于调用方在 PMS 未响应时回退到备选方案
 
+- **校审外部流程默认模式与编译期开关** (2026-05-12)
+  - 新增 `VITE_REVIEW_ENABLE_INTERNAL_WORKFLOW_MODE` 编译期开关，默认关闭；关闭时 `workflow_mode=manual/internal`、session/local storage 和 embed 参数都不会把前端切到内部主动模式
+  - 发起编校审面板在外部流程模式下只保存 task 并发送 `plant3d.form_saved`，不再调用内部 `submitTaskToNextNode` 抢先把单据从 `sj` 推到 `jd`
+  - `authGetToken` 与 PMS embed payload builder 不再发送 `workflow_mode`，公开校审 API 不再靠额外参数判断内部/外部模式
+  - 保留内部主动模式作为显式编译产物能力：仅设置 `VITE_REVIEW_ENABLE_INTERNAL_WORKFLOW_MODE=1/true` 时兼容旧的 manual/internal 调试入口
+  - 验证：`npm run type-check` 通过；后端默认/内部 feature 双向 HTTP smoke 均符合预期
+
 - **RUS-239 驳回后重新流转修复** (2026-04-30)
   - 新增外部流程桥接判断，仅在 PMS/仿 PMS 嵌入模式下向父窗口发送 `plant3d.workflow_action`
   - 设计批注处理页“流转回校对”和任务详情“再次提交”接入 `workflow/sync active` 语义，避免外部流程场景继续走内部 submit

@@ -542,6 +542,7 @@ onMounted(() => {
     const w = window as Window & {
       __plant3dInitiateReviewE2E?: {
         addMockComponent: (refNo?: string, name?: string) => Promise<void>;
+        submit: () => Promise<void>;
         getLastCreateResult: () => InitiateReviewAutomationCreateResult | null;
       };
     };
@@ -550,6 +551,9 @@ onMounted(() => {
         const ref = refNo || `E2E-AUTO-${Date.now()}`;
         notification.value = { type: null, message: '', details: '' };
         ensureComponentSelected(normalizeReviewDeliveryRefno(ref), name);
+      },
+      async submit() {
+        await handleSubmit();
       },
       getLastCreateResult() {
         return automationCreateResult.value;
@@ -827,7 +831,9 @@ async function handleSubmit() {
 
     await syncTaskAttachments(task.id);
 
-    if (!isExternal) {
+    // 非外部流程由 plant3d 内部推进到 jd；外部流程只保存 task，
+    // 后续 active/agree/return 必须由 PMS workflow/sync 驱动。
+    if (task?.id && !isExternal) {
       await userStore.submitTaskToNextNode(task.id, '发起编校审');
     }
 

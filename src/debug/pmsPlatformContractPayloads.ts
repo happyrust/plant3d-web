@@ -34,7 +34,6 @@ export type BuildEmbedUrlPayloadOptions = {
   currentPmsUser: SimulatorPmsUser;
   currentWorkflowRole: WorkflowRole;
   preferredFormId?: string | null;
-  workflowMode?: string | null;
   token?: string | null;
   extraParameters?: Record<string, unknown> | null;
 };
@@ -109,9 +108,6 @@ export function buildEmbedUrlPayload(options: BuildEmbedUrlPayloadOptions): Reco
   };
   if (options.preferredFormId?.trim()) {
     payload.form_id = options.preferredFormId.trim();
-  }
-  if (options.workflowMode?.trim()) {
-    payload.workflow_mode = options.workflowMode.trim();
   }
   if (options.token?.trim()) {
     payload.token = options.token.trim();

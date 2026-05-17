@@ -275,7 +275,6 @@ export async function runSequence(opts: PmsContractSequenceOptions): Promise<Ste
     projectId: opts.projectId,
     currentPmsUser: opts.user,
     currentWorkflowRole: role,
-    workflowMode: opts.workflowMode,
     token: bearerToken || null,
   });
   if (opts.verbose) console.error(`  payload: ${JSON.stringify(embedPayload)}`);

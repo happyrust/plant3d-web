@@ -399,7 +399,7 @@ describe('DockLayout embed bootstrap', () => {
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
       target: 'reviewer',
       formId: 'FORM-CLAIMS-1',
-      passiveWorkflowMode: false,
+      passiveWorkflowMode: true,
     }));
 
     const persisted = JSON.parse(sessionStorage.getItem('embed_mode_params') || '{}');
@@ -419,7 +419,7 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
-  it('设计端被动恢复时优先打开批注处理并使用 returnedInitiatedTasks 匹配任务', async () => {
+  it('SJ 外部 form_id 被动恢复时只打开校审面板并使用 returnedInitiatedTasks 匹配任务', async () => {
     const returnedTask = createTask({
       id: 'task-returned-1',
       formId: 'FORM-RETURNED-1',
@@ -434,7 +434,7 @@ describe('DockLayout embed bootstrap', () => {
       currentNode: 'jd',
     })];
     restoreEmbedWorkbenchContextMock.mockResolvedValue({
-      target: 'designer',
+      target: 'reviewer',
       restoreStatus: 'matched',
       restoredTaskId: returnedTask.id,
       restoredTaskSummary: {
@@ -467,19 +467,19 @@ describe('DockLayout embed bootstrap', () => {
     const mounted = await mountDockLayout();
 
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
-      target: 'designer',
+      target: 'reviewer',
       formId: 'FORM-RETURNED-1',
       passiveWorkflowMode: true,
     }));
     const restoreArgs = restoreEmbedWorkbenchContextMock.mock.calls.at(-1)?.[0] as {
-      designerTasks: () => ReviewTask[];
+      reviewerTasks: () => ReviewTask[];
     };
-    expect(restoreArgs.designerTasks()).toEqual([returnedTask]);
+    expect(restoreArgs.reviewerTasks()).toEqual([returnedTask]);
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
-      target: 'designer',
+      target: 'reviewer',
       formId: 'FORM-RETURNED-1',
-      primaryPanelId: 'designerCommentHandling',
-      visiblePanelIds: ['designerCommentHandling'],
+      primaryPanelId: 'review',
+      visiblePanelIds: ['review'],
     });
 
     mounted.unmount();

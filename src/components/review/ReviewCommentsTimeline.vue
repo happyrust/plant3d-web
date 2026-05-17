@@ -428,9 +428,11 @@ async function submitComment() {
       formId: ctx.formId ?? undefined,
       taskId: ctx.taskId ?? undefined,
     });
-    if (resp.success && resp.comment) {
+    if (resp.success && ctx.formId) {
+      await refreshComments();
+    } else if (resp.success && resp.comment) {
       store.addCommentToAnnotation(props.annotationType, props.annotationId, resp.comment, ctx.formId, ctx.taskId);
-    } else if (!ctx.formId) {
+    } else if (resp.success && !ctx.formId) {
       store.addCommentToAnnotation(
         props.annotationType,
         props.annotationId,

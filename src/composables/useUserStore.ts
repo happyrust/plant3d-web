@@ -871,6 +871,35 @@ async function loadReviewTasks(): Promise<void> {
   return refreshPromise;
 }
 
+async function loadReviewTaskByFormId(formId: string): Promise<ReviewTask | null> {
+  const normalizedFormId = formId.trim();
+  if (!normalizedFormId || !USE_BACKEND.value) return null;
+
+  try {
+    const response = await reviewTaskGetList({ formId: normalizedFormId, limit: 1 });
+    if (!response.success) return null;
+
+    const matchedTask = (response.tasks || [])
+      .map((task) => normalizeReviewTask(task))
+      .find((task): task is ReviewTask => task !== null && task.formId?.trim() === normalizedFormId) ?? null;
+
+    if (!matchedTask) return null;
+
+    const nextTasks = new Map(reviewTasks.value.map((task) => [task.id, task]));
+    const existing = nextTasks.get(matchedTask.id);
+    nextTasks.set(matchedTask.id, existing ? { ...existing, ...matchedTask } : matchedTask);
+    reviewTasks.value = Array.from(nextTasks.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+
+    return matchedTask;
+  } catch (e) {
+    console.warn('[useUserStore] Failed to load review task by form id:', {
+      formId: normalizedFormId,
+      error: e,
+    });
+    return null;
+  }
+}
+
 async function createReviewTask(data: {
   title: string;
   description: string;
@@ -1538,6 +1567,7 @@ export function useUserStore() {
 
     // 任务方法
     loadReviewTasks,
+    loadReviewTaskByFormId,
     createReviewTask,
     updateTaskStatus,
     updateTaskAttachments,

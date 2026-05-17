@@ -358,6 +358,11 @@ describe('ReviewPanel', () => {
     toolStoreMock.importJSON.mockClear();
     toolStoreMock.setToolMode.mockClear();
     toolStoreMock.setTextAnnotationsCollapsed.mockClear();
+    toolStoreMock.annotationCount.value = 0;
+    toolStoreMock.cloudAnnotationCount.value = 0;
+    toolStoreMock.rectAnnotationCount.value = 0;
+    toolStoreMock.obbAnnotationCount.value = 0;
+    toolStoreMock.measurementCount.value = 0;
     toolStoreMock.annotations.value = [];
     toolStoreMock.cloudAnnotations.value = [];
     toolStoreMock.rectAnnotations.value = [];
@@ -651,6 +656,66 @@ describe('ReviewPanel', () => {
     expect(zone?.textContent).toContain('刷新');
     expect(zone?.textContent).not.toContain('提交到');
     expect(zone?.textContent).not.toContain('驳回到设计');
+
+    mounted.unmount();
+  });
+
+  it('external sj form-focused mode only shows existing scoped annotations', async () => {
+    sessionStorage.setItem('plant3d_workflow_mode', 'external');
+    sessionStorage.setItem('embed_mode_params', JSON.stringify({
+      formId: 'FORM-001',
+      userToken: null,
+      userId: 'designer-1',
+      workflowRole: 'sj',
+      projectId: 'project-1',
+      workflowMode: 'external',
+      isEmbedMode: true,
+    }));
+    sessionStorage.setItem('embed_landing_state', JSON.stringify({
+      target: 'reviewer',
+      formId: 'FORM-001',
+      restoreStatus: 'matched',
+      restoredTaskId: 'task-sj-returned',
+      primaryPanelId: 'review',
+      visiblePanelIds: ['review'],
+    }));
+    currentTask.value = createTask({
+      id: 'task-sj-returned',
+      formId: 'FORM-001',
+      currentNode: 'sj',
+      status: 'draft',
+    });
+    toolStoreMock.annotationCount.value = 2;
+    toolStoreMock.annotations.value = [
+      {
+        id: 'anno-current-form',
+        formId: 'FORM-001',
+        refno: 'V-01',
+        title: '当前单据批注',
+        description: '只显示这一条',
+        visible: true,
+        createdAt: 1710000000000,
+      },
+      {
+        id: 'anno-other-form',
+        formId: 'FORM-OTHER',
+        refno: 'P-02',
+        title: '其他单据批注',
+        description: '不应显示',
+        visible: true,
+        createdAt: 1710000001000,
+      },
+    ];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    expect(document.querySelector('[data-testid="external-sj-existing-annotations-only"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-annotation-zone"]')).toBeNull();
+    expect(document.querySelector('[data-testid="reviewer-direct-launch-measurement-zone"]')).toBeNull();
+    expect(document.body.textContent).toContain('当前单据批注');
+    expect(document.body.textContent).not.toContain('其他单据批注');
+    expect(document.body.textContent).not.toContain('确认当前数据');
 
     mounted.unmount();
   });

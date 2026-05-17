@@ -65,6 +65,7 @@ scripts/*
 !scripts/pms-simulator-bootstrap.ts
 !scripts/pms-simulator-runner.ts
 !scripts/deploy-ubuntu.sh
+!scripts/v3-verify-matrix.ts
 
 # Agent Memory (跨会话记忆)
 .agent-memory/

@@ -1,17 +1,24 @@
+import type {
+  ReviewAnnotationCheckResult,
+  WorkflowVerifyData,
+  WorkflowVerifyNextStep,
+} from '@/api/reviewApi';
+
 export type PmsWorkflowPreActionMessage = {
   type: 'pms.workflow_pre_action';
   formId: string;
-  action: 'agree' | 'return' | 'redirect' | 'terminate';
+  action: 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
   requestId?: string;
 };
 
 export type PmsWorkflowChangedMessage = {
   type: 'pms.workflow_changed';
   formId: string;
-  action: 'agree' | 'return' | 'redirect' | 'terminate';
+  action: 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
   targetNode?: string;
   comments?: string;
   pmsActor?: string;
+  nextStep?: WorkflowVerifyNextStep | null;
   requestId?: string;
 };
 
@@ -20,6 +27,13 @@ export type PmsInboundMessage = PmsWorkflowPreActionMessage | PmsWorkflowChanged
 export type Plant3dWorkflowPreActionAckedMessage = {
   type: 'plant3d.workflow_pre_action_acked';
   ok: boolean;
+  action?: PmsWorkflowPreActionMessage['action'];
+  saveOk?: boolean;
+  verifyPassed?: boolean;
+  recommendedAction?: WorkflowVerifyData['recommendedAction'];
+  blockCode?: string;
+  message?: string;
+  annotationCheck?: ReviewAnnotationCheckResult;
   error?: string;
   requestId?: string;
 };

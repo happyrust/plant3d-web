@@ -9,21 +9,28 @@ import type {
   ObbAnnotationRecord,
   RectAnnotationRecord,
 } from './useToolStore';
-import type { ReviewTask } from '@/types/auth';
+import type { ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
   reviewRecordCreate,
   reviewRecordDelete,
   reviewRecordGetByTaskId,
   reviewRecordClearByTaskId,
-  reviewTaskApprove,
   reviewTaskGetById,
   reviewTaskGetHistory,
-  reviewTaskReturn,
+  reviewWorkflowSyncMutation,
+  reviewVerifyWorkflow,
   getReviewUserWebSocketUrl,
   type ConfirmedRecordData,
+  type ReviewAnnotationCheckResult,
   type ReviewHistoryItem,
+  type WorkflowVerifyData,
+  type WorkflowVerifyNextStep,
 } from '@/api/reviewApi';
+import {
+  readPersistedEmbedModeParams,
+  resolveTrustedEmbedIdentity,
+} from '@/components/review/embedRoleLanding';
 import {
   buildReviewConfirmSnapshotPayload,
   buildReviewConfirmSnapshotPayloadFromRecords,
@@ -527,12 +534,31 @@ function handleWebSocketMessage(message: {
 // ============ PMS 跨平台 workflow 同步入口 ============
 
 type FlushPendingConfirmResult = { ok: boolean; error?: string };
+type ExternalWorkflowPreAction = 'active' | 'agree' | 'return' | 'redirect' | 'terminate';
+
+type PrepareExternalWorkflowActionPayload = {
+  formId: string;
+  action: ExternalWorkflowPreAction;
+};
+
+type PrepareExternalWorkflowActionResult = {
+  ok: boolean;
+  action: ExternalWorkflowPreAction;
+  saveOk: boolean;
+  verifyPassed?: boolean;
+  recommendedAction?: WorkflowVerifyData['recommendedAction'];
+  blockCode?: string;
+  message?: string;
+  annotationCheck?: ReviewAnnotationCheckResult;
+  error?: string;
+};
 
 type ApplyExternalWorkflowChangePayload = {
   formId: string;
-  action: 'agree' | 'return' | 'redirect' | 'terminate';
+  action: ExternalWorkflowPreAction;
   targetNode?: string;
   comments?: string;
+  nextStep?: WorkflowVerifyNextStep | null;
 };
 
 type ApplyExternalWorkflowChangeResult = {
@@ -590,6 +616,195 @@ async function flushPendingConfirmForExternalAction(
   }
 }
 
+function mapExternalActionToVerifyAction(
+  action: ExternalWorkflowPreAction,
+): 'active' | 'agree' | 'return' | 'stop' | null {
+  if (action === 'active') return 'active';
+  if (action === 'agree' || action === 'return') return action;
+  if (action === 'terminate') return 'stop';
+  return null;
+}
+
+function normalizeWorkflowNodeValue(value?: string | null): WorkflowNode | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'sj' || normalized === 'jd' || normalized === 'sh' || normalized === 'pz'
+    ? normalized
+    : null;
+}
+
+function getTaskAssigneeForNode(
+  task: ReviewTask,
+  node: WorkflowNode,
+): { id: string; name: string } {
+  if (node === 'sj') {
+    return {
+      id: task.requesterId?.trim() || '',
+      name: task.requesterName?.trim() || task.requesterId?.trim() || '',
+    };
+  }
+
+  if (node === 'jd') {
+    const id = task.checkerId?.trim() || task.reviewerId?.trim() || '';
+    return {
+      id,
+      name: task.checkerName?.trim() || task.reviewerName?.trim() || id,
+    };
+  }
+
+  const id = task.approverId?.trim() || '';
+  return {
+    id,
+    name: task.approverName?.trim() || id,
+  };
+}
+
+function getDefaultAgreeTargetNode(currentNode?: WorkflowNode): WorkflowNode | null {
+  if (currentNode === 'jd') return 'sh';
+  if (currentNode === 'sh') return 'pz';
+  return null;
+}
+
+function resolveExternalWorkflowNextStep(
+  task: ReviewTask,
+  payload: ApplyExternalWorkflowChangePayload,
+): WorkflowVerifyNextStep | null {
+  if (payload.nextStep?.assigneeId?.trim() && payload.nextStep.roles?.trim()) {
+    return {
+      assigneeId: payload.nextStep.assigneeId.trim(),
+      name: payload.nextStep.name?.trim() || payload.nextStep.assigneeId.trim(),
+      roles: payload.nextStep.roles.trim(),
+    };
+  }
+
+  const currentNode = normalizeWorkflowNodeValue(task.currentNode);
+  let targetNode: WorkflowNode | null = normalizeWorkflowNodeValue(payload.targetNode);
+
+  if (!targetNode && payload.action === 'active') {
+    targetNode = 'jd';
+  }
+  if (!targetNode && payload.action === 'return') {
+    targetNode = 'sj';
+  }
+  if (!targetNode && payload.action === 'agree') {
+    targetNode = getDefaultAgreeTargetNode(currentNode ?? undefined);
+  }
+
+  if (!targetNode) return null;
+  const assignee = getTaskAssigneeForNode(task, targetNode);
+  if (!assignee.id) return null;
+
+  return {
+    assigneeId: assignee.id,
+    name: assignee.name || assignee.id,
+    roles: targetNode,
+  };
+}
+
+function resolveExternalWorkflowVerifyContext(formId: string) {
+  const embedParams = readPersistedEmbedModeParams();
+  const trustedIdentity = embedParams ? resolveTrustedEmbedIdentity(embedParams) : null;
+  const task = currentTask.value;
+  const actorId =
+    trustedIdentity?.userId
+    || embedParams?.userId
+    || task?.checkerId
+    || task?.reviewerId
+    || task?.approverId
+    || task?.requesterId
+    || '';
+  const actorRole =
+    trustedIdentity?.workflowRole
+    || embedParams?.workflowRole
+    || task?.currentNode
+    || '';
+
+  return {
+    token: embedParams?.userToken?.trim() || '',
+    formId: trustedIdentity?.formId || embedParams?.formId || task?.formId || formId,
+    actor: {
+      id: actorId,
+      name: actorId || 'PMS',
+      roles: actorRole || 'jd',
+    },
+  };
+}
+
+async function prepareExternalWorkflowAction(
+  payload: PrepareExternalWorkflowActionPayload,
+): Promise<PrepareExternalWorkflowActionResult> {
+  const saveResult = await flushPendingConfirmForExternalAction(payload.formId);
+  if (!saveResult.ok) {
+    const message = saveResult.error || 'PMS workflow_pre_action 自动保存失败';
+    return {
+      ok: false,
+      action: payload.action,
+      saveOk: false,
+      verifyPassed: false,
+      message,
+      error: message,
+    };
+  }
+
+  const verifyAction = mapExternalActionToVerifyAction(payload.action);
+  if (!verifyAction) {
+    return {
+      ok: true,
+      action: payload.action,
+      saveOk: true,
+      message: `action_${payload.action}_skipped_pre_action_verify`,
+    };
+  }
+
+  const verifyContext = resolveExternalWorkflowVerifyContext(payload.formId);
+  if (!verifyContext.token) {
+    const message = 'missing_embed_token_for_workflow_verify';
+    return {
+      ok: false,
+      action: payload.action,
+      saveOk: true,
+      verifyPassed: false,
+      message,
+      error: message,
+    };
+  }
+
+  try {
+    const response = await reviewVerifyWorkflow({
+      formId: verifyContext.formId,
+      token: verifyContext.token,
+      action: verifyAction,
+      actor: verifyContext.actor,
+      metadata: {
+        source: 'pms.workflow_pre_action',
+        externalAction: payload.action,
+      },
+    });
+    const verifyPassed = response.data?.passed === true;
+    const message = response.data?.reason || response.message || (verifyPassed ? '验证通过' : 'workflow/verify 未通过');
+    return {
+      ok: verifyPassed,
+      action: payload.action,
+      saveOk: true,
+      verifyPassed,
+      recommendedAction: response.data?.recommendedAction,
+      blockCode: response.data?.blockCode || response.errorCode,
+      message,
+      annotationCheck: response.annotationCheck,
+      error: verifyPassed ? undefined : message,
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      action: payload.action,
+      saveOk: true,
+      verifyPassed: false,
+      message,
+      error: message,
+    };
+  }
+}
+
 async function applyExternalWorkflowChange(
   payload: ApplyExternalWorkflowChangePayload,
 ): Promise<ApplyExternalWorkflowChangeResult> {
@@ -601,17 +816,42 @@ async function applyExternalWorkflowChange(
     return { ok: false, error: 'form_id_mismatch' };
   }
 
+  const syncAction = mapExternalActionToVerifyAction(payload.action);
+  if (!syncAction) {
+    return { ok: false, error: `action_${payload.action}_not_implemented` };
+  }
+
+  const syncContext = resolveExternalWorkflowVerifyContext(payload.formId);
+  if (!syncContext.token) {
+    return { ok: false, error: 'missing_embed_token_for_workflow_sync' };
+  }
+
+  const nextStep = resolveExternalWorkflowNextStep(task, payload);
+  const requiresNextStep = syncAction === 'active'
+    || syncAction === 'return'
+    || (syncAction === 'agree' && task.currentNode !== 'pz');
+  if (requiresNextStep && !nextStep) {
+    return { ok: false, error: `missing_next_step_for_${syncAction}` };
+  }
+
+  let responseStatus: string | undefined;
+  let responseCurrentNode: string | undefined;
   try {
-    if (payload.action === 'agree') {
-      await reviewTaskApprove(task.id, payload.comments ?? '');
-    } else if (payload.action === 'return') {
-      const targetNode = payload.targetNode?.trim() || 'sj';
-      await reviewTaskReturn(task.id, targetNode, payload.comments ?? '');
-    } else if (payload.action === 'redirect' || payload.action === 'terminate') {
-      return { ok: false, error: `action_${payload.action}_not_implemented` };
-    } else {
-      return { ok: false, error: `unknown_action_${payload.action}` };
-    }
+    const response = await reviewWorkflowSyncMutation({
+      formId: syncContext.formId,
+      token: syncContext.token,
+      action: syncAction,
+      actor: syncContext.actor,
+      nextStep,
+      comments: payload.comments,
+      metadata: {
+        source: 'pms.workflow_changed',
+        externalAction: payload.action,
+        targetNode: payload.targetNode,
+      },
+    });
+    responseStatus = response.data?.taskStatus;
+    responseCurrentNode = response.data?.currentNode;
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -622,8 +862,8 @@ async function applyExternalWorkflowChange(
   return {
     ok: true,
     taskId: task.id,
-    status: refreshed?.status ?? task.status,
-    currentNode: refreshed?.currentNode ?? task.currentNode,
+    status: refreshed?.status ?? responseStatus ?? task.status,
+    currentNode: refreshed?.currentNode ?? responseCurrentNode ?? task.currentNode,
   };
 }
 
@@ -719,6 +959,7 @@ export function useReviewStore() {
 
     // PMS 跨平台 workflow 同步
     flushPendingConfirmForExternalAction,
+    prepareExternalWorkflowAction,
     applyExternalWorkflowChange,
 
     // WebSocket

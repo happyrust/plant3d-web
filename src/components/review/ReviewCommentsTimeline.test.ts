@@ -290,6 +290,63 @@ describe('ReviewCommentsTimeline', () => {
     mounted.unmount();
   });
 
+  it('SJ 在正式单据上下文回复后刷新线程且不因后端未回传 comment 误报失败', async () => {
+    currentUser.value = { id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER };
+    reviewCommentCreateMock.mockImplementationOnce(async () => {
+      backendComments.value = [
+        ...backendComments.value,
+        {
+          id: 'comment-sj-reply',
+          annotationId: 'annot-1',
+          annotationType: 'text',
+          authorId: 'designer-1',
+          authorName: '设计甲',
+          authorRole: UserRole.DESIGNER,
+          content: 'SJ 回复内容',
+          createdAt: 2,
+        },
+      ];
+      return { success: true };
+    });
+
+    const mounted = await mountTimeline({
+      designerOnly: true,
+      contextFormId: 'FORM-1',
+      contextTaskId: 'task-1',
+      composerSubmitLabel: '发送回复',
+    });
+    await flushUi();
+
+    const textareas = Array.from(document.querySelectorAll<HTMLTextAreaElement>('textarea'));
+    const commentInput = textareas.at(-1);
+    expect(commentInput).toBeTruthy();
+    commentInput!.value = 'SJ 回复内容';
+    commentInput!.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushUi();
+
+    const sendButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('发送回复'));
+    expect(sendButton).toBeTruthy();
+    sendButton?.click();
+    await flushUi();
+
+    expect(reviewCommentCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+      annotationId: 'annot-1',
+      annotationType: 'text',
+      authorId: 'designer-1',
+      authorRole: UserRole.DESIGNER,
+      content: 'SJ 回复内容',
+      formId: 'FORM-1',
+      taskId: 'task-1',
+    }));
+    expect(emitToastMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      message: '评论创建失败',
+    }));
+    expect(document.body.textContent).toContain('SJ 回复内容');
+
+    mounted.unmount();
+  });
+
   it('Dock 紧凑模式仍显示评论、处理按钮、输入框和发送按钮', async () => {
     const mounted = await mountTimeline({
       density: 'dock',

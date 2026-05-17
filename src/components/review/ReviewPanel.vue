@@ -143,10 +143,12 @@ const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
 const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
 
 const embedLandingState = ref<EmbedLandingState | null>(null);
+const persistedEmbedParams = ref(readPersistedEmbedModeParams());
 const showDebugUi = isReviewDebugUiEnabled();
 
 function syncEmbedLandingStateFromStorage() {
   if (typeof sessionStorage === 'undefined') return;
+  persistedEmbedParams.value = readPersistedEmbedModeParams();
   const storedLandingState = sessionStorage.getItem(EMBED_LANDING_STATE_STORAGE_KEY);
   if (!storedLandingState) return;
 
@@ -192,7 +194,31 @@ const taskContext = computed<NormalizedTaskContext | null>(() => {
 const currentTaskNodeLabel = computed(() => taskContext.value?.currentNodeLabel || '-');
 const currentTaskFormId = computed(() => taskContext.value?.formId || '未绑定 formId');
 const currentTaskHasFormalFormId = computed(() => !!taskContext.value?.formId);
-const isPassiveWorkflow = computed(() => resolvePassiveWorkflowMode());
+const isPassiveWorkflow = computed(() => resolvePassiveWorkflowMode({
+  embedParams: persistedEmbedParams.value,
+}));
+function normalizeFormId(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+const activeReviewFormId = computed(() => (
+  normalizeFormId(taskContext.value?.formId)
+  || normalizeFormId(embedLandingState.value?.formId)
+  || normalizeFormId(persistedEmbedParams.value?.formId)
+));
+const persistedWorkflowRole = computed(() => (
+  String(
+    persistedEmbedParams.value?.workflowRole
+    || persistedEmbedParams.value?.verifiedClaims?.role
+    || ''
+  ).trim().toLowerCase()
+));
+const isExternalSjFormFocused = computed(() => (
+  isPassiveWorkflow.value
+  && persistedWorkflowRole.value === 'sj'
+  && !!activeReviewFormId.value
+));
+const canCreateReviewEvidence = computed(() => !isExternalSjFormFocused.value);
 const currentTaskStatusLabel = computed(() => {
   if (!currentTask.value) return '-';
   return getTaskStatusDisplayName(currentTask.value.status).label;
@@ -988,7 +1014,7 @@ async function confirmCurrentData() {
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
-      clearAll: () => {
+      clearDraftData: () => {
         toolStore.clearAll();
       },
       resetNote: () => {
@@ -1061,6 +1087,8 @@ function handleClickOutside(event: MouseEvent) {
 
 onMounted(() => {
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
+  syncEmbedLandingStateFromStorage();
+  window.setTimeout(syncEmbedLandingStateFromStorage, 0);
   document.addEventListener('click', handleClickOutside);
 
   const isAutomation = localStorage.getItem('plant3d_automation_review') === '1'
@@ -1313,6 +1341,7 @@ type AnnotationListItem = {
   visible: boolean;
   commentCount: number;
   refno?: string;
+  formId?: string;
   reviewState?: AnnotationReviewState;
 };
 
@@ -1321,8 +1350,14 @@ const expandedAnnotationType = ref<AnnotationType | null>(null);
 
 const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   const items: AnnotationListItem[] = [];
+  const scopedFormId = isExternalSjFormFocused.value ? activeReviewFormId.value : null;
+  const shouldIncludeRecord = (record: { formId?: string }) => {
+    if (!scopedFormId) return true;
+    return normalizeFormId(record.formId) === scopedFormId;
+  };
 
   for (const a of toolStore.annotations.value) {
+    if (!shouldIncludeRecord(a)) continue;
     items.push({
       id: a.id,
       type: 'text',
@@ -1332,11 +1367,13 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
       visible: a.visible,
       commentCount: toolStore.getAnnotationComments('text', a.id).length,
       refno: a.refno,
+      formId: normalizeFormId(a.formId) || undefined,
       reviewState: a.reviewState,
     });
   }
 
   for (const a of toolStore.cloudAnnotations.value) {
+    if (!shouldIncludeRecord(a)) continue;
     items.push({
       id: a.id,
       type: 'cloud',
@@ -1345,11 +1382,13 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
       createdAt: a.createdAt,
       visible: a.visible,
       commentCount: toolStore.getAnnotationComments('cloud', a.id).length,
+      formId: normalizeFormId(a.formId) || undefined,
       reviewState: a.reviewState,
     });
   }
 
   for (const a of toolStore.rectAnnotations.value) {
+    if (!shouldIncludeRecord(a)) continue;
     items.push({
       id: a.id,
       type: 'rect',
@@ -1358,11 +1397,13 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
       createdAt: a.createdAt,
       visible: a.visible,
       commentCount: toolStore.getAnnotationComments('rect', a.id).length,
+      formId: normalizeFormId(a.formId) || undefined,
       reviewState: a.reviewState,
     });
   }
 
   for (const a of toolStore.obbAnnotations.value) {
+    if (!shouldIncludeRecord(a)) continue;
     items.push({
       id: a.id,
       type: 'obb',
@@ -1371,6 +1412,7 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
       createdAt: a.createdAt,
       visible: a.visible,
       commentCount: toolStore.getAnnotationComments('obb', a.id).length,
+      formId: normalizeFormId(a.formId) || undefined,
       reviewState: a.reviewState,
     });
   }
@@ -1514,7 +1556,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
             @click="clearModelFilter">
             <Filter class="mr-1 inline h-3 w-3" />已过滤
           </button>
-          <button type="button" class="h-6 rounded px-2 text-xs hover:bg-muted" title="关闭任务"
+          <button v-if="!isExternalSjFormFocused" type="button" class="h-6 rounded px-2 text-xs hover:bg-muted" title="关闭任务"
             @click="reviewStore.clearCurrentTask()">
             <XCircle class="h-4 w-4" />
           </button>
@@ -1699,7 +1741,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           <ClipboardCheck class="h-4 w-4 text-primary" />
           <span class="text-sm font-semibold">批注与测量</span>
         </div>
-        <button type="button"
+        <button v-if="canCreateReviewEvidence" type="button"
           class="h-7 rounded-md px-2.5 text-xs"
           :class="
             reviewStore.reviewMode.value
@@ -1709,6 +1751,10 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           @click="reviewStore.toggleReviewMode()">
           校审{{ reviewStore.reviewMode.value ? '已启用' : '已关闭' }}
         </button>
+        <span v-else
+          class="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+          仅处理已有批注
+        </span>
       </div>
 
       <!-- 待确认数据计数 -->
@@ -1722,9 +1768,17 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           <span>测量 <strong>{{ pendingMeasurementCount }}</strong></span>
         </div>
       </div>
+      <div v-if="isExternalSjFormFocused"
+        class="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800"
+        data-testid="external-sj-existing-annotations-only">
+        外部流程 SJ 入口仅支持查看和处理当前单据已有批注，不能新增批注或测量证据。
+      </div>
 
       <!-- 工具按钮 -->
-      <div class="mt-2 flex flex-wrap gap-1.5" data-guide="review-panel-tools" data-testid="reviewer-direct-launch-annotation-zone">
+      <div v-if="canCreateReviewEvidence"
+        class="mt-2 flex flex-wrap gap-1.5"
+        data-guide="review-panel-tools"
+        data-testid="reviewer-direct-launch-annotation-zone">
         <button v-for="action in reviewerDirectLaunchActions"
           :key="action.id"
           type="button"
@@ -1756,7 +1810,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       </div>
 
       <!-- 确认操作 -->
-      <div v-if="hasPendingData" class="mt-3 border-t border-slate-200 pt-3">
+      <div v-if="hasPendingData && canCreateReviewEvidence" class="mt-3 border-t border-slate-200 pt-3">
         <input v-model="confirmNote"
           class="h-8 w-full rounded-md border border-input bg-background px-3 text-sm"
           placeholder="备注（可选）" />
@@ -1884,6 +1938,9 @@ function flyToAnnotationItem(item: AnnotationListItem) {
             <ReviewCommentsTimeline :annotation-type="expandedAnnotationType"
               :annotation-id="item.id"
               :annotation-label="`${getAnnotationTypeBadge(item.type).label}批注 / ${item.title}`"
+              :designer-only="isExternalSjFormFocused"
+              :context-form-id="activeReviewFormId"
+              :context-task-id="currentTask?.id ?? null"
               @close="expandedAnnotationId = null; expandedAnnotationType = null" />
           </div>
         </div>

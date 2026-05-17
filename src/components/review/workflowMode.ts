@@ -13,6 +13,17 @@ type ResolveWorkflowModeOptions = {
   embedParams?: WorkflowModeEmbedParams | null;
 };
 
+function parseCompileTimeFlag(value?: string | boolean | null): boolean {
+  if (value === true) return true;
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true';
+}
+
+export function isInternalWorkflowModeFeatureEnabled(): boolean {
+  return parseCompileTimeFlag(import.meta.env.VITE_REVIEW_ENABLE_INTERNAL_WORKFLOW_MODE);
+}
+
 function normalizeWorkflowMode(value?: string | null): string | null {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized || null;
@@ -23,6 +34,8 @@ function isInternalWorkflowMode(mode?: string | null): boolean {
 }
 
 export function resolveWorkflowMode(options: ResolveWorkflowModeOptions = {}): 'external' | 'manual' | 'internal' {
+  if (!isInternalWorkflowModeFeatureEnabled()) return 'external';
+
   const {
     verifiedWorkflowMode,
     search,

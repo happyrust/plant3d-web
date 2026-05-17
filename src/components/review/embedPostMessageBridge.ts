@@ -8,7 +8,7 @@ import {
 } from './embedPostMessageMessages';
 
 type BridgeOptions = {
-  onPmsWorkflowPreAction: (msg: PmsWorkflowPreActionMessage) => Promise<{ ok: boolean; error?: string }>;
+  onPmsWorkflowPreAction: (msg: PmsWorkflowPreActionMessage) => Promise<Omit<Plant3dWorkflowPreActionAckedMessage, 'type' | 'requestId'>>;
   onPmsWorkflowChanged: (msg: PmsWorkflowChangedMessage) => Promise<{
     ok: boolean;
     taskId?: string;
@@ -36,8 +36,7 @@ export function attachEmbedPostMessageBridge(options: BridgeOptions): () => void
       const result = await options.onPmsWorkflowPreAction(data);
       const ack: Plant3dWorkflowPreActionAckedMessage = {
         type: 'plant3d.workflow_pre_action_acked',
-        ok: result.ok,
-        error: result.error,
+        ...result,
         requestId: data.requestId,
       };
       (source as WindowProxy).postMessage(ack, '*');

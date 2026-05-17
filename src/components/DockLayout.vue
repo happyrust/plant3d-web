@@ -20,6 +20,7 @@ import {
   getVerifiedEmbedFormId,
   getVerifiedEmbedWorkflowMode,
   readEmbedModeParamsFromSearch,
+  resolveExternalFormFocusedLandingTarget,
   resolvePassiveEmbedViewTarget,
   resolveTrustedEmbedIdentity,
   resolveEmbedLandingTargetFromRole,
@@ -326,12 +327,16 @@ function tryRegisterWorkflowSyncBridge() {
   if (offWorkflowSyncBridge) return;
 
   offWorkflowSyncBridge = attachEmbedPostMessageBridge({
-    onPmsWorkflowPreAction: async (msg) => reviewStore.flushPendingConfirmForExternalAction(msg.formId),
+    onPmsWorkflowPreAction: async (msg) => reviewStore.prepareExternalWorkflowAction({
+      formId: msg.formId,
+      action: msg.action,
+    }),
     onPmsWorkflowChanged: async (msg) => reviewStore.applyExternalWorkflowChange({
       formId: msg.formId,
       action: msg.action,
       targetNode: msg.targetNode,
       comments: msg.comments,
+      nextStep: msg.nextStep,
     }),
   });
 }
@@ -1060,8 +1065,19 @@ function resetLayout() {
   }
   if (isEmbedLayoutMode()) {
     const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
+    const passiveWorkflowMode = isPassiveWorkflowMode();
+    const effectiveLandingTarget = resolveExternalFormFocusedLandingTarget({
+      target: landingTarget,
+      workflowRole: embedModeParams.value.workflowRole,
+      passiveWorkflowMode,
+      formId: getVerifiedEmbedFormId(embedModeParams.value),
+    });
     createEmbedFocusedLayout(api.value, {
-      primaryPanelId: landingTarget === 'designer' ? 'initiateReview' : landingTarget === 'reviewer' ? 'review' : undefined,
+      primaryPanelId: effectiveLandingTarget === 'designer'
+        ? 'initiateReview'
+        : effectiveLandingTarget === 'reviewer'
+          ? 'review'
+          : undefined,
     });
     return;
   }
@@ -1482,16 +1498,17 @@ async function bootstrapEmbedSession(): Promise<void> {
     return;
   }
 
-  await ensureUserStoreInitialized();
-
   if (trustedEmbedIdentity) {
     userStore.setEmbedUser(
       trustedEmbedIdentity.userId,
       trustedEmbedIdentity.workflowRole || undefined,
       { verified: true },
     );
+    await userStore.loadReviewTasks();
+    return;
   }
 
+  await ensureUserStoreInitialized();
   await userStore.loadReviewTasks();
 }
 
@@ -1525,8 +1542,15 @@ async function applyInitialLanding() {
 
   if (embedModeParams.value.isEmbedMode) {
     const roleLandingTarget = resolveEmbedLandingTargetFromRole(trustedEmbedIdentity?.workflowRole);
-    const landingTarget = roleLandingTarget;
     const passiveWorkflowMode = isPassiveWorkflowMode();
+    const verifiedFormId = getVerifiedEmbedFormId(embedModeParams.value);
+    const landingTarget = resolveExternalFormFocusedLandingTarget({
+      target: roleLandingTarget,
+      workflowRole: trustedEmbedIdentity?.workflowRole,
+      passiveWorkflowMode,
+      formId: verifiedFormId,
+    });
+    const isExternalSjFormFocused = roleLandingTarget === 'designer' && landingTarget === 'reviewer';
 
     if (landingTarget) {
       console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
@@ -1543,21 +1567,24 @@ async function applyInitialLanding() {
 
       const restoreResult = await restoreEmbedWorkbenchContext({
         target: landingTarget,
-        formId: getVerifiedEmbedFormId(embedModeParams.value),
+        formId: verifiedFormId,
         loadReviewTasks: userStore.loadReviewTasks,
-        reviewerTasks: () => userStore.pendingReviewTasks.value,
+        reviewerTasks: () => isExternalSjFormFocused
+          ? userStore.returnedInitiatedTasks.value
+          : userStore.pendingReviewTasks.value,
         designerTasks: () => userStore.returnedInitiatedTasks.value,
         allTasks: () => userStore.reviewTasks.value,
         setCurrentTask: reviewStore.setCurrentTask,
         openPanel,
         activatePanel,
         passiveWorkflowMode,
+        loadTaskByFormId: userStore.loadReviewTaskByFormId,
       });
 
       const fallbackLandingTarget = resolvePassiveEmbedViewTarget({
         workflowRole: trustedEmbedIdentity?.workflowRole,
         passiveWorkflowMode,
-        formId: getVerifiedEmbedFormId(embedModeParams.value),
+        formId: verifiedFormId,
         restoredTaskSummary: restoreResult.restoredTaskSummary,
       });
 
@@ -1613,14 +1640,13 @@ async function applyInitialLanding() {
       if (restoredModelRefnos.length > 0) {
         await ensureModelRefnosVisible(restoredModelRefnos, {
           taskId: restoreResult.restoredTaskId,
-          formId: getVerifiedEmbedFormId(embedModeParams.value),
+          formId: verifiedFormId,
         });
       } else {
         await ensureRestoredTaskModelsVisible(restoreResult.restoredTask);
       }
 
       if (landingState) {
-        const verifiedFormId = getVerifiedEmbedFormId(embedModeParams.value);
         const shouldShowDesignerCommentHandling = landingTarget === 'designer'
           && (
             (
@@ -1651,6 +1677,8 @@ async function applyInitialLanding() {
           restoredTaskId: restoreResult.restoredTaskId,
           restoredTaskSummary: restoreResult.restoredTaskSummary,
           restoredTaskDraft: restoreResult.restoredTaskDraft,
+          matchedSource: restoreResult.matchedSource,
+          missReason: restoreResult.missReason,
         });
       }
       return;
@@ -1674,13 +1702,22 @@ function onReady(event: DockviewReadyEvent) {
     createMbdFocusedLayout(api.value);
   } else if (isEmbedLayoutMode()) {
     const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
+    const passiveWorkflowMode = isPassiveWorkflowMode();
+    const effectiveLandingTarget = resolveExternalFormFocusedLandingTarget({
+      target: landingTarget,
+      workflowRole: embedModeParams.value.workflowRole,
+      passiveWorkflowMode,
+      formId: getVerifiedEmbedFormId(embedModeParams.value),
+    });
     const primaryPanelId = landingTarget
       ? getEmbedLandingPanelIdsWithOptions(landingTarget, {
-        passiveWorkflowMode: isPassiveWorkflowMode(),
+        passiveWorkflowMode,
+        formId: getVerifiedEmbedFormId(embedModeParams.value),
+        workflowRole: embedModeParams.value.workflowRole,
       })[0] as 'review' | 'initiateReview' | 'designerCommentHandling' | undefined
       : undefined;
     createEmbedFocusedLayout(api.value, {
-      primaryPanelId,
+      primaryPanelId: effectiveLandingTarget ? primaryPanelId : undefined,
     });
   } else {
     const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);
