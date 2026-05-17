@@ -39,6 +39,15 @@
 
 ### 修复
 
+- **审核面板「批注表格」视图回填** (2026-05-17)
+  - 恢复 reviewer 工作台（`ReviewPanel.vue`）的「卡片列表 ⇄ 批注表格」tab 切换；ribbon `panel.annotationTable` 按钮在校核面板上重新生效
+  - 直接复用 `buildAnnotationWorkspaceItems` 构造 `AnnotationWorkspaceItem[]` 喂给 `AnnotationTableView`，无须新增适配器
+  - 表格视图为只读浏览：行单击=选中、行双击=飞到 3D + 自动切回卡片列表、右键=复制 RefNo / 整行文本
+  - 视图模式持久化到 localStorage，独立 key `plant3d-web-nav-state-reviewer-workbench-v1`，刷新后保持
+  - 根因：ccb8d08（PR 8）落地的能力在某次反向 rebase 中被 028de56 之前的 ReviewPanel 版本整段覆盖；后续 merge `6ad374b` 巩固损坏
+  - 关键文件：`src/components/review/ReviewPanel.vue`
+  - 关联文档：`docs/plans/2026-05-17-reviewer-annotation-table-restore-plan.md` + `开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md`
+
 - **测量清空修复** (2026-04-29)
   - 修复顶部菜单“测量 → 清空”只按当前测量模式清理，导致画面上已有测量标签残留的问题
   - 统一清理普通测量、xeokit 测量、未完成测量草稿，以及测量模式生成的管-墙/柱距离标注

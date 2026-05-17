@@ -25,6 +25,11 @@ import {
   XCircle,
 } from 'lucide-vue-next';
 
+import AnnotationTableView from './AnnotationTableView.vue';
+import {
+  buildAnnotationWorkspaceItems,
+  type AnnotationWorkspaceItem,
+} from './annotationWorkspaceModel';
 import CollisionResultList from './CollisionResultList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
@@ -39,6 +44,10 @@ import {
 import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';
+import {
+  clearReviewerWorkbenchViewModeRequest,
+  useReviewerWorkbenchViewModeRequest,
+} from './reviewerWorkbenchViewModeBus';
 import {
   buildSubmitBlockingReviewConfirmPayload,
   buildReviewConfirmSnapshotPayload,
@@ -67,6 +76,7 @@ import {
   reviewSyncImport,
 } from '@/api/reviewApi';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
@@ -1271,6 +1281,27 @@ const expandedExtras = ref(false);
 const workflowHistoryCount = computed(() => workflow.value?.history?.length ?? 0);
 const confirmedRecordListCount = computed(() => reviewStore.sortedConfirmedRecords.value.length);
 
+// ============ 批注列表 / 批注表格 视图模式 ============
+
+type AnnotationListViewMode = 'split' | 'table';
+const annotationListViewMode = ref<AnnotationListViewMode>('split');
+
+const reviewerNavigationState = useNavigationStatePersistence(
+  'plant3d-web-nav-state-reviewer-workbench-v1',
+);
+reviewerNavigationState.bindRef<AnnotationListViewMode>(
+  'annotationListViewMode',
+  annotationListViewMode,
+  'split',
+);
+
+const reviewerWorkbenchViewModeRequest = useReviewerWorkbenchViewModeRequest();
+watch(reviewerWorkbenchViewModeRequest, (request) => {
+  if (!request) return;
+  annotationListViewMode.value = request.mode;
+  clearReviewerWorkbenchViewModeRequest();
+});
+
 // ============ 批注列表（详情 + 评论线程） ============
 
 type AnnotationListItem = {
@@ -1348,6 +1379,50 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
 });
 
 const totalAnnotationItemCount = computed(() => allAnnotationItems.value.length);
+
+const annotationWorkspaceItems = computed<AnnotationWorkspaceItem[]>(() =>
+  buildAnnotationWorkspaceItems({
+    annotations: toolStore.annotations.value,
+    cloudAnnotations: toolStore.cloudAnnotations.value,
+    rectAnnotations: toolStore.rectAnnotations.value,
+    obbAnnotations: toolStore.obbAnnotations.value,
+    getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id).length,
+  }),
+);
+
+function findAnnotationListItemFromWorkspace(item: AnnotationWorkspaceItem): AnnotationListItem | undefined {
+  return allAnnotationItems.value.find((entry) => entry.id === item.id && entry.type === item.type);
+}
+
+function handleTableSelectAnnotation(item: AnnotationWorkspaceItem | null) {
+  if (!item) {
+    expandedAnnotationId.value = null;
+    expandedAnnotationType.value = null;
+    return;
+  }
+  expandedAnnotationId.value = item.id;
+  expandedAnnotationType.value = item.type;
+}
+
+async function handleTableOpenAnnotation(item: AnnotationWorkspaceItem) {
+  annotationListViewMode.value = 'split';
+  await nextTick();
+  handleTableSelectAnnotation(item);
+  const card = findAnnotationListItemFromWorkspace(item);
+  if (card) flyToAnnotationItem(card);
+}
+
+function handleTableCopyFeedback(payload: { kind: 'refno' | 'row'; result: 'copied' | 'fallback' | 'failed' }) {
+  const label = payload.kind === 'refno' ? 'RefNo' : '批注行';
+  if (payload.result === 'failed') {
+    emitToast({ message: `复制${label}失败，请重试`, level: 'warning' });
+    return;
+  }
+  emitToast({
+    message: payload.result === 'fallback' ? `已复制${label}（降级）` : `已复制${label}`,
+    level: 'success',
+  });
+}
 
 function getAnnotationTypeBadge(type: AnnotationType): { label: string; colorClass: string } {
   switch (type) {
@@ -1700,8 +1775,41 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       </div>
     </div>
 
+    <!-- ═══════ C2.0. 视图模式切换：卡片列表 / 批注表格 ═══════ -->
+    <div v-if="totalAnnotationItemCount > 0"
+      class="inline-flex items-center gap-1 self-start rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
+      role="tablist"
+      aria-label="批注视图切换"
+      data-testid="reviewer-annotation-list-view-mode-tabs">
+      <button type="button"
+        role="tab"
+        :aria-selected="annotationListViewMode === 'split'"
+        class="inline-flex h-7 items-center rounded-lg px-2.5 text-xs font-semibold transition"
+        :class="annotationListViewMode === 'split'
+          ? 'bg-slate-900 text-white shadow-sm'
+          : 'text-slate-600 hover:bg-slate-100'"
+        data-testid="reviewer-annotation-list-view-mode-split"
+        @click="annotationListViewMode = 'split'">
+        卡片列表
+      </button>
+      <button type="button"
+        role="tab"
+        :aria-selected="annotationListViewMode === 'table'"
+        class="inline-flex h-7 items-center rounded-lg px-2.5 text-xs font-semibold transition"
+        :class="annotationListViewMode === 'table'
+          ? 'bg-slate-900 text-white shadow-sm'
+          : 'text-slate-600 hover:bg-slate-100'"
+        data-testid="reviewer-annotation-list-view-mode-table"
+        @click="annotationListViewMode = 'table'">
+        批注表格
+      </button>
+    </div>
+
     <!-- ═══════ C2. 批注列表（每条批注详情 + 评论线程） ═══════ -->
-    <div v-if="totalAnnotationItemCount > 0" class="rounded-lg border border-slate-200 bg-white" data-guide="annotation-list-zone">
+    <div v-if="totalAnnotationItemCount > 0 && annotationListViewMode === 'split'"
+      class="rounded-lg border border-slate-200 bg-white"
+      data-guide="annotation-list-zone"
+      data-testid="reviewer-annotation-card-list">
       <div class="flex items-center justify-between px-4 py-3">
         <div class="flex items-center gap-2">
           <FileText class="h-4 w-4 text-orange-500" />
@@ -1780,6 +1888,24 @@ function flyToAnnotationItem(item: AnnotationListItem) {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- ═══════ C2.table. 批注表格视图（只读浏览） ═══════ -->
+    <div v-else-if="totalAnnotationItemCount > 0 && annotationListViewMode === 'table'"
+      class="min-h-[480px]"
+      data-testid="reviewer-annotation-table-view-container">
+      <AnnotationTableView :items="annotationWorkspaceItems"
+        :current-annotation-id="expandedAnnotationId"
+        :current-annotation-type="expandedAnnotationType"
+        :task-key="currentTask?.id ?? null"
+        :subtitle="currentTask?.title ?? null"
+        empty-title="当前任务下还没有可浏览的批注"
+        empty-description="批注创建后会自动出现在这里。"
+        data-testid="annotation-table-view"
+        @select-annotation="handleTableSelectAnnotation"
+        @open-annotation="(item) => void handleTableOpenAnnotation(item)"
+        @locate-annotation="(item) => void handleTableOpenAnnotation(item)"
+        @copy-feedback="handleTableCopyFeedback" />
     </div>
 
     <!-- 弹窗组件 -->
