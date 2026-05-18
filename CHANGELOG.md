@@ -57,6 +57,15 @@
 
 ### 修复
 
+- **SJ 外部 form_id 入口全面收敛到 ReviewPanel** (2026-05-18)
+  - SJ 经 PMS 外部流程打开带 form_id 的单据时，所有批注处理统一在审核侧 ReviewPanel 内完成，不再单独打开「批注处理」(DCH) / 「退回任务列表」/ 「发起编校审」/ 「待审核任务」面板
+  - 新增 `isExternalSjFormFocusedMode()` helper，扩展 `closeBlockedReviewPanels`：SJ 外部 form_id 模式额外关闭 DCH/resubmissionTasks/initiateReview/reviewerTasks
+  - Ribbon command `panel.resubmissionTasks` / `panel.designerCommentHandling` / `panel.annotationTable` 在 SJ 外部 form_id 模式下强制路由到 review
+  - 重写 `DockLayout.test.ts` 中过时的「设计端被动恢复未匹配内部任务但 workflow/sync 有批注记录时仍进入批注处理」用例，改为锁定新策略「仍统一落到 review 面板，不再单独开 DCH」（转绿 1 条原 baseline fail）
+  - 双胞胎 5 套件 + DockLayout 汇总：baseline 34 fail / 62 pass → after 33 fail / 66 pass（净 -1 fail / +4 pass，0 新增 fail）
+  - 关键文件：`src/components/DockLayout.vue`、`src/components/DockLayout.test.ts`
+  - 关联文档：`开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md` §13、`.plannotator/plan-sj-reject-ui.md` §2 / §5
+
 - **审核面板批注表格 form_id 收敛** (2026-05-18)
   - SJ 经 PMS 外部流程打开被驳回单据并切到「批注表格」时，不再显示其它 form_id 的批注
   - `ReviewPanel.vue` 的 `annotationWorkspaceItems` 改为先构造全集再按 `isExternalSjFormFocused` + `activeReviewFormId` 过滤，行为与同文件 `allAnnotationItems`（卡片列表）严格对齐，复用 `scopeAnnotationWorkspaceItemsByFormId` helper
