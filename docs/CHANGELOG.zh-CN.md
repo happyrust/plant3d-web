@@ -2,6 +2,87 @@
 
 ## 2026-05-18
 
+### 管道距离测量与标注增强（4 个独立 PR 一日全交付）
+
+PipeDistanceDrawer + LinearDimension3D 这条链路过去半年只覆盖了"逐根点击 BRAN
+→ 单色橙线 + 整数无单位 label"的最基础版本；本次按 `docs/plans/2026-05-18-
+pipe-distance-annotation-enhancement-plan.md` 的 4 PR 拆分一次性交付。
+
+**PR-1 标注视觉对齐效果图（commit efc33ae）**
+- 修复 `usePipeDistanceAnnotationThree.ts` 隐藏 bug：旧调用
+  `new LinearDimension3D({ start, end, color, textColor })` 把 params
+  对象当作首位 `materials` 参数传入，运行时 `materials.ssDimensionDefault`
+  会抛错——结果"显示标注"勾选后 3D 场景实际没有任何尺寸线。这个 bug 不影响
+  type-check（首参类型宽，TS 不严校）、不影响 build，所以一直没人发现。
+- 新建 per-composable `materials = markRaw(new AnnotationMaterials())`，与
+  `useMbdPipeAnnotationThree.ts:1051` 同 pattern，避免污染全局。
+- 改用 `new LinearDimension3D(materials, { start, end, ... })` 双参签名；
+  `text: \`${result.distance} mm\`` + `decimals: 0` + `unit: 'mm'`，与
+  `assets/pipe-distance-annotation-aveva-e3d-2026-05-18.png` 效果图对齐。
+- `dim.setBackgroundColor(0xff6b00)` + `dim.setMaterialSet(materials.orange)`
+  让 label 用品牌橙底实心矩形显示。
+
+**PR-2 距离严重度三档配色（commit e29c8c8）**
+- 新增纯函数 helper `src/composables/pipeDistanceSeverity.ts`：
+  - `resolvePipeDistanceSeverity(distanceMm)` 把单条 mm 距离映射到
+    `'critical' | 'warning' | 'safe'`（阈值 plan §1.1 PR-2：< 100mm critical /
+    [100, 300) warning / >= 300mm safe）。
+  - `resolvePipeDistanceSeverityVisuals(severity, materials)` 落地为
+    `{ materialSet, backgroundColor }`：
+    - critical: 0xff3d00 红橙 + `materials.ssDimensionDefault`
+    - warning : 0xff6b00 默认橙 + `materials.orange`
+    - safe    : 0xffb74d 暖白 + `materials.yellow`
+- `usePipeDistanceAnnotationThree` 渲染每条结果时按 severity 动态调用
+  `setBackgroundColor` + `setMaterialSet`，替代 PR-1 固定橙色。
+- 边界处理：NaN → critical fail-safe；负数 → critical；Infinity → safe。
+- 测试：`pipeDistanceSeverity.test.ts` 7/7 PASS。
+
+**PR-3 框选 BRAN 拾取链路（commit 4387c58）**
+- 让 10+ 根 BRAN 选择从"逐根点击"收敛为一次拖框；复用 `useDtxTools` 既有
+  `annotation_obb` marquee 几何（向左 contain / 向右 intersect）+
+  `findNounByRefnoAcrossAllDbnos` 做 noun 过滤。
+- `useToolStore`：`ToolMode` 扩 `'pick_refno_box'`；新增
+  `startBoxPickRefno(nounFilter, onConfirm)` action，与 `startPickRefno`
+  共享 `pickRefnoFilter` / `pickedRefnos` / `pickRefnoCallback` 三件
+  状态；`setToolMode` 退出条件拓展到 `pick_refno_box`；`confirmPickRefno`
+  / `cancelPickRefno` 改走 `setToolMode('none')`，顺带 fix 现存 leak（直接
+  赋值 `toolMode.value` 会跳过 filter / callback 清理）。
+- `useDtxTools`：marquee 三件套 + `collectRefnosInScreenRect` +
+  `updateMarqueeStyle` 函数 mode 类型扩 `'pick_refno_box'`；`onCanvas
+  PointerDown/Move/Up` 三个 handler 接入；`endMarquee` 加 `pick_refno_box`
+  分支：拿全集 → 按 `store.pickRefnoFilter` 过滤 → addPickedRefno 后自动
+  `confirmPickRefno`。
+- `PipeDistanceDrawer.vue`：旧"选择 BRAN 管道"单按钮拆为 grid 2 列
+  "点击选" + "拖框选" 双按钮；hint 提示按模式切换。
+- 测试：`useToolStore.pickRefnoBox.test.ts` 5/5 PASS。
+
+**PR-4 结果筛选 / 单条切换（commit 4000a27）**
+- 检测结果 ≥ 10 条时能聚焦关心的距离范围：
+  - 抽屉结果区加"仅看 ≥ N mm"距离阈值输入框（0 / 非法 / 负 → 清阈值）；
+  - 每行加 Eye / EyeOff 切换按钮，控制单条 3D 标注显隐；
+  - 标题计数从"N"改为"可见 N / 总 M"，附"已隐藏 X 条"提示；
+  - 所有结果被过滤时显示"点此重置"入口。
+- `usePipeDistanceStore`：新增 `hiddenResultIds: Set<string>` /
+  `resultMinDistance: number | null` state + `visibleResults` computed +
+  `toggleResultHidden` / `setResultMinDistance` / `resetResultFilters`
+  action；`clearResults` 末尾顺带 reset 筛选，避免 state 残留误伤下次检测。
+- `usePipeDistanceAnnotationThree` composable 签名不动；Drawer 改传
+  `store.visibleResults` 替代 `store.results` 即自动跳过被 hide /
+  不满足阈值的 3D 标注渲染。
+- 列表 `v-for` 仍按全集 idx 渲染（保持 `activeResultIndex` 不变），靠
+  `v-show` 控制可见性，避免改 index 引发的 ripple。
+- 测试：`usePipeDistanceStore.resultFilter.test.ts` 7/7 PASS。
+
+**回归汇总**
+- 双胞胎 5 套件（cloudCollapsed + DockLayout + ReviewPanel + DCH +
+  pickRefno）+ 本次新增 3 套件（pipeDistanceSeverity + pickRefnoBox +
+  resultFilter）共 8 套件：35 failed / 80 passed = 与计划起点 baseline
+  完全一致，**0 新增 fail**，新增 19 pass。
+- `npm run type-check` 0 error；本次涉及文件 lint 0 error 0 warning。
+- 不破坏 `activeResultIndex` API；`MeasurementPanel.test.ts` mock 无需改。
+- 起点 commit = `3ca20ec`；落地链 = `efc33ae` (PR-1) → `e29c8c8` (PR-2) →
+  `4387c58` (PR-3) → `4000a27` (PR-4)。
+
 ### 矩形 / OBB 批注双击图钉收起（推广 cloud 方案 A 到全部批注类型）
 
 - 延续早些 commit 359932d 的「云线批注双击图钉收起」能力，按方案 A 推广到
