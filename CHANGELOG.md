@@ -44,6 +44,17 @@
   - 新增三种错误类型：原则错误（×）、一般错误（△）、图面错误（○）
   - 涉及文件：`auth.ts`、`AnnotationPanel.vue`、`AnnotationOverlayBar.vue`、`useToolStore.ts`
 
+### 重构
+
+- **审核面板 split / table 数据源统一** (2026-05-18)
+  - `ReviewPanel.vue` 的卡片列表 split 视图与批注表格 table 视图共享单一原始来源 `scopedReviewerItems: AnnotationWorkspaceItem[]`
+  - 删除本地 `AnnotationListItem` 类型定义、`allAnnotationItems` computed、`findAnnotationListItemFromWorkspace` 反向适配器（净 -81 行）
+  - 卡片列表 handler `toggleAnnotationDetail` / `flyToAnnotationItem` / `getAnnotationReviewBadge` 入参类型迁移到 `AnnotationWorkspaceItem`
+  - 行为不变：双胞胎面板 5 套件 baseline 33 fail / 56 pass → after 33 fail / 59 pass（仅新增早些补丁的 3 pass，0 新增 fail）
+  - 消除 2026-05-18 早些补丁所对齐却未消除的"双轨"，让未来过滤维度扩展只需改一处
+  - 关键文件：`src/components/review/ReviewPanel.vue`
+  - 关联文档：`docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md`、`开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md` §12
+
 ### 修复
 
 - **审核面板批注表格 form_id 收敛** (2026-05-18)

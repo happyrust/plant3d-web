@@ -648,7 +648,9 @@ git revert <commit-6-docs> <commit-5-smoke> <commit-4-tests> \
 
 ## 8. 后续建议（不在本计划范围）
 
-- **下一 PR · 数据源对齐：** 把当前 ReviewPanel 的本地 `AnnotationListItem` 整体迁到 `AnnotationWorkspaceItem`，消除 adapter；同时把 ReviewPanel 的卡片列表渲染抽出复用 `AnnotationWorkspace`（对齐 a644ba3 / DCH）。
+- **下一 PR · 数据源对齐：** 把当前 ReviewPanel 的本地 `AnnotationListItem` 整体迁到 `AnnotationWorkspaceItem`，消除 adapter；同时把 ReviewPanel 的卡片列表渲染抽出复用 `AnnotationWorkspace`（对齐 a644ba3 / DCH）。 
+  - ✅ **数据源对齐部分已在 2026-05-18 完成**（commits `9446da0` / `41a1713` / `f1e78b5`），详见 `docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md`
+  - 余下「卡片列表渲染复用 `AnnotationWorkspace`」仍未启动，留作后续 PR
 - **下下 PR · 抽 viewMode switcher：** `AnnotationListModeSwitcher.vue`（接收 viewMode bus + persistence key 作为 props），DCH / ReviewPanel 共用，消灭"双胞胎组件"。
 - **CI 升级：** plant3d-web 的 GitHub Actions 必跑 `src/components/review/**.test.ts` 子集，并在 PR check 上 enforce。
 - **历史归档：** 加 `开发文档/三维校审/index.md` 把回归 commit、复盘 ADR、PR 8/9 设计文档串成一条线，便于新人理解上下文。
