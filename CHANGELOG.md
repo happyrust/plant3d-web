@@ -46,6 +46,13 @@
 
 ### 修复
 
+- **审核面板批注表格 form_id 收敛** (2026-05-18)
+  - SJ 经 PMS 外部流程打开被驳回单据并切到「批注表格」时，不再显示其它 form_id 的批注
+  - `ReviewPanel.vue` 的 `annotationWorkspaceItems` 改为先构造全集再按 `isExternalSjFormFocused` + `activeReviewFormId` 过滤，行为与同文件 `allAnnotationItems`（卡片列表）严格对齐，复用 `scopeAnnotationWorkspaceItemsByFormId` helper
+  - 新增 3 条 vitest 用例锁定 form_id scope 行为（SJ 外部聚焦 / manual workflow / passive workflow+jd 角色），双胞胎面板 5 套件 baseline 33 fail / 56 pass → after 33 fail / 59 pass（0 新增 fail）
+  - 关键文件：`src/components/review/ReviewPanel.vue`、`src/components/review/ReviewPanel.test.ts`
+  - 关联文档：`docs/plans/2026-05-18-reviewer-annotation-table-formid-scope-plan.md`、`开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md` §11、`.plannotator/plan-sj-reject-ui.md` §6
+
 - **审核面板「批注表格」视图回填** (2026-05-17)
   - 恢复 reviewer 工作台（`ReviewPanel.vue`）的「卡片列表 ⇄ 批注表格」tab 切换；ribbon `panel.annotationTable` 按钮在校核面板上重新生效
   - 直接复用 `buildAnnotationWorkspaceItems` 构造 `AnnotationWorkspaceItem[]` 喂给 `AnnotationTableView`，无须新增适配器
