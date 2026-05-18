@@ -167,6 +167,9 @@ const reviewTasksRef = ref<ReviewTask[]>([]);
 
 vi.mock('@/composables/useReviewStore', () => ({
   useReviewStore: () => ({
+    // 注：DockLayout.vue 的 isExternalSjReturnedFormFocused 读 reviewStore.currentTask.value，
+    // mock 必须暴露 currentTask ref，否则触发 TypeError: Cannot read properties of undefined (reading 'value')。
+    currentTask: currentTaskRef,
     setCurrentTask: (...args: unknown[]) => setCurrentTaskMock(...args),
     addConfirmedRecord: vi.fn(),
     clearConfirmedRecords: vi.fn(),

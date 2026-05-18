@@ -392,6 +392,11 @@ export type CloudAnnotationRecord = {
   screenOffset?: { x: number; y: number };
   cloudSize?: { width: number; height: number };
   visible: boolean;
+  /**
+   * 与 `AnnotationRecord.collapsed` 对齐：true 时只渲染图钉标记，
+   * 不渲染文字框 / 引线。双击图钉切换。
+   */
+  collapsed?: boolean;
   title: string;
   description: string;
   createdAt: number;
@@ -615,6 +620,7 @@ function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRe
 function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnotationRecord {
   return {
     ...rec,
+    collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
@@ -1339,6 +1345,16 @@ function updateCloudAnnotation(id: string, patch: Partial<CloudAnnotationRecord>
 
 function updateCloudAnnotationVisible(id: string, visible: boolean) {
   updateCloudAnnotation(id, { visible });
+}
+
+// 与 setTextAnnotationsCollapsed 对齐：批量切换云线批注的 collapsed 状态。
+// 双击云线图钉 / 命令面板「云线批注批量收起」等入口都通过这里写入。
+function setCloudAnnotationsCollapsed(ids: string[], collapsed: boolean) {
+  const targetIds = new Set(ids.map((id) => id.trim()).filter(Boolean));
+  if (targetIds.size === 0) return;
+  cloudAnnotations.value = cloudAnnotations.value.map((annotation) => (
+    targetIds.has(annotation.id) ? { ...annotation, collapsed } : annotation
+  ));
 }
 
 function removeCloudAnnotation(id: string) {
@@ -2281,6 +2297,7 @@ export function useToolStore() {
     updateAnnotation,
     updateAnnotationVisible,
     setTextAnnotationsCollapsed,
+    setCloudAnnotationsCollapsed,
     setAnnotationTypeVisible,
     removeAnnotation,
     clearAnnotations,

@@ -3443,7 +3443,12 @@ export function useDtxTools(options: {
       if (!c.visible) continue;
       const anchor = new Vector3(...c.anchorWorldPos);
       const visual = createCloudAnnotationVisual(c, resolution);
-      toolsGroup.add(visual.pin, visual.leader.root, visual.outline, visual.bboxEdges);
+      // pin / outline / bboxEdges 始终加入；leader（图钉 → 文字框引线）随 collapsed 控制，
+      // 与文字批注的「双击图钉收起文字框 / 引线，保留图钉」行为对齐。
+      toolsGroup.add(visual.pin, visual.outline, visual.bboxEdges);
+      if (shouldRenderTextAnnotationCard(c.collapsed)) {
+        toolsGroup.add(visual.leader.root);
+      }
       cloudShapes.set(`cloud:${c.id}`, {
         id: `cloud:${c.id}`,
         worldPos: anchor,
@@ -3454,88 +3459,98 @@ export function useDtxTools(options: {
         record: c,
       });
 
-      const cloudMarker = makeTextAnnotationMarkerEl(overlay, 'C', false);
+      const cloudMarker = makeTextAnnotationMarkerEl(overlay, 'C', c.collapsed === true);
       markers.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: anchor, el: cloudMarker });
       cloudMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        if (ev.detail > 1) return;
+        activateAnnotation('cloud', c.id);
+      });
+      // 与文字批注 marker 一致：双击图钉切换 collapsed，
+      // 收起时只渲染图钉，展开后再补回文字框 / 引线。
+      cloudMarker.addEventListener('dblclick', (ev) => {
+        ev.stopPropagation();
+        store.setCloudAnnotationsCollapsed([c.id], toggleTextAnnotationCollapsed(c.collapsed));
         activateAnnotation('cloud', c.id);
       });
 
-      const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
-      const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
-      label.style.transform = 'translate(-50%,-50%)';
-      if (c.severity) label.dataset.severity = c.severity;
-      labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: visual.labelWorldPos, el: label });
-      const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
-      const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
-      const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+      if (shouldRenderTextAnnotationCard(c.collapsed)) {
+        const draft = getInlineTextAnnotationDraft('cloud', c.id, c);
+        const label = makeInlineAnnotationCardEl(overlay, '云线批注', draft.title, draft.description);
+        label.style.transform = 'translate(-50%,-50%)';
+        if (c.severity) label.dataset.severity = c.severity;
+        labels.set(`cloud:${c.id}`, { id: `cloud:${c.id}`, worldPos: visual.labelWorldPos, el: label });
+        const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+        const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+        const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
 
-      label.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        activateAnnotation('cloud', c.id);
-      });
-      label.addEventListener('dblclick', (ev) => {
-        ev.stopPropagation();
-        focusInlineAnnotationEditor('cloud', c.id);
-      });
-      label.addEventListener('focusout', () => {
-        queueMicrotask(() => {
-          const activeElement = label.ownerDocument?.activeElement;
-          if (activeElement && label.contains(activeElement)) return;
+        label.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('cloud', c.id);
+        });
+        label.addEventListener('dblclick', (ev) => {
+          ev.stopPropagation();
+          focusInlineAnnotationEditor('cloud', c.id);
+        });
+        label.addEventListener('focusout', () => {
+          queueMicrotask(() => {
+            const activeElement = label.ownerDocument?.activeElement;
+            if (activeElement && label.contains(activeElement)) return;
+            commitInlineAnnotationDraft('cloud', c.id);
+          });
+        });
+
+        dragHandle?.addEventListener('pointerdown', (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
           commitInlineAnnotationDraft('cloud', c.id);
+          dragHandle.style.cursor = 'grabbing';
+          beginInlineOverlayAnnotationDrag('cloud', c.id, ev, visual.labelWorldPos, anchor);
+          try {
+            dragHandle.setPointerCapture(ev.pointerId);
+          } catch {
+            // ignore
+          }
         });
-      });
+        dragHandle?.addEventListener('pointermove', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+          continueInlineOverlayAnnotationDrag(ev);
+        });
+        dragHandle?.addEventListener('pointerup', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+          dragHandle.style.cursor = 'grab';
+          endInlineOverlayAnnotationDrag(ev);
+        });
+        dragHandle?.addEventListener('pointercancel', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
+          dragHandle.style.cursor = 'grab';
+          endInlineOverlayAnnotationDrag(ev);
+        });
 
-      dragHandle?.addEventListener('pointerdown', (ev) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-        commitInlineAnnotationDraft('cloud', c.id);
-        dragHandle.style.cursor = 'grabbing';
-        beginInlineOverlayAnnotationDrag('cloud', c.id, ev, visual.labelWorldPos, anchor);
-        try {
-          dragHandle.setPointerCapture(ev.pointerId);
-        } catch {
-          // ignore
+        titleInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('cloud', c.id);
+        });
+        titleInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('cloud', c.id, {
+            title: titleInput.value,
+            description: descriptionInput?.value ?? draft.description,
+          });
+        });
+        descriptionInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('cloud', c.id);
+        });
+        descriptionInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('cloud', c.id, {
+            title: titleInput?.value ?? draft.title,
+            description: descriptionInput.value,
+          });
+        });
+
+        if (store.pendingCloudAnnotationEditId.value === c.id) {
+          queueMicrotask(() => focusInlineAnnotationEditor('cloud', c.id));
         }
-      });
-      dragHandle?.addEventListener('pointermove', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
-        continueInlineOverlayAnnotationDrag(ev);
-      });
-      dragHandle?.addEventListener('pointerup', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
-        dragHandle.style.cursor = 'grab';
-        endInlineOverlayAnnotationDrag(ev);
-      });
-      dragHandle?.addEventListener('pointercancel', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== c.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'cloud') return;
-        dragHandle.style.cursor = 'grab';
-        endInlineOverlayAnnotationDrag(ev);
-      });
-
-      titleInput?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        activateAnnotation('cloud', c.id);
-      });
-      titleInput?.addEventListener('input', () => {
-        setInlineAnnotationDraft('cloud', c.id, {
-          title: titleInput.value,
-          description: descriptionInput?.value ?? draft.description,
-        });
-      });
-      descriptionInput?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        activateAnnotation('cloud', c.id);
-      });
-      descriptionInput?.addEventListener('input', () => {
-        setInlineAnnotationDraft('cloud', c.id, {
-          title: titleInput?.value ?? draft.title,
-          description: descriptionInput.value,
-        });
-      });
-
-      if (store.pendingCloudAnnotationEditId.value === c.id) {
-        queueMicrotask(() => focusInlineAnnotationEditor('cloud', c.id));
       }
     }
 
