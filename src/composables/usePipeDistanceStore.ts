@@ -3,7 +3,7 @@
  *
  * 管理检测参数、已选 BRAN 管道、检测结果及 UI 状态。
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import type { Vec3 } from '@/api/mbdPipeApi';
 
@@ -28,6 +28,17 @@ const activeResultIndex = ref<number | null>(null);
 const isDetecting = ref(false);
 const detectError = ref<string | null>(null);
 
+const hiddenResultIds = ref<Set<string>>(new Set());
+const resultMinDistance = ref<number | null>(null);
+
+function isResultVisible(r: PipeDistanceResult): boolean {
+  if (hiddenResultIds.value.has(r.id)) return false;
+  if (resultMinDistance.value !== null && r.distance < resultMinDistance.value) return false;
+  return true;
+}
+
+const visibleResults = computed(() => results.value.filter(isResultVisible));
+
 export function usePipeDistanceStore() {
   function addBranRefno(refno: string) {
     if (!selectedBranRefnos.value.includes(refno)) {
@@ -46,6 +57,26 @@ export function usePipeDistanceStore() {
 
   function setActiveResult(index: number | null) {
     activeResultIndex.value = index;
+  }
+
+  function toggleResultHidden(id: string) {
+    const next = new Set(hiddenResultIds.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    hiddenResultIds.value = next;
+  }
+
+  function setResultMinDistance(min: number | null) {
+    if (min === null || !Number.isFinite(min) || min <= 0) {
+      resultMinDistance.value = null;
+      return;
+    }
+    resultMinDistance.value = min;
+  }
+
+  function resetResultFilters() {
+    hiddenResultIds.value = new Set();
+    resultMinDistance.value = null;
   }
 
   async function runDetection() {
@@ -110,6 +141,7 @@ export function usePipeDistanceStore() {
     results.value = [];
     activeResultIndex.value = null;
     detectError.value = null;
+    resetResultFilters();
   }
 
   return {
@@ -121,11 +153,17 @@ export function usePipeDistanceStore() {
     activeResultIndex,
     isDetecting,
     detectError,
+    hiddenResultIds,
+    resultMinDistance,
+    visibleResults,
     addBranRefno,
     removeBranRefno,
     clearBranRefnos,
     setActiveResult,
     runDetection,
     clearResults,
+    toggleResultHidden,
+    setResultMinDistance,
+    resetResultFilters,
   };
 }

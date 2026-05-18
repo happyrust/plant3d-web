@@ -4,6 +4,8 @@ import { computed, onUnmounted } from 'vue';
 import {
   BoxSelect,
   Check,
+  Eye,
+  EyeOff,
   MousePointerClick,
   RefreshCw,
   X,
@@ -27,10 +29,10 @@ const isPicking = computed(() => toolStore.toolMode.value === 'pick_refno');
 const isBoxPicking = computed(() => toolStore.toolMode.value === 'pick_refno_box');
 const isAnyPicking = computed(() => isPicking.value || isBoxPicking.value);
 
-// 3D 标注渲染
+// 3D 标注渲染（仅渲染当前可见的结果：跳过被 hide 的 + 不满足距离阈值的）
 const annotationVis = usePipeDistanceAnnotationThree(
   computed(() => ctx.viewerRef.value),
-  store.results,
+  store.visibleResults,
   store.showAnnotations
 );
 
@@ -105,6 +107,20 @@ const clampedMaxAngle = computed({
     store.maxAngle.value = Math.max(1, Math.min(15, Number(v) || 5));
   },
 });
+
+const resultMinDistanceInput = computed({
+  get: () => store.resultMinDistance.value ?? 0,
+  set: (v: number) => {
+    const n = Number(v);
+    store.setResultMinDistance(Number.isFinite(n) && n > 0 ? Math.round(n) : null);
+  },
+});
+
+const hiddenCount = computed(() => store.results.value.filter((r) => store.hiddenResultIds.value.has(r.id)).length);
+
+function isResultHidden(id: string): boolean {
+  return store.hiddenResultIds.value.has(id);
+}
 </script>
 
 <template>
@@ -241,7 +257,10 @@ const clampedMaxAngle = computed({
           <!-- 4. 检测结果 -->
           <div class="px-4 py-3">
             <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs font-semibold text-foreground">检测结果 ({{ store.results.value.length }})</span>
+              <span class="text-xs font-semibold text-foreground">
+                检测结果 ({{ store.visibleResults.value.length }}
+                <span v-if="store.visibleResults.value.length !== store.results.value.length" class="text-muted-foreground">/ {{ store.results.value.length }}</span>)
+              </span>
               <button v-if="store.results.value.length > 0" type="button"
                 class="inline-flex items-center gap-1 text-xs text-destructive hover:underline"
                 @click="store.clearResults()">
@@ -250,15 +269,41 @@ const clampedMaxAngle = computed({
               </button>
             </div>
 
+            <!-- 距离阈值筛选 -->
+            <div v-if="store.results.value.length > 0" class="mb-2 flex items-center gap-2">
+              <label class="text-[11px] text-muted-foreground whitespace-nowrap">仅看 ≥</label>
+              <input v-model.number="resultMinDistanceInput"
+                type="number"
+                min="0" max="2000"
+                placeholder="0"
+                class="flex h-7 w-20 rounded-md border border-input bg-background px-2 py-0.5 font-mono text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+              <span class="text-[11px] text-muted-foreground">mm</span>
+              <button v-if="store.resultMinDistance.value !== null || hiddenCount > 0"
+                type="button"
+                class="ml-auto text-[11px] text-[#FF6B00] hover:underline"
+                @click="store.resetResultFilters()">
+                重置筛选
+              </button>
+            </div>
+
+            <div v-if="hiddenCount > 0" class="mb-2 text-[11px] text-muted-foreground">
+              已隐藏 {{ hiddenCount }} 条
+            </div>
+
             <div v-if="store.results.value.length === 0"
               class="py-4 text-center text-xs text-muted-foreground">
               暂无检测结果
             </div>
 
             <!-- result list (scrollable) -->
+            <div v-else-if="store.visibleResults.value.length === 0"
+              class="py-4 text-center text-xs text-muted-foreground">
+              所有结果均被筛选 / 隐藏，<button type="button" class="text-[#FF6B00] hover:underline" @click="store.resetResultFilters()">点此重置</button>
+            </div>
             <div v-else
               class="max-h-[200px] overflow-auto rounded-md border border-border">
               <div v-for="(result, idx) in store.results.value"
+                v-show="!isResultHidden(result.id) && (store.resultMinDistance.value === null || result.distance >= store.resultMinDistance.value)"
                 :key="result.id"
                 class="group flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2.5 transition-colors last:border-b-0"
                 :class="store.activeResultIndex.value === idx
@@ -273,6 +318,13 @@ const clampedMaxAngle = computed({
                 <span class="flex-1 truncate text-xs text-muted-foreground">
                   {{ result.pipeA }} ↔ {{ result.pipeB }}
                 </span>
+                <button type="button"
+                  class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-colors hover:bg-muted-foreground/20 hover:text-foreground group-hover:opacity-100"
+                  :title="isResultHidden(result.id) ? '显示该条标注' : '隐藏该条标注'"
+                  @click.stop="store.toggleResultHidden(result.id)">
+                  <EyeOff v-if="isResultHidden(result.id)" class="h-3 w-3" />
+                  <Eye v-else class="h-3 w-3" />
+                </button>
                 <button type="button"
                   class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-0 hover:bg-muted-foreground/20 group-hover:opacity-100"
                   title="定位"
