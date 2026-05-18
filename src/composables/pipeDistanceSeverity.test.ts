@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { AnnotationMaterials } from '@/utils/three/annotation';
-
 import {
   resolvePipeDistanceSeverity,
   resolvePipeDistanceSeverityVisuals,
   type PipeDistanceSeverity,
 } from './pipeDistanceSeverity';
+
+import { AnnotationMaterials } from '@/utils/three/annotation';
 
 describe('resolvePipeDistanceSeverity', () => {
   it('< 100mm → critical', () => {

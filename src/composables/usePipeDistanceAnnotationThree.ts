@@ -2,13 +2,14 @@ import { markRaw, watch, type Ref } from 'vue';
 
 import { Vector3 } from 'three';
 
-import type { PipeDistanceResult } from './usePipeDistanceStore';
-import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
-
 import {
   resolvePipeDistanceSeverity,
   resolvePipeDistanceSeverityVisuals,
 } from './pipeDistanceSeverity';
+
+import type { PipeDistanceResult } from './usePipeDistanceStore';
+import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
+
 import {
   AnnotationMaterials,
   LinearDimension3D,
