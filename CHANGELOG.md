@@ -57,6 +57,14 @@
 
 ### 修复
 
+- **SJ 外部单据仅在驳回/退回状态下进入校审面板** (2026-05-18)
+  - 修正 `sj + 外部 form_id` 被无条件路由到 `ReviewPanel` 的问题：现在普通未驳回单据保持设计端落点，只有恢复到的任务确认为 canonical returned/rejected 时才显示校审面板
+  - `embedRoleLanding.ts` 不再只凭 `sj + form_id` 把落点改为 reviewer；form_id 仍用于权限与批注 scope 判定
+  - `embedContextRestore.ts` 新增 returned designer task panel 选择能力，供外部 SJ returned/rejected 场景路由到 `review`
+  - `DockLayout.vue` 在任务恢复后结合 `isCanonicalReturnedTask()` 决定是否收敛到校审面板，避免未驳回单据也进入校审工作台
+  - 验证：`embedRoleLanding.test.ts` + `embedContextRestore.test.ts` 35/35 通过；`npm run type-check` 通过；`git diff --check` 通过
+  - 已知基线：面板大回归套件中 `ReviewPanel` / `DesignerCommentHandlingPanel` 仍有既有失败，本次聚焦落点逻辑未扩大修复范围
+
 - **外部 form_id 收敛规则推广到任意 reviewer 角色（A2 升级）** (2026-05-18)
   - 产品规约：「不能跨 form_id 批注，看的就是对应单据的数据」。本次把 2026-05-18 早些只针对 SJ 的外部 form_id 收敛规则推广到任意 reviewer 角色（sj/jd/sh/pz）
   - `embedRoleLanding.ts` 新增 `isExternalFormFocusedMode(params)`，不再要求 `role === 'sj'`，只看 `isPassiveWorkflowMode + verifiedFormId`

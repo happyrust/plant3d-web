@@ -1,5 +1,16 @@
 # 更新日志
 
+## 2026-05-18
+
+### SJ 外部单据仅在驳回/退回状态下进入校审面板
+
+- 修正 `sj + 外部 form_id` 被无条件路由到 `ReviewPanel` 的问题：普通未驳回单据保持设计端落点。
+- 只有恢复到的任务确认为 canonical returned/rejected 时，SJ 打开该单据才显示校审面板。
+- `embedRoleLanding.ts` 不再仅凭 `sj + form_id` 把落点改为 reviewer；`form_id` 仍用于权限与批注 scope 判定。
+- `embedContextRestore.ts` 支持 returned designer task panel 选择，外部 SJ returned/rejected 场景可路由到 `review`。
+- `DockLayout.vue` 在任务恢复后结合 `isCanonicalReturnedTask()` 决定是否收敛到校审面板。
+- 验证：`embedRoleLanding.test.ts` + `embedContextRestore.test.ts` 35/35 通过；`npm run type-check` 通过；`git diff --check` 通过。
+
 ## 2026-05-08
 
 ### RUS-239 驳回后重新流转 — UX 增强与健壮性提升

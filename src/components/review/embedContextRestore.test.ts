@@ -278,7 +278,7 @@ describe('restoreEmbedWorkbenchContext', () => {
     expect(result.restoreStatus).toBe('matched');
   });
 
-  it('designer passive restore keeps designer comment handling for the matched form even before task状态回到 sj', async () => {
+  it('designer passive restore keeps initiate-review landing when the matched form is not returned', async () => {
     const task = createTask({
       id: 'task-designer-passive',
       formId: 'FORM-D-PASSIVE',
@@ -303,8 +303,40 @@ describe('restoreEmbedWorkbenchContext', () => {
     });
 
     expect(setCurrentTask).toHaveBeenCalledWith(task);
-    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['designerCommentHandling']);
-    expect(activatePanel).toHaveBeenLastCalledWith('designerCommentHandling');
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['initiateReview']);
+    expect(activatePanel).toHaveBeenLastCalledWith('initiateReview');
+    expect(result.restoreStatus).toBe('matched');
+  });
+
+  it('can route returned designer tasks to review panel for external sj reopen', async () => {
+    const task = createTask({
+      id: 'task-designer-returned-review',
+      formId: 'FORM-D-RETURNED-REVIEW',
+      status: 'rejected',
+      currentNode: 'sj',
+      returnReason: '请按驳回意见修改',
+    });
+    const openPanel = vi.fn();
+    const activatePanel = vi.fn();
+    const setCurrentTask = vi.fn(async () => undefined);
+
+    const result = await restoreEmbedWorkbenchContext({
+      target: 'designer',
+      formId: 'FORM-D-RETURNED-REVIEW',
+      loadReviewTasks: async () => undefined,
+      reviewerTasks: () => [],
+      designerTasks: () => [task],
+      allTasks: () => [task],
+      setCurrentTask,
+      openPanel,
+      activatePanel,
+      passiveWorkflowMode: true,
+      returnedDesignerTaskPanel: 'review',
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(task);
+    expect(openPanel.mock.calls.map(([panelId]) => panelId)).toEqual(['review']);
+    expect(activatePanel).toHaveBeenLastCalledWith('review');
     expect(result.restoreStatus).toBe('matched');
   });
 

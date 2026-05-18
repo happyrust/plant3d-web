@@ -49,6 +49,7 @@ type RestoreEmbedWorkbenchOptions = {
   closePanel?: (panelId: string) => void;
   passiveWorkflowMode?: boolean;
   loadTaskByFormId?: (formId: string) => Promise<ReviewTask | null>;
+  returnedDesignerTaskPanel?: 'designerCommentHandling' | 'review';
 };
 
 function normalizeFormId(formId?: string | null): string | null {
@@ -193,11 +194,11 @@ export async function restoreEmbedWorkbenchContext(
     }
   }
 
-  const shouldOpenDesignerCommentHandling = options.target === 'designer'
+  const shouldOpenReturnedDesignerTaskPanel = options.target === 'designer'
     && !!result.restoredTask
-    && (options.passiveWorkflowMode || isCanonicalReturnedTask(result.restoredTask));
-  const panelIds = shouldOpenDesignerCommentHandling
-    ? ['designerCommentHandling']
+    && isCanonicalReturnedTask(result.restoredTask);
+  const panelIds = shouldOpenReturnedDesignerTaskPanel
+    ? [options.returnedDesignerTaskPanel ?? 'designerCommentHandling']
     : getEmbedLandingPanelIdsWithOptions(options.target, {
       passiveWorkflowMode: options.passiveWorkflowMode,
     });

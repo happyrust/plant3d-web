@@ -120,9 +120,10 @@ function isPassiveWorkflowMode(): boolean {
   });
 }
 
-// 任意 reviewer 角色（sj/jd/sh/pz）经外部 PMS 流程打开带 form_id 的单据时，
+// 任意 reviewer 角色（jd/sh/pz）经外部 PMS 流程打开带 form_id 的单据时，
 // 统一在审核侧 ReviewPanel 内处理批注，不再让「批注处理」面板（DCH）/
 // 「退回任务列表」/「发起编校审」/「待审核任务」这类内部入口出现。
+// SJ 例外：只有当前 form_id 对应任务确认为 returned/rejected 时才进入 ReviewPanel。
 // 产品规约：「不能跨 form_id 批注，看的就是对应单据的数据」。
 // 详见 .plannotator/plan-sj-reject-ui.md §2 / §5 与
 // 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §13/§14。
@@ -136,13 +137,30 @@ function inExternalSjFormFocusedMode(): boolean {
   return isExternalSjFormFocusedMode(embedModeParams.value);
 }
 
+function isExternalSjReturnedFormFocused(): boolean {
+  const task = reviewStore.currentTask.value;
+  return !!(
+    inExternalSjFormFocusedMode()
+    && task
+    && isCanonicalReturnedTask(task)
+  );
+}
+
+function shouldCollapseExternalFormPanelsToReview(): boolean {
+  if (!inExternalFormFocusedMode()) return false;
+  if (inExternalSjFormFocusedMode()) {
+    return isExternalSjReturnedFormFocused();
+  }
+  return true;
+}
+
 function closeBlockedReviewPanels() {
   const dockApi = api.value;
   if (!dockApi) return;
   if (!isPassiveWorkflowMode()) return;
   closePanelIfExists(dockApi, 'myTasks');
-  if (inExternalFormFocusedMode()) {
-    // 任意外部 form_id 聚焦模式下，所有「批注处理 / 退回任务列表 /
+  if (shouldCollapseExternalFormPanelsToReview()) {
+    // 外部 form_id 聚焦到审核侧时，所有「批注处理 / 退回任务列表 /
     // 发起编校审 / 待审核任务」入口都被收敛到 review 面板，避免出现第二个面板。
     closePanelIfExists(dockApi, 'designerCommentHandling');
     closePanelIfExists(dockApi, 'resubmissionTasks');
@@ -1287,23 +1305,23 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('dashboard');
       return;
     case 'panel.resubmissionTasks':
-      if (inExternalFormFocusedMode()) {
-        // 外部 form_id 模式下，「退回任务」收敛到 review 面板。
+      if (shouldCollapseExternalFormPanelsToReview()) {
+        // 外部 form_id 模式确认需要审核侧处理时，「退回任务」收敛到 review 面板。
         ensurePanelAndActivate('review');
         return;
       }
       togglePanel('designerCommentHandling');
       return;
     case 'panel.designerCommentHandling':
-      if (inExternalFormFocusedMode()) {
+      if (shouldCollapseExternalFormPanelsToReview()) {
         ensurePanelAndActivate('review');
         return;
       }
       togglePanel('designerCommentHandling');
       return;
     case 'panel.annotationTable': {
-      if (inExternalFormFocusedMode()) {
-        // 外部 form_id 模式：强制走 review 面板的批注表格视图。
+      if (shouldCollapseExternalFormPanelsToReview()) {
+        // 外部 form_id 模式确认需要审核侧处理时，强制走 review 面板的批注表格视图。
         ensurePanelAndActivate('review');
         requestReviewerWorkbenchViewMode('table');
         return;
@@ -1592,7 +1610,11 @@ async function applyInitialLanding() {
       passiveWorkflowMode,
       formId: verifiedFormId,
     });
-    const isExternalSjFormFocused = roleLandingTarget === 'designer' && landingTarget === 'reviewer';
+    const isExternalSjFormFocused = !!(
+      passiveWorkflowMode
+      && verifiedFormId
+      && trustedEmbedIdentity?.workflowRole?.trim().toLowerCase() === 'sj'
+    );
 
     if (landingTarget) {
       console.log('[DockLayout] 嵌入模式角色落点:', landingTarget);
@@ -1621,6 +1643,7 @@ async function applyInitialLanding() {
         activatePanel,
         passiveWorkflowMode,
         loadTaskByFormId: userStore.loadReviewTaskByFormId,
+        returnedDesignerTaskPanel: isExternalSjFormFocused ? 'review' : 'designerCommentHandling',
       });
 
       const fallbackLandingTarget = resolvePassiveEmbedViewTarget({
@@ -1689,18 +1712,32 @@ async function applyInitialLanding() {
       }
 
       if (landingState) {
+        const shouldShowReturnedSjReviewPanel = landingTarget === 'designer'
+          && isExternalSjFormFocused
+          && !!restoreResult.restoredTask
+          && isCanonicalReturnedTask(restoreResult.restoredTask);
         const shouldShowDesignerCommentHandling = landingTarget === 'designer'
+          && !shouldShowReturnedSjReviewPanel
           && (
             (
               !!restoreResult.restoredTask
-              && (passiveWorkflowMode || isCanonicalReturnedTask(restoreResult.restoredTask))
+              && isCanonicalReturnedTask(restoreResult.restoredTask)
             )
             || (
-              passiveWorkflowMode
+              !isExternalSjFormFocused
+              && passiveWorkflowMode
               && restoredWorkflowRecordCount > 0
               && !!verifiedFormId
             )
           );
+        if (shouldShowReturnedSjReviewPanel) {
+          if (api.value) {
+            closePanelIfExists(api.value, 'initiateReview');
+            closePanelIfExists(api.value, 'designerCommentHandling');
+          }
+          openPanel('review');
+          activatePanel('review');
+        }
         if (shouldShowDesignerCommentHandling) {
           // 设计端进入「批注处理」流程时不再展示「发起编校审」面板，
           // 该面板仅服务于新建编校审场景，与处理已退回单据的语义冲突。
@@ -1712,8 +1749,16 @@ async function applyInitialLanding() {
         }
         persistEmbedLandingState({
           ...landingState,
-          primaryPanelId: shouldShowDesignerCommentHandling ? 'designerCommentHandling' : landingState.primaryPanelId,
-          visiblePanelIds: shouldShowDesignerCommentHandling ? ['designerCommentHandling'] : landingState.visiblePanelIds,
+          primaryPanelId: shouldShowReturnedSjReviewPanel
+            ? 'review'
+            : shouldShowDesignerCommentHandling
+              ? 'designerCommentHandling'
+              : landingState.primaryPanelId,
+          visiblePanelIds: shouldShowReturnedSjReviewPanel
+            ? ['review']
+            : shouldShowDesignerCommentHandling
+              ? ['designerCommentHandling']
+              : landingState.visiblePanelIds,
           formId: verifiedFormId,
           restoreStatus: restoreResult.restoreStatus,
           restoredTaskId: restoreResult.restoredTaskId,

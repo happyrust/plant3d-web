@@ -215,8 +215,9 @@ export function resolvePassiveEmbedViewTarget(options: {
 }
 
 /**
- * SJ 经 PMS 外部流程打开带 form_id 的单据时，所有批注处理统一在审核侧
- * ReviewPanel 内完成，不再出现「批注处理（DCH）」面板。
+ * SJ 经 PMS 外部流程打开带 form_id 的单据时，权限仍按外部单据聚焦处理。
+ * 是否落到审核侧 ReviewPanel 不能只看 form_id，必须等任务恢复后确认该单据
+ * 确实处于 returned/rejected 状态。
  * 详见 .plannotator/plan-sj-reject-ui.md §2 / §5 与
  * 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §13。
  *
@@ -239,10 +240,9 @@ export function isExternalSjFormFocusedMode(params: EmbedModeParams | null): boo
  *（sj / jd / sh / pz）经 PMS / 嵌入入口打开带 form_id 的单据时返回 true。
  *
  * 产品规约：**不能跨 form_id 批注，看到的就是对应单据的数据**。任何
- * 显示批注的视图（卡片列表、批注表格）以及任何隐式打开旁路面板的入口
- * （ribbon `panel.designerCommentHandling` / `panel.resubmissionTasks` /
- * `panel.annotationTable` 等）在这个模式下都应当强制收敛到 review 面板，
- * 且只展示当前 form_id 的批注。
+ * 显示批注的视图（卡片列表、批注表格）在这个模式下都应当只展示当前
+ * form_id 的批注。面板落点还需要结合角色和已恢复任务状态判断：
+ * SJ 只有在单据确认为 returned/rejected 时才进入 review 面板。
  *
  * 与 `isExternalSjFormFocusedMode` 的区别：本函数不限制 workflowRole，
  * 适用于「显示/收敛」语义；前者仅适用于「SJ 权限边界」语义（如禁止 SJ
@@ -261,11 +261,7 @@ export function resolveExternalFormFocusedLandingTarget(options: {
   formId?: string | null;
 }): EmbedLandingTarget | null {
   if (!options.target) return null;
-  if (!options.passiveWorkflowMode) return options.target;
-  if (options.target !== 'designer') return options.target;
-  if (normalizeEmbedRole(options.workflowRole) !== 'sj') return options.target;
-  if (!normalizeEmbedValue(options.formId ?? null)) return options.target;
-  return 'reviewer';
+  return options.target;
 }
 
 export function getVerifiedEmbedProjectId(params: EmbedModeParams): string | null {

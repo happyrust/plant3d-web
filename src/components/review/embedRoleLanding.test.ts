@@ -150,19 +150,19 @@ describe('embed role landing', () => {
     });
   });
 
-  it('routes external sj form-focused entries to the review panel', () => {
+  it('keeps external sj form-focused entries on designer landing until task restore confirms return', () => {
     expect(resolveExternalFormFocusedLandingTarget({
       target: 'designer',
       workflowRole: 'sj',
       passiveWorkflowMode: true,
       formId: 'FORM-SJ-RETURNED',
-    })).toBe('reviewer');
+    })).toBe('designer');
 
     expect(getEmbedLandingPanelIdsWithOptions('designer', {
       workflowRole: 'sj',
       passiveWorkflowMode: true,
       formId: 'FORM-SJ-RETURNED',
-    })).toEqual(['review']);
+    })).toEqual(['initiateReview']);
 
     const result = applyEmbedLandingState({
       ensurePanel: () => ({ api: { setActive: () => undefined } }),
@@ -182,15 +182,15 @@ describe('embed role landing', () => {
     });
 
     expect(result).toEqual({
-      target: 'reviewer',
-      primaryPanelId: 'review',
-      visiblePanelIds: ['review'],
+      target: 'designer',
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview'],
     });
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toEqual({
-      target: 'reviewer',
+      target: 'designer',
       formId: 'FORM-SJ-RETURNED',
-      primaryPanelId: 'review',
-      visiblePanelIds: ['review'],
+      primaryPanelId: 'initiateReview',
+      visiblePanelIds: ['initiateReview'],
     });
   });
 
