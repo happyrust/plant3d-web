@@ -778,15 +778,6 @@ function canEditComment(comment: AnnotationComment): boolean {
               <div class="text-[11px] text-[#9CA3AF]">
                 {{ reviewActionHint }}
               </div>
-              <button type="button"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-md text-[12px] font-semibold text-white"
-                :class="[isDockDensity ? 'px-2.5 py-1.5' : 'px-3 py-1.5', selectedReviewAction && canSubmitReviewAction && !actionSubmitting
-                  ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
-                  : 'cursor-not-allowed bg-[#D1D5DB]']"
-                :disabled="!selectedReviewAction || !canSubmitReviewAction || actionSubmitting"
-                @click="submitSelectedReviewAction">
-                {{ actionSubmitting ? '提交中...' : reviewActionSubmitLabel }}
-              </button>
             </div>
           </div>
         </div>
