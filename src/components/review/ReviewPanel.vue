@@ -1497,10 +1497,6 @@ async function handleWorkspaceTitleUpdate(payload: {
   }
 }
 
-function findAnnotationListItemFromWorkspace(item: AnnotationWorkspaceItem): AnnotationListItem | undefined {
-  return allAnnotationItems.value.find((entry) => entry.id === item.id && entry.type === item.type);
-}
-
 function handleTableSelectAnnotation(item: AnnotationWorkspaceItem | null) {
   if (!item) {
     expandedAnnotationId.value = null;
@@ -1515,8 +1511,10 @@ async function handleTableOpenAnnotation(item: AnnotationWorkspaceItem) {
   annotationListViewMode.value = 'split';
   await nextTick();
   handleTableSelectAnnotation(item);
-  const card = findAnnotationListItemFromWorkspace(item);
-  if (card) flyToAnnotationItem(card);
+  // 数据源已统一为 AnnotationWorkspaceItem（参见
+  // docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md），
+  // 不再需要从 workspace item 反向找 list item。
+  flyToAnnotationItem(item);
 }
 
 function handleTableCopyFeedback(payload: { kind: 'refno' | 'row'; result: 'copied' | 'fallback' | 'failed' }) {
@@ -1557,7 +1555,7 @@ function formatAnnotationTime(timestamp: number): string {
     ' ' + new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
-function toggleAnnotationDetail(item: AnnotationListItem) {
+function toggleAnnotationDetail(item: AnnotationWorkspaceItem) {
   if (expandedAnnotationId.value === item.id) {
     expandedAnnotationId.value = null;
     expandedAnnotationType.value = null;
@@ -1567,7 +1565,7 @@ function toggleAnnotationDetail(item: AnnotationListItem) {
   }
 }
 
-function flyToAnnotationItem(item: AnnotationListItem) {
+function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
   if (item.type === 'text') {
     toolStore.activeAnnotationId.value = item.id;
     toolStore.activeCloudAnnotationId.value = null;
@@ -1942,7 +1940,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
       </div>
 
       <div class="flex flex-col gap-0.5 border-t border-slate-100 px-3 py-2">
-        <div v-for="item in allAnnotationItems" :key="item.id">
+        <div v-for="item in scopedReviewerItems" :key="item.id">
           <!-- 批注卡片 -->
           <div class="cursor-pointer rounded-lg border p-3 transition-colors"
             :class="expandedAnnotationId === item.id
@@ -1964,8 +1962,8 @@ function flyToAnnotationItem(item: AnnotationListItem) {
                   </span>
                 </div>
                 <p v-if="item.description" class="mt-0.5 truncate text-xs text-slate-500">{{ item.description }}</p>
-                <div v-if="item.refno" class="mt-1">
-                  <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] text-blue-600">{{ item.refno }}</span>
+                <div v-if="item.refnos.length > 0" class="mt-1">
+                  <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] text-blue-600">{{ item.refnos[0] }}</span>
                 </div>
                 <div v-if="item.reviewState?.updatedByName" class="mt-1 text-[11px] text-slate-400">
                   {{ item.reviewState.updatedByName }}
