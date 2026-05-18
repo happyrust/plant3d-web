@@ -1425,10 +1425,12 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   return items.sort((a, b) => b.createdAt - a.createdAt);
 });
 
-const totalAnnotationItemCount = computed(() => allAnnotationItems.value.length);
+const totalAnnotationItemCount = computed(() => scopedReviewerItems.value.length);
 
-const annotationWorkspaceItems = computed<AnnotationWorkspaceItem[]>(() => {
-  const allItems = buildAnnotationWorkspaceItems({
+// 单一原始来源：split 视图（卡片列表）与 table 视图（批注表格）共享。
+// 详见 docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md
+const reviewerAnnotationItems = computed<AnnotationWorkspaceItem[]>(() =>
+  buildAnnotationWorkspaceItems({
     annotations: toolStore.annotations.value,
     cloudAnnotations: toolStore.cloudAnnotations.value,
     rectAnnotations: toolStore.rectAnnotations.value,
@@ -1439,14 +1441,17 @@ const annotationWorkspaceItems = computed<AnnotationWorkspaceItem[]>(() => {
       activeReviewFormId.value ?? undefined,
       currentTask.value?.id ?? undefined,
     ).length,
-  });
-  // form_id 收敛：仅在 SJ 外部 form_id 聚焦模式启用，与 allAnnotationItems
-  // 的 shouldIncludeRecord 行为严格对齐，防止表格视图泄露其它单据的批注。
-  // 详见 docs/plans/2026-05-18-reviewer-annotation-table-formid-scope-plan.md
-  // 与 .plannotator/plan-sj-reject-ui.md §6。
-  if (!isExternalSjFormFocused.value) return allItems;
-  return scopeAnnotationWorkspaceItemsByFormId(allItems, activeReviewFormId.value);
+  }),
+);
+
+// form_id 收敛：仅在 SJ 外部 form_id 聚焦模式启用，防止泄露跨单据批注。
+// 行为沿用 2026-05-18 早些 plan 的 A1 决策（参见 .plannotator/plan-sj-reject-ui.md §6）。
+const scopedReviewerItems = computed<AnnotationWorkspaceItem[]>(() => {
+  if (!isExternalSjFormFocused.value) return reviewerAnnotationItems.value;
+  return scopeAnnotationWorkspaceItemsByFormId(reviewerAnnotationItems.value, activeReviewFormId.value);
 });
+
+const annotationWorkspaceItems = scopedReviewerItems;
 
 function buildWorkspaceItemKey(item: AnnotationWorkspaceItem): string {
   return `${item.type}:${item.id}`;
