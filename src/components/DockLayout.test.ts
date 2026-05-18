@@ -485,11 +485,15 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
-  it('设计端被动恢复未匹配内部任务但 workflow/sync 有批注记录时仍进入批注处理', async () => {
+  it('SJ 外部 form_id 被动恢复未匹配内部任务但 workflow/sync 有批注记录时，仍统一落到 review 面板，不再单独开 DCH', async () => {
+    // 2026-05-18 产品策略更新：SJ 经 PMS 外部流程打开带 form_id 单据时，
+    // 所有批注处理统一在 review 面板内完成，不再单独开「批注处理」（DCH）面板。
+    // 详见 .plannotator/plan-sj-reject-ui.md §2 / §5 与
+    // 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §13。
     returnedInitiatedTasksRef.value = [];
     reviewTasksRef.value = [];
     restoreEmbedWorkbenchContextMock.mockResolvedValue({
-      target: 'designer',
+      target: 'reviewer',
       restoreStatus: 'missing',
       restoredTaskId: null,
       restoredTaskSummary: null,
@@ -525,18 +529,17 @@ describe('DockLayout embed bootstrap', () => {
     const mounted = await mountDockLayout();
 
     expect(restoreEmbedWorkbenchContextMock).toHaveBeenCalledWith(expect.objectContaining({
-      target: 'designer',
+      target: 'reviewer',
       formId: 'FORM-FB4EF9F13DF1',
       passiveWorkflowMode: true,
     }));
-    expect(dockPanels.has('designerCommentHandling')).toBe(true);
-    expect(activatedPanels).toContain('designerCommentHandling');
+    expect(dockPanels.has('designerCommentHandling')).toBe(false);
+    expect(activatedPanels).not.toContain('designerCommentHandling');
     expect(JSON.parse(sessionStorage.getItem('embed_landing_state') || '{}')).toMatchObject({
-      target: 'designer',
+      target: 'reviewer',
       formId: 'FORM-FB4EF9F13DF1',
-      primaryPanelId: 'designerCommentHandling',
-      visiblePanelIds: ['designerCommentHandling'],
-      restoreStatus: 'missing',
+      primaryPanelId: 'review',
+      visiblePanelIds: ['review'],
     });
 
     mounted.unmount();
