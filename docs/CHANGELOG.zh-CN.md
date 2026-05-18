@@ -1,5 +1,56 @@
 # 更新日志
 
+## 2026-05-19
+
+### 外部 PMS 单据批注状态同步与启动健壮性增强（U011 现网体感修复整组）
+
+承接 2026-05-18 «JD/JH 可确认 SJ 已处理的驳回批注» 与 «保留批注状态任务血缘»，
+针对外部 PMS form-focused（U011 类）场景下用户实际反馈的三件事做整组收尾：
+(1) 单批注 SJ 处理按钮被默认折叠卡死、(2) 同一批注上一轮驳回状态覆盖本轮 fixed、
+(3) 当前用户待办量大时 `loadReviewTasks` 阻塞外部 PMS 单据打开。
+
+- `useAnnotationReviewStateSync.ts`：新增 `pickLatestAnnotationStates` 同批注去重，
+  按 `(reviewRound, updatedAt)` 取最新；同一批注存在多轮记录时只应用 round 更高（或
+  同 round 内 `updatedAt` 更晚）的那一条。修复 SJ 完成二次处理后，因后端仍返回历史
+  轮次的 `decision_status=rejected` 记录、被回写覆盖、UI 又退回旧状态的问题。
+- `ReviewPanel.vue`：
+  - `refreshAnnotationReviewStatesForCurrentTask` 去掉「必须有 `currentTask`」前置，
+    外部 form 聚焦时只凭 `activeReviewFormId` 也能按 form_id 拉一次最新状态。
+  - 监听 `activeReviewFormId` 的 watch 同步去掉 `currentTask` 早返；外部 PMS 在
+    `restoreEmbedWorkbenchContext` 还在等任务列表时，URL 已带 form_id 就能先把状态拉回。
+  - `restoreConfirmedRecordsIntoScene` 与 `confirmCurrentData` 成功之后追加一次
+    `refreshAnnotationReviewStatesForCurrentTask`，让证据保存 → 处理状态 UI 立刻自洽，
+    不再依赖下一次 watch 触发。
+  - 新增「外部 form 聚焦 + split 视图 + 仅 1 条作用域批注」时自动展开该批注的 watch：
+    解决 2026-05-18 进度里定位到的 FORM-DE19AFADC087 默认折叠导致 SJ 处理按钮（已修改 /
+    不需解决 / 提交处理结果）被收在卡片里看不见的体感问题。
+- `embedContextRestore.ts`：PMS 嵌入打开 form-focused 单据时改为
+  「`loadTaskByFormId` 直拉单据（8s 超时） + `loadReviewTasks` 后台 fire-and-forget」。
+  URL 已带可验证 form_id 时不再阻塞在「拉当前角色全量任务列表」这一步，并在
+  `resolveEmbedRestoreResult` 仍 missing 时回填 form-loader 的命中结果。
+  - 新增内部 `withTimeout` helper 与 `FORM_FOCUSED_TASK_LOAD_TIMEOUT_MS = 8000`，
+    超时返回 `null` 不抛错，保留原有列表回填路径作兜底。
+- `useToolStore.ts`：把 `@/review/services/sharedStores`（`getReviewCommentThreadStore` /
+  `getCommentsFromStore`）与 `@/review/domain/reviewSnapshot`（`liftAnnotationComment`）
+  从分散的运行时 lazy 引用改为顶层 import + `_getThreadStore()` helper（项目
+  `no-inline-imports` 规则）；让 `addCommentToAnnotation` 在 vitest 单元测试环境下也能
+  直接走共享 thread store，不再依赖任何运行时 globals。
+- 测试：
+  - 新增 `src/composables/useAnnotationReviewStateSync.test.ts` 1 条用例，
+    锁定「同一批注两轮状态时只应用 round=2 的 fixed，不被 round=1 的 rejected 覆盖」。
+  - `src/composables/useToolStore.persistence.test.ts` 新增 1 条用例
+    「addCommentToAnnotation 通过共享 thread store 写入并按 (formId, taskId) scope 读回」。
+- 验证：`npm run type-check` 0 error；`eslint` 改动 6 个文件 0/0；
+  `useAnnotationReviewStateSync.test.ts` 1/1 + `useToolStore.persistence.test.ts` 12/12 通过；
+  双胞胎 4 套件（`ReviewPanel.test.ts` + `DesignerCommentHandlingPanel.test.ts` +
+  `AnnotationTableView.test.ts` + `reviewerWorkbenchViewModeBus.test.ts`）：
+  baseline 34 fail / 53 pass = after 34 fail / 53 pass（**0 新增 fail**，已对比 stash baseline）。
+- 关键文件：
+  - `src/components/review/ReviewPanel.vue`
+  - `src/components/review/embedContextRestore.ts`
+  - `src/composables/useAnnotationReviewStateSync.ts`
+  - `src/composables/useToolStore.ts`
+
 ## 2026-05-18
 
 ### 管道距离测量与标注增强（4 个独立 PR 一日全交付）

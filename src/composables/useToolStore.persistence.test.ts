@@ -411,6 +411,42 @@ describe('useToolStore - persistence', () => {
     expect(store.getAnnotationComments('text', 'text-form').map((c) => c.id)).toEqual(['c-unscoped']);
   });
 
+  it('should add annotation comments through the shared thread store without runtime globals', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addAnnotation({
+      id: 'text-add-thread',
+      entityId: 'entity-add-thread',
+      worldPos: [3, 3, 3],
+      visible: true,
+      glyph: 'A',
+      title: 'Add thread',
+      description: '',
+      createdAt: 1,
+    });
+
+    const created = store.addCommentToAnnotation(
+      'text',
+      'text-add-thread',
+      {
+        id: 'c-add-thread',
+        authorId: 'u-1',
+        authorName: 'A',
+        authorRole: 'designer',
+        content: 'added through store',
+        createdAt: 10,
+      },
+      'FORM-ADD',
+      'task-add',
+    );
+
+    expect(created?.id).toBe('c-add-thread');
+    expect(store.getAnnotationComments('text', 'text-add-thread', 'FORM-ADD', 'task-add').map((c) => c.id))
+      .toEqual(['c-add-thread']);
+    expect(store.getAnnotationComments('text', 'text-add-thread')).toEqual([]);
+  });
+
   it('should not fall back to the unscoped bucket when reading annotation comments with a formId', async () => {
     const store = await loadStore();
     store.clearAll();

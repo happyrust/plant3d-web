@@ -1,11 +1,52 @@
-import { annotationReviewStatesQuery, normalizeAnnotationReviewStateView } from '@/api/reviewApi';
+import {
+  annotationReviewStatesQuery,
+  normalizeAnnotationReviewStateView,
+  type AnnotationReviewStateView,
+} from '@/api/reviewApi';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 
-const VALID_ANNOTATION_TYPES: ReadonlyArray<AnnotationType> = ['text', 'cloud', 'rect', 'obb'];
+const VALID_ANNOTATION_TYPES: readonly AnnotationType[] = ['text', 'cloud', 'rect', 'obb'];
 
 function isValidAnnotationType(value: unknown): value is AnnotationType {
   return typeof value === 'string'
     && (VALID_ANNOTATION_TYPES as readonly string[]).includes(value);
+}
+
+function getAnnotationStateKey(view: AnnotationReviewStateView): string | null {
+  const annotationId = typeof view.annotationId === 'string' ? view.annotationId.trim() : '';
+  if (!annotationId) return null;
+  if (!isValidAnnotationType(view.annotationType)) return null;
+  return `${view.annotationType}:${annotationId}`;
+}
+
+function isNewerAnnotationState(
+  candidate: AnnotationReviewStateView,
+  current: AnnotationReviewStateView,
+): boolean {
+  const candidateRound = Number.isFinite(candidate.reviewRound) ? candidate.reviewRound : 0;
+  const currentRound = Number.isFinite(current.reviewRound) ? current.reviewRound : 0;
+  if (candidateRound !== currentRound) return candidateRound > currentRound;
+
+  const candidateUpdatedAt = Number.isFinite(candidate.updatedAt) ? candidate.updatedAt : 0;
+  const currentUpdatedAt = Number.isFinite(current.updatedAt) ? current.updatedAt : 0;
+  return candidateUpdatedAt > currentUpdatedAt;
+}
+
+function pickLatestAnnotationStates(
+  views: (AnnotationReviewStateView | null | undefined)[],
+): AnnotationReviewStateView[] {
+  const latestByAnnotation = new Map<string, AnnotationReviewStateView>();
+  for (const view of views) {
+    if (!view) continue;
+    const key = getAnnotationStateKey(view);
+    if (!key) continue;
+
+    const current = latestByAnnotation.get(key);
+    if (!current || isNewerAnnotationState(view, current)) {
+      latestByAnnotation.set(key, view);
+    }
+  }
+  return Array.from(latestByAnnotation.values());
 }
 
 export type SyncAnnotationReviewStatesOptions = {
@@ -68,11 +109,8 @@ export async function syncAnnotationReviewStates(
   const views = response.states ?? [];
   let appliedCount = 0;
 
-  for (const view of views) {
-    if (!view) continue;
-    const annotationId = typeof view.annotationId === 'string' ? view.annotationId.trim() : '';
-    if (!annotationId) continue;
-    if (!isValidAnnotationType(view.annotationType)) continue;
+  for (const view of pickLatestAnnotationStates(views)) {
+    const annotationId = view.annotationId.trim();
     const normalized = normalizeAnnotationReviewStateView(view);
     const ok = store.setAnnotationReviewState(view.annotationType, annotationId, normalized);
     if (ok) appliedCount += 1;

@@ -908,22 +908,22 @@ watch(currentTask, async (newTask) => {
 async function refreshAnnotationReviewStatesForCurrentTask(): Promise<void> {
   const task = currentTask.value;
   const formId = task?.formId?.trim() || activeReviewFormId.value;
-  if (!task || !formId) return;
-  const taskIdSnapshot = task.id;
+  if (!formId) return;
+  if (!task && !isExternalFormFocused.value) return;
+  const taskIdSnapshot = task?.id ?? null;
   const result = await syncAnnotationReviewStates({
     formId,
     // 外部 PMS 按 form_id 聚焦同一张单据，但 SJ/JD/JH 可能恢复到不同内部 taskId。
     // 按当前 taskId 查询会看不到 SJ 已提交的 fixed/wont_fix，导致 JD/JH 无法同意/驳回。
-    taskId: isExternalFormFocused.value ? undefined : task.id,
+    taskId: isExternalFormFocused.value ? undefined : task?.id,
   });
-  if (currentTask.value?.id !== taskIdSnapshot) return;
+  if ((currentTask.value?.id ?? null) !== taskIdSnapshot) return;
   if (!result.ok && result.errorMessage) {
     console.warn('[ReviewPanel] 拉取批注处理状态失败:', result.errorMessage);
   }
 }
 
 watch(activeReviewFormId, () => {
-  if (!currentTask.value) return;
   void refreshAnnotationReviewStatesForCurrentTask();
 });
 
@@ -936,6 +936,7 @@ watch(
   }),
   async () => {
     await restoreConfirmedRecordsIntoScene();
+    await refreshAnnotationReviewStatesForCurrentTask();
   },
   { immediate: true }
 );
@@ -1061,6 +1062,7 @@ async function confirmCurrentData() {
       emitToast({ message: '确认数据已保存', level: 'success' });
       await nextTick();
       await restoreConfirmedRecordsIntoScene(true);
+      await refreshAnnotationReviewStatesForCurrentTask();
     }
   } catch (e) {
     confirmError.value = e instanceof Error ? e.message : '确认当前数据失败';
@@ -1407,6 +1409,25 @@ const scopedReviewerItems = computed<AnnotationWorkspaceItem[]>(() => {
 });
 
 const annotationWorkspaceItems = scopedReviewerItems;
+
+watch(
+  () => ({
+    externalFormFocused: isExternalFormFocused.value,
+    viewMode: annotationListViewMode.value,
+    itemKeys: scopedReviewerItems.value.map((item) => `${item.type}:${item.id}`).join('|'),
+  }),
+  () => {
+    if (!isExternalFormFocused.value || annotationListViewMode.value !== 'split') return;
+    if (scopedReviewerItems.value.length !== 1) return;
+
+    const [item] = scopedReviewerItems.value;
+    if (!item || expandedAnnotationId.value === item.id) return;
+
+    expandedAnnotationId.value = item.id;
+    expandedAnnotationType.value = item.type;
+  },
+  { immediate: true },
+);
 
 function buildWorkspaceItemKey(item: AnnotationWorkspaceItem): string {
   return `${item.type}:${item.id}`;

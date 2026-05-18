@@ -12,6 +12,8 @@ import type { ReviewTask, WorkflowNode } from '@/types/auth';
 
 import { normalizeReviewDeliveryRefno } from '@/composables/useReviewDeliveryUnit';
 
+const FORM_FOCUSED_TASK_LOAD_TIMEOUT_MS = 8_000;
+
 export type EmbedRestoreMatchedSource = 'reviewer_tasks' | 'designer_tasks' | 'all_tasks' | 'form_loader' | null;
 export type EmbedRestoreMissReason = 'no_form' | 'form_not_found' | 'not_returned' | null;
 
@@ -55,6 +57,24 @@ type RestoreEmbedWorkbenchOptions = {
 function normalizeFormId(formId?: string | null): string | null {
   const normalized = formId?.trim();
   return normalized || null;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => T,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(onTimeout()), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
 }
 
 function findTaskByFormId(tasks: ReviewTask[], formId: string | null): ReviewTask | null {
@@ -163,7 +183,24 @@ export function resolveEmbedRestoreResult(options: ResolveEmbedRestoreOptions): 
 export async function restoreEmbedWorkbenchContext(
   options: RestoreEmbedWorkbenchOptions,
 ): Promise<EmbedRestoreResult> {
-  await options.loadReviewTasks();
+  const normalizedFormId = normalizeFormId(options.formId);
+  let formLoadedTask: ReviewTask | null = null;
+  if (normalizedFormId && options.loadTaskByFormId) {
+    formLoadedTask = await withTimeout(
+      options.loadTaskByFormId(normalizedFormId),
+      FORM_FOCUSED_TASK_LOAD_TIMEOUT_MS,
+      () => null,
+    );
+  }
+
+  // PMS embeds are form-focused. A broad role task list can be slow for users with
+  // many pending items, so never block opening the current form on that list once
+  // the URL already has a verified form id.
+  if (normalizedFormId) {
+    void options.loadReviewTasks();
+  } else {
+    await options.loadReviewTasks();
+  }
 
   let result = resolveEmbedRestoreResult({
     target: options.target,
@@ -173,7 +210,13 @@ export async function restoreEmbedWorkbenchContext(
     allTasks: options.allTasks(),
   });
 
-  const normalizedFormId = normalizeFormId(options.formId);
+  if (result.restoreStatus === 'missing' && formLoadedTask) {
+    result = createRestoreResult(options.target, 'matched', formLoadedTask, undefined, {
+      matchedSource: 'form_loader',
+      missReason: null,
+    });
+  }
+
   if (
     result.restoreStatus === 'missing'
     && normalizedFormId

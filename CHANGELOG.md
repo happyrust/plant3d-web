@@ -57,6 +57,15 @@
 
 ### 修复
 
+- **外部 PMS 单据批注状态同步与启动健壮性增强（U011 整组）** (2026-05-19)
+  - `useAnnotationReviewStateSync.ts` 新增 `pickLatestAnnotationStates`：同一批注的多轮记录按 `(reviewRound, updatedAt)` 去重，只应用最新一轮；避免上一轮的 `decision_status=rejected` 覆盖 SJ 二次处理后的 `fixed`
+  - `ReviewPanel.vue` 的 `refreshAnnotationReviewStatesForCurrentTask` 与 `activeReviewFormId` watch 不再强依赖 `currentTask`：外部 form 聚焦时只凭 `activeReviewFormId` 也能按 `formId` 拉一次最新批注状态；`restoreConfirmedRecordsIntoScene` 与 `confirmCurrentData` 成功后追加一次主动刷新
+  - `ReviewPanel.vue` 新增「外部 form 聚焦 + split 视图 + 仅 1 条作用域批注」自动展开 watch：解决 FORM-DE19AFADC087 默认折叠把 SJ 处理按钮（已修改 / 不需解决 / 提交处理结果）藏进卡片导致体感不可见的问题
+  - `embedContextRestore.ts` PMS 嵌入打开 form-focused 单据时改为「`loadTaskByFormId` 直拉（8s 超时） + `loadReviewTasks` 后台 fire-and-forget」，并在 `resolveEmbedRestoreResult` 仍 missing 时回填 form-loader 命中结果；URL 已带可验证 form_id 时不再被「拉当前角色全量任务列表」阻塞
+  - `useToolStore.ts` 把 `getReviewCommentThreadStore` / `getCommentsFromStore` / `liftAnnotationComment` 从运行时 lazy 引用重构为顶层 import + `_getThreadStore()` helper（符合项目 `no-inline-imports` 规则），让 `addCommentToAnnotation` 在 vitest 环境也能直接走共享 thread store
+  - 新增 `useAnnotationReviewStateSync.test.ts` 1 条单测锁定多轮状态优先级；扩展 `useToolStore.persistence.test.ts` 1 条单测验证 `addCommentToAnnotation` 不依赖 runtime globals
+  - 验证：`npm run type-check` 通过；6 个改动文件 `eslint` 0 error 0 warning；新增 + 扩展的两个测试 13/13 通过；双胞胎 4 套件 baseline 34 fail / 53 pass → after 34 fail / 53 pass（**0 新增 fail**，已对比 stash baseline）
+
 - **JD/JH 可确认 SJ 已处理的驳回批注** (2026-05-18)
   - 外部 `form_id` 聚焦场景下，`ReviewPanel.vue` 同步批注处理状态改为按 `formId` 查询，不再强绑当前内部 `taskId`
   - 修复 SJ、JD、JH 在同一外部单据上恢复到不同内部 taskId 时，JD/JH 看不到 SJ 已提交的 `fixed/wont_fix`，导致“同意 / 驳回”被禁用的问题

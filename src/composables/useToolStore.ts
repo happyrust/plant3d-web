@@ -12,6 +12,11 @@ import type {
 import { useUserStore } from '@/composables/useUserStore';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
 import { buildCommentThreadKey } from '@/review/domain/commentThread';
+import { liftAnnotationComment } from '@/review/domain/reviewSnapshot';
+import {
+  getCommentsFromStore as _storeGetComments,
+  getReviewCommentThreadStore,
+} from '@/review/services/sharedStores';
 import {
   createDefaultAnnotationReviewState,
   normalizeAnnotationReviewState,
@@ -26,6 +31,10 @@ function resolveCurrentAuthorId(): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function _getThreadStore() {
+  return getReviewCommentThreadStore();
 }
 
 export type ToolMode =
