@@ -2,6 +2,36 @@
 
 ## 2026-05-18
 
+### 云线批注双击图钉收起（与文字批注对齐）
+
+- 修复云线批注的文字框不能像文字批注一样「双击图钉收起来」的问题；
+  此前 `CloudAnnotationRecord` 缺 `collapsed` 字段，`useToolStore` 也未提供
+  `setCloudAnnotationsCollapsed` action，`useDtxTools` 渲染云线 marker 时
+  第 3 参数写死 `false` 且只绑 `click`、不绑 `dblclick`，导致云线文字框无法
+  通过图钉折叠/展开。
+- `useToolStore.ts`：`CloudAnnotationRecord` 新增 `collapsed?: boolean` 字段；
+  `normalizeCloudAnnotationRecord` 默认补 `false`；新增
+  `setCloudAnnotationsCollapsed(ids, collapsed)` action 并导出，与
+  `setTextAnnotationsCollapsed` 对齐。
+- `useDtxTools.ts` 云线渲染段：`makeTextAnnotationMarkerEl` 第 3 参数改为
+  `c.collapsed === true`（图钉视觉同步状态）；新增
+  `cloudMarker.addEventListener('dblclick', ...)`，调用
+  `setCloudAnnotationsCollapsed` 切换 collapsed，并复用文字批注
+  `toggleTextAnnotationCollapsed` helper；`leader.root` / `label` / 拖动 / 输入
+  事件统一被 `shouldRenderTextAnnotationCard(c.collapsed)` 包裹，`collapsed`
+  时仅渲染 `pin` + `outline` + `bboxEdges`，保留云线轮廓与包围盒视觉。
+- 新增 `src/composables/useToolStore.cloudCollapsed.test.ts` 5 条单测：
+  normalize 默认值、`add` 保留显式 `collapsed=true`、批量双向切换、空/空白 ids
+  防御、不污染文字批注 `collapsed`。
+- `DockLayout.test.ts` 顺手补 `useReviewStore` mock 的 `currentTask` ref
+  （远端 commit 加入 `isExternalSjReturnedFormFocused` helper 时漏 mock，
+  导致单跑 3 个 `TypeError: Cannot read properties of undefined (reading 'value')`；
+  与本主题无关，但顺手清理）。
+- 验证：`npm run type-check` 0 error；`useToolStore.ts` + `useDtxTools.ts` lint
+  0 error 0 warning；`cloudCollapsed.test.ts` 5/5 通过；双胞胎 5 套件 +
+  DockLayout + cloudCollapsed 汇总 35 fail / 70 pass（0 新增 fail，转绿
+  DockLayout 3 个 TypeError，新增 5 个 cloud collapsed pass）。
+
 ### JD/JH 可确认 SJ 已处理的驳回批注
 
 - 外部 `form_id` 聚焦场景下，`ReviewPanel.vue` 同步批注处理状态改为按 `formId` 查询，不再强绑当前内部 `taskId`。
