@@ -784,6 +784,10 @@ describe('normalizeAnnotationReviewStateView', () => {
 
     expect(state.resolutionStatus).toBe('fixed');
     expect(state.decisionStatus).toBe('pending');
+    expect(state.formId).toBe('FORM-1');
+    expect(state.taskId).toBe('task-1');
+    expect(state.workflowNode).toBe('sj');
+    expect(state.reviewRound).toBe(2);
     expect(state.updatedByRole).toBe('designer');
     expect(state.updatedAt).toBe(1710000000999);
     expect(state.history).toEqual([

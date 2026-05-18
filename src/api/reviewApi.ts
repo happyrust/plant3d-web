@@ -1609,6 +1609,12 @@ export function normalizeAnnotationReviewStateView(
     : [];
 
   return {
+    formId: view.formId?.trim() || undefined,
+    taskId: view.taskId?.trim() || undefined,
+    workflowNode: view.workflowNode?.trim() || undefined,
+    reviewRound: typeof view.reviewRound === 'number' && Number.isFinite(view.reviewRound)
+      ? view.reviewRound
+      : undefined,
     resolutionStatus: view.resolutionStatus === 'fixed' || view.resolutionStatus === 'wont_fix'
       ? view.resolutionStatus
       : 'open',

@@ -83,6 +83,10 @@ export type AnnotationReviewEvent = {
 };
 
 export type AnnotationReviewState = {
+  formId?: string;
+  taskId?: string;
+  workflowNode?: string;
+  reviewRound?: number;
   resolutionStatus: AnnotationResolutionStatus;
   decisionStatus: AnnotationDecisionStatus;
   note?: string;
@@ -302,6 +306,12 @@ export function normalizeAnnotationReviewState(
   state?: Partial<AnnotationReviewState> | null
 ): AnnotationReviewState {
   return {
+    formId: typeof state?.formId === 'string' ? state.formId.trim() || undefined : undefined,
+    taskId: typeof state?.taskId === 'string' ? state.taskId.trim() || undefined : undefined,
+    workflowNode: typeof state?.workflowNode === 'string' ? state.workflowNode.trim() || undefined : undefined,
+    reviewRound: typeof state?.reviewRound === 'number' && Number.isFinite(state.reviewRound)
+      ? state.reviewRound
+      : undefined,
     resolutionStatus: state?.resolutionStatus === 'fixed' || state?.resolutionStatus === 'wont_fix'
       ? state.resolutionStatus
       : 'open',

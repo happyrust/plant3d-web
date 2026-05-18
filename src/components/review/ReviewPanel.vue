@@ -1412,6 +1412,10 @@ function buildWorkspaceItemKey(item: AnnotationWorkspaceItem): string {
   return `${item.type}:${item.id}`;
 }
 
+function resolveAnnotationActionTaskId(item: AnnotationWorkspaceItem): string | null {
+  return item.reviewState?.taskId?.trim() || currentTask.value?.id || null;
+}
+
 function canEditWorkspaceItem(item: AnnotationWorkspaceItem): boolean {
   return canEditAnnotationSeverity(userStore.currentUser.value, item.authorId);
 }
@@ -1966,7 +1970,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
               :annotation-label="`${getAnnotationTypeBadge(item.type).label}批注 / ${item.title}`"
               :designer-only="isExternalSjFormFocused"
               :context-form-id="activeReviewFormId"
-              :context-task-id="currentTask?.id ?? null"
+              :context-task-id="resolveAnnotationActionTaskId(item)"
               @close="expandedAnnotationId = null; expandedAnnotationType = null" />
           </div>
         </div>
