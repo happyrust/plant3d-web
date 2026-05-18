@@ -2,6 +2,28 @@
 
 ## 2026-05-18
 
+### 矩形 / OBB 批注双击图钉收起（推广 cloud 方案 A 到全部批注类型）
+
+- 延续早些 commit 359932d 的「云线批注双击图钉收起」能力，按方案 A 推广到
+  矩形 / OBB 批注；原本这两类批注的 pin 是 3D mesh、没有独立 DOM marker，
+  无法绑定 `dblclick`，所以「双击图钉收起文字框」对它们一直缺位。
+- `useToolStore.ts`：`RectAnnotationRecord` / `ObbAnnotationRecord` 新增
+  `collapsed?: boolean` 字段；`normalizeRect/ObbAnnotationRecord` 默认补
+  `false`；新增 `setRectAnnotationsCollapsed` / `setObbAnnotationsCollapsed`
+  action 并导出，与 `setTextAnnotationsCollapsed` / `setCloudAnnotationsCollapsed`
+  对齐。
+- `useDtxTools.ts`（rect / obb 渲染段）：
+  - 在原 3D `visual.pin` 之外新增 DOM marker（`makeTextAnnotationMarkerEl(overlay, 'R' | 'O', r.collapsed === true)`），注册到 `markers` map 与 cloud 一致；
+  - marker `click` 用 `ev.detail > 1 return` 拦截、避免与双击冲突；
+  - marker `dblclick` 调用对应 `setRect/ObbAnnotationsCollapsed`，复用文字批注 `toggleTextAnnotationCollapsed` helper；
+  - `visual.box` + `visual.pin` 始终 add 到 `toolsGroup`；`visual.leader.root` 与 label / 拖动 / 输入事件被 `shouldRenderTextAnnotationCard(r.collapsed)` 包裹，`collapsed` 时只保留 box + 3D pin + DOM 图钉 marker，隐藏文字框 + 引线。
+- 扩展 `src/composables/useToolStore.cloudCollapsed.test.ts`：在原 cloud
+  describe 基础上加 rect / obb 两组 describe，共 8 条新单测覆盖 normalize 默认值、
+  `add` 保留显式 `collapsed=true`、批量双向切换、跨类型不污染。整体 13/13 PASS。
+- 验证：`npm run type-check` 0 error；`useToolStore.ts` + `useDtxTools.ts`
+  lint 0/0；双胞胎 5 套件 + DockLayout + cloudCollapsed 汇总 35 fail / 78 pass
+  （0 新增 fail，新增 8 rect+obb pass）。
+
 ### 云线批注双击图钉收起（与文字批注对齐）
 
 - 修复云线批注的文字框不能像文字批注一样「双击图钉收起来」的问题；
