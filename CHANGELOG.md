@@ -57,6 +57,13 @@
 
 ### 修复
 
+- **SJ 驳回单据批注处理确认入口恢复** (2026-05-18)
+  - 修复 SJ 打开驳回/退回单据进入 `ReviewPanel` 后，评论线程调用 `buildCommentThreadKey()` 时报 `buildCommentThreadKey is not defined` 的运行时错误
+  - `useToolStore.ts` 显式导入 `buildCommentThreadKey`，避免依赖 auto-import/global 类型声明导致类型层面通过但运行时未注入
+  - 外部 SJ returned/rejected 场景保留 `designer-only` 时间线语义，恢复“已修改 / 不需解决 → 提交处理结果”入口，用于逐条确认批注已处理
+  - 仍不开放校审侧“同意 / 驳回”动作，也不恢复新增批注/测量证据入口；“确认当前数据”继续只服务新增证据保存
+  - 验证：`npm run type-check` 通过；`ReviewCommentsTimeline.test.ts` + `commentThread.test.ts` + `commentThreadStore.test.ts` 35/35 通过；`npm run build` 通过
+
 - **SJ 外部单据仅在驳回/退回状态下进入校审面板** (2026-05-18)
   - 修正 `sj + 外部 form_id` 被无条件路由到 `ReviewPanel` 的问题：现在普通未驳回单据保持设计端落点，只有恢复到的任务确认为 canonical returned/rejected 时才显示校审面板
   - `embedRoleLanding.ts` 不再只凭 `sj + form_id` 把落点改为 reviewer；form_id 仍用于权限与批注 scope 判定

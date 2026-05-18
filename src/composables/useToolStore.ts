@@ -11,6 +11,7 @@ import type {
 
 import { useUserStore } from '@/composables/useUserStore';
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { buildCommentThreadKey } from '@/review/domain/commentThread';
 import {
   createDefaultAnnotationReviewState,
   normalizeAnnotationReviewState,

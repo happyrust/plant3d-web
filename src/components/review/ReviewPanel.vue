@@ -1965,7 +1965,6 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
               :designer-only="isExternalSjFormFocused"
               :context-form-id="activeReviewFormId"
               :context-task-id="currentTask?.id ?? null"
-              :allow-review-actions="!isExternalSjFormFocused"
               @close="expandedAnnotationId = null; expandedAnnotationType = null" />
           </div>
         </div>
