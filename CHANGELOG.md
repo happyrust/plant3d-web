@@ -57,6 +57,12 @@
 
 ### 修复
 
+- **JD/JH 可确认 SJ 已处理的驳回批注** (2026-05-18)
+  - 外部 `form_id` 聚焦场景下，`ReviewPanel.vue` 同步批注处理状态改为按 `formId` 查询，不再强绑当前内部 `taskId`
+  - 修复 SJ、JD、JH 在同一外部单据上恢复到不同内部 taskId 时，JD/JH 看不到 SJ 已提交的 `fixed/wont_fix`，导致“同意 / 驳回”被禁用的问题
+  - 后端 `plant-model-gen` 已同步补充 `jh` 角色的 `agree/reject` 权限白名单，避免 JH token 被服务端拒绝
+  - 验证：`npm run type-check` 通过；`ReviewCommentsTimeline.test.ts` 11/11 通过；`npm run build` 通过；后端本地 `cargo check` 因缺少 NASM 被环境阻断，线上部署后 `/api/health` 与 `/api/version` 均 HTTP 200
+
 - **SJ 驳回单据批注处理确认入口恢复** (2026-05-18)
   - 修复 SJ 打开驳回/退回单据进入 `ReviewPanel` 后，评论线程调用 `buildCommentThreadKey()` 时报 `buildCommentThreadKey is not defined` 的运行时错误
   - `useToolStore.ts` 显式导入 `buildCommentThreadKey`，避免依赖 auto-import/global 类型声明导致类型层面通过但运行时未注入
