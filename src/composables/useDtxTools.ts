@@ -3560,86 +3560,108 @@ export function useDtxTools(options: {
 
       const visual = createRectAnnotationVisual(r.obb, r.anchorWorldPos, resolution);
       if (!visual) continue;
-      toolsGroup.add(visual.box, visual.pin, visual.leader.root);
+      // box + pin 始终加入；leader 随 collapsed 控制（与文字 / 云线一致）。
+      toolsGroup.add(visual.box, visual.pin);
+      if (shouldRenderTextAnnotationCard(r.collapsed)) {
+        toolsGroup.add(visual.leader.root);
+      }
 
-      const draft = getInlineTextAnnotationDraft('rect', r.id, r);
-      const label = makeInlineAnnotationCardEl(overlay, '矩形批注', draft.title, draft.description);
-      if (r.severity) label.dataset.severity = r.severity;
-      const labelWorldPos = r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos;
-      labels.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: labelWorldPos, el: label });
+      const rectAnchor = new Vector3(...r.anchorWorldPos);
       rectShapes.set(`rect:${r.id}`, {
         id: `rect:${r.id}`,
-        worldPos: new Vector3(...r.anchorWorldPos),
-        labelWorldPos: labelWorldPos.clone(),
+        worldPos: rectAnchor,
+        labelWorldPos: (r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos).clone(),
         leader: visual.leader,
       });
-      const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
-      const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
-      const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
-      label.addEventListener('click', (ev) => {
+
+      // 新增 DOM marker：与 cloud 一致，提供「双击图钉收起 / 展开」入口。
+      const rectMarker = makeTextAnnotationMarkerEl(overlay, 'R', r.collapsed === true);
+      markers.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: rectAnchor, el: rectMarker });
+      rectMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        if (ev.detail > 1) return;
         activateAnnotation('rect', r.id);
       });
-      label.addEventListener('dblclick', (ev) => {
+      rectMarker.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
-        focusInlineAnnotationEditor('rect', r.id);
-      });
-      label.addEventListener('focusout', () => {
-        queueMicrotask(() => {
-          const activeElement = label.ownerDocument?.activeElement;
-          if (activeElement && label.contains(activeElement)) return;
-          commitInlineAnnotationDraft('rect', r.id);
-        });
-      });
-      dragHandle?.addEventListener('pointerdown', (ev) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-        commitInlineAnnotationDraft('rect', r.id);
-        dragHandle.style.cursor = 'grabbing';
-        beginInlineOverlayAnnotationDrag('rect', r.id, ev, labelWorldPos, new Vector3(...r.anchorWorldPos));
-        try {
-          dragHandle.setPointerCapture(ev.pointerId);
-        } catch {
-          // ignore
-        }
-      });
-      dragHandle?.addEventListener('pointermove', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
-        continueInlineOverlayAnnotationDrag(ev);
-      });
-      dragHandle?.addEventListener('pointerup', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
-        dragHandle.style.cursor = 'grab';
-        endInlineOverlayAnnotationDrag(ev);
-      });
-      dragHandle?.addEventListener('pointercancel', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
-        dragHandle.style.cursor = 'grab';
-        endInlineOverlayAnnotationDrag(ev);
-      });
-      titleInput?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
+        store.setRectAnnotationsCollapsed([r.id], toggleTextAnnotationCollapsed(r.collapsed));
         activateAnnotation('rect', r.id);
-      });
-      titleInput?.addEventListener('input', () => {
-        setInlineAnnotationDraft('rect', r.id, {
-          title: titleInput.value,
-          description: descriptionInput?.value ?? draft.description,
-        });
-      });
-      descriptionInput?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        activateAnnotation('rect', r.id);
-      });
-      descriptionInput?.addEventListener('input', () => {
-        setInlineAnnotationDraft('rect', r.id, {
-          title: titleInput?.value ?? draft.title,
-          description: descriptionInput.value,
-        });
       });
 
-      if (store.pendingRectAnnotationEditId.value === r.id) {
-        queueMicrotask(() => focusInlineAnnotationEditor('rect', r.id));
+      if (shouldRenderTextAnnotationCard(r.collapsed)) {
+        const draft = getInlineTextAnnotationDraft('rect', r.id, r);
+        const label = makeInlineAnnotationCardEl(overlay, '矩形批注', draft.title, draft.description);
+        if (r.severity) label.dataset.severity = r.severity;
+        const labelWorldPos = r.leaderEndWorldPos ? new Vector3(...r.leaderEndWorldPos) : visual.labelWorldPos;
+        labels.set(`rect:${r.id}`, { id: `rect:${r.id}`, worldPos: labelWorldPos, el: label });
+        const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+        const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+        const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+        label.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('rect', r.id);
+        });
+        label.addEventListener('dblclick', (ev) => {
+          ev.stopPropagation();
+          focusInlineAnnotationEditor('rect', r.id);
+        });
+        label.addEventListener('focusout', () => {
+          queueMicrotask(() => {
+            const activeElement = label.ownerDocument?.activeElement;
+            if (activeElement && label.contains(activeElement)) return;
+            commitInlineAnnotationDraft('rect', r.id);
+          });
+        });
+        dragHandle?.addEventListener('pointerdown', (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+          commitInlineAnnotationDraft('rect', r.id);
+          dragHandle.style.cursor = 'grabbing';
+          beginInlineOverlayAnnotationDrag('rect', r.id, ev, labelWorldPos, rectAnchor);
+          try {
+            dragHandle.setPointerCapture(ev.pointerId);
+          } catch {
+            // ignore
+          }
+        });
+        dragHandle?.addEventListener('pointermove', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
+          continueInlineOverlayAnnotationDrag(ev);
+        });
+        dragHandle?.addEventListener('pointerup', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
+          dragHandle.style.cursor = 'grab';
+          endInlineOverlayAnnotationDrag(ev);
+        });
+        dragHandle?.addEventListener('pointercancel', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== r.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'rect') return;
+          dragHandle.style.cursor = 'grab';
+          endInlineOverlayAnnotationDrag(ev);
+        });
+        titleInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('rect', r.id);
+        });
+        titleInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('rect', r.id, {
+            title: titleInput.value,
+            description: descriptionInput?.value ?? draft.description,
+          });
+        });
+        descriptionInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('rect', r.id);
+        });
+        descriptionInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('rect', r.id, {
+            title: titleInput?.value ?? draft.title,
+            description: descriptionInput.value,
+          });
+        });
+
+        if (store.pendingRectAnnotationEditId.value === r.id) {
+          queueMicrotask(() => focusInlineAnnotationEditor('rect', r.id));
+        }
       }
     }
 
@@ -3648,87 +3670,108 @@ export function useDtxTools(options: {
       if (!o.visible) continue;
       const visual = createObbAnnotationVisual(o, resolution);
       if (!visual) continue;
-      toolsGroup.add(visual.box, visual.pin, visual.leader.root);
+      // box + pin 始终加入；leader 随 collapsed 控制（与文字 / 云线 / 矩形一致）。
+      toolsGroup.add(visual.box, visual.pin);
+      if (shouldRenderTextAnnotationCard(o.collapsed)) {
+        toolsGroup.add(visual.leader.root);
+      }
 
-      const draft = getInlineTextAnnotationDraft('obb', o.id, o);
-      const label = makeInlineAnnotationCardEl(overlay, 'OBB 批注', draft.title, draft.description);
-      if (o.severity) label.dataset.severity = o.severity;
       const anchorWorldPos = resolveObbAnnotationAnchorWorldPos(o);
-      labels.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: visual.labelWorldPos.clone(), el: label });
       obbShapes.set(`obb:${o.id}`, {
         id: `obb:${o.id}`,
         worldPos: anchorWorldPos,
         labelWorldPos: visual.labelWorldPos.clone(),
         leader: visual.leader,
       });
-      const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
-      const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
-      const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
 
-      label.addEventListener('click', (ev) => {
+      // 新增 DOM marker：与 cloud / rect 一致，提供「双击图钉收起 / 展开」入口。
+      const obbMarker = makeTextAnnotationMarkerEl(overlay, 'O', o.collapsed === true);
+      markers.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: anchorWorldPos, el: obbMarker });
+      obbMarker.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        if (ev.detail > 1) return;
         activateAnnotation('obb', o.id);
       });
-      label.addEventListener('dblclick', (ev) => {
+      obbMarker.addEventListener('dblclick', (ev) => {
         ev.stopPropagation();
-        focusInlineAnnotationEditor('obb', o.id);
+        store.setObbAnnotationsCollapsed([o.id], toggleTextAnnotationCollapsed(o.collapsed));
+        activateAnnotation('obb', o.id);
       });
-      label.addEventListener('focusout', () => {
-        queueMicrotask(() => {
-          const activeElement = label.ownerDocument?.activeElement;
-          if (activeElement && label.contains(activeElement)) return;
+
+      if (shouldRenderTextAnnotationCard(o.collapsed)) {
+        const draft = getInlineTextAnnotationDraft('obb', o.id, o);
+        const label = makeInlineAnnotationCardEl(overlay, 'OBB 批注', draft.title, draft.description);
+        if (o.severity) label.dataset.severity = o.severity;
+        labels.set(`obb:${o.id}`, { id: `obb:${o.id}`, worldPos: visual.labelWorldPos.clone(), el: label });
+        const dragHandle = label.querySelector('[data-role="annotation-drag-handle"]') as HTMLDivElement | null;
+        const titleInput = label.querySelector('[data-role="annotation-title-input"]') as HTMLInputElement | null;
+        const descriptionInput = label.querySelector('[data-role="annotation-description-input"]') as HTMLTextAreaElement | null;
+
+        label.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('obb', o.id);
+        });
+        label.addEventListener('dblclick', (ev) => {
+          ev.stopPropagation();
+          focusInlineAnnotationEditor('obb', o.id);
+        });
+        label.addEventListener('focusout', () => {
+          queueMicrotask(() => {
+            const activeElement = label.ownerDocument?.activeElement;
+            if (activeElement && label.contains(activeElement)) return;
+            commitInlineAnnotationDraft('obb', o.id);
+          });
+        });
+        dragHandle?.addEventListener('pointerdown', (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
           commitInlineAnnotationDraft('obb', o.id);
+          dragHandle.style.cursor = 'grabbing';
+          beginInlineOverlayAnnotationDrag('obb', o.id, ev, visual.labelWorldPos.clone(), anchorWorldPos);
+          try {
+            dragHandle.setPointerCapture(ev.pointerId);
+          } catch {
+            // ignore
+          }
         });
-      });
-      dragHandle?.addEventListener('pointerdown', (ev) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-        commitInlineAnnotationDraft('obb', o.id);
-        dragHandle.style.cursor = 'grabbing';
-        beginInlineOverlayAnnotationDrag('obb', o.id, ev, visual.labelWorldPos.clone(), anchorWorldPos);
-        try {
-          dragHandle.setPointerCapture(ev.pointerId);
-        } catch {
-          // ignore
-        }
-      });
-      dragHandle?.addEventListener('pointermove', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
-        continueInlineOverlayAnnotationDrag(ev);
-      });
-      dragHandle?.addEventListener('pointerup', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
-        dragHandle.style.cursor = 'grab';
-        endInlineOverlayAnnotationDrag(ev);
-      });
-      dragHandle?.addEventListener('pointercancel', (ev) => {
-        if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
-        dragHandle.style.cursor = 'grab';
-        endInlineOverlayAnnotationDrag(ev);
-      });
-      titleInput?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        activateAnnotation('obb', o.id);
-      });
-      titleInput?.addEventListener('input', () => {
-        setInlineAnnotationDraft('obb', o.id, {
-          title: titleInput.value,
-          description: descriptionInput?.value ?? draft.description,
+        dragHandle?.addEventListener('pointermove', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
+          continueInlineOverlayAnnotationDrag(ev);
         });
-      });
-      descriptionInput?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        activateAnnotation('obb', o.id);
-      });
-      descriptionInput?.addEventListener('input', () => {
-        setInlineAnnotationDraft('obb', o.id, {
-          title: titleInput?.value ?? draft.title,
-          description: descriptionInput.value,
+        dragHandle?.addEventListener('pointerup', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
+          dragHandle.style.cursor = 'grab';
+          endInlineOverlayAnnotationDrag(ev);
         });
-      });
+        dragHandle?.addEventListener('pointercancel', (ev) => {
+          if (inlineOverlayAnnotationDrag.value.annotationId !== o.id || inlineOverlayAnnotationDrag.value.annotationKind !== 'obb') return;
+          dragHandle.style.cursor = 'grab';
+          endInlineOverlayAnnotationDrag(ev);
+        });
+        titleInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('obb', o.id);
+        });
+        titleInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('obb', o.id, {
+            title: titleInput.value,
+            description: descriptionInput?.value ?? draft.description,
+          });
+        });
+        descriptionInput?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          activateAnnotation('obb', o.id);
+        });
+        descriptionInput?.addEventListener('input', () => {
+          setInlineAnnotationDraft('obb', o.id, {
+            title: titleInput?.value ?? draft.title,
+            description: descriptionInput.value,
+          });
+        });
 
-      if (store.pendingObbEditId.value === o.id) {
-        queueMicrotask(() => focusInlineAnnotationEditor('obb', o.id));
+        if (store.pendingObbEditId.value === o.id) {
+          queueMicrotask(() => focusInlineAnnotationEditor('obb', o.id));
+        }
       }
     }
 

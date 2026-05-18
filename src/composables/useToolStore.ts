@@ -379,6 +379,11 @@ export type ObbAnnotationRecord = {
   severity?: AnnotationSeverity;
   authorId?: string;
   screenshot?: AnnotationScreenshot;
+  /**
+   * 与 `AnnotationRecord.collapsed` / `CloudAnnotationRecord.collapsed` 对齐：
+   * true 时只渲染 box + pin（图钉），不渲染文字框 / 引线。双击图钉切换。
+   */
+  collapsed?: boolean;
 };
 
 export type CloudAnnotationRecord = {
@@ -424,6 +429,11 @@ export type RectAnnotationRecord = {
   severity?: AnnotationSeverity;
   authorId?: string;
   screenshot?: AnnotationScreenshot;
+  /**
+   * 与其它批注类型 collapsed 字段对齐：true 时只渲染 box + pin（图钉），
+   * 不渲染文字框 / 引线。双击图钉切换。
+   */
+  collapsed?: boolean;
 };
 
 export type PickedQueryCenter = {
@@ -611,6 +621,7 @@ export function getAnnotationRefnos(record: {
 function normalizeObbAnnotationRecord(rec: ObbAnnotationRecord): ObbAnnotationRecord {
   return {
     ...rec,
+    collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
@@ -630,6 +641,7 @@ function normalizeCloudAnnotationRecord(rec: CloudAnnotationRecord): CloudAnnota
 function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotationRecord {
   return {
     ...rec,
+    collapsed: rec.collapsed === true,
     reviewState: normalizeAnnotationReviewState(rec.reviewState),
     severity: normalizeAnnotationSeverity(rec.severity),
     screenshot: normalizeAnnotationScreenshot(rec.screenshot),
@@ -1353,6 +1365,26 @@ function setCloudAnnotationsCollapsed(ids: string[], collapsed: boolean) {
   const targetIds = new Set(ids.map((id) => id.trim()).filter(Boolean));
   if (targetIds.size === 0) return;
   cloudAnnotations.value = cloudAnnotations.value.map((annotation) => (
+    targetIds.has(annotation.id) ? { ...annotation, collapsed } : annotation
+  ));
+}
+
+// 与 setTextAnnotationsCollapsed / setCloudAnnotationsCollapsed 对齐：
+// 批量切换矩形批注的 collapsed 状态。双击矩形图钉触发。
+function setRectAnnotationsCollapsed(ids: string[], collapsed: boolean) {
+  const targetIds = new Set(ids.map((id) => id.trim()).filter(Boolean));
+  if (targetIds.size === 0) return;
+  rectAnnotations.value = rectAnnotations.value.map((annotation) => (
+    targetIds.has(annotation.id) ? { ...annotation, collapsed } : annotation
+  ));
+}
+
+// 与上述三类批注的 collapsed action 对齐：批量切换 OBB 批注的 collapsed 状态。
+// 双击 OBB 图钉触发。
+function setObbAnnotationsCollapsed(ids: string[], collapsed: boolean) {
+  const targetIds = new Set(ids.map((id) => id.trim()).filter(Boolean));
+  if (targetIds.size === 0) return;
+  obbAnnotations.value = obbAnnotations.value.map((annotation) => (
     targetIds.has(annotation.id) ? { ...annotation, collapsed } : annotation
   ));
 }
@@ -2298,6 +2330,8 @@ export function useToolStore() {
     updateAnnotationVisible,
     setTextAnnotationsCollapsed,
     setCloudAnnotationsCollapsed,
+    setRectAnnotationsCollapsed,
+    setObbAnnotationsCollapsed,
     setAnnotationTypeVisible,
     removeAnnotation,
     clearAnnotations,
