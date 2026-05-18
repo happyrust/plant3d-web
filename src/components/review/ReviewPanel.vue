@@ -1334,96 +1334,15 @@ watch(reviewerWorkbenchViewModeRequest, (request) => {
 });
 
 // ============ 批注列表（详情 + 评论线程） ============
-
-type AnnotationListItem = {
-  id: string;
-  type: AnnotationType;
-  title: string;
-  description: string;
-  createdAt: number;
-  visible: boolean;
-  commentCount: number;
-  refno?: string;
-  formId?: string;
-  reviewState?: AnnotationReviewState;
-};
+// 数据源已统一为 scopedReviewerItems（AnnotationWorkspaceItem[]），
+// split 视图（卡片列表）与 table 视图（批注表格）共享同一份基于
+// buildAnnotationWorkspaceItems + scopeAnnotationWorkspaceItemsByFormId 的源。
+// 详见 docs/plans/2026-05-18-reviewer-split-table-data-source-unification-plan.md
 
 const expandedAnnotationId = ref<string | null>(null);
 const expandedAnnotationType = ref<AnnotationType | null>(null);
 const savingSeverityKeys = ref<string[]>([]);
 const savingTitleKeys = ref<string[]>([]);
-
-const allAnnotationItems = computed<AnnotationListItem[]>(() => {
-  const items: AnnotationListItem[] = [];
-  const scopedFormId = isExternalSjFormFocused.value ? activeReviewFormId.value : null;
-  const shouldIncludeRecord = (record: { formId?: string }) => {
-    if (!scopedFormId) return true;
-    return normalizeFormId(record.formId) === scopedFormId;
-  };
-
-  for (const a of toolStore.annotations.value) {
-    if (!shouldIncludeRecord(a)) continue;
-    items.push({
-      id: a.id,
-      type: 'text',
-      title: a.title?.trim() || '未命名文字批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('text', a.id).length,
-      refno: a.refno,
-      formId: normalizeFormId(a.formId) || undefined,
-      reviewState: a.reviewState,
-    });
-  }
-
-  for (const a of toolStore.cloudAnnotations.value) {
-    if (!shouldIncludeRecord(a)) continue;
-    items.push({
-      id: a.id,
-      type: 'cloud',
-      title: a.title?.trim() || '未命名云线批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('cloud', a.id).length,
-      formId: normalizeFormId(a.formId) || undefined,
-      reviewState: a.reviewState,
-    });
-  }
-
-  for (const a of toolStore.rectAnnotations.value) {
-    if (!shouldIncludeRecord(a)) continue;
-    items.push({
-      id: a.id,
-      type: 'rect',
-      title: a.title?.trim() || '未命名矩形批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('rect', a.id).length,
-      formId: normalizeFormId(a.formId) || undefined,
-      reviewState: a.reviewState,
-    });
-  }
-
-  for (const a of toolStore.obbAnnotations.value) {
-    if (!shouldIncludeRecord(a)) continue;
-    items.push({
-      id: a.id,
-      type: 'obb',
-      title: a.title?.trim() || '未命名包围盒批注',
-      description: a.description?.trim() || '',
-      createdAt: a.createdAt,
-      visible: a.visible,
-      commentCount: toolStore.getAnnotationComments('obb', a.id).length,
-      formId: normalizeFormId(a.formId) || undefined,
-      reviewState: a.reviewState,
-    });
-  }
-
-  return items.sort((a, b) => b.createdAt - a.createdAt);
-});
 
 const totalAnnotationItemCount = computed(() => scopedReviewerItems.value.length);
 
@@ -1539,7 +1458,7 @@ function getAnnotationTypeBadge(type: AnnotationType): { label: string; colorCla
   }
 }
 
-function getAnnotationReviewBadge(item: AnnotationListItem): { label: string; detail: string; color: string } {
+function getAnnotationReviewBadge(item: AnnotationWorkspaceItem): { label: string; detail: string; color: string } {
   return getAnnotationReviewDisplay(item.reviewState);
 }
 
