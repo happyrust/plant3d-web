@@ -59,6 +59,9 @@ function prepareLocalNoProxy(): void {
   process.env.no_proxy = appendNoProxy(process.env.no_proxy);
 }
 
+// 注：原文件 merge 残留两份 postJson 且都不可用（前者引用未定义的 run/label/timeoutId，
+// 后者引用未定义的 withTimeout helper）。这里合并为一个基于 AbortController + setTimeout
+// 的可工作实现，行为对齐契约：JSON 解析失败抛错、非 2xx 抛错、12 秒超时抛错。
 async function postJson<T>(url: string, payload: unknown, bearerToken?: string): Promise<{ status: number; body: T }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
@@ -68,6 +71,7 @@ async function postJson<T>(url: string, payload: unknown, bearerToken?: string):
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Connection: 'close',
         ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
       },
       body: JSON.stringify(payload),
@@ -84,41 +88,14 @@ async function postJson<T>(url: string, payload: unknown, bearerToken?: string):
   const text = await response.text();
   let body: T;
   try {
-    return await run(controller.signal);
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error(`${label} 超时`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
+    body = JSON.parse(text) as T;
+  } catch {
+    throw new Error(`POST ${url} 返回非 JSON：HTTP ${response.status} ${text}`);
   }
-}
-
-async function postJson<T>(url: string, payload: unknown, bearerToken?: string): Promise<{ status: number; body: T }> {
-  return await withTimeout(`POST ${url}`, async (signal) => {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Connection: 'close',
-        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-      },
-      body: JSON.stringify(payload),
-      signal,
-    });
-    const text = await response.text();
-    let body: T;
-    try {
-      body = JSON.parse(text) as T;
-    } catch {
-      throw new Error(`POST ${url} 返回非 JSON：HTTP ${response.status} ${text}`);
-    }
-    if (!response.ok) {
-      throw new Error(`POST ${url} 失败：HTTP ${response.status} ${text}`);
-    }
-    return { status: response.status, body };
-  });
+  if (!response.ok) {
+    throw new Error(`POST ${url} 失败：HTTP ${response.status} ${text}`);
+  }
+  return { status: response.status, body };
 }
 
 async function waitForBackendContractReadiness(env: ReturnType<typeof buildPmsSimulatorEnvironmentConfig>, artifactDir: string): Promise<void> {
