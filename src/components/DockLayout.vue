@@ -19,6 +19,7 @@ import {
   getEmbedLandingPanelIdsWithOptions,
   getVerifiedEmbedFormId,
   getVerifiedEmbedWorkflowMode,
+  isExternalFormFocusedMode,
   isExternalSjFormFocusedMode,
   readEmbedModeParamsFromSearch,
   resolveExternalFormFocusedLandingTarget,
@@ -119,11 +120,18 @@ function isPassiveWorkflowMode(): boolean {
   });
 }
 
-// SJ 经外部 PMS 流程打开带 form_id 的单据时，统一在审核侧 ReviewPanel 内处理批注，
-// 不再让设计侧的「批注处理」面板（DCH）/「退回任务列表」/「发起编校审」/「待审核任务」
-// 这类内部入口出现。详见 .plannotator/plan-sj-reject-ui.md §2 / §5。
-// 判定下沉到 embedRoleLanding.ts 的 isExternalSjFormFocusedMode helper，
-// 与 AnnotationOverlayBar / useDtxTools 共享同一份判断。
+// 任意 reviewer 角色（sj/jd/sh/pz）经外部 PMS 流程打开带 form_id 的单据时，
+// 统一在审核侧 ReviewPanel 内处理批注，不再让「批注处理」面板（DCH）/
+// 「退回任务列表」/「发起编校审」/「待审核任务」这类内部入口出现。
+// 产品规约：「不能跨 form_id 批注，看的就是对应单据的数据」。
+// 详见 .plannotator/plan-sj-reject-ui.md §2 / §5 与
+// 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §13/§14。
+function inExternalFormFocusedMode(): boolean {
+  return isExternalFormFocusedMode(embedModeParams.value);
+}
+
+// SJ 权限边界专用：用于「禁止 SJ 在外部模式下使用 review action / 创建新证据」
+// 等场景，与上面 inExternalFormFocusedMode（form_id 收敛）正交。
 function inExternalSjFormFocusedMode(): boolean {
   return isExternalSjFormFocusedMode(embedModeParams.value);
 }
@@ -133,8 +141,8 @@ function closeBlockedReviewPanels() {
   if (!dockApi) return;
   if (!isPassiveWorkflowMode()) return;
   closePanelIfExists(dockApi, 'myTasks');
-  if (inExternalSjFormFocusedMode()) {
-    // SJ 外部 form_id 模式下，所有「设计侧批注处理 / 退回任务列表 /
+  if (inExternalFormFocusedMode()) {
+    // 任意外部 form_id 聚焦模式下，所有「批注处理 / 退回任务列表 /
     // 发起编校审 / 待审核任务」入口都被收敛到 review 面板，避免出现第二个面板。
     closePanelIfExists(dockApi, 'designerCommentHandling');
     closePanelIfExists(dockApi, 'resubmissionTasks');
@@ -1279,23 +1287,23 @@ function handleRibbonCommand(commandId: string) {
       togglePanel('dashboard');
       return;
     case 'panel.resubmissionTasks':
-      if (inExternalSjFormFocusedMode()) {
-        // SJ 外部 form_id 模式下，「退回任务」收敛到 review 面板。
+      if (inExternalFormFocusedMode()) {
+        // 外部 form_id 模式下，「退回任务」收敛到 review 面板。
         ensurePanelAndActivate('review');
         return;
       }
       togglePanel('designerCommentHandling');
       return;
     case 'panel.designerCommentHandling':
-      if (inExternalSjFormFocusedMode()) {
+      if (inExternalFormFocusedMode()) {
         ensurePanelAndActivate('review');
         return;
       }
       togglePanel('designerCommentHandling');
       return;
     case 'panel.annotationTable': {
-      if (inExternalSjFormFocusedMode()) {
-        // SJ 外部 form_id 模式：强制走 review 面板的批注表格视图。
+      if (inExternalFormFocusedMode()) {
+        // 外部 form_id 模式：强制走 review 面板的批注表格视图。
         ensurePanelAndActivate('review');
         requestReviewerWorkbenchViewMode('table');
         return;

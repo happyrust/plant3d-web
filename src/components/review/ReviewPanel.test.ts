@@ -1756,10 +1756,11 @@ describe('ReviewPanel', () => {
       mounted.unmount();
     });
 
-    it('非 SJ 外部聚焦模式（默认 manual workflow）下，批注表格视图不收敛，仍显示全部批注', async () => {
-      // 默认 beforeEach 设置 sessionStorage.plant3d_workflow_mode='manual'，
-      // 此时 isPassiveWorkflow=false → isExternalSjFormFocused=false → 不过滤。
-      currentTask.value = createTask({ formId: 'FORM-001' });
+    it('activeReviewFormId 为空时（任何 reviewer 角色）批注表格视图不收敛，仍显示全部批注', async () => {
+      // 没有 currentTask.formId / embed_landing_state.formId / embed_mode_params.formId 时，
+      // activeReviewFormId 为 null → isExternalFormFocused=false → 不过滤。
+      // 沿用 2026-05-18 §14 推广后的判断；旧版本要求 role==='sj'，新版本只看 form_id。
+      currentTask.value = createTask({ formId: undefined as unknown as string });
       seedTwoFormAnnotations();
       persistenceState.set('annotationListViewMode', 'table');
 
@@ -1773,7 +1774,12 @@ describe('ReviewPanel', () => {
       mounted.unmount();
     });
 
-    it('passive workflow + 非 SJ 角色（如 jd 校核），批注表格视图不收敛，仍显示全部批注', async () => {
+    it('passive workflow + 非 SJ 角色（如 jd 校核）且带 form_id 时，批注表格视图按当前 form_id 收敛 · 2026-05-18 \u00a714 推广', async () => {
+      // 产品规约：「不能跨 form_id 批注，看的就是对应单据的数据」。
+      // 升级后的 isExternalFormFocusedMode 不再要求 role==='sj'，
+      // 任意 reviewer 角色 + passive workflow + form_id 均启用 form_id scope。
+      // 详见 .plannotator/plan-sj-reject-ui.md §6 与
+      // 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §14。
       sessionStorage.setItem('plant3d_workflow_mode', 'external');
       sessionStorage.setItem('embed_mode_params', JSON.stringify({
         formId: 'FORM-001',
@@ -1793,7 +1799,32 @@ describe('ReviewPanel', () => {
 
       expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
       expect(document.body.textContent).toContain('当前单据批注_scope');
-      expect(document.body.textContent).toContain('其他单据批注_scope');
+      expect(document.body.textContent).not.toContain('其他单据批注_scope');
+
+      mounted.unmount();
+    });
+
+    it('passive workflow + sh 角色 + form_id 时，批注表格视图同样按当前 form_id 收敛 · 2026-05-18 \u00a714 推广', async () => {
+      sessionStorage.setItem('plant3d_workflow_mode', 'external');
+      sessionStorage.setItem('embed_mode_params', JSON.stringify({
+        formId: 'FORM-001',
+        userToken: null,
+        userId: 'reviewer-1',
+        workflowRole: 'sh',
+        projectId: 'project-1',
+        workflowMode: 'external',
+        isEmbedMode: true,
+      }));
+      currentTask.value = createTask({ formId: 'FORM-001', currentNode: 'sh' });
+      seedTwoFormAnnotations();
+      persistenceState.set('annotationListViewMode', 'table');
+
+      const mounted = await mountReviewPanel();
+      await settlePanel();
+
+      expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+      expect(document.body.textContent).toContain('当前单据批注_scope');
+      expect(document.body.textContent).not.toContain('其他单据批注_scope');
 
       mounted.unmount();
     });

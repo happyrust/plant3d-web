@@ -221,7 +221,9 @@ export function resolvePassiveEmbedViewTarget(options: {
  * 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §13。
  *
  * 判定三件套：isPassiveWorkflowMode && workflowRole === 'sj' && 有 verifiedFormId。
- * 任意一处入口需要决定「是否走 DCH」时都应当先调用本函数，true 则强制走 review。
+ * 注意这只覆盖 SJ 一类的「权限/可见性收敛」（比如禁止新增证据 / 隐藏内部入口）；
+ * 任意 reviewer 角色经外部流程聚焦到某个 form_id 的「跨单据批注不可见」规则
+ * 使用更广义的 `isExternalFormFocusedMode`，见下方。
  */
 export function isExternalSjFormFocusedMode(params: EmbedModeParams | null): boolean {
   if (!params) return false;
@@ -229,6 +231,26 @@ export function isExternalSjFormFocusedMode(params: EmbedModeParams | null): boo
   const role = normalizeEmbedRole(params.verifiedClaims?.role)
     ?? normalizeEmbedRole(params.workflowRole);
   if (role !== 'sj') return false;
+  return !!getVerifiedEmbedFormId(params);
+}
+
+/**
+ * 「外部流程 + 已聚焦到某个 form_id」的广义判定：任意 reviewer 角色
+ *（sj / jd / sh / pz）经 PMS / 嵌入入口打开带 form_id 的单据时返回 true。
+ *
+ * 产品规约：**不能跨 form_id 批注，看到的就是对应单据的数据**。任何
+ * 显示批注的视图（卡片列表、批注表格）以及任何隐式打开旁路面板的入口
+ * （ribbon `panel.designerCommentHandling` / `panel.resubmissionTasks` /
+ * `panel.annotationTable` 等）在这个模式下都应当强制收敛到 review 面板，
+ * 且只展示当前 form_id 的批注。
+ *
+ * 与 `isExternalSjFormFocusedMode` 的区别：本函数不限制 workflowRole，
+ * 适用于「显示/收敛」语义；前者仅适用于「SJ 权限边界」语义（如禁止 SJ
+ * 在外部模式下创建新证据 / 不发送内部 review action）。
+ */
+export function isExternalFormFocusedMode(params: EmbedModeParams | null): boolean {
+  if (!params) return false;
+  if (!resolvePassiveWorkflowMode({ embedParams: params })) return false;
   return !!getVerifiedEmbedFormId(params);
 }
 

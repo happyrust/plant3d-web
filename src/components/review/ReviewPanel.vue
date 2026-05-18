@@ -222,6 +222,13 @@ const isExternalSjFormFocused = computed(() => (
   && persistedWorkflowRole.value === 'sj'
   && !!activeReviewFormId.value
 ));
+// 「外部流程 + 已聚焦到某个 form_id」的广义判定：任意 reviewer 角色（含 sj/jd/sh/pz）
+// 在 PMS / 嵌入入口下打开带 form_id 的单据时为 true。仅用于「显示/收敛」语义
+// （form_id scope、隐藏内部入口），不用于 SJ 权限边界（仍用 isExternalSjFormFocused）。
+const isExternalFormFocused = computed(() => (
+  isPassiveWorkflow.value
+  && !!activeReviewFormId.value
+));
 const canCreateReviewEvidence = computed(() => !isExternalSjFormFocused.value);
 const currentTaskStatusLabel = computed(() => {
   if (!currentTask.value) return '-';
@@ -1387,10 +1394,13 @@ const reviewerAnnotationItems = computed<AnnotationWorkspaceItem[]>(() =>
   }),
 );
 
-// form_id 收敛：仅在 SJ 外部 form_id 聚焦模式启用，防止泄露跨单据批注。
-// 行为沿用 2026-05-18 早些 plan 的 A1 决策（参见 .plannotator/plan-sj-reject-ui.md §6）。
+// form_id 收敛：任意 reviewer 角色经外部流程聚焦到某个 form_id 时启用，
+// 防止跨单据批注混入。产品规约：「不能跨 form_id 批注，看的就是对应单据的数据」。
+// 与 isExternalSjFormFocused 不同：此处不限角色，包含 jd/sh/pz/sj。
+// 详见 docs/plans/2026-05-18-reviewer-annotation-table-formid-scope-plan.md
+// 与 .plannotator/plan-sj-reject-ui.md §6。
 const scopedReviewerItems = computed<AnnotationWorkspaceItem[]>(() => {
-  if (!isExternalSjFormFocused.value) return reviewerAnnotationItems.value;
+  if (!isExternalFormFocused.value) return reviewerAnnotationItems.value;
   return scopeAnnotationWorkspaceItemsByFormId(reviewerAnnotationItems.value, activeReviewFormId.value);
 });
 
