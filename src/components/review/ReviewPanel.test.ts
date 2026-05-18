@@ -1679,4 +1679,123 @@ describe('ReviewPanel', () => {
 
     mounted.unmount();
   });
+
+  describe('批注表格视图 form_id scope（2026-05-18 补丁）', () => {
+    // 与同文件的 `external sj form-focused mode only shows existing scoped annotations` 镜像，
+    // 但聚焦在「批注表格」分支：annotationWorkspaceItems 应当和 allAnnotationItems
+    // 一样按 isExternalSjFormFocused + activeReviewFormId 过滤，否则切到表格视图
+    // 会泄露其它 form_id 的批注（违反 .plannotator/plan-sj-reject-ui.md §6）。
+
+    function seedTwoFormAnnotations() {
+      toolStoreMock.annotationCount.value = 2;
+      toolStoreMock.annotations.value = [
+        {
+          id: 'ann-current-form',
+          formId: 'FORM-001',
+          entityId: 'entity-current',
+          worldPos: [0, 0, 0],
+          visible: true,
+          glyph: '1',
+          title: '当前单据批注_scope',
+          description: '只在当前单据可见',
+          severity: 'medium',
+          refnos: ['V-01'],
+          createdAt: 1710000000000,
+        },
+        {
+          id: 'ann-other-form',
+          formId: 'FORM-OTHER',
+          entityId: 'entity-other',
+          worldPos: [0, 0, 0],
+          visible: true,
+          glyph: '2',
+          title: '其他单据批注_scope',
+          description: '不应在 SJ 外部聚焦模式出现',
+          severity: 'medium',
+          refnos: ['P-02'],
+          createdAt: 1710000001000,
+        },
+      ];
+    }
+
+    it('SJ 外部 form_id 聚焦模式下，批注表格视图只显示当前 form_id 的批注', async () => {
+      sessionStorage.setItem('plant3d_workflow_mode', 'external');
+      sessionStorage.setItem('embed_mode_params', JSON.stringify({
+        formId: 'FORM-001',
+        userToken: null,
+        userId: 'designer-1',
+        workflowRole: 'sj',
+        projectId: 'project-1',
+        workflowMode: 'external',
+        isEmbedMode: true,
+      }));
+      sessionStorage.setItem('embed_landing_state', JSON.stringify({
+        target: 'reviewer',
+        formId: 'FORM-001',
+        restoreStatus: 'matched',
+        restoredTaskId: 'task-sj-returned',
+        primaryPanelId: 'review',
+        visiblePanelIds: ['review'],
+      }));
+      currentTask.value = createTask({
+        id: 'task-sj-returned',
+        formId: 'FORM-001',
+        currentNode: 'sj',
+        status: 'draft',
+      });
+      seedTwoFormAnnotations();
+      persistenceState.set('annotationListViewMode', 'table');
+
+      const mounted = await mountReviewPanel();
+      await settlePanel();
+
+      expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+      expect(document.body.textContent).toContain('当前单据批注_scope');
+      expect(document.body.textContent).not.toContain('其他单据批注_scope');
+
+      mounted.unmount();
+    });
+
+    it('非 SJ 外部聚焦模式（默认 manual workflow）下，批注表格视图不收敛，仍显示全部批注', async () => {
+      // 默认 beforeEach 设置 sessionStorage.plant3d_workflow_mode='manual'，
+      // 此时 isPassiveWorkflow=false → isExternalSjFormFocused=false → 不过滤。
+      currentTask.value = createTask({ formId: 'FORM-001' });
+      seedTwoFormAnnotations();
+      persistenceState.set('annotationListViewMode', 'table');
+
+      const mounted = await mountReviewPanel();
+      await settlePanel();
+
+      expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+      expect(document.body.textContent).toContain('当前单据批注_scope');
+      expect(document.body.textContent).toContain('其他单据批注_scope');
+
+      mounted.unmount();
+    });
+
+    it('passive workflow + 非 SJ 角色（如 jd 校核），批注表格视图不收敛，仍显示全部批注', async () => {
+      sessionStorage.setItem('plant3d_workflow_mode', 'external');
+      sessionStorage.setItem('embed_mode_params', JSON.stringify({
+        formId: 'FORM-001',
+        userToken: null,
+        userId: 'checker-1',
+        workflowRole: 'jd',
+        projectId: 'project-1',
+        workflowMode: 'external',
+        isEmbedMode: true,
+      }));
+      currentTask.value = createTask({ formId: 'FORM-001', currentNode: 'jd' });
+      seedTwoFormAnnotations();
+      persistenceState.set('annotationListViewMode', 'table');
+
+      const mounted = await mountReviewPanel();
+      await settlePanel();
+
+      expect(document.querySelector('[data-testid="annotation-table-view"]')).not.toBeNull();
+      expect(document.body.textContent).toContain('当前单据批注_scope');
+      expect(document.body.textContent).toContain('其他单据批注_scope');
+
+      mounted.unmount();
+    });
+  });
 });
