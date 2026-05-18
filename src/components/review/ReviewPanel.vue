@@ -28,6 +28,7 @@ import {
 import AnnotationTableView from './AnnotationTableView.vue';
 import {
   buildAnnotationWorkspaceItems,
+  scopeAnnotationWorkspaceItemsByFormId,
   type AnnotationWorkspaceItem,
 } from './annotationWorkspaceModel';
 import CollisionResultList from './CollisionResultList.vue';
@@ -75,6 +76,7 @@ import {
   reviewSyncExport,
   reviewSyncImport,
 } from '@/api/reviewApi';
+import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
@@ -87,6 +89,7 @@ import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '
 import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import {
+  canEditAnnotationSeverity,
   getAnnotationReviewDisplay,
   getAnnotationSeverityDisplay,
   getRoleDisplayName,
@@ -1347,6 +1350,8 @@ type AnnotationListItem = {
 
 const expandedAnnotationId = ref<string | null>(null);
 const expandedAnnotationType = ref<AnnotationType | null>(null);
+const savingSeverityKeys = ref<string[]>([]);
+const savingTitleKeys = ref<string[]>([]);
 
 const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   const items: AnnotationListItem[] = [];
@@ -1422,15 +1427,70 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
 
 const totalAnnotationItemCount = computed(() => allAnnotationItems.value.length);
 
-const annotationWorkspaceItems = computed<AnnotationWorkspaceItem[]>(() =>
-  buildAnnotationWorkspaceItems({
+const annotationWorkspaceItems = computed<AnnotationWorkspaceItem[]>(() => {
+  const allItems = buildAnnotationWorkspaceItems({
     annotations: toolStore.annotations.value,
     cloudAnnotations: toolStore.cloudAnnotations.value,
     rectAnnotations: toolStore.rectAnnotations.value,
     obbAnnotations: toolStore.obbAnnotations.value,
-    getCommentCount: (type, id) => toolStore.getAnnotationComments(type, id).length,
-  }),
-);
+    getCommentCount: (type, id) => toolStore.getAnnotationComments(
+      type,
+      id,
+      activeReviewFormId.value ?? undefined,
+      currentTask.value?.id ?? undefined,
+    ).length,
+  });
+  // form_id 收敛：仅在 SJ 外部 form_id 聚焦模式启用，与 allAnnotationItems
+  // 的 shouldIncludeRecord 行为严格对齐，防止表格视图泄露其它单据的批注。
+  // 详见 docs/plans/2026-05-18-reviewer-annotation-table-formid-scope-plan.md
+  // 与 .plannotator/plan-sj-reject-ui.md §6。
+  if (!isExternalSjFormFocused.value) return allItems;
+  return scopeAnnotationWorkspaceItemsByFormId(allItems, activeReviewFormId.value);
+});
+
+function buildWorkspaceItemKey(item: AnnotationWorkspaceItem): string {
+  return `${item.type}:${item.id}`;
+}
+
+function canEditWorkspaceItem(item: AnnotationWorkspaceItem): boolean {
+  return canEditAnnotationSeverity(userStore.currentUser.value, item.authorId);
+}
+
+async function handleWorkspaceSeverityUpdate(payload: {
+  item: AnnotationWorkspaceItem;
+  severity: AnnotationSeverity | undefined;
+}) {
+  const key = buildWorkspaceItemKey(payload.item);
+  if (savingSeverityKeys.value.includes(key)) return;
+
+  savingSeverityKeys.value = [...savingSeverityKeys.value, key];
+  try {
+    await saveAnnotationSeverity(payload.item.type, payload.item.id, payload.severity, {
+      formId: activeReviewFormId.value ?? undefined,
+      taskId: currentTask.value?.id ?? undefined,
+    });
+  } finally {
+    savingSeverityKeys.value = savingSeverityKeys.value.filter((entry) => entry !== key);
+  }
+}
+
+async function handleWorkspaceTitleUpdate(payload: {
+  item: AnnotationWorkspaceItem;
+  title: string;
+}) {
+  const key = buildWorkspaceItemKey(payload.item);
+  if (savingTitleKeys.value.includes(key)) return;
+
+  savingTitleKeys.value = [...savingTitleKeys.value, key];
+  try {
+    await saveAnnotationBasicFields(payload.item.type, payload.item.id, { title: payload.title }, {
+      formId: activeReviewFormId.value ?? undefined,
+      taskId: currentTask.value?.id ?? undefined,
+    });
+  } finally {
+    savingTitleKeys.value = savingTitleKeys.value.filter((entry) => entry !== key);
+  }
+}
 
 function findAnnotationListItemFromWorkspace(item: AnnotationWorkspaceItem): AnnotationListItem | undefined {
   return allAnnotationItems.value.find((entry) => entry.id === item.id && entry.type === item.type);
@@ -1830,7 +1890,9 @@ function flyToAnnotationItem(item: AnnotationListItem) {
     </div>
 
     <!-- ═══════ C2.0. 视图模式切换：卡片列表 / 批注表格 ═══════ -->
-    <div v-if="totalAnnotationItemCount > 0"
+    <!-- 显示条件：进入校审任务后即可见（即使暂无批注），允许提前/预切到表格视图等待批注加载；
+         否则若仅依赖 totalAnnotationItemCount > 0，ribbon「批注表格」按钮在无批注时会"按了无反应"。 -->
+    <div v-if="currentTask || annotationListViewMode === 'table'"
       class="inline-flex items-center gap-1 self-start rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
       role="tablist"
       aria-label="批注视图切换"
@@ -1941,6 +2003,7 @@ function flyToAnnotationItem(item: AnnotationListItem) {
               :designer-only="isExternalSjFormFocused"
               :context-form-id="activeReviewFormId"
               :context-task-id="currentTask?.id ?? null"
+              :allow-review-actions="!isExternalSjFormFocused"
               @close="expandedAnnotationId = null; expandedAnnotationType = null" />
           </div>
         </div>
@@ -1948,7 +2011,9 @@ function flyToAnnotationItem(item: AnnotationListItem) {
     </div>
 
     <!-- ═══════ C2.table. 批注表格视图（只读浏览） ═══════ -->
-    <div v-else-if="totalAnnotationItemCount > 0 && annotationListViewMode === 'table'"
+    <!-- 表格区不依赖 totalAnnotationItemCount > 0：AnnotationTableView 自带 empty state，
+         保证用户切到 table 视图后即使暂无批注也能看到容器和提示。 -->
+    <div v-else-if="annotationListViewMode === 'table'"
       class="min-h-[480px]"
       data-testid="reviewer-annotation-table-view-container">
       <AnnotationTableView :items="annotationWorkspaceItems"
@@ -1956,13 +2021,18 @@ function flyToAnnotationItem(item: AnnotationListItem) {
         :current-annotation-type="expandedAnnotationType"
         :task-key="currentTask?.id ?? null"
         :subtitle="currentTask?.title ?? null"
+        :can-edit-item="canEditWorkspaceItem"
+        :saving-severity-keys="savingSeverityKeys"
+        :saving-title-keys="savingTitleKeys"
         empty-title="当前任务下还没有可浏览的批注"
         empty-description="批注创建后会自动出现在这里。"
         data-testid="annotation-table-view"
         @select-annotation="handleTableSelectAnnotation"
         @open-annotation="(item) => void handleTableOpenAnnotation(item)"
         @locate-annotation="(item) => void handleTableOpenAnnotation(item)"
-        @copy-feedback="handleTableCopyFeedback" />
+        @copy-feedback="handleTableCopyFeedback"
+        @update-severity="(payload) => void handleWorkspaceSeverityUpdate(payload)"
+        @update-title="(payload) => void handleWorkspaceTitleUpdate(payload)" />
     </div>
 
     <!-- 弹窗组件 -->
