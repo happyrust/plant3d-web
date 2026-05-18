@@ -6,6 +6,10 @@ import type { PipeDistanceResult } from './usePipeDistanceStore';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import {
+  resolvePipeDistanceSeverity,
+  resolvePipeDistanceSeverityVisuals,
+} from './pipeDistanceSeverity';
+import {
   AnnotationMaterials,
   LinearDimension3D,
 } from '@/utils/three/annotation';
@@ -32,8 +36,10 @@ export function usePipeDistanceAnnotationThree(
         decimals: 0,
         unit: 'mm',
       });
-      dim.setBackgroundColor(0xff6b00);
-      dim.setMaterialSet(materials.orange);
+      const severity = resolvePipeDistanceSeverity(result.distance);
+      const visuals = resolvePipeDistanceSeverityVisuals(severity, materials);
+      dim.setBackgroundColor(visuals.backgroundColor);
+      dim.setMaterialSet(visuals.materialSet);
 
       viewer.scene.add(dim);
       annotations.set(result.id, dim);
