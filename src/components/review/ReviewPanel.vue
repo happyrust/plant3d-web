@@ -76,6 +76,7 @@ import {
   reviewSyncExport,
   reviewSyncImport,
 } from '@/api/reviewApi';
+import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
@@ -883,6 +884,7 @@ watch(currentTask, async (newTask) => {
     returnReason.value = '';
     returnTargetNode.value = 'sj';
     loadWorkflow(newTask.id);
+    void refreshAnnotationReviewStatesForCurrentTask();
   } else {
     workflow.value = null;
     workflowError.value = null;
@@ -893,6 +895,28 @@ watch(currentTask, async (newTask) => {
     returnTargetNode.value = 'sj';
   }
 }, { immediate: true });
+
+// 设计/校核/审核可能在不同浏览器分别操作；切换 task 时主动从后端拉取批注
+// 处理状态，让卡片与时间线能看到对方最新的 fixed/wont_fix + note + history。
+async function refreshAnnotationReviewStatesForCurrentTask(): Promise<void> {
+  const task = currentTask.value;
+  const formId = task?.formId?.trim() || activeReviewFormId.value;
+  if (!task || !formId) return;
+  const taskIdSnapshot = task.id;
+  const result = await syncAnnotationReviewStates({
+    formId,
+    taskId: task.id,
+  });
+  if (currentTask.value?.id !== taskIdSnapshot) return;
+  if (!result.ok && result.errorMessage) {
+    console.warn('[ReviewPanel] 拉取批注处理状态失败:', result.errorMessage);
+  }
+}
+
+watch(activeReviewFormId, () => {
+  if (!currentTask.value) return;
+  void refreshAnnotationReviewStatesForCurrentTask();
+});
 
 watch(
   () => ({
@@ -1888,6 +1912,12 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
                   {{ item.reviewState.updatedByName }}
                   <span v-if="item.reviewState.updatedByRole"> · {{ getRoleDisplayName(item.reviewState.updatedByRole) }}</span>
                   <span v-if="item.reviewState.updatedAt"> · {{ formatAnnotationTime(item.reviewState.updatedAt) }}</span>
+                </div>
+                <div v-if="item.reviewState?.note"
+                  class="mt-1 line-clamp-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] leading-5 text-slate-700"
+                  :data-testid="`reviewer-annotation-card-note-${item.id}`"
+                  :title="item.reviewState.note">
+                  <span class="mr-1 text-[10px] font-semibold text-slate-500">处理回复：</span>{{ item.reviewState.note }}
                 </div>
               </div>
               <span class="shrink-0 text-[11px] text-slate-400">{{ formatAnnotationTime(item.createdAt) }}</span>

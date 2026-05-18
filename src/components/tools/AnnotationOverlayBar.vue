@@ -20,6 +20,7 @@ import {
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import AnnotationColorPicker from '@/components/tools/AnnotationColorPicker.vue';
+import { saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
@@ -306,23 +307,34 @@ const batchActionDisabled = computed<boolean>(() => {
   return currentTypeEditableCount.value === 0;
 });
 
-function setCurrentSeverity(next: AnnotationSeverity | undefined): void {
+async function setCurrentSeverity(next: AnnotationSeverity | undefined): Promise<void> {
   const ctx = currentAnnotation.value;
   if (!ctx) return;
   if (!canEditCurrentSeverity.value) return;
-  store.updateAnnotationSeverity(ctx.type, ctx.id, next);
+  const task = reviewStore.currentTask.value;
+  await saveAnnotationSeverity(ctx.type, ctx.id, next, {
+    formId: task?.formId ?? null,
+    taskId: task?.id ?? null,
+  });
 }
 
-function batchSetCurrentTypeSeverity(next: AnnotationSeverity | undefined): void {
+async function batchSetCurrentTypeSeverity(next: AnnotationSeverity | undefined): Promise<void> {
   const type = currentType.value;
   if (!type) return;
   const user = userStore.currentUser.value;
   if (!user) return;
+  const task = reviewStore.currentTask.value;
+  const ctx = {
+    formId: task?.formId ?? null,
+    taskId: task?.id ?? null,
+  };
   const records = store.getAnnotationRecordsByType(type);
-  for (const r of records) {
-    if (canEditAnnotationSeverity(user, (r as { authorId?: string }).authorId)) {
-      store.updateAnnotationSeverity(type, (r as { id: string }).id, next);
-    }
+  const editableIds = records
+    .filter((r) => canEditAnnotationSeverity(user, (r as { authorId?: string }).authorId))
+    .map((r) => (r as { id: string }).id);
+  // 串行 await 避免触发并发提示风暴；批量入口本就低频。
+  for (const id of editableIds) {
+    await saveAnnotationSeverity(type, id, next, ctx);
   }
 }
 

@@ -214,6 +214,24 @@ export function resolvePassiveEmbedViewTarget(options: {
   return 'reviewer';
 }
 
+/**
+ * SJ 经 PMS 外部流程打开带 form_id 的单据时，所有批注处理统一在审核侧
+ * ReviewPanel 内完成，不再出现「批注处理（DCH）」面板。
+ * 详见 .plannotator/plan-sj-reject-ui.md §2 / §5 与
+ * 开发文档/三维校审/审核面板批注表格视图回归事故复盘-2026-05-17.md §13。
+ *
+ * 判定三件套：isPassiveWorkflowMode && workflowRole === 'sj' && 有 verifiedFormId。
+ * 任意一处入口需要决定「是否走 DCH」时都应当先调用本函数，true 则强制走 review。
+ */
+export function isExternalSjFormFocusedMode(params: EmbedModeParams | null): boolean {
+  if (!params) return false;
+  if (!resolvePassiveWorkflowMode({ embedParams: params })) return false;
+  const role = normalizeEmbedRole(params.verifiedClaims?.role)
+    ?? normalizeEmbedRole(params.workflowRole);
+  if (role !== 'sj') return false;
+  return !!getVerifiedEmbedFormId(params);
+}
+
 export function resolveExternalFormFocusedLandingTarget(options: {
   target: EmbedLandingTarget | null;
   workflowRole?: string | null;

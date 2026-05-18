@@ -31,6 +31,7 @@ import {
 } from './reviewTaskFilters';
 import TaskReviewDetail from './TaskReviewDetail.vue';
 
+import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import {
@@ -919,6 +920,35 @@ watch(
   { immediate: true },
 );
 
+// 校核/审核可能驳回回设计人员；切换 task 时主动拉取批注处理状态，
+// 让设计师看到对方刚刚写的 reject + note + history。
+async function refreshAnnotationReviewStatesForCurrentTask(): Promise<void> {
+  const task = currentTask.value;
+  const formId = task?.formId?.trim() || timelineContextFormId.value;
+  if (!task || !formId) return;
+  const taskIdSnapshot = task.id;
+  const result = await syncAnnotationReviewStates({
+    formId,
+    taskId: task.id,
+  });
+  if (currentTask.value?.id !== taskIdSnapshot) return;
+  if (!result.ok && result.errorMessage) {
+    console.warn('[DesignerCommentHandlingPanel] 拉取批注处理状态失败:', result.errorMessage);
+  }
+}
+
+watch(
+  () => ({
+    taskId: currentTask.value?.id ?? null,
+    formId: timelineContextFormId.value,
+  }),
+  ({ taskId, formId }) => {
+    if (!taskId || !formId) return;
+    void refreshAnnotationReviewStatesForCurrentTask();
+  },
+  { immediate: true },
+);
+
 watch(
   () => filteredAnnotationItems.value.map((item) => `${item.type}:${item.id}:${item.activityAt}`).join('|'),
   () => {
@@ -1472,7 +1502,6 @@ onMounted(() => {
           </div>
         </div>
       </section>
-    </div>
 
     <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="translate-x-full opacity-0"
       enter-to-class="translate-x-0 opacity-100" leave-active-class="transition duration-150 ease-in"
@@ -1595,8 +1624,8 @@ onMounted(() => {
             </button>
           </div>
         </div>
-      </div>
-    </section>
+      </aside>
+    </Transition>
 
     <Teleport to="body">
       <TaskReviewDetail v-if="detailTask" :task="detailTask" @close="detailTask = null" />

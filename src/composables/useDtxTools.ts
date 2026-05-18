@@ -23,6 +23,7 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
 import { getMbdPipeAnnotations, type MbdPipeData } from '@/api/mbdPipeApi';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
+import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import {
@@ -1819,7 +1820,10 @@ export function useDtxTools(options: {
     commitInlineAnnotationDraft(kind, id);
     const currentTask = reviewStore.currentTask.value;
     const currentUser = userStore.currentUser.value;
-    const shouldUseDesignerPanel = (
+    // SJ 经 PMS 外部流程打开带 form_id 的单据时，统一在 review 面板里处理批注，
+    // 不再路由到设计侧 DCH。详见 .plannotator/plan-sj-reject-ui.md §5。
+    const externalSjFormFocused = isExternalSjFormFocusedMode(readPersistedEmbedModeParams());
+    const shouldUseDesignerPanel = !externalSjFormFocused && (
       currentUser?.role === UserRole.DESIGNER
       || (currentTask ? isCanonicalReturnedTask(currentTask) : false)
     );
