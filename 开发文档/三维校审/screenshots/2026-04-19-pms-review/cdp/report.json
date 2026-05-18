@@ -1,33 +1,30 @@
 {
   "base": "http://localhost:3101",
-  "iframeSrc": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsIndvcmtmbG93X21vZGUiOiJleHRlcm5hbCIsImV4cCI6MTc3NjczOTExMywiaWF0IjoxNzc2NjUyNzEzfQ.rWz6drhFJ-DjaFEqJdD8n071eP5JAHOeKr4-xA2-Cf8&user_id=SJ&form_id=FORM-6DA598D756D4",
+  "iframeSrc": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsImV4cCI6MTc3OTE2NDg2MywiaWF0IjoxNzc5MDc4NDYzfQ.5WiJi2pZcNJp8RMwgYd3R7VgUYqBPrYV5h0HnAoMvAY&form_id=FORM-984C2D80137B",
   "consoleErrors": [
-    "pageerror: Invalid grid element",
-    "console.error: Failed to load model projects from API: TypeError: Failed to fetch\n    at http://localhost:3101/src/composables/useModelProjects.ts?t=1776652582423:81:32\n    at loadProjects (http://localhost:3101/src/composables/useModelProjects.ts?t=1776652582423:154:7)\n    at useModelProjects (http://localhost:3101/src/composables/useModelProjects.ts?t=1776652582423:181:3)\n    at applyInitialLanding (http://localhost:3101/src/components/DockLayout.vue?t=1776652591854:1009:41)"
+    "console.error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
   ],
   "stages": [
     {
       "stage": "open-simulator",
       "ok": true,
-      "elapsedMs": 823,
+      "elapsedMs": 1414,
       "value": {
         "title": "三维校审单"
       }
     },
     {
       "stage": "seed-tasks-present",
-      "ok": true,
-      "elapsedMs": 25,
-      "value": {
-        "seedRowCount": 9
-      }
+      "ok": false,
+      "elapsedMs": 21,
+      "note": "expected seed tasks >= 1, got 0"
     },
     {
       "stage": "click-add",
       "ok": true,
-      "elapsedMs": 550,
+      "elapsedMs": 540,
       "value": {
-        "embedFrameUrl": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsIndvcmtmbG93X21vZGUiOiJleHRlcm5hbCIsImV4cCI6MTc3NjczOTExMywiaWF0IjoxNzc2NjUyNzEzfQ.rWz6drhFJ-DjaFEqJdD8n071eP5JAHOeKr4-xA2-Cf8&user_id=SJ&form_id=FORM-6DA598D756D4"
+        "embedFrameUrl": "http://localhost:3101/review/3d-view?output_project=AvevaMarineSample&user_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm9qZWN0X2lkIjoiQXZldmFNYXJpbmVTYW1wbGUiLCJ1c2VyX2lkIjoiU0oiLCJ1c2VyX25hbWUiOiJTSiIsInJvbGUiOiJzaiIsImV4cCI6MTc3OTE2NDg2MywiaWF0IjoxNzc5MDc4NDYzfQ.5WiJi2pZcNJp8RMwgYd3R7VgUYqBPrYV5h0HnAoMvAY&form_id=FORM-984C2D80137B"
       }
     },
     {
@@ -36,27 +33,24 @@
       "elapsedMs": 0,
       "value": {
         "pathname": "/review/3d-view",
-        "formId": "FORM-6DA598D756D4",
-        "userId": "SJ",
+        "formId": "FORM-984C2D80137B",
+        "userId": null,
         "outputProject": "AvevaMarineSample",
-        "userTokenLen": 267
+        "pmsLikeUserIdPresent": false,
+        "userTokenLen": 231
       }
     },
     {
       "stage": "embed-plant3d-ready",
-      "ok": true,
-      "elapsedMs": 1272,
-      "value": {
-        "iframeTitle": "plant3d-web - 3D 模型查看"
-      }
+      "ok": false,
+      "elapsedMs": 20004,
+      "note": "frame.waitForSelector: Timeout 20000ms exceeded.\nCall log:\n  - waiting for locator('body') to be visible\n    43 × locator resolved to hidden <body>…</body>\n"
     },
     {
       "stage": "refresh-list",
-      "ok": true,
-      "elapsedMs": 850,
-      "value": {
-        "seedRowCount": 9
-      }
+      "ok": false,
+      "elapsedMs": 847,
+      "note": "after refresh expected seed rows >= 1, got 0"
     }
   ]
 }
