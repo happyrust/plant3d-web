@@ -912,7 +912,9 @@ async function refreshAnnotationReviewStatesForCurrentTask(): Promise<void> {
   const taskIdSnapshot = task.id;
   const result = await syncAnnotationReviewStates({
     formId,
-    taskId: task.id,
+    // 外部 PMS 按 form_id 聚焦同一张单据，但 SJ/JD/JH 可能恢复到不同内部 taskId。
+    // 按当前 taskId 查询会看不到 SJ 已提交的 fixed/wont_fix，导致 JD/JH 无法同意/驳回。
+    taskId: isExternalFormFocused.value ? undefined : task.id,
   });
   if (currentTask.value?.id !== taskIdSnapshot) return;
   if (!result.ok && result.errorMessage) {
