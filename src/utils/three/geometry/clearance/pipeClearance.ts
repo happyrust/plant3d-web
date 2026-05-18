@@ -231,3 +231,8 @@ function closestPointsBetweenSegments(
   };
 }
 
+// `computePipeSegmentToPipeSegmentClearance` 在调用方与 index 里早就被引用，
+// 但旧实现仍叫 `computePipeToPipeClearance`；保留别名避免 vite 编译时拿不到 export。
+export type PipeSegmentToPipeSegmentClearanceParams = PipeToPipeClearanceParams;
+export const computePipeSegmentToPipeSegmentClearance = computePipeToPipeClearance;
+

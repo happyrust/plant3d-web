@@ -57,6 +57,16 @@
 
 ### 修复
 
+- **外部 form_id 收敛规则推广到任意 reviewer 角色（A2 升级）** (2026-05-18)
+  - 产品规约：「不能跨 form_id 批注，看的就是对应单据的数据」。本次把 2026-05-18 早些只针对 SJ 的外部 form_id 收敛规则推广到任意 reviewer 角色（sj/jd/sh/pz）
+  - `embedRoleLanding.ts` 新增 `isExternalFormFocusedMode(params)`，不再要求 `role === 'sj'`，只看 `isPassiveWorkflowMode + verifiedFormId`
+  - `ReviewPanel.vue` 的 `scopedReviewerItems` form_id 过滤改用 `isExternalFormFocused`；原 `isExternalSjFormFocused` 保留用于 SJ 权限边界（`canCreateReviewEvidence` / `allow-review-actions`）
+  - `DockLayout.vue` 的 `closeBlockedReviewPanels` 与 ribbon command 守卫（`panel.resubmissionTasks` / `designerCommentHandling` / `annotationTable`）改用更广义的 `inExternalFormFocusedMode`，保留 `inExternalSjFormFocusedMode` 用于 SJ 专用语义
+  - `AnnotationOverlayBar` / `useDtxTools` 中按现有 `shouldUseDesignerPanel` 逻辑（DESIGNER 角色 + canonical returned task）对 jd/sh/pz 天然走 review 分支，无需额外升级
+  - 新增 `ReviewPanel.test.ts` 用例：passive workflow + jd / sh 角色 + form_id → 表格按 form_id 收敛；原 manual workflow 用例改为「activeReviewFormId 为空时不过滤」更准确反映新规则
+  - 回归差量：6 套件 33 fail / 67 pass（+1 pass，0 新增 fail）；type-check 0 error；ReviewPanel.vue + DockLayout.vue lint 0/0
+  - 关键文件：`src/components/review/embedRoleLanding.ts`、`src/components/review/ReviewPanel.vue`、`src/components/DockLayout.vue`、`src/components/review/ReviewPanel.test.ts`
+
 - **SJ 外部 form_id 入口全面收敛到 ReviewPanel** (2026-05-18)
   - SJ 经 PMS 外部流程打开带 form_id 的单据时，所有批注处理统一在审核侧 ReviewPanel 内完成，不再单独打开「批注处理」(DCH) / 「退回任务列表」/ 「发起编校审」/ 「待审核任务」面板
   - 新增 `isExternalSjFormFocusedMode()` helper，扩展 `closeBlockedReviewPanels`：SJ 外部 form_id 模式额外关闭 DCH/resubmissionTasks/initiateReview/reviewerTasks

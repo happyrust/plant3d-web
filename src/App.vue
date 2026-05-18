@@ -83,10 +83,11 @@ async function bootstrapEmbedProjectFromToken() {
   }
 }
 
+// 用户反馈：进入项目后不要自动弹向导，只在右上角"?"按钮（openGuideCenter）显式触发时再展示。
+// 保留 currentProject 的 watch 以备后续接入项目级初始化；当前不再调 autoStartIfNeeded。
 watch(currentProject, async (project) => {
   if (project && !isMbdStandaloneMode) {
     await nextTick();
-    onboarding.autoStartIfNeeded();
   }
 });
 
