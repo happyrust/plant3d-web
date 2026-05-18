@@ -2,6 +2,7 @@
 import { computed, onUnmounted } from 'vue';
 
 import {
+  BoxSelect,
   Check,
   MousePointerClick,
   RefreshCw,
@@ -23,6 +24,8 @@ const toolStore = useToolStore();
 const ctx = useViewerContext();
 
 const isPicking = computed(() => toolStore.toolMode.value === 'pick_refno');
+const isBoxPicking = computed(() => toolStore.toolMode.value === 'pick_refno_box');
+const isAnyPicking = computed(() => isPicking.value || isBoxPicking.value);
 
 // 3D 标注渲染
 const annotationVis = usePipeDistanceAnnotationThree(
@@ -38,7 +41,14 @@ onUnmounted(() => {
 // --- pick BRAN pipe ---
 function startPickBran() {
   toolStore.startPickRefno(['BRAN'], (refnos) => {
-    // Enter 确认后，将拾取结果同步到 pipeDistance store
+    for (const refno of refnos) {
+      store.addBranRefno(refno);
+    }
+  });
+}
+
+function startBoxPickBran() {
+  toolStore.startBoxPickRefno(['BRAN'], (refnos) => {
     for (const refno of refnos) {
       store.addBranRefno(refno);
     }
@@ -75,8 +85,7 @@ function onResultClick(index: number, result: PipeDistanceResult) {
 }
 
 function close() {
-  // 如果正在拾取，先取消
-  if (isPicking.value) {
+  if (isAnyPicking.value) {
     toolStore.cancelPickRefno();
   }
   emit('update:open', false);
@@ -134,15 +143,30 @@ const clampedMaxAngle = computed({
             </label>
           </div>
 
-          <!-- 2. 框选 BRAN 管道 -->
+          <!-- 2. 选择 BRAN 管道（点击 + 拖框 两种模式） -->
           <div class="space-y-2 border-b border-border/60 px-4 py-3">
-            <button type="button"
-              class="inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#FF6B00] px-3 py-2 text-sm font-medium text-[#FF6B00] transition-colors hover:bg-[#FF6B00]/10"
-              :class="isPicking ? 'bg-[#FF6B00]/10' : ''"
-              @click="startPickBran">
-              <MousePointerClick class="h-4 w-4" />
-              <span>{{ isPicking ? '点击选择管道... (Enter 确认 / ESC 取消)' : '选择 BRAN 管道' }}</span>
-            </button>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button"
+                class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-[#FF6B00] px-2 py-2 text-xs font-medium text-[#FF6B00] transition-colors hover:bg-[#FF6B00]/10"
+                :class="isPicking ? 'bg-[#FF6B00]/10' : ''"
+                :title="isPicking ? '逐根点击 (Enter 确认 / ESC 取消)' : '逐根点击 BRAN'"
+                @click="startPickBran">
+                <MousePointerClick class="h-3.5 w-3.5" />
+                <span>{{ isPicking ? '点击中...' : '点击选' }}</span>
+              </button>
+              <button type="button"
+                class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-[#FF6B00] px-2 py-2 text-xs font-medium text-[#FF6B00] transition-colors hover:bg-[#FF6B00]/10"
+                :class="isBoxPicking ? 'bg-[#FF6B00]/10' : ''"
+                :title="isBoxPicking ? '在 3D 视图里拖框选择多根 BRAN' : '拖框选择多根 BRAN'"
+                @click="startBoxPickBran">
+                <BoxSelect class="h-3.5 w-3.5" />
+                <span>{{ isBoxPicking ? '拖框中...' : '拖框选' }}</span>
+              </button>
+            </div>
+            <div v-if="isAnyPicking" class="text-[11px] text-muted-foreground">
+              <template v-if="isPicking">逐根点击 BRAN，按 Enter 确认 / ESC 取消</template>
+              <template v-else>在 3D 视图里按住左键拖出选择框（向左拖：完全包含；向右拖：相交即选）</template>
+            </div>
 
             <!-- 已选管道列表 -->
             <div v-if="store.selectedBranRefnos.value.length > 0" class="space-y-1">

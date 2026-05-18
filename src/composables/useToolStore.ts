@@ -47,7 +47,8 @@ export type ToolMode =
   | 'annotation_rect'
   | 'annotation_obb'
   | 'pick_query_center'
-  | 'pick_refno';
+  | 'pick_refno'
+  | 'pick_refno_box';
 
 export type AttributeDisplayMode = 'all' | 'general' | 'component' | 'uda';
 
@@ -1017,8 +1018,8 @@ function setToolMode(mode: ToolMode) {
     clearCurrentXeokitDraft();
   }
   toolMode.value = mode;
-  // 退出 pick_refno 时清理状态
-  if (mode !== 'pick_refno') {
+  // 退出 pick_refno / pick_refno_box 时清理状态
+  if (mode !== 'pick_refno' && mode !== 'pick_refno_box') {
     pickRefnoFilter.value = [];
     pickRefnoCallback.value = null;
     // 注意：pickedRefnos 不在此处清理，由调用方决定
@@ -1037,6 +1038,23 @@ function startPickRefno(nounFilter: string[], onConfirm?: (refnos: string[]) => 
   toolMode.value = 'pick_refno';
 }
 
+/**
+ * 启动框选 refno 拾取模式（marquee box select）
+ *
+ * 与 `startPickRefno` 共享 pickRefnoFilter / pickedRefnos / pickRefnoCallback
+ * 三件状态；用户拖框结束后 useDtxTools 会在 marquee end 时按 nounFilter 过滤
+ * box 内 refnos，append 到 pickedRefnos 并自动调用 confirmPickRefno。
+ *
+ * @param nounFilter noun 类型过滤数组（如 ['BRAN']），空数组=不过滤
+ * @param onConfirm  框选完成后的回调
+ */
+function startBoxPickRefno(nounFilter: string[], onConfirm?: (refnos: string[]) => void) {
+  pickedRefnos.value = [];
+  pickRefnoFilter.value = nounFilter.map(n => n.toUpperCase());
+  pickRefnoCallback.value = onConfirm ?? null;
+  toolMode.value = 'pick_refno_box';
+}
+
 function addPickedRefno(refno: string) {
   if (!pickedRefnos.value.includes(refno)) {
     pickedRefnos.value = [...pickedRefnos.value, refno];
@@ -1050,14 +1068,13 @@ function removePickedRefno(refno: string) {
 function confirmPickRefno() {
   const cb = pickRefnoCallback.value;
   const result = [...pickedRefnos.value];
-  toolMode.value = 'none';
-  // 回调在重置后执行，避免副作用干扰
+  setToolMode('none');
   cb?.(result);
 }
 
 function cancelPickRefno() {
   pickedRefnos.value = [];
-  toolMode.value = 'none';
+  setToolMode('none');
 }
 
 function setAttributeDisplayMode(mode: AttributeDisplayMode) {
@@ -2406,6 +2423,7 @@ export function useToolStore() {
     pickedRefnos,
     pickRefnoCallback,
     startPickRefno,
+    startBoxPickRefno,
     addPickedRefno,
     removePickedRefno,
     confirmPickRefno,

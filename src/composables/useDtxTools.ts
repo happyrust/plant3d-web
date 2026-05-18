@@ -3291,7 +3291,7 @@ export function useDtxTools(options: {
     if (div) div.style.display = 'none';
   }
 
-  function updateMarqueeStyle(mode: 'annotation_cloud' | 'annotation_obb', dx: number) {
+  function updateMarqueeStyle(mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box', dx: number) {
     const div = ensureMarqueeDiv();
     if (!div) return;
     div.style.display = 'block';
@@ -4134,7 +4134,7 @@ export function useDtxTools(options: {
     toolsGroup.add(line);
   }
 
-  function collectRefnosInScreenRect(canvas: HTMLCanvasElement, rect: { x1: number; y1: number; x2: number; y2: number }, mode: 'annotation_cloud' | 'annotation_obb', dx: number): string[] {
+  function collectRefnosInScreenRect(canvas: HTMLCanvasElement, rect: { x1: number; y1: number; x2: number; y2: number }, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box', dx: number): string[] {
     const viewer = compatViewerRef.value;
     const overlay = overlayContainerRef.value;
     const dtxViewer = dtxViewerRef.value;
@@ -4143,7 +4143,7 @@ export function useDtxTools(options: {
     if (!refnos || refnos.length === 0) return [];
 
     const sel: string[] = [];
-    const containMode = mode === 'annotation_obb' && dx < 0;
+    const containMode = (mode === 'annotation_obb' || mode === 'pick_refno_box') && dx < 0;
 
     for (const refno of refnos) {
       const aabb = viewer.scene.getAABB([refno]);
@@ -4187,7 +4187,7 @@ export function useDtxTools(options: {
     return sel;
   }
 
-  function beginMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb') {
+  function beginMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box') {
     if (!ready.value) return;
     if (e.button !== 0) return;
     if (mode === 'annotation_cloud' && !pendingCloudAnchor.value) return;
@@ -4207,7 +4207,7 @@ export function useDtxTools(options: {
     try { canvas.setPointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
-  function moveMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb') {
+  function moveMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box') {
     if (!marqueeState.value.active) return;
     if (marqueeState.value.pointerId !== e.pointerId) return;
     const cur = getCanvasPos(canvas, e);
@@ -4218,7 +4218,7 @@ export function useDtxTools(options: {
     updateMarqueeRect(start, marqueeState.value.currentCanvas);
   }
 
-  function endMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb') {
+  function endMarquee(canvas: HTMLCanvasElement, e: PointerEvent, mode: 'annotation_cloud' | 'annotation_obb' | 'pick_refno_box') {
     if (!marqueeState.value.active) return;
     if (marqueeState.value.pointerId !== e.pointerId) return;
 
@@ -4256,6 +4256,19 @@ export function useDtxTools(options: {
     const dx = end.x - start.x;
     const selectedRefnos = collectRefnosInScreenRect(canvas, rect, mode, dx);
     hideMarquee();
+
+    if (mode === 'pick_refno_box') {
+      const filterUpper = store.pickRefnoFilter.value;
+      const filtered = filterUpper.length === 0
+        ? selectedRefnos
+        : selectedRefnos.filter((refno) => {
+          const noun = findNounByRefnoAcrossAllDbnos(refno);
+          return noun !== null && filterUpper.includes(noun.toUpperCase());
+        });
+      for (const refno of filtered) store.addPickedRefno(refno);
+      store.confirmPickRefno();
+      return;
+    }
 
     if (selectedRefnos.length === 0) return;
 
@@ -4341,8 +4354,8 @@ export function useDtxTools(options: {
     clickTracker.value = { down: { x: e.clientX, y: e.clientY }, moved: false };
 
     const mode = store.toolMode.value;
-    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_query_center') return;
-    if (mode === 'annotation_obb') {
+    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_refno_box' && mode !== 'pick_query_center') return;
+    if (mode === 'annotation_obb' || mode === 'pick_refno_box') {
       beginMarquee(canvas, e, mode);
       return;
     }
@@ -4366,8 +4379,8 @@ export function useDtxTools(options: {
     }
 
     const mode = store.toolMode.value;
-    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_query_center') return;
-    if (mode === 'annotation_cloud' || mode === 'annotation_obb') {
+    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_refno_box' && mode !== 'pick_query_center') return;
+    if (mode === 'annotation_cloud' || mode === 'annotation_obb' || mode === 'pick_refno_box') {
       moveMarquee(canvas, e, mode);
       return;
     }
@@ -4388,11 +4401,11 @@ export function useDtxTools(options: {
     if (!ready.value) return;
 
     const mode = store.toolMode.value;
-    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_query_center') {
+    if (suppressStoreOverlays && mode !== 'none' && mode !== 'pick_refno' && mode !== 'pick_refno_box' && mode !== 'pick_query_center') {
       clickTracker.value = { down: null, moved: false };
       return;
     }
-    if (mode === 'annotation_obb') {
+    if (mode === 'annotation_obb' || mode === 'pick_refno_box') {
       endMarquee(canvas, e, mode);
       return;
     }
