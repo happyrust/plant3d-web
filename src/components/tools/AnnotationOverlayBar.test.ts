@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref, shallowRef } from 'vue';
 
+const saveAnnotationSeverityMock = vi.hoisted(() => vi.fn());
+
 describe('AnnotationOverlayBar', () => {
   beforeEach(() => {
     const storage = new Map<string, string>();
@@ -283,7 +285,11 @@ describe('AnnotationOverlayBar', () => {
     host = null;
   });
 
-  it('更多抽屉中提供当前批注/批量严重度快捷，具备权限时能写入 store', async () => {
+  it('主工具栏与更多抽屉均提供错误类型快捷，具备权限时能保存严重度', async () => {
+    saveAnnotationSeverityMock.mockReset();
+    vi.doMock('@/composables/useAnnotationSeveritySync', () => ({
+      saveAnnotationSeverity: saveAnnotationSeverityMock,
+    }));
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),
     }));
@@ -307,6 +313,10 @@ describe('AnnotationOverlayBar', () => {
     ]);
 
     const store = useToolStore() as any;
+    saveAnnotationSeverityMock.mockImplementation(async (annotationType: string, annotationId: string, severity: string | undefined) => {
+      store.updateAnnotationSeverity(annotationType, annotationId, severity);
+      return true;
+    });
     store.clearAll();
     store.setToolMode('annotation');
     store.addAnnotation({
@@ -342,21 +352,33 @@ describe('AnnotationOverlayBar', () => {
     app.mount(host);
     await nextTick();
 
+    expect(host.querySelector('[data-testid="annotation-overlay-drag-handle"]')).toBeTruthy();
+    (host.querySelector('[data-testid="annotation-overlay-toolbar-severity-trigger"]') as HTMLButtonElement | null)?.click();
+    await nextTick();
+    const toolbarPrinciple = host.querySelector('[data-testid="annotation-overlay-toolbar-severity-principle"]') as HTMLButtonElement | null;
+    expect(toolbarPrinciple).toBeTruthy();
+    toolbarPrinciple?.click();
+    await nextTick();
+    await vi.waitFor(() => {
+      expect(saveAnnotationSeverityMock).toHaveBeenCalled();
+    });
+    expect(saveAnnotationSeverityMock).toHaveBeenCalledWith('text', 'text-sev-1', 'principle', expect.any(Object));
+    expect(store.annotations.value.find((a: any) => a.id === 'text-sev-1').severity).toBe('principle');
+
     (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
     await nextTick();
 
-    const critBtn = host.querySelector('[data-testid="annotation-overlay-severity-critical"]') as HTMLButtonElement | null;
-    expect(critBtn).toBeTruthy();
-    expect(critBtn?.hasAttribute('disabled')).toBe(false);
-    critBtn?.click();
+    const drawingBtn = host.querySelector('[data-testid="annotation-overlay-severity-drawing"]') as HTMLButtonElement | null;
+    expect(drawingBtn).toBeTruthy();
+    drawingBtn?.click();
     await nextTick();
-    expect(store.annotations.value.find((a: any) => a.id === 'text-sev-1').severity).toBe('critical');
+    expect(store.annotations.value.find((a: any) => a.id === 'text-sev-1').severity).toBe('drawing');
 
-    const batchSevBtn = host.querySelector('[data-testid="annotation-overlay-batch-severity-severe"]') as HTMLButtonElement | null;
+    const batchSevBtn = host.querySelector('[data-testid="annotation-overlay-batch-severity-general"]') as HTMLButtonElement | null;
     expect(batchSevBtn).toBeTruthy();
     batchSevBtn?.click();
     await nextTick();
-    expect(store.annotations.value.every((a: any) => a.severity === 'severe')).toBe(true);
+    expect(store.annotations.value.every((a: any) => a.severity === 'general')).toBe(true);
 
     const batchClear = host.querySelector('[data-testid="annotation-overlay-batch-severity-clear"]') as HTMLButtonElement | null;
     batchClear?.click();
@@ -368,7 +390,7 @@ describe('AnnotationOverlayBar', () => {
     host = null;
   });
 
-  it('未登录用户在 drawer 中看到严重度按钮为 disabled', async () => {
+  it('未登录用户在主工具栏与 drawer 中看到严重度按钮为 disabled', async () => {
     vi.doMock('@/composables/useDockApi', () => ({
       ensurePanelAndActivate: vi.fn(),
     }));
@@ -409,13 +431,16 @@ describe('AnnotationOverlayBar', () => {
     app.mount(host);
     await nextTick();
 
+    const trigger = host.querySelector('[data-testid="annotation-overlay-toolbar-severity-trigger"]') as HTMLButtonElement | null;
+    expect(trigger?.hasAttribute('disabled')).toBe(true);
+
     (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
     await nextTick();
 
-    const critBtn = host.querySelector('[data-testid="annotation-overlay-severity-critical"]') as HTMLButtonElement | null;
-    const batchCritBtn = host.querySelector('[data-testid="annotation-overlay-batch-severity-critical"]') as HTMLButtonElement | null;
-    expect(critBtn?.hasAttribute('disabled')).toBe(true);
-    expect(batchCritBtn?.hasAttribute('disabled')).toBe(true);
+    const principleBtn = host.querySelector('[data-testid="annotation-overlay-severity-principle"]') as HTMLButtonElement | null;
+    const batchPrincipleBtn = host.querySelector('[data-testid="annotation-overlay-batch-severity-principle"]') as HTMLButtonElement | null;
+    expect(principleBtn?.hasAttribute('disabled')).toBe(true);
+    expect(batchPrincipleBtn?.hasAttribute('disabled')).toBe(true);
 
     app.unmount();
     host.remove();

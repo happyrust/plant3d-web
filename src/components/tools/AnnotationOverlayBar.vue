@@ -3,10 +3,12 @@ import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 
 import {
   Check,
+  ChevronDown,
   Cloud,
   Eye,
   EyeOff,
   Focus,
+  GripVertical,
   MoreHorizontal,
   PanelRightOpen,
   RectangleHorizontal,
@@ -60,6 +62,25 @@ const reviewStore = useReviewStore();
 const drawerOpen = ref(false);
 const drawerRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
+const severityMenuOpen = ref(false);
+const severityMenuRef = ref<HTMLElement | null>(null);
+const severityTriggerRef = ref<HTMLElement | null>(null);
+const overlayRootRef = ref<HTMLElement | null>(null);
+const overlayOffset = ref<{ x: number; y: number } | null>(null);
+const dragState = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+
+const OVERLAY_POS_STORAGE_KEY = 'plant3d.annotationOverlayPos';
+
+const overlayPositionStyle = computed(() => {
+  if (!overlayOffset.value) return {};
+  return {
+    left: `${overlayOffset.value.x}px`,
+    top: `${overlayOffset.value.y}px`,
+    right: 'auto',
+  };
+});
+
+const hasCustomOverlayPosition = computed(() => overlayOffset.value !== null);
 
 function hexFromNumber(n: number): string {
   return '#' + n.toString(16).padStart(6, '0').toUpperCase();
@@ -344,21 +365,94 @@ function exitAnnotation(): void {
 
 function toggleDrawer(): void {
   drawerOpen.value = !drawerOpen.value;
+  if (drawerOpen.value) severityMenuOpen.value = false;
 }
 
 function closeDrawer(): void {
   drawerOpen.value = false;
 }
 
+function toggleSeverityMenu(): void {
+  if (!canEditCurrentSeverity.value) return;
+  severityMenuOpen.value = !severityMenuOpen.value;
+  if (severityMenuOpen.value) drawerOpen.value = false;
+}
+
+function closeSeverityMenu(): void {
+  severityMenuOpen.value = false;
+}
+
+async function pickSeverityFromMenu(next: AnnotationSeverity | undefined): Promise<void> {
+  closeSeverityMenu();
+  await setCurrentSeverity(next);
+}
+
+function ensureOverlayOffsetFromDom(): { x: number; y: number } {
+  const el = overlayRootRef.value;
+  if (!el) return { x: 16, y: 16 };
+  const rect = el.getBoundingClientRect();
+  return { x: rect.left, y: rect.top };
+}
+
+function persistOverlayOffset(): void {
+  if (!overlayOffset.value) return;
+  try {
+    sessionStorage.setItem(OVERLAY_POS_STORAGE_KEY, JSON.stringify(overlayOffset.value));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function onDragHandlePointerDown(event: PointerEvent): void {
+  if (event.button !== 0) return;
+  const pos = overlayOffset.value ?? ensureOverlayOffsetFromDom();
+  overlayOffset.value = pos;
+  dragState.value = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: pos.x,
+    originY: pos.y,
+  };
+  (event.currentTarget as HTMLElement | null)?.setPointerCapture(event.pointerId);
+  event.preventDefault();
+}
+
+function onDragPointerMove(event: PointerEvent): void {
+  if (!dragState.value) return;
+  const dx = event.clientX - dragState.value.startX;
+  const dy = event.clientY - dragState.value.startY;
+  const maxX = Math.max(8, window.innerWidth - 120);
+  const maxY = Math.max(8, window.innerHeight - 48);
+  overlayOffset.value = {
+    x: Math.min(maxX, Math.max(8, dragState.value.originX + dx)),
+    y: Math.min(maxY, Math.max(8, dragState.value.originY + dy)),
+  };
+}
+
+function endDrag(): void {
+  if (!dragState.value) return;
+  dragState.value = null;
+  persistOverlayOffset();
+}
+
 function handleClickOutside(event: PointerEvent): void {
-  if (!drawerOpen.value) return;
   const target = event.target as Node;
+  if (severityMenuOpen.value) {
+    if (!severityMenuRef.value?.contains(target) && !severityTriggerRef.value?.contains(target)) {
+      closeSeverityMenu();
+    }
+  }
+  if (!drawerOpen.value) return;
   if (drawerRef.value?.contains(target)) return;
   if (triggerRef.value?.contains(target)) return;
   closeDrawer();
 }
 
 function handleWindowKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && severityMenuOpen.value) {
+    closeSeverityMenu();
+    return;
+  }
   if (event.key === 'Escape' && drawerOpen.value) {
     closeDrawer();
     return;
@@ -392,21 +486,40 @@ watch(
 );
 
 onMounted(() => {
+  try {
+    const raw = sessionStorage.getItem(OVERLAY_POS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { x?: number; y?: number };
+      if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+        overlayOffset.value = { x: parsed.x, y: parsed.y };
+      }
+    }
+  } catch {
+    // ignore corrupt storage
+  }
   window.addEventListener('keydown', handleWindowKeydown);
   document.addEventListener('pointerdown', handleClickOutside);
+  window.addEventListener('pointermove', onDragPointerMove);
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleWindowKeydown);
   document.removeEventListener('pointerdown', handleClickOutside);
+  window.removeEventListener('pointermove', onDragPointerMove);
+  window.removeEventListener('pointerup', endDrag);
+  window.removeEventListener('pointercancel', endDrag);
 });
 </script>
 
 <template>
   <div v-if="isVisible"
+    ref="overlayRootRef"
     data-testid="annotation-overlay-root"
-    class="pointer-events-none absolute right-4 top-4 flex justify-end"
-    style="z-index: 940">
+    class="pointer-events-none fixed z-[940] flex justify-end"
+    :class="hasCustomOverlayPosition ? '' : 'right-4 top-4'"
+    :style="overlayPositionStyle">
     <div class="pointer-events-auto flex flex-col items-end gap-2"
       @pointerdown.stop
       @wheel.stop>
@@ -419,9 +532,20 @@ onUnmounted(() => {
         <span>共 {{ store.annotationCount.value + store.cloudAnnotationCount.value + store.rectAnnotationCount.value }}</span>
       </div>
 
-      <!-- 主工具栏（跟随主题色） -->
+      <!-- 主工具栏（跟随主题色，可拖拽） -->
       <div class="relative flex items-center gap-1 rounded-xl border border-border bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur"
         data-testid="annotation-overlay-bar">
+        <button type="button"
+          data-testid="annotation-overlay-drag-handle"
+          class="inline-flex h-8 w-6 cursor-grab items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing"
+          title="拖动工具栏"
+          aria-label="拖动工具栏"
+          @pointerdown.stop="onDragHandlePointerDown">
+          <GripVertical class="h-3.5 w-3.5" />
+        </button>
+
+        <div class="mx-0.5 h-4 w-px bg-border" />
+
         <!-- 打开批注面板 -->
         <button type="button"
           data-testid="annotation-overlay-details-toggle"
@@ -473,6 +597,62 @@ onUnmounted(() => {
 
         <!-- 颜色选择器 -->
         <AnnotationColorPicker v-model="selectedAnnotationColor" />
+
+        <!-- 当前批注错误类型：向下弹出，避免被画布/面板遮挡 -->
+        <template v-if="currentAnnotation">
+          <div class="mx-0.5 h-4 w-px bg-border" />
+          <div data-testid="annotation-overlay-toolbar-severity"
+            class="relative"
+            :class="!canEditCurrentSeverity ? 'opacity-40' : ''">
+            <button ref="severityTriggerRef"
+              type="button"
+              data-testid="annotation-overlay-toolbar-severity-trigger"
+              class="inline-flex h-8 max-w-[7.5rem] items-center gap-1 rounded-lg border border-input bg-background px-2 text-[11px] font-medium transition-colors hover:bg-muted disabled:pointer-events-none"
+              :disabled="!canEditCurrentSeverity"
+              :title="canEditCurrentSeverity ? '选择错误类型' : '当前角色不可修改错误类型'"
+              @click.stop="toggleSeverityMenu">
+              <span v-if="currentSeverity"
+                class="truncate"
+                :class="getAnnotationSeverityDisplay(currentSeverity).color + ' rounded px-1'">
+                {{ getAnnotationSeverityDisplay(currentSeverity).symbol }}
+                {{ getAnnotationSeverityDisplay(currentSeverity).label }}
+              </span>
+              <span v-else class="truncate text-muted-foreground">错误类型</span>
+              <ChevronDown class="h-3 w-3 shrink-0 opacity-60"
+                :class="severityMenuOpen ? 'rotate-180' : ''" />
+            </button>
+            <Transition enter-active-class="transition duration-150 ease-out"
+              enter-from-class="-translate-y-1 scale-95 opacity-0"
+              enter-to-class="translate-y-0 scale-100 opacity-100"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="translate-y-0 scale-100 opacity-100"
+              leave-to-class="-translate-y-1 scale-95 opacity-0">
+              <div v-if="severityMenuOpen"
+                ref="severityMenuRef"
+                data-testid="annotation-overlay-toolbar-severity-menu"
+                class="absolute left-0 top-full z-[960] mt-1 min-w-[9.5rem] overflow-hidden rounded-lg border border-border bg-background/98 py-1 shadow-xl backdrop-blur"
+                @pointerdown.stop>
+                <button v-for="bucket in SEVERITY_QUICK_BUCKETS"
+                  :key="bucket.key"
+                  type="button"
+                  :data-testid="'annotation-overlay-toolbar-severity-' + bucket.key"
+                  class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted"
+                  :class="currentSeverity === bucket.key ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                  @click="pickSeverityFromMenu(bucket.key)">
+                  <span class="inline-block h-2 w-2 rounded-full" :class="bucket.dotClass" />
+                  <span>{{ bucket.label }}</span>
+                </button>
+                <button type="button"
+                  data-testid="annotation-overlay-toolbar-severity-clear"
+                  class="flex w-full items-center gap-2 border-t border-border px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                  :disabled="!currentSeverity"
+                  @click="pickSeverityFromMenu(undefined)">
+                  清除错误类型
+                </button>
+              </div>
+            </Transition>
+          </div>
+        </template>
 
         <div class="mx-0.5 h-4 w-px bg-border" />
 

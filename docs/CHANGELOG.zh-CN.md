@@ -2,6 +2,19 @@
 
 ## 2026-05-19
 
+### 批注浮动工具栏：错误类型下拉选择与可拖拽（校审审批快捷操作）
+
+针对校审/审批在三维场景中给批注设置错误类型（原则 × / 一般 △ / 图面 ○）的操作：
+
+- `AnnotationOverlayBar.vue`：
+  - 选中批注后，主工具栏显示 **「错误类型 ▾」** 触发器；菜单在按钮 **正下方** 展开
+    （`top-full`），避免横排按钮被画布或 Dock 遮挡。
+  - 选项仍经 `saveAnnotationSeverity` 乐观更新并同步后端；校对/审核/经理可按
+    `canEditAnnotationSeverity` 修改他人批注。
+  - 工具栏左侧新增拖动手柄，支持 `fixed` 定位拖动；位置写入
+    `sessionStorage.plant3d.annotationOverlayPos`，同窗口内刷新仍保留。
+- `AnnotationOverlayBar.test.ts`：覆盖下拉选级、拖动手柄、抽屉内批量严重度路径。
+
 ### 外部 PMS 单据批注状态同步与启动健壮性增强（U011 现网体感修复整组）
 
 承接 2026-05-18 «JD/JH 可确认 SJ 已处理的驳回批注» 与 «保留批注状态任务血缘»，
