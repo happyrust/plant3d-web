@@ -116,7 +116,7 @@ onMounted(() => {
                 <v-btn size="small" variant="text" title="切换到普通菜单" @click="toggleMenuMode">
                   <v-icon size="18">mdi-menu</v-icon>
                 </v-btn>
-                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.openGuideCenter('currentRole')">
+                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.startContextualGuide('currentRole')">
                   <v-icon size="18">mdi-help-circle-outline</v-icon>
                 </v-btn>
                 <LayoutToggleButtons />
@@ -132,7 +132,7 @@ onMounted(() => {
                 <v-btn size="small" variant="text" title="切换到 Ribbon 菜单" @click="toggleMenuMode">
                   <v-icon size="18">mdi-ribbon</v-icon>
                 </v-btn>
-                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.openGuideCenter('currentRole')">
+                <v-btn size="small" variant="text" title="三维校审导航" @click="onboarding.startContextualGuide('currentRole')">
                   <v-icon size="18">mdi-help-circle-outline</v-icon>
                 </v-btn>
                 <LayoutToggleButtons />

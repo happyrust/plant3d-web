@@ -84,6 +84,11 @@ type LinkedMeasurementItem = {
   summary: string;
 };
 
+type FormScopedRecord = {
+  formId?: string | null;
+  form_id?: string | null;
+};
+
 const SECTION_META: Record<AnnotationSectionKey, { title: string; tone: string }> = {
   open: { title: '待处理', tone: 'bg-slate-100 text-slate-700' },
   rejected: { title: '已驳回', tone: 'bg-rose-100 text-rose-700' },
@@ -105,6 +110,7 @@ const confirmNote = ref('');
 const confirmSaving = ref(false);
 const confirmError = ref<string | null>(null);
 const refreshingTask = ref(false);
+const embeddedLandingFormId = ref(readEmbeddedLandingFormId());
 
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
   currentTaskId: () => reviewStore.currentTask.value?.id ?? null,
@@ -130,11 +136,32 @@ const latestReturnTimestamp = computed(() => (
   currentTask.value ? getResubmissionLatestReturnTime(currentTask.value.workflowHistory || []) : null
 ));
 const currentTaskConfirmedRecords = confirmedRecordsRestorer.currentTaskRecords;
+const activeReviewFormId = computed(() => currentTask.value?.formId ?? embeddedLandingFormId.value);
+
+function readEmbeddedLandingFormId(): string | null {
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem('embed_landing_state');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { formId?: string | null };
+    return parsed.formId?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function matchesActiveReviewForm(record: FormScopedRecord): boolean {
+  const activeFormId = activeReviewFormId.value;
+  if (!activeFormId) return true;
+  const recordFormId = record.formId ?? record.form_id ?? null;
+  return !recordFormId || recordFormId === activeFormId;
+}
 
 const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   const items: AnnotationListItem[] = [];
 
   for (const annotation of toolStore.annotations.value) {
+    if (!matchesActiveReviewForm(annotation)) continue;
     items.push({
       id: annotation.id,
       type: 'text',
@@ -149,6 +176,7 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   }
 
   for (const annotation of toolStore.cloudAnnotations.value) {
+    if (!matchesActiveReviewForm(annotation)) continue;
     items.push({
       id: annotation.id,
       type: 'cloud',
@@ -163,6 +191,7 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   }
 
   for (const annotation of toolStore.rectAnnotations.value) {
+    if (!matchesActiveReviewForm(annotation)) continue;
     items.push({
       id: annotation.id,
       type: 'rect',
@@ -177,6 +206,7 @@ const allAnnotationItems = computed<AnnotationListItem[]>(() => {
   }
 
   for (const annotation of toolStore.obbAnnotations.value) {
+    if (!matchesActiveReviewForm(annotation)) continue;
     items.push({
       id: annotation.id,
       type: 'obb',

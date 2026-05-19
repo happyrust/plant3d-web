@@ -15,6 +15,8 @@ import {
   reviewerGuide,
 } from '@/components/onboarding/roleGuides/reviewerGuide';
 import { resolveWorkflowMode } from '@/components/review/workflowMode';
+import { ensurePanelAndActivate } from '@/composables/useDockApi';
+import { emitToast } from '@/ribbon/toastBus';
 
 const STORAGE_KEY = 'plant3d-onboarding-v1';
 
@@ -45,6 +47,28 @@ const allGuides: Record<GuideRole, GuideDefinition> = {
   reviewer: reviewerGuide,
   manager: managerGuide,
 };
+
+export function resolveGuideRoleFromUserRole(role: string | null | undefined): GuideRole | null {
+  const normalized = role?.trim().toLowerCase();
+  switch (normalized) {
+    case 'designer':
+    case 'sj':
+      return 'designer';
+    case 'proofreader':
+    case 'jd':
+      return 'proofreader';
+    case 'reviewer':
+    case 'jh':
+    case 'sh':
+      return 'reviewer';
+    case 'manager':
+    case 'admin':
+    case 'pz':
+      return 'manager';
+    default:
+      return null;
+  }
+}
 
 function loadState(): OnboardingPersistedState {
   try {
@@ -176,13 +200,17 @@ function closeGuideCenter() {
   guideCenterOpen.value = false;
 }
 
-function resolveCurrentGuideContext(): GuideContext | null {
+function resolveCurrentGuideRole(): GuideRole | null {
   const userStore = useUserStore();
-  const { menuMode } = useMenuMode();
-  const role = userStore.currentUser.value?.role as GuideRole | undefined;
-  if (!role) return null;
+  return resolveGuideRoleFromUserRole(userStore.currentUser.value?.role);
+}
 
-  const workflowRole = ROLE_TO_WORKFLOW_ROLE[role] ?? 'sj';
+function resolveCurrentGuideContext(): GuideContext | null {
+  const { menuMode } = useMenuMode();
+  const guideRole = resolveCurrentGuideRole();
+  if (!guideRole) return null;
+
+  const workflowRole = ROLE_TO_WORKFLOW_ROLE[guideRole];
   const workflowMode = resolveWorkflowMode() as WorkflowMode;
 
   return { workflowRole, workflowMode, menuMode: menuMode.value };
@@ -207,16 +235,72 @@ async function startGuideForRole(role: GuideRole, options?: StartGuideOptions) {
   const guide = ctx
     ? resolveGuideForUser({ ...ctx, workflowRole })
     : allGuides[role];
-  if (!guide) return;
+  if (!guide) return false;
   await startGuide(guide, options);
+  return true;
 }
 
 async function startGuideForCurrentRole(options?: StartGuideOptions) {
   const ctx = resolveCurrentGuideContext();
-  if (!ctx) return;
+  if (!ctx) return false;
   const guide = resolveGuideForUser(ctx);
-  if (!guide) return;
+  if (!guide) return false;
   await startGuide(guide, options);
+  return true;
+}
+
+function resolveReviewerWorkflowRole(): GuideRole | null {
+  const role = resolveCurrentGuideRole();
+  if (!role || role === 'designer') return null;
+  return role;
+}
+
+function resolveReviewPanelStepId(role: GuideRole, workflowMode: WorkflowMode): string {
+  if (role === 'proofreader') {
+    return workflowMode === 'external' ? 'review-panel-header' : 'review-panel-tools';
+  }
+  return 'review-panel';
+}
+
+function fallbackToGuideCenter(topic: GuideCenterTopic): false {
+  emitToast({
+    message: '暂未识别当前工作流角色，请从导航中心选择教程',
+    level: 'warning',
+  });
+  openGuideCenter(topic);
+  return false;
+}
+
+async function startContextualGuide(topic: GuideCenterTopic): Promise<boolean> {
+  switch (topic) {
+    case 'currentRole': {
+      const started = await startGuideForCurrentRole();
+      return started || fallbackToGuideCenter(topic);
+    }
+    case 'designer':
+    case 'proofreader':
+    case 'reviewer':
+    case 'manager':
+      return startGuideForRole(topic);
+    case 'initiateReview':
+      ensurePanelAndActivate('initiateReview');
+      return startGuideForRole('designer', { stepId: 'initiate-review-panel' });
+    case 'reviewerTasks': {
+      const role = resolveReviewerWorkflowRole();
+      if (!role) return fallbackToGuideCenter(topic);
+      ensurePanelAndActivate('reviewerTasks');
+      return startGuideForRole(role, { stepId: 'reviewer-task-list' });
+    }
+    case 'reviewPanel': {
+      const role = resolveReviewerWorkflowRole();
+      if (!role) return fallbackToGuideCenter(topic);
+      const workflowMode = resolveWorkflowMode() as WorkflowMode;
+      ensurePanelAndActivate('review');
+      return startGuideForRole(role, { stepId: resolveReviewPanelStepId(role, workflowMode) });
+    }
+    default:
+      return false;
+  }
 }
 
 function shouldShowGuideForCurrentUser(): boolean {
@@ -262,6 +346,7 @@ export function useOnboardingGuide() {
     startGuide,
     startGuideForRole,
     startGuideForCurrentRole,
+    startContextualGuide,
     nextStep,
     prevStep,
     goToStep,
@@ -276,6 +361,7 @@ export function useOnboardingGuide() {
     isGuideCompleted,
     resolveGuideForUser,
     resolveCurrentGuideContext,
+    resolveCurrentGuideRole,
     allGuides,
   };
 }

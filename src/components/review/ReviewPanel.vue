@@ -1590,7 +1590,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
           <button type="button"
             class="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
             title="查看校审面板操作指南"
-            @click="onboarding.openGuideCenter('reviewPanel')">
+            @click="onboarding.startContextualGuide('reviewPanel')">
             <HelpCircle class="h-3.5 w-3.5" />
             操作指南
           </button>

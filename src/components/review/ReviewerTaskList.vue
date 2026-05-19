@@ -356,7 +356,7 @@ onMounted(() => {
         <button class="inline-flex h-8 items-center gap-1 rounded-md border border-gray-200 px-2 text-xs text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
           type="button"
           title="查看待办任务操作指南"
-          @click="onboarding.openGuideCenter('reviewerTasks')">
+          @click="onboarding.startContextualGuide('reviewerTasks')">
           <HelpCircle class="h-4 w-4" />
           操作指南
         </button>

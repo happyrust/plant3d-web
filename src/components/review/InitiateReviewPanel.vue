@@ -930,7 +930,7 @@ function closePanel() {
         <button type="button"
           class="inline-flex h-8 items-center gap-1 rounded-md border border-[#E5E7EB] px-2 text-xs text-[#6B7280] transition hover:bg-[#F9FAFB] hover:text-[#374151]"
           title="查看发起编校审操作指南"
-          @click="onboarding.openGuideCenter('initiateReview')">
+          @click="onboarding.startContextualGuide('initiateReview')">
           <HelpCircle class="h-4 w-4" />
           操作指南
         </button>

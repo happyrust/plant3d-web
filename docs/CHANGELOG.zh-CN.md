@@ -2,6 +2,36 @@
 
 ## 2026-05-19
 
+### 教程向导：按当前工作流角色直达对应向导
+
+围绕“三维校审导航 / 操作指南”入口做体验收敛：用户点击帮助按钮后，不再先弹出教程选择窗口，
+而是按当前登录角色和所在面板直接进入最相关的向导步骤。
+
+- `useOnboardingGuide.ts`：
+  - 新增 `resolveGuideRoleFromUserRole()`，统一识别前端角色
+    `designer/proofreader/reviewer/manager/admin` 与工作流码 `sj/jd/jh/sh/pz`。
+  - 新增 `startContextualGuide(topic)`，集中处理“当前角色 + 当前入口 + 起始步骤”的映射：
+    - 顶栏帮助 / `help.reviewGuide`：直接播放当前角色完整向导。
+    - 发起编校审面板：直达设计师“填写编校审信息”步骤。
+    - 待办任务面板：按当前校核 / 审核 / 批准角色直达待办任务步骤。
+    - 校审面板：按当前角色和外部流程模式直达校审面板关键步骤。
+  - 未识别角色不再默认落到设计师向导；改为提示
+    “暂未识别当前工作流角色，请从导航中心选择教程”，并打开导航中心保留当前 topic。
+- `App.vue`、`ReviewGuideCenter.vue`、`InitiateReviewPanel.vue`、
+  `ReviewerTaskList.vue`、`ReviewPanel.vue`：帮助按钮与“操作指南”入口全部切到上下文直启。
+- `DesignerCommentHandlingPanel.vue`：批注处理列表按当前 `formId`（或嵌入落点
+  `embed_landing_state.formId`）过滤，避免外部 PMS 单据场景下跨单据批注混入当前处理上下文。
+- 规划文件：新增 `docs/plans/2026-05-19-onboarding-role-guide-next/`，
+  记录入口矩阵、实现阶段、回归排查 findings 与 progress。
+- 测试：
+  - 新增 `ReviewGuideCenter.test.ts`，锁定 `help.reviewGuide` 直接进入当前角色向导、不打开选择弹窗。
+  - 新增 / 扩展 `useOnboardingGuide.test.ts`，覆盖工作流码角色解析、上下文 topic 直启、
+    外部流程校审面板起点、未识别角色提示与导航中心回退。
+- 验证：`npx vitest run src/components/onboarding/ReviewGuideCenter.test.ts src/composables/useOnboardingGuide.test.ts`
+  7/7 通过；`npm run type-check` 通过。宽回归集合中的
+  `DesignerCommentHandlingPanel.test.ts` / `ReviewPanel.test.ts` 既有失败已记录到 planning findings，
+  建议拆成独立回归修复任务。
+
 ### 批注浮动工具栏：错误类型下拉选择与可拖拽（校审审批快捷操作）
 
 针对校审/审批在三维场景中给批注设置错误类型（原则 × / 一般 △ / 图面 ○）的操作：

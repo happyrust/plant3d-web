@@ -7,20 +7,9 @@ import type { GuideContext, WorkflowRole } from './types';
 
 import Dialog from '@/components/ui/Dialog.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
-import { useOnboardingGuide, type GuideCenterTopic, type GuideRole } from '@/composables/useOnboardingGuide';
+import { resolveGuideRoleFromUserRole, useOnboardingGuide, type GuideCenterTopic, type GuideRole } from '@/composables/useOnboardingGuide';
 import { useUserStore } from '@/composables/useUserStore';
 import { onCommand } from '@/ribbon/commandBus';
-import { UserRole } from '@/types/auth';
-
-function guideRoleFromUserRole(role: string | undefined): GuideRole | null {
-  if (!role) return null;
-  if (role === UserRole.DESIGNER) return 'designer';
-  if (role === UserRole.PROOFREADER) return 'proofreader';
-  if (role === UserRole.REVIEWER) return 'reviewer';
-  if (role === UserRole.MANAGER) return 'manager';
-  if (role === UserRole.ADMIN) return 'manager';
-  return null;
-}
 
 const ROLE_TO_WORKFLOW_ROLE: Record<GuideRole, WorkflowRole> = {
   designer: 'sj',
@@ -67,7 +56,7 @@ const ROLE_SUMMARIES_PASSIVE: Record<GuideRole, string> = {
 
 const roleOrder: GuideRole[] = ['designer', 'proofreader', 'reviewer', 'manager'];
 
-const currentGuideRole = computed(() => guideRoleFromUserRole(userStore.currentUser.value?.role));
+const currentGuideRole = computed(() => resolveGuideRoleFromUserRole(userStore.currentUser.value?.role));
 const currentRoleLabel = computed(() =>
   (currentGuideRole.value ? ROLE_LABELS[currentGuideRole.value] : '当前角色'));
 const currentRoleSummary = computed(() => {
@@ -112,7 +101,7 @@ const quickActions = computed(() => {
     topic: GuideCenterTopic;
     actionLabel: string;
     stepsHint: string;
-    run: () => Promise<void> | void;
+    run: () => Promise<unknown> | void;
   }[] = [];
 
   list.push({
@@ -272,7 +261,7 @@ let offHelpReviewGuide: (() => void) | null = null;
 onMounted(() => {
   offHelpReviewGuide = onCommand((commandId) => {
     if (commandId === 'help.reviewGuide') {
-      onboarding.openGuideCenter('currentRole');
+      void onboarding.startGuideForCurrentRole();
     }
   });
 });
