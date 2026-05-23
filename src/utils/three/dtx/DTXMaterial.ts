@@ -214,6 +214,19 @@ uniform vec3 lightColor1;
 uniform int renderPass;
 uniform float alphaCutoff;
 
+// === 房间凸壳裁剪（P1 阶段：先接入 uniform + 占位实现；P2 起逐步完善 plane/SDF 路径）===
+// 设计见 plant3d-web/goals/room-clip-dual-track/data-source-design.md
+// shader 数据流 see plant3d-web/goals/room-clip-dual-track/assets/dtx-room-clip-shader-data-flow.png
+uniform bool uClipEnabled;
+uniform int  uClipRoomCount;
+
+bool isInsideAnyRoom(vec3 p) {
+  if (!uClipEnabled) return true;
+  if (uClipRoomCount == 0) return true;
+  // 占位：后续 PR 接入 uClipPlanesTexture + uClipMetaTexture + uRoomSdfArray 真判定。
+  return true;
+}
+
 // === 对数深度缓冲 + per-object depth bias ===
 #ifdef USE_LOGDEPTHBUF
   uniform float logDepthBufFC;
@@ -258,6 +271,11 @@ vec3 calculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metalness, float ro
 
 void main() {
   if (vFlags == 0u) {
+    discard;
+  }
+  // 房间凸壳裁剪：被房间边界排除的片元直接 discard。
+  // 未启用裁剪或没选中任何房间时 isInsideAnyRoom 永远返回 true，等价旧行为。
+  if (!isInsideAnyRoom(vWorldPosition)) {
     discard;
   }
   bool isOpaque = vColor.a >= alphaCutoff;
@@ -366,7 +384,11 @@ export class DTXMaterial extends ShaderMaterial {
         lightDirection1: { value: new Vector3(-1, 0.4, -1).normalize() },
         lightColor1: { value: new Vector3(0, 0, 0) },
         renderPass: { value: options.renderPass ?? 0 },
-        alphaCutoff: { value: options.alphaCutoff ?? 0.999 }
+        alphaCutoff: { value: options.alphaCutoff ?? 0.999 },
+
+        // 房间凸壳裁剪（P1 接入占位；P2+ 加 DataTexture / sampler2DArray 真判定）
+        uClipEnabled: { value: false },
+        uClipRoomCount: { value: 0 }
       },
       // 重要：启用 WebGL2 的 GLSL 3.0 语法
       glslVersion: GLSL3
@@ -401,7 +423,25 @@ export class DTXMaterial extends ShaderMaterial {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
     // v11: fragment shader 加 backFaceBias（z-fighting Tier 1，docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md）
-    return 'DTXMaterial_v11';
+    // v12: fragment shader 加房间凸壳裁剪 uniform 占位（uClipEnabled/uClipRoomCount + isInsideAnyRoom），
+    //      详见 goals/room-clip-dual-track/data-source-design.md。
+    return 'DTXMaterial_v12';
+  }
+
+  /**
+   * 设置房间凸壳裁剪开关与房间数。
+   *
+   * P1 阶段：占位 API，仅启用 / 禁用 uniform；shader 内 isInsideAnyRoom 仍永远 true。
+   * P2 起：DTXClipController 在调用此方法前会先上传 uClipPlanesTexture / uClipMetaTexture
+   *        / uRoomSdfArray 等真实裁剪数据。
+   */
+  setRoomClipUniforms(options: { enabled: boolean; roomCount: number }): void {
+    if (this.uniforms.uClipEnabled) {
+      this.uniforms.uClipEnabled.value = options.enabled;
+    }
+    if (this.uniforms.uClipRoomCount) {
+      this.uniforms.uClipRoomCount.value = options.roomCount;
+    }
   }
 
   /**
