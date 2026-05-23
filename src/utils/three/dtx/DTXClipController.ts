@@ -70,13 +70,28 @@ export type RoomClipPayload =
 // DTXClipController
 // ════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Controller 构造参数。
+ *
+ * DTXLayer 同时持有不透明 + 透明 + picking 三种材质，必须**全部**同步裁剪状态，
+ * 否则会出现：
+ * - 透明管道在裁剪边界没被切断（视觉错乱）；
+ * - 被裁的片元仍可被 GPU picker 命中（语义错乱）。
+ */
+export type DTXClipControllerOptions = {
+  mainMaterials: DTXMaterial[];
+  pickingMaterials: DTXPickingMaterial[];
+};
+
 export class DTXClipController {
   private currentRooms: RoomClipPayload[] = [];
+  private readonly mainMaterials: DTXMaterial[];
+  private readonly pickingMaterials: DTXPickingMaterial[];
 
-  constructor(
-    private readonly material: DTXMaterial,
-    private readonly pickingMaterial: DTXPickingMaterial,
-  ) {}
+  constructor(options: DTXClipControllerOptions) {
+    this.mainMaterials = options.mainMaterials.slice();
+    this.pickingMaterials = options.pickingMaterials.slice();
+  }
 
   /**
    * 接入一组房间作为裁剪范围。
@@ -90,16 +105,18 @@ export class DTXClipController {
   setRooms(rooms: RoomClipPayload[]): void {
     this.currentRooms = rooms.slice();
     const enabled = rooms.length > 0;
-    this.material.setRoomClipUniforms({ enabled, roomCount: rooms.length });
-    this.pickingMaterial.setRoomClipUniforms({ enabled, roomCount: rooms.length });
+    const uniforms = { enabled, roomCount: rooms.length };
+    for (const m of this.mainMaterials) m.setRoomClipUniforms(uniforms);
+    for (const m of this.pickingMaterials) m.setRoomClipUniforms(uniforms);
     // TODO(P2): uploadPlanesData(this.currentRooms)
     // TODO(P4): uploadSdfTextures(this.currentRooms.filter(r => r.mode === 'sdf'))
   }
 
   disable(): void {
     this.currentRooms = [];
-    this.material.setRoomClipUniforms({ enabled: false, roomCount: 0 });
-    this.pickingMaterial.setRoomClipUniforms({ enabled: false, roomCount: 0 });
+    const uniforms = { enabled: false, roomCount: 0 };
+    for (const m of this.mainMaterials) m.setRoomClipUniforms(uniforms);
+    for (const m of this.pickingMaterials) m.setRoomClipUniforms(uniforms);
   }
 
   get roomCount(): number {

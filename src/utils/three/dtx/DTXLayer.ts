@@ -38,6 +38,7 @@ import {
   Triangle
 } from 'three';
 
+import { DTXClipController } from './DTXClipController';
 import { DTXGeometry } from './DTXGeometry';
 import { DTXMaterial } from './DTXMaterial';
 import { DTXPickingMaterial } from './DTXPickingMaterial';
@@ -256,6 +257,8 @@ export class DTXLayer {
   private _pickingMaterial: DTXPickingMaterial | null = null;
   /** GPU Picking 网格 */
   private _pickingMesh: Mesh | null = null;
+  /** 房间凸壳裁剪 controller（统一控制 opaque + transparent + picking 三材质的裁剪 uniform） */
+  private _clipController: DTXClipController | null = null;
   /** WebGL 渲染器引用 */
   private _renderer: WebGLRenderer | null = null;
   /** 场景引用 */
@@ -798,6 +801,7 @@ export class DTXLayer {
     this._material?.dispose();
     this._transparentMaterial?.dispose();
     this._pickingMaterial?.dispose();
+    this._clipController?.dispose();
 
     this._geometry = null;
     this._material = null;
@@ -806,6 +810,7 @@ export class DTXLayer {
     this._transparentMesh = null;
     this._pickingMaterial = null;
     this._pickingMesh = null;
+    this._clipController = null;
 
     this._compiled = false;
 
@@ -1208,6 +1213,13 @@ export class DTXLayer {
     this._pickingMesh = new Mesh(this._geometry, this._pickingMaterial);
     this._pickingMesh.frustumCulled = false;
     this._pickingMesh.name = 'DTXLayerPicking';
+
+    // 房间凸壳裁剪 controller：统一管理三种材质的裁剪 uniform。
+    // 必须包含 transparent 与 picking，否则会有视觉 / picking 不一致。
+    this._clipController = new DTXClipController({
+      mainMaterials: [this._material, this._transparentMaterial],
+      pickingMaterials: [this._pickingMaterial],
+    });
   }
 
   // ========== 渲染 ==========
@@ -2286,6 +2298,18 @@ export class DTXLayer {
    */
   get visibilityRevision(): number {
     return this._visibilityRevision;
+  }
+
+  /**
+   * 获取房间凸壳裁剪 controller。
+   *
+   * - 编译完成（`compile()` 之后）才会返回非 null
+   * - 由调用方调用 `setRooms(payloads) / disable()` 管理裁剪状态
+   * - DTXLayer dispose / 重建时会自动清理并重新创建 controller，
+   *   外部如果缓存了引用，需要重新 `getClipController()`
+   */
+  getClipController(): DTXClipController | null {
+    return this._clipController;
   }
 
   // ========== 统计信息 ==========
