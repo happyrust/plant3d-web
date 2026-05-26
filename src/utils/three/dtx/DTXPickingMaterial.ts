@@ -8,8 +8,16 @@ import {
   ShaderMaterial,
   DataTexture,
   Matrix4,
+  Vector3,
+  Vector4,
   GLSL3
 } from 'three';
+
+import {
+  ROOM_CLIP_MAX_PLANES,
+  ROOM_CLIP_MAX_SHAPES,
+  type RoomClipUniformPayload,
+} from './DTXClipController';
 
 // ========== Shader code ==========
 
@@ -137,11 +145,50 @@ in vec3 vWorldPosition;
 // 必须同步，否则被裁的片元仍可被点中，语义错乱。
 uniform bool uClipEnabled;
 uniform int  uClipRoomCount;
+uniform int  uClipShapeCount;
+uniform int  uClipPlaneCount;
+uniform vec4 uClipPlanes[${ROOM_CLIP_MAX_PLANES}];
+uniform int  uClipShapePlaneStart[${ROOM_CLIP_MAX_SHAPES}];
+uniform int  uClipShapePlaneCount[${ROOM_CLIP_MAX_SHAPES}];
+uniform vec3 uClipShapeAabbMin[${ROOM_CLIP_MAX_SHAPES}];
+uniform vec3 uClipShapeAabbMax[${ROOM_CLIP_MAX_SHAPES}];
+
+bool isInsideClipAabb(vec3 p, int shapeIndex) {
+  vec3 mn = uClipShapeAabbMin[shapeIndex];
+  vec3 mx = uClipShapeAabbMax[shapeIndex];
+  return all(greaterThanEqual(p, mn)) && all(lessThanEqual(p, mx));
+}
 
 bool isInsideAnyRoom(vec3 p) {
   if (!uClipEnabled) return true;
   if (uClipRoomCount == 0) return true;
-  return true;
+  if (uClipShapeCount == 0 || uClipPlaneCount == 0) return true;
+
+  for (int shapeIndex = 0; shapeIndex < ${ROOM_CLIP_MAX_SHAPES}; shapeIndex++) {
+    if (shapeIndex >= uClipShapeCount) break;
+    if (!isInsideClipAabb(p, shapeIndex)) continue;
+
+    int planeStart = uClipShapePlaneStart[shapeIndex];
+    int planeCount = uClipShapePlaneCount[shapeIndex];
+    bool insideShape = true;
+
+    for (int localPlaneIndex = 0; localPlaneIndex < ${ROOM_CLIP_MAX_PLANES}; localPlaneIndex++) {
+      if (localPlaneIndex >= planeCount) break;
+      int planeIndex = planeStart + localPlaneIndex;
+      if (planeIndex >= uClipPlaneCount) break;
+
+      vec4 plane = uClipPlanes[planeIndex];
+      float signedDistance = dot(plane.xyz, p) - plane.w;
+      if (signedDistance > 0.0) {
+        insideShape = false;
+        break;
+      }
+    }
+
+    if (insideShape) return true;
+  }
+
+  return false;
 }
 
 // === 对数深度缓冲 + per-object depth bias ===
@@ -189,6 +236,28 @@ export type DTXPickingMaterialOptions = {
   primitiveToObjectTextureWidth?: number;
 }
 
+function createVector3Array(count: number): Vector3[] {
+  return Array.from({ length: count }, () => new Vector3());
+}
+
+function createVector4Array(count: number): Vector4[] {
+  return Array.from({ length: count }, () => new Vector4());
+}
+
+function copyVector3Array(target: Vector3[], source: RoomClipUniformPayload['shapeAabbMins']): void {
+  for (let i = 0; i < target.length; i++) {
+    const v = source[i] ?? [0, 0, 0];
+    target[i]!.set(v[0], v[1], v[2]);
+  }
+}
+
+function copyVector4Array(target: Vector4[], source: RoomClipUniformPayload['planes']): void {
+  for (let i = 0; i < target.length; i++) {
+    const v = source[i] ?? [0, 0, 0, 0];
+    target[i]!.set(v[0], v[1], v[2], v[3]);
+  }
+}
+
 // ========== DTXPickingMaterial ==========
 
 export class DTXPickingMaterial extends ShaderMaterial {
@@ -212,7 +281,14 @@ export class DTXPickingMaterial extends ShaderMaterial {
 
         // 房间凸壳裁剪 uniform（与 DTXMaterial 同步语义；见 DTXMaterial.ts）
         uClipEnabled: { value: false },
-        uClipRoomCount: { value: 0 }
+        uClipRoomCount: { value: 0 },
+        uClipShapeCount: { value: 0 },
+        uClipPlaneCount: { value: 0 },
+        uClipPlanes: { value: createVector4Array(ROOM_CLIP_MAX_PLANES) },
+        uClipShapePlaneStart: { value: new Array(ROOM_CLIP_MAX_SHAPES).fill(0) },
+        uClipShapePlaneCount: { value: new Array(ROOM_CLIP_MAX_SHAPES).fill(0) },
+        uClipShapeAabbMin: { value: createVector3Array(ROOM_CLIP_MAX_SHAPES) },
+        uClipShapeAabbMax: { value: createVector3Array(ROOM_CLIP_MAX_SHAPES) }
       },
       glslVersion: GLSL3
     });
@@ -221,19 +297,38 @@ export class DTXPickingMaterial extends ShaderMaterial {
   }
 
   customProgramCacheKey(): string {
-    // v5: 加房间凸壳裁剪 uniform 占位（uClipEnabled/uClipRoomCount + isInsideAnyRoom），
-    //     同时把 vWorldPosition 加到 picking varying 里供裁剪判定使用。
-    //     必须与 DTXMaterial 同步升版，否则被裁的片元仍可被点中（语义错乱）。
-    return 'DTXPickingMaterial_v5';
+    // v6: 与 DTXMaterial_v13 同步 AABB + plane uniform 裁剪 MVP。
+    return 'DTXPickingMaterial_v6';
   }
 
   /** 与 DTXMaterial.setRoomClipUniforms 同步；裁剪必须双向应用，否则 picking 漏判。 */
-  setRoomClipUniforms(options: { enabled: boolean; roomCount: number }): void {
+  setRoomClipUniforms(options: RoomClipUniformPayload): void {
     if (this.uniforms.uClipEnabled) {
       this.uniforms.uClipEnabled.value = options.enabled;
     }
     if (this.uniforms.uClipRoomCount) {
       this.uniforms.uClipRoomCount.value = options.roomCount;
+    }
+    if (this.uniforms.uClipShapeCount) {
+      this.uniforms.uClipShapeCount.value = options.shapeCount;
+    }
+    if (this.uniforms.uClipPlaneCount) {
+      this.uniforms.uClipPlaneCount.value = options.planeCount;
+    }
+    if (this.uniforms.uClipPlanes) {
+      copyVector4Array(this.uniforms.uClipPlanes.value as Vector4[], options.planes);
+    }
+    if (this.uniforms.uClipShapePlaneStart) {
+      this.uniforms.uClipShapePlaneStart.value = options.shapePlaneStarts.slice();
+    }
+    if (this.uniforms.uClipShapePlaneCount) {
+      this.uniforms.uClipShapePlaneCount.value = options.shapePlaneCounts.slice();
+    }
+    if (this.uniforms.uClipShapeAabbMin) {
+      copyVector3Array(this.uniforms.uClipShapeAabbMin.value as Vector3[], options.shapeAabbMins);
+    }
+    if (this.uniforms.uClipShapeAabbMax) {
+      copyVector3Array(this.uniforms.uClipShapeAabbMax.value as Vector3[], options.shapeAabbMaxs);
     }
   }
 }

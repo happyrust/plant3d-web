@@ -17,6 +17,7 @@ import {
 import { Matrix4, Plane, Vector2, Vector3 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
+import { roomTreeGetAncestors, roomTreeGetChildren } from '@/api/genModelRoomTreeApi';
 import { pdmsGetPtsetWithContext } from '@/api/genModelPdmsAttrApi';
 import { getMbdPipeAnnotations, getMbdPipeV2Annotations } from '@/api/mbdPipeApi';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
@@ -1054,6 +1055,152 @@ async function getTargetRefnos(refno: string): Promise<string[]> {
   return targetRefnos;
 }
 
+function isModelRefnoId(raw: string): boolean {
+  const normalized = normalizeRefnoKeyLike(raw);
+  return !!normalized && /^\d+_\d+$/.test(normalized);
+}
+
+function resolveRoomRefnoFromAncestors(targetRefno: string, ids: string[]): string | null {
+  const target = normalizeRefnoKeyLike(targetRefno);
+  if (!target) return null;
+
+  for (let i = 0; i < ids.length; i += 1) {
+    const id = normalizeRefnoKeyLike(ids[i] || '');
+    if (!id || id === target || !isModelRefnoId(id)) continue;
+    if (String(ids[i - 1] || '').startsWith('comp-group:')) return id;
+  }
+
+  return ids
+    .map((id) => normalizeRefnoKeyLike(id))
+    .find((id): id is string => !!id && id !== target && isModelRefnoId(id)) ?? null;
+}
+
+async function collectRoomModelRefnos(roomRefno: string): Promise<string[]> {
+  const queue = [roomRefno];
+  const visited = new Set<string>();
+  const modelRefnos = new Set<string>();
+  const maxNodes = 10000;
+
+  while (queue.length > 0 && visited.size < maxNodes) {
+    const nodeId = queue.shift()!;
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+
+    const resp = await roomTreeGetChildren(nodeId, 2000);
+    if (!resp.success) continue;
+
+    for (const child of resp.children || []) {
+      const childId = String(child.id || '').trim();
+      if (!childId) continue;
+
+      if (isModelRefnoId(childId) && normalizeRefnoKeyLike(childId) !== roomRefno) {
+        modelRefnos.add(normalizeRefnoKeyLike(childId)!);
+      }
+
+      const hasChildren = (child.children_count ?? 0) > 0;
+      if ((hasChildren || childId.startsWith('comp-group:') || childId.startsWith('room-group:')) && !visited.has(childId)) {
+        queue.push(childId);
+      }
+    }
+  }
+
+  return Array.from(modelRefnos);
+}
+
+async function collectBranRoomSeedRefnos(rootRefno: string): Promise<string[]> {
+  const seeds = new Set<string>();
+  const root = normalizeRefnoKeyLike(rootRefno);
+  if (root) seeds.add(root);
+
+  try {
+    const visibleInsts = await e3dGetVisibleInsts(rootRefno);
+    if (visibleInsts.success) {
+      for (const refno of visibleInsts.refnos || []) {
+        const normalized = normalizeRefnoKeyLike(refno);
+        if (normalized) seeds.add(normalized);
+      }
+    }
+  } catch {
+    // visible-insts 只是补充口径，失败时继续用树遍历结果。
+  }
+
+  const queue = root ? [root] : [];
+  const visited = new Set<string>();
+  const maxNodes = 10000;
+
+  while (queue.length > 0 && visited.size < maxNodes) {
+    const refno = queue.shift()!;
+    if (visited.has(refno)) continue;
+    visited.add(refno);
+
+    try {
+      const resp = await e3dGetChildren(refno, 2000);
+      if (!resp.success) continue;
+
+      for (const child of resp.children || []) {
+        const childRefno = normalizeRefnoKeyLike(child.refno);
+        if (!childRefno) continue;
+
+        seeds.add(childRefno);
+        if ((child.children_count ?? 0) > 0 && !visited.has(childRefno)) {
+          queue.push(childRefno);
+        }
+      }
+    } catch {
+      // 单个子树节点失败不阻断其它节点的房间反查。
+    }
+  }
+
+  return Array.from(seeds);
+}
+
+async function resolveOwningRoomRefnosForBran(rootRefno: string): Promise<string[]> {
+  const seedRefnos = await collectBranRoomSeedRefnos(rootRefno);
+  const roomRefnos = new Set<string>();
+
+  for (const seedRefno of seedRefnos) {
+    try {
+      const ancestors = await roomTreeGetAncestors(seedRefno);
+      if (!ancestors.success) continue;
+
+      const roomRefno = resolveRoomRefnoFromAncestors(seedRefno, ancestors.ids || []);
+      if (roomRefno) roomRefnos.add(roomRefno);
+    } catch {
+      // 部分构件没有 room_relate 时继续检查其它子节点/TUBI。
+    }
+  }
+
+  return Array.from(roomRefnos);
+}
+
+async function loadRoomModelRefnos(roomLabel: string, refnos: string[]): Promise<void> {
+  const mg = modelGenerationRef.value;
+  const compat = compatViewerRef.value;
+  if (!mg || !compat) return;
+
+  const unique = Array.from(new Set(refnos.map((refno) => normalizeRefnoKeyLike(refno)).filter(Boolean))) as string[];
+  let loaded = 0;
+
+  for (const refno of unique) {
+    const ok = await mg.showModelByRefno(refno, { flyTo: false });
+    if (ok) loaded += 1;
+  }
+
+  if (unique.length > 0) {
+    compat.scene.setObjectsVisible(unique, true);
+    const aabb = compat.scene.getAABB(unique);
+    if (aabb) {
+      compat.cameraFlight.flyTo({ aabb, duration: 0.8, fit: true });
+    }
+  }
+
+  consoleStore.addLog(
+    loaded > 0 ? 'info' : 'warn',
+    `[room] show owning room rooms=${roomLabel} requested=${unique.length} loaded=${loaded}`,
+  );
+  requestRender();
+}
+
 async function hideSelected(): Promise<void> {
   const selection = getToolbarSelection();
   if (selection.sceneSelectedRefnos.length === 0 && !selection.primaryRefno) {
@@ -2017,10 +2164,37 @@ function onRightSpatialQueryClick(): void {
   openSpatialQueryDrawer(spatialQueryStore.draft.mode);
 }
 
-function onRightRoomShowAllClick(): void {
-  // 以“房间树当前选中房间”为准：由 ModelTreePanel 消费请求并执行 isolate/flyTo。
-  quickViewReq.requestShowSelectedRoomModels();
-  ensurePanelAndActivate('modelTree');
+async function onRightRoomShowAllClick(): Promise<void> {
+  const selection = getToolbarSelection();
+  const targetRefno = selection.primaryRefno ?? selection.sceneSelectedRefnos[0] ?? null;
+  if (!targetRefno) {
+    toastNeedSelection();
+    return;
+  }
+
+  try {
+    const roomRefnos = await resolveOwningRoomRefnosForBran(targetRefno);
+    if (roomRefnos.length === 0) {
+      emitToast({ message: '未找到当前对象所属房间' });
+      return;
+    }
+
+    const roomModelRefnos = Array.from(new Set((
+      await Promise.all(roomRefnos.map((roomRefno) => collectRoomModelRefnos(roomRefno)))
+    ).flat()));
+    if (roomModelRefnos.length === 0) {
+      emitToast({ message: `房间 ${roomRefnos.join(', ')} 下没有可加载模型` });
+      return;
+    }
+
+    emitToast({ message: `正在加载房间 ${roomRefnos.join(', ')}，共 ${roomModelRefnos.length} 个对象` });
+    await loadRoomModelRefnos(roomRefnos.join(','), roomModelRefnos);
+    ensurePanelAndActivate('modelTree');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emitToast({ message: `加载所属房间失败：${message}` });
+    console.warn('[ViewerPanel] show owning room failed', error);
+  }
 }
 
 function onRightPipeNetworkClick(): void {
@@ -4792,9 +4966,9 @@ onUnmounted(() => {
 
     <MeasurementWizard v-else-if="
                          !isMbdStandaloneMode &&
-                         (store.toolMode.value === 'measure_point_to_object' ||
-                           store.toolMode.value === 'measure_pipe_to_structure' ||
-                           store.toolMode.value === 'measure_pipe_to_pipe') &&
+                           (store.toolMode.value === 'measure_point_to_object' ||
+                             store.toolMode.value === 'measure_pipe_to_structure' ||
+                             store.toolMode.value === 'measure_pipe_to_pipe') &&
                            toolsRef
                        "
       :title="

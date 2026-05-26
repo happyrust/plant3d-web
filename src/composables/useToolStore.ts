@@ -866,6 +866,21 @@ const pendingCloudAnnotationEditId = ref<string | null>(null);
 const pendingRectAnnotationEditId = ref<string | null>(null);
 const pendingDimensionEditId = ref<string | null>(null);
 
+/**
+ * pending draft annotation screenshot：
+ * 用户在批注模式下点 OverlayBar 相机按钮、尚未选中/创建任何批注时，
+ * 先把上传成功的 attachment 暂存到这里；下一次 add{Text,Cloud,Rect,Obb}Annotation 会自动 drain
+ * 进刚创建批注的 `screenshot` 字段。离开任意 annotation toolMode 时清理。
+ *
+ * 仅保留 attachment 关键字段（与 AnnotationScreenshot 同构），不保留预览 blob；
+ * 与 AnnotationPanel 内的 `PendingAnnotationShot`（弹窗预览态、含 capture blob）是两个概念。
+ */
+export type PendingDraftAnnotationShot = AnnotationScreenshot & {
+  formId?: string | null;
+  taskId?: string | null;
+};
+const pendingDraftAnnotationShot = ref<PendingDraftAnnotationShot | null>(null);
+
 const currentXeokitDistanceDraft = ref<XeokitDistanceDraft | null>(null);
 const currentXeokitAngleDraft = ref<XeokitAngleDraft | null>(null);
 const currentXeokitElevationPointDraft = ref<XeokitElevationPointDraft | null>(null);
@@ -911,6 +926,7 @@ function resetTransientUiState() {
   pendingCloudAnnotationEditId.value = null;
   pendingRectAnnotationEditId.value = null;
   pendingDimensionEditId.value = null;
+  pendingDraftAnnotationShot.value = null;
   currentXeokitDistanceDraft.value = null;
   currentXeokitAngleDraft.value = null;
   currentXeokitElevationPointDraft.value = null;
@@ -1015,6 +1031,13 @@ watch(
   { deep: true }
 );
 
+const ANNOTATION_TOOL_MODES = new Set<ToolMode>([
+  'annotation',
+  'annotation_cloud',
+  'annotation_rect',
+  'annotation_obb',
+]);
+
 function setToolMode(mode: ToolMode) {
   // 离开 Xeokit 测量模式时丢弃未完成的预览草稿，避免场景里残留“幽灵测量线”，
   // 而测量面板（非 Xeokit 模式下列的是 DTX 经典 measurements）显示 0 条。
@@ -1026,6 +1049,11 @@ function setToolMode(mode: ToolMode) {
   ) {
     clearCurrentXeokitDraft();
   }
+  // 离开任意 annotation 类 mode 时丢弃 pendingDraftAnnotationShot（语义：用户不再下批注）。
+  // 留给 UI 层订阅本 ref 转化为 toast；本层不耦合 toast 实现。
+  if (ANNOTATION_TOOL_MODES.has(toolMode.value) && !ANNOTATION_TOOL_MODES.has(mode)) {
+    pendingDraftAnnotationShot.value = null;
+  }
   toolMode.value = mode;
   // 退出 pick_refno / pick_refno_box 时清理状态
   if (mode !== 'pick_refno' && mode !== 'pick_refno_box') {
@@ -1033,6 +1061,36 @@ function setToolMode(mode: ToolMode) {
     pickRefnoCallback.value = null;
     // 注意：pickedRefnos 不在此处清理，由调用方决定
   }
+}
+
+/**
+ * pendingDraftAnnotationShot 的 CRUD。consume 会原子取出并清空，专供 add{Type}Annotation drain 使用。
+ * 上层（OverlayBar / Panel）只应调 set/clear，drain 走 _drainPendingShotInto。
+ */
+function setPendingDraftAnnotationShot(shot: PendingDraftAnnotationShot | null): void {
+  pendingDraftAnnotationShot.value = shot;
+}
+
+function clearPendingDraftAnnotationShot(): void {
+  pendingDraftAnnotationShot.value = null;
+}
+
+function consumePendingDraftAnnotationShot(): PendingDraftAnnotationShot | null {
+  const shot = pendingDraftAnnotationShot.value;
+  pendingDraftAnnotationShot.value = null;
+  return shot;
+}
+
+/**
+ * 在新批注 add 之后把暂存截图 drain 到该 record。
+ * 写入仅经过 store（不走后端 PATCH）：新建批注 100% 是草稿，
+ * 持久化由 `confirmCurrentData` 把整个 payload 写入 review_records 兜底。
+ */
+function _drainPendingShotInto(type: AnnotationType, id: string): void {
+  const shot = consumePendingDraftAnnotationShot();
+  if (!shot) return;
+  // setAnnotationScreenshot 在文件下方定义（hoisted）；忽略未找到的极端情况。
+  setAnnotationScreenshot(type, id, shot);
 }
 
 /**
@@ -1311,6 +1369,7 @@ function addAnnotation(rec: AnnotationRecord) {
   annotations.value = [...annotations.value, normalizeAnnotationRecord(withAuthor)];
   activeAnnotationId.value = rec.id;
   pendingTextAnnotationEditId.value = rec.id;
+  _drainPendingShotInto('text', rec.id);
 }
 
 function updateAnnotation(id: string, patch: Partial<AnnotationRecord>) {
@@ -1347,6 +1406,7 @@ function addObbAnnotation(rec: ObbAnnotationRecord) {
   obbAnnotations.value = [...obbAnnotations.value, normalizeObbAnnotationRecord(withAuthor)];
   activeObbAnnotationId.value = rec.id;
   // 不再自动弹出编辑框，用户点击图钉后再编辑
+  _drainPendingShotInto('obb', rec.id);
 }
 
 function updateObbAnnotation(id: string, patch: Partial<ObbAnnotationRecord>) {
@@ -1375,6 +1435,7 @@ function addCloudAnnotation(rec: CloudAnnotationRecord) {
   cloudAnnotations.value = [...cloudAnnotations.value, normalizeCloudAnnotationRecord(withAuthor)];
   activeCloudAnnotationId.value = rec.id;
   pendingCloudAnnotationEditId.value = rec.id;
+  _drainPendingShotInto('cloud', rec.id);
 }
 
 function updateCloudAnnotation(id: string, patch: Partial<CloudAnnotationRecord>) {
@@ -1436,6 +1497,7 @@ function addRectAnnotation(rec: RectAnnotationRecord) {
   rectAnnotations.value = [...rectAnnotations.value, normalizeRectAnnotationRecord(withAuthor)];
   activeRectAnnotationId.value = rec.id;
   pendingRectAnnotationEditId.value = rec.id;
+  _drainPendingShotInto('rect', rec.id);
 }
 
 function updateRectAnnotation(id: string, patch: Partial<RectAnnotationRecord>) {
@@ -2400,6 +2462,11 @@ export function useToolStore() {
     getAnnotationScreenshot,
     setAnnotationScreenshot,
     clearAnnotationScreenshot,
+
+    pendingDraftAnnotationShot,
+    setPendingDraftAnnotationShot,
+    clearPendingDraftAnnotationShot,
+    consumePendingDraftAnnotationShot,
 
     exportJSON,
     importJSON,

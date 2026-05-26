@@ -59,7 +59,7 @@ describe('useToolStore - annotation severity', () => {
     setSearch('?output_project=Sample&show_dbnum=0');
   });
 
-  it('updateAnnotationSeverity 可为 4 种类型批注设置合法严重度', async () => {
+  it('updateAnnotationSeverity 可为 4 种类型批注设置任一合法严重度', async () => {
     mockUser(null);
     const store = await loadStore();
     store.clearAll();
@@ -81,15 +81,15 @@ describe('useToolStore - annotation severity', () => {
       anchor: { kind: 'top_center' }, visible: true, title: 'o', description: '', createdAt: 4, refnos: ['o3'],
     });
 
-    expect(store.updateAnnotationSeverity('text', 't-1', 'critical')).toBe(true);
-    expect(store.updateAnnotationSeverity('cloud', 'c-1', 'severe')).toBe(true);
-    expect(store.updateAnnotationSeverity('rect', 'r-1', 'normal')).toBe(true);
-    expect(store.updateAnnotationSeverity('obb', 'o-1', 'suggestion')).toBe(true);
+    expect(store.updateAnnotationSeverity('text', 't-1', 'principle')).toBe(true);
+    expect(store.updateAnnotationSeverity('cloud', 'c-1', 'general')).toBe(true);
+    expect(store.updateAnnotationSeverity('rect', 'r-1', 'drawing')).toBe(true);
+    expect(store.updateAnnotationSeverity('obb', 'o-1', 'principle')).toBe(true);
 
-    expect(store.annotations.value[0]!.severity).toBe('critical');
-    expect(store.cloudAnnotations.value[0]!.severity).toBe('severe');
-    expect(store.rectAnnotations.value[0]!.severity).toBe('normal');
-    expect(store.obbAnnotations.value[0]!.severity).toBe('suggestion');
+    expect(store.annotations.value[0]!.severity).toBe('principle');
+    expect(store.cloudAnnotations.value[0]!.severity).toBe('general');
+    expect(store.rectAnnotations.value[0]!.severity).toBe('drawing');
+    expect(store.obbAnnotations.value[0]!.severity).toBe('principle');
   });
 
   it('updateAnnotationSeverity 非法值会被规范化为 undefined', async () => {
@@ -102,10 +102,10 @@ describe('useToolStore - annotation severity', () => {
       visible: true, glyph: '1', title: 't', description: '', createdAt: 1,
     });
 
-    store.updateAnnotationSeverity('text', 't-bad', 'severe');
-    expect(store.annotations.value[0]!.severity).toBe('severe');
+    store.updateAnnotationSeverity('text', 't-bad', 'general');
+    expect(store.annotations.value[0]!.severity).toBe('general');
 
-    store.updateAnnotationSeverity('text', 't-bad', 'wtf' as unknown as 'severe');
+    store.updateAnnotationSeverity('text', 't-bad', 'wtf' as unknown as 'general');
     expect(store.annotations.value[0]!.severity).toBeUndefined();
 
     store.updateAnnotationSeverity('text', 't-bad', undefined);
@@ -122,7 +122,7 @@ describe('useToolStore - annotation severity', () => {
       visible: true, glyph: '1', title: 't', description: '', createdAt: 1,
     });
 
-    expect(store.updateAnnotationSeverity('text', 'no-such-id', 'critical')).toBe(false);
+    expect(store.updateAnnotationSeverity('text', 'no-such-id', 'principle')).toBe(false);
     expect(store.annotations.value[0]!.severity).toBeUndefined();
   });
 

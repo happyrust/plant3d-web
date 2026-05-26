@@ -41,6 +41,11 @@ type StartGuideOptions = {
   stepId?: string;
 };
 
+type GuideCompletionContext = {
+  role: string;
+  workflowMode: WorkflowMode;
+};
+
 const allGuides: Record<GuideRole, GuideDefinition> = {
   designer: designerGuide,
   proofreader: proofreaderGuide,
@@ -87,6 +92,7 @@ function saveState(state: OnboardingPersistedState) {
 const active = ref(false);
 const currentStepIndex = ref(0);
 const currentGuide = ref<GuideDefinition | null>(null);
+const currentGuideCompletion = ref<GuideCompletionContext | null>(null);
 const persistedState = ref<OnboardingPersistedState>(loadState());
 const guideCenterOpen = ref(false);
 const guideCenterTopic = ref<GuideCenterTopic>('currentRole');
@@ -146,9 +152,17 @@ async function openStep(index: number) {
   }
 }
 
-async function startGuide(guide: GuideDefinition, options?: StartGuideOptions) {
+async function startGuide(
+  guide: GuideDefinition,
+  options?: StartGuideOptions,
+  completion?: GuideCompletionContext,
+) {
   guideCenterOpen.value = false;
   currentGuide.value = guide;
+  currentGuideCompletion.value = completion ?? {
+    role: guide.role,
+    workflowMode: resolveWorkflowMode() as WorkflowMode,
+  };
   active.value = true;
   await openStep(resolveGuideStepIndex(guide, options));
 }
@@ -175,15 +189,17 @@ async function prevStep() {
 function finishGuide() {
   const userStore = useUserStore();
   const userId = userStore.currentUserId.value;
-  const role = userStore.currentUser.value?.role;
+  const role = currentGuideCompletion.value?.role ?? userStore.currentUser.value?.role;
   const workflowMode = resolveWorkflowMode() as WorkflowMode;
+  const completionWorkflowMode = currentGuideCompletion.value?.workflowMode ?? workflowMode;
 
   if (userId && role) {
-    markGuideCompleted(userId, role, workflowMode);
+    markGuideCompleted(userId, role, completionWorkflowMode);
   }
 
   active.value = false;
   currentGuide.value = null;
+  currentGuideCompletion.value = null;
   currentStepIndex.value = 0;
 }
 
@@ -236,7 +252,10 @@ async function startGuideForRole(role: GuideRole, options?: StartGuideOptions) {
     ? resolveGuideForUser({ ...ctx, workflowRole })
     : allGuides[role];
   if (!guide) return false;
-  await startGuide(guide, options);
+  await startGuide(guide, options, {
+    role,
+    workflowMode: ctx?.workflowMode ?? resolveWorkflowMode() as WorkflowMode,
+  });
   return true;
 }
 
@@ -245,7 +264,12 @@ async function startGuideForCurrentRole(options?: StartGuideOptions) {
   if (!ctx) return false;
   const guide = resolveGuideForUser(ctx);
   if (!guide) return false;
-  await startGuide(guide, options);
+  const userStore = useUserStore();
+  const role = userStore.currentUser.value?.role;
+  await startGuide(guide, options, {
+    role: role ?? guide.role,
+    workflowMode: ctx.workflowMode,
+  });
   return true;
 }
 

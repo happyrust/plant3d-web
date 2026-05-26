@@ -1,11 +1,11 @@
-import type { LengthUnit } from '@/composables/useUnitSettingsStore';
+import { formatLengthMeters } from './unitFormat';
+
 import type {
   MeasurementPoint,
   MeasurementRecord,
   XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
-
-import { formatLengthMeters } from './unitFormat';
+import type { LengthUnit } from '@/composables/useUnitSettingsStore';
 
 type MeasurementLike = MeasurementRecord | XeokitMeasurementRecord;
 

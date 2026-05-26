@@ -2,8 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 
 import {
+  Camera,
   Check,
-  ChevronDown,
   Cloud,
   Eye,
   EyeOff,
@@ -22,16 +22,20 @@ import {
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
 import AnnotationColorPicker from '@/components/tools/AnnotationColorPicker.vue';
+import { requestActiveAnnotationCamera } from '@/composables/annotationCameraTrigger';
 import { saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
 import { useAnnotationStyleStore } from '@/composables/useAnnotationStyleStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { useScreenshot } from '@/composables/useScreenshot';
 import {
   type ActiveAnnotationContext,
   type AnnotationType,
+  type ToolMode,
   useToolStore,
 } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { emitToast } from '@/ribbon/toastBus';
 import {
   ANNOTATION_SEVERITY_VALUES,
   canEditAnnotationSeverity,
@@ -58,13 +62,12 @@ const props = defineProps<{
 const store = useToolStore();
 const styleStore = useAnnotationStyleStore();
 const reviewStore = useReviewStore();
+const { captureViewport, uploadCapturedScreenshot, isCapturing } = useScreenshot();
 
 const drawerOpen = ref(false);
+const isPendingCameraUploading = ref(false);
 const drawerRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
-const severityMenuOpen = ref(false);
-const severityMenuRef = ref<HTMLElement | null>(null);
-const severityTriggerRef = ref<HTMLElement | null>(null);
 const overlayRootRef = ref<HTMLElement | null>(null);
 const overlayOffset = ref<{ x: number; y: number } | null>(null);
 const dragState = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
@@ -108,6 +111,14 @@ const annotationModes = new Set([
   'annotation',
   'annotation_cloud',
   'annotation_rect',
+]);
+
+// 包含 OBB —— 与 useToolStore 内 ANNOTATION_TOOL_MODES 对齐，用于 pending-shot 丢弃时的 toast 提示。
+const PENDING_DRAFT_CLEANUP_MODES = new Set<ToolMode>([
+  'annotation',
+  'annotation_cloud',
+  'annotation_rect',
+  'annotation_obb',
 ]);
 
 const isAnnotationMode = computed(() => annotationModes.has(store.toolMode.value));
@@ -192,6 +203,103 @@ const allVisibilityLabel = computed(() => {
 function setMode(mode: 'annotation' | 'annotation_cloud' | 'annotation_rect') {
   store.setToolMode(store.toolMode.value === mode ? 'none' : mode);
 }
+
+const hasPendingDraftShot = computed(() => !!store.pendingDraftAnnotationShot.value);
+
+const cameraButtonDisabled = computed(() => (
+  isCapturing.value || isPendingCameraUploading.value
+));
+
+const cameraButtonTitle = computed(() => {
+  if (cameraButtonDisabled.value) return '截图中…';
+  if (currentAnnotation.value) {
+    return hasPendingDraftShot.value
+      ? '为当前批注截图（已有待绑定截图将被替换）'
+      : '为当前选中批注截图';
+  }
+  return hasPendingDraftShot.value
+    ? '替换待绑定截图（下一条新建批注会自动关联）'
+    : '截当前视角 · 下一条新建批注会自动关联';
+});
+
+/**
+ * OverlayBar 相机按钮：
+ * - 已选中某条批注 → 通过 bus 唤起 AnnotationPanel 现成的"预览-确认"弹窗（复用同一个 modal）
+ * - 未选中 → 直接采样并上传为 pending draft shot；下一次 addXxxAnnotation 在 store 内自动 drain
+ */
+async function onCameraButtonClick(): Promise<void> {
+  if (cameraButtonDisabled.value) return;
+
+  if (currentAnnotation.value) {
+    requestActiveAnnotationCamera();
+    return;
+  }
+
+  const task = reviewStore.currentTask.value;
+  if (!task?.id) {
+    emitToast({ message: '请先进入校审任务后再截图', level: 'warning' });
+    return;
+  }
+
+  isPendingCameraUploading.value = true;
+  try {
+    const capture = await captureViewport({
+      format: 'image/png',
+      includeOverlays: true,
+    });
+    if (!capture) {
+      emitToast({ message: '截图失败，请重试', level: 'error' });
+      return;
+    }
+    const attachment = await uploadCapturedScreenshot(task.id, capture, {
+      kind: 'annotation_shot_pending',
+      formId: task.formId ?? null,
+      description: '批注前预拍 · 待绑定',
+    });
+    if (!attachment) {
+      emitToast({ message: '截图失败，请重试', level: 'error' });
+      return;
+    }
+    const replacing = !!store.pendingDraftAnnotationShot.value;
+    store.setPendingDraftAnnotationShot({
+      url: attachment.url,
+      attachmentId: attachment.id,
+      name: attachment.name,
+      mimeType: attachment.mimeType || attachment.type,
+      size: attachment.size,
+      width: attachment.width,
+      height: attachment.height,
+      uploadedAt: attachment.uploadedAt,
+      capturedAt: attachment.capturedAt,
+      formId: task.formId ?? null,
+      taskId: task.id,
+    });
+    emitToast({
+      message: replacing
+        ? '已替换待绑定截图，下条新建批注将自动关联'
+        : '已捕获待绑定截图，下条新建批注将自动关联',
+      level: 'success',
+    });
+  } finally {
+    isPendingCameraUploading.value = false;
+  }
+}
+
+// 监听 toolMode 变化：从批注模式切到非批注模式时若 pending 被 store 自动清，弹一条 info toast。
+// 避免静默丢弃造成用户疑惑。
+const pendingDraftShadow = ref(!!store.pendingDraftAnnotationShot.value);
+watch(
+  () => [store.toolMode.value, store.pendingDraftAnnotationShot.value] as const,
+  ([mode, pending], oldValues) => {
+    const prevMode = (oldValues?.[0] ?? mode) as ToolMode;
+    const wasAnnotation = PENDING_DRAFT_CLEANUP_MODES.has(prevMode);
+    const isAnnotation = PENDING_DRAFT_CLEANUP_MODES.has(mode as ToolMode);
+    if (wasAnnotation && !isAnnotation && pendingDraftShadow.value && !pending) {
+      emitToast({ message: '未绑定的截图已丢弃', level: 'info' });
+    }
+    pendingDraftShadow.value = !!pending;
+  },
+);
 
 function openAnnotationPanel(): void {
   const currentTask = reviewStore.currentTask.value;
@@ -299,10 +407,42 @@ function clearAll(): void {
 
 const userStore = useUserStore();
 
-const SEVERITY_QUICK_BUCKETS: { key: AnnotationSeverity; label: string; dotClass: string }[] = [
-  { key: 'principle', label: '原则错误 ×', dotClass: 'bg-red-500' },
-  { key: 'general', label: '一般错误 △', dotClass: 'bg-orange-500' },
-  { key: 'drawing', label: '图面错误 ○', dotClass: 'bg-blue-500' },
+type SeverityQuickBucket = {
+  key: AnnotationSeverity;
+  label: string;
+  symbol: string;
+  dotClass: string;
+  /** toolbar 内未选中态：浅边框 + 主色文本 + 浅 hover 背景 */
+  toolbarIdleClass: string;
+  /** toolbar 内选中态：实色背景 + 主色 ring，提示当前已设值 */
+  toolbarActiveClass: string;
+};
+
+const SEVERITY_QUICK_BUCKETS: SeverityQuickBucket[] = [
+  {
+    key: 'principle',
+    label: '原则错误 ×',
+    symbol: '×',
+    dotClass: 'bg-red-500',
+    toolbarIdleClass: 'border-input text-red-600 hover:bg-red-50',
+    toolbarActiveClass: 'border-red-300 bg-red-100 text-red-700 ring-1 ring-red-300 shadow-sm',
+  },
+  {
+    key: 'general',
+    label: '一般错误 △',
+    symbol: '△',
+    dotClass: 'bg-orange-500',
+    toolbarIdleClass: 'border-input text-orange-600 hover:bg-orange-50',
+    toolbarActiveClass: 'border-orange-300 bg-orange-100 text-orange-700 ring-1 ring-orange-300 shadow-sm',
+  },
+  {
+    key: 'drawing',
+    label: '图面错误 ○',
+    symbol: '○',
+    dotClass: 'bg-blue-500',
+    toolbarIdleClass: 'border-input text-blue-600 hover:bg-blue-50',
+    toolbarActiveClass: 'border-blue-300 bg-blue-100 text-blue-700 ring-1 ring-blue-300 shadow-sm',
+  },
 ];
 
 /** 当前选中批注的严重度（undefined 表示未设置） */
@@ -365,26 +505,10 @@ function exitAnnotation(): void {
 
 function toggleDrawer(): void {
   drawerOpen.value = !drawerOpen.value;
-  if (drawerOpen.value) severityMenuOpen.value = false;
 }
 
 function closeDrawer(): void {
   drawerOpen.value = false;
-}
-
-function toggleSeverityMenu(): void {
-  if (!canEditCurrentSeverity.value) return;
-  severityMenuOpen.value = !severityMenuOpen.value;
-  if (severityMenuOpen.value) drawerOpen.value = false;
-}
-
-function closeSeverityMenu(): void {
-  severityMenuOpen.value = false;
-}
-
-async function pickSeverityFromMenu(next: AnnotationSeverity | undefined): Promise<void> {
-  closeSeverityMenu();
-  await setCurrentSeverity(next);
 }
 
 function ensureOverlayOffsetFromDom(): { x: number; y: number } {
@@ -436,23 +560,14 @@ function endDrag(): void {
 }
 
 function handleClickOutside(event: PointerEvent): void {
-  const target = event.target as Node;
-  if (severityMenuOpen.value) {
-    if (!severityMenuRef.value?.contains(target) && !severityTriggerRef.value?.contains(target)) {
-      closeSeverityMenu();
-    }
-  }
   if (!drawerOpen.value) return;
+  const target = event.target as Node;
   if (drawerRef.value?.contains(target)) return;
   if (triggerRef.value?.contains(target)) return;
   closeDrawer();
 }
 
 function handleWindowKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && severityMenuOpen.value) {
-    closeSeverityMenu();
-    return;
-  }
   if (event.key === 'Escape' && drawerOpen.value) {
     closeDrawer();
     return;
@@ -598,59 +713,55 @@ onUnmounted(() => {
         <!-- 颜色选择器 -->
         <AnnotationColorPicker v-model="selectedAnnotationColor" />
 
-        <!-- 当前批注错误类型：向下弹出，避免被画布/面板遮挡 -->
+        <div class="mx-0.5 h-4 w-px bg-border" />
+
+        <!-- 截图：已选中批注 → 唤起 AnnotationPanel 预览-确认弹窗；未选中 → 暂存为 pending draft -->
+        <button type="button"
+          data-testid="annotation-overlay-camera"
+          class="relative inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm transition-colors disabled:pointer-events-none disabled:opacity-50"
+          :class="hasPendingDraftShot
+            ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
+          :disabled="cameraButtonDisabled"
+          :title="cameraButtonTitle"
+          :aria-label="cameraButtonTitle"
+          @click="onCameraButtonClick">
+          <Camera class="h-3.5 w-3.5" />
+          <span v-if="hasPendingDraftShot"
+            data-testid="annotation-overlay-camera-pending-dot"
+            class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-orange-500 ring-1 ring-white" />
+        </button>
+
+        <!-- 当前批注错误类型快捷：直接平铺 3 个 severity + 1 清除，一次点击命中 -->
         <template v-if="currentAnnotation">
           <div class="mx-0.5 h-4 w-px bg-border" />
           <div data-testid="annotation-overlay-toolbar-severity"
-            class="relative"
+            class="flex items-center gap-0.5"
+            role="group"
+            aria-label="错误类型快速选择"
             :class="!canEditCurrentSeverity ? 'opacity-40' : ''">
-            <button ref="severityTriggerRef"
+            <button v-for="bucket in SEVERITY_QUICK_BUCKETS"
+              :key="bucket.key"
               type="button"
-              data-testid="annotation-overlay-toolbar-severity-trigger"
-              class="inline-flex h-8 max-w-[7.5rem] items-center gap-1 rounded-lg border border-input bg-background px-2 text-[11px] font-medium transition-colors hover:bg-muted disabled:pointer-events-none"
+              :data-testid="'annotation-overlay-toolbar-severity-' + bucket.key"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-lg border bg-background text-base font-bold leading-none transition-colors disabled:pointer-events-none"
+              :class="currentSeverity === bucket.key ? bucket.toolbarActiveClass : bucket.toolbarIdleClass"
               :disabled="!canEditCurrentSeverity"
-              :title="canEditCurrentSeverity ? '选择错误类型' : '当前角色不可修改错误类型'"
-              @click.stop="toggleSeverityMenu">
-              <span v-if="currentSeverity"
-                class="truncate"
-                :class="getAnnotationSeverityDisplay(currentSeverity).color + ' rounded px-1'">
-                {{ getAnnotationSeverityDisplay(currentSeverity).symbol }}
-                {{ getAnnotationSeverityDisplay(currentSeverity).label }}
-              </span>
-              <span v-else class="truncate text-muted-foreground">错误类型</span>
-              <ChevronDown class="h-3 w-3 shrink-0 opacity-60"
-                :class="severityMenuOpen ? 'rotate-180' : ''" />
+              :title="canEditCurrentSeverity ? bucket.label : '当前角色不可修改错误类型'"
+              :aria-label="bucket.label"
+              :aria-pressed="currentSeverity === bucket.key"
+              @click.stop="setCurrentSeverity(bucket.key)">
+              {{ bucket.symbol }}
             </button>
-            <Transition enter-active-class="transition duration-150 ease-out"
-              enter-from-class="-translate-y-1 scale-95 opacity-0"
-              enter-to-class="translate-y-0 scale-100 opacity-100"
-              leave-active-class="transition duration-100 ease-in"
-              leave-from-class="translate-y-0 scale-100 opacity-100"
-              leave-to-class="-translate-y-1 scale-95 opacity-0">
-              <div v-if="severityMenuOpen"
-                ref="severityMenuRef"
-                data-testid="annotation-overlay-toolbar-severity-menu"
-                class="absolute left-0 top-full z-[960] mt-1 min-w-[9.5rem] overflow-hidden rounded-lg border border-border bg-background/98 py-1 shadow-xl backdrop-blur"
-                @pointerdown.stop>
-                <button v-for="bucket in SEVERITY_QUICK_BUCKETS"
-                  :key="bucket.key"
-                  type="button"
-                  :data-testid="'annotation-overlay-toolbar-severity-' + bucket.key"
-                  class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted"
-                  :class="currentSeverity === bucket.key ? 'bg-primary/10 text-primary' : 'text-foreground'"
-                  @click="pickSeverityFromMenu(bucket.key)">
-                  <span class="inline-block h-2 w-2 rounded-full" :class="bucket.dotClass" />
-                  <span>{{ bucket.label }}</span>
-                </button>
-                <button type="button"
-                  data-testid="annotation-overlay-toolbar-severity-clear"
-                  class="flex w-full items-center gap-2 border-t border-border px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
-                  :disabled="!currentSeverity"
-                  @click="pickSeverityFromMenu(undefined)">
-                  清除错误类型
-                </button>
-              </div>
-            </Transition>
+            <button type="button"
+              data-testid="annotation-overlay-toolbar-severity-clear"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              :disabled="!canEditCurrentSeverity || !currentSeverity"
+              title="清除错误类型"
+              aria-label="清除错误类型"
+              @click.stop="setCurrentSeverity(undefined)">
+              <X class="h-3.5 w-3.5" />
+            </button>
           </div>
         </template>
 

@@ -734,4 +734,251 @@ describe('AnnotationPanel', () => {
     host.remove();
     host = null;
   });
+
+  it('按当前校审面板卡片设计为可见批注提供包含覆盖层的截图预览，并上传用户确认的同一张图', async () => {
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const capturedViewport = {
+      blob: new Blob(['viewer-with-annotation-and-measurement-overlay'], { type: 'image/png' }),
+      dataUrl: 'data:image/png;base64,PREVIEW_WITH_ANNOTATION_AND_MEASUREMENT',
+      width: 800,
+      height: 600,
+      capturedAt: 1777041600000,
+    };
+    const captureViewport = vi.fn(async () => capturedViewport);
+    const uploadCapturedScreenshot = vi.fn(async () => ({
+      id: 'att-text-shot',
+      url: 'https://example.com/text-shot.png',
+      name: 'text-shot.png',
+      uploadedAt: 1777041600000,
+      capturedAt: 1777041600000,
+      width: 800,
+      height: 600,
+    }));
+    const saveAnnotationScreenshot = vi.fn(async (type, id, screenshot) => {
+      const { useToolStore } = await import('@/composables/useToolStore');
+      useToolStore().setAnnotationScreenshot(type, id, screenshot);
+      return true;
+    });
+
+    vi.doMock('@/components/review/ReviewCommentsPanel.vue', () => ({
+      default: { template: '<div />' },
+    }));
+    vi.doMock('@/components/review/ReviewCommentsTimeline.vue', () => ({
+      default: { template: '<div data-testid="review-comments-timeline-stub" />' },
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({ currentUser: ref({ id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER }) }),
+    }));
+    vi.doMock('@/composables/useScreenshot', () => ({
+      useScreenshot: () => ({
+        captureViewport,
+        uploadCapturedScreenshot,
+        isCapturing: ref(false),
+        uploadProgress: ref(0),
+      }),
+    }));
+    vi.doMock('@/composables/useAnnotationSeveritySync', () => ({
+      saveAnnotationScreenshot,
+    }));
+
+    const [{ default: AnnotationPanel }, { useToolStore }, { useReviewStore }] = await Promise.all([
+      import('./AnnotationPanel.vue'),
+      import('@/composables/useToolStore'),
+      import('@/composables/useReviewStore'),
+    ]);
+
+    const reviewStore = useReviewStore() as any;
+    reviewStore.currentTask.value = {
+      id: 'task-shot',
+      formId: 'FORM-SHOT',
+      title: '截图任务',
+      description: '',
+      modelName: '',
+      status: 'draft',
+      priority: 'medium',
+      requesterId: 'designer-1',
+      requesterName: '设计甲',
+      currentNode: 'sj',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.addAnnotation({
+      id: 'text-shot-1',
+      entityId: 'entity-text-shot-1',
+      worldPos: [0, 0, 0],
+      visible: true,
+      glyph: '1',
+      title: '文字截图批注',
+      description: '',
+      createdAt: 3,
+    });
+    store.addCloudAnnotation({
+      id: 'cloud-shot-1',
+      objectIds: ['demo:cloud'],
+      anchorWorldPos: [1, 2, 3],
+      visible: true,
+      title: '云线截图批注',
+      description: '',
+      createdAt: 2,
+      refnos: ['demo:cloud'],
+    });
+    store.addRectAnnotation({
+      id: 'rect-shot-1',
+      objectIds: ['demo:rect'],
+      obb: {
+        center: [3, 4, 5],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [1, 1, 1],
+        corners: [
+          [2, 3, 4], [4, 3, 4], [4, 5, 4], [2, 5, 4],
+          [2, 3, 6], [4, 3, 6], [4, 5, 6], [2, 5, 6],
+        ],
+      },
+      anchorWorldPos: [3, 4, 5],
+      leaderEndWorldPos: [5, 6, 7],
+      visible: true,
+      title: '矩形截图批注',
+      description: '',
+      createdAt: 1,
+      refnos: ['demo:rect'],
+    });
+    store.addObbAnnotation({
+      id: 'obb-shot-1',
+      objectIds: ['demo:obb'],
+      obb: {
+        center: [6, 7, 8],
+        axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        halfSize: [1, 2, 3],
+        corners: [
+          [5, 5, 5], [7, 5, 5], [7, 9, 5], [5, 9, 5],
+          [5, 5, 11], [7, 5, 11], [7, 9, 11], [5, 9, 11],
+        ],
+      },
+      labelWorldPos: [6, 7, 11],
+      anchor: { kind: 'top_center' },
+      visible: true,
+      title: '框选截图批注',
+      description: '',
+      createdAt: 4,
+      refnos: ['demo:obb'],
+    });
+    store.activeAnnotationId.value = null;
+    store.activeCloudAnnotationId.value = null;
+    store.activeRectAnnotationId.value = null;
+    store.activeObbAnnotationId.value = 'obb-shot-1';
+    store.setToolMode('annotation_obb');
+
+    const app = createApp(AnnotationPanel, {
+      tools: {
+        ready: ref(true),
+        statusText: ref('ready'),
+        flyToAnnotation: vi.fn(),
+        removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(),
+        flyToRectAnnotation: vi.fn(),
+        flyToObbAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(),
+        removeRectAnnotation: vi.fn(),
+        removeObbAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await flushUi();
+
+    const textTrigger = host.querySelector('[data-testid="annotation-screenshot-trigger-text-text-shot-1"]') as HTMLButtonElement | null;
+    const cloudTrigger = host.querySelector('[data-testid="annotation-screenshot-trigger-cloud-cloud-shot-1"]') as HTMLButtonElement | null;
+    const rectTrigger = host.querySelector('[data-testid="annotation-screenshot-trigger-rect-rect-shot-1"]') as HTMLButtonElement | null;
+    expect(textTrigger).toBeTruthy();
+    expect(cloudTrigger).toBeTruthy();
+    expect(rectTrigger).toBeTruthy();
+
+    textTrigger?.click();
+    await flushUi();
+
+    expect(captureViewport).toHaveBeenCalledWith(expect.objectContaining({
+      format: 'image/png',
+      includeOverlays: true,
+    }));
+    expect(uploadCapturedScreenshot).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('保存批注截图');
+    expect(document.body.querySelector('[data-testid="annotation-screenshot-preview-image"]')?.getAttribute('src')).toBe('data:image/png;base64,PREVIEW_WITH_ANNOTATION_AND_MEASUREMENT');
+
+    const confirmButton = document.body.querySelector('[data-testid="annotation-screenshot-confirm-save"]') as HTMLButtonElement | null;
+    expect(confirmButton).toBeTruthy();
+    confirmButton?.click();
+    await flushUi();
+
+    expect(captureViewport).toHaveBeenCalledTimes(1);
+    expect(uploadCapturedScreenshot).toHaveBeenCalledWith('task-shot', capturedViewport, expect.objectContaining({
+      kind: 'annotation_shot',
+      sourceAnnotationId: 'text-shot-1',
+      sourceAnnotationType: 'text',
+      formId: 'FORM-SHOT',
+    }));
+    expect(saveAnnotationScreenshot).toHaveBeenCalledWith('text', 'text-shot-1', expect.objectContaining({
+      url: 'https://example.com/text-shot.png',
+      attachmentId: 'att-text-shot',
+    }), {
+      formId: 'FORM-SHOT',
+      taskId: 'task-shot',
+      persist: false,
+    });
+    expect(store.getAnnotationScreenshot('text', 'text-shot-1')).toMatchObject({
+      url: 'https://example.com/text-shot.png',
+      attachmentId: 'att-text-shot',
+      name: 'text-shot.png',
+      capturedAt: 1777041600000,
+    });
+
+    uploadCapturedScreenshot.mockResolvedValueOnce({
+      id: 'att-obb-shot',
+      url: 'https://example.com/obb-shot.png',
+      name: 'obb-shot.png',
+      uploadedAt: 1777041600001,
+      capturedAt: 1777041600001,
+      width: 800,
+      height: 600,
+    });
+
+    const obbActiveTrigger = host.querySelector('[data-testid="annotation-screenshot-trigger-active-obb-obb-shot-1"]') as HTMLButtonElement | null;
+    expect(obbActiveTrigger).toBeTruthy();
+    obbActiveTrigger?.click();
+    await flushUi();
+
+    const obbConfirmButton = document.body.querySelector('[data-testid="annotation-screenshot-confirm-save"]') as HTMLButtonElement | null;
+    expect(obbConfirmButton).toBeTruthy();
+    obbConfirmButton?.click();
+    await flushUi();
+
+    expect(captureViewport).toHaveBeenCalledTimes(2);
+    expect(uploadCapturedScreenshot).toHaveBeenLastCalledWith('task-shot', capturedViewport, expect.objectContaining({
+      kind: 'annotation_shot',
+      sourceAnnotationId: 'obb-shot-1',
+      sourceAnnotationType: 'obb',
+      formId: 'FORM-SHOT',
+    }));
+    expect(saveAnnotationScreenshot).toHaveBeenLastCalledWith('obb', 'obb-shot-1', expect.objectContaining({
+      url: 'https://example.com/obb-shot.png',
+      attachmentId: 'att-obb-shot',
+    }), {
+      formId: 'FORM-SHOT',
+      taskId: 'task-shot',
+      persist: false,
+    });
+    expect(store.getAnnotationScreenshot('obb', 'obb-shot-1')).toMatchObject({
+      url: 'https://example.com/obb-shot.png',
+      attachmentId: 'att-obb-shot',
+      name: 'obb-shot.png',
+      capturedAt: 1777041600001,
+    });
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
 });

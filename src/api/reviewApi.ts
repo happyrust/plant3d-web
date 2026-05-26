@@ -6,6 +6,7 @@ import {
   type AnnotationComment,
   type AnnotationReviewAction,
   type AnnotationReviewState,
+  type AnnotationScreenshot,
   type AnnotationSeverity,
   type ReviewAttachment,
   type ReviewComponent,
@@ -1510,6 +1511,13 @@ export type AnnotationBasicFieldsUpdateResponse = {
   error_message?: string;
 };
 
+export type AnnotationScreenshotUpdateResponse = {
+  success: boolean;
+  screenshot?: AnnotationScreenshot;
+  updatedAt?: number;
+  error_message?: string;
+};
+
 /**
  * 更新批注基础字段。
  * 只更新标题/描述，不修改几何字段。
@@ -1527,6 +1535,32 @@ export async function annotationBasicFieldsUpdate(
       method: 'PATCH',
       body: JSON.stringify({
         ...patch,
+        formId: context?.formId ?? undefined,
+        taskId: context?.taskId ?? undefined,
+      }),
+    }
+  );
+}
+
+/**
+ * 更新批注截图证据。
+ *
+ * 沿用批注基础字段 PATCH 契约，只提交 screenshot 和上下文；
+ * 如果后端暂不支持该字段，调用方应回滚本地乐观更新。
+ */
+export async function annotationScreenshotUpdate(
+  annotationId: string,
+  annotationType: AnnotationComment['annotationType'],
+  screenshot: AnnotationScreenshot,
+  context?: AnnotationUpdateContext,
+): Promise<AnnotationScreenshotUpdateResponse> {
+  const params = new URLSearchParams({ type: annotationType });
+  return await fetchJson(
+    `/api/review/annotations/${encodeURIComponent(annotationId)}?${params}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        screenshot,
         formId: context?.formId ?? undefined,
         taskId: context?.taskId ?? undefined,
       }),
@@ -1699,6 +1733,7 @@ export type ReviewAttachmentUploadOptions = {
   fileType?: string;
   description?: string;
   sourceAnnotationId?: string;
+  sourceAnnotationType?: string;
 };
 
 /**
@@ -1728,6 +1763,9 @@ export async function reviewAttachmentUpload(
   }
   if (options?.sourceAnnotationId) {
     formData.append('sourceAnnotationId', options.sourceAnnotationId);
+  }
+  if (options?.sourceAnnotationType) {
+    formData.append('sourceAnnotationType', options.sourceAnnotationType);
   }
 
   const token = getAuthToken();
@@ -1779,6 +1817,9 @@ export function reviewAttachmentUploadWithProgress(
     }
     if (options?.sourceAnnotationId) {
       formData.append('sourceAnnotationId', options.sourceAnnotationId);
+    }
+    if (options?.sourceAnnotationType) {
+      formData.append('sourceAnnotationType', options.sourceAnnotationType);
     }
 
     const xhr = new XMLHttpRequest();

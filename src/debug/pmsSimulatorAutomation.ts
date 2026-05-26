@@ -1,5 +1,6 @@
 export const PMS_SIMULATOR_CASE_ORDER = [
   'approved',
+  'annotation-screenshot',
   'return',
   'bran-mixed',
   'stop',

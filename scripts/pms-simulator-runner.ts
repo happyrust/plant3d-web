@@ -206,6 +206,7 @@ async function waitForDesignerCommentAnnotationListAcrossContext(
 
 const CASE_NAMES: Record<PmsSimulatorCaseId, string> = {
   approved: '主链通过到 approved',
+  'annotation-screenshot': '批注截图包含三维批注与测量覆盖层',
   return: '驳回分支 return -> sj',
   stop: '终止分支 stop -> cancelled',
   restore: '刷新恢复',
@@ -2357,6 +2358,144 @@ async function scenarioApproved(runtime: ScenarioRuntime): Promise<PmsSimulatorS
   });
 }
 
+async function scenarioAnnotationScreenshot(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
+  const created = await createReview(runtime, 'annotation-screenshot');
+  const assertions: PmsSimulatorAssertionResult[] = [];
+  if (!created.taskId) {
+    throw new Error(`annotation-screenshot 缺少 task_id（form_id=${created.formId}）`);
+  }
+
+  const activeSnapshot = await runWorkflowAction(runtime.page, 'active', {
+    comment: 'SJ active annotation screenshot 自动化',
+  });
+  assertions.push(assertWorkflowVerify('annotation-screenshot-sj-active-verify', activeSnapshot, 'active'));
+  assertions.push(assertWorkflowSync('annotation-screenshot-sj-active-sync', activeSnapshot, 'active'));
+  assertions.push(assertBackendCurrentNode(
+    'annotation-screenshot-sj-active-backend-current-node',
+    await probeBackendTaskByFormId(runtime, created.formId, created.taskId),
+    'jd',
+  ));
+
+  const reviewerSnapshot = await openTaskForRole(runtime.page, created.formId, 'JH', { taskId: created.taskId });
+  await openAutomationPageFromSnapshot(runtime, reviewerSnapshot, `annotation-screenshot reviewer form_id=${created.formId}`, {
+    tokenUserId: 'JH',
+    tokenRole: 'jd',
+  });
+  const located = await waitForReviewerWorkbenchAcrossContext(runtime.context, { formId: created.formId });
+  const captureResult = await located.root.evaluate(async () => {
+    const hook = (window as Window & {
+      __plant3dReviewerE2E?: {
+        addMockAnnotation: (title?: string, description?: string) => string;
+        addMockMeasurement?: (kind?: 'distance' | 'angle') => string;
+        captureAnnotationScreenshot?: (type?: 'text', id?: string) => Promise<{ url?: string; attachmentId?: string; name?: string }>;
+      };
+    }).__plant3dReviewerE2E;
+    if (!hook) throw new Error('__plant3dReviewerE2E 未挂载');
+    if (typeof hook.captureAnnotationScreenshot !== 'function') {
+      throw new Error('__plant3dReviewerE2E.captureAnnotationScreenshot 未挂载');
+    }
+    const annotationId = hook.addMockAnnotation(
+      `截图批注 ${Date.now()}`,
+      '仿 PMS 验证：截图必须包含三维批注与测量覆盖层',
+    );
+    const measurementId = typeof hook.addMockMeasurement === 'function'
+      ? hook.addMockMeasurement('distance')
+      : null;
+    const screenshot = await hook.captureAnnotationScreenshot('text', annotationId);
+    return {
+      annotationId,
+      measurementId,
+      screenshot,
+    };
+  });
+
+  try {
+    await located.root.evaluate(async () => {
+      const hook = (window as Window & {
+        __plant3dReviewerE2E?: {
+          confirmData: (note?: string) => Promise<void>;
+        };
+      }).__plant3dReviewerE2E;
+      if (!hook) throw new Error('__plant3dReviewerE2E 未挂载');
+      await hook.confirmData('仿 PMS 自动化：批注截图包含三维批注与测量');
+    });
+  } catch (error) {
+    if (!isRetryableSimulatorNavigationError(error)) {
+      throw error;
+    }
+    traceSimulator(`annotation-screenshot confirmData 后页面导航，改用 backend readback 校验：${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const readbackToken = await createCleanupToken(runtime.env);
+  const confirmedCounts = await waitFor(async () => {
+    const counts = await readBackendConfirmedCounts(runtime, {
+      taskId: created.taskId,
+      formId: created.formId,
+      token: readbackToken,
+    });
+    return counts.confirmedRecordCount >= 1 ? counts : null;
+  }, {
+    timeoutMs: 45_000,
+    intervalMs: 1_000,
+    message: `等待 annotation-screenshot confirmed record 后端落库超时（form_id=${created.formId} task_id=${created.taskId}）`,
+  });
+
+  assertions.push(assertResult(
+    'annotation-screenshot-created-annotation',
+    Boolean(captureResult.annotationId),
+    undefined,
+    true,
+    Boolean(captureResult.annotationId),
+  ));
+  assertions.push(assertResult(
+    'annotation-screenshot-created-measurement',
+    Boolean(captureResult.measurementId),
+    '截图前应先创建测量，确保覆盖层合成覆盖批注和测量证据。',
+    true,
+    Boolean(captureResult.measurementId),
+  ));
+  assertions.push(assertResult(
+    'annotation-screenshot-uploaded',
+    Boolean(captureResult.screenshot?.url && captureResult.screenshot?.attachmentId),
+    `screenshot=${JSON.stringify(captureResult.screenshot)}`,
+    true,
+    Boolean(captureResult.screenshot?.url && captureResult.screenshot?.attachmentId),
+  ));
+  assertions.push(assertResult(
+    'annotation-screenshot-confirmed-record',
+    confirmedCounts.confirmedRecordCount >= 1,
+    confirmedCounts.detail,
+    '>=1',
+    confirmedCounts.confirmedRecordCount,
+  ));
+  assertions.push(assertResult(
+    'annotation-screenshot-confirmed-annotation',
+    confirmedCounts.confirmedAnnotationCount >= 1,
+    confirmedCounts.detail,
+    '>=1',
+    confirmedCounts.confirmedAnnotationCount,
+  ));
+  assertions.push(assertResult(
+    'annotation-screenshot-confirmed-measurement',
+    confirmedCounts.confirmedMeasurementCount >= 1,
+    confirmedCounts.detail,
+    '>=1',
+    confirmedCounts.confirmedMeasurementCount,
+  ));
+
+  const finalSnapshot = await getSnapshot(runtime.page);
+  return finalizeScenarioReport({
+    caseId: 'annotation-screenshot',
+    name: CASE_NAMES['annotation-screenshot'],
+    formId: created.formId,
+    taskId: created.taskId,
+    finalNode: normalizeNode(finalSnapshot.currentWorkflowNode),
+    finalStatus: finalSnapshot.currentTaskStatus,
+    packageName: created.packageName,
+    assertions,
+  });
+}
+
 async function scenarioReturn(runtime: ScenarioRuntime): Promise<PmsSimulatorScenarioReport> {
   const created = await createReview(runtime, 'return');
   const assertions: PmsSimulatorAssertionResult[] = [];
@@ -3367,6 +3506,7 @@ async function scenarioResubmitReviewerReopen(
 
 const SCENARIO_HANDLERS: Record<PmsSimulatorCaseId, ScenarioHandler> = {
   approved: scenarioApproved,
+  'annotation-screenshot': scenarioAnnotationScreenshot,
   return: scenarioReturn,
   stop: scenarioStop,
   restore: scenarioRestore,

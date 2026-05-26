@@ -1,5 +1,5 @@
-import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
 
 import type { AnnotationScreenshot } from '@/types/auth';
 
@@ -140,5 +140,78 @@ describe('useToolStore - annotation screenshot', () => {
     mockUser(null);
     const restoredStore = await loadStore();
     expect(restoredStore.getAnnotationScreenshot('text', 'text-persist')).toEqual(screenshot);
+  });
+
+  it('pendingDraftAnnotationShot 在每次 addXxxAnnotation 后被 drain 到新批注的 screenshot 字段', async () => {
+    mockUser(null);
+    const store = await loadStore();
+    store.clearAll();
+
+    // text
+    store.setPendingDraftAnnotationShot({ ...makeScreenshot('att-pending-text'), formId: 'F1', taskId: 'T1' });
+    expect(store.pendingDraftAnnotationShot.value?.attachmentId).toBe('att-pending-text');
+    store.addAnnotation({
+      id: 'text-drain', entityId: 'e1', worldPos: [0, 0, 0],
+      visible: true, glyph: '1', title: 't', description: '', createdAt: 1,
+    });
+    expect(store.getAnnotationScreenshot('text', 'text-drain')?.attachmentId).toBe('att-pending-text');
+    expect(store.pendingDraftAnnotationShot.value).toBeNull();
+
+    // cloud
+    store.setPendingDraftAnnotationShot({ ...makeScreenshot('att-pending-cloud') });
+    store.addCloudAnnotation({
+      id: 'cloud-drain', objectIds: ['o1'], anchorWorldPos: [0, 0, 0],
+      visible: true, title: 'c', description: '', createdAt: 2,
+    });
+    expect(store.getAnnotationScreenshot('cloud', 'cloud-drain')?.attachmentId).toBe('att-pending-cloud');
+    expect(store.pendingDraftAnnotationShot.value).toBeNull();
+
+    // rect
+    store.setPendingDraftAnnotationShot({ ...makeScreenshot('att-pending-rect') });
+    store.addRectAnnotation({
+      id: 'rect-drain', objectIds: ['o2'], obb: sampleObb, anchorWorldPos: [0, 0, 0],
+      visible: true, title: 'r', description: '', createdAt: 3,
+    });
+    expect(store.getAnnotationScreenshot('rect', 'rect-drain')?.attachmentId).toBe('att-pending-rect');
+
+    // obb
+    store.setPendingDraftAnnotationShot({ ...makeScreenshot('att-pending-obb') });
+    store.addObbAnnotation({
+      id: 'obb-drain', objectIds: ['o3'], obb: sampleObb, labelWorldPos: [0, 0, 1],
+      anchor: { kind: 'top_center' }, visible: true, title: 'o', description: '', createdAt: 4,
+    });
+    expect(store.getAnnotationScreenshot('obb', 'obb-drain')?.attachmentId).toBe('att-pending-obb');
+    expect(store.pendingDraftAnnotationShot.value).toBeNull();
+  });
+
+  it('从 annotation 模式离开（setToolMode → none）会自动清 pendingDraftAnnotationShot', async () => {
+    mockUser(null);
+    const store = await loadStore();
+    store.clearAll();
+
+    store.setToolMode('annotation');
+    store.setPendingDraftAnnotationShot({ ...makeScreenshot('att-discard') });
+    expect(store.pendingDraftAnnotationShot.value?.attachmentId).toBe('att-discard');
+
+    store.setToolMode('none');
+    expect(store.pendingDraftAnnotationShot.value).toBeNull();
+  });
+
+  it('annotation 模式之间互切（text → cloud）不会丢失 pendingDraftAnnotationShot', async () => {
+    mockUser(null);
+    const store = await loadStore();
+    store.clearAll();
+
+    store.setToolMode('annotation');
+    store.setPendingDraftAnnotationShot({ ...makeScreenshot('att-keep') });
+    store.setToolMode('annotation_cloud');
+    expect(store.pendingDraftAnnotationShot.value?.attachmentId).toBe('att-keep');
+
+    // 模式间互切后落到下一次 addCloudAnnotation 仍能 drain
+    store.addCloudAnnotation({
+      id: 'cloud-keep', objectIds: ['o1'], anchorWorldPos: [0, 0, 0],
+      visible: true, title: 'c', description: '', createdAt: 2,
+    });
+    expect(store.getAnnotationScreenshot('cloud', 'cloud-keep')?.attachmentId).toBe('att-keep');
   });
 });

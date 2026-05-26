@@ -975,6 +975,21 @@ function onClearXray() {
   closeContextMenu();
 }
 
+function clipRoom() {
+  if (!contextNodeId.value || !isRoomTree.value) return;
+  const ok = roomTree.clipByRoom(contextNodeId.value);
+  if (!ok && import.meta.env.DEV) {
+    console.warn('[model-tree] clipByRoom failed', roomTree.clipError.value);
+  }
+  closeContextMenu();
+}
+
+function clearRoomClip() {
+  if (!isRoomTree.value) return;
+  roomTree.clearRoomClip();
+  closeContextMenu();
+}
+
 function isolate() {
   if (!contextNodeId.value) return;
   isolateXray(contextNodeId.value);
@@ -1411,6 +1426,19 @@ function onSearchEnter(value: string) {
           @click="onClearXray">
           取消隔离
         </button>
+        <template v-if="isRoomTree">
+          <div class="my-1 h-px bg-border" />
+          <button type="button"
+            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            @click="clipRoom">
+            按房间裁剪
+          </button>
+          <button type="button"
+            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            @click="clearRoomClip">
+            清除房间裁剪
+          </button>
+        </template>
         <div class="my-1 h-px bg-border" />
         <button type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"

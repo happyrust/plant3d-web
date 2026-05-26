@@ -269,7 +269,7 @@ describe('buildSnapshotFromWorkflowSync', () => {
     const snapshot = buildSnapshotFromWorkflowSync(data, { now: () => FIXED_NOW });
     const adapted = buildReplayPayloadFromSnapshot(snapshot);
     const parsed = JSON.parse(adapted) as {
-      annotations: Array<{ id: string; screenshot?: unknown }>;
+      annotations: { id: string; screenshot?: unknown }[];
     };
 
     expect(parsed.annotations[0]).toMatchObject({

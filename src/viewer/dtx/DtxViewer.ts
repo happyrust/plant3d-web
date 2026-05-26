@@ -249,7 +249,7 @@ export class DtxViewer {
     this.camera.far = nextFar;
     this.camera.updateProjectionMatrix();
     if (this._debug) {
-      // eslint-disable-next-line no-console
+       
       console.log('[DtxViewer] fitClipPlanesToBox', { diag, near: nextNear, far: nextFar });
     }
   }

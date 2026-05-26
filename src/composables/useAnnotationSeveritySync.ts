@@ -1,12 +1,23 @@
 import type { AnnotationType } from '@/composables/useToolStore';
-import type { AnnotationSeverity } from '@/types/auth';
+import type { AnnotationScreenshot, AnnotationSeverity } from '@/types/auth';
 
-import { annotationBasicFieldsUpdate, annotationSeverityUpdate, type AnnotationUpdateContext } from '@/api/reviewApi';
+import {
+  annotationBasicFieldsUpdate,
+  annotationScreenshotUpdate,
+  annotationSeverityUpdate,
+  type AnnotationUpdateContext,
+} from '@/api/reviewApi';
 import { useToolStore } from '@/composables/useToolStore';
 import { emitToast } from '@/ribbon/toastBus';
 
 type SaveAnnotationOptions = AnnotationUpdateContext & {
   silent?: boolean;
+  /**
+   * Pending scene annotations do not exist in review_records yet. In that case
+   * keep the local screenshot on the annotation and let confirmCurrentData
+   * persist it with the full record payload.
+   */
+  persist?: boolean;
 };
 
 /**
@@ -91,6 +102,64 @@ export async function saveAnnotationBasicFields(
     if (!options?.silent) {
       emitToast({
         message: err instanceof Error ? err.message : '批注标题保存失败',
+        level: 'error',
+      });
+    }
+    return false;
+  }
+}
+
+export async function saveAnnotationScreenshot(
+  annotationType: AnnotationType,
+  annotationId: string,
+  screenshot: AnnotationScreenshot,
+  options?: SaveAnnotationOptions,
+): Promise<boolean> {
+  const store = useToolStore();
+  const records = store.getAnnotationRecordsByType(annotationType);
+  const record = records.find((r) => r.id === annotationId) as {
+    screenshot?: AnnotationScreenshot;
+  } | undefined;
+  const prev = record?.screenshot;
+
+  const updated = store.setAnnotationScreenshot(annotationType, annotationId, screenshot);
+  if (!updated) {
+    if (!options?.silent) {
+      emitToast({ message: '截图关联失败，请重试', level: 'error' });
+    }
+    return false;
+  }
+
+  if (options?.persist === false) {
+    return true;
+  }
+
+  try {
+    const resp = await annotationScreenshotUpdate(annotationId, annotationType, screenshot, {
+      formId: options?.formId,
+      taskId: options?.taskId,
+    });
+    if (resp && resp.success === false) {
+      if (prev) {
+        store.setAnnotationScreenshot(annotationType, annotationId, prev);
+      } else {
+        store.clearAnnotationScreenshot(annotationType, annotationId);
+      }
+      if (!options?.silent) {
+        emitToast({ message: '截图保存失败，已回滚', level: 'error' });
+      }
+      return false;
+    }
+    return true;
+  } catch (err) {
+    if (prev) {
+      store.setAnnotationScreenshot(annotationType, annotationId, prev);
+    } else {
+      store.clearAnnotationScreenshot(annotationType, annotationId);
+    }
+    if (!options?.silent) {
+      emitToast({
+        message: err instanceof Error ? err.message : '截图保存失败',
         level: 'error',
       });
     }

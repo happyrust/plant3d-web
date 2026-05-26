@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref, shallowRef } from 'vue';
 
 const saveAnnotationSeverityMock = vi.hoisted(() => vi.fn());
+const captureViewportMock = vi.hoisted(() => vi.fn());
+const uploadCapturedScreenshotMock = vi.hoisted(() => vi.fn());
+const requestActiveAnnotationCameraMock = vi.hoisted(() => vi.fn());
+const emitToastMock = vi.hoisted(() => vi.fn());
 
 describe('AnnotationOverlayBar', () => {
   beforeEach(() => {
@@ -285,7 +289,7 @@ describe('AnnotationOverlayBar', () => {
     host = null;
   });
 
-  it('主工具栏与更多抽屉均提供错误类型快捷，具备权限时能保存严重度', async () => {
+  it('主工具栏 4 键平铺与抽屉冗余入口均能一次点击保存严重度', async () => {
     saveAnnotationSeverityMock.mockReset();
     vi.doMock('@/composables/useAnnotationSeveritySync', () => ({
       saveAnnotationSeverity: saveAnnotationSeverityMock,
@@ -353,10 +357,10 @@ describe('AnnotationOverlayBar', () => {
     await nextTick();
 
     expect(host.querySelector('[data-testid="annotation-overlay-drag-handle"]')).toBeTruthy();
-    (host.querySelector('[data-testid="annotation-overlay-toolbar-severity-trigger"]') as HTMLButtonElement | null)?.click();
-    await nextTick();
+    expect(host.querySelector('[data-testid="annotation-overlay-toolbar-severity-trigger"]')).toBeNull();
     const toolbarPrinciple = host.querySelector('[data-testid="annotation-overlay-toolbar-severity-principle"]') as HTMLButtonElement | null;
     expect(toolbarPrinciple).toBeTruthy();
+    expect(toolbarPrinciple?.getAttribute('aria-pressed')).toBe('false');
     toolbarPrinciple?.click();
     await nextTick();
     await vi.waitFor(() => {
@@ -364,6 +368,14 @@ describe('AnnotationOverlayBar', () => {
     });
     expect(saveAnnotationSeverityMock).toHaveBeenCalledWith('text', 'text-sev-1', 'principle', expect.any(Object));
     expect(store.annotations.value.find((a: any) => a.id === 'text-sev-1').severity).toBe('principle');
+    await nextTick();
+    expect(toolbarPrinciple?.getAttribute('aria-pressed')).toBe('true');
+
+    const toolbarClear = host.querySelector('[data-testid="annotation-overlay-toolbar-severity-clear"]') as HTMLButtonElement | null;
+    expect(toolbarClear).toBeTruthy();
+    toolbarClear?.click();
+    await nextTick();
+    expect(store.annotations.value.find((a: any) => a.id === 'text-sev-1').severity).toBeUndefined();
 
     (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
     await nextTick();
@@ -431,8 +443,10 @@ describe('AnnotationOverlayBar', () => {
     app.mount(host);
     await nextTick();
 
-    const trigger = host.querySelector('[data-testid="annotation-overlay-toolbar-severity-trigger"]') as HTMLButtonElement | null;
-    expect(trigger?.hasAttribute('disabled')).toBe(true);
+    const toolbarPrinciple = host.querySelector('[data-testid="annotation-overlay-toolbar-severity-principle"]') as HTMLButtonElement | null;
+    const toolbarClear = host.querySelector('[data-testid="annotation-overlay-toolbar-severity-clear"]') as HTMLButtonElement | null;
+    expect(toolbarPrinciple?.hasAttribute('disabled')).toBe(true);
+    expect(toolbarClear?.hasAttribute('disabled')).toBe(true);
 
     (host.querySelector('[data-testid="annotation-overlay-more"]') as HTMLButtonElement | null)?.click();
     await nextTick();
@@ -441,6 +455,198 @@ describe('AnnotationOverlayBar', () => {
     const batchPrincipleBtn = host.querySelector('[data-testid="annotation-overlay-batch-severity-principle"]') as HTMLButtonElement | null;
     expect(principleBtn?.hasAttribute('disabled')).toBe(true);
     expect(batchPrincipleBtn?.hasAttribute('disabled')).toBe(true);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('未选中批注时点击 Camera 按钮 → 走 pending draft 流程（capture + upload + setPendingDraftAnnotationShot）', async () => {
+    captureViewportMock.mockReset();
+    uploadCapturedScreenshotMock.mockReset();
+    requestActiveAnnotationCameraMock.mockReset();
+    emitToastMock.mockReset();
+
+    const fakeCapture = {
+      blob: new Blob(['fake']),
+      dataUrl: 'data:image/png;base64,fake',
+      width: 800,
+      height: 600,
+      capturedAt: 1_730_000_000_000,
+      format: 'image/png' as const,
+    };
+    const fakeAttachment = {
+      id: 'att-pending-1',
+      name: 'annotation-pending-1730000000000.png',
+      url: '/files/att-pending-1.png',
+      mimeType: 'image/png',
+      type: 'image/png',
+      size: 1234,
+      width: 800,
+      height: 600,
+      uploadedAt: 1_730_000_001_000,
+      capturedAt: 1_730_000_000_000,
+    };
+
+    captureViewportMock.mockResolvedValue(fakeCapture);
+    uploadCapturedScreenshotMock.mockResolvedValue(fakeAttachment);
+
+    vi.doMock('@/composables/useScreenshot', () => ({
+      useScreenshot: () => ({
+        captureViewport: captureViewportMock,
+        uploadCapturedScreenshot: uploadCapturedScreenshotMock,
+        isCapturing: ref(false),
+      }),
+    }));
+    vi.doMock('@/composables/annotationCameraTrigger', () => ({
+      requestActiveAnnotationCamera: requestActiveAnnotationCameraMock,
+    }));
+    vi.doMock('@/ribbon/toastBus', () => ({
+      emitToast: emitToastMock,
+    }));
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref({ id: 'task-1', formId: 'form-1' }),
+      }),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
+    }));
+
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [{ default: AnnotationOverlayBar }, { useToolStore }] = await Promise.all([
+      import('./AnnotationOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.setToolMode('annotation');
+    // 关键：不选中任何批注，让 currentAnnotation === null
+
+    const app = createApp(AnnotationOverlayBar, {
+      tools: {
+        ready: ref(true), statusText: ref('文字批注'),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+        flyToObbAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+        removeObbAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const cameraBtn = host.querySelector('[data-testid="annotation-overlay-camera"]') as HTMLButtonElement | null;
+    expect(cameraBtn).toBeTruthy();
+    expect(host.querySelector('[data-testid="annotation-overlay-camera-pending-dot"]')).toBeNull();
+    cameraBtn?.click();
+    await nextTick();
+
+    await vi.waitFor(() => {
+      expect(uploadCapturedScreenshotMock).toHaveBeenCalled();
+    });
+    expect(captureViewportMock).toHaveBeenCalledWith(expect.objectContaining({
+      format: 'image/png',
+      includeOverlays: true,
+    }));
+    expect(uploadCapturedScreenshotMock).toHaveBeenCalledWith('task-1', fakeCapture, expect.objectContaining({
+      kind: 'annotation_shot_pending',
+      formId: 'form-1',
+    }));
+    expect(requestActiveAnnotationCameraMock).not.toHaveBeenCalled();
+
+    expect(store.pendingDraftAnnotationShot.value).toEqual(expect.objectContaining({
+      attachmentId: 'att-pending-1',
+      url: '/files/att-pending-1.png',
+      taskId: 'task-1',
+      formId: 'form-1',
+    }));
+
+    // pending 角标应该出现
+    await nextTick();
+    expect(host.querySelector('[data-testid="annotation-overlay-camera-pending-dot"]')).toBeTruthy();
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('已选中批注时点击 Camera 按钮 → 通过 bus 唤起 AnnotationPanel active 弹窗，不动 pending', async () => {
+    captureViewportMock.mockReset();
+    uploadCapturedScreenshotMock.mockReset();
+    requestActiveAnnotationCameraMock.mockReset();
+
+    vi.doMock('@/composables/useScreenshot', () => ({
+      useScreenshot: () => ({
+        captureViewport: captureViewportMock,
+        uploadCapturedScreenshot: uploadCapturedScreenshotMock,
+        isCapturing: ref(false),
+      }),
+    }));
+    vi.doMock('@/composables/annotationCameraTrigger', () => ({
+      requestActiveAnnotationCamera: requestActiveAnnotationCameraMock,
+    }));
+    vi.doMock('@/composables/useDockApi', () => ({
+      ensurePanelAndActivate: vi.fn(),
+    }));
+    vi.doMock('@/composables/useReviewStore', () => ({
+      useReviewStore: () => ({
+        currentTask: ref({ id: 'task-2', formId: 'form-2' }),
+      }),
+    }));
+    vi.doMock('@/composables/useUserStore', () => ({
+      useUserStore: () => ({
+        currentUser: ref({ id: 'reviewer-1', role: 'reviewer', name: 'R' }),
+      }),
+    }));
+
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [{ default: AnnotationOverlayBar }, { useToolStore }] = await Promise.all([
+      import('./AnnotationOverlayBar.vue'),
+      import('@/composables/useToolStore'),
+    ]);
+
+    const store = useToolStore() as any;
+    store.clearAll();
+    store.setToolMode('annotation');
+    store.addAnnotation({
+      id: 'text-active', entityId: 'e', worldPos: [0, 0, 0],
+      visible: true, glyph: 'A', title: 'A', description: '', createdAt: 1,
+    });
+    store.activeAnnotationId.value = 'text-active';
+
+    const app = createApp(AnnotationOverlayBar, {
+      tools: {
+        ready: ref(true), statusText: ref('文字批注'),
+        flyToAnnotation: vi.fn(), removeAnnotation: vi.fn(),
+        flyToCloudAnnotation: vi.fn(), flyToRectAnnotation: vi.fn(),
+        flyToObbAnnotation: vi.fn(),
+        removeCloudAnnotation: vi.fn(), removeRectAnnotation: vi.fn(),
+        removeObbAnnotation: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const cameraBtn = host.querySelector('[data-testid="annotation-overlay-camera"]') as HTMLButtonElement | null;
+    expect(cameraBtn).toBeTruthy();
+    cameraBtn?.click();
+    await nextTick();
+
+    expect(requestActiveAnnotationCameraMock).toHaveBeenCalledTimes(1);
+    expect(captureViewportMock).not.toHaveBeenCalled();
+    expect(uploadCapturedScreenshotMock).not.toHaveBeenCalled();
+    expect(store.pendingDraftAnnotationShot.value).toBeNull();
 
     app.unmount();
     host.remove();

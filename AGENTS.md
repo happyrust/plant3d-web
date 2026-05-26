@@ -65,6 +65,18 @@
 - 不要提交构建产物（如 `dist/`、`coverage/`、`test-results/`），除非 PR 明确说明用途  
 - 如需复现线上问题，请在 PR 描述中注明对应环境与复现步骤（URL、数据样例、浏览器版本）
 
+## RoBrain 记忆协作
+
+本仓库已按 RoBrain self-hosted OSS 模式接入 `robrain-sensing` MCP（项目 ID：`f58021791a9a`），供 Cursor 与 Codex 共享架构决策记忆。RoBrain 只记录会话中的决策、理由、拒绝过的替代方案和关联文件，不记录源码正文。
+
+- 新会话开始时，若 `robrain-sensing` MCP 可用，调用 `sensing_start_session(project_id="f58021791a9a", working_dir="/Volumes/DPC/work/plant-code/plant3d-web")`
+- 重要回复后调用 `sensing_record_turn(...)`，把本轮用户问题、助手回复、涉及文件和注入记忆 ID 记录进去
+- 会话结束时调用 `sensing_end_session(...)`，用一句话总结本轮成果
+- 需要查询历史决策时，优先用 `npx robrain inject --query "<主题>" --copy` 或 `npx robrain inject --files "<路径>" --copy`
+- 适合记录的主题：三维校审流程、PMS embed/postMessage 同步、批注/测量恢复、review snapshot cutover、DTX/xeokit viewer 坐标系与渲染取舍、CDP/E2E 验证口径
+
+RoBrain 本地服务依赖 `/Volumes/DPC/work/plant-code/robrain/.env`，不要把其中的真实 API key 写入仓库。
+
 ## PowerPMS 联调 / 自动化测试账号（内部）
 
 用于 `http://pms.powerpms.net:1801/sysin.html` 登录及 `npm run test:pms:cdp` / `test:e2e:pms`：

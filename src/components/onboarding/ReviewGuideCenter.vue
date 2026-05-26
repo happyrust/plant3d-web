@@ -115,7 +115,7 @@ const quickActions = computed(() => {
     stepsHint: role
       ? `约 ${(currentGuideCtx.value ? onboarding.resolveGuideForUser({ ...currentGuideCtx.value, workflowRole: ROLE_TO_WORKFLOW_ROLE[role] }) : onboarding.allGuides[role])?.steps.length ?? '?'} 步`
       : '完整教程',
-    run: () => onboarding.startGuideForCurrentRole(),
+    run: () => onboarding.startContextualGuide('currentRole'),
   });
 
   if (role === 'designer') {
@@ -261,7 +261,7 @@ let offHelpReviewGuide: (() => void) | null = null;
 onMounted(() => {
   offHelpReviewGuide = onCommand((commandId) => {
     if (commandId === 'help.reviewGuide') {
-      void onboarding.startGuideForCurrentRole();
+      void onboarding.startContextualGuide('currentRole');
     }
   });
 });
@@ -349,7 +349,7 @@ onUnmounted(() => {
           </div>
           <button type="button"
             class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
-            @click="onboarding.startGuideForCurrentRole()">
+            @click="onboarding.startContextualGuide('currentRole')">
             <PlayCircle class="h-4 w-4" />
             播放当前角色教程
           </button>

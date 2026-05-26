@@ -1,7 +1,7 @@
 import { Box3, Vector3 } from 'three';
 
-import type { DTXLayer } from '@/utils/three/dtx';
-import type { DTXSelectionController } from '@/utils/three/dtx';
+import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
+import type { RoomClipPayload } from '@/utils/three/dtx/DTXClipController';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -626,5 +626,25 @@ export class DtxCompatViewer {
         flyToImpl(options.aabb as any, 0);
       },
     };
+  }
+
+  /**
+   * 设置房间凸壳裁剪范围。
+   *
+   * - `null` 或空数组 → 关闭裁剪，恢复全部可见
+   * - 非空数组 → 启用视觉 MVP 裁剪；当前 AABB / convex hull 走固定上限
+   *   uniform arrays，后续 P2 可升级为 DataTexture，P4 再接入 SDF sampler2DArray。
+   *
+   * 详见 `goals/room-clip-dual-track/data-source-design.md`。
+   */
+  setRoomClip(rooms: RoomClipPayload[] | null): void {
+    const controller = this.__dtxLayer.getClipController();
+    if (!controller) return;
+    if (!rooms || rooms.length === 0) {
+      controller.disable();
+    } else {
+      controller.setRooms(rooms);
+    }
+    this.requestRender?.();
   }
 }

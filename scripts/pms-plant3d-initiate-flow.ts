@@ -654,6 +654,8 @@ export async function runPlant3dInitiateOnRoot(root: Page | Frame): Promise<Plan
     throw new Error('发起编校审主按钮仍处于禁用状态，无法提交');
   }
 
+  await submitBtn.click({ timeout: 20_000 });
+
   const successToastVisible = await root
     .getByText(/编校审单(创建|保存)成功/, { exact: false })
     .first()
@@ -836,7 +838,12 @@ export async function runPlant3dCheckerWorkflowOnRoot(root: Page | Frame): Promi
   }
 }
 
-export async function runReviewerAnnotationOnRoot(root: Page | Frame): Promise<{ annotationId: string; confirmedCount: number }> {
+export async function runReviewerAnnotationOnRoot(root: Page | Frame): Promise<{
+  annotationId: string;
+  measurementId: string | null;
+  screenshotUrl: string | null;
+  confirmedCount: number;
+}> {
   await root
     .waitForFunction(
       () => typeof (window as unknown as Record<string, { addMockAnnotation: () => string }>).__plant3dReviewerE2E?.addMockAnnotation === 'function',
@@ -847,11 +854,29 @@ export async function runReviewerAnnotationOnRoot(root: Page | Frame): Promise<{
       throw new Error('校审面板已出现，但未挂载自动化钩子 __plant3dReviewerE2E。请确保已部署含 ReviewPanel 改动的版本。');
     });
 
-  const annotationId = await root.evaluate(() => {
-    return (window as unknown as Record<string, { addMockAnnotation: (t?: string, d?: string) => string }>).__plant3dReviewerE2E.addMockAnnotation(
+  const captured = await root.evaluate(async () => {
+    const hook = (window as unknown as Record<string, {
+      __plant3dReviewerE2E: {
+        addMockAnnotation: (t?: string, d?: string) => string;
+        addMockMeasurement?: (kind?: 'distance' | 'angle') => string;
+        captureAnnotationScreenshot?: (type?: 'text', id?: string) => Promise<{ url?: string }>;
+      };
+    }>).__plant3dReviewerE2E;
+    const annotationId = hook.addMockAnnotation(
       `JH 校核批注 ${new Date().toLocaleTimeString('zh-CN')}`,
-      '校核人员通过自动化测试创建的批注 — 验证跨角色批注持久化',
+      '校核人员通过自动化测试创建的批注 — 验证跨角色批注、测量和截图持久化',
     );
+    const measurementId = typeof hook.addMockMeasurement === 'function'
+      ? hook.addMockMeasurement('distance')
+      : null;
+    const screenshot = typeof hook.captureAnnotationScreenshot === 'function'
+      ? await hook.captureAnnotationScreenshot('text', annotationId)
+      : null;
+    return {
+      annotationId,
+      measurementId,
+      screenshotUrl: screenshot?.url ?? null,
+    };
   });
 
   await root.evaluate(async () => {
@@ -862,10 +887,15 @@ export async function runReviewerAnnotationOnRoot(root: Page | Frame): Promise<{
     return (window as unknown as Record<string, { getConfirmedRecordCount: () => number }>).__plant3dReviewerE2E.getConfirmedRecordCount();
   });
 
-  return { annotationId, confirmedCount };
+  return { ...captured, confirmedCount };
 }
 
-export async function runReviewerAnnotationAcrossContext(context: BrowserContext): Promise<{ annotationId: string; confirmedCount: number }> {
+export async function runReviewerAnnotationAcrossContext(context: BrowserContext): Promise<{
+  annotationId: string;
+  measurementId: string | null;
+  screenshotUrl: string | null;
+  confirmedCount: number;
+}> {
   const rawPoll = process.env.PMS_PLANT3D_POLL_MS?.trim();
   const parsed = rawPoll ? Number(rawPoll) : NaN;
   const pollMs = Number.isFinite(parsed) && parsed >= 60_000 ? parsed : 180_000;

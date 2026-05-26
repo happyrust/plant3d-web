@@ -43,7 +43,7 @@ const VERBOSE = process.argv.includes('--verbose') || process.argv.includes('-v'
 
 type JsonRecord = Record<string, unknown>;
 
-let tokenCache: Record<string, string> = {};
+const tokenCache: Record<string, string> = {};
 let pass = 0;
 let fail = 0;
 const failures: string[] = [];
@@ -148,9 +148,9 @@ async function seedAnnotations(
       a.resolutionStatus === undefined && a.decisionStatus === undefined
         ? null
         : {
-            ...(a.resolutionStatus !== undefined ? { resolutionStatus: a.resolutionStatus } : {}),
-            ...(a.decisionStatus !== undefined ? { decisionStatus: a.decisionStatus } : {}),
-          };
+          ...(a.resolutionStatus !== undefined ? { resolutionStatus: a.resolutionStatus } : {}),
+          ...(a.decisionStatus !== undefined ? { decisionStatus: a.decisionStatus } : {}),
+        };
     return {
       id: a.id,
       title: a.id,
@@ -259,7 +259,7 @@ async function verifyAndAssert(
 
 async function caseA1_active_sj_empty(): Promise<void> {
   const formId = `V3-A1-${Date.now()}`;
-  console.log(`\n[A1] sj+active+无批注 → 期望 pass`);
+  console.log('\n[A1] sj+active+无批注 → 期望 pass');
   const sjToken = await getToken('SJ', 'sj');
   await seedFormAndTask(formId, sjToken);
   try {
@@ -271,7 +271,7 @@ async function caseA1_active_sj_empty(): Promise<void> {
 
 async function caseA2_active_sj_with_open(): Promise<void> {
   const formId = `V3-A2-${Date.now()}`;
-  console.log(`\n[A2] sj+active+1 条 open 批注 → 期望 block "未处理批注"`);
+  console.log('\n[A2] sj+active+1 条 open 批注 → 期望 block "未处理批注"');
   const sjToken = await getToken('SJ', 'sj');
   const { taskId } = await seedFormAndTask(formId, sjToken);
   await seedAnnotations(taskId, formId, [{ id: 'a2-open' }], sjToken); // 不传 reviewState → Open
@@ -288,7 +288,7 @@ async function caseA2_active_sj_with_open(): Promise<void> {
 
 async function caseA3_active_sj_all_replied(): Promise<void> {
   const formId = `V3-A3-${Date.now()}`;
-  console.log(`\n[A3] sj+active+pending+approved+rejected (open=0) → 期望 pass`);
+  console.log('\n[A3] sj+active+pending+approved+rejected (open=0) → 期望 pass');
   const sjToken = await getToken('SJ', 'sj');
   const { taskId } = await seedFormAndTask(formId, sjToken);
   await seedAnnotations(
@@ -310,7 +310,7 @@ async function caseA3_active_sj_all_replied(): Promise<void> {
 
 async function caseA4_agree_on_sj_node(): Promise<void> {
   const formId = `V3-A4-${Date.now()}`;
-  console.log(`\n[A4] sj 节点 + agree → 期望 block "agree 仅允许在 jd/sh/pz"`);
+  console.log('\n[A4] sj 节点 + agree → 期望 block "agree 仅允许在 jd/sh/pz"');
   const sjToken = await getToken('SJ', 'sj');
   await seedFormAndTask(formId, sjToken);
   try {
@@ -326,7 +326,7 @@ async function caseA4_agree_on_sj_node(): Promise<void> {
 
 async function caseA5_stop_on_sj_node(): Promise<void> {
   const formId = `V3-A5-${Date.now()}`;
-  console.log(`\n[A5] sj 节点 + stop → 期望 block "stop 仅允许在 jd/sh/pz"`);
+  console.log('\n[A5] sj 节点 + stop → 期望 block "stop 仅允许在 jd/sh/pz"');
   const sjToken = await getToken('SJ', 'sj');
   await seedFormAndTask(formId, sjToken);
   try {
@@ -355,7 +355,7 @@ async function setupJdTask(formId: string, annotations: AnnotationSeed[]): Promi
 
 async function caseB1_active_on_jd_node(): Promise<void> {
   const formId = `V3-B1-${Date.now()}`;
-  console.log(`\n[B1] jd 节点 + active → 期望 block "active 仅允许从 sj"`);
+  console.log('\n[B1] jd 节点 + active → 期望 block "active 仅允许从 sj"');
   await setupJdTask(formId, [
     { id: 'b1-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' }, // 让 sj→jd active 通过
   ]);
@@ -374,7 +374,7 @@ async function caseB1_active_on_jd_node(): Promise<void> {
 
 async function caseB2_agree_jd_empty(): Promise<void> {
   const formId = `V3-B2-${Date.now()}`;
-  console.log(`\n[B2] jd 节点 + agree + 0 批注 → 期望 pass`);
+  console.log('\n[B2] jd 节点 + agree + 0 批注 → 期望 pass');
   // setupJdTask 不传批注，但 active 跑到 jd 时也要批注 open=0；空批注满足
   await setupJdTask(formId, []);
   const jhToken = await getToken('JH', 'jd');
@@ -388,7 +388,7 @@ async function caseB2_agree_jd_empty(): Promise<void> {
 
 async function caseB3_agree_jd_pending(): Promise<void> {
   const formId = `V3-B3-${Date.now()}`;
-  console.log(`\n[B3] jd 节点 + agree + 1 pending → 期望 block "待确认批注"`);
+  console.log('\n[B3] jd 节点 + agree + 1 pending → 期望 block "待确认批注"');
   await setupJdTask(formId, [
     { id: 'b3-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
   ]);
@@ -407,7 +407,7 @@ async function caseB3_agree_jd_pending(): Promise<void> {
 
 async function caseB4_agree_jd_rejected(): Promise<void> {
   const formId = `V3-B4-${Date.now()}`;
-  console.log(`\n[B4] jd 节点 + agree + 1 rejected → 期望 recommend "return"`);
+  console.log('\n[B4] jd 节点 + agree + 1 rejected → 期望 recommend "return"');
   await setupJdTask(formId, [
     { id: 'b4-rejected', resolutionStatus: 'fixed', decisionStatus: 'rejected' },
   ]);
@@ -426,7 +426,7 @@ async function caseB4_agree_jd_rejected(): Promise<void> {
 
 async function caseB5_agree_jd_open(): Promise<void> {
   const formId = `V3-B5-${Date.now()}`;
-  console.log(`\n[B5] jd 节点 + agree + 1 open → 期望 block`);
+  console.log('\n[B5] jd 节点 + agree + 1 open → 期望 block');
   // 这里 trick：sj→jd active 时不能有 open，所以要先用一个 pending seed 跑过 active，再二次 seed 一条 open
   const sjToken = await getToken('SJ', 'sj');
   const { taskId } = await seedFormAndTask(formId, sjToken);
@@ -452,7 +452,7 @@ async function caseB5_agree_jd_open(): Promise<void> {
 
 async function caseB6_return_jd_empty(): Promise<void> {
   const formId = `V3-B6-${Date.now()}`;
-  console.log(`\n[B6] jd 节点 + return + 0 批注 → 期望 block "无未处理或被驳回"`);
+  console.log('\n[B6] jd 节点 + return + 0 批注 → 期望 block "无未处理或被驳回"');
   await setupJdTask(formId, []);
   const jhToken = await getToken('JH', 'jd');
   try {
@@ -469,7 +469,7 @@ async function caseB6_return_jd_empty(): Promise<void> {
 
 async function caseB7_return_jd_only_approved(): Promise<void> {
   const formId = `V3-B7-${Date.now()}`;
-  console.log(`\n[B7] jd 节点 + return + 全 approved → 期望 block "无问题不允许驳回"`);
+  console.log('\n[B7] jd 节点 + return + 全 approved → 期望 block "无问题不允许驳回"');
   await setupJdTask(formId, [
     { id: 'b7-approved', resolutionStatus: 'fixed', decisionStatus: 'agreed' },
   ]);
@@ -488,7 +488,7 @@ async function caseB7_return_jd_only_approved(): Promise<void> {
 
 async function caseB8_return_jd_open(): Promise<void> {
   const formId = `V3-B8-${Date.now()}`;
-  console.log(`\n[B8] jd 节点 + return + 1 open → 期望 pass`);
+  console.log('\n[B8] jd 节点 + return + 1 open → 期望 pass');
   const sjToken = await getToken('SJ', 'sj');
   const { taskId } = await seedFormAndTask(formId, sjToken);
   // 先满足 active 条件（pending）
@@ -511,7 +511,7 @@ async function caseB8_return_jd_open(): Promise<void> {
 
 async function caseB9_return_jd_rejected(): Promise<void> {
   const formId = `V3-B9-${Date.now()}`;
-  console.log(`\n[B9] jd 节点 + return + 1 rejected → 期望 pass`);
+  console.log('\n[B9] jd 节点 + return + 1 rejected → 期望 pass');
   await setupJdTask(formId, [
     { id: 'b9-rejected', resolutionStatus: 'fixed', decisionStatus: 'rejected' },
   ]);
@@ -526,7 +526,7 @@ async function caseB9_return_jd_rejected(): Promise<void> {
 
 async function caseB10_stop_jd_with_pending(): Promise<void> {
   const formId = `V3-B10-${Date.now()}`;
-  console.log(`\n[B10] jd 节点 + stop + 有 pending → 期望 pass（stop 不查 annotation）`);
+  console.log('\n[B10] jd 节点 + stop + 有 pending → 期望 pass（stop 不查 annotation）');
   await setupJdTask(formId, [
     { id: 'b10-pending', resolutionStatus: 'fixed', decisionStatus: 'pending' },
   ]);
@@ -598,7 +598,7 @@ async function setupReturnedToSjState(
 // C1：sj 拿到驳回，jd 在 jd 节点新加了一条未处理（open）批注 → verify(active) 必须 block
 async function caseC1_returned_sj_with_jd_added_open(): Promise<void> {
   const formId = `V3-C1-${Date.now()}`;
-  console.log(`\n[C1] sj 收到驳回 + jd 加的 1 条 open 仍在 → 期望 verify(active) block`);
+  console.log('\n[C1] sj 收到驳回 + jd 加的 1 条 open 仍在 → 期望 verify(active) block');
   const { sjToken } = await setupReturnedToSjState(
     formId,
     [
@@ -623,7 +623,7 @@ async function caseC1_returned_sj_with_jd_added_open(): Promise<void> {
 // C2：sj 拿到驳回，把 jd 加的那条 open 标记 fixed 后 → verify(active) 应通过
 async function caseC2_returned_sj_after_fixing_jd_added_open(): Promise<void> {
   const formId = `V3-C2-${Date.now()}`;
-  console.log(`\n[C2] sj 收到驳回 + sj 把 jd 加的 open 标 fixed → 期望 verify(active) pass`);
+  console.log('\n[C2] sj 收到驳回 + sj 把 jd 加的 open 标 fixed → 期望 verify(active) pass');
   const { taskId, sjToken } = await setupReturnedToSjState(
     formId,
     [
@@ -656,7 +656,7 @@ async function caseC2_returned_sj_after_fixing_jd_added_open(): Promise<void> {
 //     v3 active 规则仅要求 open=0，所以 sj 直接 verify(active) 应通过
 async function caseC3_returned_sj_with_only_replied_annotations(): Promise<void> {
   const formId = `V3-C3-${Date.now()}`;
-  console.log(`\n[C3] sj 收到驳回 + 全部批注都已 reply 过（含 rejected）→ 期望 verify(active) pass`);
+  console.log('\n[C3] sj 收到驳回 + 全部批注都已 reply 过（含 rejected）→ 期望 verify(active) pass');
   const { sjToken } = await setupReturnedToSjState(
     formId,
     [
@@ -677,7 +677,7 @@ async function caseC3_returned_sj_with_only_replied_annotations(): Promise<void>
 // C4：sj 拿到驳回，验证 sj 节点上不能直接 verify(agree) / verify(return) / verify(stop)
 async function caseC4_returned_sj_node_action_constraints(): Promise<void> {
   const formId = `V3-C4-${Date.now()}`;
-  console.log(`\n[C4] sj 收到驳回 + verify(agree/return/stop) → 全 block 节点不匹配`);
+  console.log('\n[C4] sj 收到驳回 + verify(agree/return/stop) → 全 block 节点不匹配');
   const { sjToken } = await setupReturnedToSjState(
     formId,
     [

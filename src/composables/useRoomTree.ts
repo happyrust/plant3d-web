@@ -1,6 +1,7 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 
 import type { CheckState, FlatRow, TreeNode } from '@/composables/useModelTree';
+import type { RoomClipPayload } from '@/utils/three/dtx/DTXClipController';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import {
@@ -46,6 +47,7 @@ export function useRoomTree(
   const searchItems = ref<RoomTreeNodeDto[]>([]);
   const searchLoading = ref(false);
   const searchError = ref<string | null>(null);
+  const clipError = ref<string | null>(null);
 
   const checkStateById = ref<Map<string, CheckState>>(new Map());
 
@@ -69,6 +71,7 @@ export function useRoomTree(
     searchItems.value = [];
     searchLoading.value = false;
     searchError.value = null;
+    clipError.value = null;
 
     checkStateById.value = new Map();
     childrenCountById.value = new Map();
@@ -496,6 +499,42 @@ export function useRoomTree(
     sceneGraph.clearIsolation();
   }
 
+  function aabbToRoomClipPayload(roomRefno: string, aabb: [number, number, number, number, number, number]): RoomClipPayload {
+    return {
+      mode: 'aabb',
+      room_refno: roomRefno,
+      aabb_min: [aabb[0], aabb[1], aabb[2]],
+      aabb_max: [aabb[3], aabb[4], aabb[5]],
+    };
+  }
+
+  function clipByRoom(id: string): boolean {
+    if (!enabled.value) return false;
+    const viewer = viewerRef.value;
+    if (!viewer) return false;
+
+    const refnos = collectLoadedRoomRefnos(id);
+    if (refnos.length === 0) {
+      clipError.value = '未找到已加载的房间对象，无法按房间裁剪';
+      return false;
+    }
+
+    const aabb = viewer.scene.getAABB(refnos);
+    if (!aabb) {
+      clipError.value = '房间包围盒不可用，无法按房间裁剪';
+      return false;
+    }
+
+    viewer.setRoomClip([aabbToRoomClipPayload(id, aabb)]);
+    clipError.value = null;
+    return true;
+  }
+
+  function clearRoomClip() {
+    viewerRef.value?.setRoomClip(null);
+    clipError.value = null;
+  }
+
   function getCheckState(id: string): CheckState {
     return checkStateById.value.get(id) || 'checked';
   }
@@ -701,6 +740,7 @@ export function useRoomTree(
     searchItems,
     searchLoading,
     searchError,
+    clipError,
     focusNodeById,
 
     getCheckState,
@@ -711,5 +751,7 @@ export function useRoomTree(
     flyTo,
     isolateXray,
     clearXray,
+    clipByRoom,
+    clearRoomClip,
   };
 }

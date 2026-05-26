@@ -8,6 +8,7 @@ import { emitCommand } from '@/ribbon/commandBus';
 const guideMocks = vi.hoisted(() => ({
   openGuideCenter: vi.fn(),
   startGuideForCurrentRole: vi.fn(),
+  startContextualGuide: vi.fn(),
 }));
 
 function makeGuide(role: string) {
@@ -48,6 +49,7 @@ vi.mock('@/composables/useOnboardingGuide', async () => {
       resolveGuideForUser: () => allGuides.reviewer,
       startGuideForRole: vi.fn(),
       startGuideForCurrentRole: guideMocks.startGuideForCurrentRole,
+      startContextualGuide: guideMocks.startContextualGuide,
       openGuideCenter: guideMocks.openGuideCenter,
       closeGuideCenter: vi.fn(),
     }),
@@ -83,18 +85,20 @@ afterEach(() => {
   unmountCurrent = null;
   guideMocks.openGuideCenter.mockReset();
   guideMocks.startGuideForCurrentRole.mockReset();
+  guideMocks.startContextualGuide.mockReset();
   document.body.innerHTML = '';
 });
 
 describe('ReviewGuideCenter command entry', () => {
-  it('收到 help.reviewGuide 命令后直接进入当前角色向导，不打开选择弹窗', async () => {
+  it('收到 help.reviewGuide 命令后走上下文入口，不打开选择弹窗', async () => {
     const { unmount } = mountReviewGuideCenter();
     unmountCurrent = unmount;
 
     emitCommand('help.reviewGuide');
     await nextTick();
 
-    expect(guideMocks.startGuideForCurrentRole).toHaveBeenCalledTimes(1);
+    expect(guideMocks.startContextualGuide).toHaveBeenCalledWith('currentRole');
+    expect(guideMocks.startGuideForCurrentRole).not.toHaveBeenCalled();
     expect(guideMocks.openGuideCenter).not.toHaveBeenCalled();
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });

@@ -18,6 +18,7 @@ import {
   normalizeReviewAttachment,
   normalizeAnnotationComment,
   normalizeAnnotationReviewStateView,
+  annotationScreenshotUpdate,
 } from './reviewApi';
 
 describe('reviewApi base url defaults', () => {
@@ -340,6 +341,50 @@ describe('reviewApi base url defaults', () => {
           note: 'ok',
         }),
       })
+    );
+  });
+
+  it('patches annotation screenshot with form and task context', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        screenshot: {
+          url: '/files/shot.png',
+          attachmentId: 'att-shot',
+          name: 'shot.png',
+          capturedAt: 1777041600000,
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await annotationScreenshotUpdate(
+      'ann-shot-1',
+      'text',
+      {
+        url: '/files/shot.png',
+        attachmentId: 'att-shot',
+        name: 'shot.png',
+        capturedAt: 1777041600000,
+      },
+      { formId: 'FORM-SHOT', taskId: 'task-shot' },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/review\/annotations\/ann-shot-1\?type=text$/),
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({
+          screenshot: {
+            url: '/files/shot.png',
+            attachmentId: 'att-shot',
+            name: 'shot.png',
+            capturedAt: 1777041600000,
+          },
+          formId: 'FORM-SHOT',
+          taskId: 'task-shot',
+        }),
+      }),
     );
   });
 

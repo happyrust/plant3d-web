@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import { e3dGetChildren } from '@/api/genModelE3dApi';
 import {
   pdmsBatchGetPtsetWithContext,
   pdmsGetPtsetWithContext,
   type PtsetBatchItemResponse,
 } from '@/api/genModelPdmsAttrApi';
-import { e3dGetChildren } from '@/api/genModelE3dApi';
 import PtsetPanel from '@/components/tools/PtsetPanel.vue';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -164,7 +164,7 @@ async function renderAllBranchChildren() {
     return;
   }
 
-  const loaded: Array<{ refno: string; response: Awaited<ReturnType<typeof pdmsGetPtsetWithContext>> }> = [];
+  const loaded: { refno: string; response: Awaited<ReturnType<typeof pdmsGetPtsetWithContext>> }[] = [];
   for (const item of successItems) {
     const resp = await pdmsGetPtsetWithContext(item.refno, getPtsetContext(item.refno));
     if (resp.success && resp.ptset.length > 0) {

@@ -20,7 +20,7 @@ vi.mock('@/api/reviewApi', () => ({
   reviewAttachmentUploadWithProgress: uploadMock,
 }));
 
-vi.mock('@/composables/useViewerContext', () => ({
+vi.mock('./useViewerContext', () => ({
   useViewerContext: () => ({ viewerRef }),
 }));
 
@@ -30,12 +30,13 @@ type BlobCallback = (blob: Blob | null) => void;
 
 function installCanvas(options: { toBlobBlob?: Blob | null; dataUrl?: string } = {}) {
   const { toBlobBlob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }), dataUrl = 'data:image/png;base64,AAA' } = options;
-  const canvas = {
+  const canvas = document.createElement('canvas');
+  Object.assign(canvas, {
     toBlob: vi.fn((cb: BlobCallback) => {
       cb(toBlobBlob);
     }),
     toDataURL: vi.fn(() => dataUrl),
-  } as unknown as HTMLCanvasElement;
+  });
 
   viewerRef.value = {
     scene: {
@@ -221,6 +222,71 @@ describe('useScreenshot', () => {
   });
 
   describe('其他辅助函数', () => {
+    it('captureViewport：合成 viewer canvas 与 xeokitOverlay，保留批注和测量 DOM 覆盖层', async () => {
+      const host = document.createElement('div');
+      const canvas = document.createElement('canvas');
+      const overlay = document.createElement('div');
+      const overlayItem = document.createElement('div');
+      host.className = 'viewer-panel-container';
+      overlay.className = 'xeokitOverlay';
+      overlayItem.textContent = '批注 A / 测量 1200mm';
+      overlay.appendChild(overlayItem);
+      host.appendChild(canvas);
+      host.appendChild(overlay);
+      document.body.appendChild(host);
+
+      canvas.width = 320;
+      canvas.height = 180;
+      canvas.toDataURL = vi.fn(() => 'data:image/png;base64,CANVAS');
+      canvas.toBlob = vi.fn((cb: BlobCallback) => {
+        cb(new Blob(['canvas-only'], { type: 'image/png' }));
+      });
+      viewerRef.value = { canvas };
+
+      const drawImage = vi.fn();
+      const originalCreateElement = document.createElement.bind(document);
+      vi.spyOn(document, 'createElement').mockImplementation((tagName: string, options?: ElementCreationOptions) => {
+        const element = originalCreateElement(tagName, options);
+        if (tagName.toLowerCase() === 'canvas') {
+          Object.defineProperty(element, 'getContext', {
+            value: vi.fn(() => ({ drawImage })),
+            configurable: true,
+          });
+          Object.defineProperty(element, 'toBlob', {
+            value: vi.fn((cb: BlobCallback) => {
+              cb(new Blob(['canvas-plus-overlay'], { type: 'image/png' }));
+            }),
+            configurable: true,
+          });
+          Object.defineProperty(element, 'toDataURL', {
+            value: vi.fn(() => 'data:image/png;base64,CANVAS_PLUS_OVERLAY'),
+            configurable: true,
+          });
+        }
+        return element;
+      });
+      vi.stubGlobal('Image', class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(_value: string) {
+          queueMicrotask(() => this.onload?.());
+        }
+      });
+
+      const { captureViewport } = useScreenshot();
+      const captured = await captureViewport({ includeOverlays: true });
+
+      expect(captured).toMatchObject({
+        dataUrl: 'data:image/png;base64,CANVAS_PLUS_OVERLAY',
+        width: 320,
+        height: 180,
+      });
+      expect(drawImage).toHaveBeenCalledTimes(2);
+
+      vi.restoreAllMocks();
+      host.remove();
+    });
+
     it('captureToDataURL：viewer 就绪时返回 dataUrl', () => {
       installCanvas({ dataUrl: 'data:image/png;base64,XYZ' });
       const { captureToDataURL } = useScreenshot();
@@ -234,6 +300,23 @@ describe('useScreenshot', () => {
       const { captureToDataURL } = useScreenshot();
 
       expect(captureToDataURL()).toBeNull();
+    });
+
+    it('captureToDataURL：viewerRef 未挂载时回退读取页面中的 viewer canvas', () => {
+      clearCanvas();
+      const host = document.createElement('div');
+      const canvas = document.createElement('canvas');
+      host.className = 'viewer-panel-container';
+      canvas.className = 'viewer';
+      canvas.toDataURL = vi.fn(() => 'data:image/png;base64,DOM_CANVAS');
+      host.appendChild(canvas);
+      document.body.appendChild(host);
+
+      const { captureToDataURL } = useScreenshot();
+
+      expect(captureToDataURL()).toBe('data:image/png;base64,DOM_CANVAS');
+
+      host.remove();
     });
   });
 });

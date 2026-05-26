@@ -11,8 +11,8 @@
  *
  * | 阶段 | 实装内容 |
  * |---|---|
- * | **P1 (当前)** | uClipEnabled / uClipRoomCount 的开关与计数；shader 端 isInsideAnyRoom 仍永远 true |
- * | **P2**       | AABB / CONVEX_HULLS 两种 mode 上传 uClipPlanesTexture + uClipMetaTexture，shader 端实装 broad-phase AABB + 凸壳 plane 集合判定 |
+ * | **P1.5 (当前)** | AABB / CONVEX_HULLS 通过固定上限 uniform arrays 做视觉 MVP 裁剪；SDF 暂退化为 AABB |
+ * | **P2**       | 将 plane 数据从 uniform arrays 升级为 uClipPlanesTexture + uClipMetaTexture，支持更大规模房间集合 |
  * | **P4**       | SDF mode 上传 uRoomSdfArray sampler2DArray + 异步 fetch binary；shader 加 mode 分派 |
  *
  * 后端 API 输出类型与本文件 `RoomClipPayload` 严格对齐，详见
@@ -66,6 +66,119 @@ export type RoomClipPayload =
   | ConvexHullsRoomPayload
   | SdfRoomPayload;
 
+export const ROOM_CLIP_MAX_SHAPES = 16;
+export const ROOM_CLIP_MAX_PLANES = 128;
+
+export type RoomClipUniformPayload = {
+  enabled: boolean;
+  roomCount: number;
+  shapeCount: number;
+  planeCount: number;
+  planes: Plane[];
+  shapePlaneStarts: number[];
+  shapePlaneCounts: number[];
+  shapeAabbMins: V3[];
+  shapeAabbMaxs: V3[];
+};
+
+const ZERO_PLANE: Plane = [0, 0, 0, 0];
+const ZERO_V3: V3 = [0, 0, 0];
+
+function cloneV3(v: V3): V3 {
+  return [v[0], v[1], v[2]];
+}
+
+function normalizePlane(plane: Plane): Plane | null {
+  const [x, y, z, d] = plane;
+  const len = Math.hypot(x, y, z);
+  if (!Number.isFinite(len) || len <= 0) return null;
+  return [x / len, y / len, z / len, d / len];
+}
+
+function planesFromAabb(min: V3, max: V3): Plane[] {
+  return [
+    [1, 0, 0, max[0]],
+    [-1, 0, 0, -min[0]],
+    [0, 1, 0, max[1]],
+    [0, -1, 0, -min[1]],
+    [0, 0, 1, max[2]],
+    [0, 0, -1, -min[2]],
+  ];
+}
+
+/**
+ * 把 API payload 降维成当前视觉 MVP 使用的固定上限 uniform 数据。
+ *
+ * - 每个 AABB / convex hull 都是一个独立 shape，多个 shape 之间取并集。
+ * - 每个 shape 内的 planes 取交集，约定 `n·p <= d` 为内部。
+ * - SDF 暂时退化为 AABB，后续真实 SDF 纹理路径落地后再替换。
+ */
+export function buildRoomClipUniformPayload(rooms: RoomClipPayload[]): RoomClipUniformPayload {
+  const planes: Plane[] = [];
+  const shapePlaneStarts: number[] = [];
+  const shapePlaneCounts: number[] = [];
+  const shapeAabbMins: V3[] = [];
+  const shapeAabbMaxs: V3[] = [];
+
+  const addShape = (aabbMin: V3, aabbMax: V3, shapePlanes: Plane[]) => {
+    if (shapePlaneStarts.length >= ROOM_CLIP_MAX_SHAPES) return;
+    const start = planes.length;
+    for (const plane of shapePlanes) {
+      if (planes.length >= ROOM_CLIP_MAX_PLANES) break;
+      const normalized = normalizePlane(plane);
+      if (normalized) planes.push(normalized);
+    }
+    const count = planes.length - start;
+    if (count <= 0) return;
+    shapePlaneStarts.push(start);
+    shapePlaneCounts.push(count);
+    shapeAabbMins.push(cloneV3(aabbMin));
+    shapeAabbMaxs.push(cloneV3(aabbMax));
+  };
+
+  for (const room of rooms) {
+    if (room.mode === 'convex_hulls') {
+      if (room.hulls.length === 0) {
+        addShape(room.aabb_min, room.aabb_max, planesFromAabb(room.aabb_min, room.aabb_max));
+        continue;
+      }
+      for (const hull of room.hulls) {
+        const hullPlanes = hull.planes.length > 0
+          ? hull.planes
+          : planesFromAabb(hull.aabb_min, hull.aabb_max);
+        addShape(hull.aabb_min, hull.aabb_max, hullPlanes);
+      }
+      continue;
+    }
+
+    // 视觉 MVP：AABB 直接裁；SDF 暂时用整体 AABB 兜底。
+    addShape(room.aabb_min, room.aabb_max, planesFromAabb(room.aabb_min, room.aabb_max));
+  }
+
+  while (planes.length < ROOM_CLIP_MAX_PLANES) planes.push([...ZERO_PLANE]);
+  while (shapePlaneStarts.length < ROOM_CLIP_MAX_SHAPES) shapePlaneStarts.push(0);
+  while (shapePlaneCounts.length < ROOM_CLIP_MAX_SHAPES) shapePlaneCounts.push(0);
+  while (shapeAabbMins.length < ROOM_CLIP_MAX_SHAPES) shapeAabbMins.push([...ZERO_V3]);
+  while (shapeAabbMaxs.length < ROOM_CLIP_MAX_SHAPES) shapeAabbMaxs.push([...ZERO_V3]);
+
+  const shapeCount = shapePlaneCounts.findIndex((count) => count === 0);
+  const effectiveShapeCount = shapeCount === -1 ? ROOM_CLIP_MAX_SHAPES : shapeCount;
+  const planeCount = planes.findIndex((plane) => plane[0] === 0 && plane[1] === 0 && plane[2] === 0 && plane[3] === 0);
+  const effectivePlaneCount = planeCount === -1 ? ROOM_CLIP_MAX_PLANES : planeCount;
+
+  return {
+    enabled: effectiveShapeCount > 0,
+    roomCount: rooms.length,
+    shapeCount: effectiveShapeCount,
+    planeCount: effectivePlaneCount,
+    planes,
+    shapePlaneStarts,
+    shapePlaneCounts,
+    shapeAabbMins,
+    shapeAabbMaxs,
+  };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // DTXClipController
 // ════════════════════════════════════════════════════════════════════════════
@@ -99,22 +212,20 @@ export class DTXClipController {
    * - 传空数组 / 不传 → 等价 {@link disable}（关闭裁剪）。
    * - 列表内顺序对应 shader 端 uClipRoom* uniform 数组的 index；后续 PR 用此 index 索引 DataTexture。
    *
-   * @internal P1 实装：仅 toggle uClipEnabled + 设置 roomCount。真正 plane / SDF 数据
-   *           会在 P2 / P4 PR 中扩展（届时不破坏本接口）。
+   * @internal 当前视觉 MVP：AABB / convex hull 会被转换为固定上限 uniform arrays；
+   *           后续 P2 可替换为 DataTexture 上传而不破坏本接口。
    */
   setRooms(rooms: RoomClipPayload[]): void {
     this.currentRooms = rooms.slice();
-    const enabled = rooms.length > 0;
-    const uniforms = { enabled, roomCount: rooms.length };
+    const uniforms = buildRoomClipUniformPayload(rooms);
     for (const m of this.mainMaterials) m.setRoomClipUniforms(uniforms);
     for (const m of this.pickingMaterials) m.setRoomClipUniforms(uniforms);
-    // TODO(P2): uploadPlanesData(this.currentRooms)
     // TODO(P4): uploadSdfTextures(this.currentRooms.filter(r => r.mode === 'sdf'))
   }
 
   disable(): void {
     this.currentRooms = [];
-    const uniforms = { enabled: false, roomCount: 0 };
+    const uniforms = buildRoomClipUniformPayload([]);
     for (const m of this.mainMaterials) m.setRoomClipUniforms(uniforms);
     for (const m of this.pickingMaterials) m.setRoomClipUniforms(uniforms);
   }

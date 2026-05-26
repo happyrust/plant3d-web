@@ -69,7 +69,7 @@ import WorkflowReturnDialog from './WorkflowReturnDialog.vue';
 import WorkflowStepBar from './WorkflowStepBar.vue';
 import WorkflowSubmitDialog from './WorkflowSubmitDialog.vue';
 
-import type { AnnotationReviewState, ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
+import type { AnnotationReviewState, AnnotationScreenshot, ReviewAttachment, ReviewTask, WorkflowNode } from '@/types/auth';
 
 import {
   reviewAnnotationCheck,
@@ -77,11 +77,13 @@ import {
   reviewSyncImport,
 } from '@/api/reviewApi';
 import { syncAnnotationReviewStates } from '@/composables/useAnnotationReviewStateSync';
-import { saveAnnotationBasicFields, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
+import { saveAnnotationBasicFields, saveAnnotationScreenshot, saveAnnotationSeverity } from '@/composables/useAnnotationSeveritySync';
+import { refreshCommentThread } from '@/composables/useCommentThread';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useNavigationStatePersistence } from '@/composables/useNavigationStatePersistence';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
 import { useReviewStore } from '@/composables/useReviewStore';
+import { useScreenshot } from '@/composables/useScreenshot';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
@@ -135,6 +137,7 @@ const onboarding = useOnboardingGuide();
 const selectionStore = useSelectionStore();
 const viewerContext = useViewerContext();
 const unitSettings = useUnitSettingsStore();
+const screenshotTools = useScreenshot();
 
 // 确认记录场景恢复（公共模块）
 const confirmedRecordsRestorer = createConfirmedRecordsRestorer({
@@ -1033,8 +1036,8 @@ const hasUnsavedBlockingSubmitData = computed(() => (
 const confirmSaving = ref(false);
 const confirmError = ref<string | null>(null);
 
-async function confirmCurrentData() {
-  if (confirmSaving.value || !hasUnsavedPendingData.value) return;
+async function confirmCurrentData(): Promise<boolean> {
+  if (confirmSaving.value || !hasUnsavedPendingData.value) return false;
 
   confirmSaving.value = true;
   confirmError.value = null;
@@ -1064,8 +1067,10 @@ async function confirmCurrentData() {
       await restoreConfirmedRecordsIntoScene(true);
       await refreshAnnotationReviewStatesForCurrentTask();
     }
+    return saved;
   } catch (e) {
     confirmError.value = e instanceof Error ? e.message : '确认当前数据失败';
+    return false;
   } finally {
     confirmSaving.value = false;
   }
@@ -1123,6 +1128,79 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 
+function getAutomationAnnotationRecord(annotationType: AnnotationType, annotationId?: string | null) {
+  const records = (() => {
+    switch (annotationType) {
+      case 'text':
+        return toolStore.annotations.value;
+      case 'cloud':
+        return toolStore.cloudAnnotations.value;
+      case 'rect':
+        return toolStore.rectAnnotations.value;
+      case 'obb':
+        return toolStore.obbAnnotations.value;
+    }
+  })();
+  return annotationId
+    ? records.find((item) => item.id === annotationId) ?? null
+    : records[0] ?? null;
+}
+
+async function captureAutomationAnnotationScreenshot(
+  annotationType: AnnotationType = 'text',
+  annotationId?: string | null,
+): Promise<AnnotationScreenshot> {
+  const task = currentTask.value;
+  if (!task?.id) {
+    throw new Error('当前校审任务未就绪，无法保存批注截图');
+  }
+  const record = getAutomationAnnotationRecord(annotationType, annotationId);
+  if (!record) {
+    throw new Error(`未找到可截图的 ${annotationType} 批注`);
+  }
+
+  const capture = await screenshotTools.captureViewport({
+    format: 'image/png',
+    includeOverlays: true,
+  });
+  if (!capture) {
+    throw new Error('三维视图截图失败');
+  }
+
+  const attachment = await screenshotTools.uploadCapturedScreenshot(task.id, capture, {
+    kind: 'annotation_shot',
+    sourceAnnotationId: record.id,
+    sourceAnnotationType: annotationType,
+    formId: task.formId ?? null,
+    description: record.title?.trim() || 'E2E 自动化批注截图',
+  });
+  if (!attachment) {
+    throw new Error('批注截图上传失败');
+  }
+
+  const screenshot: AnnotationScreenshot = {
+    url: attachment.url,
+    attachmentId: attachment.id,
+    name: attachment.name,
+    mimeType: attachment.mimeType || attachment.type,
+    size: attachment.size,
+    width: attachment.width,
+    height: attachment.height,
+    uploadedAt: attachment.uploadedAt,
+    capturedAt: attachment.capturedAt,
+  };
+  const saved = await saveAnnotationScreenshot(annotationType, record.id, screenshot, {
+    formId: task.formId ?? null,
+    taskId: task.id,
+    silent: true,
+    persist: false,
+  });
+  if (!saved) {
+    throw new Error('批注截图关联保存失败');
+  }
+  return screenshot;
+}
+
 onMounted(() => {
   window.addEventListener(EMBED_LANDING_STATE_UPDATED_EVENT, handleEmbedLandingStateUpdated);
   syncEmbedLandingStateFromStorage();
@@ -1137,6 +1215,11 @@ onMounted(() => {
         const id = `e2e-annot-${Date.now()}`;
         toolStore.addAnnotation({
           id,
+          entityId: '24381/145018',
+          worldPos: [0, 0, 0],
+          glyph: '1',
+          refno: '24381/145018',
+          refnos: ['24381/145018'],
           title: title || `E2E 批注 ${new Date().toLocaleTimeString('zh-CN')}`,
           description: description || '自动化测试创建的批注',
           position: [0, 0, 0],
@@ -1200,7 +1283,35 @@ onMounted(() => {
       },
       async confirmData(note?: string) {
         confirmNote.value = note || 'E2E 自动化批注确认';
-        await confirmCurrentData();
+        const ok = await confirmCurrentData();
+        if (!ok) {
+          throw new Error(confirmError.value || 'E2E 自动化确认当前数据失败');
+        }
+      },
+      async captureAnnotationScreenshot(annotationType?: AnnotationType, annotationId?: string) {
+        return await captureAutomationAnnotationScreenshot(annotationType ?? 'text', annotationId);
+      },
+      async refreshAnnotationCommentThread(annotationType?: AnnotationType, annotationId?: string) {
+        const type = annotationType ?? 'text';
+        const record = getAutomationAnnotationRecord(type, annotationId) as {
+          id: string;
+          formId?: string;
+          taskId?: string;
+        } | null;
+        if (!record) return 0;
+        if (type === 'text') toolStore.activeAnnotationId.value = record.id;
+        if (type === 'cloud') toolStore.activeCloudAnnotationId.value = record.id;
+        if (type === 'rect') toolStore.activeRectAnnotationId.value = record.id;
+        if (type === 'obb') toolStore.activeObbAnnotationId.value = record.id;
+        const formId = record.formId ?? currentTask.value?.formId ?? activeReviewFormId.value ?? undefined;
+        const taskId = record.taskId ?? currentTask.value?.id ?? undefined;
+        await refreshCommentThread({
+          annotationType: type,
+          annotationId: record.id,
+          formId,
+          taskId,
+        });
+        return toolStore.getAnnotationComments(type, record.id, formId, taskId).length;
       },
       getAnnotationCount() {
         return pendingAnnotationCount.value;

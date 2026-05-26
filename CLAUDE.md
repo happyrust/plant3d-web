@@ -174,3 +174,31 @@ scripts/                  # 构建和验证脚本
 - **Biggest challenge:** [The #1 thing blocking progress]
 - **Tech stack:** [Languages, frameworks, infra]
 - **Deploy:** [How you ship — Vercel, AWS, Railway, etc.]
+
+<!-- robrain -->
+## RoBrain — Context Management (OSS self-hosted)
+
+This project uses RoBrain Sensing MCP for passive session capture.
+Control MCP is not available in OSS self-hosted mode.
+Call Sensing tools exactly as instructed to maintain session memory.
+
+### Session start (mandatory, first thing in every new chat)
+```
+sensing_start_session(project_id="f58021791a9a", working_dir="<cwd>")
+```
+Use the session_id from the tool response (or pass your own unique id per chat). Initialize sequence=1 before your first reply.
+
+### After every response (mandatory)
+```
+sensing_record_turn(session_id="<stored session_id>", sequence=<n>, user_message="<full user message>", claude_reply="<full assistant reply>", files_touched=[...], injected_memory_ids=[])
+```
+Increment sequence by 1 after each successful call.
+
+If topic_shift=true is returned, note it for follow-up context retrieval.
+
+### Session end (last thing)
+```
+sensing_end_session(session_id="<stored session_id>", summary="one sentence: what was accomplished")
+```
+<!-- /robrain -->
+

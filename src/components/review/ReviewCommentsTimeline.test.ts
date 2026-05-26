@@ -376,6 +376,42 @@ describe('ReviewCommentsTimeline', () => {
     mounted.unmount();
   });
 
+  it('展示已关联批注截图缩略图，点击可打开大图预览', async () => {
+    const mounted = await mountTimeline({
+      screenshot: {
+        url: 'https://example.com/annot-shot.png',
+        attachmentId: 'att-shot',
+        name: 'annot-shot.png',
+        capturedAt: 1777041600000,
+      },
+    });
+    await flushUi();
+
+    expect(document.body.textContent).toContain('批注截图');
+    expect(document.body.textContent).toContain('annot-shot.png');
+    const thumbnail = document.querySelector('img[alt="批注截图"]') as HTMLImageElement | null;
+    expect(thumbnail?.getAttribute('src')).toBe('https://example.com/annot-shot.png');
+
+    thumbnail?.click();
+    await flushUi();
+
+    const preview = document.querySelector('[data-testid="review-comments-screenshot-preview"]');
+    expect(preview).not.toBeNull();
+    expect(preview?.querySelector('img')?.getAttribute('src')).toBe('https://example.com/annot-shot.png');
+
+    mounted.unmount();
+  });
+
+  it('未关联截图时不渲染截图卡片', async () => {
+    const mounted = await mountTimeline();
+    await flushUi();
+
+    expect(document.querySelector('img[alt="批注截图"]')).toBeNull();
+    expect(document.body.textContent).not.toContain('点击查看大图');
+
+    mounted.unmount();
+  });
+
   it('设计侧空备注点击不需解决时不更新状态', async () => {
     currentUser.value = { id: 'designer-1', name: '设计甲', role: UserRole.DESIGNER };
 

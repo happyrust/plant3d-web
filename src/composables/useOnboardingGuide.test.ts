@@ -123,4 +123,15 @@ describe('useOnboardingGuide contextual entries', () => {
       level: 'warning',
     });
   });
+
+  it('播放其他角色教程不会误标记当前登录角色已完成', async () => {
+    currentUser.value = { id: 'cross-role-user', role: 'sh' };
+
+    const guide = useOnboardingGuide();
+    await guide.startGuideForRole('designer');
+    guide.finishGuide();
+
+    expect(guide.isGuideCompleted('cross-role-user', 'sh', 'manual')).toBe(false);
+    expect(guide.isGuideCompleted('cross-role-user', 'designer', 'manual')).toBe(true);
+  });
 });

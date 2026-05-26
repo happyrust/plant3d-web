@@ -64,11 +64,38 @@ const submitTaskToNextNodeMock = vi.hoisted(() => vi.fn(async () => {}));
 const returnTaskToNodeMock = vi.hoisted(() => vi.fn(async () => {}));
 const saveAnnotationSeverityMock = vi.hoisted(() => vi.fn(async () => true));
 const saveAnnotationBasicFieldsMock = vi.hoisted(() => vi.fn(async () => true));
+const saveAnnotationScreenshotMock = vi.hoisted(() => vi.fn(async () => true));
 const refreshCommentThreadMock = vi.hoisted(() => vi.fn(async () => {}));
+const captureViewportMock = vi.hoisted(() => vi.fn(async () => ({
+  blob: new Blob(['reviewer overlay screenshot'], { type: 'image/png' }),
+  dataUrl: 'data:image/png;base64,REVIEWER_OVERLAY',
+  width: 640,
+  height: 360,
+  capturedAt: 1777041600000,
+  format: 'image/png',
+})));
+const uploadCapturedScreenshotMock = vi.hoisted(() => vi.fn(async () => ({
+  id: 'att-reviewer-shot',
+  url: 'https://example.com/reviewer-shot.png',
+  name: 'reviewer-shot.png',
+  capturedAt: 1777041600000,
+  width: 640,
+  height: 360,
+})));
 
 vi.mock('@/composables/useAnnotationSeveritySync', () => ({
   saveAnnotationSeverity: (...args: unknown[]) => saveAnnotationSeverityMock(...args),
   saveAnnotationBasicFields: (...args: unknown[]) => saveAnnotationBasicFieldsMock(...args),
+  saveAnnotationScreenshot: (...args: unknown[]) => saveAnnotationScreenshotMock(...args),
+}));
+
+vi.mock('@/composables/useScreenshot', () => ({
+  useScreenshot: () => ({
+    captureViewport: (...args: unknown[]) => captureViewportMock(...args),
+    uploadCapturedScreenshot: (...args: unknown[]) => uploadCapturedScreenshotMock(...args),
+    isCapturing: { value: false },
+    uploadProgress: { value: 0 },
+  }),
 }));
 
 vi.mock('@/composables/useCommentThread', () => ({
@@ -355,6 +382,9 @@ describe('ReviewPanel', () => {
     });
     toolStoreMock.addAnnotation.mockClear();
     toolStoreMock.addMeasurement.mockClear();
+    saveAnnotationScreenshotMock.mockClear();
+    captureViewportMock.mockClear();
+    uploadCapturedScreenshotMock.mockClear();
     toolStoreMock.importJSON.mockClear();
     toolStoreMock.setToolMode.mockClear();
     toolStoreMock.setTextAnnotationsCollapsed.mockClear();
@@ -1051,6 +1081,58 @@ describe('ReviewPanel', () => {
       visible: true,
       createdAt: expect.any(Number),
     }));
+
+    mounted.unmount();
+  });
+
+  it('automation hook captures a reviewer annotation screenshot with overlays and saves it to the annotation', async () => {
+    window.history.replaceState({}, '', '/?automation_review=1');
+    currentTask.value = createTask({ id: 'task-shot', formId: 'FORM-SHOT' });
+    toolStoreMock.annotations.value = [{
+      id: 'annot-shot',
+      title: '截图批注',
+      description: '需要带测量覆盖层',
+      visible: true,
+      createdAt: 1,
+    }];
+
+    const mounted = await mountReviewPanel();
+    await settlePanel();
+
+    const hook = (window as Window & {
+      __plant3dReviewerE2E?: {
+        captureAnnotationScreenshot?: (type?: 'text', id?: string) => Promise<{ url: string; attachmentId?: string }>;
+      };
+    }).__plant3dReviewerE2E;
+
+    expect(typeof hook?.captureAnnotationScreenshot).toBe('function');
+    const screenshot = await hook?.captureAnnotationScreenshot?.('text', 'annot-shot');
+
+    expect(captureViewportMock).toHaveBeenCalledWith(expect.objectContaining({
+      includeOverlays: true,
+      format: 'image/png',
+    }));
+    expect(uploadCapturedScreenshotMock).toHaveBeenCalledWith('task-shot', expect.objectContaining({
+      dataUrl: 'data:image/png;base64,REVIEWER_OVERLAY',
+    }), expect.objectContaining({
+      kind: 'annotation_shot',
+      sourceAnnotationId: 'annot-shot',
+      sourceAnnotationType: 'text',
+      formId: 'FORM-SHOT',
+    }));
+    expect(saveAnnotationScreenshotMock).toHaveBeenCalledWith('text', 'annot-shot', expect.objectContaining({
+      url: 'https://example.com/reviewer-shot.png',
+      attachmentId: 'att-reviewer-shot',
+    }), expect.objectContaining({
+      formId: 'FORM-SHOT',
+      taskId: 'task-shot',
+      silent: true,
+      persist: false,
+    }));
+    expect(screenshot).toMatchObject({
+      url: 'https://example.com/reviewer-shot.png',
+      attachmentId: 'att-reviewer-shot',
+    });
 
     mounted.unmount();
   });

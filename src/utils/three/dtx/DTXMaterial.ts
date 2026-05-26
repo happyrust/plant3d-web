@@ -18,10 +18,17 @@ import {
   ShaderMaterial,
   DataTexture,
   Vector3,
+  Vector4,
   Matrix4,
   Color,
   GLSL3
 } from 'three';
+
+import {
+  ROOM_CLIP_MAX_PLANES,
+  ROOM_CLIP_MAX_SHAPES,
+  type RoomClipUniformPayload,
+} from './DTXClipController';
 
 // ========== Shader 代码 ==========
 
@@ -214,17 +221,63 @@ uniform vec3 lightColor1;
 uniform int renderPass;
 uniform float alphaCutoff;
 
-// === 房间凸壳裁剪（P1 阶段：先接入 uniform + 占位实现；P2 起逐步完善 plane/SDF 路径）===
+// === 房间凸壳裁剪（视觉 MVP：uniform arrays 承载 AABB / convex hull planes；P2 再升级 DataTexture）===
 // 设计见 plant3d-web/goals/room-clip-dual-track/data-source-design.md
 // shader 数据流 see plant3d-web/goals/room-clip-dual-track/assets/dtx-room-clip-shader-data-flow.png
 uniform bool uClipEnabled;
 uniform int  uClipRoomCount;
+uniform int  uClipShapeCount;
+uniform int  uClipPlaneCount;
+uniform vec4 uClipPlanes[${ROOM_CLIP_MAX_PLANES}];
+uniform int  uClipShapePlaneStart[${ROOM_CLIP_MAX_SHAPES}];
+uniform int  uClipShapePlaneCount[${ROOM_CLIP_MAX_SHAPES}];
+uniform vec3 uClipShapeAabbMin[${ROOM_CLIP_MAX_SHAPES}];
+uniform vec3 uClipShapeAabbMax[${ROOM_CLIP_MAX_SHAPES}];
+uniform vec3 uClipEdgeColor;
+uniform float uClipEdgeWidth;
 
-bool isInsideAnyRoom(vec3 p) {
-  if (!uClipEnabled) return true;
-  if (uClipRoomCount == 0) return true;
-  // 占位：后续 PR 接入 uClipPlanesTexture + uClipMetaTexture + uRoomSdfArray 真判定。
-  return true;
+bool isInsideClipAabb(vec3 p, int shapeIndex) {
+  vec3 mn = uClipShapeAabbMin[shapeIndex];
+  vec3 mx = uClipShapeAabbMax[shapeIndex];
+  return all(greaterThanEqual(p, mn)) && all(lessThanEqual(p, mx));
+}
+
+// 返回值：<0 表示被裁；0 表示通过但不高亮；>0 表示靠近裁剪边界，需要混入切口色。
+float roomClipEdgeFactor(vec3 p) {
+  if (!uClipEnabled) return 0.0;
+  if (uClipRoomCount == 0 || uClipShapeCount == 0 || uClipPlaneCount == 0) return 0.0;
+
+  for (int shapeIndex = 0; shapeIndex < ${ROOM_CLIP_MAX_SHAPES}; shapeIndex++) {
+    if (shapeIndex >= uClipShapeCount) break;
+    if (!isInsideClipAabb(p, shapeIndex)) continue;
+
+    int planeStart = uClipShapePlaneStart[shapeIndex];
+    int planeCount = uClipShapePlaneCount[shapeIndex];
+    float maxSignedDistance = -1.0e20;
+    bool insideShape = true;
+
+    for (int localPlaneIndex = 0; localPlaneIndex < ${ROOM_CLIP_MAX_PLANES}; localPlaneIndex++) {
+      if (localPlaneIndex >= planeCount) break;
+      int planeIndex = planeStart + localPlaneIndex;
+      if (planeIndex >= uClipPlaneCount) break;
+
+      vec4 plane = uClipPlanes[planeIndex];
+      float signedDistance = dot(plane.xyz, p) - plane.w;
+      if (signedDistance > 0.0) {
+        insideShape = false;
+        break;
+      }
+      maxSignedDistance = max(maxSignedDistance, signedDistance);
+    }
+
+    if (insideShape) {
+      float edgeWidth = max(uClipEdgeWidth, 1.0e-6);
+      float distanceToBoundary = -maxSignedDistance;
+      return 1.0 - smoothstep(0.0, edgeWidth, distanceToBoundary);
+    }
+  }
+
+  return -1.0;
 }
 
 // === 对数深度缓冲 + per-object depth bias ===
@@ -275,7 +328,8 @@ void main() {
   }
   // 房间凸壳裁剪：被房间边界排除的片元直接 discard。
   // 未启用裁剪或没选中任何房间时 isInsideAnyRoom 永远返回 true，等价旧行为。
-  if (!isInsideAnyRoom(vWorldPosition)) {
+  float clipEdgeFactor = roomClipEdgeFactor(vWorldPosition);
+  if (clipEdgeFactor < 0.0) {
     discard;
   }
   bool isOpaque = vColor.a >= alphaCutoff;
@@ -308,6 +362,9 @@ void main() {
 
   // 输出保持线性空间，由 renderer 的 toneMapping/outputColorSpace 统一处理（与地形一致）
   vec3 finalColor = ambient + directLight0 + directLight1;
+  if (clipEdgeFactor > 0.001) {
+    finalColor = mix(finalColor, uClipEdgeColor, clamp(clipEdgeFactor, 0.0, 1.0));
+  }
 
   fragColor = vec4(finalColor, vColor.a);
 
@@ -344,6 +401,28 @@ export type DTXMaterialOptions = {
   transparent?: boolean;
   depthWrite?: boolean;
   depthTest?: boolean;
+}
+
+function createVector3Array(count: number): Vector3[] {
+  return Array.from({ length: count }, () => new Vector3());
+}
+
+function createVector4Array(count: number): Vector4[] {
+  return Array.from({ length: count }, () => new Vector4());
+}
+
+function copyVector3Array(target: Vector3[], source: RoomClipUniformPayload['shapeAabbMins']): void {
+  for (let i = 0; i < target.length; i++) {
+    const v = source[i] ?? [0, 0, 0];
+    target[i]!.set(v[0], v[1], v[2]);
+  }
+}
+
+function copyVector4Array(target: Vector4[], source: RoomClipUniformPayload['planes']): void {
+  for (let i = 0; i < target.length; i++) {
+    const v = source[i] ?? [0, 0, 0, 0];
+    target[i]!.set(v[0], v[1], v[2], v[3]);
+  }
 }
 
 // ========== DTXMaterial 类 ==========
@@ -386,9 +465,18 @@ export class DTXMaterial extends ShaderMaterial {
         renderPass: { value: options.renderPass ?? 0 },
         alphaCutoff: { value: options.alphaCutoff ?? 0.999 },
 
-        // 房间凸壳裁剪（P1 接入占位；P2+ 加 DataTexture / sampler2DArray 真判定）
+        // 房间凸壳裁剪（当前用固定上限 uniform arrays；P2+ 再加 DataTexture / sampler2DArray）
         uClipEnabled: { value: false },
-        uClipRoomCount: { value: 0 }
+        uClipRoomCount: { value: 0 },
+        uClipShapeCount: { value: 0 },
+        uClipPlaneCount: { value: 0 },
+        uClipPlanes: { value: createVector4Array(ROOM_CLIP_MAX_PLANES) },
+        uClipShapePlaneStart: { value: new Array(ROOM_CLIP_MAX_SHAPES).fill(0) },
+        uClipShapePlaneCount: { value: new Array(ROOM_CLIP_MAX_SHAPES).fill(0) },
+        uClipShapeAabbMin: { value: createVector3Array(ROOM_CLIP_MAX_SHAPES) },
+        uClipShapeAabbMax: { value: createVector3Array(ROOM_CLIP_MAX_SHAPES) },
+        uClipEdgeColor: { value: new Vector3(1.0, 0.28, 0.0) },
+        uClipEdgeWidth: { value: 0.08 }
       },
       // 重要：启用 WebGL2 的 GLSL 3.0 语法
       glslVersion: GLSL3
@@ -423,24 +511,44 @@ export class DTXMaterial extends ShaderMaterial {
     // 注意：当 shader 代码结构变化（如新增 uniform/global 变换）时必须升级该 key，
     // 否则 Three.js 可能复用旧 program 导致新逻辑不生效。
     // v11: fragment shader 加 backFaceBias（z-fighting Tier 1，docs/issues/dtx-model-z-fighting-flicker-2026-04-29.md）
-    // v12: fragment shader 加房间凸壳裁剪 uniform 占位（uClipEnabled/uClipRoomCount + isInsideAnyRoom），
-    //      详见 goals/room-clip-dual-track/data-source-design.md。
-    return 'DTXMaterial_v12';
+    // v13: fragment shader 加 AABB + plane uniform 裁剪 MVP，并给切口边界混入橙色高亮。
+    return 'DTXMaterial_v13';
   }
 
   /**
    * 设置房间凸壳裁剪开关与房间数。
    *
-   * P1 阶段：占位 API，仅启用 / 禁用 uniform；shader 内 isInsideAnyRoom 仍永远 true。
-   * P2 起：DTXClipController 在调用此方法前会先上传 uClipPlanesTexture / uClipMetaTexture
-   *        / uRoomSdfArray 等真实裁剪数据。
+   * 当前视觉 MVP：同步 AABB / convex hull plane uniform arrays。
+   * P2 起可由 DTXClipController 改为上传 uClipPlanesTexture / uClipMetaTexture
+   * / uRoomSdfArray 等大规模裁剪数据。
    */
-  setRoomClipUniforms(options: { enabled: boolean; roomCount: number }): void {
+  setRoomClipUniforms(options: RoomClipUniformPayload): void {
     if (this.uniforms.uClipEnabled) {
       this.uniforms.uClipEnabled.value = options.enabled;
     }
     if (this.uniforms.uClipRoomCount) {
       this.uniforms.uClipRoomCount.value = options.roomCount;
+    }
+    if (this.uniforms.uClipShapeCount) {
+      this.uniforms.uClipShapeCount.value = options.shapeCount;
+    }
+    if (this.uniforms.uClipPlaneCount) {
+      this.uniforms.uClipPlaneCount.value = options.planeCount;
+    }
+    if (this.uniforms.uClipPlanes) {
+      copyVector4Array(this.uniforms.uClipPlanes.value as Vector4[], options.planes);
+    }
+    if (this.uniforms.uClipShapePlaneStart) {
+      this.uniforms.uClipShapePlaneStart.value = options.shapePlaneStarts.slice();
+    }
+    if (this.uniforms.uClipShapePlaneCount) {
+      this.uniforms.uClipShapePlaneCount.value = options.shapePlaneCounts.slice();
+    }
+    if (this.uniforms.uClipShapeAabbMin) {
+      copyVector3Array(this.uniforms.uClipShapeAabbMin.value as Vector3[], options.shapeAabbMins);
+    }
+    if (this.uniforms.uClipShapeAabbMax) {
+      copyVector3Array(this.uniforms.uClipShapeAabbMax.value as Vector3[], options.shapeAabbMaxs);
     }
   }
 

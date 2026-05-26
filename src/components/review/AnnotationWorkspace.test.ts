@@ -17,8 +17,9 @@ vi.mock('./ReviewCommentsTimeline.vue', () => ({
     props: {
       annotationLabel: { type: String, default: '' },
       density: { type: String, default: 'normal' },
+      screenshot: { type: Object, default: undefined },
     },
-    template: '<div data-testid="timeline-stub" :data-density="density">{{ annotationLabel }}</div>',
+    template: '<div data-testid="timeline-stub" :data-density="density" :data-screenshot-url="screenshot?.url">{{ annotationLabel }}</div>',
   },
 }));
 
@@ -170,5 +171,26 @@ describe('AnnotationWorkspace', () => {
     const visible = await mountWorkspace({ showWorkflow: true });
     expect(document.querySelector('[data-testid="workflow-slot"]')).not.toBeNull();
     visible.unmount();
+  });
+
+  it('将选中批注的 screenshot 传给 ReviewCommentsTimeline', async () => {
+    const withScreenshot: AnnotationWorkspaceItem = {
+      ...baseItems[0],
+      screenshot: {
+        url: 'https://example.com/text-shot.png',
+        attachmentId: 'att-text-shot',
+        name: 'text-shot.png',
+        capturedAt: 1777041600000,
+      },
+    };
+    const mounted = await mountWorkspace({
+      selectedAnnotation: withScreenshot,
+      layout: 'detail',
+    });
+
+    const timeline = document.querySelector('[data-testid="timeline-stub"]');
+    expect(timeline?.getAttribute('data-screenshot-url')).toBe('https://example.com/text-shot.png');
+
+    mounted.unmount();
   });
 });
