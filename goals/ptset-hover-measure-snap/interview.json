@@ -1,0 +1,58 @@
+{
+  "stage": "interview",
+  "title": "测量时 hover 显示关键点(ptset) 并吸附捕捉",
+  "goalSlug": "ptset-hover-measure-snap",
+  "note": "本 bundle 的答案大多由代码勘察推导（plannotator-setup-goal 原则：可由代码回答的不询问）。如需调整请直接改动并重跑。",
+  "questions": [
+    {
+      "id": "scope-modes",
+      "prompt": "捕捉需覆盖哪些测量模式？",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "四种模式全覆盖（距离/角度/点标高/高差），因为它们共用 pickSurfacePoint 咽喉，成本边际很低。",
+      "recommendedOptionIds": ["distance", "angle", "elev_point", "elev_delta"],
+      "options": [
+        { "id": "distance", "label": "距离" },
+        { "id": "angle", "label": "角度" },
+        { "id": "elev_point", "label": "点标高" },
+        { "id": "elev_delta", "label": "高差" }
+      ],
+      "required": true
+    },
+    {
+      "id": "snap-threshold",
+      "prompt": "吸附判定用什么度量与默认阈值？",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "屏幕像素距离，默认 12px（与缩放无关、体验稳定），可在测量设置里调整。",
+      "recommendedOptionIds": ["px"],
+      "options": [
+        { "id": "px", "label": "屏幕像素阈值（推荐）" },
+        { "id": "world", "label": "世界距离阈值" }
+      ],
+      "required": true
+    },
+    {
+      "id": "hover-fetch",
+      "prompt": "hover 关键点数据如何获取？",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "按 refno 防抖(~80ms)+缓存+去重地拉取现有 /api/pdms/ptset；请求过密再启用 batch 预取。",
+      "recommendedOptionIds": ["lazy"],
+      "options": [
+        { "id": "lazy", "label": "hover 按需懒取 + 缓存（推荐）" },
+        { "id": "batch", "label": "选中即邻域批量预取" }
+      ],
+      "required": true
+    },
+    {
+      "id": "doc-location",
+      "prompt": "开发文件放置位置？",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "goals/ptset-hover-measure-snap/（遵循 planning skill 约定）；与 开发文档/测量/ 既有方案互相引用。",
+      "recommendedOptionIds": ["goals"],
+      "options": [
+        { "id": "goals", "label": "goals/<slug>/（planning skill 约定，推荐）" },
+        { "id": "devdoc", "label": "开发文档/测量/" }
+      ],
+      "required": false
+    }
+  ]
+}

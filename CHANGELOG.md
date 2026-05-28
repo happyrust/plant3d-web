@@ -4,6 +4,14 @@
 
 ### 变更
 
+- **测量关键点(ptset)捕捉 — hover 显示 + 自动吸附** (2026-05-28)
+  - 测量（距离/角度/点标高/高差）时，鼠标 hover 构件会按 refno 拉取其关键点（ptset：管端/法兰中心/喷嘴等连接点）并以绿色十字显示；光标靠近关键点时落点自动吸附到该点精确坐标
+  - 新增吸附引擎 `usePtsetSnap` 与纯换算模块 `utils/three/ptsetTransform.ts`（场景坐标换算链与 `usePtsetVisualizationThree` 完全一致，保证吸附点与显示十字对齐），含 9 个单测
+  - 吸附统一注入测量取点的唯一咽喉 `pickSurfacePoint`，预览与最终落点同时生效，四种测量模式通用；hover 取数带 80ms 防抖、按 refno 缓存与 in-flight 去重
+  - `MeasurementPanel` 样式设置新增「关键点捕捉」开关与像素阈值（默认 12px），持久化到 `useXeokitMeasurementStyleStore`；吸附到关键点时标记/lens 用独立绿色并显示点号
+  - 涉及文件：`composables/usePtsetSnap.ts`、`utils/three/ptsetTransform.ts`、`composables/useXeokitMeasurementTools.ts`、`composables/useXeokitMeasurementStyleStore.ts`、`composables/xeokitMeasurementUi.ts`、`components/tools/MeasurementPanel.vue`；设计文档 `goals/ptset-hover-measure-snap/`
+  - 验证：全量 `npm run type-check` 通过；`usePtsetSnap`(9) 与 `xeokitMeasurementUi`(2) 单测通过
+
 - **RUS-239 驳回后重新流转 — UX 增强与健壮性提升** (2026-05-08)
   - 设计批注处理面板新增**驳回原因提示框**：当任务被校核驳回时，在任务级动作区域顶部显示醒目的 amber 提示框，展示驳回原因并引导用户处理批注后点击「流转回校对」
   - 「流转回校对」按钮就绪态增加 ring 高亮效果，禁用态 title 属性说明具体原因（未处理批注 / 未保存证据）

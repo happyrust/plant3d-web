@@ -21,7 +21,17 @@ export function formatXeokitHoverHint(input: {
   return '当前未命中可拾取面。';
 }
 
-export function getXeokitOverlayPalette(role: XeokitMarkerRole, snapped: boolean): OverlayPalette {
+export function getXeokitOverlayPalette(role: XeokitMarkerRole, snapped: boolean, keypoint = false): OverlayPalette {
+  if (keypoint) {
+    // 吸附到关键点(ptset)：独立的绿色，与普通表面命中区分。
+    return {
+      markerBorder: '#22c55e',
+      markerFill: 'rgba(34, 197, 94, 0.28)',
+      lensBorder: 'rgba(34, 197, 94, 0.55)',
+      lensAccent: '#4ade80',
+    };
+  }
+
   if (!snapped) {
     return {
       markerBorder: '#f59e0b',

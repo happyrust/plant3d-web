@@ -5,6 +5,8 @@ import { Box3, Matrix4, Raycaster, Vector2, Vector3 } from 'three';
 import { useUnitSettingsStore } from './useUnitSettingsStore';
 import { useXeokitMeasurementStyleStore } from './useXeokitMeasurementStyleStore';
 import { getXeokitOverlayPalette } from './xeokitMeasurementUi';
+import { usePtsetSnap } from './usePtsetSnap';
+import { usePtsetVisualizationThree } from './usePtsetVisualizationThree';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { XeokitAngleMeasurementParams } from '@/utils/three/annotation/annotations/XeokitAngleMeasurement';
@@ -15,6 +17,7 @@ import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
+import { pdmsGetPtset, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import {
   useToolStore,
   type MeasurementPoint,
@@ -128,6 +131,115 @@ export function useXeokitMeasurementTools(options: {
   const annotations = new Map<string, AnnotationInstance>();
   let hoverMarkerEl: HTMLDivElement | null = null;
   let pointerLensEl: HTMLDivElement | null = null;
+
+  // ── 关键点(ptset) hover 显示 + 吸附 ───────────────────────────────────
+  // hover 构件时按 refno 防抖拉取其关键点：候选用于吸附，并以轻量十字显示；
+  // 取点时把表面交点吸附到最近关键点。
+  const ptsetSnap = usePtsetSnap({
+    getGlobalModelMatrix: () => dtxLayerRef.value?.getGlobalModelMatrix?.() ?? null,
+  });
+  // 复用 ptset 渲染器作为测量态轻量显示层：仅显示十字，关闭标签/箭头。
+  const ptsetHoverViz = usePtsetVisualizationThree(dtxViewerRef, overlayContainerRef, {
+    requestRender,
+    getGlobalModelMatrix: () => dtxLayerRef.value?.getGlobalModelMatrix?.() ?? null,
+  });
+  ptsetHoverViz.setLabelsVisible(false);
+  ptsetHoverViz.setArrowsVisible(false);
+
+  const requestedPtsetRefnos = new Set<string>();
+  const ptsetResponseByRefno = new Map<string, PtsetResponse>();
+  let hoverFetchTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingHoverRefno: string | null = null;
+  let currentHoverRefno: string | null = null;
+  let shownPtsetRefno: string | null = null;
+
+  function refnoFromObjectId(objectId: string | null | undefined): string | null {
+    if (!objectId || !objectId.startsWith('o:')) return null;
+    const parts = objectId.split(':');
+    return parts.length >= 3 ? (parts[1] ?? null) : null;
+  }
+
+  function showHoverPtset(refno: string | null): void {
+    if (refno === shownPtsetRefno) return;
+    if (!refno) {
+      if (shownPtsetRefno !== null) {
+        ptsetHoverViz.clearVisualization();
+        shownPtsetRefno = null;
+      }
+      return;
+    }
+    const resp = ptsetResponseByRefno.get(refno);
+    if (!resp) return; // 未缓存：取数完成后再显示
+    ptsetHoverViz.renderPtset(refno, resp);
+    ptsetHoverViz.setVisible(true);
+    shownPtsetRefno = refno;
+  }
+
+  function clearHoverPtset(): void {
+    if (hoverFetchTimer !== null) {
+      clearTimeout(hoverFetchTimer);
+      hoverFetchTimer = null;
+    }
+    pendingHoverRefno = null;
+    currentHoverRefno = null;
+    if (shownPtsetRefno !== null) {
+      ptsetHoverViz.clearVisualization();
+      shownPtsetRefno = null;
+    }
+  }
+
+  function scheduleHoverPtsetFetch(refno: string | null): void {
+    if (!measurementStyle.state.keypointSnapEnabled || !refno) return;
+    if (requestedPtsetRefnos.has(refno) || ptsetSnap.hasCandidates(refno)) return;
+    pendingHoverRefno = refno;
+    if (hoverFetchTimer !== null) clearTimeout(hoverFetchTimer);
+    hoverFetchTimer = setTimeout(() => {
+      hoverFetchTimer = null;
+      const r = pendingHoverRefno;
+      pendingHoverRefno = null;
+      if (!r || requestedPtsetRefnos.has(r) || ptsetSnap.hasCandidates(r)) return;
+      requestedPtsetRefnos.add(r);
+      pdmsGetPtset(r)
+        .then((resp) => {
+          if (resp?.success && resp.ptset.length > 0) {
+            ptsetResponseByRefno.set(r, resp);
+            ptsetSnap.upsertCandidates(r, resp);
+            if (currentHoverRefno === r) showHoverPtset(r);
+            requestRender?.();
+          }
+        })
+        .catch(() => {
+          // 失败允许后续重试
+          requestedPtsetRefnos.delete(r);
+        });
+    }, 80);
+  }
+
+  function trySnapHitToKeypoint(
+    canvas: HTMLCanvasElement,
+    e: PointerEvent,
+    base: { entityId: string; worldPos: Vector3; objectId: string },
+  ): { entityId: string; worldPos: Vector3; objectId: string } | null {
+    if (!measurementStyle.state.keypointSnapEnabled) return null;
+    const camera = dtxViewerRef.value?.camera;
+    if (!camera) return null;
+    const refno = refnoFromObjectId(base.objectId);
+    const cursor = getCanvasPos(canvas, e);
+    const rect = canvas.getBoundingClientRect();
+    const hit = ptsetSnap.snap(
+      { x: cursor.x, y: cursor.y },
+      camera,
+      { width: rect.width, height: rect.height },
+      refno ? [refno] : undefined,
+      measurementStyle.state.keypointSnapPx,
+    );
+    if (!hit) return null;
+    return {
+      entityId: `ptset:${hit.refno}#${hit.number}`,
+      objectId: base.objectId,
+      worldPos: new Vector3(hit.worldPos[0], hit.worldPos[1], hit.worldPos[2]),
+    };
+  }
 
   const currentMeasurement = computed(() => {
     return store.currentXeokitDistanceDraft.value
@@ -277,10 +389,11 @@ export function useXeokitMeasurementTools(options: {
 
   function pickSurfacePoint(canvas: HTMLCanvasElement, e: PointerEvent): { entityId: string; worldPos: Vector3; objectId: string } | null {
     const selection = selectionRef.value;
+    let base: { entityId: string; worldPos: Vector3; objectId: string } | null = null;
     if (selection) {
       const hit = selection.pickPoint(getCanvasPos(canvas, e));
       if (hit) {
-        return {
+        base = {
           entityId: hit.objectId,
           objectId: hit.objectId,
           worldPos: hit.point.clone(),
@@ -288,7 +401,17 @@ export function useXeokitMeasurementTools(options: {
       }
     }
 
-    return pickAnnotationPoint(canvas, e);
+    if (!base) {
+      base = pickAnnotationPoint(canvas, e);
+    }
+
+    // 关键点吸附：命中构件表面后，若光标在阈值内靠近某关键点，则吸附到该点精确坐标。
+    if (base) {
+      const snapped = trySnapHitToKeypoint(canvas, e, base);
+      if (snapped) return snapped;
+    }
+
+    return base;
   }
 
   function ensureOverlayElements(): void {
@@ -329,12 +452,15 @@ export function useXeokitMeasurementTools(options: {
   function updateOverlayElements(): void {
     ensureOverlayElements();
 
+    const hoverEntityId = store.xeokitHoverState.value?.entityId ?? null;
+    const isKeypointSnap = typeof hoverEntityId === 'string' && hoverEntityId.startsWith('ptset:');
+
     if (hoverMarkerEl) {
       const marker = store.xeokitMarkerState.value;
       if (!marker.visible || !marker.canvasPos) {
         hoverMarkerEl.style.display = 'none';
       } else {
-        const palette = getXeokitOverlayPalette(marker.role, marker.snapped);
+        const palette = getXeokitOverlayPalette(marker.role, marker.snapped, isKeypointSnap);
         hoverMarkerEl.style.display = 'block';
         hoverMarkerEl.style.left = `${marker.canvasPos.x}px`;
         hoverMarkerEl.style.top = `${marker.canvasPos.y}px`;
@@ -348,7 +474,7 @@ export function useXeokitMeasurementTools(options: {
       if (!lens.visible || !lens.canvasPos) {
         pointerLensEl.style.display = 'none';
       } else {
-        const palette = getXeokitOverlayPalette(store.xeokitMarkerState.value.role, lens.snapped);
+        const palette = getXeokitOverlayPalette(store.xeokitMarkerState.value.role, lens.snapped, isKeypointSnap);
         pointerLensEl.style.display = 'block';
         pointerLensEl.style.left = `${lens.canvasPos.x}px`;
         pointerLensEl.style.top = `${lens.canvasPos.y}px`;
@@ -827,6 +953,7 @@ export function useXeokitMeasurementTools(options: {
   function reset() {
     store.clearCurrentXeokitDraft();
     clearHoverFeedback();
+    clearHoverPtset();
     syncFromStore();
     requestRender?.();
   }
@@ -864,6 +991,14 @@ export function useXeokitMeasurementTools(options: {
     }
 
     const hit = pickSurfacePoint(canvas, e);
+    const hoverRefno = hit ? refnoFromObjectId(hit.objectId) : null;
+    currentHoverRefno = hoverRefno;
+    if (measurementStyle.state.keypointSnapEnabled) {
+      showHoverPtset(hoverRefno);
+      scheduleHoverPtsetFetch(hoverRefno);
+    } else {
+      showHoverPtset(null);
+    }
     updateHoverFeedback(canvas, e, hit);
 
     if (store.toolMode.value === 'xeokit_measure_elevation_point') {
@@ -1203,6 +1338,11 @@ export function useXeokitMeasurementTools(options: {
 
   function dispose() {
     clearHoverFeedback();
+    clearHoverPtset();
+    requestedPtsetRefnos.clear();
+    ptsetResponseByRefno.clear();
+    ptsetSnap.clear();
+    ptsetHoverViz.clearAll();
     if (hoverMarkerEl) {
       hoverMarkerEl.remove();
       hoverMarkerEl = null;

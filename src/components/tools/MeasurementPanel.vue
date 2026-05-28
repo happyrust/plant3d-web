@@ -6,6 +6,7 @@ import {
   type XeokitMeasurementRecord,
   useToolStore,
 } from '@/composables/useToolStore';
+import { DEFAULT_PTSET_SNAP_PX } from '@/composables/usePtsetSnap';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
@@ -233,10 +234,19 @@ function updateMeasurementStyle(
     | 'elevationDeltaShowEndpointLabels'
     | 'elevationDeltaShowDeltaLabel'
     | 'elevationDeltaShowVerticalGuide'
-    | 'elevationDeltaShowMarkers',
+    | 'elevationDeltaShowMarkers'
+    | 'keypointSnapEnabled',
   checked: boolean,
 ) {
   measurementStyle.updateStyle({ [key]: checked });
+}
+
+function updateKeypointSnapPx(raw: string): void {
+  const parsed = Number(raw);
+  const clamped = Number.isFinite(parsed)
+    ? Math.min(40, Math.max(4, Math.round(parsed)))
+    : DEFAULT_PTSET_SNAP_PX;
+  measurementStyle.updateStyle({ keypointSnapPx: clamped });
 }
 
 function resetMeasurementStyle() {
@@ -347,6 +357,33 @@ watch(
         <summary class="cursor-pointer select-none text-sm font-medium">样式设置</summary>
 
         <div class="mt-3 flex flex-col gap-3 text-sm">
+          <div data-testid="measurement-style-snap-section"
+            class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+            <div class="font-medium">关键点捕捉</div>
+            <div class="mt-1 text-xs text-muted-foreground">
+              测量时 hover 构件会显示其关键点(ptset)，靠近时自动吸附到该点。
+            </div>
+            <div class="mt-2 flex flex-col gap-2">
+              <label class="flex items-center gap-2">
+                <input data-testid="measurement-style-keypoint-snap"
+                  type="checkbox"
+                  :checked="measurementStyle.state.keypointSnapEnabled"
+                  @change="updateMeasurementStyle('keypointSnapEnabled', ($event.target as HTMLInputElement).checked)" />
+                <span>启用关键点捕捉</span>
+              </label>
+              <label class="flex items-center gap-2"
+                :class="measurementStyle.state.keypointSnapEnabled ? '' : 'opacity-50'">
+                <span class="w-24 shrink-0">捕捉阈值(px)</span>
+                <input data-testid="measurement-style-keypoint-px"
+                  type="number" min="4" max="40" step="1"
+                  class="h-8 w-20 rounded-md border border-input bg-background px-2 text-xs"
+                  :disabled="!measurementStyle.state.keypointSnapEnabled"
+                  :value="measurementStyle.state.keypointSnapPx"
+                  @change="updateKeypointSnapPx(($event.target as HTMLInputElement).value)" />
+              </label>
+            </div>
+          </div>
+
           <div data-testid="measurement-style-distance-section"
             class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
             <div class="flex items-center justify-between gap-2">

@@ -1,6 +1,7 @@
 import { reactive, watch } from 'vue';
 
 import { getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { DEFAULT_PTSET_SNAP_PX } from '@/composables/usePtsetSnap';
 
 export type XeokitMeasurementStyleConfig = {
   distanceShowTotalLabel: boolean;
@@ -17,6 +18,10 @@ export type XeokitMeasurementStyleConfig = {
   elevationDeltaShowDeltaLabel: boolean;
   elevationDeltaShowVerticalGuide: boolean;
   elevationDeltaShowMarkers: boolean;
+  /** 测量时是否启用关键点(ptset)捕捉。 */
+  keypointSnapEnabled: boolean;
+  /** 关键点捕捉的屏幕像素阈值。 */
+  keypointSnapPx: number;
 };
 
 const STORAGE_KEY_V1 = 'plant3d-web-xeokit-measurement-style-v1';
@@ -38,6 +43,8 @@ export const DEFAULT_XEOKIT_MEASUREMENT_STYLE: Readonly<XeokitMeasurementStyleCo
   elevationDeltaShowDeltaLabel: true,
   elevationDeltaShowVerticalGuide: true,
   elevationDeltaShowMarkers: true,
+  keypointSnapEnabled: true,
+  keypointSnapPx: DEFAULT_PTSET_SNAP_PX,
 };
 
 function getCurrentStorageScope(): string {
@@ -82,6 +89,8 @@ function loadPersisted(scope = getCurrentStorageScope()): XeokitMeasurementStyle
       elevationDeltaShowDeltaLabel: parsed.elevationDeltaShowDeltaLabel ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.elevationDeltaShowDeltaLabel,
       elevationDeltaShowVerticalGuide: parsed.elevationDeltaShowVerticalGuide ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.elevationDeltaShowVerticalGuide,
       elevationDeltaShowMarkers: parsed.elevationDeltaShowMarkers ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.elevationDeltaShowMarkers,
+      keypointSnapEnabled: parsed.keypointSnapEnabled ?? DEFAULT_XEOKIT_MEASUREMENT_STYLE.keypointSnapEnabled,
+      keypointSnapPx: Number.isFinite(parsed.keypointSnapPx) ? Number(parsed.keypointSnapPx) : DEFAULT_XEOKIT_MEASUREMENT_STYLE.keypointSnapPx,
     };
   } catch {
     return { ...DEFAULT_XEOKIT_MEASUREMENT_STYLE };
