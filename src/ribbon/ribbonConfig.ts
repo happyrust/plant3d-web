@@ -255,28 +255,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         ],
       },
       {
-        id: 'mbd.dims',
-        label: '尺寸类型',
-        items: [
-          {
-            kind: 'stack',
-            id: 'mbd.dims.left',
-            items: [
-              { kind: 'button', id: 'mbd.dim.segment', label: '段长', icon: 'ruler', commandId: 'mbd.dim.segment' },
-              { kind: 'button', id: 'mbd.dim.chain', label: '链式', icon: 'link', commandId: 'mbd.dim.chain' },
-            ],
-          },
-          {
-            kind: 'stack',
-            id: 'mbd.dims.right',
-            items: [
-              { kind: 'button', id: 'mbd.dim.overall', label: '总长', icon: 'move_horizontal', commandId: 'mbd.dim.overall' },
-              { kind: 'button', id: 'mbd.dim.port', label: '端口', icon: 'circle_dot', commandId: 'mbd.dim.port' },
-            ],
-          },
-        ],
-      },
-      {
         id: 'mbd.annotation',
         label: '其他标注',
         items: [

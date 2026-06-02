@@ -4,6 +4,12 @@
 
 ### 变更
 
+- **移除 MBD 尺寸标注前端实现** (2026-06-02)
+  - MBD 管线面板移除“尺寸”页签、尺寸统计、尺寸显示开关和相关设置项。
+  - 三维标注渲染不再绘制 MBD segment/chain/overall/port 尺寸与弯头角度尺寸，交互层同步移除 `mbd_dim_*` 选中、拖拽和上下文菜单入口。
+  - Ribbon 删除 MBD 尺寸命令组；MBD V2 前端类型契约移除 `linear_dim` / `angle_dim` 图元及类型守卫。
+  - API 适配层忽略后端残留线性尺寸数据，避免旧数据继续进入前端 UI。
+
 - **测量关键点(ptset)捕捉 — hover 显示 + 自动吸附** (2026-05-28)
   - 测量（距离/角度/点标高/高差）时，鼠标 hover 构件会按 refno 拉取其关键点（ptset：管端/法兰中心/喷嘴等连接点）并以绿色十字显示；光标靠近关键点时落点自动吸附到该点精确坐标
   - 新增吸附引擎 `usePtsetSnap` 与纯换算模块 `utils/three/ptsetTransform.ts`（场景坐标换算链与 `usePtsetVisualizationThree` 完全一致，保证吸附点与显示十字对齐），含 9 个单测

@@ -749,7 +749,8 @@ function adaptMbdV2ResponseToPipeResponse(
 
   const data = resp.data;
   const primitives = Array.isArray(data.primitives) ? data.primitives : [];
-  const linearPrims = primitives.filter(isV2LinearDim);
+  // MBD 尺寸标注已移除：前端不再消费 V2 linear_dim / angle_dim primitive。
+  const linearPrims: MbdV2LinearDimPrimitive[] = [];
   const nonCutLinearPrims = linearPrims.filter(
     (p) => linearSubKindToDimKind(p.sub_kind) !== 'cut_tubi',
   );

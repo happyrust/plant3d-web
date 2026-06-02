@@ -1330,11 +1330,6 @@ function syncMbdAnnotationsToInteraction(): void {
 
   const nextIds = new Set<string>();
 
-  for (const [dimId, dim] of mbdPipeVis.getDimAnnotations()) {
-    const interactionId = `mbd_dim_${dimId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, dim as any);
-    nextIds.add(interactionId);
-  }
   for (const [weldId, weld] of mbdPipeVis.getWeldAnnotations()) {
     const interactionId = `mbd_weld_${weldId}`;
     annotationSystem.registerExternalAnnotation(interactionId, weld as any);
@@ -1487,7 +1482,7 @@ function handleRibbonCommand(commandId: string) {
         // ignore
       }
       if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.uiTab.value = 'dims';
+        mbdPipeVisRef.value.uiTab.value = 'overview';
       }
 
       const refno = selectionStore.selectedRefno.value;
@@ -1502,34 +1497,6 @@ function handleRibbonCommand(commandId: string) {
       store.requestMbdPipeAnnotation(refno);
       return;
     }
-    case 'mbd.dim.segment':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showDimSegment.value =
-                    !mbdPipeVisRef.value.showDimSegment.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.dim.chain':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showDimChain.value =
-                    !mbdPipeVisRef.value.showDimChain.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.dim.overall':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showDimOverall.value =
-                    !mbdPipeVisRef.value.showDimOverall.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.dim.port':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showDimPort.value =
-                    !mbdPipeVisRef.value.showDimPort.value;
-      }
-      requestRender();
-      return;
     case 'mbd.weld':
       if (mbdPipeVisRef.value) {
         mbdPipeVisRef.value.showWelds.value =
@@ -2050,12 +2017,7 @@ function closeDimContextMenu(): void {
 function dimCtxToggleReference(): void {
   const { dimId, isReference } = dimContextMenu.value;
   if (!dimId) return;
-  if (dimId.startsWith('mbd:')) {
-    const mbdId = dimId.slice(4);
-    mbdPipeVisRef.value?.updateDimOverride(mbdId, { isReference: !isReference });
-  } else {
-    try { store.updateDimension(dimId, { isReference: !isReference } as any); } catch { /* ignore */ }
-  }
+  try { store.updateDimension(dimId, { isReference: !isReference } as any); } catch { /* ignore */ }
   closeDimContextMenu();
   requestRender();
 }
@@ -2073,39 +2035,17 @@ function dimCtxToggleSupplementary(): void {
 function dimCtxSnapToGrid(): void {
   const { dimId } = dimContextMenu.value;
   if (!dimId) return;
-  if (dimId.startsWith('mbd:')) {
-    // MBD dim: snap 当前 annotation 的 labelOffsetWorld
-    const mbdId = dimId.slice(4);
-    const dim = mbdPipeVisRef.value?.getDimAnnotations().get(mbdId);
-    if (dim) {
-      const p = dim.getParams();
-      const low = p.labelOffsetWorld;
-      if (low) {
-        const gridStep = 0.05;
-        const snapped = new Vector3(
-          Math.round(low.x / gridStep) * gridStep,
-          Math.round(low.y / gridStep) * gridStep,
-          Math.round(low.z / gridStep) * gridStep,
-        );
-        dim.setParams({ labelOffsetWorld: snapped });
-        mbdPipeVisRef.value?.updateDimOverride(mbdId, {
-          labelOffsetWorld: [snapped.x, snapped.y, snapped.z],
-        });
-      }
-    }
-  } else {
-    const rec = (store.dimensions.value || []).find((d: any) => d?.id === dimId) as any;
-    if (!rec) { closeDimContextMenu(); return; }
-    const low = rec.labelOffsetWorld as [number, number, number] | null | undefined;
-    if (low) {
-      const gridStep = 0.05;
-      const snapped: [number, number, number] = [
-        Math.round(low[0] / gridStep) * gridStep,
-        Math.round(low[1] / gridStep) * gridStep,
-        Math.round(low[2] / gridStep) * gridStep,
-      ];
-      try { store.updateDimension(dimId, { labelOffsetWorld: snapped } as any); } catch { /* ignore */ }
-    }
+  const rec = (store.dimensions.value || []).find((d: any) => d?.id === dimId) as any;
+  if (!rec) { closeDimContextMenu(); return; }
+  const low = rec.labelOffsetWorld as [number, number, number] | null | undefined;
+  if (low) {
+    const gridStep = 0.05;
+    const snapped: [number, number, number] = [
+      Math.round(low[0] / gridStep) * gridStep,
+      Math.round(low[1] / gridStep) * gridStep,
+      Math.round(low[2] / gridStep) * gridStep,
+    ];
+    try { store.updateDimension(dimId, { labelOffsetWorld: snapped } as any); } catch { /* ignore */ }
   }
   closeDimContextMenu();
   requestRender();
@@ -2114,16 +2054,7 @@ function dimCtxSnapToGrid(): void {
 function dimCtxResetLayout(): void {
   const { dimId } = dimContextMenu.value;
   if (!dimId) return;
-  if (dimId.startsWith('mbd:')) {
-    const mbdId = dimId.slice(4);
-    const dim = mbdPipeVisRef.value?.getDimAnnotations().get(mbdId);
-    if (dim) {
-      dim.setParams({ labelOffsetWorld: null, labelT: 0.5 });
-      mbdPipeVisRef.value?.resetDimOverride(mbdId);
-    }
-  } else {
-    try { store.updateDimension(dimId, { labelOffsetWorld: null, labelT: 0.5 } as any); } catch { /* ignore */ }
-  }
+  try { store.updateDimension(dimId, { labelOffsetWorld: null, labelT: 0.5 } as any); } catch { /* ignore */ }
   closeDimContextMenu();
   requestRender();
 }
@@ -2553,119 +2484,6 @@ onMounted(async () => {
       const id = typeof ev?.id === 'string' ? ev.id : null;
       if (!id) return;
       if (id === 'dim_preview') return;
-
-      // MBD dims 处理（session-only 交互）
-      if (id.startsWith('mbd_dim_')) {
-        const mbdDimId = id.slice('mbd_dim_'.length);
-        const dtxViewer2 = dtxViewerRef.value;
-        if (!dtxViewer2) return;
-
-        if (ev.type === 'select' || ev.type === 'click') {
-          mbdPipeVisRef.value?.highlightItem(mbdDimId);
-        } else if (
-          ev.type === 'deselect' &&
-          mbdPipeVisRef.value &&
-          mbdPipeVisRef.value.activeItemId.value === mbdDimId
-        ) {
-          mbdPipeVisRef.value?.highlightItem(null);
-        }
-
-        if (ev.type === 'drag-start') {
-          dtxViewer2.controls.enabled = false;
-          return;
-        }
-        if (ev.type === 'drag-end') {
-          dtxViewer2.controls.enabled = true;
-          requestRender();
-          return;
-        }
-        if (ev.type === 'drag' && ev.annotation instanceof LinearDimension3D) {
-          const me = ev.originalEvent;
-          if (!me) return;
-          const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
-          const p = ev.annotation.getParams();
-          const start = p.start.clone();
-          const end = p.end.clone();
-
-          if (role === 'label') {
-            // SolveSpace 风格：自由拖拽 label
-            const seg = end.clone().sub(start);
-            if (seg.lengthSq() < 1e-9) return;
-            seg.normalize();
-            const offsetDirVec = p.direction?.clone() ?? new Vector3(-seg.y, seg.x, 0);
-            if (offsetDirVec.lengthSq() < 1e-9) offsetDirVec.set(1, 0, 0);
-            offsetDirVec.normalize();
-            const mid = start.clone().add(end).multiplyScalar(0.5);
-            const planeNormal = seg.clone().cross(offsetDirVec);
-            if (planeNormal.lengthSq() < 1e-9) return;
-            planeNormal.normalize();
-            const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, mid);
-            const hit = intersectPlaneFromMouseEvent(me, plane);
-            if (!hit) return;
-            const defaultLabelPos = ev.annotation.getDefaultLabelWorldPos();
-            let labelOffset = hit.clone().sub(defaultLabelPos);
-            if (me.shiftKey) {
-              const gridStep = 0.05;
-              labelOffset.x = Math.round(labelOffset.x / gridStep) * gridStep;
-              labelOffset.y = Math.round(labelOffset.y / gridStep) * gridStep;
-              labelOffset.z = Math.round(labelOffset.z / gridStep) * gridStep;
-            }
-            try {
-              ev.annotation.setParams({ labelOffsetWorld: labelOffset });
-              mbdPipeVisRef.value?.updateDimOverride(mbdDimId, {
-                labelOffsetWorld: [labelOffset.x, labelOffset.y, labelOffset.z],
-              });
-            } catch { /* ignore */ }
-            requestRender();
-            return;
-          }
-
-          if (role === 'offset') {
-            // 拖拽尺寸线调整 offset
-            const seg = end.clone().sub(start);
-            if (seg.lengthSq() < 1e-9) return;
-            seg.normalize();
-            const offsetDirVec = p.direction?.clone() ?? new Vector3(-seg.y, seg.x, 0);
-            if (offsetDirVec.lengthSq() < 1e-9) offsetDirVec.set(1, 0, 0);
-            offsetDirVec.normalize();
-            const mid = start.clone().add(end).multiplyScalar(0.5);
-            const planeNormal = seg.clone().cross(offsetDirVec);
-            if (planeNormal.lengthSq() < 1e-9) return;
-            planeNormal.normalize();
-            const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, mid);
-            const hit = intersectPlaneFromMouseEvent(me, plane);
-            if (!hit) return;
-            const nextOffset = hit.clone().sub(mid).dot(offsetDirVec);
-            try {
-              ev.annotation.setParams({ offset: nextOffset });
-              mbdPipeVisRef.value?.updateDimOverride(mbdDimId, {
-                offset: nextOffset,
-                direction: [offsetDirVec.x, offsetDirVec.y, offsetDirVec.z],
-              });
-            } catch { /* ignore */ }
-            requestRender();
-            return;
-          }
-        }
-        // contextmenu: 右键菜单也适用于 MBD dims
-        if (ev.type === 'contextmenu') {
-          const sp = (ev as any).screenPos as { x: number; y: number } | undefined;
-          const isReference =
-                        ev.annotation instanceof LinearDimension3D
-                          ? !!ev.annotation.getParams().isReference
-                          : false;
-          dimContextMenu.value = {
-            visible: true,
-            x: sp?.x ?? 0,
-            y: sp?.y ?? 0,
-            dimId: `mbd:${mbdDimId}`,
-            kind: 'linear_distance',
-            isReference,
-            supplementary: false,
-          };
-        }
-        return;
-      }
 
       // MBD weld 处理（session-only 交互：label 拖拽）
       if (id.startsWith('mbd_weld_')) {
@@ -3226,11 +3044,6 @@ onMounted(async () => {
   // 将 MBD 标注注册到标注交互系统（使其可 pick/drag/contextmenu）
   function syncMbdAnnotationsToInteraction(): void {
     if (!mbdPipeVisRef.value || !annotationSystemRef.value) return;
-    const dimMap = mbdPipeVisRef.value.getDimAnnotations();
-    for (const [dimId, dim] of dimMap) {
-      const interactionId = `mbd_dim_${dimId}`;
-      annotationSystemRef.value.registerExternalAnnotation(interactionId, dim as any);
-    }
     const weldMap = mbdPipeVisRef.value.getWeldAnnotations();
     for (const [weldId, weld] of weldMap) {
       const interactionId = `mbd_weld_${weldId}`;
@@ -3429,7 +3242,27 @@ onMounted(async () => {
     const dbno = Number(showDbnum);
     if (Number.isFinite(dbno) && dbno > 0) {
       (async () => {
+        const publishShowDbnumLoadResult = (payload: Record<string, unknown>) => {
+          if (typeof window === 'undefined') return;
+          (window as any).__dtxLastShowDbnumLoadResult = {
+            dbno,
+            updatedAt: new Date().toISOString(),
+            ...payload,
+          };
+        };
+
         try {
+          publishShowDbnumLoadResult({
+            status: 'loading',
+            refnoCount: 0,
+            loadedRefnos: 0,
+            skippedRefnos: 0,
+            loadedObjects: 0,
+            missingRefnos: 0,
+            mesh404Refnos: 0,
+            mesh404GeoHashes: 0,
+            noGeoRowsRefnos: 0,
+          });
           emitToast({ message: `[信息] 正在加载 dbnum=${dbno} 的 Parquet 模型…`, level: 'info' });
           const autoFitKey = `dtx_autofit_dbno_${dbno}`;
           let shouldAutoFit = true;
@@ -3440,6 +3273,10 @@ onMounted(async () => {
           const parquetLoader = useDbnoInstancesParquetLoader();
           const available = await parquetLoader.isParquetAvailable(dbno);
           if (!available) {
+            publishShowDbnumLoadResult({
+              status: 'error',
+              error: `dbnum=${dbno} 未找到 Parquet 数据`,
+            });
             emitToast({
               message: `[错误] dbnum=${dbno} 未找到 Parquet 数据`,
               level: 'error',
@@ -3451,6 +3288,17 @@ onMounted(async () => {
             debug: isDev,
           });
           if (allRefnos.length === 0) {
+            publishShowDbnumLoadResult({
+              status: 'empty',
+              refnoCount: 0,
+              loadedRefnos: 0,
+              skippedRefnos: 0,
+              loadedObjects: 0,
+              missingRefnos: 0,
+              mesh404Refnos: 0,
+              mesh404GeoHashes: 0,
+              noGeoRowsRefnos: 0,
+            });
             emitToast({
               message: `[警告] dbnum=${dbno} 没有可加载的 refno`,
               level: 'warning',
@@ -3461,6 +3309,17 @@ onMounted(async () => {
           emitToast({
             message: `[信息] 发现 ${allRefnos.length} 个 refno，开始分批加载…`,
             level: 'info',
+          });
+          publishShowDbnumLoadResult({
+            status: 'loading',
+            refnoCount: allRefnos.length,
+            loadedRefnos: 0,
+            skippedRefnos: 0,
+            loadedObjects: 0,
+            missingRefnos: 0,
+            mesh404Refnos: 0,
+            mesh404GeoHashes: 0,
+            noGeoRowsRefnos: 0,
           });
 
           const LOAD_BATCH_SIZE = 1000;
@@ -3496,6 +3355,17 @@ onMounted(async () => {
             for (const gh of batchResult.missingBreakdown.mesh404GeoHashes) {
               missingMesh404GeoHashes.add(gh);
             }
+            publishShowDbnumLoadResult({
+              status: 'loading',
+              refnoCount: allRefnos.length,
+              loadedRefnos,
+              skippedRefnos,
+              loadedObjects,
+              missingRefnos,
+              mesh404Refnos: missingMesh404Refnos.size,
+              mesh404GeoHashes: missingMesh404GeoHashes.size,
+              noGeoRowsRefnos: missingNoGeoRows.size,
+            });
 
             if (end < allRefnos.length) {
               await new Promise<void>((resolve) =>
@@ -3539,6 +3409,18 @@ onMounted(async () => {
           const summary =
             `对象 ${loadedObjects}（已加载 ${loadedRefnos}，跳过 ${skippedRefnos}，缺失 ${missingRefnos}；` +
             `mesh 缺失 ${missingMesh404Refnos.size}/hash ${missingMesh404GeoHashes.size}，无几何 ${missingNoGeoRows.size}）`;
+          publishShowDbnumLoadResult({
+            status: loadedObjects === 0 ? 'empty' : 'loaded',
+            refnoCount: allRefnos.length,
+            loadedRefnos,
+            skippedRefnos,
+            loadedObjects,
+            missingRefnos,
+            mesh404Refnos: missingMesh404Refnos.size,
+            mesh404GeoHashes: missingMesh404GeoHashes.size,
+            noGeoRowsRefnos: missingNoGeoRows.size,
+            summary,
+          });
           if (loadedObjects === 0) {
             emitToast({
               message: `[警告] 加载结束但未绘制实例。${summary}`,
@@ -3549,6 +3431,7 @@ onMounted(async () => {
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
+          publishShowDbnumLoadResult({ status: 'error', error: msg });
           console.error('[ViewerPanel] show_dbnum Parquet 加载失败:', e);
           emitToast({ message: `[错误] 加载失败：${msg}`, level: 'error' });
         }

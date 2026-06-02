@@ -109,8 +109,6 @@ export type IssueCategory = 'geometry' | 'data' | 'layout' | 'avoidance';
 
 /** 已排版完成的 MBD 图元。前端按 `kind` 分发渲染。 */
 export type MbdPrimitive =
-  | LinearDimPrimitive
-  | AngleDimPrimitive
   | LabelPrimitive
   | LeaderLinePrimitive
   | AidLinePrimitive
@@ -130,63 +128,6 @@ export function primitiveId(p: MbdPrimitive): string {
 export function primitiveVisible(p: MbdPrimitive): boolean {
   return p.visible;
 }
-
-// ─────────────────────────────────────────────────────────────────────────
-// Linear dim
-// ─────────────────────────────────────────────────────────────────────────
-
-export type LinearDimSubKind = 'segment' | 'chain' | 'overall' | 'port';
-
-export type LinearDimArrow = {
-  position: Vec3V2;
-  direction: Vec3V2;
-}
-
-/** 线性尺寸（对应 PDMS `lindim`）。 */
-export type LinearDimPrimitive = {
-  kind: 'linear_dim';
-  sub_kind: LinearDimSubKind;
-  extension_1: LineSegmentEndpoints;
-  extension_2: LineSegmentEndpoints;
-  dim_line: LineSegmentEndpoints;
-  /** 两个箭头：起点方向、终点方向。 */
-  arrows: [LinearDimArrow, LinearDimArrow];
-  text: TextBlock;
-  /** 分层序号；`0` 为基础层，`>0` 表示已被后端 `SmallDimSolver` 错层。 */
-  level: number;
-} & CommonFields
-
-// ─────────────────────────────────────────────────────────────────────────
-// Angle dim
-// ─────────────────────────────────────────────────────────────────────────
-
-export type AngleDimArrow = {
-  position: Vec3V2;
-  /** 弧顶切线方向（单位向量），用于前端绘制弧端箭头。 */
-  tangent: Vec3V2;
-}
-
-export type ArcGeometry = {
-  center: Vec3V2;
-  radius_mm: number;
-  start_angle_rad: number;
-  sweep_rad: number;
-  /** 弧所在平面的法线（单位向量）。 */
-  normal: Vec3V2;
-}
-
-/** 角度尺寸（如弯头、管件夹角）。 */
-export type AngleDimPrimitive = {
-  kind: 'angle_dim';
-  vertex: Vec3V2;
-  /** 第一条参考射线的单位方向。 */
-  ray_1: Vec3V2;
-  /** 第二条参考射线的单位方向。 */
-  ray_2: Vec3V2;
-  arc: ArcGeometry;
-  arrows: [AngleDimArrow, AngleDimArrow];
-  text: TextBlock;
-} & CommonFields
 
 // ─────────────────────────────────────────────────────────────────────────
 // Label / LeaderLine
@@ -289,12 +230,6 @@ export type SlopeMarkPrimitive = {
 // 类型守卫（type guards）
 // ─────────────────────────────────────────────────────────────────────────
 
-export function isLinearDim(p: MbdPrimitive): p is LinearDimPrimitive {
-  return p.kind === 'linear_dim';
-}
-export function isAngleDim(p: MbdPrimitive): p is AngleDimPrimitive {
-  return p.kind === 'angle_dim';
-}
 export function isLabel(p: MbdPrimitive): p is LabelPrimitive {
   return p.kind === 'label';
 }
@@ -328,8 +263,6 @@ export function isSlopeMark(p: MbdPrimitive): p is SlopeMarkPrimitive {
  * 用于 `switch` 穷举与类型守卫断言。
  */
 export const MBD_V2_PRIMITIVE_KINDS = [
-  'linear_dim',
-  'angle_dim',
   'label',
   'leader_line',
   'aid_line',

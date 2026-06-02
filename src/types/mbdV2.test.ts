@@ -7,10 +7,8 @@ import {
   isAidLine,
   isAidPoint,
   isAidText,
-  isAngleDim,
   isLabel,
   isLeaderLine,
-  isLinearDim,
   isSlopeMark,
   isWeldMark,
   MBD_V2_PRIMITIVE_KINDS,
@@ -21,10 +19,8 @@ import {
   type AidLinePrimitive,
   type AidPointPrimitive,
   type AidTextPrimitive,
-  type AngleDimPrimitive,
   type LabelPrimitive,
   type LeaderLinePrimitive,
-  type LinearDimPrimitive,
   type MbdPrimitive,
   type MbdV2PipeData,
   type SlopeMarkPrimitive,
@@ -35,7 +31,7 @@ import {
  * P0-B / MBD V2 Phase 1 类型契约测试。
  *
  * 目标：
- * - 验证类型守卫覆盖全部 11 种 primitive
+ * - 验证类型守卫覆盖全部 9 种 primitive
  * - 验证 JSON.parse/stringify 往返保持结构
  * - 验证 `MBD_V2_PRIMITIVE_KINDS` 与类型守卫对齐
  * - 保证 `switch` 穷举触发 `assertNever`
@@ -48,41 +44,6 @@ function commonFields(id: string) {
     visible: true,
   };
 }
-
-const sampleLinearDim: LinearDimPrimitive = {
-  ...commonFields('ld-1'),
-  kind: 'linear_dim',
-  sub_kind: 'segment',
-  extension_1: { start: [0, 0, 0], end: [0, 100, 0] },
-  extension_2: { start: [500, 0, 0], end: [500, 100, 0] },
-  dim_line: { start: [0, 80, 0], end: [500, 80, 0] },
-  arrows: [
-    { position: [0, 80, 0], direction: [1, 0, 0] },
-    { position: [500, 80, 0], direction: [-1, 0, 0] },
-  ],
-  text: {
-    anchor: [240, 95, 0],
-    content: '500',
-    height_mm: 2.5,
-    orientation: [1, 0, 0],
-    up: [0, 1, 0],
-  },
-  level: 0,
-};
-
-const sampleAngleDim: AngleDimPrimitive = {
-  ...commonFields('ad-1'),
-  kind: 'angle_dim',
-  vertex: [0, 0, 0],
-  ray_1: [1, 0, 0],
-  ray_2: [0, 1, 0],
-  arc: { center: [0, 0, 0], radius_mm: 50, start_angle_rad: 0, sweep_rad: Math.PI / 2, normal: [0, 0, 1] },
-  arrows: [
-    { position: [50, 0, 0], tangent: [0, 1, 0] },
-    { position: [0, 50, 0], tangent: [-1, 0, 0] },
-  ],
-  text: { anchor: [30, 30, 0], content: '90°', height_mm: 2.5, orientation: [1, 0, 0], up: [0, 1, 0] },
-};
 
 const sampleLabel: LabelPrimitive = {
   ...commonFields('lbl-1'),
@@ -170,8 +131,6 @@ const sampleSlopeMark: SlopeMarkPrimitive = {
 };
 
 const samples: MbdPrimitive[] = [
-  sampleLinearDim,
-  sampleAngleDim,
   sampleLabel,
   sampleLeaderLine,
   sampleAidLine,
@@ -184,18 +143,16 @@ const samples: MbdPrimitive[] = [
 ];
 
 describe('mbdV2 primitive types', () => {
-  it('MBD_V2_PRIMITIVE_KINDS 覆盖 11 种 primitive 与样本一一对应', () => {
-    expect(MBD_V2_PRIMITIVE_KINDS.length).toBe(11);
+  it('MBD_V2_PRIMITIVE_KINDS 覆盖 9 种 primitive 与样本一一对应', () => {
+    expect(MBD_V2_PRIMITIVE_KINDS.length).toBe(9);
     const sampleKinds = new Set(samples.map((p) => p.kind));
-    expect(sampleKinds.size).toBe(11);
+    expect(sampleKinds.size).toBe(9);
     for (const kind of MBD_V2_PRIMITIVE_KINDS) {
       expect(sampleKinds.has(kind)).toBe(true);
     }
   });
 
   it('类型守卫对样本列表正确分流', () => {
-    expect(samples.filter(isLinearDim).length).toBe(1);
-    expect(samples.filter(isAngleDim).length).toBe(1);
     expect(samples.filter(isLabel).length).toBe(1);
     expect(samples.filter(isLeaderLine).length).toBe(1);
     expect(samples.filter(isAidLine).length).toBe(1);
@@ -208,8 +165,8 @@ describe('mbdV2 primitive types', () => {
   });
 
   it('primitiveId / primitiveVisible 从 CommonFields 取值', () => {
-    expect(primitiveId(sampleLinearDim)).toBe('ld-1');
-    expect(primitiveVisible(sampleLinearDim)).toBe(true);
+    expect(primitiveId(sampleLabel)).toBe('lbl-1');
+    expect(primitiveVisible(sampleLabel)).toBe(true);
 
     const hidden: MbdPrimitive = {
       ...sampleAidPoint,
@@ -228,9 +185,9 @@ describe('mbdV2 primitive types', () => {
       branch_refno: '=BRAN/HANG/FOO',
       primitives: [...samples],
       meta: {
-        segments_count: 3,
+        segments_count: 0,
         welds_count: 2,
-        dims_by_kind: { segment: 3, chain: 1 },
+        dims_by_kind: {},
         branch_attrs: {},
         generated_at: '2026-04-21T00:00:00Z',
       },
@@ -249,16 +206,12 @@ describe('mbdV2 primitive types', () => {
     const json = JSON.stringify(data);
     const back = JSON.parse(json) as MbdV2PipeData;
     expect(back).toEqual(data);
-    expect(back.primitives).toHaveLength(11);
+    expect(back.primitives).toHaveLength(9);
   });
 
   it('switch 穷举所有 kind，未覆盖时 assertNever 兜底', () => {
     function render(p: MbdPrimitive): string {
       switch (p.kind) {
-        case 'linear_dim':
-          return 'ld';
-        case 'angle_dim':
-          return 'ad';
         case 'label':
           return 'lbl';
         case 'leader_line':
@@ -283,8 +236,6 @@ describe('mbdV2 primitive types', () => {
     }
 
     expect(samples.map(render)).toEqual([
-      'ld',
-      'ad',
       'lbl',
       'leader',
       'aid-l',

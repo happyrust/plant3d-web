@@ -219,7 +219,6 @@ export type MbdDimOverride = {
 
 export type MbdPipeUiTab =
   | 'overview'
-  | 'dims'
   | 'clearances'
   | 'materials'
   | 'envelope'
@@ -1014,10 +1013,10 @@ export function useMbdPipeAnnotationThree(
   const rebarvizLineWidthPx = ref<number>(rebarvizDefaults.lineWidthPx);
 
   const isVisible = ref(false);
-  const showDims = ref(true);
-  const showDimSegment = ref(true);
-  const showDimChain = ref(true);
-  const showDimOverall = ref(true);
+  const showDims = ref(false);
+  const showDimSegment = ref(false);
+  const showDimChain = ref(false);
+  const showDimOverall = ref(false);
   const showDimPort = ref(false);
   const showPipeClearances = ref(true);
   const showStructureClearances = ref(true);
@@ -1103,7 +1102,7 @@ export function useMbdPipeAnnotationThree(
 
   function applyModeDefaults(mode: MbdPipeViewMode): void {
     mbdViewMode.value = mode;
-    showDims.value = true;
+    showDims.value = false;
     if (mode === 'inspection') {
       dimMode.value = 'rebarviz';
       bendDisplayMode.value = 'size';
@@ -1149,7 +1148,7 @@ export function useMbdPipeAnnotationThree(
       showOwnerSegmentDebug.value = false;
       showWelds.value = true;
       showSlopes.value = true;
-      showBends.value = true;
+      showBends.value = false;
       showSegments.value = false;
       return;
     }
@@ -1611,8 +1610,7 @@ export function useMbdPipeAnnotationThree(
 
     // 设置新的高亮
     if (id) {
-      if (dimAnnotations.has(id)) uiTab.value = 'dims';
-      else if (
+      if (
         pipeClearanceAnnotations.has(id) ||
         structureClearanceAnnotations.has(id) ||
         elevationAnnotations.has(id)
@@ -2587,32 +2585,12 @@ export function useMbdPipeAnnotationThree(
     }
     cutTubiAnnotations.clear();
 
-    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
-      renderLaidOutLinearDims(data.layout_result.linear_dims ?? []);
-      if (data.layout_result.cut_tubis?.length) {
-        renderLaidOutCutTubis(data.layout_result.cut_tubis);
-      }
-    } else {
-      const pipeOffsetDirs = data.segments?.length
-        ? computePipeAlignedOffsetDirs(data.segments)
-        : [];
-      if (data.dims?.length) {
-        renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
-      }
-      if (data.cut_tubis?.length) {
-        renderCutTubis(data.cut_tubis, data.segments ?? [], pipeOffsetDirs);
-      }
-    }
-    applyPortDimLabelDeclutter();
-    applyCutTubiLabelDeclutter();
     applyTagLabelDeclutter();
-    applyCutTubiLabelDeclutter(true);
 
     const viewer = dtxViewerRef.value;
     if (viewer) applyBackgroundColor(viewer);
     applyVisibility();
     applyLabelVisibility();
-    // 尺寸重建后回放当前高亮，避免“列表选中但场景未高亮”。
     highlightItem(activeItemId.value);
   }
 
@@ -2624,14 +2602,6 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).dispose();
     }
     bendAnnotations.clear();
-
-    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
-      if (data.layout_result.bends?.length) {
-        renderLaidOutBends(data.layout_result.bends);
-      }
-    } else if (data.bends?.length) {
-      renderBends(data.bends, data.segments ?? []);
-    }
 
     const viewer = dtxViewerRef.value;
     if (viewer) applyBackgroundColor(viewer);
@@ -3349,26 +3319,15 @@ export function useMbdPipeAnnotationThree(
       const pipeOffsetDirs = data.segments?.length
         ? computePipeAlignedOffsetDirs(data.segments)
         : [];
-      if (data.dims?.length)
-        renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
-      applyChainOffsetUnification();
-      applyPortDimLabelDeclutter();
       if (data.welds?.length) renderWelds(data.welds);
       if (data.slopes?.length) renderSlopes(data.slopes);
       if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
       if (data.structure_clearances?.length) {
         renderStructureClearances(data.structure_clearances);
       }
-      if (data.bends?.length) renderBends(data.bends, data.segments ?? []);
-      if (data.cut_tubis?.length) {
-        renderCutTubis(data.cut_tubis, data.segments ?? [], pipeOffsetDirs);
-      }
       if (data.fittings?.length) renderFittings(data.fittings);
       if (data.tags?.length) renderTags(data.tags);
-      applyPortDimLabelDeclutter();
-      applyCutTubiLabelDeclutter();
       applyTagLabelDeclutter();
-      applyCutTubiLabelDeclutter(true);
       if (effectiveElevationMarks.length > 0) renderElevationMarks(effectiveElevationMarks);
       renderEnvelope(effectiveEnvelope);
     }
