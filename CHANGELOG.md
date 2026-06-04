@@ -71,6 +71,12 @@
 
 ### 修复
 
+- **零尺寸 BOX 无模型诊断与缓存状态修正** (2026-06-05)
+  - `show_refno` 单模型加载路径在 `visible-insts` 为空或最终未绘制实例时，会查询 PDMS UI 属性并识别 `BOX` 的 `XLEN/YLEN/ZLEN` 是否全为 0。
+  - 对零尺寸 `BOX` 在底部控制台输出明确原因：生成阶段不会写入 `inst_relate/geo_relate`，因此没有可绘制模型，避免只提示“可见实例为空”。
+  - DTX loader 对 Parquet 无几何行的 refno 不再写入 `loadedRefnos` 缓存，避免后续点击误报“已存在于场景或缓存中”。
+  - 验证：`npm run type-check` 通过；`show_refno=2013294900_6965` 页面控制台已显示零尺寸诊断。
+
 - **外部 PMS 单据批注状态同步与启动健壮性增强（U011 整组）** (2026-05-19)
   - `useAnnotationReviewStateSync.ts` 新增 `pickLatestAnnotationStates`：同一批注的多轮记录按 `(reviewRound, updatedAt)` 去重，只应用最新一轮；避免上一轮的 `decision_status=rejected` 覆盖 SJ 二次处理后的 `fixed`
   - `ReviewPanel.vue` 的 `refreshAnnotationReviewStatesForCurrentTask` 与 `activeReviewFormId` watch 不再强依赖 `currentTask`：外部 form 聚焦时只凭 `activeReviewFormId` 也能按 `formId` 拉一次最新批注状态；`restoreConfirmedRecordsIntoScene` 与 `confirmCurrentData` 成功后追加一次主动刷新

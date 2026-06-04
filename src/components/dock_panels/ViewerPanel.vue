@@ -17,7 +17,7 @@ import {
 import { Matrix4, Plane, Vector2, Vector3 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
-import { pdmsGetPtsetWithContext } from '@/api/genModelPdmsAttrApi';
+import { pdmsGetPtsetWithContext, pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import { getMbdPipeAnnotations, getMbdPipeV2Annotations } from '@/api/mbdPipeApi';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
@@ -1052,6 +1052,34 @@ async function getTargetRefnos(refno: string): Promise<string[]> {
   }
 
   return targetRefnos;
+}
+
+function finiteNumberAttr(attrs: Record<string, unknown>, key: string): number | null {
+  const raw = attrs[key];
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+async function describeNoGeometryReason(refno: string): Promise<string | null> {
+  try {
+    const resp = await pdmsGetUiAttr(refno);
+    if (!resp.success || !resp.attrs) return null;
+
+    const type = String(resp.attrs.TYPE || '').trim().toUpperCase();
+    if (type !== 'BOX') return null;
+
+    const xlen = finiteNumberAttr(resp.attrs, 'XLEN');
+    const ylen = finiteNumberAttr(resp.attrs, 'YLEN');
+    const zlen = finiteNumberAttr(resp.attrs, 'ZLEN');
+    if (xlen === null || ylen === null || zlen === null) return null;
+
+    const isZeroSize = [xlen, ylen, zlen].every((value) => Math.abs(value) <= Number.EPSILON);
+    if (!isZeroSize) return null;
+
+    return `该 BOX 尺寸为 0（XLEN=${xlen}, YLEN=${ylen}, ZLEN=${zlen}），生成阶段不会写入 inst_relate/geo_relate，因此没有可绘制模型`;
+  } catch {
+    return null;
+  }
 }
 
 async function hideSelected(): Promise<void> {
@@ -3173,6 +3201,7 @@ onMounted(async () => {
         // 先查询可见子实例（容器节点本身在 Parquet 中没有几何数据）
         let loadRefnos = [showRefno];
         let visibleInstsUserHint: string | null = null;
+        let noGeometryReason: string | null = null;
         try {
           const visResp = await e3dGetVisibleInsts(showRefno);
           const visRefnos = visResp?.refnos ?? [];
@@ -3180,8 +3209,9 @@ onMounted(async () => {
             loadRefnos = mergeRootRefnoWithVisibleRefnos(showRefno, visRefnos);
             console.log(`[show_refno] visible-insts 返回 ${visRefnos.length} 个子实例，合并根节点后共 ${loadRefnos.length} 个 refno`);
           } else if (visResp?.success) {
+            noGeometryReason = await describeNoGeometryReason(showRefno);
             visibleInstsUserHint =
-              `可见子实例为 0（refno=${showRefno}），仅加载根节点；若为容器可能没有几何，请检查可见性或数据`;
+              `可见子实例为 0（refno=${showRefno}），仅加载根节点；${noGeometryReason || '若为容器可能没有几何，请检查可见性或数据'}`;
           }
         } catch (e) {
           console.warn('[show_refno] visible-insts 查询失败，回退直接加载', e);
@@ -3189,6 +3219,7 @@ onMounted(async () => {
         }
         if (visibleInstsUserHint) {
           emitToast({ message: `[警告] ${visibleInstsUserHint}`, level: 'warning' });
+          consoleStore.addLog('warn', `[show_refno] ${visibleInstsUserHint}`);
         }
 
         const result = await loadDbnoInstancesForVisibleRefnosDtx(
@@ -3221,10 +3252,13 @@ onMounted(async () => {
           `对象 ${result.loadedObjects}（已加载 ${result.loadedRefnos}，跳过 ${result.skippedRefnos}，` +
           `mesh 缺失 ${result.missingBreakdown.mesh404Refnos.length}，无几何 ${result.missingBreakdown.noGeoRowsRefnos.length}）`;
         if (result.loadedObjects === 0) {
+          noGeometryReason = noGeometryReason || await describeNoGeometryReason(showRefno);
+          const reason = noGeometryReason ? `原因：${noGeometryReason}` : '请检查左侧可见性或 Parquet 数据';
           emitToast({
-            message: `[警告] 加载结束但未绘制实例。${detail} 请检查左侧可见性或 Parquet 数据`,
+            message: `[警告] 加载结束但未绘制实例。${detail} ${reason}`,
             level: 'warning',
           });
+          consoleStore.addLog('warn', `[show_refno] 加载结束但未绘制实例。${detail} ${reason}`);
         } else {
           emitToast({ message: `[成功] ${detail}`, level: 'success' });
         }

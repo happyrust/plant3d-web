@@ -576,7 +576,6 @@ export async function loadDbnoInstancesForVisibleRefnosDtx(
     if (insts.length === 0) {
       noGeoRowsRefnos.add(refnoKey);
       if (!missingRefnos.includes(refnoKey)) missingRefnos.push(refnoKey);
-      cache.loadedRefnos.add(refnoKey);
       continue;
     }
 
