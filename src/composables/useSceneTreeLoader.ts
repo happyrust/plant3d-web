@@ -7,10 +7,11 @@
 
 import { ref, shallowRef } from 'vue';
 
-import type * as duckdb from '@duckdb/duckdb-wasm';
+import { AsyncDuckDB, ConsoleLogger } from '@duckdb/duckdb-wasm';
+import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // DuckDB 实例单例（与 useParquetModelLoader 共享）
-let duckDbInstance: duckdb.AsyncDuckDB | null = null;
+let duckDbInstance: AsyncDuckDB | null = null;
 
 /**
  * 数据源类型
@@ -82,20 +83,18 @@ function normalizeRefno(id: number | string): string {
 /**
  * 初始化 DuckDB 实例
  */
-async function ensureDuckDB(): Promise<duckdb.AsyncDuckDB> {
+async function ensureDuckDB(): Promise<AsyncDuckDB> {
   if (duckDbInstance) {
     return duckDbInstance;
   }
 
-  const duckdb = await import('@duckdb/duckdb-wasm');
-  const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-  const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+  const bundle = await selectLocalDuckDBBundle();
   const worker_url = URL.createObjectURL(
     new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
   );
   const worker = new Worker(worker_url);
-  const logger = new duckdb.ConsoleLogger();
-  duckDbInstance = new duckdb.AsyncDuckDB(logger, worker);
+  const logger = new ConsoleLogger();
+  duckDbInstance = new AsyncDuckDB(logger, worker);
   await duckDbInstance.instantiate(bundle.mainModule, bundle.pthreadWorker);
   URL.revokeObjectURL(worker_url);
 

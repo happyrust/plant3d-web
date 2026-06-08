@@ -6,11 +6,12 @@
 
 import { ref, shallowRef } from 'vue';
 
-import * as duckdb from '@duckdb/duckdb-wasm';
+import { AsyncDuckDB, ConsoleLogger, type AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // DuckDB 实例（单例）
-let db: duckdb.AsyncDuckDB | null = null;
-let conn: duckdb.AsyncDuckDBConnection | null = null;
+let db: AsyncDuckDB | null = null;
+let conn: AsyncDuckDBConnection | null = null;
 let initPromise: Promise<void> | null = null;
 
 /** 查询日志类型 */
@@ -61,20 +62,16 @@ async function initDuckDB(): Promise<void> {
 
   initPromise = (async () => {
     try {
-      // 使用 CDN 加载 DuckDB bundles
-      const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-
-      // 选择最佳 bundle
-      const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+      const bundle = await selectLocalDuckDBBundle();
 
       const worker_url = URL.createObjectURL(
         new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
       );
 
       const worker = new Worker(worker_url);
-      const logger = new duckdb.ConsoleLogger();
+      const logger = new ConsoleLogger();
 
-      db = new duckdb.AsyncDuckDB(logger, worker);
+      db = new AsyncDuckDB(logger, worker);
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
       URL.revokeObjectURL(worker_url);

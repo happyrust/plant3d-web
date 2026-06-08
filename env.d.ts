@@ -8,3 +8,4 @@ interface ImportMetaEnv {
 declare const __FRONTEND_APP_VERSION__: string;
 declare const __FRONTEND_GIT_COMMIT__: string;
 declare const __FRONTEND_BUILD_ISO__: string;
+declare const __DUCKDB_ASSET_VERSION__: string;

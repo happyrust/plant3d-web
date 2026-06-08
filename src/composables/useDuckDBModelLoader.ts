@@ -8,25 +8,28 @@
 
 import { ref, shallowRef, computed } from 'vue';
 
-import * as duckdb from '@duckdb/duckdb-wasm';
-
-// DuckDB Worker 配置
-const DUCKDB_BUNDLES = duckdb.getJsDelivrBundles();
+import {
+  AsyncDuckDB,
+  ConsoleLogger,
+  DuckDBDataProtocol,
+  type AsyncDuckDBConnection,
+  type QueryResult,
+} from '@duckdb/duckdb-wasm';
+import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // 单例 DuckDB 实例
-let dbInstance: duckdb.AsyncDuckDB | null = null;
+let dbInstance: AsyncDuckDB | null = null;
 let workerInstance: Worker | null = null;
 
 /**
  * 初始化 DuckDB-WASM
  */
-async function initDuckDB(): Promise<duckdb.AsyncDuckDB> {
+async function initDuckDB(): Promise<AsyncDuckDB> {
   if (dbInstance) {
     return dbInstance;
   }
 
-  // 选择最佳 bundle
-  const bundle = await duckdb.selectBundle(DUCKDB_BUNDLES);
+  const bundle = await selectLocalDuckDBBundle();
 
   // 创建 Worker
   const workerUrl = URL.createObjectURL(
@@ -35,8 +38,8 @@ async function initDuckDB(): Promise<duckdb.AsyncDuckDB> {
   workerInstance = new Worker(workerUrl);
 
   // 初始化日志
-  const logger = new duckdb.ConsoleLogger();
-  dbInstance = new duckdb.AsyncDuckDB(logger, workerInstance);
+  const logger = new ConsoleLogger();
+  dbInstance = new AsyncDuckDB(logger, workerInstance);
   await dbInstance.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
   console.log('📦 [DuckDB-WASM] 初始化完成');
@@ -94,8 +97,8 @@ export function useDuckDBModelLoader() {
         aabb_count: number
     } | null>(null);
 
-  let db: duckdb.AsyncDuckDB | null = null;
-  let conn: duckdb.AsyncDuckDBConnection | null = null;
+  let db: AsyncDuckDB | null = null;
+  let conn: AsyncDuckDBConnection | null = null;
   const registeredUrl = ref<string | null>(null);
 
   /**
@@ -128,7 +131,7 @@ export function useDuckDBModelLoader() {
       db = await initDuckDB();
 
       // 注册远程文件（支持 HTTP Range Requests）
-      await db.registerFileURL('model.duckdb', dbUrl, duckdb.DuckDBDataProtocol.HTTP, false);
+      await db.registerFileURL('model.duckdb', dbUrl, DuckDBDataProtocol.HTTP, false);
 
       // 打开连接
       conn = await db.connect();
@@ -197,14 +200,14 @@ export function useDuckDBModelLoader() {
       await db.registerFileURL(
         'instance.parquet',
         instanceUrl,
-        duckdb.DuckDBDataProtocol.HTTP,
+        DuckDBDataProtocol.HTTP,
         false  // 不强制下载，使用 HTTP Range
       );
 
       await db.registerFileURL(
         'transform.parquet',
         transformUrl,
-        duckdb.DuckDBDataProtocol.HTTP,
+        DuckDBDataProtocol.HTTP,
         false
       );
 
@@ -326,7 +329,7 @@ export function useDuckDBModelLoader() {
     }[]> {
     if (!conn) throw new Error('Database not connected');
 
-    let result: duckdb.QueryResult;
+    let result: QueryResult;
     try {
       result = await conn.query(`
                 SELECT 
@@ -426,7 +429,7 @@ export function useDuckDBModelLoader() {
       };
     }
 
-    let transformResult: duckdb.QueryResult;
+    let transformResult: QueryResult;
     try {
       transformResult = await conn.query(`
                 SELECT 

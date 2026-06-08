@@ -12,12 +12,19 @@
 
 import { shallowRef } from 'vue';
 
-import * as duckdb from '@duckdb/duckdb-wasm';
+import {
+  AsyncDuckDB,
+  ConsoleLogger,
+  DuckDBDataProtocol,
+  type AsyncDuckDBConnection,
+} from '@duckdb/duckdb-wasm';
 import { Matrix4 } from 'three';
 
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
+import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 import { getParquetVersion } from '@/api/genModelRealtimeApi';
+import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { buildFilesOutputUrl } from '@/lib/filesOutput';
 
 type ParquetManifest = {
@@ -28,10 +35,17 @@ type ParquetManifest = {
   root_refno?: string | null
   tables: {
     instances: { file: string; rows?: number }
+    ptsets?: { file: string; rows?: number; key?: string[] }
     geo_instances: { file: string; rows?: number }
     tubings: { file: string; rows?: number }
     transforms: { file: string; rows?: number }
     aabb: { file: string; rows?: number }
+  }
+  ptset_unit?: {
+    source?: string
+    target?: string
+    conversion_factor?: number
+    coordinate_space?: string
   }
   mesh_validation?: {
     lod_tag?: string
@@ -95,6 +109,7 @@ type RegisteredDbno = {
   // duckdb local filenames (to avoid cross-dbno collision)
   files: {
     instances: string
+    ptsets: string
     geo_instances: string
     tubings: string
     transforms: string
@@ -155,6 +170,26 @@ export function buildParquetRemoteFileUrl(baseDirUrl: string, remoteFile: string
   }
 }
 
+async function registerDuckdbRemoteFile(
+  localName: string,
+  baseDirUrl: string,
+  remoteFile: string,
+  requestToken: string,
+): Promise<string> {
+  if (!db) throw new Error('DuckDB not ready');
+  const remoteUrl = buildParquetRemoteFileUrl(baseDirUrl, remoteFile, requestToken);
+  try {
+    await db.registerFileURL(localName, remoteUrl, DuckDBDataProtocol.HTTP, true);
+    return localName;
+  } catch (error) {
+    if (!isDuckdbFileAlreadyRegisteredError(error)) throw error;
+
+    const retryLocalName = appendDuckdbLocalFileToken(localName, requestToken);
+    await db.registerFileURL(retryLocalName, remoteUrl, DuckDBDataProtocol.HTTP, true);
+    return retryLocalName;
+  }
+}
+
 function createDuckdbRemoteQueryToken(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -183,6 +218,7 @@ function buildRegisteredDbnoFiles(
   const suffix = localFileToken ? `_${localFileToken}` : '';
   return {
     instances: `p_${dbno}_instances${suffix}.parquet`,
+    ptsets: `p_${dbno}_ptsets${suffix}.parquet`,
     geo_instances: `p_${dbno}_geo_instances${suffix}.parquet`,
     tubings: `p_${dbno}_tubings${suffix}.parquet`,
     transforms: `p_${dbno}_transforms${suffix}.parquet`,
@@ -265,13 +301,15 @@ async function getDirectoryHint(dbno: number): Promise<ParquetDirectoryHint | nu
 }
 
 // DuckDB 单例（参考 useParquetSqlStore 的实现）
-let db: duckdb.AsyncDuckDB | null = null;
-let conn: duckdb.AsyncDuckDBConnection | null = null;
+let db: AsyncDuckDB | null = null;
+let conn: AsyncDuckDBConnection | null = null;
 let initPromise: Promise<void> | null = null;
 
 // 每个 dbno 的注册缓存
 const registeredByDbno = new Map<number, RegisteredDbno>();
 const registeringByDbno = new Map<number, Promise<RegisteredDbno>>();
+const registeredPtsetsByDbno = new Map<number, string>();
+const registeringPtsetsByDbno = new Map<number, Promise<string | null>>();
 const availableByDbno = new Map<number, boolean>();
 const availabilityCheckingByDbno = new Map<number, Promise<boolean>>();
 const meshValidationByDbno = new Map<number, Promise<ParquetMeshValidationInfo | null>>();
@@ -281,15 +319,14 @@ async function ensureDuckDB(): Promise<void> {
   if (initPromise) return await initPromise;
 
   initPromise = (async () => {
-    const bundles = duckdb.getJsDelivrBundles();
-    const bundle = await duckdb.selectBundle(bundles);
+    const bundle = await selectLocalDuckDBBundle();
 
     const workerUrl = URL.createObjectURL(
       new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
     );
     const worker = new Worker(workerUrl);
-    const logger = new duckdb.ConsoleLogger();
-    db = new duckdb.AsyncDuckDB(logger, worker);
+    const logger = new ConsoleLogger();
+    db = new AsyncDuckDB(logger, worker);
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
     URL.revokeObjectURL(workerUrl);
 
@@ -390,6 +427,48 @@ function createParquetQueryTiming(requestedRefnos: number, chunkCount: number): 
   };
 }
 
+function ptsetUnitInfoFromManifest(manifest: ParquetManifest): NonNullable<PtsetResponse['unit_info']> {
+  const unit = manifest.ptset_unit;
+  const conversionFactor = Number(unit?.conversion_factor ?? 1);
+  return {
+    source_unit: String(unit?.source || 'mm'),
+    target_unit: String(unit?.target || unit?.source || 'mm'),
+    conversion_factor: Number.isFinite(conversionFactor) ? conversionFactor : 1,
+  };
+}
+
+function rowToPtsetPoint(row: any): PtsetPoint {
+  const hasDir = Boolean(row.has_dir);
+  const hasRefDir = Boolean(row.has_ref_dir);
+  return {
+    number: Number(row.point_number ?? 0),
+    pt: [
+      Number(row.pt_x ?? 0),
+      Number(row.pt_y ?? 0),
+      Number(row.pt_z ?? 0),
+    ],
+    dir: hasDir
+      ? [
+          Number(row.dir_x ?? 0),
+          Number(row.dir_y ?? 0),
+          Number(row.dir_z ?? 0),
+        ]
+      : null,
+    dir_flag: Number(row.dir_flag ?? 1),
+    ref_dir: hasRefDir
+      ? [
+          Number(row.ref_dir_x ?? 0),
+          Number(row.ref_dir_y ?? 0),
+          Number(row.ref_dir_z ?? 0),
+        ]
+      : null,
+    pbore: Number(row.pbore ?? 0),
+    pwidth: Number(row.pwidth ?? 0),
+    pheight: Number(row.pheight ?? 0),
+    pconnect: String(row.pconnect ?? ''),
+  };
+}
+
 async function fetchManifest(dbno: number): Promise<ParquetManifestWithBaseDir> {
   const hint = await getDirectoryHint(dbno);
   if (hint?.manifestBaseDir) {
@@ -450,27 +529,12 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
       forceRefresh ? toDuckdbLocalFileToken(requestToken) : undefined,
     );
 
-    // 注册远程文件（HTTP Range）
-    const registerOne = async (localName: string, remoteFile: string): Promise<string> => {
-      const remoteUrl = buildParquetRemoteFileUrl(baseDirUrl, remoteFile, requestToken);
-      try {
-        await db!.registerFileURL(localName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, true);
-        return localName;
-      } catch (error) {
-        if (!isDuckdbFileAlreadyRegisteredError(error)) throw error;
-
-        const retryLocalName = appendDuckdbLocalFileToken(localName, requestToken);
-        await db!.registerFileURL(retryLocalName, remoteUrl, duckdb.DuckDBDataProtocol.HTTP, true);
-        return retryLocalName;
-      }
-    };
-
     const [instances, geoInstances, tubings, transforms, aabb] = await Promise.all([
-      registerOne(files.instances, manifest.tables.instances.file),
-      registerOne(files.geo_instances, manifest.tables.geo_instances.file),
-      registerOne(files.tubings, manifest.tables.tubings.file),
-      registerOne(files.transforms, manifest.tables.transforms.file),
-      registerOne(files.aabb, manifest.tables.aabb.file),
+      registerDuckdbRemoteFile(files.instances, baseDirUrl, manifest.tables.instances.file, requestToken),
+      registerDuckdbRemoteFile(files.geo_instances, baseDirUrl, manifest.tables.geo_instances.file, requestToken),
+      registerDuckdbRemoteFile(files.tubings, baseDirUrl, manifest.tables.tubings.file, requestToken),
+      registerDuckdbRemoteFile(files.transforms, baseDirUrl, manifest.tables.transforms.file, requestToken),
+      registerDuckdbRemoteFile(files.aabb, baseDirUrl, manifest.tables.aabb.file, requestToken),
     ]);
 
     const reg: RegisteredDbno = {
@@ -479,6 +543,7 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
       manifest,
       files: {
         instances,
+        ptsets: files.ptsets,
         geo_instances: geoInstances,
         tubings,
         transforms,
@@ -494,6 +559,45 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
     return await task;
   } finally {
     registeringByDbno.delete(dbno);
+  }
+}
+
+async function ensurePtsetsRegistered(reg: RegisteredDbno, options: { forceRefresh?: boolean } = {}): Promise<string | null> {
+  const ptsetsTable = reg.manifest.tables.ptsets;
+  if (!ptsetsTable?.file) return null;
+
+  if (options.forceRefresh) {
+    registeredPtsetsByDbno.delete(reg.dbno);
+  }
+
+  const cached = registeredPtsetsByDbno.get(reg.dbno);
+  if (cached && !options.forceRefresh) return cached;
+
+  const pending = registeringPtsetsByDbno.get(reg.dbno);
+  if (pending && !options.forceRefresh) return await pending;
+
+  const task = (async () => {
+    await ensureDuckDB();
+    if (!db || !conn) throw new Error('DuckDB not ready');
+    const requestToken = createDuckdbRemoteQueryToken();
+    const localName = options.forceRefresh
+      ? appendDuckdbLocalFileToken(reg.files.ptsets, requestToken)
+      : reg.files.ptsets;
+    const registered = await registerDuckdbRemoteFile(
+      localName,
+      reg.baseDirUrl,
+      ptsetsTable.file,
+      requestToken,
+    );
+    registeredPtsetsByDbno.set(reg.dbno, registered);
+    return registered;
+  })();
+
+  registeringPtsetsByDbno.set(reg.dbno, task);
+  try {
+    return await task;
+  } finally {
+    registeringPtsetsByDbno.delete(reg.dbno);
   }
 }
 
@@ -573,6 +677,102 @@ export function useDbnoInstancesParquetLoader() {
     return available;
   }
 
+  async function isPtsetParquetAvailable(dbno: number): Promise<boolean> {
+    try {
+      const reg = await registerDbno(dbno);
+      const ptsetsFile = await ensurePtsetsRegistered(reg);
+      return !!ptsetsFile;
+    } catch {
+      return false;
+    }
+  }
+
+  async function queryPtsetByRefnoFromParquet(
+    dbno: number,
+    refno: string,
+    options?: { forceRefresh?: boolean }
+  ): Promise<PtsetResponse> {
+    const normalizedRefno = normalizeRefnoKey(refno);
+    const fail = (message: string): PtsetResponse => ({
+      success: false,
+      refno: normalizedRefno,
+      ptset: [],
+      world_transform: null,
+      unit_info: null,
+      error_message: message,
+    });
+
+    lastError.value = null;
+    if (!normalizedRefno) return fail('refno 为空，无法查询 ptset');
+
+    try {
+      const reg = await registerDbno(dbno, { forceRefresh: options?.forceRefresh });
+      await ensureDuckDB();
+      if (!conn) throw new Error('DuckDB connection unavailable');
+
+      const ptsetsFile = await ensurePtsetsRegistered(reg, { forceRefresh: options?.forceRefresh });
+      if (!ptsetsFile) {
+        return fail('当前模型包未包含 ptsets.parquet，ptset 测量不可用');
+      }
+
+      const instanceSql = `
+        SELECT
+          i.refno_str,
+          i.cata_hash,
+          i.trans_hash,
+          tw.m00, tw.m10, tw.m20, tw.m30,
+          tw.m01, tw.m11, tw.m21, tw.m31,
+          tw.m02, tw.m12, tw.m22, tw.m32,
+          tw.m03, tw.m13, tw.m23, tw.m33
+        FROM parquet_scan('${reg.files.instances}') i
+        LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = i.trans_hash
+        WHERE i.refno_str = ${sqlQuoteString(normalizedRefno)}
+        LIMIT 1
+      `;
+      const instanceArrow = await conn.query(instanceSql);
+      const instanceRows = instanceArrow.toArray() as any[];
+      const instanceRow = instanceRows[0];
+      if (!instanceRow) {
+        return fail(`instances.parquet 中未找到 refno=${normalizedRefno}`);
+      }
+
+      const cataHash = String(instanceRow.cata_hash || '').trim();
+      if (!cataHash) {
+        return fail(`refno=${normalizedRefno} 缺少 cata_hash，无法查询 ptset`);
+      }
+
+      const ptsetSql = `
+        SELECT
+          point_number,
+          pt_x, pt_y, pt_z,
+          has_dir, dir_x, dir_y, dir_z, dir_flag,
+          has_ref_dir, ref_dir_x, ref_dir_y, ref_dir_z,
+          pbore, pwidth, pheight, pconnect
+        FROM parquet_scan('${ptsetsFile}')
+        WHERE cata_hash = ${sqlQuoteString(cataHash)}
+        ORDER BY point_number
+      `;
+      const ptsetArrow = await conn.query(ptsetSql);
+      const rows = ptsetArrow.toArray() as any[];
+      if (rows.length === 0) {
+        return fail(`cata_hash=${cataHash} 未找到 ptset 点`);
+      }
+
+      return {
+        success: true,
+        refno: normalizedRefno,
+        ptset: rows.map(rowToPtsetPoint),
+        world_transform: colsMajorToMatrixArray(instanceRow),
+        unit_info: ptsetUnitInfoFromManifest(reg.manifest),
+        error_message: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      lastError.value = message;
+      return fail(`查询 ptsets.parquet 失败: ${message}`);
+    }
+  }
+
   async function queryInstanceEntriesByRefnos(
     dbno: number,
     refnoKeys: string[],
@@ -593,13 +793,14 @@ export function useDbnoInstancesParquetLoader() {
     if (!conn) throw new Error('DuckDB connection unavailable');
 
     const registerDbnoStartedAt = Date.now();
-    const reg = await registerDbno(dbno, { forceRefresh: true });
+    const reg = await registerDbno(dbno);
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
 
     // refno 在 parquet 里是 refno_str（与前端 refnoKey 一致：`24381_100818` 这种下划线格式）
     const toRefnoStr = (k: string) => String(k);
 
     const resultMap = new Map<string, InstanceEntry[]>();
+    const cataHashSelect = reg.manifest.tables.ptsets?.file ? 'i.cata_hash' : 'NULL AS cata_hash';
 
     const CHUNK = 500;
     for (let i = 0; i < normalized.length; i += CHUNK) {
@@ -616,6 +817,7 @@ export function useDbnoInstancesParquetLoader() {
           i.noun,
           i.owner_refno_str,
           i.owner_noun,
+          ${cataHashSelect},
           i.spec_value,
           i.has_neg,
           i.trans_hash,
@@ -699,6 +901,7 @@ export function useDbnoInstancesParquetLoader() {
             owner_noun: ownerNoun,
             spec_value: Number(row.spec_value ?? 0),
             has_neg: Boolean(row.has_neg),
+            cata_hash: row.cata_hash ? String(row.cata_hash) : '',
             trans_hash: row.trans_hash ? String(row.trans_hash) : '',
             aabb_hash: row.aabb_hash ? String(row.aabb_hash) : '',
           },
@@ -968,6 +1171,8 @@ export function useDbnoInstancesParquetLoader() {
     prewarmDuckDB,
     prewarmDbno,
     isParquetAvailable,
+    isPtsetParquetAvailable,
+    queryPtsetByRefnoFromParquet,
     queryInstanceEntriesByRefnos,
     queryAllRefnosByDbno,
     queryMeshValidationInfoByDbno,

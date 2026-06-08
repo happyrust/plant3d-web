@@ -7,7 +7,12 @@
  * - output/<project>/parquet/manifest_{dbnum}.json（用于 visible-insts 过滤）
  */
 
-import * as duckdb from '@duckdb/duckdb-wasm';
+import {
+  AsyncDuckDB,
+  ConsoleLogger,
+  DuckDBDataProtocol,
+  type AsyncDuckDBConnection,
+} from '@duckdb/duckdb-wasm';
 
 import type {
   AncestorsResponse,
@@ -21,6 +26,7 @@ import type {
 } from '@/api/genModelE3dTypes';
 
 import { buildFilesOutputUrl, getOutputProjectFromUrl } from '@/lib/filesOutput';
+import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 type DbMetaInfo = {
   db_files?: Record<string, { dbnum?: number }>
@@ -74,8 +80,8 @@ async function urlExists(url: string): Promise<boolean> {
 }
 
 // DuckDB 单例（模块内）
-let db: duckdb.AsyncDuckDB | null = null;
-let conn: duckdb.AsyncDuckDBConnection | null = null;
+let db: AsyncDuckDB | null = null;
+let conn: AsyncDuckDBConnection | null = null;
 let initPromise: Promise<void> | null = null;
 
 async function ensureDuckDB(): Promise<void> {
@@ -83,15 +89,14 @@ async function ensureDuckDB(): Promise<void> {
   if (initPromise) return await initPromise;
 
   initPromise = (async () => {
-    const bundles = duckdb.getJsDelivrBundles();
-    const bundle = await duckdb.selectBundle(bundles);
+    const bundle = await selectLocalDuckDBBundle();
 
     const workerUrl = URL.createObjectURL(
       new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
     );
     const worker = new Worker(workerUrl);
-    const logger = new duckdb.ConsoleLogger();
-    db = new duckdb.AsyncDuckDB(logger, worker);
+    const logger = new ConsoleLogger();
+    db = new AsyncDuckDB(logger, worker);
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
     URL.revokeObjectURL(workerUrl);
 
@@ -203,7 +208,7 @@ async function registerFile(localName: string, url: string): Promise<void> {
   if (prev === absUrl) return;
 
   // 允许同名覆盖（不同 output_project 切换时）
-  await db.registerFileURL(localName, absUrl, duckdb.DuckDBDataProtocol.HTTP, false);
+  await db.registerFileURL(localName, absUrl, DuckDBDataProtocol.HTTP, false);
   registeredFiles.set(localName, absUrl);
 }
 

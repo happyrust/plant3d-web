@@ -1,9 +1,11 @@
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from 'vite';
 
 import vuetify from 'vite-plugin-vuetify';
 
@@ -46,6 +48,81 @@ function inferBackendPortFromApiBase(apiBase: string | undefined): string {
   }
 }
 
+function normalizeBasePath(basePath: string | undefined): string {
+  const trimmed = basePath?.trim();
+  if (!trimmed) return '/';
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+
+const DUCKDB_ASSET_FILES = [
+  'duckdb-browser-mvp.worker.js',
+  'duckdb-browser-eh.worker.js',
+  'duckdb-browser-coi.worker.js',
+  'duckdb-browser-coi.pthread.worker.js',
+  'duckdb-mvp.wasm',
+  'duckdb-eh.wasm',
+  'duckdb-coi.wasm',
+] as const;
+
+function duckDBAssetSourceDir(): string {
+  return fileURLToPath(
+    new URL('./node_modules/@duckdb/duckdb-wasm/dist/', import.meta.url)
+  );
+}
+
+function resolveDuckDBAssetVersion(): string {
+  const sourceDir = duckDBAssetSourceDir();
+  const hash = createHash('sha256');
+  for (const fileName of DUCKDB_ASSET_FILES) {
+    const source = resolve(sourceDir, fileName);
+    if (!existsSync(source)) {
+      throw new Error(`DuckDB WASM asset not found: ${source}`);
+    }
+    hash.update(fileName);
+    hash.update(readFileSync(source));
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+function copyDuckDBWasmAssetsPlugin(): Plugin {
+  let outDir = 'dist';
+  const sourceDir = duckDBAssetSourceDir();
+
+  return {
+    name: 'copy-duckdb-wasm-assets',
+    configResolved(config) {
+      outDir = config.build.outDir || 'dist';
+    },
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use('/duckdb', (req, res, next) => {
+        const fileName = decodeURIComponent((req.url ?? '').split('?', 1)[0]).replace(/^\/+/, '');
+        if (!DUCKDB_ASSET_FILES.includes(fileName as (typeof DUCKDB_ASSET_FILES)[number])) {
+          next();
+          return;
+        }
+
+        res.statusCode = 200;
+        res.setHeader(
+          'Content-Type',
+          fileName.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8'
+        );
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(readFileSync(resolve(sourceDir, fileName)));
+      });
+    },
+    closeBundle() {
+      const targetDir = resolve(__dirname, outDir, 'duckdb');
+      mkdirSync(targetDir, { recursive: true });
+
+      for (const fileName of DUCKDB_ASSET_FILES) {
+        const source = resolve(sourceDir, fileName);
+        copyFileSync(source, resolve(targetDir, fileName));
+      }
+    },
+  };
+}
+
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -58,13 +135,16 @@ export default defineConfig(({ mode }) => {
   const now = new Date();
   const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   const frontendBuildIso = beijingTime.toISOString();
+  const basePath = normalizeBasePath(env.VITE_BASE_PATH);
+  const duckDBAssetVersion = resolveDuckDBAssetVersion();
 
   return {
-    base: '/',
+    base: basePath,
     define: {
       __FRONTEND_APP_VERSION__: JSON.stringify(readPkgVersion()),
       __FRONTEND_GIT_COMMIT__: JSON.stringify(resolveGitFullCommit()),
       __FRONTEND_BUILD_ISO__: JSON.stringify(frontendBuildIso),
+      __DUCKDB_ASSET_VERSION__: JSON.stringify(duckDBAssetVersion),
     },
     plugins: [
       vue({
@@ -73,6 +153,7 @@ export default defineConfig(({ mode }) => {
       vuetify({
         autoImport: true,
       }),
+      copyDuckDBWasmAssetsPlugin(),
     ],
     server: {
       host: true,
