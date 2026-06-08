@@ -39,6 +39,24 @@ function shouldEnableAutoGeneration(): boolean {
   return false;
 }
 
+function isViewerDebugToastEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const rawQuery = (q.get('viewer_debug') || q.get('debug_toast') || '').trim().toLowerCase();
+    if (rawQuery === '1' || rawQuery === 'true' || rawQuery === 'yes') return true;
+    const rawStorage = (window.localStorage?.getItem('plant3d-web:debug-toast') || '').trim().toLowerCase();
+    return rawStorage === '1' || rawStorage === 'true' || rawStorage === 'yes';
+  } catch {
+    return false;
+  }
+}
+
+function emitDebugWarningToast(message: string): void {
+  if (!isViewerDebugToastEnabled()) return;
+  emitToast({ message, level: 'warning' });
+}
+
 export function isAutoGenerationEnabled(): boolean {
   return shouldEnableAutoGeneration();
 }
@@ -991,11 +1009,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
               `[model-load] refno=${normalizedRoot} 本次未新增实例，已存在于场景或缓存中，跳过重复提示`
             );
           } else {
-            emitToast({
-              message:
-                `[警告] 加载结束但未绘制任何实例（refno=${normalizedRoot}）。请检查左侧可见性（眼睛图标）或 Parquet 是否包含该范围几何`,
-              level: 'warning',
-            });
+            const message = `[警告] 加载结束但未绘制任何实例（refno=${normalizedRoot}）。请检查左侧可见性（眼睛图标）或 Parquet 是否包含该范围几何`;
+            consoleStore.addLog('warning', `[model-load] ${message}`);
+            emitDebugWarningToast(message);
           }
         } else {
           emitToast({ message: `[成功] 已加载 ${totalObjects} 个几何实例`, level: 'success' });
@@ -1144,11 +1160,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         progress.value = 100;
         syncGlobalLoadStatus();
         if (jsonResult.loadedObjects === 0) {
-          emitToast({
-            message:
-              `[警告] JSON fallback 已执行，但未绘制任何实例（refno=${normalizedRoot}）。请检查 instances_*.json 或 MBD 语义数据`,
-            level: 'warning',
-          });
+          const message = `[警告] JSON fallback 已执行，但未绘制任何实例（refno=${normalizedRoot}）。请检查 instances_*.json 或 MBD 语义数据`;
+          consoleStore.addLog('warning', `[model-load] ${message}`);
+          emitDebugWarningToast(message);
         } else {
           emitToast({ message: `[成功] 已通过 JSON fallback 加载 ${jsonResult.loadedObjects} 个几何实例`, level: 'success' });
         }
@@ -1217,11 +1231,9 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         statusMessage.value = 'Model is empty (0 instances)';
         progress.value = 100;
         syncGlobalLoadStatus();
-        consoleStore.addLog('warning', `[model-load] Model loaded dbno=${dbno} refno_count=0 instance_count=0`);
-        emitToast({
-          message: `[警告] dbno=${dbno} 的 Parquet 中没有任何 refno，无法加载模型`,
-          level: 'warning',
-        });
+        const message = `[警告] dbno=${dbno} 的 Parquet 中没有任何 refno，无法加载模型`;
+        consoleStore.addLog('warning', `[model-load] ${message}`);
+        emitDebugWarningToast(message);
         return { loaded: true, instanceCount: 0, refnoCount: 0 };
       }
 
