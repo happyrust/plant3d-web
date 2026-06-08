@@ -21,7 +21,7 @@ import {
 import { Matrix4 } from 'three';
 
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
-import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 import { getParquetVersion } from '@/api/genModelRealtimeApi';
 import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
@@ -331,6 +331,7 @@ async function ensureDuckDB(): Promise<void> {
     URL.revokeObjectURL(workerUrl);
 
     conn = await db.connect();
+    await configureLocalDuckDBExtensions(conn);
   })();
 
   return await initPromise;

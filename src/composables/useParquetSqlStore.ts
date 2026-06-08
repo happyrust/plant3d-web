@@ -7,7 +7,7 @@
 import { ref, shallowRef } from 'vue';
 
 import { AsyncDuckDB, ConsoleLogger, type AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // DuckDB 实例（单例）
 let db: AsyncDuckDB | null = null;
@@ -77,6 +77,7 @@ async function initDuckDB(): Promise<void> {
       URL.revokeObjectURL(worker_url);
 
       conn = await db.connect();
+      await configureLocalDuckDBExtensions(conn);
 
       addLog('info', 'DuckDB-WASM 初始化成功');
     } catch (e) {

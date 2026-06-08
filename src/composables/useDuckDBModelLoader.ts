@@ -15,7 +15,7 @@ import {
   type AsyncDuckDBConnection,
   type QueryResult,
 } from '@duckdb/duckdb-wasm';
-import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // 单例 DuckDB 实例
 let dbInstance: AsyncDuckDB | null = null;
@@ -135,6 +135,7 @@ export function useDuckDBModelLoader() {
 
       // 打开连接
       conn = await db.connect();
+      await configureLocalDuckDBExtensions(conn);
 
       // 附加数据库
       await conn.query('ATTACH \'model.duckdb\' AS model (READ_ONLY)');
@@ -213,6 +214,7 @@ export function useDuckDBModelLoader() {
 
       // 4. 打开连接
       conn = await db.connect();
+      await configureLocalDuckDBExtensions(conn);
 
       registeredUrl.value = `${baseUrl}/${dbno}`;
       isConnected.value = true;

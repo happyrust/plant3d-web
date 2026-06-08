@@ -8,7 +8,7 @@
 import { ref, shallowRef } from 'vue';
 
 import { AsyncDuckDB, ConsoleLogger } from '@duckdb/duckdb-wasm';
-import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // DuckDB 实例单例（与 useParquetModelLoader 共享）
 let duckDbInstance: AsyncDuckDB | null = null;
@@ -210,6 +210,7 @@ export function useSceneTreeLoader() {
 
       const db = await ensureDuckDB();
       const conn = await db.connect();
+      await configureLocalDuckDBExtensions(conn);
 
       try {
         await db.registerFileBuffer(filename, uint8Array);

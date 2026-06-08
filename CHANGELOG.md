@@ -71,6 +71,12 @@
 
 ### 修复
 
+- **Quicktest 模型加载离线化与聚焦修复** (2026-06-09)
+  - DuckDB-WASM 初始化后统一设置 `custom_extension_repository` 到同源 `/duckdb/extensions`，`parquet_scan()` 不再访问公网 `extensions.duckdb.org` 下载 `parquet.duckdb_extension.wasm`
+  - Vite 构建复制 `wasm_eh` / `wasm_mvp` / `wasm_threads` 三份 parquet extension 到 `dist/duckdb/extensions/v1.5.3/...`，开发服务器也支持同路径本地返回
+  - DTX 模型自动聚焦新增鲁棒包围盒：当少量远端对象把全量 AABB 撑大时，按主体对象聚焦，不隐藏或删除模型数据
+  - 验证：`npm run build` 通过；阻断 `https://extensions.duckdb.org/**` 后，`show_dbnum=250160` 仍加载 625/625 个对象并正常聚焦
+
 - **零尺寸 BOX 无模型诊断与缓存状态修正** (2026-06-05)
   - `show_refno` 单模型加载路径在 `visible-insts` 为空或最终未绘制实例时，会查询 PDMS UI 属性并识别 `BOX` 的 `XLEN/YLEN/ZLEN` 是否全为 0。
   - 对零尺寸 `BOX` 在底部控制台输出明确原因：生成阶段不会写入 `inst_relate/geo_relate`，因此没有可绘制模型，避免只提示“可见实例为空”。

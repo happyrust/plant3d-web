@@ -14,7 +14,7 @@ import {
   Settings,
   X,
 } from 'lucide-vue-next';
-import { Matrix4, Plane, Vector2, Vector3 } from 'three';
+import { Box3, Matrix4, Plane, Vector2, Vector3 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetPtsetWithContext, pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
@@ -774,6 +774,147 @@ function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
   if (dtxGlobalTransformAppliedKey === key) return;
 
   // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
+type DtxFocusBoxResult = {
+  box: Box3;
+  source: 'full' | 'robust';
+  objectCount: number;
+  keptObjectCount: number;
+  fullDiag: number;
+  focusDiag: number;
+}
+
+function getBoxDiag(box: Box3): number {
+  if (!box || box.isEmpty()) return 0;
+  const size = new Vector3();
+  box.getSize(size);
+  return size.length();
+}
+
+function medianValue(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
+}
+
+function computeDtxFocusBox(dtxLayer: DTXLayer): DtxFocusBoxResult | null {
+  const fullBox = dtxLayer.getBoundingBox();
+  if (!fullBox || fullBox.isEmpty()) return null;
+
+  const fullDiag = getBoxDiag(fullBox);
+  const objectIds =
+    typeof (dtxLayer as any).getVisibleObjectIds === 'function'
+      ? (dtxLayer as any).getVisibleObjectIds()
+      : (dtxLayer as any).getAllObjectIds?.() ?? [];
+
+  if (!Array.isArray(objectIds) || objectIds.length < 30) {
+    return {
+      box: fullBox,
+      source: 'full',
+      objectCount: objectIds?.length ?? 0,
+      keptObjectCount: objectIds?.length ?? 0,
+      fullDiag,
+      focusDiag: fullDiag,
+    };
+  }
+
+  const items: { id: string; box: Box3; center: Vector3; distance: number }[] = [];
+  for (const id of objectIds) {
+    const box = dtxLayer.getObjectBoundingBox(String(id));
+    if (!box || box.isEmpty()) continue;
+    const center = new Vector3();
+    box.getCenter(center);
+    if (!Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(center.z)) continue;
+    items.push({ id: String(id), box, center, distance: 0 });
+  }
+
+  if (items.length < 30) {
+    return {
+      box: fullBox,
+      source: 'full',
+      objectCount: items.length,
+      keptObjectCount: items.length,
+      fullDiag,
+      focusDiag: fullDiag,
+    };
+  }
+
+  const medianCenter = new Vector3(
+    medianValue(items.map((item) => item.center.x)),
+    medianValue(items.map((item) => item.center.y)),
+    medianValue(items.map((item) => item.center.z)),
+  );
+  for (const item of items) {
+    item.distance = item.center.distanceTo(medianCenter);
+  }
+
+  const keepCount = Math.max(30, Math.ceil(items.length * 0.98));
+  const kept = items
+    .slice()
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, keepCount);
+
+  const robustBox = new Box3();
+  for (const item of kept) {
+    robustBox.union(item.box);
+  }
+  if (robustBox.isEmpty()) {
+    return {
+      box: fullBox,
+      source: 'full',
+      objectCount: items.length,
+      keptObjectCount: items.length,
+      fullDiag,
+      focusDiag: fullDiag,
+    };
+  }
+
+  const focusDiag = getBoxDiag(robustBox);
+  const shouldUseRobust =
+    focusDiag > 0 &&
+    fullDiag / focusDiag >= 3 &&
+    kept.length < items.length;
+
+  return {
+    box: shouldUseRobust ? robustBox : fullBox,
+    source: shouldUseRobust ? 'robust' : 'full',
+    objectCount: items.length,
+    keptObjectCount: shouldUseRobust ? kept.length : items.length,
+    fullDiag,
+    focusDiag: shouldUseRobust ? focusDiag : fullDiag,
+  };
+}
+
+function fitDtxViewerToBox(dtxViewer: DtxViewer, box: Box3, duration = 0): void {
+  if (!box || box.isEmpty()) return;
+  const center = new Vector3();
+  const size = new Vector3();
+  box.getCenter(center);
+  box.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const distance = Math.max(maxDim * 2.5, 5);
+  const position = new Vector3(
+    center.x + distance * 0.8,
+    center.y + distance * 0.6,
+    center.z + distance * 0.8,
+  );
+  dtxViewer.flyTo(position, center, { duration });
+}
+
+function fitDtxViewerToFocusBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer, duration = 0): DtxFocusBoxResult | null {
+  const focus = computeDtxFocusBox(dtxLayer);
+  if (!focus) return null;
+  if (focus.source === 'robust') {
+    console.info('[ViewerPanel] DTX auto-fit 使用鲁棒包围盒', {
+      objectCount: focus.objectCount,
+      keptObjectCount: focus.keptObjectCount,
+      fullDiag: focus.fullDiag,
+      focusDiag: focus.focusDiag,
+    });
+  }
+  fitDtxViewerToBox(dtxViewer, focus.box, duration);
+  return focus;
+}
+
   // 因此在首次归一化时，先临时置为 identity 再取“原始（mm）bbox”。
   const prevMatrix = dtxLayer.getGlobalModelMatrix();
   dtxLayer.setGlobalModelMatrix(new Matrix4());
@@ -813,18 +954,7 @@ function fitToDtxLayerBBoxOnce(dbno: number, dtxViewer: DtxViewer, dtxLayer: DTX
   const box = dtxLayer.getBoundingBox();
   if (!box || box.isEmpty()) return;
 
-  const center = new Vector3();
-  const size = new Vector3();
-  box.getCenter(center);
-  box.getSize(size);
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const distance = Math.max(maxDim * 2.5, 5);
-  const position = new Vector3(
-    center.x + distance * 0.8,
-    center.y + distance * 0.6,
-    center.z + distance * 0.8,
-  );
-  dtxViewer.flyTo(position, center, { duration: 0 });
+  fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
   dtxAutoFitAppliedKey = key;
 }
 
@@ -3231,20 +3361,7 @@ onMounted(async () => {
         (compat as any).__dtxAfterInstancesLoaded?.(dbno, loadRefnos);
 
         requestRender();
-        const box = dtxLayer.getBoundingBox();
-        if (!box.isEmpty()) {
-          const center = new Vector3();
-          const size = new Vector3();
-          box.getCenter(center);
-          box.getSize(size);
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const distance = Math.max(maxDim * 2.5, 5);
-          const position = new Vector3(
-            center.x + distance * 0.8,
-            center.y + distance * 0.6,
-            center.z + distance * 0.8
-          );
-          dtxViewer.flyTo(position, center, { duration: 0 });
+        if (fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0)) {
           requestRender();
         }
 
@@ -3422,19 +3539,7 @@ onMounted(async () => {
 
           requestRender();
           if (shouldAutoFit) {
-            const box = dtxLayer.getBoundingBox();
-            const center = new Vector3();
-            const size = new Vector3();
-            box.getCenter(center);
-            box.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const distance = Math.max(maxDim * 2.5, 5);
-            const position = new Vector3(
-              center.x + distance * 0.8,
-              center.y + distance * 0.6,
-              center.z + distance * 0.8
-            );
-            dtxViewer.flyTo(position, center, { duration: 0 });
+            fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
             requestRender();
             try {
               sessionStorage.setItem(autoFitKey, '1');
@@ -3528,19 +3633,7 @@ onMounted(async () => {
 
         // 4. 自适应视角
         requestRender();
-        const box = dtxLayer.getBoundingBox();
-        const center = new Vector3();
-        const size = new Vector3();
-        box.getCenter(center);
-        box.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const distance = Math.max(maxDim * 2.5, 5);
-        const position = new Vector3(
-          center.x + distance * 0.8,
-          center.y + distance * 0.6,
-          center.z + distance * 0.8
-        );
-        dtxViewer.flyTo(position, center, { duration: 0 });
+        fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
         requestRender();
 
         const dbg =

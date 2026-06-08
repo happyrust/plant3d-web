@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
@@ -65,14 +65,25 @@ const DUCKDB_ASSET_FILES = [
   'duckdb-coi.wasm',
 ] as const;
 
+const DUCKDB_EXTENSION_ASSET_FILES = [
+  'v1.5.3/wasm_eh/parquet.duckdb_extension.wasm',
+  'v1.5.3/wasm_mvp/parquet.duckdb_extension.wasm',
+  'v1.5.3/wasm_threads/parquet.duckdb_extension.wasm',
+] as const;
+
 function duckDBAssetSourceDir(): string {
   return fileURLToPath(
     new URL('./node_modules/@duckdb/duckdb-wasm/dist/', import.meta.url)
   );
 }
 
+function duckDBExtensionAssetSourceDir(): string {
+  return resolve(__dirname, 'public/duckdb/extensions');
+}
+
 function resolveDuckDBAssetVersion(): string {
   const sourceDir = duckDBAssetSourceDir();
+  const extensionSourceDir = duckDBExtensionAssetSourceDir();
   const hash = createHash('sha256');
   for (const fileName of DUCKDB_ASSET_FILES) {
     const source = resolve(sourceDir, fileName);
@@ -82,12 +93,21 @@ function resolveDuckDBAssetVersion(): string {
     hash.update(fileName);
     hash.update(readFileSync(source));
   }
+  for (const fileName of DUCKDB_EXTENSION_ASSET_FILES) {
+    const source = resolve(extensionSourceDir, fileName);
+    if (!existsSync(source)) {
+      throw new Error(`DuckDB WASM extension asset not found: ${source}`);
+    }
+    hash.update(`extensions/${fileName}`);
+    hash.update(readFileSync(source));
+  }
   return hash.digest('hex').slice(0, 16);
 }
 
 function copyDuckDBWasmAssetsPlugin(): Plugin {
   let outDir = 'dist';
   const sourceDir = duckDBAssetSourceDir();
+  const extensionSourceDir = duckDBExtensionAssetSourceDir();
 
   return {
     name: 'copy-duckdb-wasm-assets',
@@ -97,7 +117,17 @@ function copyDuckDBWasmAssetsPlugin(): Plugin {
     configureServer(server: ViteDevServer) {
       server.middlewares.use('/duckdb', (req, res, next) => {
         const fileName = decodeURIComponent((req.url ?? '').split('?', 1)[0]).replace(/^\/+/, '');
-        if (!DUCKDB_ASSET_FILES.includes(fileName as (typeof DUCKDB_ASSET_FILES)[number])) {
+        let source: string | null = null;
+        if (DUCKDB_ASSET_FILES.includes(fileName as (typeof DUCKDB_ASSET_FILES)[number])) {
+          source = resolve(sourceDir, fileName);
+        } else if (fileName.startsWith('extensions/')) {
+          const extensionFileName = fileName.slice('extensions/'.length);
+          if (DUCKDB_EXTENSION_ASSET_FILES.includes(extensionFileName as (typeof DUCKDB_EXTENSION_ASSET_FILES)[number])) {
+            source = resolve(extensionSourceDir, extensionFileName);
+          }
+        }
+
+        if (!source) {
           next();
           return;
         }
@@ -108,7 +138,7 @@ function copyDuckDBWasmAssetsPlugin(): Plugin {
           fileName.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8'
         );
         res.setHeader('Cache-Control', 'no-cache');
-        res.end(readFileSync(resolve(sourceDir, fileName)));
+        res.end(readFileSync(source));
       });
     },
     closeBundle() {
@@ -118,6 +148,13 @@ function copyDuckDBWasmAssetsPlugin(): Plugin {
       for (const fileName of DUCKDB_ASSET_FILES) {
         const source = resolve(sourceDir, fileName);
         copyFileSync(source, resolve(targetDir, fileName));
+      }
+
+      for (const fileName of DUCKDB_EXTENSION_ASSET_FILES) {
+        const source = resolve(extensionSourceDir, fileName);
+        const target = resolve(targetDir, 'extensions', fileName);
+        mkdirSync(dirname(target), { recursive: true });
+        copyFileSync(source, target);
       }
     },
   };

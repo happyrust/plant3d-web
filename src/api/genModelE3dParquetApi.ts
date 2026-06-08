@@ -26,7 +26,7 @@ import type {
 } from '@/api/genModelE3dTypes';
 
 import { buildFilesOutputUrl, getOutputProjectFromUrl } from '@/lib/filesOutput';
-import { selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
+import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 type DbMetaInfo = {
   db_files?: Record<string, { dbnum?: number }>
@@ -101,6 +101,7 @@ async function ensureDuckDB(): Promise<void> {
     URL.revokeObjectURL(workerUrl);
 
     conn = await db.connect();
+    await configureLocalDuckDBExtensions(conn);
   })();
 
   return await initPromise;

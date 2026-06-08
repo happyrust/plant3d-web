@@ -2,6 +2,10 @@ import { selectBundle, type DuckDBBundle, type DuckDBBundles } from '@duckdb/duc
 
 const DUCKDB_ASSET_DIR = 'duckdb';
 
+type DuckDBConnectionLike = {
+  query(sql: string): Promise<unknown>
+}
+
 function baseUrl(): string {
   const base = import.meta.env.BASE_URL || '/';
   return base.endsWith('/') ? base : `${base}/`;
@@ -44,4 +48,29 @@ export function getLocalDuckDBBundles(): DuckDBBundles {
 
 export async function selectLocalDuckDBBundle(): Promise<DuckDBBundle> {
   return await selectBundle(getLocalDuckDBBundles());
+}
+
+export function getLocalDuckDBExtensionRepository(): string {
+  const path = `${baseUrl()}${DUCKDB_ASSET_DIR}/extensions`;
+  const href = globalThis.location?.href;
+  if (!href) return path.replace(/\/+$/, '');
+
+  try {
+    const url = new URL(path, href);
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return path.replace(/\/+$/, '');
+  }
+}
+
+function duckdbStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, '\'\'')}'`;
+}
+
+export async function configureLocalDuckDBExtensions(conn: DuckDBConnectionLike): Promise<void> {
+  await conn.query(
+    `SET custom_extension_repository = ${duckdbStringLiteral(getLocalDuckDBExtensionRepository())}`
+  );
 }
