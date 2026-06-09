@@ -9,6 +9,7 @@ import {
   isAidText,
   isLabel,
   isLeaderLine,
+  isLinearDim,
   isSlopeMark,
   isWeldMark,
   MBD_V2_PRIMITIVE_KINDS,
@@ -21,6 +22,7 @@ import {
   type AidTextPrimitive,
   type LabelPrimitive,
   type LeaderLinePrimitive,
+  type LinearDimPrimitive,
   type MbdPrimitive,
   type MbdV2PipeData,
   type SlopeMarkPrimitive,
@@ -31,7 +33,7 @@ import {
  * P0-B / MBD V2 Phase 1 类型契约测试。
  *
  * 目标：
- * - 验证类型守卫覆盖全部 9 种 primitive
+ * - 验证类型守卫覆盖全部 10 种 primitive
  * - 验证 JSON.parse/stringify 往返保持结构
  * - 验证 `MBD_V2_PRIMITIVE_KINDS` 与类型守卫对齐
  * - 保证 `switch` 穷举触发 `assertNever`
@@ -63,6 +65,36 @@ const sampleLeaderLine: LeaderLinePrimitive = {
   kind: 'leader_line',
   points: [[0, 0, 0], [10, 10, 0]],
   arrow_at: 'end',
+};
+
+const sampleLinearDim: LinearDimPrimitive = {
+  ...commonFields('ld-1'),
+  kind: 'linear_dim',
+  sub_kind: 'segment',
+  extension_1: {
+    start: [0, 0, 0],
+    end: [0, 80, 0],
+  },
+  extension_2: {
+    start: [500, 0, 0],
+    end: [500, 80, 0],
+  },
+  dim_line: {
+    start: [0, 80, 0],
+    end: [500, 80, 0],
+  },
+  arrows: [
+    { position: [0, 80, 0], direction: [1, 0, 0] },
+    { position: [500, 80, 0], direction: [-1, 0, 0] },
+  ],
+  text: {
+    anchor: [250, 95, 0],
+    content: '500 mm',
+    height_mm: 2.5,
+    orientation: [1, 0, 0],
+    up: [0, 1, 0],
+  },
+  level: 0,
 };
 
 const sampleAidLine: AidLinePrimitive = {
@@ -133,6 +165,7 @@ const sampleSlopeMark: SlopeMarkPrimitive = {
 const samples: MbdPrimitive[] = [
   sampleLabel,
   sampleLeaderLine,
+  sampleLinearDim,
   sampleAidLine,
   sampleAidArc,
   sampleAidCircle,
@@ -143,10 +176,10 @@ const samples: MbdPrimitive[] = [
 ];
 
 describe('mbdV2 primitive types', () => {
-  it('MBD_V2_PRIMITIVE_KINDS 覆盖 9 种 primitive 与样本一一对应', () => {
-    expect(MBD_V2_PRIMITIVE_KINDS.length).toBe(9);
+  it('MBD_V2_PRIMITIVE_KINDS 覆盖 10 种 primitive 与样本一一对应', () => {
+    expect(MBD_V2_PRIMITIVE_KINDS.length).toBe(10);
     const sampleKinds = new Set(samples.map((p) => p.kind));
-    expect(sampleKinds.size).toBe(9);
+    expect(sampleKinds.size).toBe(10);
     for (const kind of MBD_V2_PRIMITIVE_KINDS) {
       expect(sampleKinds.has(kind)).toBe(true);
     }
@@ -155,6 +188,7 @@ describe('mbdV2 primitive types', () => {
   it('类型守卫对样本列表正确分流', () => {
     expect(samples.filter(isLabel).length).toBe(1);
     expect(samples.filter(isLeaderLine).length).toBe(1);
+    expect(samples.filter(isLinearDim).length).toBe(1);
     expect(samples.filter(isAidLine).length).toBe(1);
     expect(samples.filter(isAidArc).length).toBe(1);
     expect(samples.filter(isAidCircle).length).toBe(1);
@@ -189,6 +223,7 @@ describe('mbdV2 primitive types', () => {
         welds_count: 2,
         dims_by_kind: {},
         branch_attrs: {},
+        dimension_unit: 'mm',
         generated_at: '2026-04-21T00:00:00Z',
       },
       issues: [
@@ -206,7 +241,7 @@ describe('mbdV2 primitive types', () => {
     const json = JSON.stringify(data);
     const back = JSON.parse(json) as MbdV2PipeData;
     expect(back).toEqual(data);
-    expect(back.primitives).toHaveLength(9);
+    expect(back.primitives).toHaveLength(10);
   });
 
   it('switch 穷举所有 kind，未覆盖时 assertNever 兜底', () => {
@@ -216,6 +251,8 @@ describe('mbdV2 primitive types', () => {
           return 'lbl';
         case 'leader_line':
           return 'leader';
+        case 'linear_dim':
+          return 'linear';
         case 'aid_line':
           return 'aid-l';
         case 'aid_arc':
@@ -238,6 +275,7 @@ describe('mbdV2 primitive types', () => {
     expect(samples.map(render)).toEqual([
       'lbl',
       'leader',
+      'linear',
       'aid-l',
       'aid-a',
       'aid-c',

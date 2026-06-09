@@ -40,6 +40,7 @@ const mbdViewModeModel = computed({
 
 const data = computed(() => props.vis.currentData.value);
 const stats = computed(() => data.value?.stats ?? null);
+const layoutStats = computed(() => data.value?.layout_result?.stats ?? null);
 const branchName = computed(() => data.value?.branch_name ?? '');
 const branchRefno = computed(() => data.value?.branch_refno ?? '');
 const inputRefno = computed(() => data.value?.input_refno ?? '');
@@ -55,6 +56,18 @@ const structureClearances = computed(() => data.value?.structure_clearances ?? [
 const attrs = computed(() => data.value?.branch_attrs ?? null);
 const elevationMarks = computed(() => props.vis.resolveElevationMarks(data.value));
 const envelope = computed(() => props.vis.resolveEnvelopeData(data.value));
+const linearDimCount = computed(() => (
+  layoutStats.value?.linear_dims_count ??
+  stats.value?.dims_count ??
+  data.value?.dims?.length ??
+  0
+));
+const cutTubiDimCount = computed(() => (
+  layoutStats.value?.cut_tubis_count ??
+  stats.value?.cut_tubis_count ??
+  data.value?.cut_tubis?.length ??
+  0
+));
 
 function formatNumber(value: unknown, digits = 0): string {
   const n = Number(value);
@@ -240,6 +253,11 @@ function revealEnvelope(id: string | undefined): void {
   if (!id) return;
   props.vis.showEnvelope.value = true;
   setActive(id, 'envelope');
+}
+
+function setBendDisplayMode(event: Event): void {
+  const value = (event.target as HTMLSelectElement | null)?.value;
+  props.vis.bendDisplayMode.value = value === 'angle' ? 'angle' : 'size';
 }
 </script>
 
@@ -487,7 +505,7 @@ function revealEnvelope(id: string | undefined): void {
         class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
         :class="tab === 'settings' ? 'bg-muted' : ''"
         @click="tab = 'settings'">
-        设置
+        尺寸设置
       </button>
     </div>
 
@@ -700,8 +718,73 @@ function revealEnvelope(id: string | undefined): void {
       </div>
     </div>
 
-    <div v-else-if="tab === 'settings'" class="rounded-md border border-border p-2 text-xs text-muted-foreground">
-      MBD 尺寸标注功能已移除，当前没有可配置的尺寸显示项。
+    <div v-else-if="tab === 'settings'" class="flex flex-col gap-3">
+      <div class="rounded-md border border-border p-2 text-xs">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <div>
+            <div class="font-semibold">尺寸显示</div>
+            <div class="text-muted-foreground">
+              V2 后端版面尺寸：linear={{ linearDimCount }} · cut-tubi={{ cutTubiDimCount }}
+            </div>
+          </div>
+          <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
+            <input data-testid="mbd-toggle-dimensions"
+              type="checkbox"
+              :checked="vis.showDims.value"
+              @change="vis.showDims.value = !vis.showDims.value" />
+            <span>全部尺寸</span>
+          </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
+            <input data-testid="mbd-toggle-dim-segment"
+              type="checkbox"
+              :checked="vis.showDimSegment.value"
+              @change="vis.showDimSegment.value = !vis.showDimSegment.value" />
+            <span>段长尺寸</span>
+          </label>
+          <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
+            <input data-testid="mbd-toggle-dim-chain"
+              type="checkbox"
+              :checked="vis.showDimChain.value"
+              @change="vis.showDimChain.value = !vis.showDimChain.value" />
+            <span>链式尺寸</span>
+          </label>
+          <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
+            <input data-testid="mbd-toggle-dim-overall"
+              type="checkbox"
+              :checked="vis.showDimOverall.value"
+              @change="vis.showDimOverall.value = !vis.showDimOverall.value" />
+            <span>总长尺寸</span>
+          </label>
+          <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
+            <input data-testid="mbd-toggle-dim-port"
+              type="checkbox"
+              :checked="vis.showDimPort.value"
+              @change="vis.showDimPort.value = !vis.showDimPort.value" />
+            <span>端口尺寸</span>
+          </label>
+          <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
+            <input data-testid="mbd-toggle-cut-tubis"
+              type="checkbox"
+              :checked="vis.showCutTubis.value"
+              @change="vis.showCutTubis.value = !vis.showCutTubis.value" />
+            <span>cut-tubi 尺寸</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="rounded-md border border-border p-2 text-xs">
+        <div class="mb-2 font-semibold">弯头显示</div>
+        <select data-testid="mbd-bend-display-mode"
+          :value="vis.bendDisplayMode.value"
+          class="rounded-md border border-border bg-background px-2 py-1 text-xs"
+          @change="setBendDisplayMode">
+          <option value="size">尺寸</option>
+          <option value="angle">角度</option>
+        </select>
+      </div>
     </div>
   </div>
 </template>

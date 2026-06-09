@@ -65,6 +65,12 @@ export type LinearDimension3DLaidOutGeometry = {
   extensionLine2Start?: THREE.Vector3 | null;
   extensionLine2End?: THREE.Vector3 | null;
   textAnchor?: THREE.Vector3 | null;
+  arrows?: [LinearDimension3DLaidOutArrow, LinearDimension3DLaidOutArrow] | null;
+};
+
+export type LinearDimension3DLaidOutArrow = {
+  position: THREE.Vector3;
+  direction: THREE.Vector3;
 };
 
 const SNAP_TS = [0, 0.25, 0.5, 0.75, 1] as const;
@@ -568,6 +574,18 @@ export class LinearDimension3D extends AnnotationBase {
       extensionLine2Start: geometry.extensionLine2Start?.clone() ?? null,
       extensionLine2End: geometry.extensionLine2End?.clone() ?? null,
       textAnchor: geometry.textAnchor?.clone() ?? null,
+      arrows: geometry.arrows
+        ? [
+          {
+            position: geometry.arrows[0].position.clone(),
+            direction: geometry.arrows[0].direction.clone(),
+          },
+          {
+            position: geometry.arrows[1].position.clone(),
+            direction: geometry.arrows[1].direction.clone(),
+          },
+        ]
+        : null,
     };
   }
 
@@ -987,6 +1005,26 @@ export class LinearDimension3D extends AnnotationBase {
 
     const arrowDir = this.tmpWorldD.copy(dirUnit);
     if (!hasExplicitLine && trimWithin !== 0) arrowDir.multiplyScalar(-1);
+    const explicitArrows = laidOut?.arrows ?? null;
+    const resolveExplicitArrowTip = (index: 0 | 1, fallback: THREE.Vector3) => {
+      const arrow = explicitArrows?.[index];
+      return arrow?.position
+        ? this.localToWorld(arrow.position.clone())
+        : fallback;
+    };
+    const resolveExplicitArrowDir = (index: 0 | 1, fallback: THREE.Vector3) => {
+      const arrow = explicitArrows?.[index];
+      if (!arrow?.direction) return fallback.clone();
+      const dir = arrow.direction.clone().transformDirection(this.matrixWorld);
+      return dir.lengthSq() > 1e-12 ? dir.normalize() : fallback.clone();
+    };
+    const arrowTip1W = resolveExplicitArrowTip(0, aeW);
+    const arrowTip2W = resolveExplicitArrowTip(1, beW);
+    const arrowDir1W = resolveExplicitArrowDir(0, arrowDir);
+    const arrowDir2W = resolveExplicitArrowDir(
+      1,
+      this.tmpWorldE.copy(arrowDir).multiplyScalar(-1),
+    );
 
     // Build arrow geometries in local space (filled triangle mesh)
     const setArrowFilled = (
@@ -1106,29 +1144,29 @@ export class LinearDimension3D extends AnnotationBase {
 
     // SolveSpace keeps linear-dimension arrow tips at the trimmed segment ends.
     if (this.params.arrowStyle === 'open') {
-      setArrowOpen(this.arrowOpenGeometry1, aeW, arrowDir);
+      setArrowOpen(this.arrowOpenGeometry1, arrowTip1W, arrowDir1W);
       setArrowOpen(
         this.arrowOpenGeometry2,
-        beW,
-        this.tmpWorldE.copy(arrowDir).multiplyScalar(-1),
+        arrowTip2W,
+        arrowDir2W,
       );
       this.arrowOpen1.visible = true;
       this.arrowOpen2.visible = true;
       this.arrow1.visible = false;
       this.arrow2.visible = false;
     } else if (this.params.arrowStyle === 'tick') {
-      setArrowTick(this.arrowOpenGeometry1, aeW, dirUnit);
-      setArrowTick(this.arrowOpenGeometry2, beW, dirUnit);
+      setArrowTick(this.arrowOpenGeometry1, arrowTip1W, arrowDir1W);
+      setArrowTick(this.arrowOpenGeometry2, arrowTip2W, arrowDir2W);
       this.arrowOpen1.visible = true;
       this.arrowOpen2.visible = true;
       this.arrow1.visible = false;
       this.arrow2.visible = false;
     } else {
-      setArrowFilled(this.arrowGeometry1, aeW, arrowDir);
+      setArrowFilled(this.arrowGeometry1, arrowTip1W, arrowDir1W);
       setArrowFilled(
         this.arrowGeometry2,
-        beW,
-        this.tmpWorldE.copy(arrowDir).multiplyScalar(-1),
+        arrowTip2W,
+        arrowDir2W,
       );
       this.arrow1.visible = true;
       this.arrow2.visible = true;

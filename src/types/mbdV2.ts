@@ -86,7 +86,17 @@ export type MbdV2Meta = {
   welds_count: number;
   /** `dims_by_kind["segment"]` 等。 */
   dims_by_kind: Record<string, number>;
+  /** `dims_by_kind` 的计数口径（例如 backend 当前的 `emitted`）。 */
+  dims_count_basis?: string;
+  /** 可见 `linear_dim` primitive 按 sub_kind 汇总。 */
+  visible_dims_by_kind?: Record<string, number>;
+  /** 被 suppress/隐藏的 `linear_dim` primitive 按 sub_kind 汇总。 */
+  suppressed_dims_by_kind?: Record<string, number>;
   branch_attrs: Record<string, string>;
+  /** 尺寸文本默认单位。 */
+  dimension_unit?: string;
+  /** 稳定后端布局来源标识，供 UI/debug 展示。 */
+  layout_source?: string;
   /** ISO 8601。 */
   generated_at: string;
 }
@@ -111,6 +121,7 @@ export type IssueCategory = 'geometry' | 'data' | 'layout' | 'avoidance';
 export type MbdPrimitive =
   | LabelPrimitive
   | LeaderLinePrimitive
+  | LinearDimPrimitive
   | AidLinePrimitive
   | AidArcPrimitive
   | AidCirclePrimitive
@@ -156,6 +167,35 @@ export type LeaderLinePrimitive = {
   /** 折线点，至少 2 个。 */
   points: Vec3V2[];
   arrow_at: LeaderArrowAt;
+} & CommonFields
+
+// ─────────────────────────────────────────────────────────────────────────
+// Linear Dimension
+// ─────────────────────────────────────────────────────────────────────────
+
+export type LinearDimSubKind =
+  | 'segment'
+  | 'chain'
+  | 'overall'
+  | 'port'
+  | 'cut_tubi';
+
+export type LinearDimArrow = {
+  position: Vec3V2;
+  direction: Vec3V2;
+}
+
+/** 后端已排版完成的 V2 线性尺寸（对应 Rust `LinearDimPrimitive`）。 */
+export type LinearDimPrimitive = {
+  kind: 'linear_dim';
+  sub_kind: LinearDimSubKind;
+  extension_1: LineSegmentEndpoints;
+  extension_2: LineSegmentEndpoints;
+  dim_line: LineSegmentEndpoints;
+  arrows: [LinearDimArrow, LinearDimArrow];
+  text: TextBlock;
+  /** 后端避让/错层层级。 */
+  level: number;
 } & CommonFields
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -236,6 +276,9 @@ export function isLabel(p: MbdPrimitive): p is LabelPrimitive {
 export function isLeaderLine(p: MbdPrimitive): p is LeaderLinePrimitive {
   return p.kind === 'leader_line';
 }
+export function isLinearDim(p: MbdPrimitive): p is LinearDimPrimitive {
+  return p.kind === 'linear_dim';
+}
 export function isAidLine(p: MbdPrimitive): p is AidLinePrimitive {
   return p.kind === 'aid_line';
 }
@@ -265,6 +308,7 @@ export function isSlopeMark(p: MbdPrimitive): p is SlopeMarkPrimitive {
 export const MBD_V2_PRIMITIVE_KINDS = [
   'label',
   'leader_line',
+  'linear_dim',
   'aid_line',
   'aid_arc',
   'aid_circle',

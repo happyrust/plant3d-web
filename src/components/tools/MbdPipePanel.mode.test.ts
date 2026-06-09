@@ -178,6 +178,46 @@ describe('MbdPipePanel mode controls', () => {
     app.unmount();
   });
 
+  it('应展示 V2 尺寸与 cut-tubi 稳定开关且不显示移除提示', async () => {
+    const vis = createVisStub();
+    host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp(MbdPipePanel, { vis });
+    app.mount(host);
+    await nextTick();
+
+    const settingsButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('设置'),
+    ) as HTMLButtonElement | undefined;
+    settingsButton?.click();
+    await nextTick();
+
+    expect(host.textContent).toContain('尺寸显示');
+    expect(host.textContent).not.toContain('MBD 尺寸标注功能已移除');
+
+    const selectors = [
+      'mbd-toggle-dimensions',
+      'mbd-toggle-dim-segment',
+      'mbd-toggle-dim-chain',
+      'mbd-toggle-dim-port',
+      'mbd-toggle-cut-tubis',
+    ];
+    for (const testId of selectors) {
+      expect(host.querySelector(`[data-testid="${testId}"]`)).toBeTruthy();
+    }
+
+    const cutToggle = host.querySelector(
+      '[data-testid="mbd-toggle-cut-tubis"]',
+    ) as HTMLInputElement | null;
+    expect(vis.showCutTubis.value).toBe(true);
+    cutToggle!.dispatchEvent(new Event('change'));
+    await nextTick();
+    expect(vis.showCutTubis.value).toBe(false);
+
+    app.unmount();
+  });
+
   it('应在总览中展示管件分类摘要', async () => {
     const vis = createVisStub();
     vis.currentData.value = {

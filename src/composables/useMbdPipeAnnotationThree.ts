@@ -345,6 +345,39 @@ function resolveLaidOutLinearGeometry(item: MbdLaidOutLinearDimDto) {
   const dimLineStart = toVector3(item.dim_line_start ?? null);
   const dimLineEnd = toVector3(item.dim_line_end ?? null);
   if (!dimLineStart || !dimLineEnd) return null;
+  const backendArrows = Array.isArray(item.backend_arrows) && item.backend_arrows.length >= 2
+    ? [
+      {
+        position: toVector3(item.backend_arrows[0]?.position ?? null),
+        direction: toVector3(item.backend_arrows[0]?.direction ?? null),
+      },
+      {
+        position: toVector3(item.backend_arrows[1]?.position ?? null),
+        direction: toVector3(item.backend_arrows[1]?.direction ?? null),
+      },
+    ]
+    : null;
+  let arrows: [
+    { position: Vector3; direction: Vector3 },
+    { position: Vector3; direction: Vector3 },
+  ] | null = null;
+  if (
+    backendArrows?.[0]?.position &&
+    backendArrows[0].direction &&
+    backendArrows[1]?.position &&
+    backendArrows[1].direction
+  ) {
+    arrows = [
+      {
+        position: backendArrows[0].position,
+        direction: backendArrows[0].direction,
+      },
+      {
+        position: backendArrows[1].position,
+        direction: backendArrows[1].direction,
+      },
+    ];
+  }
   return {
     dimLineStart,
     dimLineEnd,
@@ -353,6 +386,7 @@ function resolveLaidOutLinearGeometry(item: MbdLaidOutLinearDimDto) {
     extensionLine2Start: toVector3(item.extension_line_2_start ?? null),
     extensionLine2End: toVector3(item.extension_line_2_end ?? null),
     textAnchor: toVector3(item.text_anchor ?? null),
+    arrows,
   };
 }
 
@@ -401,6 +435,16 @@ function toVector3(vec?: ApiVec3 | null): Vector3 | null {
 
 function resolveLaidOutLabelOffset(vec?: ApiVec3 | null): Vector3 | null {
   return toVector3(vec ?? null);
+}
+
+function isBackendDerivedLinearItem(item: MbdLaidOutLinearDimDto): boolean {
+  return item.backend_derived_geometry === true ||
+    item.source_kind === 'linear_dim' ||
+    !!item.source_primitive_id;
+}
+
+function isBackendDerivedAnnotation(annotation: LinearDimension3D): boolean {
+  return !!(annotation.userData as any)?.mbdBackendDerivedGeometry;
 }
 
 function shouldUseLayoutFirstResult(
@@ -1013,10 +1057,10 @@ export function useMbdPipeAnnotationThree(
   const rebarvizLineWidthPx = ref<number>(rebarvizDefaults.lineWidthPx);
 
   const isVisible = ref(false);
-  const showDims = ref(false);
-  const showDimSegment = ref(false);
-  const showDimChain = ref(false);
-  const showDimOverall = ref(false);
+  const showDims = ref(true);
+  const showDimSegment = ref(true);
+  const showDimChain = ref(true);
+  const showDimOverall = ref(true);
   const showDimPort = ref(false);
   const showPipeClearances = ref(true);
   const showStructureClearances = ref(true);
@@ -1085,6 +1129,16 @@ export function useMbdPipeAnnotationThree(
     transparent: true,
     opacity: 0.9,
   });
+  const envelopeMaterial = new LineBasicMaterial({
+    color: 0x64748b,
+    transparent: true,
+    opacity: 0.65,
+  });
+  const envelopeHighlightMaterial = new LineBasicMaterial({
+    color: 0xf59e0b,
+    transparent: true,
+    opacity: 0.95,
+  });
   const v2LeaderLineMaterial = new LineBasicMaterial({
     color: 0x111827,
     transparent: true,
@@ -1102,7 +1156,7 @@ export function useMbdPipeAnnotationThree(
 
   function applyModeDefaults(mode: MbdPipeViewMode): void {
     mbdViewMode.value = mode;
-    showDims.value = false;
+    showDims.value = true;
     if (mode === 'inspection') {
       dimMode.value = 'rebarviz';
       bendDisplayMode.value = 'size';
@@ -1130,11 +1184,11 @@ export function useMbdPipeAnnotationThree(
     if (mode === 'layout_first') {
       dimMode.value = 'classic';
       bendDisplayMode.value = 'size';
-      // layout_first 对齐 PML mainDim：默认只看链式主尺寸。
-      // raw segment 是 tubi 几何长度，overall 对折线 BRAN 暂不能用单条直线可靠表达。
-      showDimSegment.value = false;
+      // layout_first 只显示后端 V2 实际返回的 primitive；
+      // overall 不由前端合成，只有后端明确返回时才可能显示。
+      showDimSegment.value = true;
       showDimChain.value = true;
-      showDimOverall.value = false;
+      showDimOverall.value = true;
       showDimPort.value = false;
       showPipeClearances.value = false;
       showStructureClearances.value = false;
@@ -1148,7 +1202,7 @@ export function useMbdPipeAnnotationThree(
       showOwnerSegmentDebug.value = false;
       showWelds.value = true;
       showSlopes.value = true;
-      showBends.value = false;
+      showBends.value = true;
       showSegments.value = false;
       return;
     }
@@ -1446,7 +1500,7 @@ export function useMbdPipeAnnotationThree(
     for (const annotation of cutTubiAnnotations.values()) {
       const layoutHidden = !!(asRaw(annotation).userData as any)?.mbdLayoutHidden;
       asRaw(annotation).visible =
-        isVisible.value && showCutTubis.value && !layoutHidden;
+        isVisible.value && showDims.value && showCutTubis.value && !layoutHidden;
     }
 
     // 焊缝标注可见性
@@ -1787,6 +1841,7 @@ export function useMbdPipeAnnotationThree(
     const chainDims: [string, LinearDimension3D][] = [];
     for (const [dimId, dim] of dimAnnotations.entries()) {
       const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
+      if (isBackendDerivedAnnotation(asRaw(dim))) continue;
       if (kind === 'chain') chainDims.push([dimId, asRaw(dim)]);
     }
     if (chainDims.length <= 1) return;
@@ -1822,6 +1877,7 @@ export function useMbdPipeAnnotationThree(
     for (const [dimId, dim] of dimAnnotations.entries()) {
       const kind = ((asRaw(dim).userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
       if (kind !== 'port') continue;
+      if (isBackendDerivedAnnotation(asRaw(dim))) continue;
       (asRaw(dim).userData as any).mbdDeclutterHidden = false;
       portAnnotations.push([dimId, asRaw(dim)]);
     }
@@ -1934,6 +1990,7 @@ export function useMbdPipeAnnotationThree(
 
     for (const cut of cutTubiAnnotations.values()) {
       const rawCut = asRaw(cut);
+      if (isBackendDerivedAnnotation(rawCut)) continue;
       if (!rawCut.visible) continue;
 
       const p = rawCut.getParams();
@@ -1983,6 +2040,7 @@ export function useMbdPipeAnnotationThree(
     for (const dim of dimAnnotations.values()) {
       const rawDim = asRaw(dim);
       if (!rawDim.visible) continue;
+      if (isBackendDerivedAnnotation(rawDim)) continue;
       const kind = ((rawDim.userData as any)?.mbdDimKind ?? 'segment') as MbdDimKind;
       if (kind !== 'chain' && kind !== 'overall') continue;
       occupied.push(getAnnotationLabelWorldPos(rawDim).clone());
@@ -2240,6 +2298,16 @@ export function useMbdPipeAnnotationThree(
       }
       (dim.userData as any).mbdDimId = item.id;
       (dim.userData as any).mbdDimKind = kind;
+      (dim.userData as any).mbdSourceKind = item.source_kind ?? null;
+      (dim.userData as any).mbdSourcePrimitiveId =
+        item.source_primitive_id ?? item.id;
+      (dim.userData as any).mbdSourceSubKind =
+        item.source_sub_kind ?? item.kind;
+      (dim.userData as any).mbdBackendDerivedGeometry =
+        isBackendDerivedLinearItem(item);
+      if (isBackendDerivedLinearItem(item)) {
+        dim.userData.draggable = false;
+      }
       (dim.userData as any).mbdLayoutHidden = item.visible === false;
       (dim.userData as any).mbdDeclutterHidden = item.visible === false;
       (dim.userData as any).mbdHasExplicitLabelLayout =
@@ -2366,6 +2434,16 @@ export function useMbdPipeAnnotationThree(
         continue;
       }
       (dim.userData as any).mbdAuxKind = 'cut_tubi';
+      (dim.userData as any).mbdSourceKind = item.source_kind ?? null;
+      (dim.userData as any).mbdSourcePrimitiveId =
+        item.source_primitive_id ?? item.id;
+      (dim.userData as any).mbdSourceSubKind =
+        item.source_sub_kind ?? 'cut_tubi';
+      (dim.userData as any).mbdBackendDerivedGeometry =
+        isBackendDerivedLinearItem(item);
+      if (isBackendDerivedLinearItem(item)) {
+        dim.userData.draggable = false;
+      }
       (dim.userData as any).mbdLayoutHidden = item.visible === false;
       (dim.userData as any).mbdBaseOffset = Number(item.offset) || 0;
       const rawDim = markRaw(dim);
@@ -3425,6 +3503,34 @@ export function useMbdPipeAnnotationThree(
       expand(d.start);
       expand(d.end);
     }
+    for (const d of data.layout_result?.linear_dims || []) {
+      expand(d.start);
+      expand(d.end);
+      if (d.dim_line_start) expand(d.dim_line_start);
+      if (d.dim_line_end) expand(d.dim_line_end);
+      if (d.extension_line_1_start) expand(d.extension_line_1_start);
+      if (d.extension_line_1_end) expand(d.extension_line_1_end);
+      if (d.extension_line_2_start) expand(d.extension_line_2_start);
+      if (d.extension_line_2_end) expand(d.extension_line_2_end);
+      if (d.text_anchor) expand(d.text_anchor);
+      for (const arrow of d.backend_arrows ?? []) {
+        expand(arrow.position);
+      }
+    }
+    for (const d of data.layout_result?.cut_tubis || []) {
+      expand(d.start);
+      expand(d.end);
+      if (d.dim_line_start) expand(d.dim_line_start);
+      if (d.dim_line_end) expand(d.dim_line_end);
+      if (d.extension_line_1_start) expand(d.extension_line_1_start);
+      if (d.extension_line_1_end) expand(d.extension_line_1_end);
+      if (d.extension_line_2_start) expand(d.extension_line_2_start);
+      if (d.extension_line_2_end) expand(d.extension_line_2_end);
+      if (d.text_anchor) expand(d.text_anchor);
+      for (const arrow of d.backend_arrows ?? []) {
+        expand(arrow.position);
+      }
+    }
     for (const w of data.welds || []) expand(w.position);
     for (const s of data.slopes || []) {
       expand(s.start);
@@ -3642,6 +3748,8 @@ export function useMbdPipeAnnotationThree(
     segmentHighlightMaterial.dispose();
     anchorDebugMaterial.dispose();
     ownerSegmentDebugMaterial.dispose();
+    envelopeMaterial.dispose();
+    envelopeHighlightMaterial.dispose();
     v2LeaderLineMaterial.dispose();
     group.removeFromParent();
   }
@@ -3724,6 +3832,16 @@ export function useMbdPipeAnnotationThree(
 
           for (const [dimId, dim] of dimAnnotations.entries()) {
             const rawDim = asRaw(dim);
+            if (isBackendDerivedAnnotation(rawDim)) {
+              rawDim.setParams({
+                arrowStyle: modeConfig.arrowStyle,
+                arrowSizePx: modeConfig.arrowSizePx,
+                arrowAngleDeg: modeConfig.arrowAngleDeg,
+                extensionOvershootPx: modeConfig.extensionOvershootPx,
+              });
+              rawDim.setLineWidthPx(modeConfig.lineWidthPx);
+              continue;
+            }
             const ov = dimOverrides.get(dimId) ?? {};
             const sourceDim = data?.dims?.find((item) => item.id === dimId) ?? null;
             const laidOutDim = useLayoutResult

@@ -16,6 +16,85 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vi.restoreAllMocks();
   });
 
+  function createViewer() {
+    const camera = new PerspectiveCamera(50, 800 / 600, 1, 10000);
+    camera.position.set(0, 0, 1200);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    return {
+      canvas: {
+        getBoundingClientRect: () => ({ width: 800, height: 600 }),
+      },
+      scene: new Scene(),
+      camera,
+      flyTo: vi.fn(),
+    } as any;
+  }
+
+  function makeBackendLayoutLinearDim(
+    id: string,
+    kind: 'segment' | 'chain' | 'overall' | 'port' | 'cut_tubi',
+    y: number,
+  ) {
+    return {
+      id,
+      kind,
+      start: [0, 0, 0],
+      end: [500, 0, 0],
+      text: `${id} backend text`,
+      offset: y,
+      direction: [1, 0, 0],
+      label_t: 0.5,
+      label_offset_world: null,
+      dim_line_start: [0, y, 0],
+      dim_line_end: [500, y, 0],
+      extension_line_1_start: [0, 0, 0],
+      extension_line_1_end: [0, y, 0],
+      extension_line_2_start: [500, 0, 0],
+      extension_line_2_end: [500, y, 0],
+      text_anchor: [250, y + 20, 0],
+      backend_arrows: [
+        { position: [0, y, 0], direction: [1, 0, 0] },
+        { position: [500, y, 0], direction: [-1, 0, 0] },
+      ],
+      visible: true,
+      source_kind: 'linear_dim',
+      source_primitive_id: id,
+      source_sub_kind: kind,
+      backend_derived_geometry: true,
+    };
+  }
+
+  function backendParamSnapshot(annotation: any) {
+    const params = annotation.getParams();
+    return {
+      text: params.text,
+      offset: params.offset,
+      labelT: params.labelT,
+      labelOffsetWorld: params.labelOffsetWorld?.toArray() ?? null,
+      start: params.start.toArray(),
+      end: params.end.toArray(),
+      dimLineStart: params.laidOutGeometry?.dimLineStart?.toArray() ?? null,
+      dimLineEnd: params.laidOutGeometry?.dimLineEnd?.toArray() ?? null,
+      extensionLine1Start:
+        params.laidOutGeometry?.extensionLine1Start?.toArray() ?? null,
+      extensionLine1End:
+        params.laidOutGeometry?.extensionLine1End?.toArray() ?? null,
+      extensionLine2Start:
+        params.laidOutGeometry?.extensionLine2Start?.toArray() ?? null,
+      extensionLine2End:
+        params.laidOutGeometry?.extensionLine2End?.toArray() ?? null,
+      textAnchor: params.laidOutGeometry?.textAnchor?.toArray() ?? null,
+      arrows: params.laidOutGeometry?.arrows?.map((arrow: any) => ({
+        position: arrow.position.toArray(),
+        direction: arrow.direction.toArray(),
+      })) ?? null,
+      sourcePrimitiveId: annotation.userData.mbdSourcePrimitiveId,
+      sourceSubKind: annotation.userData.mbdSourceSubKind,
+      backendDerived: annotation.userData.mbdBackendDerivedGeometry,
+    };
+  }
+
   it('默认显示版面优先模式相关标注', () => {
     const viewer = {
       canvas: {
@@ -190,6 +269,221 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(params?.laidOutGeometry?.extensionLine1End?.toArray()).toEqual([10, 320, 0]);
     expect(params?.laidOutGeometry?.extensionLine2End?.toArray()).toEqual([1010, 320, 0]);
     expect(params?.laidOutGeometry?.textAnchor?.toArray()).toEqual([240, 360, 0]);
+  });
+
+  it('V2 backend linear_dim renders backend geometry, arrows, text, and provenance directly', () => {
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults('layout_first');
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-V2-BACKEND',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      layout_result: {
+        version: 2,
+        mode: 'layout_first',
+        stats: {
+          linear_dims_count: 1,
+          cut_tubis_count: 0,
+          welds_count: 0,
+          slopes_count: 0,
+          bends_count: 0,
+          tags_count: 0,
+          fittings_count: 0,
+          suppressed_count: 0,
+        },
+        linear_dims: [
+          makeBackendLayoutLinearDim('v2-chain-1', 'chain', 80),
+        ],
+        cut_tubis: [],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [],
+        fittings: [],
+        suppressed_items: [],
+      },
+      stats: {
+        segments_count: 0,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+      },
+    } as any);
+
+    const dim = vis.getDimAnnotations().get('v2-chain-1');
+    expect(dim).toBeTruthy();
+    expect(backendParamSnapshot(dim)).toMatchObject({
+      text: 'v2-chain-1 backend text',
+      dimLineStart: [0, 80, 0],
+      dimLineEnd: [500, 80, 0],
+      extensionLine1Start: [0, 0, 0],
+      extensionLine1End: [0, 80, 0],
+      extensionLine2Start: [500, 0, 0],
+      extensionLine2End: [500, 80, 0],
+      textAnchor: [250, 100, 0],
+      arrows: [
+        { position: [0, 80, 0], direction: [1, 0, 0] },
+        { position: [500, 80, 0], direction: [-1, 0, 0] },
+      ],
+      sourcePrimitiveId: 'v2-chain-1',
+      sourceSubKind: 'chain',
+      backendDerived: true,
+    });
+  });
+
+  it('V2 hide/show, camera updates, resize, and display config do not mutate backend geometry', async () => {
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults('layout_first');
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-V2-IMMUTABLE',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      layout_result: {
+        version: 2,
+        mode: 'layout_first',
+        stats: {
+          linear_dims_count: 1,
+          cut_tubis_count: 0,
+          welds_count: 0,
+          slopes_count: 0,
+          bends_count: 0,
+          tags_count: 0,
+          fittings_count: 0,
+          suppressed_count: 0,
+        },
+        linear_dims: [
+          makeBackendLayoutLinearDim('v2-segment-1', 'segment', 80),
+        ],
+        cut_tubis: [],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [],
+        fittings: [],
+        suppressed_items: [],
+      },
+      stats: {
+        segments_count: 0,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+      },
+    } as any);
+
+    const dim = vis.getDimAnnotations().get('v2-segment-1');
+    expect(dim).toBeTruthy();
+    const before = backendParamSnapshot(dim);
+
+    vis.showDims.value = false;
+    await nextTick();
+    vis.showDims.value = true;
+    await nextTick();
+    vis.dimOffsetScale.value = 4;
+    vis.dimLabelT.value = 0.1;
+    await nextTick();
+    vis.setResolution(1024, 768);
+    vis.updateLabelPositions();
+
+    expect(backendParamSnapshot(dim)).toEqual(before);
+  });
+
+  it('V2 cut_tubi linear_dim uses the same backend geometry contract and toggle preserves it', async () => {
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults('layout_first');
+    vis.showCutTubis.value = true;
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-V2-CUT',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      layout_result: {
+        version: 2,
+        mode: 'layout_first',
+        stats: {
+          linear_dims_count: 0,
+          cut_tubis_count: 1,
+          welds_count: 0,
+          slopes_count: 0,
+          bends_count: 0,
+          tags_count: 0,
+          fittings_count: 0,
+          suppressed_count: 0,
+        },
+        linear_dims: [],
+        cut_tubis: [
+          makeBackendLayoutLinearDim('v2-cut-1', 'cut_tubi', 40),
+        ],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [],
+        fittings: [],
+        suppressed_items: [],
+      },
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+      },
+    } as any);
+
+    const cut = vis.getCutTubiAnnotations().get('v2-cut-1');
+    expect(cut).toBeTruthy();
+    expect(cut?.visible).toBe(true);
+    const before = backendParamSnapshot(cut);
+
+    vis.showCutTubis.value = false;
+    await nextTick();
+    expect(cut?.visible).toBe(false);
+    vis.showCutTubis.value = true;
+    await nextTick();
+    expect(cut?.visible).toBe(true);
+    expect(backendParamSnapshot(cut)).toEqual(before);
   });
 
   it('construction 下相邻短 chain 尺寸应自动错开文字位置', () => {

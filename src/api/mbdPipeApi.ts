@@ -222,6 +222,11 @@ export type MbdPipeEnvelopeDto = {
 export type MbdLaidOutLinearDimDto = {
   id: string
   kind: string
+  /** V2 provenance for layout-first backend primitive rendering. */
+  source_kind?: 'linear_dim' | string
+  source_primitive_id?: string
+  source_sub_kind?: string
+  backend_derived_geometry?: boolean
   start: Vec3
   end: Vec3
   text: string
@@ -236,6 +241,7 @@ export type MbdLaidOutLinearDimDto = {
   extension_line_2_start?: Vec3 | null
   extension_line_2_end?: Vec3 | null
   text_anchor?: Vec3 | null
+  backend_arrows?: [MbdV2LinearDimArrow, MbdV2LinearDimArrow] | null
   visible: boolean
   suppressed_reason?: string | null
 }
@@ -341,6 +347,11 @@ export type MbdV2TextBlock = {
   up: Vec3
 }
 
+export type MbdV2LinearDimArrow = {
+  position: Vec3
+  direction: Vec3
+}
+
 export type MbdV2Issue = {
   id?: string
   severity?: 'info' | 'warning' | 'error' | string
@@ -366,6 +377,7 @@ export type MbdV2LinearDimPrimitive = MbdV2CommonPrimitive & {
   extension_1: { start: Vec3; end: Vec3 }
   extension_2: { start: Vec3; end: Vec3 }
   dim_line: { start: Vec3; end: Vec3 }
+  arrows?: [MbdV2LinearDimArrow, MbdV2LinearDimArrow]
   text: MbdV2TextBlock
   level?: number
 }
@@ -455,6 +467,8 @@ export type MbdPipeData = {
   layout_result?: MbdPipeLayoutResult | null
   /** V2 primitive 引线，供当前 3D 渲染器在过渡期直接消费。 */
   v2_leader_lines?: MbdV2LeaderLinePrimitive[]
+  /** V2 primitive 线性尺寸，保留后端 primitive provenance 供渲染/debug/验证使用。 */
+  v2_linear_dims?: MbdV2LinearDimPrimitive[]
   debug_info?: MbdPipeDebugInfo
 }
 
@@ -592,6 +606,27 @@ function labelTOnLine(start: Vec3, end: Vec3, anchor: Vec3): number {
   return Math.max(0, Math.min(1, t));
 }
 
+function normalizeLinearDimArrows(
+  p: MbdV2LinearDimPrimitive,
+  dimLineStart: Vec3,
+  dimLineEnd: Vec3,
+): [MbdV2LinearDimArrow, MbdV2LinearDimArrow] {
+  const fallbackDir = normalizeVec3(subVec3(dimLineEnd, dimLineStart));
+  const src = Array.isArray(p.arrows) ? p.arrows : [];
+  const first = src[0];
+  const second = src[1];
+  return [
+    {
+      position: cloneVec3(first?.position, dimLineStart),
+      direction: normalizeVec3(first?.direction, fallbackDir),
+    },
+    {
+      position: cloneVec3(second?.position, dimLineEnd),
+      direction: normalizeVec3(second?.direction, scaleVec3(fallbackDir, -1)),
+    },
+  ];
+}
+
 function linearSubKindToDimKind(subKind: string | undefined): MbdDimKind | 'cut_tubi' {
   const raw = String(subKind ?? '').trim().toLowerCase();
   if (raw === 'chain') return 'chain';
@@ -628,6 +663,8 @@ function v2LinearToLaidOutDim(p: MbdV2LinearDimPrimitive): MbdLaidOutLinearDimDt
   const dimLineEnd = cloneVec3(p.dim_line?.end, measuredEnd);
   const textAnchor = cloneVec3(p.text?.anchor, midVec3(dimLineStart, dimLineEnd));
   const kind = linearSubKindToDimKind(p.sub_kind);
+  const rawSubKind = String(p.sub_kind ?? 'segment');
+  const backendArrows = normalizeLinearDimArrows(p, dimLineStart, dimLineEnd);
   const dimDirection = normalizeVec3(
     subVec3(dimLineEnd, dimLineStart),
     normalizeVec3(subVec3(measuredEnd, measuredStart)),
@@ -637,6 +674,10 @@ function v2LinearToLaidOutDim(p: MbdV2LinearDimPrimitive): MbdLaidOutLinearDimDt
   return {
     id: p.id,
     kind: kind === 'cut_tubi' ? 'cut_tubi' : kind,
+    source_kind: 'linear_dim',
+    source_primitive_id: p.id,
+    source_sub_kind: rawSubKind,
+    backend_derived_geometry: true,
     start: measuredStart,
     end: measuredEnd,
     text: String(p.text?.content ?? ''),
@@ -651,6 +692,7 @@ function v2LinearToLaidOutDim(p: MbdV2LinearDimPrimitive): MbdLaidOutLinearDimDt
     extension_line_2_start: cloneVec3(p.extension_2?.start, measuredEnd),
     extension_line_2_end: cloneVec3(p.extension_2?.end, dimLineEnd),
     text_anchor: textAnchor,
+    backend_arrows: backendArrows,
     visible: p.visible !== false,
     suppressed_reason: p.suppressed_reason ?? null,
   };
@@ -749,8 +791,7 @@ function adaptMbdV2ResponseToPipeResponse(
 
   const data = resp.data;
   const primitives = Array.isArray(data.primitives) ? data.primitives : [];
-  // MBD 尺寸标注已移除：前端不再消费 V2 linear_dim / angle_dim primitive。
-  const linearPrims: MbdV2LinearDimPrimitive[] = [];
+  const linearPrims = primitives.filter(isV2LinearDim);
   const nonCutLinearPrims = linearPrims.filter(
     (p) => linearSubKindToDimKind(p.sub_kind) !== 'cut_tubi',
   );
@@ -870,7 +911,7 @@ function adaptMbdV2ResponseToPipeResponse(
   ];
 
   const dimsByKind = data.meta?.dims_by_kind ?? {};
-  const cutTubiCount = cutTubiDims.length || Number(dimsByKind.cut_tubi ?? 0);
+  const cutTubiCount = cutTubiDims.length;
   const stats: MbdPipeStats = {
     segments_count: Number(data.meta?.segments_count ?? 0),
     dims_count: nonCutLinearPrims.length,
@@ -926,15 +967,19 @@ function adaptMbdV2ResponseToPipeResponse(
           ],
           issues,
           generated_at: data.meta?.generated_at,
+          layout_source: data.meta?.layout_source,
+          dims_by_kind: dimsByKind,
         },
       },
       v2_leader_lines: leaders,
+      v2_linear_dims: linearPrims,
       debug_info: {
         source: params.source ?? 'db',
         notes: [
           'front-end adapted /api/mbd/v2/pipe primitives to current 3D renderer contract',
         ],
         version: data.version,
+        layout_source: data.meta?.layout_source,
         primitive_count: primitives.length,
         primitive_kinds: primitives.reduce<Record<string, number>>((acc, p) => {
           acc[p.kind] = (acc[p.kind] ?? 0) + 1;
