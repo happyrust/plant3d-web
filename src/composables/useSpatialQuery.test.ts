@@ -132,6 +132,7 @@ describe('createSpatialQueryStore', () => {
       page: 1,
       per_page: 100,
     }));
+    expect(queryNearbyByPosition.mock.calls[0]?.[4]).not.toHaveProperty('max_results');
     expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a']);
     expect(store.resultSet.value?.groups.map((group) => group.specValue)).toEqual([1]);
   });
@@ -168,8 +169,8 @@ describe('createSpatialQueryStore', () => {
     expect(queryNearbyByPosition).toHaveBeenCalledWith(5, 5, 5, 50, expect.objectContaining({
       page: 2,
       per_page: 20,
-      max_results: 20,
     }));
+    expect(queryNearbyByPosition.mock.calls[0]?.[4]).not.toHaveProperty('max_results');
     expect(store.resultSet.value?.page).toBe(2);
     expect(store.resultSet.value?.perPage).toBe(20);
     expect(store.resultSet.value?.total).toBe(25);
@@ -244,11 +245,11 @@ describe('createSpatialQueryStore', () => {
       include_self: false,
       nouns: 'EQUI',
       spec_values: '2',
-      max_results: 10,
       page: 2,
       per_page: 10,
       shape: 'cube',
     }));
+    expect(queryNearbyByRefno.mock.calls[0]?.[2]).not.toHaveProperty('max_results');
     expect(queryNearbyByPosition).not.toHaveBeenCalled();
     expect(querySpatialIndex).not.toHaveBeenCalled();
     expect(store.status.value).toBe('ready');
@@ -329,11 +330,11 @@ describe('createSpatialQueryStore', () => {
     await store.submitQuery();
 
     expect(queryNearbyByPosition).toHaveBeenCalledWith(10, 20, 30, 40, expect.objectContaining({
-      max_results: 25,
       page: 1,
       per_page: 25,
       shape: 'sphere',
     }));
+    expect(queryNearbyByPosition.mock.calls[0]?.[4]).not.toHaveProperty('max_results');
     expect(queryNearbyByRefno).not.toHaveBeenCalled();
     expect(querySpatialIndex).not.toHaveBeenCalled();
     expect(store.resultSet.value?.center).toEqual({

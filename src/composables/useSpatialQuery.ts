@@ -955,7 +955,6 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       const serverOptions = {
         nouns: request.filters.nouns.length > 0 ? request.filters.nouns.join(',') : undefined,
         spec_values: request.filters.specValues.length > 0 ? request.filters.specValues.join(',') : undefined,
-        max_results: request.limit,
         page,
         per_page: request.limit,
         shape: request.shape,
@@ -966,7 +965,6 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           include_self: request.includeSelf ?? false,
           nouns: serverOptions.nouns,
           spec_values: serverOptions.spec_values,
-          max_results: serverOptions.max_results,
           page: serverOptions.page,
           per_page: serverOptions.per_page,
           shape: serverOptions.shape,
