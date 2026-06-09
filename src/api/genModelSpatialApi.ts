@@ -42,11 +42,57 @@ export type SpatialQueryResultItem = {
   distance?: number;
 };
 
+export type SpatialNearbyCenter = {
+  x: number;
+  y: number;
+  z: number;
+  source: string;
+  refno?: string;
+};
+
+export type SpatialNearbyParams = {
+  refno?: string;
+  x?: number;
+  y?: number;
+  z?: number;
+  radius: number;
+  /** 查询形状：sphere（默认）| cube */
+  shape?: 'cube' | 'sphere';
+  /** noun 过滤（逗号分隔，如 "EQUI,PIPE,TUBI"） */
+  nouns?: string;
+  /** 专业过滤（逗号分隔，如 "1,3"） */
+  spec_values?: string;
+  /** 是否包含自身（refno 模式有效） */
+  include_self?: boolean;
+  /** 分页页码，从 1 开始 */
+  page?: number;
+  /** 每页数量 */
+  per_page?: number;
+  /** 兼容旧参数：未传 per_page 时作为每页数量 */
+  max_results?: number;
+};
+
+export type SpatialNearbyOptions = Omit<SpatialNearbyParams, 'refno' | 'x' | 'y' | 'z' | 'radius'>;
+
 export type SpatialQueryResult = {
   success: boolean;
   results?: SpatialQueryResultItem[];
+  /** nearby 响应的服务端权威中心；legacy /query 可能没有该字段 */
+  center?: SpatialNearbyCenter;
+  /** nearby 响应使用的半径 */
+  radius?: number;
+  /** nearby 响应使用的形状 */
+  shape?: 'cube' | 'sphere' | string;
   /** 是否还有更多结果；兼容旧字段名 */
   truncated?: boolean;
+  /** nearby 候选集是否被截断 */
+  truncated_candidates?: boolean;
+  /** nearby 结果集是否被截断 */
+  truncated_results?: boolean;
+  /** nearby 候选数量/上限与结果上限元数据 */
+  candidate_count?: number;
+  candidate_cap?: number;
+  result_cap?: number;
   /** 本次查询完整命中数量 */
   total_count?: number;
   /** 当前页返回数量 */
@@ -64,6 +110,8 @@ export type SpatialQueryResult = {
   };
   error?: string;
 };
+
+export type SpatialNearbyResult = SpatialQueryResult;
 
 export type SpatialQueryParams = {
   mode?: 'bbox' | 'refno' | 'position';
@@ -295,6 +343,49 @@ export async function querySpatialIndex(params: SpatialQueryParams): Promise<Spa
   return await fetchJson<SpatialQueryResult>(`/api/sqlite-spatial/query${query ? '?' + query : ''}`);
 }
 
+function appendNearbySearchParams(sp: URLSearchParams, params: SpatialNearbyParams): void {
+  if (params.refno) sp.set('refno', params.refno);
+  if (params.x !== undefined) sp.set('x', String(params.x));
+  if (params.y !== undefined) sp.set('y', String(params.y));
+  if (params.z !== undefined) sp.set('z', String(params.z));
+  sp.set('radius', String(params.radius));
+
+  if (params.shape) sp.set('shape', params.shape);
+  if (params.nouns) sp.set('nouns', params.nouns);
+  if (params.spec_values) sp.set('spec_values', params.spec_values);
+  if (params.include_self !== undefined) sp.set('include_self', String(params.include_self));
+  if (params.page !== undefined) sp.set('page', String(params.page));
+  if (params.per_page !== undefined) sp.set('per_page', String(params.per_page));
+  if (params.max_results !== undefined) sp.set('max_results', String(params.max_results));
+}
+
+/**
+ * nearby 空间查询：按 refno 或中心坐标 + 半径查找周边构件。
+ *
+ * 与 legacy querySpatialIndex() 分离，确保旧调用继续走 /query。
+ */
+export async function queryNearbySpatial(params: SpatialNearbyParams): Promise<SpatialNearbyResult> {
+  const sp = new URLSearchParams();
+  appendNearbySearchParams(sp, params);
+  const query = sp.toString();
+  return await fetchJson<SpatialNearbyResult>(`/api/sqlite-spatial/nearby${query ? '?' + query : ''}`);
+}
+
+/**
+ * 便捷方法：按 Refno + 半径查询周边构件（refno 模式）
+ */
+export async function queryNearbyByRefno(
+  refno: string,
+  radius: number,
+  options?: SpatialNearbyOptions,
+): Promise<SpatialNearbyResult> {
+  return queryNearbySpatial({
+    refno,
+    radius,
+    ...options,
+  });
+}
+
 /**
  * 查询空间索引统计信息（健康检查）
  */
@@ -400,21 +491,9 @@ export async function queryNearbyByCenter(
   cy: number,
   cz: number,
   radius: number,
-  options?: { nouns?: string; spec_values?: string; max_results?: number; page?: number; per_page?: number; shape?: 'cube' | 'sphere' },
-): Promise<SpatialQueryResult> {
-  return querySpatialIndex({
-    mode: 'position',
-    x: cx,
-    y: cy,
-    z: cz,
-    radius,
-    max_results: options?.max_results,
-    page: options?.page,
-    per_page: options?.per_page,
-    nouns: options?.nouns,
-    spec_values: options?.spec_values,
-    shape: options?.shape,
-  });
+  options?: SpatialNearbyOptions,
+): Promise<SpatialNearbyResult> {
+  return queryNearbyByPosition(cx, cy, cz, radius, options);
 }
 
 /**
@@ -425,19 +504,13 @@ export async function queryNearbyByPosition(
   y: number,
   z: number,
   radius: number,
-  options?: { nouns?: string; spec_values?: string; max_results?: number; page?: number; per_page?: number; shape?: 'cube' | 'sphere' },
-): Promise<SpatialQueryResult> {
-  return querySpatialIndex({
-    mode: 'position',
+  options?: SpatialNearbyOptions,
+): Promise<SpatialNearbyResult> {
+  return queryNearbySpatial({
     x,
     y,
     z,
     radius,
-    max_results: options?.max_results,
-    page: options?.page,
-    per_page: options?.per_page,
-    nouns: options?.nouns,
-    spec_values: options?.spec_values,
-    shape: options?.shape,
+    ...options,
   });
 }

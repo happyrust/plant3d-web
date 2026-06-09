@@ -2,8 +2,10 @@ import { computed, reactive, ref, watch, type Ref } from 'vue';
 
 import { enqueueParquetIncremental } from '@/api/genModelRealtimeApi';
 import {
+  queryNearbyByRefno,
   queryNearbyByPosition,
   querySpatialIndex,
+  type SpatialNearbyResult as ApiSpatialNearbyResult,
   type SpatialQueryResult as ApiSpatialQueryResult,
   type SpatialQueryResultItem as ApiSpatialQueryResultItem,
 } from '@/api/genModelSpatialApi';
@@ -30,6 +32,7 @@ import {
   type SpatialQueryResultGroup,
   type SpatialQueryResultItem,
   type SpatialQueryResultSet,
+  type SpatialQueryServerCenter,
   type SpatialQueryShape,
   type SpatialQuerySortBy,
   type SpatialQueryStatus,
@@ -84,6 +87,7 @@ type SpatialQueryStoreOptions = {
   selection?: SelectionLike;
   toolStore?: ToolStoreLike;
   queryNearbyByPosition?: typeof queryNearbyByPosition;
+  queryNearbyByRefno?: typeof queryNearbyByRefno;
   querySpatialIndex?: typeof querySpatialIndex;
   createRequestId?: () => string;
   batchLoadRefnos?: BatchLoadRefnosFn;
@@ -135,10 +139,23 @@ function bboxToAabb6(bbox: SpatialQueryAabb | null | undefined): [number, number
   return [bbox.min.x, bbox.min.y, bbox.min.z, bbox.max.x, bbox.max.y, bbox.max.z];
 }
 
-function distanceBetweenPoints(a: SpatialQueryPoint, b: SpatialQueryPoint): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  const dz = a.z - b.z;
+function axisGap(point: number, min: number, max: number): number {
+  if (point < min) return min - point;
+  if (point > max) return point - max;
+  return 0;
+}
+
+// 与后端 sqlite_spatial_api.rs 的 aabb_min_distance 口径保持一致：
+// 用候选 AABB 到查询点的“最近表面距离”，而非中心到中心距离。
+// 否则长管 / 大设备会因为中心较远而在球形查询中被本地误排除，
+// 且本地（已加载）与服务端（未加载）结果的距离 / 排序口径会不一致。
+function aabbMinDistanceToPoint(
+  aabb: [number, number, number, number, number, number],
+  point: SpatialQueryPoint,
+): number {
+  const dx = axisGap(point.x, aabb[0], aabb[3]);
+  const dy = axisGap(point.y, aabb[1], aabb[4]);
+  const dz = axisGap(point.z, aabb[2], aabb[5]);
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
@@ -238,6 +255,13 @@ function makeFilters(draft: SpatialQueryDraft): SpatialQueryFilters {
   };
 }
 
+function shouldIncludeSelf(draft: SpatialQueryDraft): boolean | undefined {
+  if (draft.mode === 'distance' && draft.distanceCenterSource === 'refno') {
+    return false;
+  }
+  return undefined;
+}
+
 function parseRequestMode(draft: SpatialQueryDraft): { centerSource: SpatialQueryCenterSource; sortBy: SpatialQuerySortBy } {
   if (draft.mode === 'range') {
     return {
@@ -286,6 +310,30 @@ function toSpatialItemFromApi(item: ApiSpatialQueryResultItem, loaded: boolean, 
   };
 }
 
+function normalizeServerCenter(center: ApiSpatialQueryResult['center'] | undefined): SpatialQueryServerCenter | null {
+  if (!center) return null;
+  return {
+    x: center.x,
+    y: center.y,
+    z: center.z,
+    source: center.source,
+    refno: center.refno,
+  };
+}
+
+function normalizeServerShape(shape: ApiSpatialQueryResult['shape'] | undefined): SpatialQueryShape | string | null {
+  return shape ?? null;
+}
+
+function queryBBoxFromResponse(serverResp: ApiSpatialQueryResult | null): SpatialQueryAabb | null {
+  return serverResp?.query_bbox
+    ? {
+      min: { ...serverResp.query_bbox.min },
+      max: { ...serverResp.query_bbox.max },
+    }
+    : null;
+}
+
 function syncResultSetSummary(current: SpatialQueryResultSet): SpatialQueryResultSet {
   const items = sortItems(current.items, current.request.sortBy);
   const total = Math.max(current.total, items.length);
@@ -294,7 +342,7 @@ function syncResultSetSummary(current: SpatialQueryResultSet): SpatialQueryResul
     ...current,
     items,
     total,
-    returnedCount: items.length,
+    returnedCount: current.returnedCount,
     totalPages: Math.max(1, Math.ceil(total / perPage)),
     loadedCount: items.filter((item) => item.loaded).length,
     unloadedCount: items.filter((item) => !item.loaded).length,
@@ -527,8 +575,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
   const viewerRef = options.viewerRef ?? useViewerContext().viewerRef;
   const selection = options.selection ?? useSelectionStore();
   const toolStore = options.toolStore ?? useToolStore();
-  const queryNearby = options.queryNearbyByPosition ?? queryNearbyByPosition;
-  const queryByIndex = options.querySpatialIndex ?? querySpatialIndex;
+  const queryNearbyPosition = options.queryNearbyByPosition ?? queryNearbyByPosition;
+  const queryNearbyRefno = options.queryNearbyByRefno ?? queryNearbyByRefno;
   const nextRequestId = options.createRequestId ?? createRequestId;
   const batchLoadRefnos = options.batchLoadRefnos ?? ((refnos: string[], loadOptions?: BatchLoadOptions) => {
     return batchLoadSpatialQueryRefnos(viewerRef, refnos, loadOptions);
@@ -621,7 +669,8 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       filters,
       limit: draft.limit,
       sortBy,
-      refno: draft.distanceCenterSource === 'refno' ? draft.refno.trim() || undefined : undefined,
+      refno: draft.mode === 'distance' && draft.distanceCenterSource === 'refno' ? draft.refno.trim() || undefined : undefined,
+      includeSelf: shouldIncludeSelf(draft),
     };
   }
 
@@ -637,10 +686,13 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const maxz = request.center.z + radius;
 
     for (const refno of refnos) {
+      if (request.centerSource === 'refno' && request.includeSelf === false && request.refno && normalizeRefno(refno) === normalizeRefno(request.refno)) {
+        continue;
+      }
       const aabb = viewer.scene.getAABB([refno]) || viewer.scene.objects[refno]?.aabb || null;
       if (!aabb) continue;
       const center = aabbToCenter(aabb);
-      const distance = distanceBetweenPoints(center, request.center);
+      const distance = aabbMinDistanceToPoint(aabb, request.center);
       const intersectsCube =
         aabb[3] >= minx && aabb[0] <= maxx &&
         aabb[4] >= miny && aabb[1] <= maxy &&
@@ -695,8 +747,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     if (serverResp) {
       if (hasMore) {
         warnings.push('服务端还有更多结果，请使用分页继续查看');
-      } else if (serverResp.truncated) {
+      } else if (serverResp.truncated || serverResp.truncated_results) {
         warnings.push('服务端结果已按当前页数量返回');
+      }
+      if (serverResp.truncated_candidates) {
+        warnings.push('服务端候选集已截断，结果可能只覆盖候选上限范围');
+      }
+      if (serverResp.truncated_results) {
+        warnings.push('服务端结果集已截断，请缩小半径或过滤条件');
       }
 
       for (const raw of serverResults) {
@@ -744,10 +802,20 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
     const total = Math.max(serverResp?.total_count ?? inferredTotal, items.length);
     const loadedCount = items.filter((item) => item.loaded).length;
     const unloadedCount = items.length - loadedCount;
+    const serverCenter = normalizeServerCenter(serverResp?.center);
 
     return {
       request,
       items,
+      center: serverCenter,
+      queryBBox: queryBBoxFromResponse(serverResp),
+      serverRadius: typeof serverResp?.radius === 'number' ? serverResp.radius : null,
+      serverShape: normalizeServerShape(serverResp?.shape),
+      truncatedCandidates: Boolean(serverResp?.truncated_candidates ?? false),
+      truncatedResults: Boolean(serverResp?.truncated_results ?? false),
+      candidateCount: typeof serverResp?.candidate_count === 'number' ? serverResp.candidate_count : null,
+      candidateCap: typeof serverResp?.candidate_cap === 'number' ? serverResp.candidate_cap : null,
+      resultCap: typeof serverResp?.result_cap === 'number' ? serverResp.result_cap : null,
       page,
       perPage,
       returnedCount: serverResp?.returned_count ?? items.length,
@@ -756,15 +824,14 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       total,
       loadedCount,
       unloadedCount,
-      truncated: hasMore,
+      truncated: Boolean(hasMore || serverResp?.truncated || serverResp?.truncated_candidates || serverResp?.truncated_results),
       warnings,
       groups: buildGroups(items),
     };
   }
 
-  async function resolveRequest(): Promise<{ request: SpatialQueryRequest; serverFallbackRefno?: string }> {
+  async function resolveRequest(): Promise<{ request: SpatialQueryRequest }> {
     status.value = 'resolving-center';
-    const viewer = viewerRef.value;
     const centerSource = parseRequestMode(draft).centerSource;
 
     if (draft.mode === 'distance' && centerSource === 'refno') {
@@ -772,14 +839,6 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       if (!refno) {
         throw new Error('请输入起始物项 Refno');
       }
-      const aabb = viewer?.scene.getAABB([refno]) ?? null;
-      if (!aabb) {
-        return {
-          request: normalizeRequestFromCenter(draft.center, centerSource),
-          serverFallbackRefno: refno,
-        };
-      }
-      draft.center = aabbToCenter(aabb);
       return { request: normalizeRequestFromCenter(draft.center, centerSource) };
     }
 
@@ -811,14 +870,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
     try {
       const viewer = viewerRef.value;
-      const { request, serverFallbackRefno } = await resolveRequest();
+      const { request } = await resolveRequest();
       let localItems: SpatialQueryResultItem[] = [];
-      let serverResp: ApiSpatialQueryResult | null = null;
-
-      if (viewer && !serverFallbackRefno) {
-        status.value = 'querying-local';
-        localItems = queryLocal(viewer, request);
-      }
+      let serverResp: ApiSpatialNearbyResult | null = null;
 
       status.value = 'querying-server';
       const serverOptions = {
@@ -830,12 +884,9 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         shape: request.shape,
       };
 
-      if (serverFallbackRefno) {
-        serverResp = await queryByIndex({
-          mode: 'refno',
-          refno: serverFallbackRefno,
-          distance: request.radius,
-          include_self: false,
+      if (request.centerSource === 'refno' && request.refno) {
+        serverResp = await queryNearbyRefno(request.refno, request.radius, {
+          include_self: request.includeSelf ?? false,
           nouns: serverOptions.nouns,
           spec_values: serverOptions.spec_values,
           max_results: serverOptions.max_results,
@@ -844,19 +895,39 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
           shape: serverOptions.shape,
         });
       } else {
-        serverResp = await queryNearby(request.center.x, request.center.y, request.center.z, request.radius, serverOptions);
+        serverResp = await queryNearbyPosition(request.center.x, request.center.y, request.center.z, request.radius, serverOptions);
       }
 
       if (!serverResp.success) {
         throw new Error(serverResp.error || '空间查询失败');
       }
 
-      status.value = 'merging-results';
-      commitResultSet(mergeResults(request, localItems, serverResp));
-
-      if (serverFallbackRefno) {
-        resultSet.value.warnings.push('起始 Refno 未在当前 Viewer 中加载，已回退为服务端 Refno 周边查询');
+      const serverCenter = normalizeServerCenter(serverResp.center);
+      const authoritativeRequest = serverCenter
+        ? {
+          ...request,
+          center: {
+            x: serverCenter.x,
+            y: serverCenter.y,
+            z: serverCenter.z,
+          },
+        }
+        : request;
+      if (serverCenter) {
+        draft.center = {
+          x: serverCenter.x,
+          y: serverCenter.y,
+          z: serverCenter.z,
+        };
       }
+
+      if (viewer) {
+        status.value = 'querying-local';
+        localItems = queryLocal(viewer, authoritativeRequest);
+      }
+
+      status.value = 'merging-results';
+      commitResultSet(mergeResults(authoritativeRequest, localItems, serverResp));
 
       status.value = 'ready';
     } catch (err) {

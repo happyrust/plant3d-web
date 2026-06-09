@@ -172,6 +172,173 @@ describe('createSpatialQueryStore', () => {
     expect(store.resultSet.value?.totalPages).toBe(2);
   });
 
+  it('distance refno 查询应走 nearby refno 路径并保留服务端中心和元数据', async () => {
+    const viewer = createViewerStub();
+    const queryNearbyByPosition = vi.fn();
+    const querySpatialIndex = vi.fn();
+    const queryNearbyByRefno = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      center: {
+        x: 100,
+        y: 200,
+        z: 300,
+        source: 'world_transform',
+        refno: 'loaded_a',
+      },
+      radius: 75,
+      shape: 'sphere',
+      query_bbox: {
+        min: { x: 25, y: 125, z: 225 },
+        max: { x: 175, y: 275, z: 375 },
+      },
+      total_count: 12,
+      returned_count: 1,
+      page: 2,
+      per_page: 10,
+      has_more: true,
+      truncated: true,
+      truncated_candidates: true,
+      truncated_results: false,
+      candidate_count: 50,
+      candidate_cap: 50,
+      result_cap: 100,
+      results: [
+        {
+          refno: 'server_only',
+          noun: 'EQUI',
+          spec_value: 2,
+          distance: 18,
+          aabb: {
+            min: { x: 90, y: 190, z: 290 },
+            max: { x: 110, y: 210, z: 310 },
+          },
+        },
+      ],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: 'loaded_a' } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+      queryNearbyByRefno,
+      querySpatialIndex,
+    });
+
+    store.draft.mode = 'distance';
+    store.draft.distanceCenterSource = 'refno';
+    store.draft.refno = 'loaded_a';
+    store.draft.radius = 75;
+    store.draft.nounText = 'EQUI';
+    store.draft.specValues = [2];
+    store.draft.limit = 10;
+
+    await store.submitQuery(2);
+
+    expect(queryNearbyByRefno).toHaveBeenCalledWith('loaded_a', 75, expect.objectContaining({
+      include_self: false,
+      nouns: 'EQUI',
+      spec_values: '2',
+      max_results: 10,
+      page: 2,
+      per_page: 10,
+      shape: 'sphere',
+    }));
+    expect(queryNearbyByPosition).not.toHaveBeenCalled();
+    expect(querySpatialIndex).not.toHaveBeenCalled();
+    expect(store.status.value).toBe('ready');
+    expect(store.draft.center).toEqual({ x: 100, y: 200, z: 300 });
+    expect(store.resultSet.value?.request.center).toEqual({ x: 100, y: 200, z: 300 });
+    expect(store.resultSet.value?.center).toEqual({
+      x: 100,
+      y: 200,
+      z: 300,
+      source: 'world_transform',
+      refno: 'loaded_a',
+    });
+    expect(store.resultSet.value?.queryBBox).toEqual({
+      min: { x: 25, y: 125, z: 225 },
+      max: { x: 175, y: 275, z: 375 },
+    });
+    expect(store.resultSet.value?.total).toBe(12);
+    expect(store.resultSet.value?.returnedCount).toBe(1);
+    expect(store.resultSet.value?.page).toBe(2);
+    expect(store.resultSet.value?.perPage).toBe(10);
+    expect(store.resultSet.value?.hasMore).toBe(true);
+    expect(store.resultSet.value?.truncated).toBe(true);
+    expect(store.resultSet.value?.truncatedCandidates).toBe(true);
+    expect(store.resultSet.value?.truncatedResults).toBe(false);
+    expect(store.resultSet.value?.candidateCount).toBe(50);
+    expect(store.resultSet.value?.candidateCap).toBe(50);
+    expect(store.resultSet.value?.resultCap).toBe(100);
+    expect(store.resultSet.value?.items[0]).toMatchObject({
+      refno: 'server_only',
+      noun: 'EQUI',
+      specValue: 2,
+      distance: 18,
+      bbox: {
+        min: { x: 90, y: 190, z: 290 },
+        max: { x: 110, y: 210, z: 310 },
+      },
+    });
+    expect(store.resultSet.value?.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('更多结果'),
+      expect.stringContaining('候选'),
+    ]));
+  });
+
+  it('distance coordinate 查询应走 nearby 坐标路径且不调用 refno 或 legacy query', async () => {
+    const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
+      success: true,
+      center: {
+        x: 10,
+        y: 20,
+        z: 30,
+        source: 'point_input',
+      },
+      total_count: 0,
+      returned_count: 0,
+      page: 1,
+      per_page: 25,
+      has_more: false,
+      results: [],
+    }));
+    const queryNearbyByRefno = vi.fn();
+    const querySpatialIndex = vi.fn();
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: null },
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      queryNearbyByPosition,
+      queryNearbyByRefno,
+      querySpatialIndex,
+    });
+
+    store.draft.mode = 'distance';
+    store.draft.distanceCenterSource = 'coordinates';
+    store.draft.center = { x: 10, y: 20, z: 30 };
+    store.draft.radius = 40;
+    store.draft.limit = 25;
+
+    await store.submitQuery();
+
+    expect(queryNearbyByPosition).toHaveBeenCalledWith(10, 20, 30, 40, expect.objectContaining({
+      max_results: 25,
+      page: 1,
+      per_page: 25,
+      shape: 'sphere',
+    }));
+    expect(queryNearbyByRefno).not.toHaveBeenCalled();
+    expect(querySpatialIndex).not.toHaveBeenCalled();
+    expect(store.resultSet.value?.center).toEqual({
+      x: 10,
+      y: 20,
+      z: 30,
+      source: 'point_input',
+    });
+  });
+
   it('批量加载当前筛选结果时应走精确 refno 批量加载并刷新统计', async () => {
     const viewer = createViewerStub();
     const batchLoadRefnos = vi.fn(async (refnos: string[]) => ({

@@ -330,4 +330,26 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     unmount();
   });
+
+  it('查询结果展示服务端返回的中心坐标和来源', async () => {
+    stubState.resultSet.value = {
+      ...makeResultSet(1),
+      center: {
+        x: 123.4,
+        y: 567.8,
+        z: 910.1,
+        source: 'world_transform',
+        refno: '24381_145018',
+      },
+    };
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    expect(host.textContent).toContain('中心 123, 568, 910');
+    expect(host.textContent).toContain('world_transform');
+    expect(host.textContent).toContain('24381_145018');
+
+    unmount();
+  });
 });

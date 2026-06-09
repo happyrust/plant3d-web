@@ -340,6 +340,10 @@
             </div>
           </div>
 
+          <div v-if="resultCenterText" class="border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500" data-testid="spatial-result-center">
+            {{ resultCenterText }}
+          </div>
+
           <div v-if="resultSet?.warnings.length" class="space-y-1.5 border-b border-gray-100 px-3 py-2">
             <div v-for="warning in resultSet.warnings"
               :key="warning"
@@ -532,6 +536,13 @@ const showCoordinateInputs = computed(() => {
 
 const centerSummary = computed(() => {
   return `${draft.center.x.toFixed(0)}, ${draft.center.y.toFixed(0)}, ${draft.center.z.toFixed(0)}`;
+});
+
+const resultCenterText = computed(() => {
+  const center = resultSet.value?.center;
+  if (!center) return '';
+  const refno = center.refno ? ` · ${center.refno}` : '';
+  return `中心 ${center.x.toFixed(0)}, ${center.y.toFixed(0)}, ${center.z.toFixed(0)} · ${center.source}${refno}`;
 });
 
 const statusLabel = computed(() => {

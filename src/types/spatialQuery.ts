@@ -24,6 +24,11 @@ export type SpatialQueryPoint = {
   z: number;
 };
 
+export type SpatialQueryServerCenter = SpatialQueryPoint & {
+  source: string;
+  refno?: string;
+};
+
 export type SpatialQueryAabb = {
   min: SpatialQueryPoint;
   max: SpatialQueryPoint;
@@ -47,6 +52,7 @@ export type SpatialQueryRequest = {
   limit: number;
   sortBy: SpatialQuerySortBy;
   refno?: string;
+  includeSelf?: boolean;
 };
 
 export type SpatialQueryResultItem = {
@@ -74,6 +80,15 @@ export type SpatialQueryResultGroup = {
 export type SpatialQueryResultSet = {
   request: SpatialQueryRequest;
   items: SpatialQueryResultItem[];
+  center?: SpatialQueryServerCenter | null;
+  queryBBox?: SpatialQueryAabb | null;
+  serverRadius?: number | null;
+  serverShape?: SpatialQueryShape | string | null;
+  truncatedCandidates?: boolean;
+  truncatedResults?: boolean;
+  candidateCount?: number | null;
+  candidateCap?: number | null;
+  resultCap?: number | null;
   page: number;
   perPage: number;
   returnedCount: number;
