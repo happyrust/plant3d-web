@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
-import { createSpatialQueryStore } from './useSpatialQuery';
+import {
+  createSpatialQueryStore,
+  initializeSpatialQueryFromUrl,
+  parseSpatialQueryUrlParams,
+} from './useSpatialQuery';
 
 import type { SpatialQueryResult } from '@/api/genModelSpatialApi';
 
@@ -186,7 +190,7 @@ describe('createSpatialQueryStore', () => {
         refno: 'loaded_a',
       },
       radius: 75,
-      shape: 'sphere',
+      shape: 'cube',
       query_bbox: {
         min: { x: 25, y: 125, z: 225 },
         max: { x: 175, y: 275, z: 375 },
@@ -229,6 +233,7 @@ describe('createSpatialQueryStore', () => {
     store.draft.distanceCenterSource = 'refno';
     store.draft.refno = 'loaded_a';
     store.draft.radius = 75;
+    store.draft.shape = 'cube';
     store.draft.nounText = 'EQUI';
     store.draft.specValues = [2];
     store.draft.limit = 10;
@@ -242,7 +247,7 @@ describe('createSpatialQueryStore', () => {
       max_results: 10,
       page: 2,
       per_page: 10,
-      shape: 'sphere',
+      shape: 'cube',
     }));
     expect(queryNearbyByPosition).not.toHaveBeenCalled();
     expect(querySpatialIndex).not.toHaveBeenCalled();
@@ -493,5 +498,182 @@ describe('createSpatialQueryStore', () => {
     expect(viewer.cameraFlight.flyTo).toHaveBeenCalled();
     expect(store.resultSet.value.items[0]?.loaded).toBe(true);
     expect(store.activeResultRefno.value).toBe('server_only');
+  });
+
+  it('显示/隐藏、隔离和恢复动作应作用于当前返回 refno 且不清空结果集', () => {
+    const viewer = createViewerStub();
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+    });
+
+    store.resultSet.value = {
+      request: {
+        mode: 'distance',
+        centerSource: 'coordinates',
+        center: { x: 0, y: 0, z: 0 },
+        radius: 100,
+        shape: 'sphere',
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        limit: 100,
+        sortBy: 'distanceAsc',
+      },
+      items: [
+        {
+          refno: 'loaded_a',
+          noun: 'PIPE',
+          specValue: 1,
+          specName: '管道系统',
+          distance: 5,
+          loaded: true,
+          visible: true,
+          matchedBy: 'viewer-local',
+        },
+        {
+          refno: 'server_only',
+          noun: 'EQUI',
+          specValue: 2,
+          specName: '电气系统',
+          distance: 20,
+          loaded: false,
+          visible: false,
+          matchedBy: 'server-spatial-index',
+        },
+      ],
+      page: 1,
+      perPage: 100,
+      returnedCount: 2,
+      totalPages: 1,
+      hasMore: false,
+      total: 2,
+      loadedCount: 1,
+      unloadedCount: 1,
+      truncated: false,
+      warnings: [],
+      groups: [],
+    };
+
+    store.setAllResultsVisible(false);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a', 'server_only'], false);
+    expect(store.resultSet.value?.items.map((item) => item.visible)).toEqual([false, false]);
+
+    store.setAllResultsVisible(true);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a', 'server_only'], true);
+    expect(store.resultSet.value?.items.map((item) => item.visible)).toEqual([true, true]);
+
+    store.toggleResultVisible(store.resultSet.value.items[0]!);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a'], false);
+    expect(store.resultSet.value?.items[0]?.visible).toBe(false);
+
+    store.isolateResults();
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'loaded_b'], true);
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'server_only'], false);
+    expect(viewer.scene.setObjectsVisible).toHaveBeenCalledWith(['loaded_a', 'server_only'], true);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a', 'server_only']);
+
+    store.restoreScene();
+    expect(viewer.scene.setObjectsXRayed).toHaveBeenCalledWith(['loaded_a', 'loaded_b'], false);
+    expect(store.resultSet.value?.items.map((item) => item.refno)).toEqual(['loaded_a', 'server_only']);
+  });
+
+  it('解析 spatial URL 参数并初始化抽屉草稿，autorun 只透传一次', () => {
+    const parsed = parseSpatialQueryUrlParams('?spatial_refno=24381/145019&spatial_radius=1000&spatial_shape=cube&spatial_autorun=1');
+    expect(parsed).toEqual({
+      refno: '24381_145019',
+      radius: 1000,
+      shape: 'cube',
+      autorun: true,
+    });
+
+    const store = {
+      draft: {
+        mode: 'range',
+        rangeCenterSource: 'selected',
+        distanceCenterSource: 'coordinates',
+        refno: '',
+        center: { x: 9, y: 8, z: 7 },
+        radius: 10,
+        shape: 'sphere',
+        nounText: 'PIPE',
+        keyword: 'old',
+        onlyLoaded: true,
+        onlyVisible: true,
+        specValues: [1],
+        limit: 5,
+      },
+      resetQuery: vi.fn(),
+      setMode: vi.fn((mode: 'range' | 'distance') => {
+        store.draft.mode = mode;
+      }),
+      submitQuery: vi.fn(),
+    };
+    const openDrawer = vi.fn((_mode: 'range' | 'distance', options?: { autoSubmit?: boolean }) => {
+      if (options?.autoSubmit) {
+        store.submitQuery(1);
+      }
+    });
+
+    const applied = initializeSpatialQueryFromUrl(
+      '?spatial_refno=24381/145019&spatial_radius=1000&spatial_shape=cube&spatial_autorun=1',
+      store,
+      openDrawer,
+    );
+
+    expect(applied).toBe(true);
+    expect(store.resetQuery).toHaveBeenCalledTimes(1);
+    expect(store.setMode).toHaveBeenCalledWith('distance');
+    expect(store.draft.mode).toBe('distance');
+    expect(store.draft.distanceCenterSource).toBe('refno');
+    expect(store.draft.refno).toBe('24381_145019');
+    expect(store.draft.radius).toBe(1000);
+    expect(store.draft.shape).toBe('cube');
+    expect(openDrawer).toHaveBeenCalledWith('distance', {
+      useSelection: false,
+      autoSubmit: true,
+    });
+    expect(store.submitQuery).toHaveBeenCalledTimes(1);
+    expect(store.submitQuery).toHaveBeenCalledWith(1);
+  });
+
+  it('spatial URL 没有 autorun 时只打开并填充，不触发查询', () => {
+    const store = {
+      draft: {
+        mode: 'distance',
+        rangeCenterSource: 'selected',
+        distanceCenterSource: 'coordinates',
+        refno: '',
+        center: { x: 0, y: 0, z: 0 },
+        radius: 10,
+        shape: 'sphere',
+        nounText: '',
+        keyword: '',
+        onlyLoaded: false,
+        onlyVisible: false,
+        specValues: [],
+        limit: 100,
+      },
+      resetQuery: vi.fn(),
+      setMode: vi.fn((mode: 'range' | 'distance') => {
+        store.draft.mode = mode;
+      }),
+      submitQuery: vi.fn(),
+    };
+    const openDrawer = vi.fn();
+
+    const applied = initializeSpatialQueryFromUrl(
+      '?spatial_refno=24381_145019&spatial_radius=1000&spatial_shape=sphere',
+      store,
+      openDrawer,
+    );
+
+    expect(applied).toBe(true);
+    expect(store.draft.refno).toBe('24381_145019');
+    expect(store.draft.radius).toBe(1000);
+    expect(openDrawer).toHaveBeenCalledWith('distance', {
+      useSelection: false,
+      autoSubmit: false,
+    });
+    expect(store.submitQuery).not.toHaveBeenCalled();
   });
 });

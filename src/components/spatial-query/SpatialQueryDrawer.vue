@@ -67,23 +67,6 @@
             </div>
           </section>
 
-          <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
-            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">查询形状</div>
-            <div class="mt-2 grid grid-cols-2 gap-1.5">
-              <button type="button"
-                class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
-                :class="draft.shape === 'sphere' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
-                @click="draft.shape = 'sphere'">
-                球形
-              </button>
-              <button type="button"
-                class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
-                :class="draft.shape === 'cube' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
-                @click="draft.shape = 'cube'">
-                立方体
-              </button>
-            </div>
-          </section>
         </template>
 
         <template v-else>
@@ -165,6 +148,24 @@
             </div>
           </section>
         </template>
+
+        <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
+          <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">查询形状</div>
+          <div class="mt-2 grid grid-cols-2 gap-1.5">
+            <button type="button"
+              class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
+              :class="draft.shape === 'sphere' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+              @click="draft.shape = 'sphere'">
+              球形
+            </button>
+            <button type="button"
+              class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
+              :class="draft.shape === 'cube' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+              @click="draft.shape = 'cube'">
+              立方体
+            </button>
+          </div>
+        </section>
 
         <section v-if="showCoordinateInputs" class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
           <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">中心坐标</div>
@@ -337,6 +338,23 @@
                 @click="loadUnloadedResults">
                 只加载当前页未加载
               </button>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="pagedResultItems.length === 0"
+                data-testid="copy-current-page-refnos"
+                @click="copyCurrentPageRefnos">
+                复制当前页 Refno
+              </button>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="allReturnedRefnos.length === 0"
+                data-testid="copy-all-returned-refnos"
+                @click="copyAllReturnedRefnos">
+                复制已返回 Refno
+              </button>
+            </div>
+            <div v-if="copyStatus" class="mt-1.5 text-[11px] text-emerald-600">
+              {{ copyStatus }}
             </div>
           </div>
 
@@ -440,6 +458,8 @@
                       <button type="button"
                         class="rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
                         title="飞行定位"
+                        data-testid="locate-spatial-result"
+                        :data-refno="item.refno"
                         @click.stop="focusItem(item)">
                         <ArrowUpRight class="h-4 w-4" />
                       </button>
@@ -456,7 +476,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Search, X } from 'lucide-vue-next';
 
@@ -507,6 +527,7 @@ const DISTANCE_RADIUS_PRESETS = [100, 500, 1000, 5000] as const;
 const isQueryBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
 const specOptions = SITE_SPEC_OPTIONS_WITH_UNKNOWN;
 const selectedSpecValues = computed(() => new Set(draft.specValues));
+const copyStatus = ref<string | null>(null);
 
 const allSpecSelected = computed(() => draft.specValues.length === specOptions.length);
 
@@ -583,6 +604,10 @@ const currentResultPage = computed(() => {
 
 const pagedResultItems = computed(() => {
   return resultSet.value?.items ?? [];
+});
+
+const allReturnedRefnos = computed(() => {
+  return uniqueRefnosInOrder(resultSet.value?.items ?? []);
 });
 
 const pagedResultGroups = computed<SpatialQueryResultGroup[]>(() => {
@@ -708,6 +733,38 @@ function showOnlyGroup(specValue: number) {
 
 function formatDistance(distance: number) {
   return `${distance.toFixed(0)} mm`;
+}
+
+function uniqueRefnosInOrder(items: SpatialQueryResultItem[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const refno = String(item.refno || '').trim();
+    if (!refno || seen.has(refno)) continue;
+    seen.add(refno);
+    out.push(refno);
+  }
+  return out;
+}
+
+async function copyRefnos(refnos: string[], label: string) {
+  const text = refnos.join('\n');
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    copyStatus.value = `已复制 ${refnos.length} 个${label} Refno`;
+  } catch (err) {
+    copyStatus.value = null;
+    error.value = err instanceof Error ? `复制失败：${err.message}` : '复制失败';
+  }
+}
+
+function copyCurrentPageRefnos() {
+  void copyRefnos(uniqueRefnosInOrder(pagedResultItems.value), '当前页');
+}
+
+function copyAllReturnedRefnos() {
+  void copyRefnos(allReturnedRefnos.value, '已返回');
 }
 
 function setModeAndKeepDraft(mode: SpatialQueryMode) {

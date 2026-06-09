@@ -53,7 +53,7 @@ import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { useSpatialQuery } from '@/composables/useSpatialQuery';
+import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore, type DimensionKind } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
@@ -4033,6 +4033,7 @@ onMounted(async () => {
   offRibbonCommand = onCommand(handleRibbonCommand);
   window.addEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
   offOpenSpatialQuery = () => window.removeEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
+  initializeSpatialQueryFromUrl(window.location.search, spatialQueryStore, openSpatialQueryDrawer);
 
   // 点击工具栏外部时关闭“测量”下拉菜单（不影响当前工具模式）
   const onDocPointerDown = (ev: PointerEvent) => {

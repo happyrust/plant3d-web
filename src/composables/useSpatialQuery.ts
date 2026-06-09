@@ -111,6 +111,83 @@ function createDefaultDraft(): SpatialQueryDraft {
   };
 }
 
+export type SpatialQueryUrlConfig = {
+  refno: string;
+  radius: number;
+  shape: SpatialQueryShape;
+  autorun: boolean;
+};
+
+type SpatialQueryUrlStore = {
+  draft: SpatialQueryDraft;
+  setMode: (mode: SpatialQueryMode) => void;
+  resetQuery?: () => void;
+};
+
+type SpatialQueryDrawerOpenFn = (
+  mode?: SpatialQueryMode,
+  options?: { useSelection?: boolean; autoSubmit?: boolean },
+) => void;
+
+function normalizeUrlRefno(refno: string): string {
+  return String(refno || '').trim().replace(/\//g, '_');
+}
+
+function isTruthyFlag(raw: string | null | undefined): boolean {
+  const value = String(raw ?? '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes';
+}
+
+function toSearchParams(search: string | URLSearchParams): URLSearchParams {
+  if (search instanceof URLSearchParams) return search;
+  const normalized = search.startsWith('?') ? search.slice(1) : search;
+  return new URLSearchParams(normalized);
+}
+
+export function parseSpatialQueryUrlParams(search: string | URLSearchParams): SpatialQueryUrlConfig | null {
+  const params = toSearchParams(search);
+  const refno = normalizeUrlRefno(params.get('spatial_refno') || '');
+  if (!refno) return null;
+
+  const radius = Number(params.get('spatial_radius'));
+  if (!Number.isFinite(radius) || radius <= 0) return null;
+
+  const rawShape = String(params.get('spatial_shape') || 'sphere').trim().toLowerCase();
+  const shape: SpatialQueryShape = rawShape === 'cube' ? 'cube' : 'sphere';
+
+  return {
+    refno,
+    radius,
+    shape,
+    autorun: isTruthyFlag(params.get('spatial_autorun')),
+  };
+}
+
+export function applySpatialQueryUrlConfig(store: SpatialQueryUrlStore, config: SpatialQueryUrlConfig): void {
+  store.resetQuery?.();
+  store.setMode('distance');
+  store.draft.distanceCenterSource = 'refno';
+  store.draft.refno = config.refno;
+  store.draft.radius = config.radius;
+  store.draft.shape = config.shape;
+}
+
+export function initializeSpatialQueryFromUrl(
+  search: string | URLSearchParams,
+  store: SpatialQueryUrlStore,
+  openDrawer: SpatialQueryDrawerOpenFn,
+): boolean {
+  const config = parseSpatialQueryUrlParams(search);
+  if (!config) return false;
+
+  applySpatialQueryUrlConfig(store, config);
+  openDrawer('distance', {
+    useSelection: false,
+    autoSubmit: config.autorun,
+  });
+  return true;
+}
+
 function normalizeNounText(nounText: string): string[] {
   return nounText
     .split(',')
@@ -665,7 +742,7 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
       centerSource,
       center,
       radius: draft.radius,
-      shape: draft.mode === 'distance' ? 'sphere' : draft.shape,
+      shape: draft.shape,
       filters,
       limit: draft.limit,
       sortBy,

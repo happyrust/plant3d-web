@@ -176,7 +176,16 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     applyCurrentSelection.mockReset();
     startPickCenter.mockReset();
     submitQuery.mockReset();
+    clearResults.mockReset();
+    activateResult.mockReset();
+    loadResults.mockReset();
+    showOnlySpecGroup.mockReset();
+    toggleResultVisible.mockReset();
+    setAllResultsVisible.mockReset();
+    isolateResults.mockReset();
+    restoreScene.mockReset();
     setMode.mockClear();
+    vi.unstubAllGlobals();
     resetDraft();
   });
 
@@ -349,6 +358,151 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(host.textContent).toContain('中心 123, 568, 910');
     expect(host.textContent).toContain('world_transform');
     expect(host.textContent).toContain('24381_145018');
+
+    unmount();
+  });
+
+  it('展示总数、当前页数、已加载/未加载统计和截断警告', async () => {
+    stubState.resultSet.value = {
+      ...makeResultSet(3, { page: 1, perPage: 3, total: 12, hasMore: true }),
+      loadedCount: 1,
+      unloadedCount: 2,
+      truncated: true,
+      truncatedCandidates: true,
+      warnings: [
+        '服务端还有更多结果，请使用分页继续查看',
+        '服务端候选集已截断，结果可能只覆盖候选上限范围',
+      ],
+    };
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    expect(host.textContent).toContain('共 12 项，当前页 3 项，已加载 1 项，未加载 2 项');
+    expect(host.textContent).toContain('服务端还有更多结果');
+    expect(host.textContent).toContain('服务端候选集已截断');
+
+    unmount();
+  });
+
+  it('可复制当前页 refno，按当前展示顺序输出', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    stubState.resultSet.value = makeResultSet(3);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const copyButton = host.querySelector('[data-testid="copy-current-page-refnos"]') as HTMLButtonElement | null;
+    expect(copyButton).toBeTruthy();
+    copyButton?.click();
+    await nextTick();
+
+    expect(writeText).toHaveBeenCalledWith('24381_100001\n24381_100002\n24381_100003');
+
+    unmount();
+  });
+
+  it('可复制全部已返回 refno，去重后保持结果顺序', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const resultSet = makeResultSet(3);
+    resultSet.items.push({
+      ...resultSet.items[1]!,
+      distance: 99,
+    });
+    resultSet.groups[0]!.items = resultSet.items;
+    stubState.resultSet.value = resultSet;
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const copyButton = host.querySelector('[data-testid="copy-all-returned-refnos"]') as HTMLButtonElement | null;
+    expect(copyButton).toBeTruthy();
+    copyButton?.click();
+    await nextTick();
+
+    expect(writeText).toHaveBeenCalledWith('24381_100001\n24381_100002\n24381_100003');
+
+    unmount();
+  });
+
+  it('加载当前页与只加载未加载结果按钮传递正确参数', async () => {
+    stubState.resultSet.value = makeResultSet(2);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const allButtons = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
+    allButtons.find((button) => button.textContent?.includes('加载当前页模型'))?.click();
+    await nextTick();
+    expect(loadResults).toHaveBeenCalledWith({ flyTo: true });
+
+    allButtons.find((button) => button.textContent?.includes('只加载当前页未加载'))?.click();
+    await nextTick();
+    expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
+
+    unmount();
+  });
+
+  it('查看器动作按钮可显示、隐藏、隔离、恢复当前结果集', async () => {
+    stubState.resultSet.value = makeResultSet(2);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const allButtons = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
+    allButtons.find((button) => button.textContent?.includes('全部显示'))?.click();
+    allButtons.find((button) => button.textContent?.includes('全部隐藏'))?.click();
+    allButtons.find((button) => button.textContent?.includes('隔离结果'))?.click();
+    allButtons.find((button) => button.textContent?.includes('恢复场景'))?.click();
+    await nextTick();
+
+    expect(setAllResultsVisible).toHaveBeenCalledWith(true);
+    expect(setAllResultsVisible).toHaveBeenCalledWith(false);
+    expect(isolateResults).toHaveBeenCalledTimes(1);
+    expect(restoreScene).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it('结果行点击和显式定位按钮都会触发加载/选中/飞行定位路径', async () => {
+    stubState.resultSet.value = makeResultSet(1);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const resultRow = Array.from(host.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('24381_100001')) as HTMLButtonElement | undefined;
+    expect(resultRow).toBeTruthy();
+    resultRow?.click();
+    await nextTick();
+
+    const locateButton = host.querySelector('[data-testid="locate-spatial-result"][data-refno="24381_100001"]') as HTMLButtonElement | null;
+    expect(locateButton).toBeTruthy();
+    locateButton?.click();
+    await nextTick();
+
+    expect(activateResult).toHaveBeenCalledTimes(2);
+    expect(activateResult).toHaveBeenNthCalledWith(1, stubState.resultSet.value.items[0]);
+    expect(activateResult).toHaveBeenNthCalledWith(2, stubState.resultSet.value.items[0]);
+
+    unmount();
+  });
+
+  it('单项显示/隐藏按钮调用可见性切换并保留结果集', async () => {
+    stubState.resultSet.value = makeResultSet(1);
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const visibilityButton = host.querySelector('button[title="隐藏"]') as HTMLButtonElement | null;
+    expect(visibilityButton).toBeTruthy();
+    visibilityButton?.click();
+    await nextTick();
+
+    expect(toggleResultVisible).toHaveBeenCalledWith(stubState.resultSet.value.items[0]);
+    expect(stubState.resultSet.value?.items.map((item) => item.refno)).toEqual(['24381_100001']);
 
     unmount();
   });
