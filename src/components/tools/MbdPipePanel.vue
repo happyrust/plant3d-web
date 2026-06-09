@@ -126,6 +126,14 @@ const actualRenderSource = computed(() => (
   data.value ? props.vis.renderSource?.value ?? null : null
 ));
 
+const backendLayoutSource = computed(() => {
+  const layoutSource =
+    data.value?.layout_result?.debug_info?.layout_source ??
+    data.value?.debug_info?.layout_source;
+  const text = String(layoutSource ?? '').trim();
+  return text || '未报告';
+});
+
 const isLayoutFallback = computed(() => (
   !!data.value &&
   props.vis.mbdViewMode.value === 'layout_first' &&
@@ -307,6 +315,9 @@ function setBendDisplayMode(event: Event): void {
           <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
             <span>用户模式：{{ modeLabel(mbdViewModeModel) }}</span>
             <span>实际渲染：{{ renderSourceLabel(actualRenderSource) }}</span>
+            <span data-testid="mbd-layout-source">
+              后端 layout source：{{ backendLayoutSource }}
+            </span>
             <span v-if="isLayoutFallback" class="text-amber-600">
               后端未返回 `layout_result`，当前保持 layout_first 语义，仅回退为 fallback 渲染。
             </span>
@@ -729,6 +740,8 @@ function setBendDisplayMode(event: Event): void {
           </div>
           <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
             <input data-testid="mbd-toggle-dimensions"
+              data-mbd-dimension-toggle="all"
+              aria-label="all dimensions"
               type="checkbox"
               :checked="vis.showDims.value"
               @change="vis.showDims.value = !vis.showDims.value" />
@@ -739,6 +752,8 @@ function setBendDisplayMode(event: Event): void {
         <div class="grid grid-cols-2 gap-2">
           <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
             <input data-testid="mbd-toggle-dim-segment"
+              data-mbd-dimension-toggle="segment"
+              aria-label="segment dimensions"
               type="checkbox"
               :checked="vis.showDimSegment.value"
               @change="vis.showDimSegment.value = !vis.showDimSegment.value" />
@@ -746,6 +761,8 @@ function setBendDisplayMode(event: Event): void {
           </label>
           <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
             <input data-testid="mbd-toggle-dim-chain"
+              data-mbd-dimension-toggle="chain"
+              aria-label="chain dimensions"
               type="checkbox"
               :checked="vis.showDimChain.value"
               @change="vis.showDimChain.value = !vis.showDimChain.value" />
@@ -753,6 +770,8 @@ function setBendDisplayMode(event: Event): void {
           </label>
           <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
             <input data-testid="mbd-toggle-dim-overall"
+              data-mbd-dimension-toggle="overall"
+              aria-label="overall dimensions"
               type="checkbox"
               :checked="vis.showDimOverall.value"
               @change="vis.showDimOverall.value = !vis.showDimOverall.value" />
@@ -760,6 +779,8 @@ function setBendDisplayMode(event: Event): void {
           </label>
           <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
             <input data-testid="mbd-toggle-dim-port"
+              data-mbd-dimension-toggle="port"
+              aria-label="port dimensions"
               type="checkbox"
               :checked="vis.showDimPort.value"
               @change="vis.showDimPort.value = !vis.showDimPort.value" />
@@ -767,6 +788,8 @@ function setBendDisplayMode(event: Event): void {
           </label>
           <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1">
             <input data-testid="mbd-toggle-cut-tubis"
+              data-mbd-dimension-toggle="cut_tubi"
+              aria-label="cut_tubi dimensions"
               type="checkbox"
               :checked="vis.showCutTubis.value"
               @change="vis.showCutTubis.value = !vis.showCutTubis.value" />

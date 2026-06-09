@@ -64,6 +64,43 @@ describe('getMbdPipeV2Annotations adapter', () => {
     vi.restoreAllMocks();
   });
 
+  it('requests V2 layout-first dimensions with explicit per-kind intent by default', async () => {
+    const response: MbdV2Response = {
+      success: true,
+      data: {
+        version: 'v2',
+        input_refno: '24381_145018',
+        branch_refno: '24381_145018',
+        primitives: [],
+        meta: {
+          segments_count: 0,
+          welds_count: 0,
+          dims_by_kind: {},
+          branch_attrs: {},
+          generated_at: '2026-06-09T00:00:00Z',
+          layout_source: 'backend_v2_layout',
+        },
+        issues: [],
+      },
+    };
+    const fetchMock = mockV2Fetch(response);
+
+    await getMbdPipeV2Annotations('24381_145018');
+
+    const calledUrl = new URL(
+      String(fetchMock.mock.calls[0]?.[0] ?? ''),
+      'http://localhost',
+    );
+    expect(calledUrl.pathname).toContain('/api/mbd/v2/pipe/24381_145018');
+    expect(calledUrl.searchParams.get('mode')).toBe('layout_first');
+    expect(calledUrl.searchParams.get('include_layout_result')).toBe('true');
+    expect(calledUrl.searchParams.get('include_dims')).toBe('true');
+    expect(calledUrl.searchParams.get('include_chain_dims')).toBe('true');
+    expect(calledUrl.searchParams.get('include_port_dims')).toBe('true');
+    expect(calledUrl.searchParams.get('include_cut_tubis')).toBe('true');
+    expect(calledUrl.searchParams.get('include_overall_dim')).toBe('false');
+  });
+
   it('preserves V2 linear_dim primitives as backend-laid-out display data', async () => {
     const response: MbdV2Response = {
       success: true,
@@ -106,6 +143,8 @@ describe('getMbdPipeV2Annotations adapter', () => {
     expect(adapted.data?.debug_info?.primitive_kinds).toEqual({
       linear_dim: 3,
     });
+    expect(adapted.data?.debug_info?.layout_source).toBe('backend_v2_layout');
+    expect(adapted.data?.layout_result?.debug_info?.layout_source).toBe('backend_v2_layout');
     expect(adapted.data?.stats.dims_count).toBe(2);
     expect(adapted.data?.stats.cut_tubis_count).toBe(1);
 

@@ -21,6 +21,7 @@ function createVisStub() {
     dimLabelT: ref(0.5),
     dimMode: ref('classic'),
     bendDisplayMode: ref('size'),
+    renderSource: ref('fallback'),
     rebarvizArrowSizePx: ref(16),
     rebarvizArrowAngleDeg: ref(18),
     rebarvizArrowStyle: ref('open'),
@@ -206,6 +207,13 @@ describe('MbdPipePanel mode controls', () => {
     for (const testId of selectors) {
       expect(host.querySelector(`[data-testid="${testId}"]`)).toBeTruthy();
     }
+    for (const toggleKind of ['all', 'segment', 'chain', 'port', 'cut_tubi']) {
+      const toggle = host.querySelector(
+        `[data-mbd-dimension-toggle="${toggleKind}"]`,
+      ) as HTMLInputElement | null;
+      expect(toggle).toBeTruthy();
+      expect(toggle?.getAttribute('aria-label')).toContain(toggleKind);
+    }
 
     const cutToggle = host.querySelector(
       '[data-testid="mbd-toggle-cut-tubis"]',
@@ -214,6 +222,85 @@ describe('MbdPipePanel mode controls', () => {
     cutToggle!.dispatchEvent(new Event('change'));
     await nextTick();
     expect(vis.showCutTubis.value).toBe(false);
+
+    app.unmount();
+  });
+
+  it('应展示后端 V2 layout source 且成功 layout_result 不显示 fallback 警告', async () => {
+    const vis = createVisStub();
+    vis.mbdViewMode.value = 'layout_first';
+    vis.renderSource.value = 'layout_result';
+    vis.currentData.value = {
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-V2-LAYOUT-SOURCE',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      pipe_clearances: [],
+      structure_clearances: [],
+      elevation_marks: [],
+      envelope: null,
+      stats: {
+        segments_count: 0,
+        dims_count: 2,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+      layout_result: {
+        version: 2,
+        mode: 'layout_first',
+        stats: {
+          linear_dims_count: 2,
+          cut_tubis_count: 1,
+          welds_count: 0,
+          slopes_count: 0,
+          bends_count: 0,
+          tags_count: 0,
+          fittings_count: 0,
+          suppressed_count: 0,
+        },
+        linear_dims: [],
+        cut_tubis: [],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [],
+        fittings: [],
+        suppressed_items: [],
+        debug_info: {
+          layout_source: 'backend_v2_layout',
+        },
+      },
+      debug_info: {
+        version: 'v2',
+        layout_source: 'backend_v2_layout',
+      },
+    } as any;
+
+    host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp(MbdPipePanel, { vis });
+    app.mount(host);
+    await nextTick();
+
+    const layoutSource = host.querySelector(
+      '[data-testid="mbd-layout-source"]',
+    ) as HTMLElement | null;
+    expect(layoutSource?.textContent).toContain('backend_v2_layout');
+    expect(host.textContent).toContain('layout_result（后端版面）');
+    expect(host.textContent).not.toContain('fallback 渲染');
 
     app.unmount();
   });

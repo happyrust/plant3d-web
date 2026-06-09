@@ -3970,14 +3970,14 @@ onMounted(async () => {
           max_slope: 0.1,
           dim_min_length: 1.0,
           weld_merge_threshold: 1.0,
-          // layout_first 的主尺寸按 PML mainDim 语义走链式尺寸；
-          // raw segment 会与链式尺寸重复，默认不请求。
-          include_dims: !isLayoutFirstMbd,
+          // V2 layout_first 由后端决定 eligible dimensions；
+          // 前端显式表达 segment/chain/port/cut_tubi 控制面板的请求意图。
+          include_dims: true,
           // 一期默认切到施工视图：链式/总长/焊口/坡度优先
           include_chain_dims: true,
           // 折线 BRAN 的 overall 是路径总长，不能用首尾直连的一条尺寸线表达。
           include_overall_dim: !isLayoutFirstMbd,
-          include_port_dims: false,
+          include_port_dims: isLayoutFirstMbd,
           include_cut_tubis: true,
           include_fittings: true,
           include_tags: true,

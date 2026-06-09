@@ -116,8 +116,8 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(true);
-    expect(vis.showDimPort.value).toBe(false);
-    expect(vis.showCutTubis.value).toBe(false);
+    expect(vis.showDimPort.value).toBe(true);
+    expect(vis.showCutTubis.value).toBe(true);
     expect(vis.showElbows.value).toBe(true);
     expect(vis.showBranches.value).toBe(true);
     expect(vis.showFlanges.value).toBe(true);
@@ -176,12 +176,111 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(true);
-    expect(vis.showDimPort.value).toBe(false);
-    expect(vis.showCutTubis.value).toBe(false);
+    expect(vis.showDimPort.value).toBe(true);
+    expect(vis.showCutTubis.value).toBe(true);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
     expect(vis.showBends.value).toBe(true);
     expect(vis.bendDisplayMode.value).toBe('size');
+  });
+
+  it('layout_first defaults show eligible V2 dimensions and per-kind toggles only affect matching annotations', async () => {
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults('layout_first');
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-V2-TOGGLES',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      layout_result: {
+        version: 2,
+        mode: 'layout_first',
+        stats: {
+          linear_dims_count: 3,
+          cut_tubis_count: 1,
+          welds_count: 0,
+          slopes_count: 0,
+          bends_count: 0,
+          tags_count: 0,
+          fittings_count: 0,
+          suppressed_count: 0,
+        },
+        linear_dims: [
+          makeBackendLayoutLinearDim('v2-segment-toggle', 'segment', 80),
+          makeBackendLayoutLinearDim('v2-chain-toggle', 'chain', 120),
+          makeBackendLayoutLinearDim('v2-port-toggle', 'port', 160),
+        ],
+        cut_tubis: [
+          makeBackendLayoutLinearDim('v2-cut-toggle', 'cut_tubi', 40),
+        ],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [],
+        fittings: [],
+        suppressed_items: [],
+      },
+      stats: {
+        segments_count: 0,
+        dims_count: 3,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+      },
+    } as any);
+
+    const segment = vis.getDimAnnotations().get('v2-segment-toggle');
+    const chain = vis.getDimAnnotations().get('v2-chain-toggle');
+    const port = vis.getDimAnnotations().get('v2-port-toggle');
+    const cut = vis.getCutTubiAnnotations().get('v2-cut-toggle');
+
+    expect(segment?.visible).toBe(true);
+    expect(chain?.visible).toBe(true);
+    expect(port?.visible).toBe(true);
+    expect(cut?.visible).toBe(true);
+
+    vis.showDimPort.value = false;
+    await nextTick();
+    expect(segment?.visible).toBe(true);
+    expect(chain?.visible).toBe(true);
+    expect(port?.visible).toBe(false);
+    expect(cut?.visible).toBe(true);
+
+    vis.showDimPort.value = true;
+    vis.showCutTubis.value = false;
+    await nextTick();
+    expect(segment?.visible).toBe(true);
+    expect(chain?.visible).toBe(true);
+    expect(port?.visible).toBe(true);
+    expect(cut?.visible).toBe(false);
+
+    vis.showDims.value = false;
+    await nextTick();
+    expect(segment?.visible).toBe(false);
+    expect(chain?.visible).toBe(false);
+    expect(port?.visible).toBe(false);
+    expect(cut?.visible).toBe(false);
+
+    vis.showDims.value = true;
+    vis.showCutTubis.value = true;
+    await nextTick();
+    expect(segment?.visible).toBe(true);
+    expect(chain?.visible).toBe(true);
+    expect(port?.visible).toBe(true);
+    expect(cut?.visible).toBe(true);
   });
 
   it('layout_first 模式应优先消费 layout_result 的最终绘制参数', () => {

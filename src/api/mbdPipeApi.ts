@@ -513,6 +513,32 @@ export type MbdPipeQueryParams = {
   bend_mode?: MbdBendMode
 }
 
+const MBD_V2_LAYOUT_FIRST_DEFAULT_QUERY: MbdPipeQueryParams = {
+  mode: 'layout_first',
+  include_layout_result: true,
+  include_dims: true,
+  include_chain_dims: true,
+  include_overall_dim: false,
+  include_port_dims: true,
+  include_cut_tubis: true,
+};
+
+function withMbdV2LayoutFirstDefaults(
+  params: MbdPipeQueryParams,
+): MbdPipeQueryParams {
+  if (params.mode && params.mode !== 'layout_first') {
+    return {
+      ...params,
+      mode: params.mode,
+    };
+  }
+  return {
+    ...MBD_V2_LAYOUT_FIRST_DEFAULT_QUERY,
+    ...params,
+    mode: params.mode ?? 'layout_first',
+  };
+}
+
 function getBaseUrl(): string {
   return getBackendApiBaseUrl();
 }
@@ -995,11 +1021,12 @@ export async function getMbdPipeV2Annotations(
   refno: string,
   params: MbdPipeQueryParams = {},
 ): Promise<MbdPipeResponse> {
-  const q = toQueryString(params as Record<string, unknown>);
+  const effectiveParams = withMbdV2LayoutFirstDefaults(params);
+  const q = toQueryString(effectiveParams as Record<string, unknown>);
   const resp = await fetchJson<MbdV2Response>(
     `/api/mbd/v2/pipe/${encodeURIComponent(refno)}${q}`,
   );
-  return adaptMbdV2ResponseToPipeResponse(resp, params);
+  return adaptMbdV2ResponseToPipeResponse(resp, effectiveParams);
 }
 
 /**
