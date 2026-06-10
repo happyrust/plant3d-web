@@ -6,6 +6,7 @@ import { computed, onUnmounted, ref, watch } from 'vue';
 import { FileText, RefreshCw, X } from 'lucide-vue-next';
 
 import { fetchLogTypes, fetchLogs, type LogEntry, type LogTypeInfo } from '@/api/logsApi';
+import { getCurrentSiteIdentity } from '@/api/siteRegistryApi';
 
 const props = defineProps<{
   formId?: string | null;
@@ -16,6 +17,9 @@ const props = defineProps<{
 const open = ref(false);
 const types = ref<LogTypeInfo[]>([]);
 const typesLoaded = ref(false);
+// spec 004：标题区显示当前站点名（identity 拉取失败时静默隐藏）。
+const siteName = ref<string | null>(null);
+const siteIdentityLoaded = ref(false);
 const activeType = ref<string>('review.workflow');
 const entries = ref<LogEntry[]>([]);
 const nextCursor = ref<string | null>(null);
@@ -65,6 +69,17 @@ async function ensureTypes(): Promise<void> {
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function ensureSiteIdentity(): Promise<void> {
+  if (siteIdentityLoaded.value) return;
+  siteIdentityLoaded.value = true;
+  try {
+    const identity = await getCurrentSiteIdentity();
+    siteName.value = identity.site_name || identity.site_id || null;
+  } catch {
+    siteName.value = null;
   }
 }
 
@@ -123,6 +138,7 @@ function togglePolling(): void {
 
 async function openDrawer(): Promise<void> {
   open.value = true;
+  void ensureSiteIdentity();
   await ensureTypes();
   await loadEntries(false);
 }
@@ -163,6 +179,9 @@ onUnmounted(stopPolling);
       <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
         <FileText class="h-4 w-4" />
         日志查看
+        <span v-if="siteName" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-normal text-slate-500">
+          {{ siteName }}
+        </span>
       </div>
       <div class="flex items-center gap-2">
         <label class="flex items-center gap-1 text-xs text-slate-500">
@@ -214,11 +233,6 @@ onUnmounted(stopPolling);
         class="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
         {{ errorMessage }}
       </div>
-      <div v-if="needsSiteId && !props.siteId"
-        class="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-        站点日志需要提供 site_id（当前上下文未携带）。
-      </div>
-
       <div v-if="!loading && entries.length === 0 && !errorMessage"
         class="py-10 text-center text-xs text-slate-400">
         没有匹配的日志记录
