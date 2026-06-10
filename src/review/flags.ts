@@ -23,7 +23,8 @@ export type ReviewFlagName =
   | 'REVIEW_E_DRAFT_CONFIRMED_STORE'
   | 'REVIEW_E_DUAL_LAYER_VIEWER'
   | 'REVIEW_F_COMMENT_SYNC_V2'
-  | 'REVIEW_G_TASK_SCOPED_DRAFT';
+  | 'REVIEW_G_TASK_SCOPED_DRAFT'
+  | 'REVIEW_H_LOG_DRAWER';
 
 const FLAG_DEFAULTS: Record<ReviewFlagName, boolean> = {
   REVIEW_B_SNAPSHOT_LAYER_SHADOW: false,
@@ -36,6 +37,8 @@ const FLAG_DEFAULTS: Record<ReviewFlagName, boolean> = {
   REVIEW_E_DUAL_LAYER_VIEWER: false,
   REVIEW_F_COMMENT_SYNC_V2: false,
   REVIEW_G_TASK_SCOPED_DRAFT: false,
+  // spec 003-review-log-viewer：校审页日志抽屉（默认关闭，排障时开启）
+  REVIEW_H_LOG_DRAWER: false,
 };
 
 const FORCE_LEGACY_KEY = 'review.force_legacy';

@@ -35,6 +35,7 @@ import CollisionResultList from './CollisionResultList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
 import { restoreEmbedFormSnapshotContext } from './embedFormSnapshotRestore';
+import LogDrawer from './LogDrawer.vue';
 import {
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
@@ -87,6 +88,7 @@ import { useToolStore, type AnnotationType } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
+import { isReviewFlagEnabled } from '@/review/flags';
 import { emitCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import {
@@ -149,6 +151,8 @@ const lastRestoredSceneKey = confirmedRecordsRestorer.lastRestoredSceneKey;
 const embedLandingState = ref<EmbedLandingState | null>(null);
 const persistedEmbedParams = ref(readPersistedEmbedModeParams());
 const showDebugUi = isReviewDebugUiEnabled();
+// spec 003-review-log-viewer：日志抽屉 flag 门控（默认关闭，零行为变化）
+const logDrawerEnabled = isReviewFlagEnabled('REVIEW_H_LOG_DRAWER');
 
 function syncEmbedLandingStateFromStorage() {
   if (typeof sessionStorage === 'undefined') return;
@@ -2038,6 +2042,11 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
       :loading="workflowActionLoading"
       @update:visible="(visible) => { if (!visible) closeReturnDialog(); }"
       @confirm="(targetNode, reason) => { returnTargetNode = targetNode; returnReason = reason; void handleReturnToNode(); }" />
+
+    <!-- 日志抽屉（spec 003-review-log-viewer，flag 门控） -->
+    <LogDrawer v-if="logDrawerEnabled"
+      :form-id="activeReviewFormId"
+      :task-id="currentTask?.id ?? null" />
 
     <!-- ═══════ D. Tab 切换区域 ═══════ -->
     <div class="rounded-lg border border-slate-200 bg-white">
