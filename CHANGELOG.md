@@ -4,6 +4,14 @@
 
 ### 变更
 
+- **校审页日志抽屉 — 四类日志统一查看** (2026-06-11)
+  - 新增 flag `REVIEW_H_LOG_DRAWER`(默认关闭)门控的日志抽屉:校审页右下角悬浮入口,tab 按类型切换,默认过滤当前 form_id/task_id,支持手动刷新、5s 轮询与游标加载更多
+  - 类型 tab 由后端 `/api/logs/types` 按角色动态下发:校审流转历史(全部角色)、接口 request/response 日志、进程运行日志、站点文件日志 parse/generate/db/web/viewer(管理角色)
+  - 接口日志条目可展开查看脱敏后的请求/响应体;站点日志无需传 site_id(后端默认当前站点),抽屉标题显示当前站点名(`/api/site/identity`,失败静默)
+  - 新增 API 客户端 `src/api/logsApi.ts`(vitest 3 例)与组件 `src/components/review/LogDrawer.vue`;`ReviewPanel.vue` 挂载,flag 关闭零行为变化
+  - 新增 Playwright 冒烟脚本 `debug_scripts/log-drawer-smoke.mjs`(开 flag → 打开抽屉 → 断言 tab 与数据 → 截图 artifacts/)
+  - 对应后端 plant-model-gen specs/003~005(接口日志采集、统一查询 API、站点兜底、进程内运行日志)
+
 - **移除 MBD 尺寸标注前端实现** (2026-06-02)
   - MBD 管线面板移除“尺寸”页签、尺寸统计、尺寸显示开关和相关设置项。
   - 三维标注渲染不再绘制 MBD segment/chain/overall/port 尺寸与弯头角度尺寸，交互层同步移除 `mbd_dim_*` 选中、拖拽和上下文菜单入口。
