@@ -1,0 +1,20 @@
+{
+  "_comment": "E3D 经典配色预设（参考工件，T12/T13 落地为 public/config/presets/ 并接入引擎）。颜色取自 E3D 命名调色板(assets/e3d-palette.json)。带 specs/purposes 的规则需先按 research §专业值映射/数据列核实(T1/T2)确认后启用。",
+  "colorRulesEnabled": true,
+  "colorRules": [
+    { "name": "All Equipment",      "when": { "nouns": ["EQUI", "SUBE"] }, "color": "#EDC932" },
+    { "name": "All Pipes",          "when": { "nouns": ["PIPE", "TUBI", "ELBO", "TEE", "BEND", "REDU", "FLAN", "CAP", "CROS"] }, "color": "#00CC00" },
+    { "name": "Structural Panels",  "when": { "nouns": ["PANE"], "owners": ["STRU", "SUBS", "FRMW", "SBFR"] }, "color": "#F5DEB3", "opacity": 0.75 },
+    { "name": "All Sections",       "when": { "nouns": ["SCTN", "GENSEC"] }, "color": "#BD8D7E" },
+    { "name": "All Hangers",        "when": { "nouns": ["HANG"] }, "color": "#FF7F00" },
+    { "name": "All Supports",       "when": { "nouns": ["ATTA", "REST"] }, "color": "#FF7F00" },
+    { "name": "All Handrails",      "when": { "nouns": ["HANDRA"] }, "color": "#B0E0E6" },
+    { "name": "All HVAC",           "when": { "nouns": ["HVAC", "HSPOOL"] }, "color": "#99CC32" },
+    { "name": "Cable",              "when": { "nouns": ["CABLE"] }, "color": "#660099" },
+    { "name": "Cableway",           "when": { "nouns": ["CWAY", "CWBRAN", "CTMTRL"] }, "color": "#9F9F5F" },
+    { "name": "All Civil (Zone)",   "when": { "nouns": ["ZONE"], "purposes": ["CIV"] }, "color": "#C0C0C0", "_needs": "T1/T2: purpose 列" },
+    { "name": "Industrial Floors",  "when": { "nouns": ["CFLOOR", "FLOOR"] }, "color": "#C0C0C0" },
+    { "name": "All Dimensions",     "when": { "nouns": ["DIMGRO"] }, "color": "#ED9A00" },
+    { "name": "All Aids",           "when": { "nouns": ["AIDGRO"] }, "color": "#ED9A00" }
+  ]
+}

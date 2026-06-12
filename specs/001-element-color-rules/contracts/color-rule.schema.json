@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://plant3d-web/specs/001-element-color-rules/color-rule.schema.json",
+  "title": "ColorRule / colorRules configuration",
+  "description": "构件颜色规则（对齐 E3D AutoColour）。挂在 model-display.config.json 顶层。",
+  "type": "object",
+  "properties": {
+    "colorRulesEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "全局开关，对齐 E3D AUTOCOLOUR ON/OFF。false 时所有规则不参与，回退到现有材质解析链。"
+    },
+    "colorRules": {
+      "type": "array",
+      "description": "有序规则列表，按顺序首条命中生效（first-match）。",
+      "items": { "$ref": "#/definitions/ColorRule" }
+    }
+  },
+  "definitions": {
+    "ColorRule": {
+      "type": "object",
+      "required": ["name", "when"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "规则名（展示/调试，可沿用 E3D 规则名）" },
+        "enabled": { "type": "boolean", "default": true, "description": "单条启停" },
+        "when": { "$ref": "#/definitions/ColorRuleWhen" },
+        "color": {
+          "oneOf": [{ "type": "string" }, { "type": "number" }],
+          "description": "#RRGGBB / #RGB / 0xRRGGBB / 数字 / three 颜色名"
+        },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "metalness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "roughness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "hidden": { "type": "boolean", "description": "命中则隐藏构件" },
+        "edges": { "type": "boolean", "description": "phase-2：描边" }
+      }
+    },
+    "ColorRuleWhen": {
+      "type": "object",
+      "description": "维度内 OR、维度间 AND；省略的维度通配。至少给一个维度。",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "nouns": { "type": "array", "items": { "type": "string" }, "description": "构件类型（noun），大小写不敏感" },
+        "owners": { "type": "array", "items": { "type": "string" }, "description": "所属类型（ownerNoun）" },
+        "specs": { "type": "array", "items": { "type": "number" }, "description": "专业 spec_value（语义见 research §专业值映射）" },
+        "purposes": { "type": "array", "items": { "type": "string" }, "description": "PURP 用途（需 loader 取数；缺数据则不可用）" },
+        "refnos": { "type": "array", "items": { "type": "string" }, "description": "精确 refno（/ 与 _ 等价）" },
+        "refnoPrefix": { "type": "array", "items": { "type": "string" }, "description": "refno 前缀匹配" },
+        "namePattern": { "type": "string", "description": "name 子串（大小写不敏感 contains）" }
+      }
+    }
+  }
+}
