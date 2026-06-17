@@ -67,8 +67,8 @@ export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickS
     thresholdPx: DEFAULT_PTSET_SNAP_PX,
   },
   ptset: {
-    show: false,
-    snap: false,
+    show: true,
+    snap: true,
     priority: 20,
     thresholdPx: DEFAULT_PTSET_SNAP_PX,
   },
@@ -80,7 +80,7 @@ export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickS
   },
   mesh_pick_point: {
     show: true,
-    snap: true,
+    snap: false,
     priority: 40,
     thresholdPx: DEFAULT_PTSET_SNAP_PX,
   },

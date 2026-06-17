@@ -892,6 +892,249 @@ describe('useDbnoInstancesParquetLoader', () => {
     ]);
   });
 
+  it('queryPtsetByRefnoFromParquet 区分缺少 ptsets 表的诊断', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryPtsetByRefnoFromParquet(7997, '24381_145714');
+
+    expect(out).toMatchObject({
+      success: false,
+      refno: '24381_145714',
+      error_code: 'PTSET_TABLE_MISSING',
+      error_message: '当前模型包未包含 ptsets.parquet，ptset 测量不可用',
+    });
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it('queryPtsetByRefnoFromParquet 区分缺少 instance row 的诊断', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createPtsetManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockResolvedValue({ toArray: () => [] });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryPtsetByRefnoFromParquet(7997, '24381_145714');
+
+    expect(out).toMatchObject({
+      success: false,
+      error_code: 'PTSET_INSTANCE_MISSING',
+      error_message: 'instances.parquet 中未找到 refno=24381_145714',
+    });
+  });
+
+  it('queryPtsetByRefnoFromParquet 区分缺少 cata_hash 的诊断', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createPtsetManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockResolvedValue({
+      toArray: () => [
+        {
+          refno_str: '24381_145714',
+          cata_hash: '',
+          trans_hash: 'trans-a',
+          ...createIdentityMatrix(1, 2, 3),
+        },
+      ],
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryPtsetByRefnoFromParquet(7997, '24381_145714');
+
+    expect(out).toMatchObject({
+      success: false,
+      error_code: 'PTSET_CATA_HASH_MISSING',
+      error_message: 'refno=24381_145714 缺少 cata_hash，无法查询 ptset',
+    });
+    expect(queryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('queryPtsetByRefnoFromParquet 区分缺少 transform row 的诊断', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createPtsetManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockResolvedValue({
+      toArray: () => [
+        {
+          refno_str: '24381_145714',
+          cata_hash: 'cata-a',
+          trans_hash: 'missing-trans',
+          m00: null,
+          m10: null,
+          m20: null,
+          m30: null,
+          m01: null,
+          m11: null,
+          m21: null,
+          m31: null,
+          m02: null,
+          m12: null,
+          m22: null,
+          m32: null,
+          m03: null,
+          m13: null,
+          m23: null,
+          m33: null,
+        },
+      ],
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryPtsetByRefnoFromParquet(7997, '24381_145714');
+
+    expect(out).toMatchObject({
+      success: false,
+      error_code: 'PTSET_TRANSFORM_MISSING',
+      error_message: 'refno=24381_145714 trans_hash=missing-trans 缺少 transform row，无法转换 ptset',
+    });
+    expect(queryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('queryPtsetByRefnoFromParquet 区分 cata_hash 无 point rows 的诊断', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createPtsetManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock
+      .mockResolvedValueOnce({
+        toArray: () => [
+          {
+            refno_str: '24381_145714',
+            cata_hash: 'cata-a',
+            trans_hash: 'trans-a',
+            ...createIdentityMatrix(1, 2, 3),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ toArray: () => [] });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryPtsetByRefnoFromParquet(7997, '24381_145714');
+
+    expect(out).toMatchObject({
+      success: false,
+      error_code: 'PTSET_POINTS_MISSING',
+      error_message: 'cata_hash=cata-a 未找到 ptset 点',
+    });
+    expect(queryMock).toHaveBeenCalledTimes(2);
+  });
+
   it('从 primitive_keypoints.parquet 查询并转换构件局部关键点', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

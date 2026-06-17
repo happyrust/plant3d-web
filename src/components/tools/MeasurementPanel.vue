@@ -5,6 +5,7 @@ import {
   MEASUREMENT_PICK_SOURCE_LABELS,
   type MeasurementPickSourceId,
 } from '@/composables/useMeasurementPickSources';
+import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import {
   type MeasurementRecord,
   type XeokitMeasurementRecord,
@@ -13,6 +14,7 @@ import {
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
+import { emitCommand } from '@/ribbon/commandBus';
 import {
   formatMeasurementKindLabel,
   formatMeasurementSummary,
@@ -30,6 +32,7 @@ const props = defineProps<{
 }>();
 
 const store = useToolStore();
+const pipeDistanceStore = usePipeDistanceStore();
 const ctx = useViewerContext();
 const xeokitTools = computed(() => ctx.xeokitMeasurementTools.value);
 const measurementStyle = useXeokitMeasurementStyleStore();
@@ -123,6 +126,12 @@ const distanceStyleNote = computed(() => {
   return measurementStyle.state.distanceShowAxisBreakdown
     ? '当前会同时显示总长和 X / Y / Z 分量标签。'
     : '开启后会额外显示 X / Y / Z 三段分量线和标签。';
+});
+const pipeDistanceStatusText = computed(() => {
+  if (pipeDistanceStore.isDetecting.value) return '正在检测管道间净距';
+  if (pipeDistanceStore.detectError.value) return pipeDistanceStore.detectError.value;
+  const count = pipeDistanceStore.results.value.length;
+  return count > 0 ? `已生成 ${count} 条净距结果` : '尚未生成净距结果';
 });
 
 function isApproximateMeasurement(record: MeasurementRecord | XeokitMeasurementRecord): boolean {
@@ -242,6 +251,10 @@ function clearMeasurements() {
     return;
   }
   store.clearMeasurements();
+}
+
+function openPipeDistanceTool(): void {
+  emitCommand('measurement.pipe_to_pipe');
 }
 
 function updateMeasurementStyle(
@@ -382,6 +395,46 @@ watch(
         <template v-else>
           当前未满足测量条件，请先排除上面的 Viewer / DTX 初始化问题。
         </template>
+      </div>
+
+      <div data-testid="measurement-pipe-distance-card"
+        class="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold">管-管净距</div>
+            <div class="mt-1 text-xs text-muted-foreground">
+              选择多根 BRAN 管道后检测并展示管道间最近净距。
+            </div>
+            <div data-testid="measurement-pipe-distance-status"
+              class="mt-1 text-xs text-muted-foreground">
+              {{ pipeDistanceStatusText }}
+            </div>
+            <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span>
+                已选
+                <strong data-testid="measurement-pipe-distance-selected-count"
+                  class="text-foreground">
+                  {{ pipeDistanceStore.selectedBranRefnos.value.length }}
+                </strong>
+                根
+              </span>
+              <span>
+                结果
+                <strong data-testid="measurement-pipe-distance-result-count"
+                  class="text-foreground">
+                  {{ pipeDistanceStore.results.value.length }}
+                </strong>
+                条
+              </span>
+            </div>
+          </div>
+          <button type="button"
+            data-testid="measurement-open-pipe-distance"
+            class="h-8 shrink-0 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
+            @click="openPipeDistanceTool">
+            打开
+          </button>
+        </div>
       </div>
 
       <details v-if="canShowStyleSettings" class="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">

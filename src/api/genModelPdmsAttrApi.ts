@@ -51,6 +51,15 @@ export type PtsetResponse = {
     target_unit: string;
     conversion_factor: number;
   } | null;
+  error_code?:
+    | 'PTSET_REFNO_EMPTY'
+    | 'PTSET_INSTANCE_MISSING'
+    | 'PTSET_TABLE_MISSING'
+    | 'PTSET_CATA_HASH_MISSING'
+    | 'PTSET_TRANSFORM_MISSING'
+    | 'PTSET_POINTS_MISSING'
+    | 'PTSET_QUERY_FAILED'
+    | null;
   error_message?: string | null;
 }
 

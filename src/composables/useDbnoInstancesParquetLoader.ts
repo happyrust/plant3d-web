@@ -402,6 +402,7 @@ function colsMajorToMatrixArray(row: any): number[] | null {
   const out: number[] = [];
   for (const k of keys) {
     const v = (row as any)[k];
+    if (v === null || v === undefined) return null;
     const n = typeof v === 'number' ? v : Number(v);
     if (!Number.isFinite(n)) return null;
     out.push(n);
@@ -782,17 +783,21 @@ export function useDbnoInstancesParquetLoader() {
     options?: { forceRefresh?: boolean }
   ): Promise<PtsetResponse> {
     const normalizedRefno = normalizeRefnoKey(refno);
-    const fail = (message: string): PtsetResponse => ({
+    const fail = (
+      errorCode: NonNullable<PtsetResponse['error_code']>,
+      message: string,
+    ): PtsetResponse => ({
       success: false,
       refno: normalizedRefno,
       ptset: [],
       world_transform: null,
       unit_info: null,
+      error_code: errorCode,
       error_message: message,
     });
 
     lastError.value = null;
-    if (!normalizedRefno) return fail('refno 为空，无法查询 ptset');
+    if (!normalizedRefno) return fail('PTSET_REFNO_EMPTY', 'refno 为空，无法查询 ptset');
 
     try {
       const reg = await registerDbno(dbno, { forceRefresh: options?.forceRefresh });
@@ -801,7 +806,7 @@ export function useDbnoInstancesParquetLoader() {
 
       const ptsetsFile = await ensurePtsetsRegistered(reg, { forceRefresh: options?.forceRefresh });
       if (!ptsetsFile) {
-        return fail('当前模型包未包含 ptsets.parquet，ptset 测量不可用');
+        return fail('PTSET_TABLE_MISSING', '当前模型包未包含 ptsets.parquet，ptset 测量不可用');
       }
 
       const instanceSql = `
@@ -822,12 +827,21 @@ export function useDbnoInstancesParquetLoader() {
       const instanceRows = instanceArrow.toArray() as any[];
       const instanceRow = instanceRows[0];
       if (!instanceRow) {
-        return fail(`instances.parquet 中未找到 refno=${normalizedRefno}`);
+        return fail('PTSET_INSTANCE_MISSING', `instances.parquet 中未找到 refno=${normalizedRefno}`);
       }
 
       const cataHash = String(instanceRow.cata_hash || '').trim();
       if (!cataHash) {
-        return fail(`refno=${normalizedRefno} 缺少 cata_hash，无法查询 ptset`);
+        return fail('PTSET_CATA_HASH_MISSING', `refno=${normalizedRefno} 缺少 cata_hash，无法查询 ptset`);
+      }
+
+      const worldTransform = colsMajorToMatrixArray(instanceRow);
+      if (!worldTransform) {
+        const transHash = String(instanceRow.trans_hash || '').trim();
+        return fail(
+          'PTSET_TRANSFORM_MISSING',
+          `refno=${normalizedRefno} trans_hash=${transHash || '(empty)'} 缺少 transform row，无法转换 ptset`,
+        );
       }
 
       const ptsetSql = `
@@ -844,21 +858,22 @@ export function useDbnoInstancesParquetLoader() {
       const ptsetArrow = await conn.query(ptsetSql);
       const rows = ptsetArrow.toArray() as any[];
       if (rows.length === 0) {
-        return fail(`cata_hash=${cataHash} 未找到 ptset 点`);
+        return fail('PTSET_POINTS_MISSING', `cata_hash=${cataHash} 未找到 ptset 点`);
       }
 
       return {
         success: true,
         refno: normalizedRefno,
         ptset: rows.map(rowToPtsetPoint),
-        world_transform: colsMajorToMatrixArray(instanceRow),
+        world_transform: worldTransform,
         unit_info: ptsetUnitInfoFromManifest(reg.manifest),
+        error_code: null,
         error_message: null,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       lastError.value = message;
-      return fail(`查询 ptsets.parquet 失败: ${message}`);
+      return fail('PTSET_QUERY_FAILED', `查询 ptsets.parquet 失败: ${message}`);
     }
   }
 
