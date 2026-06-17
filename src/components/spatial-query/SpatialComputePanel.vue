@@ -165,7 +165,7 @@
           </div>
 
           <!-- Result Table -->
-          <div v-if="computeState.resultRows.length > 0 || computeState.error" class="mt-3">
+          <div v-if="computeState.resultRows.length > 0 || computeState.error || computeState.responseText" class="mt-3">
             <div class="flex items-center justify-between pb-2">
               <div class="text-[13px] font-bold text-foreground">查询结果表</div>
               <div class="text-xs font-bold text-[#EA580C]">可点击行自动选中并跳转</div>
@@ -209,6 +209,10 @@
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div v-else-if="!computeState.error" class="rounded-[10px] border border-gray-200 bg-gray-50 px-3 py-4 text-center text-sm text-muted-foreground">
+              未找到符合条件的结果。
             </div>
           </div>
 
