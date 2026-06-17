@@ -272,6 +272,7 @@ function hasField(field: 'tolerance' | 'suppoType' | 'searchRadius' | 'targetNou
 
 function formatDistanceMm(mm: number | null): string {
   if (mm == null) return '-';
+  if (activeScenario.value === 'branNearestClearance') return `${Math.round(mm)}mm`;
   if (mm >= 1000) return `${(mm / 1000).toFixed(1)}m`;
   return `${mm.toFixed(0)}mm`;
 }

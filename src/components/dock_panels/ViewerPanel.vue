@@ -35,6 +35,7 @@ import {
 } from '@/composables/mbd/mbdRequestSync';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
 import { useBackgroundStore } from '@/composables/useBackgroundStore';
+import { useBranClearanceAnnotationThree } from '@/composables/useBranClearanceAnnotationThree';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { loadDbnoInstancesForVisibleRefnosDtx, applyMaterialConfigToLoadedDtx } from '@/composables/useDbnoInstancesDtxLoader';
@@ -53,6 +54,7 @@ import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
+import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/useSpatialQuery';
 import { useToolStore, type DimensionKind } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
@@ -99,6 +101,7 @@ const modelLoadStatus = useModelLoadStatus();
 const unitSettings = useUnitSettingsStore();
 const selectionStore = useSelectionStore();
 const spatialQueryStore = useSpatialQuery();
+const spatialComputeStore = useSpatialCompute();
 const viewerContext = useViewerContext();
 const backgroundStore = useBackgroundStore();
 const displayThemeStore = useDisplayThemeStore();
@@ -607,6 +610,9 @@ const mbdPipeVisRef = shallowRef<ReturnType<
 const annotationSystemRef = shallowRef<ReturnType<
     typeof useAnnotationThree
 > | null>(null);
+const branClearanceVisRef = shallowRef<ReturnType<
+    typeof useBranClearanceAnnotationThree
+> | null>(null);
 const modelGenerationRef = shallowRef<ReturnType<
     typeof useModelGeneration
 > | null>(null);
@@ -650,6 +656,7 @@ let offToolsInput: (() => void) | null = null;
 let offXeokitToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
 let offMbdPipeWatch: (() => void) | null = null;
+let offBranClearanceWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offOpenSpatialQuery: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
@@ -1078,16 +1085,19 @@ watch(
 
     const hasPtset = (ptsetVisRef.value?.visualObjects.value?.size ?? 0) > 0;
     const hasMbdPipe = !!mbdPipeVisRef.value?.currentData.value;
+    const hasBranClearance =
+      (spatialComputeStore.scenarios.branNearestClearance.annotationCandidates.length ?? 0) > 0;
 
-    if (!hasMarks && !hasPtset && !hasMbdPipe) return;
+    if (!hasMarks && !hasPtset && !hasMbdPipe && !hasBranClearance) return;
 
     try {
       store.clearAll();
       ptsetVisRef.value?.clearAll();
       mbdPipeVisRef.value?.clearAll();
+      clearBranClearanceAnnotations();
       emitToast({
         message:
-                    '模型单位/重心设置已变更：为避免错位，已清空测量/批注/点集/MBD管道标注（可重新创建）',
+                    '模型单位/重心设置已变更：为避免错位，已清空测量/批注/点集/MBD管道/BRAN清距标注（可重新创建）',
       });
     } catch {
       // ignore
@@ -1572,6 +1582,14 @@ function clearMbdAnnotationsFromInteraction(): void {
   mbdInteractionRegistry.clear((id) => {
     annotationSystem.unregisterExternalAnnotation(id);
   });
+}
+
+function clearBranClearanceAnnotations(): void {
+  try {
+    branClearanceVisRef.value?.clearAnnotations();
+  } catch {
+    // ignore
+  }
 }
 
 function handleRibbonCommand(commandId: string) {
@@ -2483,6 +2501,8 @@ onMounted(async () => {
     loadedRefnos: string[],
   ) => {
     activeDbno = _dbno;
+    clearBranClearanceAnnotations();
+    spatialComputeStore.resetScenario('branNearestClearance');
     // 测试/自动化：暴露最近一次加载的 refno 列表，便于 Playwright 精确做期望值计算。
     (compat as any).__dtxLastLoadedDbno = _dbno;
     (compat as any).__dtxLastLoadedRefnos = loadedRefnos;
@@ -2656,6 +2676,35 @@ onMounted(async () => {
     },
   });
   annotationSystemRef.value = annotationSystem;
+  const branClearanceVis = useBranClearanceAnnotationThree(annotationSystem, {
+    requestRender,
+  });
+  branClearanceVisRef.value = branClearanceVis;
+  offBranClearanceWatch?.();
+  offBranClearanceWatch = watch(
+    () => ({
+      loading: spatialComputeStore.scenarios.branNearestClearance.loading,
+      error: spatialComputeStore.scenarios.branNearestClearance.error,
+      responseText: spatialComputeStore.scenarios.branNearestClearance.responseText,
+      candidates: spatialComputeStore.scenarios.branNearestClearance.annotationCandidates.slice(),
+    }),
+    ({ loading, error, candidates }) => {
+      if (loading || error || candidates.length === 0) {
+        branClearanceVis.clearAnnotations();
+        return;
+      }
+      const result = branClearanceVis.renderAnnotations(candidates);
+      if (result.skipped.length > 0) {
+        console.warn('[bran-clearance] skipped incomplete annotation candidates', result.skipped);
+      }
+    },
+    { deep: true, immediate: true },
+  );
+  if (isDev) {
+    (window as any).__plant3dBranClearanceAnnotations = {
+      getSnapshot: () => branClearanceVis.getDebugSnapshot(),
+    };
+  }
   // 初始化 CSS2DRenderer
   if (overlayContainer.value && mainCanvas.value) {
     annotationSystem.initCSS2DRenderer(overlayContainer.value, mainCanvas.value);
@@ -4286,6 +4335,9 @@ onUnmounted(() => {
   offMbdPipeWatch?.();
   offMbdPipeWatch = null;
 
+  offBranClearanceWatch?.();
+  offBranClearanceWatch = null;
+
   try {
     ptsetVisRef.value?.clearAll();
   } catch {
@@ -4300,6 +4352,13 @@ onUnmounted(() => {
     // ignore
   }
   mbdPipeVisRef.value = null;
+
+  try {
+    clearBranClearanceAnnotations();
+  } catch {
+    // ignore
+  }
+  branClearanceVisRef.value = null;
 
   // 仅清理引用（useAnnotationThree 内部已注册 onUnmounted 执行 dispose）
   annotationSystemRef.value = null;
@@ -4395,6 +4454,7 @@ onUnmounted(() => {
     delete (window as any).__viewerTools;
     delete (window as any).__viewer;
     delete (window as any).__plant3dMbdE2E;
+    delete (window as any).__plant3dBranClearanceAnnotations;
   } catch {
     // ignore
   }
