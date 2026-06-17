@@ -101,4 +101,78 @@ describe('useMeasurementPickSources', () => {
       label: 'Position 24381_145018',
     });
   });
+
+  it('selects PTSET before a closer mesh pick when both sources are enabled', () => {
+    const settings = cloneMeasurementPickSourceSettings({
+      ptset: { show: true, snap: true, priority: 20, thresholdPx: 80 },
+      mesh_pick_point: { show: true, snap: true, priority: 40, thresholdPx: 80 },
+    });
+    const candidates: MeasurementPickCandidate[] = [
+      {
+        id: 'mesh:o:24381_145018:0',
+        source: 'mesh_pick_point',
+        entityId: 'o:24381_145018:0',
+        objectId: 'o:24381_145018:0',
+        worldPos: new Vector3(0, 0, 0),
+      },
+      {
+        id: 'ptset:24381_145018#1',
+        source: 'ptset',
+        entityId: 'ptset:24381_145018#1',
+        objectId: 'o:24381_145018:0',
+        worldPos: new Vector3(0.1, 0, 0),
+      },
+    ];
+
+    const resolved = resolveMeasurementPickCandidates({
+      cursor: { x: 100, y: 100 },
+      camera: camera(),
+      rect: { width: 200, height: 200 },
+      settings,
+      candidates,
+    });
+
+    expect(resolved.snapCandidates.map((item) => item.id)).toEqual([
+      'ptset:24381_145018#1',
+      'mesh:o:24381_145018:0',
+    ]);
+    expect(resolved.snapCandidates[0]?.pixelDistance).toBeCloseTo(10);
+    expect(resolved.snapCandidates[1]?.pixelDistance).toBe(0);
+    expect(resolved.hit?.id).toBe('ptset:24381_145018#1');
+    expect(resolved.hit?.source).toBe('ptset');
+  });
+
+  it('falls back to mesh when PTSET is outside threshold', () => {
+    const settings = cloneMeasurementPickSourceSettings({
+      ptset: { show: true, snap: true, priority: 20, thresholdPx: 4 },
+      mesh_pick_point: { show: true, snap: true, priority: 40, thresholdPx: 80 },
+    });
+    const candidates: MeasurementPickCandidate[] = [
+      {
+        id: 'ptset:24381_145018#1',
+        source: 'ptset',
+        entityId: 'ptset:24381_145018#1',
+        objectId: 'o:24381_145018:0',
+        worldPos: new Vector3(0.1, 0, 0),
+      },
+      {
+        id: 'mesh:o:24381_145018:0',
+        source: 'mesh_pick_point',
+        entityId: 'o:24381_145018:0',
+        objectId: 'o:24381_145018:0',
+        worldPos: new Vector3(0, 0, 0),
+      },
+    ];
+
+    const resolved = resolveMeasurementPickCandidates({
+      cursor: { x: 100, y: 100 },
+      camera: camera(),
+      rect: { width: 200, height: 200 },
+      settings,
+      candidates,
+    });
+
+    expect(resolved.snapCandidates.map((item) => item.id)).toEqual(['mesh:o:24381_145018:0']);
+    expect(resolved.hit?.source).toBe('mesh_pick_point');
+  });
 });

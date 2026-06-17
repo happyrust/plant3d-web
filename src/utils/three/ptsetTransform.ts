@@ -1,6 +1,7 @@
-import { Matrix4, Vector3 } from 'three';
+import { Vector3 } from 'three';
 
-import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
+import type { Matrix4 } from 'three';
 
 export type Vec3 = [number, number, number];
 
@@ -84,6 +85,64 @@ export function applyPtsetTransformToDir(worldTransform: unknown, localDir: Vec3
   return localDir;
 }
 
+export function applyMatrix4ToDir(matrix: Matrix4 | null, dir: Vec3): Vec3 {
+  if (!matrix) return dir;
+  const e = matrix.elements;
+  const dx = dir[0];
+  const dy = dir[1];
+  const dz = dir[2];
+  return [
+    e[0] * dx + e[4] * dy + e[8] * dz,
+    e[1] * dx + e[5] * dy + e[9] * dz,
+    e[2] * dx + e[6] * dy + e[10] * dz,
+  ];
+}
+
+export type TransformedPtsetPoint = {
+  localPt: Vec3;
+  worldPt: Vec3;
+  scenePt: Vec3;
+  localDir: Vec3 | null;
+  worldDir: Vec3 | null;
+  sceneDir: Vec3 | null;
+};
+
+export function transformPtsetPoint(input: {
+  point: PtsetPoint;
+  unitFactor: number;
+  worldTransform: unknown;
+  globalModelMatrix: Matrix4 | null;
+}): TransformedPtsetPoint {
+  const localPt: Vec3 = [
+    input.point.pt[0] * input.unitFactor,
+    input.point.pt[1] * input.unitFactor,
+    input.point.pt[2] * input.unitFactor,
+  ];
+  const worldPt = applyPtsetTransformToPoint(input.worldTransform, localPt);
+  let scenePt: Vec3 = worldPt;
+  if (input.globalModelMatrix) {
+    const v = new Vector3(worldPt[0], worldPt[1], worldPt[2]).applyMatrix4(input.globalModelMatrix);
+    scenePt = [v.x, v.y, v.z];
+  }
+
+  const localDir: Vec3 | null = input.point.dir ? [
+    input.point.dir[0] * input.unitFactor,
+    input.point.dir[1] * input.unitFactor,
+    input.point.dir[2] * input.unitFactor,
+  ] : null;
+  const worldDir = localDir ? applyPtsetTransformToDir(input.worldTransform, localDir) : null;
+  const sceneDir = worldDir ? applyMatrix4ToDir(input.globalModelMatrix, worldDir) : null;
+
+  return {
+    localPt,
+    worldPt,
+    scenePt,
+    localDir,
+    worldDir,
+    sceneDir,
+  };
+}
+
 /**
  * 把一个 ptset 响应换算为场景坐标系的关键点候选集。
  *
@@ -106,23 +165,17 @@ export function ptsetResponseToSceneCandidates(
 
   for (const point of response.ptset) {
     if (!point?.pt) continue;
-    const localPt: Vec3 = [
-      point.pt[0] * unitFactor,
-      point.pt[1] * unitFactor,
-      point.pt[2] * unitFactor,
-    ];
-    const worldPt = applyPtsetTransformToPoint(worldTransform, localPt);
-
-    let scenePos: Vec3 = worldPt;
-    if (globalModelMatrix) {
-      const v = new Vector3(worldPt[0], worldPt[1], worldPt[2]).applyMatrix4(globalModelMatrix);
-      scenePos = [v.x, v.y, v.z];
-    }
+    const transformed = transformPtsetPoint({
+      point,
+      unitFactor,
+      worldTransform,
+      globalModelMatrix,
+    });
 
     out.push({
       refno,
       number: point.number,
-      worldPos: scenePos,
+      worldPos: transformed.scenePt,
       pbore: point.pbore,
     });
   }

@@ -108,4 +108,109 @@ describe('useToolStore - measurement source info', () => {
       label: 'Position 24381_145018',
     });
   });
+
+  it('preserves independent sourceInfo for PTSET/PTSET, mesh/mesh, and mixed distance records', async () => {
+    const store = await loadStore();
+    store.clearAll();
+
+    store.addXeokitDistanceMeasurement({
+      id: 'ptset-to-ptset',
+      kind: 'distance',
+      origin: {
+        entityId: 'ptset:24381_145018#1',
+        worldPos: [0, 0, 0],
+        sourceInfo: {
+          source: 'ptset',
+          candidateId: 'ptset:24381_145018#1',
+          refno: '24381_145018',
+          label: 'PTSET #1',
+        },
+      },
+      target: {
+        entityId: 'ptset:24381_145018#2',
+        worldPos: [1, 0, 0],
+        sourceInfo: {
+          source: 'ptset',
+          candidateId: 'ptset:24381_145018#2',
+          refno: '24381_145018',
+          label: 'PTSET #2',
+        },
+      },
+      visible: true,
+      approximate: false,
+      createdAt: 3,
+    });
+    store.addXeokitDistanceMeasurement({
+      id: 'mesh-to-mesh',
+      kind: 'distance',
+      origin: {
+        entityId: 'o:24381_145018:0',
+        worldPos: [0, 0, 0],
+        sourceInfo: {
+          source: 'mesh_pick_point',
+          candidateId: 'mesh:o:24381_145018:0',
+          refno: '24381_145018',
+          label: 'Mesh Pick Point',
+        },
+      },
+      target: {
+        entityId: 'o:24381_145020:0',
+        worldPos: [0, 1, 0],
+        sourceInfo: {
+          source: 'mesh_pick_point',
+          candidateId: 'mesh:o:24381_145020:0',
+          refno: '24381_145020',
+          label: 'Mesh Pick Point',
+        },
+      },
+      visible: true,
+      approximate: false,
+      createdAt: 4,
+    });
+    store.addXeokitDistanceMeasurement({
+      id: 'ptset-to-mesh',
+      kind: 'distance',
+      origin: {
+        entityId: 'ptset:24381_145018#1',
+        worldPos: [0, 0, 0],
+        sourceInfo: {
+          source: 'ptset',
+          candidateId: 'ptset:24381_145018#1',
+          refno: '24381_145018',
+          label: 'PTSET #1',
+        },
+      },
+      target: {
+        entityId: 'o:24381_145018:0',
+        worldPos: [0, 0, 1],
+        sourceInfo: {
+          source: 'mesh_pick_point',
+          refno: '24381_145018',
+          label: 'Mesh Pick Point',
+        },
+      },
+      visible: true,
+      approximate: false,
+      createdAt: 5,
+    });
+
+    const [ptsetToPtset, meshToMesh, mixed] = store.xeokitDistanceMeasurements.value;
+
+    expect(ptsetToPtset?.origin.sourceInfo?.candidateId).toBe('ptset:24381_145018#1');
+    expect(ptsetToPtset?.target.sourceInfo?.candidateId).toBe('ptset:24381_145018#2');
+    expect(meshToMesh?.origin.sourceInfo?.source).toBe('mesh_pick_point');
+    expect(meshToMesh?.origin.sourceInfo?.candidateId).not.toContain('ptset:');
+    expect(meshToMesh?.target.sourceInfo?.source).toBe('mesh_pick_point');
+    expect(meshToMesh?.target.sourceInfo?.candidateId).not.toContain('ptset:');
+    expect(mixed?.origin.sourceInfo).toMatchObject({
+      source: 'ptset',
+      candidateId: 'ptset:24381_145018#1',
+    });
+    expect(mixed?.target.sourceInfo).toMatchObject({
+      source: 'mesh_pick_point',
+      refno: '24381_145018',
+      label: 'Mesh Pick Point',
+    });
+    expect(mixed?.target.sourceInfo?.candidateId?.startsWith('ptset:')).not.toBe(true);
+  });
 });

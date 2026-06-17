@@ -8,7 +8,7 @@ import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
-import { applyPtsetTransformToDir, applyPtsetTransformToPoint } from '@/utils/three/ptsetTransform';
+import { transformPtsetPoint } from '@/utils/three/ptsetTransform';
 import { formatLengthMeters, formatNumber, formatVec3Meters } from '@/utils/unitFormat';
 
 type Vec3 = [number, number, number]
@@ -246,24 +246,15 @@ export function usePtsetVisualizationThree(
     for (const point of response.ptset) {
       const objId = `ptset_${normalizedRefno}_${point.number}`;
 
-      const localPt: Vec3 = [
-        point.pt[0] * unitFactor,
-        point.pt[1] * unitFactor,
-        point.pt[2] * unitFactor,
-      ];
-      const localDir: Vec3 | null = point.dir ? [
-        point.dir[0] * unitFactor,
-        point.dir[1] * unitFactor,
-        point.dir[2] * unitFactor,
-      ] : null;
-
-      const worldPt = applyPtsetTransformToPoint(worldTransform, localPt);
-      const worldDir = localDir ? applyPtsetTransformToDir(worldTransform, localDir) : null;
-      const scenePtV = new Vector3(worldPt[0], worldPt[1], worldPt[2]).applyMatrix4(gm);
-      const scenePt: Vec3 = [scenePtV.x, scenePtV.y, scenePtV.z];
+      const transformed = transformPtsetPoint({
+        point,
+        unitFactor,
+        worldTransform,
+        globalModelMatrix: gm,
+      });
 
       const crossSize = Math.max(0.2, (point.pbore * unitFactor) * 0.15 || 0.6);
-      const cross = generateCrossLines(worldPt, crossSize);
+      const cross = generateCrossLines(transformed.worldPt, crossSize);
       const crossGeo = new BufferGeometry();
       crossGeo.setAttribute('position', new BufferAttribute(new Float32Array(cross.positions), 3));
       crossGeo.setIndex(new BufferAttribute(new Uint16Array(cross.indices), 1));
@@ -274,9 +265,9 @@ export function usePtsetVisualizationThree(
       group.add(crossLine);
 
       let arrowLine: LineSegments | undefined;
-      if (worldDir) {
+      if (transformed.worldDir) {
         const arrowLen = Math.max(0.6, (point.pbore * unitFactor) * 0.6 || 2.0);
-        const arrow = generateArrowLines(worldPt, worldDir, arrowLen);
+        const arrow = generateArrowLines(transformed.worldPt, transformed.worldDir, arrowLen);
         if (arrow) {
           const arrowGeo = new BufferGeometry();
           arrowGeo.setAttribute('position', new BufferAttribute(new Float32Array(arrow.positions), 3));
@@ -294,8 +285,8 @@ export function usePtsetVisualizationThree(
       labelDiv.setAttribute('data-ptset-point', String(point.number));
       const pboreInTargetUnit = point.pbore * unitFactor;
       const coordText = policy === 'follow_backend'
-        ? `(${formatNumber(worldPt[0], precision)}, ${formatNumber(worldPt[1], precision)}, ${formatNumber(worldPt[2], precision)})${targetUnit}`
-        : formatVec3Meters(worldPt as any, displayUnit, precision);
+        ? `(${formatNumber(transformed.worldPt[0], precision)}, ${formatNumber(transformed.worldPt[1], precision)}, ${formatNumber(transformed.worldPt[2], precision)})${targetUnit}`
+        : formatVec3Meters(transformed.worldPt as any, displayUnit, precision);
       const boreText = point.pbore > 0
         ? (policy === 'follow_backend'
           ? `Ø${formatNumber(pboreInTargetUnit, precision)}${targetUnit}`
@@ -322,7 +313,7 @@ export function usePtsetVisualizationThree(
         id: objId,
         refno: normalizedRefno,
         point,
-        worldPos: scenePt,
+        worldPos: transformed.scenePt,
         cross: crossLine,
         arrow: arrowLine,
         labelDiv,
@@ -368,9 +359,9 @@ export function usePtsetVisualizationThree(
       const entryHasAny = appendEntry(
         entry.refno,
         entry.response,
-        unitFactor,
+        entry.response.unit_info?.conversion_factor || unitFactor,
         policy,
-        targetUnit,
+        entry.response.unit_info?.target_unit || targetUnit,
         displayUnit,
         precision,
         gm,
