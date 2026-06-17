@@ -191,10 +191,7 @@ export async function e3dGetSubtreeRefnos(
 
 async function backendE3dGetVisibleInsts(refno: string): Promise<VisibleInstsResponse> {
   const resp = await fetchJson<VisibleInstsResponse>(`/api/e3d/visible-insts/${encodeURIComponent(refno)}`);
-  const debugAny = (resp as any)?.debug as
-    | { candidates_count?: number; visible_count?: number; filtered_count?: number; source?: string }
-    | null
-    | undefined;
+  const debugAny = resp.debug;
   console.info('[vis][api] /api/e3d/visible-insts', {
     refno,
     refno_count: Array.isArray(resp.refnos) ? resp.refnos.length : 0,
@@ -209,7 +206,10 @@ async function backendE3dGetVisibleInsts(refno: string): Promise<VisibleInstsRes
       ? ` candidates=${debugAny.candidates_count ?? ''} filtered=${debugAny.filtered_count ?? ''} visible=${debugAny.visible_count ?? ''} source=${debugAny.source ?? ''}`
       : '');
   if (resp.success && refnoCount === 0) {
-    addLog('warning', `${line} → 可见实例为空（请检查后端数据库的空间索引或模型树数据）`);
+    addLog(
+      'warning',
+      `${line} → 可见实例为空（该节点/分支未命中可加载几何实例；若为 GENSEC/SPINE/POINSP 等结构节点通常属正常，若应显示请检查几何生成/inst_relate）`
+    );
   } else {
     addLog('info', line);
   }

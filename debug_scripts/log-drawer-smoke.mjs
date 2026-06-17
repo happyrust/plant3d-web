@@ -1,8 +1,9 @@
 // spec 004 T403: 日志抽屉浏览器冒烟(Playwright chromium,与系统 Chrome 隔离)。
 // 用法: node debug_scripts/log-drawer-smoke.mjs <admin_token>
 // 产物: artifacts/log-drawer-*.png + stdout 断言结果。
-import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
+
+import { chromium } from 'playwright';
 
 const token = process.argv[2];
 if (!token) {

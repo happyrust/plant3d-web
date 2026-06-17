@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import {
-  pdmsBatchGetPtsetWithContext,
-  pdmsGetPtsetWithContext,
-  type PtsetBatchItemResponse,
-} from '@/api/genModelPdmsAttrApi';
-import { e3dGetChildren } from '@/api/genModelE3dApi';
+import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
+
 import PtsetPanel from '@/components/tools/PtsetPanel.vue';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
+import { useDbnoInstancesParquetLoader, type ParquetPtsetChildSummary } from '@/composables/useDbnoInstancesParquetLoader';
 import { useViewerContext } from '@/composables/useViewerContext';
 
 const props = defineProps<{
@@ -20,6 +17,7 @@ const props = defineProps<{
 }>();
 
 const ctx = useViewerContext();
+const parquetLoader = useDbnoInstancesParquetLoader();
 
 const ptsetVis = computed(() => ctx.ptsetVis.value);
 const currentRefno = computed(() => ptsetVis.value?.currentRefno.value ?? null);
@@ -52,27 +50,22 @@ function normalizeRefnoKey(raw: string | null | undefined): string | null {
   return value.replace(/\//g, '_');
 }
 
-function getPtsetContext(refno: string) {
+function resolveDbno(refno: string): number | null {
   try {
-    return { dbno: getDbnumByRefno(refno) };
+    return getDbnumByRefno(refno);
   } catch {
-    return {};
+    return null;
   }
 }
 
-function buildBranchItem(
-  child: { refno: string; noun: string; name: string },
-  batchItem?: PtsetBatchItemResponse,
-): BranchPtsetItem {
-  const success = !!batchItem?.success;
-  const ptCount = Array.isArray(batchItem?.ptset) ? batchItem!.ptset.length : 0;
+function buildBranchItem(summary: ParquetPtsetChildSummary): BranchPtsetItem {
   return {
-    refno: child.refno,
-    noun: child.noun,
-    name: child.name,
-    success,
-    ptCount,
-    errorMessage: batchItem?.error_message ?? (success ? null : '未找到 ptset 数据'),
+    refno: summary.refno,
+    noun: summary.noun,
+    name: summary.name,
+    success: summary.success,
+    ptCount: summary.ptCount,
+    errorMessage: summary.errorMessage ?? (summary.success ? null : '未找到 ptset 数据'),
   };
 }
 
@@ -91,41 +84,15 @@ async function loadBranchInspector(targetRefno = contextRefno.value) {
 
   branchLoading.value = true;
   try {
-    const childrenResp = await e3dGetChildren(rootRefno, 2000);
-    if (seq !== branchLoadSeq) return;
-    if (!childrenResp.success) {
-      branchError.value = childrenResp.error_message || '加载子元件失败';
+    const dbno = resolveDbno(rootRefno);
+    if (dbno == null) {
+      branchError.value = `无法从 refno=${rootRefno} 解析 dbno`;
       return;
     }
 
-    const children = (childrenResp.children || [])
-      .map((child) => ({
-        refno: normalizeRefnoKey(child.refno) || String(child.refno || ''),
-        noun: String(child.noun || ''),
-        name: String(child.name || ''),
-      }))
-      .filter((child) => !!child.refno);
-
-    if (children.length === 0) {
-      branchItems.value = [];
-      return;
-    }
-
-    const batchResp = await pdmsBatchGetPtsetWithContext(
-      children.map((child) => child.refno),
-      getPtsetContext(rootRefno),
-    );
+    const summaries = await parquetLoader.queryDirectChildrenPtsetSummary(dbno, rootRefno);
     if (seq !== branchLoadSeq) return;
-
-    const byInput = new Map<string, PtsetBatchItemResponse>();
-    for (const item of batchResp.results || []) {
-      const key = normalizeRefnoKey(item.input_refno);
-      if (key) {
-        byInput.set(key, item);
-      }
-    }
-
-    branchItems.value = children.map((child) => buildBranchItem(child, byInput.get(child.refno)));
+    branchItems.value = summaries.map(buildBranchItem);
   } catch (error) {
     if (seq !== branchLoadSeq) return;
     branchError.value = error instanceof Error ? error.message : String(error);
@@ -140,7 +107,13 @@ async function renderBranchChild(refno: string) {
   const normalized = normalizeRefnoKey(refno);
   if (!normalized || !ptsetVis.value) return;
 
-  const resp = await pdmsGetPtsetWithContext(normalized, getPtsetContext(normalized));
+  const dbno = resolveDbno(normalized);
+  if (dbno == null) {
+    branchError.value = `无法从 refno=${normalized} 解析 dbno`;
+    return;
+  }
+
+  const resp = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, normalized);
   if (!resp.success || resp.ptset.length === 0) {
     branchError.value = resp.error_message || `未找到 ${normalized} 的点集数据`;
     branchRenderedAll.value = false;
@@ -164,9 +137,11 @@ async function renderAllBranchChildren() {
     return;
   }
 
-  const loaded: Array<{ refno: string; response: Awaited<ReturnType<typeof pdmsGetPtsetWithContext>> }> = [];
+  const loaded: { refno: string; response: PtsetResponse }[] = [];
   for (const item of successItems) {
-    const resp = await pdmsGetPtsetWithContext(item.refno, getPtsetContext(item.refno));
+    const dbno = resolveDbno(item.refno);
+    if (dbno == null) continue;
+    const resp = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, item.refno);
     if (resp.success && resp.ptset.length > 0) {
       loaded.push({ refno: item.refno, response: resp });
     }

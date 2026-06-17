@@ -8,7 +8,7 @@ import { modelShowByRefno } from '@/api/genModelTaskApi';
 import { getMbdPipeAnnotations, type MbdPipeData, type Vec3 } from '@/api/mbdPipeApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
-import { ensureDbMetaInfoLoaded, getDbnumByRefno, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
+import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { isDtxRefnoLoaded, loadDbnoInstancesForVisibleRefnosDtx } from '@/composables/useDbnoInstancesDtxLoader';
 import {
   getDbnoInstancesManifest,
@@ -704,9 +704,16 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           const anyViewer = viewer as any;
           let aabb = anyViewer?.scene?.getAABB?.([normalizedRoot]) ?? null;
           if (!aabb) {
-            const { refnos } = await querySubtreeRefnos(normalizedRoot);
-            if (refnos && refnos.length > 0) {
-              aabb = anyViewer?.scene?.getAABB?.(refnos) ?? null;
+            try {
+              const { refnos } = await querySubtreeRefnos(normalizedRoot);
+              if (refnos && refnos.length > 0) {
+                aabb = anyViewer?.scene?.getAABB?.(refnos) ?? null;
+              }
+            } catch (subtreeError) {
+              consoleStore.addLog(
+                'warning',
+                `[model-load] flyTo 子树范围查询失败，继续尝试模型加载 refno=${normalizedRoot} err=${subtreeError instanceof Error ? subtreeError.message : String(subtreeError)}`
+              );
             }
           }
           if (aabb) {
@@ -758,7 +765,22 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         dbno = options.db_num;
       } else {
         await ensureDbMetaInfoLoaded();
-        dbno = getDbnumByRefno(normalizedRoot);
+        const mappedDbno = tryGetDbnumByRefno(normalizedRoot);
+        if (mappedDbno == null) {
+          statusMessage.value = `refno=${normalizedRoot} 不在当前项目模型库映射中`;
+          progress.value = 100;
+          syncGlobalLoadStatus();
+          consoleStore.addLog(
+            'warning',
+            `[model-load] 跳过不可加载节点 refno=${normalizedRoot}：db_meta_info.json 未包含该 ref0，通常表示它不是当前部署模型库中的可绘制实例`
+          );
+          emitToast({
+            message: `[提示] 当前节点不在已部署模型库映射中，未触发模型加载（refno=${normalizedRoot}）`,
+            level: 'info',
+          });
+          return false;
+        }
+        dbno = mappedDbno;
       }
       if (!Number.isFinite(dbno) || dbno <= 0) throw new Error('无法确定 dbno');
 
@@ -1011,7 +1033,6 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
           } else {
             const message = `[警告] 加载结束但未绘制任何实例（refno=${normalizedRoot}）。请检查左侧可见性（眼睛图标）或 Parquet 是否包含该范围几何`;
             consoleStore.addLog('warning', `[model-load] ${message}`);
-            emitDebugWarningToast(message);
           }
         } else {
           emitToast({ message: `[成功] 已加载 ${totalObjects} 个几何实例`, level: 'success' });

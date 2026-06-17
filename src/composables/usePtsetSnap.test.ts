@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'vitest';
+
 import { Matrix4, PerspectiveCamera } from 'three';
 
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
+
+import { projectToCanvas, snapToCandidates } from '@/composables/usePtsetSnap';
 import {
   applyPtsetTransformToPoint,
   ptsetResponseToSceneCandidates,
 } from '@/utils/three/ptsetTransform';
-import { projectToCanvas, snapToCandidates } from '@/composables/usePtsetSnap';
 
-function makeResponse(points: Array<{ number: number; pt: [number, number, number]; pbore?: number }>, conversion = 1): PtsetResponse {
+function makeResponse(points: { number: number; pt: [number, number, number]; pbore?: number }[], conversion = 1): PtsetResponse {
   return {
     success: true,
     refno: '1_1',

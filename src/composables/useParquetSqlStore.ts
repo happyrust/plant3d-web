@@ -7,6 +7,7 @@
 import { ref, shallowRef } from 'vue';
 
 import { AsyncDuckDB, ConsoleLogger, type AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // DuckDB 实例（单例）

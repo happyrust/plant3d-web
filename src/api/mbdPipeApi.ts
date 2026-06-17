@@ -16,6 +16,8 @@ export type MbdPipeViewMode = MbdPipeApiMode
 export type BranchAttrsDto = {
   duty?: string | null
   pspec?: string | null
+  hbor?: number | null
+  tbor?: number | null
   rccm?: string | null
   clean?: string | null
   temp?: string | null
@@ -39,6 +41,7 @@ export type MbdPipeStats = {
   cut_tubis_count?: number
   fittings_count?: number
   tags_count?: number
+  material_rows_count?: number
 }
 
 export type MbdPipeDebugInfo = {
@@ -170,6 +173,17 @@ export type MbdTagDto = {
   layout_hint?: MbdLayoutHint | null
 }
 
+export type MbdMaterialRowDto = {
+  item_no: number
+  ns: string
+  item_code: string
+  description: string
+  quantity: number
+  unit: string
+  unit_weight?: number | null
+  refnos: string[]
+}
+
 export type MbdPipeClearanceDto = {
   id: string
   pipe1_refno: string
@@ -289,6 +303,7 @@ export type MbdLaidOutBendDto = {
 
 export type MbdLaidOutTagDto = {
   id: string
+  role?: string | null
   text: string
   position: Vec3
   label_offset_world?: Vec3 | null
@@ -459,6 +474,7 @@ export type MbdPipeData = {
   cut_tubis?: MbdCutTubiDto[]
   fittings?: MbdFittingDto[]
   tags?: MbdTagDto[]
+  material_rows?: MbdMaterialRowDto[]
   pipe_clearances?: MbdPipeClearanceDto[]
   elevation_marks?: MbdElevationMarkDto[]
   structure_clearances?: MbdStructureClearanceDto[]
@@ -476,6 +492,14 @@ export type MbdPipeResponse = {
   success: boolean
   error_message?: string
   data?: MbdPipeData
+}
+
+export type MbdPipeV2AnnotationOptions = {
+  /**
+   * V2 layout-first currently carries backend-laid-out primitives, while flow
+   * direction still uses the original segment arrive -> leave contract.
+   */
+  includeLegacySegments?: boolean
 }
 
 export type MbdPipeQueryParams = {
@@ -503,6 +527,11 @@ export type MbdPipeQueryParams = {
   include_cut_tubis?: boolean
   include_fittings?: boolean
   include_tags?: boolean
+  include_position_tags?: boolean
+  include_elevation_marks?: boolean
+  include_branch_label?: boolean
+  include_material_balloons?: boolean
+  include_material_table?: boolean
   include_layout_hints?: boolean
   include_layout_result?: boolean
   weld_merge_threshold?: number
@@ -516,11 +545,22 @@ export type MbdPipeQueryParams = {
 const MBD_V2_LAYOUT_FIRST_DEFAULT_QUERY: MbdPipeQueryParams = {
   mode: 'layout_first',
   include_layout_result: true,
-  include_dims: true,
+  // 首期 BRAN MBD 只默认请求长度类尺寸：chain / port / cut-tubi。
+  include_dims: false,
   include_chain_dims: true,
   include_overall_dim: false,
   include_port_dims: true,
   include_cut_tubis: true,
+  include_fittings: false,
+  include_tags: false,
+  include_position_tags: false,
+  include_elevation_marks: false,
+  include_branch_label: false,
+  include_material_balloons: false,
+  include_material_table: false,
+  include_welds: false,
+  include_slopes: false,
+  include_bends: false,
 };
 
 function withMbdV2LayoutFirstDefaults(
@@ -773,6 +813,35 @@ function v2LabelOffset(label: MbdV2LabelPrimitive): Vec3 | null {
   return lenVec3(offset) > 1e-9 ? offset : null;
 }
 
+function inferV2LabelRole(label: MbdV2LabelPrimitive): string {
+  const raw = `${label.id ?? ''} ${label.function ?? ''} ${label.content ?? ''}`.toLowerCase();
+  if (raw.includes('tag:material')) return 'material_balloon';
+  if (raw.includes('tag:elevation') || raw.includes('pe ')) return 'elevation_tag';
+  if (raw.includes('tag:position') || raw.includes('\nx ') || raw.includes('\ny ')) return 'position_tag';
+  if (raw.includes('tag:branch')) return 'branch_label';
+  if (raw.includes('tag:tubi')) return 'tubi';
+  if (raw.includes('tag:fitting')) return 'component_tag';
+  return label.function ?? 'v2_label';
+}
+
+function buildV2MaterialRows(cutTubiPrims: MbdV2LinearDimPrimitive[]): MbdMaterialRowDto[] {
+  return cutTubiPrims.map((cut, idx) => {
+    const start = cloneVec3(cut.extension_1?.start);
+    const end = cloneVec3(cut.extension_2?.start);
+    const lengthMm = distanceVec3(start, end);
+    return {
+      item_no: idx + 1,
+      ns: '-',
+      item_code: 'TUBI',
+      description: 'Cut pipe length',
+      quantity: Number((lengthMm / 1000).toFixed(3)),
+      unit: 'm',
+      unit_weight: null,
+      refnos: [cut.source_refno ?? cut.id],
+    };
+  });
+}
+
 function normalizeV2BranchAttrs(attrs?: Record<string, string>): BranchAttrsDto {
   const src = attrs ?? {};
   const pick = (...keys: string[]) => {
@@ -789,6 +858,8 @@ function normalizeV2BranchAttrs(attrs?: Record<string, string>): BranchAttrsDto 
   return {
     duty: pick('DUTY'),
     pspec: pick('PSPEC'),
+    hbor: numberOrNull(pick('HBOR')),
+    tbor: numberOrNull(pick('TBOR')),
     rccm: pick('RCCM'),
     clean: pick('CLEAN'),
     temp: pick('TEMP'),
@@ -802,6 +873,23 @@ function normalizeV2BranchAttrs(attrs?: Record<string, string>): BranchAttrsDto 
     status: pick('STATUS'),
     fluid: pick('FLUID'),
   };
+}
+
+function normalizeV2BranchName(data: MbdV2PipeData): string {
+  const metaBranchName = data.meta?.branch_name;
+  if (typeof metaBranchName === 'string' && metaBranchName.trim()) {
+    return metaBranchName.trim();
+  }
+  const attrs = data.meta?.branch_attrs ?? {};
+  const attrName =
+    attrs.BRANCH_NAME
+    ?? attrs.branch_name
+    ?? attrs.NAME
+    ?? attrs.name;
+  if (typeof attrName === 'string' && attrName.trim()) {
+    return attrName.trim();
+  }
+  return data.branch_refno;
 }
 
 function adaptMbdV2ResponseToPipeResponse(
@@ -840,23 +928,27 @@ function adaptMbdV2ResponseToPipeResponse(
     (item) => String(item.kind).toLowerCase() !== 'cut_tubi',
   );
 
-  const tagDtos: MbdTagDto[] = labels.map((label) => ({
-    id: label.id,
-    refno: label.source_refno ?? label.id,
-    noun: 'MBD_LABEL',
-    role: label.function ?? 'v2_label',
-    text: String(label.content ?? ''),
-    position: cloneVec3(label.anchor),
-    layout_hint: {
-      anchor_point: cloneVec3(label.anchor),
-      primary_axis: cloneVec3(label.orientation, [1, 0, 0]),
-      offset_dir: cloneVec3(label.up, [0, 1, 0]),
-      label_role: 'v2_label',
-    },
-  }));
+  const tagDtos: MbdTagDto[] = labels.map((label) => {
+    const role = inferV2LabelRole(label);
+    return {
+      id: label.id,
+      refno: label.source_refno ?? label.id,
+      noun: 'MBD_LABEL',
+      role,
+      text: String(label.content ?? ''),
+      position: cloneVec3(label.anchor),
+      layout_hint: {
+        anchor_point: cloneVec3(label.anchor),
+        primary_axis: cloneVec3(label.orientation, [1, 0, 0]),
+        offset_dir: cloneVec3(label.up, [0, 1, 0]),
+        label_role: role,
+      },
+    };
+  });
 
   const laidOutTags: MbdLaidOutTagDto[] = labels.map((label) => ({
     id: label.id,
+    role: inferV2LabelRole(label),
     text: String(label.content ?? ''),
     position: cloneVec3(label.anchor),
     label_offset_world: v2LabelOffset(label),
@@ -938,6 +1030,12 @@ function adaptMbdV2ResponseToPipeResponse(
 
   const dimsByKind = data.meta?.dims_by_kind ?? {};
   const cutTubiCount = cutTubiDims.length;
+  const materialRows = buildV2MaterialRows(cutTubiPrims);
+  const requestedLayers = {
+    elevation_marks: params.include_elevation_marks === true,
+    material_table: params.include_material_table === true,
+    tags: params.include_tags === true,
+  };
   const stats: MbdPipeStats = {
     segments_count: Number(data.meta?.segments_count ?? 0),
     dims_count: nonCutLinearPrims.length,
@@ -947,6 +1045,7 @@ function adaptMbdV2ResponseToPipeResponse(
     cut_tubis_count: cutTubiCount,
     fittings_count: 0,
     tags_count: labels.length,
+    material_rows_count: materialRows.length,
   };
 
   return {
@@ -954,7 +1053,7 @@ function adaptMbdV2ResponseToPipeResponse(
     data: {
       input_refno: data.input_refno,
       branch_refno: data.branch_refno,
-      branch_name: data.branch_refno,
+      branch_name: normalizeV2BranchName(data),
       branch_attrs: normalizeV2BranchAttrs(data.meta?.branch_attrs),
       segments: [],
       dims: nonCutLinearPrims.map(v2LinearToDimDto),
@@ -964,6 +1063,7 @@ function adaptMbdV2ResponseToPipeResponse(
       cut_tubis: cutTubiPrims.map(v2LinearToCutTubiDto),
       fittings: [],
       tags: tagDtos,
+      material_rows: materialRows,
       stats,
       layout_result: {
         version: 2,
@@ -1004,6 +1104,7 @@ function adaptMbdV2ResponseToPipeResponse(
         notes: [
           'front-end adapted /api/mbd/v2/pipe primitives to current 3D renderer contract',
         ],
+        requested_layers: requestedLayers,
         version: data.version,
         layout_source: data.meta?.layout_source,
         primitive_count: primitives.length,
@@ -1020,13 +1121,83 @@ function adaptMbdV2ResponseToPipeResponse(
 export async function getMbdPipeV2Annotations(
   refno: string,
   params: MbdPipeQueryParams = {},
+  options: MbdPipeV2AnnotationOptions = {},
 ): Promise<MbdPipeResponse> {
   const effectiveParams = withMbdV2LayoutFirstDefaults(params);
   const q = toQueryString(effectiveParams as Record<string, unknown>);
   const resp = await fetchJson<MbdV2Response>(
     `/api/mbd/v2/pipe/${encodeURIComponent(refno)}${q}`,
   );
-  return adaptMbdV2ResponseToPipeResponse(resp, effectiveParams);
+  const adapted = adaptMbdV2ResponseToPipeResponse(resp, effectiveParams);
+
+  if (
+    options.includeLegacySegments &&
+    adapted.success &&
+    adapted.data &&
+    adapted.data.segments.length === 0
+  ) {
+    try {
+      const legacy = await getMbdPipeAnnotations(refno, effectiveParams);
+      const legacySegments = legacy.data?.segments ?? [];
+      const legacyMaterialRows = legacy.data?.material_rows ?? [];
+      const legacyBends = legacy.data?.bends ?? [];
+      const legacyFittings = legacy.data?.fittings ?? [];
+      if (legacy.success && legacy.data && legacySegments.length > 0) {
+        const materialRows =
+          legacyMaterialRows.length > 0 ? legacyMaterialRows : adapted.data.material_rows ?? [];
+        const bends =
+          legacyBends.length > 0 ? legacyBends : adapted.data.bends ?? [];
+        const fittings =
+          legacyFittings.length > 0 ? legacyFittings : adapted.data.fittings ?? [];
+        return {
+          ...adapted,
+          data: {
+            ...adapted.data,
+            segments: legacySegments,
+            bends,
+            fittings,
+            material_rows: materialRows,
+            stats: {
+              ...adapted.data.stats,
+              segments_count:
+                legacy.data.stats?.segments_count ?? legacySegments.length,
+              bends_count:
+                legacy.data.stats?.bends_count ?? bends.length,
+              fittings_count:
+                legacy.data.stats?.fittings_count ?? fittings.length,
+              material_rows_count:
+                legacy.data.stats?.material_rows_count ?? materialRows.length,
+            },
+            layout_result: adapted.data.layout_result
+              ? {
+                ...adapted.data.layout_result,
+                stats: {
+                  ...adapted.data.layout_result.stats,
+                  bends_count:
+                    legacy.data.stats?.bends_count ?? bends.length,
+                  fittings_count:
+                    legacy.data.stats?.fittings_count ?? fittings.length,
+                },
+              }
+              : adapted.data.layout_result,
+            debug_info: {
+              ...(adapted.data.debug_info ?? {}),
+              legacy_segments_source: '/api/mbd/pipe',
+              legacy_segments_count: legacySegments.length,
+              legacy_bends_count: legacyBends.length,
+              legacy_fittings_count: legacyFittings.length,
+              legacy_material_rows_count: legacyMaterialRows.length,
+            },
+          },
+        };
+      }
+    } catch {
+      // Keep the V2 annotation result usable even when the legacy segment route
+      // is unavailable; callers will simply have no flow-direction overlay.
+    }
+  }
+
+  return adapted;
 }
 
 /**

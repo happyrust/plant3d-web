@@ -1,5 +1,28 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
+
+const dtxLoaderMocks = vi.hoisted(() => ({
+  loadDtxAabbProxyRefnos: vi.fn(),
+}));
+
+const dbMetaMocks = vi.hoisted(() => ({
+  ensureDbMetaInfoLoaded: vi.fn(async () => undefined),
+  getDbnumByRefno: vi.fn(() => 7997),
+}));
+
+vi.mock('@/composables/useDbnoInstancesDtxLoader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/composables/useDbnoInstancesDtxLoader')>();
+  return {
+    ...actual,
+    loadDtxAabbProxyRefnos: dtxLoaderMocks.loadDtxAabbProxyRefnos,
+  };
+});
+
+vi.mock('@/composables/useDbMetaInfo', () => ({
+  ensureDbMetaInfoLoaded: dbMetaMocks.ensureDbMetaInfoLoaded,
+  getDbnumByRefno: dbMetaMocks.getDbnumByRefno,
+  tryGetDbnumByRefno: dbMetaMocks.getDbnumByRefno,
+}));
 
 import {
   createSpatialQueryStore,
@@ -56,6 +79,18 @@ function createViewerStub() {
 }
 
 describe('createSpatialQueryStore', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dbMetaMocks.ensureDbMetaInfoLoaded.mockResolvedValue(undefined);
+    dbMetaMocks.getDbnumByRefno.mockReturnValue(7997);
+    dtxLoaderMocks.loadDtxAabbProxyRefnos.mockImplementation((_layer, _dbno, entries) => ({
+      loadedRefnos: entries.filter((entry: any) => !!entry.aabb).map((entry: any) => String(entry.refno)),
+      missingRefnos: entries.filter((entry: any) => !entry.aabb).map((entry: any) => String(entry.refno)),
+      loadedObjects: entries.filter((entry: any) => !!entry.aabb).length,
+      skippedObjects: 0,
+    }));
+  });
+
   it('范围查询应合并本地已加载结果和服务端未加载结果', async () => {
     const viewer = createViewerStub();
     const queryNearbyByPosition = vi.fn(async (): Promise<SpatialQueryResult> => ({
@@ -414,6 +449,160 @@ describe('createSpatialQueryStore', () => {
     expect(store.resultSet.value?.items.find((item) => item.refno === 'server_only')?.visible).toBe(true);
   });
 
+  it('批量加载失败但结果有服务端 AABB 时，应生成空间查询代理模型兜底显示', async () => {
+    const viewer = createViewerStub();
+    viewer.__dtxLayer = {};
+    viewer.__dtxAfterInstancesLoaded = vi.fn();
+    const batchLoadRefnos = vi.fn(async () => ({
+      ok: [],
+      fail: [{ refno: 'server_only', error: '加载模型失败' }],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      batchLoadRefnos,
+    });
+
+    store.resultSet.value = {
+      request: {
+        mode: 'distance',
+        centerSource: 'coordinates',
+        center: { x: 0, y: 0, z: 0 },
+        radius: 100,
+        shape: 'sphere',
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        limit: 100,
+        sortBy: 'distanceAsc',
+      },
+      items: [
+        {
+          refno: 'server_only',
+          noun: 'EQUI',
+          specValue: 2,
+          specName: '电气系统',
+          distance: 20,
+          loaded: false,
+          visible: false,
+          matchedBy: 'server-spatial-index',
+          bbox: {
+            min: { x: 20, y: 0, z: 0 },
+            max: { x: 30, y: 10, z: 10 },
+          },
+        },
+      ],
+      page: 1,
+      perPage: 100,
+      returnedCount: 1,
+      totalPages: 1,
+      hasMore: false,
+      total: 1,
+      loadedCount: 0,
+      unloadedCount: 1,
+      truncated: false,
+      warnings: [],
+      groups: [],
+    };
+
+    await store.loadResults({ onlyUnloaded: true, flyTo: true });
+
+    expect(batchLoadRefnos).toHaveBeenCalledWith(['server_only'], expect.objectContaining({ flyTo: true }));
+    expect(dtxLoaderMocks.loadDtxAabbProxyRefnos).toHaveBeenCalledWith(
+      viewer.__dtxLayer,
+      7997,
+      [expect.objectContaining({
+        refno: 'server_only',
+        noun: 'EQUI',
+        specValue: 2,
+      })],
+    );
+    expect(viewer.__dtxAfterInstancesLoaded).toHaveBeenCalledWith(7997, ['server_only']);
+    expect(store.error.value).toBeNull();
+    expect(store.resultSet.value?.loadedCount).toBe(1);
+    expect(store.resultSet.value?.unloadedCount).toBe(0);
+    expect(store.resultSet.value?.items[0]?.loaded).toBe(true);
+    expect(store.resultSet.value?.items[0]?.visible).toBe(true);
+  });
+
+  it('批量加载返回 ok 但 viewer 中没有可绘制对象时，应改用 AABB 代理模型兜底显示', async () => {
+    const viewer = createViewerStub();
+    viewer.__dtxLayer = {};
+    viewer.__dtxAfterInstancesLoaded = vi.fn();
+    viewer.scene.getAABB = vi.fn(() => null);
+    delete viewer.scene.objects.server_only;
+
+    const batchLoadRefnos = vi.fn(async () => ({
+      ok: ['server_only'],
+      fail: [],
+    }));
+
+    const store = createSpatialQueryStore({
+      viewerRef: { value: viewer },
+      selection: { selectedRefno: { value: null } } as any,
+      toolStore: { pickedQueryCenter: { value: null }, setToolMode: vi.fn(), setPickedQueryCenter: vi.fn() } as any,
+      batchLoadRefnos,
+    });
+
+    store.resultSet.value = {
+      request: {
+        mode: 'distance',
+        centerSource: 'coordinates',
+        center: { x: 0, y: 0, z: 0 },
+        radius: 100,
+        shape: 'sphere',
+        filters: { nouns: [], keyword: '', onlyLoaded: false, onlyVisible: false, specValues: [] },
+        limit: 100,
+        sortBy: 'distanceAsc',
+      },
+      items: [
+        {
+          refno: 'server_only',
+          noun: 'EQUI',
+          specValue: 2,
+          specName: '电气系统',
+          distance: 20,
+          loaded: false,
+          visible: false,
+          matchedBy: 'server-spatial-index',
+          bbox: {
+            min: { x: 20, y: 0, z: 0 },
+            max: { x: 30, y: 10, z: 10 },
+          },
+        },
+      ],
+      page: 1,
+      perPage: 100,
+      returnedCount: 1,
+      totalPages: 1,
+      hasMore: false,
+      total: 1,
+      loadedCount: 0,
+      unloadedCount: 1,
+      truncated: false,
+      warnings: [],
+      groups: [],
+    };
+
+    await store.loadResults({ onlyUnloaded: true });
+
+    expect(batchLoadRefnos).toHaveBeenCalledWith(['server_only'], expect.objectContaining({ flyTo: undefined }));
+    expect(dtxLoaderMocks.loadDtxAabbProxyRefnos).toHaveBeenCalledWith(
+      viewer.__dtxLayer,
+      7997,
+      [expect.objectContaining({
+        refno: 'server_only',
+        noun: 'EQUI',
+        specValue: 2,
+      })],
+    );
+    expect(store.error.value).toBeNull();
+    expect(store.resultSet.value?.loadedCount).toBe(1);
+    expect(store.resultSet.value?.unloadedCount).toBe(0);
+    expect(store.resultSet.value?.items[0]?.loaded).toBe(true);
+    expect(store.resultSet.value?.items[0]?.visible).toBe(true);
+  });
+
   it('点击未加载结果时应先请求加载，再飞行并选中', async () => {
     const viewer = createViewerStub();
     const requestId = 'req-1';
@@ -635,6 +824,16 @@ describe('createSpatialQueryStore', () => {
     });
     expect(store.submitQuery).toHaveBeenCalledTimes(1);
     expect(store.submitQuery).toHaveBeenCalledWith(1);
+  });
+
+  it('spatial URL 显式使用 m 单位时应转换为内部 mm 半径', () => {
+    const parsed = parseSpatialQueryUrlParams('?spatial_refno=24381/145019&spatial_radius=5&spatial_radius_unit=m&spatial_shape=sphere');
+    expect(parsed).toEqual({
+      refno: '24381_145019',
+      radius: 5000,
+      shape: 'sphere',
+      autorun: false,
+    });
   });
 
   it('spatial URL 没有 autorun 时只打开并填充，不触发查询', () => {

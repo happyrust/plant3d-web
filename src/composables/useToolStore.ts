@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue';
 
+import type { MeasurementPickSourceId } from './useMeasurementPickSources';
 import type {
   AnnotationComment,
   AnnotationReviewAction,
@@ -65,9 +66,17 @@ export type Vec3 = [number, number, number];
 
 export type MeasurementKind = 'distance' | 'angle' | 'elevation_point' | 'elevation_delta';
 
+export type MeasurementPointSourceInfo = {
+  source: MeasurementPickSourceId;
+  candidateId?: string;
+  refno?: string | null;
+  label?: string | null;
+};
+
 export type MeasurementPoint = {
   entityId: string;
   worldPos: Vec3;
+  sourceInfo?: MeasurementPointSourceInfo;
 };
 
 export type MeasurementSourceLink = {
@@ -576,24 +585,107 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
-function normalizeMeasurementRecord(rec: MeasurementRecord): MeasurementRecord {
+function normalizeNullableString(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  return normalizeOptionalString(value);
+}
+
+function normalizeMeasurementPointSourceInfo(value: unknown): MeasurementPointSourceInfo | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Partial<MeasurementPointSourceInfo>;
+  if (
+    raw.source !== 'mesh_pick_point' &&
+    raw.source !== 'ptset' &&
+    raw.source !== 'position' &&
+    raw.source !== 'primitive_key_point'
+  ) {
+    return undefined;
+  }
   return {
+    source: raw.source,
+    candidateId: normalizeOptionalString(raw.candidateId),
+    refno: normalizeNullableString(raw.refno),
+    label: normalizeNullableString(raw.label),
+  };
+}
+
+function normalizeMeasurementPoint(point: MeasurementPoint): MeasurementPoint {
+  return {
+    ...point,
+    sourceInfo: normalizeMeasurementPointSourceInfo(point.sourceInfo),
+  };
+}
+
+function normalizeMeasurementRecord(rec: MeasurementRecord): MeasurementRecord {
+  const base = {
     ...rec,
     sourceAnnotationId: normalizeOptionalString(rec.sourceAnnotationId),
     sourceAnnotationType: normalizeOptionalString(rec.sourceAnnotationType) as AnnotationType | undefined,
     formId: normalizeOptionalString(rec.formId),
     taskId: normalizeOptionalString(rec.taskId),
+  };
+  if (base.kind === 'distance') {
+    return {
+      ...base,
+      origin: normalizeMeasurementPoint(base.origin),
+      target: normalizeMeasurementPoint(base.target),
+    };
+  }
+  if (base.kind === 'angle') {
+    return {
+      ...base,
+      origin: normalizeMeasurementPoint(base.origin),
+      corner: normalizeMeasurementPoint(base.corner),
+      target: normalizeMeasurementPoint(base.target),
+    };
+  }
+  if (base.kind === 'elevation_point') {
+    return {
+      ...base,
+      point: normalizeMeasurementPoint(base.point),
+    };
+  }
+  return {
+    ...base,
+    origin: normalizeMeasurementPoint(base.origin),
+    target: normalizeMeasurementPoint(base.target),
   };
 }
 
 function normalizeXeokitMeasurementRecord<T extends XeokitMeasurementRecord>(rec: T): T {
-  return {
+  const base = {
     ...rec,
     sourceAnnotationId: normalizeOptionalString(rec.sourceAnnotationId),
     sourceAnnotationType: normalizeOptionalString(rec.sourceAnnotationType) as AnnotationType | undefined,
     formId: normalizeOptionalString(rec.formId),
     taskId: normalizeOptionalString(rec.taskId),
   };
+  if (base.kind === 'distance') {
+    return {
+      ...base,
+      origin: normalizeMeasurementPoint(base.origin),
+      target: normalizeMeasurementPoint(base.target),
+    } as T;
+  }
+  if (base.kind === 'angle') {
+    return {
+      ...base,
+      origin: normalizeMeasurementPoint(base.origin),
+      corner: normalizeMeasurementPoint(base.corner),
+      target: normalizeMeasurementPoint(base.target),
+    } as T;
+  }
+  if (base.kind === 'elevation_point') {
+    return {
+      ...base,
+      point: normalizeMeasurementPoint(base.point),
+    } as T;
+  }
+  return {
+    ...base,
+    origin: normalizeMeasurementPoint(base.origin),
+    target: normalizeMeasurementPoint(base.target),
+  } as T;
 }
 
 function normalizeAnnotationRecord(rec: AnnotationRecord): AnnotationRecord {
@@ -661,7 +753,7 @@ function normalizeRectAnnotationRecord(rec: RectAnnotationRecord): RectAnnotatio
 function normalizeV1(parsed: PersistedStateV1): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: [],
     cloudAnnotations: [],
@@ -677,7 +769,7 @@ function normalizeV1(parsed: PersistedStateV1): PersistedStateV5 {
 function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: [],
@@ -693,7 +785,7 @@ function normalizeV2(parsed: PersistedStateV2): PersistedStateV5 {
 function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
@@ -709,7 +801,7 @@ function normalizeV3(parsed: PersistedStateV3): PersistedStateV5 {
 function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
@@ -725,19 +817,23 @@ function normalizeV4(parsed: PersistedStateV4): PersistedStateV5 {
 function normalizeV5(parsed: PersistedStateV5): PersistedStateV5 {
   return {
     version: 5,
-    measurements: Array.isArray(parsed.measurements) ? parsed.measurements : [],
+    measurements: Array.isArray(parsed.measurements) ? parsed.measurements.map(normalizeMeasurementRecord) : [],
     annotations: Array.isArray(parsed.annotations) ? parsed.annotations.map(normalizeAnnotationRecord) : [],
     obbAnnotations: Array.isArray(parsed.obbAnnotations) ? parsed.obbAnnotations.map(normalizeObbAnnotationRecord) : [],
     cloudAnnotations: Array.isArray(parsed.cloudAnnotations) ? parsed.cloudAnnotations.map(normalizeCloudAnnotationRecord) : [],
     rectAnnotations: Array.isArray(parsed.rectAnnotations) ? parsed.rectAnnotations.map(normalizeRectAnnotationRecord) : [],
     dimensions: Array.isArray(parsed.dimensions) ? parsed.dimensions : [],
-    xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements) ? parsed.xeokitDistanceMeasurements : [],
-    xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements) ? parsed.xeokitAngleMeasurements : [],
+    xeokitDistanceMeasurements: Array.isArray(parsed.xeokitDistanceMeasurements)
+      ? parsed.xeokitDistanceMeasurements.map(normalizeXeokitMeasurementRecord)
+      : [],
+    xeokitAngleMeasurements: Array.isArray(parsed.xeokitAngleMeasurements)
+      ? parsed.xeokitAngleMeasurements.map(normalizeXeokitMeasurementRecord)
+      : [],
     xeokitElevationPointMeasurements: Array.isArray(parsed.xeokitElevationPointMeasurements)
-      ? parsed.xeokitElevationPointMeasurements
+      ? parsed.xeokitElevationPointMeasurements.map(normalizeXeokitMeasurementRecord)
       : [],
     xeokitElevationDeltaMeasurements: Array.isArray(parsed.xeokitElevationDeltaMeasurements)
-      ? parsed.xeokitElevationDeltaMeasurements
+      ? parsed.xeokitElevationDeltaMeasurements.map(normalizeXeokitMeasurementRecord)
       : [],
   };
 }
@@ -1095,7 +1191,7 @@ function setCompareMode(enabled: boolean) {
 }
 
 function addMeasurement(rec: MeasurementRecord) {
-  measurements.value = [...measurements.value, rec];
+  measurements.value = [...measurements.value, normalizeMeasurementRecord(rec)];
   activeMeasurementId.value = rec.id;
 }
 
@@ -1116,7 +1212,7 @@ function clearMeasurements() {
 }
 
 function addXeokitDistanceMeasurement(rec: XeokitDistanceMeasurementRecord) {
-  xeokitDistanceMeasurements.value = [...xeokitDistanceMeasurements.value, rec];
+  xeokitDistanceMeasurements.value = [...xeokitDistanceMeasurements.value, normalizeXeokitMeasurementRecord(rec)];
   activeXeokitMeasurementId.value = rec.id;
 }
 
@@ -1125,7 +1221,7 @@ function updateXeokitDistanceMeasurement(id: string, patch: Partial<XeokitDistan
 }
 
 function addXeokitAngleMeasurement(rec: XeokitAngleMeasurementRecord) {
-  xeokitAngleMeasurements.value = [...xeokitAngleMeasurements.value, rec];
+  xeokitAngleMeasurements.value = [...xeokitAngleMeasurements.value, normalizeXeokitMeasurementRecord(rec)];
   activeXeokitMeasurementId.value = rec.id;
 }
 
@@ -1134,7 +1230,7 @@ function updateXeokitAngleMeasurement(id: string, patch: Partial<XeokitAngleMeas
 }
 
 function addXeokitElevationPointMeasurement(rec: XeokitElevationPointMeasurementRecord) {
-  xeokitElevationPointMeasurements.value = [...xeokitElevationPointMeasurements.value, rec];
+  xeokitElevationPointMeasurements.value = [...xeokitElevationPointMeasurements.value, normalizeXeokitMeasurementRecord(rec)];
   activeXeokitMeasurementId.value = rec.id;
 }
 
@@ -1143,7 +1239,7 @@ function updateXeokitElevationPointMeasurement(id: string, patch: Partial<Xeokit
 }
 
 function addXeokitElevationDeltaMeasurement(rec: XeokitElevationDeltaMeasurementRecord) {
-  xeokitElevationDeltaMeasurements.value = [...xeokitElevationDeltaMeasurements.value, rec];
+  xeokitElevationDeltaMeasurements.value = [...xeokitElevationDeltaMeasurements.value, normalizeXeokitMeasurementRecord(rec)];
   activeXeokitMeasurementId.value = rec.id;
 }
 

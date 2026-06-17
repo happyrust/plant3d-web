@@ -17,7 +17,7 @@ import {
 import { Box3, Matrix4, Plane, Vector2, Vector3 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
-import { pdmsGetPtsetWithContext, pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
 import { getMbdPipeAnnotations, getMbdPipeV2Annotations } from '@/api/mbdPipeApi';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
@@ -66,7 +66,7 @@ import {
 } from '@/debug/injectMbdPipeDemo';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import { isMbdStandaloneUrl, normalizeMbdRefnoFromUrl } from '@/utils/mbdStandaloneUrl';
+import { isMbdDrawingPresetUrl, isMbdStandaloneUrl, normalizeMbdRefnoFromUrl } from '@/utils/mbdStandaloneUrl';
 import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
@@ -90,6 +90,7 @@ defineProps<{
 const containerRef = ref<HTMLDivElement | null>(null);
 const mainCanvas = ref<HTMLCanvasElement>();
 const isMbdStandaloneMode = isMbdStandaloneUrl(window.location.search);
+const isMbdDrawingPresetMode = isMbdDrawingPresetUrl(window.location.search);
 const overlayContainer = ref<HTMLElement | null>(null);
 
 const store = useToolStore();
@@ -180,6 +181,11 @@ function isMbdV2DisabledFromUrl(): boolean {
   }
 }
 
+function isMbdDrawingPresetFromUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  return isMbdDrawingPresetUrl(window.location.search);
+}
+
 function readMbdDimModeFromUrl(): 'classic' | 'rebarviz' | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -216,7 +222,9 @@ function resolveMbdApiMode(mode: 'layout_first' | 'construction' | 'inspection')
 function readMbdArrowSizeFromUrl(): number | null {
   try {
     const q = new URLSearchParams(window.location.search);
-    const raw = Number(String(q.get('mbd_arrow_size') || '').trim());
+    const text = String(q.get('mbd_arrow_size') ?? '').trim();
+    if (!text) return null;
+    const raw = Number(text);
     if (Number.isFinite(raw)) return Math.max(6, Math.min(40, raw));
   } catch {
     // ignore
@@ -227,7 +235,9 @@ function readMbdArrowSizeFromUrl(): number | null {
 function readMbdArrowAngleFromUrl(): number | null {
   try {
     const q = new URLSearchParams(window.location.search);
-    const raw = Number(String(q.get('mbd_arrow_angle') || '').trim());
+    const text = String(q.get('mbd_arrow_angle') ?? '').trim();
+    if (!text) return null;
+    const raw = Number(text);
     if (Number.isFinite(raw)) return Math.max(8, Math.min(40, raw));
   } catch {
     // ignore
@@ -238,8 +248,10 @@ function readMbdArrowAngleFromUrl(): number | null {
 function readMbdLineWidthFromUrl(): number | null {
   try {
     const q = new URLSearchParams(window.location.search);
-    const raw = Number(String(q.get('mbd_line_width') || '').trim());
-    if (Number.isFinite(raw)) return Math.max(1, Math.min(6, raw));
+    const text = String(q.get('mbd_line_width') ?? '').trim();
+    if (!text) return null;
+    const raw = Number(text);
+    if (Number.isFinite(raw)) return Math.max(1, Math.min(10, raw));
   } catch {
     // ignore
   }
@@ -318,7 +330,8 @@ function applyGlobalEdgeStyle(): void {
 
   overlay.setStyle({
     showFill: false,
-    edgeColor: 0x4b5563,
+    edgeColor: isMbdDrawingPresetMode ? 0x0f2f7f : 0x4b5563,
+    edgeOpacity: isMbdDrawingPresetMode ? 0.58 : 1,
     edgeThresholdAngle: clampGlobalEdgeThresholdAngle(globalEdgeThresholdAngle.value),
     edgeAlwaysOnTop: false,
   });
@@ -537,6 +550,14 @@ const isMeasureModeActive = computed(() => {
     mode === 'xeokit_measure_elevation_point' ||
     mode === 'xeokit_measure_elevation_delta' ||
     mode === 'measure_object_to_object' ||
+    mode === 'measure_pipe_to_structure' ||
+    mode === 'measure_pipe_to_pipe'
+  );
+});
+const isNearestMeasurementWizardMode = computed(() => {
+  const mode = store.toolMode.value;
+  return (
+    mode === 'measure_point_to_object' ||
     mode === 'measure_pipe_to_structure' ||
     mode === 'measure_pipe_to_pipe'
   );
@@ -766,14 +787,6 @@ function computeClipPlanesByDiag(diag: number): { near: number; far: number } {
   return { near: 5, far: Math.min(100000, Math.max(20000, d * 20)) };
 }
 
-function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
-  const { scale, recenter } = readDtxScaleConfigFromUrl();
-  if (!Number.isFinite(scale) || scale <= 0) return;
-
-  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
-  if (dtxGlobalTransformAppliedKey === key) return;
-
-  // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
 type DtxFocusBoxResult = {
   box: Box3;
   source: 'full' | 'robust';
@@ -915,6 +928,14 @@ function fitDtxViewerToFocusBox(dtxViewer: DtxViewer, dtxLayer: DTXLayer, durati
   return focus;
 }
 
+function applyDtxGlobalTransformOnce(dbno: number, dtxLayer: DTXLayer): void {
+  const { scale, recenter } = readDtxScaleConfigFromUrl();
+  if (!Number.isFinite(scale) || scale <= 0) return;
+
+  const key = `${dbno}:${scale}:${recenter ? 1 : 0}`;
+  if (dtxGlobalTransformAppliedKey === key) return;
+
+  // 注意：DTXLayer.getBoundingBox() 会应用 globalModelMatrix。
   // 因此在首次归一化时，先临时置为 identity 再取“原始（mm）bbox”。
   const prevMatrix = dtxLayer.getGlobalModelMatrix();
   dtxLayer.setGlobalModelMatrix(new Matrix4());
@@ -1078,6 +1099,11 @@ watch(
 function applyBackground(mode: BackgroundMode): void {
   const viewer = dtxViewerRef.value;
   if (!viewer) return;
+  if (isMbdDrawingPresetMode) {
+    viewer.setSolidBackground('#f3f1ed');
+    requestRender();
+    return;
+  }
   const preset = backgroundStore.getPreset(mode);
   if (mode === 'skybox') {
     viewer.loadCrossSkybox('/texture/skybox.png');
@@ -1676,6 +1702,13 @@ function handleRibbonCommand(commandId: string) {
       }
       requestRender();
       return;
+    case 'mbd.flow_direction':
+      if (mbdPipeVisRef.value) {
+        mbdPipeVisRef.value.showFlowDirection.value =
+                    !mbdPipeVisRef.value.showFlowDirection.value;
+      }
+      requestRender();
+      return;
     case 'mbd.labels':
       if (mbdPipeVisRef.value) {
         mbdPipeVisRef.value.showLabels.value =
@@ -2134,7 +2167,7 @@ function openSpatialQueryDrawer(mode: 'range' | 'distance' = 'distance', options
   }
 
   if (options?.autoSubmit) {
-    void spatialQueryStore.submitQuery();
+    void spatialQueryStore.submitQuery(1);
   }
 }
 
@@ -2229,10 +2262,10 @@ onMounted(async () => {
   continuousRender = false;
   demoMode = 'none';
   demoPrimitiveCount = 1000;
-  cadGridEnabled = true;
-  cameraViewMode.value = 'cad_weak';
-  globalEdgeEnabled.value = false;
-  globalEdgeThresholdAngle.value = 20;
+  cadGridEnabled = !isMbdDrawingPresetMode;
+  cameraViewMode.value = isMbdDrawingPresetMode ? 'cad_flat' : 'cad_weak';
+  globalEdgeEnabled.value = isMbdDrawingPresetMode;
+  globalEdgeThresholdAngle.value = isMbdDrawingPresetMode ? 14 : 20;
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
   try {
@@ -2310,7 +2343,7 @@ onMounted(async () => {
       canvas,
       background: 0xe5e7eb,
       debug: isDev,
-      gizmo: { enabled: true, placement: 'top-right', size: 100 },
+      gizmo: { enabled: !isMbdDrawingPresetMode, placement: 'top-right', size: 100 },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -3302,6 +3335,9 @@ onMounted(async () => {
       tools,
       xeokitMeasurementTools,
     };
+    (window as any).__plant3dMbdE2E = {
+      getSnapshot: () => mbdPipeVisRef.value?.getDebugSnapshot?.() ?? null,
+    };
   }
 
   if (showRefno && demoMode !== 'primitives') {
@@ -3879,6 +3915,33 @@ onMounted(async () => {
       handleShowModelByRefnos,
     );
 
+  async function loadChildPtsetEntries(parquetLoader: ReturnType<typeof useDbnoInstancesParquetLoader>, dbno: number, ownerRefno: string) {
+    const summaries = await parquetLoader.queryDirectChildrenPtsetSummary(dbno, ownerRefno);
+    const candidates = summaries.filter((item) => item.success && item.ptCount > 0);
+    const loaded: { refno: string; response: Awaited<ReturnType<typeof parquetLoader.queryPtsetByRefnoFromParquet>> }[] = [];
+
+    for (const item of candidates) {
+      const resp = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, item.refno);
+      if (resp.success && resp.ptset.length > 0) {
+        loaded.push({ refno: item.refno, response: resp });
+      }
+    }
+
+    return { summaries, loaded };
+  }
+
+  function renderPtsetEntries(contextRefno: string, entries: { refno: string; response: Awaited<ReturnType<ReturnType<typeof useDbnoInstancesParquetLoader>['queryPtsetByRefnoFromParquet']>> }[]) {
+    if (entries.length === 0) return;
+    const [first, ...rest] = entries;
+    ptsetVis.setPanelContext(contextRefno);
+    ptsetVis.renderPtset(first.refno, first.response);
+    for (const item of rest) {
+      ptsetVis.appendPtset(item.refno, item.response, { setCurrent: false });
+    }
+    ptsetVis.flyToPtset();
+    requestRender();
+  }
+
   offPtsetWatch = watch(
     () => store.ptsetVisualizationRequest.value,
     async (request) => {
@@ -3896,23 +3959,34 @@ onMounted(async () => {
         } catch {
           dbno = null;
         }
-        let batchId: string | null = null;
+        if (dbno == null) {
+          emitToast({ message: `无法从 refno=${refnoKey} 解析 dbno，无法查询 ptset` });
+          return;
+        }
 
-        const response = await pdmsGetPtsetWithContext(refnoKey, {
-          dbno: dbno ?? undefined,
-          batchId,
-        });
+        const parquetLoader = useDbnoInstancesParquetLoader();
+        const response = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, refnoKey);
         if (response.success && response.ptset.length > 0) {
-          ptsetVis.renderPtset(refnoKey, response);
-          ptsetVis.flyToPtset();
+          renderPtsetEntries(refnoKey, [{ refno: refnoKey, response }]);
           emitToast({
             message: `已显示 ${response.ptset.length} 个连接点`,
           });
-          requestRender();
         } else {
-          const errorMsg = response.error_message || '未找到点集数据';
-          emitToast({ message: errorMsg });
-          console.warn('[ptset]', errorMsg);
+          const fallback = await loadChildPtsetEntries(parquetLoader, dbno, refnoKey);
+          if (fallback.loaded.length > 0) {
+            renderPtsetEntries(refnoKey, fallback.loaded);
+            const pointCount = fallback.loaded.reduce((sum, item) => sum + item.response.ptset.length, 0);
+            emitToast({
+              message: `当前构件自身无 ptset，已显示 ${fallback.loaded.length} 个子元件 ${pointCount} 个连接点`,
+            });
+          } else {
+            const childErrors = fallback.summaries
+              .map((item) => item.errorMessage)
+              .filter(Boolean);
+            const errorMsg = response.error_message || childErrors[0] || '未找到点集数据';
+            emitToast({ message: errorMsg });
+            console.warn('[ptset]', errorMsg);
+          }
         }
       } catch (error) {
         console.error('[ptset] Failed to load ptset:', error);
@@ -3930,7 +4004,9 @@ onMounted(async () => {
       if (!request) return;
       try {
         try {
-          ensurePanelAndActivate('mbdPipe');
+          if (!isMbdDrawingPresetMode) {
+            ensurePanelAndActivate('mbdPipe');
+          }
         } catch {
           // ignore
         }
@@ -3958,6 +4034,7 @@ onMounted(async () => {
         let batchId: string | null = null;
 
         const isLayoutFirstMbd = mbdPipeVis.mbdViewMode.value === 'layout_first';
+        const isDrawingMbd = isLayoutFirstMbd && isMbdDrawingPresetFromUrl();
         const mbdParams = {
           mode: resolveMbdApiMode(mbdPipeVis.mbdViewMode.value),
           // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
@@ -3970,29 +4047,34 @@ onMounted(async () => {
           max_slope: 0.1,
           dim_min_length: 1.0,
           weld_merge_threshold: 1.0,
-          // V2 layout_first 由后端决定 eligible dimensions；
-          // 前端显式表达 segment/chain/port/cut_tubi 控制面板的请求意图。
-          include_dims: true,
-          // 一期默认切到施工视图：链式/总长/焊口/坡度优先
+          // 首期 BRAN MBD 聚焦长度尺寸：chain/port/cut-tubi。
+          include_dims: false,
           include_chain_dims: true,
           // 折线 BRAN 的 overall 是路径总长，不能用首尾直连的一条尺寸线表达。
           include_overall_dim: !isLayoutFirstMbd,
           include_port_dims: isLayoutFirstMbd,
           include_cut_tubis: true,
-          include_fittings: true,
-          include_tags: true,
+          include_fittings: isDrawingMbd,
+          include_tags: isDrawingMbd,
+          include_position_tags: isDrawingMbd,
+          include_elevation_marks: isDrawingMbd,
+          include_branch_label: isDrawingMbd,
+          include_material_balloons: isDrawingMbd,
+          include_material_table: isDrawingMbd,
           include_layout_hints: true,
           include_layout_result: isLayoutFirstMbd,
-          include_welds: true,
-          include_slopes: true,
-          include_bends: true,
+          include_welds: isDrawingMbd,
+          include_slopes: false,
+          include_bends: isDrawingMbd,
           bend_mode: 'facecenter',
         } as const;
         const useV2Mbd =
           isLayoutFirstMbd &&
           !isMbdV2DisabledFromUrl();
         const resp = useV2Mbd
-          ? await getMbdPipeV2Annotations(refnoKey, mbdParams)
+          ? await getMbdPipeV2Annotations(refnoKey, mbdParams, {
+            includeLegacySegments: true,
+          })
           : await getMbdPipeAnnotations(refnoKey, mbdParams);
         if (resp.success && resp.data) {
           if (mbdPipeVis.mbdViewMode.value === 'layout_first' && !resp.data.layout_result) {
@@ -4312,6 +4394,7 @@ onUnmounted(() => {
     delete (window as any).__xeokitMeasurementTools;
     delete (window as any).__viewerTools;
     delete (window as any).__viewer;
+    delete (window as any).__plant3dMbdE2E;
   } catch {
     // ignore
   }
@@ -4331,7 +4414,7 @@ onUnmounted(() => {
     <div ref="overlayContainer" class="xeokitOverlay" />
 
     <!-- DEV：LOD 调参面板（屏幕相关阈值 + L2 预热） -->
-    <div v-if="lodDebugVisible"
+    <div v-if="lodDebugVisible && !isMbdDrawingPresetMode"
       class="pointer-events-auto absolute left-3 top-3 w-[260px] rounded-md border border-border bg-background/90 p-2 text-foreground shadow-lg backdrop-blur"
       style="z-index: 950"
       @pointerdown.stop
@@ -4454,7 +4537,8 @@ onUnmounted(() => {
     </div>
 
     <!-- 左侧竖直工具栏（快捷操作） -->
-    <div ref="leftToolbarRef"
+    <div v-if="!isMbdDrawingPresetMode"
+      ref="leftToolbarRef"
       class="pointer-events-auto absolute left-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop
@@ -4562,7 +4646,8 @@ onUnmounted(() => {
     </div>
 
     <!-- 右侧竖直工具栏（查看/快捷） -->
-    <div class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
+    <div v-if="!isMbdDrawingPresetMode"
+      class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop
       @wheel.stop>
@@ -4801,13 +4886,7 @@ onUnmounted(() => {
       @close="closeObjectMeasureMode"
       @reset="resetObjectMeasureSelection" />
 
-    <MeasurementWizard v-else-if="
-                         !isMbdStandaloneMode &&
-                         (store.toolMode.value === 'measure_point_to_object' ||
-                           store.toolMode.value === 'measure_pipe_to_structure' ||
-                           store.toolMode.value === 'measure_pipe_to_pipe') &&
-                           toolsRef
-                       "
+    <MeasurementWizard v-else-if="!isMbdStandaloneMode && isNearestMeasurementWizardMode && toolsRef"
       :title="
         store.toolMode.value === 'measure_point_to_object'
           ? '点到面测量'

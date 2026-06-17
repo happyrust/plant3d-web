@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ref, shallowRef } from 'vue';
+import { nextTick, ref, shallowRef } from 'vue';
 
 import { Matrix4, PerspectiveCamera, Scene, Vector3 } from 'three';
 
@@ -8,6 +8,29 @@ import branTestData from './bran-test-data.json';
 import type { MbdPipeData } from '@/api/mbdPipeApi';
 
 import { useMbdPipeAnnotationThree } from '@/composables/useMbdPipeAnnotationThree';
+
+function createFixtureViewer() {
+  return {
+    canvas: {
+      getBoundingClientRect: () => ({ width: 1920, height: 1080 }),
+    },
+    scene: new Scene(),
+    camera: new PerspectiveCamera(60, 1920 / 1080, 0.1, 10000),
+    flyTo: vi.fn(),
+  } as any;
+}
+
+function renderFixtureFlow(data: MbdPipeData = branTestData as MbdPipeData) {
+  const viewer = createFixtureViewer();
+  const vis = useMbdPipeAnnotationThree(
+    shallowRef(viewer),
+    ref<HTMLElement | null>(null),
+    { getGlobalModelMatrix: () => new Matrix4() },
+  );
+  vis.applyModeDefaults('construction');
+  vis.renderBranch(data);
+  return vis;
+}
 
 /**
  * BRAN JSON Fixture Test Suite
@@ -72,6 +95,171 @@ describe('BRAN JSON Fixture', () => {
     expect(fittingKinds.has('elbo')).toBe(true);
     expect(fittingKinds.has('tee')).toBe(true);
     expect(fittingKinds.has('flan')).toBe(true);
+  });
+
+  it('fixture should create hidden flow direction objects by default', async () => {
+    const data = branTestData as MbdPipeData;
+    const vis = renderFixtureFlow(data);
+    const flowObjects = vis.getFlowDirectionObjects();
+    const endpointObjects = vis.getBranchFlowEndpointObjects();
+
+    expect(vis.showFlowDirection.value).toBe(false);
+    expect(flowObjects.size).toBe(data.segments.length);
+    expect(endpointObjects.size).toBe(2);
+    for (const flow of flowObjects.values()) {
+      expect(flow.centerline.visible).toBe(false);
+      expect(flow.pulse.visible).toBe(false);
+      expect(flow.arrows.length).toBeGreaterThan(0);
+      expect(flow.arrows.every((arrow) => !arrow.visible)).toBe(true);
+    }
+    for (const endpoint of endpointObjects.values()) {
+      expect(endpoint.marker.visible).toBe(false);
+      expect(endpoint.halo.visible).toBe(false);
+      expect(endpoint.arrow.visible).toBe(false);
+      expect(endpoint.guide.visible).toBe(false);
+      expect(endpoint.pulse.visible).toBe(false);
+    }
+
+    vis.showFlowDirection.value = true;
+    await nextTick();
+
+    for (const flow of flowObjects.values()) {
+      expect(flow.centerline.visible).toBe(true);
+      expect(flow.pulse.visible).toBe(true);
+      expect(flow.arrows.every((arrow) => arrow.visible)).toBe(true);
+    }
+    for (const endpoint of endpointObjects.values()) {
+      expect(endpoint.marker.visible).toBe(true);
+      expect(endpoint.halo.visible).toBe(true);
+      expect(endpoint.arrow.visible).toBe(true);
+      expect(endpoint.guide.visible).toBe(true);
+      expect(endpoint.pulse.visible).toBe(true);
+    }
+  });
+
+  it('fixture flow direction should follow arrive to leave', () => {
+    const vis = renderFixtureFlow();
+    const flowObjects = vis.getFlowDirectionObjects();
+    const endpointObjects = vis.getBranchFlowEndpointObjects();
+
+    const segT1 = flowObjects.get('seg_t1');
+    const segT2 = flowObjects.get('seg_t2');
+    const inlet = endpointObjects.get('inlet');
+    const outlet = endpointObjects.get('outlet');
+
+    expect(segT1?.direction.x).toBeCloseTo(1, 6);
+    expect(segT1?.direction.y).toBeCloseTo(0, 6);
+    expect(segT1?.direction.z).toBeCloseTo(0, 6);
+    expect(segT2?.direction.x).toBeCloseTo(0, 6);
+    expect(segT2?.direction.y).toBeCloseTo(1, 6);
+    expect(segT2?.direction.z).toBeCloseTo(0, 6);
+    expect(inlet?.segmentId).toBe('seg_t1');
+    expect(inlet?.position.toArray()).toEqual([0, 0, 0]);
+    expect(inlet?.marker.getParams().label).toBe('BRAN入口');
+    expect(inlet!.arrowStart.x).toBeLessThan(inlet!.position.x);
+    expect(inlet!.arrowEnd.x).toBeGreaterThan(inlet!.arrowStart.x);
+    expect(inlet!.arrowEnd.x).toBeGreaterThan(inlet!.position.x);
+    expect(outlet?.segmentId).toBe('seg_t5');
+    expect(outlet?.position.toArray()).toEqual([2850, 600, 0]);
+    expect(outlet?.marker.getParams().label).toBe('BRAN出口');
+    expect(outlet!.arrowStart.x).toBeLessThan(outlet!.position.x);
+    expect(outlet!.arrowEnd.x).toBeGreaterThan(outlet!.arrowStart.x);
+    expect(outlet!.arrowEnd.x).toBeGreaterThan(outlet!.position.x);
+  });
+
+  it('fixture flow direction should skip invalid segments', () => {
+    const base = branTestData as MbdPipeData;
+    const data = {
+      ...base,
+      segments: [
+        ...base.segments,
+        {
+          ...base.segments[0],
+          id: 'seg_missing_leave',
+          leave: null,
+        },
+        {
+          ...base.segments[0],
+          id: 'seg_zero_length',
+          arrive: [1, 1, 1],
+          leave: [1, 1, 1],
+        },
+      ],
+    } as MbdPipeData;
+
+    const vis = renderFixtureFlow(data);
+    const flowObjects = vis.getFlowDirectionObjects();
+    const endpointObjects = vis.getBranchFlowEndpointObjects();
+
+    expect(flowObjects.size).toBe(base.segments.length);
+    expect(endpointObjects.size).toBe(2);
+    expect(flowObjects.has('seg_missing_leave')).toBe(false);
+    expect(flowObjects.has('seg_zero_length')).toBe(false);
+    expect(flowObjects.has('seg_t1')).toBe(true);
+  });
+
+  it('fixture flow direction visibility should be independent from labels and segment skeleton', async () => {
+    const vis = renderFixtureFlow();
+    const flowObjects = vis.getFlowDirectionObjects();
+    const endpointObjects = vis.getBranchFlowEndpointObjects();
+
+    vis.showFlowDirection.value = true;
+    await nextTick();
+    expect(Array.from(flowObjects.values()).every((flow) => flow.centerline.visible)).toBe(true);
+    expect(Array.from(flowObjects.values()).every((flow) => flow.pulse.visible)).toBe(true);
+    expect(Array.from(flowObjects.values()).every((flow) => flow.arrows.every((arrow) => arrow.visible))).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.marker.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.halo.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.arrow.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.guide.visible)).toBe(true);
+
+    vis.showLabels.value = false;
+    vis.showSegments.value = true;
+    await nextTick();
+    expect(vis.showFlowDirection.value).toBe(true);
+    expect(Array.from(flowObjects.values()).every((flow) => flow.centerline.visible)).toBe(true);
+    expect(Array.from(flowObjects.values()).every((flow) => flow.pulse.visible)).toBe(true);
+    expect(Array.from(flowObjects.values()).every((flow) => flow.arrows.every((arrow) => arrow.visible))).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.marker.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.halo.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.arrow.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => endpoint.guide.visible)).toBe(true);
+
+    vis.isVisible.value = false;
+    await nextTick();
+    expect(Array.from(flowObjects.values()).every((flow) => !flow.centerline.visible)).toBe(true);
+    expect(Array.from(flowObjects.values()).every((flow) => !flow.pulse.visible)).toBe(true);
+    expect(Array.from(flowObjects.values()).every((flow) => flow.arrows.every((arrow) => !arrow.visible))).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => !endpoint.marker.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => !endpoint.halo.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => !endpoint.arrow.visible)).toBe(true);
+    expect(Array.from(endpointObjects.values()).every((endpoint) => !endpoint.guide.visible)).toBe(true);
+  });
+
+  it('fixture flow direction should clear objects and use readable materials', () => {
+    const vis = renderFixtureFlow();
+    const flowObjects = vis.getFlowDirectionObjects();
+    const endpointObjects = vis.getBranchFlowEndpointObjects();
+    const firstFlow = flowObjects.get('seg_t1');
+
+    expect(firstFlow).toBeDefined();
+    expect((firstFlow!.centerline.material as any).color.getHex()).toBe(0x38bdf8);
+    expect((firstFlow!.centerline.material as any).depthTest).toBe(false);
+    expect(firstFlow!.pulse.name).toBe('mbd-flow-pulse:seg_t1');
+    expect((firstFlow!.pulse.material as any).isShaderMaterial).toBe(true);
+    expect((firstFlow!.pulse.material as any).depthTest).toBe(false);
+    expect((firstFlow!.arrows[0]!.material as any).color.getHex()).toBe(0xf97316);
+    expect((firstFlow!.arrows[0]!.material as any).depthTest).toBe(false);
+    expect((endpointObjects.get('inlet')!.halo.material as any).color.getHex()).toBe(0x0ea5e9);
+    expect((endpointObjects.get('outlet')!.halo.material as any).color.getHex()).toBe(0xff7a18);
+    expect(endpointObjects.get('inlet')!.arrow.name).toBe('mbd-flow-inlet-external-arrow');
+    expect(endpointObjects.get('outlet')!.arrow.name).toBe('mbd-flow-outlet-external-arrow');
+    expect(endpointObjects.get('inlet')!.pulse.name).toBe('mbd-flow-inlet-external-pulse');
+
+    vis.clearAll();
+
+    expect(vis.getFlowDirectionObjects().size).toBe(0);
+    expect(vis.getBranchFlowEndpointObjects().size).toBe(0);
   });
 
   it('fixture should render all dimensions in construction mode', () => {

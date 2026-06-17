@@ -2,11 +2,14 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
 import {
+  MEASUREMENT_PICK_SOURCE_LABELS,
+  type MeasurementPickSourceId,
+} from '@/composables/useMeasurementPickSources';
+import {
   type MeasurementRecord,
   type XeokitMeasurementRecord,
   useToolStore,
 } from '@/composables/useToolStore';
-import { DEFAULT_PTSET_SNAP_PX } from '@/composables/usePtsetSnap';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementStyleStore } from '@/composables/useXeokitMeasurementStyleStore';
@@ -32,6 +35,27 @@ const xeokitTools = computed(() => ctx.xeokitMeasurementTools.value);
 const measurementStyle = useXeokitMeasurementStyleStore();
 const unitSettings = useUnitSettingsStore();
 const measurementRowEls = ref(new Map<string, HTMLElement>());
+const measurementPickSourceRows: {
+  id: MeasurementPickSourceId;
+  description: string;
+}[] = [
+  {
+    id: 'ptset',
+    description: '构件 PTSET 点，默认显示并捕捉。',
+  },
+  {
+    id: 'mesh_pick_point',
+    description: '光标射线命中的模型表面点，需手动启用捕捉。',
+  },
+  {
+    id: 'position',
+    description: '实例位置/原点；当前阶段无数据时会提示不可用。',
+  },
+  {
+    id: 'primitive_key_point',
+    description: '基本体关键点；依赖模型包导出的关键点数据。',
+  },
+];
 
 const isXeokitMode = computed(() => {
   return (
@@ -234,19 +258,26 @@ function updateMeasurementStyle(
     | 'elevationDeltaShowEndpointLabels'
     | 'elevationDeltaShowDeltaLabel'
     | 'elevationDeltaShowVerticalGuide'
-    | 'elevationDeltaShowMarkers'
-    | 'keypointSnapEnabled',
+    | 'elevationDeltaShowMarkers',
   checked: boolean,
 ) {
   measurementStyle.updateStyle({ [key]: checked });
 }
 
-function updateKeypointSnapPx(raw: string): void {
+function updateMeasurementPickSource(
+  source: MeasurementPickSourceId,
+  key: 'show' | 'snap',
+  checked: boolean,
+): void {
+  measurementStyle.updateMeasurementPickSource(source, { [key]: checked });
+}
+
+function updateMeasurementPickSourceThreshold(source: MeasurementPickSourceId, raw: string): void {
   const parsed = Number(raw);
   const clamped = Number.isFinite(parsed)
     ? Math.min(40, Math.max(4, Math.round(parsed)))
-    : DEFAULT_PTSET_SNAP_PX;
-  measurementStyle.updateStyle({ keypointSnapPx: clamped });
+    : measurementStyle.state.measurementPickSources[source].thresholdPx;
+  measurementStyle.updateMeasurementPickSource(source, { thresholdPx: clamped });
 }
 
 function resetMeasurementStyle() {
@@ -346,7 +377,7 @@ watch(
 
       <div class="mt-2 text-xs text-muted-foreground">
         <template v-if="isMeasurementReady">
-          模型加载完成后可用；点击模型表面按提示点选即可创建。
+          模型加载完成后可用；测量点按下方已启用的点源捕捉，Mesh Pick Point 需手动启用。
         </template>
         <template v-else>
           当前未满足测量条件，请先排除上面的 Viewer / DTX 初始化问题。
@@ -359,28 +390,53 @@ watch(
         <div class="mt-3 flex flex-col gap-3 text-sm">
           <div data-testid="measurement-style-snap-section"
             class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
-            <div class="font-medium">关键点捕捉</div>
+            <div class="font-medium">测量点源</div>
             <div class="mt-1 text-xs text-muted-foreground">
-              测量时 hover 构件会显示其关键点(ptset)，靠近时自动吸附到该点。
+              显示和捕捉互相独立；关闭捕捉后该点源不会参与测量登记。
             </div>
-            <div class="mt-2 flex flex-col gap-2">
-              <label class="flex items-center gap-2">
-                <input data-testid="measurement-style-keypoint-snap"
-                  type="checkbox"
-                  :checked="measurementStyle.state.keypointSnapEnabled"
-                  @change="updateMeasurementStyle('keypointSnapEnabled', ($event.target as HTMLInputElement).checked)" />
-                <span>启用关键点捕捉</span>
-              </label>
-              <label class="flex items-center gap-2"
-                :class="measurementStyle.state.keypointSnapEnabled ? '' : 'opacity-50'">
-                <span class="w-24 shrink-0">捕捉阈值(px)</span>
-                <input data-testid="measurement-style-keypoint-px"
-                  type="number" min="4" max="40" step="1"
-                  class="h-8 w-20 rounded-md border border-input bg-background px-2 text-xs"
-                  :disabled="!measurementStyle.state.keypointSnapEnabled"
-                  :value="measurementStyle.state.keypointSnapPx"
-                  @change="updateKeypointSnapPx(($event.target as HTMLInputElement).value)" />
-              </label>
+            <div class="mt-3 overflow-x-auto">
+              <table class="w-full min-w-[420px] text-left text-xs">
+                <thead class="text-muted-foreground">
+                  <tr>
+                    <th class="pb-2 font-medium">点源</th>
+                    <th class="pb-2 text-center font-medium">显示</th>
+                    <th class="pb-2 text-center font-medium">捕捉</th>
+                    <th class="pb-2 font-medium">阈值(px)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in measurementPickSourceRows"
+                    :key="row.id"
+                    class="border-t border-border">
+                    <td class="py-2 pr-3 align-top">
+                      <div class="font-medium text-foreground">
+                        {{ MEASUREMENT_PICK_SOURCE_LABELS[row.id] }}
+                      </div>
+                      <div class="mt-0.5 text-muted-foreground">{{ row.description }}</div>
+                    </td>
+                    <td class="py-2 text-center align-top">
+                      <input :data-testid="`measurement-source-${row.id}-show`"
+                        type="checkbox"
+                        :checked="measurementStyle.state.measurementPickSources[row.id].show"
+                        @change="updateMeasurementPickSource(row.id, 'show', ($event.target as HTMLInputElement).checked)" />
+                    </td>
+                    <td class="py-2 text-center align-top">
+                      <input :data-testid="`measurement-source-${row.id}-snap`"
+                        type="checkbox"
+                        :checked="measurementStyle.state.measurementPickSources[row.id].snap"
+                        @change="updateMeasurementPickSource(row.id, 'snap', ($event.target as HTMLInputElement).checked)" />
+                    </td>
+                    <td class="py-2 align-top">
+                      <input :data-testid="`measurement-source-${row.id}-threshold`"
+                        type="number" min="4" max="40" step="1"
+                        class="h-8 w-20 rounded-md border border-input bg-background px-2 text-xs"
+                        :disabled="!measurementStyle.state.measurementPickSources[row.id].snap"
+                        :value="measurementStyle.state.measurementPickSources[row.id].thresholdPx"
+                        @change="updateMeasurementPickSourceThreshold(row.id, ($event.target as HTMLInputElement).value)" />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 

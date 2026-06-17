@@ -47,6 +47,7 @@ export function detectPipeClearances(
 
           const start1 = new THREE.Vector3(seg1.arrive[0], seg1.arrive[1], seg1.arrive[2]);
           const end1 = new THREE.Vector3(seg1.leave[0], seg1.leave[1], seg1.leave[2]);
+          const center1 = start1.clone().add(end1).multiplyScalar(0.5);
           const axis1 = new THREE.Vector3(
             seg1.leave[0] - seg1.arrive[0],
             seg1.leave[1] - seg1.arrive[1],
@@ -55,6 +56,7 @@ export function detectPipeClearances(
           
           const start2 = new THREE.Vector3(seg2.arrive[0], seg2.arrive[1], seg2.arrive[2]);
           const end2 = new THREE.Vector3(seg2.leave[0], seg2.leave[1], seg2.leave[2]);
+          const center2 = start2.clone().add(end2).multiplyScalar(0.5);
           const axis2 = new THREE.Vector3(
             seg2.leave[0] - seg2.arrive[0],
             seg2.leave[1] - seg2.arrive[1],
@@ -63,17 +65,16 @@ export function detectPipeClearances(
           if (!areAxesWithinAngle(axis1, axis2, maxAngleDeg)) continue;
 
           const result = computePipeSegmentToPipeSegmentClearance({
+            pipe1Center: center1,
             pipe1Start: start1,
             pipe1End: end1,
             pipe1Radius: seg1.outside_diameter / 2,
             pipe1Axis: axis1,
-            pipe1Start: new THREE.Vector3(...seg1.arrive),
-            pipe1End: new THREE.Vector3(...seg1.leave),
             pipe2Center: center2,
             pipe2Radius: seg2.outside_diameter / 2,
             pipe2Axis: axis2,
-            pipe2Start: new THREE.Vector3(...seg2.arrive),
-            pipe2End: new THREE.Vector3(...seg2.leave),
+            pipe2Start: start2,
+            pipe2End: end2,
             maxAngleDeg,
           });
 

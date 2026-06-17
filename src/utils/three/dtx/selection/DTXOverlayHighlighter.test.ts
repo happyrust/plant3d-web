@@ -62,4 +62,27 @@ describe('DTXOverlayHighlighter', () => {
       'sel_edge_o:demo:1',
     ]);
   });
+
+  it('支持 edgeOpacity 以控制全局轮廓线视觉权重', () => {
+    const scene = new Scene();
+    const geometry = createQuadGeometry();
+    const highlighter = new DTXOverlayHighlighter(scene, {
+      showFill: false,
+      edgeOpacity: 0.37,
+    });
+
+    highlighter.setGeometryGetter(() => ({
+      geometry,
+      matrix: new Matrix4(),
+    }));
+
+    highlighter.setHighlightedObjects(['o:demo:2']);
+
+    const overlayGroup = scene.getObjectByName('DTXSelectionOverlay');
+    const edge = overlayGroup?.children[0] as any;
+    expect(edge?.material?.opacity).toBe(0.37);
+
+    highlighter.setStyle({ edgeOpacity: 0.52 });
+    expect(edge?.material?.opacity).toBe(0.52);
+  });
 });

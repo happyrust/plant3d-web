@@ -1,11 +1,14 @@
-import type { LengthUnit } from '@/composables/useUnitSettingsStore';
+import { formatLengthMeters } from './unitFormat';
+
 import type {
   MeasurementPoint,
   MeasurementRecord,
   XeokitMeasurementRecord,
 } from '@/composables/useToolStore';
+import type { LengthUnit } from '@/composables/useUnitSettingsStore';
 
-import { formatLengthMeters } from './unitFormat';
+import { MEASUREMENT_PICK_SOURCE_LABELS } from '@/composables/useMeasurementPickSources';
+import { formatPdmsRef } from '@/utils/pdmsRefno';
 
 type MeasurementLike = MeasurementRecord | XeokitMeasurementRecord;
 
@@ -36,6 +39,27 @@ export function formatMeasurementKindLabel(kind: MeasurementLike['kind']): strin
   }
 }
 
+function formatMeasurementPointSource(point: MeasurementPoint): string {
+  const source = point.sourceInfo?.source;
+  if (!source) return formatMeasurementEntityId(point.entityId);
+  const label = MEASUREMENT_PICK_SOURCE_LABELS[source] ?? source;
+  const pointLabel = point.sourceInfo?.label;
+  if (pointLabel === label || pointLabel?.startsWith(`${label} `)) return pointLabel;
+  return pointLabel ? `${label} ${pointLabel}` : label;
+}
+
+function formatMeasurementEntityId(entityId: string): string {
+  const objectMatch = /^o:([^:]+):\d+$/.exec(entityId);
+  return formatPdmsRef(objectMatch?.[1] ?? entityId);
+}
+
+function formatMeasurementPoint(point: MeasurementPoint): string {
+  const entityText = formatMeasurementEntityId(point.entityId);
+  if (!point.sourceInfo) return entityText;
+  const sourceText = formatMeasurementPointSource(point);
+  return sourceText === point.entityId ? entityText : `${entityText} (${sourceText})`;
+}
+
 export function formatMeasurementSummary(
   measurement: MeasurementLike,
   unit: LengthUnit,
@@ -43,13 +67,13 @@ export function formatMeasurementSummary(
 ): string {
   switch (measurement.kind) {
     case 'distance':
-      return `起点 ${measurement.origin.entityId} · 终点 ${measurement.target.entityId}`;
+      return `起点 ${formatMeasurementPoint(measurement.origin)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
     case 'angle':
-      return `起点 ${measurement.origin.entityId} · 拐点 ${measurement.corner.entityId} · 终点 ${measurement.target.entityId}`;
+      return `起点 ${formatMeasurementPoint(measurement.origin)} -> 拐点 ${formatMeasurementPoint(measurement.corner)} -> 终点 ${formatMeasurementPoint(measurement.target)}`;
     case 'elevation_point':
-      return `绝对 ${formatSignedLengthMeters(measurement.absoluteElevation, unit, precision)} · 相对基准 ${formatSignedLengthMeters(measurement.relativeElevation, unit, precision)}`;
+      return `点 ${formatMeasurementPointSource(measurement.point)} · 绝对 ${formatSignedLengthMeters(measurement.absoluteElevation, unit, precision)} · 相对基准 ${formatSignedLengthMeters(measurement.relativeElevation, unit, precision)}`;
     case 'elevation_delta':
-      return `起点 ${formatSignedLengthMeters(measurement.originElevation, unit, precision)} · 终点 ${formatSignedLengthMeters(measurement.targetElevation, unit, precision)} · 高差 ${formatSignedLengthMeters(measurement.deltaElevation, unit, precision)}`;
+      return `起点 ${formatMeasurementPointSource(measurement.origin)} ${formatSignedLengthMeters(measurement.originElevation, unit, precision)} · 终点 ${formatMeasurementPointSource(measurement.target)} ${formatSignedLengthMeters(measurement.targetElevation, unit, precision)} · 高差 ${formatSignedLengthMeters(measurement.deltaElevation, unit, precision)}`;
   }
 }
 

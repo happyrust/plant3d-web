@@ -27,6 +27,10 @@ export type WeldAnnotation3DParams = {
   labelOffsetWorld?: THREE.Vector3 | null;
   /** 文字渲染风格（solvespace/rebarviz） */
   labelRenderStyle?: SolveSpaceLabelRenderStyle;
+  /** 是否给文字加制图编号方框 */
+  labelBox?: boolean;
+  /** 方框内边距（SolveSpace pixel units） */
+  labelBoxPaddingPx?: number;
 }
 
 // 十字标记：两条独立线段（避免 Line2 折线连线导致出现斜线）
@@ -45,6 +49,7 @@ export class WeldAnnotation3D extends AnnotationBase {
   private lineGeometryV: THREE.BufferGeometry;
   private textLabel: SolveSpaceBillboardVectorText;
   private readonly labelWorld = new THREE.Vector3();
+  private readonly worldScale = new THREE.Vector3();
   private readonly wppTmp = {
     ndc: new THREE.Vector3(),
     ndc2: new THREE.Vector3(),
@@ -68,6 +73,8 @@ export class WeldAnnotation3D extends AnnotationBase {
       crossSize: params.crossSize ?? 50,
       labelOffsetWorld: params.labelOffsetWorld?.clone() ?? null,
       labelRenderStyle: params.labelRenderStyle,
+      labelBox: params.labelBox ?? false,
+      labelBoxPaddingPx: params.labelBoxPaddingPx ?? 7,
     };
     this.materialSet = this.resolveMaterialSet(materials.orange);
 
@@ -108,7 +115,21 @@ export class WeldAnnotation3D extends AnnotationBase {
     this.textLabel.object3d.getWorldPosition(this.labelWorld);
     const wpp = worldPerPixelAt(camera, this.labelWorld, vw, vh, this.wppTmp);
     if (Number.isFinite(wpp) && wpp > 0) {
-      this.textLabel.setWorldPerPixel(wpp);
+      let localWpp = wpp;
+      try {
+        this.getWorldScale(this.worldScale);
+        const s =
+          (Math.abs(this.worldScale.x) +
+            Math.abs(this.worldScale.y) +
+            Math.abs(this.worldScale.z)) /
+          3;
+        if (Number.isFinite(s) && s > 1e-9) {
+          localWpp = wpp / s;
+        }
+      } catch {
+        // ignore
+      }
+      this.textLabel.setWorldPerPixel(localWpp);
     }
     this.textLabel.setFrame(
       this.labelWorld,
@@ -138,6 +159,8 @@ export class WeldAnnotation3D extends AnnotationBase {
       crossSize: this.params.crossSize,
       labelOffsetWorld: this.params.labelOffsetWorld?.clone() ?? null,
       labelRenderStyle: this.params.labelRenderStyle,
+      labelBox: this.params.labelBox,
+      labelBoxPaddingPx: this.params.labelBoxPaddingPx,
     };
   }
 
@@ -155,11 +178,20 @@ export class WeldAnnotation3D extends AnnotationBase {
       this.params.labelRenderStyle = params.labelRenderStyle;
       this.textLabel.setRenderStyle(params.labelRenderStyle);
     }
+    if (params.labelBox !== undefined) this.params.labelBox = params.labelBox;
+    if (params.labelBoxPaddingPx !== undefined) {
+      this.params.labelBoxPaddingPx = params.labelBoxPaddingPx;
+    }
     this.rebuild();
   }
 
   setMaterialSet(materialSet: AnnotationMaterialSet): void {
     this.materialSet = materialSet;
+    this.textLabel.setMaterials({
+      normal: this.materialSet.textFatLine,
+      hovered: this.materials.ssHovered.textFatLine,
+      selected: this.materials.ssSelected.textFatLine,
+    });
     this.applyMaterials();
   }
 
@@ -204,6 +236,11 @@ export class WeldAnnotation3D extends AnnotationBase {
           : '现场焊';
     this.textLabel.setText(
       subtitleText.trim().length > 0 ? `${label}\n${subtitleText}` : label,
+    );
+    this.textLabel.setOutlineBoxVisible(
+      this.params.labelBox,
+      this.params.labelBoxPaddingPx,
+      30,
     );
     const labelPos = new THREE.Vector3(0, s * 0.9, 0);
     if (this.params.labelOffsetWorld) {

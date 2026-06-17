@@ -52,7 +52,6 @@ export function resolveMbdDimensionMaterialSet(
   if (mode === 'rebarviz') {
     if (kind === 'overall') return materials.ssDimensionDefault;
     if (kind === 'chain') return materials.ssDimensionDefault;
-    if (kind === 'port') return materials.black;
     return materials.ssDimensionDefault;
   }
 

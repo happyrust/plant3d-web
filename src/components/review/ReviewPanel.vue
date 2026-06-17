@@ -35,7 +35,6 @@ import CollisionResultList from './CollisionResultList.vue';
 import { createConfirmedRecordsRestorer } from './confirmedRecordsRestore';
 import { isReviewDebugUiEnabled } from './debugUiGate';
 import { restoreEmbedFormSnapshotContext } from './embedFormSnapshotRestore';
-import LogDrawer from './LogDrawer.vue';
 import {
   EMBED_LANDING_STATE_STORAGE_KEY,
   EMBED_LANDING_STATE_UPDATED_EVENT,
@@ -43,6 +42,7 @@ import {
   resolveTrustedEmbedIdentity,
   type EmbedLandingState,
 } from './embedRoleLanding';
+import LogDrawer from './LogDrawer.vue';
 import ReviewAuxData from './ReviewAuxData.vue';
 import ReviewCommentsTimeline from './ReviewCommentsTimeline.vue';
 import ReviewDataSync from './ReviewDataSync.vue';

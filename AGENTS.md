@@ -81,3 +81,8 @@
 **用本机 Chrome + DevTools（CDP 附加，便于看 Network/断点）**：终端 1 执行 `chmod +x scripts/launch-chrome-cdp.sh && ./scripts/launch-chrome-cdp.sh`；终端 2 在设好 `PMS_E2E_PASSWORD`、`PMS_EMBEDDED_SITE_SUBSTRING` 后运行 `npm run test:pms:cdp:attach:full` 或 `test:pms:cdp:attach:extended`（已内置 `CHROME_CDP_URL=http://127.0.0.1:9222`）。非默认端口时用 `CHROME_DEBUG_PORT=9333` 启动 Chrome，并对 npm 命令设置 `CHROME_CDP_URL=http://127.0.0.1:9333`。
 
 **PMS 数据接口可见性（默认开）**：`test:pms:cdp:full` 在 plant3d「编校审单创建成功」后，会再次进入「三维校审单」并监听 **PMS 域名** 上 `xhr`/`fetch` 的 **JSON** 响应，确认其中出现本次 **编校审包名** 或 **测试 BRAN**（`24381_145018` 及斜杠形式）。不需要时用 `PMS_CDP_VERIFY_PMS_API=0` 关闭；列表接口路径固定时可设 `PMS_API_URL_SUBSTRING` 缩小匹配范围。
+
+<!-- SPECKIT START -->
+Current Spec Kit feature plan:
+`specs/002-bran-flow-direction/plan.md`
+<!-- SPECKIT END -->

@@ -28,14 +28,7 @@ vi.mock('@duckdb/duckdb-wasm', () => {
     DuckDBDataProtocol: {
       HTTP: 'http',
     },
-    getJsDelivrBundles: () => ({
-      mock: {
-        mainWorker: 'worker.js',
-        mainModule: 'duckdb.wasm',
-        pthreadWorker: 'pthread.js',
-      },
-    }),
-    selectBundle: async (bundles: Record<string, unknown>) => bundles.mock,
+    selectBundle: async (bundles: Record<string, unknown>) => bundles.eh ?? bundles.mvp,
     ConsoleLogger,
     AsyncDuckDB,
   };

@@ -66,7 +66,6 @@
               </div>
             </div>
           </section>
-
         </template>
 
         <template v-else>
@@ -120,30 +119,30 @@
             <div class="flex items-center justify-between">
               <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">查询半径</div>
               <div class="font-mono text-lg font-semibold text-[#C84D00]">
-                {{ draft.radius }} <span class="text-xs text-[#C84D00]/70">mm</span>
+                {{ radiusMetersText }} <span class="text-xs text-[#C84D00]/70">m</span>
               </div>
             </div>
-            <input :value="draft.radius"
+            <input :value="radiusMetersValue"
               type="range"
-              :min="DISTANCE_RADIUS_MIN"
-              :max="DISTANCE_RADIUS_MAX"
-              :step="DISTANCE_RADIUS_STEP"
+              :min="DISTANCE_RADIUS_MIN_M"
+              :max="DISTANCE_RADIUS_MAX_M"
+              :step="DISTANCE_RADIUS_STEP_M"
               data-testid="radius-slider"
               class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-[#FF6B00]"
               @input="onRadiusSliderInput" />
             <div class="mt-1 flex justify-between text-[10px] text-gray-400">
-              <span>{{ DISTANCE_RADIUS_MIN }} mm</span>
-              <span>{{ DISTANCE_RADIUS_MAX }} mm</span>
+              <span>{{ DISTANCE_RADIUS_MIN_M }} m</span>
+              <span>{{ DISTANCE_RADIUS_MAX_M }} m</span>
             </div>
             <div class="mt-2 flex flex-wrap gap-1.5">
               <button v-for="preset in DISTANCE_RADIUS_PRESETS"
                 :key="preset"
                 type="button"
                 class="rounded-full border px-2.5 py-0.5 text-[11px] transition-colors"
-                :class="draft.radius === preset ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                :class="radiusMetersValue === preset ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
                 data-testid="radius-preset"
-                @click="draft.radius = preset">
-                {{ preset }} mm
+                @click="setRadiusMeters(preset)">
+                {{ preset }} m
               </button>
             </div>
           </section>
@@ -194,11 +193,13 @@
         <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
           <div class="grid gap-1.5" :class="draft.mode === 'range' ? 'grid-cols-2' : 'grid-cols-1'">
             <label v-if="draft.mode === 'range'" class="text-xs text-gray-500">
-              <span class="mb-1 block">查询半径 (mm)</span>
-              <input v-model.number="draft.radius"
+              <span class="mb-1 block">查询半径 (m)</span>
+              <input :value="radiusMetersValue"
                 type="number"
-                min="1"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+                :min="DISTANCE_RADIUS_MIN_M"
+                :step="DISTANCE_RADIUS_STEP_M"
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]"
+                @input="onRadiusMetersNumberInput" />
             </label>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">每页数量</span>
@@ -370,6 +371,59 @@
             </div>
           </div>
 
+          <div v-if="resultSet && resultSet.items.length > 0" class="border-b border-gray-100 px-3 py-2">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div class="text-xs font-semibold text-gray-900">房间列表</div>
+                <div class="mt-0.5 text-[11px] text-gray-500">
+                  <span v-if="roomListLoading">正在解析所在房间...</span>
+                  <span v-else-if="roomListRows.length > 0">当前页涉及 {{ roomListRows.length }} 个房间</span>
+                  <span v-else>当前页暂未解析到房间</span>
+                </div>
+              </div>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="roomListLoading"
+                @click="refreshRoomList">
+                刷新
+              </button>
+            </div>
+            <div v-if="roomListError" class="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+              {{ roomListError }}
+            </div>
+            <div v-if="roomListRows.length > 0" class="max-h-40 space-y-1.5 overflow-y-auto">
+              <div v-for="room in roomListRows"
+                :key="room.roomRefno"
+                class="rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5">
+                <div class="flex items-start justify-between gap-2">
+                  <button type="button"
+                    class="min-w-0 text-left"
+                    @click="openRoomInfo(room)">
+                    <div class="truncate text-xs font-medium text-gray-900">{{ room.name }}</div>
+                    <div class="mt-0.5 flex flex-wrap gap-1">
+                      <span class="rounded-full bg-white px-2 py-0.5 font-mono text-[11px] text-gray-500">{{ room.roomRefno }}</span>
+                      <span class="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">{{ room.roomType }}</span>
+                      <span class="rounded-full bg-[#FFF1E8] px-2 py-0.5 text-[11px] text-[#C84D00]">{{ room.count }} 项</span>
+                    </div>
+                    <div v-if="room.desc" class="mt-1 truncate text-[11px] text-gray-500">{{ room.desc }}</div>
+                  </button>
+                  <div class="flex shrink-0 gap-1">
+                    <button type="button"
+                      class="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+                      @click="openRoomInfo(room)">
+                      信息
+                    </button>
+                    <button type="button"
+                      class="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+                      @click="showRoomModel(room)">
+                      显示
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div v-if="!resultSet && !isQueryBusy" class="px-3 py-6 text-center text-xs text-gray-400">
             暂无结果，执行一次空间查询后会在这里按专业分组显示。
           </div>
@@ -476,12 +530,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Search, X } from 'lucide-vue-next';
 
 import type { SpatialQueryMode, SpatialQueryResultGroup, SpatialQueryResultItem } from '@/types/spatialQuery';
 
+import { resolveContainingRoomInfo, useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
 import {
   SITE_SPEC_OPTIONS_WITH_UNKNOWN,
@@ -498,6 +553,7 @@ const emit = defineEmits<{
 }>();
 
 const spatialQuery = useSpatialQuery();
+const roomInfoPanel = useRoomInfoPanel();
 const {
   draft,
   status,
@@ -519,17 +575,44 @@ const {
   restoreScene,
 } = spatialQuery;
 
-const DISTANCE_RADIUS_MIN = 100;
-const DISTANCE_RADIUS_MAX = 10000;
-const DISTANCE_RADIUS_STEP = 100;
-const DISTANCE_RADIUS_PRESETS = [100, 500, 1000, 5000] as const;
+const METERS_TO_MM = 1000;
+const DISTANCE_RADIUS_MIN_M = 0.1;
+const DISTANCE_RADIUS_MAX_M = 100;
+const DISTANCE_RADIUS_STEP_M = 0.1;
+const DISTANCE_RADIUS_PRESETS = [1, 5, 10, 50] as const;
 
 const isQueryBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
 const specOptions = SITE_SPEC_OPTIONS_WITH_UNKNOWN;
 const selectedSpecValues = computed(() => new Set(draft.specValues));
 const copyStatus = ref<string | null>(null);
+const roomListLoading = ref(false);
+const roomListError = ref<string | null>(null);
+const roomListRows = ref<SpatialRoomListRow[]>([]);
+let roomListSeq = 0;
+
+type SpatialRoomListRow = {
+  roomRefno: string;
+  name: string;
+  roomType: string;
+  desc: string;
+  count: number;
+  sourceRefnos: string[];
+};
 
 const allSpecSelected = computed(() => draft.specValues.length === specOptions.length);
+const radiusMetersValue = computed(() => Number((draft.radius / METERS_TO_MM).toFixed(3)));
+const radiusMetersText = computed(() => formatMeters(radiusMetersValue.value));
+
+function formatMeters(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  if (Math.abs(value - Math.round(value)) < 0.0001) return String(Math.round(value));
+  return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function setRadiusMeters(value: number): void {
+  if (!Number.isFinite(value) || value <= 0) return;
+  draft.radius = Math.round(value * METERS_TO_MM);
+}
 
 function selectAllSpecs(): void {
   draft.specValues = specOptions.map((option) => option.value);
@@ -640,6 +723,89 @@ const resultPageEnd = computed(() => {
   return resultPageStart.value + result.items.length - 1;
 });
 
+function attrText(attrs: Record<string, unknown>, key: string): string {
+  const value = attrs[key] ?? attrs[key.toUpperCase()] ?? attrs[key.toLowerCase()];
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+async function refreshRoomList() {
+  const seq = ++roomListSeq;
+  const items = resultSet.value?.items ?? [];
+  roomListRows.value = [];
+  roomListError.value = null;
+  if (items.length === 0) return;
+
+  roomListLoading.value = true;
+  try {
+    const grouped = new Map<string, SpatialRoomListRow>();
+    const resolved = await Promise.all(items.map(async (item) => {
+      try {
+        return {
+          item,
+          info: await resolveContainingRoomInfo(item.refno),
+        };
+      } catch {
+        return {
+          item,
+          info: null,
+        };
+      }
+    }));
+    if (seq !== roomListSeq) return;
+
+    for (const { item, info } of resolved) {
+      if (!info) continue;
+      const roomType = attrText(info.attrs, 'TYPE') || 'ROOM';
+      const desc = attrText(info.attrs, 'DESC') || attrText(info.attrs, 'DESCRIPTION');
+      const name = info.fullName || attrText(info.attrs, 'NAME') || info.roomRefno;
+      const existing = grouped.get(info.roomRefno);
+      if (existing) {
+        existing.count += 1;
+        existing.sourceRefnos.push(item.refno);
+      } else {
+        grouped.set(info.roomRefno, {
+          roomRefno: info.roomRefno,
+          name,
+          roomType,
+          desc,
+          count: 1,
+          sourceRefnos: [item.refno],
+        });
+      }
+    }
+
+    roomListRows.value = Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (e) {
+    if (seq !== roomListSeq) return;
+    roomListError.value = e instanceof Error ? e.message : String(e);
+    roomListRows.value = [];
+  } finally {
+    if (seq === roomListSeq) {
+      roomListLoading.value = false;
+    }
+  }
+}
+
+watch(
+  () => (resultSet.value?.items ?? []).map((item) => item.refno).join('|'),
+  () => {
+    void refreshRoomList();
+  },
+  { immediate: true },
+);
+
+function openRoomInfo(room: SpatialRoomListRow) {
+  void roomInfoPanel.openForRefno(room.roomRefno);
+}
+
+function showRoomModel(room: SpatialRoomListRow) {
+  void (async () => {
+    await roomInfoPanel.openForRefno(room.roomRefno);
+    await roomInfoPanel.showRoomModel(room.roomRefno);
+  })();
+}
+
 function closePanel() {
   emit('update:open', false);
 }
@@ -677,8 +843,14 @@ function onRadiusSliderInput(event: Event) {
   const target = event.target as HTMLInputElement;
   const value = Number(target.value);
   if (Number.isFinite(value)) {
-    draft.radius = value;
+    setRadiusMeters(value);
   }
+}
+
+function onRadiusMetersNumberInput(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const value = Number(target.value);
+  setRadiusMeters(value);
 }
 
 function toggleSpecValue(specValue: number) {
@@ -732,7 +904,7 @@ function showOnlyGroup(specValue: number) {
 }
 
 function formatDistance(distance: number) {
-  return `${distance.toFixed(0)} mm`;
+  return `${formatMeters(distance / METERS_TO_MM)} m`;
 }
 
 function uniqueRefnosInOrder(items: SpatialQueryResultItem[]): string[] {

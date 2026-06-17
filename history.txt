@@ -87,3 +87,4 @@ SELECT count() AS distinct_returned_tasks FROM (SELECT VALUE task_id FROM review
 SELECT count() AS records_total FROM review_records GROUP ALL;
 SELECT count() AS distinct_records_tasks FROM (SELECT VALUE task_id FROM review_records GROUP BY task_id) GROUP ALL;
 SELECT count() AS annotation_states_total FROM review_annotation_states GROUP ALL;
+SELECT count() FROM pe GROUP ALL;

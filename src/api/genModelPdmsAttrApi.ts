@@ -6,6 +6,8 @@ export type PdmsUiAttrResponse = {
   attrs: Record<string, unknown>;
   /** 构件完整路径名称（层级路径） */
   full_name?: string | null;
+  /** 引用类属性（值形如 pe:<refno>，如 OWNER/REFNO）解析出的 full_name，键为属性名 */
+  ref_full_names?: Record<string, string> | null;
   error_message?: string | null;
 };
 

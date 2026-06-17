@@ -19,6 +19,7 @@ export type DTXOverlayHighlightStyle = {
   fillColor?: ColorRepresentation;
   fillOpacity?: number;
   edgeColor?: ColorRepresentation;
+  edgeOpacity?: number;
   edgeThresholdAngle?: number;
   /** 令边线恒在最上（不被深度遮挡）。默认 false，更近常规描边。 */
   edgeAlwaysOnTop?: boolean;
@@ -58,6 +59,7 @@ export class DTXOverlayHighlighter {
       fillColor: style.fillColor ?? 0x4b7cff,
       fillOpacity: style.fillOpacity ?? 0.85,
       edgeColor: style.edgeColor ?? 0x00ff00,
+      edgeOpacity: style.edgeOpacity ?? 1,
       edgeThresholdAngle: style.edgeThresholdAngle ?? 20,
       edgeAlwaysOnTop: style.edgeAlwaysOnTop ?? false,
     };
@@ -76,7 +78,7 @@ export class DTXOverlayHighlighter {
       color: this._style.edgeColor,
       depthTest: !this._style.edgeAlwaysOnTop,
       transparent: true,
-      opacity: 1,
+      opacity: this._style.edgeOpacity,
     });
 
     this._scene.add(this._group);
@@ -93,6 +95,7 @@ export class DTXOverlayHighlighter {
       fillColor: next.fillColor ?? this._style.fillColor,
       fillOpacity: next.fillOpacity ?? this._style.fillOpacity,
       edgeColor: next.edgeColor ?? this._style.edgeColor,
+      edgeOpacity: next.edgeOpacity ?? this._style.edgeOpacity,
       edgeThresholdAngle: next.edgeThresholdAngle ?? this._style.edgeThresholdAngle,
       edgeAlwaysOnTop: next.edgeAlwaysOnTop ?? this._style.edgeAlwaysOnTop,
     };
@@ -101,6 +104,7 @@ export class DTXOverlayHighlighter {
     this._fillMat.opacity = this._style.fillOpacity;
 
     this._edgeMat.color.set(this._style.edgeColor);
+    this._edgeMat.opacity = this._style.edgeOpacity;
     this._edgeMat.depthTest = !this._style.edgeAlwaysOnTop;
     this._edgeMat.needsUpdate = true;
   }

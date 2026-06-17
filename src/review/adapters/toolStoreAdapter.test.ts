@@ -241,10 +241,10 @@ describe('buildReplayPayloadFromSnapshot', () => {
     const records = [r0];
 
     const golden = JSON.parse(buildReviewRecordReplayPayload(toReplayRecords(records))) as {
-      annotations: Array<{ id: string; screenshot?: unknown }>;
+      annotations: { id: string; screenshot?: unknown }[];
     };
     const adapted = JSON.parse(buildReplayPayloadFromSnapshot(buildSnapshotFromTaskRecords(records))) as {
-      annotations: Array<{ id: string; screenshot?: unknown }>;
+      annotations: { id: string; screenshot?: unknown }[];
     };
 
     expect(golden.annotations[0]).toMatchObject({

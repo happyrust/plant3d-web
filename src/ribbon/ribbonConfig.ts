@@ -277,6 +277,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
             id: 'mbd.display.left',
             items: [
               { kind: 'button', id: 'mbd.segments', label: '管段线', icon: 'spline', commandId: 'mbd.segments' },
+              { kind: 'button', id: 'mbd.flow_direction', label: '流向', icon: 'trending_up', commandId: 'mbd.flow_direction' },
               { kind: 'button', id: 'mbd.labels', label: '文字标签', icon: 'file_text', commandId: 'mbd.labels' },
             ],
           },

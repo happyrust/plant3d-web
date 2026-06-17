@@ -47,6 +47,7 @@ function createVisStub() {
     showSlopes: ref(true),
     showBends: ref(false),
     showSegments: ref(false),
+    showFlowDirection: ref(false),
     showLabels: ref(true),
     currentData: ref(null),
     activeItemId: ref<string | null>(null),
@@ -72,6 +73,7 @@ function createVisStub() {
     getStructureClearanceAnnotations: vi.fn(() => new Map()),
     getElevationAnnotations: vi.fn(() => new Map()),
     getEnvelopeObjects: vi.fn(() => new Map()),
+    getFlowDirectionObjects: vi.fn(() => new Map()),
     resolveElevationMarks: vi.fn((data?: any) => data?.elevation_marks ?? []),
     resolveEnvelopeData: vi.fn((data?: any) => data?.envelope ?? null),
     applyModeDefaults: vi.fn(),
@@ -145,6 +147,30 @@ describe('MbdPipePanel mode controls', () => {
     await nextTick();
 
     expect(vis.showStructureClearances.value).toBe(true);
+
+    app.unmount();
+  });
+
+  it('应支持流向显示开关', async () => {
+    const vis = createVisStub();
+    host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp(MbdPipePanel, { vis });
+    app.mount(host);
+    await nextTick();
+
+    const toggle = host.querySelector(
+      '[data-testid="mbd-toggle-flow-direction"]',
+    ) as HTMLInputElement | null;
+    expect(toggle).toBeTruthy();
+    expect(toggle?.checked).toBe(false);
+    expect(vis.showFlowDirection.value).toBe(false);
+
+    toggle!.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    expect(vis.showFlowDirection.value).toBe(true);
 
     app.unmount();
   });

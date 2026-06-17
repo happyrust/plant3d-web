@@ -6,6 +6,8 @@
  * - 指定 output_project：使用 `/files/output/<project>/<rel>`（多项目并存）
  */
 
+import { buildBackendUrl } from '@/utils/apiBase';
+
 let currentProjectPath: string | null = null;
 
 export function setCurrentProjectPath(path: string | null) {
@@ -29,7 +31,9 @@ export function getOutputProjectFromUrl(): string | null {
 export function buildFilesOutputUrl(relPath: string): string {
   const rel = String(relPath || '').replace(/^\/+/, '');
   const project = getOutputProjectFromUrl();
-  if (!project) return `/files/output/${rel}`;
-  return `/files/output/${encodeURIComponent(project)}/${rel}`;
+  const path = project
+    ? `/files/output/${encodeURIComponent(project)}/${rel}`
+    : `/files/output/${rel}`;
+  return buildBackendUrl(path);
 }
 

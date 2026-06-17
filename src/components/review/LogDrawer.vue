@@ -185,7 +185,7 @@ onUnmounted(stopPolling);
       </div>
       <div class="flex items-center gap-2">
         <label class="flex items-center gap-1 text-xs text-slate-500">
-          <input v-model="scopeCurrent" type="checkbox" class="h-3.5 w-3.5">
+          <input v-model="scopeCurrent" type="checkbox" class="h-3.5 w-3.5" />
           仅当前单据
         </label>
         <button type="button"

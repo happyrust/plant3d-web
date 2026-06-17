@@ -1,9 +1,10 @@
-import type { Camera, Matrix4 } from 'three';
 import { Vector3 } from 'three';
 
 import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
-import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
+import type { Camera, Matrix4 } from 'three';
+
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
+import { getDtxRefnoTransform } from '@/composables/useDbnoInstancesDtxLoader';
 import {
   ptsetResponseToSceneCandidates,
   type PtsetSceneCandidate,

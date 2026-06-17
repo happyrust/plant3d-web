@@ -95,6 +95,8 @@ export class SolveSpaceBillboardVectorText {
 
   private readonly lineGeometry: LineSegmentsGeometry;
   private readonly line: LineSegments2;
+  private readonly frameBoxGeometry: LineSegmentsGeometry;
+  private readonly frameBoxLine: LineSegments2;
   private haloLine: LineSegments2 | null = null;
   private haloMaterial: LineMaterial | null = null;
   private spriteMesh: THREE.Mesh | null = null;
@@ -114,6 +116,9 @@ export class SolveSpaceBillboardVectorText {
   private widthPx = 0;
   private heightPx = 0;
   private lineHasGeometry = false;
+  private frameBoxVisible = false;
+  private frameBoxPaddingPx = 7;
+  private frameBoxMinSidePx = 28;
   private hasExplicitFrame = false;
   private readonly frameOriginWorld = new THREE.Vector3();
   private readonly frameAxisUWorld = new THREE.Vector3(1, 0, 0);
@@ -145,7 +150,18 @@ export class SolveSpaceBillboardVectorText {
     this.line.frustumCulled = false;
     this.line.userData.noPick = true;
 
+    this.frameBoxGeometry = new LineSegmentsGeometry();
+    this.frameBoxGeometry.setPositions([0, 0, 0, 0, 0, 0]);
+    this.frameBoxLine = new LineSegments2(
+      this.frameBoxGeometry,
+      this.materialNormal,
+    );
+    this.frameBoxLine.frustumCulled = false;
+    this.frameBoxLine.userData.noPick = true;
+    this.frameBoxLine.visible = false;
+
     this._createHaloLine();
+    this.object3d.add(this.frameBoxLine);
     this.object3d.add(this.line);
 
     this._createBackgroundMesh();
@@ -197,6 +213,23 @@ export class SolveSpaceBillboardVectorText {
 
   setVisible(visible: boolean): void {
     this.object3d.visible = visible;
+  }
+
+  setOutlineBoxVisible(
+    visible: boolean,
+    paddingPx = this.frameBoxPaddingPx,
+    minSidePx = this.frameBoxMinSidePx,
+  ): void {
+    this.frameBoxVisible = visible;
+    if (Number.isFinite(paddingPx)) {
+      this.frameBoxPaddingPx = Math.max(0, paddingPx);
+    }
+    if (Number.isFinite(minSidePx)) {
+      this.frameBoxMinSidePx = Math.max(1, minSidePx);
+    }
+    this.rebuildFrameBoxGeometry();
+    this._applyMaterial();
+    this._applyRenderStyleVisibility();
   }
 
   setFrame(
@@ -264,6 +297,11 @@ export class SolveSpaceBillboardVectorText {
       // ignore
     }
     try {
+      this.frameBoxGeometry.dispose();
+    } catch {
+      // ignore
+    }
+    try {
       this.pickProxyGeometry?.dispose();
     } catch {
       // ignore
@@ -310,6 +348,7 @@ export class SolveSpaceBillboardVectorText {
       this.haloLine.renderOrder = preset.haloRenderOrder;
       this.haloLine.scale.setScalar(preset.haloScale);
     }
+    this.frameBoxLine.renderOrder = preset.textRenderOrder;
     if (this.haloMaterial) {
       this.haloMaterial.opacity = preset.haloOpacity;
     }
@@ -320,18 +359,18 @@ export class SolveSpaceBillboardVectorText {
 
   private _applyMaterial(): void {
     const stateMat = this.resolveStateMaterial();
+    let material: LineMaterial;
     if (this.getStylePreset().forceTextDepthOff) {
-      this.line.material = this.getRebarvizTextMaterial(stateMat);
-      return;
-    }
-
-    if (this._interactionState === 'selected') {
-      this.line.material = this.materialSelected;
+      material = this.getRebarvizTextMaterial(stateMat);
+    } else if (this._interactionState === 'selected') {
+      material = this.materialSelected;
     } else if (this._interactionState === 'hovered') {
-      this.line.material = this.materialHovered;
+      material = this.materialHovered;
     } else {
-      this.line.material = this.materialNormal;
+      material = this.materialNormal;
     }
+    this.line.material = material;
+    this.frameBoxLine.material = material;
   }
 
   private _applyRenderStyleVisibility(): void {
@@ -339,6 +378,7 @@ export class SolveSpaceBillboardVectorText {
     this.applyRenderStylePreset();
 
     this.line.visible = hasText;
+    this.frameBoxLine.visible = hasText && this.frameBoxVisible;
 
     if (this.haloLine) {
       this.haloLine.visible = false;
@@ -527,8 +567,37 @@ export class SolveSpaceBillboardVectorText {
       this.bgMesh.position.set(0, 0, -0.01); // slightly behind text to avoid z-fight
     }
 
+    this.rebuildFrameBoxGeometry(contentW, contentH);
     this._applyMaterial();
     this._applyRenderStyleVisibility();
+  }
+
+  private rebuildFrameBoxGeometry(
+    widthPx = this.widthPx,
+    heightPx = this.heightPx,
+  ): void {
+    const pad = this.frameBoxPaddingPx;
+    const rawW = Math.max(1e-6, widthPx + pad * 2);
+    const rawH = Math.max(1e-6, heightPx + pad * 2);
+    const shortSingleLine =
+      !this._text.includes('\n') && this._text.trim().length <= 2;
+    const side = Math.max(rawW, rawH, this.frameBoxMinSidePx);
+    const w = shortSingleLine ? side : Math.max(rawW, this.frameBoxMinSidePx);
+    const h = shortSingleLine ? side : Math.max(rawH, this.frameBoxMinSidePx);
+    const l = -w / 2;
+    const r = w / 2;
+    const b = -h / 2;
+    const t = h / 2;
+    this.frameBoxGeometry.setPositions([
+      l, b, 0,
+      r, b, 0,
+      r, b, 0,
+      r, t, 0,
+      r, t, 0,
+      l, t, 0,
+      l, t, 0,
+      l, b, 0,
+    ]);
   }
 
   private applyFrameFromWorld(): void {

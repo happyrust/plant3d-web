@@ -51,6 +51,10 @@ export type LinearDimension3DParams = {
   arrowAngleDeg?: number;
   /** 界线超出 px（默认 10） */
   extensionOvershootPx?: number;
+  /** 延伸线线宽相对尺寸主线的倍率（默认 1，保持历史行为） */
+  extensionLineWidthRatio?: number;
+  /** 延伸线透明度（默认继承尺寸主线） */
+  extensionLineOpacity?: number;
   /** 文字渲染风格（solvespace/rebarviz） */
   labelRenderStyle?: SolveSpaceLabelRenderStyle;
   /** layout_first 已布局几何：存在时优先消费后端显式尺寸线/界线/文字锚点。 */
@@ -66,6 +70,8 @@ export type LinearDimension3DLaidOutGeometry = {
   extensionLine2End?: THREE.Vector3 | null;
   textAnchor?: THREE.Vector3 | null;
   arrows?: [LinearDimension3DLaidOutArrow, LinearDimension3DLaidOutArrow] | null;
+  /** Use camera-facing arrow planes for screen-laid-out drawing dimensions. */
+  screenFacingArrows?: boolean;
 };
 
 export type LinearDimension3DLaidOutArrow = {
@@ -131,6 +137,9 @@ export class LinearDimension3D extends AnnotationBase {
   private dashedLineMatNormal: any | null = null;
   private dashedLineMatHovered: any | null = null;
   private dashedLineMatSelected: any | null = null;
+  private extensionLineMatNormal: any | null = null;
+  private extensionLineMatHovered: any | null = null;
+  private extensionLineMatSelected: any | null = null;
 
   // 几何体（需要动态更新）
   private dimLineGeometryA: LineGeometry;
@@ -202,6 +211,8 @@ export class LinearDimension3D extends AnnotationBase {
       arrowSizePx: params.arrowSizePx ?? 10,
       arrowAngleDeg: params.arrowAngleDeg ?? 20,
       extensionOvershootPx: params.extensionOvershootPx ?? 10,
+      extensionLineWidthRatio: params.extensionLineWidthRatio ?? 1,
+      extensionLineOpacity: params.extensionLineOpacity ?? 1,
       labelRenderStyle: params.labelRenderStyle,
       laidOutGeometry: this.cloneLaidOutGeometry(params.laidOutGeometry),
     };
@@ -241,6 +252,7 @@ export class LinearDimension3D extends AnnotationBase {
       this.dimensionLineOutside,
     ]) {
       l.userData.dragRole = 'offset';
+      l.renderOrder = 992;
       l.frustumCulled = false;
       this.add(l);
     }
@@ -256,6 +268,8 @@ export class LinearDimension3D extends AnnotationBase {
     );
     this.extensionLine1.userData.dragRole = 'offset';
     this.extensionLine2.userData.dragRole = 'offset';
+    this.extensionLine1.renderOrder = 992;
+    this.extensionLine2.renderOrder = 992;
     this.extensionLine1.frustumCulled = false;
     this.extensionLine2.frustumCulled = false;
     this.add(this.extensionLine1, this.extensionLine2);
@@ -265,6 +279,8 @@ export class LinearDimension3D extends AnnotationBase {
     this.arrow2 = new THREE.Mesh(this.arrowGeometry2, this.materialSet.mesh);
     this.arrow1.userData.dragRole = 'offset';
     this.arrow2.userData.dragRole = 'offset';
+    this.arrow1.renderOrder = 993;
+    this.arrow2.renderOrder = 993;
     this.arrow1.frustumCulled = false;
     this.arrow2.frustumCulled = false;
     this.add(this.arrow1, this.arrow2);
@@ -274,6 +290,8 @@ export class LinearDimension3D extends AnnotationBase {
     this.arrowOpen2 = new LineSegments2(this.arrowOpenGeometry2, this.materialSet.fatLine);
     this.arrowOpen1.userData.dragRole = 'offset';
     this.arrowOpen2.userData.dragRole = 'offset';
+    this.arrowOpen1.renderOrder = 993;
+    this.arrowOpen2.renderOrder = 993;
     this.arrowOpen1.frustumCulled = false;
     this.arrowOpen2.frustumCulled = false;
     this.arrowOpen1.visible = false;
@@ -424,7 +442,7 @@ export class LinearDimension3D extends AnnotationBase {
 
   /** 获取文字标签的世界坐标 */
   getLabelWorldPos(): THREE.Vector3 {
-    return this.resolveLabelAnchorWorld(new THREE.Vector3());
+    return this.textLabel.object3d.getWorldPosition(new THREE.Vector3());
   }
 
   /** 获取吸附点的世界坐标（用于拖拽提示线/外部辅助） */
@@ -497,6 +515,8 @@ export class LinearDimension3D extends AnnotationBase {
       arrowSizePx: this.params.arrowSizePx,
       arrowAngleDeg: this.params.arrowAngleDeg,
       extensionOvershootPx: this.params.extensionOvershootPx,
+      extensionLineWidthRatio: this.params.extensionLineWidthRatio,
+      extensionLineOpacity: this.params.extensionLineOpacity,
       labelRenderStyle: this.params.labelRenderStyle,
       laidOutGeometry: this.cloneLaidOutGeometry(this.params.laidOutGeometry),
     };
@@ -518,10 +538,10 @@ export class LinearDimension3D extends AnnotationBase {
       const t = Math.max(0, Math.min(1, Number(this.params.labelT) || 0.5));
       out.copy(this.dimStart).lerp(this.dimEnd, t);
     }
-    this.localToWorld(out);
     if (this.params.labelOffsetWorld) {
       out.add(this.params.labelOffsetWorld);
     }
+    this.localToWorld(out);
     return out;
   }
 
@@ -548,6 +568,12 @@ export class LinearDimension3D extends AnnotationBase {
       this.params.arrowAngleDeg = params.arrowAngleDeg;
     if (params.extensionOvershootPx !== undefined) {
       this.params.extensionOvershootPx = params.extensionOvershootPx;
+    }
+    if (params.extensionLineWidthRatio !== undefined) {
+      this.params.extensionLineWidthRatio = params.extensionLineWidthRatio;
+    }
+    if (params.extensionLineOpacity !== undefined) {
+      this.params.extensionLineOpacity = params.extensionLineOpacity;
     }
     if (params.labelRenderStyle !== undefined) {
       this.params.labelRenderStyle = params.labelRenderStyle;
@@ -586,6 +612,7 @@ export class LinearDimension3D extends AnnotationBase {
           },
         ]
         : null,
+      screenFacingArrows: geometry.screenFacingArrows === true,
     };
   }
 
@@ -646,8 +673,9 @@ export class LinearDimension3D extends AnnotationBase {
     this.dimensionLineA.material = lineMat;
     this.dimensionLineB.material = lineMat;
     this.dimensionLineOutside.material = lineMat;
-    this.extensionLine1.material = lineMat;
-    this.extensionLine2.material = lineMat;
+    const extensionLineMat = this.getExtensionLineMaterial(state, lineMat);
+    this.extensionLine1.material = extensionLineMat;
+    this.extensionLine2.material = extensionLineMat;
     // 实心箭头使用 mesh 材质；开口箭头使用实线材质（不跟随 reference 虚线）
     this.arrow1.material = meshMat;
     this.arrow2.material = meshMat;
@@ -676,6 +704,60 @@ export class LinearDimension3D extends AnnotationBase {
       else if (state === 'hovered') this.dashedLineMatHovered = cached;
       else this.dashedLineMatNormal = cached;
     }
+    return cached;
+  }
+
+  private getExtensionLineMaterial(
+    state: 'normal' | 'hovered' | 'selected',
+    solid: any,
+  ): any {
+    const rawWidthRatio = Number(this.params.extensionLineWidthRatio);
+    const widthRatio = Math.max(
+      0.1,
+      Number.isFinite(rawWidthRatio) ? rawWidthRatio : 1,
+    );
+    const rawOpacity = Number(this.params.extensionLineOpacity);
+    const opacity = Math.max(
+      0,
+      Math.min(1, Number.isFinite(rawOpacity) ? rawOpacity : 1),
+    );
+    if (Math.abs(widthRatio - 1) < 1e-6 && Math.abs(opacity - 1) < 1e-6) {
+      return solid;
+    }
+
+    let cached: any | null;
+    if (state === 'selected') cached = this.extensionLineMatSelected;
+    else if (state === 'hovered') cached = this.extensionLineMatHovered;
+    else cached = this.extensionLineMatNormal;
+
+    const src = (cached as any)?.__src as any | undefined;
+    const srcWidth = Math.max(1, Number(solid?.linewidth) || 1);
+    const cacheWidthRatio = Number((cached as any)?.__widthRatio);
+    const cacheOpacity = Number((cached as any)?.__opacity);
+    if (
+      !cached ||
+      src !== solid ||
+      Math.abs(cacheWidthRatio - widthRatio) > 1e-6 ||
+      Math.abs(cacheOpacity - opacity) > 1e-6
+    ) {
+      try {
+        cached?.dispose?.();
+      } catch {
+        /* ignore */
+      }
+      cached = solid.clone();
+      (cached as any).__src = solid;
+      (cached as any).__widthRatio = widthRatio;
+      (cached as any).__opacity = opacity;
+      if (state === 'selected') this.extensionLineMatSelected = cached;
+      else if (state === 'hovered') this.extensionLineMatHovered = cached;
+      else this.extensionLineMatNormal = cached;
+    }
+
+    cached.linewidth = Math.max(1, srcWidth * widthRatio);
+    cached.opacity = opacity;
+    cached.transparent = opacity < 1 || !!solid.transparent;
+    cached.needsUpdate = true;
     return cached;
   }
 
@@ -737,6 +819,7 @@ export class LinearDimension3D extends AnnotationBase {
       1,
       Math.floor(Number(viewport?.height) || Number(window?.innerHeight) || 1),
     );
+    this.syncLineMaterialResolution(vw, vh);
 
     // Ensure world matrices are up to date for local<->world transforms
     this.updateWorldMatrix(true, true);
@@ -1002,6 +1085,9 @@ export class LinearDimension3D extends AnnotationBase {
     } else {
       nW.normalize();
     }
+    if (laidOut?.screenFacingArrows === true) {
+      nW.copy(this.camForward);
+    }
 
     const arrowDir = this.tmpWorldD.copy(dirUnit);
     if (!hasExplicitLine && trimWithin !== 0) arrowDir.multiplyScalar(-1);
@@ -1025,6 +1111,30 @@ export class LinearDimension3D extends AnnotationBase {
       1,
       this.tmpWorldE.copy(arrowDir).multiplyScalar(-1),
     );
+    const screenFacingArrows = laidOut?.screenFacingArrows === true;
+    const resolveArrowLegEnds = (tip: THREE.Vector3, dir: THREE.Vector3) => {
+      if (screenFacingArrows) {
+        const axis = dir.clone().projectOnPlane(this.camForward);
+        if (axis.lengthSq() < 1e-12) {
+          axis.copy(Math.abs(dir.dot(this.camUp)) > 0.75 ? this.camRight : this.camUp);
+        }
+        axis.normalize();
+        const side = this.camForward.clone().cross(axis);
+        if (side.lengthSq() < 1e-12) side.copy(this.camRight);
+        side.normalize();
+        const base = tip.clone().addScaledVector(axis, arrowLen);
+        const halfBase = arrowLen * Math.tan(theta);
+        return [
+          base.clone().addScaledVector(side, halfBase),
+          base.clone().addScaledVector(side, -halfBase),
+        ] as const;
+      }
+
+      return [
+        dir.clone().applyAxisAngle(nW, +theta).setLength(legLen).add(tip),
+        dir.clone().applyAxisAngle(nW, -theta).setLength(legLen).add(tip),
+      ] as const;
+    };
 
     // Build arrow geometries in local space (filled triangle mesh)
     const setArrowFilled = (
@@ -1032,16 +1142,7 @@ export class LinearDimension3D extends AnnotationBase {
       tip: THREE.Vector3,
       dir: THREE.Vector3,
     ) => {
-      const e1 = this.tmpWorldC
-        .copy(dir)
-        .applyAxisAngle(nW, +theta)
-        .setLength(legLen)
-        .add(tip);
-      const e2 = this.tmpWorldF
-        .copy(dir)
-        .applyAxisAngle(nW, -theta)
-        .setLength(legLen)
-        .add(tip);
+      const [e1, e2] = resolveArrowLegEnds(tip, dir);
 
       // Align each endpoint like SolveSpace DoLine() does
       alignToPixelGrid(camera, tip, vw, vh, this.tempWorldA);
@@ -1080,16 +1181,7 @@ export class LinearDimension3D extends AnnotationBase {
       tip: THREE.Vector3,
       dir: THREE.Vector3,
     ) => {
-      const e1 = this.tmpWorldC
-        .copy(dir)
-        .applyAxisAngle(nW, +theta)
-        .setLength(legLen)
-        .add(tip);
-      const e2 = this.tmpWorldF
-        .copy(dir)
-        .applyAxisAngle(nW, -theta)
-        .setLength(legLen)
-        .add(tip);
+      const [e1, e2] = resolveArrowLegEnds(tip, dir);
 
       alignToPixelGrid(camera, tip, vw, vh, this.tempWorldA);
       const pLocal = this.worldToLocal(this.tempLocalA.copy(this.tempWorldA));
@@ -1170,8 +1262,15 @@ export class LinearDimension3D extends AnnotationBase {
       );
       this.arrow1.visible = true;
       this.arrow2.visible = true;
-      this.arrowOpen1.visible = false;
-      this.arrowOpen2.visible = false;
+      if (laidOut?.screenFacingArrows === true) {
+        setArrowOpen(this.arrowOpenGeometry1, arrowTip1W, arrowDir1W);
+        setArrowOpen(this.arrowOpenGeometry2, arrowTip2W, arrowDir2W);
+        this.arrowOpen1.visible = true;
+        this.arrowOpen2.visible = true;
+      } else {
+        this.arrowOpen1.visible = false;
+        this.arrowOpen2.visible = false;
+      }
     }
 
     // Reference dims: dashed/stippled lines (SolveSpace-like)
@@ -1215,6 +1314,25 @@ export class LinearDimension3D extends AnnotationBase {
         /* ignore */
       }
     }
+  }
+
+  private syncLineMaterialResolution(width: number, height: number): void {
+    const apply = (material: unknown) => {
+      const resolution = (material as { resolution?: THREE.Vector2 } | null)?.resolution;
+      resolution?.set(width, height);
+    };
+    for (const set of [this.materialSet, this.hoveredMaterialSet, this.selectedMaterialSet]) {
+      apply(set.fatLine);
+      apply(set.fatLineHover);
+      apply(set.textFatLine);
+      apply(set.textFatLineHover);
+    }
+    apply(this.dashedLineMatNormal);
+    apply(this.dashedLineMatHovered);
+    apply(this.dashedLineMatSelected);
+    apply(this.extensionLineMatNormal);
+    apply(this.extensionLineMatHovered);
+    apply(this.extensionLineMatSelected);
   }
 
   /** 重建几何体 */
@@ -1379,6 +1497,21 @@ export class LinearDimension3D extends AnnotationBase {
     }
     try {
       this.dashedLineMatSelected?.dispose?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      this.extensionLineMatNormal?.dispose?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      this.extensionLineMatHovered?.dispose?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      this.extensionLineMatSelected?.dispose?.();
     } catch {
       /* ignore */
     }

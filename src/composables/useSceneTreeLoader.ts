@@ -8,6 +8,7 @@
 import { ref, shallowRef } from 'vue';
 
 import { AsyncDuckDB, ConsoleLogger } from '@duckdb/duckdb-wasm';
+
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // DuckDB 实例单例（与 useParquetModelLoader 共享）

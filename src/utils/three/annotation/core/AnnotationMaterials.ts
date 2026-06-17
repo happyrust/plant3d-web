@@ -45,7 +45,7 @@ export class AnnotationMaterials {
     this.black = this.createMaterialSet(0x000000, 0x333333);
 
     this.ssConstraintMagenta = this.createMaterialSet(0xff00ff, 0xff44ff);
-    this.ssDimensionDefault = this.createMaterialSet(0xef4444, 0xf87171);
+    this.ssDimensionDefault = this.createMaterialSet(0x7f1d1d, 0x991b1b);
     this.ssHovered = this.createMaterialSet(0xffff00, 0xffff44);
     this.ssSelected = this.createMaterialSet(0xdc2626, 0xef4444);
   }
@@ -74,12 +74,14 @@ export class AnnotationMaterials {
       }),
       mesh: new THREE.MeshBasicMaterial({
         color: normalColor,
-        opacity: 0.9,
+        opacity: 1,
+        side: THREE.DoubleSide,
         ...sharedParams,
       }),
       meshHover: new THREE.MeshBasicMaterial({
         color: hoverColor,
         opacity: 1,
+        side: THREE.DoubleSide,
         ...sharedParams,
       }),
       fatLine: new LineMaterial({

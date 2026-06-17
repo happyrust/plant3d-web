@@ -1,9 +1,10 @@
-import { Box3, BufferAttribute, BufferGeometry, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
+import { Box3, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Matrix4, SphereGeometry } from 'three';
 
 import { realtimeInstancesByRefnos } from '@/api/genModelRealtimeApi';
 import { getDbnoInstancesManifest } from '@/composables/useDbnoInstancesJsonLoader';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
+import { buildBackendUrl } from '@/utils/apiBase';
 import { buildInstanceIndexByRefno, type InstanceEntry } from '@/utils/instances/instanceManifest';
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
 import { DTXLayer } from '@/utils/three/dtx';
@@ -36,6 +37,13 @@ export type DtxMissingBreakdown = {
   mesh404GeoHashes: string[]
 }
 
+export type DtxAabbProxyEntry = {
+  refno: string
+  noun?: string | null
+  specValue?: number | null
+  aabb: { min: number[]; max: number[] } | null
+}
+
 type DbnoRuntimeCache = {
   loadedRefnos: Set<string>
   loadedGeoHash: Set<string>
@@ -54,6 +62,7 @@ type DbnoRuntimeCache = {
 }
 
 const cachesByDbno = new Map<number, DbnoRuntimeCache>();
+const AABB_PROXY_GEO_HASH = '__spatial_query_aabb_proxy_box';
 
 function getCache(dbno: number): DbnoRuntimeCache {
   const existing = cachesByDbno.get(dbno);
@@ -204,7 +213,7 @@ async function ensureGeometryForGeoHash(
       return { status: 'ok' as const, notFoundNew: false };
     }
 
-    const glbUrl = `/files/meshes/lod_${lodAssetKey}/${geoHash}_${lodAssetKey}.glb`;
+    const glbUrl = buildBackendUrl(`/files/meshes/lod_${lodAssetKey}/${geoHash}_${lodAssetKey}.glb`);
     let geometry: BufferGeometry | null = null;
     let notFound = false;
     let notFoundNew = false;
@@ -417,6 +426,114 @@ export function applyMaterialConfigToLoadedDtx(
   }
 
   return { updatedObjects };
+}
+
+function normalizeAabbProxy(aabb: DtxAabbProxyEntry['aabb']): { min: [number, number, number]; max: [number, number, number] } | null {
+  if (!aabb || !Array.isArray(aabb.min) || !Array.isArray(aabb.max)) return null;
+  const values = [
+    Number(aabb.min[0]), Number(aabb.min[1]), Number(aabb.min[2]),
+    Number(aabb.max[0]), Number(aabb.max[1]), Number(aabb.max[2]),
+  ];
+  if (values.some((value) => !Number.isFinite(value))) return null;
+
+  return {
+    min: [
+      Math.min(values[0]!, values[3]!),
+      Math.min(values[1]!, values[4]!),
+      Math.min(values[2]!, values[5]!),
+    ],
+    max: [
+      Math.max(values[0]!, values[3]!),
+      Math.max(values[1]!, values[4]!),
+      Math.max(values[2]!, values[5]!),
+    ],
+  };
+}
+
+export function loadDtxAabbProxyRefnos(
+  dtxLayer: DTXLayer,
+  dbno: number,
+  entries: DtxAabbProxyEntry[],
+): { loadedRefnos: string[]; missingRefnos: string[]; loadedObjects: number; skippedObjects: number } {
+  const normalizedEntries = entries
+    .map((entry) => ({
+      ...entry,
+      refno: normalizeRefnoKey(entry.refno),
+      normalizedAabb: normalizeAabbProxy(entry.aabb),
+    }))
+    .filter((entry) => !!entry.refno);
+
+  if (normalizedEntries.length === 0) {
+    return { loadedRefnos: [], missingRefnos: [], loadedObjects: 0, skippedObjects: 0 };
+  }
+
+  const cache = getCache(dbno);
+  dtxLayer.addGeometry(AABB_PROXY_GEO_HASH, getUnitBoxGeometry());
+  cache.loadedGeoHash.add(AABB_PROXY_GEO_HASH);
+
+  const loadedRefnos: string[] = [];
+  const missingRefnos: string[] = [];
+  let loadedObjects = 0;
+  let skippedObjects = 0;
+
+  for (const entry of normalizedEntries) {
+    const refno = entry.refno;
+    const aabb = entry.normalizedAabb;
+    if (!aabb) {
+      missingRefnos.push(refno);
+      continue;
+    }
+
+    const sizeX = Math.max(aabb.max[0] - aabb.min[0], 1);
+    const sizeY = Math.max(aabb.max[1] - aabb.min[1], 1);
+    const sizeZ = Math.max(aabb.max[2] - aabb.min[2], 1);
+    const centerX = (aabb.min[0] + aabb.max[0]) / 2;
+    const centerY = (aabb.min[1] + aabb.max[1]) / 2;
+    const centerZ = (aabb.min[2] + aabb.max[2]) / 2;
+
+    const objectId = `o:${refno}:spatial-proxy`;
+    const matrix = new Matrix4().makeScale(sizeX, sizeY, sizeZ);
+    matrix.setPosition(centerX, centerY, centerZ);
+
+    if (!dtxLayer.hasObject(objectId)) {
+      dtxLayer.addObject(
+        objectId,
+        AABB_PROXY_GEO_HASH,
+        matrix,
+        new Color(0x14b8a6),
+        { metalness: 0.05, roughness: 0.78, opacity: 0.38 },
+        { min: aabb.min, max: aabb.max },
+      );
+      loadedObjects++;
+    } else {
+      skippedObjects++;
+    }
+
+    const existingObjectIds = cache.refnoToObjectIds.get(refno) ?? [];
+    if (!existingObjectIds.includes(objectId)) {
+      cache.refnoToObjectIds.set(refno, [...existingObjectIds, objectId]);
+    }
+    cache.objectIdToRefno.set(objectId, refno);
+    cache.objectIdToSpecValue.set(objectId, parseSpecValue(entry.specValue));
+    cache.refnoTransform.set(refno, matrix.toArray());
+    cache.refnoToNoun.set(refno, normalizeNounKey(entry.noun || '') || 'AABB_PROXY');
+    if (!cache.refnoToSpecValue.has(refno)) {
+      cache.refnoToSpecValue.set(refno, parseSpecValue(entry.specValue));
+    }
+    cache.loadedRefnos.add(refno);
+    loadedRefnos.push(refno);
+  }
+
+  if (loadedObjects > 0) {
+    dtxLayer.recompile();
+  }
+
+  return {
+    loadedRefnos: Array.from(new Set(loadedRefnos)),
+    missingRefnos: Array.from(new Set(missingRefnos)),
+    loadedObjects,
+    skippedObjects,
+  };
 }
 
 export async function loadDbnoInstancesForVisibleRefnosDtx(

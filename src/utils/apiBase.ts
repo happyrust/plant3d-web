@@ -113,3 +113,9 @@ export function getBackendApiBaseUrl(options: BackendApiBaseOptions = {}): strin
     browserOrigin: getBrowserOrigin(),
   });
 }
+
+export function buildBackendUrl(path: string, options: BackendApiBaseOptions = {}): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const base = getBackendApiBaseUrl(options).replace(/\/$/, '');
+  return `${base}${normalizedPath}`;
+}

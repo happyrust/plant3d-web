@@ -710,6 +710,90 @@ describe('LinearDimension3D', () => {
     expect(instanceStart.count).toBe(2);
   });
 
+  it('should orient explicit screen-facing filled arrows toward the camera', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(
+      materials,
+      {
+        start: new THREE.Vector3(0, 0, 0),
+        end: new THREE.Vector3(8, 0, 0),
+        offset: 2,
+        direction: new THREE.Vector3(0, 1, 0),
+        arrowStyle: 'filled',
+        arrowSizePx: 20,
+        laidOutGeometry: {
+          dimLineStart: new THREE.Vector3(0, 4, 0),
+          dimLineEnd: new THREE.Vector3(8, 4, 0),
+          textAnchor: new THREE.Vector3(4, 6, 0),
+          arrows: [
+            {
+              position: new THREE.Vector3(0, 4, 0),
+              direction: new THREE.Vector3(1, 0, 0),
+            },
+            {
+              position: new THREE.Vector3(8, 4, 0),
+              direction: new THREE.Vector3(-1, 0, 0),
+            },
+          ],
+          screenFacingArrows: true,
+        },
+      },
+      { depthTest: false },
+    );
+
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    (camera as any).userData.annotationViewport = { width: 800, height: 600 };
+    camera.position.set(5, 7, 18);
+    camera.lookAt(4, 4, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    dim.update(camera);
+
+    expect(dim.getParams().laidOutGeometry?.screenFacingArrows).toBe(true);
+    const lineA = (dim as any).dimensionLineA as any;
+    expect((lineA.material as any).resolution.x).toBe(800);
+    expect((lineA.material as any).resolution.y).toBe(600);
+    const arrowMesh1 = (dim as any).arrow1 as THREE.Mesh;
+    const arrowOpen1 = (dim as any).arrowOpen1 as any;
+    const arrowGeom1 = (dim as any).arrowGeometry1 as THREE.BufferGeometry;
+    const positions = arrowGeom1.getAttribute('position');
+    expect(arrowMesh1.visible).toBe(true);
+    expect(arrowOpen1.visible).toBe(true);
+    expect(positions.count).toBe(3);
+
+    const p0 = new THREE.Vector3().fromBufferAttribute(positions, 0);
+    const p1 = new THREE.Vector3().fromBufferAttribute(positions, 1);
+    const p2 = new THREE.Vector3().fromBufferAttribute(positions, 2);
+    dim.localToWorld(p0);
+    dim.localToWorld(p1);
+    dim.localToWorld(p2);
+
+    const projectToPixel = (point: THREE.Vector3) => {
+      const ndc = point.clone().project(camera);
+      return new THREE.Vector2(
+        (ndc.x * 0.5 + 0.5) * 800,
+        (-ndc.y * 0.5 + 0.5) * 600,
+      );
+    };
+    const s0 = projectToPixel(p0);
+    const s1 = projectToPixel(p1);
+    const s2 = projectToPixel(p2);
+    const projectedArea = Math.abs(
+      (s1.x - s0.x) * (s2.y - s0.y) - (s2.x - s0.x) * (s1.y - s0.y),
+    ) * 0.5;
+    expect(projectedArea).toBeGreaterThan(80);
+
+    const arrowNormal = p1.sub(p0).cross(p2.sub(p0)).normalize();
+    const cameraForward = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(camera.quaternion)
+      .normalize();
+    expect(Math.abs(arrowNormal.dot(cameraForward))).toBeGreaterThan(0.98);
+  });
+
   it('should render tick arrow style with single slash segments', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { LinearDimension3D } = await import('./LinearDimension3D');
@@ -761,5 +845,28 @@ describe('LinearDimension3D', () => {
     const arrowOpen1 = (dim as any).arrowOpen1 as any;
     expect((lineA.material as any).linewidth).toBeCloseTo(2.5, 6);
     expect((arrowOpen1.material as any).linewidth).toBeCloseTo(2.5, 6);
+  });
+
+  it('should allow extension lines to be weaker than main dimension lines', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(4, 0, 0),
+      offset: 1,
+      extensionLineWidthRatio: 0.5,
+      extensionLineOpacity: 0.4,
+    });
+
+    dim.setLineWidthPx(4);
+
+    const lineA = (dim as any).dimensionLineA as any;
+    const extensionLine1 = (dim as any).extensionLine1 as any;
+    expect(extensionLine1.material).not.toBe(lineA.material);
+    expect((lineA.material as any).linewidth).toBeCloseTo(4, 6);
+    expect((extensionLine1.material as any).linewidth).toBeCloseTo(2, 6);
+    expect((extensionLine1.material as any).opacity).toBeCloseTo(0.4, 6);
   });
 });

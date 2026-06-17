@@ -4,6 +4,15 @@ vi.mock('@/api/genModelTaskApi', () => ({
   getBaseUrl: () => 'http://127.0.0.1:3100',
 }));
 
+vi.mock('@/utils/duckdbBundles', () => ({
+  configureLocalDuckDBExtensions: vi.fn(),
+  selectLocalDuckDBBundle: async () => ({
+    mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
+    mainModule: '/duckdb/duckdb-eh.wasm',
+    pthreadWorker: '/duckdb/duckdb-browser-eh.pthread.worker.js',
+  }),
+}));
+
 const { queryMock, registerFileURLMock, instantiateMock, connectMock } = vi.hoisted(() => ({
   queryMock: vi.fn(),
   registerFileURLMock: vi.fn(),
@@ -35,14 +44,7 @@ vi.mock('@duckdb/duckdb-wasm', () => {
     DuckDBDataProtocol: {
       HTTP: 'http',
     },
-    getJsDelivrBundles: () => ({
-      mock: {
-        mainWorker: 'worker.js',
-        mainModule: 'duckdb.wasm',
-        pthreadWorker: 'pthread.js',
-      },
-    }),
-    selectBundle: async (bundles: Record<string, unknown>) => bundles.mock,
+    selectBundle: async (bundles: Record<string, unknown>) => bundles.eh ?? bundles.mvp,
     ConsoleLogger,
     AsyncDuckDB,
   };
@@ -68,6 +70,39 @@ function createManifest(dbno: number) {
       checked_geo_hashes: 10,
       missing_geo_hashes: 1,
       missing_owner_refnos: 2,
+    },
+  };
+}
+
+function createPtsetManifest(dbno: number) {
+  const manifest = createManifest(dbno);
+  return {
+    ...manifest,
+    tables: {
+      ...manifest.tables,
+      ptsets: { file: `ptsets_${dbno}.parquet` },
+    },
+    ptset_unit: {
+      source: 'mm',
+      target: 'm',
+      conversion_factor: 0.001,
+    },
+  };
+}
+
+function createPrimitiveKeypointManifest(dbno: number) {
+  const manifest = createManifest(dbno);
+  return {
+    ...manifest,
+    tables: {
+      ...manifest.tables,
+      primitive_keypoints: { file: `primitive_keypoints_${dbno}.parquet` },
+    },
+    primitive_keypoint_unit: {
+      source: 'mm',
+      target: 'm',
+      conversion_factor: 0.001,
+      coordinate_space: 'geo_local',
     },
   };
 }
@@ -285,7 +320,7 @@ describe('useDbnoInstancesParquetLoader', () => {
     const allRefnoQueryNames = registerFileURLMock.mock.calls.slice(0, 5).map((call) => String(call[0]));
     const instanceQueryNames = registerFileURLMock.mock.calls.slice(5, 10).map((call) => String(call[0]));
 
-    expect(allRefnoQueryNames).toContain('p_7997_instances.parquet');
+    expect(allRefnoQueryNames[0]).toMatch(/^p_7997_instances_.+\.parquet$/);
     for (const name of instanceQueryNames) {
       expect(allRefnoQueryNames).not.toContain(name);
     }
@@ -725,6 +760,334 @@ describe('useDbnoInstancesParquetLoader', () => {
     expect(loader.lastQueryTiming.value?.phaseMs.mainRows).toBeGreaterThanOrEqual(0);
     expect(loader.lastQueryTiming.value?.phaseMs.tubiSql).toBeGreaterThanOrEqual(0);
     expect(loader.lastQueryTiming.value?.phaseMs.tubiRows).toBeGreaterThanOrEqual(0);
+  });
+
+  it('从 parquet 快照查询直子元件 ptset 摘要', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createPtsetManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockImplementation(async (sql: string) => {
+      expect(sql).toContain('WHERE i.owner_refno_str = \'24381_145712\'');
+      expect(sql).toContain('p_7997_ptsets.parquet');
+      return {
+        toArray: () => [
+          {
+            refno_str: '24381_145714',
+            noun: 'ELBO',
+            name: '',
+            cata_hash: 'cata-a',
+            pt_count: 2,
+          },
+          {
+            refno_str: '24381_145715',
+            noun: 'GASK',
+            name: '',
+            cata_hash: 'cata-b',
+            pt_count: 0,
+          },
+        ],
+      };
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryDirectChildrenPtsetSummary(7997, '24381_145712');
+
+    expect(out).toEqual([
+      {
+        refno: '24381_145714',
+        noun: 'ELBO',
+        name: '',
+        success: true,
+        ptCount: 2,
+        errorMessage: null,
+      },
+      {
+        refno: '24381_145715',
+        noun: 'GASK',
+        name: '',
+        success: false,
+        ptCount: 0,
+        errorMessage: 'cata_hash=cata-b 未找到 ptset 点',
+      },
+    ]);
+  });
+
+  it('模型包缺少 ptsets 表时仍能列出直子元件并标记不可用', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockImplementation(async (sql: string) => {
+      expect(sql).not.toContain('ptsets_7997');
+      return {
+        toArray: () => [
+          {
+            refno_str: '24381_145714',
+            noun: 'ELBO',
+            name: '',
+            cata_hash: 'cata-a',
+            pt_count: 0,
+          },
+        ],
+      };
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryDirectChildrenPtsetSummary(7997, '24381_145712');
+
+    expect(out).toEqual([
+      {
+        refno: '24381_145714',
+        noun: 'ELBO',
+        name: '',
+        success: false,
+        ptCount: 0,
+        errorMessage: '当前模型包未包含 ptsets.parquet，ptset 不可用',
+      },
+    ]);
+  });
+
+  it('从 primitive_keypoints.parquet 查询并转换构件局部关键点', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createPrimitiveKeypointManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    queryMock.mockImplementation(async (sql: string) => {
+      expect(sql).toContain('primitive_keypoints');
+      expect(sql).toContain('p_7997_primitive_keypoints.parquet');
+      return {
+        toArray: () => [
+          {
+            refno_str: '24381_145714',
+            geo_index: 0,
+            geo_hash: 'geo-a',
+            ...createIdentityMatrix(10, 20, 30),
+            g_m00: null, g_m10: null, g_m20: null, g_m30: null,
+            g_m01: null, g_m11: null, g_m21: null, g_m31: null,
+            g_m02: null, g_m12: null, g_m22: null, g_m32: null,
+            g_m03: null, g_m13: null, g_m23: null, g_m33: null,
+            keypoint_index: 2,
+            kind: 'center',
+            local_x: 1000,
+            local_y: 2000,
+            local_z: 3000,
+            has_dir: false,
+            dir_x: 0,
+            dir_y: 0,
+            dir_z: 0,
+            source: 'geo_relate.pts',
+          },
+        ],
+      };
+    });
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+    const out = await loader.queryPrimitiveKeypointsByRefnoFromParquet(7997, '24381_145714');
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: 'primitive:24381_145714:0:geo-a#2',
+      refno: '24381_145714',
+      geoHash: 'geo-a',
+      geoIndex: 0,
+      keypointIndex: 2,
+      kind: 'center',
+      source: 'geo_relate.pts',
+      local: [1, 2, 3],
+      world: [11, 22, 33],
+    });
+    expect(registerFileURLMock.mock.calls.map((call) => String(call[0]))).toContain(
+      'p_7997_primitive_keypoints.parquet'
+    );
+  });
+
+  it('primitive keypoint 数据或单位元数据缺失时报告不可用', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        return new Response(JSON.stringify(createManifest(7997)), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await expect(loader.isPrimitiveKeypointParquetAvailable(7997)).resolves.toBe(false);
+    await expect(
+      loader.queryPrimitiveKeypointsByRefnoFromParquet(7997, '24381_145714')
+    ).rejects.toThrow('未包含 primitive_keypoints.parquet');
+  });
+
+  it('primitive keypoint 表存在但缺少 unit 元数据时报告契约不完整', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        const manifest = createManifest(7997);
+        return new Response(JSON.stringify({
+          ...manifest,
+          tables: {
+            ...manifest.tables,
+            primitive_keypoints: { file: 'primitive_keypoints_7997.parquet' },
+          },
+        }), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await expect(loader.isPrimitiveKeypointParquetAvailable(7997)).resolves.toBe(false);
+    await expect(
+      loader.queryPrimitiveKeypointsByRefnoFromParquet(7997, '24381_145714')
+    ).rejects.toThrow('缺少 primitive_keypoint_unit.geo_local 元数据');
+  });
+
+  it('primitive keypoint unit 坐标空间不是 geo_local 时报告契约不完整', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.includes('/api/model/parquet-version/7997')) {
+        return new Response(JSON.stringify({
+          success: true,
+          dbnum: 7997,
+          revision: 1,
+          updated_at: '2026-03-08T00:00:00.000Z',
+          running: false,
+          pending_count: 0,
+          last_error: null,
+          manifest_base_dir: 'instances',
+          files_base_dir: 'instances',
+        }), { status: 200 });
+      }
+
+      if (url.endsWith('/files/output/instances/manifest_7997.json')) {
+        const manifest = createPrimitiveKeypointManifest(7997);
+        return new Response(JSON.stringify({
+          ...manifest,
+          primitive_keypoint_unit: {
+            ...manifest.primitive_keypoint_unit,
+            coordinate_space: 'local',
+          },
+        }), { status: 200 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { useDbnoInstancesParquetLoader } = await import('./useDbnoInstancesParquetLoader');
+    const loader = useDbnoInstancesParquetLoader();
+
+    await expect(loader.isPrimitiveKeypointParquetAvailable(7997)).resolves.toBe(false);
+    await expect(
+      loader.queryPrimitiveKeypointsByRefnoFromParquet(7997, '24381_145714')
+    ).rejects.toThrow('缺少 primitive_keypoint_unit.geo_local 元数据');
   });
 
   it('给 DuckDB 远程 parquet URL 添加缓存规避参数', async () => {

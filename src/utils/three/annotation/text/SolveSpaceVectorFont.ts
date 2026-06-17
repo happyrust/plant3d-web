@@ -470,9 +470,15 @@ export class SolveSpaceVectorFont {
 let _builtinFontPromise: Promise<SolveSpaceVectorFont> | null = null;
 let _builtinFontUrl: string | null = null;
 
+function getDefaultSolveSpaceFontUrl(): string {
+  const baseUrl = String((import.meta as any).env?.BASE_URL ?? '/');
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBase}fonts/unicode.lff.gz`;
+}
+
 /** Load (and cache) SolveSpace `unicode.lff.gz` from `public/fonts/`. */
 export function getSolveSpaceBuiltinVectorFont(
-  url = '/fonts/unicode.lff.gz',
+  url = getDefaultSolveSpaceFontUrl(),
 ): Promise<SolveSpaceVectorFont> {
   if (!_builtinFontPromise || _builtinFontUrl !== url) {
     _builtinFontUrl = url;

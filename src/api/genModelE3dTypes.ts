@@ -38,6 +38,12 @@ export type VisibleInstsResponse = {
   refno: string;
   refnos: string[];
   error_message?: string | null;
+  debug?: {
+    candidates_count?: number;
+    filtered_count?: number;
+    visible_count?: number;
+    source?: string;
+  } | null;
 };
 
 export type SearchRequest = {

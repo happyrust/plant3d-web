@@ -15,6 +15,7 @@ import {
   type AsyncDuckDBConnection,
   type QueryResult,
 } from '@duckdb/duckdb-wasm';
+
 import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 // 单例 DuckDB 实例

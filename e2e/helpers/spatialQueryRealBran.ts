@@ -1,9 +1,9 @@
 import type { APIRequestContext } from '@playwright/test';
 
-const DEFAULT_REFNO = '24381_145018';
-const DEFAULT_RADII = [5000, 10000, 20000];
-const DEFAULT_NOUNS = ['PIPE', 'BRAN'];
-const DEFAULT_URL = '/?output_project=AvevaMarineSample';
+const DEFAULT_REFNO = '2013286704_476';
+const DEFAULT_RADII = [1000, 5000, 10000];
+const DEFAULT_NOUNS = ['BRAN', 'FLAN', 'REDU', 'TUBI', 'VALV'];
+const DEFAULT_URL = '/?spatial_refno=2013286704_476&spatial_radius=5&spatial_radius_unit=m&spatial_shape=sphere&spatial_autorun=1&backendPort=3100';
 const DEFAULT_LIMIT = 100;
 const DIRECT_BACKEND_BASE = 'http://127.0.0.1:3100';
 
@@ -12,6 +12,9 @@ export type SpatialQueryBranchFixture = {
 };
 
 export const KNOWN_REAL_BRANCH_FIXTURES: Record<string, SpatialQueryBranchFixture> = {
+  '2013286704_476': {
+    aabb: [-287297.5, 290838.25, 100685.0, -286441.5, 292033.03, 101547.5],
+  },
   '24381_145018': {
     aabb: [1415.72, 8056.67, 13193.23, 9869.75, 10320.18, 18764.8],
   },
@@ -140,14 +143,13 @@ function normalizeRefnoSlash(raw: string): string {
 
 function buildProbePath(config: SpatialQueryRealBranConfig, radius: number): string {
   const sp = new URLSearchParams();
-  sp.set('mode', 'refno');
   sp.set('refno', config.refno);
-  sp.set('distance', String(radius));
+  sp.set('radius', String(radius));
   sp.set('include_self', 'true');
-  sp.set('max_results', String(config.maxResults));
+  sp.set('per_page', String(config.maxResults));
   sp.set('shape', 'sphere');
   sp.set('nouns', config.nouns.join(','));
-  return `${DIRECT_BACKEND_BASE}/api/sqlite-spatial/query?${sp.toString()}`;
+  return `${DIRECT_BACKEND_BASE}/api/sqlite-spatial/nearby?${sp.toString()}`;
 }
 
 async function fetchFailureHints(

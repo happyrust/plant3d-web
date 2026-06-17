@@ -40,7 +40,39 @@ describe('useDbnoInstancesDtxLoader', () => {
     const mod = await import('./useDbnoInstancesDtxLoader');
 
     expect(typeof mod.loadDbnoInstancesForVisibleRefnosDtx).toBe('function');
+    expect(typeof mod.loadDtxAabbProxyRefnos).toBe('function');
     expect(typeof mod.hasDtxDbnoCache).toBe('function');
+  });
+
+  it('AABB 代理模型应登记到 DTX refno 索引，便于空间查询定位和显隐', async () => {
+    const { DTXLayer } = await import('@/utils/three/dtx');
+    const mod = await import('./useDbnoInstancesDtxLoader');
+
+    const dtxLayer = new DTXLayer({
+      maxVertices: 64,
+      maxIndices: 128,
+      maxObjects: 8,
+    });
+
+    const result = mod.loadDtxAabbProxyRefnos(dtxLayer, 99000, [
+      {
+        refno: '2013286704_479',
+        noun: 'TEE',
+        specValue: 0,
+        aabb: {
+          min: [-10, -20, -30],
+          max: [10, 20, 30],
+        },
+      },
+    ]);
+
+    expect(result.loadedRefnos).toEqual(['2013286704_479']);
+    expect(result.missingRefnos).toEqual([]);
+    expect(result.loadedObjects).toBe(1);
+    expect(dtxLayer.hasObject('o:2013286704_479:spatial-proxy')).toBe(true);
+    expect(mod.resolveDtxObjectIdsByRefno(99000, '2013286704_479')).toEqual([
+      'o:2013286704_479:spatial-proxy',
+    ]);
   });
 
   it('ELBO 自身已有几何时，不应把 owner 关系带出的 TUBI 也映射到 ELBO', async () => {

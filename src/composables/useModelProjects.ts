@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { recordRecentProject } from '@/composables/dashboardRecentProjects';
 import { refreshToolStorePersistedScope } from '@/composables/useToolStore';
 import { setCurrentProjectPath } from '@/lib/filesOutput';
+import { buildBackendUrl } from '@/utils/apiBase';
 
 /** 无 URL 指定时的默认模型工程（output 目录名）；与后端项目 name 对齐 */
 export const DEFAULT_MODEL_PROJECT_PATH = 'AvevaMarineSample';
@@ -118,8 +119,8 @@ export function useModelProjects() {
     loadProjectsInFlight = (async () => {
       isLoading.value = true;
       try {
-        // 从后端 API 加载项目列表（通过 Vite proxy 转发到 plant-model-gen）
-        const response = await fetch('/api/projects');
+        // 从后端 API 加载项目列表；若 URL 带 backend/backendPort，直接请求该站点后端。
+        const response = await fetch(buildBackendUrl('/api/projects', { fallbackUrl: 'http://localhost:3100' }));
         if (!response.ok) {
           throw new Error(`Failed to load projects: ${response.status} ${response.statusText}`);
         }

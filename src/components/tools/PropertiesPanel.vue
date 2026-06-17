@@ -31,6 +31,8 @@ type PropertyRow = {
   value: unknown;
   type: PropertyType;
   displayValue: string;
+  /** 鼠标悬停展示的原始值（引用属性解析为 full_name 后，tooltip 仍保留参考号） */
+  title?: string;
 };
 
 type PropertyGroup = {
@@ -120,6 +122,10 @@ function classifyProperty(key: string): 'general' | 'component' | 'uda' {
   return 'component';
 }
 
+// 引用类属性（值形如 "pe:2013286704_661"，例如 OWNER/REFNO）的 full_name 由后端 ui-attr
+// 响应直接给出（键为属性名），前端只读不再逐个回查。
+const refFullNames = sel.refFullNames;
+
 const groups = computed<PropertyGroup[]>(() => {
   const data = sel.propertiesData.value;
   if (!data) return [];
@@ -135,11 +141,15 @@ const groups = computed<PropertyGroup[]>(() => {
     .sort((a, b) => a.localeCompare(b))
     .forEach((key) => {
       const isRefno = key.toUpperCase() === 'REFNO';
+      const rawValue = data[key];
+      const resolvedFullName = refFullNames.value?.[key];
+      const baseDisplay = isRefno ? formatRefnoDisplay(rawValue) : formatValue(rawValue);
       const row: PropertyRow = {
         key,
-        value: data[key],
-        type: getPropertyType(data[key]),
-        displayValue: isRefno ? formatRefnoDisplay(data[key]) : formatValue(data[key]),
+        value: rawValue,
+        type: getPropertyType(rawValue),
+        displayValue: resolvedFullName ?? baseDisplay,
+        title: resolvedFullName ? `${resolvedFullName}\n${formatValue(rawValue)}` : undefined,
       };
 
       // 搜索过滤
@@ -241,8 +251,12 @@ function handleBlur(row: PropertyRow) {
     <div class="flex-shrink-0 border-b border-border px-3 py-2">
       <div class="flex items-center justify-between">
         <span class="text-xs font-medium text-foreground">属性</span>
-        <Badge v-if="sel.selectedRefno.value" variant="outline" class="font-mono text-[10px]">
-          {{ sel.selectedRefno.value }}
+        <Badge v-if="sel.selectedRefno.value"
+          variant="outline"
+          class="max-w-[60%] truncate text-[10px]"
+          :class="sel.fullName.value ? '' : 'font-mono'"
+          :title="sel.fullName.value ? `${sel.fullName.value}\n${sel.selectedRefno.value}` : sel.selectedRefno.value">
+          {{ sel.fullName.value || sel.selectedRefno.value }}
         </Badge>
         <span v-else class="text-[10px] text-muted-foreground">未选择</span>
       </div>
@@ -338,7 +352,7 @@ function handleBlur(row: PropertyRow) {
                       row.type === 'string' && 'text-foreground',
                       row.type === 'object' && 'cursor-default text-muted-foreground'
                     )"
-                    :title="row.displayValue"
+                    :title="row.title ?? row.displayValue"
                     @click="startEditing(row)">
                     {{ row.displayValue }}
                   </div>

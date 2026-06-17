@@ -2,7 +2,9 @@
 import { computed } from 'vue';
 
 import type {
+  MbdDimDto,
   MbdFittingDto,
+  MbdLaidOutLinearDimDto,
   MbdPipeViewMode,
   MbdPipeEnvelopeDto,
   MbdStructureClearanceDto,
@@ -50,6 +52,7 @@ const slopes = computed(() => data.value?.slopes ?? []);
 const bends = computed(() => data.value?.bends ?? []);
 const fittings = computed(() => data.value?.fittings ?? []);
 const tags = computed(() => data.value?.tags ?? []);
+const materialRows = computed(() => data.value?.material_rows ?? []);
 const segments = computed(() => data.value?.segments ?? []);
 const pipeClearances = computed(() => data.value?.pipe_clearances ?? []);
 const structureClearances = computed(() => data.value?.structure_clearances ?? []);
@@ -69,6 +72,27 @@ const cutTubiDimCount = computed(() => (
   0
 ));
 
+function parseDimTextMm(text: unknown): number | null {
+  const match = String(text ?? '').match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const value = Number(match[0]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function lengthFromLaidOutDim(dim: MbdLaidOutLinearDimDto): number {
+  const parsed = parseDimTextMm(dim.text);
+  if (parsed != null) return parsed;
+  return distance(dim.start, dim.end);
+}
+
+function lengthFromDim(dim: MbdDimDto): number {
+  const explicit = Number(dim.length);
+  if (Number.isFinite(explicit)) return explicit;
+  const parsed = parseDimTextMm(dim.text);
+  if (parsed != null) return parsed;
+  return distance(dim.start, dim.end);
+}
+
 function formatNumber(value: unknown, digits = 0): string {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(digits) : '--';
@@ -81,6 +105,15 @@ function formatLength(value: unknown, digits = 0): string {
 function formatPoint(point?: Vec3 | null): string {
   if (!point || point.length !== 3) return '--';
   return point.map((v) => formatNumber(v, 0)).join(', ');
+}
+
+function distance(a?: Vec3 | null, b?: Vec3 | null): number {
+  if (!a || !b) return 0;
+  const dx = Number(a[0]) - Number(b[0]);
+  const dy = Number(a[1]) - Number(b[1]);
+  const dz = Number(a[2]) - Number(b[2]);
+  const value = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return Number.isFinite(value) ? value : 0;
 }
 
 function formatEnvelopeSize(source: MbdPipeEnvelopeDto | null): string {
@@ -143,6 +176,35 @@ const isLayoutFallback = computed(() => (
 const segmentTotalLength = computed(() =>
   segments.value.reduce((sum, segment) => sum + Number(segment.length ?? 0), 0)
 );
+
+const mbdTotalLength = computed(() => {
+  const layoutDims = data.value?.layout_result?.linear_dims ?? [];
+  const overallDims = layoutDims.filter((dim) => String(dim.kind).toLowerCase() === 'overall');
+  if (overallDims.length > 0) {
+    return overallDims.reduce((sum, dim) => sum + lengthFromLaidOutDim(dim), 0);
+  }
+
+  const chainDims = layoutDims.filter((dim) => String(dim.kind).toLowerCase() === 'chain');
+  if (chainDims.length > 0) {
+    return chainDims.reduce((sum, dim) => sum + lengthFromLaidOutDim(dim), 0);
+  }
+
+  const cutTubiDims = data.value?.layout_result?.cut_tubis ?? [];
+  if (cutTubiDims.length > 0) {
+    return cutTubiDims.reduce((sum, dim) => sum + lengthFromLaidOutDim(dim), 0);
+  }
+
+  const dims = data.value?.dims ?? [];
+  const segmentDims = dims.filter((dim) => {
+    const kind = String(dim.kind ?? 'segment').toLowerCase();
+    return kind === 'overall' || kind === 'chain' || kind === 'segment';
+  });
+  if (segmentDims.length > 0) {
+    return segmentDims.reduce((sum, dim) => sum + lengthFromDim(dim), 0);
+  }
+
+  return segmentTotalLength.value;
+});
 
 const fittingSummary = computed(() => ({
   elbow: fittings.value.filter((f) => classifyFitting(f) === 'elbow').length,
@@ -236,6 +298,12 @@ const materialEntries = computed(() => {
     { label: '室外', value: source.swgd ?? '' },
   ].filter((item) => String(item.value ?? '').trim().length > 0);
 });
+
+function formatMaterialQuantity(value: unknown, unit: unknown): string {
+  const n = Number(value);
+  const text = Number.isFinite(n) ? n.toFixed(3).replace(/\.?0+$/, '') : String(value ?? '');
+  return `${text}${unit ? ` ${unit}` : ''}`.trim();
+}
 
 function setActive(id: string | null, nextTab?: MbdPipeUiTab): void {
   if (nextTab) tab.value = nextTab;
@@ -408,6 +476,13 @@ function setBendDisplayMode(event: Event): void {
       </label>
       <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
         <input type="checkbox"
+          :checked="vis.showFlowDirection.value"
+          data-testid="mbd-toggle-flow-direction"
+          @change="vis.showFlowDirection.value = !vis.showFlowDirection.value" />
+        <span>流向</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+        <input type="checkbox"
           :checked="vis.showElbows.value"
           @change="vis.showElbows.value = !vis.showElbows.value" />
         <span>弯头件</span>
@@ -457,6 +532,12 @@ function setBendDisplayMode(event: Event): void {
       </div>
       <div class="rounded-md border border-border px-2 py-1">
         弯头: <span class="font-semibold">{{ stats?.bends_count ?? bends.length }}</span>
+      </div>
+      <div class="rounded-md border border-border px-2 py-1">
+        尺寸: <span class="font-semibold">{{ linearDimCount }}</span>
+      </div>
+      <div class="rounded-md border border-border px-2 py-1">
+        cut-tubi: <span class="font-semibold">{{ cutTubiDimCount }}</span>
       </div>
       <div class="rounded-md border border-border px-2 py-1">
         管间净距: <span class="font-semibold">{{ pipeClearances.length }}</span>
@@ -524,7 +605,7 @@ function setBendDisplayMode(event: Event): void {
       <div class="grid grid-cols-2 gap-2 text-xs">
         <div class="rounded-md border border-border p-2">
           <div class="text-muted-foreground">总长</div>
-          <div class="mt-1 text-sm font-semibold">{{ formatLength(segmentTotalLength) }}</div>
+          <div class="mt-1 text-sm font-semibold">{{ formatLength(mbdTotalLength) }}</div>
         </div>
         <div class="rounded-md border border-border p-2">
           <div class="text-muted-foreground">最小净空</div>
@@ -689,7 +770,29 @@ function setBendDisplayMode(event: Event): void {
     </div>
 
     <div v-else-if="tab === 'materials'" class="rounded-md border border-border p-2 text-xs">
-      <div v-if="materialEntries.length > 0" class="grid grid-cols-2 gap-x-2 gap-y-1">
+      <div v-if="materialRows.length > 0" class="overflow-hidden rounded border border-border">
+        <table class="w-full border-collapse text-left text-[11px]">
+          <thead class="bg-muted text-muted-foreground">
+            <tr>
+              <th class="px-2 py-1 font-medium">#</th>
+              <th class="px-2 py-1 font-medium">N.S</th>
+              <th class="px-2 py-1 font-medium">ITEMCODE</th>
+              <th class="px-2 py-1 font-medium">数量</th>
+              <th class="px-2 py-1 font-medium">单重</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in materialRows" :key="row.item_no" class="border-t border-border">
+              <td class="px-2 py-1 tabular-nums">{{ row.item_no }}</td>
+              <td class="px-2 py-1">{{ row.ns }}</td>
+              <td class="px-2 py-1">{{ row.item_code }}</td>
+              <td class="px-2 py-1 tabular-nums">{{ formatMaterialQuantity(row.quantity, row.unit) }}</td>
+              <td class="px-2 py-1 tabular-nums">{{ row.unit_weight ?? '/' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else-if="materialEntries.length > 0" class="grid grid-cols-2 gap-x-2 gap-y-1">
         <template v-for="item in materialEntries" :key="item.label">
           <div class="text-muted-foreground">{{ item.label }}</div>
           <div class="truncate">{{ item.value }}</div>

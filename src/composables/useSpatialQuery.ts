@@ -13,6 +13,7 @@ import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMeta
 import {
   findNounByRefnoAcrossAllDbnos,
   findSpecValueByRefnoAcrossAllDbnos,
+  loadDtxAabbProxyRefnos,
   loadDbnoInstancesForVisibleRefnosDtx,
 } from '@/composables/useDbnoInstancesDtxLoader';
 import { triggerBatchGenerateSse } from '@/composables/useDbnoInstancesJsonLoader';
@@ -129,6 +130,8 @@ type SpatialQueryDrawerOpenFn = (
   options?: { useSelection?: boolean; autoSubmit?: boolean },
 ) => void;
 
+const SPATIAL_RADIUS_METERS_TO_MM = 1000;
+
 function normalizeUrlRefno(refno: string): string {
   return String(refno || '').trim().replace(/\//g, '_');
 }
@@ -149,8 +152,12 @@ export function parseSpatialQueryUrlParams(search: string | URLSearchParams): Sp
   const refno = normalizeUrlRefno(params.get('spatial_refno') || '');
   if (!refno) return null;
 
-  const radius = Number(params.get('spatial_radius'));
-  if (!Number.isFinite(radius) || radius <= 0) return null;
+  const rawRadius = Number(params.get('spatial_radius'));
+  if (!Number.isFinite(rawRadius) || rawRadius <= 0) return null;
+  const radiusUnit = String(params.get('spatial_radius_unit') || '').trim().toLowerCase();
+  const radius = radiusUnit === 'm' || radiusUnit === 'meter' || radiusUnit === 'meters'
+    ? Math.round(rawRadius * SPATIAL_RADIUS_METERS_TO_MM)
+    : rawRadius;
 
   const rawShape = String(params.get('spatial_shape') || 'sphere').trim().toLowerCase();
   const shape: SpatialQueryShape = rawShape === 'cube' ? 'cube' : 'sphere';
@@ -214,6 +221,25 @@ function aabbToStruct(aabb: [number, number, number, number, number, number] | u
 function bboxToAabb6(bbox: SpatialQueryAabb | null | undefined): [number, number, number, number, number, number] | null {
   if (!bbox) return null;
   return [bbox.min.x, bbox.min.y, bbox.min.z, bbox.max.x, bbox.max.y, bbox.max.z];
+}
+
+function isFiniteAabb6(aabb: [number, number, number, number, number, number] | null | undefined): boolean {
+  if (!aabb) return false;
+  return aabb.every((value) => Number.isFinite(value))
+    && aabb[3] >= aabb[0]
+    && aabb[4] >= aabb[1]
+    && aabb[5] >= aabb[2];
+}
+
+function hasRenderableSpatialResult(viewer: ViewerRuntimeLike, refno: string): boolean {
+  const normalized = normalizeRefno(refno);
+  if (!normalized) return false;
+
+  const sceneAabb = viewer.scene.getAABB([normalized]);
+  if (isFiniteAabb6(sceneAabb)) return true;
+
+  const objectAabb = viewer.scene.objects[normalized]?.aabb;
+  return isFiniteAabb6(objectAabb);
 }
 
 function axisGap(point: number, min: number, max: number): number {
@@ -648,6 +674,111 @@ async function batchLoadSpatialQueryRefnos(
   };
 }
 
+async function loadSpatialQueryAabbProxies(
+  viewer: ViewerRuntimeLike,
+  items: SpatialQueryResultItem[],
+  options: BatchLoadOptions = {},
+): Promise<BatchLoadResult> {
+  const normalizedItems = items
+    .map((item) => ({
+      item,
+      refno: normalizeRefno(item.refno),
+      aabb: item.bbox
+        ? {
+          min: [item.bbox.min.x, item.bbox.min.y, item.bbox.min.z],
+          max: [item.bbox.max.x, item.bbox.max.y, item.bbox.max.z],
+        }
+        : null,
+    }))
+    .filter((entry) => !!entry.refno);
+  if (normalizedItems.length === 0) {
+    return { ok: [], fail: [] };
+  }
+
+  const dtxLayer = viewer.__dtxLayer;
+  if (!dtxLayer) {
+    return {
+      ok: [],
+      fail: normalizedItems.map(({ refno }) => ({ refno, error: 'DTXLayer 未初始化，无法生成空间查询代理模型' })),
+    };
+  }
+
+  try {
+    await ensureDbMetaInfoLoaded();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: [],
+      fail: normalizedItems.map(({ refno }) => ({ refno, error: message })),
+    };
+  }
+
+  const groupedByDbno = new Map<number, typeof normalizedItems>();
+  const fail: { refno: string; error: string | null }[] = [];
+
+  for (const entry of normalizedItems) {
+    if (!entry.aabb) {
+      fail.push({ refno: entry.refno, error: '空间查询结果缺少 AABB，无法生成代理模型' });
+      continue;
+    }
+    try {
+      const dbno = getDbnumByRefno(entry.refno);
+      const group = groupedByDbno.get(dbno) ?? [];
+      group.push(entry);
+      groupedByDbno.set(dbno, group);
+    } catch (error) {
+      fail.push({ refno: entry.refno, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  const okSet = new Set<string>();
+
+  for (const [dbno, group] of groupedByDbno.entries()) {
+    const proxyResult = loadDtxAabbProxyRefnos(
+      dtxLayer as Parameters<typeof loadDtxAabbProxyRefnos>[0],
+      dbno,
+      group.map(({ item, refno, aabb }) => ({
+        refno,
+        noun: item.noun,
+        specValue: item.specValue,
+        aabb,
+      })),
+    );
+
+    const loaded = uniqStrings(proxyResult.loadedRefnos);
+    if (loaded.length > 0) {
+      (viewer.scene.ensureRefnos as (refnos: string[], opts?: { computeAabb?: boolean }) => void)(loaded, { computeAabb: true });
+      for (const refno of loaded) {
+        const matched = group.find((entry) => entry.refno === refno);
+        const aabb6 = bboxToAabb6(matched?.item.bbox);
+        if (aabb6 && viewer.scene.objects[refno]) {
+          viewer.scene.objects[refno]!.aabb = aabb6;
+        }
+      }
+      viewer.scene.setObjectsVisible(loaded, true);
+      viewer.__dtxAfterInstancesLoaded?.(dbno, loaded);
+      loaded.forEach((refno) => okSet.add(refno));
+    }
+
+    for (const refno of proxyResult.missingRefnos) {
+      fail.push({ refno, error: '空间查询结果缺少有效 AABB，无法生成代理模型' });
+    }
+  }
+
+  const ok = uniqStrings(Array.from(okSet));
+  if (options.flyTo && ok.length > 0) {
+    const aabb = viewer.scene.getAABB(ok);
+    if (aabb) {
+      viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+    }
+  }
+
+  return {
+    ok,
+    fail: fail.filter((item) => !okSet.has(item.refno)),
+  };
+}
+
 export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) {
   const viewerRef = options.viewerRef ?? useViewerContext().viewerRef;
   const selection = options.selection ?? useSelectionStore();
@@ -1048,7 +1179,20 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
 
     try {
       status.value = 'loading-model-for-result';
-      await ensureResultLoaded(item);
+      try {
+        await ensureResultLoaded(item);
+        if (!hasRenderableSpatialResult(viewer as ViewerRuntimeLike, item.refno)) {
+          const proxyResult = await loadSpatialQueryAabbProxies(viewer as ViewerRuntimeLike, [item]);
+          if (proxyResult.ok.length === 0) {
+            throw new Error(proxyResult.fail[0]?.error || `加载模型失败: ${item.refno}`);
+          }
+        }
+      } catch (loadError) {
+        const proxyResult = await loadSpatialQueryAabbProxies(viewer as ViewerRuntimeLike, [item]);
+        if (proxyResult.ok.length === 0) {
+          throw loadError;
+        }
+      }
 
       status.value = 'flying-to-result';
       const previous = viewer.scene.selectedObjectIds.slice();
@@ -1104,10 +1248,79 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         { flyTo: options.flyTo }
       );
       const okSet = new Set(result.ok.map((item) => normalizeRefno(item)));
+      const failSet = new Set(result.fail.map((item) => normalizeRefno(item.refno)));
+      let unresolvedFail = result.fail;
+      const viewer = viewerRef.value as ViewerRuntimeLike | null;
+
+      if (viewer && okSet.size > 0) {
+        const fakeOkTargets = targets.filter((item) => {
+          const refno = normalizeRefno(item.refno);
+          return okSet.has(refno) && !hasRenderableSpatialResult(viewer, refno);
+        });
+        if (fakeOkTargets.length > 0) {
+          const proxyResult = await loadSpatialQueryAabbProxies(
+            viewer,
+            fakeOkTargets,
+            { flyTo: false },
+          );
+          proxyResult.ok.forEach((refno) => okSet.add(normalizeRefno(refno)));
+          const proxyOkSet = new Set(proxyResult.ok.map((refno) => normalizeRefno(refno)));
+          for (const target of fakeOkTargets) {
+            const refno = normalizeRefno(target.refno);
+            if (!proxyOkSet.has(refno)) {
+              okSet.delete(refno);
+            }
+          }
+          unresolvedFail = [
+            ...unresolvedFail,
+            ...proxyResult.fail,
+            ...fakeOkTargets
+              .filter((target) => !proxyOkSet.has(normalizeRefno(target.refno)))
+              .map((target) => ({
+                refno: normalizeRefno(target.refno),
+                error: `模型加载完成但未生成可见对象: ${normalizeRefno(target.refno)}`,
+              })),
+          ];
+        }
+      }
+
+      if (failSet.size > 0) {
+        if (viewer) {
+          const proxyResult = await loadSpatialQueryAabbProxies(
+            viewer,
+            targets.filter((item) => failSet.has(normalizeRefno(item.refno))),
+            { flyTo: options.flyTo },
+          );
+          proxyResult.ok.forEach((refno) => okSet.add(normalizeRefno(refno)));
+          const proxyOkSet = new Set(proxyResult.ok.map((refno) => normalizeRefno(refno)));
+          unresolvedFail = [
+            ...result.fail.filter((item) => !proxyOkSet.has(normalizeRefno(item.refno))),
+            ...proxyResult.fail,
+          ].filter((item, index, list) => {
+            const refno = normalizeRefno(item.refno);
+            return !!refno && list.findIndex((candidate) => normalizeRefno(candidate.refno) === refno) === index;
+          });
+        }
+      }
+
+      unresolvedFail = unresolvedFail.filter((item, index, list) => {
+        const refno = normalizeRefno(item.refno);
+        return !!refno
+          && !okSet.has(refno)
+          && list.findIndex((candidate) => normalizeRefno(candidate.refno) === refno) === index;
+      });
+
+      if (viewer && options.flyTo && okSet.size > 0) {
+        const flyTargets = Array.from(okSet).filter((refno) => hasRenderableSpatialResult(viewer, refno));
+        const aabb = viewer.scene.getAABB(flyTargets.length > 5000 ? flyTargets.slice(0, 5000) : flyTargets);
+        if (aabb) {
+          viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
+        }
+      }
 
       if (resultSet.value) {
         for (const item of resultSet.value.items) {
-          if (okSet.has(item.refno)) {
+          if (okSet.has(normalizeRefno(item.refno))) {
             item.loaded = true;
             item.visible = true;
           }
@@ -1115,10 +1328,10 @@ export function createSpatialQueryStore(options: SpatialQueryStoreOptions = {}) 
         commitResultSet(resultSet.value);
       }
 
-      if (result.fail.length > 0) {
-        error.value = result.fail.length === 1
-          ? (result.fail[0]?.error || `加载模型失败: ${result.fail[0]?.refno}`)
-          : `有 ${result.fail.length} 个模型加载失败`;
+      if (unresolvedFail.length > 0) {
+        error.value = unresolvedFail.length === 1
+          ? (unresolvedFail[0]?.error || `加载模型失败: ${unresolvedFail[0]?.refno}`)
+          : `有 ${unresolvedFail.length} 个模型加载失败`;
       }
 
       status.value = 'ready';

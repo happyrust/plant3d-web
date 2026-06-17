@@ -9,6 +9,13 @@ const ignores = [
   '.vscode',
   'coverage',
   'dist',
+  'wiki/**/*',
+  'tmp/**/*',
+  '.tmp*',
+  '.tmp*/**',
+  '.agents/**/*',
+  '.context/**/*',
+  '.specify/**/*',
   'doc/**/*',
   'docs/**/*',
   '.worktrees/**',
@@ -241,10 +248,12 @@ export default tseslint.config(
     }
   },
   {
-    files: ['e2e/**/*.ts', 'scripts/**/*.mjs', 'src/**/*.test.ts', 'src/**/*.spec.ts'],
+    files: ['e2e/**/*.ts', 'scripts/**/*.{ts,mjs,cjs}', 'debug_scripts/**/*.mjs', 'src/**/*.test.ts', 'src/**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-empty-function': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-empty': 'off',
       'vue/one-component-per-file': 'off'
     }
   },

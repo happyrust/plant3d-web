@@ -33,16 +33,34 @@ const safeDepth = computed(() => {
 const isVisible = computed(() => props.checkState !== 'unchecked');
 const typeIconUrl = computed(() => getPdmsTypeIconUrl(props.row.type));
 
-/** 显示名称：优先使用 name，为空时用 refno（dbnum/sesno 格式）兜底 */
-const displayName = computed(() => {
-  const name = props.row.name;
-  if (name && name.trim()) return name;
+function normalizePdmsName(value: string | undefined): string {
+  return String(value || '').trim().replace(/^\/+/, '');
+}
+
+function fallbackRefnoLabel(id: string): string {
   // refno 格式：24381_145018 → 24381/145018
+  return id && id.includes('_') ? id.replace('_', '/') : id || '';
+}
+
+const rawDisplayName = computed(() => normalizePdmsName(props.row.name));
+const nameLooksLikeRefno = computed(() => {
   const id = props.row.id;
-  if (id && id.includes('_')) return id.replace('_', '/');
-  return id || '';
+  const name = rawDisplayName.value;
+  return !!id && !!name && (name === id || name === id.replace('_', '/'));
 });
-const isNameFallback = computed(() => !props.row.name || !props.row.name.trim());
+
+/** 显示名称：PDMS 节点显示为 "NOUN NAME"，为空时用 refno 兜底 */
+const displayName = computed(() => {
+  const name = rawDisplayName.value;
+  const fallback = fallbackRefnoLabel(props.row.id);
+  const type = String(props.row.type || '').trim();
+
+  if (!name || nameLooksLikeRefno.value) return fallback;
+  if (!type || type === 'WORL') return name;
+  if (name.toUpperCase().startsWith(`${type.toUpperCase()} `)) return name;
+  return `${type} ${name}`;
+});
+const isNameFallback = computed(() => !rawDisplayName.value || nameLooksLikeRefno.value);
 
 // hover 状态管理
 const isHovering = ref(false);

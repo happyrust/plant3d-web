@@ -144,7 +144,6 @@ function resolveReviewIdentityCandidates(
   return uniqueNonEmpty([user.id]);
 }
 
-
 function identityCandidatesIntersect(left: string[], right: string[]): boolean {
   if (left.length === 0 || right.length === 0) return false;
   const rightSet = new Set(right);

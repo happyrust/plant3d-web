@@ -68,6 +68,14 @@ vi.mock('@/composables/useSpatialQuery', () => ({
   }),
 }));
 
+vi.mock('@/composables/useRoomInfoPanel', () => ({
+  resolveContainingRoomInfo: vi.fn(async () => null),
+  useRoomInfoPanel: () => ({
+    openForRefno: vi.fn(async () => null),
+    showRoomModel: vi.fn(async () => undefined),
+  }),
+}));
+
 function mountDrawer() {
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -234,11 +242,11 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const slider = host.querySelector('[data-testid="radius-slider"]') as HTMLInputElement | null;
     expect(slider).toBeTruthy();
-    expect(slider?.min).toBe('100');
-    expect(slider?.max).toBe('10000');
+    expect(slider?.min).toBe('0.1');
+    expect(slider?.max).toBe('100');
 
     if (slider) {
-      slider.value = '2500';
+      slider.value = '2.5';
       slider.dispatchEvent(new Event('input'));
     }
     await nextTick();
@@ -254,13 +262,13 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const presets = Array.from(host.querySelectorAll('[data-testid="radius-preset"]')) as HTMLButtonElement[];
     expect(presets.length).toBe(4);
-    expect(presets[0].textContent).toContain('100 mm');
-    expect(presets[1].textContent).toContain('500 mm');
+    expect(presets[0].textContent).toContain('1 m');
+    expect(presets[1].textContent).toContain('5 m');
 
-    presets[2].click(); // 1000 mm
+    presets[2].click(); // 10 m
     await nextTick();
 
-    expect(stubState.draft.radius).toBe(1000);
+    expect(stubState.draft.radius).toBe(10000);
     const reread = Array.from(host.querySelectorAll('[data-testid="radius-preset"]')) as HTMLButtonElement[];
     expect(reread[2].className).toContain('bg-[#FFF1E8]');
 
@@ -272,7 +280,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     await nextTick();
 
     const allLabels = Array.from(host.querySelectorAll('label')) as HTMLLabelElement[];
-    const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (mm)'));
+    const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (m)'));
     expect(radiusLabel).toBeUndefined();
     const limitLabel = allLabels.find((label) => label.textContent?.includes('每页数量'));
     expect(limitLabel).toBeDefined();
@@ -295,7 +303,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(slider).toBeNull();
 
     const allLabels = Array.from(host.querySelectorAll('label')) as HTMLLabelElement[];
-    const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (mm)'));
+    const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (m)'));
     expect(radiusLabel).toBeDefined();
 
     unmount();

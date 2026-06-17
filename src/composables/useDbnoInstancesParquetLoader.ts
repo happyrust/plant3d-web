@@ -18,14 +18,14 @@ import {
   DuckDBDataProtocol,
   type AsyncDuckDBConnection,
 } from '@duckdb/duckdb-wasm';
-import { Matrix4 } from 'three';
+import { Matrix4, Vector3 } from 'three';
 
+import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import type { InstanceEntry } from '@/utils/instances/instanceManifest';
-import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 import { getParquetVersion } from '@/api/genModelRealtimeApi';
-import type { PtsetPoint, PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { buildFilesOutputUrl } from '@/lib/filesOutput';
+import { configureLocalDuckDBExtensions, selectLocalDuckDBBundle } from '@/utils/duckdbBundles';
 
 type ParquetManifest = {
   version: number
@@ -36,6 +36,7 @@ type ParquetManifest = {
   tables: {
     instances: { file: string; rows?: number }
     ptsets?: { file: string; rows?: number; key?: string[] }
+    primitive_keypoints?: { file: string; rows?: number; key?: string[] }
     geo_instances: { file: string; rows?: number }
     tubings: { file: string; rows?: number }
     transforms: { file: string; rows?: number }
@@ -44,6 +45,14 @@ type ParquetManifest = {
   ptset_unit?: {
     source?: string
     target?: string
+    conversion_factor?: number
+    coordinate_space?: string
+  }
+  primitive_keypoint_unit?: {
+    source?: string
+    source_unit?: string
+    target?: string
+    target_unit?: string
     conversion_factor?: number
     coordinate_space?: string
   }
@@ -82,6 +91,15 @@ export type ParquetMeshValidationInfo = {
   reportGeneratedAt: string | null
 }
 
+export type ParquetPtsetChildSummary = {
+  refno: string
+  noun: string
+  name: string
+  success: boolean
+  ptCount: number
+  errorMessage: string | null
+}
+
 export type ParquetQueryTiming = {
   phaseMs: {
     duckdbInit: number
@@ -102,6 +120,21 @@ export type ParquetQueryTiming = {
   }
 }
 
+export type PrimitiveKeyPointCandidate = {
+  id: string
+  refno: string
+  objectId: string
+  geoHash: string
+  geoIndex: number
+  keypointIndex: number
+  kind: string
+  source: string
+  local: [number, number, number]
+  world: [number, number, number]
+  hasDir: boolean
+  dir: [number, number, number] | null
+}
+
 type RegisteredDbno = {
   dbno: number
   baseDirUrl: string
@@ -110,6 +143,7 @@ type RegisteredDbno = {
   files: {
     instances: string
     ptsets: string
+    primitive_keypoints: string
     geo_instances: string
     tubings: string
     transforms: string
@@ -219,6 +253,7 @@ function buildRegisteredDbnoFiles(
   return {
     instances: `p_${dbno}_instances${suffix}.parquet`,
     ptsets: `p_${dbno}_ptsets${suffix}.parquet`,
+    primitive_keypoints: `p_${dbno}_primitive_keypoints${suffix}.parquet`,
     geo_instances: `p_${dbno}_geo_instances${suffix}.parquet`,
     tubings: `p_${dbno}_tubings${suffix}.parquet`,
     transforms: `p_${dbno}_transforms${suffix}.parquet`,
@@ -310,6 +345,8 @@ const registeredByDbno = new Map<number, RegisteredDbno>();
 const registeringByDbno = new Map<number, Promise<RegisteredDbno>>();
 const registeredPtsetsByDbno = new Map<number, string>();
 const registeringPtsetsByDbno = new Map<number, Promise<string | null>>();
+const registeredPrimitiveKeypointsByDbno = new Map<number, string>();
+const registeringPrimitiveKeypointsByDbno = new Map<number, Promise<string | null>>();
 const availableByDbno = new Map<number, boolean>();
 const availabilityCheckingByDbno = new Map<number, Promise<boolean>>();
 const meshValidationByDbno = new Map<number, Promise<ParquetMeshValidationInfo | null>>();
@@ -438,6 +475,14 @@ function ptsetUnitInfoFromManifest(manifest: ParquetManifest): NonNullable<Ptset
   };
 }
 
+function primitiveKeypointConversionFactorFromManifest(manifest: ParquetManifest): number | null {
+  const unit = manifest.primitive_keypoint_unit;
+  if (!unit || typeof unit !== 'object') return null;
+  if (String(unit.coordinate_space || '').trim() !== 'geo_local') return null;
+  const conversionFactor = Number(unit.conversion_factor);
+  return Number.isFinite(conversionFactor) ? conversionFactor : null;
+}
+
 function rowToPtsetPoint(row: any): PtsetPoint {
   const hasDir = Boolean(row.has_dir);
   const hasRefDir = Boolean(row.has_ref_dir);
@@ -450,18 +495,18 @@ function rowToPtsetPoint(row: any): PtsetPoint {
     ],
     dir: hasDir
       ? [
-          Number(row.dir_x ?? 0),
-          Number(row.dir_y ?? 0),
-          Number(row.dir_z ?? 0),
-        ]
+        Number(row.dir_x ?? 0),
+        Number(row.dir_y ?? 0),
+        Number(row.dir_z ?? 0),
+      ]
       : null,
     dir_flag: Number(row.dir_flag ?? 1),
     ref_dir: hasRefDir
       ? [
-          Number(row.ref_dir_x ?? 0),
-          Number(row.ref_dir_y ?? 0),
-          Number(row.ref_dir_z ?? 0),
-        ]
+        Number(row.ref_dir_x ?? 0),
+        Number(row.ref_dir_y ?? 0),
+        Number(row.ref_dir_z ?? 0),
+      ]
       : null,
     pbore: Number(row.pbore ?? 0),
     pwidth: Number(row.pwidth ?? 0),
@@ -545,6 +590,7 @@ async function registerDbno(dbno: number, options: { forceRefresh?: boolean } = 
       files: {
         instances,
         ptsets: files.ptsets,
+        primitive_keypoints: files.primitive_keypoints,
         geo_instances: geoInstances,
         tubings,
         transforms,
@@ -599,6 +645,48 @@ async function ensurePtsetsRegistered(reg: RegisteredDbno, options: { forceRefre
     return await task;
   } finally {
     registeringPtsetsByDbno.delete(reg.dbno);
+  }
+}
+
+async function ensurePrimitiveKeypointsRegistered(
+  reg: RegisteredDbno,
+  options: { forceRefresh?: boolean } = {}
+): Promise<string | null> {
+  const table = reg.manifest.tables.primitive_keypoints;
+  if (!table?.file) return null;
+
+  if (options.forceRefresh) {
+    registeredPrimitiveKeypointsByDbno.delete(reg.dbno);
+  }
+
+  const cached = registeredPrimitiveKeypointsByDbno.get(reg.dbno);
+  if (cached && !options.forceRefresh) return cached;
+
+  const pending = registeringPrimitiveKeypointsByDbno.get(reg.dbno);
+  if (pending && !options.forceRefresh) return await pending;
+
+  const task = (async () => {
+    await ensureDuckDB();
+    if (!db || !conn) throw new Error('DuckDB not ready');
+    const requestToken = createDuckdbRemoteQueryToken();
+    const localName = options.forceRefresh
+      ? appendDuckdbLocalFileToken(reg.files.primitive_keypoints, requestToken)
+      : reg.files.primitive_keypoints;
+    const registered = await registerDuckdbRemoteFile(
+      localName,
+      reg.baseDirUrl,
+      table.file,
+      requestToken,
+    );
+    registeredPrimitiveKeypointsByDbno.set(reg.dbno, registered);
+    return registered;
+  })();
+
+  registeringPrimitiveKeypointsByDbno.set(reg.dbno, task);
+  try {
+    return await task;
+  } finally {
+    registeringPrimitiveKeypointsByDbno.delete(reg.dbno);
   }
 }
 
@@ -774,6 +862,246 @@ export function useDbnoInstancesParquetLoader() {
     }
   }
 
+  async function isPrimitiveKeypointParquetAvailable(dbno: number): Promise<boolean> {
+    try {
+      const reg = await registerDbno(dbno);
+      const file = await ensurePrimitiveKeypointsRegistered(reg);
+      if (!file) return false;
+      return primitiveKeypointConversionFactorFromManifest(reg.manifest) !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  async function queryPrimitiveKeypointsByRefnoFromParquet(
+    dbno: number,
+    refno: string,
+    options?: { forceRefresh?: boolean }
+  ): Promise<PrimitiveKeyPointCandidate[]> {
+    const normalizedRefno = normalizeRefnoKey(refno);
+    lastError.value = null;
+    if (!normalizedRefno) return [];
+
+    try {
+      const reg = await registerDbno(dbno, { forceRefresh: options?.forceRefresh });
+      await ensureDuckDB();
+      if (!conn) throw new Error('DuckDB connection unavailable');
+
+      const primitiveFile = await ensurePrimitiveKeypointsRegistered(reg, {
+        forceRefresh: options?.forceRefresh,
+      });
+      if (!primitiveFile) {
+        throw new Error('当前模型包未包含 primitive_keypoints.parquet，Primitive Key Point 不可用');
+      }
+
+      const conversionFactor = primitiveKeypointConversionFactorFromManifest(reg.manifest);
+      if (conversionFactor === null) {
+        throw new Error('当前模型包缺少 primitive_keypoint_unit.geo_local 元数据，Primitive Key Point 不可用');
+      }
+
+      const sql = `
+        WITH target(refno_str) AS (
+          SELECT ${sqlQuoteString(normalizedRefno)} AS refno_str
+        ),
+        instance_geo AS (
+          SELECT
+            i.refno_str,
+            gi.geo_index,
+            gi.geo_hash,
+            tw.m00, tw.m10, tw.m20, tw.m30,
+            tw.m01, tw.m11, tw.m21, tw.m31,
+            tw.m02, tw.m12, tw.m22, tw.m32,
+            tw.m03, tw.m13, tw.m23, tw.m33,
+            tg.m00 AS g_m00, tg.m10 AS g_m10, tg.m20 AS g_m20, tg.m30 AS g_m30,
+            tg.m01 AS g_m01, tg.m11 AS g_m11, tg.m21 AS g_m21, tg.m31 AS g_m31,
+            tg.m02 AS g_m02, tg.m12 AS g_m12, tg.m22 AS g_m22, tg.m32 AS g_m32,
+            tg.m03 AS g_m03, tg.m13 AS g_m13, tg.m23 AS g_m23, tg.m33 AS g_m33
+          FROM target t
+          JOIN parquet_scan('${reg.files.instances}') i ON i.refno_str = t.refno_str
+          JOIN parquet_scan('${reg.files.geo_instances}') gi ON gi.refno_str = i.refno_str
+          LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = i.trans_hash
+          LEFT JOIN parquet_scan('${reg.files.transforms}') tg ON tg.trans_hash = gi.geo_trans_hash
+        ),
+        tubi_geo AS (
+          SELECT
+            t.refno_str,
+            tb.order AS geo_index,
+            tb.geo_hash,
+            tw.m00, tw.m10, tw.m20, tw.m30,
+            tw.m01, tw.m11, tw.m21, tw.m31,
+            tw.m02, tw.m12, tw.m22, tw.m32,
+            tw.m03, tw.m13, tw.m23, tw.m33,
+            NULL AS g_m00, NULL AS g_m10, NULL AS g_m20, NULL AS g_m30,
+            NULL AS g_m01, NULL AS g_m11, NULL AS g_m21, NULL AS g_m31,
+            NULL AS g_m02, NULL AS g_m12, NULL AS g_m22, NULL AS g_m32,
+            NULL AS g_m03, NULL AS g_m13, NULL AS g_m23, NULL AS g_m33
+          FROM target t
+          JOIN parquet_scan('${reg.files.tubings}') tb
+            ON tb.tubi_refno_str = t.refno_str
+            OR tb.owner_refno_str = t.refno_str
+          LEFT JOIN parquet_scan('${reg.files.transforms}') tw ON tw.trans_hash = tb.trans_hash
+        ),
+        all_geo AS (
+          SELECT * FROM instance_geo
+          UNION ALL
+          SELECT * FROM tubi_geo
+        )
+        SELECT
+          g.refno_str,
+          g.geo_index,
+          g.geo_hash,
+          g.m00, g.m10, g.m20, g.m30,
+          g.m01, g.m11, g.m21, g.m31,
+          g.m02, g.m12, g.m22, g.m32,
+          g.m03, g.m13, g.m23, g.m33,
+          g.g_m00, g.g_m10, g.g_m20, g.g_m30,
+          g.g_m01, g.g_m11, g.g_m21, g.g_m31,
+          g.g_m02, g.g_m12, g.g_m22, g.g_m32,
+          g.g_m03, g.g_m13, g.g_m23, g.g_m33,
+          pk.keypoint_index,
+          pk.kind,
+          pk.local_x,
+          pk.local_y,
+          pk.local_z,
+          pk.has_dir,
+          pk.dir_x,
+          pk.dir_y,
+          pk.dir_z,
+          pk.source
+        FROM all_geo g
+        JOIN parquet_scan('${primitiveFile}') pk ON pk.geo_hash = g.geo_hash
+        ORDER BY g.refno_str, g.geo_index, pk.keypoint_index
+      `;
+
+      const arrow = await conn.query(sql);
+      const rows = arrow.toArray() as any[];
+      const out: PrimitiveKeyPointCandidate[] = [];
+      for (const row of rows) {
+        const refnoStr = normalizeRefnoKey(String(row.refno_str || normalizedRefno));
+        const geoHash = String(row.geo_hash || '').trim();
+        if (!refnoStr || !geoHash) continue;
+
+        const worldCols = colsMajorToMatrixArray(row);
+        if (!worldCols) continue;
+        const geoLocal = colsMajorToMatrixArrayWithPrefix(row, 'g_');
+        const matrix = new Matrix4().fromArray(multiplyWorldAndGeoLocal(worldCols, geoLocal));
+
+        const local: [number, number, number] = [
+          Number(row.local_x ?? 0) * conversionFactor,
+          Number(row.local_y ?? 0) * conversionFactor,
+          Number(row.local_z ?? 0) * conversionFactor,
+        ];
+        if (local.some((value) => !Number.isFinite(value))) continue;
+
+        const v = new Vector3(local[0], local[1], local[2]).applyMatrix4(matrix);
+        const keypointIndex = Number(row.keypoint_index ?? 0);
+        const geoIndex = Number(row.geo_index ?? 0);
+        const hasDir = Boolean(row.has_dir);
+        const dir: [number, number, number] | null = hasDir
+          ? [
+            Number(row.dir_x ?? 0),
+            Number(row.dir_y ?? 0),
+            Number(row.dir_z ?? 0),
+          ]
+          : null;
+
+        out.push({
+          id: `primitive:${refnoStr}:${geoIndex}:${geoHash}#${keypointIndex}`,
+          refno: refnoStr,
+          objectId: `o:${refnoStr}:0`,
+          geoHash,
+          geoIndex,
+          keypointIndex,
+          kind: String(row.kind || 'key_point'),
+          source: String(row.source || 'primitive_keypoints.parquet'),
+          local,
+          world: [v.x, v.y, v.z],
+          hasDir,
+          dir,
+        });
+      }
+      return out;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      lastError.value = message;
+      throw new Error(`查询 primitive_keypoints.parquet 失败: ${message}`);
+    }
+  }
+
+  async function queryDirectChildrenPtsetSummary(
+    dbno: number,
+    ownerRefno: string,
+    options?: { forceRefresh?: boolean }
+  ): Promise<ParquetPtsetChildSummary[]> {
+    const normalizedOwner = normalizeRefnoKey(ownerRefno);
+    if (!normalizedOwner) return [];
+
+    lastError.value = null;
+
+    const toSummary = (row: any, ptsetsFile: string | null): ParquetPtsetChildSummary => {
+      const refno = normalizeRefnoKey(String(row.refno_str || ''));
+      const cataHash = String(row.cata_hash || '').trim();
+      const ptCount = Number(row.pt_count ?? 0);
+      const errorMessage = !ptsetsFile
+        ? '当前模型包未包含 ptsets.parquet，ptset 不可用'
+        : !cataHash
+          ? `refno=${refno} 缺少 cata_hash，无法查询 ptset`
+          : ptCount > 0
+            ? null
+            : `cata_hash=${cataHash} 未找到 ptset 点`;
+
+      return {
+        refno,
+        noun: String(row.noun || ''),
+        name: String(row.name || ''),
+        success: !!ptsetsFile && !!cataHash && ptCount > 0,
+        ptCount: !!ptsetsFile && !!cataHash ? ptCount : 0,
+        errorMessage,
+      };
+    };
+
+    try {
+      const reg = await registerDbno(dbno, { forceRefresh: options?.forceRefresh });
+      await ensureDuckDB();
+      if (!conn) throw new Error('DuckDB connection unavailable');
+
+      const ptsetsFile = await ensurePtsetsRegistered(reg, { forceRefresh: options?.forceRefresh });
+      const ptCountSelect = ptsetsFile ? 'COALESCE(pc.pt_count, 0) AS pt_count' : '0 AS pt_count';
+      const ptCountJoin = ptsetsFile
+        ? `
+        LEFT JOIN (
+          SELECT cata_hash, COUNT(*) AS pt_count
+          FROM parquet_scan('${ptsetsFile}')
+          WHERE cata_hash IS NOT NULL AND cata_hash <> ''
+          GROUP BY cata_hash
+        ) pc ON pc.cata_hash = i.cata_hash
+        `
+        : '';
+
+      const sql = `
+        SELECT
+          i.refno_str,
+          i.noun,
+          '' AS name,
+          i.cata_hash,
+          ${ptCountSelect}
+        FROM parquet_scan('${reg.files.instances}') i
+        ${ptCountJoin}
+        WHERE i.owner_refno_str = ${sqlQuoteString(normalizedOwner)}
+        ORDER BY i.refno_str
+      `;
+      const arrow = await conn.query(sql);
+      const rows = arrow.toArray() as any[];
+      return rows
+        .map((row) => toSummary(row, ptsetsFile))
+        .filter((item) => !!item.refno);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      lastError.value = message;
+      throw new Error(`查询直子元件 ptset 摘要失败: ${message}`);
+    }
+  }
+
   async function queryInstanceEntriesByRefnos(
     dbno: number,
     refnoKeys: string[],
@@ -794,7 +1122,7 @@ export function useDbnoInstancesParquetLoader() {
     if (!conn) throw new Error('DuckDB connection unavailable');
 
     const registerDbnoStartedAt = Date.now();
-    const reg = await registerDbno(dbno);
+    const reg = await registerDbno(dbno, { forceRefresh: true });
     timing.phaseMs.registerDbno = Date.now() - registerDbnoStartedAt;
 
     // refno 在 parquet 里是 refno_str（与前端 refnoKey 一致：`24381_100818` 这种下划线格式）
@@ -1051,7 +1379,7 @@ export function useDbnoInstancesParquetLoader() {
   ): Promise<string[]> {
     lastError.value = null;
 
-    const reg = await registerDbno(dbno);
+    const reg = await registerDbno(dbno, { forceRefresh: true });
     await ensureDuckDB();
     if (!conn) throw new Error('DuckDB connection unavailable');
 
@@ -1173,7 +1501,10 @@ export function useDbnoInstancesParquetLoader() {
     prewarmDbno,
     isParquetAvailable,
     isPtsetParquetAvailable,
+    isPrimitiveKeypointParquetAvailable,
     queryPtsetByRefnoFromParquet,
+    queryPrimitiveKeypointsByRefnoFromParquet,
+    queryDirectChildrenPtsetSummary,
     queryInstanceEntriesByRefnos,
     queryAllRefnosByDbno,
     queryMeshValidationInfoByDbno,

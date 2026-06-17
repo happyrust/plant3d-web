@@ -55,6 +55,35 @@ export function applyPtsetTransformToPoint(worldTransform: unknown, localPt: Vec
   return localPt;
 }
 
+export function applyPtsetTransformToDir(worldTransform: unknown, localDir: Vec3): Vec3 {
+  const dx = localDir[0];
+  const dy = localDir[1];
+  const dz = localDir[2];
+
+  if (Array.isArray(worldTransform) && worldTransform.length === 16) {
+    const m = worldTransform as number[];
+    return [
+      (m[0] ?? 1) * dx + (m[4] ?? 0) * dy + (m[8] ?? 0) * dz,
+      (m[1] ?? 0) * dx + (m[5] ?? 1) * dy + (m[9] ?? 0) * dz,
+      (m[2] ?? 0) * dx + (m[6] ?? 0) * dy + (m[10] ?? 1) * dz,
+    ];
+  }
+
+  if (Array.isArray(worldTransform) && worldTransform.length >= 3 && Array.isArray((worldTransform as unknown[])[0])) {
+    const m = worldTransform as unknown as number[][];
+    const m0 = m[0] ?? [1, 0, 0, 0];
+    const m1 = m[1] ?? [0, 1, 0, 0];
+    const m2 = m[2] ?? [0, 0, 1, 0];
+    return [
+      (m0[0] ?? 1) * dx + (m0[1] ?? 0) * dy + (m0[2] ?? 0) * dz,
+      (m1[0] ?? 0) * dx + (m1[1] ?? 1) * dy + (m1[2] ?? 0) * dz,
+      (m2[0] ?? 0) * dx + (m2[1] ?? 0) * dy + (m2[2] ?? 1) * dz,
+    ];
+  }
+
+  return localDir;
+}
+
 /**
  * 把一个 ptset 响应换算为场景坐标系的关键点候选集。
  *

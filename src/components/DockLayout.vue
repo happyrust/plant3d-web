@@ -49,7 +49,7 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { onCommand } from '@/ribbon/commandBus';
-import { isMbdStandaloneUrl } from '@/utils/mbdStandaloneUrl';
+import { isMbdDrawingPresetUrl, isMbdStandaloneUrl } from '@/utils/mbdStandaloneUrl';
 
 const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
 
@@ -481,6 +481,10 @@ function isMbdStandaloneLayoutMode(): boolean {
   return isMbdStandaloneUrl(window.location.search);
 }
 
+function isMbdDrawingLayoutMode(): boolean {
+  return isMbdDrawingPresetUrl(window.location.search);
+}
+
 function closeEmbedLandingPanels() {
   const dockApi = api.value;
   if (!dockApi) return;
@@ -520,6 +524,7 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
   closePanelIfExists(dockApi, 'dashboard');
+  closePanelIfExists(dockApi, 'roomInfo');
   closePanelIfExists(dockApi, 'spatialCompute');
 
   const viewerPanel = dockApi.addPanel({
@@ -622,6 +627,7 @@ function createEmbedFocusedLayout(
     'taskCreation',
     'modelExport',
     'materialConfig',
+    'roomInfo',
     'roomStatus',
     'spatialCompute',
     'parquetDebug',
@@ -686,6 +692,7 @@ function createMbdFocusedLayout(dockApi: DockApi) {
     'taskCreation',
     'modelExport',
     'materialConfig',
+    'roomInfo',
     'roomStatus',
     'spatialCompute',
     'parquetDebug',
@@ -724,6 +731,51 @@ function createMbdFocusedLayout(dockApi: DockApi) {
   if (rightGroup) rightGroup.api.setSize({ width: 420 });
 
   console.log('[DockLayout] MBD-focused layout created');
+}
+
+function createMbdDrawingLayout(dockApi: DockApi) {
+  [
+    'properties',
+    'manager',
+    'hydraulic',
+    'annotation',
+    'measurement',
+    'dimension',
+    'ptset',
+    'mbdPipe',
+    'modelTree',
+    'modelQuery',
+    'nearbyQuery',
+    'viewer',
+    'console',
+    'dashboard',
+    'review',
+    'initiateReview',
+    'reviewerTasks',
+    'myTasks',
+    'designerCommentHandling',
+    'resubmissionTasks',
+    'taskMonitor',
+    'taskCreation',
+    'modelExport',
+    'materialConfig',
+    'roomInfo',
+    'roomStatus',
+    'spatialCompute',
+    'parquetDebug',
+  ].forEach((panelId) => {
+    closePanelIfExists(dockApi, panelId);
+  });
+
+  const viewerPanel = dockApi.addPanel({
+    id: 'viewer',
+    component: 'ViewerPanel',
+    title: '三维查看器',
+    renderer: 'always',
+  });
+
+  viewerPanel.api.setActive();
+  console.log('[DockLayout] MBD drawing layout created');
 }
 
 function activatePanel(panelId: string) {
@@ -1026,6 +1078,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (normalizedPanelId === 'roomInfo') {
+    return addPanelSafely(dockApi, {
+      id: 'roomInfo',
+      component: 'RoomInfoPanel',
+      title: '房型房间信息',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (normalizedPanelId === 'spatialCompute') {
     return addPanelSafely(dockApi, {
       id: 'spatialCompute',
@@ -1104,6 +1168,10 @@ function resetLayout() {
   if (!api.value) return;
   resetZoneState();
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  if (isMbdDrawingLayoutMode()) {
+    createMbdDrawingLayout(api.value);
+    return;
+  }
   if (isMbdStandaloneLayoutMode()) {
     createMbdFocusedLayout(api.value);
     return;
@@ -1363,6 +1431,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.roomStatus':
       togglePanel('roomStatus');
+      return;
+    case 'panel.roomInfo':
+      togglePanel('roomInfo');
       return;
 
     // zone toggle commands
@@ -1785,7 +1856,9 @@ function onReady(event: DockviewReadyEvent) {
     ensurePanel as (panelId: string) => { api: { setActive: () => void } } | undefined,
   );
 
-  if (isMbdStandaloneLayoutMode()) {
+  if (isMbdDrawingLayoutMode()) {
+    createMbdDrawingLayout(api.value);
+  } else if (isMbdStandaloneLayoutMode()) {
     createMbdFocusedLayout(api.value);
   } else if (isEmbedLayoutMode()) {
     const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
@@ -1886,7 +1959,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dockview-container">
+  <div class="dockview-container" :class="{ 'dockview-container--mbd-drawing': isMbdDrawingLayoutMode() }">
     <div v-if="embedSessionError"
       data-testid="embed-session-error"
       class="absolute left-1/2 top-3 z-[1100] -translate-x-1/2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 shadow">
@@ -1911,3 +1984,11 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.dockview-container--mbd-drawing :deep(.dv-tabs-and-actions-container),
+.dockview-container--mbd-drawing :deep(.dockview-tabs-and-actions-container),
+.dockview-container--mbd-drawing :deep(.tabs-and-actions-container) {
+  display: none;
+}
+</style>

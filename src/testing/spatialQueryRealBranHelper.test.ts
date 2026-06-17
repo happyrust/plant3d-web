@@ -33,11 +33,11 @@ describe('spatialQueryRealBran helper', () => {
   it('应解析默认环境并生成斜杠 refno', () => {
     const config = resolveSpatialQueryRealBranConfig();
 
-    expect(config.refno).toBe('24381_145018');
-    expect(config.refnoSlash).toBe('24381/145018');
-    expect(config.radii).toEqual([5000, 10000, 20000]);
-    expect(config.nouns).toEqual(['PIPE', 'BRAN']);
-    expect(config.url).toBe('/?output_project=AvevaMarineSample');
+    expect(config.refno).toBe('2013286704_476');
+    expect(config.refnoSlash).toBe('2013286704/476');
+    expect(config.radii).toEqual([1000, 5000, 10000]);
+    expect(config.nouns).toEqual(['BRAN', 'FLAN', 'REDU', 'TUBI', 'VALV']);
+    expect(config.url).toBe('/?spatial_refno=2013286704_476&spatial_radius=5&spatial_radius_unit=m&spatial_shape=sphere&spatial_autorun=1&backendPort=3100');
   });
 
   it('应选择首个满足条件的半径', async () => {
@@ -48,7 +48,7 @@ describe('spatialQueryRealBran helper', () => {
     const config = resolveSpatialQueryRealBranConfig();
     const request = {
       get: async (path: string) => {
-        if (path.includes('distance=5000')) {
+        if (path.includes('radius=5000')) {
           return createMockResponse({
             status: 200,
             body: JSON.stringify({
@@ -93,7 +93,7 @@ describe('spatialQueryRealBran helper', () => {
     };
 
     await expect(probeSpatialQueryRadius(request as any, config)).rejects.toThrow(
-      /radius=5000 status=500 ok=false total=0 non_self=0 truncated=false error=HTTP 500 body=<empty>/,
+      /radius=1000 status=500 ok=false total=0 non_self=0 truncated=false error=HTTP 500 body=<empty>/,
     );
   });
 
@@ -187,7 +187,7 @@ describe('spatialQueryRealBran helper', () => {
     };
 
     const result = await probeSpatialQueryRadius(request as any, config);
-    expect(result.selectedRadius).toBe(20000);
+    expect(result.selectedRadius).toBe(10000);
     expect(result.selectedAttempt.totalResults).toBe(0);
     expect(result.attempts).toHaveLength(3);
   });
@@ -233,7 +233,7 @@ describe('spatialQueryRealBran helper', () => {
     };
 
     const result = await probeSpatialQueryRadius(request as any, config);
-    expect(result.selectedRadius).toBe(20000);
+    expect(result.selectedRadius).toBe(10000);
     expect(mbdCalls).toBe(0);
   });
 });

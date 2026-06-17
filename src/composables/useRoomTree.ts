@@ -8,6 +8,7 @@ import {
   roomTreeGetChildren,
   roomTreeGetRoot,
   roomTreeSearch,
+  normalizeRoomTreeId,
   type RoomTreeNodeDto,
 } from '@/api/genModelRoomTreeApi';
 import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
@@ -23,7 +24,16 @@ function dtoToTreeNode(dto: RoomTreeNodeDto, parentId: string | null): TreeNode 
 }
 
 function isRoomObjectId(id: string) {
-  return /^\d+_\d+(,\d+)?$/.test(id);
+  return /^\d+_\d+$/.test(normalizeRoomTreeId(id));
+}
+
+function roomIdFromAncestorIds(ids: string[]): string | null {
+  for (let i = 0; i < ids.length - 1; i++) {
+    if (ids[i + 1]?.startsWith('room-group:')) {
+      return ids[i] ?? null;
+    }
+  }
+  return null;
 }
 
 export function useRoomTree(
@@ -331,7 +341,7 @@ export function useRoomTree(
       (id) => nodes[id]?.childrenIds,
       { maxDepth: 256, maxNodes: 200_000 },
     );
-    return ids.filter((id) => isRoomObjectId(id));
+    return ids.map(normalizeRoomTreeId).filter((id) => isRoomObjectId(id));
   }
 
   function setCheckStateDeep(id: string, state: CheckState) {
@@ -586,6 +596,29 @@ export function useRoomTree(
     }
   }
 
+  async function focusContainingRoomForRefno(
+    refno: string,
+    options?: {
+      flyTo?: boolean;
+      syncSceneSelection?: boolean;
+      clearSearch?: boolean;
+    },
+  ): Promise<string | null> {
+    const targetId = normalizeRoomTreeId(refno);
+    if (!targetId) return null;
+
+    const resp = await roomTreeGetAncestors(targetId);
+    if (!resp.success) {
+      throw new Error(resp.error_message || 'ancestors failed');
+    }
+
+    const roomId = roomIdFromAncestorIds(resp.ids);
+    if (!roomId) return null;
+
+    await focusNodeById(roomId, options);
+    return roomId;
+  }
+
   let initSeq = 0;
   let initRetryTimer: ReturnType<typeof setTimeout> | null = null;
   let initRetryCount = 0;
@@ -702,6 +735,7 @@ export function useRoomTree(
     searchLoading,
     searchError,
     focusNodeById,
+    focusContainingRoomForRefno,
 
     getCheckState,
     setVisible,

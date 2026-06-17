@@ -64,6 +64,10 @@ export function useSelectionStore() {
   const fullName = computed(() =>
     data.value?.success && data.value?.full_name ? String(data.value.full_name) : null,
   );
+  // 引用类属性（OWNER/REFNO 等，值为 pe:<refno>）解析出的 full_name，键为属性名。
+  const refFullNames = computed<Record<string, string> | null>(() =>
+    data.value?.success && data.value?.ref_full_names ? data.value.ref_full_names : null,
+  );
   const propertiesError = computed(() => {
     if (isError.value) return error.value instanceof Error ? error.value.message : String(error.value);
     if (data.value && !data.value.success) return data.value.error_message || '属性查询失败';
@@ -111,6 +115,7 @@ export function useSelectionStore() {
     propertiesError,
     propertiesData,
     fullName,
+    refFullNames,
     loadProperties,
     clearSelection,
     clearSelectedRefnos,

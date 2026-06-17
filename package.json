@@ -41,7 +41,7 @@
     "demo:mbd-pipe-annotation:filled": "vite --host 127.0.0.1 --port 5173 --strictPort --open \"/?dtx_demo=mbd_pipe&mbd_pipe_case=rebarviz_beam&mbd_dim_mode=rebarviz&mbd_arrow_style=filled&mbd_arrow_size=18&mbd_arrow_angle=18&mbd_line_width=2.6\""
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.30.0",
+    "@duckdb/duckdb-wasm": "1.33.1-dev55.0",
     "@fontsource/roboto-mono": "^5.2.8",
     "@hufe921/canvas-editor": "^0.9.123",
     "@lume/three-meshline": "^4.0.5",

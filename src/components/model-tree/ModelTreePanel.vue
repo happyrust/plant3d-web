@@ -13,6 +13,8 @@ import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { setModelTreeInstance } from '@/composables/useModelTreeStore';
 import { usePdmsOwnerTree, NOUN_TYPES } from '@/composables/usePdmsOwnerTree';
+import { useQuickViewRequestStore } from '@/composables/useQuickViewRequestStore';
+import { useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
@@ -48,6 +50,8 @@ setModelTreeInstance(pdmsTree);
 
 const selection = useSelectionStore();
 const toolStore = useToolStore();
+const quickViewReq = useQuickViewRequestStore();
+const roomInfoPanel = useRoomInfoPanel();
 
 const isRoomTree = computed(() => activeTree.value === 'room');
 
@@ -568,6 +572,15 @@ watch(
   },
 );
 
+watch(
+  () => quickViewReq.request.value,
+  (req) => {
+    if (!req || req.kind !== 'show_selected_room_models') return;
+    quickViewReq.clear();
+    void showSelectedRoomModelsFromQuickRequest();
+  },
+);
+
 const rowVirtualizer = useVirtualizer({
   count: flatRows.value.length,
   getScrollElement: () => containerRef.value,
@@ -691,7 +704,7 @@ function openContextMenu(nodeId: string, ev: MouseEvent) {
   
   // 计算菜单位置，考虑视口边界
   const menuWidth = 176; // w-44 = 11rem = 176px
-  const menuHeight = 200; // 预估高度
+  const menuHeight = 280; // 预估高度
   
   let x = ev.clientX;
   let y = ev.clientY;
@@ -882,6 +895,74 @@ function normalizeRefnoKeyLike(id: string): string {
   return core.replace(/\//g, '_').replace(/,/g, '_');
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForRoomTreeReady(timeoutMs = 6000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (roomTree.rootIds.value.length > 0) return true;
+    await delay(120);
+  }
+  return roomTree.rootIds.value.length > 0;
+}
+
+function selectedRoomIdFromRoomTree(): string | null {
+  const selected = Array.from(roomTree.selectedIds.value);
+  for (const id of selected) {
+    const node = roomTree.nodesById.value[id];
+    if (node?.type === 'ROOM') return id;
+  }
+
+  for (const id of selected) {
+    const node = roomTree.nodesById.value[id];
+    const parentId = node?.parentId ?? null;
+    const parent = parentId ? roomTree.nodesById.value[parentId] : null;
+    if (parent?.type === 'ROOM') return parent.id;
+  }
+
+  return null;
+}
+
+async function showSelectedRoomModelsFromQuickRequest() {
+  const activeRoomId = activeTree.value === 'room' ? selectedRoomIdFromRoomTree() : null;
+  const selectedRefno = normalizeRefnoKeyLike(selection.selectedRefno.value || selection.selectedRefnos.value.at(-1) || '');
+  const targetRefno = activeRoomId || selectedRefno;
+
+  activeTree.value = 'room';
+  await nextTick();
+
+  const ready = await waitForRoomTreeReady();
+  if (!ready) return;
+
+  let roomId = activeRoomId;
+  if (!roomId && targetRefno) {
+    try {
+      roomId = await roomTree.focusContainingRoomForRefno(targetRefno, {
+        flyTo: false,
+        syncSceneSelection: false,
+        clearSearch: true,
+      });
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('[model-tree] focusContainingRoomForRefno failed', e);
+      }
+    }
+  }
+
+  if (!roomId) return;
+
+  roomTree.selectedIds.value = new Set([roomId]);
+  if (modelGenerationState.value) {
+    await modelGenerationState.value.showModelByRefno(roomId, { flyTo: true });
+  }
+  roomTree.isolateXray(roomId);
+  roomTree.flyTo(roomId);
+  selection.setSelectedRefno(roomId);
+  ensurePanelAndActivate('properties');
+}
+
 async function focusAndCenterInTree(id: string) {
   const seq = ++focusAndCenterSeq;
   const targetId = isRoomTree.value ? id : normalizeRefnoKeyLike(id);
@@ -935,7 +1016,28 @@ async function onPickSearchItem(refno: string) {
   const targetId = isRoomTree.value ? refno : normalizeRefnoKeyLike(refno);
   try {
     if (isRoomTree.value) {
-      await roomTree.focusNodeById(targetId);
+      roomTree.setFilter('');
+      const roomId = await roomTree.focusContainingRoomForRefno(targetId, {
+        flyTo: true,
+        syncSceneSelection: false,
+        clearSearch: true,
+      });
+      if (roomId) {
+        roomTree.selectedIds.value = new Set([roomId]);
+        if (modelGenerationState.value) {
+          await modelGenerationState.value.showModelByRefno(roomId, { flyTo: true });
+        }
+        roomTree.isolateXray(roomId);
+        roomTree.flyTo(roomId);
+        selection.setSelectedRefno(roomId);
+        ensurePanelAndActivate('properties');
+      } else {
+        await roomTree.focusNodeById(targetId, {
+          flyTo: true,
+          syncSceneSelection: false,
+          clearSearch: true,
+        });
+      }
     } else {
       await pdmsTree.focusNodeById(targetId);
     }
@@ -1033,6 +1135,40 @@ function viewProperties() {
   closeContextMenu();
 }
 
+async function showContainingRoomFromContext(showModels: boolean) {
+  if (!contextNodeId.value || !isRefnoLike(contextNodeId.value)) return;
+
+  const targetRefno = normalizeRefnoKeyLike(contextNodeId.value);
+  closeContextMenu();
+
+  activeTree.value = 'room';
+  await nextTick();
+
+  const ready = await waitForRoomTreeReady();
+  if (!ready) return;
+
+  const roomId = await roomTree.focusContainingRoomForRefno(targetRefno, {
+    flyTo: showModels,
+    syncSceneSelection: false,
+    clearSearch: true,
+  });
+  if (!roomId) return;
+
+  roomTree.selectedIds.value = new Set([roomId]);
+  await roomInfoPanel.openForRefno(targetRefno);
+  if (showModels && modelGenerationState.value) {
+    await modelGenerationState.value.showModelByRefno(roomId, { flyTo: true });
+    roomTree.isolateXray(roomId);
+    roomTree.flyTo(roomId);
+  }
+  selection.setSelectedRefno(roomId);
+}
+
+const contextNodeCanShowRoom = computed(() => {
+  const id = contextNodeId.value;
+  return !!id && isRefnoLike(id);
+});
+
 // MBD 标注：右键菜单可用的 noun 类型
 const MBD_NOUNS = new Set(['BRAN', 'HANG', 'PIPE']);
 
@@ -1059,7 +1195,7 @@ function onSearchEnter(value: string) {
   // 如果输入的是 RefNo 格式，直接尝试定位，无需等待搜索结果
   if (isRefnoLike(trimmed)) {
     console.log(`[ModelTreePanel] Enter pressed with RefNo-like input: ${trimmed}, triggering direct focus`);
-    onPickSearchItem(trimmed);
+    void onPickSearchItem(trimmed);
     // 可选：关闭搜索框
     searchPopoverOpen.value = false;
   }
@@ -1433,6 +1569,19 @@ function onSearchEnter(value: string) {
           @click="viewProperties">
           查看属性
         </button>
+        <template v-if="contextNodeCanShowRoom">
+          <div class="my-1 h-px bg-border" />
+          <button type="button"
+            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            @click="showContainingRoomFromContext(false)">
+            查看所在房间信息
+          </button>
+          <button type="button"
+            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            @click="showContainingRoomFromContext(true)">
+            显示所在房间模型
+          </button>
+        </template>
         <template v-if="contextNodeCanMbd">
           <div class="my-1 h-px bg-border" />
           <button type="button"
