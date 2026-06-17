@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { queryNearbyByPosition, queryNearbyByRefno, querySpatialIndex } from './genModelSpatialApi';
+import {
+  normalizeBranRefno,
+  queryBranCenterlineNearestClearance,
+  queryNearbyByPosition,
+  queryNearbyByRefno,
+  querySpatialIndex,
+} from './genModelSpatialApi';
 
 describe('genModelSpatialApi', () => {
   beforeEach(() => {
@@ -183,5 +189,59 @@ describe('genModelSpatialApi', () => {
     expect(url.searchParams.get('page')).toBe('2');
     expect(url.searchParams.get('per_page')).toBe('100');
     expect(url.searchParams.get('max_results')).toBe('100');
+  });
+
+  it('queryBranCenterlineNearestClearance 应序列化 BRAN nearest-clearance 查询参数', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true, nearest_by_group: {} }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await queryBranCenterlineNearestClearance({
+      source_refno: 'pe:<24381/145018>',
+      target_groups: ['wall', 'column'],
+      radius: 5000,
+      scope: 'same_dbnum',
+      max_per_group: 2,
+      debug: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestUrl = String(fetchMock.mock.calls[0]?.[0]);
+    const url = new URL(requestUrl, 'http://localhost');
+
+    expect(url.pathname).toBe('/api/sqlite-spatial/nearest-clearance');
+    expect(url.searchParams.get('source_mode')).toBe('bran_centerline');
+    expect(url.searchParams.get('source_refno')).toBe('24381_145018');
+    expect(url.searchParams.get('target_groups')).toBe('wall,column');
+    expect(url.searchParams.get('radius')).toBe('5000');
+    expect(url.searchParams.get('scope')).toBe('same_dbnum');
+    expect(url.searchParams.get('max_per_group')).toBe('2');
+    expect(url.searchParams.get('debug')).toBe('true');
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
+  });
+
+  it('queryBranCenterlineNearestClearance 应使用 wall,column 和 5000mm 默认值', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true, nearest_by_group: {} }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await queryBranCenterlineNearestClearance({ source_refno: '24381/145018' });
+
+    const requestUrl = String(fetchMock.mock.calls[0]?.[0]);
+    const url = new URL(requestUrl, 'http://localhost');
+
+    expect(url.searchParams.get('source_refno')).toBe('24381_145018');
+    expect(url.searchParams.get('target_groups')).toBe('wall,column');
+    expect(url.searchParams.get('radius')).toBe('5000');
+    expect(url.searchParams.get('scope')).toBe('same_dbnum');
+  });
+
+  it('normalizeBranRefno 应支持常见选中对象和手输格式', () => {
+    expect(normalizeBranRefno('24381_145018')).toBe('24381_145018');
+    expect(normalizeBranRefno('24381/145018')).toBe('24381_145018');
+    expect(normalizeBranRefno('pe:<24381/145018>')).toBe('24381_145018');
+    expect(normalizeBranRefno('=24381,145018')).toBe('24381_145018');
   });
 });

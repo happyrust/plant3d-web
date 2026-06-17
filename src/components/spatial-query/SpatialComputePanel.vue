@@ -97,13 +97,13 @@
           <!-- Form -->
           <div class="mt-3 space-y-2.5">
             <label class="block">
-              <span class="mb-1 block text-xs font-semibold text-muted-foreground">SUPPO Refno</span>
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">{{ currentScenarioMeta.sourceLabel }}</span>
               <input v-model="computeState.suppoRefno"
                 type="text"
                 :placeholder="`${currentScenarioMeta.exampleRefno}`"
                 class="h-10 w-full rounded-[10px] border bg-orange-50 px-3 font-mono text-[13px] font-medium text-foreground outline-none transition-colors focus:border-orange-400"
                 :class="computeState.suppoRefno ? 'border-orange-300' : 'border-gray-200'" />
-              <span class="mt-0.5 block text-[11px] font-medium text-gray-400">格式示例：24383_88342</span>
+              <span class="mt-0.5 block text-[11px] font-medium text-gray-400">{{ currentScenarioMeta.sourceHelp }}</span>
             </label>
 
             <label v-if="hasField('tolerance')" class="block">
@@ -132,10 +132,10 @@
             </div>
 
             <label v-if="hasField('targetNouns')" class="block">
-              <span class="mb-1 block text-xs font-semibold text-muted-foreground">target_nouns</span>
+              <span class="mb-1 block text-xs font-semibold text-muted-foreground">{{ activeScenario === 'branNearestClearance' ? 'target_groups' : 'target_nouns' }}</span>
               <input v-model="computeState.targetNouns"
                 type="text"
-                placeholder="WALL,COLUMN,FIXING"
+                :placeholder="activeScenario === 'branNearestClearance' ? 'wall,column' : 'WALL,COLUMN,FIXING'"
                 class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px] text-foreground outline-none focus:border-orange-400" />
             </label>
 
@@ -181,6 +181,7 @@
                 <div class="w-[130px] px-3">构件 Refno</div>
                 <div class="w-[70px] px-2">类型</div>
                 <div class="w-[56px] px-2">距离</div>
+                <div v-if="activeScenario === 'branNearestClearance'" class="flex-1 px-2">分组 / BRAN 段</div>
                 <div class="flex-1 px-2.5 text-right">操作</div>
               </div>
               <!-- Rows -->
@@ -193,7 +194,10 @@
                   :class="idx === 0 ? 'font-semibold text-[#C2410C]' : 'text-muted-foreground'">
                   {{ formatDistanceMm(row.distanceMm) }}
                 </div>
-                <div class="flex flex-1 justify-end px-2.5 py-2">
+                <div v-if="activeScenario === 'branNearestClearance'" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
+                  {{ formatBranRowDetails(row) }}
+                </div>
+                <div class="flex justify-end px-2.5 py-2" :class="activeScenario === 'branNearestClearance' ? 'w-[92px]' : 'flex-1'">
                   <button type="button"
                     class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors"
                     :class="idx === 0
@@ -232,6 +236,8 @@
 <script setup lang="ts">
 import { ChevronDown, Loader2, MousePointerClick } from 'lucide-vue-next';
 
+import type { SpatialComputeResultRow } from '@/composables/useSpatialCompute';
+
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 
 defineEmits<{
@@ -268,5 +274,12 @@ function formatDistanceMm(mm: number | null): string {
   if (mm == null) return '-';
   if (mm >= 1000) return `${(mm / 1000).toFixed(1)}m`;
   return `${mm.toFixed(0)}mm`;
+}
+
+function formatBranRowDetails(row: SpatialComputeResultRow): string {
+  const segment = row.sourceSegmentRefno
+    ? `segment ${row.sourceSegmentRefno}${row.sourceSegmentOrder != null ? `#${row.sourceSegmentOrder}` : ''}`
+    : 'segment -';
+  return `${row.targetGroup || '-'} · ${segment}`;
 }
 </script>

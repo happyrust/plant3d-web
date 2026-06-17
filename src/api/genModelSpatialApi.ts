@@ -174,6 +174,68 @@ export type SpaceComputeVector = {
   dz: number;
 };
 
+export type BranNearestClearanceTargetGroup = 'wall' | 'column' | string;
+
+export type BranNearestClearanceRequest = {
+  source_refno: string;
+  target_groups?: BranNearestClearanceTargetGroup[] | string;
+  /** mm */
+  radius?: number;
+  scope?: 'same_dbnum' | string;
+  max_per_group?: number;
+  debug?: boolean;
+};
+
+export type BranNearestClearanceAabb = {
+  min: SpaceComputePoint;
+  max: SpaceComputePoint;
+};
+
+export type BranNearestClearanceNearest = {
+  source_segment_refno?: string | null;
+  source_segment_order?: number | null;
+  source_point: SpaceComputePoint;
+  target_point: SpaceComputePoint;
+  vector: SpaceComputeVector;
+};
+
+export type BranNearestClearanceAnnotation = {
+  start_point: SpaceComputePoint;
+  end_point: SpaceComputePoint;
+  label_mm: number;
+};
+
+export type BranNearestClearanceCandidate = {
+  refno: string;
+  noun: string;
+  spec_value?: number | null;
+  distance_mm: number;
+  intersects?: boolean;
+  aabb?: BranNearestClearanceAabb;
+  nearest?: BranNearestClearanceNearest | null;
+  annotation?: BranNearestClearanceAnnotation | null;
+};
+
+export type BranNearestClearanceSource = {
+  kind?: string;
+  refno?: string;
+  dbnum?: number | string;
+  segment_count?: number;
+  centerline_bbox?: BranNearestClearanceAabb;
+};
+
+export type BranNearestClearanceResponse = {
+  success: boolean;
+  nearest_by_group?: Record<string, BranNearestClearanceCandidate[]>;
+  warnings?: string[];
+  error?: string;
+  message?: string;
+  unit?: string;
+  distance_method?: string;
+  source?: BranNearestClearanceSource;
+  resolved_filters?: unknown;
+};
+
 export type SpaceComputeSuppoRequest = SpaceComputeRefnoRequest & {
   tolerance?: number;
 };
@@ -304,6 +366,14 @@ function normalizeSuppoRefno(refno: string): string {
   return String(refno || '').trim().replace(/,/g, '/').replace(/_/g, '/');
 }
 
+export function normalizeBranRefno(refno: string): string {
+  const value = String(refno || '').trim();
+  if (!value) return '';
+  const wrapped = value.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? value;
+  const core = wrapped.replace(/^pe:/i, '').replace(/^=/, '').trim();
+  return core.replace(/,/g, '_').replace(/\//g, '_');
+}
+
 // ============================================================================
 // API functions
 // ============================================================================
@@ -403,6 +473,28 @@ export async function queryPipeWallDistanceCandidates(
     method: 'POST',
     body: JSON.stringify(request),
   });
+}
+
+export async function queryBranCenterlineNearestClearance(
+  request: BranNearestClearanceRequest,
+): Promise<BranNearestClearanceResponse> {
+  const sp = new URLSearchParams();
+  sp.set('source_mode', 'bran_centerline');
+  sp.set('source_refno', normalizeBranRefno(request.source_refno));
+  sp.set(
+    'target_groups',
+    Array.isArray(request.target_groups)
+      ? request.target_groups.join(',')
+      : request.target_groups || 'wall,column',
+  );
+  sp.set('radius', String(request.radius ?? 5000));
+  sp.set('scope', request.scope || 'same_dbnum');
+  if (request.max_per_group !== undefined) sp.set('max_per_group', String(request.max_per_group));
+  if (request.debug !== undefined) sp.set('debug', String(request.debug));
+
+  return await fetchJson<BranNearestClearanceResponse>(
+    `/api/sqlite-spatial/nearest-clearance?${sp.toString()}`,
+  );
 }
 
 export async function postSpaceFitting(
