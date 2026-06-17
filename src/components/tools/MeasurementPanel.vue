@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch, type Ref } from 'vue';
 
 import {
   MEASUREMENT_PICK_SOURCE_LABELS,
+  clampMeasurementPickThreshold,
   type MeasurementPickSourceId,
 } from '@/composables/useMeasurementPickSources';
 import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
@@ -44,11 +45,11 @@ const measurementPickSourceRows: {
 }[] = [
   {
     id: 'ptset',
-    description: '构件 PTSET 点，默认显示并捕捉。',
+    description: 'PTSET Keypoint，显示控制绿色标记，捕捉控制能否登记测量端点。',
   },
   {
     id: 'mesh_pick_point',
-    description: '光标射线命中的模型表面点，需手动启用捕捉。',
+    description: 'Model Surface Point，来自光标射线命中的模型表面，默认只显示候选，需手动启用捕捉。',
   },
   {
     id: 'position',
@@ -286,10 +287,7 @@ function updateMeasurementPickSource(
 }
 
 function updateMeasurementPickSourceThreshold(source: MeasurementPickSourceId, raw: string): void {
-  const parsed = Number(raw);
-  const clamped = Number.isFinite(parsed)
-    ? Math.min(40, Math.max(4, Math.round(parsed)))
-    : measurementStyle.state.measurementPickSources[source].thresholdPx;
+  const clamped = clampMeasurementPickThreshold(raw);
   measurementStyle.updateMeasurementPickSource(source, { thresholdPx: clamped });
 }
 
@@ -445,7 +443,7 @@ watch(
             class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
             <div class="font-medium">测量点源</div>
             <div class="mt-1 text-xs text-muted-foreground">
-              显示和捕捉互相独立；关闭捕捉后该点源不会参与测量登记。
+              显示和捕捉互相独立；关闭捕捉后该点源不会参与测量登记。阈值单位为屏幕像素(px)，小于或等于阈值时可捕捉。
             </div>
             <div class="mt-3 overflow-x-auto">
               <table class="w-full min-w-[420px] text-left text-xs">
@@ -464,6 +462,12 @@ watch(
                     <td class="py-2 pr-3 align-top">
                       <div class="font-medium text-foreground">
                         {{ MEASUREMENT_PICK_SOURCE_LABELS[row.id] }}
+                        <span v-if="row.id === 'ptset'" class="text-muted-foreground">
+                          Keypoint
+                        </span>
+                        <span v-else-if="row.id === 'mesh_pick_point'" class="text-muted-foreground">
+                          / Model Surface Point
+                        </span>
                       </div>
                       <div class="mt-0.5 text-muted-foreground">{{ row.description }}</div>
                     </td>

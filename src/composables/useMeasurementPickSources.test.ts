@@ -64,7 +64,7 @@ describe('useMeasurementPickSources', () => {
     expect(resolved.hit?.id).toBe('position:a');
   });
 
-  it('keeps PTSET display and snap enabled when migrating legacy snap settings', () => {
+  it('keeps PTSET display independent when migrating legacy snap settings', () => {
     const enabled = measurementPickSettingsFromLegacy({
       keypointSnapEnabled: true,
       keypointSnapPx: 9,
@@ -75,8 +75,21 @@ describe('useMeasurementPickSources', () => {
     });
 
     expect(enabled.ptset).toMatchObject({ show: true, snap: true, thresholdPx: 9 });
-    expect(disabled.ptset).toMatchObject({ show: false, snap: false, thresholdPx: 40 });
+    expect(disabled.ptset).toMatchObject({ show: true, snap: false, thresholdPx: 40 });
     expect(enabled.mesh_pick_point.snap).toBe(false);
+  });
+
+  it('normalizes invalid and boundary threshold inputs deterministically', async () => {
+    const { DEFAULT_PTSET_SNAP_PX } = await import('./usePtsetSnap');
+    const { clampMeasurementPickThreshold } = await import('./useMeasurementPickSources');
+
+    expect(clampMeasurementPickThreshold('')).toBe(DEFAULT_PTSET_SNAP_PX);
+    expect(clampMeasurementPickThreshold('not-a-number')).toBe(DEFAULT_PTSET_SNAP_PX);
+    expect(clampMeasurementPickThreshold(0)).toBe(4);
+    expect(clampMeasurementPickThreshold(-1)).toBe(4);
+    expect(clampMeasurementPickThreshold(4)).toBe(4);
+    expect(clampMeasurementPickThreshold(40)).toBe(40);
+    expect(clampMeasurementPickThreshold(41)).toBe(40);
   });
 
   it('builds position candidates from object transforms and global model matrix', () => {

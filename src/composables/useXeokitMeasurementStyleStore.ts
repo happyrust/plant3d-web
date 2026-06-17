@@ -160,7 +160,6 @@ function updateStyle(patch: Partial<XeokitMeasurementStyleConfig>): void {
       ...state.measurementPickSources,
       ptset: {
         ...state.measurementPickSources.ptset,
-        show: ptsetEnabled,
         snap: ptsetEnabled,
         thresholdPx: ptsetPx,
       },

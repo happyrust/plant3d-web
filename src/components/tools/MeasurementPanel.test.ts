@@ -1012,4 +1012,250 @@ describe('MeasurementPanel', () => {
     host.remove();
     host = null;
   });
+
+  it('测量点源 UI 文案和状态应区分 PTSET 显示、PTSET 捕捉与 Mesh 捕捉', async () => {
+    const selectedId = ref<string | null>(null);
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef({
+          ready: ref(true),
+          statusText: ref('xeokit ready'),
+          activate: vi.fn(),
+          deactivate: vi.fn(),
+          flyToMeasurement: vi.fn(),
+          removeMeasurement: vi.fn(),
+          clearMeasurements: vi.fn(),
+        }),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        mbdPipeVis: shallowRef(null),
+        annotationSystem: shallowRef({
+          selectAnnotation: vi.fn(),
+          selectedId,
+        }),
+      }),
+    }));
+
+    const [{ default: MeasurementPanel }, { useToolStore }, { useXeokitMeasurementStyleStore }] =
+      await Promise.all([
+        import('./MeasurementPanel.vue'),
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+
+    const store = useToolStore() as any;
+    store.clearXeokitMeasurements();
+    store.setToolMode('xeokit_measure_distance');
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+
+    const app = createApp(MeasurementPanel, {
+      tools: {
+        ready: ref(false),
+        statusText: ref('classic ready'),
+        flyToMeasurement: vi.fn(),
+        removeMeasurement: vi.fn(),
+      },
+    });
+    app.mount(host);
+    await nextTick();
+
+    const sourceSection = host.querySelector(
+      '[data-testid="measurement-style-snap-section"]',
+    ) as HTMLElement | null;
+    const ptsetShow = host.querySelector(
+      '[data-testid="measurement-source-ptset-show"]',
+    ) as HTMLInputElement | null;
+    const ptsetSnap = host.querySelector(
+      '[data-testid="measurement-source-ptset-snap"]',
+    ) as HTMLInputElement | null;
+    const ptsetThreshold = host.querySelector(
+      '[data-testid="measurement-source-ptset-threshold"]',
+    ) as HTMLInputElement | null;
+    const meshShow = host.querySelector(
+      '[data-testid="measurement-source-mesh_pick_point-show"]',
+    ) as HTMLInputElement | null;
+    const meshSnap = host.querySelector(
+      '[data-testid="measurement-source-mesh_pick_point-snap"]',
+    ) as HTMLInputElement | null;
+    const meshThreshold = host.querySelector(
+      '[data-testid="measurement-source-mesh_pick_point-threshold"]',
+    ) as HTMLInputElement | null;
+
+    expect(sourceSection?.textContent).toContain('PTSET Keypoint');
+    expect(sourceSection?.textContent).toContain('Model Surface Point');
+    expect(sourceSection?.textContent).toContain('屏幕像素');
+    expect(sourceSection?.textContent).toContain('小于或等于阈值时可捕捉');
+    expect(ptsetShow?.checked).toBe(true);
+    expect(ptsetSnap?.checked).toBe(true);
+    expect(ptsetThreshold?.disabled).toBe(false);
+    expect(ptsetThreshold?.value).toBe('12');
+    expect(meshShow?.checked).toBe(true);
+    expect(meshSnap?.checked).toBe(false);
+    expect(meshThreshold?.disabled).toBe(true);
+    expect(meshThreshold?.value).toBe('12');
+
+    if (ptsetShow) {
+      ptsetShow.checked = false;
+      ptsetShow.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+
+    expect(measurementStyle.state.measurementPickSources.ptset.show).toBe(false);
+    expect(measurementStyle.state.measurementPickSources.ptset.snap).toBe(true);
+    expect(ptsetSnap?.checked).toBe(true);
+    expect(ptsetThreshold?.disabled).toBe(false);
+
+    if (ptsetSnap) {
+      ptsetSnap.checked = false;
+      ptsetSnap.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+
+    expect(measurementStyle.state.measurementPickSources.ptset.show).toBe(false);
+    expect(measurementStyle.state.measurementPickSources.ptset.snap).toBe(false);
+    expect(ptsetThreshold?.disabled).toBe(true);
+    expect(measurementStyle.state.measurementPickSources.mesh_pick_point.show).toBe(true);
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
+
+  it('阈值输入应按像素边界归一化，并在面板重挂载后保持 store 状态', async () => {
+    const selectedId = ref<string | null>(null);
+    let host: HTMLDivElement | null = document.createElement('div');
+    document.body.appendChild(host);
+
+    vi.doMock('@/composables/useViewerContext', () => ({
+      useViewerContext: () => ({
+        viewerRef: shallowRef(null),
+        overlayContainerRef: shallowRef(null),
+        tools: shallowRef(null),
+        xeokitMeasurementTools: shallowRef({
+          ready: ref(true),
+          statusText: ref('xeokit ready'),
+          activate: vi.fn(),
+          deactivate: vi.fn(),
+          flyToMeasurement: vi.fn(),
+          removeMeasurement: vi.fn(),
+          clearMeasurements: vi.fn(),
+        }),
+        store: shallowRef(null),
+        viewerError: shallowRef(null),
+        ptsetVis: shallowRef(null),
+        mbdPipeVis: shallowRef(null),
+        annotationSystem: shallowRef({
+          selectAnnotation: vi.fn(),
+          selectedId,
+        }),
+      }),
+    }));
+
+    const [{ default: MeasurementPanel }, { useToolStore }, { useXeokitMeasurementStyleStore }] =
+      await Promise.all([
+        import('./MeasurementPanel.vue'),
+        import('@/composables/useToolStore'),
+        import('@/composables/useXeokitMeasurementStyleStore'),
+      ]);
+
+    const store = useToolStore() as any;
+    store.clearXeokitMeasurements();
+    store.setToolMode('xeokit_measure_distance');
+    const measurementStyle = useXeokitMeasurementStyleStore();
+    measurementStyle.resetStyle();
+
+    const mountPanel = () => {
+      const app = createApp(MeasurementPanel, {
+        tools: {
+          ready: ref(false),
+          statusText: ref('classic ready'),
+          flyToMeasurement: vi.fn(),
+          removeMeasurement: vi.fn(),
+        },
+      });
+      app.mount(host!);
+      return app;
+    };
+
+    let app = mountPanel();
+    await nextTick();
+
+    const ptsetThreshold = host.querySelector(
+      '[data-testid="measurement-source-ptset-threshold"]',
+    ) as HTMLInputElement | null;
+    const meshSnap = host.querySelector(
+      '[data-testid="measurement-source-mesh_pick_point-snap"]',
+    ) as HTMLInputElement | null;
+    const meshThreshold = host.querySelector(
+      '[data-testid="measurement-source-mesh_pick_point-threshold"]',
+    ) as HTMLInputElement | null;
+
+    if (ptsetThreshold) {
+      ptsetThreshold.value = '';
+      ptsetThreshold.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickSources.ptset.thresholdPx).toBe(12);
+
+    if (ptsetThreshold) {
+      ptsetThreshold.value = '-1';
+      ptsetThreshold.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickSources.ptset.thresholdPx).toBe(4);
+
+    if (ptsetThreshold) {
+      ptsetThreshold.value = '40';
+      ptsetThreshold.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickSources.ptset.thresholdPx).toBe(40);
+
+    if (meshSnap) {
+      meshSnap.checked = true;
+      meshSnap.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+    expect(meshThreshold?.disabled).toBe(false);
+
+    if (meshThreshold) {
+      meshThreshold.value = '7';
+      meshThreshold.dispatchEvent(new Event('change'));
+    }
+    await nextTick();
+    expect(measurementStyle.state.measurementPickSources.mesh_pick_point.snap).toBe(true);
+    expect(measurementStyle.state.measurementPickSources.mesh_pick_point.thresholdPx).toBe(7);
+
+    app.unmount();
+    host.innerHTML = '';
+    app = mountPanel();
+    await nextTick();
+
+    const remountedPtsetThreshold = host.querySelector(
+      '[data-testid="measurement-source-ptset-threshold"]',
+    ) as HTMLInputElement | null;
+    const remountedMeshSnap = host.querySelector(
+      '[data-testid="measurement-source-mesh_pick_point-snap"]',
+    ) as HTMLInputElement | null;
+    const remountedMeshThreshold = host.querySelector(
+      '[data-testid="measurement-source-mesh_pick_point-threshold"]',
+    ) as HTMLInputElement | null;
+
+    expect(remountedPtsetThreshold?.value).toBe('40');
+    expect(remountedMeshSnap?.checked).toBe(true);
+    expect(remountedMeshThreshold?.disabled).toBe(false);
+    expect(remountedMeshThreshold?.value).toBe('7');
+
+    app.unmount();
+    host.remove();
+    host = null;
+  });
 });

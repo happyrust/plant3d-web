@@ -87,6 +87,9 @@ export const DEFAULT_MEASUREMENT_PICK_SOURCE_SETTINGS: Readonly<MeasurementPickS
 };
 
 export function clampMeasurementPickThreshold(raw: unknown): number {
+  if (typeof raw === 'string' && raw.trim() === '') {
+    return DEFAULT_PTSET_SNAP_PX;
+  }
   const parsed = Number(raw);
   return Number.isFinite(parsed)
     ? Math.min(40, Math.max(4, Math.round(parsed)))
@@ -125,7 +128,7 @@ export function measurementPickSettingsFromLegacy(input: {
   const ptsetEnabled = input.keypointSnapEnabled ?? next.ptset.snap;
   next.ptset = {
     ...next.ptset,
-    show: ptsetEnabled,
+    show: true,
     snap: ptsetEnabled,
     thresholdPx: clampMeasurementPickThreshold(input.keypointSnapPx),
   };
