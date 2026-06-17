@@ -216,6 +216,12 @@ export type BranNearestClearanceCandidate = {
   annotation?: BranNearestClearanceAnnotation | null;
 };
 
+export type BranNearestClearanceGroupResult = {
+  group: string;
+  nouns?: string[];
+  candidates: BranNearestClearanceCandidate[];
+};
+
 export type BranNearestClearanceSource = {
   kind?: string;
   refno?: string;
@@ -226,7 +232,7 @@ export type BranNearestClearanceSource = {
 
 export type BranNearestClearanceResponse = {
   success: boolean;
-  nearest_by_group?: Record<string, BranNearestClearanceCandidate[]>;
+  nearest_by_group?: Record<string, BranNearestClearanceCandidate[]> | BranNearestClearanceGroupResult[];
   warnings?: string[];
   error?: string;
   message?: string;

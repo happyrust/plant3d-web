@@ -9,6 +9,7 @@ import {
   postSpaceWallDistance,
   queryBranCenterlineNearestClearance,
   type BranNearestClearanceCandidate,
+  type BranNearestClearanceGroupResult,
   type BranNearestClearanceResponse,
   type SpaceComputeFittingData,
   type SpaceComputeFittingOffsetData,
@@ -334,7 +335,7 @@ function extractResultRows(key: SpatialComputeScenarioKey, envelope: SpatialComp
 
 function extractBranNearestRows(response: BranNearestClearanceResponse): SpatialComputeResultRow[] {
   if (!response.success) return [];
-  return Object.entries(response.nearest_by_group ?? {}).flatMap(([targetGroup, candidates]) =>
+  return normalizeBranNearestGroups(response.nearest_by_group).flatMap(([targetGroup, candidates]) =>
     (candidates ?? []).map((candidate) => ({
       refno: candidate.refno,
       noun: candidate.noun,
@@ -356,13 +357,26 @@ function extractBranAnnotationCandidates(
   response: BranNearestClearanceResponse,
 ): BranNearestClearanceAnnotationCandidate[] {
   if (!response.success) return [];
-  return Object.entries(response.nearest_by_group ?? {}).flatMap(([targetGroup, candidates]) =>
+  return normalizeBranNearestGroups(response.nearest_by_group).flatMap(([targetGroup, candidates]) =>
     (candidates ?? []).map((candidate, index) => ({ targetGroup, candidate, index })),
   );
 }
 
-function parseOptionalNumber(raw: string, fieldLabel: string): number | undefined {
-  const text = raw.trim();
+function normalizeBranNearestGroups(
+  nearestByGroup: BranNearestClearanceResponse['nearest_by_group'],
+): [string, BranNearestClearanceCandidate[]][] {
+  if (!nearestByGroup) return [];
+  if (Array.isArray(nearestByGroup)) {
+    return nearestByGroup.map((group: BranNearestClearanceGroupResult) => [
+      group.group,
+      group.candidates ?? [],
+    ]);
+  }
+  return Object.entries(nearestByGroup);
+}
+
+function parseOptionalNumber(raw: string | number | null | undefined, fieldLabel: string): number | undefined {
+  const text = String(raw ?? '').trim();
   if (!text) return undefined;
   const value = Number(text);
   if (!Number.isFinite(value)) {

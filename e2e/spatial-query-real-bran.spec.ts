@@ -11,7 +11,7 @@ test.describe.configure({ mode: 'serial' });
 test.setTimeout(180_000);
 
 function parseSummaryCounts(summary: string): { total: number; loaded: number; unloaded: number } | null {
-  const matched = summary.match(/共\s*(\d+)\s*项，已加载\s*(\d+)\s*项，未加载\s*(\d+)\s*项/);
+  const matched = summary.match(/共\s*(\d+)\s*项(?:，当前页\s*\d+\s*项)?，已加载\s*(\d+)\s*项，未加载\s*(\d+)\s*项/);
   if (!matched) return null;
   return {
     total: Number(matched[1]),
@@ -167,14 +167,21 @@ async function runRealBranSpatialQueryCase(
   await page.locator('label:has-text("Y") input').fill(String(branchCenter.y));
   await page.locator('label:has-text("Z") input').fill(String(branchCenter.z));
 
-  await page.getByLabel('查询半径 (mm)').fill(String(selectedRadius));
-  await page.getByLabel('最大结果数').fill('100');
+  const radiusInput = page.getByLabel(/查询半径/);
+  const radiusLabel = await radiusInput.evaluate((input) =>
+    input.closest('label')?.textContent || input.getAttribute('aria-label') || '',
+  );
+  await radiusInput.fill(radiusLabel.includes('(m)') ? String(selectedRadius / 1000) : String(selectedRadius));
+  await page.getByLabel(/最大结果数|每页数量/).fill('100');
   await page.getByLabel('Noun 类型（逗号分隔）').fill(config.nouns.join(','));
 
   const queryPromise = page.waitForResponse((resp) => {
-    if (!resp.url().includes('/api/sqlite-spatial/query')) return false;
+    if (!resp.url().includes('/api/sqlite-spatial/query') && !resp.url().includes('/api/sqlite-spatial/nearby')) return false;
     const url = new URL(resp.url());
-    return url.searchParams.get('mode') === 'position'
+    const isPositionQuery = url.pathname.endsWith('/query')
+      ? url.searchParams.get('mode') === 'position'
+      : url.searchParams.has('x') && url.searchParams.has('y') && url.searchParams.has('z');
+    return isPositionQuery
       && url.searchParams.get('radius') === String(selectedRadius)
       && url.searchParams.get('shape') === 'sphere'
       && url.searchParams.get('nouns') === config.nouns.join(',');
@@ -184,7 +191,7 @@ async function runRealBranSpatialQueryCase(
   const queryResp = await queryPromise;
   expect(queryResp.ok()).toBe(true);
 
-  const summary = page.locator('text=/共\\s*\\d+\\s*项，已加载\\s*\\d+\\s*项，未加载\\s*\\d+\\s*项/');
+  const summary = page.locator('text=/共\\s*\\d+\\s*项(?:，当前页\\s*\\d+\\s*项)?，已加载\\s*\\d+\\s*项，未加载\\s*\\d+\\s*项/');
   await expect(summary).toBeVisible({ timeout: 60_000 });
   const summaryText = await summary.textContent();
   const counts = parseSummaryCounts(summaryText || '');
@@ -199,7 +206,7 @@ async function runRealBranSpatialQueryCase(
   await expect(page.getByText(/查看器未就绪|无法解析当前选中构件的位置|空间查询失败|加载模型失败/)).toHaveCount(0);
 
   if ((counts?.unloaded ?? 0) > 0) {
-    await page.getByRole('button', { name: '只加载未加载结果', exact: true }).click();
+    await page.getByRole('button', { name: /只加载(?:当前页)?未加载(?:结果)?/, exact: true }).click();
     await expect.poll(async () => {
       const nextText = await summary.textContent();
       const nextCounts = parseSummaryCounts(nextText || '');
