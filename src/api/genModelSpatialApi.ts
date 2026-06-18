@@ -181,7 +181,7 @@ export type BranNearestClearanceRequest = {
   target_groups?: BranNearestClearanceTargetGroup[] | string;
   /** mm */
   radius?: number;
-  scope?: 'same_dbnum' | string;
+  scope?: 'same_dbnum' | 'all_loaded' | string;
   max_per_group?: number;
   debug?: boolean;
 };
@@ -494,7 +494,7 @@ export async function queryBranCenterlineNearestClearance(
       : request.target_groups || 'wall,column',
   );
   sp.set('radius', String(request.radius ?? 5000));
-  sp.set('scope', request.scope || 'same_dbnum');
+  sp.set('scope', request.scope || 'all_loaded');
   if (request.max_per_group !== undefined) sp.set('max_per_group', String(request.max_per_group));
   if (request.debug !== undefined) sp.set('debug', String(request.debug));
 

@@ -33,11 +33,11 @@ describe('spatialQueryRealBran helper', () => {
   it('应解析默认环境并生成斜杠 refno', () => {
     const config = resolveSpatialQueryRealBranConfig();
 
-    expect(config.refno).toBe('2013286704_476');
-    expect(config.refnoSlash).toBe('2013286704/476');
+    expect(config.refno).toBe('24381_145018');
+    expect(config.refnoSlash).toBe('24381/145018');
     expect(config.radii).toEqual([1000, 5000, 10000]);
     expect(config.nouns).toEqual(['BRAN', 'FLAN', 'REDU', 'TUBI', 'VALV']);
-    expect(config.url).toBe('/?spatial_refno=2013286704_476&spatial_radius=5&spatial_radius_unit=m&spatial_shape=sphere&spatial_autorun=1&backendPort=3100');
+    expect(config.url).toBe('/?spatial_refno=24381_145018&spatial_radius=5&spatial_radius_unit=m&spatial_shape=sphere&spatial_autorun=1&backendPort=3100');
   });
 
   it('应选择首个满足条件的半径', async () => {

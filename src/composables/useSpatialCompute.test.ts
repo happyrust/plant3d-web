@@ -33,6 +33,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(store.currentScenarioMeta.value.title).toContain('BRAN');
     expect(store.currentScenarioMeta.value.sourceLabel).toBe('BRAN Refno');
     expect(store.currentScenarioMeta.value.sourceHelp).not.toContain('SUPPO');
+    expect(store.currentScenarioState.value.suppoRefno).toBe('24381_145018');
     expect(store.currentScenarioState.value.targetNouns).toBe('wall,column');
     expect(store.currentScenarioState.value.searchRadius).toBe('5000');
   });
@@ -100,7 +101,7 @@ describe('useSpatialCompute BRAN nearest clearance', () => {
     expect(url.searchParams.get('source_refno')).toBe('24381_145018');
     expect(url.searchParams.get('target_groups')).toBe('wall,column');
     expect(url.searchParams.get('radius')).toBe('5000');
-    expect(url.searchParams.get('scope')).toBe('same_dbnum');
+    expect(url.searchParams.get('scope')).toBe('all_loaded');
     expect(state.error).toBe('');
     expect(state.resultRows).toEqual([
       expect.objectContaining({

@@ -1,9 +1,9 @@
 import type { APIRequestContext } from '@playwright/test';
 
-const DEFAULT_REFNO = '2013286704_476';
+const DEFAULT_REFNO = '24381_145018';
 const DEFAULT_RADII = [1000, 5000, 10000];
 const DEFAULT_NOUNS = ['BRAN', 'FLAN', 'REDU', 'TUBI', 'VALV'];
-const DEFAULT_URL = '/?spatial_refno=2013286704_476&spatial_radius=5&spatial_radius_unit=m&spatial_shape=sphere&spatial_autorun=1&backendPort=3100';
+const DEFAULT_URL = '/?spatial_refno=24381_145018&spatial_radius=5&spatial_radius_unit=m&spatial_shape=sphere&spatial_autorun=1&backendPort=3100';
 const DEFAULT_LIMIT = 100;
 const DIRECT_BACKEND_BASE = 'http://127.0.0.1:3100';
 

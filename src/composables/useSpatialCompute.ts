@@ -149,9 +149,9 @@ const SCENARIO_META: SpatialComputeScenarioMeta[] = [
     title: 'BRAN 中心线最近清距',
     description: '沿 BRAN 中心线查找墙、柱最近点并返回标注点对。',
     endpoint: '/api/sqlite-spatial/nearest-clearance',
-    exampleRefno: '2013286704_476',
+    exampleRefno: '24381_145018',
     sourceLabel: 'BRAN Refno',
-    sourceHelp: 'BRAN 格式示例：2013286704_476 或 2013286704/476',
+    sourceHelp: 'BRAN 格式示例：24381_145018 或 24381/145018',
     fields: ['searchRadius', 'targetNouns'],
   },
 ];
@@ -209,7 +209,7 @@ const DEFAULT_STATE_BY_SCENARIO: Record<
     neighborWindow: '5000',
   },
   branNearestClearance: {
-    suppoRefno: '2013286704_476',
+    suppoRefno: '24381_145018',
     tolerance: '',
     suppoType: '',
     searchRadius: '5000',
@@ -522,7 +522,7 @@ export function createSpatialComputeStore() {
             source_refno: refno,
             target_groups: targetGroups.length > 0 ? targetGroups : 'wall,column',
             radius: parseOptionalNumber(state.searchRadius, 'radius') ?? 5000,
-            scope: 'same_dbnum',
+            scope: 'all_loaded',
           });
           if (requestTokens[key] !== token) return;
           state.responseText = JSON.stringify(branResponse, null, 2);

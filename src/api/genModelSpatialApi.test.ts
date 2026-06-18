@@ -221,7 +221,7 @@ describe('genModelSpatialApi', () => {
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
   });
 
-  it('queryBranCenterlineNearestClearance 应使用 wall,column 和 5000mm 默认值', async () => {
+  it('queryBranCenterlineNearestClearance 应使用 wall,column、5000mm 和 all_loaded 默认值', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ success: true, nearest_by_group: {} }), { status: 200 })
     );
@@ -235,7 +235,7 @@ describe('genModelSpatialApi', () => {
     expect(url.searchParams.get('source_refno')).toBe('24381_145018');
     expect(url.searchParams.get('target_groups')).toBe('wall,column');
     expect(url.searchParams.get('radius')).toBe('5000');
-    expect(url.searchParams.get('scope')).toBe('same_dbnum');
+    expect(url.searchParams.get('scope')).toBe('all_loaded');
   });
 
   it('normalizeBranRefno 应支持常见选中对象和手输格式', () => {

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const DEFAULT_REFNO = '2013286704_476';
+const DEFAULT_REFNO = '24381_145018';
 
 type Point = { x: number; y: number; z: number };
 
@@ -98,7 +98,7 @@ test('BRAN nearest-clearance browser flow reaches backend and reflects response 
       && url.searchParams.get('source_refno') === refno.replace(/\//g, '_')
       && url.searchParams.get('target_groups') === 'wall,column'
       && url.searchParams.get('radius') === '5000'
-      && url.searchParams.get('scope') === 'same_dbnum';
+      && url.searchParams.get('scope') === 'all_loaded';
   }, { timeout: 60_000 });
 
   await page.getByRole('button', { name: '执行计算并定位', exact: true }).click();
@@ -139,7 +139,7 @@ test('BRAN nearest-clearance browser flow reaches backend and reflects response 
   await expect(page.getByText(first.noun, { exact: false })).toBeVisible();
   await expect(page.getByText(first.targetGroup, { exact: false })).toBeVisible();
   if (first.nearest?.source_segment_refno) {
-    await expect(page.getByText(first.nearest.source_segment_refno, { exact: false })).toBeVisible();
+    await expect(page.getByText(new RegExp(`segment\\s+${first.nearest.source_segment_refno}`)).first()).toBeVisible();
   }
 
   await expect.poll(async () => {
