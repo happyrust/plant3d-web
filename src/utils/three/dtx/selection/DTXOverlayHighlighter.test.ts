@@ -85,4 +85,39 @@ describe('DTXOverlayHighlighter', () => {
     highlighter.setStyle({ edgeOpacity: 0.52 });
     expect(edge?.material?.opacity).toBe(0.52);
   });
+
+  it('支持 edgeLineWidth 并暴露当前轮廓快照，供 MBD 出图回归校验', () => {
+    const scene = new Scene();
+    const geometry = createQuadGeometry();
+    const highlighter = new DTXOverlayHighlighter(scene, {
+      showFill: false,
+      edgeOpacity: 0.9,
+      edgeLineWidth: 1.7,
+      edgeThresholdAngle: 36,
+    });
+
+    highlighter.setGeometryGetter(() => ({
+      geometry,
+      matrix: new Matrix4(),
+    }));
+
+    highlighter.setHighlightedObjects(['o:demo:3']);
+
+    const overlayGroup = scene.getObjectByName('DTXSelectionOverlay');
+    const edge = overlayGroup?.children[0] as any;
+    expect(edge?.material?.linewidth).toBe(1.7);
+    expect(highlighter.getSnapshot()).toMatchObject({
+      objectCount: 1,
+      style: {
+        showFill: false,
+        edgeOpacity: 0.9,
+        edgeLineWidth: 1.7,
+        edgeThresholdAngle: 36,
+      },
+    });
+
+    highlighter.setStyle({ edgeLineWidth: 2.1 });
+    expect(edge?.material?.linewidth).toBe(2.1);
+    expect(highlighter.getSnapshot().style.edgeLineWidth).toBe(2.1);
+  });
 });

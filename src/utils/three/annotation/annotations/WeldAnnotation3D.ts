@@ -31,6 +31,8 @@ export type WeldAnnotation3DParams = {
   labelBox?: boolean;
   /** 方框内边距（SolveSpace pixel units） */
   labelBoxPaddingPx?: number;
+  /** 方框最小边长（SolveSpace pixel units） */
+  labelBoxMinSidePx?: number;
 }
 
 // 十字标记：两条独立线段（避免 Line2 折线连线导致出现斜线）
@@ -75,6 +77,7 @@ export class WeldAnnotation3D extends AnnotationBase {
       labelRenderStyle: params.labelRenderStyle,
       labelBox: params.labelBox ?? false,
       labelBoxPaddingPx: params.labelBoxPaddingPx ?? 7,
+      labelBoxMinSidePx: params.labelBoxMinSidePx ?? 30,
     };
     this.materialSet = this.resolveMaterialSet(materials.orange);
 
@@ -161,6 +164,7 @@ export class WeldAnnotation3D extends AnnotationBase {
       labelRenderStyle: this.params.labelRenderStyle,
       labelBox: this.params.labelBox,
       labelBoxPaddingPx: this.params.labelBoxPaddingPx,
+      labelBoxMinSidePx: this.params.labelBoxMinSidePx,
     };
   }
 
@@ -181,6 +185,9 @@ export class WeldAnnotation3D extends AnnotationBase {
     if (params.labelBox !== undefined) this.params.labelBox = params.labelBox;
     if (params.labelBoxPaddingPx !== undefined) {
       this.params.labelBoxPaddingPx = params.labelBoxPaddingPx;
+    }
+    if (params.labelBoxMinSidePx !== undefined) {
+      this.params.labelBoxMinSidePx = params.labelBoxMinSidePx;
     }
     this.rebuild();
   }
@@ -240,7 +247,7 @@ export class WeldAnnotation3D extends AnnotationBase {
     this.textLabel.setOutlineBoxVisible(
       this.params.labelBox,
       this.params.labelBoxPaddingPx,
-      30,
+      this.params.labelBoxMinSidePx,
     );
     const labelPos = new THREE.Vector3(0, s * 0.9, 0);
     if (this.params.labelOffsetWorld) {

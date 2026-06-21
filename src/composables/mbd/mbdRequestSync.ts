@@ -1,5 +1,6 @@
 export type MbdPipeAnnotationRequestLike = {
   refno: string
+  displayMode?: 'full' | 'drawing' | 'length'
   timestamp: number
 }
 

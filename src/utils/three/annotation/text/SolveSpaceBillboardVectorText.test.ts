@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
 import { SolveSpaceBillboardVectorText } from './SolveSpaceBillboardVectorText';
 
@@ -88,6 +89,40 @@ describe('SolveSpaceBillboardVectorText', () => {
 
     // Verify text line is visible
     expect((label as any).line?.visible).toBe(true);
+
+    label.dispose();
+    normal.dispose();
+    hovered.dispose();
+    selected.dispose();
+  });
+
+  it('编号框线宽应比文字线宽更轻', async () => {
+    const normal = new LineMaterial({ color: 0x7f1d1d, linewidth: 5 });
+    const hovered = new LineMaterial({ color: 0xffff00, linewidth: 5 });
+    const selected = new LineMaterial({ color: 0xff0000, linewidth: 5 });
+
+    const label = new SolveSpaceBillboardVectorText({
+      text: '2',
+      materialNormal: normal,
+      materialHovered: hovered,
+      materialSelected: selected,
+      renderStyle: 'rebarviz',
+      font: Promise.resolve(fakeFont as any),
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    label.setOutlineBoxVisible(true, 4, 24);
+
+    const textLineWidth = Number(((label as any).line?.material as any)?.linewidth);
+    const frameLineWidth = Number(
+      ((label as any).frameBoxLine?.material as any)?.linewidth,
+    );
+
+    expect((label as any).frameBoxLine?.visible).toBe(true);
+    expect(frameLineWidth).toBeGreaterThanOrEqual(1);
+    expect(frameLineWidth).toBeLessThan(textLineWidth);
 
     label.dispose();
     normal.dispose();

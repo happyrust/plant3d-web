@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-06-19",
+  "description": "Real BRAN corpus for MBD interactive 3D annotation validation. Samples must not be handled with refno-specific production code.",
+  "defaults": {
+    "backendUrl": "http://127.0.0.1:18082",
+    "multiBranchBackendUrl": "http://127.0.0.1:18083",
+    "marineBackendUrl": "http://127.0.0.1:18084",
+    "primaryProject": "aps250160-mbd-cata2",
+    "multiBranchProject": "aps250160-mbd-multibran",
+    "marineProject": "AvevaMarineSample"
+  },
+  "samples": [
+    {
+      "refno": "2013286704_476",
+      "displayRefno": "2013286704/476",
+      "project": "aps250160-mbd-cata2",
+      "topology": "branch_with_valve_or_fitting",
+      "priority": "smoke",
+      "expectedLengthTexts": ["600", "1073", "783"],
+      "requiredChecks": [
+        "fullInteractiveRequestFlags",
+        "cameraAnchoredDimensions",
+        "styleHotUpdate",
+        "modelTreeContextMenu"
+      ],
+      "notes": "Primary real backend smoke sample verified through Ribbon and model-tree context menu."
+    },
+    {
+      "refno": "24381_145018",
+      "displayRefno": "24381/145018",
+      "project": "AvevaMarineSample",
+      "backendUrl": "http://127.0.0.1:18084",
+      "dbno": 7997,
+      "topology": "marine_sample_real_bran",
+      "priority": "marine-smoke",
+      "expectedLengthTexts": [],
+      "requiredChecks": [
+        "showDbnumModelLoad",
+        "dbnoScopedMbdRequest",
+        "fullInteractiveRequestFlags",
+        "cameraAnchoredDimensions",
+        "labelOverlapBudget"
+      ],
+      "notes": "AvevaMarineSample real BRAN; refno prefix is not the MBD dbnum, so the viewer must use show_dbnum/dbno=7997."
+    },
+    {
+      "refno": "2013286704_497",
+      "displayRefno": "2013286704/497",
+      "project": "aps250160-mbd-multibran",
+      "topology": "branch_stub_or_short_branch",
+      "priority": "regression",
+      "expectedLengthTexts": [],
+      "requiredChecks": [
+        "noFatalIssue",
+        "nonEmptyAnnotationOrExplicitRecoverableIssue",
+        "cameraAnchoredDimensionsWhenLengthsExist"
+      ],
+      "notes": "Use to detect branch-stub layout and semantic fallback regressions."
+    },
+    {
+      "refno": "2013286704_508",
+      "displayRefno": "2013286704/508",
+      "project": "aps250160-mbd-multibran",
+      "topology": "dense_material_or_tag_branch",
+      "priority": "regression",
+      "expectedLengthTexts": [],
+      "requiredChecks": [
+        "noFatalIssue",
+        "labelOverlapBudget",
+        "materialAndTagFallback"
+      ],
+      "notes": "Use to exercise label priority, material/tag fallback, and avoidance rules."
+    },
+    {
+      "refno": "2013286704_488",
+      "displayRefno": "2013286704/488",
+      "project": "aps250160-mbd-multibran",
+      "topology": "alternate_route_branch",
+      "priority": "regression",
+      "expectedLengthTexts": [],
+      "requiredChecks": [
+        "noFatalIssue",
+        "semanticFallback",
+        "cameraAnchoredDimensionsWhenLengthsExist"
+      ],
+      "notes": "Use to catch route/topology assumptions beyond the primary 476 branch."
+    }
+  ]
+}

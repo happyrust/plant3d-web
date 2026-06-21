@@ -97,5 +97,10 @@ describe('RIBBON_TABS', () => {
         && item.id === 'settings.annotationStyle'
         && item.commandId === 'annotation.settings'
     )))).toBe(true);
+    expect(settingsTab?.groups.some((group) => group.items.some((item) => (
+      item.kind === 'button'
+        && item.id === 'settings.mbdAnnotationStyle'
+        && item.commandId === 'mbd.settings'
+    )))).toBe(true);
   });
 });

@@ -17,9 +17,14 @@ describe('WeldAnnotation3D', () => {
       label: 'W1',
       isShop: true,
       crossSize: 10,
+      labelBox: true,
+      labelBoxPaddingPx: 5,
+      labelBoxMinSidePx: 26,
     });
 
     expect(ann.getParams().label).toBe('W1');
+    expect(ann.getParams().labelBoxPaddingPx).toBe(5);
+    expect(ann.getParams().labelBoxMinSidePx).toBe(26);
     ann.setLabelVisible(false);
 
     const textGroup = (ann as any).textLabel.object3d as THREE.Group;

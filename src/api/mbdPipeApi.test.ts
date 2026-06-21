@@ -121,7 +121,7 @@ describe('getMbdPipeV2Annotations adapter', () => {
     expect(calledUrl.searchParams.get('include_layout_result')).toBe('true');
     expect(calledUrl.searchParams.get('include_dims')).toBe('false');
     expect(calledUrl.searchParams.get('include_chain_dims')).toBe('true');
-    expect(calledUrl.searchParams.get('include_port_dims')).toBe('true');
+    expect(calledUrl.searchParams.get('include_port_dims')).toBe('false');
     expect(calledUrl.searchParams.get('include_cut_tubis')).toBe('true');
     expect(calledUrl.searchParams.get('include_overall_dim')).toBe('false');
     expect(calledUrl.searchParams.get('include_fittings')).toBe('false');

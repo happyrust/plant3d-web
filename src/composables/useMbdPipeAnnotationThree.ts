@@ -86,12 +86,17 @@ import {
   type MbdDimensionModeConfig,
 } from '@/composables/mbd/mbdDimensionMode';
 import {
+  MBD_DRAWING_STYLE_PROFILE,
+  useMbdDrawingStyleStore,
+} from '@/composables/mbd/mbdDrawingStyleProfile';
+import {
   useBackgroundStore,
   getPreset,
 } from '@/composables/useBackgroundStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { isMbdDrawingPresetUrl } from '@/utils/mbdStandaloneUrl';
 import {
+  type AnnotationMaterialSet,
   AnnotationMaterials,
   LinearDimension3D,
   WeldAnnotation3D,
@@ -134,9 +139,17 @@ type MbdPipeVisualEmphasisObject = {
   segmentId: string;
   body: Mesh;
   spine: Line;
-  rings: LineSegments[];
+  rings: Mesh[];
   bands: Mesh[];
   rails: Mesh[];
+  outlines: Mesh[];
+};
+
+type MbdFittingVisualEmphasisObject = {
+  fittingId: string;
+  coreRings: Mesh[];
+  portRings: Mesh[];
+  arms: Mesh[];
 };
 
 export type UseMbdPipeAnnotationThreeReturn = {
@@ -185,6 +198,10 @@ export type UseMbdPipeAnnotationThreeReturn = {
   /** 包络盒显示 */
   showEnvelope: Ref<boolean>;
   showCutTubis: Ref<boolean>;
+  /** 显示后端 inline/piece 管段长度尺寸，不等同于 cut-tubi 明细层。 */
+  showInlineTubeLengthDims: Ref<boolean>;
+  /** 显示 MBD 管道/管件强化几何，仍保持三维场景锚定。 */
+  showPipeVisualEmphasis: Ref<boolean>;
   showElbows: Ref<boolean>;
   showBranches: Ref<boolean>;
   showFlanges: Ref<boolean>;
@@ -270,6 +287,7 @@ export type MbdPipeDebugSnapshot = {
     layout_linear_dims: number;
     cut_tubis: number;
     tags: number;
+    fittings: number;
     layout_tags: number;
     v2_leader_lines: number;
     elevation_marks: number;
@@ -281,6 +299,16 @@ export type MbdPipeDebugSnapshot = {
     cut_tubis: number;
     tags: number;
     v2_leader_lines: number;
+    v2_leader_extensions: number;
+    pipe_visual_bodies: number;
+    pipe_visual_bands: number;
+    pipe_visual_rails: number;
+    pipe_visual_outlines: number;
+    pipe_visual_rings: number;
+    pipe_visual_spines: number;
+    fitting_visual_cores: number;
+    fitting_visual_ports: number;
+    fitting_visual_arms: number;
     elevations: number;
     envelope_objects: number;
   };
@@ -320,11 +348,25 @@ export type MbdPipeDebugV2LeaderLineState = {
 export type MbdPipeDebugLineObjectState = {
   name: string;
   type: string;
+  annotation_id: string | null;
+  line_role: string | null;
+  dim_kind: string | null;
+  leader_id: string | null;
+  target_tag_id: string | null;
+  tag_kind: string | null;
   aux_kind: string | null;
   visible: boolean;
   screen_span_px: number | null;
   screen_box: MbdPipeDebugScreenBox | null;
+  screen_segments?: {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  }[];
   opacity: number | null;
+  line_width_px: number | null;
+  color_hex: string | null;
 };
 
 export type MbdPipeDebugScreenBox = {
@@ -545,12 +587,21 @@ function resolveLaidOutLinearGeometry(item: MbdLaidOutLinearDimDto) {
     extensionLine2End: toVector3(item.extension_line_2_end ?? null),
     textAnchor: toVector3(item.text_anchor ?? null),
     arrows,
+    screenFacingArrows: isMbdDrawingPresetRuntime(),
   };
 }
 
+let mbdDrawingPresetRuntimeSearch: string | null = null;
+let mbdDrawingPresetRuntimeValue = false;
+
 function isMbdDrawingPresetRuntime(): boolean {
   if (typeof window === 'undefined') return false;
-  return isMbdDrawingPresetUrl(window.location.search);
+  const search = window.location.search;
+  if (search !== mbdDrawingPresetRuntimeSearch) {
+    mbdDrawingPresetRuntimeSearch = search;
+    mbdDrawingPresetRuntimeValue = isMbdDrawingPresetUrl(search);
+  }
+  return mbdDrawingPresetRuntimeValue;
 }
 
 function computeFlyToPositionFromBox(box: Box3, drawingPreset = false): {
@@ -563,7 +614,7 @@ function computeFlyToPositionFromBox(box: Box3, drawingPreset = false): {
   box.getSize(size);
   const maxDim = Math.max(size.x, size.y, size.z);
   if (drawingPreset) {
-    const distance = Math.max(maxDim * 1.82, 3.4);
+    const distance = Math.max(maxDim * 3.2, 5.2);
     const position = new Vector3(
       center.x + distance * 0.36,
       center.y - distance * 0.95,
@@ -624,6 +675,54 @@ function isBackendDerivedAnnotation(annotation: LinearDimension3D): boolean {
   return !!(annotation.userData as any)?.mbdBackendDerivedGeometry;
 }
 
+type DrawingLinearPlacement = 'inline-tube-length' | 'external-chain' | 'default';
+
+function normalizeDrawingLinearRole(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function getLaidOutLinearLabelRole(item: MbdLaidOutLinearDimDto): string {
+  return normalizeDrawingLinearRole(
+    item.layout_hint?.label_role ?? item.source_sub_kind ?? item.kind,
+  );
+}
+
+function isInlineTubeLengthRole(
+  id: string,
+  kind: string,
+  labelRole: string,
+): boolean {
+  if (labelRole === 'cut_tubi' || labelRole === 'tag_tubi') return true;
+  if (labelRole === 'chain-overall' || kind === 'overall') return false;
+  if (/:piece:\d+(?::|$)/.test(id)) return true;
+  return false;
+}
+
+function resolveDrawingLinearPlacement(item: MbdLaidOutLinearDimDto): DrawingLinearPlacement {
+  const kind = normalizeDrawingLinearRole(item.kind ?? item.source_sub_kind);
+  const labelRole = getLaidOutLinearLabelRole(item);
+  if (isInlineTubeLengthRole(item.id, kind, labelRole)) return 'inline-tube-length';
+  if (
+    labelRole === 'chain-overall' ||
+    kind === 'overall' ||
+    (kind === 'chain' && !/:piece:\d+(?::|$)/.test(item.id))
+  ) return 'external-chain';
+  return 'default';
+}
+
+function getDrawingLinearPlacement(annotation: LinearDimension3D): DrawingLinearPlacement {
+  const raw = normalizeDrawingLinearRole(
+    (annotation.userData as any)?.mbdDrawingLinearPlacement,
+  );
+  if (raw === 'inline-tube-length' || raw === 'external-chain') return raw;
+  return 'default';
+}
+
+function isDrawingInlineTubeLengthTarget(targetId: string, dim?: LinearDimension3D | null): boolean {
+  if (/:piece:\d+(?::|$)/.test(targetId)) return true;
+  return dim ? getDrawingLinearPlacement(dim) === 'inline-tube-length' : false;
+}
+
 function shouldUseLayoutFirstResult(
   mode: MbdPipeViewMode,
   data: MbdPipeData,
@@ -682,6 +781,115 @@ function collectDuplicateOverallDimIds(dims: MbdDimDto[]): Set<string> {
     }
   }
   return duplicateOverallIds;
+}
+
+function normalizeDimDuplicateText(text: unknown): string {
+  return String(text ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .toUpperCase();
+}
+
+function buildLaidOutDimDuplicateKey(item: MbdLaidOutLinearDimDto): string | null {
+  const start = toVector3(item.start);
+  const end = toVector3(item.end);
+  const text = normalizeDimDuplicateText(item.text);
+  if (!start || !end || text.length <= 0) return null;
+  return `${text}|${buildDimSpanKey(start, end)}`;
+}
+
+function isPrimaryLengthDimForDrawingDedupe(item: MbdLaidOutLinearDimDto): boolean {
+  const kind = String(item.kind ?? item.source_sub_kind ?? 'segment')
+    .trim()
+    .toLowerCase();
+  return kind === 'segment' || kind === 'chain' || kind === 'overall';
+}
+
+function getDrawingLinearDimDedupePriority(item: MbdLaidOutLinearDimDto): number {
+  const kind = String(item.kind ?? item.source_sub_kind ?? 'segment')
+    .trim()
+    .toLowerCase();
+  if (kind === 'chain') return 40;
+  if (kind === 'segment') return 30;
+  if (kind === 'overall') return 20;
+  if (kind === 'port') return 10;
+  return 0;
+}
+
+function filterRedundantDrawingLinearDims(
+  linearDims: MbdLaidOutLinearDimDto[],
+  cutTubis: MbdLaidOutLinearDimDto[] = [],
+): MbdLaidOutLinearDimDto[] {
+  if (!isMbdDrawingPresetRuntime()) return linearDims;
+
+  const bestByKey = new Map<string, { index: number; priority: number }>();
+  linearDims.forEach((item, index) => {
+    if (item.visible === false) return;
+    const key = buildLaidOutDimDuplicateKey(item);
+    const priority = getDrawingLinearDimDedupePriority(item);
+    if (!key || priority <= 0) return;
+    const prev = bestByKey.get(key);
+    if (!prev || priority > prev.priority) {
+      bestByKey.set(key, { index, priority });
+    }
+  });
+  if (bestByKey.size <= 0) return linearDims;
+
+  const cutTubiLengthKeys = new Set<string>();
+  for (const cut of cutTubis) {
+    if (cut.visible === false) continue;
+    const key = buildLaidOutDimDuplicateKey(cut);
+    if (key) cutTubiLengthKeys.add(key);
+  }
+
+  return linearDims.filter((item, index) => {
+    if (item.visible === false) return true;
+    const key = buildLaidOutDimDuplicateKey(item);
+    const priority = getDrawingLinearDimDedupePriority(item);
+    if (!key || priority <= 0) return true;
+    if (
+      cutTubiLengthKeys.has(key) &&
+      isInlineTubeLengthRole(
+        item.id,
+        normalizeDrawingLinearRole(item.kind ?? item.source_sub_kind),
+        getLaidOutLinearLabelRole(item),
+      )
+    ) {
+      return false;
+    }
+    return bestByKey.get(key)?.index === index;
+  });
+}
+
+function filterRedundantDrawingCutTubis(
+  cutTubis: MbdLaidOutLinearDimDto[],
+  linearDims: MbdLaidOutLinearDimDto[],
+): MbdLaidOutLinearDimDto[] {
+  if (!isMbdDrawingPresetRuntime() || cutTubis.length <= 0 || linearDims.length <= 0) {
+    return cutTubis;
+  }
+
+  const primaryLengthKeys = new Set<string>();
+  for (const item of linearDims) {
+    if (item.visible === false || !isPrimaryLengthDimForDrawingDedupe(item)) continue;
+    const labelRole = getLaidOutLinearLabelRole(item);
+    if (isInlineTubeLengthRole(
+      item.id,
+      normalizeDrawingLinearRole(item.kind ?? item.source_sub_kind),
+      labelRole,
+    )) {
+      continue;
+    }
+    const key = buildLaidOutDimDuplicateKey(item);
+    if (key) primaryLengthKeys.add(key);
+  }
+  if (primaryLengthKeys.size <= 0) return cutTubis;
+
+  return cutTubis.filter((item) => {
+    if (item.visible === false) return true;
+    const key = buildLaidOutDimDuplicateKey(item);
+    return !key || !primaryLengthKeys.has(key);
+  });
 }
 
 function buildPointKey(point: Vector3): string {
@@ -1013,7 +1221,18 @@ function classifyFitting(fitting: MbdFittingDto): MbdFittingKind {
   ) {
     return 'branch';
   }
-  if (raw.includes('FLAN')) return 'flange';
+  if (
+    raw.includes('FLAN') ||
+    raw.includes('FLNG') ||
+    raw.includes('REDU') ||
+    raw.includes('VALV') ||
+    raw.includes('GATE') ||
+    raw.includes('GLOV') ||
+    raw.includes('BALL') ||
+    raw.includes('CHECK') ||
+    raw.includes('CVAV') ||
+    raw.includes('GASK')
+  ) return 'flange';
   return 'elbow';
 }
 
@@ -1029,7 +1248,18 @@ function classifyTag(tag: MbdTagDto): MbdTagKind {
   if (raw.includes('TEE') || raw.includes('BRANCH') || raw.includes('OLET')) {
     return 'branch';
   }
-  if (raw.includes('FLAN')) return 'flange';
+  if (
+    raw.includes('FLAN') ||
+    raw.includes('FLNG') ||
+    raw.includes('REDU') ||
+    raw.includes('VALV') ||
+    raw.includes('GATE') ||
+    raw.includes('GLOV') ||
+    raw.includes('BALL') ||
+    raw.includes('CHECK') ||
+    raw.includes('CVAV') ||
+    raw.includes('GASK')
+  ) return 'flange';
   if (raw.includes('ELBO') || raw.includes('BEND')) return 'elbow';
   return 'other';
 }
@@ -1043,6 +1273,16 @@ function classifyLaidOutTag(tag: MbdLaidOutTagDto): MbdTagKind {
     text: tag.text,
     position: tag.position,
   });
+}
+
+function shouldSuppressDrawingTubiLengthTag(
+  tag: Pick<MbdLaidOutTagDto, 'text'>,
+  tagKind: MbdTagKind,
+): boolean {
+  if (!isMbdDrawingPresetRuntime() || tagKind !== 'tubi') return false;
+  return /^L\s*=\s*[-+]?\d+(?:\.\d+)?(?:\s*(?:MM|M))?$/i.test(
+    String(tag.text ?? '').trim(),
+  );
 }
 
 function canRenderFittingGeometry(fitting: MbdFittingDto): boolean {
@@ -1246,6 +1486,7 @@ export function useMbdPipeAnnotationThree(
   void labelContainerRef;
 
   const unitSettings = useUnitSettingsStore();
+  const mbdDrawingStyleStore = useMbdDrawingStyleStore();
 
   // UI 状态（MbdPipePanel 使用）
   const uiTab = ref<MbdPipeUiTab>('overview');
@@ -1277,6 +1518,8 @@ export function useMbdPipeAnnotationThree(
   const showElevationMarks = ref(true);
   const showEnvelope = ref(false);
   const showCutTubis = ref(true);
+  const showInlineTubeLengthDims = ref(false);
+  const showPipeVisualEmphasis = ref(false);
   const showElbows = ref(true);
   const showBranches = ref(true);
   const showFlanges = ref(true);
@@ -1300,6 +1543,16 @@ export function useMbdPipeAnnotationThree(
   group.matrixAutoUpdate = false;
 
   const identityMatrix = new Matrix4();
+  const lastGroupMatrix = new Matrix4();
+  let hasLastGroupMatrix = false;
+
+  function syncAnnotationGroupMatrix(matrix: Matrix4): void {
+    if (hasLastGroupMatrix && lastGroupMatrix.equals(matrix)) return;
+    group.matrix.copy(matrix);
+    group.updateMatrixWorld(true);
+    lastGroupMatrix.copy(matrix);
+    hasLastGroupMatrix = true;
+  }
 
   // 材质管理器
   const materials = markRaw(new AnnotationMaterials());
@@ -1325,7 +1578,11 @@ export function useMbdPipeAnnotationThree(
   const ownerSegmentDebugLines = new Map<string, Line>();
   const v2LeaderLines = new Map<string, Line>();
   const v2LeaderLineTubes = new Map<string, Mesh[]>();
+  const v2LeaderExtensions = new Map<string, Line>();
+  const v2LeaderExtensionTubes = new Map<string, Mesh>();
+  let drawingLeaderExtensionsNeedRebuild = false;
   const pipeVisualEmphasisObjects = new Map<string, MbdPipeVisualEmphasisObject>();
+  const fittingVisualEmphasisObjects = new Map<string, MbdFittingVisualEmphasisObject>();
   const flowDirectionObjects = new Map<string, MbdFlowDirectionObject>();
   const branchFlowEndpointObjects = new Map<
     'inlet' | 'outlet',
@@ -1359,8 +1616,15 @@ export function useMbdPipeAnnotationThree(
     opacity: 0.95,
   });
   const drawingPresetRuntime = isMbdDrawingPresetRuntime();
-  const v2LeaderOpacity = drawingPresetRuntime ? 0.24 : 1;
-  const v2LeaderTubeOpacity = drawingPresetRuntime ? 0.14 : 1;
+  const v2LeaderOpacity = drawingPresetRuntime
+    ? MBD_DRAWING_STYLE_PROFILE.leader.lineOpacity
+    : 1;
+  const v2LeaderTubeOpacity = drawingPresetRuntime
+    ? MBD_DRAWING_STYLE_PROFILE.leader.tubeOpacity
+    : 1;
+  const pipeEmphasisBodyOpacity = drawingPresetRuntime
+    ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bodyOpacity
+    : 0.82;
   const v2LeaderLineMaterial = new LineBasicMaterial({
     color: 0x7f1d1d,
     transparent: true,
@@ -1375,37 +1639,97 @@ export function useMbdPipeAnnotationThree(
     depthWrite: false,
   });
   const pipeEmphasisBodyMaterial = new MeshBasicMaterial({
-    color: drawingPresetRuntime ? 0x0b96ff : 0x0784ff,
-    transparent: true,
-    opacity: drawingPresetRuntime ? 0.66 : 0.82,
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bodyColor
+      : 0x0784ff,
+    transparent: !drawingPresetRuntime || pipeEmphasisBodyOpacity < 1,
+    opacity: pipeEmphasisBodyOpacity,
     depthTest: true,
-    depthWrite: false,
+    depthWrite: drawingPresetRuntime,
   });
-  const pipeEmphasisRingMaterial = new LineBasicMaterial({
-    color: drawingPresetRuntime ? 0x003f9f : 0x004fb8,
+  const pipeEmphasisRingMaterial = new MeshBasicMaterial({
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.ringColor
+      : 0x004fb8,
     transparent: true,
-    opacity: drawingPresetRuntime ? 0.92 : 1,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.ringOpacity
+      : 1,
     depthTest: true,
     depthWrite: false,
   });
   const pipeEmphasisBandMaterial = new MeshBasicMaterial({
-    color: drawingPresetRuntime ? 0x0045b8 : 0x003a9f,
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bandColor
+      : 0x003a9f,
     transparent: true,
-    opacity: drawingPresetRuntime ? 0.84 : 1,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bandOpacity
+      : 1,
     depthTest: true,
     depthWrite: false,
   });
   const pipeEmphasisRailMaterial = new MeshBasicMaterial({
-    color: 0x002f86,
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.railColor
+      : 0x002f86,
     transparent: true,
-    opacity: drawingPresetRuntime ? 0.88 : 1,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.railOpacity
+      : 1,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const pipeEmphasisOutlineMaterial = new MeshBasicMaterial({
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.outlineColor
+      : 0x002a9a,
+    transparent: true,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.outlineOpacity
+      : 0.88,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const fittingEmphasisCoreMaterial = new MeshBasicMaterial({
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.coreColor
+      : 0x0030a8,
+    transparent: true,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.coreOpacity
+      : 0.88,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const fittingEmphasisPortMaterial = new MeshBasicMaterial({
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portColor
+      : 0x002f86,
+    transparent: true,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portOpacity
+      : 0.92,
+    depthTest: true,
+    depthWrite: false,
+  });
+  const fittingEmphasisArmMaterial = new MeshBasicMaterial({
+    color: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.armColor
+      : 0x0030a8,
+    transparent: true,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.armOpacity
+      : 0.82,
     depthTest: true,
     depthWrite: false,
   });
   const pipeEmphasisSpineMaterial = new LineBasicMaterial({
     color: 0x0ea5e9,
     transparent: true,
-    opacity: drawingPresetRuntime ? 0.38 : 0.62,
+    opacity: drawingPresetRuntime
+      ? MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.spineOpacity
+      : 0.62,
     depthTest: true,
     depthWrite: false,
   });
@@ -1475,7 +1799,82 @@ export function useMbdPipeAnnotationThree(
     blending: AdditiveBlending,
   });
 
+  function applyLineMaterialColor(material: unknown, color: number, opacity = 1): void {
+    const mat = material as {
+      color?: { setHex?: (value: number) => void }
+      opacity?: number
+      transparent?: boolean
+      needsUpdate?: boolean
+    };
+    mat.color?.setHex?.(color);
+    mat.opacity = opacity;
+    mat.transparent = opacity < 1 || !!mat.transparent;
+    mat.needsUpdate = true;
+  }
+
+  function applyAnnotationMaterialSetColor(
+    set: AnnotationMaterialSet,
+    color: number,
+    hoverColor: number,
+    opacity: number,
+  ): void {
+    applyLineMaterialColor(set.line, color, opacity);
+    applyLineMaterialColor(set.mesh, color, opacity);
+    applyLineMaterialColor(set.fatLine, color, opacity);
+    applyLineMaterialColor(set.textFatLine, color, opacity);
+    applyLineMaterialColor(set.lineHover, hoverColor, opacity);
+    applyLineMaterialColor(set.meshHover, hoverColor, opacity);
+    applyLineMaterialColor(set.fatLineHover, hoverColor, opacity);
+    applyLineMaterialColor(set.textFatLineHover, hoverColor, opacity);
+  }
+
+  function applyMbdDrawingRuntimeStyle(): void {
+    const dimensionStyle = MBD_DRAWING_STYLE_PROFILE.dimension;
+    applyAnnotationMaterialSetColor(
+      materials.ssDimensionDefault,
+      dimensionStyle.lineColor,
+      dimensionStyle.lineHoverColor,
+      dimensionStyle.lineOpacity,
+    );
+    applyAnnotationMaterialSetColor(
+      materials.ssHovered,
+      dimensionStyle.lineHoverColor,
+      dimensionStyle.lineHoverColor,
+      dimensionStyle.lineOpacity,
+    );
+    applyAnnotationMaterialSetColor(
+      materials.ssSelected,
+      dimensionStyle.lineSelectedColor,
+      dimensionStyle.lineSelectedColor,
+      dimensionStyle.lineOpacity,
+    );
+
+    if (!drawingPresetRuntime) return;
+
+    const leaderStyle = MBD_DRAWING_STYLE_PROFILE.leader;
+    applyLineMaterialColor(v2LeaderLineMaterial, leaderStyle.lineColor, leaderStyle.lineOpacity);
+    applyLineMaterialColor(v2LeaderLineTubeMaterial, leaderStyle.lineColor, leaderStyle.tubeOpacity);
+
+    const pipeStyle = MBD_DRAWING_STYLE_PROFILE.pipeEmphasis;
+    applyLineMaterialColor(pipeEmphasisBodyMaterial, pipeStyle.bodyColor, pipeStyle.bodyOpacity);
+    applyLineMaterialColor(pipeEmphasisRingMaterial, pipeStyle.ringColor, pipeStyle.ringOpacity);
+    applyLineMaterialColor(pipeEmphasisBandMaterial, pipeStyle.bandColor, pipeStyle.bandOpacity);
+    applyLineMaterialColor(pipeEmphasisRailMaterial, pipeStyle.railColor, pipeStyle.railOpacity);
+    applyLineMaterialColor(pipeEmphasisOutlineMaterial, pipeStyle.outlineColor, pipeStyle.outlineOpacity);
+    applyLineMaterialColor(pipeEmphasisSpineMaterial, 0x0ea5e9, pipeStyle.spineOpacity);
+
+    const fittingStyle = MBD_DRAWING_STYLE_PROFILE.fittingEmphasis;
+    applyLineMaterialColor(fittingEmphasisCoreMaterial, fittingStyle.coreColor, fittingStyle.coreOpacity);
+    applyLineMaterialColor(fittingEmphasisPortMaterial, fittingStyle.portColor, fittingStyle.portOpacity);
+    applyLineMaterialColor(fittingEmphasisArmMaterial, fittingStyle.armColor, fittingStyle.armOpacity);
+  }
+
+  applyMbdDrawingRuntimeStyle();
+
   let flowAnimationFrame: number | null = null;
+  const layoutScreenDeclutterMinIntervalMs = 180;
+  let layoutScreenDeclutterLastRunMs = 0;
+  let layoutScreenDeclutterTimer: number | null = null;
 
   // 历史兼容：保留 initCSS2DRenderer API（但不再实际参与渲染）
   let legacyCss2dRenderer: CSS2DRenderer | null = null;
@@ -1500,6 +1899,8 @@ export function useMbdPipeAnnotationThree(
       showElevationMarks.value = true;
       showEnvelope.value = false;
       showCutTubis.value = false;
+      showInlineTubeLengthDims.value = false;
+      showPipeVisualEmphasis.value = false;
       showElbows.value = true;
       showBranches.value = true;
       showFlanges.value = true;
@@ -1515,12 +1916,13 @@ export function useMbdPipeAnnotationThree(
     if (mode === 'layout_first') {
       dimMode.value = 'rebarviz';
       rebarvizArrowStyle.value = 'filled';
-      rebarvizArrowSizePx.value = 17;
-      rebarvizArrowAngleDeg.value = 24;
-      rebarvizLineWidthPx.value = 3.4;
+      rebarvizArrowSizePx.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowSizePx;
+      rebarvizArrowAngleDeg.value =
+        MBD_DRAWING_STYLE_PROFILE.dimension.arrowAngleDeg;
+      rebarvizLineWidthPx.value = MBD_DRAWING_STYLE_PROFILE.dimension.lineWidthPx;
       bendDisplayMode.value = 'size';
-      // layout_first 只显示后端 V2 实际返回的 primitive；
-      // overall 不由前端合成，只有后端明确返回时才可能显示。
+      // 普通三维页先给主长度层，制造/切管细节由面板按需打开；
+      // drawing 预设也会在出图规则中按需要去重。
       showDimSegment.value = true;
       showDimChain.value = true;
       showDimOverall.value = true;
@@ -1529,7 +1931,9 @@ export function useMbdPipeAnnotationThree(
       showStructureClearances.value = false;
       showElevationMarks.value = false;
       showEnvelope.value = false;
-      showCutTubis.value = true;
+      showCutTubis.value = false;
+      showInlineTubeLengthDims.value = false;
+      showPipeVisualEmphasis.value = false;
       showElbows.value = true;
       showBranches.value = true;
       showFlanges.value = true;
@@ -1553,6 +1957,8 @@ export function useMbdPipeAnnotationThree(
     showElevationMarks.value = false;
     showEnvelope.value = false;
     showCutTubis.value = false;
+    showInlineTubeLengthDims.value = false;
+    showPipeVisualEmphasis.value = false;
     showElbows.value = true;
     showBranches.value = true;
     showFlanges.value = true;
@@ -1593,7 +1999,7 @@ export function useMbdPipeAnnotationThree(
         40,
         base.arrowAngleDeg,
       ),
-      lineWidthPx: clampNumber(rebarvizLineWidthPx.value, 1, 10, base.lineWidthPx),
+      lineWidthPx: clampNumber(rebarvizLineWidthPx.value, 1, 16, base.lineWidthPx),
     };
   }
 
@@ -1603,8 +2009,10 @@ export function useMbdPipeAnnotationThree(
     } {
     if (!isMbdDrawingPresetRuntime()) return {};
     return {
-      extensionLineWidthRatio: 0.56,
-      extensionLineOpacity: 0.78,
+      extensionLineWidthRatio:
+        MBD_DRAWING_STYLE_PROFILE.dimension.extensionLineWidthRatio,
+      extensionLineOpacity:
+        MBD_DRAWING_STYLE_PROFILE.dimension.extensionLineOpacity,
     };
   }
 
@@ -1644,7 +2052,9 @@ export function useMbdPipeAnnotationThree(
       raw.setLabelVisible(visible && !forceHide);
     }
     for (const annotation of tagAnnotations.values()) {
-      asRaw(annotation).setLabelVisible(visible);
+      const raw = asRaw(annotation);
+      const forceHide = !!(raw.userData as any)?.mbdDeclutterHidden;
+      raw.setLabelVisible(visible && !forceHide);
     }
     for (const annotation of pipeClearanceAnnotations.values()) {
       asRaw(annotation).setLabelVisible(visible);
@@ -1782,6 +2192,27 @@ export function useMbdPipeAnnotationThree(
     }
     v2LeaderLineTubes.clear();
 
+    for (const tube of v2LeaderExtensionTubes.values()) {
+      try {
+        (tube.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      tube.removeFromParent();
+    }
+    v2LeaderExtensionTubes.clear();
+
+    for (const line of v2LeaderExtensions.values()) {
+      try {
+        (line.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      line.removeFromParent();
+    }
+    v2LeaderExtensions.clear();
+    drawingLeaderExtensionsNeedRebuild = false;
+
     for (const emphasis of pipeVisualEmphasisObjects.values()) {
       try {
         (emphasis.body.geometry as BufferGeometry)?.dispose?.();
@@ -1800,11 +2231,35 @@ export function useMbdPipeAnnotationThree(
           (rail.geometry as BufferGeometry)?.dispose?.();
           rail.removeFromParent();
         }
+        for (const outline of emphasis.outlines) {
+          (outline.geometry as BufferGeometry)?.dispose?.();
+          outline.removeFromParent();
+        }
       } catch {
         // ignore
       }
     }
     pipeVisualEmphasisObjects.clear();
+
+    for (const emphasis of fittingVisualEmphasisObjects.values()) {
+      try {
+        for (const coreRing of emphasis.coreRings) {
+          (coreRing.geometry as BufferGeometry)?.dispose?.();
+          coreRing.removeFromParent();
+        }
+        for (const portRing of emphasis.portRings) {
+          (portRing.geometry as BufferGeometry)?.dispose?.();
+          portRing.removeFromParent();
+        }
+        for (const arm of emphasis.arms) {
+          (arm.geometry as BufferGeometry)?.dispose?.();
+          arm.removeFromParent();
+        }
+      } catch {
+        // ignore
+      }
+    }
+    fittingVisualEmphasisObjects.clear();
 
     for (const flow of flowDirectionObjects.values()) {
       try {
@@ -1905,13 +2360,22 @@ export function useMbdPipeAnnotationThree(
       const kind = ((ann.userData as any)?.mbdDimKind ??
         'segment') as MbdDimKind;
       const declutterHidden = !!(ann.userData as any)?.mbdDeclutterHidden;
+      const inlineTubeLengthHidden =
+        !isMbdDrawingPresetRuntime() &&
+        getDrawingLinearPlacement(ann) === 'inline-tube-length' &&
+        !showInlineTubeLengthDims.value &&
+        !showCutTubis.value;
       const kindVisible =
         (kind === 'segment' && showDimSegment.value) ||
         (kind === 'chain' && showDimChain.value) ||
         (kind === 'overall' && showDimOverall.value) ||
         (kind === 'port' && showDimPort.value);
       ann.visible =
-        isVisible.value && showDims.value && kindVisible && !declutterHidden;
+        isVisible.value &&
+        showDims.value &&
+        kindVisible &&
+        !declutterHidden &&
+        !inlineTubeLengthHidden;
     }
 
     for (const annotation of cutTubiAnnotations.values()) {
@@ -1995,12 +2459,30 @@ export function useMbdPipeAnnotationThree(
     }
 
     for (const line of v2LeaderLines.values()) {
-      line.visible = isVisible.value && showLabels.value;
+      const targetTagId = String((line.userData as any)?.mbdTargetTagId ?? '').trim();
+      const targetTag = targetTagId ? tagAnnotations.get(targetTagId) : null;
+      const targetHidden = targetTag
+        ? !asRaw(targetTag).visible ||
+          !!(asRaw(targetTag).userData as any)?.mbdDeclutterHidden
+        : false;
+      line.visible = isVisible.value && showLabels.value && !targetHidden;
     }
     for (const tubes of v2LeaderLineTubes.values()) {
       for (const tube of tubes) {
-        tube.visible = isVisible.value && showLabels.value;
+        const targetTagId = String((tube.userData as any)?.mbdTargetTagId ?? '').trim();
+        const targetTag = targetTagId ? tagAnnotations.get(targetTagId) : null;
+        const targetHidden = targetTag
+          ? !asRaw(targetTag).visible ||
+            !!(asRaw(targetTag).userData as any)?.mbdDeclutterHidden
+          : false;
+        tube.visible = isVisible.value && showLabels.value && !targetHidden;
       }
+    }
+    for (const line of v2LeaderExtensions.values()) {
+      line.visible = isVisible.value && showLabels.value;
+    }
+    for (const tube of v2LeaderExtensionTubes.values()) {
+      tube.visible = isVisible.value && showLabels.value;
     }
 
     const pipeEmphasisVisible = isVisible.value;
@@ -2015,6 +2497,20 @@ export function useMbdPipeAnnotationThree(
       }
       for (const rail of emphasis.rails) {
         rail.visible = pipeEmphasisVisible;
+      }
+      for (const outline of emphasis.outlines) {
+        outline.visible = pipeEmphasisVisible;
+      }
+    }
+    for (const emphasis of fittingVisualEmphasisObjects.values()) {
+      for (const coreRing of emphasis.coreRings) {
+        coreRing.visible = pipeEmphasisVisible;
+      }
+      for (const portRing of emphasis.portRings) {
+        portRing.visible = pipeEmphasisVisible;
+      }
+      for (const arm of emphasis.arms) {
+        arm.visible = pipeEmphasisVisible;
       }
     }
 
@@ -2780,6 +3276,12 @@ export function useMbdPipeAnnotationThree(
         item.source_sub_kind ?? item.kind;
       (dim.userData as any).mbdBackendDerivedGeometry =
         isBackendDerivedLinearItem(item);
+      (dim.userData as any).mbdLayoutLabelRole =
+        item.layout_hint?.label_role ?? item.source_sub_kind ?? item.kind ?? null;
+      (dim.userData as any).mbdLayoutOffsetLevel =
+        Number(item.layout_hint?.offset_level ?? 0) || 0;
+      (dim.userData as any).mbdDrawingLinearPlacement =
+        resolveDrawingLinearPlacement(item);
       if (isBackendDerivedLinearItem(item)) {
         dim.userData.draggable = false;
       }
@@ -2840,7 +3342,7 @@ export function useMbdPipeAnnotationThree(
     a: MbdPipeDebugScreenBox,
     b: MbdPipeDebugScreenBox,
   ): boolean {
-    const margin = 10;
+    const margin = isMbdDrawingPresetRuntime() ? 24 : 10;
     return !(
       a.right + margin < b.left ||
       a.left - margin > b.right ||
@@ -2856,6 +3358,81 @@ export function useMbdPipeAnnotationThree(
     const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
     const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
     return width * height;
+  }
+
+  function screenBoxGapPx(
+    a: MbdPipeDebugScreenBox,
+    b: MbdPipeDebugScreenBox,
+  ): number {
+    const dx = Math.max(0, Math.max(a.left - b.right, b.left - a.right));
+    const dy = Math.max(0, Math.max(a.top - b.bottom, b.top - a.bottom));
+    return Math.hypot(dx, dy);
+  }
+
+  function drawingNearBoxPenalty(
+    a: MbdPipeDebugScreenBox,
+    b: MbdPipeDebugScreenBox,
+    minGapPx: number,
+  ): number {
+    if (!isMbdDrawingPresetRuntime() || minGapPx <= 0) return 0;
+    const gap = screenBoxGapPx(a, b);
+    if (gap >= minGapPx) return 0;
+    const ratio = (minGapPx - gap) / minGapPx;
+    return ratio * ratio;
+  }
+
+  function drawingPlacedLabelConflictPenalty(
+    box: MbdPipeDebugScreenBox,
+    placedBox: MbdPipeDebugScreenBox,
+    minGapPx = 52,
+  ): number {
+    const overlapArea = screenBoxOverlapArea(box, placedBox);
+    const nearPenalty = drawingNearBoxPenalty(box, placedBox, minGapPx);
+    if (overlapArea <= 0) return nearPenalty * 4_000;
+    const minArea = Math.max(1, Math.min(
+      box.width * box.height,
+      placedBox.width * placedBox.height,
+    ));
+    const overlapRatio = overlapArea / minArea;
+    return 500_000 + overlapRatio * 1_500_000 + Math.min(overlapArea, 20_000) * 40;
+  }
+
+  function screenSegmentIntersectsBox(
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    box: MbdPipeDebugScreenBox,
+    paddingPx = 0,
+  ): boolean {
+    const left = box.left - paddingPx;
+    const right = box.right + paddingPx;
+    const top = box.top - paddingPx;
+    const bottom = box.bottom + paddingPx;
+    if (right <= left || bottom <= top) return false;
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    let t0 = 0;
+    let t1 = 1;
+    const clip = (p: number, q: number): boolean => {
+      if (Math.abs(p) < 1e-9) return q >= 0;
+      const r = q / p;
+      if (p < 0) {
+        if (r > t1) return false;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return false;
+        if (r < t1) t1 = r;
+      }
+      return true;
+    };
+
+    return (
+      clip(-dx, start.x - left) &&
+      clip(dx, right - start.x) &&
+      clip(-dy, start.y - top) &&
+      clip(dy, bottom - start.y) &&
+      t1 >= t0
+    );
   }
 
   function applyLaidOutDimLabelDeclutter(): void {
@@ -3005,12 +3582,244 @@ export function useMbdPipeAnnotationThree(
     return local.lengthSq() > 1e-12 ? local.normalize() : null;
   }
 
+  function createDrawingProjectedOffsetLinearGeometry(
+    dim: LinearDimension3D,
+    targetId: string,
+    startWorld: Vector3,
+    endWorld: Vector3,
+    startScreen: { x: number; y: number },
+    endScreen: { x: number; y: number },
+    labelScreen: { x: number; y: number },
+    camera: Camera,
+    viewport: { width: number; height: number },
+    drawingModelBoxes: MbdPipeDebugScreenBox[],
+    drawingKeepoutBoxes: MbdPipeDebugScreenBox[] = [],
+  ): LinearDimension3DLaidOutGeometry | null {
+    const dx = endScreen.x - startScreen.x;
+    const dy = endScreen.y - startScreen.y;
+    const spanPx = Math.hypot(dx, dy);
+    if (spanPx < 8) return null;
+
+    const ux = dx / spanPx;
+    const uy = dy / spanPx;
+    const midScreen = {
+      x: (startScreen.x + endScreen.x) * 0.5,
+      y: (startScreen.y + endScreen.y) * 0.5,
+    };
+    const text = dim.getDisplayText();
+    const normals = [
+      { x: -uy, y: ux },
+      { x: uy, y: -ux },
+    ];
+    const diagonalProjectedLine = Math.abs(ux) > 0.35 && Math.abs(uy) > 0.35;
+    const firstLayerTubeLength =
+      targetId.startsWith('cut_tubi:') || /:piece:\d+(?::|$)/.test(targetId);
+    const overallChainLength =
+      targetId.startsWith('dim:chain:') &&
+      getDrawingLinearPlacement(dim) === 'external-chain';
+    const gapCandidates = diagonalProjectedLine
+      ? overallChainLength
+        ? [142, 178, 226, 288, 360, 440]
+        : firstLayerTubeLength
+          ? [76, 98, 126, 166, 218, 288]
+          : [110, 145, 190, 250, 330]
+      : overallChainLength
+        ? [116, 148, 188, 240, 304, 382]
+        : firstLayerTubeLength
+          ? [54, 72, 96, 128, 168, 220]
+          : [84, 112, 148, 188, 236, 292];
+    const textGapPx = overallChainLength ? 58 : firstLayerTubeLength ? 24 : 30;
+    const extensionStubPx = overallChainLength ? 12 : 8;
+
+    let best: {
+      lineStart: { x: number; y: number };
+      lineEnd: { x: number; y: number };
+      extensionStart: { x: number; y: number };
+      extensionEnd: { x: number; y: number };
+      extension2Start: { x: number; y: number };
+      extension2End: { x: number; y: number };
+      textAnchor: { x: number; y: number };
+      score: number;
+    } | null = null;
+
+    for (const normal of normals) {
+      const preferredSide =
+        (labelScreen.x - midScreen.x) * normal.x +
+        (labelScreen.y - midScreen.y) * normal.y;
+      for (const gapPx of gapCandidates) {
+        let lineStart = {
+          x: startScreen.x + normal.x * gapPx,
+          y: startScreen.y + normal.y * gapPx,
+        };
+        let lineEnd = {
+          x: endScreen.x + normal.x * gapPx,
+          y: endScreen.y + normal.y * gapPx,
+        };
+        const minSpanPx = 58;
+        if (spanPx < minSpanPx) {
+          const center = {
+            x: (lineStart.x + lineEnd.x) * 0.5,
+            y: (lineStart.y + lineEnd.y) * 0.5,
+          };
+          lineStart = {
+            x: center.x - ux * minSpanPx * 0.5,
+            y: center.y - uy * minSpanPx * 0.5,
+          };
+          lineEnd = {
+            x: center.x + ux * minSpanPx * 0.5,
+            y: center.y + uy * minSpanPx * 0.5,
+          };
+        }
+
+        const textAnchor = {
+          x: midScreen.x + normal.x * (gapPx + textGapPx),
+          y: midScreen.y + normal.y * (gapPx + textGapPx),
+        };
+        const lineBox = expandScreenBox({
+          x: (lineStart.x + lineEnd.x) * 0.5,
+          y: (lineStart.y + lineEnd.y) * 0.5,
+          width: Math.max(1, Math.abs(lineEnd.x - lineStart.x)),
+          height: Math.max(1, Math.abs(lineEnd.y - lineStart.y)),
+          left: Math.min(lineStart.x, lineEnd.x),
+          right: Math.max(lineStart.x, lineEnd.x),
+          top: Math.min(lineStart.y, lineEnd.y),
+          bottom: Math.max(lineStart.y, lineEnd.y),
+        }, 3);
+        const textBox = labelScreenBox(textAnchor, text);
+        const modelPenalty = drawingModelBoxes.reduce((sum, box) => {
+          const lineCrosses = screenSegmentIntersectsBox(lineStart, lineEnd, box, 12);
+          const textOverlap = screenBoxOverlapArea(expandScreenBox(textBox, 3), box);
+          return sum + (lineCrosses ? 5_000_000 : 0) + textOverlap * 160;
+        }, 0);
+        const keepoutPenalty = drawingKeepoutBoxes.reduce((sum, box) => {
+          const lineCrosses = screenSegmentIntersectsBox(lineStart, lineEnd, box, 16);
+          const textOverlap = screenBoxOverlapArea(expandScreenBox(textBox, 8), box);
+          const textNear = drawingNearBoxPenalty(textBox, box, 56);
+          return sum +
+            (lineCrosses ? 180_000 : 0) +
+            textOverlap * 120 +
+            textNear * 95_000;
+        }, 0);
+        const outsideBasePenalty =
+          screenOutsidePenalty(lineBox, viewport) +
+          screenOutsidePenalty(textBox, viewport);
+        const outsidePenalty =
+          outsideBasePenalty > 0 ? outsideBasePenalty + 10_000_000 : 0;
+        const sidePenalty = preferredSide >= -4 ? 0 : 160;
+        const distancePenalty = gapPx;
+        const score =
+          modelPenalty +
+          keepoutPenalty +
+          outsidePenalty +
+          sidePenalty +
+          distancePenalty;
+        if (!best || score < best.score) {
+          best = {
+            lineStart,
+            lineEnd,
+            extensionStart: {
+              x: startScreen.x + normal.x * extensionStubPx,
+              y: startScreen.y + normal.y * extensionStubPx,
+            },
+            extensionEnd: {
+              x: startScreen.x + normal.x * gapPx,
+              y: startScreen.y + normal.y * gapPx,
+            },
+            extension2Start: {
+              x: endScreen.x + normal.x * extensionStubPx,
+              y: endScreen.y + normal.y * extensionStubPx,
+            },
+            extension2End: {
+              x: endScreen.x + normal.x * gapPx,
+              y: endScreen.y + normal.y * gapPx,
+            },
+            textAnchor,
+            score,
+          };
+        }
+      }
+    }
+    if (!best) return null;
+
+    const depthRef = startWorld.clone().lerp(endWorld, 0.5);
+    const dimStartWorld = screenPointToWorldAtDepth(depthRef, best.lineStart, camera, viewport);
+    const dimEndWorld = screenPointToWorldAtDepth(depthRef, best.lineEnd, camera, viewport);
+    const extensionStartWorld = screenPointToWorldAtDepth(
+      depthRef,
+      best.extensionStart,
+      camera,
+      viewport,
+    );
+    const extensionEndWorld = screenPointToWorldAtDepth(
+      depthRef,
+      best.extensionEnd,
+      camera,
+      viewport,
+    );
+    const extension2StartWorld = screenPointToWorldAtDepth(
+      depthRef,
+      best.extension2Start,
+      camera,
+      viewport,
+    );
+    const extension2EndWorld = screenPointToWorldAtDepth(
+      depthRef,
+      best.extension2End,
+      camera,
+      viewport,
+    );
+    const textAnchorWorld = screenPointToWorldAtDepth(
+      depthRef,
+      best.textAnchor,
+      camera,
+      viewport,
+    );
+    if (
+      !dimStartWorld ||
+      !dimEndWorld ||
+      !extensionStartWorld ||
+      !extensionEndWorld ||
+      !extension2StartWorld ||
+      !extension2EndWorld ||
+      !textAnchorWorld
+    ) {
+      return null;
+    }
+
+    const dimDirWorld = dimEndWorld.clone().sub(dimStartWorld);
+    const dimDirLocal = worldDirectionToLocalDirection(dim, dimDirWorld);
+    if (!dimDirLocal) return null;
+    const toLocal = (point: Vector3) => dim.worldToLocal(point.clone());
+    return {
+      dimLineStart: toLocal(dimStartWorld),
+      dimLineEnd: toLocal(dimEndWorld),
+      extensionLine1Start: toLocal(extensionStartWorld),
+      extensionLine1End: toLocal(extensionEndWorld),
+      extensionLine2Start: toLocal(extension2StartWorld),
+      extensionLine2End: toLocal(extension2EndWorld),
+      textAnchor: toLocal(textAnchorWorld),
+      arrows: [
+        {
+          position: toLocal(dimStartWorld),
+          direction: dimDirLocal.clone(),
+        },
+        {
+          position: toLocal(dimEndWorld),
+          direction: dimDirLocal.clone().multiplyScalar(-1),
+        },
+      ],
+      screenFacingArrows: true,
+    };
+  }
+
   function createDrawingExternalLinearGeometry(
     dim: LinearDimension3D,
     targetId: string,
     finalLabelWorld: Vector3,
     camera: Camera,
     viewport: { width: number; height: number },
+    drawingModelBoxes: MbdPipeDebugScreenBox[] = [],
+    drawingKeepoutBoxes: MbdPipeDebugScreenBox[] = [],
   ): LinearDimension3DLaidOutGeometry | null {
     if (!isMbdDrawingPresetRuntime()) return null;
     const params = dim.getParams();
@@ -3023,30 +3832,78 @@ export function useMbdPipeAnnotationThree(
     const labelScreen = projectLabelToScreen(finalLabelWorld, camera, viewport);
     if (!startScreen || !endScreen || !labelScreen) return null;
 
+    const drawingPlacement = getDrawingLinearPlacement(dim);
+    if (
+      isDrawingInlineTubeLengthTarget(targetId, dim) ||
+      (drawingPlacement === 'external-chain' && targetId.startsWith('dim:chain:'))
+    ) {
+      return createDrawingProjectedOffsetLinearGeometry(
+        dim,
+        targetId,
+        startWorld,
+        endWorld,
+        startScreen,
+        endScreen,
+        labelScreen,
+        camera,
+        viewport,
+        drawingModelBoxes,
+        drawingKeepoutBoxes,
+      );
+    }
+
     const dx = endScreen.x - startScreen.x;
     const dy = endScreen.y - startScreen.y;
     const isPortDimension = targetId.startsWith('dim:port:');
-    const forceHorizontal =
-      targetId.startsWith('dim:chain:') ||
-      targetId.startsWith('dim:overall:') ||
-      targetId.startsWith('cut_tubi:');
-    const horizontal = !isPortDimension && (forceHorizontal || Math.abs(dx) >= Math.abs(dy));
+    const isCutTubiDimension = targetId.startsWith('cut_tubi:');
+    const horizontal = !isPortDimension && Math.abs(dx) >= Math.abs(dy);
     const minSpanPx = 56;
+    const endpointLeft = Math.min(startScreen.x, endScreen.x);
+    const endpointRight = Math.max(startScreen.x, endScreen.x);
+    const cutTubiLabelDetached =
+      isCutTubiDimension &&
+      (labelScreen.x < endpointLeft - 120 || labelScreen.x > endpointRight + 120);
     let dimStartScreen: { x: number; y: number };
     let dimEndScreen: { x: number; y: number };
+    let textAnchorScreen: { x: number; y: number };
 
     if (horizontal) {
       let x1 = startScreen.x;
       let x2 = endScreen.x;
+      if (cutTubiLabelDetached) {
+        const detachedSpanPx = clampNumber(
+          Math.abs(endpointRight - endpointLeft),
+          86,
+          132,
+          104,
+        );
+        x1 = labelScreen.x - detachedSpanPx * 0.5;
+        x2 = labelScreen.x + detachedSpanPx * 0.5;
+      }
       if (Math.abs(x2 - x1) < minSpanPx) {
         const midX = (x1 + x2) * 0.5;
         x1 = midX - minSpanPx * 0.5;
         x2 = midX + minSpanPx * 0.5;
       }
-      const lineGapPx = labelScreen.y >= viewport.height * 0.5 ? 34 : -34;
+      const lineGapPx = resolveDrawingDimensionLineGapPx({
+        targetId,
+        axis: 'horizontal',
+        sign: labelScreen.y >= viewport.height * 0.5 ? 1 : -1,
+        baseGapPx: cutTubiLabelDetached ? 42 : 34,
+        labelScreen,
+        lineStartScreen: { x: x1, y: labelScreen.y },
+        lineEndScreen: { x: x2, y: labelScreen.y },
+        viewport,
+        drawingModelBoxes,
+      });
       const lineY = labelScreen.y + lineGapPx;
       dimStartScreen = { x: x1, y: lineY };
       dimEndScreen = { x: x2, y: lineY };
+      const textGapPx = 26;
+      textAnchorScreen = {
+        x: (dimStartScreen.x + dimEndScreen.x) * 0.5,
+        y: lineY - Math.sign(lineGapPx || -1) * textGapPx,
+      };
     } else {
       let y1 = startScreen.y;
       let y2 = endScreen.y;
@@ -3059,10 +3916,25 @@ export function useMbdPipeAnnotationThree(
         y1 = midY - minSpanPx * 0.5;
         y2 = midY + minSpanPx * 0.5;
       }
-      const lineGapPx = labelScreen.x >= viewport.width * 0.5 ? 44 : -44;
+      const lineGapPx = resolveDrawingDimensionLineGapPx({
+        targetId,
+        axis: 'vertical',
+        sign: labelScreen.x >= viewport.width * 0.5 ? 1 : -1,
+        baseGapPx: 44,
+        labelScreen,
+        lineStartScreen: { x: labelScreen.x, y: y1 },
+        lineEndScreen: { x: labelScreen.x, y: y2 },
+        viewport,
+        drawingModelBoxes,
+      });
       const lineX = labelScreen.x + lineGapPx;
       dimStartScreen = { x: lineX, y: y1 };
       dimEndScreen = { x: lineX, y: y2 };
+      const textGapPx = 32;
+      textAnchorScreen = {
+        x: lineX - Math.sign(lineGapPx || -1) * textGapPx,
+        y: (dimStartScreen.y + dimEndScreen.y) * 0.5,
+      };
     }
 
     const clampStubDelta = (delta: number): number => {
@@ -3071,19 +3943,29 @@ export function useMbdPipeAnnotationThree(
       return Math.sign(delta) * Math.min(abs, 32);
     };
     const extensionStartScreen = horizontal
-      ? {
-        x: dimStartScreen.x,
-        y: dimStartScreen.y + clampStubDelta(startScreen.y - dimStartScreen.y),
-      }
+      ? cutTubiLabelDetached
+        ? {
+          x: dimStartScreen.x,
+          y: dimStartScreen.y + (labelScreen.y >= viewport.height * 0.5 ? 18 : -18),
+        }
+        : {
+          x: dimStartScreen.x,
+          y: dimStartScreen.y + clampStubDelta(startScreen.y - dimStartScreen.y),
+        }
       : {
         x: dimStartScreen.x + clampStubDelta(startScreen.x - dimStartScreen.x),
         y: dimStartScreen.y,
       };
     const extensionEndScreen = horizontal
-      ? {
-        x: dimEndScreen.x,
-        y: dimEndScreen.y + clampStubDelta(endScreen.y - dimEndScreen.y),
-      }
+      ? cutTubiLabelDetached
+        ? {
+          x: dimEndScreen.x,
+          y: dimEndScreen.y + (labelScreen.y >= viewport.height * 0.5 ? 18 : -18),
+        }
+        : {
+          x: dimEndScreen.x,
+          y: dimEndScreen.y + clampStubDelta(endScreen.y - dimEndScreen.y),
+        }
       : {
         x: dimEndScreen.x + clampStubDelta(endScreen.x - dimEndScreen.x),
         y: dimEndScreen.y,
@@ -3114,7 +3996,19 @@ export function useMbdPipeAnnotationThree(
       camera,
       viewport,
     );
-    if (!dimStartWorld || !dimEndWorld || !extensionStartWorld || !extensionEndWorld) {
+    const textAnchorWorld = screenPointToWorldAtDepth(
+      depthRef,
+      textAnchorScreen,
+      camera,
+      viewport,
+    );
+    if (
+      !dimStartWorld ||
+      !dimEndWorld ||
+      !extensionStartWorld ||
+      !extensionEndWorld ||
+      !textAnchorWorld
+    ) {
       return null;
     }
     const dimDirWorld = dimEndWorld.clone().sub(dimStartWorld);
@@ -3129,7 +4023,7 @@ export function useMbdPipeAnnotationThree(
       extensionLine1End: toLocal(dimStartWorld),
       extensionLine2Start: toLocal(extensionEndWorld),
       extensionLine2End: toLocal(dimEndWorld),
-      textAnchor: toLocal(finalLabelWorld),
+      textAnchor: toLocal(textAnchorWorld),
       arrows: [
         {
           position: toLocal(dimStartWorld),
@@ -3161,16 +4055,156 @@ export function useMbdPipeAnnotationThree(
   }
 
   function layoutScreenPriority(id: string, kind: MbdPipeDebugScreenItem['kind']): number {
-    if (kind === 'dim' && !id.startsWith('dim:port:')) return 0;
-    if (id.startsWith('tag:branch:')) return 1;
+    if ((kind === 'dim' && /:piece:\d+(?::|$)/.test(id)) || kind === 'cut_tubi') return 0;
+    if (kind === 'dim' && !id.startsWith('dim:port:')) return 1;
     if (id.startsWith('tag:position:')) return 2;
-    if (id.startsWith('tag:fitting:')) return 3;
-    if (id.startsWith('dim:port:')) return 4;
-    if (kind === 'cut_tubi') return 5;
+    if (id.startsWith('tag:branch:')) return 3;
+    if (id.startsWith('tag:fitting:')) return 4;
+    if (id.startsWith('dim:port:')) return 5;
     if (id.startsWith('tag:elevation:')) return 6;
     if (id.startsWith('tag:tubi:')) return 7;
     if (id.startsWith('tag:material:')) return 8;
     return kind === 'tag' ? 9 : 10;
+  }
+
+  function isAutoHideableLayoutScreenTag(id: string): boolean {
+    return (
+      id.startsWith('tag:material:') ||
+      id.startsWith('tag:elevation:') ||
+      id.startsWith('tag:tubi:') ||
+      id.startsWith('tag:fitting:')
+    );
+  }
+
+  function setLayoutTagScreenLodHidden(id: string, hidden: boolean): void {
+    const tag = tagAnnotations.get(id);
+    if (!tag) return;
+    const raw = asRaw(tag);
+    (raw.userData as any).mbdScreenLodHidden = hidden;
+    (raw.userData as any).mbdDeclutterHidden = hidden;
+  }
+
+  function collectLayoutScreenLodItems(
+    camera: Camera,
+    viewport: { width: number; height: number },
+    hiddenTagIds: Set<string>,
+  ): MbdPipeDebugScreenItem[] {
+    const items: MbdPipeDebugScreenItem[] = [];
+    const append = (
+      id: string,
+      kind: MbdPipeDebugScreenItem['kind'],
+      text: string,
+      labelWorldPos: Vector3 | null,
+    ): void => {
+      if (!labelWorldPos || String(text).trim().length === 0) return;
+      const screen = projectLabelToScreen(labelWorldPos, camera, viewport);
+      if (!screen) return;
+      const box = labelScreenBox(screen, text);
+      const margin = 24;
+      items.push({
+        id,
+        kind,
+        text,
+        x: screen.x,
+        y: screen.y,
+        box,
+        in_viewport:
+          box.right >= -margin &&
+          box.bottom >= -margin &&
+          box.left <= viewport.width + margin &&
+          box.top <= viewport.height + margin,
+      });
+    };
+
+    for (const [id, dim] of dimAnnotations.entries()) {
+      const rawDim = asRaw(dim);
+      if (!rawDim.visible || !!(rawDim.userData as any)?.mbdDeclutterHidden) continue;
+      append(id, 'dim', dim.getDisplayText(), getAnnotationLabelWorldPos(rawDim));
+    }
+    for (const [id, dim] of cutTubiAnnotations.entries()) {
+      const rawDim = asRaw(dim);
+      if (!rawDim.visible || !!(rawDim.userData as any)?.mbdDeclutterHidden) continue;
+      append(id, 'cut_tubi', dim.getDisplayText(), getAnnotationLabelWorldPos(rawDim));
+    }
+    for (const [id, tag] of tagAnnotations.entries()) {
+      if (hiddenTagIds.has(id)) continue;
+      const rawTag = asRaw(tag);
+      if (!rawTag.visible || !!(rawTag.userData as any)?.mbdLayoutHidden) continue;
+      const params = rawTag.getParams();
+      const label = String(params.label ?? '').trim();
+      const subtitle = String(params.subtitle ?? '').trim();
+      append(
+        id,
+        'tag',
+        subtitle ? `${label}\n${subtitle}` : label,
+        getAnnotationLabelWorldPos(rawTag),
+      );
+    }
+    return items.filter((item) => item.in_viewport);
+  }
+
+  function chooseLayoutScreenLodHideTarget(
+    a: MbdPipeDebugScreenItem,
+    b: MbdPipeDebugScreenItem,
+  ): string | null {
+    const aHideable = a.kind === 'tag' && isAutoHideableLayoutScreenTag(a.id);
+    const bHideable = b.kind === 'tag' && isAutoHideableLayoutScreenTag(b.id);
+    if (!aHideable && !bHideable) return null;
+    if (aHideable && !bHideable) return a.id;
+    if (!aHideable && bHideable) return b.id;
+    const aPriority = layoutScreenPriority(a.id, a.kind);
+    const bPriority = layoutScreenPriority(b.id, b.kind);
+    if (aPriority !== bPriority) return aPriority > bPriority ? a.id : b.id;
+    return a.box.width * a.box.height <= b.box.width * b.box.height ? a.id : b.id;
+  }
+
+  function applyLayoutResultScreenLod(
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): void {
+    if (renderSource.value !== 'layout_result' || isMbdDrawingPresetRuntime()) return;
+    if (tagAnnotations.size <= 0) return;
+
+    for (const [id, tag] of tagAnnotations.entries()) {
+      if (!isAutoHideableLayoutScreenTag(id)) continue;
+      const rawTag = asRaw(tag);
+      if ((rawTag.userData as any).mbdScreenLodHidden) {
+        setLayoutTagScreenLodHidden(id, false);
+      }
+    }
+
+    const hiddenTagIds = new Set<string>();
+    const maxIterations = Math.max(1, tagAnnotations.size);
+    for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+      const items = collectLayoutScreenLodItems(camera, viewport, hiddenTagIds);
+      let bestPair:
+        | {
+          a: MbdPipeDebugScreenItem;
+          b: MbdPipeDebugScreenItem;
+          ratio: number;
+        }
+        | null = null;
+      for (let i = 0; i < items.length; i += 1) {
+        for (let j = i + 1; j < items.length; j += 1) {
+          const a = items[i]!;
+          const b = items[j]!;
+          const overlapArea = screenBoxOverlapArea(a.box, b.box);
+          if (overlapArea <= 0) continue;
+          const aArea = Math.max(1, a.box.width * a.box.height);
+          const bArea = Math.max(1, b.box.width * b.box.height);
+          const ratio = overlapArea / Math.min(aArea, bArea);
+          if (ratio < 0.35) continue;
+          if (!bestPair || ratio > bestPair.ratio) {
+            bestPair = { a, b, ratio };
+          }
+        }
+      }
+      if (!bestPair) break;
+      const hideId = chooseLayoutScreenLodHideTarget(bestPair.a, bestPair.b);
+      if (!hideId || hiddenTagIds.has(hideId)) break;
+      hiddenTagIds.add(hideId);
+      setLayoutTagScreenLodHidden(hideId, true);
+    }
   }
 
   function makeLayoutScreenOffsetCandidates(): { dx: number; dy: number }[] {
@@ -3208,10 +4242,163 @@ export function useMbdPipeAnnotationThree(
     };
   }
 
+  function drawingExternalGeometryKey(
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): string {
+    camera.updateMatrixWorld?.(true);
+    const e = camera.matrixWorld.elements;
+    return [
+      Math.round(viewport.width),
+      Math.round(viewport.height),
+      e[12]?.toFixed(2),
+      e[13]?.toFixed(2),
+      e[14]?.toFixed(2),
+      camera.rotation.x.toFixed(4),
+      camera.rotation.y.toFixed(4),
+      camera.rotation.z.toFixed(4),
+      camera.zoom?.toFixed(4) ?? '1',
+    ].join(':');
+  }
+
+  function resolveDrawingDimensionLineGapPx(args: {
+    targetId: string;
+    axis: 'horizontal' | 'vertical';
+    sign: 1 | -1;
+    baseGapPx: number;
+    labelScreen: { x: number; y: number };
+    lineStartScreen: { x: number; y: number };
+    lineEndScreen: { x: number; y: number };
+    viewport: { width: number; height: number };
+    drawingModelBoxes: MbdPipeDebugScreenBox[];
+  }): number {
+    const { axis, sign, labelScreen, viewport, drawingModelBoxes } = args;
+    const baseGapPx = args.baseGapPx;
+    if (drawingModelBoxes.length <= 0) return sign * baseGapPx;
+
+    const gapCandidates = [
+      baseGapPx,
+      baseGapPx + 24,
+      baseGapPx + 48,
+      baseGapPx + 72,
+      baseGapPx + 96,
+      baseGapPx + 128,
+    ];
+    let bestGap = sign * baseGapPx;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const gapAbs of gapCandidates) {
+      const gap = sign * gapAbs;
+      const start = { ...args.lineStartScreen };
+      const end = { ...args.lineEndScreen };
+      if (axis === 'horizontal') {
+        start.y = labelScreen.y + gap;
+        end.y = labelScreen.y + gap;
+      } else {
+        start.x = labelScreen.x + gap;
+        end.x = labelScreen.x + gap;
+      }
+      const lineBox: MbdPipeDebugScreenBox = {
+        x: (start.x + end.x) * 0.5,
+        y: (start.y + end.y) * 0.5,
+        width: Math.max(1, Math.abs(end.x - start.x)),
+        height: Math.max(1, Math.abs(end.y - start.y)),
+        left: Math.min(start.x, end.x),
+        right: Math.max(start.x, end.x),
+        top: Math.min(start.y, end.y),
+        bottom: Math.max(start.y, end.y),
+      };
+      const keepoutPenalty = drawingModelBoxes.reduce((sum, box) => {
+        if (!screenSegmentIntersectsBox(start, end, box, 10)) return sum;
+        return sum + 100_000 + screenBoxOverlapArea(expandScreenBox(lineBox, 3), box);
+      }, 0);
+      const outsidePenalty = screenOutsidePenalty(expandScreenBox(lineBox, 2), viewport);
+      const distancePenalty = Math.abs(gapAbs - baseGapPx) * 3;
+      const score = keepoutPenalty + outsidePenalty + distancePenalty;
+      if (score < bestScore) {
+        bestScore = score;
+        bestGap = gap;
+      }
+      if (keepoutPenalty <= 0 && outsidePenalty <= 0) break;
+    }
+    return bestGap;
+  }
+
+  function trailingAnnotationIndex(id: string): number | null {
+    const match = /:(\d+)$/.exec(id);
+    if (!match) return null;
+    const value = Number(match[1]);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  }
+
+  function tubiTagLayoutIndex(id: string): number | null {
+    if (!id.startsWith('tag:tubi:')) return null;
+    const data = currentData.value;
+    const layoutTagIds = (data?.layout_result?.tags ?? [])
+      .filter((tag) => classifyLaidOutTag(tag) === 'tubi')
+      .map((tag) => tag.id);
+    let index = layoutTagIds.indexOf(id);
+    if (index >= 0) return index;
+
+    const rawTagIds = (data?.tags ?? [])
+      .filter((tag) => classifyTag(tag) === 'tubi')
+      .map((tag) => tag.id);
+    index = rawTagIds.indexOf(id);
+    if (index >= 0) return index;
+
+    const renderedTubiIds = Array.from(tagAnnotations.entries())
+      .filter(([, tag]) => ((asRaw(tag).userData as any)?.mbdTagKind ?? null) === 'tubi')
+      .map(([tagId]) => tagId)
+      .sort((a, b) => a.localeCompare(b));
+    index = renderedTubiIds.indexOf(id);
+    return index >= 0 ? index : null;
+  }
+
+  function elevationTagLayoutIndex(id: string): number | null {
+    if (!id.startsWith('tag:elevation:')) return null;
+    const data = currentData.value;
+    const layoutTagIds = (data?.layout_result?.tags ?? [])
+      .filter((tag) => classifyLaidOutTag(tag) === 'elevation')
+      .map((tag) => tag.id);
+    let index = layoutTagIds.indexOf(id);
+    if (index >= 0) return index;
+
+    const rawTagIds = (data?.tags ?? [])
+      .filter((tag) => classifyTag(tag) === 'elevation')
+      .map((tag) => tag.id);
+    index = rawTagIds.indexOf(id);
+    if (index >= 0) return index;
+
+    const renderedElevationIds = Array.from(tagAnnotations.entries())
+      .filter(([, tag]) => ((asRaw(tag).userData as any)?.mbdTagKind ?? null) === 'elevation')
+      .map(([tagId]) => tagId)
+      .sort((a, b) => a.localeCompare(b));
+    index = renderedElevationIds.indexOf(id);
+    return index >= 0 ? index : null;
+  }
+
+  function materialTagItemNo(id: string): number | null {
+    const match = /^tag:material:(\d+):/.exec(id);
+    if (!match) return null;
+    const value = Number(match[1]);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
   function preferredLayoutScreenOffsetCandidates(
     id: string,
   ): { dx: number; dy: number }[] {
-    if (id.startsWith('dim:port:2013286704_479')) {
+    const index = trailingAnnotationIndex(id);
+    const tubiIndex = tubiTagLayoutIndex(id);
+    if (id.startsWith('dim:chain:') && index === 0) {
+      return [
+        { dx: 0, dy: -40 },
+        { dx: 48, dy: -40 },
+        { dx: -48, dy: -40 },
+        { dx: 0, dy: -52 },
+        { dx: 64, dy: -52 },
+        { dx: -64, dy: -52 },
+      ];
+    }
+    if (id.startsWith('dim:port:') && index === 0) {
       return [
         { dx: 2600, dy: 1600 },
         { dx: -2600, dy: 1600 },
@@ -3219,7 +4406,7 @@ export function useMbdPipeAnnotationThree(
         { dx: -3200, dy: 0 },
       ];
     }
-    if (id.startsWith('dim:port:2013286704_480')) {
+    if (id.startsWith('dim:port:') && index === 1) {
       return [
         { dx: 2600, dy: -1800 },
         { dx: -2600, dy: -1800 },
@@ -3228,7 +4415,7 @@ export function useMbdPipeAnnotationThree(
         { dx: 0, dy: -2400 },
       ];
     }
-    if (id.startsWith('cut_tubi:2013286704_479')) {
+    if (id.startsWith('cut_tubi:') && index === 0) {
       return [
         { dx: -4200, dy: 1200 },
         { dx: 4200, dy: 1200 },
@@ -3238,7 +4425,7 @@ export function useMbdPipeAnnotationThree(
         { dx: 2600, dy: 1800 },
       ];
     }
-    if (id.startsWith('cut_tubi:2013286704_480')) {
+    if (id.startsWith('cut_tubi:') && index === 1) {
       return [
         { dx: -3600, dy: 2600 },
         { dx: 3600, dy: 2600 },
@@ -3272,12 +4459,14 @@ export function useMbdPipeAnnotationThree(
     }
     if (id.startsWith('tag:fitting:')) {
       return [
-        { dx: -260, dy: 120 },
         { dx: -260, dy: -120 },
-        { dx: 260, dy: 120 },
         { dx: 260, dy: -120 },
-        { dx: 0, dy: 180 },
         { dx: 0, dy: -180 },
+        { dx: -260, dy: -220 },
+        { dx: 260, dy: -220 },
+        { dx: -260, dy: 120 },
+        { dx: 260, dy: 120 },
+        { dx: 0, dy: 180 },
         { dx: 5200, dy: -800 },
         { dx: 5200, dy: 2200 },
         { dx: -5200, dy: -800 },
@@ -3305,7 +4494,7 @@ export function useMbdPipeAnnotationThree(
       ];
     }
     if (id.startsWith('tag:tubi:')) {
-      return id.endsWith('_479')
+      return tubiIndex === 0
         ? [
           { dx: 5200, dy: -3600 },
           { dx: 5200, dy: -1200 },
@@ -3317,6 +4506,9 @@ export function useMbdPipeAnnotationThree(
           { dx: 1300, dy: -780 },
         ]
         : [
+          { dx: -3200, dy: -2400 },
+          { dx: -3600, dy: -1200 },
+          { dx: -4200, dy: 0 },
           { dx: -5200, dy: -3600 },
           { dx: -5200, dy: 1200 },
           { dx: 5200, dy: -3600 },
@@ -3326,24 +4518,29 @@ export function useMbdPipeAnnotationThree(
           { dx: -1300, dy: 780 },
         ];
     }
-    if (id.startsWith('tag:material:1:')) {
+    if (id.startsWith('tag:material:')) {
+      const itemNo = materialTagItemNo(id) ?? 1;
+      const preferDown = itemNo % 2 === 1;
+      const primaryDy = preferDown ? 140 : -140;
+      const secondaryDy = -primaryDy;
+      const preferRight = Math.floor((itemNo - 1) / 2) % 2 === 0;
+      const primaryDx = preferRight ? 220 : -220;
+      const secondaryDx = -primaryDx;
       return [
-        { dx: 4200, dy: 2600 },
-        { dx: -4200, dy: 2600 },
-        { dx: 4200, dy: 0 },
-        { dx: -4200, dy: 0 },
-        { dx: 2600, dy: 1800 },
-        { dx: -2600, dy: 1800 },
-      ];
-    }
-    if (id.startsWith('tag:material:2:')) {
-      return [
-        { dx: 4200, dy: 2600 },
-        { dx: -4200, dy: 2600 },
-        { dx: 4200, dy: 0 },
-        { dx: -4200, dy: 0 },
-        { dx: 2600, dy: -1800 },
-        { dx: -2600, dy: -1800 },
+        { dx: primaryDx, dy: primaryDy },
+        { dx: secondaryDx, dy: primaryDy },
+        { dx: primaryDx, dy: secondaryDy },
+        { dx: secondaryDx, dy: secondaryDy },
+        { dx: primaryDx + Math.sign(primaryDx) * 80, dy: primaryDy + Math.sign(primaryDy) * 50 },
+        { dx: secondaryDx - Math.sign(primaryDx) * 80, dy: primaryDy + Math.sign(primaryDy) * 50 },
+        { dx: 280, dy: 0 },
+        { dx: -280, dy: 0 },
+        { dx: 0, dy: 160 },
+        { dx: 0, dy: -160 },
+        { dx: 340, dy: 240 },
+        { dx: -340, dy: 240 },
+        { dx: 340, dy: -240 },
+        { dx: -340, dy: -240 },
       ];
     }
     if (id.startsWith('tag:branch:')) {
@@ -3362,34 +4559,81 @@ export function useMbdPipeAnnotationThree(
     baseScreen: { x: number; y: number } | null,
     viewport: { width: number; height: number },
   ): { dx: number; dy: number }[] {
-    if (!baseScreen || !isMbdDrawingPresetRuntime()) return [];
+    if (!baseScreen) return [];
     let target: { x: number; y: number } | null = null;
+    const index = trailingAnnotationIndex(id);
+    const tubiIndex = tubiTagLayoutIndex(id);
+    const elevationIndex = elevationTagLayoutIndex(id);
+    const chainOverallAxis =
+      /^dim:chain:.*:axis:(\d+)$/.exec(id)?.[1] ??
+      /^dim:chain:.*:axis:(\d+):piece:\d+$/.exec(id)?.[1] ??
+      null;
     if (id.startsWith('tag:branch:')) {
-      target = { x: viewport.width * 0.50, y: viewport.height * 0.12 };
-    } else if (id.startsWith('dim:chain:2013286704_476:0')) {
-      target = { x: viewport.width * 0.56, y: viewport.height * 0.93 };
-    } else if (id.startsWith('dim:chain:2013286704_476:1')) {
-      target = { x: viewport.width * 0.47, y: viewport.height * 0.91 };
-    } else if (id.startsWith('dim:port:2013286704_479')) {
+      target = { x: viewport.width * 0.50, y: viewport.height * 0.90 };
+    } else if (id.startsWith('tag:material:')) {
+      const itemNo = materialTagItemNo(id) ?? 1;
+      const horizontalSign = Math.floor((itemNo - 1) / 2) % 2 === 0 ? 1 : -1;
+      const rawVerticalSign = itemNo % 2 === 1 ? 1 : -1;
+      const verticalSign =
+        baseScreen.y < viewport.height * 0.24
+          ? 1
+          : baseScreen.y > viewport.height * 0.76
+            ? -1
+            : rawVerticalSign;
+      target = {
+        x: clampNumber(baseScreen.x + horizontalSign * 118, 72, viewport.width - 72, baseScreen.x),
+        y: clampNumber(baseScreen.y + verticalSign * 92, 72, viewport.height - 72, baseScreen.y),
+      };
+      const clampTarget = (x: number, y: number): { x: number; y: number } => ({
+        x: clampNumber(x, 72, viewport.width - 72, target!.x),
+        y: clampNumber(y, 72, viewport.height - 72, target!.y),
+      });
+      const materialTargets = [
+        target,
+        clampTarget(target.x + horizontalSign * 118, target.y),
+        clampTarget(target.x - horizontalSign * 118, target.y),
+        clampTarget(target.x, target.y + verticalSign * 122),
+        clampTarget(target.x, target.y - verticalSign * 122),
+        clampTarget(target.x + horizontalSign * 118, target.y + verticalSign * 122),
+        clampTarget(target.x - horizontalSign * 118, target.y + verticalSign * 122),
+        clampTarget(baseScreen.x + horizontalSign * 168, baseScreen.y + verticalSign * 218),
+        clampTarget(baseScreen.x - horizontalSign * 168, baseScreen.y + verticalSign * 218),
+      ];
+      return materialTargets.map((slot) => ({
+        dx: slot.x - baseScreen.x,
+        dy: slot.y - baseScreen.y,
+      }));
+    } else if (/^dim:chain:.*:axis:0:piece:\d+$/.test(id)) {
+      target = { x: viewport.width * 0.31, y: viewport.height * 0.36 };
+    } else if (chainOverallAxis === '0') {
+      target = { x: viewport.width * 0.30, y: viewport.height * 0.22 };
+    } else if (chainOverallAxis === '1') {
+      target = { x: viewport.width * 0.39, y: viewport.height * 0.78 };
+    } else if (id.startsWith('dim:port:') && index === 0) {
       target = { x: viewport.width * 0.78, y: viewport.height * 0.58 };
-    } else if (id.startsWith('dim:port:2013286704_480')) {
+    } else if (id.startsWith('dim:port:') && index === 1) {
       target = { x: viewport.width * 0.23, y: viewport.height * 0.58 };
-    } else if (id.startsWith('cut_tubi:2013286704_479')) {
-      target = { x: viewport.width * 0.22, y: viewport.height * 0.38 };
-    } else if (id.startsWith('cut_tubi:2013286704_480')) {
+    } else if (id.startsWith('cut_tubi:') && index === 0) {
+      target = { x: viewport.width * 0.425, y: viewport.height * 0.34 };
+    } else if (id.startsWith('cut_tubi:') && index === 1) {
       target = { x: viewport.width * 0.22, y: viewport.height * 0.72 };
     } else if (id.endsWith(':head')) {
-      target = { x: viewport.width * 0.18, y: viewport.height * 0.28 };
+      target = { x: viewport.width * 0.36, y: viewport.height * 0.58 };
     } else if (id.endsWith(':tail')) {
-      target = { x: viewport.width * 0.78, y: viewport.height * 0.28 };
+      target = { x: viewport.width * 0.62, y: viewport.height * 0.50 };
     } else if (id.startsWith('tag:fitting:')) {
-      target = { x: viewport.width * 0.20, y: viewport.height * 0.88 };
+      target = { x: viewport.width * 0.20, y: viewport.height * 0.78 };
     } else if (id.startsWith('tag:elevation:')) {
-      target = { x: viewport.width * 0.78, y: viewport.height * 0.50 };
-    } else if (id.startsWith('tag:tubi:2013286704_479')) {
+      const slot = Math.max(0, elevationIndex ?? 0);
+      const column = Math.floor(slot / 6);
+      const row = slot % 6;
+      const yRatio = 0.22 + row * 0.12;
+      const xRatio = column % 2 === 0 ? 0.86 : 0.74;
+      target = { x: viewport.width * xRatio, y: viewport.height * yRatio };
+    } else if (id.startsWith('tag:tubi:') && tubiIndex === 0) {
       target = { x: viewport.width * 0.80, y: viewport.height * 0.14 };
-    } else if (id.startsWith('tag:tubi:2013286704_480')) {
-      target = { x: viewport.width * 0.08, y: viewport.height * 0.70 };
+    } else if (id.startsWith('tag:tubi:') && tubiIndex === 1) {
+      target = { x: viewport.width * 0.16, y: viewport.height * 0.68 };
     }
     if (!target) return [];
     const dx = target.x - baseScreen.x;
@@ -3405,8 +4649,8 @@ export function useMbdPipeAnnotationThree(
     box: MbdPipeDebugScreenBox,
     viewport: { width: number; height: number },
   ): number {
-    const margin = 16;
-    const rightReserved = 112;
+    const margin = isMbdDrawingPresetRuntime() ? 32 : 16;
+    const rightReserved = isMbdDrawingPresetRuntime() ? margin : 112;
     const left = Math.max(0, margin - box.left);
     const right = Math.max(0, box.right - (viewport.width - rightReserved));
     const top = Math.max(0, margin - box.top);
@@ -3414,17 +4658,214 @@ export function useMbdPipeAnnotationThree(
     return (left + right + top + bottom) * 5000;
   }
 
+  function collectPipeAxisScreenSegments(
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): { start: { x: number; y: number }; end: { x: number; y: number } }[] {
+    const data = currentData.value;
+    if (!data?.segments?.length) return [];
+    group.updateMatrixWorld?.(true);
+    const segments: { start: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+    for (const segment of data.segments) {
+      const startLocal = toVector3(segment.arrive);
+      const endLocal = toVector3(segment.leave);
+      if (!startLocal || !endLocal) continue;
+      const start = projectLabelToScreen(
+        group.localToWorld(startLocal.clone()),
+        camera,
+        viewport,
+      );
+      const end = projectLabelToScreen(
+        group.localToWorld(endLocal.clone()),
+        camera,
+        viewport,
+      );
+      if (!start || !end) continue;
+      segments.push({ start, end });
+    }
+    return segments;
+  }
+
+  function collectLayoutLeaderScreenSegmentsForKeepout(
+    excludedTagId: string,
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): { x1: number; y1: number; x2: number; y2: number }[] {
+    const leaders = currentData.value?.v2_leader_lines ?? [];
+    const segments: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    for (const [leaderIndex, leader] of leaders.entries()) {
+      const tagItem = resolveLeaderLayoutTag(leader, leaderIndex);
+      if (tagItem?.id === excludedTagId) continue;
+      const tagKind = tagItem ? classifyLaidOutTag(tagItem) : 'other';
+      if (tagItem && shouldSuppressDrawingTubiLengthTag(tagItem, tagKind)) continue;
+      const points = resolveDrawingLeaderRenderPoints(
+        (leader.points ?? [])
+          .map((point) => toVector3(point))
+          .filter((point): point is Vector3 => !!point),
+        tagKind,
+      );
+      if (points.length < 2) continue;
+      const projected = points
+        .map((point) => projectLabelToScreen(group.localToWorld(point.clone()), camera, viewport))
+        .filter((point): point is { x: number; y: number } => !!point);
+      for (let index = 1; index < projected.length; index += 1) {
+        const a = projected[index - 1]!;
+        const b = projected[index]!;
+        segments.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+      }
+    }
+    return segments;
+  }
+
+  type MbdPipeScreenSegment = {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  };
+
+  function collectLinearDimensionScreenSegmentsForKeepout(
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): MbdPipeScreenSegment[] {
+    const segments: MbdPipeScreenSegment[] = [];
+    const appendDimSegments = (annotation: LinearDimension3D): void => {
+      const rawDim = asRaw(annotation);
+      if (!rawDim.visible || !!(rawDim.userData as any)?.mbdDeclutterHidden) return;
+      const params = rawDim.getParams();
+      const laidOut = params.laidOutGeometry;
+      const pairs: [Vector3 | null | undefined, Vector3 | null | undefined][] = laidOut
+        ? [
+          [laidOut.dimLineStart, laidOut.dimLineEnd],
+          [laidOut.extensionLine1Start, laidOut.extensionLine1End],
+          [laidOut.extensionLine2Start, laidOut.extensionLine2End],
+        ]
+        : [[params.start, params.end]];
+      rawDim.updateMatrixWorld?.(true);
+      for (const [startLocal, endLocal] of pairs) {
+        if (!startLocal || !endLocal) continue;
+        if (startLocal.distanceToSquared(endLocal) < 1e-10) continue;
+        const start = projectLabelToScreen(
+          rawDim.localToWorld(startLocal.clone()),
+          camera,
+          viewport,
+        );
+        const end = projectLabelToScreen(
+          rawDim.localToWorld(endLocal.clone()),
+          camera,
+          viewport,
+        );
+        if (!start || !end) continue;
+        segments.push({ x1: start.x, y1: start.y, x2: end.x, y2: end.y });
+      }
+    };
+
+    for (const dim of dimAnnotations.values()) appendDimSegments(dim);
+    for (const dim of cutTubiAnnotations.values()) appendDimSegments(dim);
+    return segments;
+  }
+
   function drawingModelKeepoutPenalty(
     id: string,
     kind: MbdPipeDebugScreenItem['kind'],
     box: MbdPipeDebugScreenBox,
     viewport: { width: number; height: number },
+    camera: Camera,
+    drawingModelBoxes: MbdPipeDebugScreenBox[],
+    drawingDimensionSegments: MbdPipeScreenSegment[] = [],
   ): number {
-    void id;
-    void kind;
-    void box;
-    void viewport;
+    if (!isMbdDrawingPresetRuntime() || (kind !== 'tag' && !id.startsWith('tag:'))) {
+      return 0;
+    }
+    const materialTag = id.startsWith('tag:material:');
+    const positionOrBranchTag =
+      id.startsWith('tag:position:') || id.startsWith('tag:branch:');
+    const paddedBox = expandScreenBox(box, materialTag ? 8 : 5);
+    const labelArea = Math.max(1, box.width * box.height);
+    const modelOverlapRatio = drawingModelBoxes.reduce((maxRatio, modelBox) => {
+      const overlapArea = screenBoxOverlapArea(paddedBox, modelBox);
+      if (overlapArea <= 0) return maxRatio;
+      return Math.max(maxRatio, overlapArea / labelArea);
+    }, 0);
+    const overlapThreshold = positionOrBranchTag ? 0.10 : 0.035;
+    if (modelOverlapRatio >= overlapThreshold) {
+      return (materialTag ? 240_000 : 160_000) + modelOverlapRatio * 90_000;
+    }
+    const axisCrossing = collectPipeAxisScreenSegments(camera, viewport).some((segment) =>
+      screenSegmentIntersectsBox(segment.start, segment.end, box, 12),
+    );
+    if (axisCrossing) return materialTag ? 100_000 : 70_000;
+    const dimensionCrossing = drawingDimensionSegments.some((segment) =>
+      screenSegmentIntersectsBox(
+        { x: segment.x1, y: segment.y1 },
+        { x: segment.x2, y: segment.y2 },
+        box,
+        materialTag ? 18 : 16,
+      ),
+    );
+    if (dimensionCrossing) return materialTag ? 180_000 : 125_000;
+    const leaderCrossing = collectLayoutLeaderScreenSegmentsForKeepout(
+      id,
+      camera,
+      viewport,
+    ).some((segment) =>
+      screenSegmentIntersectsBox(
+        { x: segment.x1, y: segment.y1 },
+        { x: segment.x2, y: segment.y2 },
+        box,
+        2,
+      ),
+    );
+    if (leaderCrossing) return materialTag ? 120_000 : 85_000;
     return 0;
+  }
+
+  function drawingLeaderExtensionCandidatePenalty(
+    id: string,
+    box: MbdPipeDebugScreenBox,
+    labelScreen: { x: number; y: number },
+    camera: Camera,
+    viewport: { width: number; height: number },
+    placedBoxes: MbdPipeDebugScreenBox[],
+  ): number {
+    if (!isMbdDrawingPresetRuntime() || !id.startsWith('tag:material:')) return 0;
+    const leaders = currentData.value?.v2_leader_lines ?? [];
+    let leaderPoints: Vector3[] | null = null;
+    for (const [leaderIndex, leader] of leaders.entries()) {
+      const tagItem = resolveLeaderLayoutTag(leader, leaderIndex);
+      if (tagItem?.id !== id) continue;
+      leaderPoints = resolveDrawingLeaderRenderPoints(
+        (leader.points ?? [])
+          .map((point) => toVector3(point))
+          .filter((point): point is Vector3 => !!point),
+        'material',
+      );
+      break;
+    }
+    if (!leaderPoints || leaderPoints.length < 2) return 0;
+    const anchor =
+      resolveLeaderAnchorScreenPoint(leaderPoints, camera, viewport) ??
+      resolveNearestLeaderScreenPoint(leaderPoints, labelScreen, camera, viewport);
+    if (!anchor) return 0;
+    const start = screenRayBoxEdgePoint(box, anchor, 2) ?? labelScreen;
+    const anchorDistance = Math.hypot(labelScreen.x - anchor.x, labelScreen.y - anchor.y);
+    let penalty = anchorDistance > 320
+      ? 450_000 + (anchorDistance - 320) * (anchorDistance - 320) * 150
+      : Math.max(0, anchorDistance - 260) * Math.max(0, anchorDistance - 260) * 45;
+    for (const placed of placedBoxes) {
+      if (!screenSegmentIntersectsBox(start, anchor, placed, 8)) continue;
+      penalty += 180_000 + screenBoxOverlapArea(expandScreenBox(placed, 2), {
+        x: (start.x + anchor.x) * 0.5,
+        y: (start.y + anchor.y) * 0.5,
+        width: Math.max(1, Math.abs(start.x - anchor.x)),
+        height: Math.max(1, Math.abs(start.y - anchor.y)),
+        left: Math.min(start.x, anchor.x),
+        right: Math.max(start.x, anchor.x),
+        top: Math.min(start.y, anchor.y),
+        bottom: Math.max(start.y, anchor.y),
+      });
+    }
+    return penalty;
   }
 
   function screenBoxInsideViewport(
@@ -3432,7 +4873,7 @@ export function useMbdPipeAnnotationThree(
     viewport: { width: number; height: number },
   ): boolean {
     const margin = 16;
-    const rightReserved = 112;
+    const rightReserved = isMbdDrawingPresetRuntime() ? 24 : 112;
     return (
       box.left >= margin &&
       box.right <= viewport.width - rightReserved &&
@@ -3442,7 +4883,7 @@ export function useMbdPipeAnnotationThree(
   }
 
   function isLayoutScreenDeclutterEnabled(): boolean {
-    return true;
+    return isMbdDrawingPresetRuntime();
   }
 
   function applyLayoutScreenLabelDeclutter(): void {
@@ -3452,6 +4893,8 @@ export function useMbdPipeAnnotationThree(
     if (!isLayoutScreenDeclutterEnabled()) return;
     const viewer = dtxViewerRef.value;
     if (!viewer) return;
+    layoutScreenDeclutterLastRunMs =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     const camera = viewer.camera;
     camera.updateMatrixWorld?.(true);
@@ -3528,6 +4971,23 @@ export function useMbdPipeAnnotationThree(
       target.applyWorldOffset(new Vector3());
     }
 
+    const drawingModelScreenBoxes = isMbdDrawingPresetRuntime()
+      ? [
+        ...collectDrawingModelScreenBoxes(camera, viewport),
+        ...collectPipeBodyScreenBoxes(camera, viewport),
+      ]
+      : [];
+    let drawingDimensionScreenSegments: MbdPipeScreenSegment[] | null = null;
+    const getDrawingDimensionScreenSegments = (): MbdPipeScreenSegment[] => {
+      if (!isMbdDrawingPresetRuntime()) return [];
+      if (!drawingDimensionScreenSegments) {
+        drawingDimensionScreenSegments = collectLinearDimensionScreenSegmentsForKeepout(
+          camera,
+          viewport,
+        );
+      }
+      return drawingDimensionScreenSegments;
+    };
     const placed: MbdPipeDebugScreenBox[] = [];
     for (const target of targets) {
       const basePos = target.labelPos();
@@ -3540,18 +5000,36 @@ export function useMbdPipeAnnotationThree(
         if (
           !target.id.startsWith('dim:chain:') &&
           !target.id.startsWith('dim:overall:') &&
-          !target.id.startsWith('dim:port:')
+          !target.id.startsWith('dim:port:') &&
+          !target.id.startsWith('cut_tubi:')
         ) {
           return;
         }
         const rawDim = asRaw(target.linear);
         const finalLabelWorld = target.labelPos();
+        const externalGeometryKey = [
+          drawingExternalGeometryKey(camera, viewport),
+          finalLabelWorld.x.toFixed(2),
+          finalLabelWorld.y.toFixed(2),
+          finalLabelWorld.z.toFixed(2),
+        ].join(':');
+        if ((rawDim.userData as any).mbdDrawingExternalGeometryKey === externalGeometryKey) {
+          rawDim.setParams({
+            labelOffsetWorld: null,
+            labelT: 0.5,
+          });
+          const screen = projectLabelToScreen(target.labelPos(), camera, viewport);
+          if (screen) bestBox = labelScreenBox(screen, target.text);
+          return;
+        }
         const externalGeometry = createDrawingExternalLinearGeometry(
           rawDim,
           target.id,
           finalLabelWorld,
           camera,
           viewport,
+          drawingModelScreenBoxes,
+          placed,
         );
         if (!externalGeometry) return;
         rawDim.setParams({
@@ -3559,9 +5037,22 @@ export function useMbdPipeAnnotationThree(
           labelOffsetWorld: null,
           labelT: 0.5,
         });
+        (rawDim.userData as any).mbdDrawingExternalGeometryKey = externalGeometryKey;
         const screen = projectLabelToScreen(target.labelPos(), camera, viewport);
         if (screen) bestBox = labelScreenBox(screen, target.text);
       };
+
+      if (
+        target.linear &&
+        isMbdDrawingPresetRuntime() &&
+        isDrawingInlineTubeLengthTarget(target.id, asRaw(target.linear))
+      ) {
+        target.applyWorldOffset(new Vector3());
+        applyExternalGeometry();
+        const screen = projectLabelToScreen(target.labelPos(), camera, viewport);
+        if (screen) placed.push(labelScreenBox(screen, target.text));
+        continue;
+      }
 
       const baseScreen = projectLabelToScreen(basePos, camera, viewport);
       const absoluteSlotCandidates = preferredAbsoluteLayoutScreenOffsetCandidates(
@@ -3584,7 +5075,8 @@ export function useMbdPipeAnnotationThree(
         target.id.startsWith('tag:position:') ||
         target.id.endsWith(':tail') ||
         target.id.startsWith('tag:elevation:') ||
-        target.id.startsWith('tag:tubi:');
+        target.id.startsWith('tag:tubi:') ||
+        target.id.startsWith('tag:material:');
       const targetCandidates = [
         ...preferredCandidates,
         ...candidates,
@@ -3603,22 +5095,33 @@ export function useMbdPipeAnnotationThree(
           if (!screen) continue;
           const box = labelScreenBox(screen, target.text);
           if (!screenBoxInsideViewport(box, viewport)) continue;
-          const overlapScore = placed.reduce((sum, prev) => {
-            const overlapArea = screenBoxOverlapArea(box, prev);
-            if (overlapArea <= 0) return sum;
-            const minArea = Math.max(1, Math.min(
-              box.width * box.height,
-              prev.width * prev.height,
-            ));
-            return sum + overlapArea / minArea;
-          }, 0);
+          const labelConflictPenalty = placed.reduce(
+            (sum, prev) => sum + drawingPlacedLabelConflictPenalty(box, prev),
+            0,
+          );
           const distancePenalty = isAbsoluteSlotCandidate(candidate)
             ? -12
             : (Math.abs(candidate.dx) + Math.abs(candidate.dy)) * 0.0002;
           const score =
-            overlapScore * 1000 +
+            labelConflictPenalty +
             screenOutsidePenalty(box, viewport) +
-            drawingModelKeepoutPenalty(target.id, target.kind, box, viewport) +
+            drawingModelKeepoutPenalty(
+              target.id,
+              target.kind,
+              box,
+              viewport,
+              camera,
+              drawingModelScreenBoxes,
+              target.kind === 'tag' ? getDrawingDimensionScreenSegments() : [],
+            ) +
+            drawingLeaderExtensionCandidatePenalty(
+              target.id,
+              box,
+              screen,
+              camera,
+              viewport,
+              placed,
+            ) +
             distancePenalty;
           if (score < bestScore) {
             bestScore = score;
@@ -3627,10 +5130,22 @@ export function useMbdPipeAnnotationThree(
           }
         }
         if (bestBox) {
-          target.applyWorldOffset(bestOffset);
-          applyExternalGeometry();
-          placed.push(bestBox);
-          continue;
+          const semanticSlotScoreLimit = isMbdDrawingPresetRuntime() ? 16 : 50_000;
+          const semanticSlotGoodEnough =
+            bestScore < semanticSlotScoreLimit ||
+            (
+              isMbdDrawingPresetRuntime() &&
+              (
+                target.id.startsWith('tag:position:') ||
+                target.id.startsWith('tag:branch:')
+              )
+            );
+          if (semanticSlotGoodEnough) {
+            target.applyWorldOffset(bestOffset);
+            applyExternalGeometry();
+            placed.push(bestBox);
+            continue;
+          }
         }
       }
       for (const candidate of targetCandidates) {
@@ -3645,15 +5160,10 @@ export function useMbdPipeAnnotationThree(
         const screen = projectLabelToScreen(target.labelPos(), camera, viewport);
         if (!screen) continue;
         const box = labelScreenBox(screen, target.text);
-        const overlapScore = placed.reduce((sum, prev) => {
-          const overlapArea = screenBoxOverlapArea(box, prev);
-          if (overlapArea <= 0) return sum;
-          const minArea = Math.max(1, Math.min(
-            box.width * box.height,
-            prev.width * prev.height,
-          ));
-          return sum + overlapArea / minArea;
-        }, 0);
+        const labelConflictPenalty = placed.reduce(
+          (sum, prev) => sum + drawingPlacedLabelConflictPenalty(box, prev),
+          0,
+        );
         const distancePenalty = isAbsoluteSlotCandidate(candidate)
           ? -12
           : (Math.abs(candidate.dx) + Math.abs(candidate.dy)) * 0.0002;
@@ -3662,20 +5172,33 @@ export function useMbdPipeAnnotationThree(
           target.kind,
           box,
           viewport,
+          camera,
+          drawingModelScreenBoxes,
+          target.kind === 'tag' ? getDrawingDimensionScreenSegments() : [],
+        );
+        const leaderExtensionPenalty = drawingLeaderExtensionCandidatePenalty(
+          target.id,
+          box,
+          screen,
+          camera,
+          viewport,
+          placed,
         );
         const score =
-          overlapScore * 1000 +
+          labelConflictPenalty +
           screenOutsidePenalty(box, viewport) +
           keepoutPenalty +
+          leaderExtensionPenalty +
           distancePenalty;
         if (score < bestScore) {
           bestScore = score;
           bestOffset = offset.clone();
           bestBox = box;
           if (
-            overlapScore <= 0 &&
+            labelConflictPenalty <= 0 &&
             screenOutsidePenalty(box, viewport) <= 0 &&
-            keepoutPenalty <= 0
+            keepoutPenalty <= 0 &&
+            leaderExtensionPenalty <= 0
           ) break;
         }
       }
@@ -3688,6 +5211,9 @@ export function useMbdPipeAnnotationThree(
       }
       if (bestBox) placed.push(bestBox);
     }
+    applyLayoutResultScreenLod(camera, viewport);
+    applyVisibility();
+    drawingLeaderExtensionsNeedRebuild = true;
   }
 
   function renderLaidOutCutTubis(items: MbdLaidOutLinearDimDto[]): void {
@@ -3708,6 +5234,9 @@ export function useMbdPipeAnnotationThree(
         item.source_sub_kind ?? 'cut_tubi';
       (dim.userData as any).mbdBackendDerivedGeometry =
         isBackendDerivedLinearItem(item);
+      (dim.userData as any).mbdLayoutLabelRole =
+        item.layout_hint?.label_role ?? item.source_sub_kind ?? 'cut_tubi';
+      (dim.userData as any).mbdDrawingLinearPlacement = 'inline-tube-length';
       if (isBackendDerivedLinearItem(item)) {
         dim.userData.draggable = false;
       }
@@ -3798,6 +5327,9 @@ export function useMbdPipeAnnotationThree(
     for (const tagItem of tags) {
       const position = toVector3(tagItem.position);
       const tagKind = classifyLaidOutTag(tagItem);
+      if (shouldSuppressDrawingTubiLengthTag(tagItem, tagKind)) {
+        continue;
+      }
       if (!position) {
         recordSuppressedAnnotation(
           suppressedWrongLineCount,
@@ -3816,7 +5348,8 @@ export function useMbdPipeAnnotationThree(
           labelOffsetWorld: resolveDrawingLaidOutLabelOffset(tagItem.label_offset_world),
           labelRenderStyle,
           labelBox: tagKind === 'material' && isMbdDrawingPresetRuntime(),
-          labelBoxPaddingPx: 7,
+          labelBoxPaddingPx: 4,
+          labelBoxMinSidePx: 24,
         },
         mbdOnTopAnnotationOptions,
       );
@@ -3951,6 +5484,37 @@ export function useMbdPipeAnnotationThree(
     }
     cutTubiAnnotations.clear();
 
+    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
+      const rawLayoutCutTubis = data.layout_result.cut_tubis ?? [];
+      const visibleLayoutCutTubisForDedupe = showCutTubis.value ? rawLayoutCutTubis : [];
+      const layoutLinearDims = filterRedundantDrawingLinearDims(
+        data.layout_result.linear_dims ?? [],
+        visibleLayoutCutTubisForDedupe,
+      );
+      const layoutCutTubis = filterRedundantDrawingCutTubis(
+        rawLayoutCutTubis,
+        layoutLinearDims,
+      );
+      renderLaidOutLinearDims(layoutLinearDims);
+      if (layoutCutTubis.length) {
+        renderLaidOutCutTubis(layoutCutTubis);
+      }
+      applyLaidOutDimLabelDeclutter();
+      applyLayoutScreenLabelDeclutter();
+    } else {
+      const pipeOffsetDirs = data.segments?.length
+        ? computePipeAlignedOffsetDirs(data.segments)
+        : [];
+      if (data.dims?.length) renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
+      if (showCutTubis.value && data.cut_tubis?.length) {
+        renderCutTubis(data.cut_tubis, data.segments ?? [], pipeOffsetDirs);
+      }
+      applyPortDimLabelDeclutter();
+      applyChainOffsetUnification();
+      applyCutTubiLabelDeclutter();
+      applyCutTubiLabelDeclutter(true);
+    }
+
     applyTagLabelDeclutter();
 
     const viewer = dtxViewerRef.value;
@@ -3968,6 +5532,14 @@ export function useMbdPipeAnnotationThree(
       asRaw(annotation).dispose();
     }
     bendAnnotations.clear();
+
+    if (shouldUseLayoutFirstResult(mbdViewMode.value, data)) {
+      if (data.layout_result.bends?.length) {
+        renderLaidOutBends(data.layout_result.bends);
+      }
+    } else if (data.bends?.length) {
+      renderBends(data.bends, data.segments ?? []);
+    }
 
     const viewer = dtxViewerRef.value;
     if (viewer) applyBackgroundColor(viewer);
@@ -5010,36 +6582,43 @@ export function useMbdPipeAnnotationThree(
     direction: Vector3,
     radius: number,
     suffix: string,
-  ): LineSegments {
+  ): Mesh {
     const up = Math.abs(direction.z) > 0.92
       ? new Vector3(1, 0, 0)
       : new Vector3(0, 0, 1);
     const side = up.clone().cross(direction).normalize();
     const normal = direction.clone().cross(side).normalize();
-    const steps = 48;
-    const values: number[] = [];
+    const steps = drawingPresetRuntime ? 72 : 48;
+    const points: Vector3[] = [];
     for (let index = 0; index < steps; index += 1) {
       const a = (index / steps) * Math.PI * 2;
-      const b = ((index + 1) / steps) * Math.PI * 2;
-      const pa = center
-        .clone()
-        .addScaledVector(side, Math.cos(a) * radius)
-        .addScaledVector(normal, Math.sin(a) * radius);
-      const pb = center
-        .clone()
-        .addScaledVector(side, Math.cos(b) * radius)
-        .addScaledVector(normal, Math.sin(b) * radius);
-      values.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z);
+      points.push(
+        center
+          .clone()
+          .addScaledVector(side, Math.cos(a) * radius)
+          .addScaledVector(normal, Math.sin(a) * radius),
+      );
     }
-    const geometry = new BufferGeometry();
-    geometry.setAttribute(
-      'position',
-      new Float32BufferAttribute(new Float32Array(values), 3),
+    const ringThickness = drawingPresetRuntime
+      ? clampNumber(
+        radius * MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.ringTubeRadiusRatio,
+        MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.ringTubeRadiusMin,
+        MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.ringTubeRadiusMax,
+        MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.ringTubeRadiusFallback,
+      )
+      : clampNumber(radius * 0.04, 1.2, 4.4, 2.0);
+    const geometry = new TubeGeometry(
+      new CatmullRomCurve3(points, true, 'catmullrom', 0.5),
+      steps,
+      ringThickness,
+      drawingPresetRuntime ? 8 : 6,
+      true,
     );
-    const ring = markRaw(new LineSegments(geometry, pipeEmphasisRingMaterial));
+    const ring = markRaw(new Mesh(geometry, pipeEmphasisRingMaterial));
     ring.name = `mbd-pipe-emphasis-ring:${segmentId}:${suffix}`;
     ring.renderOrder = 884;
     ring.visible = false;
+    ring.frustumCulled = false;
     (ring.userData as any).mbdAuxKind = 'pipe-visual-ring';
     (ring.userData as any).mbdSegmentId = segmentId;
     return ring;
@@ -5070,7 +6649,12 @@ export function useMbdPipeAnnotationThree(
     }
     const curve = new CatmullRomCurve3(points, true, 'catmullrom', 0.5);
     const bandThickness = drawingPresetRuntime
-      ? clampNumber(radius * 0.07, 1.45, 6.4, 2.2)
+      ? clampNumber(
+        radius * MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bandThicknessRatio,
+        MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bandThicknessMin,
+        MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bandThicknessMax,
+        MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.bandThicknessFallback,
+      )
       : clampNumber(radius * 0.085, 1.8, 8.0, 2.6);
     const geometry = new TubeGeometry(curve, 64, bandThickness, 8, true);
     const band = markRaw(new Mesh(geometry, pipeEmphasisBandMaterial));
@@ -5098,7 +6682,7 @@ export function useMbdPipeAnnotationThree(
       new CatmullRomCurve3([railStart, railEnd]),
       Math.max(8, Math.min(36, Math.floor(length / 24))),
       radius,
-      6,
+      drawingPresetRuntime ? 8 : 6,
       false,
     );
     const rail = markRaw(new Mesh(geometry, pipeEmphasisRailMaterial));
@@ -5111,6 +6695,321 @@ export function useMbdPipeAnnotationThree(
     return rail;
   }
 
+  function createPipeVisualOutline(
+    segmentId: string,
+    start: Vector3,
+    end: Vector3,
+    offset: Vector3,
+    radius: number,
+    suffix: string,
+  ): Mesh {
+    const outlineStart = start.clone().add(offset);
+    const outlineEnd = end.clone().add(offset);
+    const length = outlineStart.distanceTo(outlineEnd);
+    const geometry = new TubeGeometry(
+      new CatmullRomCurve3([outlineStart, outlineEnd]),
+      Math.max(8, Math.min(40, Math.floor(length / 22))),
+      radius,
+      drawingPresetRuntime ? 10 : 7,
+      false,
+    );
+    const outline = markRaw(new Mesh(geometry, pipeEmphasisOutlineMaterial));
+    outline.name = `mbd-pipe-emphasis-outline:${segmentId}:${suffix}`;
+    outline.renderOrder = 888;
+    outline.visible = false;
+    outline.frustumCulled = false;
+    (outline.userData as any).mbdAuxKind = 'pipe-visual-outline';
+    (outline.userData as any).mbdSegmentId = segmentId;
+    return outline;
+  }
+
+  function closestPointOnSegment(
+    point: Vector3,
+    start: Vector3,
+    end: Vector3,
+  ): { point: Vector3; t: number; distance: number } {
+    const span = end.clone().sub(start);
+    const spanLengthSq = span.lengthSq();
+    if (spanLengthSq <= 1e-9) {
+      return { point: start.clone(), t: 0, distance: point.distanceTo(start) };
+    }
+    const rawT = point.clone().sub(start).dot(span) / spanLengthSq;
+    const t = clampNumber(rawT, 0, 1, 0);
+    const closest = start.clone().addScaledVector(span, t);
+    return { point: closest, t, distance: point.distanceTo(closest) };
+  }
+
+  function resolveFittingVisualRadius(
+    fitting: MbdFittingDto,
+    segments: MbdPipeSegmentDto[],
+  ): number {
+    const anchor = toVector3(fitting.anchor_point) ??
+      toVector3(fitting.layout_hint?.anchor_point ?? null);
+    const explicitRadius = Number(fitting.radius ?? NaN);
+    if (!anchor && Number.isFinite(explicitRadius) && explicitRadius > 0) {
+      return clampNumber(explicitRadius, 18, 100, 42);
+    }
+    if (!anchor) return 42;
+
+    let best:
+      | {
+        segment: MbdPipeSegmentDto;
+        flow: NonNullable<ReturnType<typeof resolveFlowSegmentGeometry>>;
+        distance: number;
+      }
+      | null = null;
+    for (const segment of segments) {
+      const flow = resolveFlowSegmentGeometry(segment);
+      if (!flow) continue;
+      const closest = closestPointOnSegment(anchor, flow.start, flow.end);
+      if (!best || closest.distance < best.distance) {
+        best = { segment, flow, distance: closest.distance };
+      }
+    }
+    if (best) {
+      return resolvePipeVisualRadius(best.segment, best.flow.length);
+    }
+    return Number.isFinite(explicitRadius) && explicitRadius > 0
+      ? clampNumber(explicitRadius, 18, 100, 42)
+      : 42;
+  }
+
+  function pushDistinctDirection(directions: Vector3[], direction: Vector3): void {
+    if (direction.lengthSq() <= 1e-9) return;
+    const normalized = direction.clone().normalize();
+    if (directions.some((item) => item.dot(normalized) > 0.9)) return;
+    directions.push(normalized);
+  }
+
+  function resolveFittingVisualDirections(
+    fitting: MbdFittingDto,
+    segments: MbdPipeSegmentDto[],
+    anchor: Vector3,
+    radius: number,
+  ): Vector3[] {
+    const directions: Vector3[] = [];
+    const faceCenters = [
+      toVector3(fitting.face_center_1 ?? null),
+      toVector3(fitting.face_center_2 ?? null),
+    ].filter((point): point is Vector3 => !!point);
+    for (const faceCenter of faceCenters) {
+      pushDistinctDirection(directions, faceCenter.clone().sub(anchor));
+    }
+    if (directions.length >= 2) return directions.slice(0, 4);
+
+    const candidates: {
+      direction: Vector3;
+      distance: number;
+      fromCenterline: boolean;
+    }[] = [];
+    for (const segment of segments) {
+      const flow = resolveFlowSegmentGeometry(segment);
+      if (!flow) continue;
+      const closest = closestPointOnSegment(anchor, flow.start, flow.end);
+      const maxDistance = Math.max(260, radius * 5.2);
+      if (closest.distance > maxDistance) continue;
+      const towardClosest = closest.point.clone().sub(anchor);
+      if (towardClosest.length() > radius * 0.35) {
+        candidates.push({
+          direction: towardClosest,
+          distance: closest.distance,
+          fromCenterline: false,
+        });
+      } else {
+        candidates.push({
+          direction: flow.direction.clone(),
+          distance: closest.distance,
+          fromCenterline: true,
+        });
+        candidates.push({
+          direction: flow.direction.clone().multiplyScalar(-1),
+          distance: closest.distance + radius * 0.2,
+          fromCenterline: true,
+        });
+      }
+    }
+    candidates
+      .sort((a, b) =>
+        a.distance - b.distance ||
+        Number(a.fromCenterline) - Number(b.fromCenterline),
+      )
+      .forEach((candidate) => pushDistinctDirection(directions, candidate.direction));
+
+    if (directions.length <= 0) {
+      pushDistinctDirection(directions, new Vector3(1, 0, 0));
+      pushDistinctDirection(directions, new Vector3(0, 1, 0));
+    } else if (directions.length === 1) {
+      const up = Math.abs(directions[0]!.z) > 0.92
+        ? new Vector3(1, 0, 0)
+        : new Vector3(0, 0, 1);
+      pushDistinctDirection(directions, up.clone().cross(directions[0]!).normalize());
+    }
+    return directions.slice(0, 4);
+  }
+
+  function createFittingVisualRing(
+    fittingId: string,
+    center: Vector3,
+    direction: Vector3,
+    radius: number,
+    tubeRadius: number,
+    auxKind: string,
+    suffix: string,
+    material: MeshBasicMaterial,
+    renderOrder: number,
+  ): Mesh {
+    const safeDirection = direction.lengthSq() > 1e-9
+      ? direction.clone().normalize()
+      : new Vector3(0, 0, 1);
+    const up = Math.abs(safeDirection.z) > 0.92
+      ? new Vector3(1, 0, 0)
+      : new Vector3(0, 0, 1);
+    const side = up.clone().cross(safeDirection).normalize();
+    const normal = safeDirection.clone().cross(side).normalize();
+    const steps = drawingPresetRuntime ? 72 : 48;
+    const points: Vector3[] = [];
+    for (let index = 0; index < steps; index += 1) {
+      const a = (index / steps) * Math.PI * 2;
+      points.push(
+        center
+          .clone()
+          .addScaledVector(side, Math.cos(a) * radius)
+          .addScaledVector(normal, Math.sin(a) * radius),
+      );
+    }
+    const geometry = new TubeGeometry(
+      new CatmullRomCurve3(points, true, 'catmullrom', 0.5),
+      steps,
+      tubeRadius,
+      drawingPresetRuntime ? 9 : 6,
+      true,
+    );
+    const ring = markRaw(new Mesh(geometry, material));
+    ring.name = `mbd-fitting-emphasis-${suffix}:${fittingId}`;
+    ring.renderOrder = renderOrder;
+    ring.visible = false;
+    ring.frustumCulled = false;
+    (ring.userData as any).mbdAuxKind = auxKind;
+    (ring.userData as any).mbdFittingId = fittingId;
+    return ring;
+  }
+
+  function createFittingVisualArm(
+    fittingId: string,
+    anchor: Vector3,
+    direction: Vector3,
+    radius: number,
+    suffix: string,
+  ): Mesh {
+    const safeDirection = direction.lengthSq() > 1e-9
+      ? direction.clone().normalize()
+      : new Vector3(1, 0, 0);
+    const start = anchor.clone().addScaledVector(safeDirection, radius * 0.24);
+    const end = anchor.clone().addScaledVector(
+      safeDirection,
+      radius * MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.armLengthScale,
+    );
+    const length = start.distanceTo(end);
+    const tubeRadius = drawingPresetRuntime
+      ? clampNumber(
+        radius * MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.armTubeRadiusRatio,
+        MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.armTubeRadiusMin,
+        MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.armTubeRadiusMax,
+        MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.armTubeRadiusFallback,
+      )
+      : clampNumber(radius * 0.058, 1.8, 5.6, 2.6);
+    const geometry = new TubeGeometry(
+      new CatmullRomCurve3([start, end]),
+      Math.max(8, Math.min(28, Math.floor(length / 14))),
+      tubeRadius,
+      drawingPresetRuntime ? 8 : 6,
+      false,
+    );
+    const arm = markRaw(new Mesh(geometry, fittingEmphasisArmMaterial));
+    arm.name = `mbd-fitting-emphasis-arm:${fittingId}:${suffix}`;
+    arm.renderOrder = 891;
+    arm.visible = false;
+    arm.frustumCulled = false;
+    (arm.userData as any).mbdAuxKind = 'fitting-visual-arm';
+    (arm.userData as any).mbdFittingId = fittingId;
+    return arm;
+  }
+
+  function renderFittingVisualEmphasis(
+    fittings: MbdFittingDto[],
+    segments: MbdPipeSegmentDto[],
+  ): void {
+    for (const fitting of fittings) {
+      const anchor = toVector3(fitting.anchor_point) ??
+        toVector3(fitting.layout_hint?.anchor_point ?? null);
+      if (!anchor) continue;
+      const radius = resolveFittingVisualRadius(fitting, segments);
+      const directions = resolveFittingVisualDirections(fitting, segments, anchor, radius);
+      const coreTubeRadius = drawingPresetRuntime
+        ? clampNumber(
+          radius * MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.coreTubeRadiusRatio,
+          MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.coreTubeRadiusMin,
+          MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.coreTubeRadiusMax,
+          MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.coreTubeRadiusFallback,
+        )
+        : clampNumber(radius * 0.06, 1.8, 5.8, 2.8);
+      const portTubeRadius = drawingPresetRuntime
+        ? clampNumber(
+          radius * MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portTubeRadiusRatio,
+          MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portTubeRadiusMin,
+          MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portTubeRadiusMax,
+          MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portTubeRadiusFallback,
+        )
+        : clampNumber(radius * 0.052, 1.6, 5.4, 2.5);
+
+      const coreDirections = directions.length >= 2
+        ? directions.slice(0, 2)
+        : [new Vector3(1, 0, 0), new Vector3(0, 1, 0)];
+      const coreRings = coreDirections.map((direction, index) =>
+        createFittingVisualRing(
+          fitting.id,
+          anchor,
+          direction,
+          radius * MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.coreRadiusScale,
+          coreTubeRadius,
+          'fitting-visual-core',
+          `core-${index}`,
+          fittingEmphasisCoreMaterial,
+          890,
+        ),
+      );
+      const portRings = directions.map((direction, index) =>
+        createFittingVisualRing(
+          fitting.id,
+          anchor.clone().addScaledVector(
+            direction,
+            radius * MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portOffsetScale,
+          ),
+          direction,
+          radius * MBD_DRAWING_STYLE_PROFILE.fittingEmphasis.portRadiusScale,
+          portTubeRadius,
+          'fitting-visual-port',
+          `port-${index}`,
+          fittingEmphasisPortMaterial,
+          892,
+        ),
+      );
+      const arms = directions.map((direction, index) =>
+        createFittingVisualArm(fitting.id, anchor, direction, radius, String(index)),
+      );
+
+      for (const coreRing of coreRings) group.add(coreRing);
+      for (const portRing of portRings) group.add(portRing);
+      for (const arm of arms) group.add(arm);
+      fittingVisualEmphasisObjects.set(fitting.id, {
+        fittingId: fitting.id,
+        coreRings,
+        portRings,
+        arms,
+      });
+    }
+  }
+
   function renderPipeVisualEmphasis(segments: MbdPipeSegmentDto[]): void {
     for (const segment of segments) {
       const flow = resolveFlowSegmentGeometry(segment);
@@ -5121,7 +7020,7 @@ export function useMbdPipeAnnotationThree(
         new CatmullRomCurve3([flow.start.clone(), flow.end.clone()]),
         Math.max(8, Math.min(40, Math.floor(flow.length / 18))),
         radius,
-        24,
+        drawingPresetRuntime ? 32 : 24,
         false,
       );
       const body = markRaw(new Mesh(bodyGeometry, pipeEmphasisBodyMaterial));
@@ -5150,90 +7049,108 @@ export function useMbdPipeAnnotationThree(
       (spine.userData as any).mbdAuxKind = 'pipe-visual-spine';
       (spine.userData as any).mbdSegmentId = segment.id;
 
-      const rings = [
-        createPipeVisualRing(segment.id, flow.start, flow.direction, radius * 1.02, 'start'),
+      const ringStations = drawingPresetRuntime
+        ? [
+          { t: 0, radiusScale: 1.025, suffix: 'start' },
+          { t: 1, radiusScale: 1.025, suffix: 'end' },
+        ]
+        : [
+          { t: 0, radiusScale: 1.02, suffix: 'start' },
+          { t: 0.34, radiusScale: 1.01, suffix: 'band-a' },
+          { t: 0.68, radiusScale: 1.01, suffix: 'band-b' },
+          { t: 1, radiusScale: 1.02, suffix: 'end' },
+        ];
+      const bandStations = drawingPresetRuntime
+        ? [
+          { t: 0, radiusScale: 1.03, suffix: 'start' },
+          { t: 1, radiusScale: 1.03, suffix: 'end' },
+        ]
+        : [
+          { t: 0, radiusScale: 1.025, suffix: 'start' },
+          { t: 0.34, radiusScale: 1.015, suffix: 'band-a' },
+          { t: 0.68, radiusScale: 1.015, suffix: 'band-b' },
+          { t: 1, radiusScale: 1.025, suffix: 'end' },
+        ];
+      const rings = ringStations.map((station) =>
         createPipeVisualRing(
           segment.id,
-          flow.start.clone().lerp(flow.end, 0.34),
+          flow.start.clone().lerp(flow.end, station.t),
           flow.direction,
-          radius * 1.01,
-          'band-a',
+          radius * station.radiusScale,
+          station.suffix,
         ),
-        createPipeVisualRing(
-          segment.id,
-          flow.start.clone().lerp(flow.end, 0.68),
-          flow.direction,
-          radius * 1.01,
-          'band-b',
-        ),
-        createPipeVisualRing(segment.id, flow.end, flow.direction, radius * 1.02, 'end'),
-      ];
-      const bands = [
-        createPipeVisualBand(segment.id, flow.start, flow.direction, radius * 1.025, 'start'),
+      );
+      const bands = bandStations.map((station) =>
         createPipeVisualBand(
           segment.id,
-          flow.start.clone().lerp(flow.end, 0.34),
+          flow.start.clone().lerp(flow.end, station.t),
           flow.direction,
-          radius * 1.015,
-          'band-a',
+          radius * station.radiusScale,
+          station.suffix,
         ),
-        createPipeVisualBand(
-          segment.id,
-          flow.start.clone().lerp(flow.end, 0.68),
-          flow.direction,
-          radius * 1.015,
-          'band-b',
-        ),
-        createPipeVisualBand(segment.id, flow.end, flow.direction, radius * 1.025, 'end'),
-      ];
+      );
       const frameUp = Math.abs(flow.direction.z) > 0.92
         ? new Vector3(1, 0, 0)
         : new Vector3(0, 0, 1);
       const frameSide = frameUp.clone().cross(flow.direction).normalize();
       const frameNormal = flow.direction.clone().cross(frameSide).normalize();
       const railRadius = drawingPresetRuntime
-        ? clampNumber(radius * 0.052, 1.6, 5.4, 2.4)
+        ? clampNumber(
+          radius * MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.railRadiusRatio,
+          MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.railRadiusMin,
+          MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.railRadiusMax,
+          MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.railRadiusFallback,
+        )
         : clampNumber(radius * 0.064, 2.0, 6.8, 3.0);
       const railOffset = radius * 1.08;
-      const rails = [
-        createPipeVisualRail(
-          segment.id,
-          flow.start,
-          flow.end,
-          frameSide.clone().multiplyScalar(railOffset),
-          railRadius,
-          'side-pos',
-        ),
-        createPipeVisualRail(
-          segment.id,
-          flow.start,
-          flow.end,
-          frameSide.clone().multiplyScalar(-railOffset),
-          railRadius,
-          'side-neg',
-        ),
-        createPipeVisualRail(
-          segment.id,
-          flow.start,
-          flow.end,
-          frameNormal.clone().multiplyScalar(railOffset),
-          railRadius,
-          'normal-pos',
-        ),
-        createPipeVisualRail(
-          segment.id,
-          flow.start,
-          flow.end,
-          frameNormal.clone().multiplyScalar(-railOffset),
-          railRadius,
-          'normal-neg',
-        ),
+      const railDefs = [
+        { offset: frameSide.clone().multiplyScalar(railOffset), suffix: 'side-pos' },
+        { offset: frameSide.clone().multiplyScalar(-railOffset), suffix: 'side-neg' },
+        { offset: frameNormal.clone().multiplyScalar(railOffset), suffix: 'normal-pos' },
+        { offset: frameNormal.clone().multiplyScalar(-railOffset), suffix: 'normal-neg' },
       ];
+      const rails = railDefs.map((rail) =>
+        createPipeVisualRail(
+          segment.id,
+          flow.start,
+          flow.end,
+          rail.offset,
+          railRadius,
+          rail.suffix,
+        ),
+      );
+      const outlineRadius = drawingPresetRuntime
+        ? clampNumber(
+          radius * MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.outlineRadiusRatio,
+          MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.outlineRadiusMin,
+          MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.outlineRadiusMax,
+          MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.outlineRadiusFallback,
+        )
+        : clampNumber(radius * 0.078, 2.6, 7.6, 3.6);
+      const outlineOffset =
+        radius * MBD_DRAWING_STYLE_PROFILE.pipeEmphasis.outlineOffsetScale;
+      const outlineDefs = [
+        { offset: frameSide.clone().multiplyScalar(outlineOffset), suffix: 'side-pos' },
+        { offset: frameSide.clone().multiplyScalar(-outlineOffset), suffix: 'side-neg' },
+        { offset: frameNormal.clone().multiplyScalar(outlineOffset), suffix: 'normal-pos' },
+        { offset: frameNormal.clone().multiplyScalar(-outlineOffset), suffix: 'normal-neg' },
+      ];
+      const outlines = outlineDefs.map((outline) =>
+        createPipeVisualOutline(
+          segment.id,
+          flow.start,
+          flow.end,
+          outline.offset,
+          outlineRadius,
+          outline.suffix,
+        ),
+      );
       group.add(body);
       group.add(spine);
       for (const ring of rings) group.add(ring);
       for (const band of bands) group.add(band);
       for (const rail of rails) group.add(rail);
+      for (const outline of outlines) group.add(outline);
       pipeVisualEmphasisObjects.set(segment.id, {
         segmentId: segment.id,
         body,
@@ -5241,6 +7158,7 @@ export function useMbdPipeAnnotationThree(
         rings,
         bands,
         rails,
+        outlines,
       });
     }
   }
@@ -5274,7 +7192,10 @@ export function useMbdPipeAnnotationThree(
     return total;
   }
 
-  function resolveDrawingLeaderRenderPoints(points: Vector3[]): Vector3[] {
+  function resolveDrawingLeaderRenderPoints(
+    points: Vector3[],
+    tagKind: MbdTagKind = 'other',
+  ): Vector3[] {
     if (!isMbdDrawingPresetRuntime() || points.length < 2) {
       return points.map((point) => point.clone());
     }
@@ -5283,31 +7204,354 @@ export function useMbdPipeAnnotationThree(
       return points.map((point) => point.clone());
     }
 
-    const keepLength = Math.min(
-      totalLength,
-      clampNumber(totalLength * 0.32, 80, 180, 120),
-    );
-    const labelEnd = points[points.length - 1]!.clone();
-    const shortened: Vector3[] = [labelEnd];
+    const keepLength = tagKind === 'material'
+      ? Math.min(
+        totalLength * 0.58,
+        clampNumber(totalLength * 0.32, 42, 118, 68),
+      )
+      : Math.min(
+        totalLength,
+        clampNumber(totalLength * 0.38, 90, 205, 130),
+      );
+    const anchorStart = points[0]!.clone();
+    const shortened: Vector3[] = [anchorStart];
     let remaining = keepLength;
 
-    for (let index = points.length - 1; index >= 1; index -= 1) {
+    for (let index = 0; index < points.length - 1; index += 1) {
       const current = points[index]!;
-      const previous = points[index - 1]!;
-      const segmentLength = current.distanceTo(previous);
+      const next = points[index + 1]!;
+      const segmentLength = current.distanceTo(next);
       if (!Number.isFinite(segmentLength) || segmentLength <= 1e-6) continue;
 
       if (remaining >= segmentLength) {
-        shortened.push(previous.clone());
+        shortened.push(next.clone());
         remaining -= segmentLength;
         continue;
       }
 
-      shortened.push(current.clone().lerp(previous, remaining / segmentLength));
+      shortened.push(current.clone().lerp(next, remaining / segmentLength));
       break;
     }
 
-    return shortened.reverse();
+    return shortened;
+  }
+
+  function collectLocalPolylineScreenBox(
+    points: Vector3[],
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): MbdPipeDebugScreenBox | null {
+    let left = Infinity;
+    let right = -Infinity;
+    let top = Infinity;
+    let bottom = -Infinity;
+    let projectedCount = 0;
+    for (const point of points) {
+      const world = group.localToWorld(point.clone());
+      const screen = projectLabelToScreen(world, camera, viewport);
+      if (!screen) continue;
+      left = Math.min(left, screen.x);
+      right = Math.max(right, screen.x);
+      top = Math.min(top, screen.y);
+      bottom = Math.max(bottom, screen.y);
+      projectedCount += 1;
+    }
+    if (
+      projectedCount <= 0 ||
+      !Number.isFinite(left) ||
+      !Number.isFinite(right) ||
+      !Number.isFinite(top) ||
+      !Number.isFinite(bottom)
+    ) {
+      return null;
+    }
+    return {
+      x: (left + right) * 0.5,
+      y: (top + bottom) * 0.5,
+      width: right - left,
+      height: bottom - top,
+      left,
+      right,
+      top,
+      bottom,
+    };
+  }
+
+  function resolveDrawingLeaderClippedFromTagLabelPoints(
+    points: Vector3[],
+    tagItem: MbdLaidOutTagDto | null,
+    tagKind: MbdTagKind,
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): Vector3[] | null {
+    if (
+      !isMbdDrawingPresetRuntime() ||
+      points.length < 2
+    ) {
+      return null;
+    }
+    const screenPoints = points
+      .map((point) => {
+        const world = group.localToWorld(point.clone());
+        const screen = projectLabelToScreen(world, camera, viewport);
+        return screen ? { ...screen, local: point } : null;
+      });
+    if (screenPoints.some((point) => !point)) return null;
+
+    const buildLabelInfo = (tag: any): {
+      labelWorld: Vector3;
+      labelScreen: { x: number; y: number };
+      labelBox: MbdPipeDebugScreenBox;
+    } | null => {
+      const rawTag = asRaw(tag);
+      if (!rawTag || !rawTag.visible) return null;
+      rawTag.update(camera);
+      const params = rawTag.getParams();
+      const label = String(params.label ?? '').trim();
+      const subtitle = String(params.subtitle ?? '').trim();
+      const text = subtitle ? `${label}\n${subtitle}` : label;
+      if (!text.trim()) return null;
+      const labelWorld = getAnnotationLabelWorldPos(rawTag);
+      const labelScreen = projectLabelToScreen(labelWorld, camera, viewport);
+      if (!labelScreen) return null;
+      return {
+        labelWorld,
+        labelScreen,
+        labelBox: expandScreenBox(labelScreenBox(labelScreen, text), 2),
+      };
+    };
+    const leaderIntersectsLabel = (box: MbdPipeDebugScreenBox): boolean => {
+      for (let index = 0; index < screenPoints.length - 1; index += 1) {
+        const start = screenPoints[index]!;
+        const end = screenPoints[index + 1]!;
+        if (screenSegmentIntersectsBox(start, end, box, 0)) return true;
+      }
+      return false;
+    };
+    const canUseLinkedTag =
+      tagKind === 'position' ||
+      tagKind === 'branch' ||
+      tagKind === 'branch_label';
+    let labelInfo = tagItem && canUseLinkedTag
+      ? buildLabelInfo(tagAnnotations.get(tagItem.id))
+      : null;
+    if (!labelInfo) {
+      for (const [id, tag] of tagAnnotations.entries()) {
+        if (!id.startsWith('tag:position:') && !id.startsWith('tag:branch:')) continue;
+        const candidate = buildLabelInfo(tag);
+        if (!candidate || !leaderIntersectsLabel(candidate.labelBox)) continue;
+        labelInfo = candidate;
+        break;
+      }
+    }
+    if (!labelInfo) return null;
+    const { labelBox } = labelInfo;
+    const originalLineBox = collectLocalPolylineScreenBox(points, camera, viewport);
+    const originalLineSpan = originalLineBox
+      ? Math.hypot(originalLineBox.width, originalLineBox.height)
+      : 0;
+    const validateClippedPoints = (candidate: Vector3[]): Vector3[] | null => {
+      if (candidate.length < 2) return null;
+      const box = collectLocalPolylineScreenBox(candidate, camera, viewport);
+      if (!box) return null;
+      const span = Math.hypot(box.width, box.height);
+      if (!Number.isFinite(span)) return null;
+      const maxSpan = Math.max(originalLineSpan + 120, originalLineSpan * 1.35, 96);
+      if (span > maxSpan) return null;
+      const outsideHard =
+        box.right < -96 ||
+        box.left > viewport.width + 96 ||
+        box.bottom < -96 ||
+        box.top > viewport.height + 96;
+      return outsideHard ? null : candidate;
+    };
+
+    const leaderDepthRefWorld = group.localToWorld(points[0]!.clone());
+    const toLocalAtLabelDepth = (screen: { x: number; y: number }): Vector3 | null => {
+      const world = screenPointToWorldAtDepth(leaderDepthRefWorld, screen, camera, viewport);
+      return world ? group.worldToLocal(world) : null;
+    };
+    const pointInsideLabelBox = (point: { x: number; y: number }): boolean =>
+      point.x >= labelBox.left &&
+      point.x <= labelBox.right &&
+      point.y >= labelBox.top &&
+      point.y <= labelBox.bottom;
+
+    for (let index = 0; index < screenPoints.length - 1; index += 1) {
+      const start = screenPoints[index]!;
+      const end = screenPoints[index + 1]!;
+      if (!screenSegmentIntersectsBox(start, end, labelBox, 0)) continue;
+      const startInside = pointInsideLabelBox(start);
+      const endInside = pointInsideLabelBox(end);
+      if (startInside !== endInside) {
+        const outside = startInside ? end : start;
+        const outsideDx = outside.x - labelBox.x;
+        const outsideDy = outside.y - labelBox.y;
+        const outsideLen = Math.hypot(outsideDx, outsideDy);
+        const farOutside = outsideLen > 1e-6
+          ? {
+            x: labelBox.x + (outsideDx / outsideLen) * 1000,
+            y: labelBox.y + (outsideDy / outsideLen) * 1000,
+          }
+          : outside;
+        const edge = screenRayBoxEdgePoint(labelBox, farOutside, 8);
+        const screenSegmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+        const edgeT = edge && screenSegmentLength > 1e-6
+          ? clampNumber(
+            Math.hypot(edge.x - start.x, edge.y - start.y) / screenSegmentLength,
+            0,
+            1,
+            0,
+          )
+          : null;
+        const edgeLocal = edgeT == null
+          ? null
+          : points[index]!.clone().lerp(points[index + 1]!, edgeT);
+        if (!edgeLocal) return null;
+        if (startInside) {
+          return validateClippedPoints([
+            ...points.slice(0, index).map((point) => point.clone()),
+            edgeLocal,
+            ...points.slice(index + 1).map((point) => point.clone()),
+          ]);
+        }
+        return validateClippedPoints([
+          ...points.slice(0, index + 1).map((point) => point.clone()),
+          edgeLocal,
+          ...points.slice(index + 2).map((point) => point.clone()),
+        ]);
+      }
+      if (!startInside && !endInside) {
+        const keepStart = Math.hypot(start.x - labelBox.x, start.y - labelBox.y) >=
+          Math.hypot(end.x - labelBox.x, end.y - labelBox.y);
+        const outside = keepStart ? start : end;
+        const outsideDx = outside.x - labelBox.x;
+        const outsideDy = outside.y - labelBox.y;
+        const outsideLen = Math.hypot(outsideDx, outsideDy);
+        const farOutside = outsideLen > 1e-6
+          ? {
+            x: labelBox.x + (outsideDx / outsideLen) * 1000,
+            y: labelBox.y + (outsideDy / outsideLen) * 1000,
+          }
+          : outside;
+        const edge = screenRayBoxEdgePoint(labelBox, farOutside, 8);
+        const screenSegmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+        const edgeT = edge && screenSegmentLength > 1e-6
+          ? clampNumber(
+            Math.hypot(edge.x - start.x, edge.y - start.y) / screenSegmentLength,
+            0,
+            1,
+            0,
+          )
+          : null;
+        const edgeLocal = edgeT == null
+          ? null
+          : points[index]!.clone().lerp(points[index + 1]!, edgeT);
+        if (!edgeLocal) return null;
+        return validateClippedPoints(keepStart
+          ? [
+            ...points.slice(0, index + 1).map((point) => point.clone()),
+            edgeLocal,
+          ]
+          : [
+            edgeLocal,
+            ...points.slice(index + 1).map((point) => point.clone()),
+          ]);
+      }
+    }
+
+    const lineBox = collectLocalPolylineScreenBox(points, camera, viewport);
+    if (!lineBox) return null;
+    const lineSpan = Math.hypot(lineBox.width, lineBox.height);
+    if (!Number.isFinite(lineSpan) || lineSpan > 96) return null;
+    const lineArea = Math.max(1, lineBox.width * lineBox.height);
+    const overlapArea = screenBoxOverlapArea(lineBox, labelBox);
+    const covered = lineArea <= 1
+      ? (
+        lineBox.left >= labelBox.left &&
+        lineBox.right <= labelBox.right &&
+        lineBox.top >= labelBox.top &&
+        lineBox.bottom <= labelBox.bottom
+      )
+      : overlapArea / lineArea >= 0.82;
+    if (!covered) return null;
+
+    let dx = lineBox.x - labelBox.x;
+    let dy = lineBox.y - labelBox.y;
+    let len = Math.hypot(dx, dy);
+    if (!Number.isFinite(len) || len < 1e-3) {
+      dx = 0;
+      dy = -1;
+      len = 1;
+    }
+    const dir = { x: dx / len, y: dy / len };
+    const farTarget = {
+      x: labelBox.x + dir.x * 1000,
+      y: labelBox.y + dir.y * 1000,
+    };
+    const stubStart = screenRayBoxEdgePoint(labelBox, farTarget, 8);
+    if (!stubStart) return null;
+    const stubLength = clampNumber(lineSpan, 28, 52, 36);
+    const stubEnd = {
+      x: stubStart.x + dir.x * stubLength,
+      y: stubStart.y + dir.y * stubLength,
+    };
+    const localPoints = [stubStart, stubEnd]
+      .map(toLocalAtLabelDepth)
+      .filter((point): point is Vector3 => !!point)
+      .map((point) => point.clone());
+    return validateClippedPoints(localPoints);
+  }
+
+  function shouldSuppressDrawingLeaderInsidePriorityLabel(
+    points: Vector3[],
+    tagKind: MbdTagKind,
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): boolean {
+    if (!isMbdDrawingPresetRuntime() || points.length < 2) return false;
+    if (
+      tagKind !== 'position' &&
+      tagKind !== 'branch' &&
+      tagKind !== 'branch_label' &&
+      tagKind !== 'elevation'
+    ) {
+      return false;
+    }
+    const lineBox = collectLocalPolylineScreenBox(points, camera, viewport);
+    if (!lineBox) return false;
+    const lineSpan = Math.hypot(lineBox.width, lineBox.height);
+    if (!Number.isFinite(lineSpan) || lineSpan > 240) return false;
+    const lineArea = Math.max(1, lineBox.width * lineBox.height);
+    for (const [id, tag] of tagAnnotations.entries()) {
+      if (!id.startsWith('tag:position:') && !id.startsWith('tag:branch:')) continue;
+      const rawTag = asRaw(tag);
+      if (!rawTag.visible) continue;
+      rawTag.update(camera);
+      const params = rawTag.getParams();
+      const label = String(params.label ?? '').trim();
+      const subtitle = String(params.subtitle ?? '').trim();
+      const text = subtitle ? `${label}\n${subtitle}` : label;
+      if (!text.trim()) continue;
+      const labelWorld = getAnnotationLabelWorldPos(rawTag);
+      const labelScreen = projectLabelToScreen(labelWorld, camera, viewport);
+      if (!labelScreen) continue;
+      const labelBox = expandScreenBox(labelScreenBox(labelScreen, text), 2);
+      const overlapArea = screenBoxOverlapArea(lineBox, labelBox);
+      if (lineArea <= 1) {
+        if (
+          lineBox.left >= labelBox.left &&
+          lineBox.right <= labelBox.right &&
+          lineBox.top >= labelBox.top &&
+          lineBox.bottom <= labelBox.bottom
+        ) {
+          return true;
+        }
+      } else if (overlapArea / lineArea >= 0.82) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function createLeaderLineTube(
@@ -5337,13 +7581,479 @@ export function useMbdPipeAnnotationThree(
     return tube;
   }
 
-  function renderV2LeaderLines(leaders: MbdV2LeaderLinePrimitive[]): void {
-    for (const leader of leaders) {
+  function shouldRenderDrawingTagLeaderExtension(tagKind: MbdTagKind): boolean {
+    return (
+      tagKind === 'material' ||
+      tagKind === 'elbow' ||
+      tagKind === 'flange' ||
+      tagKind === 'branch' ||
+      tagKind === 'other'
+    );
+  }
+
+  function resolveLeaderLayoutTag(
+    leader: MbdV2LeaderLinePrimitive,
+    index: number,
+  ): MbdLaidOutTagDto | null {
+    const layoutTags = currentData.value?.layout_result?.tags ?? [];
+    if (layoutTags.length <= 0) return null;
+
+    const linkedTagId = String(leader.source_refno ?? '').trim();
+    if (linkedTagId.startsWith('tag:')) {
+      const linked = layoutTags.find((tag) => tag.id === linkedTagId);
+      if (linked) return linked;
+    }
+
+    const numericSuffix = /(?:^|-)leader-(\d+)$/i.exec(String(leader.id ?? ''));
+    if (numericSuffix) {
+      const tagIndex = Number(numericSuffix[1]) - 1;
+      const tag = layoutTags[tagIndex];
+      if (tag) return tag;
+    }
+
+    const byIndex = layoutTags[index];
+    return byIndex ?? null;
+  }
+
+  function resolveLeaderAnchorScreenPoint(
+    points: Vector3[],
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): { x: number; y: number; world: Vector3 } | null {
+    const anchor = points[0];
+    if (!anchor) return null;
+    const world = group.localToWorld(anchor.clone());
+    const screen = projectLabelToScreen(world, camera, viewport);
+    return screen ? { ...screen, world } : null;
+  }
+
+  function screenRayBoxEdgePoint(
+    box: MbdPipeDebugScreenBox,
+    target: { x: number; y: number },
+    paddingPx = 4,
+  ): { x: number; y: number } | null {
+    const dx = target.x - box.x;
+    const dy = target.y - box.y;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+    if (Math.hypot(dx, dy) < 1e-3) return null;
+
+    const halfW = Math.max(1, box.width * 0.5 + paddingPx);
+    const halfH = Math.max(1, box.height * 0.5 + paddingPx);
+    const ratio = Math.max(Math.abs(dx) / halfW, Math.abs(dy) / halfH);
+    if (!Number.isFinite(ratio) || ratio <= 1) return null;
+    const scale = 1 / ratio;
+    return {
+      x: box.x + dx * scale,
+      y: box.y + dy * scale,
+    };
+  }
+
+  function resolveNearestLeaderScreenPoint(
+    points: Vector3[],
+    labelScreen: { x: number; y: number },
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): { x: number; y: number; world: Vector3 } | null {
+    let best:
+      | { x: number; y: number; world: Vector3; distance: number }
+      | null = null;
+    for (const point of points) {
+      const world = group.localToWorld(point.clone());
+      const screen = projectLabelToScreen(world, camera, viewport);
+      if (!screen) continue;
+      const distance = Math.hypot(screen.x - labelScreen.x, screen.y - labelScreen.y);
+      if (!Number.isFinite(distance)) continue;
+      if (!best || distance < best.distance) {
+        best = { ...screen, world, distance };
+      }
+    }
+    return best ? { x: best.x, y: best.y, world: best.world } : null;
+  }
+
+  function collectObjectScreenBox(
+    object: any,
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): MbdPipeDebugScreenBox | null {
+    const geometry = object?.geometry;
+    const startAttr = geometry?.attributes?.instanceStart ?? null;
+    const endAttr = geometry?.attributes?.instanceEnd ?? null;
+    const positionAttr =
+      geometry?.getAttribute?.('position') ??
+      geometry?.attributes?.position ??
+      null;
+    const hasInstancedSegments = !!(
+      startAttr &&
+      endAttr &&
+      Number.isFinite(Number(startAttr.count)) &&
+      Number.isFinite(Number(endAttr.count)) &&
+      Number(startAttr.count) > 0 &&
+      Number(endAttr.count) > 0
+    );
+    if (
+      !hasInstancedSegments &&
+      (!positionAttr || !Number.isFinite(Number(positionAttr.count)) || Number(positionAttr.count) <= 0)
+    ) {
+      return null;
+    }
+    object.updateMatrixWorld?.(true);
+    let left = Infinity;
+    let right = -Infinity;
+    let top = Infinity;
+    let bottom = -Infinity;
+    let projectedCount = 0;
+
+    const projectPoint = (point: Vector3): void => {
+      object.localToWorld(point);
+      const screen = projectLabelToScreen(point, camera, viewport);
+      if (!screen) return;
+      projectedCount += 1;
+      left = Math.min(left, screen.x);
+      right = Math.max(right, screen.x);
+      top = Math.min(top, screen.y);
+      bottom = Math.max(bottom, screen.y);
+    };
+
+    if (hasInstancedSegments) {
+      const count = Math.min(Number(startAttr.count), Number(endAttr.count));
+      for (let index = 0; index < count; index += 1) {
+        projectPoint(new Vector3().fromBufferAttribute(startAttr, index));
+        projectPoint(new Vector3().fromBufferAttribute(endAttr, index));
+      }
+    } else {
+      for (let index = 0; index < Number(positionAttr.count); index += 1) {
+        projectPoint(new Vector3().fromBufferAttribute(positionAttr as any, index));
+      }
+    }
+
+    if (
+      projectedCount <= 0 ||
+      !Number.isFinite(left) ||
+      !Number.isFinite(right) ||
+      !Number.isFinite(top) ||
+      !Number.isFinite(bottom)
+    ) {
+      return null;
+    }
+    return {
+      x: Number(((left + right) * 0.5).toFixed(2)),
+      y: Number(((top + bottom) * 0.5).toFixed(2)),
+      width: Number((right - left).toFixed(2)),
+      height: Number((bottom - top).toFixed(2)),
+      left: Number(left.toFixed(2)),
+      right: Number(right.toFixed(2)),
+      top: Number(top.toFixed(2)),
+      bottom: Number(bottom.toFixed(2)),
+    };
+  }
+
+  function isDrawingModelOverlayObject(object: any): boolean {
+    if (String(object?.name ?? '').startsWith('sel_edge_')) return true;
+    let cursor = object?.parent;
+    while (cursor) {
+      if (String(cursor.name ?? '') === 'DTXSelectionOverlay') return true;
+      cursor = cursor.parent;
+    }
+    return false;
+  }
+
+  function collectDrawingModelScreenBoxes(
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): MbdPipeDebugScreenBox[] {
+    const viewer = dtxViewerRef.value;
+    const scene = viewer?.scene;
+    if (!scene) return [];
+
+    const boxes: MbdPipeDebugScreenBox[] = [];
+    scene.updateMatrixWorld?.(true);
+    scene.traverse((object: any) => {
+      if (boxes.length >= 500) return;
+      if (!isDrawingModelOverlayObject(object)) return;
+      if (!/Line/.test(String(object?.type ?? ''))) return;
+      const box = collectObjectScreenBox(object, camera, viewport);
+      if (!box) return;
+      if (box.width < 8 || box.height < 8) return;
+      if (box.width * box.height > viewport.width * viewport.height * 0.72) return;
+      boxes.push(box);
+    });
+    return boxes;
+  }
+
+  function expandScreenBox(
+    box: MbdPipeDebugScreenBox,
+    paddingPx: number,
+  ): MbdPipeDebugScreenBox {
+    const left = box.left - paddingPx;
+    const right = box.right + paddingPx;
+    const top = box.top - paddingPx;
+    const bottom = box.bottom + paddingPx;
+    return {
+      x: (left + right) * 0.5,
+      y: (top + bottom) * 0.5,
+      width: right - left,
+      height: bottom - top,
+      left,
+      right,
+      top,
+      bottom,
+    };
+  }
+
+  function collectPipeBodyScreenBoxes(
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): MbdPipeDebugScreenBox[] {
+    const boxes: MbdPipeDebugScreenBox[] = [];
+    group.updateMatrixWorld?.(true);
+    for (const emphasis of pipeVisualEmphasisObjects.values()) {
+      const box = collectObjectScreenBox(emphasis.body, camera, viewport);
+      if (box) boxes.push(box);
+    }
+    return boxes;
+  }
+
+  function resolveDrawingLeaderExtensionScreenPoints(
+    tagKind: MbdTagKind,
+    labelBox: MbdPipeDebugScreenBox,
+    startScreen: { x: number; y: number },
+    endScreen: { x: number; y: number },
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): { x: number; y: number }[] {
+    if (tagKind !== 'material') return [startScreen, endScreen];
+
+    const crossingBody = collectPipeBodyScreenBoxes(camera, viewport).find((box) =>
+      screenSegmentIntersectsBox(startScreen, endScreen, box, -8),
+    );
+    if (!crossingBody) return [startScreen, endScreen];
+
+    const dx = labelBox.x - crossingBody.x;
+    const dy = labelBox.y - crossingBody.y;
+    const useHorizontal = Math.abs(dx) >= Math.abs(dy);
+    const sign = useHorizontal
+      ? (dx >= 0 ? 1 : -1)
+      : (dy >= 0 ? 1 : -1);
+    const farTarget = useHorizontal
+      ? { x: labelBox.x + sign * 1000, y: labelBox.y }
+      : { x: labelBox.x, y: labelBox.y + sign * 1000 };
+    const stubStart = screenRayBoxEdgePoint(labelBox, farTarget, 2) ?? startScreen;
+    const directLength = Math.hypot(endScreen.x - startScreen.x, endScreen.y - startScreen.y);
+    const stubLength = clampNumber(directLength * 0.75, 54, 72, 58);
+    const stubEnd = useHorizontal
+      ? { x: stubStart.x + sign * stubLength, y: stubStart.y }
+      : { x: stubStart.x, y: stubStart.y + sign * stubLength };
+
+    return [stubStart, stubEnd];
+  }
+
+  function createDrawingLeaderExtensionLine(
+    leader: MbdV2LeaderLinePrimitive,
+    points: Vector3[],
+    index: number,
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): void {
+    if (!isMbdDrawingPresetRuntime() || points.length < 2) return;
+
+    const tagItem = resolveLeaderLayoutTag(leader, index);
+    if (!tagItem) return;
+    const tagKind = classifyLaidOutTag(tagItem);
+    if (!shouldRenderDrawingTagLeaderExtension(tagKind)) return;
+
+    const tag = tagAnnotations.get(tagItem.id);
+    const rawTag = tag ? asRaw(tag) : null;
+    if (!rawTag || !rawTag.visible) return;
+    rawTag.update(camera);
+    const params = rawTag.getParams();
+    const label = String(params.label ?? '').trim();
+    const subtitle = String(params.subtitle ?? '').trim();
+    const text = subtitle ? `${label}\n${subtitle}` : label;
+    if (!text) return;
+
+    const labelWorld = getAnnotationLabelWorldPos(rawTag);
+    const labelScreen = projectLabelToScreen(labelWorld, camera, viewport);
+    if (!labelScreen) return;
+
+    const labelBox = labelScreenBox(labelScreen, text);
+    const target =
+      resolveLeaderAnchorScreenPoint(points, camera, viewport) ??
+      resolveNearestLeaderScreenPoint(points, labelScreen, camera, viewport);
+    if (!target) return;
+
+    const startScreen = screenRayBoxEdgePoint(labelBox, target, tagKind === 'material' ? 2 : 6);
+    if (!startScreen) return;
+
+    const gapPx = Math.hypot(target.x - startScreen.x, target.y - startScreen.y);
+    if (!Number.isFinite(gapPx) || gapPx < 18) return;
+
+    const direction = {
+      x: (target.x - startScreen.x) / gapPx,
+      y: (target.y - startScreen.y) / gapPx,
+    };
+    const extensionPx = gapPx <= 92
+      ? gapPx
+      : clampNumber(gapPx * 0.28, 42, 72, tagKind === 'material' ? 56 : 64);
+    const endScreen = {
+      x: startScreen.x + direction.x * extensionPx,
+      y: startScreen.y + direction.y * extensionPx,
+    };
+    const screenPoints = resolveDrawingLeaderExtensionScreenPoints(
+      tagKind,
+      labelBox,
+      startScreen,
+      endScreen,
+      camera,
+      viewport,
+    );
+    const localPoints = screenPoints
+      .map((point) => screenPointToWorldAtDepth(labelWorld, point, camera, viewport))
+      .filter((point): point is Vector3 => !!point)
+      .map((point) => group.worldToLocal(point.clone()));
+    if (localPoints.length < 2) return;
+
+    const extensionLength = resolvePolylineLength(localPoints);
+    if (!Number.isFinite(extensionLength) || extensionLength < 1e-6) return;
+
+    const geom = new BufferGeometry();
+    const positions = new Float32Array(localPoints.length * 3);
+    localPoints.forEach((point, pointIndex) => {
+      positions[pointIndex * 3] = point.x;
+      positions[pointIndex * 3 + 1] = point.y;
+      positions[pointIndex * 3 + 2] = point.z;
+    });
+    geom.setAttribute(
+      'position',
+      new Float32BufferAttribute(positions, 3),
+    );
+    const line = markRaw(new Line(geom, v2LeaderLineMaterial));
+    line.name = `mbd-v2-leader-extension:${leader.id}:${tagItem.id}`;
+    line.renderOrder = 984;
+    line.visible = isVisible.value && showLabels.value;
+    line.frustumCulled = false;
+    (line.userData as any).mbdAuxKind = 'v2_leader_extension';
+    (line.userData as any).mbdLeaderId = leader.id;
+    (line.userData as any).mbdTargetTagId = tagItem.id;
+    (line.userData as any).mbdTagKind = tagKind;
+    group.add(line);
+    const extensionKey = `${leader.id}:${tagItem.id}`;
+    v2LeaderExtensions.set(extensionKey, line);
+
+    const tubeRadius = clampNumber(
+      extensionLength * MBD_DRAWING_STYLE_PROFILE.leader.extensionTubeRadiusRatio,
+      MBD_DRAWING_STYLE_PROFILE.leader.extensionTubeRadiusMin,
+      MBD_DRAWING_STYLE_PROFILE.leader.extensionTubeRadiusMax,
+      MBD_DRAWING_STYLE_PROFILE.leader.extensionTubeRadiusFallback,
+    );
+    const tube = createLeaderLineTube(
+      `${leader.id}:${tagItem.id}:extension`,
+      localPoints[0]!,
+      localPoints[localPoints.length - 1]!,
+      tubeRadius,
+      0,
+    );
+    if (tube) {
+      tube.name = `mbd-v2-leader-extension-tube:${leader.id}:${tagItem.id}`;
+      tube.renderOrder = 983;
+      tube.visible = isVisible.value && showLabels.value;
+      (tube.userData as any).mbdAuxKind = 'v2_leader_extension_tube';
+      (tube.userData as any).mbdLeaderId = leader.id;
+      (tube.userData as any).mbdTargetTagId = tagItem.id;
+      (tube.userData as any).mbdTagKind = tagKind;
+      group.add(tube);
+      v2LeaderExtensionTubes.set(extensionKey, tube);
+    }
+  }
+
+  function clearDrawingLeaderExtensionLines(): void {
+    for (const tube of v2LeaderExtensionTubes.values()) {
+      try {
+        (tube.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      tube.removeFromParent();
+    }
+    v2LeaderExtensionTubes.clear();
+
+    for (const line of v2LeaderExtensions.values()) {
+      try {
+        (line.geometry as BufferGeometry)?.dispose?.();
+      } catch {
+        // ignore
+      }
+      line.removeFromParent();
+    }
+    v2LeaderExtensions.clear();
+  }
+
+  function rebuildDrawingLeaderExtensions(
+    camera: Camera,
+    viewport: { width: number; height: number },
+  ): void {
+    clearDrawingLeaderExtensionLines();
+    if (!isMbdDrawingPresetRuntime()) return;
+    const leaders = currentData.value?.v2_leader_lines ?? [];
+    for (const [leaderIndex, leader] of leaders.entries()) {
       const rawPoints = (leader.points ?? [])
         .map((point) => toVector3(point))
         .filter((point): point is Vector3 => !!point);
-      const points = resolveDrawingLeaderRenderPoints(rawPoints);
+      createDrawingLeaderExtensionLine(
+        leader,
+        rawPoints,
+        leaderIndex,
+        camera,
+        viewport,
+      );
+    }
+  }
+
+  function renderV2LeaderLines(leaders: MbdV2LeaderLinePrimitive[]): void {
+    const viewer = dtxViewerRef.value;
+    const camera = viewer?.camera ?? null;
+    const viewport = viewer
+      ? {
+        width: Math.max(1, Number(viewer.canvas.getBoundingClientRect().width) || 1),
+        height: Math.max(1, Number(viewer.canvas.getBoundingClientRect().height) || 1),
+      }
+      : null;
+    camera?.updateMatrixWorld?.(true);
+    for (const [leaderIndex, leader] of leaders.entries()) {
+      const rawPoints = (leader.points ?? [])
+        .map((point) => toVector3(point))
+        .filter((point): point is Vector3 => !!point);
+      const tagItem = resolveLeaderLayoutTag(leader, leaderIndex);
+      const tagKind = tagItem ? classifyLaidOutTag(tagItem) : 'other';
+      if (tagItem && shouldSuppressDrawingTubiLengthTag(tagItem, tagKind)) {
+        continue;
+      }
+      const renderedPoints = resolveDrawingLeaderRenderPoints(rawPoints, tagKind);
+      const clippedLabelLeaderPoints = camera && viewport
+        ? resolveDrawingLeaderClippedFromTagLabelPoints(
+          renderedPoints,
+          tagItem,
+          tagKind,
+          camera,
+          viewport,
+        )
+        : null;
+      const points = clippedLabelLeaderPoints ?? renderedPoints;
       if (points.length < 2) continue;
+      const totalLength = resolvePolylineLength(points);
+      if (!Number.isFinite(totalLength) || totalLength < 1e-6) continue;
+      if (isMbdDrawingPresetRuntime() && camera && viewport) {
+        const screenBox = collectLocalPolylineScreenBox(points, camera, viewport);
+        const screenSpan = screenBox ? Math.hypot(screenBox.width, screenBox.height) : 0;
+        if (!Number.isFinite(screenSpan) || screenSpan < 8) continue;
+      }
+      if (
+        !clippedLabelLeaderPoints &&
+        camera &&
+        viewport &&
+        shouldSuppressDrawingLeaderInsidePriorityLabel(points, tagKind, camera, viewport)
+      ) {
+        continue;
+      }
 
       const geom = new BufferGeometry();
       const pos = new Float32Array(points.length * 3);
@@ -5357,13 +8067,19 @@ export function useMbdPipeAnnotationThree(
       line.name = `mbd-v2-leader:${leader.id}`;
       (line.userData as any).mbdAuxKind = 'v2_leader_line';
       (line.userData as any).mbdLeaderId = leader.id;
+      (line.userData as any).mbdTargetTagId = tagItem?.id ?? null;
+      (line.userData as any).mbdTagKind = tagKind;
       const rawLine = markRaw(line);
       group.add(rawLine);
       v2LeaderLines.set(leader.id, rawLine);
 
-      const totalLength = resolvePolylineLength(points);
       const tubeRadius = isMbdDrawingPresetRuntime()
-        ? clampNumber(totalLength * 0.0018, 0.55, 1.55, 0.9)
+        ? clampNumber(
+          totalLength * MBD_DRAWING_STYLE_PROFILE.leader.lineTubeRadiusRatio,
+          MBD_DRAWING_STYLE_PROFILE.leader.lineTubeRadiusMin,
+          MBD_DRAWING_STYLE_PROFILE.leader.lineTubeRadiusMax,
+          MBD_DRAWING_STYLE_PROFILE.leader.lineTubeRadiusFallback,
+        )
         : clampNumber(totalLength * 0.0032, 1.1, 3.2, 1.8);
       const tubes: Mesh[] = [];
       for (let index = 1; index < points.length; index += 1) {
@@ -5375,6 +8091,8 @@ export function useMbdPipeAnnotationThree(
           index - 1,
         );
         if (!tube) continue;
+        (tube.userData as any).mbdTargetTagId = tagItem?.id ?? null;
+        (tube.userData as any).mbdTagKind = tagKind;
         group.add(tube);
         tubes.push(tube);
       }
@@ -5382,6 +8100,7 @@ export function useMbdPipeAnnotationThree(
         v2LeaderLineTubes.set(leader.id, tubes);
       }
     }
+    drawingLeaderExtensionsNeedRebuild = isMbdDrawingPresetRuntime();
   }
 
   function createDebugAnchorMarker(
@@ -5491,8 +8210,7 @@ export function useMbdPipeAnnotationThree(
 
     // 应用全局模型矩阵
     const gm = getGlobalModelMatrix?.() || identityMatrix;
-    group.matrix.copy(gm);
-    group.updateMatrixWorld(true);
+    syncAnnotationGroupMatrix(gm);
 
     // 更新材质分辨率
     const rect = viewer.canvas.getBoundingClientRect();
@@ -5505,7 +8223,17 @@ export function useMbdPipeAnnotationThree(
 
     // 渲染各类标注
     if (useLayoutResult) {
-      renderLaidOutLinearDims(data.layout_result.linear_dims ?? []);
+      const rawLayoutCutTubis = data.layout_result.cut_tubis ?? [];
+      const visibleLayoutCutTubisForDedupe = showCutTubis.value ? rawLayoutCutTubis : [];
+      const layoutLinearDims = filterRedundantDrawingLinearDims(
+        data.layout_result.linear_dims ?? [],
+        visibleLayoutCutTubisForDedupe,
+      );
+      const layoutCutTubis = filterRedundantDrawingCutTubis(
+        rawLayoutCutTubis,
+        layoutLinearDims,
+      );
+      renderLaidOutLinearDims(layoutLinearDims);
       if (data.layout_result.welds?.length) renderLaidOutWelds(data.layout_result.welds);
       if (data.layout_result.slopes?.length) renderLaidOutSlopes(data.layout_result.slopes);
       if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
@@ -5513,8 +8241,8 @@ export function useMbdPipeAnnotationThree(
         renderStructureClearances(data.structure_clearances);
       }
       if (data.layout_result.bends?.length) renderLaidOutBends(data.layout_result.bends);
-      if (data.layout_result.cut_tubis?.length) {
-        renderLaidOutCutTubis(data.layout_result.cut_tubis);
+      if (layoutCutTubis.length) {
+        renderLaidOutCutTubis(layoutCutTubis);
       }
       if (data.layout_result.fittings?.length) {
         renderLaidOutFittings(data.layout_result.fittings);
@@ -5531,23 +8259,39 @@ export function useMbdPipeAnnotationThree(
         ? computePipeAlignedOffsetDirs(data.segments)
         : [];
       if (data.dims?.length) renderDims(data.dims, data.segments ?? [], pipeOffsetDirs);
+      if (showCutTubis.value && data.cut_tubis?.length) {
+        renderCutTubis(data.cut_tubis, data.segments ?? [], pipeOffsetDirs);
+      }
       if (data.welds?.length) renderWelds(data.welds);
       if (data.slopes?.length) renderSlopes(data.slopes);
+      if (data.bends?.length) renderBends(data.bends, data.segments ?? []);
       if (data.pipe_clearances?.length) renderPipeClearances(data.pipe_clearances);
       if (data.structure_clearances?.length) {
         renderStructureClearances(data.structure_clearances);
       }
       if (data.fittings?.length) renderFittings(data.fittings);
       if (data.tags?.length) renderTags(data.tags);
+      applyPortDimLabelDeclutter();
+      applyChainOffsetUnification();
+      applyCutTubiLabelDeclutter();
       applyTagLabelDeclutter();
+      applyCutTubiLabelDeclutter(true);
       if (effectiveElevationMarks.length > 0) renderElevationMarks(effectiveElevationMarks);
       renderEnvelope(effectiveEnvelope);
     }
     if (data.v2_leader_lines?.length) renderV2LeaderLines(data.v2_leader_lines);
-    if (data.segments?.length) renderPipeVisualEmphasis(data.segments);
+    if ((isMbdDrawingPresetRuntime() || showPipeVisualEmphasis.value) && data.segments?.length) {
+      renderPipeVisualEmphasis(data.segments);
+    }
+    if ((isMbdDrawingPresetRuntime() || showPipeVisualEmphasis.value) && data.fittings?.length) {
+      renderFittingVisualEmphasis(data.fittings, data.segments ?? []);
+    }
     if (data.segments?.length) renderSegments(data.segments);
     if (data.segments?.length) renderFlowDirections(data.segments);
     renderDebugOverlays(data);
+    if (renderSource.value === 'layout_result') {
+      applyLayoutScreenLabelDeclutter();
+    }
 
     // Set text background occlusion color to match scene background
     applyBackgroundColor(viewer);
@@ -5651,8 +8395,18 @@ export function useMbdPipeAnnotationThree(
     };
 
     if (data.layout_result) {
-      for (const d of data.layout_result.linear_dims || []) expandLaidOutLinear(d);
-      for (const d of data.layout_result.cut_tubis || []) expandLaidOutLinear(d);
+      const rawLayoutCutTubis = data.layout_result.cut_tubis || [];
+      const visibleLayoutCutTubisForDedupe = showCutTubis.value ? rawLayoutCutTubis : [];
+      const layoutLinearDims = filterRedundantDrawingLinearDims(
+        data.layout_result.linear_dims || [],
+        visibleLayoutCutTubisForDedupe,
+      );
+      const layoutCutTubis = filterRedundantDrawingCutTubis(
+        rawLayoutCutTubis,
+        layoutLinearDims,
+      );
+      for (const d of layoutLinearDims) expandLaidOutLinear(d);
+      for (const d of layoutCutTubis) expandLaidOutLinear(d);
       for (const tag of data.layout_result.tags || []) {
         expand(tag.position);
         if (!drawingPreset && tag.label_offset_world) {
@@ -5745,20 +8499,43 @@ export function useMbdPipeAnnotationThree(
     const size = new Vector3();
     box.getSize(size);
     const maxDim = Math.max(size.x, size.y, size.z);
-    const pad = clampNumber(maxDim * 0.25, 0.06, 1.25, 0.18);
+    const pad = drawingPreset
+      ? clampNumber(maxDim * 0.5, 0.12, 2.5, 0.34)
+      : clampNumber(maxDim * 0.25, 0.06, 1.25, 0.18);
     box.expandByScalar(pad);
 
     const { position, target } = computeFlyToPositionFromBox(
       box,
       drawingPreset,
     );
-    viewer.flyTo(position, target, { duration: 800 });
-    window.setTimeout(() => {
+    const flyToDuration = drawingPreset ? 0 : 800;
+    const relayoutDelay = drawingPreset ? 80 : 900;
+    viewer.flyTo(position, target, { duration: flyToDuration });
+    const relayoutForCurrentCamera = () => {
       applyLaidOutDimLabelDeclutter();
       applyLayoutScreenLabelDeclutter();
       updateLabelPositions();
       requestRender?.();
-    }, 900);
+    };
+    window.setTimeout(relayoutForCurrentCamera, relayoutDelay);
+    if (drawingPreset) {
+      window.setTimeout(relayoutForCurrentCamera, 240);
+    }
+  }
+
+  function applyLayoutScreenLabelDeclutterThrottled(): void {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const wait = layoutScreenDeclutterMinIntervalMs - (now - layoutScreenDeclutterLastRunMs);
+    if (wait <= 0) {
+      applyLayoutScreenLabelDeclutter();
+      return;
+    }
+    if (layoutScreenDeclutterTimer !== null || typeof window === 'undefined') return;
+    layoutScreenDeclutterTimer = window.setTimeout(() => {
+      layoutScreenDeclutterTimer = null;
+      applyLayoutScreenLabelDeclutter();
+      requestRender?.();
+    }, wait);
   }
 
   function updateLabelPositions(): void {
@@ -5767,8 +8544,9 @@ export function useMbdPipeAnnotationThree(
 
     // 若全局模型矩阵在运行期变化（例如单位/重心配置），需要保持标注组与之同步。
     const gm = getGlobalModelMatrix?.() || identityMatrix;
-    group.matrix.copy(gm);
-    group.updateMatrixWorld(true);
+    syncAnnotationGroupMatrix(gm);
+
+    applyLayoutScreenLabelDeclutterThrottled();
 
     // 更新所有标注
     const camera = viewer.camera;
@@ -5809,6 +8587,13 @@ export function useMbdPipeAnnotationThree(
     }
     for (const endpoint of branchFlowEndpointObjects.values()) {
       asRaw(endpoint.marker).update(camera);
+    }
+    if (drawingLeaderExtensionsNeedRebuild) {
+      rebuildDrawingLeaderExtensions(camera, {
+        width: Math.max(1, Number(rect.width) || 1),
+        height: Math.max(1, Number(rect.height) || 1),
+      });
+      drawingLeaderExtensionsNeedRebuild = false;
     }
   }
 
@@ -6178,10 +8963,29 @@ export function useMbdPipeAnnotationThree(
 
     const collectPositions = (object: any): Vector3[] => {
       const geometry = object?.geometry;
+      const startAttr = geometry?.attributes?.instanceStart ?? null;
+      const endAttr = geometry?.attributes?.instanceEnd ?? null;
+      if (
+        startAttr &&
+        endAttr &&
+        Number.isFinite(Number(startAttr.count)) &&
+        Number.isFinite(Number(endAttr.count))
+      ) {
+        const points: Vector3[] = [];
+        const count = Math.min(Number(startAttr.count), Number(endAttr.count));
+        for (let index = 0; index < count; index += 1) {
+          const start = new Vector3().fromBufferAttribute(startAttr, index);
+          object.localToWorld(start);
+          points.push(start);
+          const end = new Vector3().fromBufferAttribute(endAttr, index);
+          object.localToWorld(end);
+          points.push(end);
+        }
+        return points;
+      }
       const attr =
         geometry?.getAttribute?.('position') ??
         geometry?.attributes?.position ??
-        geometry?.attributes?.instanceStart ??
         null;
       if (!attr || !Number.isFinite(Number(attr.count)) || Number(attr.count) <= 0) {
         return [];
@@ -6193,21 +8997,55 @@ export function useMbdPipeAnnotationThree(
         object.localToWorld(point);
         points.push(point);
       }
-      const endAttr = geometry?.attributes?.instanceEnd ?? null;
-      if (endAttr && Number.isFinite(Number(endAttr.count))) {
-        const endCount = Number(endAttr.count);
-        for (let index = 0; index < endCount; index += 1) {
-          const point = new Vector3().fromBufferAttribute(endAttr, index);
-          object.localToWorld(point);
-          points.push(point);
-        }
-      }
       return points;
+    };
+    const readNearestUserData = (object: any, key: string): string | null => {
+      let cursor: any = object;
+      while (cursor) {
+        const value = cursor.userData?.[key];
+        if (value != null && String(value).length > 0) return String(value);
+        cursor = cursor.parent;
+      }
+      return null;
+    };
+    const readNearestAnnotationId = (object: any): string | null =>
+      readNearestUserData(object, 'mbdDimId') ??
+      readNearestUserData(object, 'mbdCutTubiId') ??
+      readNearestUserData(object, 'mbdPipeClearanceId') ??
+      readNearestUserData(object, 'mbdStructureClearanceId') ??
+      readNearestUserData(object, 'mbdSourcePrimitiveId');
+    const readMaterialLineWidth = (material: any): number | null => {
+      const raw = Number(material?.linewidth);
+      return Number.isFinite(raw) ? Number(raw.toFixed(3)) : null;
+    };
+    const readMaterialColor = (material: any): string | null => {
+      const color = material?.color;
+      if (!color || typeof color.getHexString !== 'function') return null;
+      return `#${String(color.getHexString()).toLowerCase()}`;
+    };
+    const shouldCollectDebugObjectState = (
+      type: string,
+      auxKind: string | null,
+    ): boolean => {
+      if (/Line/.test(type)) return true;
+      return (
+        auxKind === 'v2_leader_line_tube' ||
+        auxKind === 'v2_leader_extension_tube' ||
+        auxKind === 'pipe-visual-body' ||
+        auxKind === 'pipe-visual-ring' ||
+        auxKind === 'pipe-visual-band' ||
+        auxKind === 'pipe-visual-rail' ||
+        auxKind === 'pipe-visual-outline' ||
+        auxKind === 'fitting-visual-core' ||
+        auxKind === 'fitting-visual-port' ||
+        auxKind === 'fitting-visual-arm'
+      );
     };
 
     group.traverse((object: any) => {
       const type = String(object?.type ?? '');
-      if (!/Line/.test(type)) return;
+      const auxKind = readNearestUserData(object, 'mbdAuxKind');
+      if (!shouldCollectDebugObjectState(type, auxKind)) return;
       const points = collectPositions(object);
       if (points.length <= 0) return;
 
@@ -6215,6 +9053,35 @@ export function useMbdPipeAnnotationThree(
         .map((point) => projectLabelToScreen(point, camera, viewport))
         .filter((point): point is { x: number; y: number } => !!point);
       if (screenPoints.length <= 0) return;
+
+      const hasInstancedLineSegments = !!(
+        object?.geometry?.attributes?.instanceStart &&
+        object?.geometry?.attributes?.instanceEnd
+      );
+      const screenSegments: MbdPipeDebugLineObjectState['screen_segments'] = [];
+      if (hasInstancedLineSegments || type === 'LineSegments' || type === 'LineSegments2') {
+        for (let index = 1; index < screenPoints.length; index += 2) {
+          const a = screenPoints[index - 1]!;
+          const b = screenPoints[index]!;
+          screenSegments.push({
+            x1: Number(a.x.toFixed(2)),
+            y1: Number(a.y.toFixed(2)),
+            x2: Number(b.x.toFixed(2)),
+            y2: Number(b.y.toFixed(2)),
+          });
+        }
+      } else if (type === 'Line' || type === 'Line2') {
+        for (let index = 1; index < screenPoints.length; index += 1) {
+          const a = screenPoints[index - 1]!;
+          const b = screenPoints[index]!;
+          screenSegments.push({
+            x1: Number(a.x.toFixed(2)),
+            y1: Number(a.y.toFixed(2)),
+            x2: Number(b.x.toFixed(2)),
+            y2: Number(b.y.toFixed(2)),
+          });
+        }
+      }
 
       let left = Infinity;
       let right = -Infinity;
@@ -6236,7 +9103,13 @@ export function useMbdPipeAnnotationThree(
       states.push({
         name: String(object.name ?? ''),
         type,
-        aux_kind: object.userData?.mbdAuxKind ? String(object.userData.mbdAuxKind) : null,
+        annotation_id: readNearestAnnotationId(object),
+        line_role: readNearestUserData(object, 'mbdLineRole'),
+        dim_kind: readNearestUserData(object, 'mbdDimKind'),
+        leader_id: readNearestUserData(object, 'mbdLeaderId'),
+        target_tag_id: readNearestUserData(object, 'mbdTargetTagId'),
+        tag_kind: readNearestUserData(object, 'mbdTagKind'),
+        aux_kind: auxKind,
         visible: object.visible !== false,
         screen_span_px: Number(span.toFixed(2)),
         screen_box: {
@@ -6249,9 +9122,12 @@ export function useMbdPipeAnnotationThree(
           top: Number(top.toFixed(2)),
           bottom: Number(bottom.toFixed(2)),
         },
+        screen_segments: screenSegments.length > 0 ? screenSegments : undefined,
         opacity: Number.isFinite(Number(mat?.opacity))
           ? Number(Number(mat.opacity).toFixed(3))
           : null,
+        line_width_px: readMaterialLineWidth(mat),
+        color_hex: readMaterialColor(mat),
       });
     });
 
@@ -6266,6 +9142,38 @@ export function useMbdPipeAnnotationThree(
     const dimensionArrowStates = collectDebugDimensionArrowStates();
     const v2LeaderLineStates = collectDebugV2LeaderLineStates();
     const lineObjectStates = collectDebugLineObjectStates();
+    const pipeVisualCounts = Array.from(pipeVisualEmphasisObjects.values()).reduce(
+      (acc, emphasis) => {
+        acc.bodies += 1;
+        acc.spines += 1;
+        acc.rings += emphasis.rings.length;
+        acc.bands += emphasis.bands.length;
+        acc.rails += emphasis.rails.length;
+        acc.outlines += emphasis.outlines.length;
+        return acc;
+      },
+      {
+        bodies: 0,
+        bands: 0,
+        outlines: 0,
+        rails: 0,
+        rings: 0,
+        spines: 0,
+      },
+    );
+    const fittingVisualCounts = Array.from(fittingVisualEmphasisObjects.values()).reduce(
+      (acc, emphasis) => {
+        acc.cores += emphasis.coreRings.length;
+        acc.ports += emphasis.portRings.length;
+        acc.arms += emphasis.arms.length;
+        return acc;
+      },
+      {
+        arms: 0,
+        cores: 0,
+        ports: 0,
+      },
+    );
     const renderedTagTexts = Array.from(tagAnnotations.values())
       .map((tag) => {
         try {
@@ -6298,6 +9206,18 @@ export function useMbdPipeAnnotationThree(
         declutter_hidden: !!(raw.userData as any)?.mbdDeclutterHidden,
       };
     });
+    const isVisibleAnnotation = (annotation: { visible?: boolean; userData?: unknown }): boolean => {
+      const raw = asRaw(annotation) as any;
+      return raw.visible !== false &&
+        !(raw.userData as any)?.mbdLayoutHidden &&
+        !(raw.userData as any)?.mbdDeclutterHidden;
+    };
+    const visibleDimCount = Array.from(dimAnnotations.values())
+      .filter(isVisibleAnnotation).length;
+    const visibleCutTubiCount = Array.from(cutTubiAnnotations.values())
+      .filter(isVisibleAnnotation).length;
+    const visibleTagCount = Array.from(tagAnnotations.values())
+      .filter(isVisibleAnnotation).length;
 
     return {
       branch_refno: data?.branch_refno ?? null,
@@ -6310,6 +9230,7 @@ export function useMbdPipeAnnotationThree(
         layout_linear_dims: layout?.linear_dims?.length ?? 0,
         cut_tubis: data?.cut_tubis?.length ?? 0,
         tags: data?.tags?.length ?? 0,
+        fittings: data?.fittings?.length ?? 0,
         layout_tags: layout?.tags?.length ?? 0,
         v2_leader_lines: data?.v2_leader_lines?.length ?? 0,
         elevation_marks: resolveEffectiveElevationMarks(data).length,
@@ -6317,10 +9238,20 @@ export function useMbdPipeAnnotationThree(
       },
       rendered_counts: {
         group_children: group.children.length,
-        dims: dimAnnotations.size,
-        cut_tubis: cutTubiAnnotations.size,
-        tags: tagAnnotations.size,
+        dims: visibleDimCount,
+        cut_tubis: visibleCutTubiCount,
+        tags: visibleTagCount,
         v2_leader_lines: v2LeaderLines.size,
+        v2_leader_extensions: v2LeaderExtensions.size,
+        pipe_visual_bodies: pipeVisualCounts.bodies,
+        pipe_visual_bands: pipeVisualCounts.bands,
+        pipe_visual_rails: pipeVisualCounts.rails,
+        pipe_visual_outlines: pipeVisualCounts.outlines,
+        pipe_visual_rings: pipeVisualCounts.rings,
+        pipe_visual_spines: pipeVisualCounts.spines,
+        fitting_visual_cores: fittingVisualCounts.cores,
+        fitting_visual_ports: fittingVisualCounts.ports,
+        fitting_visual_arms: fittingVisualCounts.arms,
         elevations: elevationAnnotations.size,
         envelope_objects: envelopeObjects.size,
       },
@@ -6371,6 +9302,10 @@ export function useMbdPipeAnnotationThree(
     pipeEmphasisRingMaterial.dispose();
     pipeEmphasisBandMaterial.dispose();
     pipeEmphasisRailMaterial.dispose();
+    pipeEmphasisOutlineMaterial.dispose();
+    fittingEmphasisCoreMaterial.dispose();
+    fittingEmphasisPortMaterial.dispose();
+    fittingEmphasisArmMaterial.dispose();
     pipeEmphasisSpineMaterial.dispose();
     flowCenterlineMaterial.dispose();
     flowArrowMaterial.dispose();
@@ -6378,6 +9313,10 @@ export function useMbdPipeAnnotationThree(
     flowOutletMarkerMaterial.dispose();
     flowPulseMaterial.dispose();
     stopFlowAnimation();
+    if (layoutScreenDeclutterTimer !== null && typeof window !== 'undefined') {
+      window.clearTimeout(layoutScreenDeclutterTimer);
+      layoutScreenDeclutterTimer = null;
+    }
     group.removeFromParent();
   }
 
@@ -6559,6 +9498,28 @@ export function useMbdPipeAnnotationThree(
     },
   );
 
+  watch(
+    () => mbdDrawingStyleStore.version.value,
+    () => {
+      try {
+        rebarvizArrowSizePx.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowSizePx;
+        rebarvizArrowAngleDeg.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowAngleDeg;
+        rebarvizLineWidthPx.value = MBD_DRAWING_STYLE_PROFILE.dimension.lineWidthPx;
+        applyMbdDrawingRuntimeStyle();
+
+        const data = currentData.value;
+        if (data) {
+          renderBranch(data);
+        } else {
+          applyLabelRenderStyleByMode();
+          requestRender?.();
+        }
+      } catch {
+        // keep settings changes non-fatal during tests and partial viewer teardown
+      }
+    },
+  );
+
   watch(dimMode, () => {
     try {
       rebuildDimsByCurrentData();
@@ -6607,6 +9568,8 @@ export function useMbdPipeAnnotationThree(
     showElevationMarks,
     showEnvelope,
     showCutTubis,
+    showInlineTubeLengthDims,
+    showPipeVisualEmphasis,
     showElbows,
     showBranches,
     showFlanges,

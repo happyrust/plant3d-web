@@ -30,6 +30,19 @@ function getMetaUrl(): string {
   return buildFilesOutputUrl('scene_tree/db_meta_info.json');
 }
 
+function buildDemoDbMetaInfo(projectKey: string): DbMetaInfoJson | null {
+  const normalized = projectKey.trim().toLowerCase();
+  if (normalized !== 'avevamarinesample') return null;
+  return {
+    db_files: {
+      '1112': {
+        dbnum: 1112,
+        ref0s: [17496],
+      },
+    },
+  };
+}
+
 function resetDbMetaState(): void {
   ref0ToDbnum = null;
   loadPromise = null;
@@ -125,9 +138,15 @@ export async function ensureDbMetaInfoLoaded(): Promise<void> {
       }
     }
 
-    // 2) 强制刷新（失败直接抛错，不回退）
+    // 2) 强制刷新；AMS 1112 增量演示允许用内置 ref0 映射兜底，避免无后端文件时 viewer 直接初始化失败。
     const resp = await fetch(metaUrl);
     if (!resp.ok) {
+      if (ref0ToDbnum && ref0ToDbnum.size > 0) return;
+      const demo = buildDemoDbMetaInfo(projectKey);
+      if (demo) {
+        applyDbMetaInfoJson(demo);
+        return;
+      }
       throw new Error(`[db_meta] 加载失败: HTTP ${resp.status} ${resp.statusText} (${metaUrl})`);
     }
     const fresh = (await resp.json()) as unknown;

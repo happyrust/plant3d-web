@@ -14,6 +14,7 @@ import branTestData from '@/fixtures/bran-test-data.json';
 describe('useMbdPipeAnnotationThree.flyTo', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.history.replaceState({}, '', '/');
   });
 
   function createViewer() {
@@ -95,6 +96,12 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     };
   }
 
+  function backendGeometrySnapshot(annotation: any) {
+    const snapshot = backendParamSnapshot(annotation);
+    delete (snapshot as Partial<typeof snapshot>).labelOffsetWorld;
+    return snapshot;
+  }
+
   it('默认显示版面优先模式相关标注', () => {
     const viewer = {
       canvas: {
@@ -112,12 +119,12 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     );
 
     expect(vis.mbdViewMode.value).toBe('layout_first');
-    expect(vis.dimMode.value).toBe('classic');
+    expect(vis.dimMode.value).toBe('rebarviz');
     expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(true);
     expect(vis.showDimPort.value).toBe(true);
-    expect(vis.showCutTubis.value).toBe(true);
+    expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showElbows.value).toBe(true);
     expect(vis.showBranches.value).toBe(true);
     expect(vis.showFlanges.value).toBe(true);
@@ -172,19 +179,19 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
 
     vis.applyModeDefaults('layout_first');
     expect(vis.mbdViewMode.value).toBe('layout_first');
-    expect(vis.dimMode.value).toBe('classic');
+    expect(vis.dimMode.value).toBe('rebarviz');
     expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(true);
     expect(vis.showDimPort.value).toBe(true);
-    expect(vis.showCutTubis.value).toBe(true);
+    expect(vis.showCutTubis.value).toBe(false);
     expect(vis.showWelds.value).toBe(true);
     expect(vis.showSlopes.value).toBe(true);
     expect(vis.showBends.value).toBe(true);
     expect(vis.bendDisplayMode.value).toBe('size');
   });
 
-  it('layout_first defaults show eligible V2 dimensions and per-kind toggles only affect matching annotations', async () => {
+  it('layout_first defaults show main V2 dimensions and keep cut-tubi opt-in', async () => {
     const viewer = createViewer();
     const vis = useMbdPipeAnnotationThree(
       shallowRef(viewer),
@@ -208,7 +215,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
         version: 2,
         mode: 'layout_first',
         stats: {
-          linear_dims_count: 3,
+          linear_dims_count: 4,
           cut_tubis_count: 1,
           welds_count: 0,
           slopes_count: 0,
@@ -220,6 +227,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
         linear_dims: [
           makeBackendLayoutLinearDim('v2-segment-toggle', 'segment', 80),
           makeBackendLayoutLinearDim('v2-chain-toggle', 'chain', 120),
+          makeBackendLayoutLinearDim('v2-chain-toggle:piece:1', 'chain', 140),
           makeBackendLayoutLinearDim('v2-port-toggle', 'port', 160),
         ],
         cut_tubis: [
@@ -234,7 +242,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
       },
       stats: {
         segments_count: 0,
-        dims_count: 3,
+        dims_count: 4,
         welds_count: 0,
         slopes_count: 0,
         bends_count: 0,
@@ -244,18 +252,26 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
 
     const segment = vis.getDimAnnotations().get('v2-segment-toggle');
     const chain = vis.getDimAnnotations().get('v2-chain-toggle');
+    const piece = vis.getDimAnnotations().get('v2-chain-toggle:piece:1');
     const port = vis.getDimAnnotations().get('v2-port-toggle');
     const cut = vis.getCutTubiAnnotations().get('v2-cut-toggle');
 
     expect(segment?.visible).toBe(true);
     expect(chain?.visible).toBe(true);
+    expect(piece?.visible).toBe(false);
     expect(port?.visible).toBe(true);
+    expect(cut?.visible).toBe(false);
+
+    vis.showCutTubis.value = true;
+    await nextTick();
+    expect(piece?.visible).toBe(true);
     expect(cut?.visible).toBe(true);
 
     vis.showDimPort.value = false;
     await nextTick();
     expect(segment?.visible).toBe(true);
     expect(chain?.visible).toBe(true);
+    expect(piece?.visible).toBe(true);
     expect(port?.visible).toBe(false);
     expect(cut?.visible).toBe(true);
 
@@ -264,6 +280,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     await nextTick();
     expect(segment?.visible).toBe(true);
     expect(chain?.visible).toBe(true);
+    expect(piece?.visible).toBe(false);
     expect(port?.visible).toBe(true);
     expect(cut?.visible).toBe(false);
 
@@ -271,6 +288,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     await nextTick();
     expect(segment?.visible).toBe(false);
     expect(chain?.visible).toBe(false);
+    expect(piece?.visible).toBe(false);
     expect(port?.visible).toBe(false);
     expect(cut?.visible).toBe(false);
 
@@ -279,6 +297,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     await nextTick();
     expect(segment?.visible).toBe(true);
     expect(chain?.visible).toBe(true);
+    expect(piece?.visible).toBe(true);
     expect(port?.visible).toBe(true);
     expect(cut?.visible).toBe(true);
   });
@@ -501,7 +520,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
 
     const dim = vis.getDimAnnotations().get('v2-segment-1');
     expect(dim).toBeTruthy();
-    const before = backendParamSnapshot(dim);
+    const before = backendGeometrySnapshot(dim);
 
     vis.showDims.value = false;
     await nextTick();
@@ -513,7 +532,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vis.setResolution(1024, 768);
     vis.updateLabelPositions();
 
-    expect(backendParamSnapshot(dim)).toEqual(before);
+    expect(backendGeometrySnapshot(dim)).toEqual(before);
   });
 
   it('V2 cut_tubi linear_dim uses the same backend geometry contract and toggle preserves it', async () => {
@@ -574,7 +593,7 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     const cut = vis.getCutTubiAnnotations().get('v2-cut-1');
     expect(cut).toBeTruthy();
     expect(cut?.visible).toBe(true);
-    const before = backendParamSnapshot(cut);
+    const before = backendGeometrySnapshot(cut);
 
     vis.showCutTubis.value = false;
     await nextTick();
@@ -582,7 +601,257 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vis.showCutTubis.value = true;
     await nextTick();
     expect(cut?.visible).toBe(true);
-    expect(backendParamSnapshot(cut)).toEqual(before);
+    expect(backendGeometrySnapshot(cut)).toEqual(before);
+  });
+
+  it('drawing preset collapses redundant linear dimensions with the same span and text', () => {
+    window.history.replaceState({}, '', '/?mbd_preset=drawing');
+
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    const chain = {
+      ...makeBackendLayoutLinearDim('dim:chain:dup', 'chain', 80),
+      text: '794',
+    };
+    const cutTubi = {
+      ...makeBackendLayoutLinearDim('cut_tubi:dup', 'cut_tubi', 40),
+      text: '794',
+    };
+    const port = {
+      ...makeBackendLayoutLinearDim('dim:port:dup', 'port', 120),
+      text: '794',
+    };
+
+    vis.applyModeDefaults('layout_first');
+    vis.showCutTubis.value = true;
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-V2-CUT-DEDUP',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      layout_result: {
+        version: 2,
+        mode: 'layout_first',
+        stats: {
+          linear_dims_count: 1,
+          cut_tubis_count: 1,
+          welds_count: 0,
+          slopes_count: 0,
+          bends_count: 0,
+          tags_count: 0,
+          fittings_count: 0,
+          suppressed_count: 0,
+        },
+        linear_dims: [port, chain],
+        cut_tubis: [cutTubi],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [],
+        fittings: [],
+        suppressed_items: [],
+      },
+      stats: {
+        segments_count: 0,
+        dims_count: 1,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 1,
+      },
+    } as any);
+
+    expect(vis.getDimAnnotations().has('dim:chain:dup')).toBe(true);
+    expect(vis.getDimAnnotations().has('dim:port:dup')).toBe(false);
+    expect(vis.getCutTubiAnnotations().has('cut_tubi:dup')).toBe(false);
+  });
+
+  it('普通三维页只叠加 MBD 标注，不额外生成管道强化几何', () => {
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-NORMAL-3D',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-1',
+          refno: '24381_1',
+          noun: 'TUBI',
+          arrive: [0, 0, 0],
+          leave: [800, 0, 0],
+          length: 800,
+          straight_length: 800,
+          outside_diameter: 120,
+          bore: 100,
+        },
+      ],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    });
+
+    const snapshot = vis.getDebugSnapshot();
+    expect(snapshot?.rendered_counts.pipe_visual_bodies).toBe(0);
+    expect(snapshot?.rendered_counts.pipe_visual_rings).toBe(0);
+    expect(snapshot?.rendered_counts.pipe_visual_rails).toBe(0);
+  });
+
+  it('drawing preset 才生成管道强化几何用于出图', () => {
+    window.history.replaceState({}, '', '/?mbd_preset=drawing');
+
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-DRAWING',
+      branch_attrs: {},
+      segments: [
+        {
+          id: 'seg-1',
+          refno: '24381_1',
+          noun: 'TUBI',
+          arrive: [0, 0, 0],
+          leave: [800, 0, 0],
+          length: 800,
+          straight_length: 800,
+          outside_diameter: 120,
+          bore: 100,
+        },
+      ],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      fittings: [],
+      tags: [],
+      stats: {
+        segments_count: 1,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        fittings_count: 0,
+        tags_count: 0,
+      },
+    });
+
+    const snapshot = vis.getDebugSnapshot();
+    expect(snapshot?.rendered_counts.pipe_visual_bodies).toBe(1);
+    expect(snapshot?.rendered_counts.pipe_visual_rings).toBeGreaterThan(0);
+  });
+
+  it('drawing preset hides L= tubi tags while keeping material balloons', () => {
+    window.history.replaceState({}, '', '/?mbd_preset=drawing');
+
+    const viewer = createViewer();
+    const vis = useMbdPipeAnnotationThree(
+      shallowRef(viewer),
+      ref<HTMLElement | null>(null),
+      { getGlobalModelMatrix: () => new Matrix4() },
+    );
+
+    vis.applyModeDefaults('layout_first');
+    vis.renderBranch({
+      input_refno: '24381_145018',
+      branch_refno: '24381_145018',
+      branch_name: 'BRAN-V2-TAG-DEDUP',
+      branch_attrs: {},
+      segments: [],
+      dims: [],
+      welds: [],
+      slopes: [],
+      bends: [],
+      cut_tubis: [],
+      layout_result: {
+        version: 2,
+        mode: 'layout_first',
+        stats: {
+          linear_dims_count: 0,
+          cut_tubis_count: 0,
+          welds_count: 0,
+          slopes_count: 0,
+          bends_count: 0,
+          tags_count: 2,
+          fittings_count: 0,
+          suppressed_count: 0,
+        },
+        linear_dims: [],
+        cut_tubis: [],
+        welds: [],
+        slopes: [],
+        bends: [],
+        tags: [
+          {
+            id: 'tag:tubi:dup',
+            role: 'tubi',
+            text: 'L=794',
+            position: [0, 0, 0],
+            visible: true,
+          },
+          {
+            id: 'tag:material:1:dup',
+            role: 'material_balloon',
+            text: '1',
+            position: [50, 0, 0],
+            visible: true,
+          },
+        ],
+        fittings: [],
+        suppressed_items: [],
+      },
+      stats: {
+        segments_count: 0,
+        dims_count: 0,
+        welds_count: 0,
+        slopes_count: 0,
+        bends_count: 0,
+        cut_tubis_count: 0,
+        tags_count: 2,
+      },
+    } as any);
+
+    expect(vis.getTagAnnotations().has('tag:tubi:dup')).toBe(false);
+    expect(vis.getTagAnnotations().has('tag:material:1:dup')).toBe(true);
   });
 
   it('construction 下相邻短 chain 尺寸应自动错开文字位置', () => {
@@ -3270,16 +3539,16 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
     vis.renderBranch(data);
 
     expect(getLabelStyle(vis.getDimAnnotations().get('dim-1'))).toBe(
-      'solvespace',
+      'rebarviz',
     );
     expect(getLabelStyle(vis.getWeldAnnotations().get('weld-1'))).toBe(
-      'solvespace',
+      'rebarviz',
     );
     expect(getLabelStyle(vis.getSlopeAnnotations().get('slope-1'))).toBe(
-      'solvespace',
+      'rebarviz',
     );
     expect(getLabelStyle(vis.getBendAnnotations().get('bend-1'))).toBe(
-      'solvespace',
+      'rebarviz',
     );
 
     vis.dimMode.value = 'classic';

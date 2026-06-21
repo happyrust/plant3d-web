@@ -256,6 +256,9 @@ export class LinearDimension3D extends AnnotationBase {
       l.frustumCulled = false;
       this.add(l);
     }
+    this.dimensionLineA.userData.mbdLineRole = 'dimensionLineA';
+    this.dimensionLineB.userData.mbdLineRole = 'dimensionLineB';
+    this.dimensionLineOutside.userData.mbdLineRole = 'dimensionLineOutside';
 
     // 创建尺寸界线（Line2）
     this.extensionLine1 = new Line2(
@@ -268,6 +271,8 @@ export class LinearDimension3D extends AnnotationBase {
     );
     this.extensionLine1.userData.dragRole = 'offset';
     this.extensionLine2.userData.dragRole = 'offset';
+    this.extensionLine1.userData.mbdLineRole = 'extensionLine1';
+    this.extensionLine2.userData.mbdLineRole = 'extensionLine2';
     this.extensionLine1.renderOrder = 992;
     this.extensionLine2.renderOrder = 992;
     this.extensionLine1.frustumCulled = false;
@@ -290,6 +295,8 @@ export class LinearDimension3D extends AnnotationBase {
     this.arrowOpen2 = new LineSegments2(this.arrowOpenGeometry2, this.materialSet.fatLine);
     this.arrowOpen1.userData.dragRole = 'offset';
     this.arrowOpen2.userData.dragRole = 'offset';
+    this.arrowOpen1.userData.mbdLineRole = 'arrowOpen1';
+    this.arrowOpen2.userData.mbdLineRole = 'arrowOpen2';
     this.arrowOpen1.renderOrder = 993;
     this.arrowOpen2.renderOrder = 993;
     this.arrowOpen1.frustumCulled = false;
@@ -941,8 +948,21 @@ export class LinearDimension3D extends AnnotationBase {
 
     const hasExplicitLine = !!(laidOut?.dimLineStart && laidOut?.dimLineEnd);
     let trimWithin = 0;
-    const swidth = shouldTrimForVisibleLabel ? (extPx.width + 8) * wpp : 0;
-    const sheight = shouldTrimForVisibleLabel ? (extPx.height + 8) * wpp : 0;
+    const drawingPlacement = String(
+      (this.userData as any)?.mbdDrawingLinearPlacement ?? '',
+    );
+    const trimPaddingPx =
+      drawingPlacement === 'external-chain'
+        ? 64
+        : drawingPlacement === 'inline-tube-length'
+          ? 32
+          : 8;
+    const swidth = shouldTrimForVisibleLabel
+      ? (extPx.width + trimPaddingPx) * wpp
+      : 0;
+    const sheight = shouldTrimForVisibleLabel
+      ? (extPx.height + trimPaddingPx) * wpp
+      : 0;
 
     if (hasExplicitLine) {
       // layout_first 显式几何模式：尺寸线总体几何由后端决定，但仍需在文字处留白，
@@ -1436,12 +1456,9 @@ export class LinearDimension3D extends AnnotationBase {
     const baseLabelPos = laidOut?.textAnchor
       ? this.tempVec.copy(laidOut.textAnchor)
       : this.tempVec.copy(this.dimStart).lerp(this.dimEnd, t);
+    this.textLabel.object3d.position.copy(baseLabelPos);
     if (this.params.labelOffsetWorld) {
-      this.textLabel.object3d.position
-        .copy(baseLabelPos)
-        .add(this.params.labelOffsetWorld);
-    } else {
-      this.textLabel.object3d.position.copy(baseLabelPos);
+      this.textLabel.object3d.position.add(this.params.labelOffsetWorld);
     }
 
     // 吸附点位置

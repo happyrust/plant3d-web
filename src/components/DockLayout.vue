@@ -625,6 +625,7 @@ function createEmbedFocusedLayout(
     'resubmissionTasks',
     'taskMonitor',
     'taskCreation',
+    'incrementalUpdate',
     'modelExport',
     'materialConfig',
     'roomInfo',
@@ -690,6 +691,7 @@ function createMbdFocusedLayout(dockApi: DockApi) {
     'resubmissionTasks',
     'taskMonitor',
     'taskCreation',
+    'incrementalUpdate',
     'modelExport',
     'materialConfig',
     'roomInfo',
@@ -757,6 +759,7 @@ function createMbdDrawingLayout(dockApi: DockApi) {
     'resubmissionTasks',
     'taskMonitor',
     'taskCreation',
+    'incrementalUpdate',
     'modelExport',
     'materialConfig',
     'roomInfo',
@@ -902,6 +905,18 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
+  if (normalizedPanelId === 'mbdAnnotationStyle') {
+    return addPanelSafely(dockApi, {
+      id: 'mbdAnnotationStyle',
+      component: 'MbdAnnotationStylePanel',
+      title: 'MBD 标注样式',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
   if (panelId === 'dimensionStyle') {
     return addPanelSafely(dockApi, {
       id: 'dimensionStyle',
@@ -1015,6 +1030,18 @@ function ensurePanel(panelId: string) {
       id: 'taskCreation',
       component: 'TaskCreationPanel',
       title: '创建任务',
+      position: measurementPanel
+        ? { referencePanel: measurementPanel, direction: 'within' }
+        : viewerPanel
+          ? { referencePanel: viewerPanel, direction: 'right' }
+          : undefined,
+    });
+  }
+  if (normalizedPanelId === 'incrementalUpdate') {
+    return addPanelSafely(dockApi, {
+      id: 'incrementalUpdate',
+      component: 'IncrementalUpdatePanel',
+      title: '增量更新',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -1344,6 +1371,12 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.mbdPipe':
       togglePanel('mbdPipe');
       return;
+    case 'panel.mbdAnnotationStyle':
+      togglePanel('mbdAnnotationStyle');
+      return;
+    case 'mbd.settings':
+      togglePanel('mbdAnnotationStyle');
+      return;
     case 'panel.materialConfig':
       togglePanel('materialConfig');
       return;
@@ -1425,6 +1458,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.taskCreation':
       togglePanel('taskCreation');
+      return;
+    case 'panel.incrementalUpdate':
+      togglePanel('incrementalUpdate');
       return;
     case 'panel.parquetDebug':
       togglePanel('parquetDebug');

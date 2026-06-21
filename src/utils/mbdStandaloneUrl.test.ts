@@ -4,6 +4,7 @@ import {
   isMbdDrawingPresetUrl,
   isMbdStandaloneUrl,
   normalizeMbdRefnoFromUrl,
+  resolveMbdStandaloneDisplayMode,
 } from './mbdStandaloneUrl';
 
 describe('mbdStandaloneUrl', () => {
@@ -13,9 +14,11 @@ describe('mbdStandaloneUrl', () => {
     expect(isMbdStandaloneUrl('?output_project=demo')).toBe(false);
   });
 
-  it('keeps standalone MBD URLs focused unless drawing preset is explicit', () => {
+  it('opens standalone MBD URLs in full interactive 3D mode by default', () => {
     expect(isMbdDrawingPresetUrl('?mbd_refno=2013286704_476')).toBe(false);
     expect(isMbdDrawingPresetUrl('?mbd_pipe=2013286704/476')).toBe(false);
+    expect(resolveMbdStandaloneDisplayMode('?mbd_refno=2013286704_476')).toBe('full');
+    expect(resolveMbdStandaloneDisplayMode('?mbd_pipe=2013286704/476')).toBe('full');
     expect(isMbdDrawingPresetUrl('?output_project=demo')).toBe(false);
   });
 
@@ -25,6 +28,8 @@ describe('mbdStandaloneUrl', () => {
     expect(isMbdDrawingPresetUrl('?mbd_refno=2013286704_476&mbd_sheet=1')).toBe(true);
     expect(isMbdDrawingPresetUrl('?mbd_refno=2013286704_476&mbd_preset=length')).toBe(false);
     expect(isMbdDrawingPresetUrl('?mbd_refno=2013286704_476&mbd_mode=core')).toBe(false);
-    expect(isMbdDrawingPresetUrl('?output_project=demo&mbd_full=1')).toBe(true);
+    expect(resolveMbdStandaloneDisplayMode('?mbd_refno=2013286704_476&mbd_preset=drawing')).toBe('drawing');
+    expect(resolveMbdStandaloneDisplayMode('?mbd_refno=2013286704_476&mbd_preset=length')).toBe('length');
+    expect(resolveMbdStandaloneDisplayMode('?output_project=demo&mbd_full=1')).toBe('full');
   });
 });

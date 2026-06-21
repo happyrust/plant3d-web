@@ -326,6 +326,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         items: [
           { kind: 'button', id: 'task.dataParsing', label: '数据解析', icon: 'database', commandId: 'task.createDataParsing' },
           { kind: 'button', id: 'task.modelGen', label: '模型生成', icon: 'cube', commandId: 'task.createModelGeneration' },
+          { kind: 'button', id: 'task.incrementalUpdate', label: '增量更新', icon: 'activity', commandId: 'panel.incrementalUpdate' },
           { kind: 'button', id: 'task.modelExport', label: '导出模型', icon: 'download', commandId: 'task.createModelExport' },
         ],
       },
@@ -347,6 +348,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '样式',
         items: [
           { kind: 'button', id: 'settings.annotationStyle', label: '批注样式', icon: 'settings', commandId: 'annotation.settings' },
+          { kind: 'button', id: 'settings.mbdAnnotationStyle', label: 'MBD标注', icon: 'settings', commandId: 'mbd.settings' },
         ],
       },
     ],

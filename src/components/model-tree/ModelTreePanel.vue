@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import { useVirtualizer } from '@tanstack/vue-virtual';
-import { Filter, Plus, Search, X } from 'lucide-vue-next';
+import { Filter, GitCompare, Plus, Search, X } from 'lucide-vue-next';
 
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
@@ -25,6 +25,29 @@ const props = defineProps<{
 }>();
 
 const activeTree = ref<'pdms' | 'room'>('pdms');
+
+type IncrementalCompareModel = {
+  refno: string;
+  category?: string;
+  status?: string;
+  beforeState?: string;
+  afterState?: string;
+  sourceChangeCount?: number;
+  sourceNouns?: string;
+};
+
+type IncrementalCompareContext = {
+  project?: string;
+  dbnum?: number;
+  fromSesno?: number;
+  toSesno?: number;
+  mode?: string;
+  refnos: string[];
+  models: IncrementalCompareModel[];
+};
+
+const incrementalCompareContext = ref<IncrementalCompareContext | null>(null);
+const incrementalCompareSelectedRefno = ref<string | null>(null);
 
 const pdmsViewerRef = shallowRef<DtxCompatViewer | null>(props.viewer);
 const roomViewerRef = shallowRef<DtxCompatViewer | null>(null);
@@ -68,6 +91,22 @@ const filteredTypes = computed(() => (isRoomTree.value ? roomTree.filteredTypes.
 const searchLoading = computed(() => (isRoomTree.value ? roomTree.searchLoading.value : pdmsTree.searchLoading.value));
 const searchError = computed(() => (isRoomTree.value ? roomTree.searchError.value : pdmsTree.searchError.value));
 const searchItems = computed(() => (isRoomTree.value ? roomTree.searchItems.value : pdmsTree.searchItems.value));
+
+const incrementalCompareModels = computed(() => {
+  const ctx = incrementalCompareContext.value;
+  if (!ctx) return [];
+  if (ctx.models.length > 0) return ctx.models;
+  return ctx.refnos.map((refno) => ({ refno }));
+});
+
+const incrementalCompareTitle = computed(() => {
+  const ctx = incrementalCompareContext.value;
+  if (!ctx) return '';
+  const db = ctx.dbnum ? `DB ${ctx.dbnum}` : 'DB';
+  const from = ctx.fromSesno ?? '-';
+  const to = ctx.toSesno ?? '-';
+  return `${db} · ${from} / ${to}`;
+});
 
 function setFilter(text: string) {
   if (isRoomTree.value) {
@@ -295,6 +334,7 @@ function rowAt(index: number) {
 const containerRef = ref<HTMLElement | null>(null);
 const contextMenuOpen = ref(false);
 const contextMenuPos = ref({ x: 0, y: 0 });
+const contextMenuRef = ref<HTMLElement | null>(null);
 const contextNodeId = ref<string | null>(null);
 
 const searchPopoverOpen = ref(false);
@@ -692,39 +732,127 @@ const virtualRows = computed(() => {
 });
 const totalSize = computed(() => rowVirtualizer.value.getTotalSize());
 
+function getPdmsTreeE2ESnapshot(rawRefno?: string) {
+  const targetId = normalizeRefnoKeyLike(rawRefno || '');
+  const targetIndex = targetId ? flatRows.value.findIndex((row) => row.id === targetId) : -1;
+  const node = targetId ? pdmsTree.nodesById.value[targetId] : null;
+  const parent = node?.parentId ? pdmsTree.nodesById.value[node.parentId] : null;
+  const rows = targetIndex >= 0
+    ? flatRows.value.slice(Math.max(0, targetIndex - 6), targetIndex + 7)
+    : flatRows.value.slice(0, 80);
+
+  return {
+    activeTree: activeTree.value,
+    rootIds: [...pdmsTree.rootIds.value],
+    expandedIds: [...pdmsTree.expandedIds.value],
+    selectedIds: [...pdmsTree.selectedIds.value],
+    flatRowCount: flatRows.value.length,
+    targetId,
+    targetIndex,
+    targetNode: node
+      ? {
+        id: node.id,
+        name: node.name,
+        type: node.type,
+        parentId: node.parentId,
+        childrenIds: [...node.childrenIds],
+      }
+      : null,
+    targetParent: parent
+      ? {
+        id: parent.id,
+        name: parent.name,
+        type: parent.type,
+        parentId: parent.parentId,
+        childrenIds: [...parent.childrenIds],
+      }
+      : null,
+    rows,
+    virtualRows: virtualRows.value.map((row) => ({
+      index: row.index,
+      start: row.start,
+      size: row.size,
+    })),
+  };
+}
+
+async function focusPdmsTreeRefnoForE2E(rawRefno: string) {
+  const targetId = normalizeRefnoKeyLike(rawRefno);
+  let error: string | null = null;
+
+  try {
+    activeTree.value = 'pdms';
+    await nextTick();
+    await pdmsTree.focusNodeById(targetId, {
+      flyTo: false,
+      syncSceneSelection: false,
+      clearSearch: false,
+    });
+    selection.setSelectedRefno(targetId);
+    await nextTick();
+    if (containerRef.value) rowVirtualizer.value.measure();
+    await nextTick();
+
+    const targetIndex = flatRows.value.findIndex((row) => row.id === targetId);
+    if (targetIndex >= 0) {
+      const v = rowVirtualizer.value as unknown as { scrollToIndex?: (index: number, opts?: unknown) => void };
+      if (typeof v.scrollToIndex === 'function') {
+        v.scrollToIndex(targetIndex, { align: 'center' });
+      } else if (containerRef.value) {
+        containerRef.value.scrollTop = targetIndex * 32;
+      }
+      await nextTick();
+      if (containerRef.value) rowVirtualizer.value.measure();
+    }
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+
+  return {
+    ...getPdmsTreeE2ESnapshot(targetId),
+    error,
+  };
+}
+
 function closeContextMenu() {
   contextMenuOpen.value = false;
   contextNodeId.value = null;
+}
+
+function clampContextMenuPosition(x: number, y: number, width: number, height: number) {
+  const margin = 8;
+  const maxX = Math.max(margin, window.innerWidth - width - margin);
+  const maxY = Math.max(margin, window.innerHeight - height - margin);
+
+  return {
+    x: Math.min(Math.max(margin, x), maxX),
+    y: Math.min(Math.max(margin, y), maxY),
+  };
 }
 
 function openContextMenu(nodeId: string, ev: MouseEvent) {
   ev.preventDefault();
   ev.stopPropagation();
   contextNodeId.value = nodeId;
-  
-  // 计算菜单位置，考虑视口边界
+
+  // 先用预估尺寸定位，再在 DOM 渲染后按真实尺寸二次夹紧。
   const menuWidth = 176; // w-44 = 11rem = 176px
-  const menuHeight = 280; // 预估高度
-  
-  let x = ev.clientX;
-  let y = ev.clientY;
-  
-  // 检查右边界
-  if (x + menuWidth > window.innerWidth) {
-    x = window.innerWidth - menuWidth - 8;
-  }
-  
-  // 检查下边界
-  if (y + menuHeight > window.innerHeight) {
-    y = window.innerHeight - menuHeight - 8;
-  }
-  
-  // 确保不超出左上边界
-  x = Math.max(8, x);
-  y = Math.max(8, y);
-  
-  contextMenuPos.value = { x, y };
+  const menuHeight = 360;
+
+  contextMenuPos.value = clampContextMenuPosition(ev.clientX, ev.clientY, menuWidth, menuHeight);
   contextMenuOpen.value = true;
+
+  void nextTick(() => {
+    const el = contextMenuRef.value;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    contextMenuPos.value = clampContextMenuPosition(
+      contextMenuPos.value.x,
+      contextMenuPos.value.y,
+      rect.width || menuWidth,
+      rect.height || menuHeight,
+    );
+  });
 }
 
 function onGlobalMouseDown(ev: MouseEvent) {
@@ -747,6 +875,11 @@ onMounted(async () => {
   if (containerRef.value) {
     rowVirtualizer.value.measure();
   }
+
+  (window as any).__plant3dModelTreeE2E = {
+    focusRefno: focusPdmsTreeRefnoForE2E,
+    getSnapshot: getPdmsTreeE2ESnapshot,
+  };
 
   // 监听自动定位事件 (from ViewerPanel via auto_locate_refno URL param)
   const handleAutoLocate = async (event: Event) => {
@@ -799,6 +932,12 @@ onMounted(async () => {
   
   // 清理函数将在 onUnmounted 中处理
   (window as any).__autoLocateHandler = handleAutoLocate;
+
+  const handleIncrementalCompare = (event: Event) => {
+    applyIncrementalCompareContext((event as CustomEvent).detail);
+  };
+  window.addEventListener('plant3d:incremental-version-compare', handleIncrementalCompare);
+  (window as any).__incrementalCompareTreeHandler = handleIncrementalCompare;
 });
 
 onUnmounted(() => {
@@ -810,6 +949,14 @@ onUnmounted(() => {
     window.removeEventListener('autoLocateRefno', handler);
     delete (window as any).__autoLocateHandler;
   }
+
+  const compareHandler = (window as any).__incrementalCompareTreeHandler;
+  if (compareHandler) {
+    window.removeEventListener('plant3d:incremental-version-compare', compareHandler);
+    delete (window as any).__incrementalCompareTreeHandler;
+  }
+
+  delete (window as any).__plant3dModelTreeE2E;
 });
 
 const typesButtonLabel = computed(() => {
@@ -893,6 +1040,110 @@ function normalizeRefnoKeyLike(id: string): string {
   const wrapped = raw.match(/[⟨<]([^⟩>]+)[⟩>]/)?.[1] ?? raw;
   const core = wrapped.replace(/^pe:/i, '').replace(/^=/, '');
   return core.replace(/\//g, '_').replace(/,/g, '_');
+}
+
+function normalizeCompareRefno(raw: unknown): string {
+  return normalizeRefnoKeyLike(String(raw ?? ''));
+}
+
+function applyIncrementalCompareContext(rawDetail: unknown) {
+  const detail = rawDetail as {
+    project?: unknown;
+    dbnum?: unknown;
+    fromSesno?: unknown;
+    toSesno?: unknown;
+    mode?: unknown;
+    refnos?: unknown;
+    models?: unknown;
+  };
+  const refnos = Array.isArray(detail?.refnos)
+    ? detail.refnos.map(normalizeCompareRefno).filter(Boolean)
+    : [];
+  const models = Array.isArray(detail?.models)
+    ? detail.models
+      .map((model: unknown) => {
+        const item = model as IncrementalCompareModel;
+        const refno = normalizeCompareRefno(item?.refno);
+        if (!refno) return null;
+        return {
+          refno,
+          category: item.category,
+          status: item.status,
+          beforeState: item.beforeState,
+          afterState: item.afterState,
+          sourceChangeCount: item.sourceChangeCount,
+          sourceNouns: item.sourceNouns,
+        };
+      })
+      .filter((item): item is IncrementalCompareModel => !!item)
+    : [];
+  const mergedRefnos = Array.from(new Set([
+    ...refnos,
+    ...models.map((item) => item.refno),
+  ]));
+  if (mergedRefnos.length === 0) return;
+
+  activeTree.value = 'pdms';
+  incrementalCompareContext.value = {
+    project: typeof detail.project === 'string' ? detail.project : undefined,
+    dbnum: Number.isFinite(Number(detail.dbnum)) ? Number(detail.dbnum) : undefined,
+    fromSesno: Number.isFinite(Number(detail.fromSesno)) ? Number(detail.fromSesno) : undefined,
+    toSesno: Number.isFinite(Number(detail.toSesno)) ? Number(detail.toSesno) : undefined,
+    mode: typeof detail.mode === 'string' ? detail.mode : undefined,
+    refnos: mergedRefnos,
+    models: models.length > 0 ? models : mergedRefnos.map((refno) => ({ refno })),
+  };
+  incrementalCompareSelectedRefno.value = mergedRefnos[0] ?? null;
+  if (incrementalCompareSelectedRefno.value) {
+    selection.setSelectedRefno(incrementalCompareSelectedRefno.value);
+  }
+}
+
+async function focusIncrementalCompareModel(refno: string) {
+  const target = normalizeCompareRefno(refno);
+  if (!target) return;
+  activeTree.value = 'pdms';
+  incrementalCompareSelectedRefno.value = target;
+  selection.setSelectedRefno(target);
+  ensurePanelAndActivate('viewer');
+
+  try {
+    await pdmsTree.focusNodeById(target, { flyTo: false, syncSceneSelection: false, clearSearch: false });
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn('[model-tree] incremental compare focus fallback', e);
+    }
+  }
+
+  window.dispatchEvent(new CustomEvent('showModelByRefnos', {
+    detail: {
+      refnos: [target],
+      flyTo: true,
+    },
+  }));
+}
+
+function compareStatusLabel(status?: string): string {
+  if (status === 'added') return '新增';
+  if (status === 'modified') return '修改';
+  if (status === 'deleted') return '删除';
+  if (status === 'mixed') return '混合';
+  return '变化';
+}
+
+function compareStatusClass(status?: string): string {
+  if (status === 'added') return 'text-emerald-700 bg-emerald-50';
+  if (status === 'modified') return 'text-amber-700 bg-amber-50';
+  if (status === 'deleted') return 'text-rose-700 bg-rose-50';
+  if (status === 'mixed') return 'text-blue-700 bg-blue-50';
+  return 'text-slate-700 bg-slate-100';
+}
+
+function versionStateLabel(state?: string): string {
+  if (state === 'missing') return '不存在';
+  if (state === 'changed') return '变化';
+  if (state === 'present') return '存在';
+  return '-';
 }
 
 function delay(ms: number): Promise<void> {
@@ -1183,7 +1434,7 @@ const contextNodeCanMbd = computed(() => {
 function generateMbd() {
   if (!contextNodeId.value) return;
   if (isRefnoLike(contextNodeId.value)) {
-    toolStore.requestMbdPipeAnnotation(contextNodeId.value);
+    toolStore.requestMbdPipeAnnotation(contextNodeId.value, { displayMode: 'full' });
   }
   closeContextMenu();
 }
@@ -1503,6 +1754,49 @@ function onSearchEnter(value: string) {
       </div>
     </div>
 
+    <div v-if="incrementalCompareModels.length > 0 && !isRoomTree"
+      class="mb-2 rounded-md border border-blue-200 bg-blue-50/70 p-2 text-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex min-w-0 items-center gap-2">
+          <GitCompare class="h-4 w-4 shrink-0 text-blue-700" />
+          <div class="min-w-0">
+            <div class="truncate font-medium text-blue-900">增量对比模型</div>
+            <div class="truncate text-xs text-blue-700">
+              {{ incrementalCompareTitle }} · {{ incrementalCompareModels.length }} 个模型
+            </div>
+          </div>
+        </div>
+        <button v-if="incrementalCompareSelectedRefno"
+          type="button"
+          class="shrink-0 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
+          @click="focusIncrementalCompareModel(incrementalCompareSelectedRefno)">
+          加载选中
+        </button>
+      </div>
+
+      <div class="mt-2 max-h-48 overflow-auto rounded border border-blue-100 bg-white">
+        <button v-for="item in incrementalCompareModels"
+          :key="item.refno"
+          type="button"
+          class="flex w-full items-center gap-2 border-b border-blue-50 px-2 py-1.5 text-left hover:bg-blue-50"
+          :class="incrementalCompareSelectedRefno === item.refno ? 'bg-blue-50' : ''"
+          @click="focusIncrementalCompareModel(item.refno)">
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-mono text-xs text-slate-900">{{ item.refno }}</span>
+            <span class="block truncate text-[11px] text-slate-500">
+              {{ item.category || '-' }} · {{ item.sourceNouns || '-' }}
+            </span>
+          </span>
+          <span class="shrink-0 rounded px-1.5 py-0.5 text-[11px]" :class="compareStatusClass(item.status)">
+            {{ compareStatusLabel(item.status) }}
+          </span>
+          <span class="shrink-0 text-[11px] text-slate-500">
+            {{ versionStateLabel(item.beforeState) }} → {{ versionStateLabel(item.afterState) }}
+          </span>
+        </button>
+      </div>
+    </div>
+
     <div ref="containerRef"
       class="relative min-h-0 flex-1 overflow-auto rounded-md border border-border bg-background p-2">
       <div class="relative w-full"
@@ -1529,6 +1823,7 @@ function onSearchEnter(value: string) {
     <!-- 右键菜单 - 使用 Teleport 渲染到 body -->
     <Teleport to="body">
       <div v-if="contextMenuOpen"
+        ref="contextMenuRef"
         data-model-tree-context-menu="true"
         :class="cn('fixed z-[9999] w-44 rounded-md border border-border bg-background p-1 shadow-md')"
         :style="{ left: `${contextMenuPos.x}px`, top: `${contextMenuPos.y}px` }">
@@ -1585,6 +1880,8 @@ function onSearchEnter(value: string) {
         <template v-if="contextNodeCanMbd">
           <div class="my-1 h-px bg-border" />
           <button type="button"
+            data-testid="model-tree-generate-mbd"
+            :data-refno="contextNodeId || ''"
             class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
             @click="generateMbd">
             生成 MBD 标注

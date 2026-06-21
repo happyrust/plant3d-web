@@ -478,9 +478,12 @@ export type PtsetVisualizationRequest = {
   timestamp: number;
 };
 
+export type MbdPipeAnnotationDisplayMode = 'full' | 'drawing' | 'length';
+
 // MBD 管道标注请求（用于跨组件通信）
 export type MbdPipeAnnotationRequest = {
   refno: string;
+  displayMode?: MbdPipeAnnotationDisplayMode;
   timestamp: number;
 };
 
@@ -2516,8 +2519,15 @@ export function useToolStore() {
 
     // MBD 管道标注
     mbdPipeAnnotationRequest,
-    requestMbdPipeAnnotation: (refno: string) => {
-      mbdPipeAnnotationRequest.value = { refno, timestamp: Date.now() };
+    requestMbdPipeAnnotation: (
+      refno: string,
+      options: { displayMode?: MbdPipeAnnotationDisplayMode } = {},
+    ) => {
+      mbdPipeAnnotationRequest.value = {
+        refno,
+        displayMode: options.displayMode ?? 'full',
+        timestamp: Date.now(),
+      };
     },
     clearMbdPipeAnnotationRequest: () => {
       mbdPipeAnnotationRequest.value = null;

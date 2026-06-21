@@ -121,9 +121,17 @@ onUnmounted(() => {
 
 <template>
   <div :class="cn(
-    'flex h-8 items-center rounded-sm pr-2 text-sm transition-colors',
-    selected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
-  )" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave" @mousedown.prevent="onSelect" @contextmenu="onContext">
+         'flex h-8 items-center rounded-sm pr-2 text-sm transition-colors',
+         selected ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+       )"
+    data-testid="model-tree-row"
+    :data-node-type="row.type"
+    :data-refno="row.id"
+    :data-selected="selected ? 'true' : 'false'"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
+    @mousedown.prevent="onSelect"
+    @contextmenu="onContext">
     <!-- Indentation guides -->
     <div class="flex h-full shrink-0 select-none">
       <span v-for="n in safeDepth" :key="n" class="h-full border-r border-border/40" :style="{ width: `${INDENT_PX}px` }" />

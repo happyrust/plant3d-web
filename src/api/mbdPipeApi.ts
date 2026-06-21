@@ -9,7 +9,7 @@ import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 export type Vec3 = [number, number, number]
 
-export type MbdPipeSource = 'db' | 'cache'
+export type MbdPipeSource = 'db' | 'cache' | 'parquet'
 export type MbdPipeApiMode = 'layout_first' | 'construction' | 'inspection'
 export type MbdPipeViewMode = MbdPipeApiMode
 
@@ -147,7 +147,16 @@ export type MbdCutTubiDto = {
   layout_hint?: MbdLayoutHint | null
 }
 
-export type MbdFittingKind = 'elbo' | 'bend' | 'tee' | 'olet' | 'flan' | 'unknown'
+export type MbdFittingKind =
+  | 'elbo'
+  | 'bend'
+  | 'tee'
+  | 'olet'
+  | 'flan'
+  | 'redu'
+  | 'valv'
+  | 'gask'
+  | 'unknown'
 
 export type MbdFittingDto = {
   id: string
@@ -545,11 +554,11 @@ export type MbdPipeQueryParams = {
 const MBD_V2_LAYOUT_FIRST_DEFAULT_QUERY: MbdPipeQueryParams = {
   mode: 'layout_first',
   include_layout_result: true,
-  // 首期 BRAN MBD 只默认请求长度类尺寸：chain / port / cut-tubi。
+  // 首期 BRAN MBD 聚焦主长度尺寸：chain；cut-tubi 仅用于材料表，端口尺寸需显式开启。
   include_dims: false,
   include_chain_dims: true,
   include_overall_dim: false,
-  include_port_dims: true,
+  include_port_dims: false,
   include_cut_tubis: true,
   include_fittings: false,
   include_tags: false,
@@ -583,6 +592,8 @@ function getBaseUrl(): string {
   return getBackendApiBaseUrl();
 }
 
+const MBD_PIPE_API_TIMEOUT_MS = 60_000;
+
 function toQueryString(params: Record<string, unknown>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -597,21 +608,47 @@ function toQueryString(params: Record<string, unknown>): string {
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const base = getBaseUrl().replace(/\/$/, '');
   const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
-
-  const resp = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
+  const controller = new AbortController();
+  const upstreamSignal = init?.signal;
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, MBD_PIPE_API_TIMEOUT_MS);
+  const onUpstreamAbort = () => controller.abort();
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      controller.abort();
+    } else {
+      upstreamSignal.addEventListener('abort', onUpstreamAbort, { once: true });
+    }
   }
 
-  return (await resp.json()) as T;
+  try {
+    const resp = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
+    }
+
+    return (await resp.json()) as T;
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(`MBD API request timed out after ${MBD_PIPE_API_TIMEOUT_MS}ms: ${path}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    upstreamSignal?.removeEventListener('abort', onUpstreamAbort);
+  }
 }
 
 export async function getMbdPipeAnnotations(refno: string, params: MbdPipeQueryParams = {}): Promise<MbdPipeResponse> {
@@ -759,6 +796,13 @@ function v2LinearToLaidOutDim(p: MbdV2LinearDimPrimitive): MbdLaidOutLinearDimDt
     extension_line_2_end: cloneVec3(p.extension_2?.end, dimLineEnd),
     text_anchor: textAnchor,
     backend_arrows: backendArrows,
+    layout_hint: {
+      anchor_point: textAnchor,
+      primary_axis: normalizeVec3(subVec3(measuredEnd, measuredStart)),
+      offset_dir: cloneVec3(p.text?.up, [0, 1, 0]),
+      label_role: `v2:${rawSubKind}`,
+      offset_level: Number(p.level ?? 0),
+    },
     visible: p.visible !== false,
     suppressed_reason: p.suppressed_reason ?? null,
   };

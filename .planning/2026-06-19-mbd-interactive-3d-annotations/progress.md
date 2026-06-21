@@ -1,0 +1,398 @@
+# Progress: MBD Interactive 3D BRAN Dimensions
+
+## 2026-06-19
+
+- Read `planning-with-files` instructions and created scoped planning files.
+- Ran SigMap query for MBD interactive 3D branch annotation scope.
+- Inspected git status and confirmed many pre-existing modified/untracked files; this work will not revert unrelated changes.
+- Located the active MBD flow:
+  - model-tree menu: `ModelTreePanel.vue`
+  - Ribbon command: `ViewerPanel.vue`
+  - request contract: `useToolStore.ts`
+  - URL preset parser: `mbdStandaloneUrl.ts`
+  - renderer: `useMbdPipeAnnotationThree.ts`
+  - style panel/profile: `MbdAnnotationStylePanel.vue`, `mbdDrawingStyleProfile.ts`
+- Wrote the formal architecture and development plan to `docs/plans/2026-06-19-mbd-interactive-3d-annotation-architecture-plan.md`.
+- Implemented latest-only request guarding in `src/components/dock_panels/ViewerPanel.vue` so stale MBD async responses do not overwrite or clear newer branch requests.
+- Ran targeted ESLint with `--fix` on the MBD request/render files; passed.
+- Ran `npm run type-check`; passed.
+- Ran focused Vitest for URL mode and MBD renderer behavior; 2 files passed, 9 tests passed, 43 skipped. Vitest printed a non-fatal `ECONNREFUSED localhost:3000` async log after completion with exit code 0.
+- Ran a real Playwright browser verification against `http://127.0.0.1:3101/viewer/?backend=http://127.0.0.1:18082&output_project=aps250160-mbd-cata2&mbd_refno=2013286704_476`.
+- The page requested full MBD data with `include_fittings=true`, `include_tags=true`, `include_material_balloons=true`, `include_welds=true`, and `include_bends=true`.
+- Snapshot after render: dims 3, tags 6, pipe visual bodies 2, fitting visual cores/ports/arms 16 each, severe overlap count 0.
+- Required length texts `600`, `1073`, and `783` were in viewport. After rotating the camera, their screen positions changed and remained in viewport, confirming interactive 3D anchoring rather than a fixed overlay.
+- Wrote the browser verification artifact to `tmp/mbd-real-2013286704_476-interactive-verify.json`.
+- Added `e2e/mbd-interactive-ui.spec.ts`, a real-backend gated Playwright test for the actual Ribbon UI path. It selects `2013286704_476`, clicks `MBD -> 生成标注`, verifies full MBD request flags, confirms `600/1073/783` stay in viewport after camera rotation, opens `MBD -> 标注设置`, applies the light preset, and confirms visible dimension lines update to `#b91c1c`.
+- Added `setSelectedRefno` to `window.__plant3dMbdE2E` for stable E2E setup without re-entering Vue injection-bound composables from `page.evaluate`.
+- Updated `e2e/mbd-pipe-race.spec.ts` to match the current full-interactive API contract and to use the runtime `__viewerToolStore` instance.
+- Updated `.gitignore` with `!e2e/mbd-interactive-ui.spec.ts` so the new E2E is trackable.
+- Verification: `MBD_REAL_UI_E2E=1 ... npx playwright test e2e/mbd-interactive-ui.spec.ts` passed 1/1. Artifact: `tmp/mbd-real-2013286704_476-interactive-ui-menu.json`.
+- Verification: `npx playwright test e2e/mbd-pipe-race.spec.ts` passed 1/1.
+- Verification: `npm run type-check` passed.
+- Verification: focused Vitest for URL mode, renderer mode, style profile, and style panel passed: 4 files, 12 tests passed, 43 skipped. Vitest again printed a non-fatal `ECONNREFUSED localhost:3000` async log with exit code 0.
+- Added stable model-tree row attributes in `src/components/model-tree/ModelTreeRow.vue` and a `data-testid` on the model-tree `生成 MBD 标注` context-menu item.
+- Added `__plant3dModelTreeE2E` snapshot/focus helpers in `src/components/model-tree/ModelTreePanel.vue` so real-browser tests can wait for tree readiness, focus a real BRAN with the production `pdmsTree.focusNodeById` path, and still right-click the actual DOM row.
+- Fixed model-tree context-menu viewport clamping by measuring the rendered menu and clamping to the viewport with actual width/height. This keeps bottom menu items such as `生成 MBD 标注` clickable.
+- Extended `e2e/mbd-interactive-ui.spec.ts` with a second real-backend test for the actual model-tree right-click menu flow.
+- Intermediate errors resolved:
+  - `npx playwright test e2e\mbd-interactive-ui.spec.ts` did not discover tests; re-ran with `e2e/mbd-interactive-ui.spec.ts`.
+  - Model-tree focus initially ran before root initialization; added root/flatRows readiness wait.
+  - Context menu MBD item was outside the viewport; added post-render menu clamping.
+- Verification: `MBD_REAL_UI_E2E=1 MBD_REAL_BACKEND_URL=http://127.0.0.1:18082 MBD_REAL_OUTPUT_PROJECT=aps250160-mbd-cata2 MBD_REAL_REFNO=2013286704_476 npx playwright test e2e/mbd-interactive-ui.spec.ts` passed 2/2. It covers both Ribbon and model-tree right-click menu flows.
+- Verification: `npm run type-check` passed.
+- Verification: `npx playwright test e2e/mbd-pipe-race.spec.ts` passed 1/1.
+- Verification: focused Vitest for URL mode, renderer mode, style profile, and style panel passed: 4 files, 12 tests passed, 43 skipped. The known non-fatal `ECONNREFUSED localhost:3000` async log still appeared with exit code 0.
+
+## 2026-06-19 Senior Staff Goal Continuation
+
+- Created root `GOAL.md` as the active production-grade delivery contract for MBD interactive 3D pipe annotations.
+- Recorded task scope, Done definition, success criteria, architecture decisions, verification gates, progress files, and next-stage plan in `GOAL.md`.
+- Validation: read `GOAL.md` back from disk and searched for required anchors: `Done 定义`, `五轴`, `2013286704`, `真实后端验证`, and `下一阶段计划`.
+- Self-review against Goal: satisfied the user's first execution rule by creating a clear project goal file before further implementation. This step is documentation/process scaffolding, so browser E2E is not applicable yet; subsequent behavior changes must include real test/browser verification.
+- Audited current MBD request flow with SigMap + `rg`; confirmed `displayMode` existed but five-axis request mapping and API parameter construction were still embedded in `ViewerPanel.vue`.
+- Added `src/composables/mbd/mbdPresetMapper.ts` to map `full/drawing/length` compatibility presets into `requestIntent`, `dataScope`, `layoutMode`, and `renderMode` axes.
+- Added `src/composables/mbd/mbdApiParamBuilder.ts` to build backend MBD query flags from the resolved axes.
+- Added focused unit coverage in `mbdPresetMapper.test.ts` and `mbdApiParamBuilder.test.ts` for full interactive, drawing sheet, length-focus, and non-layout-first behavior.
+- Updated `ViewerPanel.vue` to use the mapper/builder for MBD request flags, preload timeout, fly-to policy, visual emphasis flags, and V2 selection while preserving the existing user-visible behavior.
+- Verification: `npx vitest run src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts --reporter=dot` passed 2 files / 7 tests.
+- Verification: `npm run type-check` passed after the mapper/builder integration.
+- Verification: targeted ESLint with `--fix` on the new MBD modules and `ViewerPanel.vue` exited successfully.
+- Verification: `npx playwright test e2e/mbd-pipe-race.spec.ts` passed 1/1, proving latest-request behavior still holds after request-axis extraction.
+- Verification: real backend probe to `http://127.0.0.1:18082/api/mbd/v2/pipe/2013286704_476?...` returned HTTP 200.
+- Verification: real UI E2E with `MBD_REAL_UI_E2E=1`, backend `18082`, project `aps250160-mbd-cata2`, refno `2013286704_476` passed 2/2 for Ribbon and model-tree context-menu flows.
+- Verification: focused regression Vitest for URL preset, request gate, mapper/builder, style/profile, and selected renderer cases passed 5 files with 21 tests, 46 skipped. Vitest still emits the known non-fatal `ECONNREFUSED localhost:3000` async log.
+- Additional risk found: full `src/composables/useMbdPipeAnnotationThree.flyTo.test.ts` currently fails 14 tests, mostly bend/layout/dim-mode regression cases. This appears broader than the request-axis extraction and remains a production-grade risk to address before marking the Goal complete.
+- Self-review against Goal: the request architecture now moves from implicit `displayMode` branching toward the documented five-axis model and is proven by unit, type, race E2E, and real browser E2E evidence. The Goal is not complete because renderer test debt remains.
+- Added `e2e/fixtures/mbd-branch-corpus.json` with the primary smoke BRAN `2013286704_476` plus planned multibran regression samples `2013286704_497`, `2013286704_508`, and `2013286704_488`.
+- Updated `.gitignore` so `e2e/fixtures/*.json` can be tracked alongside the existing MBD E2E files.
+- Added `e2e/helpers/mbdPrintBranchCorpus.mjs` to print corpus refs or PowerShell env assignments for real-backend E2E runs.
+- Validation: `node e2e/helpers/mbdPrintBranchCorpus.mjs --priority smoke --include-expected-lengths` emitted `MBD_REAL_REFNO=2013286704_476` and `MBD_REAL_EXPECTED_LENGTHS=600,1073,783`.
+- Validation: `node e2e/helpers/mbdPrintBranchCorpus.mjs --project aps250160-mbd-multibran --format refs` emitted `2013286704_497,2013286704_508,2013286704_488`.
+- Validation: JSON format output parsed successfully and contained 4 samples.
+- Verification: targeted ESLint with `--fix` on `e2e/helpers/mbdPrintBranchCorpus.mjs` exited successfully.
+- External data check: probing `2013286704_497/508/488` on backend ports `18082` and `18083` returned HTTP 200 but business `success=false`.
+- External data check detail: backend reports SurrealDB WebSocket connection refused for those multibran refs, even when `source=cache` is requested. This confirms the corpus is ready, but the current backend/runtime data source cannot yet prove multibran rendering.
+- Self-review against Goal: the work reduces single-BRAN overfitting by adding a concrete regression corpus and helper. The Goal remains incomplete until multibran backend data is deployable and the corpus can be exercised through real browser tests.
+- Updated `.planning/2026-06-19-mbd-interactive-3d-annotations/task_plan.md` to reflect the active Senior Staff Goal state instead of the earlier smaller task state.
+- Validation: searched `task_plan.md` for `Five-axis`, `Renderer full-test`, `Multibran`, `Final production`, `mbdPresetMapper`, `14 failing`, and `SurrealDB`; all required anchors are present.
+- Self-review against Goal: planning files now accurately describe completed work, remaining risks, and external blockers. The final production review remains pending.
+- Current review pass found one behavior drift introduced by the new builder: non-`layout_first` modes would stop requesting `include_overall_dim`.
+- Fixed the drift by making the length data scope keep `overall=true`; `buildMbdPipeQueryParams` still suppresses overall only when `axes.isLayoutFirst` is true, matching the previous Viewer behavior.
+- Updated `mbdApiParamBuilder.test.ts` to assert non-layout-first `inspection` requests keep `include_overall_dim=true`.
+- Verification after fix: `npx vitest run src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts --reporter=dot` passed 2 files / 7 tests.
+- Verification after fix: `npm run type-check` passed.
+- Verification after fix: real UI E2E with backend `18082`, project `aps250160-mbd-cata2`, refno `2013286704_476` passed 2/2 for Ribbon and model-tree context-menu flows.
+- Self-review against Goal: the five-axis extraction now preserves the pre-existing API behavior for non-layout-first modes while keeping the full interactive MBD path verified in a real browser.
+- Used Oracle MCP session `mbd-3d-architectu-review` as the second-model architecture review. Its conclusion matches the current direction: keep ordinary 3D MBD as `full` interactive and make drawing fixed-view explicit only; demote `displayMode` to a compatibility preset; use request intent/data scope/layout mode/render mode/style profile axes; keep camera projection, billboard, screen avoidance, LOD, and style in the frontend; keep topology, semantic dimensions, layout hints, issues, and capabilities in the backend.
+- Ran a new Oracle dry-run with the latest files and confirmed the full context bundle was too large at about 211k tokens, so reused the completed narrower Oracle browser session instead of spawning a duplicate long run.
+- Fixed renderer fallback behavior when `layout_result` is missing:
+  - legacy fallback now renders `bends` instead of dropping them.
+  - legacy fallback now runs port-dimension declutter, chain offset unification, cut-tubi declutter, and tag declutter after rendering.
+  - cut-tubi fallback rendering remains guarded by `showCutTubis` so the opt-in detail layer does not unexpectedly appear.
+- Fixed renderer rebuild behavior for interactive settings changes:
+  - `rebuildDimsByCurrentData` now re-renders layout-first or legacy dimensions/cut-tubis from current data after clearing old objects.
+  - `rebuildBendsByCurrentData` now re-renders layout-result bends or legacy bend annotations from current data.
+  - dim-mode changes now preserve annotations, highlighters, layout solutions, and duplicate-overall suppression instead of clearing the layer.
+- Fixed backend-derived geometry immutability in screen declutter by skipping backend-derived linear annotations when assigning frontend label offsets. This keeps backend wire geometry stable during camera/update passes.
+- Aligned the dim/weld/slope/bend style synchronization test with the current product default: initial mode is `rebarviz`, switching to `classic` uses `solvespace`, and switching back returns to `rebarviz`.
+- Verification: targeted Vitest for backend-derived geometry immutability and missing-face-center bend inference passed 2/2.
+- Verification: targeted Vitest for dense port declutter, bend angle mode, dim-mode highlight retention, reset override stability, and layout duplicate suppression passed 6/6.
+- Verification: targeted Vitest for dim/weld/slope/bend style synchronization passed 1/1.
+- Verification: full renderer suite `npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts --reporter=dot` passed 49/49. The known non-fatal `ECONNREFUSED localhost:3000` async log still appeared after Vitest completion with exit code 0.
+- Updated `task_plan.md`: renderer full-test stabilization moved from `in progress` to `complete`.
+- Self-review against Goal: the largest recorded production risk in the frontend renderer is now covered by a full green renderer test file. The Goal is still not complete until the broader focused suite, type-check, real browser E2E, and final review pass are run after these fixes.
+- Verification: focused regression matrix `npx vitest run src/utils/mbdStandaloneUrl.test.ts src/composables/mbd/mbdRequestSync.test.ts src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts src/composables/mbd/mbdDrawingStyleProfile.test.ts src/components/tools/MbdAnnotationStylePanel.test.ts src/composables/useMbdPipeAnnotationThree.flyTo.test.ts --reporter=dot` passed 7 files / 67 tests. The known non-fatal `ECONNREFUSED localhost:3000` async log still appeared after completion with exit code 0.
+- Verification: `npm run type-check` passed.
+- Self-review against Goal: unit, integration-style renderer coverage, and TypeScript are green after the fallback/rebuild fixes. Remaining verification before production review: targeted lint and real browser E2E against `2013286704_476`.
+- Real browser failure found after the renderer fixes: `MBD_REAL_UI_E2E=1 ... npx playwright test e2e/mbd-interactive-ui.spec.ts` initially failed because camera rotation produced `severe_screen_overlap_count=4` in the full interactive three-dimensional page.
+- Root cause: layout-result labels were only being placed once for a camera/layout state close to the fixed drawing view; full interactive mode did not re-run the screen-space layout pass on camera updates, and the chain/position-tag slots were not general enough for the real `2013286704_476` viewpoint.
+- Fixed the full interactive relayout path:
+  - `updateLabelPositions()` now runs `applyLayoutScreenLabelDeclutter()` after syncing the current model matrix, so camera rotate/zoom/pan can recompute screen-space label offsets while keeping world anchors.
+  - `preferredAbsoluteLayoutScreenOffsetCandidates()` now applies to full interactive layout-result mode as well as drawing mode.
+  - Added generic chain-piece slotting for ids shaped like `dim:chain:<branch>:axis:<n>:piece:<n>`.
+  - Adjusted position tag slots so head/tail coordinate labels no longer pile up on the model after rotation.
+  - Kept the production path on `labelOffsetWorld`; the unused experimental `runtimeLabelOffsetWorld` API was removed from `LinearDimension3D`.
+- Diagnostic validation on the real page after the fix:
+  - source: `tmp/mbd-real-2013286704_476-overlap-diagnostic.json`
+  - screenshot: `tmp/mbd-real-2013286704_476-overlap-diagnostic.png`
+  - render source: `layout_result`
+  - dimensions before/after rotation: `600,1073,783`
+  - rendered after rotation: dims `3`, tags `6`
+  - severe overlap before rotation: `0`
+  - severe overlap after rotation: `0`
+  - non-severe overlap pairs after rotation: `1`
+- Verification after the full interactive relayout fix:
+  - `npx eslint src/composables/useMbdPipeAnnotationThree.ts src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/utils/three/annotation/annotations/LinearDimension3D.ts --fix` passed.
+  - `npx vitest run src/utils/mbdStandaloneUrl.test.ts src/composables/mbd/mbdRequestSync.test.ts src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts src/composables/mbd/mbdDrawingStyleProfile.test.ts src/components/tools/MbdAnnotationStylePanel.test.ts src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/utils/three/annotation/annotations/LinearDimension3D.test.ts --reporter=dot` passed 8 files / 90 tests. The known non-fatal `ECONNREFUSED localhost:3000` async log still appeared after completion with exit code 0.
+  - `npm run type-check` passed.
+  - `MBD_REAL_UI_E2E=1 MBD_REAL_BACKEND_URL=http://127.0.0.1:18082 MBD_REAL_OUTPUT_PROJECT=aps250160-mbd-cata2 MBD_REAL_REFNO=2013286704_476 npx playwright test e2e/mbd-interactive-ui.spec.ts` passed 2/2 for both Ribbon and model-tree context-menu flows.
+  - `npx playwright test e2e/mbd-pipe-race.spec.ts` passed 1/1.
+- Self-review against Goal: the user's core complaint, "三维显示里面的标注乱、固定在特殊视角、没有用真实 branch", is now addressed for the primary real BRAN through true page-level E2E and diagnostic evidence. The remaining blocker is external multibran backend runtime availability for `2013286704_497/508/488`, not frontend hard-coding or a missing corpus.
+- Production build validation: `npm run build` passed. Vite emitted existing warnings about large chunks, dynamic/static import chunk placement, and stale Browserslist data; no build error.
+- Full test sweep: `npm test` currently fails outside the focused MBD scope. The run showed failures in version info, PMS simulator, auth severity, screenshot, DuckDB bundle URL, user/review workflow, measurement, ReviewPanel, TaskReviewDetail, and MeasurementPanel tests. These failures pre-exist in unrelated dirty-worktree areas and were not fixed in this MBD pass.
+- MBD-related full-suite failure found and fixed: `src/api/mbdPipeApi.test.ts` still expected default V2 `include_port_dims=true`, but the current API default and verified full-interactive request intentionally use `include_port_dims=false`.
+- Updated `src/api/mbdPipeApi.test.ts` to match the current five-axis/full-interactive contract while retaining explicit switch pass-through coverage.
+- Verification after the API contract test fix:
+  - `npx vitest run src/api/mbdPipeApi.test.ts --reporter=dot` passed 1 file / 6 tests.
+  - `npx eslint src/api/mbdPipeApi.test.ts --fix` passed.
+  - `npx vitest run src/api/mbdPipeApi.test.ts src/utils/mbdStandaloneUrl.test.ts src/composables/mbd/mbdRequestSync.test.ts src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts src/composables/mbd/mbdDrawingStyleProfile.test.ts src/components/tools/MbdAnnotationStylePanel.test.ts src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/utils/three/annotation/annotations/LinearDimension3D.test.ts --reporter=dot` passed 9 files / 96 tests. The known non-fatal `ECONNREFUSED localhost:3000` async log still appeared after completion with exit code 0.
+  - `npm run type-check` passed.
+  - `git diff --check` on the touched MBD/progress files passed.
+  - `rg "runtimeLabelOffsetWorld|setRuntimeLabelOffsetWorld" src/utils/three/annotation/annotations/LinearDimension3D.ts src/composables/useMbdPipeAnnotationThree.ts` returned no matches, confirming the unused experimental API was removed.
+- Self-review against Goal: MBD-related tests, type-check, production build, real browser E2E, and diagnostic overlap checks are green. The whole repository still has unrelated full-test failures, so final delivery notes must call that out instead of claiming a clean repo-wide `npm test`.
+- Final production review pass:
+  - Requirement: open normal 3D viewer and enable MBD dimensions from menus. Evidence: real Playwright E2E passed both Ribbon `MBD -> 生成标注` and model-tree context-menu `生成 MBD 标注` against backend `18082`, project `aps250160-mbd-cata2`, refno `2013286704_476`.
+  - Requirement: true 3D anchoring, not a fixed screenshot/drawing overlay. Evidence: diagnostic and E2E rotate the camera after render; `600/1073/783` remain visible and the debug snapshot stays sourced from `layout_result`.
+  - Requirement: keep labels readable while camera changes. Evidence: real diagnostic after camera rotation has severe overlap `0`, rendered dims `3`, rendered tags `6`, and no missing core length text.
+  - Requirement: use real BRAN data. Evidence: API requests hit `/api/mbd/v2/pipe/2013286704_476` and fallback V1 URL on the real backend; artifacts are under `tmp/mbd-real-2013286704_476-*`.
+  - Requirement: generic solution, not one-off BRAN rules. Evidence: production code scan/diff review confirmed old `2013286704_*` slot special cases were removed from the renderer; remaining explicit refs are in tests, fixtures, docs/comments, and unrelated existing modules.
+  - Requirement: five-axis architecture. Evidence: `mbdPresetMapper.ts` and `mbdApiParamBuilder.ts` are implemented and covered; Oracle review agrees `displayMode` should be only a compatibility preset.
+  - Requirement: style configuration page. Evidence: `MbdAnnotationStylePanel` and style profile tests pass; real UI E2E opens `MBD -> 标注设置`, applies light preset, and verifies visible dimension line color hot-update.
+  - Requirement: complete error handling. Evidence: request race guard E2E passes; V2/V1 fallback path remains covered; `layout_result` missing falls back to legacy semantic rendering with bends and declutter instead of fatal clearing.
+  - Requirement: tests/verification. Evidence: focused MBD matrix 9 files / 96 tests passed, real UI E2E 2/2 passed, race E2E 1/1 passed, type-check passed, build passed, and diff check passed.
+  - Requirement: performance/maintainability. Evidence: architecture docs specify rAF/throttled projection, debug snapshot gating, object reuse/dispose direction; code review removed unused experimental runtime offset API and preserved generic semantic slots.
+  - Residual risk: full repo `npm test` is not green due unrelated review/measurement/version/duckdb failures in the existing dirty worktree. The MBD API failure found during the sweep was fixed and verified.
+  - Residual blocker: multibran real-backend verification for `2013286704_497/508/488` is blocked by backend SurrealDB WebSocket connection refused; corpus and helper are ready.
+- Self-review against Goal: frontend MBD interactive 3D annotation is ready for a real developer/user to exercise on the primary BRAN without the previously observed fixed-view/overlap failure. The thread goal should not be represented as fully complete until the external multibran backend/runtime blocker and unrelated repo-wide test failures are resolved or accepted.
+
+## 2026-06-19 Multibran Continuation
+
+- Re-read `GOAL.md` and the progress log before continuing, and confirmed the active goal remains production-grade interactive 3D MBD annotations, not a fixed-view drawing overlay.
+- Used SigMap for the next investigation: `sigmap ask "MBD 3D annotation screen overlap declutter useMbdPipeAnnotationThree branch corpus 497"`. SigMap wrote `.context/query-context.md`; it still printed the known "system cannot find the path specified" warning.
+- Used Oracle per project guidance: ran `npx -y @steipete/oracle --help`, listed recent sessions, and reattached the completed `mbd-3d-architectu-review` session. Oracle's second-model conclusion remains aligned with the current architecture: keep ordinary 3D MBD as interactive `full`, treat `drawing` as explicit fixed-sheet preset only, use five axes internally, and keep camera projection/avoidance/LOD/style in the frontend.
+- Found a usable multibran backend/project pair: `http://127.0.0.1:18083` with `aps250160-mbd-multibran` returns MBD data for `2013286704_497`, `2013286704_508`, and `2013286704_488`. This replaces the earlier assumption that multibran verification was fully blocked by backend runtime availability.
+- Added multibran validation scaffolding:
+  - `.gitignore` now keeps `e2e/mbd-branch-corpus.spec.ts` trackable.
+  - `e2e/fixtures/mbd-branch-corpus.json` now records `multiBranchBackendUrl: http://127.0.0.1:18083`.
+  - `e2e/helpers/mbdPrintBranchCorpus.mjs` emits the selected backend URL for corpus runs.
+  - `e2e/mbd-branch-corpus.spec.ts` is gated by `MBD_REAL_CORPUS_E2E=1` and validates non-empty MBD render, full request flags, camera movement, expected length texts when configured, and severe-overlap budget.
+- Validation after scaffolding:
+  - `node e2e/helpers/mbdPrintBranchCorpus.mjs --project aps250160-mbd-multibran --format env` emitted backend `18083`, project `aps250160-mbd-multibran`, and refs `2013286704_497,2013286704_508,2013286704_488`.
+  - `npx eslint e2e/mbd-branch-corpus.spec.ts e2e/helpers/mbdPrintBranchCorpus.mjs --fix` passed.
+  - `npx playwright test e2e/mbd-branch-corpus.spec.ts --list` listed the three real multibran tests.
+- Real E2E failure found: with `MBD_REAL_CORPUS_E2E=1`, backend `18083`, and project `aps250160-mbd-multibran`, `2013286704_497` failed before rotation because `severe_screen_overlap_count` was `15` with the budget `0`. Playwright skipped the rest because the corpus suite is serial.
+- Re-ran the same real corpus validation on the current worktree: `MBD_REAL_CORPUS_E2E=1 MBD_REAL_BACKEND_URL=http://127.0.0.1:18083 MBD_REAL_OUTPUT_PROJECT=aps250160-mbd-multibran npx playwright test e2e/mbd-branch-corpus.spec.ts` failed again on `2013286704_497`, this time with `severe_screen_overlap_count=16` before rotation. `2013286704_508` and `2013286704_488` were skipped by serial execution.
+- Decision: keep the overlap budget strict for now and fix the generic renderer/avoidance behavior instead of relaxing the threshold or adding a `2013286704_497` special case.
+- Self-review against Goal: the work has moved from single-BRAN proof to a real multibran acceptance loop. The next production blocker is a real generic layout defect in `2013286704_497`, so implementation must focus on reusable screen-space avoidance, semantic slots, and LOD behavior.
+- Implemented a generic renderer-side fix for layout-result/full mode:
+  - Initial render now runs `applyLayoutScreenLabelDeclutter()` before final visibility application, so the first settled view does not depend solely on later camera callbacks.
+  - Full interactive mode no longer accepts semantic label slots unconditionally when the collision score is high; it can fall through to broader screen-space candidates.
+  - Added layout-result screen LOD for low-priority tags (`material`, `elevation`, `tubi`, `fitting`) when severe label overlaps remain after placement. Position and branch labels are preserved.
+  - V2 leader lines/tubes now record `mbdTargetTagId` and are hidden when the owning tag is auto-hidden, avoiding orphan leaders.
+- Diagnostic validation after the renderer fix on real `2013286704_497`:
+  - artifact: `tmp/mbd-real-corpus-2013286704_497-diagnostic-after-lod.json`
+  - screenshot: `tmp/mbd-real-corpus-2013286704_497-diagnostic-after-lod.png`
+  - immediate snapshot still showed transient severe overlap during fly-to/relayout, but the settled snapshot after 1.6s reached `severe_screen_overlap_count=0` with no overlap pairs.
+- Updated `e2e/mbd-branch-corpus.spec.ts` so `waitForCorpusMbd` waits for the severe-overlap budget before taking the assertion snapshot. The first attempt had a test-context bug because `maxSevereOverlap` was referenced inside the browser context without being passed as an argument; this was fixed by passing it through `waitForFunction` args.
+- Validation after the 497 fix: `npx eslint src/composables/useMbdPipeAnnotationThree.ts e2e/mbd-branch-corpus.spec.ts --fix` passed, then the real corpus E2E advanced past `2013286704_497` successfully. The next sample, `2013286704_508`, failed with `severe_screen_overlap_count=4` before rotation, so multibran verification is still not complete.
+- Self-review against Goal: the 497 result proves the fix is not hard-coded to the primary BRAN, but 508 shows the generic dense-label strategy still has at least one uncovered topology/density case.
+- Diagnosed `2013286704_508`: `tmp/mbd-real-corpus-2013286704_508-diagnostic-after-lod.json` showed the immediate frame still had severe overlaps, but the settled snapshot after fly-to/relayout had `severe_screen_overlap_count=0` and no overlap pairs. The remaining test failure was an E2E timing issue rather than a persistent render defect.
+- Updated `e2e/mbd-branch-corpus.spec.ts` to wait for a settled MBD state: it now waits for non-empty annotations and overlap budget, waits through the fly-to/relayout window, then verifies the same budget again. The same settled wait is used after camera rotation.
+- Validation: `npx eslint e2e/mbd-branch-corpus.spec.ts src/composables/useMbdPipeAnnotationThree.ts --fix` passed.
+- Real multibran E2E validation passed: `MBD_REAL_CORPUS_E2E=1 MBD_REAL_BACKEND_URL=http://127.0.0.1:18083 MBD_REAL_OUTPUT_PROJECT=aps250160-mbd-multibran npx playwright test e2e/mbd-branch-corpus.spec.ts` passed 3/3 for `2013286704_497`, `2013286704_508`, and `2013286704_488`.
+- Self-review against Goal: the multibran acceptance loop is now real and green. The next required checks are focused MBD Vitest, TypeScript, and primary `2013286704_476` real UI E2E to guard against regressions in the original user scenario.
+- Focused MBD regression matrix passed: `npx vitest run src/api/mbdPipeApi.test.ts src/utils/mbdStandaloneUrl.test.ts src/composables/mbd/mbdRequestSync.test.ts src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts src/composables/mbd/mbdDrawingStyleProfile.test.ts src/components/tools/MbdAnnotationStylePanel.test.ts src/composables/useMbdPipeAnnotationThree.flyTo.test.ts src/utils/three/annotation/annotations/LinearDimension3D.test.ts --reporter=dot` passed 9 files / 96 tests. The known non-fatal `ECONNREFUSED localhost:3000` async logs still appeared after completion with exit code 0.
+- TypeScript validation passed: `npm run type-check`.
+- Primary real BRAN UI E2E passed: `MBD_REAL_UI_E2E=1 MBD_REAL_BACKEND_URL=http://127.0.0.1:18082 MBD_REAL_OUTPUT_PROJECT=aps250160-mbd-cata2 MBD_REAL_REFNO=2013286704_476 npx playwright test e2e/mbd-interactive-ui.spec.ts` passed 2/2 for Ribbon and model-tree context-menu flows.
+- Request race E2E passed: `npx playwright test e2e/mbd-pipe-race.spec.ts` passed 1/1.
+- Production build passed: `npm run build`. Vite reported existing warnings about large chunks, dynamic/static import chunk placement, and stale Browserslist/caniuse-lite data; no build error.
+- Self-review against Goal: primary + multibran real browser coverage, focused tests, type-check, race, and build are green after the generic layout-result LOD fix. Remaining final work is review/diff hygiene and explicit delivery notes about unrelated full-suite failures.
+
+## Final Review Pass
+
+- Requirement: ordinary 3D page can enable MBD annotations from menus. Evidence: primary real UI E2E passed both Ribbon and model-tree context-menu flows for `2013286704_476` against backend `18082`, project `aps250160-mbd-cata2`.
+- Requirement: true 3D interactive anchoring, not screenshot/fixed overlay. Evidence: primary E2E and multibran corpus rotate the camera and require screen-space movement while keeping annotations rendered and within overlap budget.
+- Requirement: generic solution beyond one BRAN. Evidence: real multibran corpus passed 3/3 for `2013286704_497`, `2013286704_508`, and `2013286704_488` against backend `18083`, project `aps250160-mbd-multibran`; production renderer scan found no `2013286704_*` hard-coded rules.
+- Requirement: readable labels as camera/view changes. Evidence: corpus waits for settled overlap budget before and after rotation; `maxSevereOverlap` remains `0`, not relaxed.
+- Requirement: architecture and plan documented. Evidence: `GOAL.md` is updated with current state; architecture plans remain in `docs/plans/2026-06-19-mbd-interactive-3d-annotation-architecture-plan.md` and `docs/plans/2026-06-19-mbd-oracle-architecture-development-plan.md`; this progress file records decisions and validations.
+- Requirement: style configuration remains available. Evidence: `MbdAnnotationStylePanel` focused tests passed, and primary real UI E2E still opens/uses the MBD settings flow.
+- Requirement: error handling and race behavior. Evidence: V2/V1 API tests passed, request race E2E passed, and corpus helper records backend/project/refno selection explicitly.
+- Requirement: performance/maintainability. Evidence: renderer fix uses generic screen-space scoring, low-priority tag LOD, and leader/tag binding; no refno special cases. Further modular extraction remains a planned maintainability improvement rather than a blocker for this delivery.
+- Verification summary:
+  - `npx eslint e2e/mbd-branch-corpus.spec.ts src/composables/useMbdPipeAnnotationThree.ts --fix` passed.
+  - Focused MBD Vitest matrix passed 9 files / 96 tests.
+  - `npm run type-check` passed.
+  - Real primary E2E passed 2/2.
+  - Real multibran corpus E2E passed 3/3.
+  - Race E2E passed 1/1.
+  - `npm run build` passed.
+  - `git diff --check` on touched MBD/goal/progress files passed.
+- Residual risk: whole-repo `npm test` is still not claimed green. Earlier full sweep showed unrelated failures in review/measurement/version/DuckDB/PMS areas; this MBD pass fixed the MBD-specific failure found during that sweep but did not address unrelated dirty-worktree failures.
+- Final self-review against Goal: the requested production-grade path for real 3D MBD BRAN annotations is now demonstrated on the primary BRAN and three additional real BRANs, with strict overlap budget and camera-anchored E2E. The remaining work is broader repo hygiene and future modularization, not a blocker for a real user/developer to exercise this feature.
+
+## 2026-06-21 AvevaMarineSample Data Source Alignment
+
+- User clarified that current model data should default to local generated data (`cache` / `parquet`), not SurrealDB.
+- Confirmed backend `src/web_api/mbd_pipe_api.rs` still defaulted `MbdPipeQuery.source` and `MbdPipeSource::default()` to `Db`.
+- Updated backend MBD source selection:
+  - default `MbdPipeSource` is now `Cache`;
+  - default `MbdPipeQuery.source` is now `Cache`;
+  - V2 layout query no longer forces `source=Db`;
+  - `source=cache` now falls back to `parquet` before failing;
+  - explicit `source=db` remains available for diagnostics.
+- AvevaMarineSample `24381_145018` / `dbno=7997` investigation:
+  - `output/AvevaMarineSample/parquet/7997/manifest.json` reports `tubings.rows=0`;
+  - `output/instance_cache` was not present in the default backend output root;
+  - `scene_tree/cata_closure_verify.json` reports `tubi_ondemand=11`, so the model can derive real TUBI geometry, but the current default MBD local sources do not yet contain those 11 pipe segments.
+- Validation:
+  - `cargo fmt --check --manifest-path Cargo.toml` passed after rustfmt.
+  - `cargo check --features web_server,mbd-pipe --bin web_server` passed.
+  - Attempted focused `cargo test --features web_server,mbd-pipe --lib test_mbd_v2_layout_query_defaults_to_bran_length_dims -- --exact`; blocked by unrelated existing lib-test compile errors in `src/parse_sidecar.rs` (`filter_design_outbound_for_manual_dbnums` missing), not by the MBD source change.
+- Browser validation:
+  - Opened the in-app browser at `http://127.0.0.1:3101/viewer/?backend=http%3A%2F%2F127.0.0.1%3A18084&output_project=AvevaMarineSample&show_dbnum=7997&show_refno=24381_145018&mbd_debug=1&mbd_api_debug=1&mbd_dim_text=backend`.
+  - Direct `show_refno=24381_145018` reported: `加载结束但未绘制实例。对象 0（已加载 1，跳过 0，mesh 缺失 0，无几何 1）`.
+  - Reopened with only `show_dbnum=7997`; the 3D canvas loaded without that direct-refno no-geometry warning.
+  - Menu path `MBD -> 生成标注` opened the MBD panel but did not generate real BRAN data.
+  - Panel button `测试标注` generated `Demo Branch` fallback data only (`尺寸: 4`, `实际渲染: fallback（前端回退）`), so it must not be treated as real `24381_145018` validation.
+- Self-review: the source-default bug is fixed in code, but the Marine BRAN is not done until dbnum 7997 has MBD-readable local pipe segments in cache/parquet or the on-demand pipeline writes them there.
+
+## 2026-06-21 AvevaMarineSample 24381_145018 Root Cause Pass
+
+- User rejected the temporary frontend fallback direction and clarified that the correct task is to analyze the real failure, not to synthesize a model-tree root or otherwise hide backend/data problems.
+- Removed/verified absence of the temporary fallback markers from the frontend:
+  - `ensureNodeAsFallbackRoot`
+  - `focusInitialUrlRefno`
+- Used SigMap for the frontend/code-search requirement:
+  - `sigmap ask "BRAN 24381_145018 AvevaMarineSample 真实模型树 visible-insts MBD parquet 加载问题，相关前端文件和后端接口在哪里？"`
+  - SigMap produced `.context/query-context.md` and confirmed the relevant frontend scope remains model tree, parquet loading, and MBD request/render modules.
+- Used Oracle MCP dry-run for a second-model review bundle:
+  - Attached backend `e3d_tree_api.rs`, `mbd_pipe_api.rs`, `options.rs`, `query_compat.rs`, plus frontend model-tree files and `GOAL.md`.
+  - Dry-run bundle size was about 99k tokens and suitable for review.
+  - Live Oracle browser consult was blocked by the private Oracle Chrome profile not being signed in / model selector unavailable, so no Oracle answer was used as evidence.
+- Runtime API evidence against `http://192.168.1.5:18085`:
+  - `/api/e3d/world-root` returns synthetic `7997_0` with `children_count=0`.
+  - `/api/e3d/children/24381_145018` returns 17 real child nodes under the BRAN.
+  - `/api/e3d/ancestors/24381_145018` returns `24381_101405 -> 24381_144870 -> 24381_144975`; `24381_101405` is a real `SITE /1PTU-INST23` owned by missing `16189_0`.
+  - `/api/e3d/visible-insts/24381_145018?debug=1` returns only `24381_145035`, with debug `candidates_count=17`, `visible_count=1`, `source=surreal_geometry`.
+  - `/api/mbd/v2/pipe/24381_145018?dbno=7997&source=parquet&debug=true` fails while searching `output/AvevaMarineSample/instances\7997\tubings.parquet`, proving MBD parquet lookup ignored the configured quicktest `output_root`.
+- Data evidence:
+  - quicktest config `runtime/admin_sites/quicktest-7997-8080/DbOption.toml` has `manual_db_nums=[7997]`, `project_name="AvevaMarineSample"`, and `output_root="runtime/admin_sites/quicktest-7997-8080/output"`.
+  - quicktest parquet manifest has `instances=40199`, `geo_instances=48288`, `transforms=49165`, `tubings=4878`.
+  - default `output/AvevaMarineSample/parquet/7997` manifest has `instances=4183`, `geo_instances=4183`, `tubings=0`.
+  - DuckDB check: quicktest parquet contains 11 `instances` child refs for the BRAN, 48 `geo_instances` rows for those refs, and 11 `tubings` rows owned by `24381_145018`; default output contains none.
+- Source-code root causes found:
+  - `e3d_tree_api.rs::resolve_offline_world_refno` synthesizes `manual_db_nums[0] << 32` (`7997_0`) as WORL even when that refno is absent from TreeIndex and has no children.
+  - `e3d_tree_api.rs::get_visible_insts` only filters candidates with legacy `output/<project>/instances/instances_{dbnum}.json`; when that JSON is absent it falls back to `query_geometry_instances` / Surreal geometry instead of configured parquet, which drops the 10 additional real child instances.
+  - `mbd_pipe_api.rs::current_project_output_root` hardcodes `output/<project_name>` instead of using `DbOption::get_project_output_dir()`, so MBD parquet/cache paths diverge from the running site configuration.
+  - `mbd_pipe_api.rs::fetch_tubi_segments_from_cache_with_debug` also hardcodes `output/AvevaMarineSample/instance_cache` / `output/instance_cache`, instead of using configured model cache / project output root.
+- Decision:
+  - Do not add frontend fallback roots or one-off `24381_145018` handling.
+  - Proper fix must be backend-first: one canonical project output root resolver, coherent offline root/top-level tree derivation from TreeIndex, parquet-aware `visible-insts`, and MBD cache/parquet lookup using the same configured output root.
+- Self-review against Goal:
+  - This step satisfies the user's request to analyze the real failure and documents concrete API, parquet, and source evidence.
+  - The feature is not done: the Marine page cannot be considered correct until these backend data-source/root issues are fixed, the backend is rebuilt/restarted, and the normal 3D page shows the full real BRAN with MBD annotations from menu actions.
+
+## 2026-06-21 AvevaMarineSample 24381_145018 Backend/Data-Chain Fix
+
+- Implemented the fix in the backend, not as a frontend fallback:
+  - `plant-model-gen-cata-closure/src/web_api/e3d_tree_api.rs`
+    - when the configured offline world refno is synthetic and absent from TreeIndex, derive top-level real nodes from the loaded TreeIndex by owner relationship instead of returning an empty tree;
+    - `visible-insts` now checks the configured project `output_root` first, then legacy paths, and can filter candidates from `geo_instances.parquet` / `instances.parquet` before falling back to Surreal geometry.
+  - `plant-model-gen-cata-closure/src/web_api/mbd_pipe_api.rs`
+    - MBD source defaults remain local-data-first (`cache`, then parquet);
+    - MBD parquet/cache lookup now uses the running site's configured project output root instead of hardcoded `output/<project>`;
+    - cache lookup still respects `MODEL_CACHE_DIR`, with legacy `output/instance_cache` only as compatibility.
+- Rebuilt a dedicated backend binary to avoid killing unrelated running servers:
+  - `CARGO_TARGET_DIR=target/codex-ams-mbd-rootfix cargo build --features web_server,mbd-pipe --bin web_server`
+  - started `web_server.exe` on `192.168.1.5:18085` with `runtime/admin_sites/quicktest-7997-8080/DbOption`.
+- API validation after restart:
+  - `/api/e3d/world-root` now returns synthetic `7997_0` with `children_count=13`, not `0`;
+  - `/api/e3d/children/7997_0` returns real top-level SITE nodes, including `/1PTU-INST23` (`24381_101405`);
+  - `/api/e3d/visible-insts/24381_145018?debug=1` returns 11 refs with `source=parquet_geo_instances`, not the previous single Surreal-only child;
+  - `/api/mbd/v2/pipe/24381_145018?dbno=7997&source=parquet&debug=true&include_dims=true&include_chain_dims=true&include_overall_dim=true&include_tags=true&include_fittings=true&include_bends=true` returns `success=true`, `segments_count=11`, and real length values including `1683`, `456`, `2311`, `2556`, `2349`, `1038`, `1600`, `2338`, `1200`, `416`, `576`.
+  - Follow-up probe against the V2 primitive contract returned `primitiveCount=76`, with `linear_dim=54`, `label=11`, `leader_line=11`, and `dims_by_kind={chain:31, cut_tubi:11, overall:1, segment:11}`.
+- Frontend synchronization fix:
+  - `plant3d-web/src/components/dock_panels/ViewerPanel.vue` now calls `selectionStore.setSelectedRefno(showRefno)` when `show_refno` is supplied.
+  - Reason: URL loading already targeted the real BRAN, but menu action `MBD -> 生成标注` depends on current selection. This is normal state synchronization, not a fake model/tree fallback.
+- Browser validation in the normal 3D page:
+  - URL opened in the in-app browser:
+    `http://127.0.0.1:3101/viewer/?backend=http%3A%2F%2F192.168.1.5%3A18085&output_project=AvevaMarineSample&show_dbnum=7997&show_refno=24381_145018&mbd_debug=1&mbd_api_debug=1&mbd_dim_text=backend&cache_bust=1782035706670`
+  - Model tree shows `WORL *` plus 13 real SITE nodes, and expands/focuses through `SITE Copy-of-1RCS-1RX-LD` / `PIPE Copy-of-1RCS0014-1RX` to the target BRAN.
+  - Browser logs show `visible-insts 返回 11 个子实例，合并根节点后共 12 个 refno`, `using parquet`, and `show_refno 加载完成`.
+  - Using the UI menu `MBD -> 生成标注` now generates the real Marine branch, with panel evidence:
+    - `BRAN/HANG: 24381_145018 · input: 24381_145018`;
+    - actual render `layout_result（后端版面）`;
+    - `段: 11`, `尺寸: 31`, `cut-tubi: 11`, `弯头: 9`, `管件: 9`, `标签: 45`, `焊缝: 1`;
+    - total length `39299 mm`;
+    - debug flag `hasDemoBranch=false`.
+- Validation commands:
+  - backend: `cargo fmt --check --manifest-path Cargo.toml` passed;
+  - backend: `cargo check --features web_server,mbd-pipe --bin web_server` passed with existing dependency warnings only;
+  - backend: isolated `cargo build` passed;
+  - frontend: `npm run type-check` passed.
+- Self-review against Goal:
+  - The failure was not hidden with a fallback. The corrected path is: configured site output root -> TreeIndex/parquet -> `visible-insts` -> MBD parquet/cache -> normal UI menu.
+  - Remaining production follow-up is to convert these API probes into an automated AvevaMarineSample real-BRAN E2E once that fixture/backend is stable in CI-like local runs.
+
+## 2026-06-21 MBD 3D Viewer GPU/Interaction Performance Pass
+
+- User reported the current 3D MBD display consumes too much GPU and stutters.
+- Runtime profiling on the AvevaMarineSample `24381_145018` page found three concrete causes:
+  - static idle does not continuously render (`renderer.info.render.frame` stayed unchanged over a 2s idle sample), so the issue is interaction-time work, not an always-on render loop;
+  - `full` interactive MBD mode was enabling pipe/fitting visual emphasis by default, duplicating the real model with hundreds of extra TubeGeometry objects;
+  - `updateLabelPositions()` called `applyLayoutScreenLabelDeclutter()` every render frame, and `isMbdDrawingPresetRuntime()` repeatedly parsed `window.location.search` through `URLSearchParams` in hot paths.
+- Implemented minimal fixes:
+  - `full` interactive mode no longer enables `showPipeVisualEmphasis` by default; drawing preset still enables it.
+  - `applyLayoutScreenLabelDeclutter()` is throttled from the per-frame path with a trailing update, so camera movement no longer recomputes the expensive screen-space declutter every frame.
+  - `isMbdDrawingPresetRuntime()` now caches by `window.location.search`, so URL parsing happens only when the URL changes.
+  - MBD group matrix sync now skips recursive `group.updateMatrixWorld(true)` when the global model matrix is unchanged.
+- Browser validation on the real Marine BRAN:
+  - before the preset change, generated MBD had `group_children=616` with `pipe_visual_*` and `fitting_visual_*` objects enabled;
+  - after the change, the same BRAN in `full` interactive mode has `group_children=364`, `pipe_visual_* = 0`, `fitting_visual_* = 0`, while keeping `dims=31`, `tags=32`, and `v2_leader_lines=45`;
+  - CPU profile no longer shows `URLSearchParams` as a hot function; the remaining main cost is normal Three.js matrix work for the remaining annotation objects.
+- Validation commands:
+  - `npx vitest run src/composables/mbd/mbdPresetMapper.test.ts src/composables/useMbdPipeAnnotationThree.flyTo.test.ts --reporter=dot` passed 2 files / 53 tests.
+  - `npm run type-check` passed.
+  - `git diff --check` passed for the touched MBD files.
+- Self-review:
+  - This is a targeted performance fix, not a visual rewrite.
+  - It keeps true 3D MBD dimensions and labels enabled, but stops the normal interactive viewer from drawing the heavier drawing-style pipe reinforcement unless the user explicitly enters drawing mode.
+
+## 2026-06-21 Current GPU Consumption Reasonableness Check
+
+- Re-sampled the current worktree on the real AvevaMarineSample `24381_145018` page.
+- Idle without MBD:
+  - `renderer.info.render.frame` delta over 2s: `0`;
+  - renderer pixel ratio: `1.5`;
+  - canvas backing size: `639 x 955`;
+  - WebGL memory: `geometries=8`, `textures=19`, `programs=19`.
+- Idle after generating MBD:
+  - `renderer.info.render.frame` delta over 2s: `0`;
+  - rendered MBD counts: `dims=31`, `tags=31`, `v2_leader_lines=45`, `group_children=364`;
+  - heavy drawing-only emphasis stayed disabled: all `pipe_visual_* = 0`, all `fitting_visual_* = 0`;
+  - WebGL memory: `geometries=411`, `textures=19`, `programs=23`.
+- Rotation profile:
+  - object counts remained stable (`group_children=364`);
+  - CPU profile top no longer contains `URLSearchParams`;
+  - remaining hot functions are Three.js `updateMatrixWorld` / `multiplyMatrices`, expected for camera-facing 3D annotations.
+- Conclusion:
+  - Current GPU/interaction cost is reasonable for a single real BRAN with full 3D MBD labels.
+  - It is not yet a low-end/multi-BRAN budget: if users keep several BRAN MBD overlays visible at once, the next lazy fix should be interaction-time LOD (hide low-priority tags while camera is moving, restore after idle).
+
+## 2026-06-21 Lightweight Fixed 3D MBD Decision
+
+- User clarified the current target: the normal 3D viewer needs a fixed, lightweight MBD dimension overlay, not drawing-style automatic screen avoidance.
+- Architecture decision:
+  - normal interactive 3D keeps annotations anchored in world/model coordinates and does not run screen-space declutter;
+  - drawing/export preset remains the only path that runs screen-space label avoidance and heavier drawing presentation logic;
+  - normal interactive `full`/layout-first requests stay lightweight: no fitting tags, no material balloons, no weld/bend/tag semantics, no pipe/fitting visual-emphasis geometry unless explicitly in drawing mode.
+- Frontend change:
+  - `src/composables/useMbdPipeAnnotationThree.ts`: `isLayoutScreenDeclutterEnabled()` now returns `isMbdDrawingPresetRuntime()`, so ordinary 3D dimensions stay fixed relative to their backend layout anchors while camera rotation/zoom only reprojects them.
+- Real browser validation:
+  - opened the current in-app browser page:
+    `http://127.0.0.1:3101/viewer/?backend=http%3A%2F%2F192.168.1.5%3A18085&output_project=AvevaMarineSample&show_dbnum=7997&show_refno=24381_145018&mbd_debug=1&mbd_api_debug=1&mbd_dim_text=backend&cache_bust=1782038231720`;
+  - avoided the panel `测试标注` demo path and used the real Ribbon command `MBD -> 生成标注`;
+  - panel evidence after generation:
+    - `BRAN/HANG: 24381_145018 · input: 24381_145018`;
+    - `实际渲染：layout_result（后端版面）`;
+    - `段: 11`, `尺寸: 21`, `cut-tubi: 11`, `管件: 0`, `标签: 0`, `抑制: 0`;
+    - `总长35468 mm`;
+    - no `demo-branch` / `demo-input` text remained.
+- Validation commands:
+  - `npm run type-check` passed.
+  - `npx vitest run src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts --reporter=dot` passed 2 files / 8 tests.
+  - `npx vitest run src/composables/useMbdPipeAnnotationThree.flyTo.test.ts --reporter=dot` passed 1 file / 49 tests.
+  - `git diff --check -- src/composables/useMbdPipeAnnotationThree.ts src/composables/mbd/mbdPresetMapper.ts src/composables/mbd/mbdPresetMapper.test.ts src/composables/mbd/mbdApiParamBuilder.test.ts e2e/mbd-interactive-ui.spec.ts e2e/mbd-branch-corpus.spec.ts` passed.
+- Self-review:
+  - This matches the clarified scope: fixed true-3D annotations, no avoidance, no fallback/demo, and a smaller object/semantic budget.
+  - The remaining visible quality work should be simple style tuning only: line width, arrow size, text size/color, and maybe hiding cut-tubi details by default if the user wants an even sparser overlay.

@@ -1,6 +1,6 @@
 <!-- @ts-nocheck -->
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import {
   Aperture,
@@ -14,7 +14,26 @@ import {
   Settings,
   X,
 } from 'lucide-vue-next';
-import { Box3, Matrix4, Plane, Vector2, Vector3 } from 'three';
+import {
+  AmbientLight,
+  Box3,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  EdgesGeometry,
+  Group,
+  LineBasicMaterial,
+  LineSegments,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  PerspectiveCamera,
+  Plane,
+  Scene,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+} from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
@@ -27,18 +46,28 @@ import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
 import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
+import { buildMbdPipeQueryParams } from '@/composables/mbd/mbdApiParamBuilder';
+import {
+  MBD_DRAWING_STYLE_PROFILE,
+  useMbdDrawingStyleStore,
+} from '@/composables/mbd/mbdDrawingStyleProfile';
+import { resolveMbdAnnotationRequestAxes } from '@/composables/mbd/mbdPresetMapper';
 import {
   createLatestOnlyGate,
   ExternalAnnotationRegistry,
   shouldClearMbdRequest,
-  type MbdPipeAnnotationRequestLike,
 } from '@/composables/mbd/mbdRequestSync';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
 import { useBackgroundStore } from '@/composables/useBackgroundStore';
 import { useBranClearanceAnnotationThree } from '@/composables/useBranClearanceAnnotationThree';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, getDbnumByRefno } from '@/composables/useDbMetaInfo';
-import { loadDbnoInstancesForVisibleRefnosDtx, applyMaterialConfigToLoadedDtx } from '@/composables/useDbnoInstancesDtxLoader';
+import {
+  loadDbnoInstancesForVisibleRefnosDtx,
+  applyMaterialConfigToLoadedDtx,
+  resolveDtxNounByRefno,
+  resolveDtxRefnoByObjectId,
+} from '@/composables/useDbnoInstancesDtxLoader';
 import {
   getDbnoInstancesManifest,
   getDbnoInstancesMeta,
@@ -68,7 +97,12 @@ import {
 } from '@/debug/injectMbdPipeDemo';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import { isMbdDrawingPresetUrl, isMbdStandaloneUrl, normalizeMbdRefnoFromUrl } from '@/utils/mbdStandaloneUrl';
+import {
+  isMbdDrawingPresetUrl,
+  isMbdStandaloneUrl,
+  normalizeMbdRefnoFromUrl,
+  resolveMbdStandaloneDisplayMode,
+} from '@/utils/mbdStandaloneUrl';
 import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
@@ -99,6 +133,8 @@ const store = useToolStore();
 const consoleStore = useConsoleStore();
 const modelLoadStatus = useModelLoadStatus();
 const unitSettings = useUnitSettingsStore();
+const mbdDrawingStyleStore = useMbdDrawingStyleStore();
+const mbdPipeRequestGate = createLatestOnlyGate();
 const selectionStore = useSelectionStore();
 const spatialQueryStore = useSpatialQuery();
 const spatialComputeStore = useSpatialCompute();
@@ -126,6 +162,393 @@ function normalizeRefnoKeyLike(raw: string): string | null {
   const m = s.match(/^(\d+)\s*[\\/_-]\s*(\d+)$/);
   if (!m) return s;
   return `${m[1]}_${m[2]}`;
+}
+
+function normalizeCompareRefno(raw: unknown): string {
+  return normalizeRefnoKeyLike(String(raw ?? '')) || '';
+}
+
+function applyIncrementalCompareState(rawDetail: unknown) {
+  const detail = rawDetail as {
+    project?: unknown;
+    dbnum?: unknown;
+    fromSesno?: unknown;
+    toSesno?: unknown;
+    mode?: unknown;
+    compare?: unknown;
+    refnos?: unknown;
+    models?: unknown;
+  };
+  const refnos = Array.isArray(detail?.refnos)
+    ? detail.refnos.map(normalizeCompareRefno).filter(Boolean)
+    : [];
+  const models = Array.isArray(detail?.models)
+    ? detail.models
+      .map((model: unknown) => {
+        const item = model as IncrementalCompareModel;
+        const refno = normalizeCompareRefno(item?.refno);
+        if (!refno) return null;
+        return {
+          refno,
+          category: item.category,
+          status: item.status,
+          beforeState: item.beforeState,
+          afterState: item.afterState,
+          sourceChangeCount: item.sourceChangeCount,
+          sourceNouns: item.sourceNouns,
+        };
+      })
+      .filter((item): item is IncrementalCompareModel => !!item)
+    : [];
+  const mergedRefnos = Array.from(new Set([
+    ...refnos,
+    ...models.map((item) => item.refno),
+  ]));
+  if (mergedRefnos.length === 0) return;
+
+  incrementalCompareState.value = {
+    project: typeof detail.project === 'string' ? detail.project : undefined,
+    dbnum: Number.isFinite(Number(detail.dbnum)) ? Number(detail.dbnum) : undefined,
+    fromSesno: Number.isFinite(Number(detail.fromSesno)) ? Number(detail.fromSesno) : undefined,
+    toSesno: Number.isFinite(Number(detail.toSesno)) ? Number(detail.toSesno) : undefined,
+    mode: typeof detail.mode === 'string' ? detail.mode : undefined,
+    compare: !!detail.compare,
+    refnos: mergedRefnos,
+    models: models.length > 0 ? models : mergedRefnos.map((refno) => ({ refno })),
+  };
+  incrementalCompareSelectedRefno.value = mergedRefnos[0] ?? null;
+  if (incrementalCompareSelectedRefno.value) {
+    selectionStore.setSelectedRefno(incrementalCompareSelectedRefno.value);
+  }
+  emitToast({ message: `已进入增量模型对比：${mergedRefnos.length} 个模型` });
+  renderIncrementalCompareProxy(true);
+  scheduleIncrementalSplitCompareRender();
+}
+
+function compareStatusLabel(status?: string): string {
+  if (status === 'added') return '新增';
+  if (status === 'modified') return '修改';
+  if (status === 'deleted') return '删除';
+  if (status === 'mixed') return '混合';
+  return '变化';
+}
+
+function compareStatusClass(status?: string): string {
+  if (status === 'added') return 'bg-emerald-50 text-emerald-700';
+  if (status === 'modified') return 'bg-amber-50 text-amber-700';
+  if (status === 'deleted') return 'bg-rose-50 text-rose-700';
+  if (status === 'mixed') return 'bg-blue-50 text-blue-700';
+  return 'bg-slate-100 text-slate-700';
+}
+
+function versionStateLabel(state?: string): string {
+  if (state === 'missing') return '不存在';
+  if (state === 'changed') return '变化';
+  if (state === 'present') return '存在';
+  return '-';
+}
+
+function disposeObjectTree(obj: Group) {
+  obj.traverse((child: any) => {
+    child.geometry?.dispose?.();
+    if (Array.isArray(child.material)) {
+      child.material.forEach((mat: any) => mat?.dispose?.());
+    } else {
+      child.material?.dispose?.();
+    }
+  });
+}
+
+function clearIncrementalCompareProxy() {
+  const viewer = dtxViewerRef.value;
+  if (incrementalCompareProxyGroup && viewer) {
+    viewer.scene.remove(incrementalCompareProxyGroup);
+  }
+  if (incrementalCompareProxyGroup) {
+    disposeObjectTree(incrementalCompareProxyGroup);
+  }
+  incrementalCompareProxyGroup = null;
+}
+
+function materialForVersionState(state?: string, status?: string) {
+  if (state === 'missing') {
+    return new MeshBasicMaterial({
+      color: 0x94a3b8,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+    });
+  }
+  if (status === 'deleted') return new MeshBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.72 });
+  if (status === 'modified' || status === 'mixed') return new MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.78 });
+  return new MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.82 });
+}
+
+function clearIncrementalCompareMiniScene(side: 'before' | 'after') {
+  const sceneState = incrementalCompareSplitScenes[side];
+  if (!sceneState) return;
+  disposeObjectTree(sceneState.scene);
+  sceneState.renderer.dispose();
+  incrementalCompareSplitScenes[side] = null;
+}
+
+function clearIncrementalSplitCompare() {
+  clearIncrementalCompareMiniScene('before');
+  clearIncrementalCompareMiniScene('after');
+  if (isDev) {
+    delete (window as any).__incrementalCompareSplit;
+  }
+}
+
+function scheduleIncrementalSplitCompareRender() {
+  if (typeof window === 'undefined') return;
+  void nextTick().then(() => {
+    window.requestAnimationFrame(() => renderIncrementalSplitCompare());
+  });
+}
+
+function ensureIncrementalCompareMiniScene(side: 'before' | 'after', canvas: HTMLCanvasElement) {
+  let sceneState = incrementalCompareSplitScenes[side];
+  if (!sceneState || sceneState.renderer.domElement !== canvas) {
+    clearIncrementalCompareMiniScene(side);
+    const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(new Color(0xf8fafc), 1);
+    sceneState = {
+      renderer,
+      scene: new Scene(),
+      camera: new PerspectiveCamera(38, 1, 0.1, 5000),
+    };
+    incrementalCompareSplitScenes[side] = sceneState;
+  } else {
+    disposeObjectTree(sceneState.scene);
+    sceneState.scene = new Scene();
+  }
+  return sceneState;
+}
+
+function buildIncrementalCompareSideGroup(side: 'before' | 'after') {
+  const rows = incrementalCompareModels.value;
+  const group = new Group();
+  group.name = `incremental-${side}-version-models`;
+  if (rows.length === 0) return group;
+
+  const columns = Math.min(10, Math.max(1, Math.ceil(Math.sqrt(rows.length * 1.3))));
+  const cellX = 2.4;
+  const cellY = 2.1;
+  const selected = incrementalCompareSelectedRefno.value;
+
+  rows.forEach((row, index) => {
+    const col = index % columns;
+    const line = Math.floor(index / columns);
+    const baseX = (col - (columns - 1) / 2) * cellX;
+    const baseY = -line * cellY;
+    const state = side === 'before' ? row.beforeState : row.afterState;
+    const isSelected = row.refno === selected;
+    const scale = isSelected ? 1.45 : 1;
+    const height = Math.min(2.6, 0.7 + (row.sourceChangeCount ?? 1) * 0.07);
+    const geometry = new BoxGeometry(0.86 * scale, 0.86 * scale, Math.max(0.24, height * scale));
+    const mesh = new Mesh(geometry, materialForVersionState(state, row.status));
+    mesh.name = `incremental-${side}-${row.refno}`;
+    mesh.position.set(baseX, baseY, Math.max(0.24, height * scale) / 2);
+    mesh.userData.refno = row.refno;
+    mesh.userData.version = side;
+    group.add(mesh);
+
+    const edges = new LineSegments(
+      new EdgesGeometry(geometry),
+      new LineBasicMaterial({
+        color: isSelected ? 0x2563eb : 0x475569,
+        transparent: true,
+        opacity: isSelected ? 1 : state === 'missing' ? 0.35 : 0.58,
+      }),
+    );
+    edges.name = `incremental-${side}-edges-${row.refno}`;
+    edges.position.copy(mesh.position);
+    group.add(edges);
+  });
+
+  return group;
+}
+
+function renderIncrementalCompareSide(side: 'before' | 'after', canvas: HTMLCanvasElement) {
+  const sceneState = ensureIncrementalCompareMiniScene(side, canvas);
+  const width = Math.max(240, Math.floor(canvas.clientWidth || canvas.getBoundingClientRect().width || 320));
+  const height = Math.max(180, Math.floor(canvas.clientHeight || canvas.getBoundingClientRect().height || 220));
+  sceneState.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  sceneState.renderer.setSize(width, height, false);
+
+  const scene = sceneState.scene;
+  scene.background = new Color(0xf8fafc);
+  scene.add(new AmbientLight(0xffffff, 0.76));
+  const keyLight = new DirectionalLight(0xffffff, 1.45);
+  keyLight.position.set(8, -10, 12);
+  scene.add(keyLight);
+  const fillLight = new DirectionalLight(0xc7d2fe, 0.58);
+  fillLight.position.set(-8, 8, 8);
+  scene.add(fillLight);
+
+  const group = buildIncrementalCompareSideGroup(side);
+  scene.add(group);
+
+  const box = new Box3().setFromObject(group);
+  const center = new Vector3();
+  const size = new Vector3();
+  if (box.isEmpty()) {
+    center.set(0, 0, 0);
+    size.set(8, 8, 4);
+  } else {
+    box.getCenter(center);
+    box.getSize(size);
+  }
+
+  const maxDim = Math.max(size.x, size.y, size.z, 8);
+  const camera = sceneState.camera;
+  camera.aspect = width / height;
+  camera.near = 0.1;
+  camera.far = Math.max(500, maxDim * 40);
+  camera.position.set(center.x + maxDim * 0.82, center.y - maxDim * 1.18, center.z + maxDim * 0.78);
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+
+  sceneState.renderer.render(scene, camera);
+  canvas.dataset.rendered = 'true';
+  canvas.dataset.modelCount = String(incrementalCompareModels.value.length);
+}
+
+function renderIncrementalSplitCompare() {
+  if (!incrementalCompareState.value) return;
+  const beforeCanvas = incrementalCompareBeforeCanvas.value;
+  const afterCanvas = incrementalCompareAfterCanvas.value;
+  if (!beforeCanvas || !afterCanvas) return;
+
+  renderIncrementalCompareSide('before', beforeCanvas);
+  renderIncrementalCompareSide('after', afterCanvas);
+
+  if (isDev) {
+    (window as any).__incrementalCompareSplit = {
+      before: {
+        hasCanvas: !!beforeCanvas,
+        rendered: beforeCanvas.dataset.rendered === 'true',
+        count: Number(beforeCanvas.dataset.modelCount || 0),
+        width: beforeCanvas.clientWidth,
+        height: beforeCanvas.clientHeight,
+      },
+      after: {
+        hasCanvas: !!afterCanvas,
+        rendered: afterCanvas.dataset.rendered === 'true',
+        count: Number(afterCanvas.dataset.modelCount || 0),
+        width: afterCanvas.clientWidth,
+        height: afterCanvas.clientHeight,
+      },
+    };
+  }
+}
+
+function renderIncrementalCompareProxy(flyTo = true) {
+  const viewer = dtxViewerRef.value;
+  if (!viewer || !incrementalCompareState.value) return;
+  clearIncrementalCompareProxy();
+
+  const rows = incrementalCompareModels.value;
+  if (rows.length === 0) return;
+
+  const group = new Group();
+  group.name = 'incremental-version-compare-proxy';
+  const columns = Math.min(8, Math.max(1, Math.ceil(Math.sqrt(rows.length))));
+  const cellX = 5.5;
+  const cellY = 3.6;
+  const pairGap = 1.25;
+  const selected = incrementalCompareSelectedRefno.value;
+
+  rows.forEach((row, index) => {
+    const col = index % columns;
+    const line = Math.floor(index / columns);
+    const baseX = (col - (columns - 1) / 2) * cellX;
+    const baseY = -line * cellY;
+    const height = Math.min(2.4, 0.8 + (row.sourceChangeCount ?? 1) * 0.08);
+    const isSelected = row.refno === selected;
+    const scale = isSelected ? 1.35 : 1;
+    const geometry = new BoxGeometry(0.9 * scale, 0.9 * scale, height * scale);
+
+    const before = new Mesh(geometry.clone(), materialForVersionState(row.beforeState, row.status));
+    before.name = `incremental-before-${row.refno}`;
+    before.position.set(baseX - pairGap, baseY, height / 2);
+    before.userData.refno = row.refno;
+    before.userData.version = 'before';
+    group.add(before);
+
+    const after = new Mesh(geometry.clone(), materialForVersionState(row.afterState, row.status));
+    after.name = `incremental-after-${row.refno}`;
+    after.position.set(baseX + pairGap, baseY, height / 2);
+    after.userData.refno = row.refno;
+    after.userData.version = 'after';
+    group.add(after);
+
+    const edgeColor = isSelected ? 0x2563eb : 0x334155;
+    for (const mesh of [before, after]) {
+      const edges = new LineSegments(
+        new EdgesGeometry(mesh.geometry),
+        new LineBasicMaterial({ color: edgeColor, transparent: true, opacity: isSelected ? 0.95 : 0.42 }),
+      );
+      edges.position.copy(mesh.position);
+      edges.scale.copy(mesh.scale);
+      group.add(edges);
+    }
+  });
+
+  viewer.scene.add(group);
+  incrementalCompareProxyGroup = group;
+
+  const box = new Box3().setFromObject(group);
+  if (flyTo && !box.isEmpty()) {
+    viewer.fitClipPlanesToBox(box);
+    const center = new Vector3();
+    const size = new Vector3();
+    box.getCenter(center);
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z, 8);
+    const position = new Vector3(center.x + maxDim * 1.1, center.y - maxDim * 1.45, center.z + maxDim * 0.9);
+    viewer.flyTo(position, center, { duration: 650 });
+  }
+
+  if (isDev) {
+    (window as any).__incrementalCompareProxy = {
+      count: rows.length,
+      selected,
+      hasGroup: true,
+    };
+  }
+  requestRender();
+  scheduleIncrementalSplitCompareRender();
+}
+
+function loadIncrementalCompareRefno(refno: string) {
+  const normalized = normalizeCompareRefno(refno);
+  if (!normalized) return;
+  incrementalCompareSelectedRefno.value = normalized;
+  selectionStore.setSelectedRefno(normalized);
+  renderIncrementalCompareProxy(true);
+  scheduleIncrementalSplitCompareRender();
+  window.dispatchEvent(new CustomEvent('showModelByRefnos', {
+    detail: {
+      refnos: [normalized],
+      flyTo: true,
+    },
+  }));
+  window.dispatchEvent(new CustomEvent('autoLocateRefno', {
+    detail: {
+      refno: normalized.replace(/_/g, '/'),
+    },
+  }));
+}
+
+function closeIncrementalCompareOverlay() {
+  incrementalCompareState.value = null;
+  incrementalCompareSelectedRefno.value = null;
+  clearIncrementalCompareProxy();
+  clearIncrementalSplitCompare();
+  requestRender();
 }
 
 function mergeRootRefnoWithVisibleRefnos(rootRefno: string, visibleRefnos: string[]): string[] {
@@ -216,10 +639,6 @@ function readMbdDimTextModeFromUrl(): 'backend' | 'auto' | null {
     // ignore
   }
   return null;
-}
-
-function resolveMbdApiMode(mode: 'layout_first' | 'construction' | 'inspection') {
-  return mode;
 }
 
 function readMbdArrowSizeFromUrl(): number | null {
@@ -333,14 +752,191 @@ function applyGlobalEdgeStyle(): void {
 
   overlay.setStyle({
     showFill: false,
-    edgeColor: isMbdDrawingPresetMode ? 0x0f2f7f : 0x4b5563,
-    edgeOpacity: isMbdDrawingPresetMode ? 0.58 : 1,
+    edgeColor: isMbdDrawingPresetMode
+      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.color
+      : 0x4b5563,
+    edgeOpacity: isMbdDrawingPresetMode
+      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.opacity
+      : 1,
+    edgeLineWidth: isMbdDrawingPresetMode
+      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.lineWidthPx
+      : 1,
     edgeThresholdAngle: clampGlobalEdgeThresholdAngle(globalEdgeThresholdAngle.value),
     edgeAlwaysOnTop: false,
   });
   lastGlobalEdgeRevision = -1;
   syncGlobalEdgeOverlay(true);
   requestRender();
+}
+
+function resolveMbdDrawingObjectMaterial(noun: string): {
+  color: Color;
+  metalness: number;
+  roughness: number;
+  opacity: number;
+} {
+  const key = String(noun || '').trim().toUpperCase();
+  const profile = MBD_DRAWING_STYLE_PROFILE.modelMaterials;
+  if (key === 'TUBI' || key === 'PIPE') {
+    return {
+      color: new Color(profile.pipeColor),
+      metalness: profile.metalness,
+      roughness: profile.roughness,
+      opacity: profile.pipeOpacity,
+    };
+  }
+  if (['ELBO', 'BEND', 'TEE', 'REDU', 'CAP', 'OLET'].includes(key)) {
+    return {
+      color: new Color(profile.fittingColor),
+      metalness: profile.metalness,
+      roughness: profile.roughness,
+      opacity: profile.fittingOpacity,
+    };
+  }
+  if (['FLAN', 'FILT', 'GASK', 'BOLT', 'WELD'].includes(key)) {
+    return {
+      color: new Color(profile.flangeColor),
+      metalness: profile.metalness,
+      roughness: profile.roughness,
+      opacity: profile.flangeOpacity,
+    };
+  }
+  if (['VALV', 'GATE', 'GLOV', 'BALL', 'CHECK', 'CVAV'].includes(key)) {
+    return {
+      color: new Color(profile.valveColor),
+      metalness: profile.metalness,
+      roughness: profile.roughness,
+      opacity: profile.valveOpacity,
+    };
+  }
+  return {
+    color: new Color(profile.defaultColor),
+    metalness: profile.metalness,
+    roughness: profile.roughness,
+    opacity: profile.defaultOpacity,
+  };
+}
+
+function applyMbdDrawingModelMaterialStyle(
+  layer: DTXLayer | null,
+  dbno: number | null,
+): { updatedObjects: number } {
+  if (!isMbdDrawingPresetMode || !layer || dbno === null) {
+    return { updatedObjects: 0 };
+  }
+
+  const objectIds = layer.getVisibleObjectIds();
+  let updatedObjects = 0;
+  for (const objectId of objectIds) {
+    const refno = resolveDtxRefnoByObjectId(dbno, objectId);
+    const noun = refno ? resolveDtxNounByRefno(dbno, refno) : null;
+    const material = resolveMbdDrawingObjectMaterial(noun || '');
+    layer.setObjectMaterial(objectId, {
+      color: material.color,
+      metalness: material.metalness,
+      roughness: material.roughness,
+      opacity: material.opacity,
+    });
+    updatedObjects += 1;
+  }
+
+  if (updatedObjects > 0) {
+    console.debug('[mbd-pipe] drawing model material style applied', {
+      dbno,
+      updated_objects: updatedObjects,
+    });
+  }
+  return { updatedObjects };
+}
+
+type MbdDrawingModelStyleSnapshot = {
+  object_count: number;
+  min_opacity: number | null;
+  max_opacity: number | null;
+  opacity_by_noun: Record<string, { count: number; min: number | null; max: number | null }>;
+};
+
+type MbdDrawingModelEdgeSnapshot = {
+  enabled: boolean;
+  object_count: number;
+  style: {
+    show_fill: boolean;
+    show_edges: boolean;
+    edge_color: number | string;
+    edge_opacity: number;
+    edge_line_width_px: number;
+    edge_threshold_angle_deg: number;
+    edge_always_on_top: boolean;
+  } | null;
+};
+
+function getMbdDrawingModelStyleSnapshot(): MbdDrawingModelStyleSnapshot {
+  const layer = dtxLayerRef.value;
+  if (!isMbdDrawingPresetMode || !layer || activeDbno === null) {
+    return {
+      object_count: 0,
+      min_opacity: null,
+      max_opacity: null,
+      opacity_by_noun: {},
+    };
+  }
+
+  const opacityByNoun: Record<string, { count: number; min: number | null; max: number | null }> = {};
+  let objectCount = 0;
+  let minOpacity = Number.POSITIVE_INFINITY;
+  let maxOpacity = Number.NEGATIVE_INFINITY;
+
+  for (const objectId of layer.getVisibleObjectIds()) {
+    const opacity = layer.getObjectOpacity(objectId);
+    if (typeof opacity !== 'number' || !Number.isFinite(opacity)) continue;
+    const refno = resolveDtxRefnoByObjectId(activeDbno, objectId);
+    const noun = (refno ? resolveDtxNounByRefno(activeDbno, refno) : null) || 'UNKNOWN';
+    const key = noun.trim().toUpperCase() || 'UNKNOWN';
+    const bucket = opacityByNoun[key] ?? {
+      count: 0,
+      min: null,
+      max: null,
+    };
+    bucket.count += 1;
+    bucket.min = bucket.min === null ? opacity : Math.min(bucket.min, opacity);
+    bucket.max = bucket.max === null ? opacity : Math.max(bucket.max, opacity);
+    opacityByNoun[key] = bucket;
+    objectCount += 1;
+    minOpacity = Math.min(minOpacity, opacity);
+    maxOpacity = Math.max(maxOpacity, opacity);
+  }
+
+  return {
+    object_count: objectCount,
+    min_opacity: objectCount > 0 ? minOpacity : null,
+    max_opacity: objectCount > 0 ? maxOpacity : null,
+    opacity_by_noun: opacityByNoun,
+  };
+}
+
+function getMbdDrawingModelEdgeSnapshot(): MbdDrawingModelEdgeSnapshot {
+  const overlaySnapshot = globalEdgeOverlayRef.value?.getSnapshot?.() ?? null;
+  if (!isMbdDrawingPresetMode || !overlaySnapshot) {
+    return {
+      enabled: false,
+      object_count: 0,
+      style: null,
+    };
+  }
+  const style = overlaySnapshot.style;
+  return {
+    enabled: globalEdgeEnabled.value,
+    object_count: overlaySnapshot.objectCount,
+    style: {
+      show_fill: style.showFill,
+      show_edges: style.showEdges,
+      edge_color: style.edgeColor,
+      edge_opacity: style.edgeOpacity,
+      edge_line_width_px: style.edgeLineWidth,
+      edge_threshold_angle_deg: style.edgeThresholdAngle,
+      edge_always_on_top: style.edgeAlwaysOnTop,
+    },
+  };
 }
 
 function onCameraViewModeChange(mode: CameraViewMode): void {
@@ -405,7 +1001,9 @@ function onFocusDimOpacityInput(value: number | string): void {
 
     const refno = normalizeMbdRefnoFromUrl(window.location.search) ?? '';
     if (!refno) return;
-    store.requestMbdPipeAnnotation(refno);
+    store.requestMbdPipeAnnotation(refno, {
+      displayMode: resolveMbdStandaloneDisplayMode(window.location.search),
+    });
   } catch {
     // ignore
   }
@@ -617,6 +1215,73 @@ const modelGenerationRef = shallowRef<ReturnType<
     typeof useModelGeneration
 > | null>(null);
 
+type IncrementalCompareModel = {
+    refno: string;
+    category?: string;
+    status?: string;
+    beforeState?: string;
+    afterState?: string;
+    sourceChangeCount?: number;
+    sourceNouns?: string;
+};
+
+type IncrementalCompareState = {
+    project?: string;
+    dbnum?: number;
+    fromSesno?: number;
+    toSesno?: number;
+    mode?: string;
+    compare?: boolean;
+    refnos: string[];
+    models: IncrementalCompareModel[];
+};
+
+const incrementalCompareState = ref<IncrementalCompareState | null>(null);
+const incrementalCompareSelectedRefno = ref<string | null>(null);
+const incrementalCompareBeforeCanvas = ref<HTMLCanvasElement | null>(null);
+const incrementalCompareAfterCanvas = ref<HTMLCanvasElement | null>(null);
+
+const incrementalCompareModels = computed(() => {
+  const state = incrementalCompareState.value;
+  if (!state) return [];
+  if (state.models.length > 0) return state.models;
+  return state.refnos.map((refno) => ({ refno }));
+});
+
+const incrementalCompareSelectedModel = computed(() => {
+  const selected = incrementalCompareSelectedRefno.value;
+  return incrementalCompareModels.value.find((item) => item.refno === selected)
+    ?? incrementalCompareModels.value[0]
+    ?? null;
+});
+
+const incrementalCompareBeforePresentCount = computed(() =>
+  incrementalCompareModels.value.filter((item) => item.beforeState !== 'missing').length,
+);
+
+const incrementalCompareAfterPresentCount = computed(() =>
+  incrementalCompareModels.value.filter((item) => item.afterState !== 'missing').length,
+);
+
+let incrementalCompareProxyGroup: Group | null = null;
+let incrementalCompareSplitScenes: Record<'before' | 'after', {
+    renderer: WebGLRenderer;
+    scene: Scene;
+    camera: PerspectiveCamera;
+} | null> = {
+  before: null,
+  after: null,
+};
+
+watch(
+  () => [dtxViewerRef.value, incrementalCompareState.value, incrementalCompareSelectedRefno.value] as const,
+  ([viewer, state]) => {
+    if (!viewer || !state) return;
+    renderIncrementalCompareProxy(false);
+    scheduleIncrementalSplitCompareRender();
+  },
+);
+
 const cameraViewMode = ref<CameraViewMode>('cad_weak');
 const globalEdgeEnabled = ref(false);
 const globalEdgeThresholdAngle = ref(20);
@@ -658,6 +1323,7 @@ let offPtsetWatch: (() => void) | null = null;
 let offMbdPipeWatch: (() => void) | null = null;
 let offBranClearanceWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
+let offIncrementalCompare: (() => void) | null = null;
 let offOpenSpatialQuery: (() => void) | null = null;
 let offControlsChange: (() => void) | null = null;
 let offPivotEvents: (() => void) | null = null;
@@ -665,6 +1331,8 @@ let offGizmoEvents: (() => void) | null = null;
 let offDocPointerDown: (() => void) | null = null;
 let offKeydown: (() => void) | null = null;
 let offAnnotationInteraction: (() => void) | null = null;
+let offAnnotationVectorTextRebuilt: (() => void) | null = null;
+let annotationVectorTextRebuildCount = 0;
 
 let dtxGlobalTransformAppliedKey: string | null = null;
 let dtxAutoFitAppliedKey: string | null = null;
@@ -1067,6 +1735,26 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => mbdDrawingStyleStore.version.value,
+  () => {
+    if (!isMbdDrawingPresetMode) return;
+    try {
+      globalEdgeThresholdAngle.value = MBD_DRAWING_STYLE_PROFILE.modelEdges.thresholdAngleDeg;
+      applyGlobalEdgeStyle();
+    } catch {
+      // ignore
+    }
+
+    try {
+      applyMbdDrawingModelMaterialStyle(dtxLayerRef.value, activeDbno);
+    } catch (e) {
+      console.warn('[ViewerPanel] MBD 图纸模型样式刷新失败', e);
+    }
+    requestRender();
+  },
+);
+
 // 模型单位/重心变更会改变全局矩阵（scale/translation），为避免既有标注错位，一期采取安全策略：有数据时自动清空。
 watch(
   () => [unitSettings.modelUnit.value, unitSettings.recenter.value],
@@ -1143,6 +1831,7 @@ async function onDisplayThemeChange(theme: DisplayTheme): Promise<void> {
   if (!layer || activeDbno === null) return;
   const config = await loadModelDisplayConfig();
   applyMaterialConfigToLoadedDtx(layer, activeDbno, config, theme);
+  applyMbdDrawingModelMaterialStyle(layer, activeDbno);
   compatViewerRef.value?.scene.reapplyFocusTransparency();
   requestRender();
 }
@@ -1696,7 +2385,7 @@ function handleRibbonCommand(commandId: string) {
         return;
       }
 
-      store.requestMbdPipeAnnotation(refno);
+      store.requestMbdPipeAnnotation(refno, { displayMode: 'full' });
       return;
     }
     case 'mbd.weld':
@@ -1751,12 +2440,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'mbd.settings':
       try {
-        ensurePanelAndActivate('mbdPipe');
+        ensurePanelAndActivate('mbdAnnotationStyle');
       } catch {
         // ignore
-      }
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.uiTab.value = 'settings';
       }
       requestRender();
       return;
@@ -2030,6 +2716,8 @@ function handleResize() {
   annotationSystemRef.value?.setResolution(rect.width, rect.height);
   // 更新 MBD 管道标注分辨率（LineMaterial + CSS2DRenderer 需要）
   mbdPipeVisRef.value?.setResolution(rect.width, rect.height);
+  // 更新全局工程边线分辨率（LineMaterial 需要）
+  globalEdgeOverlayRef.value?.setResolution(rect.width, rect.height);
 
   // 立即同步渲染一帧，避免黑屏闪烁
   renderFrameImmediate();
@@ -2278,12 +2966,15 @@ onMounted(async () => {
   attachedToScene = false;
   shaderPrecompiled = false;
   continuousRender = false;
+  annotationVectorTextRebuildCount = 0;
   demoMode = 'none';
   demoPrimitiveCount = 1000;
   cadGridEnabled = !isMbdDrawingPresetMode;
   cameraViewMode.value = isMbdDrawingPresetMode ? 'cad_flat' : 'cad_weak';
   globalEdgeEnabled.value = isMbdDrawingPresetMode;
-  globalEdgeThresholdAngle.value = isMbdDrawingPresetMode ? 14 : 20;
+  globalEdgeThresholdAngle.value = isMbdDrawingPresetMode
+    ? MBD_DRAWING_STYLE_PROFILE.modelEdges.thresholdAngleDeg
+    : 20;
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
   try {
@@ -2396,10 +3087,21 @@ onMounted(async () => {
   // 全局工程边线：深灰细线（无填充），用于接近 CAD 轮廓观感
   const globalEdgeOverlay = new DTXOverlayHighlighter(dtxViewer.scene, {
     showFill: false,
-    edgeColor: 0x4b5563,
-    edgeThresholdAngle: 20,
+    edgeColor: isMbdDrawingPresetMode
+      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.color
+      : 0x4b5563,
+    edgeOpacity: isMbdDrawingPresetMode
+      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.opacity
+      : 1,
+    edgeLineWidth: isMbdDrawingPresetMode
+      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.lineWidthPx
+      : 1,
+    edgeThresholdAngle: isMbdDrawingPresetMode
+      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.thresholdAngleDeg
+      : 20,
     edgeAlwaysOnTop: false,
   });
+  globalEdgeOverlay.setResolution(canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height);
   globalEdgeOverlay.setGeometryGetter((objectId) =>
     dtxLayer.getObjectGeometryData(objectId),
   );
@@ -3328,6 +4030,19 @@ onMounted(async () => {
   const urlParams = new URLSearchParams(window.location.search);
   const showDbnum = urlParams.get('show_dbnum');
   const showRefno = normalizeRefnoKeyLike(urlParams.get('show_refno') || '');
+  const showDbnumValue = (() => {
+    const parsed = Number(showDbnum);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  })();
+  const resolveDbnoForCurrentMbdRefno = (refno: string): number | null => {
+    if (showDbnumValue !== null) return showDbnumValue;
+    if (activeDbno !== null) return activeDbno;
+    try {
+      return getDbnumByRefno(refno);
+    } catch {
+      return null;
+    }
+  };
 
   // 启动预拉：db_meta_info（关键，提供 refno->dbnum 映射）
   // demo 模式（primitives / mbd_pipe）不依赖后端数据，跳过预拉避免无后端时初始化失败。
@@ -3386,21 +4101,39 @@ onMounted(async () => {
     };
     (window as any).__plant3dMbdE2E = {
       getSnapshot: () => mbdPipeVisRef.value?.getDebugSnapshot?.() ?? null,
+      getDrawingModelStyleSnapshot: () => getMbdDrawingModelStyleSnapshot(),
+      getDrawingModelEdgeSnapshot: () => getMbdDrawingModelEdgeSnapshot(),
+      getVectorTextRebuildCount: () => annotationVectorTextRebuildCount,
+      setSelectedRefno: (refno: string | null) => selectionStore.setSelectedRefno(refno),
     };
   }
+  const onAnnotationVectorTextRebuilt = () => {
+    annotationVectorTextRebuildCount += 1;
+    requestRender();
+  };
+  window.addEventListener(
+    'plant3d:annotation-vector-text-rebuilt',
+    onAnnotationVectorTextRebuilt,
+  );
+  offAnnotationVectorTextRebuilt = () =>
+    window.removeEventListener(
+      'plant3d:annotation-vector-text-rebuilt',
+      onAnnotationVectorTextRebuilt,
+    );
 
   if (showRefno && demoMode !== 'primitives') {
     (async () => {
       try {
         emitToast({ message: `[信息] 正在加载 ${showRefno} …`, level: 'info' });
         console.log(`[show_refno] refno=${showRefno}`);
+        selectionStore.setSelectedRefno(showRefno);
 
-        await ensureDbMetaInfoLoaded();
+        if (showDbnumValue === null) {
+          await ensureDbMetaInfoLoaded();
+        }
 
-        let dbno: number;
-        try {
-          dbno = getDbnumByRefno(showRefno);
-        } catch {
+        const dbno = resolveDbnoForCurrentMbdRefno(showRefno);
+        if (dbno === null) {
           console.error(`[show_refno] 无法解析 ${showRefno} 的 dbnum`);
           emitToast({
             message: `[错误] 无法解析 dbnum（refno=${showRefno}）`,
@@ -3474,8 +4207,8 @@ onMounted(async () => {
   }
 
   // show_dbnum URL 参数：按 dbno 直接走 Parquet 全量加载。
-  if (showDbnum && !showRefno && demoMode !== 'primitives') {
-    const dbno = Number(showDbnum);
+  if (showDbnumValue !== null && !showRefno && demoMode !== 'primitives') {
+    const dbno = showDbnumValue;
     if (Number.isFinite(dbno) && dbno > 0) {
       (async () => {
         const publishShowDbnumLoadResult = (payload: Record<string, unknown>) => {
@@ -3964,6 +4697,16 @@ onMounted(async () => {
       handleShowModelByRefnos,
     );
 
+  const handleIncrementalCompare = (ev: Event) => {
+    applyIncrementalCompareState((ev as CustomEvent).detail);
+  };
+  window.addEventListener('plant3d:incremental-version-compare', handleIncrementalCompare);
+  offIncrementalCompare = () =>
+    window.removeEventListener(
+      'plant3d:incremental-version-compare',
+      handleIncrementalCompare,
+    );
+
   async function loadChildPtsetEntries(parquetLoader: ReturnType<typeof useDbnoInstancesParquetLoader>, dbno: number, ownerRefno: string) {
     const summaries = await parquetLoader.queryDirectChildrenPtsetSummary(dbno, ownerRefno);
     const candidates = summaries.filter((item) => item.success && item.ptCount > 0);
@@ -4051,6 +4794,7 @@ onMounted(async () => {
     () => store.mbdPipeAnnotationRequest.value,
     async (request) => {
       if (!request) return;
+      const requestSeq = mbdPipeRequestGate.issue();
       try {
         try {
           if (!isMbdDrawingPresetMode) {
@@ -4063,68 +4807,76 @@ onMounted(async () => {
         const refnoKey = normalizeRefnoKeyLike(request.refno) || request.refno;
         emitToast({ message: `正在生成管道标注: ${refnoKey}` });
 
+        const requestDisplayMode = request.displayMode ?? 'full';
+        const requestAxes = resolveMbdAnnotationRequestAxes({
+          displayMode: requestDisplayMode,
+          viewMode: mbdPipeVis.mbdViewMode.value,
+        });
+        mbdPipeVis.showInlineTubeLengthDims.value = requestAxes.showInlineTubeLengthDims;
+        mbdPipeVis.showPipeVisualEmphasis.value = requestAxes.showPipeVisualEmphasis;
+        if (requestAxes.hideCutTubiDetails) {
+          mbdPipeVis.showCutTubis.value = false;
+        }
+
         // 尽量先加载对应模型（避免“只见标注面板、不见模型”）
         try {
           const mg = modelGenerationRef.value;
           if (mg) {
-            await mg.showModelByRefno(refnoKey, { flyTo: true });
+            let preloadTimedOut = false;
+            const preloadTimeoutMs = requestAxes.preloadTimeoutMs;
+            const preloadPromise = mg.showModelByRefno(refnoKey, {
+              flyTo: requestAxes.flyToOnPreload,
+            }).catch((error) => {
+              console.warn('[mbd-pipe] 预加载模型失败（将继续生成标注）', error);
+            });
+            await Promise.race([
+              preloadPromise,
+              new Promise<void>((resolve) => {
+                window.setTimeout(() => {
+                  preloadTimedOut = true;
+                  resolve();
+                }, preloadTimeoutMs);
+              }),
+            ]);
+            if (preloadTimedOut) {
+              console.warn('[mbd-pipe] 预加载模型超时（将继续生成标注）', {
+                refno: refnoKey,
+                timeout_ms: preloadTimeoutMs,
+              });
+            }
+            if (requestAxes.isDrawingSheet) {
+              const preloadDbno = resolveDbnoForCurrentMbdRefno(refnoKey);
+              applyMbdDrawingModelMaterialStyle(dtxLayerRef.value, preloadDbno);
+            }
           }
         } catch (e) {
           console.warn('[mbd-pipe] 预加载模型失败（将继续生成标注）', e);
         }
+        if (!mbdPipeRequestGate.isLatest(requestSeq)) {
+          return;
+        }
 
         // 标注按需获取：尽量带上 dbno + batch_id（来自 meta_{dbno}.json）以确保与当前模型快照一致。
-        let dbno: number | null = null;
-        try {
-          dbno = getDbnumByRefno(refnoKey);
-        } catch {
-          dbno = null;
-        }
+        const dbno = resolveDbnoForCurrentMbdRefno(refnoKey);
         let batchId: string | null = null;
 
-        const isLayoutFirstMbd = mbdPipeVis.mbdViewMode.value === 'layout_first';
-        const isDrawingMbd = isLayoutFirstMbd && isMbdDrawingPresetFromUrl();
-        const mbdParams = {
-          mode: resolveMbdApiMode(mbdPipeVis.mbdViewMode.value),
-          // 显式指定走 SurrealDB，避免环境默认值差异影响测试结果
-          source: 'db',
+        const mbdParams = buildMbdPipeQueryParams({
+          axes: requestAxes,
           debug: isDev || isMbdApiDebugFromUrl(),
-          dbno: dbno ?? undefined,
-          batch_id: batchId,
-          // 首期默认值：对齐 MBD 默认
-          min_slope: 0.001,
-          max_slope: 0.1,
-          dim_min_length: 1.0,
-          weld_merge_threshold: 1.0,
-          // 首期 BRAN MBD 聚焦长度尺寸：chain/port/cut-tubi。
-          include_dims: false,
-          include_chain_dims: true,
-          // 折线 BRAN 的 overall 是路径总长，不能用首尾直连的一条尺寸线表达。
-          include_overall_dim: !isLayoutFirstMbd,
-          include_port_dims: isLayoutFirstMbd,
-          include_cut_tubis: true,
-          include_fittings: isDrawingMbd,
-          include_tags: isDrawingMbd,
-          include_position_tags: isDrawingMbd,
-          include_elevation_marks: isDrawingMbd,
-          include_branch_label: isDrawingMbd,
-          include_material_balloons: isDrawingMbd,
-          include_material_table: isDrawingMbd,
-          include_layout_hints: true,
-          include_layout_result: isLayoutFirstMbd,
-          include_welds: isDrawingMbd,
-          include_slopes: false,
-          include_bends: isDrawingMbd,
-          bend_mode: 'facecenter',
-        } as const;
+          dbno,
+          batchId,
+        });
         const useV2Mbd =
-          isLayoutFirstMbd &&
+          requestAxes.isLayoutFirst &&
           !isMbdV2DisabledFromUrl();
         const resp = useV2Mbd
           ? await getMbdPipeV2Annotations(refnoKey, mbdParams, {
             includeLegacySegments: true,
           })
           : await getMbdPipeAnnotations(refnoKey, mbdParams);
+        if (!mbdPipeRequestGate.isLatest(requestSeq)) {
+          return;
+        }
         if (resp.success && resp.data) {
           if (mbdPipeVis.mbdViewMode.value === 'layout_first' && !resp.data.layout_result) {
             console.warn('[mbd-pipe] layout_first 未拿到 layout_result，保持当前模式并回退到 fallback 渲染', {
@@ -4155,7 +4907,9 @@ onMounted(async () => {
         const msg = e instanceof Error ? e.message : String(e);
         emitToast({ message: `生成管道标注失败：${msg}` });
       } finally {
-        store.clearMbdPipeAnnotationRequest();
+        if (shouldClearMbdRequest(store.mbdPipeAnnotationRequest.value, request)) {
+          store.clearMbdPipeAnnotationRequest();
+        }
       }
     },
     { immediate: true },
@@ -4323,8 +5077,15 @@ onUnmounted(() => {
   offAnnotationInteraction?.();
   offAnnotationInteraction = null;
 
+  offAnnotationVectorTextRebuilt?.();
+  offAnnotationVectorTextRebuilt = null;
+
   offShowModelByRefnos?.();
   offShowModelByRefnos = null;
+
+  offIncrementalCompare?.();
+  offIncrementalCompare = null;
+  clearIncrementalCompareProxy();
 
   offOpenSpatialQuery?.();
   offOpenSpatialQuery = null;
@@ -4888,6 +5649,97 @@ onUnmounted(() => {
 
     <!-- 管道间距离标注控制面板 -->
     <PipeDistanceDrawer v-model:open="pipeDistDrawerOpen" />
+
+    <div v-if="incrementalCompareState"
+      class="pointer-events-auto absolute right-3 top-3 w-[min(760px,calc(100%-1.5rem))] rounded-lg border border-blue-200 bg-background/95 p-3 text-sm text-foreground shadow-lg backdrop-blur"
+      style="z-index: 956"
+      @pointerdown.stop
+      @wheel.stop>
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <GitCompare class="h-4 w-4 shrink-0 text-blue-700" />
+            <div class="truncate font-semibold">增量版本对照</div>
+          </div>
+          <div class="mt-0.5 truncate text-xs text-muted-foreground">
+            DB {{ incrementalCompareState.dbnum ?? '-' }} · {{ incrementalCompareState.fromSesno ?? '-' }} / {{ incrementalCompareState.toSesno ?? '-' }}
+            · {{ incrementalCompareModels.length }} 个模型
+          </div>
+        </div>
+        <button type="button"
+          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-input bg-background hover:bg-muted"
+          title="关闭"
+          @click="closeIncrementalCompareOverlay">
+          <X class="h-4 w-4" />
+        </button>
+      </div>
+
+      <div class="mt-3 grid gap-3 md:grid-cols-2">
+        <section class="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+          <div class="flex h-9 items-center justify-between border-b border-slate-200 bg-white px-3">
+            <div class="truncate text-xs font-semibold text-slate-800">
+              旧版 {{ incrementalCompareState.fromSesno ?? '-' }}
+            </div>
+            <div class="shrink-0 text-[11px] text-slate-500">
+              {{ incrementalCompareBeforePresentCount }} / {{ incrementalCompareModels.length }}
+            </div>
+          </div>
+          <canvas ref="incrementalCompareBeforeCanvas"
+            data-incremental-compare-view="before"
+            class="block h-[220px] w-full" />
+        </section>
+
+        <section class="overflow-hidden rounded-md border border-emerald-200 bg-emerald-50/50">
+          <div class="flex h-9 items-center justify-between border-b border-emerald-100 bg-white px-3">
+            <div class="truncate text-xs font-semibold text-slate-800">
+              新版 {{ incrementalCompareState.toSesno ?? '-' }}
+            </div>
+            <div class="shrink-0 text-[11px] text-emerald-700">
+              {{ incrementalCompareAfterPresentCount }} / {{ incrementalCompareModels.length }}
+            </div>
+          </div>
+          <canvas ref="incrementalCompareAfterCanvas"
+            data-incremental-compare-view="after"
+            class="block h-[220px] w-full" />
+        </section>
+      </div>
+
+      <div v-if="incrementalCompareSelectedModel" class="mt-3 rounded-md border border-blue-100 bg-blue-50/60 p-2">
+        <div class="truncate font-mono text-xs">{{ incrementalCompareSelectedModel.refno }}</div>
+        <div class="mt-2 grid grid-cols-3 gap-2 text-xs">
+          <div class="rounded border border-border bg-background px-2 py-1">
+            <div class="text-muted-foreground">旧版</div>
+            <div class="font-medium">{{ versionStateLabel(incrementalCompareSelectedModel.beforeState) }}</div>
+          </div>
+          <div class="rounded px-2 py-1 text-center" :class="compareStatusClass(incrementalCompareSelectedModel.status)">
+            <div class="opacity-80">变化</div>
+            <div class="font-medium">{{ compareStatusLabel(incrementalCompareSelectedModel.status) }}</div>
+          </div>
+          <div class="rounded border border-border bg-background px-2 py-1">
+            <div class="text-muted-foreground">新版</div>
+            <div class="font-medium">{{ versionStateLabel(incrementalCompareSelectedModel.afterState) }}</div>
+          </div>
+        </div>
+        <div class="mt-2 truncate text-[11px] text-muted-foreground">
+          {{ incrementalCompareSelectedModel.category || '-' }} · {{ incrementalCompareSelectedModel.sourceNouns || '-' }}
+        </div>
+      </div>
+
+      <div class="mt-3 flex gap-2">
+        <select v-model="incrementalCompareSelectedRefno"
+          class="h-8 min-w-0 flex-1 rounded border border-input bg-background px-2 text-xs">
+          <option v-for="item in incrementalCompareModels" :key="item.refno" :value="item.refno">
+            {{ item.refno }} · {{ compareStatusLabel(item.status) }}
+          </option>
+        </select>
+        <button type="button"
+          class="shrink-0 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90"
+          :disabled="!incrementalCompareSelectedRefno"
+          @click="loadIncrementalCompareRefno(incrementalCompareSelectedRefno || '')">
+          加载
+        </button>
+      </div>
+    </div>
 
     <div v-if="initError"
       class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur"

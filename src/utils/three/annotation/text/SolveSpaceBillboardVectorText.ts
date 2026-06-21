@@ -104,6 +104,10 @@ export class SolveSpaceBillboardVectorText {
     string,
     LineMaterial
   >();
+  private readonly frameBoxMaterialCache = new Map<
+    string,
+    LineMaterial
+  >();
 
   private pickProxy: THREE.Mesh | null = null;
   private pickProxyGeometry: THREE.PlaneGeometry | null = null;
@@ -281,6 +285,7 @@ export class SolveSpaceBillboardVectorText {
     if (materials.hovered) this.materialHovered = materials.hovered;
     if (materials.selected) this.materialSelected = materials.selected;
     this.clearRebarvizMaterialCache();
+    this.clearFrameBoxMaterialCache();
     this._applyMaterial();
   }
 
@@ -327,6 +332,7 @@ export class SolveSpaceBillboardVectorText {
       // ignore
     }
     this.clearRebarvizMaterialCache();
+    this.clearFrameBoxMaterialCache();
     this.object3d.removeFromParent();
   }
 
@@ -370,7 +376,7 @@ export class SolveSpaceBillboardVectorText {
       material = this.materialNormal;
     }
     this.line.material = material;
-    this.frameBoxLine.material = material;
+    this.frameBoxLine.material = this.getFrameBoxMaterial(material);
   }
 
   private _applyRenderStyleVisibility(): void {
@@ -387,6 +393,11 @@ export class SolveSpaceBillboardVectorText {
     if (this.bgMesh) {
       this.bgMesh.visible = false;
     }
+  }
+
+  private notifyGeometryChanged(): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('plant3d:annotation-vector-text-rebuilt'));
   }
 
   private _createHaloLine(): void {
@@ -441,6 +452,17 @@ export class SolveSpaceBillboardVectorText {
     this.rebarvizMaterialCache.clear();
   }
 
+  private clearFrameBoxMaterialCache(): void {
+    for (const m of this.frameBoxMaterialCache.values()) {
+      try {
+        m.dispose();
+      } catch {
+        // ignore
+      }
+    }
+    this.frameBoxMaterialCache.clear();
+  }
+
   private getRebarvizTextMaterial(
     base: LineMaterial,
   ): LineMaterial {
@@ -454,6 +476,38 @@ export class SolveSpaceBillboardVectorText {
     m.transparent = true;
     this.rebarvizMaterialCache.set(key, m);
     return m;
+  }
+
+  private getFrameBoxMaterial(base: LineMaterial): LineMaterial {
+    const key = base.uuid;
+    const cached = this.frameBoxMaterialCache.get(key);
+    if (cached) {
+      this.syncFrameBoxMaterial(cached, base);
+      return cached;
+    }
+
+    const m = base.clone();
+    this.syncFrameBoxMaterial(m, base);
+    this.frameBoxMaterialCache.set(key, m);
+    return m;
+  }
+
+  private syncFrameBoxMaterial(material: LineMaterial, base: LineMaterial): void {
+    const sourceResolution = (base as any).resolution;
+    const targetResolution = (material as any).resolution;
+    if (sourceResolution && targetResolution?.copy) {
+      targetResolution.copy(sourceResolution);
+    }
+
+    const sourceLineWidth = Number((base as any).linewidth);
+    if (Number.isFinite(sourceLineWidth) && sourceLineWidth > 0) {
+      (material as any).linewidth = Math.max(1, sourceLineWidth * 0.42);
+    }
+
+    material.depthTest = base.depthTest;
+    material.depthWrite = base.depthWrite;
+    material.transparent = base.transparent;
+    material.opacity = base.opacity;
   }
 
   private _createBackgroundMesh(): void {
@@ -570,6 +624,7 @@ export class SolveSpaceBillboardVectorText {
     this.rebuildFrameBoxGeometry(contentW, contentH);
     this._applyMaterial();
     this._applyRenderStyleVisibility();
+    this.notifyGeometryChanged();
   }
 
   private rebuildFrameBoxGeometry(

@@ -92,6 +92,9 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
     const includeChainDims = url.searchParams.get('include_chain_dims');
     const includeOverallDim = url.searchParams.get('include_overall_dim');
     const includePortDims = url.searchParams.get('include_port_dims');
+    const includeFittings = url.searchParams.get('include_fittings');
+    const includeTags = url.searchParams.get('include_tags');
+    const includeMaterialBalloons = url.searchParams.get('include_material_balloons');
     const includeWelds = url.searchParams.get('include_welds');
     const includeSlopes = url.searchParams.get('include_slopes');
     const includeBends = url.searchParams.get('include_bends');
@@ -100,10 +103,13 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
     if (
       mode !== 'layout_first' ||
       includeChainDims !== 'true' ||
-      includeOverallDim !== 'true' ||
+      includeOverallDim !== 'false' ||
       includePortDims !== 'false' ||
+      includeFittings !== 'true' ||
+      includeTags !== 'true' ||
+      includeMaterialBalloons !== 'true' ||
       includeWelds !== 'true' ||
-      includeSlopes !== 'true' ||
+      includeSlopes !== 'false' ||
       includeBends !== 'true' ||
       bendMode !== 'facecenter' ||
       url.searchParams.get('include_layout_result') !== 'true'
@@ -140,34 +146,31 @@ test('mbd pipe race: should keep latest request result', async ({ page }) => {
     });
   });
 
-  await page.goto('/?output_project=PlaywrightMbdPipeRace&dtx_demo=primitives&dtx_demo_count=20', { waitUntil: 'domcontentloaded' });
+  await page.goto('/?output_project=PlaywrightMbdPipeRace&dtx_demo=primitives&dtx_demo_count=20&mbd_api=v1', { waitUntil: 'domcontentloaded' });
 
-  await page.waitForFunction(() => !!(window as any).__xeokitViewer?.scene, null, { timeout: 60_000 });
+  await page.waitForFunction(
+    () => !!(window as any).__xeokitViewer?.scene && !!(window as any).__viewerToolStore,
+    null,
+    { timeout: 60_000 },
+  );
 
-  await page.evaluate(async ({ first }) => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
-    store.requestMbdPipeAnnotation(first);
+  await page.evaluate(({ first }) => {
+    (window as any).__viewerToolStore.requestMbdPipeAnnotation(first, { displayMode: 'full' });
   }, { first: firstRefno });
 
   await expect
     .poll(() => firstHit, { timeout: 10_000, message: '等待首个请求发出' })
     .toBeGreaterThan(0);
 
-  await page.evaluate(async ({ second }) => {
-    const storeMod = await import('/src/composables/useToolStore.ts');
-    const store = storeMod.useToolStore();
-    store.requestMbdPipeAnnotation(second);
+  await page.evaluate(({ second }) => {
+    (window as any).__viewerToolStore.requestMbdPipeAnnotation(second, { displayMode: 'full' });
   }, { second: secondRefno });
 
   await expect
     .poll(
       async () =>
-        await page.evaluate(async () => {
-          const ctxMod = await import('/src/composables/useViewerContext.ts');
-          const ctx = ctxMod.useViewerContext();
-          return ctx.mbdPipeVis.value?.currentData.value?.branch_refno ?? null;
-        }),
+        await page.evaluate(() =>
+          (window as any).__plant3dMbdE2E?.getSnapshot?.()?.branch_refno ?? null),
       { timeout: 15_000, message: '等待最新请求渲染完成' },
     )
     .toBe(secondRefno);
