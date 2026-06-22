@@ -15,7 +15,7 @@ describe('resolveMbdAnnotationRequestAxes', () => {
     expect(axes.includesFullMbdSemantics).toBe(false);
     expect(axes.showInlineTubeLengthDims).toBe(false);
     expect(axes.showPipeVisualEmphasis).toBe(false);
-    expect(axes.hideCutTubiDetails).toBe(false);
+    expect(axes.hideCutTubiDetails).toBe(true);
     expect(axes.flyToOnPreload).toBe(true);
     expect(axes.dataScope.semantics.materialBalloons).toBe(false);
   });

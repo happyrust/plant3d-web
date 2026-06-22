@@ -122,7 +122,7 @@ export function resolveMbdAnnotationRequestAxes(
     includesFullMbdSemantics,
     showInlineTubeLengthDims: includesFullMbdSemantics,
     showPipeVisualEmphasis: isDrawingSheet,
-    hideCutTubiDetails: includesFullMbdSemantics,
+    hideCutTubiDetails: isDrawingSheet || isFullInteractive,
     preloadTimeoutMs: isDrawingSheet ? 12_000 : 20_000,
     flyToOnPreload: !isDrawingSheet,
   };

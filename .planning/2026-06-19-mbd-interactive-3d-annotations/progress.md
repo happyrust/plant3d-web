@@ -396,3 +396,21 @@
 - Self-review:
   - This matches the clarified scope: fixed true-3D annotations, no avoidance, no fallback/demo, and a smaller object/semantic budget.
   - The remaining visible quality work should be simple style tuning only: line width, arrow size, text size/color, and maybe hiding cut-tubi details by default if the user wants an even sparser overlay.
+
+## 2026-06-22 Lightweight Default Cut-Tubi Visibility
+
+- Continued the lightweight 3D pass with the smallest visible simplification:
+  - normal `full` + `layout_first` generation now defaults `hideCutTubiDetails=true`;
+  - cut-tubi data is still requested and available, but the `cut-tubi 尺寸` toggle starts unchecked so the default overlay shows the main dimensions first.
+- Files changed:
+  - `src/composables/mbd/mbdPresetMapper.ts`
+  - `src/composables/mbd/mbdPresetMapper.test.ts`
+- Validation:
+  - `npx vitest run src/composables/mbd/mbdPresetMapper.test.ts --reporter=dot` passed 1 file / 4 tests.
+  - `npm run type-check` passed.
+  - Real browser validation on `AvevaMarineSample` BRAN `24381_145018` via `MBD -> 生成标注`:
+    - panel showed real target, not demo;
+    - `尺寸: 21`, `cut-tubi: 11`, `标签: 0`;
+    - opening `尺寸设置` showed `[data-testid="mbd-toggle-cut-tubis"]` exists and `checked=false`.
+- Self-review:
+  - This is intentionally not a new layout algorithm. It reduces default clutter while leaving the existing manual control intact.
