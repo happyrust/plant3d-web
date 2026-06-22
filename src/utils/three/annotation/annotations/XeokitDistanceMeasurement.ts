@@ -28,7 +28,7 @@ export type XeokitDistanceMeasurementParams = {
   labelPrefix?: string;
 };
 
-const markerGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+const markerGeometry = new THREE.RingGeometry(0.07, 0.12, 32);
 const MAIN_LINE_WIDTH_PX = 2.6;
 const AXIS_LINE_WIDTH_PX = 2.2;
 
@@ -164,8 +164,8 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
     this.yLine = new Line2(this.yGeometry, this.getLineMaterial('y-normal', this.yMaterialSet.fatLine, AXIS_LINE_WIDTH_PX));
     this.zLine = new Line2(this.zGeometry, this.getLineMaterial('z-normal', this.zMaterialSet.fatLine, AXIS_LINE_WIDTH_PX));
 
-    this.originMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh);
-    this.targetMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh);
+    this.originMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh.clone());
+    this.targetMarker = new THREE.Mesh(markerGeometry, this.materialSet.mesh.clone());
 
     this.mainLabel = new CSS2DObject(this.mainLabelEl);
     this.xLabel = new CSS2DObject(this.xLabelEl);
@@ -210,6 +210,8 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
     this.xLabel.quaternion.copy(camera.quaternion);
     this.yLabel.quaternion.copy(camera.quaternion);
     this.zLabel.quaternion.copy(camera.quaternion);
+    this.originMarker.quaternion.copy(camera.quaternion);
+    this.targetMarker.quaternion.copy(camera.quaternion);
   }
 
   protected override onScaleFactorChanged(factor: number): void {
@@ -231,6 +233,8 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
       material.dispose();
     }
     this.lineMaterialCache.clear();
+    (this.originMarker.material as THREE.Material).dispose();
+    (this.targetMarker.material as THREE.Material).dispose();
     this.mainLabelEl.remove();
     this.xLabelEl.remove();
     this.yLabelEl.remove();
@@ -344,7 +348,9 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
       // ignore
     }
 
-    const mainOffset = localWpp * 18;
+    const isPreviewLabel = this.params.labelPrefix === '预览';
+    const mainOffset = localWpp * (isPreviewLabel ? 34 : 18);
+    const mainSideOffset = isPreviewLabel ? localWpp * 22 : 0;
     const axisOffset = localWpp * 12;
     const slotOffset = localWpp * 16;
     const xDir = this.tempLocalD.copy(cornerX).sub(origin).normalize();
@@ -362,7 +368,10 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
       ? this.tempLocalE.copy(cornerXY).lerp(target, 0.5)
       : this.tempLocalE.copy(cornerXY);
 
-    this.mainLabel.position.copy(lineMidLocal).addScaledVector(this.offsetDirLocal, mainOffset);
+    this.mainLabel.position
+      .copy(lineMidLocal)
+      .addScaledVector(this.offsetDirLocal, mainOffset)
+      .addScaledVector(this.sideDirLocal, mainSideOffset);
     this.xLabel.position
       .copy(xAnchor)
       .addScaledVector(this.offsetDirLocal, axisOffset)
@@ -459,8 +468,8 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
     this.xLine.material = axisLineMat ?? this.getLineMaterial('x-normal', this.xMaterialSet.fatLine, AXIS_LINE_WIDTH_PX);
     this.yLine.material = axisLineMat ?? this.getLineMaterial('y-normal', this.yMaterialSet.fatLine, AXIS_LINE_WIDTH_PX);
     this.zLine.material = axisLineMat ?? this.getLineMaterial('z-normal', this.zMaterialSet.fatLine, AXIS_LINE_WIDTH_PX);
-    this.originMarker.material = meshMat;
-    this.targetMarker.material = meshMat;
+    this.applyMarkerMaterial(this.originMarker, meshMat);
+    this.applyMarkerMaterial(this.targetMarker, meshMat);
 
     const textColor = '#ffffff';
     const highlightBorder = state === 'selected'
@@ -473,5 +482,12 @@ export class XeokitDistanceMeasurement extends AnnotationBase {
       el.style.color = textColor;
       el.style.borderColor = highlightBorder || labelBorders[index] || '#0f172a';
     });
+  }
+
+  private applyMarkerMaterial(marker: THREE.Mesh, source: THREE.MeshBasicMaterial): void {
+    const material = marker.material as THREE.MeshBasicMaterial;
+    material.copy(source);
+    material.depthTest = false;
+    material.depthWrite = false;
   }
 }

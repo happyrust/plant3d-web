@@ -36,7 +36,7 @@ import {
 } from 'three';
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
-import { pdmsGetUiAttr } from '@/api/genModelPdmsAttrApi';
+import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import { getMbdPipeAnnotations, getMbdPipeV2Annotations } from '@/api/mbdPipeApi';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
@@ -81,6 +81,10 @@ import { useMbdPipeAnnotationThree } from '@/composables/useMbdPipeAnnotationThr
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
+import {
+  queryDirectChildrenPtsetSummaryWithRuntimeFallback,
+  queryPtsetWithRuntimeFallback,
+} from '@/composables/usePtsetRuntimeLookup';
 import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationThree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
@@ -4708,12 +4712,12 @@ onMounted(async () => {
     );
 
   async function loadChildPtsetEntries(parquetLoader: ReturnType<typeof useDbnoInstancesParquetLoader>, dbno: number, ownerRefno: string) {
-    const summaries = await parquetLoader.queryDirectChildrenPtsetSummary(dbno, ownerRefno);
+    const summaries = await queryDirectChildrenPtsetSummaryWithRuntimeFallback(parquetLoader, dbno, ownerRefno);
     const candidates = summaries.filter((item) => item.success && item.ptCount > 0);
-    const loaded: { refno: string; response: Awaited<ReturnType<typeof parquetLoader.queryPtsetByRefnoFromParquet>> }[] = [];
+    const loaded: { refno: string; response: PtsetResponse }[] = [];
 
     for (const item of candidates) {
-      const resp = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, item.refno);
+      const resp = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, item.refno);
       if (resp.success && resp.ptset.length > 0) {
         loaded.push({ refno: item.refno, response: resp });
       }
@@ -4722,7 +4726,7 @@ onMounted(async () => {
     return { summaries, loaded };
   }
 
-  function renderPtsetEntries(contextRefno: string, entries: { refno: string; response: Awaited<ReturnType<ReturnType<typeof useDbnoInstancesParquetLoader>['queryPtsetByRefnoFromParquet']>> }[]) {
+  function renderPtsetEntries(contextRefno: string, entries: { refno: string; response: PtsetResponse }[]) {
     if (entries.length === 0) return;
     const [first, ...rest] = entries;
     ptsetVis.setPanelContext(contextRefno);
@@ -4757,7 +4761,7 @@ onMounted(async () => {
         }
 
         const parquetLoader = useDbnoInstancesParquetLoader();
-        const response = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, refnoKey);
+        const response = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, refnoKey);
         if (response.success && response.ptset.length > 0) {
           renderPtsetEntries(refnoKey, [{ refno: refnoKey, response }]);
           emitToast({
@@ -5411,55 +5415,55 @@ onUnmounted(() => {
         </button>
 
         <div v-if="leftToolbarOpenMeasureMenu"
-          class="absolute left-full top-0 ml-2 flex w-40 flex-col gap-1 rounded-xl border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
+          class="absolute left-full top-0 ml-1.5 flex w-32 flex-col gap-0.5 rounded-lg border border-border bg-background/95 p-1 shadow-lg backdrop-blur"
           style="z-index: 941">
           <button type="button"
-            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_distance' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureDistanceClick">
-            <Ruler class="h-4 w-4" />
+            <Ruler class="h-3.5 w-3.5" />
             <span>长度测量</span>
           </button>
           <button type="button"
-            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_elevation_point' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureElevationPointClick">
-            <Ruler class="h-4 w-4" />
+            <Ruler class="h-3.5 w-3.5" />
             <span>点标高</span>
           </button>
           <button type="button"
-            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_elevation_delta' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureElevationDeltaClick">
-            <Ruler class="h-4 w-4" />
+            <Ruler class="h-3.5 w-3.5" />
             <span>高差</span>
           </button>
           <button type="button"
-            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'xeokit_measure_angle' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureAngleClick">
-            <Ruler class="h-4 w-4" />
+            <Ruler class="h-3.5 w-3.5" />
             <span>角度测量</span>
           </button>
           <button type="button"
-            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'measure_object_to_object' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasureObjectToObjectClick">
-            <Ruler class="h-4 w-4" />
+            <Ruler class="h-3.5 w-3.5" />
             <span>构件最近点</span>
           </button>
           <button type="button"
-            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'measure_pipe_to_structure' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasurePipeToStructureClick">
-            <Ruler class="h-4 w-4" />
+            <Ruler class="h-3.5 w-3.5" />
             <span>管-墙/柱</span>
           </button>
           <button type="button"
-            class="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+            class="flex h-7 items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-muted"
             :class="store.toolMode.value === 'measure_pipe_to_pipe' ? 'bg-muted' : ''"
             @click.stop="onLeftMeasurePipeToPipeClick">
-            <Ruler class="h-4 w-4" />
+            <Ruler class="h-3.5 w-3.5" />
             <span>管-管</span>
           </button>
         </div>

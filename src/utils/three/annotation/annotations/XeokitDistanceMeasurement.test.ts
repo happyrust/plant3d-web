@@ -38,6 +38,21 @@ describe('XeokitDistanceMeasurement', () => {
     expect(measurement.zLabel.visible).toBe(false);
   });
 
+  it('距离测量端点应显示为空心圆锚点', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { XeokitDistanceMeasurement } = await import('./XeokitDistanceMeasurement');
+
+    const materials = new AnnotationMaterials();
+    const measurement = new XeokitDistanceMeasurement(materials, {
+      origin: new THREE.Vector3(0, 0, 0),
+      target: new THREE.Vector3(1, 0, 0),
+      visible: true,
+    }) as any;
+
+    expect(measurement.originMarker.geometry.type).toBe('RingGeometry');
+    expect((measurement.originMarker.material as THREE.MeshBasicMaterial).depthTest).toBe(false);
+  });
+
   it('单个零分量时仍应保留对应的 XYZ 分解标签', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { XeokitDistanceMeasurement } = await import('./XeokitDistanceMeasurement');
@@ -140,6 +155,38 @@ describe('XeokitDistanceMeasurement', () => {
     const labelWorld = measurement.mainLabel.getWorldPosition(new THREE.Vector3());
     const lineMidWorld = measurement.localToWorld(new THREE.Vector3(500, 0, 0));
     expect(labelWorld.distanceTo(lineMidWorld)).toBeGreaterThan(0.03);
+  });
+
+  it('草稿预览标签应比正式标签更远离线段端点区域', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { XeokitDistanceMeasurement } = await import('./XeokitDistanceMeasurement');
+
+    const materials = new AnnotationMaterials();
+    const normal = new XeokitDistanceMeasurement(materials, {
+      origin: new THREE.Vector3(0, 0, 0),
+      target: new THREE.Vector3(1, 0, 0),
+      visible: true,
+    }) as any;
+    const preview = new XeokitDistanceMeasurement(materials, {
+      origin: new THREE.Vector3(0, 0, 0),
+      target: new THREE.Vector3(1, 0, 0),
+      labelPrefix: '预览',
+      visible: true,
+    }) as any;
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    camera.position.set(0, 0, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    normal.update(camera);
+    preview.update(camera);
+
+    const lineMid = new THREE.Vector3(0.5, 0, 0);
+    const normalDistance = normal.mainLabel.position.distanceTo(lineMid);
+    const previewDistance = preview.mainLabel.position.distanceTo(lineMid);
+    expect(previewDistance).toBeGreaterThan(normalDistance);
   });
 
   it('零分量轴的标签也应单独避让，不能与其它标签重叠', async () => {

@@ -323,21 +323,23 @@ watch(
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
-    <div class="rounded-md border border-border bg-background p-3">
-      <div class="text-sm font-semibold">工具状态</div>
-      <div class="mt-1 text-xs text-muted-foreground">{{ measurementStatusText }}</div>
+  <div class="flex flex-col gap-2 text-xs">
+    <div class="rounded-md border border-border bg-background p-2">
+      <div class="flex items-center justify-between gap-2">
+        <div class="text-sm font-semibold">工具状态</div>
+        <div class="min-w-0 truncate text-muted-foreground">{{ measurementStatusText }}</div>
+      </div>
 
-      <div class="mt-3 flex flex-wrap gap-2">
+      <div class="mt-2 grid grid-cols-5 gap-1">
         <button type="button"
-          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
           :class="store.toolMode.value === 'none' ? 'bg-muted' : ''"
           @click="setMode('none')">
           关闭
         </button>
 
         <button type="button"
-          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
           :class="store.toolMode.value === 'xeokit_measure_distance' ? 'bg-muted' : ''"
           :disabled="!isMeasurementReady"
           @click="setMode('measure_distance')">
@@ -345,7 +347,7 @@ watch(
         </button>
 
         <button type="button"
-          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
           :class="store.toolMode.value === 'xeokit_measure_elevation_point' ? 'bg-muted' : ''"
           :disabled="!isMeasurementReady"
           @click="setMode('measure_elevation_point')">
@@ -353,7 +355,7 @@ watch(
         </button>
 
         <button type="button"
-          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
           :class="store.toolMode.value === 'xeokit_measure_elevation_delta' ? 'bg-muted' : ''"
           :disabled="!isMeasurementReady"
           @click="setMode('measure_elevation_delta')">
@@ -361,7 +363,7 @@ watch(
         </button>
 
         <button type="button"
-          class="h-9 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted"
+          class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
           :class="store.toolMode.value === 'xeokit_measure_angle' ? 'bg-muted' : ''"
           :disabled="!isMeasurementReady"
           @click="setMode('measure_angle')">
@@ -369,84 +371,88 @@ watch(
         </button>
       </div>
 
-      <div class="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="text-xs font-medium text-foreground">标高基准</div>
-          <input type="number"
-            step="0.001"
-            class="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm"
-            :value="measurementStyle.state.elevationDatum"
-            @change="updateDatumElevation(($event.target as HTMLInputElement).value)" />
-          <span class="text-xs text-muted-foreground">{{ unitSettings.displayUnit.value }}</span>
-          <button type="button"
-            class="h-8 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-            @click="resetDatumElevation">
-            恢复 0
-          </button>
+      <details class="mt-2 rounded-md border border-border bg-muted/20 px-2 py-1">
+        <summary class="cursor-pointer select-none font-medium">更多</summary>
+
+        <div class="mt-2 text-muted-foreground">
+          <template v-if="isMeasurementReady">
+            模型加载完成后可用；测量点按下方已启用的点源捕捉，Mesh Pick Point 需手动启用。
+          </template>
+          <template v-else>
+            当前未满足测量条件，请先排除上面的 Viewer / DTX 初始化问题。
+          </template>
         </div>
-      </div>
 
-      <div class="mt-2 text-xs text-muted-foreground">
-        <template v-if="isMeasurementReady">
-          模型加载完成后可用；测量点按下方已启用的点源捕捉，Mesh Pick Point 需手动启用。
-        </template>
-        <template v-else>
-          当前未满足测量条件，请先排除上面的 Viewer / DTX 初始化问题。
-        </template>
-      </div>
-
-      <div data-testid="measurement-pipe-distance-card"
-        class="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="text-sm font-semibold">管-管净距</div>
-            <div class="mt-1 text-xs text-muted-foreground">
-              选择多根 BRAN 管道后检测并展示管道间最近净距。
-            </div>
-            <div data-testid="measurement-pipe-distance-status"
-              class="mt-1 text-xs text-muted-foreground">
-              {{ pipeDistanceStatusText }}
-            </div>
-            <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span>
-                已选
-                <strong data-testid="measurement-pipe-distance-selected-count"
-                  class="text-foreground">
-                  {{ pipeDistanceStore.selectedBranRefnos.value.length }}
-                </strong>
-                根
-              </span>
-              <span>
-                结果
-                <strong data-testid="measurement-pipe-distance-result-count"
-                  class="text-foreground">
-                  {{ pipeDistanceStore.results.value.length }}
-                </strong>
-                条
-              </span>
-            </div>
+        <div class="mt-2 rounded-md border border-border bg-background px-2 py-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="text-xs font-medium text-foreground">标高基准</div>
+            <input type="number"
+              step="0.001"
+              class="h-7 w-24 rounded-md border border-input bg-background px-2"
+              :value="measurementStyle.state.elevationDatum"
+              @change="updateDatumElevation(($event.target as HTMLInputElement).value)" />
+            <span class="text-xs text-muted-foreground">{{ unitSettings.displayUnit.value }}</span>
+            <button type="button"
+              class="h-7 rounded-md border border-input bg-background px-2 hover:bg-muted"
+              @click="resetDatumElevation">
+              恢复 0
+            </button>
           </div>
-          <button type="button"
-            data-testid="measurement-open-pipe-distance"
-            class="h-8 shrink-0 rounded-md border border-input bg-background px-2 text-xs hover:bg-muted"
-            @click="openPipeDistanceTool">
-            打开
-          </button>
         </div>
-      </div>
 
-      <details v-if="canShowStyleSettings" class="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+        <div data-testid="measurement-pipe-distance-card"
+          class="mt-2 rounded-md border border-border bg-background px-2 py-1">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-semibold">管-管净距</div>
+              <div class="mt-0.5 text-muted-foreground">
+                选择多根 BRAN 管道后检测并展示管道间最近净距。
+              </div>
+              <div data-testid="measurement-pipe-distance-status"
+                class="mt-0.5 text-muted-foreground">
+                {{ pipeDistanceStatusText }}
+              </div>
+              <div class="mt-1 flex flex-wrap gap-2 text-muted-foreground">
+                <span>
+                  已选
+                  <strong data-testid="measurement-pipe-distance-selected-count"
+                    class="text-foreground">
+                    {{ pipeDistanceStore.selectedBranRefnos.value.length }}
+                  </strong>
+                  根
+                </span>
+                <span>
+                  结果
+                  <strong data-testid="measurement-pipe-distance-result-count"
+                    class="text-foreground">
+                    {{ pipeDistanceStore.results.value.length }}
+                  </strong>
+                  条
+                </span>
+              </div>
+            </div>
+            <button type="button"
+              data-testid="measurement-open-pipe-distance"
+              class="h-7 shrink-0 rounded-md border border-input bg-background px-2 hover:bg-muted"
+              @click="openPipeDistanceTool">
+              打开
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <details v-if="canShowStyleSettings" class="mt-2 rounded-md border border-border bg-muted/20 px-2 py-1">
         <summary class="cursor-pointer select-none text-sm font-medium">样式设置</summary>
 
-        <div class="mt-3 flex flex-col gap-3 text-sm">
+        <div class="mt-2 flex flex-col gap-2">
           <div data-testid="measurement-style-snap-section"
-            class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+            class="rounded-md border border-border bg-background/80 p-2">
             <div class="font-medium">测量点源</div>
-            <div class="mt-1 text-xs text-muted-foreground">
+            <div class="mt-1 text-muted-foreground">
               显示和捕捉互相独立；关闭捕捉后该点源不会参与测量登记。阈值单位为屏幕像素(px)，小于或等于阈值时可捕捉。
             </div>
             <div class="mt-3 overflow-x-auto">
-              <table class="w-full min-w-[420px] text-left text-xs">
+              <table class="w-full text-left">
                 <thead class="text-muted-foreground">
                   <tr>
                     <th class="pb-2 font-medium">点源</th>
@@ -498,7 +504,7 @@ watch(
           </div>
 
           <div data-testid="measurement-style-distance-section"
-            class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+            class="rounded-md border border-border bg-background/80 p-2">
             <div class="flex items-center justify-between gap-2">
               <div class="font-medium">长度测量</div>
               <button type="button"
@@ -545,7 +551,7 @@ watch(
           </div>
 
           <div data-testid="measurement-style-angle-section"
-            class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+            class="rounded-md border border-border bg-background/80 p-2">
             <div class="font-medium">角度测量</div>
             <div class="mt-1 text-xs text-muted-foreground">
               默认显示角度标签和关键端点，可按需要精简表现。
@@ -572,7 +578,7 @@ watch(
             </div>
           </div>
 
-          <div class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+          <div class="rounded-md border border-border bg-background/80 p-2">
             <div class="font-medium">点标高</div>
             <div class="mt-1 text-xs text-muted-foreground">
               同时控制绝对标高、相对基准、点标记与引线显示。
@@ -608,7 +614,7 @@ watch(
             </div>
           </div>
 
-          <div class="rounded-lg border border-border bg-background/80 p-3 shadow-sm">
+          <div class="rounded-md border border-border bg-background/80 p-2">
             <div class="font-medium">高差</div>
             <div class="mt-1 text-xs text-muted-foreground">
               控制起终点标高、高差标签、竖向辅助线与端点显示。
@@ -647,13 +653,13 @@ watch(
       </details>
     </div>
 
-    <div class="rounded-md border border-border bg-background p-3">
+    <div class="rounded-md border border-border bg-background p-2">
       <div class="flex items-center justify-between gap-2">
         <div class="text-sm font-semibold">测量列表</div>
         <div class="text-xs text-muted-foreground">共 {{ sorted.length }} 条</div>
       </div>
 
-      <div v-if="sorted.length === 0" class="mt-2 text-sm text-muted-foreground">
+      <div v-if="sorted.length === 0" class="mt-2 text-muted-foreground">
         暂无测量。
       </div>
 
@@ -663,7 +669,7 @@ watch(
           :ref="(el) => setMeasurementRowRef(m.id, el)"
           :data-testid="`measurement-row-${m.id}`"
           :data-selected="selectedMeasurementId === m.id ? 'true' : 'false'"
-          class="rounded-lg border p-3 transition-colors"
+          class="rounded-md border p-2 transition-colors"
           :class="selectedMeasurementId === m.id ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:bg-muted/40'"
           role="button"
           tabindex="0"
@@ -692,7 +698,7 @@ watch(
                   {{ m.visible ? '显示中' : '已隐藏' }}
                 </span>
               </div>
-              <div class="mt-2 truncate text-sm font-semibold">
+              <div class="mt-1 truncate text-xs font-semibold">
                 {{ new Date(m.createdAt).toLocaleString() }}
               </div>
               <div :data-testid="`measurement-summary-${m.id}`"
@@ -702,10 +708,10 @@ watch(
               <div class="mt-0.5 truncate text-xs text-muted-foreground">ID: {{ m.id }}</div>
             </div>
 
-            <div class="flex shrink-0 items-center gap-1 rounded-full border border-border bg-background/80 p-1">
+            <div class="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background/80 p-0.5">
               <button type="button"
                 :data-testid="`measurement-fly-button-${m.id}`"
-                class="h-8 rounded-md px-2 text-xs"
+                class="h-7 rounded px-1.5"
                 :class="selectedMeasurementId === m.id ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'hover:bg-muted'"
                 @click.stop="fly(m.id)">
                 定位
@@ -713,13 +719,13 @@ watch(
 
               <button type="button"
                 :data-testid="`measurement-visibility-button-${m.id}`"
-                class="h-8 rounded-md px-2 text-xs hover:bg-muted"
+                class="h-7 rounded px-1.5 hover:bg-muted"
                 @click.stop="toggleVisible(m.id, m.visible)">
                 {{ getVisibilityActionLabel(m.visible) }}
               </button>
 
               <button type="button"
-                class="h-8 rounded-md px-2 text-xs text-destructive hover:bg-muted"
+                class="h-7 rounded px-1.5 text-destructive hover:bg-muted"
                 @click.stop="remove(m.id)">
                 删除
               </button>
@@ -728,10 +734,10 @@ watch(
         </div>
       </div>
 
-      <div class="mt-3 flex justify-end">
+      <div class="mt-2 flex justify-end">
         <button type="button"
           data-testid="measurement-clear-all"
-          class="h-9 rounded-md border border-input bg-background px-3 text-sm text-destructive hover:bg-muted"
+          class="h-7 rounded-md border border-input bg-background px-2 text-destructive hover:bg-muted"
           @click="clearMeasurements()">
           清空测量
         </button>

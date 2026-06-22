@@ -296,6 +296,104 @@ describe('useXeokitMeasurementTools', () => {
     expect(store.measurementDetailsDrawerOpen.value).toBe(false);
   });
 
+  it('测量未命中时不显示鼠标旁遮挡提示', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+    store.setToolMode('xeokit_measure_distance');
+
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+    });
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    camera.updateMatrixWorld(true);
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref({ camera, canvas, scene: new THREE.Scene() } as any),
+      dtxLayerRef: ref({ _totalObjects: 1 } as any),
+      selectionRef: ref({ pickPoint: vi.fn(() => null) } as any),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(null),
+      requestRender: null,
+    });
+
+    tools.onCanvasPointerMove(canvas, new PointerEvent('pointermove', {
+      clientX: 100,
+      clientY: 100,
+    }));
+
+    expect(store.xeokitPointerLensState.value.visible).toBe(false);
+    tools.dispose();
+  });
+
+  it('普通 mesh hover 不应触发测量态临时半透明', async () => {
+    const [{ useToolStore }, { useXeokitMeasurementTools }] = await Promise.all([
+      import('@/composables/useToolStore'),
+      import('@/composables/useXeokitMeasurementTools'),
+    ]);
+
+    const store = useToolStore();
+    store.clearAll();
+    store.setToolMode('xeokit_measure_distance');
+
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+    });
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.set(0, 0, 1);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    const picks = [
+      { objectId: 'o:tubi_refno:0', point: new THREE.Vector3(0, 0, 0) },
+      { objectId: 'o:tubi_refno:0', point: new THREE.Vector3(0, 0, 0) },
+    ];
+    const compat = {
+      scene: {
+        objects: {
+          tubi_refno: { xrayed: false },
+        } as Record<string, { xrayed: boolean }>,
+        setObjectsXRayed: vi.fn((refnos: string[], xrayed: boolean) => {
+          for (const refno of refnos) {
+            compat.scene.objects[refno] ??= { xrayed: false };
+            compat.scene.objects[refno].xrayed = xrayed;
+          }
+        }),
+      },
+    };
+
+    const tools = useXeokitMeasurementTools({
+      dtxViewerRef: ref({ camera, canvas, scene: new THREE.Scene() } as any),
+      dtxLayerRef: ref({
+        _totalObjects: 1,
+        getGlobalModelMatrix: () => new THREE.Matrix4(),
+      } as any),
+      selectionRef: ref({
+        pickPoint: vi.fn(() => picks.shift() ?? null),
+      } as any),
+      overlayContainerRef: ref(document.createElement('div')),
+      store,
+      compatViewerRef: ref(compat as any),
+      requestRender: null,
+    });
+
+    const event = new PointerEvent('pointermove', { clientX: 100, clientY: 100 });
+    tools.onCanvasPointerMove(canvas, event);
+    tools.onCanvasPointerMove(canvas, event);
+    tools.deactivate();
+
+    expect(compat.scene.setObjectsXRayed).not.toHaveBeenCalled();
+    tools.dispose();
+  });
+
   it('当 DTX 未命中但 annotation 命中时，仍应允许创建测量草稿', async () => {
     const [{ useToolStore }, { useXeokitMeasurementTools }, { AnnotationMaterials }] = await Promise.all([
       import('@/composables/useToolStore'),
@@ -376,26 +474,37 @@ describe('useXeokitMeasurementTools', () => {
     vi.doMock('@/composables/useDbnoInstancesParquetLoader', () => ({
       useDbnoInstancesParquetLoader: () => ({
         queryPtsetByRefnoFromParquet: vi.fn(async () => ({
-          success: true,
+          success: false,
           refno: '24381_145018',
-          ptset: [
-            {
-              number: 1,
-              pt: [0, 0, 0],
-              dir: null,
-              dir_flag: 0,
-              ref_dir: null,
-              pbore: 100,
-              pwidth: 0,
-              pheight: 0,
-              pconnect: '',
-            },
-          ],
+          ptset: [],
           world_transform: null,
-          unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
-          error_message: null,
+          unit_info: null,
+          error_code: 'PTSET_POINTS_MISSING',
+          error_message: 'cata_hash=elbo-a 未找到 ptset 点',
         })),
       }),
+    }));
+    vi.doMock('@/api/genModelPdmsAttrApi', () => ({
+      pdmsGetPtsetWithContext: vi.fn(async () => ({
+        success: true,
+        refno: '24381_145018',
+        ptset: [
+          {
+            number: 1,
+            pt: [0, 0, 0],
+            dir: null,
+            dir_flag: 0,
+            ref_dir: null,
+            pbore: 100,
+            pwidth: 0,
+            pheight: 0,
+            pconnect: '',
+          },
+        ],
+        world_transform: null,
+        unit_info: { source_unit: 'mm', target_unit: 'mm', conversion_factor: 1 },
+        error_message: null,
+      })),
     }));
 
     const [{ useToolStore }, { useXeokitMeasurementTools }, { useXeokitMeasurementStyleStore }] = await Promise.all([
@@ -436,6 +545,19 @@ describe('useXeokitMeasurementTools', () => {
       objectId: 'o:24381_145018:0',
       point: new THREE.Vector3(0, 0, 0),
     }));
+    const compat = {
+      scene: {
+        objects: {
+          '24381_145018': { xrayed: false },
+        } as Record<string, { xrayed: boolean }>,
+        setObjectsXRayed: vi.fn((refnos: string[], xrayed: boolean) => {
+          for (const refno of refnos) {
+            compat.scene.objects[refno] ??= { xrayed: false };
+            compat.scene.objects[refno].xrayed = xrayed;
+          }
+        }),
+      },
+    };
 
     const tools = useXeokitMeasurementTools({
       dtxViewerRef: ref({
@@ -452,7 +574,7 @@ describe('useXeokitMeasurementTools', () => {
       } as any),
       overlayContainerRef: ref(document.createElement('div')),
       store,
-      compatViewerRef: ref(null),
+      compatViewerRef: ref(compat as any),
       requestRender: null,
     });
     const event = new PointerEvent('pointerup', {
@@ -464,6 +586,14 @@ describe('useXeokitMeasurementTools', () => {
     tools.onCanvasPointerMove(canvas, event);
     await vi.advanceTimersByTimeAsync(100);
     await Promise.resolve();
+    tools.onCanvasPointerMove(canvas, event);
+
+    expect(store.xeokitPointerLensState.value).toMatchObject({
+      visible: true,
+      snapped: true,
+    });
+    expect(compat.scene.setObjectsXRayed).toHaveBeenCalledWith(['24381_145018'], true);
+
     tools.onCanvasPointerUp(canvas, event);
 
     expect(store.currentXeokitDistanceDraft.value?.origin.sourceInfo).toEqual({
@@ -492,6 +622,7 @@ describe('useXeokitMeasurementTools', () => {
       label: 'Mesh Pick Point',
     });
     expect(record.target.sourceInfo?.candidateId?.startsWith('ptset:')).toBe(false);
+    expect(compat.scene.setObjectsXRayed).toHaveBeenCalledWith(['24381_145018'], false);
 
     tools.dispose();
     vi.useRealTimers();

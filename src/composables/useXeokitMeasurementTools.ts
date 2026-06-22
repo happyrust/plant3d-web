@@ -28,6 +28,7 @@ import {
   type MeasurementPickSourceId,
   type ProjectedMeasurementPickCandidate,
 } from './useMeasurementPickSources';
+import { queryPtsetWithRuntimeFallback } from './usePtsetRuntimeLookup';
 import { projectToCanvas, usePtsetSnap } from './usePtsetSnap';
 import { usePtsetVisualizationThree } from './usePtsetVisualizationThree';
 import { useUnitSettingsStore } from './useUnitSettingsStore';
@@ -207,7 +208,10 @@ export function useXeokitMeasurementTools(options: {
   let hoverFetchTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingHoverRefno: string | null = null;
   let currentHoverRefno: string | null = null;
-  let shownPtsetRefno: string | null = null;
+  let shownPtsetKey: string | null = null;
+  const lockedMeasurementRefnos = new Set<string>();
+  const lockedMeasurementXrayRefnos = new Set<string>();
+  const temporaryXrayRefnos = new Set<string>();
 
   function ensureHoverPickCandidateGroupAttached(): void {
     const viewer = dtxViewerRef.value;
@@ -277,20 +281,41 @@ export function useXeokitMeasurementTools(options: {
     return parts.length >= 3 ? (parts[1] ?? null) : null;
   }
 
-  function showHoverPtset(refno: string | null): void {
-    if (refno === shownPtsetRefno) return;
-    if (!refno) {
-      if (shownPtsetRefno !== null) {
+  function renderMeasurementPtsets(hoverRefno: string | null): void {
+    if (!measurementStyle.state.measurementPickSources.ptset.show) {
+      if (shownPtsetKey !== null) {
         ptsetHoverViz.clearVisualization();
-        shownPtsetRefno = null;
+        shownPtsetKey = null;
       }
       return;
     }
-    const resp = ptsetResponseByRefno.get(refno);
-    if (!resp) return; // 未缓存：取数完成后再显示
-    ptsetHoverViz.renderPtset(refno, resp);
+
+    const refnos = Array.from(new Set([
+      ...lockedMeasurementRefnos,
+      ...(hoverRefno ? [hoverRefno] : []),
+    ]));
+    const entries = refnos
+      .map((refno) => ({ refno, resp: ptsetResponseByRefno.get(refno) }))
+      .filter((entry): entry is { refno: string; resp: PtsetResponse } =>
+        !!entry.resp?.success && entry.resp.ptset.length > 0,
+      );
+    const key = entries.map((entry) => entry.refno).join('|');
+    if (key === shownPtsetKey) return;
+    if (entries.length === 0) {
+      ptsetHoverViz.clearVisualization();
+      shownPtsetKey = null;
+      return;
+    }
+    ptsetHoverViz.renderPtset(entries[0].refno, entries[0].resp);
+    for (const entry of entries.slice(1)) {
+      ptsetHoverViz.appendPtset(entry.refno, entry.resp, { setCurrent: false });
+    }
     ptsetHoverViz.setVisible(true);
-    shownPtsetRefno = refno;
+    shownPtsetKey = key;
+  }
+
+  function showHoverPtset(refno: string | null): void {
+    renderMeasurementPtsets(refno);
   }
 
   function clearHoverPtset(): void {
@@ -301,9 +326,9 @@ export function useXeokitMeasurementTools(options: {
     pendingHoverRefno = null;
     currentHoverRefno = null;
     pickPointMessage.value = null;
-    if (shownPtsetRefno !== null) {
+    if (shownPtsetKey !== null) {
       ptsetHoverViz.clearVisualization();
-      shownPtsetRefno = null;
+      shownPtsetKey = null;
     }
   }
 
@@ -325,14 +350,14 @@ export function useXeokitMeasurementTools(options: {
         ptsetErrorByRefno.set(r, error instanceof Error ? error.message : String(error));
         return;
       }
-      parquetLoader.queryPtsetByRefnoFromParquet(dbno, r)
+      queryPtsetForMeasurement(dbno, r)
         .then((resp) => {
           if (resp?.success && resp.ptset.length > 0) {
             ptsetResponseByRefno.set(r, resp);
             ptsetErrorByRefno.delete(r);
             ptsetSnap.upsertCandidates(r, resp);
-            if (currentHoverRefno === r) {
-              showHoverPtset(measurementStyle.state.measurementPickSources.ptset.show ? r : null);
+            if (currentHoverRefno === r || lockedMeasurementRefnos.has(r)) {
+              showHoverPtset(currentHoverRefno);
             }
             requestRender?.();
             return;
@@ -343,6 +368,74 @@ export function useXeokitMeasurementTools(options: {
           ptsetErrorByRefno.set(r, error instanceof Error ? error.message : String(error));
         });
     }, 80);
+  }
+
+  async function queryPtsetForMeasurement(dbno: number, refno: string): Promise<PtsetResponse> {
+    return await queryPtsetWithRuntimeFallback(parquetLoader, dbno, refno);
+  }
+
+  function refnoFromMeasurementPoint(point: MeasurementPoint | null | undefined): string | null {
+    const sourceRefno = String(point?.sourceInfo?.refno ?? '').trim();
+    if (sourceRefno) return sourceRefno.replace(/\//g, '_');
+    return refnoFromObjectId(point?.entityId);
+  }
+
+  function xrayRefnoFromMeasurementPoint(point: MeasurementPoint | null | undefined): string | null {
+    if (point?.sourceInfo?.source !== 'ptset') return null;
+    return refnoFromMeasurementPoint(point);
+  }
+
+  function xrayRefnoFromPickHit(hit: PickHit | null | undefined): string | null {
+    if (hit?.source !== 'ptset') return null;
+    return String(hit.refno || refnoFromObjectId(hit.objectId) || '').trim() || null;
+  }
+
+  function addLockedMeasurementPoint(point: MeasurementPoint): void {
+    const refno = refnoFromMeasurementPoint(point);
+    if (!refno) return;
+    lockedMeasurementRefnos.add(refno);
+    const xrayRefno = xrayRefnoFromMeasurementPoint(point);
+    if (xrayRefno) lockedMeasurementXrayRefnos.add(xrayRefno);
+    scheduleHoverPtsetFetch(refno);
+    renderMeasurementPtsets(currentHoverRefno);
+  }
+
+  function updateTemporaryXray(refnos: Array<string | null | undefined>): void {
+    const compat = compatViewerRef.value;
+    if (!compat?.scene) return;
+
+    const next = new Set(refnos.map((refno) => String(refno || '').trim()).filter(Boolean));
+    for (const refno of Array.from(temporaryXrayRefnos)) {
+      if (next.has(refno)) continue;
+      compat.scene.setObjectsXRayed([refno], false);
+      temporaryXrayRefnos.delete(refno);
+    }
+
+    for (const refno of next) {
+      const wasXRayed = compat.scene.objects?.[refno]?.xrayed === true;
+      if (!wasXRayed) {
+        temporaryXrayRefnos.add(refno);
+      }
+      compat.scene.setObjectsXRayed([refno], true);
+    }
+    requestRender?.();
+  }
+
+  function syncMeasurementVisualAssists(hoverRefno: string | null, hit: PickHit | null = null): void {
+    updateTemporaryXray([...lockedMeasurementXrayRefnos, xrayRefnoFromPickHit(hit)]);
+    renderMeasurementPtsets(hoverRefno);
+  }
+
+  function clearMeasurementVisualAssists(): void {
+    const compat = compatViewerRef.value;
+    if (compat?.scene && temporaryXrayRefnos.size > 0) {
+      compat.scene.setObjectsXRayed(Array.from(temporaryXrayRefnos), false);
+    }
+    temporaryXrayRefnos.clear();
+    lockedMeasurementRefnos.clear();
+    lockedMeasurementXrayRefnos.clear();
+    clearHoverPtset();
+    requestRender?.();
   }
 
   function ensurePrimitiveKeypointsForRefno(refno: string | null): void {
@@ -805,17 +898,17 @@ export function useXeokitMeasurementTools(options: {
     if (!pointerLensEl) {
       pointerLensEl = document.createElement('div');
       pointerLensEl.style.position = 'absolute';
-      pointerLensEl.style.transform = 'translate(12px, 12px)';
       pointerLensEl.style.pointerEvents = 'none';
       pointerLensEl.style.zIndex = '27';
       pointerLensEl.style.display = 'none';
-      pointerLensEl.style.padding = '6px 8px';
+      pointerLensEl.style.padding = '4px 6px';
       pointerLensEl.style.borderRadius = '10px';
       pointerLensEl.style.background = 'rgba(15, 23, 42, 0.88)';
       pointerLensEl.style.color = '#f8fafc';
-      pointerLensEl.style.fontSize = '11px';
+      pointerLensEl.style.fontSize = '10px';
       pointerLensEl.style.lineHeight = '1.35';
       pointerLensEl.style.boxShadow = '0 8px 20px rgba(15, 23, 42, 0.24)';
+      pointerLensEl.style.maxWidth = '160px';
       container.appendChild(pointerLensEl);
     }
   }
@@ -846,9 +939,14 @@ export function useXeokitMeasurementTools(options: {
         pointerLensEl.style.display = 'none';
       } else {
         const palette = getXeokitOverlayPalette(store.xeokitMarkerState.value.role, lens.snapped, isKeypointSnap);
+        const overlay = overlayContainerRef.value;
+        const rect = overlay?.getBoundingClientRect();
+        const flipX = rect ? lens.canvasPos.x > rect.width - 180 : false;
+        const flipY = rect ? lens.canvasPos.y > rect.height - 80 : false;
         pointerLensEl.style.display = 'block';
         pointerLensEl.style.left = `${lens.canvasPos.x}px`;
         pointerLensEl.style.top = `${lens.canvasPos.y}px`;
+        pointerLensEl.style.transform = `translate(${flipX ? 'calc(-100% - 18px)' : '18px'}, ${flipY ? 'calc(-100% - 18px)' : '18px'})`;
         pointerLensEl.style.border = `1px solid ${palette.lensBorder}`;
         pointerLensEl.innerHTML = `
           <div style="font-weight:700;margin-bottom:2px;color:${palette.lensAccent};">${lens.title}</div>
@@ -994,7 +1092,7 @@ export function useXeokitMeasurementTools(options: {
         canvasPos: markerCanvasPos,
       });
       store.setXeokitPointerLensState({
-        visible: true,
+        visible: false,
         snapped: false,
         title: lensText.title,
         subtitle: lensText.subtitle,
@@ -1020,7 +1118,7 @@ export function useXeokitMeasurementTools(options: {
       canvasPos: markerCanvasPos,
     });
     store.setXeokitPointerLensState({
-      visible: true,
+      visible: Boolean(hit),
       snapped: Boolean(hit),
       title: lensText.title,
       subtitle: lensText.subtitle || displayHit.entityId,
@@ -1353,6 +1451,7 @@ export function useXeokitMeasurementTools(options: {
 
   function activate(mode: 'xeokit_measure_distance' | 'xeokit_measure_angle' | 'xeokit_measure_elevation_point' | 'xeokit_measure_elevation_delta') {
     if (suppressStoreMeasurements) return;
+    clearMeasurementVisualAssists();
     store.setMeasurementDetailsDrawerOpen(false);
     store.setToolMode(mode);
   }
@@ -1360,7 +1459,7 @@ export function useXeokitMeasurementTools(options: {
   function reset() {
     store.clearCurrentXeokitDraft();
     clearHoverFeedback();
-    clearHoverPtset();
+    clearMeasurementVisualAssists();
     syncFromStore();
     requestRender?.();
   }
@@ -1394,6 +1493,7 @@ export function useXeokitMeasurementTools(options: {
 
     if (!ready.value) {
       clearHoverFeedback();
+      syncMeasurementVisualAssists(null, null);
       return;
     }
 
@@ -1401,6 +1501,7 @@ export function useXeokitMeasurementTools(options: {
     const hit = pick.hit;
     const hoverRefno = pick.surfaceRefno;
     currentHoverRefno = hoverRefno;
+    syncMeasurementVisualAssists(hoverRefno, hit);
     updateHoverFeedback(canvas, e, hit, pick.preview);
 
     if (store.toolMode.value === 'xeokit_measure_elevation_point') {
@@ -1512,6 +1613,8 @@ export function useXeokitMeasurementTools(options: {
 
     const pick = pickSurfacePoint(canvas, e);
     const hit = pick.hit;
+    currentHoverRefno = pick.surfaceRefno;
+    syncMeasurementVisualAssists(pick.surfaceRefno, hit);
     const missOnModelWithoutPick = !hit && !!pick.surfaceRefno;
     const toolMode = store.toolMode.value;
     const datumElevation = measurementStyle.state.elevationDatum;
@@ -1575,6 +1678,7 @@ export function useXeokitMeasurementTools(options: {
           return;
         }
         const point = measurementPointFromHit(hit);
+        addLockedMeasurementPoint(point);
         const nextDraft: XeokitDistanceDraft = {
           id: nowId('xdist'),
           kind: 'distance',
@@ -1616,6 +1720,7 @@ export function useXeokitMeasurementTools(options: {
       };
       store.addXeokitDistanceMeasurement(rec);
       store.clearCurrentXeokitDraft();
+      clearMeasurementVisualAssists();
       syncFromStore();
       updateSelectionBinding(rec.id);
       requestRender?.();
@@ -1774,11 +1879,12 @@ export function useXeokitMeasurementTools(options: {
       requestRender?.();
     }
     clearHoverFeedback();
+    clearMeasurementVisualAssists();
   }
 
   function dispose() {
     clearHoverFeedback();
-    clearHoverPtset();
+    clearMeasurementVisualAssists();
     clearHoverPickCandidates();
     try { hoverPickCandidateGroup.parent?.remove(hoverPickCandidateGroup); } catch { /* ignore */ }
     requestedPtsetRefnos.clear();

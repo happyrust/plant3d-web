@@ -6,6 +6,10 @@ import type { PtsetResponse } from '@/api/genModelPdmsAttrApi';
 import PtsetPanel from '@/components/tools/PtsetPanel.vue';
 import { getDbnumByRefno } from '@/composables/useDbMetaInfo';
 import { useDbnoInstancesParquetLoader, type ParquetPtsetChildSummary } from '@/composables/useDbnoInstancesParquetLoader';
+import {
+  queryDirectChildrenPtsetSummaryWithRuntimeFallback,
+  queryPtsetWithRuntimeFallback,
+} from '@/composables/usePtsetRuntimeLookup';
 import { useViewerContext } from '@/composables/useViewerContext';
 
 const props = defineProps<{
@@ -90,7 +94,7 @@ async function loadBranchInspector(targetRefno = contextRefno.value) {
       return;
     }
 
-    const summaries = await parquetLoader.queryDirectChildrenPtsetSummary(dbno, rootRefno);
+    const summaries = await queryDirectChildrenPtsetSummaryWithRuntimeFallback(parquetLoader, dbno, rootRefno);
     if (seq !== branchLoadSeq) return;
     branchItems.value = summaries.map(buildBranchItem);
   } catch (error) {
@@ -113,7 +117,7 @@ async function renderBranchChild(refno: string) {
     return;
   }
 
-  const resp = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, normalized);
+  const resp = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, normalized);
   if (!resp.success || resp.ptset.length === 0) {
     branchError.value = resp.error_message || `未找到 ${normalized} 的点集数据`;
     branchRenderedAll.value = false;
@@ -141,7 +145,7 @@ async function renderAllBranchChildren() {
   for (const item of successItems) {
     const dbno = resolveDbno(item.refno);
     if (dbno == null) continue;
-    const resp = await parquetLoader.queryPtsetByRefnoFromParquet(dbno, item.refno);
+    const resp = await queryPtsetWithRuntimeFallback(parquetLoader, dbno, item.refno);
     if (resp.success && resp.ptset.length > 0) {
       loaded.push({ refno: item.refno, response: resp });
     }

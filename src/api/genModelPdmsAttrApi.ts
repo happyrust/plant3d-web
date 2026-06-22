@@ -91,6 +91,11 @@ export type PtsetBatchQueryResponse = {
   failed_count: number;
 }
 
+export type PtsetChildrenResponse = PtsetBatchQueryResponse & {
+  refno: string;
+  error_message?: string | null;
+}
+
 function getBaseUrl(): string {
   return getBackendApiBaseUrl();
 }
@@ -177,6 +182,23 @@ export async function pdmsBatchGetPtsetWithContext(
       batch_id: ctx?.batchId ?? undefined,
     }),
   });
+}
+
+export async function pdmsGetPtsetChildrenWithContext(
+  refno: string,
+  ctx?: PtsetQueryContext,
+): Promise<PtsetChildrenResponse> {
+  const search = new URLSearchParams();
+  if (ctx?.dbno !== undefined) {
+    search.set('dbno', String(ctx.dbno));
+  }
+  if (ctx?.batchId) {
+    search.set('batch_id', String(ctx.batchId));
+  }
+  const qs = search.toString();
+  return await fetchJson<PtsetChildrenResponse>(
+    `/api/pdms/ptset/children/${encodeURIComponent(refno)}${qs ? `?${qs}` : ''}`,
+  );
 }
 
 /**
