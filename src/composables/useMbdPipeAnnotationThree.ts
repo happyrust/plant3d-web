@@ -1915,11 +1915,18 @@ export function useMbdPipeAnnotationThree(
 
     if (mode === 'layout_first') {
       dimMode.value = 'rebarviz';
-      rebarvizArrowStyle.value = 'filled';
-      rebarvizArrowSizePx.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowSizePx;
-      rebarvizArrowAngleDeg.value =
-        MBD_DRAWING_STYLE_PROFILE.dimension.arrowAngleDeg;
-      rebarvizLineWidthPx.value = MBD_DRAWING_STYLE_PROFILE.dimension.lineWidthPx;
+      if (isMbdDrawingPresetRuntime()) {
+        rebarvizArrowStyle.value = 'filled';
+        rebarvizArrowSizePx.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowSizePx;
+        rebarvizArrowAngleDeg.value =
+          MBD_DRAWING_STYLE_PROFILE.dimension.arrowAngleDeg;
+        rebarvizLineWidthPx.value = MBD_DRAWING_STYLE_PROFILE.dimension.lineWidthPx;
+      } else {
+        rebarvizArrowStyle.value = rebarvizDefaults.arrowStyle === 'filled' ? 'filled' : 'open';
+        rebarvizArrowSizePx.value = rebarvizDefaults.arrowSizePx;
+        rebarvizArrowAngleDeg.value = rebarvizDefaults.arrowAngleDeg;
+        rebarvizLineWidthPx.value = rebarvizDefaults.lineWidthPx;
+      }
       bendDisplayMode.value = 'size';
       // 普通三维页先给主长度层，制造/切管细节由面板按需打开；
       // drawing 预设也会在出图规则中按需要去重。
@@ -9502,9 +9509,11 @@ export function useMbdPipeAnnotationThree(
     () => mbdDrawingStyleStore.version.value,
     () => {
       try {
-        rebarvizArrowSizePx.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowSizePx;
-        rebarvizArrowAngleDeg.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowAngleDeg;
-        rebarvizLineWidthPx.value = MBD_DRAWING_STYLE_PROFILE.dimension.lineWidthPx;
+        if (isMbdDrawingPresetRuntime()) {
+          rebarvizArrowSizePx.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowSizePx;
+          rebarvizArrowAngleDeg.value = MBD_DRAWING_STYLE_PROFILE.dimension.arrowAngleDeg;
+          rebarvizLineWidthPx.value = MBD_DRAWING_STYLE_PROFILE.dimension.lineWidthPx;
+        }
         applyMbdDrawingRuntimeStyle();
 
         const data = currentData.value;

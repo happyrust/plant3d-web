@@ -894,6 +894,7 @@ export class LinearDimension3D extends AnnotationBase {
     const hasBendId = !!((this.userData as any)?.mbdBendId);
     const shouldAutoHideShortLabel =
       dimKind === 'segment' ||
+      dimKind === 'chain' ||
       dimKind === 'port' ||
       auxKind === 'cut_tubi' ||
       hasBendId;
@@ -905,7 +906,7 @@ export class LinearDimension3D extends AnnotationBase {
       !this._hovered &&
       !this._selected &&
       hasLabelBox &&
-      lineLengthPx < Math.max(14, extPx.width * 0.45);
+      lineLengthPx < Math.max(24, extPx.width * 1.1);
     this.syncLabelVisibility();
     const shouldTrimForVisibleLabel =
       hasLabelBox && this.labelRequestedVisible && !this.labelAutoHidden;

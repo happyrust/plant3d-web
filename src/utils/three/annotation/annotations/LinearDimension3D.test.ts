@@ -57,6 +57,38 @@ describe('LinearDimension3D', () => {
     expect(spy).toHaveBeenCalled();
   });
 
+  it('should auto-hide short chain labels', async () => {
+    const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
+    const { LinearDimension3D } = await import('./LinearDimension3D');
+
+    const materials = new AnnotationMaterials();
+    const dim = new LinearDimension3D(materials, {
+      start: new THREE.Vector3(0, 0, 0),
+      end: new THREE.Vector3(0.2, 0, 0),
+      text: '2641',
+      laidOutGeometry: {
+        dimLineStart: new THREE.Vector3(0, 0, 0),
+        dimLineEnd: new THREE.Vector3(0.2, 0, 0),
+      },
+    });
+    dim.userData.mbdDimKind = 'chain';
+    vi.spyOn((dim as any).textLabel, 'getExtentsPx').mockReturnValue({
+      width: 72,
+      height: 14,
+    });
+
+    const camera = new THREE.PerspectiveCamera(60, 800 / 600, 0.1, 100);
+    camera.position.set(0, 0, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    (camera as any).userData.annotationViewport = { width: 800, height: 600 };
+
+    dim.update(camera);
+
+    expect((dim as any).textLabel.object3d.visible).toBe(false);
+  });
+
   it('should forward setBackgroundColor to textLabel', async () => {
     const { AnnotationMaterials } = await import('../core/AnnotationMaterials');
     const { LinearDimension3D } = await import('./LinearDimension3D');

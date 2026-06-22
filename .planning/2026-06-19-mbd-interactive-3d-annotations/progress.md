@@ -414,3 +414,28 @@
     - opening `尺寸设置` showed `[data-testid="mbd-toggle-cut-tubis"]` exists and `checked=false`.
 - Self-review:
   - This is intentionally not a new layout algorithm. It reduces default clutter while leaving the existing manual control intact.
+
+## 2026-06-22 Normal 3D MBD Visual Weight Pass
+
+- User feedback on the real AvevaMarineSample `24381_145018` page: the current ordinary 3D MBD dimension text was too visually heavy.
+- Root cause:
+  - normal 3D dimension lines had been reduced to lightweight RebarViz defaults (`arrowSizePx=18`, `lineWidthPx=2.4`);
+  - vector text still cloned shared `textFatLine` materials at `linewidth=5`, so the red numbers looked like bold filled marks even when dimension lines were light.
+- Frontend changes:
+  - `src/composables/mbd/mbdDimensionMode.ts`: ordinary RebarViz defaults use smaller arrows and thinner dimension lines.
+  - `src/composables/useMbdPipeAnnotationThree.ts`: ordinary 3D layout-first no longer imports drawing-preset filled arrow/line widths; drawing preset still keeps drawing style.
+  - `src/utils/three/annotation/text/SolveSpaceBillboardVectorText.ts`: RebarViz vector text now applies a `textLineWidthScale=0.4`, turning the shared 5px text material into an approximately 2px text stroke; cached cloned materials also sync base resolution/color/opacity.
+  - `src/utils/three/annotation/annotations/LinearDimension3D.ts`: short chain labels join the short-label auto-hide path so very short spans do not force unreadable text into the model.
+- Validation commands:
+  - `npx vitest run src\utils\three\annotation\text\SolveSpaceBillboardVectorText.test.ts src\utils\three\annotation\annotations\LinearDimension3D.test.ts src\composables\useMbdPipeAnnotationThree.flyTo.test.ts --reporter=dot` passed 3 files / 77 tests. The repeated `ECONNREFUSED 127.0.0.1:3000` messages are existing async test-environment noise; Vitest exit code was 0.
+  - `npm run type-check` passed.
+  - `git diff --check` passed for the touched MBD annotation files.
+- Real browser validation:
+  - opened the in-app browser at:
+    `http://127.0.0.1:3101/viewer/?backend=http%3A%2F%2F192.168.1.5%3A18085&output_project=AvevaMarineSample&show_dbnum=7997&show_refno=24381_145018&mbd_debug=1&mbd_api_debug=1&mbd_dim_text=backend&cache_bust=1782038231720`;
+  - reloaded the page and used the real Ribbon command `MBD -> 生成标注`, not the demo `测试标注`;
+  - panel evidence after generation: `target=true`, `demo=false`, `尺寸: 21`, `cut-tubi: 11`, `标签: 0`, `实际渲染：layout_result（后端版面）`;
+  - screenshot review showed the red dimension text changed from heavy block-like strokes to thin vector strokes while staying anchored to the true 3D branch.
+- Self-review:
+  - This fix is generic: it changes the RebarViz 3D text style and short-label policy, with no BRAN/refno special cases.
+  - It intentionally does not reintroduce expensive screen-space avoidance into ordinary 3D. Remaining visual cleanup should be a separate lightweight LOD/priority pass if the user wants fewer labels, not thicker/thinner text tuning.

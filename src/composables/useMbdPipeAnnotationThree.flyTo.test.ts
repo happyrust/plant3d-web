@@ -120,6 +120,9 @@ describe('useMbdPipeAnnotationThree.flyTo', () => {
 
     expect(vis.mbdViewMode.value).toBe('layout_first');
     expect(vis.dimMode.value).toBe('rebarviz');
+    expect(vis.rebarvizArrowStyle.value).toBe('open');
+    expect(vis.rebarvizArrowSizePx.value).toBe(18);
+    expect(vis.rebarvizLineWidthPx.value).toBe(2.4);
     expect(vis.showDimSegment.value).toBe(true);
     expect(vis.showDimChain.value).toBe(true);
     expect(vis.showDimOverall.value).toBe(true);

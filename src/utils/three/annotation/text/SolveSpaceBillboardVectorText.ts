@@ -14,6 +14,7 @@ export type SolveSpaceLabelRenderStyle = 'solvespace' | 'rebarviz';
 
 type LabelStylePreset = {
   minCapHeightPx: number;
+  textLineWidthScale: number;
   pickPaddingPx: number;
   textRenderOrder: number;
   bgRenderOrder: number;
@@ -46,6 +47,7 @@ const LABEL_STYLE_PRESETS: Record<
 > = {
   solvespace: {
     minCapHeightPx: 16,
+    textLineWidthScale: 1,
     pickPaddingPx: 8,
     textRenderOrder: 910,
     bgRenderOrder: 909,
@@ -55,7 +57,8 @@ const LABEL_STYLE_PRESETS: Record<
     forceTextDepthOff: false,
   },
   rebarviz: {
-    minCapHeightPx: 18,
+    minCapHeightPx: 14,
+    textLineWidthScale: 0.4,
     pickPaddingPx: 6,
     textRenderOrder: 922,
     bgRenderOrder: 909,
@@ -468,14 +471,42 @@ export class SolveSpaceBillboardVectorText {
   ): LineMaterial {
     const key = base.uuid;
     const cached = this.rebarvizMaterialCache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      this.syncRebarvizTextMaterial(cached, base);
+      return cached;
+    }
 
     const m = base.clone();
-    m.depthTest = false;
-    m.depthWrite = false;
-    m.transparent = true;
+    this.syncRebarvizTextMaterial(m, base);
     this.rebarvizMaterialCache.set(key, m);
     return m;
+  }
+
+  private syncRebarvizTextMaterial(material: LineMaterial, base: LineMaterial): void {
+    const sourceResolution = (base as any).resolution;
+    const targetResolution = (material as any).resolution;
+    if (sourceResolution && targetResolution?.copy) {
+      targetResolution.copy(sourceResolution);
+    }
+
+    const sourceColor = (base as any).color;
+    const targetColor = (material as any).color;
+    if (sourceColor && targetColor?.copy) {
+      targetColor.copy(sourceColor);
+    }
+
+    const sourceLineWidth = Number((base as any).linewidth);
+    if (Number.isFinite(sourceLineWidth) && sourceLineWidth > 0) {
+      (material as any).linewidth = Math.max(
+        1,
+        sourceLineWidth * this.getStylePreset().textLineWidthScale,
+      );
+    }
+
+    material.depthTest = false;
+    material.depthWrite = false;
+    material.transparent = true;
+    material.opacity = base.opacity;
   }
 
   private getFrameBoxMaterial(base: LineMaterial): LineMaterial {

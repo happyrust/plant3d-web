@@ -29,10 +29,10 @@ const MODE_CONFIG: Record<MbdDimensionMode, MbdDimensionModeConfig> = {
   rebarviz: {
     depthTest: false,
     arrowStyle: 'open',
-    // 对标 RebarViz：更明显的开口箭头 + 更粗线宽
-    arrowSizePx: 22,
+    // 对标 RebarViz，但普通三维里保持轻量，避免标注压过模型。
+    arrowSizePx: 18,
     arrowAngleDeg: 18,
-    lineWidthPx: 3.0,
+    lineWidthPx: 2.4,
     extensionOvershootPx: 12,
     labelRenderStyle: 'rebarviz',
   },
