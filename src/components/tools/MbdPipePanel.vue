@@ -335,6 +335,11 @@ function setBendDisplayMode(event: Event): void {
   const value = (event.target as HTMLSelectElement | null)?.value;
   props.vis.bendDisplayMode.value = value === 'angle' ? 'angle' : 'size';
 }
+
+function setDimensionMode(event: Event): void {
+  const value = (event.target as HTMLSelectElement | null)?.value;
+  props.vis.dimMode.value = value === 'classic' ? 'classic' : 'rebarviz';
+}
 </script>
 
 <template>
@@ -899,6 +904,17 @@ function setBendDisplayMode(event: Event): void {
             <span>cut-tubi 尺寸</span>
           </label>
         </div>
+      </div>
+
+      <div class="rounded-md border border-border p-2 text-xs">
+        <div class="mb-2 font-semibold">绘制方式</div>
+        <select data-testid="mbd-dimension-mode"
+          :value="vis.dimMode.value"
+          class="rounded-md border border-border bg-background px-2 py-1 text-xs"
+          @change="setDimensionMode">
+          <option value="rebarviz">RebarViz</option>
+          <option value="classic">SolveSpace</option>
+        </select>
       </div>
 
       <div class="rounded-md border border-border p-2 text-xs">

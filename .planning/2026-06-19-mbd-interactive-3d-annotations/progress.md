@@ -439,3 +439,24 @@
 - Self-review:
   - This fix is generic: it changes the RebarViz 3D text style and short-label policy, with no BRAN/refno special cases.
   - It intentionally does not reintroduce expensive screen-space avoidance into ordinary 3D. Remaining visual cleanup should be a separate lightweight LOD/priority pass if the user wants fewer labels, not thicker/thinner text tuning.
+
+## 2026-06-22 Dimension Drawing Mode Comparison
+
+- User requested two comparable MBD drawing modes, with the alternate mode using SolveSpace drawing.
+- Minimal frontend change:
+  - `src/components/tools/MbdPipePanel.vue` now exposes a `绘制方式` select in `尺寸设置`;
+  - options map to existing renderer modes only: `RebarViz -> dimMode='rebarviz'`, `SolveSpace -> dimMode='classic'`;
+  - no new render state or config layer was added because `classic` already uses `labelRenderStyle='solvespace'` and existing watchers rebuild the annotations.
+- Validation:
+  - `npx vitest run src\components\tools\MbdPipePanel.mode.test.ts --reporter=dot` passed 1 file / 8 tests.
+  - `npm run type-check` passed.
+  - `git diff --check -- src\components\tools\MbdPipePanel.vue src\components\tools\MbdPipePanel.mode.test.ts` passed.
+  - Real browser on AvevaMarineSample `24381_145018`:
+    - generated real MBD via `MBD -> 生成标注`, not demo;
+    - panel evidence stayed `尺寸: 21`, `cut-tubi: 11`, target `24381_145018`;
+    - `尺寸设置 -> 绘制方式` showed `RebarViz` and `SolveSpace`;
+    - switching to `SolveSpace` changed select value to `classic`;
+    - switching back to `RebarViz` changed select value to `rebarviz`.
+- Self-review:
+  - This is a generic compare switch over existing renderer modes, not a new mode implementation.
+  - Remaining need, if requested later: persist the selected drawing mode per user/project. Skipped for now because comparison only needs an immediate UI toggle.

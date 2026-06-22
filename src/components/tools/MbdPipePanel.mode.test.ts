@@ -205,6 +205,37 @@ describe('MbdPipePanel mode controls', () => {
     app.unmount();
   });
 
+  it('应支持在 RebarViz 与 SolveSpace 绘制方式之间切换', async () => {
+    const vis = createVisStub();
+    vis.dimMode.value = 'rebarviz';
+    host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const app = createApp(MbdPipePanel, { vis });
+    app.mount(host);
+    await nextTick();
+
+    const settingsButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('设置'),
+    ) as HTMLButtonElement | undefined;
+    settingsButton?.click();
+    await nextTick();
+
+    const modeSelect = host.querySelector(
+      '[data-testid="mbd-dimension-mode"]',
+    ) as HTMLSelectElement | null;
+    expect(modeSelect).toBeTruthy();
+    expect(modeSelect?.value).toBe('rebarviz');
+
+    modeSelect!.value = 'classic';
+    modeSelect!.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    expect(vis.dimMode.value).toBe('classic');
+
+    app.unmount();
+  });
+
   it('应展示 V2 尺寸与 cut-tubi 稳定开关且不显示移除提示', async () => {
     const vis = createVisStub();
     host = document.createElement('div');
