@@ -13,9 +13,21 @@ import {
 } from '@/api/genModelRoomTreeApi';
 import { collectLoadedSubtreeIds, useSceneGraphOps } from '@/composables/useSceneGraph';
 
+const ROOM_ITEM_PREFIX = 'room-item:';
+
+function roomTreeModelRefno(id: string): string {
+  const normalized = normalizeRoomTreeId(id);
+  if (isRoomObjectId(normalized)) return normalized;
+  if (!normalized.startsWith(ROOM_ITEM_PREFIX)) return '';
+  const itemRefno = normalized.slice(ROOM_ITEM_PREFIX.length).split(':').pop() || '';
+  return normalizeRoomTreeId(itemRefno);
+}
+
 function dtoToTreeNode(dto: RoomTreeNodeDto, parentId: string | null): TreeNode {
+  const refno = roomTreeModelRefno(dto.id);
   return {
     id: dto.id,
+    ...(refno ? { refno } : {}),
     name: dto.name,
     type: dto.noun,
     parentId,
@@ -170,6 +182,7 @@ export function useRoomTree(
 
       out.push({
         id: node.id,
+        refno: node.refno,
         name: node.name,
         type: node.type,
         depth,
@@ -341,7 +354,10 @@ export function useRoomTree(
       (id) => nodes[id]?.childrenIds,
       { maxDepth: 256, maxNodes: 200_000 },
     );
-    return ids.map(normalizeRoomTreeId).filter((id) => isRoomObjectId(id));
+    const refnos = ids
+      .map((id) => nodes[id]?.refno || roomTreeModelRefno(id))
+      .filter((id) => isRoomObjectId(id));
+    return Array.from(new Set(refnos));
   }
 
   function setCheckStateDeep(id: string, state: CheckState) {
@@ -579,13 +595,14 @@ export function useRoomTree(
     }
 
     expandedIds.value = nextExpanded;
-    selectedIds.value = new Set([id]);
+    const focusId = nodesById.value[id] ? id : path[path.length - 1] || id;
+    selectedIds.value = new Set([focusId]);
     if (syncScene) {
       syncSceneSelection();
     }
 
-    if (fly && isRoomObjectId(id)) {
-      flyTo(id);
+    if (fly) {
+      flyTo(focusId);
     }
 
     if (clearSearch) {

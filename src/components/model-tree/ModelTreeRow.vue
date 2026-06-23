@@ -126,7 +126,7 @@ onUnmounted(() => {
        )"
     data-testid="model-tree-row"
     :data-node-type="row.type"
-    :data-refno="row.id"
+    :data-refno="row.refno || row.id"
     :data-selected="selected ? 'true' : 'false'"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"

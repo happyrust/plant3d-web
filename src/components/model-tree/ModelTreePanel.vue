@@ -266,6 +266,14 @@ function isRefnoLike(id: string): boolean {
   return /^\d+[_\/,]\d+/.test(id);
 }
 
+function treeNodeRefno(id: string): string {
+  if (isRoomTree.value) {
+    const node = roomTree.nodesById.value[id];
+    return node?.refno || (isRefnoLike(id) ? normalizeRefnoKeyLike(id) : '');
+  }
+  return isRefnoLike(id) ? normalizeRefnoKeyLike(id) : '';
+}
+
 function handleSelectionChanged(selected: Set<string>) {
   // 约定：全局 selection（属性面板/查询等）只绑定 PDMS refno，房间树 id 不写入
   if (isRoomTree.value) return;
@@ -1366,9 +1374,9 @@ function hideNode() {
 
 function showPtset() {
   if (!contextNodeId.value) return;
-  // 只有 refno 格式的节点才能显示点集
-  if (isRefnoLike(contextNodeId.value)) {
-    toolStore.requestPtsetVisualization(contextNodeId.value);
+  const refno = treeNodeRefno(contextNodeId.value);
+  if (refno) {
+    toolStore.requestPtsetVisualization(refno);
     ensurePanelAndActivate('ptset');
   }
   closeContextMenu();
@@ -1376,20 +1384,19 @@ function showPtset() {
 
 function viewProperties() {
   if (!contextNodeId.value) return;
-  // 只有 refno 格式的节点才能查看属性
-  if (isRefnoLike(contextNodeId.value)) {
-    // 设置选中的 refno，触发属性面板加载
-    selection.setSelectedRefno(contextNodeId.value);
-    // 确保属性面板存在并激活
+  const refno = treeNodeRefno(contextNodeId.value);
+  if (refno) {
+    selection.setSelectedRefno(refno);
     ensurePanelAndActivate('properties');
   }
   closeContextMenu();
 }
 
 async function showContainingRoomFromContext(showModels: boolean) {
-  if (!contextNodeId.value || !isRefnoLike(contextNodeId.value)) return;
+  if (!contextNodeId.value) return;
 
-  const targetRefno = normalizeRefnoKeyLike(contextNodeId.value);
+  const targetRefno = treeNodeRefno(contextNodeId.value);
+  if (!targetRefno) return;
   closeContextMenu();
 
   activeTree.value = 'room';
@@ -1417,7 +1424,7 @@ async function showContainingRoomFromContext(showModels: boolean) {
 
 const contextNodeCanShowRoom = computed(() => {
   const id = contextNodeId.value;
-  return !!id && isRefnoLike(id);
+  return !!id && !!treeNodeRefno(id);
 });
 
 // MBD 标注：右键菜单可用的 noun 类型

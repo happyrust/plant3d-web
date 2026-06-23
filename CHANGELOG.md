@@ -4,6 +4,11 @@
 
 ### 变更
 
+- **房间树交付单元继续展开 E3D 子层级** (2026-06-23)
+  - 房间树支持 `room-item:{room}:{refno}` 虚拟节点，BRAN/EQUI 等最小交付单元下继续显示原始模型树子节点。
+  - 房间树节点保留真实 `refno`，隐藏/显示、属性、点集和定位操作继续作用于真实模型节点。
+  - AvevaMarineSample R301 验证：BRAN 下可展开到 `STRT/BEND/TEE/ATTA`，DOM `data-refno` 为真实 refno。
+
 - **校审页日志抽屉 — 四类日志统一查看** (2026-06-11)
   - 新增 flag `REVIEW_H_LOG_DRAWER`(默认关闭)门控的日志抽屉:校审页右下角悬浮入口,tab 按类型切换,默认过滤当前 form_id/task_id,支持手动刷新、5s 轮询与游标加载更多
   - 类型 tab 由后端 `/api/logs/types` 按角色动态下发:校审流转历史(全部角色)、接口 request/response 日志、进程运行日志、站点文件日志 parse/generate/db/web/viewer(管理角色)
