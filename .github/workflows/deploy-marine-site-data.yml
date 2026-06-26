@@ -140,15 +140,11 @@ jobs:
               ("_root_", "output_root"): os.environ["REMOTE_OUTPUT_DIR"],
               ("_root_", "surreal_ip"): "127.0.0.1",
               ("_root_", "surreal_port"): 8020,
-              ("_root_", "surreal_user"): "root",
-              ("_root_", "surreal_password"): "root",
               ("_root_", "surreal_script_dir"): "/root/resource/surreal",
               ("model_center", "frontend_base_url"): f"http://{host}",
               ("surrealdb", "ip"): "127.0.0.1",
               ("surrealdb", "port"): 8020,
               ("surrealdb", "path"): db_dir,
-              ("surrealdb", "user"): "root",
-              ("surrealdb", "password"): "root",
               ("surrealkv", "path"): f"{db_dir}.kv",
               ("web_server", "auto_start_surreal"): False,
               ("web_server", "backend_url"): f"http://{host}",
@@ -158,8 +154,6 @@ jobs:
               ("web_server", "public_base_url"): f"http://{host}",
               ("web_server", "surreal_bind"): "127.0.0.1:8020",
               ("web_server", "surreal_data_path"): db_dir,
-              ("web_server", "surreal_user"): "root",
-              ("web_server", "surreal_password"): "root",
           }
 
           def render(value):
@@ -237,6 +231,21 @@ jobs:
             "$REMOTE_USER@$REMOTE_HOST" 'sudo bash -se' <<'ENDSSH'
           set -euo pipefail
 
+          toml_value() {
+            python3 - "$1" "$2" <<'PY'
+          import sys
+          import tomllib
+
+          section, key = sys.argv[1], sys.argv[2]
+          with open("/root/DbOption.toml", "rb") as fh:
+              data = tomllib.load(fh)
+          value = data.get(section, {}).get(key) if section else data.get(key)
+          if value is None:
+              raise SystemExit(f"missing toml value: {section}.{key}")
+          print(value)
+          PY
+          }
+
           diagnostics() {
             echo "::group::remote diagnostics"
             echo "== systemd status =="
@@ -263,8 +272,10 @@ jobs:
             echo "== surreal cli =="
             if command -v surreal >/dev/null 2>&1; then
               surreal version || true
+              site_surreal_user="$(toml_value web_server surreal_user 2>/dev/null || echo root)"
+              site_surreal_pass="$(toml_value web_server surreal_password 2>/dev/null || echo root)"
               printf 'INFO FOR DB;\nSELECT count() AS count FROM pe GROUP ALL;\nSELECT count() AS count FROM inst_relate GROUP ALL;\nSELECT count() AS count FROM geo_relate GROUP ALL;\n' \
-                | surreal sql --conn http://127.0.0.1:8020 --user root --pass root --ns 1 --db AvevaMarineSample --pretty || true
+                | surreal sql --conn http://127.0.0.1:8020 --user "$site_surreal_user" --pass "$site_surreal_pass" --ns 1 --db AvevaMarineSample --pretty || true
             else
               echo "surreal CLI not found"
             fi
@@ -297,6 +308,8 @@ jobs:
             surreal_bin=/usr/bin/surreal
           fi
           test -n "$surreal_bin"
+          site_surreal_user="$(toml_value web_server surreal_user)"
+          site_surreal_pass="$(toml_value web_server surreal_password)"
 
           cat > /etc/systemd/system/surreal-8020.service <<EOF
           [Unit]
@@ -310,8 +323,8 @@ jobs:
           WorkingDirectory=/root/surreal_data
           Environment=REMOTE_SURREAL_DATA_DIR=/root/surreal_data
           Environment=SURREAL_DB_DIR_NAME=avevamarinesample-7997.db
-          Environment=SURREAL_USER=root
-          Environment=SURREAL_PASS=root
+          Environment="SURREAL_USER=$site_surreal_user"
+          Environment="SURREAL_PASS=$site_surreal_pass"
           Environment=SURREAL_BIND=0.0.0.0:8020
           Environment=SURREAL_BIN=$surreal_bin
           ExecStart=/root/shells/run_surreal_8020_ubuntu.sh
