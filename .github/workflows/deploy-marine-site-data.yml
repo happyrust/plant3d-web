@@ -1,0 +1,228 @@
+name: Deploy Marine Site Data
+
+on:
+  push:
+    tags:
+      - 'marine-site-data-*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag containing the Marine payload'
+        required: true
+        type: string
+      asset_name:
+        description: 'Payload asset name'
+        required: false
+        default: 'marine-site-data.tar.gz'
+        type: string
+      remote_host:
+        description: 'Override production host'
+        required: false
+        default: ''
+        type: string
+      remote_user:
+        description: 'Override production user'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-marine-site-data
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+      ASSET_NAME: ${{ inputs.asset_name || 'marine-site-data.tar.gz' }}
+      REMOTE_HOST: ${{ inputs.remote_host != '' && inputs.remote_host || secrets.PROD_HOST || vars.DEPLOY_REMOTE_HOST }}
+      REMOTE_USER: ${{ inputs.remote_user != '' && inputs.remote_user || secrets.PROD_USER || vars.DEPLOY_REMOTE_USER || 'root' }}
+      SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_KEY }}
+      PROJECT_NAME: AvevaMarineSample
+      DBNUM: '7997'
+      REMOTE_DB_DIR: /root/surreal_data/avevamarinesample-7997.db
+      REMOTE_OUTPUT_DIR: /root/output
+      REMOTE_MESH_DIR: /root/assets/meshes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deploy secrets
+        run: |
+          set -euo pipefail
+          test -n "$REMOTE_HOST" || { echo "Missing PROD_HOST or DEPLOY_REMOTE_HOST"; exit 1; }
+          test -n "$REMOTE_USER" || { echo "Missing PROD_USER or DEPLOY_REMOTE_USER"; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "Missing PROD_SSH_KEY"; exit 1; }
+
+      - name: Download payload
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/payload"
+          for attempt in $(seq 1 20); do
+            if gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "$ASSET_NAME" \
+              --dir "$RUNNER_TEMP/payload"; then
+              break
+            fi
+            echo "Payload not ready yet; retry $attempt/20"
+            sleep 15
+          done
+          test -f "$RUNNER_TEMP/payload/$ASSET_NAME"
+
+      - name: Extract and patch DbOption
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/extracted"
+          tar -xzf "$RUNNER_TEMP/payload/$ASSET_NAME" -C "$RUNNER_TEMP/extracted"
+          test -f "$RUNNER_TEMP/extracted/DbOption.toml"
+          test -d "$RUNNER_TEMP/extracted/data/surreal.db"
+          test -d "$RUNNER_TEMP/extracted/output/$PROJECT_NAME"
+          test -d "$RUNNER_TEMP/extracted/assets/meshes/lod_L1"
+
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "extracted"
+          source = root / "DbOption.toml"
+          target = root / "DbOption.remote.toml"
+          host = os.environ["REMOTE_HOST"]
+          db_dir = os.environ["REMOTE_DB_DIR"]
+
+          section = "_root_"
+          section_re = re.compile(r"^\s*\[([^\]]+)\]\s*(#.*)?$")
+          replacements = {
+              ("_root_", "ip"): "127.0.0.1",
+              ("_root_", "project_path"): "/root/e3d_models",
+              ("_root_", "meshes_path"): os.environ["REMOTE_MESH_DIR"],
+              ("_root_", "output_root"): os.environ["REMOTE_OUTPUT_DIR"],
+              ("_root_", "surreal_ip"): "127.0.0.1",
+              ("_root_", "surreal_port"): 8020,
+              ("_root_", "surreal_user"): "root",
+              ("_root_", "surreal_password"): "root",
+              ("_root_", "surreal_script_dir"): "/root/resource/surreal",
+              ("model_center", "frontend_base_url"): f"http://{host}",
+              ("surrealdb", "ip"): "127.0.0.1",
+              ("surrealdb", "port"): 8020,
+              ("surrealdb", "path"): db_dir,
+              ("surrealdb", "user"): "root",
+              ("surrealdb", "password"): "root",
+              ("surrealkv", "path"): f"{db_dir}.kv",
+              ("web_server", "auto_start_surreal"): False,
+              ("web_server", "backend_url"): f"http://{host}",
+              ("web_server", "bind_host"): "0.0.0.0",
+              ("web_server", "frontend_url"): f"http://{host}",
+              ("web_server", "port"): 3100,
+              ("web_server", "public_base_url"): f"http://{host}",
+              ("web_server", "surreal_bind"): "127.0.0.1:8020",
+              ("web_server", "surreal_data_path"): db_dir,
+              ("web_server", "surreal_user"): "root",
+              ("web_server", "surreal_password"): "root",
+          }
+
+          def render(value):
+              if isinstance(value, bool):
+                  return "true" if value else "false"
+              if isinstance(value, int):
+                  return str(value)
+              return json.dumps(value)
+
+          lines = []
+          for line in source.read_text(encoding="utf-8").splitlines(keepends=True):
+              match = section_re.match(line)
+              if match and not line.lstrip().startswith("#"):
+                  section = match.group(1).strip()
+                  lines.append(line)
+                  continue
+              changed = False
+              for (wanted_section, key), value in replacements.items():
+                  if section == wanted_section and re.match(rf"^\s*{re.escape(key)}\s*=", line):
+                      lines.append(f"{key} = {render(value)}\n")
+                      changed = True
+                      break
+              if not changed:
+                  lines.append(line)
+          target.write_text("".join(lines), encoding="utf-8")
+          PY
+
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
+
+      - name: Prepare remote
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "$REMOTE_USER@$REMOTE_HOST" 'sudo bash -se' <<'ENDSSH'
+          set -euo pipefail
+          ts="$(date +%Y%m%d_%H%M%S)"
+          backup="/root/deploy-backups/marine-site-${ts}"
+          mkdir -p "$backup" /root/surreal_data /root/output /root/assets/meshes /root/deploy-backups
+          cp -a /root/DbOption.toml "$backup/DbOption.toml" 2>/dev/null || true
+          systemctl stop web-server || true
+          systemctl stop surreal-8020 || true
+          echo "backup=$backup"
+          ENDSSH
+
+      - name: Sync DB, output and meshes
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/extracted"
+          ssh_args="-i ~/.ssh/deploy_key"
+          rsync -az --delete -e "ssh $ssh_args" --rsync-path="sudo rsync" \
+            "$base/data/surreal.db/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DB_DIR/"
+          rsync -az --delete -e "ssh $ssh_args" --rsync-path="sudo rsync" \
+            "$base/output/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_OUTPUT_DIR/"
+          rsync -az --delete -e "ssh $ssh_args" --rsync-path="sudo rsync" \
+            "$base/assets/meshes/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_MESH_DIR/"
+          rsync -az -e "ssh $ssh_args" --rsync-path="sudo rsync" \
+            "$base/DbOption.remote.toml" "$REMOTE_USER@$REMOTE_HOST:/tmp/DbOption.toml"
+
+      - name: Activate and smoke
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "$REMOTE_USER@$REMOTE_HOST" 'sudo bash -se' <<'ENDSSH'
+          set -euo pipefail
+          mv /tmp/DbOption.toml /root/DbOption.toml
+          mkdir -p /etc/systemd/system/surreal-8020.service.d
+          cat > /etc/systemd/system/surreal-8020.service.d/override.conf <<'EOF'
+          [Service]
+          Environment=REMOTE_SURREAL_DATA_DIR=/root/surreal_data
+          Environment=SURREAL_DB_DIR_NAME=avevamarinesample-7997.db
+          Environment=SURREAL_USER=root
+          Environment=SURREAL_PASS=root
+          Environment=SURREAL_BIND=0.0.0.0:8020
+          EOF
+          systemctl daemon-reload
+          systemctl start surreal-8020
+          systemctl restart web-server
+          nginx -t && systemctl reload nginx || true
+
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3100/api/status >/tmp/plant3d-status.json; then
+              break
+            fi
+            sleep 2
+          done
+          cat /tmp/plant3d-status.json
+          curl -fsS http://127.0.0.1:3100/api/projects
+          curl -fsSI http://127.0.0.1:3100/files/output/AvevaMarineSample/parquet/manifest_7997.json
+          first_mesh="$(find /root/assets/meshes/lod_L1 -maxdepth 1 -name '*_L1.glb' | head -n 1)"
+          test -n "$first_mesh"
+          mesh_name="$(basename "$first_mesh")"
+          curl -fsSI "http://127.0.0.1:3100/files/meshes/lod_L1/$mesh_name"
+          systemctl is-active surreal-8020
+          systemctl is-active web-server
+          ENDSSH
