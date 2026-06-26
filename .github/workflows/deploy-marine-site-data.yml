@@ -64,17 +64,44 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/payload"
-          for attempt in $(seq 1 20); do
+          shopt -s nullglob
+          payload="$RUNNER_TEMP/payload/$ASSET_NAME"
+          manifest="$RUNNER_TEMP/payload/$ASSET_NAME.parts"
+          for attempt in $(seq 1 120); do
+            rm -f "$payload" "$manifest" "$RUNNER_TEMP"/payload/"$ASSET_NAME".part-*
             if gh release download "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --pattern "$ASSET_NAME" \
               --dir "$RUNNER_TEMP/payload"; then
               break
             fi
-            echo "Payload not ready yet; retry $attempt/20"
+
+            if gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "$ASSET_NAME.parts" \
+              --dir "$RUNNER_TEMP/payload"; then
+              gh release download "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --pattern "$ASSET_NAME.part-*" \
+                --dir "$RUNNER_TEMP/payload" || true
+              expected_count="$(grep '^count=' "$manifest" | cut -d= -f2)"
+              actual_count="$(find "$RUNNER_TEMP/payload" -maxdepth 1 -name "$ASSET_NAME.part-*" | wc -l | tr -d ' ')"
+              if [[ "$actual_count" == "$expected_count" ]]; then
+                find "$RUNNER_TEMP/payload" -maxdepth 1 -name "$ASSET_NAME.part-*" -print \
+                  | sort \
+                  | xargs cat > "$payload"
+                expected_sha="$(grep '^sha256=' "$manifest" | cut -d= -f2)"
+                actual_sha="$(sha256sum "$payload" | awk '{print $1}')"
+                test "$actual_sha" = "$expected_sha"
+                break
+              fi
+              echo "Payload parts incomplete: $actual_count/$expected_count"
+            fi
+
+            echo "Payload not ready yet; retry $attempt/120"
             sleep 15
           done
-          test -f "$RUNNER_TEMP/payload/$ASSET_NAME"
+          test -f "$payload"
 
       - name: Extract and patch DbOption
         run: |
