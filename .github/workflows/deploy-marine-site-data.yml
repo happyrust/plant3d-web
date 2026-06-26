@@ -204,6 +204,10 @@ jobs:
           cp -a /root/DbOption.toml "$backup/DbOption.toml" 2>/dev/null || true
           systemctl stop web-server || true
           systemctl stop surreal-8020 || true
+          systemctl stop surrealdb || true
+          if command -v fuser >/dev/null 2>&1; then
+            fuser -k 8020/tcp 2>/dev/null || true
+          fi
           echo "backup=$backup"
           ENDSSH
 
@@ -232,18 +236,96 @@ jobs:
             -o UserKnownHostsFile=/dev/null \
             "$REMOTE_USER@$REMOTE_HOST" 'sudo bash -se' <<'ENDSSH'
           set -euo pipefail
+
+          diagnostics() {
+            echo "::group::remote diagnostics"
+            echo "== systemd status =="
+            systemctl status surreal-8020 web-server --no-pager || true
+            echo "== surreal-8020 unit =="
+            systemctl cat surreal-8020 || true
+            echo "== listeners =="
+            ss -tlnp | grep -E ':(8020|3100)\b' || true
+            echo "== DbOption summary =="
+            grep -nE '^(project_name|surreal_ns|output_root|meshes_path|project_code) =|^\[(surrealdb|web_server)\]' /root/DbOption.toml || true
+            echo "== deployed dirs =="
+            du -sh /root/surreal_data/avevamarinesample-7997.db /root/output/AvevaMarineSample /root/assets/meshes 2>/dev/null || true
+            find /root/output/AvevaMarineSample/parquet -maxdepth 2 -type f 2>/dev/null | sort | sed -n '1,40p' || true
+            find /root/assets/meshes/lod_L1 -maxdepth 1 -name '*_L1.glb' -print -quit || true
+            echo "== local API =="
+            curl -sS http://127.0.0.1:3100/api/status || true
+            echo
+            curl -sS http://127.0.0.1:3100/api/site/identity || true
+            echo
+            curl -sS http://127.0.0.1:3100/api/e3d/world-root || true
+            echo
+            curl -sS http://127.0.0.1:3100/api/e3d/visible-insts/7997_0 || true
+            echo
+            echo "== surreal cli =="
+            if command -v surreal >/dev/null 2>&1; then
+              surreal version || true
+              printf 'INFO FOR DB;\nSELECT count() AS count FROM pe GROUP ALL;\nSELECT count() AS count FROM inst_relate GROUP ALL;\nSELECT count() AS count FROM geo_relate GROUP ALL;\n' \
+                | surreal sql --conn http://127.0.0.1:8020 --user root --pass root --ns 1 --db AvevaMarineSample --pretty || true
+            else
+              echo "surreal CLI not found"
+            fi
+            echo "== recent logs =="
+            journalctl -u surreal-8020 -n 120 --no-pager || true
+            journalctl -u web-server -n 160 --no-pager || true
+            echo "::endgroup::"
+          }
+          trap 'rc=$?; if [ "$rc" -ne 0 ]; then diagnostics; fi; exit "$rc"' EXIT
+
           mv /tmp/DbOption.toml /root/DbOption.toml
-          mkdir -p /etc/systemd/system/surreal-8020.service.d
-          cat > /etc/systemd/system/surreal-8020.service.d/override.conf <<'EOF'
+          mkdir -p /root/shells /etc/systemd/system/surreal-8020.service.d
+          cat > /root/shells/run_surreal_8020_ubuntu.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          SURREAL_USER="${SURREAL_USER:-root}"
+          SURREAL_PASS="${SURREAL_PASS:-root}"
+          BIND="${SURREAL_BIND:-0.0.0.0:8020}"
+          DATA_DIR="${REMOTE_SURREAL_DATA_DIR:-/root/surreal_data}"
+          DB_DIR_NAME="${SURREAL_DB_DIR_NAME:-ams-8020.db}"
+          SURREAL_BIN="${SURREAL_BIN:-surreal}"
+          exec "$SURREAL_BIN" start --user "$SURREAL_USER" --pass "$SURREAL_PASS" --bind "$BIND" "rocksdb://${DATA_DIR}/${DB_DIR_NAME}"
+          EOF
+          chmod +x /root/shells/run_surreal_8020_ubuntu.sh
+
+          surreal_bin="$(command -v surreal || true)"
+          if [ -x /usr/local/bin/surreal ]; then
+            surreal_bin=/usr/local/bin/surreal
+          elif [ -x /usr/bin/surreal ]; then
+            surreal_bin=/usr/bin/surreal
+          fi
+          test -n "$surreal_bin"
+
+          cat > /etc/systemd/system/surreal-8020.service <<EOF
+          [Unit]
+          Description=SurrealDB plant (8020, rocksdb, AvevaMarineSample 7997)
+          After=network-online.target
+          Wants=network-online.target
+          Conflicts=surrealdb.service
+
           [Service]
+          Type=simple
+          WorkingDirectory=/root/surreal_data
           Environment=REMOTE_SURREAL_DATA_DIR=/root/surreal_data
           Environment=SURREAL_DB_DIR_NAME=avevamarinesample-7997.db
           Environment=SURREAL_USER=root
           Environment=SURREAL_PASS=root
           Environment=SURREAL_BIND=0.0.0.0:8020
+          Environment=SURREAL_BIN=$surreal_bin
+          ExecStart=/root/shells/run_surreal_8020_ubuntu.sh
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=1048576
+
+          [Install]
+          WantedBy=multi-user.target
           EOF
           systemctl daemon-reload
-          systemctl start surreal-8020
+          systemctl stop surrealdb || true
+          systemctl enable surreal-8020
+          systemctl restart surreal-8020
           systemctl restart web-server
           nginx -t && systemctl reload nginx || true
 
@@ -256,10 +338,20 @@ jobs:
           cat /tmp/plant3d-status.json
           curl -fsS http://127.0.0.1:3100/api/projects
           curl -fsSI http://127.0.0.1:3100/files/output/AvevaMarineSample/parquet/manifest_7997.json
-          first_mesh="$(find /root/assets/meshes/lod_L1 -maxdepth 1 -name '*_L1.glb' | head -n 1)"
+          first_mesh="$(find /root/assets/meshes/lod_L1 -maxdepth 1 -name '*_L1.glb' -print -quit)"
           test -n "$first_mesh"
           mesh_name="$(basename "$first_mesh")"
           curl -fsSI "http://127.0.0.1:3100/files/meshes/lod_L1/$mesh_name"
+          curl -fsS http://127.0.0.1:3100/api/e3d/world-root >/tmp/plant3d-world-root.json
+          curl -fsS http://127.0.0.1:3100/api/e3d/visible-insts/7997_0 >/tmp/plant3d-visible.json
+          cat /tmp/plant3d-visible.json
+          python3 - <<'PY'
+          import json
+
+          visible = json.load(open("/tmp/plant3d-visible.json", encoding="utf-8"))
+          if visible.get("success") is not True:
+              raise SystemExit(f"visible-insts failed: {visible}")
+          PY
           systemctl is-active surreal-8020
           systemctl is-active web-server
           ENDSSH
