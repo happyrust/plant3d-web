@@ -18,6 +18,8 @@ import {
   AmbientLight,
   Box3,
   BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   DirectionalLight,
   EdgesGeometry,
@@ -37,7 +39,6 @@ import {
 
 import { e3dGetChildren, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetUiAttr, type PtsetResponse } from '@/api/genModelPdmsAttrApi';
-import { getMbdPipeAnnotations, getMbdPipeV2Annotations } from '@/api/mbdPipeApi';
 import { resolveViewerToolbarSelection } from '@/components/dock_panels/viewerToolbarSelection';
 import PipeDistanceDrawer from '@/components/pipe-distance/PipeDistanceDrawer.vue';
 import ReviewConfirmation from '@/components/review/ReviewConfirmation.vue';
@@ -46,17 +47,6 @@ import AnnotationOverlayBar from '@/components/tools/AnnotationOverlayBar.vue';
 import MeasurementOverlayBar from '@/components/tools/MeasurementOverlayBar.vue';
 import MeasurementWizard from '@/components/tools/MeasurementWizard.vue';
 import ObjectMeasureDrawer from '@/components/tools/ObjectMeasureDrawer.vue';
-import { buildMbdPipeQueryParams } from '@/composables/mbd/mbdApiParamBuilder';
-import {
-  MBD_DRAWING_STYLE_PROFILE,
-  useMbdDrawingStyleStore,
-} from '@/composables/mbd/mbdDrawingStyleProfile';
-import { resolveMbdAnnotationRequestAxes } from '@/composables/mbd/mbdPresetMapper';
-import {
-  createLatestOnlyGate,
-  ExternalAnnotationRegistry,
-  shouldClearMbdRequest,
-} from '@/composables/mbd/mbdRequestSync';
 import { useAnnotationThree } from '@/composables/useAnnotationThree';
 import { useBackgroundStore } from '@/composables/useBackgroundStore';
 import { useBranClearanceAnnotationThree } from '@/composables/useBranClearanceAnnotationThree';
@@ -77,7 +67,6 @@ import { DimensionAnnotationManager } from '@/composables/useDimensionAnnotation
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
-import { useMbdPipeAnnotationThree } from '@/composables/useMbdPipeAnnotationThree';
 import { MeasurementAnnotationManager } from '@/composables/useMeasurementAnnotation';
 import { useModelGeneration } from '@/composables/useModelGeneration';
 import { useModelLoadStatus } from '@/composables/useModelLoadStatus';
@@ -93,20 +82,10 @@ import { useToolStore, type DimensionKind } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementTools } from '@/composables/useXeokitMeasurementTools';
-import {
-  branCameraPresets,
-  demoMbdPipeData,
-  getMbdPipeDemoConfig,
-  resolveMbdPipeDemoCaseFromUrl,
-} from '@/debug/injectMbdPipeDemo';
 import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
-import {
-  isMbdDrawingPresetUrl,
-  isMbdStandaloneUrl,
-  normalizeMbdRefnoFromUrl,
-  resolveMbdStandaloneDisplayMode,
-} from '@/utils/mbdStandaloneUrl';
+import { buildBackendUrl } from '@/utils/apiBase';
+import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
 import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
@@ -118,6 +97,7 @@ import { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import { loadDtxPrimitiveDemo } from '@/viewer/dtx/dtxPrimitiveDemo';
 import { DTXTileLodController } from '@/viewer/dtx/DTXTileLodController';
 import { DtxViewer, type BackgroundMode } from '@/viewer/dtx/DtxViewer';
+import { shouldStopShowDbnumLoad } from '@/viewer/dtx/showDbnumLoadPolicy';
 
 defineProps<{
     params: {
@@ -129,16 +109,12 @@ defineProps<{
 
 const containerRef = ref<HTMLDivElement | null>(null);
 const mainCanvas = ref<HTMLCanvasElement>();
-const isMbdStandaloneMode = isMbdStandaloneUrl(window.location.search);
-const isMbdDrawingPresetMode = isMbdDrawingPresetUrl(window.location.search);
 const overlayContainer = ref<HTMLElement | null>(null);
 
 const store = useToolStore();
 const consoleStore = useConsoleStore();
 const modelLoadStatus = useModelLoadStatus();
 const unitSettings = useUnitSettingsStore();
-const mbdDrawingStyleStore = useMbdDrawingStyleStore();
-const mbdPipeRequestGate = createLatestOnlyGate();
 const selectionStore = useSelectionStore();
 const spatialQueryStore = useSpatialQuery();
 const spatialComputeStore = useSpatialCompute();
@@ -176,10 +152,13 @@ function applyIncrementalCompareState(rawDetail: unknown) {
   const detail = rawDetail as {
     project?: unknown;
     dbnum?: unknown;
+    fromReleaseId?: unknown;
+    toReleaseId?: unknown;
     fromSesno?: unknown;
     toSesno?: unknown;
     mode?: unknown;
     compare?: unknown;
+    componentKey?: unknown;
     refnos?: unknown;
     models?: unknown;
   };
@@ -194,6 +173,8 @@ function applyIncrementalCompareState(rawDetail: unknown) {
         if (!refno) return null;
         return {
           refno,
+          componentKey: typeof item.componentKey === 'string' ? item.componentKey : undefined,
+          refnoU64: Number.isFinite(Number(item.refnoU64)) ? Number(item.refnoU64) : undefined,
           category: item.category,
           status: item.status,
           beforeState: item.beforeState,
@@ -213,10 +194,13 @@ function applyIncrementalCompareState(rawDetail: unknown) {
   incrementalCompareState.value = {
     project: typeof detail.project === 'string' ? detail.project : undefined,
     dbnum: Number.isFinite(Number(detail.dbnum)) ? Number(detail.dbnum) : undefined,
+    fromReleaseId: typeof detail.fromReleaseId === 'string' ? detail.fromReleaseId : undefined,
+    toReleaseId: typeof detail.toReleaseId === 'string' ? detail.toReleaseId : undefined,
     fromSesno: Number.isFinite(Number(detail.fromSesno)) ? Number(detail.fromSesno) : undefined,
     toSesno: Number.isFinite(Number(detail.toSesno)) ? Number(detail.toSesno) : undefined,
     mode: typeof detail.mode === 'string' ? detail.mode : undefined,
     compare: !!detail.compare,
+    componentKey: typeof detail.componentKey === 'string' ? detail.componentKey : undefined,
     refnos: mergedRefnos,
     models: models.length > 0 ? models : mergedRefnos.map((refno) => ({ refno })),
   };
@@ -224,9 +208,12 @@ function applyIncrementalCompareState(rawDetail: unknown) {
   if (incrementalCompareSelectedRefno.value) {
     selectionStore.setSelectedRefno(incrementalCompareSelectedRefno.value);
   }
-  emitToast({ message: `已进入增量模型对比：${mergedRefnos.length} 个模型` });
-  renderIncrementalCompareProxy(true);
-  scheduleIncrementalSplitCompareRender();
+  emitToast({ message: `已进入 DTX 版本对比：${mergedRefnos.length} 个模型` });
+  clearIncrementalCompareProxy();
+  clearIncrementalSplitCompare();
+  if (incrementalCompareSelectedRefno.value) {
+    loadIncrementalCompareRefno(incrementalCompareSelectedRefno.value);
+  }
 }
 
 function compareStatusLabel(status?: string): string {
@@ -527,13 +514,279 @@ function renderIncrementalCompareProxy(flyTo = true) {
   scheduleIncrementalSplitCompareRender();
 }
 
+type RuntimeSceneGeometry = {
+  geo_hash?: string;
+  geo_index?: number;
+  geo_matrix?: number[];
+  mesh_asset?: {
+    mesh_url?: string;
+    sha256?: string;
+  } | null;
+};
+
+type RuntimeSceneComponent = {
+  aabb?: { min?: number[]; max?: number[] } | null;
+  component_key?: string;
+  geometries?: RuntimeSceneGeometry[];
+  instance_matrix?: number[];
+  noun?: string;
+  refno_str?: string;
+  refno_u64?: number;
+};
+
+type RuntimeScenePayload = {
+  mesh_base_url?: string;
+  mesh_lod_tag?: string;
+  scene?: {
+    components?: RuntimeSceneComponent[];
+    release?: { release_id?: string; dbnum?: number };
+  };
+};
+
+const modelVersionDtxGeometryCache = new Map<string, Promise<BufferGeometry | null>>();
+let modelVersionDtxCompareObjectIds: string[] = [];
+let modelVersionDtxCompareRunId = 0;
+
+function hideModelVersionDtxCompareObjects() {
+  const layer = dtxLayerRef.value;
+  if (layer && modelVersionDtxCompareObjectIds.length > 0) {
+    layer.setObjectsVisible(modelVersionDtxCompareObjectIds, false);
+  }
+  modelVersionDtxCompareObjectIds = [];
+}
+
+function matrixFromRuntimeArray(value: unknown): Matrix4 {
+  if (Array.isArray(value) && value.length === 16 && value.every((item) => typeof item === 'number' && Number.isFinite(item))) {
+    return new Matrix4().fromArray(value as number[]);
+  }
+  return new Matrix4();
+}
+
+function runtimeMeshUrl(data: RuntimeScenePayload, geo: RuntimeSceneGeometry): string {
+  const assetUrl = geo.mesh_asset?.mesh_url;
+  if (assetUrl) return assetUrl;
+  const base = String(data.mesh_base_url || '').replace(/\/+$/, '');
+  const lod = String(data.mesh_lod_tag || 'L1');
+  const hash = String(geo.geo_hash || '');
+  return `${base}/${hash}_${lod}.glb`;
+}
+
+async function loadRuntimeGlbGeometry(url: string): Promise<BufferGeometry | null> {
+  const key = url;
+  const existing = modelVersionDtxGeometryCache.get(key);
+  if (existing) return await existing;
+
+  const task = (async () => {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const parsed = await parseGlbGeometry(await response.arrayBuffer());
+    if (!parsed) return null;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array(parsed.positions), 3));
+    if (parsed.normals && parsed.normals.length === parsed.positions.length) {
+      geometry.setAttribute('normal', new BufferAttribute(new Float32Array(parsed.normals), 3));
+    }
+    geometry.setIndex(new BufferAttribute(new Uint32Array(parsed.indices), 1));
+    if (!parsed.normals) geometry.computeVertexNormals();
+    return geometry;
+  })();
+
+  modelVersionDtxGeometryCache.set(key, task);
+  return await task;
+}
+
+async function fetchReleaseRuntimeScene(releaseId: string, componentKey: string, project?: string): Promise<RuntimeScenePayload> {
+  const params = new URLSearchParams({
+    component_key: componentKey,
+    limit: '1',
+  });
+  if (project) params.set('project', project);
+  const url = buildBackendUrl(`/api/model-version/releases/${encodeURIComponent(releaseId)}/runtime-scene?${params.toString()}`);
+  const response = await fetch(url);
+  const body = await response.json();
+  if (!response.ok || body?.success === false) {
+    throw new Error(body?.message || `release runtime scene failed: ${releaseId}`);
+  }
+  return body.data as RuntimeScenePayload;
+}
+
+function modelVersionComponentKey(model: IncrementalCompareModel | null): string | null {
+  if (model?.componentKey) return model.componentKey;
+  const state = incrementalCompareState.value;
+  if (state?.componentKey) return state.componentKey;
+  const dbnum = state?.dbnum;
+  if (dbnum && model?.refnoU64) return `${dbnum}:${model.refnoU64}`;
+  return null;
+}
+
+function boxFromRuntimeComponent(component: RuntimeSceneComponent): Box3 | null {
+  const min = component.aabb?.min;
+  const max = component.aabb?.max;
+  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) return null;
+  const values = [min[0], min[1], min[2], max[0], max[1], max[2]].map(Number);
+  if (!values.every((value) => Number.isFinite(value))) return null;
+  return new Box3(
+    new Vector3(values[0], values[1], values[2]),
+    new Vector3(values[3], values[4], values[5]),
+  );
+}
+
+function runtimeSceneComponentsBox(components: RuntimeSceneComponent[]): Box3 {
+  const box = new Box3();
+  for (const component of components) {
+    const componentBox = boxFromRuntimeComponent(component);
+    if (componentBox && !componentBox.isEmpty()) box.union(componentBox);
+  }
+  return box;
+}
+
+async function loadIncrementalCompareReleaseDtx(refno: string): Promise<boolean> {
+  const state = incrementalCompareState.value;
+  const model = incrementalCompareSelectedModel.value;
+  const componentKey = modelVersionComponentKey(model);
+  if (!state?.fromReleaseId || !state.toReleaseId || !componentKey) return false;
+
+  const layer = dtxLayerRef.value;
+  const viewer = dtxViewerRef.value;
+  if (!layer || !viewer) return false;
+
+  const runId = ++modelVersionDtxCompareRunId;
+  hideModelVersionDtxCompareObjects();
+
+  const debugState = {
+    runId,
+    status: 'running',
+    requested: [refno],
+    componentKey,
+    releases: [state.fromReleaseId, state.toReleaseId],
+    loadedObjects: 0,
+    failedGeometries: 0,
+    displayMode: 'release-local-side-by-side',
+    offset: 0,
+    sideCenters: [] as Array<{ side: string; center: number[]; size: number[]; components: number }>,
+    error: null as string | null,
+  };
+  if (isDev) {
+    (window as any).__dtxVersionCompareReleaseScene = debugState;
+  }
+
+  try {
+    const [fromScene, toScene] = await Promise.all([
+      fetchReleaseRuntimeScene(state.fromReleaseId, componentKey, state.project),
+      fetchReleaseRuntimeScene(state.toReleaseId, componentKey, state.project),
+    ]);
+    const sideScenes = [
+      { side: 'from', data: fromScene, releaseId: state.fromReleaseId, offsetSign: -1, color: new Color(0x2563eb) },
+      { side: 'to', data: toScene, releaseId: state.toReleaseId, offsetSign: 1, color: new Color(0x10b981) },
+    ] as const;
+    const sideEntries = sideScenes.map((sideScene) => {
+      const components = sideScene.data.scene?.components || [];
+      const sourceBox = runtimeSceneComponentsBox(components);
+      const center = new Vector3();
+      const size = new Vector3(100, 100, 100);
+      if (!sourceBox.isEmpty()) {
+        sourceBox.getCenter(center);
+        sourceBox.getSize(size);
+      }
+      return { ...sideScene, components, sourceBox, center, size };
+    });
+    const maxSideWidth = Math.max(...sideEntries.map(({ size }) => Math.abs(size.x)), 80);
+    const maxSideDim = Math.max(
+      ...sideEntries.flatMap(({ size }) => [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)]),
+      80,
+    );
+    const offset = Math.max(105, maxSideWidth * 0.65 + 55, maxSideDim * 0.55);
+    debugState.offset = offset;
+    debugState.sideCenters = sideEntries.map(({ side, center, size, components }) => ({
+      side,
+      center: center.toArray(),
+      size: size.toArray(),
+      components: components.length,
+    }));
+    const addedObjectIds: string[] = [];
+
+    for (const { side, data, releaseId, offsetSign, color, components, center } of sideEntries) {
+      for (const component of components) {
+        const instanceMatrix = matrixFromRuntimeArray(component.instance_matrix);
+        for (const geo of component.geometries || []) {
+          const meshUrl = runtimeMeshUrl(data, geo);
+          const geometry = await loadRuntimeGlbGeometry(meshUrl);
+          if (!geometry) {
+            debugState.failedGeometries += 1;
+            continue;
+          }
+          const geoHash = `mv:${releaseId}:${geo.geo_hash || 'geo'}:${geo.geo_index ?? 0}:${geo.mesh_asset?.sha256 || meshUrl}`;
+          layer.addGeometry(geoHash, geometry);
+          const geoMatrix = matrixFromRuntimeArray(geo.geo_matrix);
+          const normalizeMatrix = new Matrix4().makeTranslation(
+            offset * offsetSign - center.x,
+            -center.y,
+            -center.z,
+          );
+          const matrix = new Matrix4()
+            .copy(normalizeMatrix)
+            .multiply(instanceMatrix)
+            .multiply(geoMatrix);
+          const objectId = `mv:${runId}:${side}:${component.component_key || componentKey}:${geo.geo_index ?? addedObjectIds.length}`;
+          layer.addObject(objectId, geoHash, matrix, color, {
+            metalness: 0.08,
+            roughness: 0.78,
+            opacity: 0.86,
+          });
+          addedObjectIds.push(objectId);
+          debugState.loadedObjects += 1;
+        }
+      }
+    }
+
+    modelVersionDtxCompareObjectIds = addedObjectIds;
+    if (addedObjectIds.length > 0) {
+      layer.recompile();
+      const box = new Box3();
+      const tmp = new Box3();
+      for (const objectId of addedObjectIds) {
+        const objectBox = layer.getObjectBoundingBoxInto(objectId, tmp);
+        if (objectBox && !objectBox.isEmpty()) box.union(objectBox);
+      }
+      if (!box.isEmpty()) {
+        viewer.fitClipPlanesToBox(box);
+        const center = new Vector3();
+        const size = new Vector3();
+        box.getCenter(center);
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z, 1);
+        viewer.flyTo(
+          new Vector3(center.x + maxDim * 2.05, center.y - maxDim * 2.35, center.z + maxDim * 1.65),
+          center,
+          { duration: 650 },
+        );
+      }
+      requestRender();
+    }
+
+    debugState.status = 'done';
+    emitToast({ message: `已用 DTX 加载版本对比模型：${refno}` });
+    return addedObjectIds.length > 0;
+  } catch (error) {
+    debugState.status = 'error';
+    debugState.error = error instanceof Error ? error.message : String(error);
+    console.warn('[ViewerPanel] release DTX compare load failed', error);
+    emitToast({ message: `版本 DTX 模型加载失败：${debugState.error}`, level: 'error' });
+    return false;
+  }
+}
+
 function loadIncrementalCompareRefno(refno: string) {
   const normalized = normalizeCompareRefno(refno);
   if (!normalized) return;
   incrementalCompareSelectedRefno.value = normalized;
   selectionStore.setSelectedRefno(normalized);
-  renderIncrementalCompareProxy(true);
-  scheduleIncrementalSplitCompareRender();
+  clearIncrementalCompareProxy();
+  clearIncrementalSplitCompare();
+  if (incrementalCompareState.value?.fromReleaseId && incrementalCompareState.value?.toReleaseId) {
+    void loadIncrementalCompareReleaseDtx(normalized);
+    return;
+  }
   window.dispatchEvent(new CustomEvent('showModelByRefnos', {
     detail: {
       refnos: [normalized],
@@ -550,6 +803,7 @@ function loadIncrementalCompareRefno(refno: string) {
 function closeIncrementalCompareOverlay() {
   incrementalCompareState.value = null;
   incrementalCompareSelectedRefno.value = null;
+  hideModelVersionDtxCompareObjects();
   clearIncrementalCompareProxy();
   clearIncrementalSplitCompare();
   requestRender();
@@ -585,116 +839,6 @@ function getSelectionStoreRefnos(): string[] {
 function isTruthyUrlQueryFlag(raw: string | null | undefined): boolean {
   const t = String(raw ?? '').trim().toLowerCase();
   return t === '1' || t === 'true' || t === 'yes';
-}
-
-/** 与 GET /api/mbd/pipe 的 debug 查询参数对齐；生产包也可用 ?mbd_debug=1 拉取 debug_info */
-function isMbdApiDebugFromUrl(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const q = new URLSearchParams(window.location.search);
-    return isTruthyUrlQueryFlag(q.get('mbd_debug'));
-  } catch {
-    return false;
-  }
-}
-
-function isMbdV2DisabledFromUrl(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const raw = String(q.get('mbd_api') ?? q.get('mbd_version') ?? '')
-      .trim()
-      .toLowerCase();
-    return raw === 'v1' || raw === '1';
-  } catch {
-    return false;
-  }
-}
-
-function isMbdDrawingPresetFromUrl(): boolean {
-  if (typeof window === 'undefined') return false;
-  return isMbdDrawingPresetUrl(window.location.search);
-}
-
-function readMbdDimModeFromUrl(): 'classic' | 'rebarviz' | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const raw = String(q.get('mbd_dim_mode') || '')
-      .trim()
-      .toLowerCase();
-    if (raw === 'classic') return 'classic';
-    if (raw === 'rebarviz') return 'rebarviz';
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function readMbdDimTextModeFromUrl(): 'backend' | 'auto' | null {
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const raw = String(q.get('mbd_text_mode') || '')
-      .trim()
-      .toLowerCase();
-    if (raw === 'backend') return 'backend';
-    if (raw === 'auto') return 'auto';
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function readMbdArrowSizeFromUrl(): number | null {
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const text = String(q.get('mbd_arrow_size') ?? '').trim();
-    if (!text) return null;
-    const raw = Number(text);
-    if (Number.isFinite(raw)) return Math.max(6, Math.min(40, raw));
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function readMbdArrowAngleFromUrl(): number | null {
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const text = String(q.get('mbd_arrow_angle') ?? '').trim();
-    if (!text) return null;
-    const raw = Number(text);
-    if (Number.isFinite(raw)) return Math.max(8, Math.min(40, raw));
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function readMbdLineWidthFromUrl(): number | null {
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const text = String(q.get('mbd_line_width') ?? '').trim();
-    if (!text) return null;
-    const raw = Number(text);
-    if (Number.isFinite(raw)) return Math.max(1, Math.min(10, raw));
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function readMbdArrowStyleFromUrl(): 'open' | 'filled' | 'tick' | null {
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const raw = String(q.get('mbd_arrow_style') || '')
-      .trim()
-      .toLowerCase();
-    if (raw === 'open' || raw === 'filled' || raw === 'tick') return raw;
-  } catch {
-    // ignore
-  }
-  return null;
 }
 
 type CameraViewMode = 'cad_weak' | 'cad_flat' | 'normal';
@@ -756,191 +900,15 @@ function applyGlobalEdgeStyle(): void {
 
   overlay.setStyle({
     showFill: false,
-    edgeColor: isMbdDrawingPresetMode
-      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.color
-      : 0x4b5563,
-    edgeOpacity: isMbdDrawingPresetMode
-      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.opacity
-      : 1,
-    edgeLineWidth: isMbdDrawingPresetMode
-      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.lineWidthPx
-      : 1,
+    edgeColor: 0x4b5563,
+    edgeOpacity: 1,
+    edgeLineWidth: 1,
     edgeThresholdAngle: clampGlobalEdgeThresholdAngle(globalEdgeThresholdAngle.value),
     edgeAlwaysOnTop: false,
   });
   lastGlobalEdgeRevision = -1;
   syncGlobalEdgeOverlay(true);
   requestRender();
-}
-
-function resolveMbdDrawingObjectMaterial(noun: string): {
-  color: Color;
-  metalness: number;
-  roughness: number;
-  opacity: number;
-} {
-  const key = String(noun || '').trim().toUpperCase();
-  const profile = MBD_DRAWING_STYLE_PROFILE.modelMaterials;
-  if (key === 'TUBI' || key === 'PIPE') {
-    return {
-      color: new Color(profile.pipeColor),
-      metalness: profile.metalness,
-      roughness: profile.roughness,
-      opacity: profile.pipeOpacity,
-    };
-  }
-  if (['ELBO', 'BEND', 'TEE', 'REDU', 'CAP', 'OLET'].includes(key)) {
-    return {
-      color: new Color(profile.fittingColor),
-      metalness: profile.metalness,
-      roughness: profile.roughness,
-      opacity: profile.fittingOpacity,
-    };
-  }
-  if (['FLAN', 'FILT', 'GASK', 'BOLT', 'WELD'].includes(key)) {
-    return {
-      color: new Color(profile.flangeColor),
-      metalness: profile.metalness,
-      roughness: profile.roughness,
-      opacity: profile.flangeOpacity,
-    };
-  }
-  if (['VALV', 'GATE', 'GLOV', 'BALL', 'CHECK', 'CVAV'].includes(key)) {
-    return {
-      color: new Color(profile.valveColor),
-      metalness: profile.metalness,
-      roughness: profile.roughness,
-      opacity: profile.valveOpacity,
-    };
-  }
-  return {
-    color: new Color(profile.defaultColor),
-    metalness: profile.metalness,
-    roughness: profile.roughness,
-    opacity: profile.defaultOpacity,
-  };
-}
-
-function applyMbdDrawingModelMaterialStyle(
-  layer: DTXLayer | null,
-  dbno: number | null,
-): { updatedObjects: number } {
-  if (!isMbdDrawingPresetMode || !layer || dbno === null) {
-    return { updatedObjects: 0 };
-  }
-
-  const objectIds = layer.getVisibleObjectIds();
-  let updatedObjects = 0;
-  for (const objectId of objectIds) {
-    const refno = resolveDtxRefnoByObjectId(dbno, objectId);
-    const noun = refno ? resolveDtxNounByRefno(dbno, refno) : null;
-    const material = resolveMbdDrawingObjectMaterial(noun || '');
-    layer.setObjectMaterial(objectId, {
-      color: material.color,
-      metalness: material.metalness,
-      roughness: material.roughness,
-      opacity: material.opacity,
-    });
-    updatedObjects += 1;
-  }
-
-  if (updatedObjects > 0) {
-    console.debug('[mbd-pipe] drawing model material style applied', {
-      dbno,
-      updated_objects: updatedObjects,
-    });
-  }
-  return { updatedObjects };
-}
-
-type MbdDrawingModelStyleSnapshot = {
-  object_count: number;
-  min_opacity: number | null;
-  max_opacity: number | null;
-  opacity_by_noun: Record<string, { count: number; min: number | null; max: number | null }>;
-};
-
-type MbdDrawingModelEdgeSnapshot = {
-  enabled: boolean;
-  object_count: number;
-  style: {
-    show_fill: boolean;
-    show_edges: boolean;
-    edge_color: number | string;
-    edge_opacity: number;
-    edge_line_width_px: number;
-    edge_threshold_angle_deg: number;
-    edge_always_on_top: boolean;
-  } | null;
-};
-
-function getMbdDrawingModelStyleSnapshot(): MbdDrawingModelStyleSnapshot {
-  const layer = dtxLayerRef.value;
-  if (!isMbdDrawingPresetMode || !layer || activeDbno === null) {
-    return {
-      object_count: 0,
-      min_opacity: null,
-      max_opacity: null,
-      opacity_by_noun: {},
-    };
-  }
-
-  const opacityByNoun: Record<string, { count: number; min: number | null; max: number | null }> = {};
-  let objectCount = 0;
-  let minOpacity = Number.POSITIVE_INFINITY;
-  let maxOpacity = Number.NEGATIVE_INFINITY;
-
-  for (const objectId of layer.getVisibleObjectIds()) {
-    const opacity = layer.getObjectOpacity(objectId);
-    if (typeof opacity !== 'number' || !Number.isFinite(opacity)) continue;
-    const refno = resolveDtxRefnoByObjectId(activeDbno, objectId);
-    const noun = (refno ? resolveDtxNounByRefno(activeDbno, refno) : null) || 'UNKNOWN';
-    const key = noun.trim().toUpperCase() || 'UNKNOWN';
-    const bucket = opacityByNoun[key] ?? {
-      count: 0,
-      min: null,
-      max: null,
-    };
-    bucket.count += 1;
-    bucket.min = bucket.min === null ? opacity : Math.min(bucket.min, opacity);
-    bucket.max = bucket.max === null ? opacity : Math.max(bucket.max, opacity);
-    opacityByNoun[key] = bucket;
-    objectCount += 1;
-    minOpacity = Math.min(minOpacity, opacity);
-    maxOpacity = Math.max(maxOpacity, opacity);
-  }
-
-  return {
-    object_count: objectCount,
-    min_opacity: objectCount > 0 ? minOpacity : null,
-    max_opacity: objectCount > 0 ? maxOpacity : null,
-    opacity_by_noun: opacityByNoun,
-  };
-}
-
-function getMbdDrawingModelEdgeSnapshot(): MbdDrawingModelEdgeSnapshot {
-  const overlaySnapshot = globalEdgeOverlayRef.value?.getSnapshot?.() ?? null;
-  if (!isMbdDrawingPresetMode || !overlaySnapshot) {
-    return {
-      enabled: false,
-      object_count: 0,
-      style: null,
-    };
-  }
-  const style = overlaySnapshot.style;
-  return {
-    enabled: globalEdgeEnabled.value,
-    object_count: overlaySnapshot.objectCount,
-    style: {
-      show_fill: style.showFill,
-      show_edges: style.showEdges,
-      edge_color: style.edgeColor,
-      edge_opacity: style.edgeOpacity,
-      edge_line_width_px: style.edgeLineWidth,
-      edge_threshold_angle_deg: style.edgeThresholdAngle,
-      edge_always_on_top: style.edgeAlwaysOnTop,
-    },
-  };
 }
 
 function onCameraViewModeChange(mode: CameraViewMode): void {
@@ -992,26 +960,6 @@ function onFocusDimOpacityInput(value: number | string): void {
   safeLsSet('dtx_focus_opacity', String(next));
   requestRender();
 }
-
-// URL 预加载：通过 ?mbd_refno= 或 ?mbd_pipe= 自动触发 MBD 管道标注（mbd_refno 优先）。
-// 示例：/?output_project=AvevaMarineSample&mbd_refno=24381_145018
-// 兼容：/?output_project=AvevaMarineSample&mbd_pipe=24381/145018
-// 调试：加 &mbd_debug=1 可在非 dev 构建下仍请求后端 debug_info（并打印到控制台）
-(() => {
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const demo = String(q.get('dtx_demo') || '').toLowerCase();
-    if (demo === 'primitives') return;
-
-    const refno = normalizeMbdRefnoFromUrl(window.location.search) ?? '';
-    if (!refno) return;
-    store.requestMbdPipeAnnotation(refno, {
-      displayMode: resolveMbdStandaloneDisplayMode(window.location.search),
-    });
-  } catch {
-    // ignore
-  }
-})();
 
 type DtxTileLodUiConfig = {
     l1Px: number;
@@ -1194,6 +1142,8 @@ const pipeDistDrawerOpen = ref(false);
 
 const dtxViewerRef = shallowRef<DtxViewer | null>(null);
 const dtxLayerRef = shallowRef<DTXLayer | null>(null);
+const showDbnumExtraDtxLayers: DTXLayer[] = [];
+const attachedShowDbnumExtraDtxLayers = new WeakSet<DTXLayer>();
 const selectionControllerRef = shallowRef<DTXSelectionController | null>(null);
 const globalEdgeOverlayRef = shallowRef<DTXOverlayHighlighter | null>(null);
 const viewCullControllerRef = shallowRef<DTXViewCullController | null>(null);
@@ -1205,9 +1155,6 @@ const toolsRef = shallowRef<ReturnType<typeof useDtxTools> | null>(null);
 const xeokitMeasurementToolsRef = shallowRef<ReturnType<typeof useXeokitMeasurementTools> | null>(null);
 const ptsetVisRef = shallowRef<ReturnType<
     typeof usePtsetVisualizationThree
-> | null>(null);
-const mbdPipeVisRef = shallowRef<ReturnType<
-    typeof useMbdPipeAnnotationThree
 > | null>(null);
 const annotationSystemRef = shallowRef<ReturnType<
     typeof useAnnotationThree
@@ -1221,6 +1168,8 @@ const modelGenerationRef = shallowRef<ReturnType<
 
 type IncrementalCompareModel = {
     refno: string;
+    componentKey?: string;
+    refnoU64?: number;
     category?: string;
     status?: string;
     beforeState?: string;
@@ -1232,10 +1181,13 @@ type IncrementalCompareModel = {
 type IncrementalCompareState = {
     project?: string;
     dbnum?: number;
+    fromReleaseId?: string;
+    toReleaseId?: string;
     fromSesno?: number;
     toSesno?: number;
     mode?: string;
     compare?: boolean;
+    componentKey?: string;
     refnos: string[];
     models: IncrementalCompareModel[];
 };
@@ -1281,8 +1233,8 @@ watch(
   () => [dtxViewerRef.value, incrementalCompareState.value, incrementalCompareSelectedRefno.value] as const,
   ([viewer, state]) => {
     if (!viewer || !state) return;
-    renderIncrementalCompareProxy(false);
-    scheduleIncrementalSplitCompareRender();
+    clearIncrementalCompareProxy();
+    clearIncrementalSplitCompare();
   },
 );
 
@@ -1296,7 +1248,7 @@ let attachedToScene = false;
 let shaderPrecompiled = false;
 let lastGlobalEdgeRevision = -1;
 let continuousRender = false;
-let demoMode: 'none' | 'primitives' | 'mbd_pipe' = 'none';
+let demoMode: 'none' | 'primitives' = 'none';
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
 
@@ -1324,7 +1276,6 @@ let offRibbonCommand: (() => void) | null = null;
 let offToolsInput: (() => void) | null = null;
 let offXeokitToolsInput: (() => void) | null = null;
 let offPtsetWatch: (() => void) | null = null;
-let offMbdPipeWatch: (() => void) | null = null;
 let offBranClearanceWatch: (() => void) | null = null;
 let offShowModelByRefnos: (() => void) | null = null;
 let offIncrementalCompare: (() => void) | null = null;
@@ -1342,6 +1293,15 @@ let dtxGlobalTransformAppliedKey: string | null = null;
 let dtxAutoFitAppliedKey: string | null = null;
 let activeDbno: number | null = null;
 let tileLodInitializedDbno: number | null = null;
+
+const SHOW_DBNUM_DTX_LAYER_OPTIONS = {
+  maxVertices: 2000000,
+  maxIndices: 6000000,
+  maxObjects: 260000,
+};
+const SHOW_DBNUM_LOAD_BATCH_SIZE = 100;
+const SHOW_DBNUM_LAYER_MAX_OBJECTS = 180000;
+const SHOW_DBNUM_LAYER_MAX_TRIANGLES = 32000000;
 
 watch(
   () => [compatViewerRef.value, selectionStore.selectedRefno.value, selectionStore.selectedRefnos.value.join('|')] as const,
@@ -1739,26 +1699,6 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => mbdDrawingStyleStore.version.value,
-  () => {
-    if (!isMbdDrawingPresetMode) return;
-    try {
-      globalEdgeThresholdAngle.value = MBD_DRAWING_STYLE_PROFILE.modelEdges.thresholdAngleDeg;
-      applyGlobalEdgeStyle();
-    } catch {
-      // ignore
-    }
-
-    try {
-      applyMbdDrawingModelMaterialStyle(dtxLayerRef.value, activeDbno);
-    } catch (e) {
-      console.warn('[ViewerPanel] MBD 图纸模型样式刷新失败', e);
-    }
-    requestRender();
-  },
-);
-
 // 模型单位/重心变更会改变全局矩阵（scale/translation），为避免既有标注错位，一期采取安全策略：有数据时自动清空。
 watch(
   () => [unitSettings.modelUnit.value, unitSettings.recenter.value],
@@ -1776,20 +1716,18 @@ watch(
             (store.obbAnnotations.value?.length ?? 0) > 0;
 
     const hasPtset = (ptsetVisRef.value?.visualObjects.value?.size ?? 0) > 0;
-    const hasMbdPipe = !!mbdPipeVisRef.value?.currentData.value;
     const hasBranClearance =
       (spatialComputeStore.scenarios.branNearestClearance.annotationCandidates.length ?? 0) > 0;
 
-    if (!hasMarks && !hasPtset && !hasMbdPipe && !hasBranClearance) return;
+    if (!hasMarks && !hasPtset && !hasBranClearance) return;
 
     try {
       store.clearAll();
       ptsetVisRef.value?.clearAll();
-      mbdPipeVisRef.value?.clearAll();
       clearBranClearanceAnnotations();
       emitToast({
         message:
-                    '模型单位/重心设置已变更：为避免错位，已清空测量/批注/点集/MBD管道/BRAN清距标注（可重新创建）',
+                    '模型单位/重心设置已变更：为避免错位，已清空测量/批注/点集/BRAN清距标注（可重新创建）',
       });
     } catch {
       // ignore
@@ -1801,11 +1739,6 @@ watch(
 function applyBackground(mode: BackgroundMode): void {
   const viewer = dtxViewerRef.value;
   if (!viewer) return;
-  if (isMbdDrawingPresetMode) {
-    viewer.setSolidBackground('#f3f1ed');
-    requestRender();
-    return;
-  }
   const preset = backgroundStore.getPreset(mode);
   if (mode === 'skybox') {
     viewer.loadCrossSkybox('/texture/skybox.png');
@@ -1835,7 +1768,6 @@ async function onDisplayThemeChange(theme: DisplayTheme): Promise<void> {
   if (!layer || activeDbno === null) return;
   const config = await loadModelDisplayConfig();
   applyMaterialConfigToLoadedDtx(layer, activeDbno, config, theme);
-  applyMbdDrawingModelMaterialStyle(layer, activeDbno);
   compatViewerRef.value?.scene.reapplyFocusTransparency();
   requestRender();
 }
@@ -2210,73 +2142,6 @@ function setAutoNearestMode(
   requestRender();
 }
 
-function syncMbdAnnotationsToInteraction(): void {
-  const annotationSystem = annotationSystemRef.value;
-  const mbdPipeVis = mbdPipeVisRef.value;
-  if (!annotationSystem || !mbdPipeVis) return;
-
-  const nextIds = new Set<string>();
-
-  for (const [weldId, weld] of mbdPipeVis.getWeldAnnotations()) {
-    const interactionId = `mbd_weld_${weldId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, weld as any);
-    nextIds.add(interactionId);
-  }
-  for (const [slopeId, slope] of mbdPipeVis.getSlopeAnnotations()) {
-    const interactionId = `mbd_slope_${slopeId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, slope as any);
-    nextIds.add(interactionId);
-  }
-  for (const [bendId, bend] of mbdPipeVis.getBendAnnotations()) {
-    const interactionId = `mbd_bend_${bendId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, bend as any);
-    nextIds.add(interactionId);
-  }
-  for (const [clearanceId, clearance] of mbdPipeVis.getPipeClearanceAnnotations()) {
-    const interactionId = `mbd_pipe_clearance_${clearanceId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, clearance as any);
-    nextIds.add(interactionId);
-  }
-  for (const [clearanceId, clearance] of mbdPipeVis.getStructureClearanceAnnotations()) {
-    const interactionId = `mbd_structure_clearance_${clearanceId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, clearance as any);
-    nextIds.add(interactionId);
-  }
-  for (const [elevationId, elevation] of mbdPipeVis.getElevationAnnotations()) {
-    const interactionId = `mbd_elevation_${elevationId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, elevation as any);
-    nextIds.add(interactionId);
-  }
-  for (const [envelopeId, envelope] of mbdPipeVis.getEnvelopeObjects()) {
-    const interactionId = `mbd_envelope_${envelopeId}`;
-    annotationSystem.registerExternalAnnotation(interactionId, envelope as any);
-    nextIds.add(interactionId);
-  }
-
-  mbdInteractionRegistry.sync(
-    nextIds,
-    () => {
-      // MBD 标注已在前面 register，这里只需同步 registry 集合。
-    },
-    (id) => {
-      annotationSystem.unregisterExternalAnnotation(id);
-    },
-  );
-}
-
-function clearMbdAnnotationsFromInteraction(): void {
-  const annotationSystem = annotationSystemRef.value;
-  if (!annotationSystem) {
-    mbdInteractionRegistry.clear(() => {
-      // ignore
-    });
-    return;
-  }
-  mbdInteractionRegistry.clear((id) => {
-    annotationSystem.unregisterExternalAnnotation(id);
-  });
-}
-
 function clearBranClearanceAnnotations(): void {
   try {
     branClearanceVisRef.value?.clearAnnotations();
@@ -2358,102 +2223,17 @@ function handleRibbonCommand(commandId: string) {
         // ignore
       }
       return;
-    case 'panel.mbdPipe':
-      try {
-        ensurePanelAndActivate('mbdPipe');
-      } catch {
-        // ignore
-      }
+    case 'panel.pipeDistance.open':
+      pipeDistDrawerOpen.value = true;
+      rangeDrawerOpen.value = false;
       return;
     case 'panel.pipeDistance':
       pipeDistDrawerOpen.value = !pipeDistDrawerOpen.value;
       if (pipeDistDrawerOpen.value) rangeDrawerOpen.value = false;
       return;
-    case 'mbd.generate': {
-      // 一条龙：用当前选中 refno 触发 MBD 管道标注生成（复用 store watcher 链路）。
-      try {
-        ensurePanelAndActivate('mbdPipe');
-      } catch {
-        // ignore
-      }
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.uiTab.value = 'overview';
-      }
-
-      const refno = selectionStore.selectedRefno.value;
-      if (!refno) {
-        emitToast({
-          message:
-                        '请先选中一个构件（模型树/场景），再生成 MBD 管道标注',
-        });
-        return;
-      }
-
-      store.requestMbdPipeAnnotation(refno, { displayMode: 'full' });
-      return;
-    }
-    case 'mbd.weld':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showWelds.value =
-                    !mbdPipeVisRef.value.showWelds.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.slope':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showSlopes.value =
-                    !mbdPipeVisRef.value.showSlopes.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.segments':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showSegments.value =
-                    !mbdPipeVisRef.value.showSegments.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.flow_direction':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showFlowDirection.value =
-                    !mbdPipeVisRef.value.showFlowDirection.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.labels':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.showLabels.value =
-                    !mbdPipeVisRef.value.showLabels.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.toggle_all':
-      if (mbdPipeVisRef.value) {
-        mbdPipeVisRef.value.isVisible.value =
-                    !mbdPipeVisRef.value.isVisible.value;
-      }
-      requestRender();
-      return;
-    case 'mbd.flyTo':
-      mbdPipeVisRef.value?.flyTo();
-      requestRender();
-      return;
-    case 'mbd.clear':
-      mbdPipeVisRef.value?.clearAll();
-      requestRender();
-      return;
-    case 'mbd.settings':
-      try {
-        ensurePanelAndActivate('mbdAnnotationStyle');
-      } catch {
-        // ignore
-      }
-      requestRender();
-      return;
     case 'tools.clear_all':
       store.clearAll();
       ptsetVisRef.value?.clearAll();
-      mbdPipeVisRef.value?.clearAll();
       requestRender();
       return;
   }
@@ -2481,6 +2261,60 @@ function ensureLayerAttached() {
   }
 
   requestRender();
+}
+
+function createShowDbnumDtxLayer(dtxViewer: DtxViewer, sourceLayer: DTXLayer): DTXLayer {
+  const layer = new DTXLayer({
+    renderer: dtxViewer.renderer,
+    debug: isDev,
+    ...SHOW_DBNUM_DTX_LAYER_OPTIONS,
+  });
+  layer.setRenderer(dtxViewer.renderer);
+  layer.setGlobalModelMatrix(sourceLayer.getGlobalModelMatrix());
+  showDbnumExtraDtxLayers.push(layer);
+  if (typeof window !== 'undefined') {
+    (window as any).__dtxShowDbnumExtraLayers = showDbnumExtraDtxLayers;
+  }
+  return layer;
+}
+
+function ensureShowDbnumExtraLayerAttached(layer: DTXLayer, dtxViewer: DtxViewer): void {
+  if (!layer.getStats().compiled) return;
+  if (attachedShowDbnumExtraDtxLayers.has(layer)) return;
+  layer.addToScene(dtxViewer.scene);
+  attachedShowDbnumExtraDtxLayers.add(layer);
+}
+
+function updateShowDbnumExtraLayers(dtxViewer: DtxViewer): void {
+  for (const layer of showDbnumExtraDtxLayers) {
+    ensureShowDbnumExtraLayerAttached(layer, dtxViewer);
+    layer.update(dtxViewer.camera);
+  }
+}
+
+function getShowDbnumAllLayers(primaryLayer: DTXLayer): DTXLayer[] {
+  return [primaryLayer, ...showDbnumExtraDtxLayers];
+}
+
+function computeDtxLayersBoundingBox(layers: DTXLayer[]): Box3 | null {
+  const combined = new Box3();
+  let hasBox = false;
+  for (const layer of layers) {
+    const box = layer.getBoundingBox();
+    if (!box || box.isEmpty()) continue;
+    combined.union(box);
+    hasBox = true;
+  }
+  return hasBox ? combined : null;
+}
+
+function shouldRollShowDbnumLayer(layer: DTXLayer): boolean {
+  const stats = layer.getStats();
+  if (!stats.compiled || stats.totalObjects === 0) return false;
+  return (
+    stats.totalObjects >= SHOW_DBNUM_LAYER_MAX_OBJECTS ||
+    stats.drawTriangleCount >= SHOW_DBNUM_LAYER_MAX_TRIANGLES
+  );
 }
 
 function parseRefnoFromObjectId(objectId: string): string | null {
@@ -2718,8 +2552,7 @@ function handleResize() {
 
   // 更新三维标注系统的分辨率（LineMaterial 需要）
   annotationSystemRef.value?.setResolution(rect.width, rect.height);
-  // 更新 MBD 管道标注分辨率（LineMaterial + CSS2DRenderer 需要）
-  mbdPipeVisRef.value?.setResolution(rect.width, rect.height);
+  // 更新 overlay 标注分辨率（LineMaterial + CSS2DRenderer 需要）
   // 更新全局工程边线分辨率（LineMaterial 需要）
   globalEdgeOverlayRef.value?.setResolution(rect.width, rect.height);
 
@@ -2738,6 +2571,7 @@ function renderFrameImmediate() {
   cadGridRef.value?.update(dtxViewer.controls.target);
   ensureLayerAttached();
   dtxLayer.update(dtxViewer.camera);
+  updateShowDbnumExtraLayers(dtxViewer);
 
   // resize 会改变 aspect/projectionMatrix，需更新视锥裁剪与 LOD（避免“旧裁剪状态”）
   viewCullControllerRef.value?.update(dtxViewer.camera);
@@ -2747,6 +2581,9 @@ function renderFrameImmediate() {
   pivotControllerRef.value?.update();
 
   syncGlobalEdgeOverlay();
+
+  const annotationSystem = annotationSystemRef.value;
+  annotationSystem?.update(dtxViewer.camera);
 
   const selection = selectionControllerRef.value;
   if (selection?.hasOutline()) {
@@ -2764,11 +2601,7 @@ function renderFrameImmediate() {
   // resize 同步渲染：补一次 overlay/labels 更新，避免标签与线条在首帧错位
   toolsRef.value?.updateOverlayPositions();
   ptsetVisRef.value?.updateLabelPositions();
-  mbdPipeVisRef.value?.updateLabelPositions();
-  if (annotationSystemRef.value) {
-    annotationSystemRef.value.update(dtxViewer.camera);
-    annotationSystemRef.value.renderLabels(dtxViewer.scene, dtxViewer.camera);
-  }
+  annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
 }
 
 let needsRender = true;
@@ -2826,12 +2659,16 @@ function renderFrame() {
 
     ensureLayerAttached();
     dtxLayer.update(dtxViewer.camera);
+    updateShowDbnumExtraLayers(dtxViewer);
     if (cameraChanged) {
       viewCullControllerRef.value?.update(dtxViewer.camera);
       tileLodControllerRef.value?.requestUpdate(dtxViewer.camera);
     }
 
     syncGlobalEdgeOverlay();
+
+    const annotationSystem = annotationSystemRef.value;
+    annotationSystem?.update(dtxViewer.camera);
 
     const selection = selectionControllerRef.value;
     if (selection?.hasOutline()) {
@@ -2849,13 +2686,9 @@ function renderFrame() {
 
     toolsRef.value?.updateOverlayPositions();
     ptsetVisRef.value?.updateLabelPositions();
-    mbdPipeVisRef.value?.updateLabelPositions();
 
     // 三维标注系统更新
-    if (annotationSystemRef.value) {
-      annotationSystemRef.value.update(dtxViewer.camera);
-      annotationSystemRef.value.renderLabels(dtxViewer.scene, dtxViewer.camera);
-    }
+    annotationSystem?.renderLabels(dtxViewer.scene, dtxViewer.camera);
 
     needsRender = false;
 
@@ -2973,12 +2806,10 @@ onMounted(async () => {
   annotationVectorTextRebuildCount = 0;
   demoMode = 'none';
   demoPrimitiveCount = 1000;
-  cadGridEnabled = !isMbdDrawingPresetMode;
-  cameraViewMode.value = isMbdDrawingPresetMode ? 'cad_flat' : 'cad_weak';
-  globalEdgeEnabled.value = isMbdDrawingPresetMode;
-  globalEdgeThresholdAngle.value = isMbdDrawingPresetMode
-    ? MBD_DRAWING_STYLE_PROFILE.modelEdges.thresholdAngleDeg
-    : 20;
+  cadGridEnabled = true;
+  cameraViewMode.value = 'cad_weak';
+  globalEdgeEnabled.value = false;
+  globalEdgeThresholdAngle.value = 20;
   focusTransparencyEnabled.value = false;
   focusDimOpacityPercent.value = 20;
   try {
@@ -3000,8 +2831,6 @@ onMounted(async () => {
       if (Number.isFinite(cnt) && cnt > 0) {
         demoPrimitiveCount = Math.floor(cnt);
       }
-    } else if (demo === 'mbd_pipe') {
-      demoMode = 'mbd_pipe';
     }
 
     const gridRaw = q.get('dtx_grid') || localStorage.getItem('dtx_grid');
@@ -3056,7 +2885,7 @@ onMounted(async () => {
       canvas,
       background: 0xe5e7eb,
       debug: isDev,
-      gizmo: { enabled: !isMbdDrawingPresetMode, placement: 'top-right', size: 100 },
+      gizmo: { enabled: true, placement: 'top-right', size: 100 },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -3081,9 +2910,17 @@ onMounted(async () => {
     console.warn('[ViewerPanel] CAD grid 初始化失败', e);
   }
 
+  const isShowDbnumModeAtInit = (() => {
+    try {
+      return new URLSearchParams(window.location.search).has('show_dbnum');
+    } catch {
+      return false;
+    }
+  })();
   const dtxLayer = new DTXLayer({
     renderer: dtxViewer.renderer,
     debug: isDev,
+    ...(isShowDbnumModeAtInit ? SHOW_DBNUM_DTX_LAYER_OPTIONS : {}),
   });
   dtxLayer.setRenderer(dtxViewer.renderer);
   dtxLayerRef.value = dtxLayer;
@@ -3091,18 +2928,10 @@ onMounted(async () => {
   // 全局工程边线：深灰细线（无填充），用于接近 CAD 轮廓观感
   const globalEdgeOverlay = new DTXOverlayHighlighter(dtxViewer.scene, {
     showFill: false,
-    edgeColor: isMbdDrawingPresetMode
-      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.color
-      : 0x4b5563,
-    edgeOpacity: isMbdDrawingPresetMode
-      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.opacity
-      : 1,
-    edgeLineWidth: isMbdDrawingPresetMode
-      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.lineWidthPx
-      : 1,
-    edgeThresholdAngle: isMbdDrawingPresetMode
-      ? MBD_DRAWING_STYLE_PROFILE.modelEdges.thresholdAngleDeg
-      : 20,
+    edgeColor: 0x4b5563,
+    edgeOpacity: 1,
+    edgeLineWidth: 1,
+    edgeThresholdAngle: 20,
     edgeAlwaysOnTop: false,
   });
   globalEdgeOverlay.setResolution(canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height);
@@ -3281,7 +3110,7 @@ onMounted(async () => {
     store,
     compatViewerRef,
     requestRender,
-    suppressStoreOverlays: isMbdStandaloneMode,
+    suppressStoreOverlays: false,
   });
   toolsRef.value = tools;
   tools.refreshReadyState();
@@ -3295,7 +3124,7 @@ onMounted(async () => {
     store,
     compatViewerRef,
     requestRender,
-    suppressStoreMeasurements: isMbdStandaloneMode,
+    suppressStoreMeasurements: false,
   });
   xeokitMeasurementToolsRef.value = xeokitMeasurementTools;
   xeokitMeasurementTools.refreshReadyState();
@@ -3310,66 +3139,6 @@ onMounted(async () => {
     },
   );
   ptsetVisRef.value = ptsetVis;
-
-  const mbdPipeVis = useMbdPipeAnnotationThree(dtxViewerRef, overlayContainer, {
-    requestRender,
-    getGlobalModelMatrix: () =>
-      dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
-  });
-  const mbdDimModeFromUrl = readMbdDimModeFromUrl();
-  if (mbdDimModeFromUrl) {
-    mbdPipeVis.dimMode.value = mbdDimModeFromUrl;
-  }
-  const mbdDimTextModeFromUrl = readMbdDimTextModeFromUrl();
-  if (mbdDimTextModeFromUrl) {
-    mbdPipeVis.dimTextMode.value = mbdDimTextModeFromUrl;
-  }
-  const mbdArrowStyleFromUrl = readMbdArrowStyleFromUrl();
-  if (mbdArrowStyleFromUrl) {
-    mbdPipeVis.rebarvizArrowStyle.value = mbdArrowStyleFromUrl;
-  }
-  const mbdArrowSizeFromUrl = readMbdArrowSizeFromUrl();
-  if (mbdArrowSizeFromUrl !== null) {
-    mbdPipeVis.rebarvizArrowSizePx.value = mbdArrowSizeFromUrl;
-  }
-  const mbdArrowAngleFromUrl = readMbdArrowAngleFromUrl();
-  if (mbdArrowAngleFromUrl !== null) {
-    mbdPipeVis.rebarvizArrowAngleDeg.value = mbdArrowAngleFromUrl;
-  }
-  const mbdLineWidthFromUrl = readMbdLineWidthFromUrl();
-  if (mbdLineWidthFromUrl !== null) {
-    mbdPipeVis.rebarvizLineWidthPx.value = mbdLineWidthFromUrl;
-  }
-  mbdPipeVisRef.value = mbdPipeVis;
-
-  // mbd_pipe demo：不依赖后端，直接注入模拟管道几何体 + 标注
-  if (demoMode === 'mbd_pipe') {
-    try {
-      const demoCase = resolveMbdPipeDemoCaseFromUrl();
-      const demoConfig = getMbdPipeDemoConfig(demoCase);
-      demoConfig.geometry(dtxViewer);
-      mbdPipeVis.renderBranch(demoConfig.data);
-      demoConfig.flyTo(dtxViewer);
-      emitToast({
-        message: `[mbd_pipe demo:${demoConfig.key}] ${demoConfig.title} 已加载：段${demoConfig.data.stats.segments_count} 尺寸${demoConfig.data.stats.dims_count} 焊缝${demoConfig.data.stats.welds_count} 坡度${demoConfig.data.stats.slopes_count} 弯头${demoConfig.data.stats.bends_count}`,
-      });
-      if (demoConfig.key === 'rebarviz_beam') {
-        emitToast({
-          message:
-                        '[mbd_pipe demo] 对标 RebarViz 梁案例：可用 ?mbd_pipe_case=rebarviz_beam 直接访问',
-        });
-      }
-      // Expose BRAN camera presets for manual verification (dev mode)
-      if (isDev && demoConfig.key === 'bran_fixture') {
-        (window as any).__branCameraPresets = branCameraPresets;
-        console.info('[BRAN Verification] Camera presets available: window.__branCameraPresets');
-        console.info('Usage: __branCameraPresets.normalSegments(__dtxViewer)');
-      }
-      requestRender();
-    } catch (e) {
-      console.warn('[ViewerPanel] mbd_pipe demo 初始化失败', e);
-    }
-  }
 
   // 三维标注系统初始化
   const annotationSystem = useAnnotationThree(dtxViewerRef, overlayContainer, {
@@ -3430,169 +3199,6 @@ onMounted(async () => {
       const id = typeof ev?.id === 'string' ? ev.id : null;
       if (!id) return;
       if (id === 'dim_preview') return;
-
-      // MBD weld 处理（session-only 交互：label 拖拽）
-      if (id.startsWith('mbd_weld_')) {
-        const mbdWeldId = id.slice('mbd_weld_'.length);
-        const dtxViewer2 = dtxViewerRef.value;
-        if (!dtxViewer2) return;
-
-        if (ev.type === 'select' || ev.type === 'click') {
-          mbdPipeVisRef.value?.highlightItem(mbdWeldId);
-        } else if (
-          ev.type === 'deselect' &&
-          mbdPipeVisRef.value &&
-          mbdPipeVisRef.value.activeItemId.value === mbdWeldId
-        ) {
-          mbdPipeVisRef.value?.highlightItem(null);
-        }
-
-        if (ev.type === 'drag-start') {
-          dtxViewer2.controls.enabled = false;
-          return;
-        }
-        if (ev.type === 'drag-end') {
-          dtxViewer2.controls.enabled = true;
-          requestRender();
-          return;
-        }
-        if (ev.type === 'drag' && ev.annotation instanceof WeldAnnotation3D) {
-          const me = ev.originalEvent;
-          if (!me) return;
-          const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
-          if (role === 'label') {
-            const defaultPos = ev.annotation.getDefaultLabelWorldPos();
-            const camDir = dtxViewer2.camera.getWorldDirection(new Vector3());
-            const planeNormal = camDir.clone();
-            const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, defaultPos);
-            const hit = intersectPlaneFromMouseEvent(me, plane);
-            if (!hit) return;
-            const labelOffset = hit.clone().sub(defaultPos);
-            try {
-              ev.annotation.setParams({ labelOffsetWorld: labelOffset });
-            } catch { /* ignore */ }
-            requestRender();
-          }
-        }
-        return;
-      }
-
-      // MBD slope 处理（session-only 交互：label 拖拽）
-      if (id.startsWith('mbd_slope_')) {
-        const mbdSlopeId = id.slice('mbd_slope_'.length);
-        const dtxViewer2 = dtxViewerRef.value;
-        if (!dtxViewer2) return;
-
-        if (ev.type === 'select' || ev.type === 'click') {
-          mbdPipeVisRef.value?.highlightItem(mbdSlopeId);
-        } else if (
-          ev.type === 'deselect' &&
-          mbdPipeVisRef.value &&
-          mbdPipeVisRef.value.activeItemId.value === mbdSlopeId
-        ) {
-          mbdPipeVisRef.value?.highlightItem(null);
-        }
-
-        if (ev.type === 'drag-start') {
-          dtxViewer2.controls.enabled = false;
-          return;
-        }
-        if (ev.type === 'drag-end') {
-          dtxViewer2.controls.enabled = true;
-          requestRender();
-          return;
-        }
-        if (ev.type === 'drag' && ev.annotation instanceof SlopeAnnotation3D) {
-          const me = ev.originalEvent;
-          if (!me) return;
-          const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
-          if (role === 'label') {
-            const defaultPos = ev.annotation.getDefaultLabelWorldPos();
-            const camDir = dtxViewer2.camera.getWorldDirection(new Vector3());
-            const planeNormal = camDir.clone();
-            const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, defaultPos);
-            const hit = intersectPlaneFromMouseEvent(me, plane);
-            if (!hit) return;
-            const labelOffset = hit.clone().sub(defaultPos);
-            try {
-              ev.annotation.setParams({ labelOffsetWorld: labelOffset });
-            } catch { /* ignore */ }
-            requestRender();
-          }
-        }
-        return;
-      }
-
-      // MBD bend 处理（session-only 交互：label 拖拽）
-      if (id.startsWith('mbd_bend_')) {
-        const mbdBendId = id.slice('mbd_bend_'.length);
-        const dtxViewer2 = dtxViewerRef.value;
-        if (!dtxViewer2) return;
-
-        if (ev.type === 'select' || ev.type === 'click') {
-          mbdPipeVisRef.value?.highlightItem(mbdBendId);
-        } else if (
-          ev.type === 'deselect' &&
-          mbdPipeVisRef.value &&
-          mbdPipeVisRef.value.activeItemId.value === mbdBendId
-        ) {
-          mbdPipeVisRef.value?.highlightItem(null);
-        }
-
-        if (ev.type === 'drag-start') {
-          dtxViewer2.controls.enabled = false;
-          return;
-        }
-        if (ev.type === 'drag-end') {
-          dtxViewer2.controls.enabled = true;
-          requestRender();
-          return;
-        }
-        if (ev.type === 'drag' && ev.annotation instanceof AngleDimension3D) {
-          const me = ev.originalEvent;
-          if (!me) return;
-          const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
-          if (role === 'label') {
-            const defaultPos = ev.annotation.getDefaultLabelWorldPos();
-            const camDir = dtxViewer2.camera.getWorldDirection(new Vector3());
-            const plane = new Plane().setFromNormalAndCoplanarPoint(camDir, defaultPos);
-            const hit = intersectPlaneFromMouseEvent(me, plane);
-            if (!hit) return;
-            const labelOffset = hit.clone().sub(defaultPos);
-            try {
-              ev.annotation.setParams({ labelOffsetWorld: labelOffset });
-            } catch { /* ignore */ }
-            requestRender();
-          }
-        }
-        return;
-      }
-
-      if (
-        id.startsWith('mbd_pipe_clearance_') ||
-        id.startsWith('mbd_structure_clearance_') ||
-        id.startsWith('mbd_elevation_') ||
-        id.startsWith('mbd_envelope_')
-      ) {
-        const targetId = id.startsWith('mbd_pipe_clearance_')
-          ? id.slice('mbd_pipe_clearance_'.length)
-          : id.startsWith('mbd_structure_clearance_')
-            ? id.slice('mbd_structure_clearance_'.length)
-            : id.startsWith('mbd_elevation_')
-              ? id.slice('mbd_elevation_'.length)
-              : id.slice('mbd_envelope_'.length);
-
-        if (ev.type === 'select' || ev.type === 'click') {
-          mbdPipeVisRef.value?.highlightItem(targetId);
-        } else if (
-          ev.type === 'deselect' &&
-          mbdPipeVisRef.value &&
-          mbdPipeVisRef.value.activeItemId.value === targetId
-        ) {
-          mbdPipeVisRef.value?.highlightItem(null);
-        }
-        return;
-      }
 
       if (id.startsWith('meas_')) {
         const measurementId = id.slice('meas_'.length);
@@ -3920,13 +3526,13 @@ onMounted(async () => {
     };
     mgr.setUnit(unitSettings.displayUnit.value as any);
     mgr.setPrecision(unitSettings.precision.value);
-    mgr.sync(isMbdStandaloneMode ? [] : store.measurements.value as any);
+    mgr.sync(store.measurements.value as any);
     syncSelectedMeasurementAnnotation();
 
     watch(
       () => store.measurements.value,
       (measurements) => {
-        mgr.sync(isMbdStandaloneMode ? [] : measurements as any);
+        mgr.sync(measurements as any);
         syncSelectedMeasurementAnnotation();
         requestRender();
       },
@@ -3946,7 +3552,7 @@ onMounted(async () => {
       ([unit, precision]) => {
         mgr.setUnit(unit as any);
         mgr.setPrecision(precision);
-        mgr.sync(isMbdStandaloneMode ? [] : store.measurements.value as any);
+        mgr.sync(store.measurements.value as any);
         syncSelectedMeasurementAnnotation();
         requestRender();
       },
@@ -3962,13 +3568,13 @@ onMounted(async () => {
     mgr.setPrecision(unitSettings.precision.value);
     const bgPreset = backgroundStore.getPreset(backgroundStore.mode.value);
     mgr.setBackgroundColor(bgPreset.bottomColor);
-    mgr.sync(isMbdStandaloneMode ? [] : store.dimensions.value as any);
+    mgr.sync(store.dimensions.value as any);
     dimensionAnnoMgrRef.value = mgr;
 
     watch(
       () => store.dimensions.value,
       (dims) => {
-        mgr.sync(isMbdStandaloneMode ? [] : dims as any);
+        mgr.sync(dims as any);
         requestRender();
       },
       { deep: true },
@@ -3979,7 +3585,7 @@ onMounted(async () => {
       ([unit, precision]) => {
         mgr.setUnit(unit as any);
         mgr.setPrecision(precision);
-        mgr.sync(isMbdStandaloneMode ? [] : store.dimensions.value as any);
+        mgr.sync(store.dimensions.value as any);
         requestRender();
       },
     );
@@ -3987,58 +3593,15 @@ onMounted(async () => {
     console.warn('[ViewerPanel] 尺寸标注管理器初始化失败', e);
   }
 
-  // 将 MBD 标注注册到标注交互系统（使其可 pick/drag/contextmenu）
-  function syncMbdAnnotationsToInteraction(): void {
-    if (!mbdPipeVisRef.value || !annotationSystemRef.value) return;
-    const weldMap = mbdPipeVisRef.value.getWeldAnnotations();
-    for (const [weldId, weld] of weldMap) {
-      const interactionId = `mbd_weld_${weldId}`;
-      annotationSystemRef.value.registerExternalAnnotation(interactionId, weld as any);
-    }
-    const slopeMap = mbdPipeVisRef.value.getSlopeAnnotations();
-    for (const [slopeId, slope] of slopeMap) {
-      const interactionId = `mbd_slope_${slopeId}`;
-      annotationSystemRef.value.registerExternalAnnotation(interactionId, slope as any);
-    }
-    const pipeClearanceMap = mbdPipeVisRef.value.getPipeClearanceAnnotations();
-    for (const [clearanceId, clearance] of pipeClearanceMap) {
-      const interactionId = `mbd_pipe_clearance_${clearanceId}`;
-      annotationSystemRef.value.registerExternalAnnotation(interactionId, clearance as any);
-    }
-    const structureClearanceMap = mbdPipeVisRef.value.getStructureClearanceAnnotations();
-    for (const [clearanceId, clearance] of structureClearanceMap) {
-      const interactionId = `mbd_structure_clearance_${clearanceId}`;
-      annotationSystemRef.value.registerExternalAnnotation(interactionId, clearance as any);
-    }
-    const elevationMap = mbdPipeVisRef.value.getElevationAnnotations();
-    for (const [elevationId, elevation] of elevationMap) {
-      const interactionId = `mbd_elevation_${elevationId}`;
-      annotationSystemRef.value.registerExternalAnnotation(interactionId, elevation as any);
-    }
-    const envelopeMap = mbdPipeVisRef.value.getEnvelopeObjects();
-    for (const [envelopeId, envelope] of envelopeMap) {
-      const interactionId = `mbd_envelope_${envelopeId}`;
-      annotationSystemRef.value.registerExternalAnnotation(interactionId, envelope as any);
-    }
-  }
-
-  // 对 mbd_pipe demo：此时标注已在 renderBranch 中创建，注册到交互系统
-  if (demoMode === 'mbd_pipe') {
-    try {
-      syncMbdAnnotationsToInteraction();
-    } catch (e) {
-      console.warn('[ViewerPanel] MBD 标注交互注册失败', e);
-    }
-  }
-
   const urlParams = new URLSearchParams(window.location.search);
   const showDbnum = urlParams.get('show_dbnum');
   const showRefno = normalizeRefnoKeyLike(urlParams.get('show_refno') || '');
+  const debugRefnoParam = urlParams.get('debug_refno');
   const showDbnumValue = (() => {
     const parsed = Number(showDbnum);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   })();
-  const resolveDbnoForCurrentMbdRefno = (refno: string): number | null => {
+  const resolveDbnoForRefno = (refno: string): number | null => {
     if (showDbnumValue !== null) return showDbnumValue;
     if (activeDbno !== null) return activeDbno;
     try {
@@ -4049,8 +3612,8 @@ onMounted(async () => {
   };
 
   // 启动预拉：db_meta_info（关键，提供 refno->dbnum 映射）
-  // demo 模式（primitives / mbd_pipe）不依赖后端数据，跳过预拉避免无后端时初始化失败。
-  if (demoMode !== 'primitives' && demoMode !== 'mbd_pipe' && !showDbnum) {
+  // demo 模式（primitives）不依赖后端数据，跳过预拉避免无后端时初始化失败。
+  if (demoMode !== 'primitives' && !showDbnum) {
     try {
       await ensureDbMetaInfoLoaded();
     } catch (e) {
@@ -4062,28 +3625,6 @@ onMounted(async () => {
   }
 
   viewerContext.ptsetVis.value = ptsetVis as any;
-  viewerContext.mbdPipeVis.value = mbdPipeVis as any;
-
-  // 开发模式：暴露全局函数用于测试模拟数据
-  if (isDev && typeof window !== 'undefined') {
-    (window as any).loadMockMbdPipeData = () => {
-      try {
-        ensurePanelAndActivate('mbdPipe');
-        if (mbdPipeVisRef.value) {
-          mbdPipeVisRef.value.renderBranch(demoMbdPipeData);
-          mbdPipeVisRef.value.flyTo();
-          emitToast({
-            message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count} 弯头${demoMbdPipeData.stats.bends_count}`,
-          });
-          requestRender();
-        }
-      } catch (e) {
-        console.error('[mbd-pipe-mock] Failed to load:', e);
-        emitToast({ message: '加载模拟数据失败' });
-      }
-    };
-    console.log('[dev] 已暴露全局函数: window.loadMockMbdPipeData()');
-  }
   viewerContext.annotationSystem.value = annotationSystem;
   viewerContext.viewerRef.value = compat as any;
   viewerContext.overlayContainerRef.value = overlayContainer.value;
@@ -4102,13 +3643,6 @@ onMounted(async () => {
       store,
       tools,
       xeokitMeasurementTools,
-    };
-    (window as any).__plant3dMbdE2E = {
-      getSnapshot: () => mbdPipeVisRef.value?.getDebugSnapshot?.() ?? null,
-      getDrawingModelStyleSnapshot: () => getMbdDrawingModelStyleSnapshot(),
-      getDrawingModelEdgeSnapshot: () => getMbdDrawingModelEdgeSnapshot(),
-      getVectorTextRebuildCount: () => annotationVectorTextRebuildCount,
-      setSelectedRefno: (refno: string | null) => selectionStore.setSelectedRefno(refno),
     };
   }
   const onAnnotationVectorTextRebuilt = () => {
@@ -4136,7 +3670,7 @@ onMounted(async () => {
           await ensureDbMetaInfoLoaded();
         }
 
-        const dbno = resolveDbnoForCurrentMbdRefno(showRefno);
+        const dbno = resolveDbnoForRefno(showRefno);
         if (dbno === null) {
           console.error(`[show_refno] 无法解析 ${showRefno} 的 dbnum`);
           emitToast({
@@ -4295,25 +3829,37 @@ onMounted(async () => {
             noGeoRowsRefnos: 0,
           });
 
-          const LOAD_BATCH_SIZE = 1000;
+          const LOAD_BATCH_SIZE = SHOW_DBNUM_LOAD_BATCH_SIZE;
+          const fullLoad = new URLSearchParams(window.location.search)
+            .get('show_dbnum_full') === '1';
           let loadedRefnos = 0;
           let skippedRefnos = 0;
           let loadedObjects = 0;
+          let loadedTriangles = 0;
           let missingRefnos = 0;
+          let budgetLimited = false;
           const missingNoGeoRows = new Set<string>();
           const missingMesh404Refnos = new Set<string>();
           const missingMesh404GeoHashes = new Set<string>();
+          let activeShowDbnumLayer = dtxLayer;
+          if (typeof window !== 'undefined') {
+            (window as any).__dtxShowDbnumLayers = () => getShowDbnumAllLayers(dtxLayer);
+          }
 
           for (let start = 0; start < allRefnos.length; start += LOAD_BATCH_SIZE) {
             const end = Math.min(allRefnos.length, start + LOAD_BATCH_SIZE);
             const batch = allRefnos.slice(start, end);
             const batchResult = await loadDbnoInstancesForVisibleRefnosDtx(
-              dtxLayer,
+              activeShowDbnumLayer,
               dbno,
               batch,
-              { lodAssetKey: 'L1', debug: isDev, dataSource: 'parquet' }
+              { lodAssetKey: 'L1', debug: isDev, dataSource: 'parquet', includeOwnedTubings: false }
             );
             (compat as any).__dtxAfterInstancesLoaded?.(dbno, batch);
+            if (activeShowDbnumLayer !== dtxLayer) {
+              activeShowDbnumLayer.setGlobalModelMatrix(dtxLayer.getGlobalModelMatrix());
+              ensureShowDbnumExtraLayerAttached(activeShowDbnumLayer, dtxViewer);
+            }
 
             loadedRefnos += batchResult.loadedRefnos;
             skippedRefnos += batchResult.skippedRefnos;
@@ -4328,6 +3874,11 @@ onMounted(async () => {
             for (const gh of batchResult.missingBreakdown.mesh404GeoHashes) {
               missingMesh404GeoHashes.add(gh);
             }
+            const activeLayerStats = activeShowDbnumLayer.getStats();
+            loadedTriangles = getShowDbnumAllLayers(dtxLayer).reduce(
+              (sum, layer) => sum + layer.getStats().drawTriangleCount,
+              0,
+            );
             publishShowDbnumLoadResult({
               status: 'loading',
               refnoCount: allRefnos.length,
@@ -4338,9 +3889,36 @@ onMounted(async () => {
               mesh404Refnos: missingMesh404Refnos.size,
               mesh404GeoHashes: missingMesh404GeoHashes.size,
               noGeoRowsRefnos: missingNoGeoRows.size,
+              layerCount: getShowDbnumAllLayers(dtxLayer).length,
+              activeLayerObjects: activeLayerStats.totalObjects,
+              activeLayerTriangles: activeLayerStats.drawTriangleCount,
             });
 
             if (end < allRefnos.length) {
+              if (shouldStopShowDbnumLoad({
+                objects: loadedObjects,
+                triangles: loadedTriangles,
+              }, fullLoad)) {
+                budgetLimited = true;
+                break;
+              }
+              if (shouldRollShowDbnumLayer(activeShowDbnumLayer)) {
+                activeShowDbnumLayer = createShowDbnumDtxLayer(dtxViewer, dtxLayer);
+                publishShowDbnumLoadResult({
+                  status: 'loading',
+                  refnoCount: allRefnos.length,
+                  loadedRefnos,
+                  skippedRefnos,
+                  loadedObjects,
+                  missingRefnos,
+                  mesh404Refnos: missingMesh404Refnos.size,
+                  mesh404GeoHashes: missingMesh404GeoHashes.size,
+                  noGeoRowsRefnos: missingNoGeoRows.size,
+                  layerCount: getShowDbnumAllLayers(dtxLayer).length,
+                  activeLayerObjects: 0,
+                  activeLayerTriangles: 0,
+                });
+              }
               await new Promise<void>((resolve) =>
                 requestAnimationFrame(() => resolve())
               );
@@ -4361,17 +3939,28 @@ onMounted(async () => {
 
           requestRender();
           if (shouldAutoFit) {
-            fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
+            const combinedBox = computeDtxLayersBoundingBox(getShowDbnumAllLayers(dtxLayer));
+            if (combinedBox) {
+              fitDtxViewerToBox(dtxViewer, combinedBox, 0);
+              try {
+                cadGridRef.value?.fitToBoundingBox(combinedBox);
+              } catch {
+                // ignore
+              }
+            } else {
+              fitDtxViewerToFocusBox(dtxViewer, dtxLayer, 0);
+            }
             requestRender();
             try {
               sessionStorage.setItem(autoFitKey, '1');
             } catch {}
           }
           const summary =
+            `${budgetLimited ? `安全概览 ${loadedRefnos}/${allRefnos.length} 个 refno，` : ''}` +
             `对象 ${loadedObjects}（已加载 ${loadedRefnos}，跳过 ${skippedRefnos}，缺失 ${missingRefnos}；` +
             `mesh 缺失 ${missingMesh404Refnos.size}/hash ${missingMesh404GeoHashes.size}，无几何 ${missingNoGeoRows.size}）`;
           publishShowDbnumLoadResult({
-            status: loadedObjects === 0 ? 'empty' : 'loaded',
+            status: loadedObjects === 0 ? 'empty' : budgetLimited ? 'partial' : 'loaded',
             refnoCount: allRefnos.length,
             loadedRefnos,
             skippedRefnos,
@@ -4380,11 +3969,19 @@ onMounted(async () => {
             mesh404Refnos: missingMesh404Refnos.size,
             mesh404GeoHashes: missingMesh404GeoHashes.size,
             noGeoRowsRefnos: missingNoGeoRows.size,
+            layerCount: getShowDbnumAllLayers(dtxLayer).length,
+            loadedTriangles,
+            budgetLimited,
             summary,
           });
           if (loadedObjects === 0) {
             emitToast({
               message: `[警告] 加载结束但未绘制实例。${summary}`,
+              level: 'warning',
+            });
+          } else if (budgetLimited) {
+            emitToast({
+              message: `[提示] ${summary}。请从模型树按需加载；诊断全量加载可加 show_dbnum_full=1。`,
               level: 'warning',
             });
           } else {
@@ -4401,7 +3998,7 @@ onMounted(async () => {
   }
 
   // debug_refno URL 参数：加载指定 refno 下的可见实例（如 debug_refno=24381_145018）
-  const debugRefno = urlParams.get('debug_refno');
+  const debugRefno = debugRefnoParam;
   if (debugRefno && !showDbnum && !showRefno && demoMode !== 'primitives') {
     // 支持 24381_145018 或 24381/145018 格式
     const refnoStr = debugRefno.replace('/', '_');
@@ -4646,7 +4243,10 @@ onMounted(async () => {
         for (const r of unique) {
           const dtxStatsBefore =
                         (dtxLayer as any)?.getStats?.() ?? null;
-          const ok = await mg.showModelByRefno(r, { flyTo: flyTo && unique.length === 1 });
+          const ok = await mg.showModelByRefno(r, {
+            flyTo: flyTo && unique.length === 1,
+            regenerate: !!(detail as any)?.regenModel,
+          });
           const loadDebug = mg.lastLoadDebug?.value ?? null;
           const dtxStatsAfter =
                         (dtxLayer as any)?.getStats?.() ?? null;
@@ -4794,130 +4394,6 @@ onMounted(async () => {
     { immediate: true },
   );
 
-  offMbdPipeWatch = watch(
-    () => store.mbdPipeAnnotationRequest.value,
-    async (request) => {
-      if (!request) return;
-      const requestSeq = mbdPipeRequestGate.issue();
-      try {
-        try {
-          if (!isMbdDrawingPresetMode) {
-            ensurePanelAndActivate('mbdPipe');
-          }
-        } catch {
-          // ignore
-        }
-
-        const refnoKey = normalizeRefnoKeyLike(request.refno) || request.refno;
-        emitToast({ message: `正在生成管道标注: ${refnoKey}` });
-
-        const requestDisplayMode = request.displayMode ?? 'full';
-        const requestAxes = resolveMbdAnnotationRequestAxes({
-          displayMode: requestDisplayMode,
-          viewMode: mbdPipeVis.mbdViewMode.value,
-        });
-        mbdPipeVis.showInlineTubeLengthDims.value = requestAxes.showInlineTubeLengthDims;
-        mbdPipeVis.showPipeVisualEmphasis.value = requestAxes.showPipeVisualEmphasis;
-        if (requestAxes.hideCutTubiDetails) {
-          mbdPipeVis.showCutTubis.value = false;
-        }
-
-        // 尽量先加载对应模型（避免“只见标注面板、不见模型”）
-        try {
-          const mg = modelGenerationRef.value;
-          if (mg) {
-            let preloadTimedOut = false;
-            const preloadTimeoutMs = requestAxes.preloadTimeoutMs;
-            const preloadPromise = mg.showModelByRefno(refnoKey, {
-              flyTo: requestAxes.flyToOnPreload,
-            }).catch((error) => {
-              console.warn('[mbd-pipe] 预加载模型失败（将继续生成标注）', error);
-            });
-            await Promise.race([
-              preloadPromise,
-              new Promise<void>((resolve) => {
-                window.setTimeout(() => {
-                  preloadTimedOut = true;
-                  resolve();
-                }, preloadTimeoutMs);
-              }),
-            ]);
-            if (preloadTimedOut) {
-              console.warn('[mbd-pipe] 预加载模型超时（将继续生成标注）', {
-                refno: refnoKey,
-                timeout_ms: preloadTimeoutMs,
-              });
-            }
-            if (requestAxes.isDrawingSheet) {
-              const preloadDbno = resolveDbnoForCurrentMbdRefno(refnoKey);
-              applyMbdDrawingModelMaterialStyle(dtxLayerRef.value, preloadDbno);
-            }
-          }
-        } catch (e) {
-          console.warn('[mbd-pipe] 预加载模型失败（将继续生成标注）', e);
-        }
-        if (!mbdPipeRequestGate.isLatest(requestSeq)) {
-          return;
-        }
-
-        // 标注按需获取：尽量带上 dbno + batch_id（来自 meta_{dbno}.json）以确保与当前模型快照一致。
-        const dbno = resolveDbnoForCurrentMbdRefno(refnoKey);
-        let batchId: string | null = null;
-
-        const mbdParams = buildMbdPipeQueryParams({
-          axes: requestAxes,
-          debug: isDev || isMbdApiDebugFromUrl(),
-          dbno,
-          batchId,
-        });
-        const useV2Mbd =
-          requestAxes.isLayoutFirst &&
-          !isMbdV2DisabledFromUrl();
-        const resp = useV2Mbd
-          ? await getMbdPipeV2Annotations(refnoKey, mbdParams, {
-            includeLegacySegments: true,
-          })
-          : await getMbdPipeAnnotations(refnoKey, mbdParams);
-        if (!mbdPipeRequestGate.isLatest(requestSeq)) {
-          return;
-        }
-        if (resp.success && resp.data) {
-          if (mbdPipeVis.mbdViewMode.value === 'layout_first' && !resp.data.layout_result) {
-            console.warn('[mbd-pipe] layout_first 未拿到 layout_result，保持当前模式并回退到 fallback 渲染', {
-              branch_refno: resp.data.branch_refno,
-            });
-            emitToast({
-              message: '后端未返回版面排布结果，当前按 fallback 渲染',
-            });
-          }
-          if (resp.data.debug_info && (isDev || isMbdApiDebugFromUrl())) {
-            console.info('[mbd-pipe] debug_info', resp.data.debug_info);
-          }
-          mbdPipeVis.renderBranch(resp.data);
-          mbdPipeVis.flyTo();
-          // 将 MBD 标注注册到交互系统
-          try { syncMbdAnnotationsToInteraction(); } catch { /* ignore */ }
-          emitToast({
-            message: `已生成标注：段${resp.data.stats.segments_count} 尺寸${resp.data.stats.dims_count} 焊缝${resp.data.stats.welds_count} 坡度${resp.data.stats.slopes_count} 弯头${resp.data.stats.bends_count} 切管${resp.data.stats.cut_tubis_count ?? resp.data.cut_tubis?.length ?? 0} 管件${resp.data.stats.fittings_count ?? resp.data.fittings?.length ?? 0} 标签${resp.data.stats.tags_count ?? resp.data.tags?.length ?? 0}`,
-          });
-          requestRender();
-        } else {
-          const msg = resp.error_message || '生成管道标注失败';
-          emitToast({ message: msg });
-          console.warn('[mbd-pipe]', msg);
-        }
-      } catch (e) {
-        console.error('[mbd-pipe] Failed to load:', e);
-        const msg = e instanceof Error ? e.message : String(e);
-        emitToast({ message: `生成管道标注失败：${msg}` });
-      } finally {
-        if (shouldClearMbdRequest(store.mbdPipeAnnotationRequest.value, request)) {
-          store.clearMbdPipeAnnotationRequest();
-        }
-      }
-    },
-    { immediate: true },
-  );
 
   offRibbonCommand = onCommand(handleRibbonCommand);
   window.addEventListener('openSpatialQuery', handleOpenSpatialQueryEvent as EventListener);
@@ -4950,25 +4426,6 @@ onMounted(async () => {
             (target as any)?.isContentEditable === true;
     if (isEditable) return;
 
-    // 开发模式：Ctrl+Shift+M 加载模拟 MBD 管道标注数据
-    if (isDev && ev.ctrlKey && ev.shiftKey && ev.key === 'M') {
-      ev.preventDefault();
-      try {
-        ensurePanelAndActivate('mbdPipe');
-        if (mbdPipeVisRef.value) {
-          mbdPipeVisRef.value.renderBranch(demoMbdPipeData);
-          mbdPipeVisRef.value.flyTo();
-          emitToast({
-            message: `已加载模拟数据：段${demoMbdPipeData.stats.segments_count} 尺寸${demoMbdPipeData.stats.dims_count} 焊缝${demoMbdPipeData.stats.welds_count} 坡度${demoMbdPipeData.stats.slopes_count} 弯头${demoMbdPipeData.stats.bends_count}`,
-          });
-          requestRender();
-        }
-      } catch (e) {
-        console.error('[mbd-pipe-mock] Failed to load:', e);
-        emitToast({ message: '加载模拟数据失败' });
-      }
-      return;
-    }
 
     if (ev.key === 'Escape') {
       // 在 pick_refno 模式中，Escape 取消拾取
@@ -4992,6 +4449,7 @@ onMounted(async () => {
         store.toolMode.value === 'xeokit_measure_elevation_point' ||
         store.toolMode.value === 'xeokit_measure_elevation_delta'
       ) {
+        if (xeokitMeasurementToolsRef.value?.reset()) return;
         exitXeokitMeasureMode();
         return;
       }
@@ -5097,8 +4555,6 @@ onUnmounted(() => {
   offPtsetWatch?.();
   offPtsetWatch = null;
 
-  offMbdPipeWatch?.();
-  offMbdPipeWatch = null;
 
   offBranClearanceWatch?.();
   offBranClearanceWatch = null;
@@ -5110,13 +4566,6 @@ onUnmounted(() => {
   }
   ptsetVisRef.value = null;
 
-  try {
-    // 释放材质/CSS2DRenderer DOM 等资源
-    mbdPipeVisRef.value?.dispose?.();
-  } catch {
-    // ignore
-  }
-  mbdPipeVisRef.value = null;
 
   try {
     clearBranClearanceAnnotations();
@@ -5197,6 +4646,14 @@ onUnmounted(() => {
   }
   dtxLayerRef.value = null;
 
+  for (const layer of showDbnumExtraDtxLayers.splice(0)) {
+    try {
+      layer.dispose();
+    } catch {
+      // ignore
+    }
+  }
+
   try {
     dtxViewerRef.value?.dispose();
   } catch {
@@ -5218,7 +4675,8 @@ onUnmounted(() => {
     delete (window as any).__xeokitMeasurementTools;
     delete (window as any).__viewerTools;
     delete (window as any).__viewer;
-    delete (window as any).__plant3dMbdE2E;
+    delete (window as any).__dtxShowDbnumLayers;
+    delete (window as any).__dtxShowDbnumExtraLayers;
     delete (window as any).__plant3dBranClearanceAnnotations;
   } catch {
     // ignore
@@ -5228,7 +4686,6 @@ onUnmounted(() => {
   viewerContext.tools.value = null;
   viewerContext.xeokitMeasurementTools.value = null;
   viewerContext.ptsetVis.value = null;
-  viewerContext.mbdPipeVis.value = null;
   viewerContext.annotationSystem.value = null;
 });
 </script>
@@ -5239,7 +4696,7 @@ onUnmounted(() => {
     <div ref="overlayContainer" class="xeokitOverlay" />
 
     <!-- DEV：LOD 调参面板（屏幕相关阈值 + L2 预热） -->
-    <div v-if="lodDebugVisible && !isMbdDrawingPresetMode"
+    <div v-if="lodDebugVisible"
       class="pointer-events-auto absolute left-3 top-3 w-[260px] rounded-md border border-border bg-background/90 p-2 text-foreground shadow-lg backdrop-blur"
       style="z-index: 950"
       @pointerdown.stop
@@ -5362,7 +4819,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 左侧竖直工具栏（快捷操作） -->
-    <div v-if="!isMbdDrawingPresetMode"
+    <div
       ref="leftToolbarRef"
       class="pointer-events-auto absolute left-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
@@ -5405,7 +4862,7 @@ onUnmounted(() => {
       </button>
 
       <!-- 测量（下拉：长度/角度） -->
-      <div v-if="!isMbdStandaloneMode" class="relative">
+      <div class="relative">
         <button type="button"
           class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background hover:bg-muted"
           :class="isMeasureModeActive ? 'bg-muted' : ''"
@@ -5471,7 +4928,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 右侧竖直工具栏（查看/快捷） -->
-    <div v-if="!isMbdDrawingPresetMode"
+    <div
       class="pointer-events-auto absolute right-3 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur"
       style="z-index: 940"
       @pointerdown.stop
@@ -5655,8 +5112,9 @@ onUnmounted(() => {
     <PipeDistanceDrawer v-model:open="pipeDistDrawerOpen" />
 
     <div v-if="incrementalCompareState"
-      class="pointer-events-auto absolute right-3 top-3 w-[min(760px,calc(100%-1.5rem))] rounded-lg border border-blue-200 bg-background/95 p-3 text-sm text-foreground shadow-lg backdrop-blur"
+      class="pointer-events-auto absolute right-3 top-3 w-[300px] max-w-[calc(100%-1.5rem)] rounded-lg border border-blue-200 bg-background/95 p-2.5 text-sm text-foreground shadow-lg backdrop-blur"
       style="z-index: 956"
+      data-testid="viewer-dtx-version-compare-overlay"
       @pointerdown.stop
       @wheel.stop>
       <div class="flex items-start justify-between gap-2">
@@ -5666,8 +5124,7 @@ onUnmounted(() => {
             <div class="truncate font-semibold">增量版本对照</div>
           </div>
           <div class="mt-0.5 truncate text-xs text-muted-foreground">
-            DB {{ incrementalCompareState.dbnum ?? '-' }} · {{ incrementalCompareState.fromSesno ?? '-' }} / {{ incrementalCompareState.toSesno ?? '-' }}
-            · {{ incrementalCompareModels.length }} 个模型
+            DB {{ incrementalCompareState.dbnum ?? '-' }} · {{ incrementalCompareState.fromSesno ?? '-' }} -> {{ incrementalCompareState.toSesno ?? '-' }}
           </div>
         </div>
         <button type="button"
@@ -5678,58 +5135,25 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div class="mt-3 grid gap-3 md:grid-cols-2">
-        <section class="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
-          <div class="flex h-9 items-center justify-between border-b border-slate-200 bg-white px-3">
-            <div class="truncate text-xs font-semibold text-slate-800">
-              旧版 {{ incrementalCompareState.fromSesno ?? '-' }}
-            </div>
-            <div class="shrink-0 text-[11px] text-slate-500">
-              {{ incrementalCompareBeforePresentCount }} / {{ incrementalCompareModels.length }}
-            </div>
-          </div>
-          <canvas ref="incrementalCompareBeforeCanvas"
-            data-incremental-compare-view="before"
-            class="block h-[220px] w-full" />
-        </section>
-
-        <section class="overflow-hidden rounded-md border border-emerald-200 bg-emerald-50/50">
-          <div class="flex h-9 items-center justify-between border-b border-emerald-100 bg-white px-3">
-            <div class="truncate text-xs font-semibold text-slate-800">
-              新版 {{ incrementalCompareState.toSesno ?? '-' }}
-            </div>
-            <div class="shrink-0 text-[11px] text-emerald-700">
-              {{ incrementalCompareAfterPresentCount }} / {{ incrementalCompareModels.length }}
-            </div>
-          </div>
-          <canvas ref="incrementalCompareAfterCanvas"
-            data-incremental-compare-view="after"
-            class="block h-[220px] w-full" />
-        </section>
+      <div class="mt-2 flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600">
+        <span class="min-w-0 truncate">当前 ViewerPanel DTX</span>
+        <span class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">真实 diff</span>
       </div>
 
-      <div v-if="incrementalCompareSelectedModel" class="mt-3 rounded-md border border-blue-100 bg-blue-50/60 p-2">
-        <div class="truncate font-mono text-xs">{{ incrementalCompareSelectedModel.refno }}</div>
-        <div class="mt-2 grid grid-cols-3 gap-2 text-xs">
-          <div class="rounded border border-border bg-background px-2 py-1">
-            <div class="text-muted-foreground">旧版</div>
-            <div class="font-medium">{{ versionStateLabel(incrementalCompareSelectedModel.beforeState) }}</div>
-          </div>
-          <div class="rounded px-2 py-1 text-center" :class="compareStatusClass(incrementalCompareSelectedModel.status)">
-            <div class="opacity-80">变化</div>
-            <div class="font-medium">{{ compareStatusLabel(incrementalCompareSelectedModel.status) }}</div>
-          </div>
-          <div class="rounded border border-border bg-background px-2 py-1">
-            <div class="text-muted-foreground">新版</div>
-            <div class="font-medium">{{ versionStateLabel(incrementalCompareSelectedModel.afterState) }}</div>
+      <div v-if="incrementalCompareSelectedModel" class="mt-2 rounded-md border border-blue-100 bg-blue-50/60 p-2 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0 truncate font-mono">{{ incrementalCompareSelectedModel.refno }}</div>
+          <div class="shrink-0 rounded px-2 py-0.5" :class="compareStatusClass(incrementalCompareSelectedModel.status)">
+            {{ compareStatusLabel(incrementalCompareSelectedModel.status) }}
           </div>
         </div>
-        <div class="mt-2 truncate text-[11px] text-muted-foreground">
-          {{ incrementalCompareSelectedModel.category || '-' }} · {{ incrementalCompareSelectedModel.sourceNouns || '-' }}
+        <div class="mt-1 truncate text-[11px] text-muted-foreground">
+          {{ versionStateLabel(incrementalCompareSelectedModel.beforeState) }} -> {{ versionStateLabel(incrementalCompareSelectedModel.afterState) }}
+          · {{ incrementalCompareSelectedModel.category || '-' }}
         </div>
       </div>
 
-      <div class="mt-3 flex gap-2">
+      <div class="mt-2 flex gap-2">
         <select v-model="incrementalCompareSelectedRefno"
           class="h-8 min-w-0 flex-1 rounded border border-input bg-background px-2 text-xs">
           <option v-for="item in incrementalCompareModels" :key="item.refno" :value="item.refno">
@@ -5791,7 +5215,7 @@ onUnmounted(() => {
       @click="closeDimContextMenu"
       @contextmenu.prevent="closeDimContextMenu" />
 
-    <ObjectMeasureDrawer v-if="!isMbdStandaloneMode && store.toolMode.value === 'measure_object_to_object' && toolsRef"
+    <ObjectMeasureDrawer v-if="store.toolMode.value === 'measure_object_to_object' && toolsRef"
       :title="'构件最近点测量'"
       :subtitle="'点击模型或在模型树中双选两个构件'"
       :status-text="toolsRef.objectToObjectUiState.value.statusText"
@@ -5802,7 +5226,7 @@ onUnmounted(() => {
       @close="closeObjectMeasureMode"
       @reset="resetObjectMeasureSelection" />
 
-    <MeasurementWizard v-else-if="!isMbdStandaloneMode && isNearestMeasurementWizardMode && toolsRef"
+    <MeasurementWizard v-else-if="isNearestMeasurementWizardMode && toolsRef"
       :title="
         store.toolMode.value === 'measure_point_to_object'
           ? '点到面测量'
@@ -5815,9 +5239,9 @@ onUnmounted(() => {
       @pointerdown.stop
       @wheel.stop />
 
-    <AnnotationOverlayBar v-if="!isMbdStandaloneMode && toolsRef" :tools="toolsRef" />
+    <AnnotationOverlayBar v-if="toolsRef" :tools="toolsRef" />
 
-    <MeasurementOverlayBar v-if="!isMbdStandaloneMode && isXeokitMeasureMode && xeokitMeasurementToolsRef" :tools="xeokitMeasurementToolsRef" />
+    <MeasurementOverlayBar v-if="isXeokitMeasureMode && xeokitMeasurementToolsRef" :tools="xeokitMeasurementToolsRef" />
 
     <ReviewConfirmation />
   </div>

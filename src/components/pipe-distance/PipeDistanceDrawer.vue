@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted } from 'vue';
+import { computed, onUnmounted, watch } from 'vue';
 
 import {
   BoxSelect,
@@ -12,17 +12,37 @@ import {
   Locate,
   Trash2,
 } from 'lucide-vue-next';
+import { Vector3, type Matrix4 } from 'three';
 
+import type { Vec3 } from '@/types/vec3';
+
+import {
+  findNounByRefnoAcrossAllDbnos,
+  resolveDtxObjectIdsByRefno,
+} from '@/composables/useDbnoInstancesDtxLoader';
 import { usePipeDistanceAnnotationThree } from '@/composables/usePipeDistanceAnnotationThree';
 import { usePipeDistanceStore, type PipeDistanceResult } from '@/composables/usePipeDistanceStore';
+import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
 import { useViewerContext } from '@/composables/useViewerContext';
+import {
+  detectDtxBranchAxisDistances,
+  resolveDtxAxisDistanceDbnum,
+  type DtxBranchAxisDistanceLayer,
+} from '@/utils/three/geometry/clearance/detectDtxBranchAxisDistances';
+
+type ViewerWithDtxLayerMatrix = {
+  __dtxLayer?: DtxBranchAxisDistanceLayer & {
+    getGlobalModelMatrix?: () => Matrix4 | null;
+  };
+};
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
 
 const store = usePipeDistanceStore();
 const toolStore = useToolStore();
+const selectionStore = useSelectionStore();
 const ctx = useViewerContext();
 
 const isPicking = computed(() => toolStore.toolMode.value === 'pick_refno');
@@ -33,11 +53,15 @@ const isAnyPicking = computed(() => isPicking.value || isBoxPicking.value);
 const annotationVis = usePipeDistanceAnnotationThree(
   computed(() => ctx.viewerRef.value),
   store.visibleResults,
-  store.showAnnotations
+  store.showAnnotations,
+  computed(() => ctx.annotationSystem.value)
 );
 
 onUnmounted(() => {
   annotationVis.clearAnnotations();
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    delete (window as typeof window & { __plant3dPipeDistanceE2E?: unknown }).__plant3dPipeDistanceE2E;
+  }
 });
 
 // --- pick BRAN pipe ---
@@ -58,8 +82,116 @@ function startBoxPickBran() {
 }
 
 // --- detection ---
+function createSceneTransformPoint(): ((point: Vec3) => Vec3) | undefined {
+  const matrix = (ctx.viewerRef.value as ViewerWithDtxLayerMatrix | null)?.__dtxLayer?.getGlobalModelMatrix?.();
+  if (!matrix) return undefined;
+  return (point: Vec3): Vec3 => {
+    const p = new Vector3(point[0], point[1], point[2]).applyMatrix4(matrix);
+    return [p.x, p.y, p.z];
+  };
+}
+
+function createDtxAxisDistanceFallback(refnos: string[]): PipeDistanceResult[] {
+  const dtxLayer = (ctx.viewerRef.value as ViewerWithDtxLayerMatrix | null)?.__dtxLayer;
+  if (!dtxLayer) return [];
+
+  return detectDtxBranchAxisDistances(dtxLayer, {
+    refnos,
+    maxAngleDeg: store.maxAngle.value,
+    maxDistanceMm: store.maxDistance.value,
+    includeBeyondMaxDistanceForSinglePair: true,
+    resolveObjectIdsByRefno: (refno) => {
+      const dbnum = resolveDtxAxisDistanceDbnum(refno);
+      return dbnum ? resolveDtxObjectIdsByRefno(dbnum, refno) : [];
+    },
+  });
+}
+
+function applyDetectionFallbackResults(refnos: string[], fallbackResults: PipeDistanceResult[]): boolean {
+  if (fallbackResults.length === 0) return false;
+  store.setBranRefnos(refnos);
+  store.showAnnotations.value = true;
+  store.results.value = fallbackResults;
+  store.activeResultIndex.value = 0;
+  store.detectError.value = null;
+  return true;
+}
+
+async function detectBransWithDtxFallback(refnos: string[]) {
+  await store.autoDetectBrans(refnos, {
+    transformPoint: createSceneTransformPoint(),
+  });
+  if (store.results.value.length > 0) return;
+
+  const fallbackResults = createDtxAxisDistanceFallback(refnos);
+  applyDetectionFallbackResults(refnos, fallbackResults);
+}
+
 async function handleDetect() {
-  await store.runDetection();
+  await detectBransWithDtxFallback(store.selectedBranRefnos.value);
+}
+
+function getCurrentSelectedBrans(): string[] {
+  const candidates = [
+    ...selectionStore.selectedRefnos.value,
+    selectionStore.selectedRefno.value,
+  ].filter((refno): refno is string => !!refno);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const refno of candidates) {
+    const normalized = refno.trim().replace(/\//g, '_');
+    if (!normalized || seen.has(normalized)) continue;
+    const noun = (findNounByRefnoAcrossAllDbnos(normalized) || '').toUpperCase();
+    if (noun !== 'BRAN') continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+async function detectCurrentSelectedBrans(options: { quiet?: boolean } = {}) {
+  const refnos = getCurrentSelectedBrans();
+  if (refnos.length < 2) {
+    if (!options.quiet) {
+      store.detectError.value = '当前选中不足 2 根 BRAN 管道';
+    }
+    return;
+  }
+  await detectBransWithDtxFallback(refnos);
+}
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as typeof window & {
+    __plant3dPipeDistanceE2E?: {
+      detectBrans: (refnos: string[]) => Promise<void>;
+      setDebugResults: (results: PipeDistanceResult[]) => void;
+      getSnapshot: () => {
+        selectedBranRefnos: string[];
+        detectError: string | null;
+        visibleResults: PipeDistanceResult[];
+        results: PipeDistanceResult[];
+      };
+    };
+  }).__plant3dPipeDistanceE2E = {
+    detectBrans: detectBransWithDtxFallback,
+    setDebugResults: (results: PipeDistanceResult[]) => {
+      store.setBranRefnos([...new Set(results.flatMap((result) => [result.pipeA, result.pipeB]))]);
+      const maxInjectedDistance = Math.max(0, ...results.map((result) => result.distance));
+      if (Number.isFinite(maxInjectedDistance)) {
+        store.maxDistance.value = Math.max(store.maxDistance.value, Math.ceil(maxInjectedDistance));
+      }
+      store.showAnnotations.value = true;
+      store.results.value = [...results];
+      store.activeResultIndex.value = results.length > 0 ? 0 : null;
+      store.detectError.value = null;
+    },
+    getSnapshot: () => ({
+      selectedBranRefnos: [...store.selectedBranRefnos.value],
+      detectError: store.detectError.value,
+      visibleResults: [...store.visibleResults.value],
+      results: [...store.results.value],
+    }),
+  };
 }
 
 // --- result click ---
@@ -92,6 +224,15 @@ function close() {
   }
   emit('update:open', false);
 }
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) return;
+    if (store.selectedBranRefnos.value.length > 0 || store.results.value.length > 0) return;
+    void detectCurrentSelectedBrans({ quiet: true });
+  },
+);
 
 // --- validation helpers ---
 const clampedMaxDistance = computed({
@@ -179,6 +320,14 @@ function isResultHidden(id: string): boolean {
                 <span>{{ isBoxPicking ? '拖框中...' : '拖框选' }}</span>
               </button>
             </div>
+            <button type="button"
+              class="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+              :disabled="store.isDetecting.value"
+              title="导入当前选中的 BRAN 并立即检测"
+              @click="detectCurrentSelectedBrans()">
+              <Check class="h-3.5 w-3.5" />
+              当前选中并检测
+            </button>
             <div v-if="isAnyPicking" class="text-[11px] text-muted-foreground">
               <template v-if="isPicking">逐根点击 BRAN，按 Enter 确认 / ESC 取消</template>
               <template v-else>在 3D 视图里按住左键拖出选择框（向左拖：完全包含；向右拖：相交即选）</template>

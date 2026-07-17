@@ -21,7 +21,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
-import { getMbdPipeAnnotations, type MbdPipeData } from '@/api/mbdPipeApi';
+import type { PipeSegmentDto } from '@/types/pipeGeometry';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
@@ -266,7 +266,6 @@ const PIPE_STRUCTURE_BACKEND_MAX_CANDIDATES = 20;
 const PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES = 5;
 const PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT = 128;
 const PIPE_STRUCTURE_DEFAULT_NOUNS = ['WALL', 'COLUMN'];
-const PIPE_STRUCTURE_MBD_CACHE_TTL_MS = 60_000;
 const OBJECT_TO_OBJECT_VERTEX_SAMPLE_LIMIT = 64;
 
 type PipeMeasureResult = {
@@ -1753,7 +1752,6 @@ export function useDtxTools(options: {
   const pipeMeasureBusy = ref(false);
   const pipeMeasureStatus = ref<string>('');
   const pipeToPipeSourceCandidate = ref<PipeToPipeMeasureCandidate | null>(null);
-  const mbdBranchCache = new Map<string, { expiresAt: number; data: MbdPipeData | null }>();
 
   // dimensions (独立于测量)
   const dimensionPoints = ref<MeasurementPoint[]>([]);
@@ -2560,43 +2558,12 @@ export function useDtxTools(options: {
     return findOwnerRefnoByTubi(sourceRefno) || sourceRefno;
   }
 
-  async function queryMbdPipeWithBranchCache(branchRefno: string): Promise<MbdPipeData | null> {
-    const normalizedBranch = normalizeRefnoKey(branchRefno);
-    const now = Date.now();
-    const cached = mbdBranchCache.get(normalizedBranch);
-    if (cached && cached.expiresAt > now) {
-      return cached.data;
-    }
-
-    let data: MbdPipeData | null = null;
-    try {
-      const response = await getMbdPipeAnnotations(toBackendRefno(normalizedBranch), {
-        include_dims: false,
-        include_chain_dims: false,
-        include_overall_dim: false,
-        include_port_dims: false,
-        include_welds: false,
-        include_slopes: false,
-        include_bends: false,
-        include_cut_tubis: false,
-        include_fittings: false,
-        include_tags: false,
-        include_layout_hints: false,
-      });
-      data = response.success ? (response.data || null) : null;
-    } catch {
-      data = null;
-    }
-
-    mbdBranchCache.set(normalizedBranch, {
-      expiresAt: now + PIPE_STRUCTURE_MBD_CACHE_TTL_MS,
-      data,
-    });
-    return data;
+  async function queryPipeBranchSegments(_branchRefno: string): Promise<{ segments?: PipeSegmentDto[] } | null> {
+    return null;
   }
 
   function toWorldPipeSegment(
-    segment: MbdPipeSegmentDto,
+    segment: PipeSegmentDto,
     globalMatrix: any,
   ): WorldPipeSegment | null {
     const refno = normalizeRefnoKey(segment.refno || '');
@@ -2663,7 +2630,7 @@ export function useDtxTools(options: {
     if (!dbnum) return candidate;
 
     const branchRefno = resolvePipeOwnerBranchRefno(sourceRefno);
-    const mbdData = await queryMbdPipeWithBranchCache(branchRefno);
+    const mbdData = await queryPipeBranchSegments(branchRefno);
     const globalMatrix = layer.getGlobalModelMatrix();
     const segments = (mbdData?.segments || [])
       .map((segment) => toWorldPipeSegment(segment, globalMatrix))
@@ -2686,7 +2653,7 @@ export function useDtxTools(options: {
     dbnum: number
     layer: DTXLayer
     globalMatrix: any
-    mbdData: MbdPipeData | null
+    mbdData: { segments?: PipeSegmentDto[] } | null
   }): Vector3[] {
     const { sourceRefno, sourceObjectId, dbnum, layer, globalMatrix, mbdData } = params;
     const refnoTransform = getDtxRefnoTransform(dbnum, sourceRefno);
@@ -3014,7 +2981,7 @@ export function useDtxTools(options: {
       setPipeMeasureStatus('正在收集参考点…');
       const globalMatrix = layer.getGlobalModelMatrix();
       const branchRefno = resolvePipeOwnerBranchRefno(sourceRefno);
-      const mbdData = await queryMbdPipeWithBranchCache(branchRefno);
+      const mbdData = await queryPipeBranchSegments(branchRefno);
       const referencePoints = collectPipeReferencePointsWorld({
         sourceRefno,
         sourceObjectId,

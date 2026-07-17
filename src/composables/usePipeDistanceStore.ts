@@ -5,10 +5,7 @@
  */
 import { computed, ref } from 'vue';
 
-import type { Vec3 } from '@/api/mbdPipeApi';
-
-import { getMbdPipeAnnotations } from '@/api/mbdPipeApi';
-import { detectPipeClearances } from '@/utils/three/geometry/clearance/detectPipeClearances';
+import type { Vec3 } from '@/types/vec3';
 
 export type PipeDistanceResult = {
   id: string;
@@ -17,6 +14,15 @@ export type PipeDistanceResult = {
   pipeB: string;
   start: Vec3;
   end: Vec3;
+  pipeAStart?: Vec3;
+  pipeAEnd?: Vec3;
+  pipeBStart?: Vec3;
+  pipeBEnd?: Vec3;
+};
+
+export type PipeDistanceDetectionOptions = {
+  refnos?: string[];
+  transformPoint?: (point: Vec3) => Vec3 | null | undefined;
 };
 
 const showAnnotations = ref(true);
@@ -31,6 +37,38 @@ const detectError = ref<string | null>(null);
 const hiddenResultIds = ref<Set<string>>(new Set());
 const resultMinDistance = ref<number | null>(null);
 
+function normalizeBranRefno(refno: string): string {
+  return String(refno || '').trim().replace(/\//g, '_');
+}
+
+function toBackendRefno(refno: string): string {
+  const normalized = normalizeBranRefno(refno);
+  const matched = normalized.match(/^(\d+)_(\d+)$/);
+  if (!matched) return normalized;
+  return `${matched[1]}/${matched[2]}`;
+}
+
+function transformResultPoint(point: Vec3, transformPoint?: PipeDistanceDetectionOptions['transformPoint']): Vec3 {
+  if (!transformPoint) return point;
+  const transformed = transformPoint(point);
+  if (!transformed) return point;
+  return transformed;
+}
+
+function optionalVec3(value: unknown): Vec3 | undefined {
+  if (!Array.isArray(value) || value.length !== 3) return undefined;
+  const point = value.map(Number);
+  return point.every(Number.isFinite) ? point as Vec3 : undefined;
+}
+
+function transformOptionalPoint(
+  point: unknown,
+  transformPoint?: PipeDistanceDetectionOptions['transformPoint'],
+): Vec3 | undefined {
+  const value = optionalVec3(point);
+  return value ? transformResultPoint(value, transformPoint) : undefined;
+}
+
 function isResultVisible(r: PipeDistanceResult): boolean {
   if (hiddenResultIds.value.has(r.id)) return false;
   if (resultMinDistance.value !== null && r.distance < resultMinDistance.value) return false;
@@ -41,13 +79,25 @@ const visibleResults = computed(() => results.value.filter(isResultVisible));
 
 export function usePipeDistanceStore() {
   function addBranRefno(refno: string) {
-    if (!selectedBranRefnos.value.includes(refno)) {
-      selectedBranRefnos.value.push(refno);
+    const normalized = normalizeBranRefno(refno);
+    if (normalized && !selectedBranRefnos.value.includes(normalized)) {
+      selectedBranRefnos.value.push(normalized);
     }
   }
 
+  function setBranRefnos(refnos: string[]) {
+    const seen = new Set<string>();
+    selectedBranRefnos.value = refnos
+      .map(normalizeBranRefno)
+      .filter((refno) => {
+        if (!refno || seen.has(refno)) return false;
+        seen.add(refno);
+        return true;
+      });
+  }
+
   function removeBranRefno(refno: string) {
-    const idx = selectedBranRefnos.value.indexOf(refno);
+    const idx = selectedBranRefnos.value.indexOf(normalizeBranRefno(refno));
     if (idx >= 0) selectedBranRefnos.value.splice(idx, 1);
   }
 
@@ -79,7 +129,11 @@ export function usePipeDistanceStore() {
     resultMinDistance.value = null;
   }
 
-  async function runDetection() {
+  async function runDetection(options: PipeDistanceDetectionOptions = {}) {
+    if (options.refnos) {
+      setBranRefnos(options.refnos);
+    }
+
     const branRefnos = selectedBranRefnos.value;
     if (branRefnos.length < 2) {
       detectError.value = '请至少选择 2 根 BRAN 管道';
@@ -90,44 +144,10 @@ export function usePipeDistanceStore() {
     detectError.value = null;
 
     try {
-      // 1. 并发获取每个 BRAN 的管段数据
-      const responses = await Promise.all(
-        branRefnos.map((refno) =>
-          getMbdPipeAnnotations(refno, { source: 'db', include_dims: false, include_welds: false, include_slopes: false, include_bends: false })
-        ),
-      );
-
-      // 2. 组织为 detectPipeClearances 所需的 Record<branRefno, segments[]> 格式
-      const branches: Record<string, import('@/api/mbdPipeApi').MbdPipeSegmentDto[]> = {};
-      for (let i = 0; i < branRefnos.length; i++) {
-        const resp = responses[i];
-        if (resp && resp.success && resp.data && resp.data.segments.length > 0) {
-          branches[branRefnos[i]!] = resp.data.segments;
-        }
-      }
-
-      const branchKeys = Object.keys(branches);
-      if (branchKeys.length < 2) {
-        detectError.value = `仅 ${branchKeys.length} 根 BRAN 有管段数据，至少需要 2 根`;
-        results.value = [];
-        activeResultIndex.value = null;
-        return;
-      }
-
-      // 3. 调用净距检测算法
-      const clearances = detectPipeClearances(branches, maxDistance.value, maxAngle.value);
-
-      // 4. 转换为 PipeDistanceResult
-      results.value = clearances.map((c) => ({
-        id: c.id,
-        distance: Math.round(c.distance),
-        pipeA: c.pipe1_refno,
-        pipeB: c.pipe2_refno,
-        start: c.start,
-        end: c.end,
-      }));
-
-      activeResultIndex.value = results.value.length > 0 ? 0 : null;
+      detectError.value = '管道净距检测暂不可用：MBD 管段数据接口已移除';
+      results.value = [];
+      activeResultIndex.value = null;
+      return;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       detectError.value = `检测失败: ${msg}`;
@@ -135,6 +155,13 @@ export function usePipeDistanceStore() {
     } finally {
       isDetecting.value = false;
     }
+  }
+
+  async function autoDetectBrans(refnos: string[], options: Omit<PipeDistanceDetectionOptions, 'refnos'> = {}) {
+    await runDetection({
+      ...options,
+      refnos,
+    });
   }
 
   function clearResults() {
@@ -157,10 +184,12 @@ export function usePipeDistanceStore() {
     resultMinDistance,
     visibleResults,
     addBranRefno,
+    setBranRefnos,
     removeBranRefno,
     clearBranRefnos,
     setActiveResult,
     runDetection,
+    autoDetectBrans,
     clearResults,
     toggleResultHidden,
     setResultMinDistance,

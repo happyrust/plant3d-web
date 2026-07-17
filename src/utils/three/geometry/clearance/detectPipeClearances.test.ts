@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { detectPipeClearances } from './detectPipeClearances';
 
-import type { MbdPipeSegmentDto } from '@/api/mbdPipeApi';
+import type { PipeSegmentDto } from '@/types/pipeGeometry';
 
 describe('detectPipeClearances', () => {
   it('should detect parallel pipes within distance threshold', () => {
@@ -17,7 +17,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
       'bran2': [
         {
@@ -29,13 +29,17 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
     };
 
     const result = detectPipeClearances(branches, 500);
     expect(result.length).toBe(1);
     expect(result[0]!.distance).toBeCloseTo(100, 0);
+    expect(result[0]!.layout_hint?.pipe1_start).toEqual([0, 0, 0]);
+    expect(result[0]!.layout_hint?.pipe1_end).toEqual([0, 10, 0]);
+    expect(result[0]!.layout_hint?.pipe2_start).toEqual([200, 0, 0]);
+    expect(result[0]!.layout_hint?.pipe2_end).toEqual([200, 10, 0]);
   });
 
   it('should not detect pipes beyond distance threshold', () => {
@@ -50,7 +54,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
       'bran2': [
         {
@@ -62,7 +66,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
     };
 
@@ -82,7 +86,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
       'bran2': [
         {
@@ -94,7 +98,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
     };
 
@@ -114,7 +118,7 @@ describe('detectPipeClearances', () => {
           length: 100,
           straight_length: 100,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
       'bran2': [
         {
@@ -126,7 +130,7 @@ describe('detectPipeClearances', () => {
           length: 100,
           straight_length: 100,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
     };
 
@@ -146,7 +150,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
       'bran2': [
         {
@@ -158,13 +162,44 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
     };
 
     const result = detectPipeClearances(branches, 500);
     expect(result.length).toBe(1);
     expect(result[0]!.distance).toBeCloseTo(0, 8);
+  });
+
+  it('should use the layout default outside diameter when segment OD is missing', () => {
+    const branches = {
+      'bran1': [
+        {
+          id: 'seg1',
+          refno: 'pipe1',
+          noun: 'PIPE',
+          arrive: [0, 0, 0],
+          leave: [0, 10, 0],
+          length: 10,
+          straight_length: 10,
+        } as PipeSegmentDto,
+      ],
+      'bran2': [
+        {
+          id: 'seg2',
+          refno: 'pipe2',
+          noun: 'PIPE',
+          arrive: [329, 0, 0],
+          leave: [329, 10, 0],
+          length: 10,
+          straight_length: 10,
+        } as PipeSegmentDto,
+      ],
+    };
+
+    const result = detectPipeClearances(branches, 500);
+    expect(result.length).toBe(1);
+    expect(result[0]!.distance).toBeCloseTo(100, 8);
   });
 
   it('should not report far offset finite pipe segments as close', () => {
@@ -179,7 +214,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
       'bran2': [
         {
@@ -191,7 +226,7 @@ describe('detectPipeClearances', () => {
           length: 10,
           straight_length: 10,
           outside_diameter: 100,
-        } as MbdPipeSegmentDto,
+        } as PipeSegmentDto,
       ],
     };
 

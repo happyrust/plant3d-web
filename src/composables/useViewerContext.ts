@@ -2,7 +2,6 @@ import { shallowRef, type Ref, type ShallowRef } from 'vue';
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { useDtxTools } from './useDtxTools';
-import type { UseMbdPipeAnnotationThreeReturn } from './useMbdPipeAnnotationThree';
 import type { UsePtsetVisualizationThreeReturn } from './usePtsetVisualizationThree';
 import type { useToolStore } from './useToolStore';
 import type { useXeokitMeasurementTools } from './useXeokitMeasurementTools';
@@ -16,7 +15,6 @@ export type ViewerContext = {
   store: ShallowRef<ReturnType<typeof useToolStore> | null>;
   viewerError: ShallowRef<string | null>;
   ptsetVis: ShallowRef<UsePtsetVisualizationThreeReturn | null>;
-  mbdPipeVis: ShallowRef<UseMbdPipeAnnotationThreeReturn | null>;
   annotationSystem: ShallowRef<UseAnnotationThreeReturn | null>;
 };
 
@@ -28,7 +26,6 @@ const globalViewerContext: ViewerContext = {
   store: shallowRef(null),
   viewerError: shallowRef(null),
   ptsetVis: shallowRef(null),
-  mbdPipeVis: shallowRef(null),
   annotationSystem: shallowRef(null),
 };
 

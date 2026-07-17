@@ -4,8 +4,7 @@ import type { Ref } from 'vue';
 import { e3dGetSubtreeRefnos, e3dGetVisibleInsts } from '@/api/genModelE3dApi';
 import { pdmsGetTypeInfo } from '@/api/genModelPdmsAttrApi';
 import { enqueueParquetIncremental, getParquetVersion } from '@/api/genModelRealtimeApi';
-import { modelShowByRefno } from '@/api/genModelTaskApi';
-import { getMbdPipeAnnotations, type MbdPipeData, type Vec3 } from '@/api/mbdPipeApi';
+import { modelRegenerateByRefno, modelShowByRefno } from '@/api/genModelTaskApi';
 import { useConfirmDialogStore } from '@/composables/useConfirmDialogStore';
 import { useConsoleStore } from '@/composables/useConsoleStore';
 import { ensureDbMetaInfoLoaded, tryGetDbnumByRefno } from '@/composables/useDbMetaInfo';
@@ -130,116 +129,6 @@ function uniqStrings(list: string[]): string[] {
   return out;
 }
 
-const IDENTITY_MATRIX = [
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1,
-];
-
-const DEFAULT_SYNTHETIC_TUBI_DIAMETER_MM = 100;
-
-function vecSub(a: Vec3, b: Vec3): Vec3 {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function vecLength(v: Vec3): number {
-  return Math.hypot(v[0], v[1], v[2]);
-}
-
-function vecNormalize(v: Vec3): Vec3 {
-  const len = vecLength(v);
-  if (!Number.isFinite(len) || len <= 1e-6) return [0, 0, 1];
-  return [v[0] / len, v[1] / len, v[2] / len];
-}
-
-function vecCross(a: Vec3, b: Vec3): Vec3 {
-  return [
-    a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0],
-  ];
-}
-
-function buildSyntheticSegmentMatrix(start: Vec3, end: Vec3, diameterMm: number): number[] {
-  const axisZ = vecNormalize(vecSub(end, start));
-  const scaleZ = Math.max(vecLength(vecSub(end, start)), 1);
-  const radialScale = Math.max(diameterMm, 1);
-
-  let seed: Vec3 = Math.abs(axisZ[2]) > 0.95 ? [0, 1, 0] : [0, 0, 1];
-  let axisX = vecNormalize(vecCross(seed, axisZ));
-  if (vecLength(axisX) <= 1e-6) {
-    seed = [1, 0, 0];
-    axisX = vecNormalize(vecCross(seed, axisZ));
-  }
-  const axisY = vecNormalize(vecCross(axisZ, axisX));
-
-  return [
-    axisX[0] * radialScale, axisX[1] * radialScale, axisX[2] * radialScale, 0,
-    axisY[0] * radialScale, axisY[1] * radialScale, axisY[2] * radialScale, 0,
-    axisZ[0] * scaleZ, axisZ[1] * scaleZ, axisZ[2] * scaleZ, 0,
-    start[0], start[1], start[2], 1,
-  ];
-}
-
-function buildSyntheticBranchInstance(
-  rootRefno: string,
-  rootNoun: string | null,
-  branchName: string | null | undefined,
-  data: MbdPipeData,
-): NonNullable<InstanceManifest['instances']>[number] | null {
-  const validSegments = (data.segments || []).filter((segment) => {
-    return Array.isArray(segment.arrive) && segment.arrive.length === 3
-      && Array.isArray(segment.leave) && segment.leave.length === 3;
-  });
-  if (validSegments.length === 0) return null;
-
-  const diameter = Math.max(
-    Number(validSegments.find((segment) => Number.isFinite(segment.outside_diameter ?? NaN))?.outside_diameter)
-      || DEFAULT_SYNTHETIC_TUBI_DIAMETER_MM,
-    1,
-  );
-  const radius = diameter * 0.5;
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let minZ = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  let maxZ = Number.NEGATIVE_INFINITY;
-
-  const geoInstances = validSegments.map((segment, index) => {
-    const start = segment.arrive as Vec3;
-    const end = segment.leave as Vec3;
-    for (const point of [start, end]) {
-      minX = Math.min(minX, point[0] - radius);
-      minY = Math.min(minY, point[1] - radius);
-      minZ = Math.min(minZ, point[2] - radius);
-      maxX = Math.max(maxX, point[0] + radius);
-      maxY = Math.max(maxY, point[1] + radius);
-      maxZ = Math.max(maxZ, point[2] + radius);
-    }
-
-    return {
-      geo_hash: `tubi_${rootRefno}_${index}`,
-      transform: buildSyntheticSegmentMatrix(start, end, diameter),
-    };
-  });
-
-  return {
-    refno: rootRefno,
-    noun: rootNoun || 'BRAN',
-    name: branchName || null,
-    aabb: Number.isFinite(minX) && Number.isFinite(maxX)
-      ? {
-        min: [minX, minY, minZ],
-        max: [maxX, maxY, maxZ],
-      }
-      : null,
-    refno_transform: IDENTITY_MATRIX,
-    geo_instances: geoInstances,
-  };
-}
-
 async function prepareJsonManifestForFallback(
   dbno: number,
   rootRefno: string,
@@ -267,52 +156,7 @@ async function prepareJsonManifestForFallback(
     return { ready: true };
   }
 
-  let mbdResp;
-  try {
-    mbdResp = await getMbdPipeAnnotations(rootRefno, {
-      include_dims: false,
-      include_welds: false,
-      include_slopes: false,
-      include_bends: false,
-      include_cut_tubis: false,
-      include_fittings: false,
-      include_tags: false,
-      include_layout_result: false,
-    });
-  } catch {
-    return { ready: true };
-  }
-  if (!mbdResp.success || !mbdResp.data) {
-    return { ready: true };
-  }
-
-  const syntheticInstance = buildSyntheticBranchInstance(
-    rootRefno,
-    rootNoun,
-    mbdResp.data.branch_name,
-    mbdResp.data,
-  );
-  if (!syntheticInstance) {
-    return { ready: true };
-  }
-
-  const nextInstances = Array.isArray(manifest.instances)
-    ? manifest.instances.filter((item) => normalizeRefnoString(String(item?.refno ?? '')) !== rootRefno)
-    : [];
-  nextInstances.push(syntheticInstance);
-
-  setDbnoInstancesManifest(dbno, {
-    ...manifest,
-    generated_at: manifest.generated_at || new Date().toISOString(),
-    instances: nextInstances,
-  });
-  return {
-    ready: true,
-    syntheticAabb: syntheticInstance.aabb
-      ? [...syntheticInstance.aabb.min, ...syntheticInstance.aabb.max]
-      : null,
-    syntheticNoun: syntheticInstance.noun ?? rootNoun,
-  };
+  return { ready: true };
 }
 
 async function querySubtreeRefnos(refno: string): Promise<{ refnos: string[]; truncated: boolean }> {
@@ -405,7 +249,7 @@ export async function resolveActualModelLoadScope(
 export function useModelGeneration(options: ModelGenerationOptions): ModelGenerationState & {
   generateAndLoadModel: (refno: string) => Promise<boolean>
   showModelByDbnum: (dbno: number, options?: { flyTo?: boolean }) => Promise<{ loaded: boolean; instanceCount: number; refnoCount: number }>
-  showModelByRefno: (refno: string, options?: { flyTo?: boolean }) => Promise<boolean>
+  showModelByRefno: (refno: string, options?: { flyTo?: boolean; regenerate?: boolean }) => Promise<boolean>
   isModelActuallyLoaded: (refno: string) => boolean
   checkRefnoExists: (refno: string) => boolean
 } {
@@ -693,12 +537,15 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
     return !!dtxLayer?.hasObject?.(normalizedRoot);
   }
 
-  async function showModelByRefno(refno: string, loadOptions?: { flyTo?: boolean }): Promise<boolean> {
+  async function showModelByRefno(
+    refno: string,
+    loadOptions?: { flyTo?: boolean; regenerate?: boolean }
+  ): Promise<boolean> {
     const normalizedRoot = normalizeRefnoString(refno);
     if (!normalizedRoot) return false;
 
     const genuinelyLoaded = loadedRoots.has(normalizedRoot);
-    if (checkRefnoExists(normalizedRoot)) {
+    if (!loadOptions?.regenerate && checkRefnoExists(normalizedRoot)) {
       if (loadOptions?.flyTo) {
         try {
           const anyViewer = viewer as any;
@@ -863,6 +710,63 @@ export function useModelGeneration(options: ModelGenerationOptions): ModelGenera
         progress.value = 100;
         syncGlobalLoadStatus();
         consoleStore.addLog('warning', `[model-load] refno=${normalizedRoot} 当前无可见实例，无需回退全量加载`);
+        return true;
+      }
+
+      if (loadOptions?.regenerate) {
+        statusMessage.value = `正在重新生成 ${normalizedRoot}...`;
+        progress.value = 20;
+        showProgressModal.value = true;
+        syncGlobalLoadStatus();
+        consoleStore.addLog(
+          'info',
+          `[model-regen] start root=${normalizedRoot} dbno=${dbno} component_count=${loadScope.actualLoadRefnos.length}`
+        );
+
+        const regen = await modelRegenerateByRefno({
+          refnos: [toBackendRefno(normalizedRoot)],
+          db_num: dbno,
+          gen_parquet: false,
+        });
+        if (!regen?.success) {
+          throw new Error(regen?.message || `模型重新生成失败：${normalizedRoot}`);
+        }
+
+        statusMessage.value = '重新生成完成，正在替换场景模型...';
+        progress.value = 80;
+        syncGlobalLoadStatus();
+        const regeneratedRefnos = loadScope.actualLoadRefnos;
+        const regenerated = await loadDbnoInstancesForVisibleRefnosDtx(
+          dtxLayer,
+          dbno,
+          regeneratedRefnos,
+          {
+            lodAssetKey: 'L1',
+            debug: false,
+            dataSource: 'backend',
+            forceReloadRefnos: regeneratedRefnos,
+            replaceExistingObjects: true,
+            forceRefreshGeometries: true,
+          }
+        );
+        anyViewer.__dtxAfterInstancesLoaded?.(dbno, regeneratedRefnos);
+        if (regenerated.loadedObjects <= 0) {
+          throw new Error(`重新生成完成，但后端未返回可绘制实例：${normalizedRoot}`);
+        }
+
+        loadedRoots.add(normalizedRoot);
+        progress.value = 100;
+        statusMessage.value = `重新生成完成（${regenerated.loadedObjects} 个几何实例）`;
+        syncGlobalLoadStatus();
+        if (loadOptions.flyTo) {
+          const aabb = anyViewer.scene?.getAABB?.(regeneratedRefnos) ?? null;
+          if (aabb) anyViewer.cameraFlight?.flyTo?.({ aabb, duration: 0.8, fit: true });
+        }
+        consoleStore.addLog(
+          'info',
+          `[model-regen] done root=${normalizedRoot} dbno=${dbno} loaded_objects=${regenerated.loadedObjects}`
+        );
+        emitToast({ message: `[成功] ${normalizedRoot} 已重新生成并替换`, level: 'success' });
         return true;
       }
 

@@ -76,6 +76,8 @@ export type MeasurementPointSourceInfo = {
 export type MeasurementPoint = {
   entityId: string;
   worldPos: Vec3;
+  /** 工程 World 坐标（米），不包含 Viewer recenter 平移。 */
+  designWorldPos?: Vec3;
   sourceInfo?: MeasurementPointSourceInfo;
 };
 
@@ -200,7 +202,7 @@ export type XeokitDistanceDraft = {
   createdAt: number;
 };
 
-export type XeokitAngleDraftStage = 'finding_corner' | 'finding_target';
+export type XeokitAngleDraftStage = 'finding_first_arm' | 'finding_second_arm';
 
 export type XeokitAngleDraft = {
   id: string;
@@ -475,15 +477,6 @@ export type ActiveAnnotationContext = {
 // Ptset 可视化请求（用于跨组件通信）
 export type PtsetVisualizationRequest = {
   refno: string;
-  timestamp: number;
-};
-
-export type MbdPipeAnnotationDisplayMode = 'full' | 'drawing' | 'length';
-
-// MBD 管道标注请求（用于跨组件通信）
-export type MbdPipeAnnotationRequest = {
-  refno: string;
-  displayMode?: MbdPipeAnnotationDisplayMode;
   timestamp: number;
 };
 
@@ -951,8 +944,6 @@ const pickedQueryCenter = ref<PickedQueryCenter | null>(null);
 
 // Ptset 可视化请求
 const ptsetVisualizationRequest = ref<PtsetVisualizationRequest | null>(null);
-// MBD 管道标注请求
-const mbdPipeAnnotationRequest = ref<MbdPipeAnnotationRequest | null>(null);
 
 // ── 通用 refno 拾取模式 ──
 const pickRefnoFilter = ref<string[]>([]);       // noun 过滤列表（如 ['BRAN']），空=不过滤
@@ -2515,22 +2506,6 @@ export function useToolStore() {
     },
     clearPtsetVisualizationRequest: () => {
       ptsetVisualizationRequest.value = null;
-    },
-
-    // MBD 管道标注
-    mbdPipeAnnotationRequest,
-    requestMbdPipeAnnotation: (
-      refno: string,
-      options: { displayMode?: MbdPipeAnnotationDisplayMode } = {},
-    ) => {
-      mbdPipeAnnotationRequest.value = {
-        refno,
-        displayMode: options.displayMode ?? 'full',
-        timestamp: Date.now(),
-      };
-    },
-    clearMbdPipeAnnotationRequest: () => {
-      mbdPipeAnnotationRequest.value = null;
     },
 
     // ── 通用 refno 拾取 ──

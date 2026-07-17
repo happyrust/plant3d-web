@@ -49,7 +49,6 @@ import { useToolStore } from '@/composables/useToolStore';
 import { useUserStore } from '@/composables/useUserStore';
 import { showModelByRefnosWithAck, useViewerContext, waitForViewerReady } from '@/composables/useViewerContext';
 import { onCommand } from '@/ribbon/commandBus';
-import { isMbdDrawingPresetUrl, isMbdStandaloneUrl } from '@/utils/mbdStandaloneUrl';
 
 const embedModeParams = ref<EmbedModeParams>(readEmbedModeParamsFromSearch(window.location.search));
 
@@ -477,14 +476,6 @@ function isEmbedLayoutMode(): boolean {
   return !!embedModeParams.value.isEmbedMode;
 }
 
-function isMbdStandaloneLayoutMode(): boolean {
-  return isMbdStandaloneUrl(window.location.search);
-}
-
-function isMbdDrawingLayoutMode(): boolean {
-  return isMbdDrawingPresetUrl(window.location.search);
-}
-
 function closeEmbedLandingPanels() {
   const dockApi = api.value;
   if (!dockApi) return;
@@ -496,7 +487,7 @@ function closeEmbedLandingPanels() {
 
 function saveLayout() {
   if (!api.value) return;
-  if (isEmbedLayoutMode() || isMbdStandaloneLayoutMode()) {
+  if (isEmbedLayoutMode()) {
     console.info('[DockLayout] 当前专用布局跳过普通布局持久化');
     return;
   }
@@ -517,13 +508,13 @@ function createDefaultLayout(dockApi: DockApi) {
   closePanelIfExists(dockApi, 'measurement');
   closePanelIfExists(dockApi, 'dimension');
   closePanelIfExists(dockApi, 'ptset');
-  closePanelIfExists(dockApi, 'mbdPipe');
   closePanelIfExists(dockApi, 'modelTree');
   closePanelIfExists(dockApi, 'modelQuery');
   closePanelIfExists(dockApi, 'nearbyQuery');
   closePanelIfExists(dockApi, 'viewer');
   closePanelIfExists(dockApi, 'console');
   closePanelIfExists(dockApi, 'dashboard');
+  closePanelIfExists(dockApi, 'modelVersionCompare');
   closePanelIfExists(dockApi, 'roomInfo');
   closePanelIfExists(dockApi, 'spatialCompute');
 
@@ -610,7 +601,6 @@ function createEmbedFocusedLayout(
     'measurement',
     'dimension',
     'ptset',
-    'mbdPipe',
     'modelTree',
     'modelQuery',
     'nearbyQuery',
@@ -626,6 +616,7 @@ function createEmbedFocusedLayout(
     'taskMonitor',
     'taskCreation',
     'incrementalUpdate',
+    'modelVersionCompare',
     'modelExport',
     'materialConfig',
     'roomInfo',
@@ -665,120 +656,6 @@ function createEmbedFocusedLayout(
   console.log('[DockLayout] Embed-focused layout created', {
     primaryPanelId: options.primaryPanelId ?? null,
   });
-}
-
-function createMbdFocusedLayout(dockApi: DockApi) {
-  [
-    'properties',
-    'manager',
-    'hydraulic',
-    'annotation',
-    'measurement',
-    'dimension',
-    'ptset',
-    'mbdPipe',
-    'modelTree',
-    'modelQuery',
-    'nearbyQuery',
-    'viewer',
-    'console',
-    'dashboard',
-    'review',
-    'initiateReview',
-    'reviewerTasks',
-    'myTasks',
-    'designerCommentHandling',
-    'resubmissionTasks',
-    'taskMonitor',
-    'taskCreation',
-    'incrementalUpdate',
-    'modelExport',
-    'materialConfig',
-    'roomInfo',
-    'roomStatus',
-    'spatialCompute',
-    'parquetDebug',
-  ].forEach((panelId) => {
-    closePanelIfExists(dockApi, panelId);
-  });
-
-  const viewerPanel = dockApi.addPanel({
-    id: 'viewer',
-    component: 'ViewerPanel',
-    title: '三维查看器',
-    renderer: 'always',
-  });
-
-  dockApi.addPanel({
-    id: 'modelTree',
-    component: 'ModelTreePanel',
-    title: '模型树',
-    renderer: 'always',
-    position: { referencePanel: viewerPanel, direction: 'left' },
-  });
-
-  const mbdPanel = dockApi.addPanel({
-    id: 'mbdPipe',
-    component: 'MbdPipePanel',
-    title: 'MBD-管道标注',
-    position: { referencePanel: viewerPanel, direction: 'right' },
-  });
-
-  viewerPanel.api.setActive();
-  mbdPanel.api.setActive();
-
-  const leftGroup = dockApi.getPanel('modelTree')?.group;
-  const rightGroup = dockApi.getPanel('mbdPipe')?.group;
-  if (leftGroup) leftGroup.api.setSize({ width: 350 });
-  if (rightGroup) rightGroup.api.setSize({ width: 420 });
-
-  console.log('[DockLayout] MBD-focused layout created');
-}
-
-function createMbdDrawingLayout(dockApi: DockApi) {
-  [
-    'properties',
-    'manager',
-    'hydraulic',
-    'annotation',
-    'measurement',
-    'dimension',
-    'ptset',
-    'mbdPipe',
-    'modelTree',
-    'modelQuery',
-    'nearbyQuery',
-    'viewer',
-    'console',
-    'dashboard',
-    'review',
-    'initiateReview',
-    'reviewerTasks',
-    'myTasks',
-    'designerCommentHandling',
-    'resubmissionTasks',
-    'taskMonitor',
-    'taskCreation',
-    'incrementalUpdate',
-    'modelExport',
-    'materialConfig',
-    'roomInfo',
-    'roomStatus',
-    'spatialCompute',
-    'parquetDebug',
-  ].forEach((panelId) => {
-    closePanelIfExists(dockApi, panelId);
-  });
-
-  const viewerPanel = dockApi.addPanel({
-    id: 'viewer',
-    component: 'ViewerPanel',
-    title: '三维查看器',
-    renderer: 'always',
-  });
-
-  viewerPanel.api.setActive();
-  console.log('[DockLayout] MBD drawing layout created');
 }
 
 function activatePanel(panelId: string) {
@@ -893,31 +770,7 @@ function ensurePanel(panelId: string) {
           : undefined,
     });
   }
-  if (normalizedPanelId === 'mbdPipe') {
-    return addPanelSafely(dockApi, {
-      id: 'mbdPipe',
-      component: 'MbdPipePanel',
-      title: 'MBD-管道标注',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (normalizedPanelId === 'mbdAnnotationStyle') {
-    return addPanelSafely(dockApi, {
-      id: 'mbdAnnotationStyle',
-      component: 'MbdAnnotationStylePanel',
-      title: 'MBD 标注样式',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (panelId === 'dimensionStyle') {
+  if (normalizedPanelId === 'dimensionStyle') {
     return addPanelSafely(dockApi, {
       id: 'dimensionStyle',
       component: 'DimensionStylePanel',
@@ -1047,6 +900,16 @@ function ensurePanel(panelId: string) {
         : viewerPanel
           ? { referencePanel: viewerPanel, direction: 'right' }
           : undefined,
+    });
+  }
+  if (normalizedPanelId === 'modelVersionCompare') {
+    return addPanelSafely(dockApi, {
+      id: 'modelVersionCompare',
+      component: 'ModelVersionComparePanel',
+      title: '版本对比',
+      position: viewerPanel
+        ? { referencePanel: viewerPanel, direction: 'right' }
+        : undefined,
     });
   }
   if (normalizedPanelId === 'modelExport') {
@@ -1195,14 +1058,6 @@ function resetLayout() {
   if (!api.value) return;
   resetZoneState();
   localStorage.removeItem(LAYOUT_STORAGE_KEY);
-  if (isMbdDrawingLayoutMode()) {
-    createMbdDrawingLayout(api.value);
-    return;
-  }
-  if (isMbdStandaloneLayoutMode()) {
-    createMbdFocusedLayout(api.value);
-    return;
-  }
   if (isEmbedLayoutMode()) {
     const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
     const passiveWorkflowMode = isPassiveWorkflowMode();
@@ -1368,15 +1223,6 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.ptset':
       togglePanel('ptset');
       return;
-    case 'panel.mbdPipe':
-      togglePanel('mbdPipe');
-      return;
-    case 'panel.mbdAnnotationStyle':
-      togglePanel('mbdAnnotationStyle');
-      return;
-    case 'mbd.settings':
-      togglePanel('mbdAnnotationStyle');
-      return;
     case 'panel.materialConfig':
       togglePanel('materialConfig');
       return;
@@ -1461,6 +1307,9 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.incrementalUpdate':
       togglePanel('incrementalUpdate');
+      return;
+    case 'panel.modelVersionCompare':
+      togglePanel('modelVersionCompare');
       return;
     case 'panel.parquetDebug':
       togglePanel('parquetDebug');
@@ -1892,11 +1741,7 @@ function onReady(event: DockviewReadyEvent) {
     ensurePanel as (panelId: string) => { api: { setActive: () => void } } | undefined,
   );
 
-  if (isMbdDrawingLayoutMode()) {
-    createMbdDrawingLayout(api.value);
-  } else if (isMbdStandaloneLayoutMode()) {
-    createMbdFocusedLayout(api.value);
-  } else if (isEmbedLayoutMode()) {
+  if (isEmbedLayoutMode()) {
     const landingTarget = resolveEmbedLandingTargetFromRole(embedModeParams.value.workflowRole);
     const passiveWorkflowMode = isPassiveWorkflowMode();
     const effectiveLandingTarget = resolveExternalFormFocusedLandingTarget({
@@ -1944,13 +1789,13 @@ function onReady(event: DockviewReadyEvent) {
   closeBlockedReviewPanels();
 
   event.api.onDidLayoutChange(() => {
-    if (!isEmbedLayoutMode() && !isMbdStandaloneLayoutMode()) {
+    if (!isEmbedLayoutMode()) {
       saveLayout();
     }
     notifyDockLayoutChange();
   });
 
-  if (!isEmbedLayoutMode() && !isMbdStandaloneLayoutMode()) {
+  if (!isEmbedLayoutMode()) {
     migratePropertiesPanelOnce();
   }
 
@@ -1995,7 +1840,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dockview-container" :class="{ 'dockview-container--mbd-drawing': isMbdDrawingLayoutMode() }">
+  <div class="dockview-container">
     <div v-if="embedSessionError"
       data-testid="embed-session-error"
       class="absolute left-1/2 top-3 z-[1100] -translate-x-1/2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 shadow">
@@ -2022,9 +1867,4 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.dockview-container--mbd-drawing :deep(.dv-tabs-and-actions-container),
-.dockview-container--mbd-drawing :deep(.dockview-tabs-and-actions-container),
-.dockview-container--mbd-drawing :deep(.tabs-and-actions-container) {
-  display: none;
-}
 </style>

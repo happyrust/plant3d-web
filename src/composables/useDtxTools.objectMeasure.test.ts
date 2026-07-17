@@ -53,21 +53,12 @@ vi.mock('@/composables/useSelectionStore', () => ({
   useSelectionStore: () => selectionStoreMock,
 }));
 
-vi.mock('@/api/mbdPipeApi', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/api/mbdPipeApi')>();
-  return {
-    ...actual,
-    getMbdPipeAnnotations: vi.fn(async () => ({ success: false, data: null })),
-  };
-});
-
 import {
   computeApproxNearestBetweenObjects,
   useDtxTools,
 } from './useDtxTools';
 import { useToolStore } from './useToolStore';
 
-import { getMbdPipeAnnotations } from '@/api/mbdPipeApi';
 import { DTXLayer } from '@/utils/three/dtx';
 
 function createLayerWithBoxes(distance = 3): DTXLayer {
@@ -129,16 +120,11 @@ async function flushAsyncToolWork(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function resetMbdPipeAnnotationsMock(): void {
-  vi.mocked(getMbdPipeAnnotations).mockResolvedValue({ success: false, data: null } as any);
-}
-
 describe('useDtxTools object measure helpers', () => {
   beforeEach(() => {
     selectedRefnos.value = [];
     selectedRefno.value = null;
     vi.clearAllMocks();
-    resetMbdPipeAnnotationsMock();
     const store = useToolStore();
     store.clearAll();
     store.setToolMode('none');
@@ -189,7 +175,6 @@ describe('useDtxTools object measure tree flow', () => {
     selectedRefnos.value = [];
     selectedRefno.value = null;
     vi.clearAllMocks();
-    resetMbdPipeAnnotationsMock();
     const store = useToolStore();
     store.clearAll();
     store.setToolMode('none');
@@ -261,70 +246,7 @@ describe('useDtxTools object measure tree flow', () => {
     expect(tools.statusText.value).toBe('请先显示这两个构件后再测量');
   });
 
-  it('管-管快速标注有 MBD 直管段数据时应使用外表面精确点生成尺寸', async () => {
-    vi.mocked(getMbdPipeAnnotations).mockImplementation(async (refno: string) => {
-      const normalized = String(refno).replace(/\//g, '_');
-      const isSource = normalized.endsWith('1001');
-      const x = isSource ? 0 : 200;
-      return {
-        success: true,
-        data: {
-          segments: [
-            {
-              id: isSource ? 'seg1' : 'seg2',
-              refno: isSource ? '24381_1001' : '24381_1002',
-              noun: 'PIPE',
-              arrive: [x, 0, 0],
-              leave: [x, 10, 0],
-              length: 10,
-              straight_length: 10,
-              outside_diameter: 100,
-            },
-          ],
-        },
-      } as any;
-    });
-
-    const store = useToolStore();
-    const layer = createLayerWithBoxes(3);
-    const hits = [
-      { objectId: 'o:24381_1001:0', point: new Vector3(0, 5, 0) },
-      { objectId: 'o:24381_1002:0', point: new Vector3(200, 5, 0) },
-    ];
-    const tools = useDtxTools({
-      dtxViewerRef: ref(createViewerStub() as any),
-      dtxLayerRef: ref(layer),
-      selectionRef: ref({
-        pickPoint: vi.fn(() => hits.shift() ?? null),
-      } as any),
-      overlayContainerRef: ref(null),
-      store,
-      compatViewerRef: ref(null),
-      requestRender: null,
-    });
-
-    tools.refreshReadyState();
-    store.setToolMode('measure_pipe_to_pipe');
-    await nextTick();
-
-    const canvas = createCanvasStub();
-    const event = createPointerEventStub();
-    tools.onCanvasPointerDown(canvas, event);
-    tools.onCanvasPointerUp(canvas, event);
-    await flushAsyncToolWork();
-
-    tools.onCanvasPointerDown(canvas, event);
-    tools.onCanvasPointerUp(canvas, event);
-    await flushAsyncToolWork();
-
-    expect(store.dimensions.value).toHaveLength(1);
-    expect(store.dimensions.value[0]?.origin.entityId).toBe('24381_1001');
-    expect(store.dimensions.value[0]?.target.entityId).toBe('24381_1002');
-    expect(store.dimensions.value[0]?.origin.worldPos[0]).toBeCloseTo(50, 6);
-    expect(store.dimensions.value[0]?.target.worldPos[0]).toBeCloseTo(150, 6);
-  });
-
-  it('管-管快速标注缺少 MBD 直管段数据时应退回 mesh 最近点并生成尺寸', async () => {
+  it('管-管快速标注在无管段数据时应退回 mesh 最近点并生成尺寸', async () => {
     const store = useToolStore();
     const layer = createLayerWithBoxes(3);
     const hits = [

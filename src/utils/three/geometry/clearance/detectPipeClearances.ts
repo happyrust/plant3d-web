@@ -2,19 +2,28 @@ import * as THREE from 'three';
 
 import { computePipeSegmentToPipeSegmentClearance } from './pipeClearance';
 
-import type { MbdPipeSegmentDto, MbdPipeClearanceDto, Vec3 } from '@/api/mbdPipeApi';
+import type { PipeClearanceDto, PipeSegmentDto } from '@/types/pipeGeometry';
+import type { Vec3 } from '@/types/vec3';
 
 export type PipePair = {
-  pipe1: MbdPipeSegmentDto
-  pipe2: MbdPipeSegmentDto
+  pipe1: PipeSegmentDto
+  pipe2: PipeSegmentDto
   bran1: string
   bran2: string
 }
+
+const DEFAULT_PIPE_OUTSIDE_DIAMETER_MM = 229;
 
 function areAxesWithinAngle(axis1: THREE.Vector3, axis2: THREE.Vector3, maxAngleDeg: number): boolean {
   if (axis1.lengthSq() < 1e-12 || axis2.lengthSq() < 1e-12) return false;
   const maxAngleRad = (Math.max(0, Math.min(180, maxAngleDeg)) * Math.PI) / 180;
   return Math.abs(axis1.clone().normalize().dot(axis2.clone().normalize())) >= Math.cos(maxAngleRad);
+}
+
+function resolveOutsideDiameter(segment: PipeSegmentDto): number {
+  const outsideDiameter = Number(segment.outside_diameter ?? NaN);
+  if (Number.isFinite(outsideDiameter) && outsideDiameter > 0) return outsideDiameter;
+  return DEFAULT_PIPE_OUTSIDE_DIAMETER_MM;
 }
 
 /**
@@ -25,11 +34,11 @@ function areAxesWithinAngle(axis1: THREE.Vector3, axis2: THREE.Vector3, maxAngle
  * @param maxAngleDeg - 最大夹角（度），默认 5
  */
 export function detectPipeClearances(
-  branches: Record<string, MbdPipeSegmentDto[]>,
+  branches: Record<string, PipeSegmentDto[]>,
   maxDistance = 500,
   maxAngleDeg = 5,
-): MbdPipeClearanceDto[] {
-  const clearances: MbdPipeClearanceDto[] = [];
+): PipeClearanceDto[] {
+  const clearances: PipeClearanceDto[] = [];
   const branKeys = Object.keys(branches);
 
   for (let i = 0; i < branKeys.length; i++) {
@@ -40,10 +49,12 @@ export function detectPipeClearances(
       const segs2 = branches[bran2]!;
 
       for (const seg1 of segs1) {
-        if (!seg1.arrive || !seg1.leave || !seg1.outside_diameter) continue;
+        if (!seg1.arrive || !seg1.leave) continue;
+        const outsideDiameter1 = resolveOutsideDiameter(seg1);
         
         for (const seg2 of segs2) {
-          if (!seg2.arrive || !seg2.leave || !seg2.outside_diameter) continue;
+          if (!seg2.arrive || !seg2.leave) continue;
+          const outsideDiameter2 = resolveOutsideDiameter(seg2);
 
           const start1 = new THREE.Vector3(seg1.arrive[0], seg1.arrive[1], seg1.arrive[2]);
           const end1 = new THREE.Vector3(seg1.leave[0], seg1.leave[1], seg1.leave[2]);
@@ -68,10 +79,10 @@ export function detectPipeClearances(
             pipe1Center: center1,
             pipe1Start: start1,
             pipe1End: end1,
-            pipe1Radius: seg1.outside_diameter / 2,
+            pipe1Radius: outsideDiameter1 / 2,
             pipe1Axis: axis1,
             pipe2Center: center2,
-            pipe2Radius: seg2.outside_diameter / 2,
+            pipe2Radius: outsideDiameter2 / 2,
             pipe2Axis: axis2,
             pipe2Start: start2,
             pipe2End: end2,
@@ -95,6 +106,12 @@ export function detectPipeClearances(
               ] as Vec3,
               distance: result.distance,
               text: `${Math.round(result.distance)}`,
+              layout_hint: {
+                pipe1_start: seg1.arrive,
+                pipe1_end: seg1.leave,
+                pipe2_start: seg2.arrive,
+                pipe2_end: seg2.leave,
+              },
             });
           }
         }

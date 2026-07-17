@@ -16,19 +16,16 @@ import UserAvatar from '@/components/user/UserAvatar.vue';
 import { useMenuMode } from '@/composables/useMenuMode';
 import { useModelProjects } from '@/composables/useModelProjects';
 import { useOnboardingGuide } from '@/composables/useOnboardingGuide';
-import { isMbdStandaloneUrl } from '@/utils/mbdStandaloneUrl';
 
-const isMbdStandaloneMode = isMbdStandaloneUrl(window.location.search);
 const { isRibbonMode, toggleMenuMode } = useMenuMode();
 const ribbonBarRef = ref<InstanceType<typeof RibbonBar> | null>(null);
 const ribbonCollapsed = computed(() => ribbonBarRef.value?.collapsed ?? false);
 const extensionHeight = computed(() => {
-  if (isMbdStandaloneMode) return 0;
   return isRibbonMode.value ? (ribbonCollapsed.value ? 32 : 120) : 48;
 });
 
 const urlParams = new URLSearchParams(window.location.search);
-const showBenchmark = !isMbdStandaloneMode && urlParams.get('benchmark') === 'true';
+const showBenchmark = urlParams.get('benchmark') === 'true';
 const requestedOutputProject = urlParams.get('output_project')?.trim() ?? '';
 const hasRequestedOutputProject = requestedOutputProject.length > 0;
 
@@ -37,7 +34,7 @@ const { currentProject, loadProjects, switchProjectById, projects } = useModelPr
 const onboarding = useOnboardingGuide();
 const embedBootstrapPending = ref(false);
 const showDashboardLayout = computed(() =>
-  !isMbdStandaloneMode && !currentProject.value && !embedBootstrapPending.value && !hasRequestedOutputProject,
+  !currentProject.value && !embedBootstrapPending.value && !hasRequestedOutputProject,
 );
 
 function isCurrentProjectMatched(projectId: string): boolean {
@@ -86,7 +83,7 @@ async function bootstrapEmbedProjectFromToken() {
 // 用户反馈：进入项目后不要自动弹向导，只在右上角"?"按钮（openGuideCenter）显式触发时再展示。
 // 保留 currentProject 的 watch 以备后续接入项目级初始化；当前不再调 autoStartIfNeeded。
 watch(currentProject, async (project) => {
-  if (project && !isMbdStandaloneMode) {
+  if (project) {
     await nextTick();
   }
 });
@@ -99,14 +96,14 @@ onMounted(() => {
 <template>
   <v-app class="h-screen">
     <ConfirmDialog />
-    <OnboardingOverlay v-if="!isMbdStandaloneMode" />
-    <ReviewGuideCenter v-if="!isMbdStandaloneMode" />
+    <OnboardingOverlay />
+    <ReviewGuideCenter />
     
     <DashboardLayout v-if="showDashboardLayout" />
     <div v-else-if="embedBootstrapPending" class="h-screen w-full" data-testid="embed-bootstrap-loading" />
     
     <template v-else>
-      <v-app-bar v-if="!isMbdStandaloneMode" class="ribbon-app-bar" :class="{ 'hierarchical-app-bar': !isRibbonMode }"
+      <v-app-bar class="ribbon-app-bar" :class="{ 'hierarchical-app-bar': !isRibbonMode }"
         :height="0"
         :extension-height="extensionHeight">
         <template #extension>

@@ -163,18 +163,6 @@ describe('spatialQueryRealBran helper', () => {
             }),
           });
         }
-        if (path.includes('/api/mbd/pipe/')) {
-          return createMockResponse({
-            status: 200,
-            body: JSON.stringify({
-              success: true,
-              data: {
-                segments: [{ id: 'seg:24381_145018:0' }],
-                fittings: [{ id: 'fitting:24381_145019' }],
-              },
-            }),
-          });
-        }
         return createMockResponse({
           status: 200,
           body: JSON.stringify({
@@ -192,10 +180,9 @@ describe('spatialQueryRealBran helper', () => {
     expect(result.attempts).toHaveLength(3);
   });
 
-  it('已知真实 branch fixture 在空间结果为空时不应依赖在线 MBD 接口', async () => {
+  it('已知真实 branch fixture 在空间结果为空时不应依赖已移除的 MBD 接口', async () => {
     process.env.SPATIAL_QUERY_E2E_REFNO = '24381_145712';
     const config = resolveSpatialQueryRealBranConfig();
-    let mbdCalls = 0;
     const request = {
       get: async (path: string) => {
         if (path.includes('/api/e3d/node/')) {
@@ -217,10 +204,6 @@ describe('spatialQueryRealBran helper', () => {
             }),
           });
         }
-        if (path.includes('/api/mbd/pipe/')) {
-          mbdCalls += 1;
-          return createMockResponse({ status: 500, body: '' });
-        }
         return createMockResponse({
           status: 200,
           body: JSON.stringify({
@@ -234,6 +217,5 @@ describe('spatialQueryRealBran helper', () => {
 
     const result = await probeSpatialQueryRadius(request as any, config);
     expect(result.selectedRadius).toBe(10000);
-    expect(mbdCalls).toBe(0);
   });
 });

@@ -1,19 +1,55 @@
 <template>
   <div v-if="open"
-    class="pointer-events-auto absolute right-14 top-24 z-[950] flex max-h-[82vh] w-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+    class="pointer-events-auto absolute right-14 top-24 z-[950] flex max-h-[82vh] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-[width]"
+    :class="isMiniMode ? 'w-[260px]' : 'w-[336px]'"
     @pointerdown.stop
     @wheel.stop>
-    <div class="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
-      <div>
-        <div class="font-ui text-base font-semibold text-gray-900">空间查询</div>
-        <div class="mt-0.5 text-[11px] text-gray-500">范围查询与距离查询</div>
+    <div class="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+      <div class="min-w-0">
+        <div class="font-ui text-sm font-semibold text-gray-900">空间查询</div>
+        <div v-if="!isMiniMode" class="mt-0.5 text-[11px] text-gray-500">范围查询与距离查询</div>
       </div>
-      <button type="button" class="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900" title="关闭" @click="closePanel">
-        <X class="h-4 w-4" />
-      </button>
+      <div class="flex items-center gap-1">
+        <button type="button"
+          class="rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+          :title="isMiniMode ? '展开面板' : '迷你模式'"
+          data-testid="spatial-query-mini-toggle"
+          @click="toggleMiniMode">
+          {{ isMiniMode ? '展开' : '迷你' }}
+        </button>
+        <button type="button" class="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900" title="关闭" @click="closePanel">
+          <X class="h-4 w-4" />
+        </button>
+      </div>
     </div>
 
-    <div class="flex flex-1 flex-col overflow-y-auto px-3 py-3">
+    <div v-if="isMiniMode" class="px-3 py-2.5">
+      <div class="rounded-lg border border-gray-100 bg-gray-50/70 p-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="font-ui text-sm font-semibold text-gray-900">空间查询</div>
+          <span class="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-600">{{ modeLabel }}</span>
+        </div>
+        <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
+          <div class="rounded-md bg-white px-2 py-1">
+            <div class="text-gray-400">半径</div>
+            <div class="font-mono font-semibold text-[#C84D00]">{{ radiusMetersText }} m</div>
+          </div>
+          <div class="rounded-md bg-white px-2 py-1">
+            <div class="text-gray-400">结果</div>
+            <div class="font-mono font-semibold text-gray-700">{{ miniResultText }}</div>
+          </div>
+        </div>
+        <div v-if="resultSet" class="mt-2 truncate text-[11px] text-gray-500">{{ resultBreakdown }}</div>
+        <button type="button"
+          class="mt-2 w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+          data-testid="spatial-query-mini-expand"
+          @click="expandFromMiniMode">
+          展开面板
+        </button>
+      </div>
+    </div>
+
+    <div v-else class="flex flex-1 flex-col overflow-y-auto px-3 py-3">
       <div class="flex flex-col gap-3">
         <div class="flex rounded-md bg-gray-100 p-1">
           <button type="button"
@@ -114,57 +150,7 @@
               </div>
             </div>
           </section>
-
-          <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
-            <div class="flex items-center justify-between">
-              <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">查询半径</div>
-              <div class="font-mono text-lg font-semibold text-[#C84D00]">
-                {{ radiusMetersText }} <span class="text-xs text-[#C84D00]/70">m</span>
-              </div>
-            </div>
-            <input :value="radiusMetersValue"
-              type="range"
-              :min="DISTANCE_RADIUS_MIN_M"
-              :max="DISTANCE_RADIUS_MAX_M"
-              :step="DISTANCE_RADIUS_STEP_M"
-              data-testid="radius-slider"
-              class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-[#FF6B00]"
-              @input="onRadiusSliderInput" />
-            <div class="mt-1 flex justify-between text-[10px] text-gray-400">
-              <span>{{ DISTANCE_RADIUS_MIN_M }} m</span>
-              <span>{{ DISTANCE_RADIUS_MAX_M }} m</span>
-            </div>
-            <div class="mt-2 flex flex-wrap gap-1.5">
-              <button v-for="preset in DISTANCE_RADIUS_PRESETS"
-                :key="preset"
-                type="button"
-                class="rounded-full border px-2.5 py-0.5 text-[11px] transition-colors"
-                :class="radiusMetersValue === preset ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
-                data-testid="radius-preset"
-                @click="setRadiusMeters(preset)">
-                {{ preset }} m
-              </button>
-            </div>
-          </section>
         </template>
-
-        <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
-          <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">查询形状</div>
-          <div class="mt-2 grid grid-cols-2 gap-1.5">
-            <button type="button"
-              class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
-              :class="draft.shape === 'sphere' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
-              @click="draft.shape = 'sphere'">
-              球形
-            </button>
-            <button type="button"
-              class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
-              :class="draft.shape === 'cube' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
-              @click="draft.shape = 'cube'">
-              立方体
-            </button>
-          </div>
-        </section>
 
         <section v-if="showCoordinateInputs" class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
           <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">中心坐标</div>
@@ -191,8 +177,8 @@
         </section>
 
         <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
-          <div class="grid gap-1.5" :class="draft.mode === 'range' ? 'grid-cols-2' : 'grid-cols-1'">
-            <label v-if="draft.mode === 'range'" class="text-xs text-gray-500">
+          <div class="flex items-center justify-between gap-3">
+            <label class="min-w-0 flex-1 text-xs text-gray-500">
               <span class="mb-1 block">查询半径 (m)</span>
               <input :value="radiusMetersValue"
                 type="number"
@@ -201,6 +187,61 @@
                 class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]"
                 @input="onRadiusMetersNumberInput" />
             </label>
+            <div class="shrink-0 text-right">
+              <div class="text-[11px] text-gray-400">当前值</div>
+              <div class="font-mono text-lg font-semibold text-[#C84D00]">
+                {{ radiusMetersText }} <span class="text-xs text-[#C84D00]/70">m</span>
+              </div>
+            </div>
+          </div>
+          <input :value="radiusMetersValue"
+            type="range"
+            :min="DISTANCE_RADIUS_MIN_M"
+            :max="DISTANCE_RADIUS_MAX_M"
+            :step="DISTANCE_RADIUS_STEP_M"
+            data-testid="radius-slider"
+            class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-[#FF6B00]"
+            @input="onRadiusSliderInput" />
+          <div class="mt-2 grid grid-cols-4 gap-1.5">
+            <button v-for="preset in DISTANCE_RADIUS_PRESETS"
+              :key="preset"
+              type="button"
+              class="rounded-full border px-2 py-1 text-[11px] transition-colors"
+              :class="radiusMetersValue === preset ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+              data-testid="radius-preset"
+              @click="setRadiusMeters(preset)">
+              {{ preset }} m
+            </button>
+          </div>
+        </section>
+
+        <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
+          <button type="button"
+            class="flex w-full items-center justify-between text-left"
+            data-testid="spatial-advanced-toggle"
+            :aria-expanded="advancedFiltersExpanded"
+            @click="advancedFiltersExpanded = !advancedFiltersExpanded">
+            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">更多条件</span>
+            <span class="text-[11px] text-gray-500">{{ advancedFiltersExpanded ? '收起' : '展开' }}</span>
+          </button>
+          <div v-if="advancedFiltersExpanded" class="mt-2 flex flex-col gap-2.5">
+            <section>
+              <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">查询形状</div>
+              <div class="mt-2 grid grid-cols-2 gap-1.5">
+                <button type="button"
+                  class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
+                  :class="draft.shape === 'sphere' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                  @click="draft.shape = 'sphere'">
+                  球形
+                </button>
+                <button type="button"
+                  class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
+                  :class="draft.shape === 'cube' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                  @click="draft.shape = 'cube'">
+                  立方体
+                </button>
+              </div>
+            </section>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">每页数量</span>
               <input v-model.number="draft.limit"
@@ -208,12 +249,6 @@
                 min="1"
                 class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
             </label>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
-          <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">过滤条件</div>
-          <div class="mt-2 flex flex-col gap-2.5">
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">Noun 类型（逗号分隔）</span>
               <input v-model="draft.nounText"
@@ -223,7 +258,7 @@
             </label>
             <div class="text-xs text-gray-500">
               <div class="mb-1 flex items-center justify-between">
-                <span>专业筛选</span>
+                <span>专业过滤</span>
                 <div class="flex items-center gap-2 text-[11px]">
                   <button type="button"
                     class="text-gray-500 transition-colors hover:text-[#C84D00] disabled:cursor-not-allowed disabled:opacity-50"
@@ -280,6 +315,10 @@
                 <input v-model="draft.onlyVisible" type="checkbox" />
                 <span>仅看当前可见</span>
               </label>
+              <label class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-600">
+                <input v-model="draft.includeNegative" type="checkbox" data-testid="include-negative-checkbox" />
+                <span>显示负实体</span>
+              </label>
             </div>
           </div>
         </section>
@@ -298,22 +337,47 @@
         </div>
 
         <section class="rounded-lg border border-gray-100 bg-white">
-          <div class="flex items-center justify-between border-b border-gray-100 px-3 py-2">
-            <div>
-              <div class="text-sm font-semibold text-gray-900">查询结果</div>
-              <div class="mt-0.5 text-[11px] text-gray-500">
-                {{ summaryText }}
+          <div class="border-b border-gray-100 px-3 py-2">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-gray-900">查询结果</div>
+                <div class="mt-0.5 text-[11px] text-gray-500">
+                  {{ summaryText }}
+                </div>
+                <div v-if="resultSet" class="mt-0.5 truncate text-[11px] text-gray-400">
+                  {{ resultBreakdown }}
+                </div>
               </div>
+              <button v-if="resultSet"
+                type="button"
+                class="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+                data-testid="spatial-results-toggle"
+                @click="resultsExpanded = !resultsExpanded">
+                {{ resultsExpanded ? '收起结果' : '查看结果' }}
+              </button>
             </div>
-            <button v-if="resultSet"
-              type="button"
-              class="rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-              @click="clearResults">
-              清空
-            </button>
+            <div v-if="resultSet" class="mt-2 grid grid-cols-3 gap-1.5">
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isQueryBusy"
+                @click="loadCurrentResults">
+                加载当前页
+              </button>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isQueryBusy"
+                @click="loadUnloadedResults">
+                只加载未加载
+              </button>
+              <button type="button"
+                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                @click="clearResults">
+                清空
+              </button>
+            </div>
           </div>
 
-          <div v-if="resultSet" class="border-b border-gray-100 px-3 py-2">
+          <div v-if="resultSet && resultsExpanded" class="border-b border-gray-100 px-3 py-2">
             <div class="grid grid-cols-2 gap-1.5">
               <button type="button" class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50" @click="showAll">
                 全部显示
@@ -326,18 +390,6 @@
               </button>
               <button type="button" class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50" @click="restoreAll">
                 恢复场景
-              </button>
-              <button type="button"
-                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isQueryBusy"
-                @click="loadCurrentResults">
-                加载当前页模型
-              </button>
-              <button type="button"
-                class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isQueryBusy"
-                @click="loadUnloadedResults">
-                只加载当前页未加载
               </button>
               <button type="button"
                 class="rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -359,11 +411,11 @@
             </div>
           </div>
 
-          <div v-if="resultCenterText" class="border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500" data-testid="spatial-result-center">
+          <div v-if="resultsExpanded && resultCenterText" class="border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500" data-testid="spatial-result-center">
             {{ resultCenterText }}
           </div>
 
-          <div v-if="resultSet?.warnings.length" class="space-y-1.5 border-b border-gray-100 px-3 py-2">
+          <div v-if="resultsExpanded && resultSet?.warnings.length" class="space-y-1.5 border-b border-gray-100 px-3 py-2">
             <div v-for="warning in resultSet.warnings"
               :key="warning"
               class="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
@@ -371,7 +423,7 @@
             </div>
           </div>
 
-          <div v-if="resultSet && resultSet.items.length > 0" class="border-b border-gray-100 px-3 py-2">
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="border-b border-gray-100 px-3 py-2">
             <div class="mb-2 flex items-center justify-between gap-2">
               <div>
                 <div class="text-xs font-semibold text-gray-900">房间列表</div>
@@ -428,11 +480,11 @@
             暂无结果，执行一次空间查询后会在这里按专业分组显示。
           </div>
 
-          <div v-else-if="resultSet && resultSet.items.length === 0 && !isQueryBusy" class="px-3 py-6 text-center text-xs text-gray-400">
+          <div v-else-if="resultsExpanded && resultSet && resultSet.items.length === 0 && !isQueryBusy" class="px-3 py-6 text-center text-xs text-gray-400">
             当前条件下没有匹配结果。
           </div>
 
-          <div v-if="resultSet && resultSet.items.length > 0" class="flex items-center justify-between border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500">
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="flex items-center justify-between border-b border-gray-100 px-3 py-2 text-[11px] text-gray-500">
             <div>
               每页 {{ resultSet.perPage }} 项 · 当前 {{ resultPageStart }}-{{ resultPageEnd }} / {{ resultSet.total }}
             </div>
@@ -455,7 +507,7 @@
             </div>
           </div>
 
-          <div v-if="resultSet && resultSet.items.length > 0" class="max-h-[280px] overflow-y-auto px-3 py-2.5">
+          <div v-if="resultsExpanded && resultSet && resultSet.items.length > 0" class="max-h-[280px] overflow-y-auto px-3 py-2.5">
             <div v-for="group in pagedResultGroups" :key="group.specValue" class="mb-3 last:mb-0">
               <div class="mb-1.5 flex items-center justify-between">
                 <div>
@@ -517,6 +569,13 @@
                         @click.stop="focusItem(item)">
                         <ArrowUpRight class="h-4 w-4" />
                       </button>
+                      <button v-if="canAnnotatePipeDistance(item)"
+                        type="button"
+                        class="rounded-md p-1 text-gray-500 hover:bg-white hover:text-gray-800"
+                        title="按管径净距标注"
+                        @click.stop="annotatePipeDistance(item)">
+                        <Ruler class="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 </button>
@@ -532,12 +591,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Search, X } from 'lucide-vue-next';
+import { ArrowUpRight, Eye, EyeOff, Loader2, MapPinned, MousePointerClick, Ruler, Search, X } from 'lucide-vue-next';
+import { Vector3, type Matrix4 } from 'three';
 
+import type { Vec3 } from '@/types/vec3';
 import type { SpatialQueryMode, SpatialQueryResultGroup, SpatialQueryResultItem } from '@/types/spatialQuery';
 
+import { findNounByRefnoAcrossAllDbnos } from '@/composables/useDbnoInstancesDtxLoader';
+import { usePipeDistanceStore } from '@/composables/usePipeDistanceStore';
 import { resolveContainingRoomInfo, useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
 import { useSpatialQuery } from '@/composables/useSpatialQuery';
+import { useViewerContext } from '@/composables/useViewerContext';
+import { emitCommand } from '@/ribbon/commandBus';
 import {
   SITE_SPEC_OPTIONS_WITH_UNKNOWN,
   getSpecBadgeStyle,
@@ -552,8 +617,16 @@ const emit = defineEmits<{
   'update:open': [value: boolean];
 }>();
 
+type ViewerWithDtxLayerMatrix = {
+  __dtxLayer?: {
+    getGlobalModelMatrix?: () => Matrix4 | null;
+  };
+};
+
 const spatialQuery = useSpatialQuery();
 const roomInfoPanel = useRoomInfoPanel();
+const pipeDistanceStore = usePipeDistanceStore();
+const viewerContext = useViewerContext();
 const {
   draft,
   status,
@@ -582,9 +655,23 @@ const DISTANCE_RADIUS_STEP_M = 0.1;
 const DISTANCE_RADIUS_PRESETS = [1, 5, 10, 50] as const;
 
 const isQueryBusy = computed(() => ['resolving-center', 'querying-local', 'querying-server', 'merging-results', 'loading-model-for-result', 'loading-results-batch', 'flying-to-result'].includes(status.value));
-const specOptions = SITE_SPEC_OPTIONS_WITH_UNKNOWN;
+const specOptions = computed(() => {
+  const resultSpecOptions = resultSet.value?.filterOptions?.specValues ?? [];
+  if (resultSpecOptions.length === 0) return SITE_SPEC_OPTIONS_WITH_UNKNOWN;
+  return resultSpecOptions.map((option) => {
+    const fallback = SITE_SPEC_OPTIONS_WITH_UNKNOWN.find((item) => item.value === option.value);
+    return {
+      value: option.value,
+      label: `${fallback?.label ?? getSpecValueShortName(option.value)}(${option.count})`,
+      fullLabel: `${fallback?.fullLabel ?? option.label}，${option.count} 项`,
+    };
+  });
+});
 const selectedSpecValues = computed(() => new Set(draft.specValues));
 const copyStatus = ref<string | null>(null);
+const isMiniMode = ref(false);
+const advancedFiltersExpanded = ref(false);
+const resultsExpanded = ref(false);
 const roomListLoading = ref(false);
 const roomListError = ref<string | null>(null);
 const roomListRows = ref<SpatialRoomListRow[]>([]);
@@ -599,9 +686,14 @@ type SpatialRoomListRow = {
   sourceRefnos: string[];
 };
 
-const allSpecSelected = computed(() => draft.specValues.length === specOptions.length);
+const allSpecSelected = computed(() => draft.specValues.length === specOptions.value.length);
 const radiusMetersValue = computed(() => Number((draft.radius / METERS_TO_MM).toFixed(3)));
 const radiusMetersText = computed(() => formatMeters(radiusMetersValue.value));
+const modeLabel = computed(() => (draft.mode === 'range' ? '范围查询' : '距离查询'));
+const miniResultText = computed(() => {
+  if (!resultSet.value) return '暂无';
+  return `${resultSet.value.total} 项`;
+});
 
 function formatMeters(value: number): string {
   if (!Number.isFinite(value)) return '0';
@@ -615,7 +707,7 @@ function setRadiusMeters(value: number): void {
 }
 
 function selectAllSpecs(): void {
-  draft.specValues = specOptions.map((option) => option.value);
+  draft.specValues = specOptions.value.map((option) => option.value);
 }
 
 function clearSpecs(): void {
@@ -810,6 +902,14 @@ function closePanel() {
   emit('update:open', false);
 }
 
+function toggleMiniMode() {
+  isMiniMode.value = !isMiniMode.value;
+}
+
+function expandFromMiniMode() {
+  isMiniMode.value = false;
+}
+
 function setResultPage(page: number) {
   if (!Number.isFinite(page)) return;
   const nextPage = Math.min(Math.max(Math.floor(page), 1), resultTotalPages.value);
@@ -818,6 +918,7 @@ function setResultPage(page: number) {
 }
 
 function runQuery() {
+  resultsExpanded.value = false;
   void submitQuery();
 }
 
@@ -869,6 +970,41 @@ function focusItem(item: SpatialQueryResultItem) {
 
 function toggleVisibility(item: SpatialQueryResultItem) {
   toggleResultVisible(item);
+}
+
+function normalizePipeDistanceRefno(refno: string): string {
+  return String(refno || '').trim().replace(/\//g, '_');
+}
+
+function createPipeDistanceSceneTransformPoint(): ((point: Vec3) => Vec3) | undefined {
+  const matrix = (viewerContext.viewerRef.value as ViewerWithDtxLayerMatrix | null)?.__dtxLayer?.getGlobalModelMatrix?.();
+  if (!matrix) return undefined;
+  return (point: Vec3): Vec3 => {
+    const p = new Vector3(point[0], point[1], point[2]).applyMatrix4(matrix);
+    return [p.x, p.y, p.z];
+  };
+}
+
+function canAnnotatePipeDistance(item: SpatialQueryResultItem): boolean {
+  if (draft.mode !== 'distance' || draft.distanceCenterSource !== 'refno') return false;
+  const sourceRefno = normalizePipeDistanceRefno(draft.refno);
+  const targetRefno = normalizePipeDistanceRefno(item.refno);
+  if (!sourceRefno || !targetRefno || sourceRefno === targetRefno) return false;
+  const targetNoun = String(item.noun || findNounByRefnoAcrossAllDbnos(targetRefno) || '').toUpperCase();
+  if (targetNoun !== 'BRAN') return false;
+  const sourceNoun = String(findNounByRefnoAcrossAllDbnos(sourceRefno) || '').toUpperCase();
+  return !sourceNoun || sourceNoun === 'BRAN';
+}
+
+async function annotatePipeDistance(item: SpatialQueryResultItem) {
+  const sourceRefno = normalizePipeDistanceRefno(draft.refno);
+  const targetRefno = normalizePipeDistanceRefno(item.refno);
+  if (!sourceRefno || !targetRefno || sourceRefno === targetRefno) return;
+  pipeDistanceStore.showAnnotations.value = true;
+  await pipeDistanceStore.autoDetectBrans([sourceRefno, targetRefno], {
+    transformPoint: createPipeDistanceSceneTransformPoint(),
+  });
+  emitCommand('panel.pipeDistance.open');
 }
 
 function showAll() {

@@ -40,6 +40,7 @@ const stubState = {
     keyword: '',
     onlyLoaded: false,
     onlyVisible: false,
+    includeNegative: false,
     specValues: [],
     limit: 200,
   }) as DraftState,
@@ -105,6 +106,7 @@ function resetDraft() {
     keyword: '',
     onlyLoaded: false,
     onlyVisible: false,
+    includeNegative: false,
     specValues: [],
     limit: 200,
   };
@@ -151,6 +153,7 @@ function makeResultSet(count: number, options: { page?: number; perPage?: number
         keyword: '',
         onlyLoaded: false,
         onlyVisible: false,
+        includeNegative: false,
         specValues: [],
       },
       limit: perPage,
@@ -177,6 +180,14 @@ function makeResultSet(count: number, options: { page?: number; perPage?: number
       },
     ],
   };
+}
+
+async function expandResults(host: HTMLElement) {
+  const toggle = host.querySelector('[data-testid="spatial-results-toggle"]') as HTMLButtonElement | null;
+  expect(toggle).toBeTruthy();
+  expect(toggle?.textContent).toContain('查看结果');
+  toggle?.click();
+  await nextTick();
 }
 
 describe('SpatialQueryDrawer (distance 模式)', () => {
@@ -275,15 +286,91 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     unmount();
   });
 
-  it('distance 模式下不显示半径 number input（只留每页数量）', async () => {
+  it('迷你模式展示紧凑摘要并可展开恢复完整面板', async () => {
+    stubState.resultSet.value = makeResultSet(3);
+
     const { host, unmount } = mountDrawer();
     await nextTick();
 
-    const allLabels = Array.from(host.querySelectorAll('label')) as HTMLLabelElement[];
-    const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (m)'));
-    expect(radiusLabel).toBeUndefined();
-    const limitLabel = allLabels.find((label) => label.textContent?.includes('每页数量'));
-    expect(limitLabel).toBeDefined();
+    const miniToggle = host.querySelector('[data-testid="spatial-query-mini-toggle"]') as HTMLButtonElement | null;
+    expect(miniToggle).toBeTruthy();
+    miniToggle?.click();
+    await nextTick();
+
+    expect(host.textContent).toContain('空间查询');
+    expect(host.textContent).toContain('距离查询');
+    expect(host.textContent).toContain('半径');
+    expect(host.textContent).toContain('1 m');
+    expect(host.textContent).toContain('3 项');
+    expect(host.querySelector('[data-testid="pick-from-selection"]')).toBeNull();
+
+    const expandButton = host.querySelector('[data-testid="spatial-query-mini-expand"]') as HTMLButtonElement | null;
+    expect(expandButton).toBeTruthy();
+    expandButton?.click();
+    await nextTick();
+
+    expect(host.querySelector('[data-testid="pick-from-selection"]')).toBeTruthy();
+
+    unmount();
+  });
+
+  it('更多条件默认折叠，展开后显示查询形状、每页数量和过滤项', async () => {
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    expect(host.textContent).toContain('更多条件');
+    expect(host.textContent).not.toContain('查询形状');
+    expect(host.textContent).not.toContain('每页数量');
+    expect(host.textContent).not.toContain('Noun 类型');
+    expect(host.textContent).not.toContain('关键字');
+    expect(host.textContent).not.toContain('专业过滤');
+
+    const advancedToggle = host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement | null;
+    expect(advancedToggle).toBeTruthy();
+    expect(advancedToggle?.getAttribute('aria-expanded')).toBe('false');
+    advancedToggle?.click();
+    await nextTick();
+
+    expect(advancedToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.textContent).toContain('查询形状');
+    expect(host.textContent).toContain('每页数量');
+    expect(host.textContent).toContain('Noun 类型');
+    expect(host.textContent).toContain('关键字');
+    expect(host.textContent).toContain('专业过滤');
+    expect(host.textContent).toContain('显示负实体');
+    const includeNegativeCheckbox = host.querySelector('[data-testid="include-negative-checkbox"]') as HTMLInputElement | null;
+    expect(includeNegativeCheckbox).toBeTruthy();
+    expect(includeNegativeCheckbox?.checked).toBe(false);
+
+    unmount();
+  });
+
+  it('查询结果数据中的过滤选项会驱动专业过滤项', async () => {
+    stubState.resultSet.value = {
+      ...makeResultSet(2),
+      filterOptions: {
+        includeNegative: false,
+        nouns: [
+          { value: 'PIPE', count: 8, isNegative: false },
+        ],
+        specValues: [
+          { value: 1, count: 8, label: '管道系统' },
+          { value: 3, count: 2, label: '仪表系统' },
+        ],
+      },
+    };
+
+    const { host, unmount } = mountDrawer();
+    await nextTick();
+
+    const advancedToggle = host.querySelector('[data-testid="spatial-advanced-toggle"]') as HTMLButtonElement | null;
+    advancedToggle?.click();
+    await nextTick();
+
+    expect(host.textContent).toContain('管道(8)');
+    expect(host.textContent).toContain('仪表(2)');
+    expect(host.textContent).not.toContain('电气');
+    expect(host.textContent).not.toContain('暖通');
 
     unmount();
   });
@@ -300,7 +387,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     expect(pickButton).toBeNull();
 
     const slider = host.querySelector('[data-testid="radius-slider"]');
-    expect(slider).toBeNull();
+    expect(slider).toBeTruthy();
 
     const allLabels = Array.from(host.querySelectorAll('label')) as HTMLLabelElement[];
     const radiusLabel = allLabels.find((label) => label.textContent?.includes('查询半径 (m)'));
@@ -319,6 +406,13 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
+
+    expect(host.textContent).toContain('共 25 项，当前页 20 项');
+    expect(host.textContent).toContain('查看结果');
+    expect(host.textContent).not.toContain('每页 20 项');
+    expect(host.textContent).not.toContain('24381_100001');
+
+    await expandResults(host);
 
     expect(host.textContent).toContain('每页 20 项');
     expect(host.textContent).toContain('当前 1-20 / 25');
@@ -362,6 +456,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
+    await expandResults(host);
 
     expect(host.textContent).toContain('中心 123, 568, 910');
     expect(host.textContent).toContain('world_transform');
@@ -387,6 +482,10 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     await nextTick();
 
     expect(host.textContent).toContain('共 12 项，当前页 3 项，已加载 1 项，未加载 2 项');
+    expect(host.textContent).not.toContain('服务端还有更多结果');
+
+    await expandResults(host);
+
     expect(host.textContent).toContain('服务端还有更多结果');
     expect(host.textContent).toContain('服务端候选集已截断');
 
@@ -400,6 +499,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
+    await expandResults(host);
 
     const copyButton = host.querySelector('[data-testid="copy-current-page-refnos"]') as HTMLButtonElement | null;
     expect(copyButton).toBeTruthy();
@@ -424,6 +524,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
+    await expandResults(host);
 
     const copyButton = host.querySelector('[data-testid="copy-all-returned-refnos"]') as HTMLButtonElement | null;
     expect(copyButton).toBeTruthy();
@@ -442,11 +543,11 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
     await nextTick();
 
     const allButtons = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
-    allButtons.find((button) => button.textContent?.includes('加载当前页模型'))?.click();
+    allButtons.find((button) => button.textContent?.includes('加载当前页'))?.click();
     await nextTick();
     expect(loadResults).toHaveBeenCalledWith({ flyTo: true });
 
-    allButtons.find((button) => button.textContent?.includes('只加载当前页未加载'))?.click();
+    allButtons.find((button) => button.textContent?.includes('只加载未加载'))?.click();
     await nextTick();
     expect(loadResults).toHaveBeenCalledWith({ onlyUnloaded: true, flyTo: true });
 
@@ -458,6 +559,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
+    await expandResults(host);
 
     const allButtons = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
     allButtons.find((button) => button.textContent?.includes('全部显示'))?.click();
@@ -479,6 +581,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
+    await expandResults(host);
 
     const resultRow = Array.from(host.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('24381_100001')) as HTMLButtonElement | undefined;
@@ -503,6 +606,7 @@ describe('SpatialQueryDrawer (distance 模式)', () => {
 
     const { host, unmount } = mountDrawer();
     await nextTick();
+    await expandResults(host);
 
     const visibilityButton = host.querySelector('button[title="隐藏"]') as HTMLButtonElement | null;
     expect(visibilityButton).toBeTruthy();

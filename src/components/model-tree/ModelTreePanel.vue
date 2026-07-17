@@ -1366,6 +1366,25 @@ async function showNode() {
   closeContextMenu();
 }
 
+async function regenerateNode() {
+  if (!contextNodeId.value || isRoomTree.value || !modelGenerationState.value) return;
+  const id = normalizeRefnoKeyLike(contextNodeId.value);
+  if (!isRefnoLike(id)) return;
+  closeContextMenu();
+  if (!window.confirm(`确认重新生成 ${id} 及其模型子树？`)) return;
+
+  setNodeLoading(id, true);
+  try {
+    const success = await modelGenerationState.value.showModelByRefno(id, {
+      flyTo: true,
+      regenerate: true,
+    });
+    if (success) await pdmsTree.setVisible(id, true);
+  } finally {
+    setNodeLoading(id, false);
+  }
+}
+
 function hideNode() {
   if (!contextNodeId.value) return;
   setVisible(contextNodeId.value, false);
@@ -1427,24 +1446,7 @@ const contextNodeCanShowRoom = computed(() => {
   return !!id && !!treeNodeRefno(id);
 });
 
-// MBD 标注：右键菜单可用的 noun 类型
-const MBD_NOUNS = new Set(['BRAN', 'HANG', 'PIPE']);
-
-const contextNodeCanMbd = computed(() => {
-  if (isRoomTree.value) return false;
-  const id = contextNodeId.value;
-  if (!id || !isRefnoLike(id)) return false;
-  const node = pdmsTree.nodesById.value[id];
-  return !!node && MBD_NOUNS.has(node.type);
-});
-
-function generateMbd() {
-  if (!contextNodeId.value) return;
-  if (isRefnoLike(contextNodeId.value)) {
-    toolStore.requestMbdPipeAnnotation(contextNodeId.value, { displayMode: 'full' });
-  }
-  closeContextMenu();
-}
+// MBD 标注：右键菜单已移除
 
 function onSearchEnter(value: string) {
   const trimmed = value.trim();
@@ -1860,6 +1862,13 @@ function onSearchEnter(value: string) {
           @click="hideNode">
           隐藏
         </button>
+        <button v-if="!isRoomTree && contextNodeId && isRefnoLike(contextNodeId)" type="button"
+          data-testid="model-tree-regenerate-model"
+          :data-refno="contextNodeId"
+          class="w-full rounded px-2 py-1 text-left text-sm text-amber-700 hover:bg-muted"
+          @click="regenerateNode">
+          重新生成模型
+        </button>
         <div class="my-1 h-px bg-border" />
         <button type="button"
           class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
@@ -1882,16 +1891,6 @@ function onSearchEnter(value: string) {
             class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
             @click="showContainingRoomFromContext(true)">
             显示所在房间模型
-          </button>
-        </template>
-        <template v-if="contextNodeCanMbd">
-          <div class="my-1 h-px bg-border" />
-          <button type="button"
-            data-testid="model-tree-generate-mbd"
-            :data-refno="contextNodeId || ''"
-            class="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-            @click="generateMbd">
-            生成 MBD 标注
           </button>
         </template>
       </div>

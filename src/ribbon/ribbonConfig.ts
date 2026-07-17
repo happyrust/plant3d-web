@@ -167,6 +167,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         id: 'measurement.manage',
         label: '管理',
         items: [
+          { kind: 'button', id: 'panel.pipeDistance', label: '管道距离', icon: 'activity', commandId: 'panel.pipeDistance' },
           { kind: 'button', id: 'measurement.clear', label: '清空', icon: 'trash', commandId: 'measurement.clear' },
         ],
       },
@@ -242,68 +243,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
     ],
   },
   {
-    id: 'mbd',
-    label: 'MBD',
-    groups: [
-      {
-        id: 'mbd.pipe',
-        label: '管道标注',
-        items: [
-          { kind: 'button', id: 'panel.mbdPipe', label: '管道标注', icon: 'ruler', commandId: 'panel.mbdPipe' },
-          { kind: 'button', id: 'mbd.generate', label: '生成标注', icon: 'plus', commandId: 'mbd.generate' },
-          { kind: 'button', id: 'panel.pipeDistance', label: '管道距离', icon: 'activity', commandId: 'panel.pipeDistance' },
-        ],
-      },
-      {
-        id: 'mbd.annotation',
-        label: '其他标注',
-        items: [
-          {
-            kind: 'stack',
-            id: 'mbd.annotation.stack',
-            items: [
-              { kind: 'button', id: 'mbd.weld', label: '焊缝', icon: 'zap', commandId: 'mbd.weld' },
-              { kind: 'button', id: 'mbd.slope', label: '坡度', icon: 'trending_up', commandId: 'mbd.slope' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'mbd.display',
-        label: '显示控制',
-        items: [
-          {
-            kind: 'stack',
-            id: 'mbd.display.left',
-            items: [
-              { kind: 'button', id: 'mbd.segments', label: '管段线', icon: 'spline', commandId: 'mbd.segments' },
-              { kind: 'button', id: 'mbd.flow_direction', label: '流向', icon: 'trending_up', commandId: 'mbd.flow_direction' },
-              { kind: 'button', id: 'mbd.labels', label: '文字标签', icon: 'file_text', commandId: 'mbd.labels' },
-            ],
-          },
-          {
-            kind: 'stack',
-            id: 'mbd.display.right',
-            items: [{ kind: 'button', id: 'mbd.toggle_all', label: '全部显隐', icon: 'eye', commandId: 'mbd.toggle_all' }],
-          },
-        ],
-      },
-      {
-        id: 'mbd.actions',
-        label: '操作',
-        items: [
-          { kind: 'button', id: 'mbd.flyTo', label: '飞行定位', icon: 'locate', commandId: 'mbd.flyTo' },
-          { kind: 'button', id: 'mbd.clear', label: '清除', icon: 'trash', commandId: 'mbd.clear' },
-        ],
-      },
-      {
-        id: 'mbd.config',
-        label: '配置',
-        items: [{ kind: 'button', id: 'mbd.settings', label: '标注设置', icon: 'settings', commandId: 'mbd.settings' }],
-      },
-    ],
-  },
-  {
     id: 'debug',
     label: '调试',
     groups: [
@@ -327,6 +266,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'task.dataParsing', label: '数据解析', icon: 'database', commandId: 'task.createDataParsing' },
           { kind: 'button', id: 'task.modelGen', label: '模型生成', icon: 'cube', commandId: 'task.createModelGeneration' },
           { kind: 'button', id: 'task.incrementalUpdate', label: '增量更新', icon: 'activity', commandId: 'panel.incrementalUpdate' },
+          { kind: 'button', id: 'task.modelVersionCompare', label: '版本对比', icon: 'compare', commandId: 'panel.modelVersionCompare' },
           { kind: 'button', id: 'task.modelExport', label: '导出模型', icon: 'download', commandId: 'task.createModelExport' },
         ],
       },
@@ -348,7 +288,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         label: '样式',
         items: [
           { kind: 'button', id: 'settings.annotationStyle', label: '批注样式', icon: 'settings', commandId: 'annotation.settings' },
-          { kind: 'button', id: 'settings.mbdAnnotationStyle', label: 'MBD标注', icon: 'settings', commandId: 'mbd.settings' },
         ],
       },
     ],
