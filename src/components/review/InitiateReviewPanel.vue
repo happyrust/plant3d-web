@@ -1009,7 +1009,7 @@ function closePanel() {
         <p class="mt-1">状态：{{ restoredTaskSummary.status }} · 当前节点：{{ restoredTaskSummary.currentNode }}</p>
       </div>
       <div v-else-if="showDebugUi && embedModeParams.isEmbedMode && embedLandingState?.restoreStatus === 'missing'"
-        class="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        class="rounded-[8px] border border-warning bg-warning-subtle px-3 py-2 text-xs text-warning"
         data-testid="designer-restored-task-missing">
         当前 form_id 尚未绑定内部任务，可继续在此创建或补齐编校审数据。
       </div>

@@ -192,6 +192,20 @@ const HarnessRoot = defineComponent({
       allowReviewActions: true,
     };
 
+    const workspaceProps = {
+      role: 'designer' as const,
+      items,
+      summary,
+      activeFilter: 'all' as const,
+      selectedAnnotation: items[0] ?? null,
+      linkedMeasurements: [],
+      confirmNote: '',
+      unsavedAnnotationCount: 0,
+      unsavedMeasurementCount: 0,
+      canConfirm: false,
+      confirmSaving: false,
+    };
+
     return () => h('div', [
       h(Section, { title: '批注表格 · wide 档（排序高亮 / 选中行 / 行内编辑）', width: 1150, sectionId: 'table-wide' }, {
         default: () => h(AnnotationTableView, tableProps),
@@ -200,26 +214,23 @@ const HarnessRoot = defineComponent({
         default: () => h(AnnotationTableView, tableProps),
       }),
       h(Section, { title: '批注工作区 · list 布局（选中行高亮）', width: 720, sectionId: 'workspace-list' }, {
-        default: () => h(AnnotationWorkspace, {
-          role: 'designer' as const,
-          items,
-          summary,
-          activeFilter: 'all' as const,
-          selectedAnnotation: items[0] ?? null,
-          linkedMeasurements: [],
-          confirmNote: '',
-          unsavedAnnotationCount: 0,
-          unsavedMeasurementCount: 0,
-          canConfirm: false,
-          confirmSaving: false,
-          layout: 'list' as const,
-        }),
+        default: () => h(AnnotationWorkspace, { ...workspaceProps, layout: 'list' as const }),
+      }),
+      h(Section, { title: '批注工作区 · detail 布局（选中批注 + 处理引导横幅）', width: 720, sectionId: 'workspace-detail' }, {
+        default: () => h(AnnotationWorkspace, { ...workspaceProps, layout: 'detail' as const }),
       }),
       h(Section, { title: '校审意见时间线 · normal 档', width: 640, sectionId: 'timeline-normal' }, {
         default: () => h(ReviewCommentsTimeline, { ...timelineProps, density: 'normal' as const }),
       }),
       h(Section, { title: '校审意见时间线 · dock 档', width: 520, sectionId: 'timeline-dock' }, {
         default: () => h(ReviewCommentsTimeline, { ...timelineProps, density: 'dock' as const }),
+      }),
+      h(Section, { title: '校审意见时间线 · 上下文警示（formId 无 taskId）', width: 640, sectionId: 'timeline-warning' }, {
+        default: () => h(ReviewCommentsTimeline, {
+          ...timelineProps,
+          contextFormId: 'FORM-HARNESS-46',
+          density: 'normal' as const,
+        }),
       }),
     ]);
   },

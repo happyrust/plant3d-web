@@ -193,8 +193,8 @@ function handleOverlayClick(e: MouseEvent) {
 
           <!-- 操作提示（目标元素不存在时显示） -->
           <div v-if="isFallbackMode && guide.currentStep.value?.actionHint"
-            class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-start gap-2">
-            <AlertTriangle class="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+            class="mb-3 rounded-lg border border-warning bg-warning-subtle px-3 py-2 text-xs text-warning flex items-start gap-2">
+            <AlertTriangle class="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
             <span>{{ guide.currentStep.value.actionHint }}</span>
           </div>
           <div v-else-if="isFallbackMode"

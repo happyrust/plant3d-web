@@ -770,7 +770,7 @@ function canEditComment(comment: AnnotationComment): boolean {
                 :placeholder="reviewActionPlaceholder" />
             </div>
             <div v-if="reviewContextWarning"
-              class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700"
+              class="mt-2 rounded-md border border-warning bg-warning-subtle px-3 py-2 text-[11px] text-warning"
               data-testid="review-actions-context-warning">
               {{ reviewContextWarning }}
             </div>

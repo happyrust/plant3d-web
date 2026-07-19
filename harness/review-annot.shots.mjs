@@ -21,7 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const outDir = resolve(__dirname, '..', 'scripts', 'pen-preview', 'out-review-annot');
 mkdirSync(outDir, { recursive: true });
 
-const SECTIONS = ['table-wide', 'table-compact', 'workspace-list', 'timeline-normal', 'timeline-dock'];
+const SECTIONS = ['table-wide', 'table-compact', 'workspace-list', 'workspace-detail', 'timeline-normal', 'timeline-dock', 'timeline-warning'];
 
 const browser = await chromium.launch();
 try {

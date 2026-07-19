@@ -348,9 +348,9 @@ watch(
         <div class="text-xs text-slate-400">当前批注</div>
         <div class="mt-2 text-2xl font-semibold text-slate-950">{{ summary.total }}</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 bg-amber-50 px-4 py-3">
-        <div class="text-xs text-amber-500">待处理</div>
-        <div class="mt-2 text-2xl font-semibold text-amber-700">{{ summary.pending }}</div>
+      <div class="rounded-2xl border border-slate-200 bg-warning-subtle px-4 py-3">
+        <div class="text-xs text-warning">待处理</div>
+        <div class="mt-2 text-2xl font-semibold text-warning">{{ summary.pending }}</div>
       </div>
       <div class="rounded-2xl border border-slate-200 bg-rose-50 px-4 py-3">
         <div class="text-xs text-rose-500">原则错误</div>
@@ -547,7 +547,7 @@ watch(
               </button>
             </div>
 
-            <div class="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"
+            <div class="border border-warning bg-warning-subtle px-3 py-2 text-xs leading-5 text-warning"
               :class="isDockDensity ? 'mt-1 rounded-md px-2 py-1 text-[11px] leading-4' : 'mt-4 rounded-2xl'">
               <AlertCircle class="mr-1 inline h-3.5 w-3.5" />
               {{ isDockDensity ? '先处理批注，再做任务流转。' : '当前批注处理与任务流转分离；请先完成单条批注处理，再执行底部任务流转。' }}
