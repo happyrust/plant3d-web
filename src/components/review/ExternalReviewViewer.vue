@@ -85,7 +85,7 @@ async function loadUrl() {
           allow="fullscreen" />
         <div v-else-if="loadError" class="flex h-full items-center justify-center">
           <div class="text-center">
-            <p class="text-sm text-red-600">{{ loadError }}</p>
+            <p class="text-sm text-danger">{{ loadError }}</p>
             <button type="button"
               class="mt-3 rounded-md border px-4 py-2 text-sm hover:bg-gray-50"
               @click="loadUrl">
@@ -94,7 +94,7 @@ async function loadUrl() {
           </div>
         </div>
         <div v-else class="flex h-full items-center justify-center">
-          <Loader2 class="h-6 w-6 animate-spin text-blue-500" />
+          <Loader2 class="h-6 w-6 animate-spin text-brand" />
           <span class="ml-3 text-sm text-muted-foreground">正在获取校审地址...</span>
         </div>
       </div>

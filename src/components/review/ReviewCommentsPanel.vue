@@ -352,7 +352,7 @@ function formatCommentTime(timestamp: number): string {
                         <Edit3 class="h-full w-full" />
                       </button>
                       <button type="button"
-                        class="h-5 w-5 rounded p-0.5 text-destructive hover:bg-red-100 dark:hover:bg-red-900"
+                        class="h-5 w-5 rounded p-0.5 text-destructive hover:bg-danger/10"
                         title="删除"
                         @click="deleteComment(comment.id)">
                         <Trash2 class="h-full w-full" />
