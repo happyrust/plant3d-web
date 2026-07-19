@@ -528,7 +528,7 @@ describe('AnnotationTableView', () => {
 
     expect(activeRow?.getAttribute('aria-selected')).toBe('true');
     expect(otherRow?.getAttribute('aria-selected')).toBe('false');
-    expect(activeRow?.className).toContain('bg-amber-50');
+    expect(activeRow?.className).toContain('bg-brand-subtle');
     expect(activeRow?.className).toContain('ring-1');
 
     destroy();

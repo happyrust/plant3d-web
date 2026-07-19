@@ -687,7 +687,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           :data-testid="`annotation-table-row-${item.id}`"
           class="flex items-center h-16 border-b border-slate-100 px-4 cursor-pointer transition-colors"
           :class="[
-            isActiveRow(item) ? 'bg-amber-50 ring-1 ring-amber-300' : 'hover:bg-amber-50',
+            isActiveRow(item) ? 'bg-brand-subtle ring-1 ring-brand' : 'hover:bg-brand-subtle',
             localIdx % 2 === 1 && !isActiveRow(item) ? 'bg-slate-50/40' : '',
           ]"
           @click="handleRowClick(item)"
@@ -823,7 +823,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           :aria-selected="isActiveRow(item)"
           :data-testid="`annotation-table-row-${item.id}`"
           class="rounded-lg border bg-white p-3 cursor-pointer transition-shadow hover:shadow-sm"
-          :class="isActiveRow(item) ? 'border-amber-400 ring-1 ring-amber-300' : 'border-slate-200'"
+          :class="isActiveRow(item) ? 'border-brand ring-1 ring-brand' : 'border-slate-200'"
           @click="handleRowClick(item)"
           @dblclick="handleRowDblClick(item)"
           @contextmenu="handleRowContextMenu($event, item)"
