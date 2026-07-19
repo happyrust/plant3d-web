@@ -10,7 +10,7 @@
       "clip": true,
       "width": 800,
       "height": 1100,
-      "fill": "#FFFFFF",
+      "fill": "#ffffff",
       "layout": "none"
     },
     {
@@ -20,18 +20,21 @@
       "y": 0,
       "name": "2D管道草图面板",
       "width": 340,
-      "fill": "#FFFFFF",
+      "fill": "#ffffff",
       "cornerRadius": 8,
       "stroke": {
         "align": "inside",
         "thickness": 1,
-        "fill": "#E5E7EB"
+        "fill": "#e2e8f0"
       },
       "effect": {
         "type": "shadow",
         "shadowType": "outer",
         "color": "#0000000f",
-        "offset": { "x": 0, "y": 4 },
+        "offset": {
+          "x": 0,
+          "y": 4
+        },
         "blur": 16
       },
       "layout": "vertical",
@@ -43,8 +46,11 @@
           "id": "psHeader",
           "name": "header",
           "width": "fill_container",
-          "fill": "#FAFAFA",
-          "padding": [16, 20],
+          "fill": "#f8fafc",
+          "padding": [
+            16,
+            20
+          ],
           "justifyContent": "space_between",
           "alignItems": "center",
           "children": [
@@ -52,9 +58,9 @@
               "type": "text",
               "id": "psTitle",
               "name": "title",
-              "fill": "#111827",
+              "fill": "#0f172a",
               "content": "2D 管道草图",
-              "fontFamily": "Fira Sans",
+              "fontFamily": "Fira Code",
               "fontSize": 16,
               "fontWeight": "600"
             },
@@ -69,9 +75,9 @@
                   "type": "text",
                   "id": "psQuickRouterLabel",
                   "name": "quickRouterLabel",
-                  "fill": "#6B7280",
+                  "fill": "#64748b",
                   "content": "快速路由",
-                  "fontFamily": "Fira Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "500"
                 },
@@ -81,7 +87,7 @@
                   "name": "toggleTrack",
                   "width": 36,
                   "height": 20,
-                  "fill": "#FF6B00",
+                  "fill": "#2563eb",
                   "cornerRadius": 10,
                   "layout": "none",
                   "children": [
@@ -93,13 +99,16 @@
                       "y": 2,
                       "width": 16,
                       "height": 16,
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "cornerRadius": 8,
                       "effect": {
                         "type": "shadow",
                         "shadowType": "outer",
                         "color": "#00000026",
-                        "offset": { "x": 0, "y": 1 },
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
                         "blur": 2
                       }
                     }
@@ -115,7 +124,11 @@
           "name": "dividerHeader",
           "width": "fill_container",
           "height": 1,
-          "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+          "stroke": {
+            "align": "center",
+            "thickness": 1,
+            "fill": "#e2e8f0"
+          }
         },
         {
           "type": "frame",
@@ -138,9 +151,9 @@
                   "type": "text",
                   "id": "psPointToolsTitle",
                   "name": "pointToolsTitle",
-                  "fill": "#111827",
+                  "fill": "#0f172a",
                   "content": "路径点工具",
-                  "fontFamily": "Fira Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "600"
                 },
@@ -156,16 +169,19 @@
                       "id": "psToolCreate",
                       "name": "toolCreate",
                       "width": "fill_container",
-                      "fill": "#FFF0E6",
+                      "fill": "#eff6ff",
                       "cornerRadius": 6,
                       "stroke": {
                         "align": "inside",
                         "thickness": 1.5,
-                        "fill": "#FF6B00"
+                        "fill": "#2563eb"
                       },
                       "layout": "vertical",
                       "gap": 4,
-                      "padding": [8, 6],
+                      "padding": [
+                        8,
+                        6
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
@@ -177,15 +193,15 @@
                           "height": 16,
                           "iconFontName": "plus-circle",
                           "iconFontFamily": "lucide",
-                          "fill": "#FF6B00"
+                          "fill": "#2563eb"
                         },
                         {
                           "type": "text",
                           "id": "psToolCreateText",
                           "name": "toolCreateText",
-                          "fill": "#FF6B00",
+                          "fill": "#2563eb",
                           "content": "创建点",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -201,11 +217,14 @@
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "layout": "vertical",
                       "gap": 4,
-                      "padding": [8, 6],
+                      "padding": [
+                        8,
+                        6
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
@@ -217,15 +236,15 @@
                           "height": 16,
                           "iconFontName": "between-horizontal-start",
                           "iconFontFamily": "lucide",
-                          "fill": "#6B7280"
+                          "fill": "#64748b"
                         },
                         {
                           "type": "text",
                           "id": "psToolInsertText",
                           "name": "toolInsertText",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "插入点",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "500"
                         }
@@ -241,11 +260,14 @@
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "layout": "vertical",
                       "gap": 4,
-                      "padding": [8, 6],
+                      "padding": [
+                        8,
+                        6
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
@@ -257,15 +279,15 @@
                           "height": 16,
                           "iconFontName": "trash-2",
                           "iconFontFamily": "lucide",
-                          "fill": "#6B7280"
+                          "fill": "#64748b"
                         },
                         {
                           "type": "text",
                           "id": "psToolDeleteText",
                           "name": "toolDeleteText",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "删除点",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "500"
                         }
@@ -281,11 +303,14 @@
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "layout": "vertical",
                       "gap": 4,
-                      "padding": [8, 6],
+                      "padding": [
+                        8,
+                        6
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
@@ -297,15 +322,15 @@
                           "height": 16,
                           "iconFontName": "x-circle",
                           "iconFontFamily": "lucide",
-                          "fill": "#6B7280"
+                          "fill": "#64748b"
                         },
                         {
                           "type": "text",
                           "id": "psToolClearText",
                           "name": "toolClearText",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "全部清除",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "500"
                         }
@@ -333,7 +358,7 @@
                           "name": "orthoCb",
                           "width": 16,
                           "height": 16,
-                          "fill": "#FF6B00",
+                          "fill": "#2563eb",
                           "cornerRadius": 4,
                           "layout": "none",
                           "children": [
@@ -347,7 +372,7 @@
                               "height": 12,
                               "iconFontName": "check",
                               "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
+                              "fill": "#ffffff"
                             }
                           ]
                         },
@@ -355,9 +380,9 @@
                           "type": "text",
                           "id": "psOrthoText",
                           "name": "orthoText",
-                          "fill": "#111827",
+                          "fill": "#0f172a",
                           "content": "正交模式",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 12,
                           "fontWeight": "normal"
                         }
@@ -381,16 +406,16 @@
                           "stroke": {
                             "align": "inside",
                             "thickness": 1.5,
-                            "fill": "#D1D5DB"
+                            "fill": "#cbd5e1"
                           }
                         },
                         {
                           "type": "text",
                           "id": "psOffsetText",
                           "name": "offsetText",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "偏移模式",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 12,
                           "fontWeight": "normal"
                         }
@@ -409,7 +434,7 @@
                           "name": "bendCb",
                           "width": 16,
                           "height": 16,
-                          "fill": "#FF6B00",
+                          "fill": "#2563eb",
                           "cornerRadius": 4,
                           "layout": "none",
                           "children": [
@@ -423,7 +448,7 @@
                               "height": 12,
                               "iconFontName": "check",
                               "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
+                              "fill": "#ffffff"
                             }
                           ]
                         },
@@ -431,9 +456,9 @@
                           "type": "text",
                           "id": "psBendText",
                           "name": "bendText",
-                          "fill": "#111827",
+                          "fill": "#0f172a",
                           "content": "使用弯管",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 12,
                           "fontWeight": "normal"
                         }
@@ -449,7 +474,11 @@
               "name": "divider1",
               "width": "fill_container",
               "height": 1,
-              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+              "stroke": {
+                "align": "center",
+                "thickness": 1,
+                "fill": "#e2e8f0"
+              }
             },
             {
               "type": "frame",
@@ -471,9 +500,9 @@
                       "type": "text",
                       "id": "psPointListTitle",
                       "name": "pointListTitle",
-                      "fill": "#111827",
+                      "fill": "#0f172a",
                       "content": "路径点列表 (4)",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Fira Code",
                       "fontSize": 13,
                       "fontWeight": "600"
                     }
@@ -489,7 +518,7 @@
                   "stroke": {
                     "align": "inside",
                     "thickness": 1,
-                    "fill": "#E5E7EB"
+                    "fill": "#e2e8f0"
                   },
                   "children": [
                     {
@@ -499,7 +528,7 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": "fill_container",
-                      "fill": "#FAFAFA",
+                      "fill": "#f8fafc",
                       "layout": "vertical",
                       "children": [
                         {
@@ -507,8 +536,11 @@
                           "id": "psPoint1",
                           "name": "point1",
                           "width": "fill_container",
-                          "fill": "#FFF0E6",
-                          "padding": [8, 12],
+                          "fill": "#eff6ff",
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "gap": 10,
                           "alignItems": "center",
                           "children": [
@@ -518,7 +550,7 @@
                               "name": "point1Badge",
                               "width": 20,
                               "height": 20,
-                              "fill": "#FF6B00",
+                              "fill": "#0f172a",
                               "cornerRadius": 10,
                               "justifyContent": "center",
                               "alignItems": "center",
@@ -527,7 +559,7 @@
                                   "type": "text",
                                   "id": "psPoint1Num",
                                   "name": "point1Num",
-                                  "fill": "#FFFFFF",
+                                  "fill": "#ffffff",
                                   "content": "1",
                                   "fontFamily": "Fira Code",
                                   "fontSize": 10,
@@ -539,7 +571,7 @@
                               "type": "text",
                               "id": "psPoint1Pos",
                               "name": "point1Pos",
-                              "fill": "#111827",
+                              "fill": "#0f172a",
                               "content": "E 1200  N 3400  U 5600",
                               "fontFamily": "Fira Code",
                               "fontSize": 11,
@@ -553,7 +585,10 @@
                           "name": "point2",
                           "width": "fill_container",
                           "fill": "#00000000",
-                          "padding": [8, 12],
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "gap": 10,
                           "alignItems": "center",
                           "children": [
@@ -563,7 +598,7 @@
                               "name": "point2Badge",
                               "width": 20,
                               "height": 20,
-                              "fill": "#D1D5DB",
+                              "fill": "#cbd5e1",
                               "cornerRadius": 10,
                               "justifyContent": "center",
                               "alignItems": "center",
@@ -572,7 +607,7 @@
                                   "type": "text",
                                   "id": "psPoint2Num",
                                   "name": "point2Num",
-                                  "fill": "#FFFFFF",
+                                  "fill": "#ffffff",
                                   "content": "2",
                                   "fontFamily": "Fira Code",
                                   "fontSize": 10,
@@ -584,7 +619,7 @@
                               "type": "text",
                               "id": "psPoint2Pos",
                               "name": "point2Pos",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "E 1200  N 3400  U 7200",
                               "fontFamily": "Fira Code",
                               "fontSize": 11,
@@ -598,7 +633,10 @@
                           "name": "point3",
                           "width": "fill_container",
                           "fill": "#00000000",
-                          "padding": [8, 12],
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "gap": 10,
                           "alignItems": "center",
                           "children": [
@@ -608,7 +646,7 @@
                               "name": "point3Badge",
                               "width": 20,
                               "height": 20,
-                              "fill": "#D1D5DB",
+                              "fill": "#cbd5e1",
                               "cornerRadius": 10,
                               "justifyContent": "center",
                               "alignItems": "center",
@@ -617,7 +655,7 @@
                                   "type": "text",
                                   "id": "psPoint3Num",
                                   "name": "point3Num",
-                                  "fill": "#FFFFFF",
+                                  "fill": "#ffffff",
                                   "content": "3",
                                   "fontFamily": "Fira Code",
                                   "fontSize": 10,
@@ -629,7 +667,7 @@
                               "type": "text",
                               "id": "psPoint3Pos",
                               "name": "point3Pos",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "E 4500  N 3400  U 7200",
                               "fontFamily": "Fira Code",
                               "fontSize": 11,
@@ -643,7 +681,10 @@
                           "name": "point4",
                           "width": "fill_container",
                           "fill": "#00000000",
-                          "padding": [8, 12],
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "gap": 10,
                           "alignItems": "center",
                           "children": [
@@ -653,7 +694,7 @@
                               "name": "point4Badge",
                               "width": 20,
                               "height": 20,
-                              "fill": "#D1D5DB",
+                              "fill": "#cbd5e1",
                               "cornerRadius": 10,
                               "justifyContent": "center",
                               "alignItems": "center",
@@ -662,7 +703,7 @@
                                   "type": "text",
                                   "id": "psPoint4Num",
                                   "name": "point4Num",
-                                  "fill": "#FFFFFF",
+                                  "fill": "#ffffff",
                                   "content": "4",
                                   "fontFamily": "Fira Code",
                                   "fontSize": 10,
@@ -674,7 +715,7 @@
                               "type": "text",
                               "id": "psPoint4Pos",
                               "name": "point4Pos",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "E 4500  N 6800  U 7200",
                               "fontFamily": "Fira Code",
                               "fontSize": 11,
@@ -706,9 +747,9 @@
                           "type": "text",
                           "id": "psPosLabel",
                           "name": "posLabel",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "坐标输入 (E / N / U)",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 12,
                           "fontWeight": "500"
                         },
@@ -721,9 +762,12 @@
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#FF6B00"
+                            "fill": "#2563eb"
                           },
-                          "padding": [4, 6],
+                          "padding": [
+                            4,
+                            6
+                          ],
                           "children": [
                             {
                               "type": "icon_font",
@@ -733,7 +777,7 @@
                               "height": 12,
                               "iconFontName": "crosshair",
                               "iconFontFamily": "lucide",
-                              "fill": "#FF6B00"
+                              "fill": "#2563eb"
                             }
                           ]
                         }
@@ -752,13 +796,38 @@
                           "name": "posE",
                           "width": "fill_container",
                           "cornerRadius": 6,
-                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
-                          "padding": [8, 10],
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#e2e8f0"
+                          },
+                          "padding": [
+                            8,
+                            10
+                          ],
                           "justifyContent": "space_between",
                           "alignItems": "center",
                           "children": [
-                            { "type": "text", "id": "psPosEVal", "name": "posEVal", "fill": "#111827", "content": "0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
-                            { "type": "text", "id": "psPosELabel", "name": "posELabel", "fill": "#9CA3AF", "content": "E", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+                            {
+                              "type": "text",
+                              "id": "psPosEVal",
+                              "name": "posEVal",
+                              "fill": "#0f172a",
+                              "content": "0",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "psPosELabel",
+                              "name": "posELabel",
+                              "fill": "#94a3b8",
+                              "content": "E",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "500"
+                            }
                           ]
                         },
                         {
@@ -767,13 +836,38 @@
                           "name": "posN",
                           "width": "fill_container",
                           "cornerRadius": 6,
-                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
-                          "padding": [8, 10],
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#e2e8f0"
+                          },
+                          "padding": [
+                            8,
+                            10
+                          ],
                           "justifyContent": "space_between",
                           "alignItems": "center",
                           "children": [
-                            { "type": "text", "id": "psPosNVal", "name": "posNVal", "fill": "#111827", "content": "0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
-                            { "type": "text", "id": "psPosNLabel", "name": "posNLabel", "fill": "#9CA3AF", "content": "N", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+                            {
+                              "type": "text",
+                              "id": "psPosNVal",
+                              "name": "posNVal",
+                              "fill": "#0f172a",
+                              "content": "0",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "psPosNLabel",
+                              "name": "posNLabel",
+                              "fill": "#94a3b8",
+                              "content": "N",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "500"
+                            }
                           ]
                         },
                         {
@@ -782,13 +876,38 @@
                           "name": "posU",
                           "width": "fill_container",
                           "cornerRadius": 6,
-                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
-                          "padding": [8, 10],
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#e2e8f0"
+                          },
+                          "padding": [
+                            8,
+                            10
+                          ],
                           "justifyContent": "space_between",
                           "alignItems": "center",
                           "children": [
-                            { "type": "text", "id": "psPosUVal", "name": "posUVal", "fill": "#111827", "content": "0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" },
-                            { "type": "text", "id": "psPosULabel", "name": "posULabel", "fill": "#9CA3AF", "content": "U", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+                            {
+                              "type": "text",
+                              "id": "psPosUVal",
+                              "name": "posUVal",
+                              "fill": "#0f172a",
+                              "content": "0",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "psPosULabel",
+                              "name": "posULabel",
+                              "fill": "#94a3b8",
+                              "content": "U",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 11,
+                              "fontWeight": "500"
+                            }
                           ]
                         }
                       ]
@@ -803,7 +922,11 @@
               "name": "divider2",
               "width": "fill_container",
               "height": 1,
-              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+              "stroke": {
+                "align": "center",
+                "thickness": 1,
+                "fill": "#e2e8f0"
+              }
             },
             {
               "type": "frame",
@@ -817,9 +940,9 @@
                   "type": "text",
                   "id": "psCommandsTitle",
                   "name": "commandsTitle",
-                  "fill": "#111827",
+                  "fill": "#0f172a",
                   "content": "快捷操作",
-                  "fontFamily": "Fira Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "600"
                 },
@@ -835,10 +958,13 @@
                       "id": "psCmdCreateBranch",
                       "name": "cmdCreateBranch",
                       "width": "fill_container",
-                      "fill": "#FF6B00",
+                      "fill": "#0f172a",
                       "cornerRadius": 6,
                       "gap": 6,
-                      "padding": [10, 12],
+                      "padding": [
+                        10,
+                        12
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
@@ -850,15 +976,15 @@
                           "height": 14,
                           "iconFontName": "git-branch",
                           "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
+                          "fill": "#ffffff"
                         },
                         {
                           "type": "text",
                           "id": "psCmdCreateBranchText",
                           "name": "cmdCreateBranchText",
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "content": "创建分支",
-                          "fontFamily": "Fira Sans",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 13,
                           "fontWeight": "500"
                         }
@@ -880,15 +1006,40 @@
                       "width": "fill_container",
                       "fill": "#00000000",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "layout": "vertical",
                       "gap": 4,
-                      "padding": [8, 6],
+                      "padding": [
+                        8,
+                        6
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "psCmdFlangeIcon", "name": "cmdFlangeIcon", "width": 16, "height": 16, "iconFontName": "disc", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "psCmdFlangeText", "name": "cmdFlangeText", "fill": "#6B7280", "content": "法兰组", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "psCmdFlangeIcon",
+                          "name": "cmdFlangeIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "disc",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psCmdFlangeText",
+                          "name": "cmdFlangeText",
+                          "fill": "#64748b",
+                          "content": "法兰组",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        }
                       ]
                     },
                     {
@@ -898,15 +1049,40 @@
                       "width": "fill_container",
                       "fill": "#00000000",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "layout": "vertical",
                       "gap": 4,
-                      "padding": [8, 6],
+                      "padding": [
+                        8,
+                        6
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "psCmdValveIcon", "name": "cmdValveIcon", "width": 16, "height": 16, "iconFontName": "toggle-right", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "psCmdValveText", "name": "cmdValveText", "fill": "#6B7280", "content": "阀组", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "psCmdValveIcon",
+                          "name": "cmdValveIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "toggle-right",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psCmdValveText",
+                          "name": "cmdValveText",
+                          "fill": "#64748b",
+                          "content": "阀组",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        }
                       ]
                     },
                     {
@@ -916,15 +1092,40 @@
                       "width": "fill_container",
                       "fill": "#00000000",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "layout": "vertical",
                       "gap": 4,
-                      "padding": [8, 6],
+                      "padding": [
+                        8,
+                        6
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "psCmdExpansionIcon", "name": "cmdExpansionIcon", "width": 16, "height": 16, "iconFontName": "expand", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "psCmdExpansionText", "name": "cmdExpansionText", "fill": "#6B7280", "content": "膨胀环", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "psCmdExpansionIcon",
+                          "name": "cmdExpansionIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "expand",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psCmdExpansionText",
+                          "name": "cmdExpansionText",
+                          "fill": "#64748b",
+                          "content": "膨胀环",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        }
                       ]
                     }
                   ]
@@ -943,14 +1144,39 @@
                       "width": "fill_container",
                       "fill": "#00000000",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "gap": 6,
-                      "padding": [8, 12],
+                      "padding": [
+                        8,
+                        12
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "psCmdCopyIcon", "name": "cmdCopyIcon", "width": 14, "height": 14, "iconFontName": "copy", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "psCmdCopyText", "name": "cmdCopyText", "fill": "#374151", "content": "复制选择", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "psCmdCopyIcon",
+                          "name": "cmdCopyIcon",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "copy",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psCmdCopyText",
+                          "name": "cmdCopyText",
+                          "fill": "#334155",
+                          "content": "复制选择",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
                       ]
                     },
                     {
@@ -960,14 +1186,39 @@
                       "width": "fill_container",
                       "fill": "#00000000",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "gap": 6,
-                      "padding": [8, 12],
+                      "padding": [
+                        8,
+                        12
+                      ],
                       "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "psCmdMirrorIcon", "name": "cmdMirrorIcon", "width": 14, "height": 14, "iconFontName": "flip-horizontal-2", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "psCmdMirrorText", "name": "cmdMirrorText", "fill": "#374151", "content": "镜像选择", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "psCmdMirrorIcon",
+                          "name": "cmdMirrorIcon",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "flip-horizontal-2",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "psCmdMirrorText",
+                          "name": "cmdMirrorText",
+                          "fill": "#334155",
+                          "content": "镜像选择",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
                       ]
                     }
                   ]
@@ -980,7 +1231,11 @@
               "name": "divider3",
               "width": "fill_container",
               "height": 1,
-              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+              "stroke": {
+                "align": "center",
+                "thickness": 1,
+                "fill": "#e2e8f0"
+              }
             },
             {
               "type": "frame",
@@ -1002,9 +1257,9 @@
                       "type": "text",
                       "id": "psMirrorTitle",
                       "name": "mirrorTitle",
-                      "fill": "#111827",
+                      "fill": "#0f172a",
                       "content": "镜像设置",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "600"
                     },
@@ -1016,7 +1271,7 @@
                       "height": 16,
                       "iconFontName": "chevron-down",
                       "iconFontFamily": "lucide",
-                      "fill": "#9CA3AF"
+                      "fill": "#94a3b8"
                     }
                   ]
                 },
@@ -1032,9 +1287,9 @@
                       "type": "text",
                       "id": "psMirrorDirLabel",
                       "name": "mirrorDirLabel",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "镜像方向",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "500"
                     },
@@ -1052,11 +1307,27 @@
                           "name": "mirrorDirInput",
                           "width": "fill_container",
                           "cornerRadius": 6,
-                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
-                          "padding": [8, 12],
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#e2e8f0"
+                          },
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "alignItems": "center",
                           "children": [
-                            { "type": "text", "id": "psMirrorDirVal", "name": "mirrorDirVal", "fill": "#111827", "content": "N 0  E 1  U 0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" }
+                            {
+                              "type": "text",
+                              "id": "psMirrorDirVal",
+                              "name": "mirrorDirVal",
+                              "fill": "#0f172a",
+                              "content": "N 0  E 1  U 0",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
                           ]
                         },
                         {
@@ -1065,10 +1336,26 @@
                           "name": "mirrorDirPickBtn",
                           "fill": "#00000000",
                           "cornerRadius": 6,
-                          "stroke": { "align": "inside", "thickness": 1, "fill": "#FF6B00" },
-                          "padding": [7, 8],
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#2563eb"
+                          },
+                          "padding": [
+                            7,
+                            8
+                          ],
                           "children": [
-                            { "type": "icon_font", "id": "psMirrorDirPickIcon", "name": "mirrorDirPickIcon", "width": 14, "height": 14, "iconFontName": "crosshair", "iconFontFamily": "lucide", "fill": "#FF6B00" }
+                            {
+                              "type": "icon_font",
+                              "id": "psMirrorDirPickIcon",
+                              "name": "mirrorDirPickIcon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "crosshair",
+                              "iconFontFamily": "lucide",
+                              "fill": "#2563eb"
+                            }
                           ]
                         }
                       ]
@@ -1087,9 +1374,9 @@
                       "type": "text",
                       "id": "psMirrorPosLabel",
                       "name": "mirrorPosLabel",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "镜像基点",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "500"
                     },
@@ -1107,11 +1394,27 @@
                           "name": "mirrorPosInput",
                           "width": "fill_container",
                           "cornerRadius": 6,
-                          "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
-                          "padding": [8, 12],
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#e2e8f0"
+                          },
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "alignItems": "center",
                           "children": [
-                            { "type": "text", "id": "psMirrorPosVal", "name": "mirrorPosVal", "fill": "#111827", "content": "E 0  N 0  U 0", "fontFamily": "Fira Code", "fontSize": 12, "fontWeight": "normal" }
+                            {
+                              "type": "text",
+                              "id": "psMirrorPosVal",
+                              "name": "mirrorPosVal",
+                              "fill": "#0f172a",
+                              "content": "E 0  N 0  U 0",
+                              "fontFamily": "Fira Code",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
                           ]
                         },
                         {
@@ -1120,10 +1423,26 @@
                           "name": "mirrorPosPickBtn",
                           "fill": "#00000000",
                           "cornerRadius": 6,
-                          "stroke": { "align": "inside", "thickness": 1, "fill": "#FF6B00" },
-                          "padding": [7, 8],
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#2563eb"
+                          },
+                          "padding": [
+                            7,
+                            8
+                          ],
                           "children": [
-                            { "type": "icon_font", "id": "psMirrorPosPickIcon", "name": "mirrorPosPickIcon", "width": 14, "height": 14, "iconFontName": "crosshair", "iconFontFamily": "lucide", "fill": "#FF6B00" }
+                            {
+                              "type": "icon_font",
+                              "id": "psMirrorPosPickIcon",
+                              "name": "mirrorPosPickIcon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "crosshair",
+                              "iconFontFamily": "lucide",
+                              "fill": "#2563eb"
+                            }
                           ]
                         }
                       ]

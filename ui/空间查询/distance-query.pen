@@ -10,7 +10,7 @@
       "clip": true,
       "width": 475,
       "height": 953,
-      "fill": "#FFFFFF",
+      "fill": "#ffffff",
       "layout": "none"
     },
     {
@@ -59,7 +59,7 @@
               "id": "B8MEp",
               "fill": "$foreground",
               "content": "空间距离查询",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 15,
               "fontWeight": "700"
             },
@@ -67,7 +67,7 @@
               "type": "frame",
               "id": "XLTWc",
               "name": "closeBtn",
-              "fill": "#f3f4f6",
+              "fill": "#f1f5f9",
               "cornerRadius": 20,
               "padding": 6,
               "children": [
@@ -89,7 +89,7 @@
           "id": "PR0hW",
           "name": "tabsRow",
           "width": "fill_container",
-          "fill": "#f9fafb",
+          "fill": "#f8fafc",
           "cornerRadius": 8,
           "stroke": {
             "align": "inside",
@@ -127,7 +127,7 @@
                   "id": "DLHbh",
                   "fill": "$primary",
                   "content": "通过 Refno",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 13,
                   "fontWeight": "600"
                 }
@@ -150,7 +150,7 @@
                   "id": "FATmr",
                   "fill": "$muted_foreground",
                   "content": "通过坐标",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 13,
                   "fontWeight": "500"
                 }
@@ -171,7 +171,7 @@
               "id": "EJUPf",
               "fill": "$muted_foreground",
               "content": "选取起始物项",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 12,
               "fontWeight": "600"
             },
@@ -187,7 +187,7 @@
                   "type": "frame",
                   "id": "MICgb",
                   "name": "pickBtn",
-                  "fill": "#FF6B00",
+                  "fill": "#0f172a",
                   "cornerRadius": 8,
                   "gap": 6,
                   "padding": [
@@ -201,9 +201,9 @@
                       "type": "text",
                       "id": "9lQ4I",
                       "name": "pickIcon",
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "content": "⊕",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "600"
                     },
@@ -211,9 +211,9 @@
                       "type": "text",
                       "id": "FST9Q",
                       "name": "pickLabel",
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "content": "拾取物项",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 11,
                       "fontWeight": "600"
                     }
@@ -241,7 +241,7 @@
                       "type": "ellipse",
                       "id": "CrzFJ",
                       "name": "pickDot",
-                      "fill": "#22C55E",
+                      "fill": "#10b981",
                       "width": 8,
                       "height": 8
                     },
@@ -251,7 +251,7 @@
                       "name": "pickRefno",
                       "fill": "$foreground",
                       "content": "24381_100818",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "500"
                     }
@@ -274,7 +274,7 @@
               "id": "w60sA",
               "fill": "$muted_foreground",
               "content": "查询半径",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 12,
               "fontWeight": "600"
             },
@@ -300,7 +300,7 @@
                       "name": "sliderTrack",
                       "width": "fill_container",
                       "height": 6,
-                      "fill": "#E5E7EB",
+                      "fill": "#e2e8f0",
                       "cornerRadius": 4,
                       "children": [
                         {
@@ -309,7 +309,7 @@
                           "name": "sliderFill",
                           "width": 180,
                           "height": 6,
-                          "fill": "#FF6B00",
+                          "fill": "#2563eb",
                           "cornerRadius": 4
                         }
                       ]
@@ -318,13 +318,13 @@
                       "type": "ellipse",
                       "id": "iS9eK",
                       "name": "sliderThumb",
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "width": 18,
                       "height": 18,
                       "stroke": {
                         "align": "inside",
                         "thickness": 2,
-                        "fill": "#FF6B00"
+                        "fill": "#2563eb"
                       },
                       "effect": {
                         "type": "shadow",
@@ -352,7 +352,7 @@
                       "name": "sliderMin",
                       "fill": "$muted_foreground",
                       "content": "100 mm",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     },
@@ -360,9 +360,9 @@
                       "type": "text",
                       "id": "Yt3rD",
                       "name": "sliderVal",
-                      "fill": "#FF6B00",
+                      "fill": "#2563eb",
                       "content": "2500 mm",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "700"
                     },
@@ -372,7 +372,7 @@
                       "name": "sliderMax",
                       "fill": "$muted_foreground",
                       "content": "10000 mm",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -401,7 +401,7 @@
               "id": "2P5og",
               "fill": "$foreground",
               "content": "筛选条件",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 12,
               "fontWeight": "700"
             },
@@ -419,7 +419,7 @@
                   "name": "specLabel",
                   "fill": "$muted_foreground",
                   "content": "专业",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "600"
                 },
@@ -434,13 +434,8 @@
                       "type": "frame",
                       "id": "STyEg",
                       "name": "chip1",
-                      "fill": "#FFF1E8",
+                      "fill": "#eff6ff",
                       "cornerRadius": 20,
-                      "stroke": {
-                        "align": "inside",
-                        "thickness": 1,
-                        "fill": "#FF6B00"
-                      },
                       "padding": [
                         4,
                         10
@@ -451,9 +446,9 @@
                           "type": "text",
                           "id": "YAagU",
                           "name": "chip1t",
-                          "fill": "#C84D00",
+                          "fill": "#1d4ed8",
                           "content": "管道",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -463,12 +458,12 @@
                       "type": "frame",
                       "id": "mr4aK",
                       "name": "chip2",
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "cornerRadius": 20,
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "padding": [
                         4,
@@ -480,9 +475,9 @@
                           "type": "text",
                           "id": "krMgN",
                           "name": "chip2t",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "电气",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "500"
                         }
@@ -492,12 +487,12 @@
                       "type": "frame",
                       "id": "qizsC",
                       "name": "chip3",
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "cornerRadius": 20,
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "padding": [
                         4,
@@ -509,9 +504,9 @@
                           "type": "text",
                           "id": "cZvlh",
                           "name": "chip3t",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "仪表",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "500"
                         }
@@ -521,12 +516,12 @@
                       "type": "frame",
                       "id": "UB1Vn",
                       "name": "chip4",
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "cornerRadius": 20,
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "padding": [
                         4,
@@ -538,9 +533,9 @@
                           "type": "text",
                           "id": "D8UjN",
                           "name": "chip4t",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "暖通",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "500"
                         }
@@ -554,7 +549,7 @@
                   "name": "nounLabel",
                   "fill": "$muted_foreground",
                   "content": "类型 (Noun)",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "600"
                 },
@@ -579,9 +574,9 @@
                       "type": "text",
                       "id": "poyLy",
                       "name": "nounText",
-                      "fill": "#9CA3AF",
+                      "fill": "#94a3b8",
                       "content": "PIPE, EQUI, BRAN",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -593,7 +588,7 @@
                   "name": "searchLabel",
                   "fill": "$muted_foreground",
                   "content": "搜索",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "600"
                 },
@@ -620,7 +615,7 @@
                       "id": "ZxVtK",
                       "name": "searchIcon",
                       "content": "🔍",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "normal"
                     },
@@ -628,9 +623,9 @@
                       "type": "text",
                       "id": "7ZY8P",
                       "name": "searchText",
-                      "fill": "#9CA3AF",
+                      "fill": "#94a3b8",
                       "content": "输入 Refno 或名称关键字...",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -644,7 +639,7 @@
               "name": "collapseArrow",
               "fill": "$muted_foreground",
               "content": "▼",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 10,
               "fontWeight": "normal"
             }
@@ -667,7 +662,7 @@
               "id": "FvsVP",
               "name": "submitBtn",
               "width": "fill_container",
-              "fill": "$primary",
+              "fill": "#0f172a",
               "cornerRadius": 8,
               "gap": 8,
               "padding": 9,
@@ -688,7 +683,7 @@
                   "id": "dHKN2",
                   "fill": "#ffffff",
                   "content": "查询周边物项",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "600"
                 }
@@ -713,7 +708,7 @@
               "id": "WCbso",
               "fill": "$foreground",
               "content": "查询结果",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 12,
               "fontWeight": "700"
             },
@@ -722,7 +717,7 @@
               "id": "wN9kq",
               "fill": "$muted_foreground",
               "content": "共 15 项 · 5 管道 · 6 电气 · 4 仪表",
-              "fontFamily": "Inter",
+              "fontFamily": "Fira Code",
               "fontSize": 10,
               "fontWeight": "normal"
             },
@@ -732,7 +727,7 @@
               "name": "resultArrow",
               "fill": "$muted_foreground",
               "content": "▲",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 10,
               "fontWeight": "normal"
             }
@@ -749,7 +744,7 @@
           "stroke": {
             "align": "inside",
             "thickness": 1,
-            "fill": "#E5E7EB"
+            "fill": "#e2e8f0"
           },
           "layout": "vertical",
           "children": [
@@ -758,7 +753,7 @@
               "id": "BogJl",
               "name": "tableHead",
               "width": "fill_container",
-              "fill": "#F9FAFB",
+              "fill": "#f8fafc",
               "padding": [
                 6,
                 8
@@ -771,7 +766,7 @@
                   "name": "th1",
                   "fill": "$muted_foreground",
                   "content": "名称 / Refno",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 10,
                   "fontWeight": "700"
                 },
@@ -781,7 +776,7 @@
                   "name": "th2",
                   "fill": "$muted_foreground",
                   "content": "专业",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 10,
                   "fontWeight": "700"
                 },
@@ -791,7 +786,7 @@
                   "name": "th3",
                   "fill": "$muted_foreground",
                   "content": "类型",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 10,
                   "fontWeight": "700"
                 },
@@ -801,7 +796,7 @@
                   "name": "th4",
                   "fill": "$muted_foreground",
                   "content": "距离",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 10,
                   "fontWeight": "700"
                 }
@@ -812,11 +807,11 @@
               "id": "Pdrvy",
               "name": "row1",
               "width": "fill_container",
-              "fill": "#FFFFFF",
+              "fill": "#ffffff",
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#F3F4F6"
+                "fill": "#f1f5f9"
               },
               "padding": [
                 7,
@@ -838,7 +833,7 @@
                       "name": "r1name",
                       "fill": "$foreground",
                       "content": "VALVE-001",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -848,8 +843,8 @@
                       "name": "r1refno",
                       "fill": "$muted_foreground",
                       "content": "24381_100818",
-                      "fontFamily": "Inter",
-                      "fontSize": 9,
+                      "fontFamily": "Fira Code",
+                      "fontSize": 10,
                       "fontWeight": "normal"
                     }
                   ]
@@ -865,7 +860,7 @@
                       "type": "frame",
                       "id": "wm9WZ",
                       "name": "r1spec",
-                      "fill": "#DBEAFE",
+                      "fill": "#dbeafe",
                       "cornerRadius": 4,
                       "padding": [
                         2,
@@ -876,9 +871,9 @@
                           "type": "text",
                           "id": "8Dwrl",
                           "name": "r1specT",
-                          "fill": "#1D4ED8",
+                          "fill": "#1d4ed8",
                           "content": "管道",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -892,7 +887,7 @@
                   "name": "r1c3",
                   "fill": "$muted_foreground",
                   "content": "EQUI",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 },
@@ -900,9 +895,9 @@
                   "type": "text",
                   "id": "fFBNu",
                   "name": "r1c4",
-                  "fill": "#FF6B00",
+                  "fill": "#2563eb",
                   "content": "1,250",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "600"
                 }
@@ -913,11 +908,11 @@
               "id": "NBJwN",
               "name": "row2",
               "width": "fill_container",
-              "fill": "#FFF7ED",
+              "fill": "#eff6ff",
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#FFEDD5"
+                "fill": "#dbeafe"
               },
               "padding": [
                 7,
@@ -939,7 +934,7 @@
                       "name": "r2name",
                       "fill": "$foreground",
                       "content": "PIPE-SEG-023",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -949,8 +944,8 @@
                       "name": "r2refno",
                       "fill": "$muted_foreground",
                       "content": "24381_145018",
-                      "fontFamily": "Inter",
-                      "fontSize": 9,
+                      "fontFamily": "Fira Code",
+                      "fontSize": 10,
                       "fontWeight": "normal"
                     }
                   ]
@@ -966,7 +961,7 @@
                       "type": "frame",
                       "id": "8loM3",
                       "name": "r2spec",
-                      "fill": "#DBEAFE",
+                      "fill": "#dbeafe",
                       "cornerRadius": 4,
                       "padding": [
                         2,
@@ -977,9 +972,9 @@
                           "type": "text",
                           "id": "clx9N",
                           "name": "r2specT",
-                          "fill": "#1D4ED8",
+                          "fill": "#1d4ed8",
                           "content": "管道",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -993,7 +988,7 @@
                   "name": "r2c3",
                   "fill": "$muted_foreground",
                   "content": "PIPE",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 },
@@ -1001,9 +996,9 @@
                   "type": "text",
                   "id": "sTDNM",
                   "name": "r2c4",
-                  "fill": "#FF6B00",
+                  "fill": "#2563eb",
                   "content": "1,830",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "600"
                 }
@@ -1014,11 +1009,11 @@
               "id": "HK5tv",
               "name": "row3",
               "width": "fill_container",
-              "fill": "#FFFFFF",
+              "fill": "#ffffff",
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#F3F4F6"
+                "fill": "#f1f5f9"
               },
               "padding": [
                 7,
@@ -1040,7 +1035,7 @@
                       "name": "r3name",
                       "fill": "$foreground",
                       "content": "CABLE-TRAY-05",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -1050,8 +1045,8 @@
                       "name": "r3refno",
                       "fill": "$muted_foreground",
                       "content": "24381_200312",
-                      "fontFamily": "Inter",
-                      "fontSize": 9,
+                      "fontFamily": "Fira Code",
+                      "fontSize": 10,
                       "fontWeight": "normal"
                     }
                   ]
@@ -1067,7 +1062,7 @@
                       "type": "frame",
                       "id": "caCsK",
                       "name": "r3spec",
-                      "fill": "#FEF3C7",
+                      "fill": "#fef3c7",
                       "cornerRadius": 4,
                       "padding": [
                         2,
@@ -1078,9 +1073,9 @@
                           "type": "text",
                           "id": "SYFrI",
                           "name": "r3specT",
-                          "fill": "#92400E",
+                          "fill": "#1e3a8a",
                           "content": "电气",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -1094,7 +1089,7 @@
                   "name": "r3c3",
                   "fill": "$muted_foreground",
                   "content": "CTRY",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 },
@@ -1102,9 +1097,9 @@
                   "type": "text",
                   "id": "cZS02",
                   "name": "r3c4",
-                  "fill": "#FF6B00",
+                  "fill": "#2563eb",
                   "content": "2,100",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "600"
                 }
@@ -1115,11 +1110,11 @@
               "id": "o3oVl",
               "name": "row4",
               "width": "fill_container",
-              "fill": "#FFFFFF",
+              "fill": "#ffffff",
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#F3F4F6"
+                "fill": "#f1f5f9"
               },
               "padding": [
                 7,
@@ -1141,7 +1136,7 @@
                       "name": "r4name",
                       "fill": "$foreground",
                       "content": "INST-TX-102",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -1151,8 +1146,8 @@
                       "name": "r4refno",
                       "fill": "$muted_foreground",
                       "content": "24381_300456",
-                      "fontFamily": "Inter",
-                      "fontSize": 9,
+                      "fontFamily": "Fira Code",
+                      "fontSize": 10,
                       "fontWeight": "normal"
                     }
                   ]
@@ -1168,7 +1163,7 @@
                       "type": "frame",
                       "id": "EDwiB",
                       "name": "r4spec",
-                      "fill": "#D1FAE5",
+                      "fill": "#d1fae5",
                       "cornerRadius": 4,
                       "padding": [
                         2,
@@ -1179,9 +1174,9 @@
                           "type": "text",
                           "id": "2itYf",
                           "name": "r4specT",
-                          "fill": "#065F46",
+                          "fill": "#065f46",
                           "content": "仪表",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 10,
                           "fontWeight": "600"
                         }
@@ -1195,7 +1190,7 @@
                   "name": "r4c3",
                   "fill": "$muted_foreground",
                   "content": "INST",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "normal"
                 },
@@ -1203,9 +1198,9 @@
                   "type": "text",
                   "id": "5JPEc",
                   "name": "r4c4",
-                  "fill": "#FF6B00",
+                  "fill": "#2563eb",
                   "content": "2,450",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 10,
                   "fontWeight": "600"
                 }
@@ -1230,7 +1225,7 @@
               "name": "scrollBar",
               "width": 40,
               "height": 4,
-              "fill": "#D1D5DB",
+              "fill": "#cbd5e1",
               "cornerRadius": 3
             }
           ]
@@ -1245,7 +1240,7 @@
       "name": "Spatial Compute Workbench",
       "width": 1440,
       "height": 960,
-      "fill": "#F3F4F6",
+      "fill": "#f1f5f9",
       "layout": "none",
       "children": [
         {
@@ -1256,7 +1251,7 @@
           "name": "Viewer Surface",
           "width": 964,
           "height": 868,
-          "fill": "#0F172A",
+          "fill": "#0f172a",
           "layout": "none",
           "children": [
             {
@@ -1267,7 +1262,7 @@
               "name": "viewerHint",
               "fill": "#FFFFFFCC",
               "content": "三维 Viewer 区域",
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 24,
               "fontWeight": "700"
             },
@@ -1277,12 +1272,12 @@
               "x": 190,
               "y": 0,
               "name": "viewerHint2",
-              "fill": "#CBD5E1",
+              "fill": "#cbd5e1",
               "textGrowth": "fixed-width",
               "width": 520,
               "content": "空间计算保持与当前场景同屏，支持直接读取选中对象与定位结果。",
               "lineHeight": 1.5,
-              "fontFamily": "Inter",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 14,
               "fontWeight": "normal"
             }
@@ -1296,7 +1291,7 @@
           "name": "Space Calc Dock Panel",
           "width": 440,
           "height": 840,
-          "fill": "#FFFFFF",
+          "fill": "#ffffff",
           "cornerRadius": 18,
           "effect": {
             "type": "shadow",
@@ -1334,9 +1329,9 @@
                       "type": "text",
                       "id": "hjer8",
                       "name": "title",
-                      "fill": "#1F2937",
+                      "fill": "#1e293b",
                       "content": "支架空间计算",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 18,
                       "fontWeight": "700"
                     },
@@ -1344,12 +1339,12 @@
                       "type": "text",
                       "id": "XZmeI",
                       "name": "subtitle",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
                       "content": "快速估算支架占用空间。",
                       "lineHeight": 1.4,
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -1362,7 +1357,7 @@
                   "y": 10,
                   "name": "Close",
                   "enabled": false,
-                  "fill": "#F3F4F6",
+                  "fill": "#f1f5f9",
                   "cornerRadius": 20,
                   "padding": 8,
                   "children": [
@@ -1374,7 +1369,7 @@
                       "height": 16,
                       "iconFontName": "x",
                       "iconFontFamily": "lucide",
-                      "fill": "#6B7280"
+                      "fill": "#64748b"
                     }
                   ]
                 }
@@ -1385,12 +1380,12 @@
               "id": "sgosb",
               "name": "Tabs",
               "width": "fill_container",
-              "fill": "#F9FAFB",
+              "fill": "#f8fafc",
               "cornerRadius": 10,
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#E5E7EB"
+                "fill": "#e2e8f0"
               },
               "gap": 6,
               "padding": 3,
@@ -1412,9 +1407,9 @@
                       "type": "text",
                       "id": "tAGV9",
                       "name": "tabQueryText",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "属性",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "500"
                     }
@@ -1425,7 +1420,7 @@
                   "id": "zuI4L",
                   "name": "tabCalc",
                   "width": "fill_container",
-                  "fill": "#FFFFFF",
+                  "fill": "#ffffff",
                   "cornerRadius": 8,
                   "effect": {
                     "type": "shadow",
@@ -1448,9 +1443,9 @@
                       "type": "text",
                       "id": "ar753",
                       "name": "tabCalcText",
-                      "fill": "#EA580C",
+                      "fill": "#2563eb",
                       "content": "计算",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "600"
                     }
@@ -1463,12 +1458,12 @@
               "id": "aTTEg",
               "name": "Banner",
               "width": "fill_container",
-              "fill": "#FFF7ED",
+              "fill": "#eff6ff",
               "cornerRadius": 12,
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#FED7AA"
+                "fill": "#bfdbfe"
               },
               "layout": "vertical",
               "gap": 2,
@@ -1481,9 +1476,9 @@
                   "type": "text",
                   "id": "nvrqj",
                   "name": "bannerTitle",
-                  "fill": "#9A3412",
+                  "fill": "#1e40af",
                   "content": "两种输入方式",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 12,
                   "fontWeight": "700"
                 },
@@ -1491,12 +1486,12 @@
                   "type": "text",
                   "id": "sxZbf",
                   "name": "bannerText",
-                  "fill": "#C2410C",
+                  "fill": "#1d4ed8",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
                   "content": "读取当前选中构件，或输入编号后计算。",
                   "lineHeight": 1.4,
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "normal"
                 }
@@ -1507,12 +1502,12 @@
               "id": "5i8OB",
               "name": "Scenario Accordion",
               "width": "fill_container",
-              "fill": "#F9FAFB",
+              "fill": "#f8fafc",
               "cornerRadius": 12,
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#E5E7EB"
+                "fill": "#e2e8f0"
               },
               "layout": "vertical",
               "gap": 8,
@@ -1540,9 +1535,9 @@
                           "type": "text",
                           "id": "IyvK5",
                           "name": "foldTitle",
-                          "fill": "#1F2937",
+                          "fill": "#1e293b",
                           "content": "场景选择",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 13,
                           "fontWeight": "700"
                         },
@@ -1550,9 +1545,9 @@
                           "type": "text",
                           "id": "K3Wmm",
                           "name": "foldSub",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "折叠后仅显示当前场景，减少 Dock 纵向占用",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 11,
                           "fontWeight": "500"
                         }
@@ -1569,7 +1564,7 @@
                           "type": "frame",
                           "id": "uOnMW",
                           "name": "foldState",
-                          "fill": "#FFF7ED",
+                          "fill": "#eff6ff",
                           "cornerRadius": 999,
                           "padding": [
                             4,
@@ -1580,9 +1575,9 @@
                               "type": "text",
                               "id": "OoU01",
                               "name": "foldStateText",
-                              "fill": "#C2410C",
+                              "fill": "#1d4ed8",
                               "content": "已折叠",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 11,
                               "fontWeight": "600"
                             }
@@ -1596,7 +1591,7 @@
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "gap": 4,
                           "padding": [
@@ -1609,9 +1604,9 @@
                               "type": "text",
                               "id": "A8X6F",
                               "name": "foldBtnText",
-                              "fill": "#374151",
+                              "fill": "#334155",
                               "content": "展开 6 个场景",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Fira Code",
                               "fontSize": 11,
                               "fontWeight": "600"
                             },
@@ -1623,7 +1618,7 @@
                               "height": 14,
                               "iconFontName": "chevron-down",
                               "iconFontFamily": "lucide",
-                              "fill": "#6B7280"
+                              "fill": "#64748b"
                             }
                           ]
                         }
@@ -1636,12 +1631,12 @@
                   "id": "wYjM4",
                   "name": "activeScenarioCard",
                   "width": "fill_container",
-                  "fill": "#FFFFFF",
+                  "fill": "#ffffff",
                   "cornerRadius": 10,
                   "stroke": {
                     "align": "inside",
                     "thickness": 1,
-                    "fill": "#E5E7EB"
+                    "fill": "#e2e8f0"
                   },
                   "layout": "vertical",
                   "gap": 6,
@@ -1662,9 +1657,9 @@
                           "type": "text",
                           "id": "3JhLR",
                           "name": "activeName",
-                          "fill": "#1F2937",
+                          "fill": "#1e293b",
                           "content": "偏移校核（fitting-offset）",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 12,
                           "fontWeight": "700"
                         },
@@ -1672,7 +1667,7 @@
                           "type": "frame",
                           "id": "kFWpT",
                           "name": "activeBadge",
-                          "fill": "#FFF0E6",
+                          "fill": "#eff6ff",
                           "cornerRadius": 999,
                           "padding": [
                             3,
@@ -1683,9 +1678,9 @@
                               "type": "text",
                               "id": "bo87K",
                               "name": "activeBadgeText",
-                              "fill": "#C2410C",
+                              "fill": "#1d4ed8",
                               "content": "当前场景",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 11,
                               "fontWeight": "600"
                             }
@@ -1697,9 +1692,9 @@
                       "type": "text",
                       "id": "M03f5",
                       "name": "activeDesc",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "向量、长度、命中状态将按当前场景直接计算。",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 11,
                       "fontWeight": "500"
                     },
@@ -1707,9 +1702,9 @@
                       "type": "text",
                       "id": "F95wA",
                       "name": "activeMore",
-                      "fill": "#9CA3AF",
+                      "fill": "#94a3b8",
                       "content": "其余 5 个场景已折叠，点击“展开 6 个场景”查看。",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Fira Code",
                       "fontSize": 11,
                       "fontWeight": "500"
                     }
@@ -1722,12 +1717,12 @@
               "id": "VaQMt",
               "name": "Detail Card",
               "width": "fill_container",
-              "fill": "#FFFFFF",
+              "fill": "#ffffff",
               "cornerRadius": 16,
               "stroke": {
                 "align": "inside",
                 "thickness": 1,
-                "fill": "#E5E7EB"
+                "fill": "#e2e8f0"
               },
               "layout": "vertical",
               "gap": 10,
@@ -1758,9 +1753,9 @@
                           "type": "text",
                           "id": "ZJ1uV",
                           "name": "detailTitle",
-                          "fill": "#1F2937",
+                          "fill": "#1e293b",
                           "content": "支架与预埋板相对定位",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 15,
                           "fontWeight": "700"
                         },
@@ -1768,12 +1763,12 @@
                           "type": "text",
                           "id": "vX84A",
                           "name": "detailDesc",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
                           "content": "输入完整 SUPPO Refno，系统会自动识别所属库并返回 anchor、panel、vector、length。",
                           "lineHeight": 1.5,
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 12,
                           "fontWeight": "normal"
                         }
@@ -1783,7 +1778,7 @@
                       "type": "frame",
                       "id": "PTXpl",
                       "name": "sampleTag",
-                      "fill": "#FFF7ED",
+                      "fill": "#eff6ff",
                       "cornerRadius": 999,
                       "padding": [
                         6,
@@ -1794,7 +1789,7 @@
                           "type": "text",
                           "id": "1W5tJ",
                           "name": "sampleTagText",
-                          "fill": "#C2410C",
+                          "fill": "#1d4ed8",
                           "content": "默认样例 Refno：24383_88342",
                           "fontFamily": "Fira Code",
                           "fontSize": 11,
@@ -1824,9 +1819,9 @@
                           "type": "text",
                           "id": "9xuDj",
                           "name": "field2Label",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "SUPPO Refno",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Fira Code",
                           "fontSize": 12,
                           "fontWeight": "600"
                         },
@@ -1835,12 +1830,12 @@
                           "id": "jqay2",
                           "name": "field2Value",
                           "width": "fill_container",
-                          "fill": "#FFF7ED",
+                          "fill": "#eff6ff",
                           "cornerRadius": 10,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#FDBA74"
+                            "fill": "#93c5fd"
                           },
                           "padding": [
                             9,
@@ -1850,7 +1845,7 @@
                             {
                               "type": "text",
                               "id": "UWivF",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "24383_88342",
                               "fontFamily": "Fira Code",
                               "fontSize": 13,
@@ -1862,9 +1857,9 @@
                           "type": "text",
                           "id": "qdnrZ",
                           "name": "refnoHint",
-                          "fill": "#9CA3AF",
+                          "fill": "#94a3b8",
                           "content": "格式示例：24383_88342",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Fira Code",
                           "fontSize": 11,
                           "fontWeight": "500"
                         }
@@ -1882,9 +1877,9 @@
                           "type": "text",
                           "id": "W6C11",
                           "name": "field3Label",
-                          "fill": "#6B7280",
+                          "fill": "#64748b",
                           "content": "容差 tolerance（可选，mm）",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 12,
                           "fontWeight": "600"
                         },
@@ -1893,12 +1888,12 @@
                           "id": "xkrcy",
                           "name": "field3Value",
                           "width": "fill_container",
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 10,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "padding": [
                             9,
@@ -1908,7 +1903,7 @@
                             {
                               "type": "text",
                               "id": "Cvail",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "5000",
                               "fontFamily": "Fira Code",
                               "fontSize": 13,
@@ -1932,12 +1927,12 @@
                       "id": "S4qXn",
                       "name": "secondary",
                       "width": "fill_container",
-                      "fill": "#FFFFFF",
+                      "fill": "#ffffff",
                       "cornerRadius": 10,
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "padding": [
                         10,
@@ -1949,9 +1944,9 @@
                         {
                           "type": "text",
                           "id": "aa1MG",
-                          "fill": "#374151",
+                          "fill": "#334155",
                           "content": "从场景读取 Refno",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 13,
                           "fontWeight": "600"
                         }
@@ -1962,7 +1957,7 @@
                       "id": "1gAam",
                       "name": "primary",
                       "width": "fill_container",
-                      "fill": "#EA580C",
+                      "fill": "#0f172a",
                       "cornerRadius": 10,
                       "padding": [
                         10,
@@ -1974,9 +1969,9 @@
                         {
                           "type": "text",
                           "id": "473xz",
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "content": "执行计算并定位",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 13,
                           "fontWeight": "700"
                         }
@@ -1996,9 +1991,9 @@
                       "type": "text",
                       "id": "Ii7in",
                       "name": "resultTitle",
-                      "fill": "#1F2937",
+                      "fill": "#1e293b",
                       "content": "查询结果表",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "700"
                     },
@@ -2006,9 +2001,9 @@
                       "type": "text",
                       "id": "j7LUH",
                       "name": "resultStatus",
-                      "fill": "#EA580C",
+                      "fill": "#2563eb",
                       "content": "可点击行自动选中并跳转",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "700"
                     }
@@ -2019,12 +2014,12 @@
                   "id": "W0jt4",
                   "name": "resultTable",
                   "width": "fill_container",
-                  "fill": "#FFFFFF",
+                  "fill": "#ffffff",
                   "cornerRadius": 10,
                   "stroke": {
                     "align": "inside",
                     "thickness": 1,
-                    "fill": "#E5E7EB"
+                    "fill": "#e2e8f0"
                   },
                   "layout": "vertical",
                   "children": [
@@ -2034,11 +2029,11 @@
                       "name": "tableHeaderRow",
                       "width": "fill_container",
                       "height": 36,
-                      "fill": "#F9FAFB",
+                      "fill": "#f8fafc",
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "children": [
                         {
@@ -2057,9 +2052,9 @@
                               "type": "text",
                               "id": "v1hdu",
                               "name": "hTextRefno",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "构件 Refno",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 11,
                               "fontWeight": "600"
                             }
@@ -2081,9 +2076,9 @@
                               "type": "text",
                               "id": "iCTLi",
                               "name": "hTextType",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "类型",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 11,
                               "fontWeight": "600"
                             }
@@ -2105,9 +2100,9 @@
                               "type": "text",
                               "id": "RFBY3",
                               "name": "hTextDist",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "距离",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 11,
                               "fontWeight": "600"
                             }
@@ -2130,9 +2125,9 @@
                               "type": "text",
                               "id": "lnYC5",
                               "name": "hTextAction",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "操作",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 11,
                               "fontWeight": "600"
                             }
@@ -2146,11 +2141,11 @@
                       "name": "row-1-active",
                       "width": "fill_container",
                       "height": 42,
-                      "fill": "#FFF7ED",
+                      "fill": "#eff6ff",
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#FED7AA"
+                        "fill": "#bfdbfe"
                       },
                       "alignItems": "center",
                       "children": [
@@ -2170,7 +2165,7 @@
                               "type": "text",
                               "id": "mYtQb",
                               "name": "ref",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "22045_778102",
                               "fontFamily": "Fira Code",
                               "fontSize": 12,
@@ -2194,9 +2189,9 @@
                               "type": "text",
                               "id": "KCozS",
                               "name": "type",
-                              "fill": "#374151",
+                              "fill": "#334155",
                               "content": "PIPE",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Fira Code",
                               "fontSize": 12,
                               "fontWeight": "500"
                             }
@@ -2218,9 +2213,9 @@
                               "type": "text",
                               "id": "I8Jd9",
                               "name": "dist",
-                              "fill": "#C2410C",
+                              "fill": "#1d4ed8",
                               "content": "1.2m",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Fira Code",
                               "fontSize": 12,
                               "fontWeight": "600"
                             }
@@ -2243,7 +2238,7 @@
                               "type": "frame",
                               "id": "s0KoE",
                               "name": "jumpBtn",
-                              "fill": "#EA580C",
+                              "fill": "#0f172a",
                               "cornerRadius": 6,
                               "gap": 4,
                               "padding": [
@@ -2256,9 +2251,9 @@
                                   "type": "text",
                                   "id": "JrGzk",
                                   "name": "jumpText",
-                                  "fill": "#FFFFFF",
+                                  "fill": "#ffffff",
                                   "content": "选中并跳转",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 11,
                                   "fontWeight": "600"
                                 },
@@ -2270,7 +2265,7 @@
                                   "height": 12,
                                   "iconFontName": "mouse-pointer-click",
                                   "iconFontFamily": "lucide",
-                                  "fill": "#FFFFFF"
+                                  "fill": "#ffffff"
                                 }
                               ]
                             }
@@ -2287,7 +2282,7 @@
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "alignItems": "center",
                       "children": [
@@ -2307,7 +2302,7 @@
                               "type": "text",
                               "id": "3fb4P",
                               "name": "ref",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "22045_778103",
                               "fontFamily": "Fira Code",
                               "fontSize": 12,
@@ -2331,9 +2326,9 @@
                               "type": "text",
                               "id": "cxgrs",
                               "name": "type",
-                              "fill": "#374151",
+                              "fill": "#334155",
                               "content": "PIPE",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Fira Code",
                               "fontSize": 12,
                               "fontWeight": "500"
                             }
@@ -2355,9 +2350,9 @@
                               "type": "text",
                               "id": "jKlRm",
                               "name": "dist",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "3.5m",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Fira Code",
                               "fontSize": 12,
                               "fontWeight": "500"
                             }
@@ -2384,7 +2379,7 @@
                               "stroke": {
                                 "align": "inside",
                                 "thickness": 1,
-                                "fill": "#E5E7EB"
+                                "fill": "#e2e8f0"
                               },
                               "gap": 4,
                               "padding": [
@@ -2397,9 +2392,9 @@
                                   "type": "text",
                                   "id": "XEzw4",
                                   "name": "jumpText",
-                                  "fill": "#374151",
+                                  "fill": "#334155",
                                   "content": "选中并跳转",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 11,
                                   "fontWeight": "600"
                                 },
@@ -2411,7 +2406,7 @@
                                   "height": 12,
                                   "iconFontName": "mouse-pointer-click",
                                   "iconFontFamily": "lucide",
-                                  "fill": "#6B7280"
+                                  "fill": "#64748b"
                                 }
                               ]
                             }
@@ -2428,7 +2423,7 @@
                       "stroke": {
                         "align": "inside",
                         "thickness": 1,
-                        "fill": "#E5E7EB"
+                        "fill": "#e2e8f0"
                       },
                       "alignItems": "center",
                       "children": [
@@ -2448,7 +2443,7 @@
                               "type": "text",
                               "id": "vXgcf",
                               "name": "ref",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "22045_778110",
                               "fontFamily": "Fira Code",
                               "fontSize": 12,
@@ -2472,9 +2467,9 @@
                               "type": "text",
                               "id": "nujIO",
                               "name": "type",
-                              "fill": "#374151",
+                              "fill": "#334155",
                               "content": "EQUI",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Fira Code",
                               "fontSize": 12,
                               "fontWeight": "500"
                             }
@@ -2496,9 +2491,9 @@
                               "type": "text",
                               "id": "jNtIb",
                               "name": "dist",
-                              "fill": "#6B7280",
+                              "fill": "#64748b",
                               "content": "4.8m",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Fira Code",
                               "fontSize": 12,
                               "fontWeight": "500"
                             }
@@ -2525,7 +2520,7 @@
                               "stroke": {
                                 "align": "inside",
                                 "thickness": 1,
-                                "fill": "#E5E7EB"
+                                "fill": "#e2e8f0"
                               },
                               "gap": 4,
                               "padding": [
@@ -2538,9 +2533,9 @@
                                   "type": "text",
                                   "id": "AJAnR",
                                   "name": "jumpText",
-                                  "fill": "#374151",
+                                  "fill": "#334155",
                                   "content": "选中并跳转",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 11,
                                   "fontWeight": "600"
                                 },
@@ -2552,7 +2547,7 @@
                                   "height": 12,
                                   "iconFontName": "mouse-pointer-click",
                                   "iconFontFamily": "lucide",
-                                  "fill": "#6B7280"
+                                  "fill": "#64748b"
                                 }
                               ]
                             }
@@ -2578,7 +2573,7 @@
                   "name": "footerNote",
                   "fill": "$muted_foreground",
                   "content": "点击结果表任意行，场景将选中并飞到目标位置。",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "500"
                 },
@@ -2588,7 +2583,7 @@
                   "name": "footerApi",
                   "fill": "$muted_foreground",
                   "content": "已选场景：fitting-offset",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 10,
                   "fontWeight": "500"
                 }
@@ -2604,11 +2599,11 @@
           "name": "Ribbon Bar",
           "width": 1440,
           "height": 92,
-          "fill": "#FFFFFF",
+          "fill": "#ffffff",
           "stroke": {
             "align": "inside",
             "thickness": 1,
-            "fill": "#E5E7EB"
+            "fill": "#e2e8f0"
           },
           "padding": [
             18,
@@ -2628,9 +2623,9 @@
                   "type": "text",
                   "id": "fxVIt",
                   "name": "fileA",
-                  "fill": "#64748B",
+                  "fill": "#64748b",
                   "content": "文件",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "500"
                 },
@@ -2638,9 +2633,9 @@
                   "type": "text",
                   "id": "6I1cP",
                   "name": "viewA",
-                  "fill": "#64748B",
+                  "fill": "#64748b",
                   "content": "视图",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "500"
                 },
@@ -2660,9 +2655,9 @@
                       "type": "text",
                       "id": "RoYQN",
                       "name": "spaceLabelA",
-                      "fill": "#0F172A",
+                      "fill": "#0f172a",
                       "content": "空间计算",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "700"
                     },
@@ -2671,7 +2666,7 @@
                       "cornerRadius": 999,
                       "id": "r6siM",
                       "name": "spaceUnderlineA",
-                      "fill": "#EA580C",
+                      "fill": "#2563eb",
                       "width": 72,
                       "height": 3
                     }
@@ -2690,12 +2685,12 @@
                   "type": "frame",
                   "id": "kSLcb",
                   "name": "queryBtnA",
-                  "fill": "#FFFFFF",
+                  "fill": "#ffffff",
                   "cornerRadius": 10,
                   "stroke": {
                     "align": "inside",
                     "thickness": 1,
-                    "fill": "#CBD5E1"
+                    "fill": "#cbd5e1"
                   },
                   "padding": [
                     10,
@@ -2710,7 +2705,7 @@
                       "name": "queryBtnTextA",
                       "fill": "#475569",
                       "content": "空间查询",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "500"
                     }
@@ -2720,13 +2715,8 @@
                   "type": "frame",
                   "id": "HjAeV",
                   "name": "computeBtnA",
-                  "fill": "#FFF7ED",
+                  "fill": "#eff6ff",
                   "cornerRadius": 10,
-                  "stroke": {
-                    "align": "inside",
-                    "thickness": 1,
-                    "fill": "#FDBA74"
-                  },
                   "padding": [
                     10,
                     14
@@ -2738,9 +2728,9 @@
                       "type": "text",
                       "id": "XOSu0",
                       "name": "computeBtnTextA",
-                      "fill": "#C2410C",
+                      "fill": "#1d4ed8",
                       "content": "支架空间计算",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "700"
                     }
@@ -2750,12 +2740,12 @@
                   "type": "frame",
                   "id": "9coeD",
                   "name": "statusBtnA",
-                  "fill": "#FFFFFF",
+                  "fill": "#ffffff",
                   "cornerRadius": 10,
                   "stroke": {
                     "align": "inside",
                     "thickness": 1,
-                    "fill": "#CBD5E1"
+                    "fill": "#cbd5e1"
                   },
                   "padding": [
                     10,
@@ -2770,7 +2760,7 @@
                       "name": "statusBtnTextA",
                       "fill": "#475569",
                       "content": "计算状态",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "500"
                     }
@@ -2786,7 +2776,7 @@
   "variables": {
     "border": {
       "type": "color",
-      "value": "#e5e7eb"
+      "value": "#e2e8f0"
     },
     "card": {
       "type": "color",
@@ -2794,15 +2784,15 @@
     },
     "foreground": {
       "type": "color",
-      "value": "#1f2937"
+      "value": "#1e293b"
     },
     "muted_foreground": {
       "type": "color",
-      "value": "#6b7280"
+      "value": "#64748b"
     },
     "primary": {
       "type": "color",
-      "value": "#ea580c"
+      "value": "#2563eb"
     }
   }
 }

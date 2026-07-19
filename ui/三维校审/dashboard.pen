@@ -9,7 +9,7 @@
       "name": "Dashboard Screen",
       "width": 1448,
       "height": 1202,
-      "fill": "#F3F4F6",
+      "fill": "#f1f5f9",
       "children": [
         {
           "type": "frame",
@@ -17,13 +17,13 @@
           "name": "sidebar",
           "width": 280,
           "height": "fill_container",
-          "fill": "#FFFFFF",
+          "fill": "#ffffff",
           "stroke": {
             "align": "inside",
             "thickness": {
               "right": 1
             },
-            "fill": "#E5E7EB"
+            "fill": "#e2e8f0"
           },
           "layout": "vertical",
           "children": [
@@ -42,7 +42,7 @@
                   "cornerRadius": 8,
                   "id": "KCeXb",
                   "name": "logoRect",
-                  "fill": "#3B82F6",
+                  "fill": "#3b82f6",
                   "width": 32,
                   "height": 32
                 },
@@ -50,9 +50,9 @@
                   "type": "text",
                   "id": "cC8qH",
                   "name": "logoText",
-                  "fill": "#1F2937",
+                  "fill": "#1e293b",
                   "content": "Plant3D Web",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Fira Code",
                   "fontSize": 20,
                   "fontWeight": "700"
                 }
@@ -74,7 +74,7 @@
                   "name": "navItem1",
                   "width": "fill_container",
                   "height": 44,
-                  "fill": "#EFF6FF",
+                  "fill": "#eff6ff",
                   "cornerRadius": 8,
                   "gap": 12,
                   "padding": [
@@ -91,15 +91,15 @@
                       "height": 20,
                       "iconFontName": "layout-dashboard",
                       "iconFontFamily": "lucide",
-                      "fill": "#3B82F6"
+                      "fill": "#3b82f6"
                     },
                     {
                       "type": "text",
                       "id": "8EXwE",
                       "name": "text1",
-                      "fill": "#3B82F6",
+                      "fill": "#3b82f6",
                       "content": "首页 (Dashboard)",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "600"
                     }
@@ -127,15 +127,15 @@
                       "height": 20,
                       "iconFontName": "folder",
                       "iconFontFamily": "lucide",
-                      "fill": "#6B7280"
+                      "fill": "#64748b"
                     },
                     {
                       "type": "text",
                       "id": "9JVih",
                       "name": "text2",
-                      "fill": "#4B5563",
+                      "fill": "#475569",
                       "content": "模型工程",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "500"
                     }
@@ -163,15 +163,15 @@
                       "height": 20,
                       "iconFontName": "check-square",
                       "iconFontFamily": "lucide",
-                      "fill": "#6B7280"
+                      "fill": "#64748b"
                     },
                     {
                       "type": "text",
                       "id": "lcZiO",
                       "name": "text3",
-                      "fill": "#4B5563",
+                      "fill": "#475569",
                       "content": "校审批注",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "500"
                     }
@@ -195,13 +195,13 @@
               "name": "mainHeader",
               "width": "fill_container",
               "height": 80,
-              "fill": "#FFFFFF",
+              "fill": "#ffffff",
               "stroke": {
                 "align": "inside",
                 "thickness": {
                   "bottom": 1
                 },
-                "fill": "#E5E7EB"
+                "fill": "#e2e8f0"
               },
               "padding": 32,
               "justifyContent": "space_between",
@@ -211,9 +211,9 @@
                   "type": "text",
                   "id": "7mRAy",
                   "name": "headerTitle",
-                  "fill": "#1F2937",
+                  "fill": "#1e293b",
                   "content": "概览",
-                  "fontFamily": "Inter",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 24,
                   "fontWeight": "700"
                 },
@@ -233,7 +233,7 @@
                       "height": 24,
                       "iconFontName": "search",
                       "iconFontFamily": "lucide",
-                      "fill": "#6B7280"
+                      "fill": "#64748b"
                     },
                     {
                       "type": "icon_font",
@@ -243,13 +243,13 @@
                       "height": 24,
                       "iconFontName": "bell",
                       "iconFontFamily": "lucide",
-                      "fill": "#6B7280"
+                      "fill": "#64748b"
                     },
                     {
                       "type": "ellipse",
                       "id": "s7Mxr",
                       "name": "avatar",
-                      "fill": "#3B82F6",
+                      "fill": "#3b82f6",
                       "width": 36,
                       "height": 36
                     }
@@ -279,9 +279,9 @@
                       "type": "text",
                       "id": "D5WGo",
                       "name": "qaTitle",
-                      "fill": "#111827",
+                      "fill": "#0f172a",
                       "content": "快捷操作",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 18,
                       "fontWeight": "600"
                     },
@@ -298,12 +298,12 @@
                           "name": "card1",
                           "width": "fill_container",
                           "height": 120,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "gap": 12,
@@ -315,7 +315,7 @@
                               "name": "iconContainer1",
                               "width": 40,
                               "height": 40,
-                              "fill": "#EFF6FF",
+                              "fill": "#eff6ff",
                               "cornerRadius": 8,
                               "layout": "none",
                               "children": [
@@ -329,7 +329,7 @@
                                   "height": 20,
                                   "iconFontName": "upload",
                                   "iconFontFamily": "lucide",
-                                  "fill": "#3B82F6"
+                                  "fill": "#3b82f6"
                                 }
                               ]
                             },
@@ -337,9 +337,9 @@
                               "type": "text",
                               "id": "pdQlY",
                               "name": "text1",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "上传/打开模型",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 16,
                               "fontWeight": "500"
                             }
@@ -351,12 +351,12 @@
                           "name": "card2",
                           "width": "fill_container",
                           "height": 120,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "gap": 12,
@@ -368,7 +368,7 @@
                               "name": "iconContainer2",
                               "width": 40,
                               "height": 40,
-                              "fill": "#ECFDF5",
+                              "fill": "#ecfdf5",
                               "cornerRadius": 8,
                               "layout": "none",
                               "children": [
@@ -382,7 +382,7 @@
                                   "height": 20,
                                   "iconFontName": "send",
                                   "iconFontFamily": "lucide",
-                                  "fill": "#10B981"
+                                  "fill": "#10b981"
                                 }
                               ]
                             },
@@ -390,9 +390,9 @@
                               "type": "text",
                               "id": "1dr87",
                               "name": "text2",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "发起编校审",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 16,
                               "fontWeight": "500"
                             }
@@ -404,12 +404,12 @@
                           "name": "card3",
                           "width": "fill_container",
                           "height": 120,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "gap": 12,
@@ -421,7 +421,7 @@
                               "name": "iconContainer3",
                               "width": 40,
                               "height": 40,
-                              "fill": "#FFFBEB",
+                              "fill": "#fffbeb",
                               "cornerRadius": 8,
                               "layout": "none",
                               "children": [
@@ -435,7 +435,7 @@
                                   "height": 20,
                                   "iconFontName": "file-check",
                                   "iconFontFamily": "lucide",
-                                  "fill": "#F59E0B"
+                                  "fill": "#f59e0b"
                                 }
                               ]
                             },
@@ -443,9 +443,9 @@
                               "type": "text",
                               "id": "9ck2e",
                               "name": "text3",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "待办校审",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 16,
                               "fontWeight": "500"
                             }
@@ -457,12 +457,12 @@
                           "name": "card4",
                           "width": "fill_container",
                           "height": 120,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "gap": 12,
@@ -474,7 +474,7 @@
                               "name": "iconContainer4",
                               "width": 40,
                               "height": 40,
-                              "fill": "#FEF2F2",
+                              "fill": "#fef2f2",
                               "cornerRadius": 8,
                               "layout": "none",
                               "children": [
@@ -488,7 +488,7 @@
                                   "height": 20,
                                   "iconFontName": "zap",
                                   "iconFontFamily": "lucide",
-                                  "fill": "#EF4444"
+                                  "fill": "#ef4444"
                                 }
                               ]
                             },
@@ -496,9 +496,9 @@
                               "type": "text",
                               "id": "koYQ9",
                               "name": "text4",
-                              "fill": "#1F2937",
+                              "fill": "#1e293b",
                               "content": "碰撞检查",
-                              "fontFamily": "Inter",
+                              "fontFamily": "Noto Sans SC",
                               "fontSize": 16,
                               "fontWeight": "500"
                             }
@@ -528,9 +528,9 @@
                           "type": "text",
                           "id": "9XryE",
                           "name": "statTitle",
-                          "fill": "#111827",
+                          "fill": "#0f172a",
                           "content": "数据统计",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 18,
                           "fontWeight": "600"
                         },
@@ -548,12 +548,12 @@
                               "name": "statCard1",
                               "width": "fill_container",
                               "height": 80,
-                              "fill": "#FFFFFF",
+                              "fill": "#ffffff",
                               "cornerRadius": 12,
                               "stroke": {
                                 "align": "inside",
                                 "thickness": 1,
-                                "fill": "#E5E7EB"
+                                "fill": "#e2e8f0"
                               },
                               "padding": 20,
                               "justifyContent": "space_between",
@@ -570,9 +570,9 @@
                                       "type": "text",
                                       "id": "vCnf3",
                                       "name": "statLabel1",
-                                      "fill": "#6B7280",
+                                      "fill": "#64748b",
                                       "content": "总工程数",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "normal"
                                     },
@@ -580,9 +580,9 @@
                                       "type": "text",
                                       "id": "MMS9h",
                                       "name": "statValue1",
-                                      "fill": "#1F2937",
+                                      "fill": "#1e293b",
                                       "content": "24",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 24,
                                       "fontWeight": "700"
                                     }
@@ -596,12 +596,12 @@
                               "name": "statCard2",
                               "width": "fill_container",
                               "height": 80,
-                              "fill": "#FFFFFF",
+                              "fill": "#ffffff",
                               "cornerRadius": 12,
                               "stroke": {
                                 "align": "inside",
                                 "thickness": 1,
-                                "fill": "#E5E7EB"
+                                "fill": "#e2e8f0"
                               },
                               "padding": 20,
                               "justifyContent": "space_between",
@@ -618,9 +618,9 @@
                                       "type": "text",
                                       "id": "oHULW",
                                       "name": "statLabel2",
-                                      "fill": "#6B7280",
+                                      "fill": "#64748b",
                                       "content": "进行中任务",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "normal"
                                     },
@@ -628,9 +628,9 @@
                                       "type": "text",
                                       "id": "8C7i8",
                                       "name": "statValue2",
-                                      "fill": "#1F2937",
+                                      "fill": "#1e293b",
                                       "content": "8",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 24,
                                       "fontWeight": "700"
                                     }
@@ -644,12 +644,12 @@
                               "name": "statCard3",
                               "width": "fill_container",
                               "height": 80,
-                              "fill": "#FFFFFF",
+                              "fill": "#ffffff",
                               "cornerRadius": 12,
                               "stroke": {
                                 "align": "inside",
                                 "thickness": 1,
-                                "fill": "#E5E7EB"
+                                "fill": "#e2e8f0"
                               },
                               "padding": 20,
                               "justifyContent": "space_between",
@@ -666,9 +666,9 @@
                                       "type": "text",
                                       "id": "l0A3d",
                                       "name": "statLabel3",
-                                      "fill": "#6B7280",
+                                      "fill": "#64748b",
                                       "content": "待我评审",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "normal"
                                     },
@@ -676,9 +676,9 @@
                                       "type": "text",
                                       "id": "Ct93B",
                                       "name": "statValue3",
-                                      "fill": "#1F2937",
+                                      "fill": "#1e293b",
                                       "content": "3",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 24,
                                       "fontWeight": "700"
                                     }
@@ -692,9 +692,9 @@
                           "type": "text",
                           "id": "f6zgf",
                           "name": "healthTitle",
-                          "fill": "#111827",
+                          "fill": "#0f172a",
                           "content": "模型健康度看板",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 18,
                           "fontWeight": "600"
                         },
@@ -704,12 +704,12 @@
                           "name": "healthCard",
                           "width": "fill_container",
                           "height": 160,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "gap": 24,
                           "padding": 24,
@@ -744,7 +744,7 @@
                                       "stroke": {
                                         "align": "center",
                                         "thickness": 8,
-                                        "fill": "#E5E7EB"
+                                        "fill": "#e2e8f0"
                                       }
                                     },
                                     {
@@ -758,7 +758,7 @@
                                       "stroke": {
                                         "align": "center",
                                         "thickness": 8,
-                                        "fill": "#10B981"
+                                        "fill": "#10b981"
                                       }
                                     },
                                     {
@@ -767,10 +767,10 @@
                                       "x": 22,
                                       "y": 30,
                                       "name": "hm1Text",
-                                      "fill": "#1F2937",
+                                      "fill": "#1e293b",
                                       "content": "85%",
                                       "textAlign": "center",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 16,
                                       "fontWeight": "700"
                                     }
@@ -780,9 +780,9 @@
                                   "type": "text",
                                   "id": "S5JWt",
                                   "name": "hm1Label",
-                                  "fill": "#6B7280",
+                                  "fill": "#64748b",
                                   "content": "意见闭合率",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 14,
                                   "fontWeight": "normal"
                                 }
@@ -792,7 +792,7 @@
                               "type": "rectangle",
                               "id": "wkMs0",
                               "name": "hDivider",
-                              "fill": "#E5E7EB",
+                              "fill": "#e2e8f0",
                               "width": 1,
                               "height": "fill_container"
                             },
@@ -826,7 +826,7 @@
                                       "stroke": {
                                         "align": "center",
                                         "thickness": 8,
-                                        "fill": "#E5E7EB"
+                                        "fill": "#e2e8f0"
                                       }
                                     },
                                     {
@@ -840,7 +840,7 @@
                                       "stroke": {
                                         "align": "center",
                                         "thickness": 8,
-                                        "fill": "#3B82F6"
+                                        "fill": "#3b82f6"
                                       }
                                     },
                                     {
@@ -849,10 +849,10 @@
                                       "x": 22,
                                       "y": 30,
                                       "name": "hm2Text",
-                                      "fill": "#1F2937",
+                                      "fill": "#1e293b",
                                       "content": "92%",
                                       "textAlign": "center",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 16,
                                       "fontWeight": "700"
                                     }
@@ -862,9 +862,9 @@
                                   "type": "text",
                                   "id": "jH3SM",
                                   "name": "hm2Label",
-                                  "fill": "#6B7280",
+                                  "fill": "#64748b",
                                   "content": "属性完整度",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 14,
                                   "fontWeight": "normal"
                                 }
@@ -886,9 +886,9 @@
                           "type": "text",
                           "id": "9cMYt",
                           "name": "taskTitle",
-                          "fill": "#111827",
+                          "fill": "#0f172a",
                           "content": "任务概览",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 18,
                           "fontWeight": "600"
                         },
@@ -898,12 +898,12 @@
                           "name": "taskCard",
                           "width": "fill_container",
                           "height": 290,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "padding": 24,
@@ -918,7 +918,7 @@
                                 "thickness": {
                                   "bottom": 1
                                 },
-                                "fill": "#E5E7EB"
+                                "fill": "#e2e8f0"
                               },
                               "gap": 24,
                               "children": [
@@ -940,9 +940,9 @@
                                       "type": "text",
                                       "id": "j1MlH",
                                       "name": "tabText1",
-                                      "fill": "#3B82F6",
+                                      "fill": "#3b82f6",
                                       "content": "我的任务",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "600"
                                     },
@@ -950,7 +950,7 @@
                                       "type": "rectangle",
                                       "id": "a0N0A",
                                       "name": "tabIndicator1",
-                                      "fill": "#3B82F6",
+                                      "fill": "#3b82f6",
                                       "width": "fill_container",
                                       "height": 2
                                     }
@@ -974,9 +974,9 @@
                                       "type": "text",
                                       "id": "HRIvt",
                                       "name": "tabText2",
-                                      "fill": "#6B7280",
+                                      "fill": "#64748b",
                                       "content": "待我评审",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "500"
                                     }
@@ -1004,7 +1004,7 @@
                                   "id": "6fsu8",
                                   "name": "task1",
                                   "width": "fill_container",
-                                  "fill": "#F9FAFB",
+                                  "fill": "#f8fafc",
                                   "cornerRadius": 8,
                                   "padding": 16,
                                   "justifyContent": "space_between",
@@ -1025,7 +1025,7 @@
                                           "height": 20,
                                           "iconFontName": "alert-circle",
                                           "iconFontFamily": "lucide",
-                                          "fill": "#EF4444"
+                                          "fill": "#ef4444"
                                         },
                                         {
                                           "type": "frame",
@@ -1038,9 +1038,9 @@
                                               "type": "text",
                                               "id": "ZUzqK",
                                               "name": "taskTitle1",
-                                              "fill": "#1F2937",
+                                              "fill": "#1e293b",
                                               "content": "[碰撞] 主管廊区管道冲突审批",
-                                              "fontFamily": "Inter",
+                                              "fontFamily": "Noto Sans SC",
                                               "fontSize": 14,
                                               "fontWeight": "500"
                                             },
@@ -1048,9 +1048,9 @@
                                               "type": "text",
                                               "id": "hVFbf",
                                               "name": "taskMeta1",
-                                              "fill": "#6B7280",
+                                              "fill": "#64748b",
                                               "content": "化工厂区 A - 10分钟前",
-                                              "fontFamily": "Inter",
+                                              "fontFamily": "Fira Code",
                                               "fontSize": 12,
                                               "fontWeight": "normal"
                                             }
@@ -1062,9 +1062,9 @@
                                       "type": "text",
                                       "id": "tZvYQ",
                                       "name": "taskRight1",
-                                      "fill": "#EF4444",
+                                      "fill": "#ef4444",
                                       "content": "高优先级",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 12,
                                       "fontWeight": "500"
                                     }
@@ -1075,7 +1075,7 @@
                                   "id": "dnZXk",
                                   "name": "task2",
                                   "width": "fill_container",
-                                  "fill": "#F9FAFB",
+                                  "fill": "#f8fafc",
                                   "cornerRadius": 8,
                                   "padding": 16,
                                   "justifyContent": "space_between",
@@ -1096,7 +1096,7 @@
                                           "height": 20,
                                           "iconFontName": "check-circle",
                                           "iconFontFamily": "lucide",
-                                          "fill": "#10B981"
+                                          "fill": "#10b981"
                                         },
                                         {
                                           "type": "frame",
@@ -1109,9 +1109,9 @@
                                               "type": "text",
                                               "id": "aDpO8",
                                               "name": "taskTitle2",
-                                              "fill": "#1F2937",
+                                              "fill": "#1e293b",
                                               "content": "[编校审] 结构专业条件确认",
-                                              "fontFamily": "Inter",
+                                              "fontFamily": "Noto Sans SC",
                                               "fontSize": 14,
                                               "fontWeight": "500"
                                             },
@@ -1119,9 +1119,9 @@
                                               "type": "text",
                                               "id": "561O8",
                                               "name": "taskMeta2",
-                                              "fill": "#6B7280",
+                                              "fill": "#64748b",
                                               "content": "水处理子项 - 2小时前",
-                                              "fontFamily": "Inter",
+                                              "fontFamily": "Fira Code",
                                               "fontSize": 12,
                                               "fontWeight": "normal"
                                             }
@@ -1133,9 +1133,9 @@
                                       "type": "text",
                                       "id": "XdE7g",
                                       "name": "taskRight2",
-                                      "fill": "#6B7280",
+                                      "fill": "#64748b",
                                       "content": "普通优先级",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 12,
                                       "fontWeight": "500"
                                     }
@@ -1146,7 +1146,7 @@
                                   "id": "k4amy",
                                   "name": "task3",
                                   "width": "fill_container",
-                                  "fill": "#F9FAFB",
+                                  "fill": "#f8fafc",
                                   "cornerRadius": 8,
                                   "padding": 16,
                                   "justifyContent": "space_between",
@@ -1167,7 +1167,7 @@
                                           "height": 20,
                                           "iconFontName": "clock",
                                           "iconFontFamily": "lucide",
-                                          "fill": "#F59E0B"
+                                          "fill": "#f59e0b"
                                         },
                                         {
                                           "type": "frame",
@@ -1180,9 +1180,9 @@
                                               "type": "text",
                                               "id": "Jii61",
                                               "name": "taskTitle3",
-                                              "fill": "#1F2937",
+                                              "fill": "#1e293b",
                                               "content": "[系统] 模型解析失败，需重新上传",
-                                              "fontFamily": "Inter",
+                                              "fontFamily": "Noto Sans SC",
                                               "fontSize": 14,
                                               "fontWeight": "500"
                                             },
@@ -1190,9 +1190,9 @@
                                               "type": "text",
                                               "id": "ms4GR",
                                               "name": "taskMeta3",
-                                              "fill": "#6B7280",
+                                              "fill": "#64748b",
                                               "content": "工艺管道模型v2 - 昨天",
-                                              "fontFamily": "Inter",
+                                              "fontFamily": "Fira Code",
                                               "fontSize": 12,
                                               "fontWeight": "normal"
                                             }
@@ -1204,9 +1204,9 @@
                                       "type": "text",
                                       "id": "GL83N",
                                       "name": "taskRight3",
-                                      "fill": "#F59E0B",
+                                      "fill": "#f59e0b",
                                       "content": "系统通知",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 12,
                                       "fontWeight": "500"
                                     }
@@ -1220,9 +1220,9 @@
                           "type": "text",
                           "id": "wx8UP",
                           "name": "activityTitle",
-                          "fill": "#111827",
+                          "fill": "#0f172a",
                           "content": "团队动态",
-                          "fontFamily": "Inter",
+                          "fontFamily": "Noto Sans SC",
                           "fontSize": 18,
                           "fontWeight": "600"
                         },
@@ -1232,12 +1232,12 @@
                           "name": "activityCard",
                           "width": "fill_container",
                           "height": 300,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "gap": 16,
@@ -1254,7 +1254,7 @@
                                   "type": "ellipse",
                                   "id": "GQMe7",
                                   "name": "actAvatar1",
-                                  "fill": "#E5E7EB",
+                                  "fill": "#e2e8f0",
                                   "width": 32,
                                   "height": 32
                                 },
@@ -1270,9 +1270,9 @@
                                       "type": "text",
                                       "id": "Iz8JX",
                                       "name": "actUser1",
-                                      "fill": "#1F2937",
+                                      "fill": "#1e293b",
                                       "content": "王建国 (工艺)",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "600"
                                     },
@@ -1280,9 +1280,9 @@
                                       "type": "text",
                                       "id": "3StJc",
                                       "name": "actAction1",
-                                      "fill": "#4B5563",
+                                      "fill": "#475569",
                                       "content": "提交了一份针对 [冷冻水管廊] 的新编校审单，需结构专业确认。",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "normal"
                                     },
@@ -1290,9 +1290,9 @@
                                       "type": "text",
                                       "id": "u4PmG",
                                       "name": "actTime1",
-                                      "fill": "#9CA3AF",
+                                      "fill": "#94a3b8",
                                       "content": "15分钟前",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 12,
                                       "fontWeight": "normal"
                                     }
@@ -1311,7 +1311,7 @@
                                   "type": "ellipse",
                                   "id": "8afvi",
                                   "name": "actAvatar2",
-                                  "fill": "#E5E7EB",
+                                  "fill": "#e2e8f0",
                                   "width": 32,
                                   "height": 32
                                 },
@@ -1327,9 +1327,9 @@
                                       "type": "text",
                                       "id": "VC43L",
                                       "name": "actUser2",
-                                      "fill": "#10B981",
+                                      "fill": "#10b981",
                                       "content": "系统机器人",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Noto Sans SC",
                                       "fontSize": 14,
                                       "fontWeight": "600"
                                     },
@@ -1337,9 +1337,9 @@
                                       "type": "text",
                                       "id": "GGNcL",
                                       "name": "actAction2",
-                                      "fill": "#4B5563",
+                                      "fill": "#475569",
                                       "content": "在化工厂区A检测到 3 处新的硬碰撞问题。",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 14,
                                       "fontWeight": "normal"
                                     },
@@ -1347,9 +1347,9 @@
                                       "type": "text",
                                       "id": "ah187",
                                       "name": "actTime2",
-                                      "fill": "#9CA3AF",
+                                      "fill": "#94a3b8",
                                       "content": "1小时前",
-                                      "fontFamily": "Inter",
+                                      "fontFamily": "Fira Code",
                                       "fontSize": 12,
                                       "fontWeight": "normal"
                                     }
@@ -1375,9 +1375,9 @@
                       "type": "text",
                       "id": "hpiRb",
                       "name": "recentTitle",
-                      "fill": "#111827",
+                      "fill": "#0f172a",
                       "content": "最近打开的工程",
-                      "fontFamily": "Inter",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 18,
                       "fontWeight": "600"
                     },
@@ -1395,12 +1395,12 @@
                           "clip": true,
                           "width": "fill_container",
                           "height": 180,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "children": [
@@ -1408,7 +1408,7 @@
                               "type": "rectangle",
                               "id": "0Gukp",
                               "name": "projImg1",
-                              "fill": "#E5E7EB",
+                              "fill": "#e2e8f0",
                               "width": "fill_container",
                               "height": 100
                             },
@@ -1425,9 +1425,9 @@
                                   "type": "text",
                                   "id": "mfbPv",
                                   "name": "projName1",
-                                  "fill": "#1F2937",
+                                  "fill": "#1e293b",
                                   "content": "化工厂区 A - 主管廊",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 14,
                                   "fontWeight": "600"
                                 },
@@ -1435,9 +1435,9 @@
                                   "type": "text",
                                   "id": "Fy5Ee",
                                   "name": "projTime1",
-                                  "fill": "#6B7280",
+                                  "fill": "#64748b",
                                   "content": "2小时前访问",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Fira Code",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
                                 }
@@ -1452,12 +1452,12 @@
                           "clip": true,
                           "width": "fill_container",
                           "height": 180,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "children": [
@@ -1465,7 +1465,7 @@
                               "type": "rectangle",
                               "id": "M99rz",
                               "name": "projImg2",
-                              "fill": "#E5E7EB",
+                              "fill": "#e2e8f0",
                               "width": "fill_container",
                               "height": 100
                             },
@@ -1482,9 +1482,9 @@
                                   "type": "text",
                                   "id": "sj8CG",
                                   "name": "projName2",
-                                  "fill": "#1F2937",
+                                  "fill": "#1e293b",
                                   "content": "水处理子项 B1区",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Fira Code",
                                   "fontSize": 14,
                                   "fontWeight": "600"
                                 },
@@ -1492,9 +1492,9 @@
                                   "type": "text",
                                   "id": "CWwMQ",
                                   "name": "projTime2",
-                                  "fill": "#6B7280",
+                                  "fill": "#64748b",
                                   "content": "昨天访问",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
                                 }
@@ -1509,12 +1509,12 @@
                           "clip": true,
                           "width": "fill_container",
                           "height": 180,
-                          "fill": "#FFFFFF",
+                          "fill": "#ffffff",
                           "cornerRadius": 12,
                           "stroke": {
                             "align": "inside",
                             "thickness": 1,
-                            "fill": "#E5E7EB"
+                            "fill": "#e2e8f0"
                           },
                           "layout": "vertical",
                           "children": [
@@ -1522,7 +1522,7 @@
                               "type": "rectangle",
                               "id": "mG7Yf",
                               "name": "projImg3",
-                              "fill": "#E5E7EB",
+                              "fill": "#e2e8f0",
                               "width": "fill_container",
                               "height": 100
                             },
@@ -1539,9 +1539,9 @@
                                   "type": "text",
                                   "id": "izMsm",
                                   "name": "projName3",
-                                  "fill": "#1F2937",
+                                  "fill": "#1e293b",
                                   "content": "除盐水站模型",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Noto Sans SC",
                                   "fontSize": 14,
                                   "fontWeight": "600"
                                 },
@@ -1549,9 +1549,9 @@
                                   "type": "text",
                                   "id": "aTY3n",
                                   "name": "projTime3",
-                                  "fill": "#6B7280",
+                                  "fill": "#64748b",
                                   "content": "3天前访问",
-                                  "fontFamily": "Inter",
+                                  "fontFamily": "Fira Code",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
                                 }

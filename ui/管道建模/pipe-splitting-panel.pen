@@ -10,7 +10,7 @@
       "clip": true,
       "width": 800,
       "height": 1000,
-      "fill": "#FFFFFF",
+      "fill": "#ffffff",
       "layout": "none"
     },
     {
@@ -20,18 +20,21 @@
       "y": 0,
       "name": "管道分割面板",
       "width": 340,
-      "fill": "#FFFFFF",
+      "fill": "#ffffff",
       "cornerRadius": 8,
       "stroke": {
         "align": "inside",
         "thickness": 1,
-        "fill": "#E5E7EB"
+        "fill": "#e2e8f0"
       },
       "effect": {
         "type": "shadow",
         "shadowType": "outer",
         "color": "#0000000f",
-        "offset": { "x": 0, "y": 4 },
+        "offset": {
+          "x": 0,
+          "y": 4
+        },
         "blur": 16
       },
       "layout": "vertical",
@@ -43,8 +46,11 @@
           "id": "spHeader",
           "name": "header",
           "width": "fill_container",
-          "fill": "#FAFAFA",
-          "padding": [16, 20],
+          "fill": "#f8fafc",
+          "padding": [
+            16,
+            20
+          ],
           "justifyContent": "space_between",
           "alignItems": "center",
           "children": [
@@ -52,9 +58,9 @@
               "type": "text",
               "id": "spTitle",
               "name": "title",
-              "fill": "#111827",
+              "fill": "#0f172a",
               "content": "管道分割 / 合并",
-              "fontFamily": "Fira Sans",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 16,
               "fontWeight": "600"
             }
@@ -66,7 +72,11 @@
           "name": "dividerHeader",
           "width": "fill_container",
           "height": 1,
-          "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+          "stroke": {
+            "align": "center",
+            "thickness": 1,
+            "fill": "#e2e8f0"
+          }
         },
         {
           "type": "frame",
@@ -82,7 +92,7 @@
               "id": "spModeTabs",
               "name": "modeTabs",
               "width": "fill_container",
-              "fill": "#F3F4F6",
+              "fill": "#f1f5f9",
               "cornerRadius": 8,
               "padding": 3,
               "gap": 3,
@@ -92,16 +102,22 @@
                   "id": "spTabSplit",
                   "name": "tabSplit",
                   "width": "fill_container",
-                  "fill": "#FFFFFF",
+                  "fill": "#ffffff",
                   "cornerRadius": 6,
-                  "padding": [8, 0],
+                  "padding": [
+                    8,
+                    0
+                  ],
                   "justifyContent": "center",
                   "alignItems": "center",
                   "effect": {
                     "type": "shadow",
                     "shadowType": "outer",
                     "color": "#0000000d",
-                    "offset": { "x": 0, "y": 1 },
+                    "offset": {
+                      "x": 0,
+                      "y": 1
+                    },
                     "blur": 3
                   },
                   "children": [
@@ -109,9 +125,9 @@
                       "type": "text",
                       "id": "spTabSplitText",
                       "name": "tabSplitText",
-                      "fill": "#111827",
+                      "fill": "#0f172a",
                       "content": "分割",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "600"
                     }
@@ -124,7 +140,10 @@
                   "width": "fill_container",
                   "fill": "#00000000",
                   "cornerRadius": 6,
-                  "padding": [8, 0],
+                  "padding": [
+                    8,
+                    0
+                  ],
                   "justifyContent": "center",
                   "alignItems": "center",
                   "children": [
@@ -132,9 +151,9 @@
                       "type": "text",
                       "id": "spTabMergeText",
                       "name": "tabMergeText",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "合并",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "normal"
                     }
@@ -147,7 +166,10 @@
                   "width": "fill_container",
                   "fill": "#00000000",
                   "cornerRadius": 6,
-                  "padding": [8, 0],
+                  "padding": [
+                    8,
+                    0
+                  ],
                   "justifyContent": "center",
                   "alignItems": "center",
                   "children": [
@@ -155,9 +177,9 @@
                       "type": "text",
                       "id": "spTabPlaneText",
                       "name": "tabPlaneText",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "平面分割",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "normal"
                     }
@@ -177,9 +199,9 @@
                   "type": "text",
                   "id": "spPickTitle",
                   "name": "pickTitle",
-                  "fill": "#111827",
+                  "fill": "#0f172a",
                   "content": "元素选择",
-                  "fontFamily": "Fira Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "600"
                 },
@@ -193,10 +215,13 @@
                   "stroke": {
                     "align": "inside",
                     "thickness": 1.5,
-                    "fill": "#FF6B00"
+                    "fill": "#2563eb"
                   },
                   "gap": 8,
-                  "padding": [9, 14],
+                  "padding": [
+                    9,
+                    14
+                  ],
                   "justifyContent": "center",
                   "alignItems": "center",
                   "children": [
@@ -208,15 +233,15 @@
                       "height": 14,
                       "iconFontName": "mouse-pointer-2",
                       "iconFontFamily": "lucide",
-                      "fill": "#FF6B00"
+                      "fill": "#2563eb"
                     },
                     {
                       "type": "text",
                       "id": "spPickText",
                       "name": "pickText",
-                      "fill": "#FF6B00",
+                      "fill": "#2563eb",
                       "content": "拾取分割元素",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "500"
                     }
@@ -232,7 +257,7 @@
                   "stroke": {
                     "align": "inside",
                     "thickness": 1,
-                    "fill": "#E5E7EB"
+                    "fill": "#e2e8f0"
                   },
                   "children": [
                     {
@@ -242,7 +267,7 @@
                       "clip": true,
                       "width": "fill_container",
                       "height": "fill_container",
-                      "fill": "#FAFAFA",
+                      "fill": "#f8fafc",
                       "layout": "vertical",
                       "children": [
                         {
@@ -250,8 +275,11 @@
                           "id": "spElem1",
                           "name": "elem1",
                           "width": "fill_container",
-                          "fill": "#FFF0E6",
-                          "padding": [8, 12],
+                          "fill": "#eff6ff",
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "gap": 10,
                           "alignItems": "center",
                           "children": [
@@ -263,7 +291,7 @@
                               "height": 14,
                               "iconFontName": "scissors",
                               "iconFontFamily": "lucide",
-                              "fill": "#FF6B00"
+                              "fill": "#2563eb"
                             },
                             {
                               "type": "frame",
@@ -277,7 +305,7 @@
                                   "type": "text",
                                   "id": "spElem1Name",
                                   "name": "elem1Name",
-                                  "fill": "#111827",
+                                  "fill": "#0f172a",
                                   "content": "TUBE /B1-T3",
                                   "fontFamily": "Fira Code",
                                   "fontSize": 12,
@@ -287,9 +315,9 @@
                                   "type": "text",
                                   "id": "spElem1Desc",
                                   "name": "elem1Desc",
-                                  "fill": "#9CA3AF",
+                                  "fill": "#94a3b8",
                                   "content": "Length: 2400mm  Bore: 150mm",
-                                  "fontFamily": "Fira Sans",
+                                  "fontFamily": "Fira Code",
                                   "fontSize": 10,
                                   "fontWeight": "normal"
                                 }
@@ -303,7 +331,10 @@
                           "name": "elem2",
                           "width": "fill_container",
                           "fill": "#00000000",
-                          "padding": [8, 12],
+                          "padding": [
+                            8,
+                            12
+                          ],
                           "gap": 10,
                           "alignItems": "center",
                           "children": [
@@ -315,7 +346,7 @@
                               "height": 14,
                               "iconFontName": "minus",
                               "iconFontFamily": "lucide",
-                              "fill": "#D1D5DB"
+                              "fill": "#cbd5e1"
                             },
                             {
                               "type": "frame",
@@ -329,7 +360,7 @@
                                   "type": "text",
                                   "id": "spElem2Name",
                                   "name": "elem2Name",
-                                  "fill": "#6B7280",
+                                  "fill": "#64748b",
                                   "content": "ELBO /B1-E2",
                                   "fontFamily": "Fira Code",
                                   "fontSize": 12,
@@ -339,9 +370,9 @@
                                   "type": "text",
                                   "id": "spElem2Desc",
                                   "name": "elem2Desc",
-                                  "fill": "#9CA3AF",
+                                  "fill": "#94a3b8",
                                   "content": "Angle: 90°  Bore: 150mm",
-                                  "fontFamily": "Fira Sans",
+                                  "fontFamily": "Fira Code",
                                   "fontSize": 10,
                                   "fontWeight": "normal"
                                 }
@@ -366,13 +397,38 @@
                       "name": "removeBtn",
                       "fill": "#00000000",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "gap": 4,
-                      "padding": [5, 10],
+                      "padding": [
+                        5,
+                        10
+                      ],
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "spRemoveIcon", "name": "removeIcon", "width": 12, "height": 12, "iconFontName": "x", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "spRemoveText", "name": "removeText", "fill": "#374151", "content": "移除", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "spRemoveIcon",
+                          "name": "removeIcon",
+                          "width": 12,
+                          "height": 12,
+                          "iconFontName": "x",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spRemoveText",
+                          "name": "removeText",
+                          "fill": "#334155",
+                          "content": "移除",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
                       ]
                     },
                     {
@@ -381,13 +437,38 @@
                       "name": "clearBtn",
                       "fill": "#00000000",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "gap": 4,
-                      "padding": [5, 10],
+                      "padding": [
+                        5,
+                        10
+                      ],
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "spClearIcon", "name": "clearIcon", "width": 12, "height": 12, "iconFontName": "trash-2", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "spClearText", "name": "clearText", "fill": "#374151", "content": "全部清除", "fontFamily": "Fira Sans", "fontSize": 12, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "spClearIcon",
+                          "name": "clearIcon",
+                          "width": 12,
+                          "height": 12,
+                          "iconFontName": "trash-2",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spClearText",
+                          "name": "clearText",
+                          "fill": "#334155",
+                          "content": "全部清除",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        }
                       ]
                     }
                   ]
@@ -400,7 +481,11 @@
               "name": "divider1",
               "width": "fill_container",
               "height": 1,
-              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+              "stroke": {
+                "align": "center",
+                "thickness": 1,
+                "fill": "#e2e8f0"
+              }
             },
             {
               "type": "frame",
@@ -414,9 +499,9 @@
                   "type": "text",
                   "id": "spSplitOptionsTitle",
                   "name": "splitOptionsTitle",
-                  "fill": "#111827",
+                  "fill": "#0f172a",
                   "content": "分割选项",
-                  "fontFamily": "Fira Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "600"
                 },
@@ -432,9 +517,9 @@
                       "type": "text",
                       "id": "spSplitTypeLabel",
                       "name": "splitTypeLabel",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "分割方式",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "500"
                     },
@@ -444,13 +529,38 @@
                       "name": "splitTypeSelect",
                       "width": "fill_container",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
-                      "padding": [8, 12],
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
+                      "padding": [
+                        8,
+                        12
+                      ],
                       "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
-                        { "type": "text", "id": "spSplitTypeVal", "name": "splitTypeVal", "fill": "#111827", "content": "在选中元素处分割", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" },
-                        { "type": "icon_font", "id": "spSplitTypeChevron", "name": "chevron", "width": 14, "height": 14, "iconFontName": "chevron-down", "iconFontFamily": "lucide", "fill": "#9CA3AF" }
+                        {
+                          "type": "text",
+                          "id": "spSplitTypeVal",
+                          "name": "splitTypeVal",
+                          "fill": "#0f172a",
+                          "content": "在选中元素处分割",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "icon_font",
+                          "id": "spSplitTypeChevron",
+                          "name": "chevron",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "chevron-down",
+                          "iconFontFamily": "lucide",
+                          "fill": "#94a3b8"
+                        }
                       ]
                     }
                   ]
@@ -467,9 +577,9 @@
                       "type": "text",
                       "id": "spSplitPosLabel",
                       "name": "splitPosLabel",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "分割位置",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "500"
                     },
@@ -479,13 +589,38 @@
                       "name": "splitPosInput",
                       "width": "fill_container",
                       "cornerRadius": 6,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
-                      "padding": [8, 12],
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
+                      "padding": [
+                        8,
+                        12
+                      ],
                       "justifyContent": "space_between",
                       "alignItems": "center",
                       "children": [
-                        { "type": "text", "id": "spSplitPosVal", "name": "splitPosVal", "fill": "#111827", "content": "1200", "fontFamily": "Fira Code", "fontSize": 13, "fontWeight": "normal" },
-                        { "type": "text", "id": "spSplitPosSuffix", "name": "splitPosSuffix", "fill": "#6B7280", "content": "mm", "fontFamily": "Fira Sans", "fontSize": 13, "fontWeight": "normal" }
+                        {
+                          "type": "text",
+                          "id": "spSplitPosVal",
+                          "name": "splitPosVal",
+                          "fill": "#0f172a",
+                          "content": "1200",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spSplitPosSuffix",
+                          "name": "splitPosSuffix",
+                          "fill": "#64748b",
+                          "content": "mm",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
                       ]
                     }
                   ]
@@ -505,15 +640,19 @@
                       "height": 16,
                       "fill": "#00000000",
                       "cornerRadius": 4,
-                      "stroke": { "align": "inside", "thickness": 1.5, "fill": "#D1D5DB" }
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1.5,
+                        "fill": "#cbd5e1"
+                      }
                     },
                     {
                       "type": "text",
                       "id": "spInsertAssyText",
                       "name": "insertAssyText",
-                      "fill": "#6B7280",
+                      "fill": "#64748b",
                       "content": "在分割点插入装配体",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     }
@@ -527,7 +666,11 @@
               "name": "divider2",
               "width": "fill_container",
               "height": 1,
-              "stroke": { "align": "center", "thickness": 1, "fill": "#E5E7EB" }
+              "stroke": {
+                "align": "center",
+                "thickness": 1,
+                "fill": "#e2e8f0"
+              }
             },
             {
               "type": "frame",
@@ -549,9 +692,9 @@
                       "type": "text",
                       "id": "spMeasureTitle",
                       "name": "measureTitle",
-                      "fill": "#111827",
+                      "fill": "#0f172a",
                       "content": "测量信息",
-                      "fontFamily": "Fira Sans",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -561,13 +704,38 @@
                       "name": "measureBtn",
                       "fill": "#00000000",
                       "cornerRadius": 4,
-                      "stroke": { "align": "inside", "thickness": 1, "fill": "#E5E7EB" },
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "#e2e8f0"
+                      },
                       "gap": 4,
-                      "padding": [4, 8],
+                      "padding": [
+                        4,
+                        8
+                      ],
                       "alignItems": "center",
                       "children": [
-                        { "type": "icon_font", "id": "spMeasureIcon", "name": "measureIcon", "width": 12, "height": 12, "iconFontName": "ruler", "iconFontFamily": "lucide", "fill": "#6B7280" },
-                        { "type": "text", "id": "spMeasureText", "name": "measureText", "fill": "#374151", "content": "测量", "fontFamily": "Fira Sans", "fontSize": 11, "fontWeight": "500" }
+                        {
+                          "type": "icon_font",
+                          "id": "spMeasureIcon",
+                          "name": "measureIcon",
+                          "width": 12,
+                          "height": 12,
+                          "iconFontName": "ruler",
+                          "iconFontFamily": "lucide",
+                          "fill": "#64748b"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spMeasureText",
+                          "name": "measureText",
+                          "fill": "#334155",
+                          "content": "测量",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 11,
+                          "fontWeight": "500"
+                        }
                       ]
                     }
                   ]
@@ -577,9 +745,12 @@
                   "id": "spMeasureResult",
                   "name": "measureResult",
                   "width": "fill_container",
-                  "fill": "#F9FAFB",
+                  "fill": "#f8fafc",
                   "cornerRadius": 6,
-                  "padding": [10, 12],
+                  "padding": [
+                    10,
+                    12
+                  ],
                   "gap": 16,
                   "children": [
                     {
@@ -589,8 +760,26 @@
                       "layout": "vertical",
                       "gap": 2,
                       "children": [
-                        { "type": "text", "id": "spMeasureDistLabel", "name": "measureDistLabel", "fill": "#9CA3AF", "content": "距离", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" },
-                        { "type": "text", "id": "spMeasureDistVal", "name": "measureDistVal", "fill": "#FF6B00", "content": "2400 mm", "fontFamily": "Fira Code", "fontSize": 13, "fontWeight": "600" }
+                        {
+                          "type": "text",
+                          "id": "spMeasureDistLabel",
+                          "name": "measureDistLabel",
+                          "fill": "#94a3b8",
+                          "content": "距离",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spMeasureDistVal",
+                          "name": "measureDistVal",
+                          "fill": "#2563eb",
+                          "content": "2400 mm",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
                       ]
                     },
                     {
@@ -600,8 +789,26 @@
                       "layout": "vertical",
                       "gap": 2,
                       "children": [
-                        { "type": "text", "id": "spMeasureCompLabel", "name": "measureCompLabel", "fill": "#9CA3AF", "content": "管件数量", "fontFamily": "Fira Sans", "fontSize": 10, "fontWeight": "500" },
-                        { "type": "text", "id": "spMeasureCompVal", "name": "measureCompVal", "fill": "#111827", "content": "5", "fontFamily": "Fira Code", "fontSize": 13, "fontWeight": "600" }
+                        {
+                          "type": "text",
+                          "id": "spMeasureCompLabel",
+                          "name": "measureCompLabel",
+                          "fill": "#94a3b8",
+                          "content": "管件数量",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "spMeasureCompVal",
+                          "name": "measureCompVal",
+                          "fill": "#0f172a",
+                          "content": "5",
+                          "fontFamily": "Fira Code",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
                       ]
                     }
                   ]
@@ -613,10 +820,13 @@
               "id": "spApplyBtn",
               "name": "applyBtn",
               "width": "fill_container",
-              "fill": "#FF6B00",
+              "fill": "#0f172a",
               "cornerRadius": 6,
               "gap": 8,
-              "padding": [10, 16],
+              "padding": [
+                10,
+                16
+              ],
               "justifyContent": "center",
               "alignItems": "center",
               "children": [
@@ -628,15 +838,15 @@
                   "height": 14,
                   "iconFontName": "scissors",
                   "iconFontFamily": "lucide",
-                  "fill": "#FFFFFF"
+                  "fill": "#ffffff"
                 },
                 {
                   "type": "text",
                   "id": "spApplyText",
                   "name": "applyText",
-                  "fill": "#FFFFFF",
+                  "fill": "#ffffff",
                   "content": "执行分割",
-                  "fontFamily": "Fira Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 14,
                   "fontWeight": "500"
                 }
