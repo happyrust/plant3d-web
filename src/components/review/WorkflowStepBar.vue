@@ -31,9 +31,9 @@ function getStepState(step: { code: WorkflowNode; order: number }): 'completed' 
 function getStepClasses(state: 'completed' | 'current' | 'upcoming') {
   switch (state) {
     case 'completed':
-      return 'text-emerald-600 font-medium';
+      return 'text-success font-medium';
     case 'current':
-      return 'text-orange-600 font-semibold';
+      return 'text-warning font-semibold';
     case 'upcoming':
       return 'text-slate-400 font-normal';
   }
@@ -45,7 +45,7 @@ function getStepClasses(state: 'completed' | 'current' | 'upcoming') {
     <template v-for="(step, idx) in steps" :key="step.code">
       <div class="flex items-center gap-1.5">
         <Check v-if="getStepState(step) === 'completed'"
-          class="h-3.5 w-3.5 text-emerald-500" />
+          class="h-3.5 w-3.5 text-success" />
         <span class="text-xs"
           :class="getStepClasses(getStepState(step))">
           {{ WORKFLOW_NODE_NAMES[step.code] }} ({{ step.code }})

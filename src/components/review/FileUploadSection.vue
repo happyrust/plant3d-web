@@ -329,11 +329,11 @@ function getStatusIcon(status: UploadedFile['status']) {
 function getStatusClass(status: UploadedFile['status']): string {
   switch (status) {
     case 'uploading':
-      return 'text-blue-500 animate-spin';
+      return 'text-brand animate-spin';
     case 'success':
-      return 'text-green-500';
+      return 'text-success';
     case 'error':
-      return 'text-red-500';
+      return 'text-danger';
     default:
       return 'text-gray-500';
   }
@@ -352,7 +352,7 @@ defineExpose({
     <div :class="[
            'border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer',
            isDragging
-             ? 'border-blue-500 bg-blue-50'
+             ? 'border-brand bg-brand-subtle'
              : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50',
            disabled && 'opacity-50 cursor-not-allowed',
            !canAddMore && 'opacity-50',
@@ -366,8 +366,8 @@ defineExpose({
       @click="triggerFileInput">
       <Upload class="h-8 w-8 mx-auto mb-2 text-gray-400" />
       <p class="text-sm text-gray-600">
-        <span v-if="canAddMore"> 拖拽文件到此处，或 <span class="text-blue-600">点击上传</span> </span>
-        <span v-else class="text-orange-600"> 已达到最大文件数量 ({{ maxFiles }} 个) </span>
+        <span v-if="canAddMore"> 拖拽文件到此处，或 <span class="text-brand">点击上传</span> </span>
+        <span v-else class="text-warning"> 已达到最大文件数量 ({{ maxFiles }} 个) </span>
       </p>
       <p class="text-xs text-gray-400 mt-1">
         单文件最大 {{ maxSize }}MB，最多 {{ maxFiles }} 个文件
@@ -389,19 +389,19 @@ defineExpose({
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm text-gray-600">
           已添加 {{ modelValue.length }} 个文件 ({{ formatFileSize(totalSize) }})
-          <span v-if="uploadingCount > 0" class="text-blue-500 ml-2">
+          <span v-if="uploadingCount > 0" class="text-brand ml-2">
             正在上传 {{ uploadingCount }} 个...
           </span>
         </span>
         <div class="flex gap-2">
           <button v-if="!autoUpload && pendingCount > 0"
-            class="text-xs text-blue-500 hover:text-blue-700"
+            class="text-xs text-brand hover:text-brand"
             data-testid="file-upload-start-button"
             @click.stop="startUpload">
             开始上传
           </button>
           <button v-if="!disabled"
-            class="text-xs text-red-500 hover:text-red-700"
+            class="text-xs text-danger hover:text-danger"
             @click.stop="clearAll">
             清空全部
           </button>
@@ -412,9 +412,9 @@ defineExpose({
         :key="file.id"
         :class="[
           'flex items-center gap-3 p-3 rounded-lg border',
-          file.status === 'error' ? 'bg-red-50 border-red-200' : 
-          file.status === 'success' ? 'bg-green-50 border-green-200' :
-          file.status === 'uploading' ? 'bg-blue-50 border-blue-200' :
+          file.status === 'error' ? 'bg-danger-subtle border-danger' : 
+          file.status === 'success' ? 'bg-success-subtle border-success' :
+          file.status === 'uploading' ? 'bg-brand-subtle border-brand' :
           'bg-gray-50 border-gray-200',
         ]">
         <!-- 文件图标/状态 -->
@@ -427,19 +427,19 @@ defineExpose({
           <p class="text-sm font-medium text-gray-900 truncate">{{ file.name }}</p>
           <p class="text-xs text-gray-500">
             {{ formatFileSize(file.size) }}
-            <span v-if="file.status === 'uploading'" class="text-blue-500 ml-2">
+            <span v-if="file.status === 'uploading'" class="text-brand ml-2">
               {{ file.progress }}%
             </span>
-            <span v-if="file.status === 'success'" class="text-green-500 ml-2">
+            <span v-if="file.status === 'success'" class="text-success ml-2">
               已上传
             </span>
-            <span v-if="file.errorMessage" class="text-red-500 ml-2">{{ file.errorMessage }}</span>
+            <span v-if="file.errorMessage" class="text-danger ml-2">{{ file.errorMessage }}</span>
           </p>
 
           <!-- 上传进度条 -->
           <div v-if="file.status === 'uploading'" class="mt-1">
             <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-              <div class="h-full bg-blue-500 transition-all duration-300"
+              <div class="h-full bg-brand transition-all duration-300"
                 data-testid="file-upload-progress-bar"
                 :style="{ width: `${file.progress}%` }" />
             </div>
@@ -450,7 +450,7 @@ defineExpose({
         <div class="flex items-center gap-1">
           <!-- 重试按钮（失败时显示） -->
           <button v-if="file.status === 'error'"
-            class="p-1 hover:bg-red-100 rounded text-red-400 hover:text-red-600"
+            class="p-1 hover:bg-danger-subtle rounded text-danger hover:text-danger"
             title="重试上传"
             data-testid="file-upload-retry-button"
             @click.stop="retryUpload(file.id)">

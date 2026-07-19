@@ -36,8 +36,8 @@ const activeTypeInfo = computed(() => types.value.find((t) => t.id === activeTyp
 const needsSiteId = computed(() => activeType.value.startsWith('site.file.'));
 
 function levelClass(level: string): string {
-  if (level === 'error') return 'bg-red-100 text-red-700';
-  if (level === 'warn') return 'bg-amber-100 text-amber-700';
+  if (level === 'error') return 'bg-danger-subtle text-danger';
+  if (level === 'warn') return 'bg-warning-subtle text-warning';
   return 'bg-slate-100 text-slate-600';
 }
 
@@ -190,7 +190,7 @@ onUnmounted(stopPolling);
         </label>
         <button type="button"
           class="rounded-md px-2 py-1 text-xs font-medium transition-colors"
-          :class="polling ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          :class="polling ? 'bg-success-subtle text-success' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
           @click="togglePolling">
           {{ polling ? '轮询中(5s)' : '自动刷新' }}
         </button>
@@ -230,7 +230,7 @@ onUnmounted(stopPolling);
     <!-- 内容 -->
     <div class="flex-1 overflow-y-auto px-3 py-2">
       <div v-if="errorMessage"
-        class="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        class="mb-2 rounded-md border border-danger bg-danger-subtle px-3 py-2 text-xs text-danger">
         {{ errorMessage }}
       </div>
       <div v-if="!loading && entries.length === 0 && !errorMessage"

@@ -130,7 +130,7 @@ function cancel() {
       <!-- 头部 -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <div class="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+          <div class="h-2 w-2 animate-pulse rounded-full bg-success" />
           <span class="text-sm font-medium text-white">待保存证据</span>
         </div>
         <button type="button" class="rounded-lg p-1 text-slate-300 hover:bg-white/10 hover:text-white" title="关闭校审模式"
@@ -143,14 +143,14 @@ function cancel() {
       <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
         <div class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
           <div class="flex items-center gap-1 text-slate-300">
-            <MessageSquare class="h-3.5 w-3.5 text-blue-300" />
+            <MessageSquare class="h-3.5 w-3.5 text-brand" />
             <span>批注</span>
           </div>
           <div class="mt-1 text-base font-semibold text-white">{{ pendingAnnotationCount }}</div>
         </div>
         <div class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
           <div class="flex items-center gap-1 text-slate-300">
-            <Ruler class="h-3.5 w-3.5 text-emerald-300" />
+            <Ruler class="h-3.5 w-3.5 text-success" />
             <span>测量</span>
           </div>
           <div class="mt-1 text-base font-semibold text-white">{{ pendingMeasurementCount }}</div>
@@ -168,7 +168,7 @@ function cancel() {
       <!-- 操作按钮 -->
       <div class="mt-3 flex gap-2">
         <button type="button"
-          class="flex h-10 flex-1 items-center justify-center gap-1 rounded-xl bg-emerald-500 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+          class="flex h-10 flex-1 items-center justify-center gap-1 rounded-xl bg-success text-xs font-semibold text-white hover:bg-success disabled:opacity-50"
           :disabled="!hasUnsavedPendingData || confirmSaving"
           @click="confirmCurrentData">
           <CheckCircle class="h-3.5 w-3.5" />
@@ -190,7 +190,7 @@ function cancel() {
       <div class="mt-3 text-xs text-slate-400">
         {{ !hasUnsavedPendingData && !confirmError ? '当前新增证据已保存，修改后可再次保存' : '保存后证据将进入确认记录' }}
       </div>
-      <div v-if="confirmError" class="mt-2 text-xs text-rose-300">
+      <div v-if="confirmError" class="mt-2 text-xs text-danger">
         {{ confirmError }}
       </div>
     </div>

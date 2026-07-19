@@ -223,7 +223,7 @@ watch(currentTask, () => {
       <div class="rounded-md bg-muted/30 p-2">
         <div class="text-xs font-medium">碰撞数据查询</div>
         <div class="mt-2 rounded-md border px-2 py-1.5 text-[11px]"
-          :class="canQueryCollision ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'">
+          :class="canQueryCollision ? 'border-success bg-success-subtle text-success' : 'border-warning bg-warning-subtle text-warning'">
           <span v-if="canQueryCollision">
             将优先使用当前任务构件 RefNo 进行碰撞查询；如需缩小范围，可手动输入单个 RefNo。
           </span>
@@ -244,7 +244,7 @@ watch(currentTask, () => {
           </button>
         </div>
         <div v-if="collisionLoading" class="mt-2 text-xs text-muted-foreground">查询中...</div>
-        <div v-else-if="collisionError" class="mt-2 text-xs text-red-600">{{ collisionError }}</div>
+        <div v-else-if="collisionError" class="mt-2 text-xs text-danger">{{ collisionError }}</div>
         <CollisionResultList v-else-if="collisionData && collisionData.data.length > 0"
           class="mt-2"
           :items="collisionData.data"
@@ -260,7 +260,7 @@ watch(currentTask, () => {
       <div class="rounded-md bg-muted/30 p-2">
         <div class="text-xs font-medium">外部辅助数据（aux-data）</div>
         <div class="mt-2 rounded-md border px-2 py-1.5 text-[11px]"
-          :class="auxContextSummary.status === 'ready' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : auxContextSummary.status === 'degraded' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-700'">
+          :class="auxContextSummary.status === 'ready' ? 'border-success bg-success-subtle text-success' : auxContextSummary.status === 'degraded' ? 'border-warning bg-warning-subtle text-warning' : 'border-danger bg-danger-subtle text-danger'">
           <span v-if="auxContextSummary.status === 'ready'">
             当前任务上下文完整，将使用激活任务的 `formId`、当前会话 `project_id`、用户身份和构件 RefNo 发起查询。
           </span>
@@ -289,7 +289,7 @@ watch(currentTask, () => {
           当前上下文：project_id={{ auxContextSummary.projectId || '未绑定' }}，formId={{ auxContextSummary.formId || '未绑定' }}，refNo={{ auxContextSummary.refnos.length }} 个。
         </div>
         <div v-if="auxLoading" class="mt-2 text-xs text-muted-foreground">请求中...</div>
-        <div v-else-if="auxError" class="mt-2 text-xs text-red-600">{{ auxError }}</div>
+        <div v-else-if="auxError" class="mt-2 text-xs text-danger">{{ auxError }}</div>
         <template v-else-if="auxData">
           <div class="mt-2 flex gap-1">
             <button v-for="tab in (['collision', 'quality', 'otverification', 'rules'] as const)" :key="tab"

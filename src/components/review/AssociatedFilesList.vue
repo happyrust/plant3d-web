@@ -126,7 +126,7 @@ function getSourceLabel(attachment: ReviewAttachment): string {
               <div class="truncate text-sm font-medium text-slate-700">{{ item.name }}</div>
               <div class="text-[11px] text-slate-400">{{ formatFileSize(item.size) }}</div>
             </div>
-            <span class="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+            <span class="shrink-0 rounded bg-brand-subtle px-1.5 py-0.5 text-[10px] font-medium text-brand">
               {{ getSourceLabel(item) }}
             </span>
             <button type="button"

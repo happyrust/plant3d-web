@@ -232,13 +232,13 @@ function getHistoryActionLabel(action: WorkflowStep['action'] | string): string 
 function getHistoryActionClass(action: WorkflowStep['action'] | string): string {
   switch (action) {
     case 'submit':
-      return 'bg-blue-100 text-blue-700';
+      return 'bg-brand-subtle text-brand';
     case 'return':
-      return 'bg-rose-100 text-rose-700';
+      return 'bg-danger-subtle text-danger';
     case 'approve':
-      return 'bg-emerald-100 text-emerald-700';
+      return 'bg-success-subtle text-success';
     case 'reject':
-      return 'bg-amber-100 text-amber-700';
+      return 'bg-warning-subtle text-warning';
     default:
       return 'bg-slate-100 text-slate-700';
   }
@@ -247,13 +247,13 @@ function getHistoryActionClass(action: WorkflowStep['action'] | string): string 
 function getHistoryMarkerClass(action: WorkflowStep['action'] | string): string {
   switch (action) {
     case 'submit':
-      return 'border-blue-500 bg-blue-100';
+      return 'border-brand bg-brand-subtle';
     case 'return':
-      return 'border-rose-500 bg-rose-100';
+      return 'border-danger bg-danger-subtle';
     case 'approve':
-      return 'border-emerald-500 bg-emerald-100';
+      return 'border-success bg-success-subtle';
     case 'reject':
-      return 'border-amber-500 bg-amber-100';
+      return 'border-warning bg-warning-subtle';
     default:
       return 'border-slate-300 bg-slate-100';
   }
@@ -335,29 +335,29 @@ onMounted(() => {
       </div>
     </template>
 
-    <div v-if="showReturnedPanel" class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+    <div v-if="showReturnedPanel" class="rounded-2xl border border-danger bg-danger-subtle p-4">
       <div class="flex items-start gap-3">
-        <XCircle class="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
-        <div class="space-y-2 text-sm text-rose-900">
+        <XCircle class="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+        <div class="space-y-2 text-sm text-danger">
           <p class="font-semibold">退回信息</p>
           <p>
-            <span class="font-medium text-rose-700">退回节点：</span>
+            <span class="font-medium text-danger">退回节点：</span>
             {{ formatWorkflowNode(returnedMetadata.returnNode || props.task.currentNode) }}
           </p>
           <p>
-            <span class="font-medium text-rose-700">退回原因：</span>
+            <span class="font-medium text-danger">退回原因：</span>
             {{ returnedMetadata.returnReason || '未填写' }}
           </p>
           <div class="flex flex-wrap items-center gap-3 pt-1">
             <button v-if="canResubmit"
               type="button"
-              class="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
+              class="inline-flex items-center gap-2 rounded-xl bg-warning px-4 py-2 text-sm font-medium text-white transition hover:bg-warning disabled:cursor-not-allowed disabled:bg-warning"
               :disabled="resubmitLoading"
               @click="handleResubmit">
               <RefreshCw :class="['h-4 w-4', resubmitLoading && 'animate-spin']" />
               {{ resubmitLoading ? '再次提交中...' : '再次提交' }}
             </button>
-            <span v-if="resubmitError" class="text-sm text-rose-700">{{ resubmitError }}</span>
+            <span v-if="resubmitError" class="text-sm text-danger">{{ resubmitError }}</span>
           </div>
         </div>
       </div>
@@ -443,7 +443,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <div v-if="workflowError" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div v-if="workflowError" class="rounded-2xl border border-warning bg-warning-subtle px-4 py-3 text-sm text-warning">
           {{ workflowError }}
         </div>
 
@@ -492,7 +492,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <div v-if="confirmedRecordsError" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div v-if="confirmedRecordsError" class="rounded-2xl border border-warning bg-warning-subtle px-4 py-3 text-sm text-warning">
           {{ confirmedRecordsError }}
         </div>
 
@@ -525,7 +525,7 @@ onMounted(() => {
                   :key="measurement.id"
                   class="rounded-lg border border-slate-200 bg-white px-3 py-2">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    <span class="rounded-full bg-success-subtle px-2 py-0.5 text-xs font-medium text-success">
                       {{ formatMeasurementKind(measurement.kind) }}
                     </span>
                     <span class="text-xs text-slate-400">{{ measurement.id }}</span>

@@ -170,15 +170,15 @@ function getStatusPresentation(task: ReviewTask) {
   if (task.status === 'submitted') {
     return {
       label: submittedInboxLabel.value,
-      textClass: 'text-amber-600',
-      dotClass: 'bg-amber-500',
+      textClass: 'text-warning',
+      dotClass: 'bg-warning',
     };
   }
   if (task.status === 'in_review') {
     return {
       label: status.label,
-      textClass: 'text-blue-600',
-      dotClass: 'bg-blue-500',
+      textClass: 'text-brand',
+      dotClass: 'bg-brand',
     };
   }
 
@@ -190,24 +190,24 @@ function getStatusPresentation(task: ReviewTask) {
 }
 
 function getPriorityBadgeClass(task: ReviewTask): string {
-  if (task.priority === 'urgent') return 'bg-red-100 text-red-700';
-  if (task.priority === 'medium') return 'bg-blue-100 text-blue-700';
+  if (task.priority === 'urgent') return 'bg-danger-subtle text-danger';
+  if (task.priority === 'medium') return 'bg-brand-subtle text-brand';
   if (task.priority === 'low') return 'bg-gray-100 text-gray-600';
-  return 'bg-orange-100 text-orange-700';
+  return 'bg-warning-subtle text-warning';
 }
 
 function getTaskActionFeedback(task: ReviewTask) {
   if (task.status === 'approved') {
     return {
       label: '已通过',
-      className: 'border border-green-200 bg-green-50 text-green-700',
+      className: 'border border-success bg-success-subtle text-success',
     };
   }
 
   if (task.status === 'rejected') {
     return {
       label: '已驳回',
-      className: 'border border-red-200 bg-red-50 text-red-700',
+      className: 'border border-danger bg-danger-subtle text-danger',
     };
   }
 
@@ -380,16 +380,16 @@ onMounted(() => {
         <input v-model="searchTerm"
           type="text"
           placeholder="搜索任务名称或发起人..."
-          class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
       </div>
-      <select v-model="statusFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <select v-model="statusFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
         <option value="all">全部状态</option>
         <option value="submitted">{{ submittedInboxLabel }}</option>
         <option value="in_review">审核中</option>
         <option value="approved">已通过</option>
         <option value="rejected">已驳回</option>
       </select>
-      <select v-model="priorityFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <select v-model="priorityFilter" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
         <option value="all">全部优先级</option>
         <option value="urgent">紧急</option>
         <option value="high">高</option>
@@ -414,7 +414,7 @@ onMounted(() => {
         <div v-for="task in filteredTasks"
           :key="task.id"
           class="cursor-pointer rounded-lg border p-4 transition-shadow hover:shadow-md"
-          :class="task.status === 'in_review' ? 'border-orange-200 bg-white' : 'border-gray-200 bg-gray-50'"
+          :class="task.status === 'in_review' ? 'border-warning bg-white' : 'border-gray-200 bg-gray-50'"
           @click="handleViewTask(task)">
           <div class="space-y-3">
             <div class="flex items-start justify-between gap-3">
@@ -450,8 +450,8 @@ onMounted(() => {
                 type="button"
                 class="inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition"
                 :class="task.status === 'in_review'
-                  ? 'border border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100'
-                  : 'bg-orange-500 text-white hover:bg-orange-600'"
+                  ? 'border border-warning bg-warning-subtle text-warning hover:bg-warning-subtle'
+                  : 'bg-warning text-white hover:bg-warning'"
                 @click.stop="handleStartReview(task)">
                 <PlayCircle v-if="task.status === 'submitted'" class="h-3.5 w-3.5" />
                 <span>{{ getStartActionLabel(task) }}</span>
@@ -526,7 +526,7 @@ onMounted(() => {
                 <div v-for="comp in selectedTask.components"
                   :key="comp.id"
                   class="flex items-center gap-2 p-2 bg-gray-50 rounded text-sm">
-                  <FileText class="h-4 w-4 text-blue-600" />
+                  <FileText class="h-4 w-4 text-brand" />
                   <span>{{ comp.name }}</span>
                   <span class="text-gray-500">({{ comp.refNo }})</span>
                 </div>
@@ -544,7 +544,7 @@ onMounted(() => {
                   target="_blank"
                   rel="noreferrer"
                   class="flex items-center gap-2 rounded bg-gray-50 px-2 py-2 text-sm hover:bg-gray-100">
-                  <Paperclip class="h-4 w-4 text-blue-600" />
+                  <Paperclip class="h-4 w-4 text-brand" />
                   <div class="min-w-0 flex-1">
                     <div class="truncate font-medium text-gray-900">{{ attachment.name || '未命名附件' }}</div>
                     <div class="truncate text-xs text-gray-500">{{ attachment.mimeType || attachment.type || attachment.url }}</div>
@@ -552,19 +552,19 @@ onMounted(() => {
                 </a>
               </div>
               <p v-else class="mt-2 text-sm text-gray-500">暂无附件</p>
-              <p v-if="selectedTaskError" class="mt-2 text-xs text-red-500">{{ selectedTaskError }}</p>
+              <p v-if="selectedTaskError" class="mt-2 text-xs text-danger">{{ selectedTaskError }}</p>
             </div>
           </div>
           <div class="p-4 border-t flex justify-end gap-2">
             <template v-if="selectedTask.status === 'submitted' || selectedTask.status === 'in_review'">
               <div class="flex gap-2">
                 <button v-if="canReturnAtCurrentNode(selectedTask.currentNode)"
-                  class="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                  class="px-4 py-2 text-sm border border-danger text-danger rounded-lg hover:bg-danger-subtle"
                   :disabled="taskActionLoading"
                   @click="openReturnDialog">
                   驳回
                 </button>
-                <button class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                <button class="px-4 py-2 text-sm bg-success text-white rounded-lg hover:bg-success disabled:opacity-50"
                   :disabled="taskActionLoading"
                   @click="handleApprove(selectedTask)">
                   {{ taskActionLoading ? '处理中...' : getApproveActionLabel(selectedTask) }}

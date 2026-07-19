@@ -1515,9 +1515,9 @@ function handleTableCopyFeedback(payload: { kind: 'refno' | 'row'; result: 'copi
 
 function getAnnotationTypeBadge(type: AnnotationType): { label: string; colorClass: string } {
   switch (type) {
-    case 'text': return { label: '文字', colorClass: 'bg-blue-100 text-blue-700' };
-    case 'cloud': return { label: '云线', colorClass: 'bg-violet-100 text-violet-700' };
-    case 'rect': return { label: '矩形', colorClass: 'bg-amber-100 text-amber-700' };
+    case 'text': return { label: '文字', colorClass: 'bg-brand-subtle text-brand' };
+    case 'cloud': return { label: '云线', colorClass: 'bg-brand-subtle text-brand' };
+    case 'rect': return { label: '矩形', colorClass: 'bg-warning-subtle text-warning' };
     case 'obb': return { label: '包围盒', colorClass: 'bg-fuchsia-100 text-fuchsia-700' };
     default: return { label: '批注', colorClass: 'bg-slate-100 text-slate-700' };
   }
@@ -1585,9 +1585,9 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
         <div class="flex items-center gap-2 min-w-0">
           <ClipboardCheck class="h-5 w-5 shrink-0 text-primary" />
           <h2 class="truncate text-base font-semibold text-slate-950">{{ currentTask.title }}</h2>
-          <span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+          <span class="shrink-0 rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] font-medium text-brand">
             {{ currentTaskNodeLabel }}
-            <span class="ml-0.5 text-blue-500">{{ taskContext?.currentNodeCode }}</span>
+            <span class="ml-0.5 text-brand">{{ taskContext?.currentNodeCode }}</span>
           </span>
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
@@ -1599,7 +1599,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
             操作指南
           </button>
           <button v-if="isFilteringByTask" type="button" title="显示所有模型"
-            class="h-7 rounded-full bg-orange-100 px-3 text-xs font-medium text-orange-700 hover:bg-orange-200"
+            class="h-7 rounded-full bg-warning-subtle px-3 text-xs font-medium text-warning hover:bg-warning"
             @click="clearModelFilter">
             <Filter class="mr-1 inline h-3 w-3" />已过滤
           </button>
@@ -1615,19 +1615,19 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
 
       <!-- 打回原因提示 -->
       <div v-if="taskContext?.returnReason"
-        class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        class="mt-2 rounded-lg border border-warning bg-warning-subtle px-3 py-2 text-sm text-warning">
         <span class="font-semibold">打回原因：</span>{{ taskContext.returnReason }}
       </div>
 
       <!-- 核心操作按钮组 -->
       <div class="mt-3 flex flex-wrap items-center gap-2" data-testid="review-workbench-workflow-zone" data-guide="workflow-actions">
         <template v-if="isPassiveWorkflow">
-          <div class="min-w-[18rem] flex-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+          <div class="min-w-[18rem] flex-1 rounded-lg border border-brand bg-brand-subtle px-3 py-2 text-sm text-brand">
             <div class="font-medium">外部流程模式</div>
-            <div class="mt-1 text-xs text-blue-700">
+            <div class="mt-1 text-xs text-brand">
               当前流程由外部平台驱动，此处仅展示状态，不提供提交、驳回等内部操作。
             </div>
-            <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-800">
+            <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-brand">
               <span>当前节点：{{ currentTaskNodeLabel }}</span>
               <span>当前状态：{{ currentTaskStatusLabel }}</span>
             </div>
@@ -1648,7 +1648,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
             {{ submitActionLabel }}
           </button>
           <button type="button"
-            class="h-8 rounded-md border border-red-200 px-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            class="h-8 rounded-md border border-danger px-3 text-sm font-medium text-danger hover:bg-danger-subtle disabled:opacity-50"
             :disabled="workflowLoading || workflowActionLoading || !canReturnToPrevNode"
             @click="toggleReturnDialog">
             驳回到设计
@@ -1663,7 +1663,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
             @click="clearModelFilter">
             显示全部
           </button>
-          <div v-if="workflowError" class="text-xs text-red-600">{{ workflowError }}</div>
+          <div v-if="workflowError" class="text-xs text-danger">{{ workflowError }}</div>
         </template>
       </div>
     </div>
@@ -1671,21 +1671,21 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
     <!-- 嵌入模式落点 -->
     <div v-else-if="embedLandingState?.target === 'reviewer'"
       data-testid="reviewer-landing-workspace"
-      class="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-900">
+      class="rounded-md border border-brand bg-brand-subtle p-3 text-brand">
       <div class="flex items-center justify-between gap-2">
         <div>
           <div class="text-sm font-semibold" data-testid="reviewer-landing-cta">自动进入校审/待处理工作区</div>
-          <div class="mt-1 text-xs text-blue-700">
+          <div class="mt-1 text-xs text-brand">
             {{ reviewerEmbedEmptyStateDesc }}
           </div>
         </div>
         <div v-if="embedLandingState.formId"
           data-testid="reviewer-lineage-form-id"
-          class="rounded-full bg-white px-3 py-1 text-xs text-blue-700">
+          class="rounded-full bg-white px-3 py-1 text-xs text-brand">
           Lineage: {{ embedLandingState.formId }}
         </div>
       </div>
-      <div class="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm text-blue-900">
+      <div class="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm text-brand">
         {{ reviewerEmbedEmptyStateTitle }}
       </div>
     </div>
@@ -1703,7 +1703,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
             {{ taskContext?.modelName || '-' }} · {{ taskContext?.componentCount || 0 }} 构件
           </span>
           <span class="rounded-full px-2 py-0.5 text-[11px]"
-            :class="currentTaskHasFormalFormId ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'">
+            :class="currentTaskHasFormalFormId ? 'bg-brand-subtle text-brand' : 'bg-warning-subtle text-warning'">
             {{ currentTaskFormId }}
           </span>
         </div>
@@ -1799,7 +1799,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
           校审{{ reviewStore.reviewMode.value ? '已启用' : '已关闭' }}
         </button>
         <span v-else
-          class="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+          class="rounded-full border border-brand bg-brand-subtle px-2.5 py-1 text-xs font-medium text-brand">
           仅处理已有批注
         </span>
       </div>
@@ -1807,16 +1807,16 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
       <!-- 待确认数据计数 -->
       <div class="mt-2 flex items-center gap-3 text-sm">
         <div class="flex items-center gap-1.5">
-          <MessageSquare class="h-3.5 w-3.5 text-blue-500" />
+          <MessageSquare class="h-3.5 w-3.5 text-brand" />
           <span>批注 <strong>{{ pendingAnnotationCount }}</strong></span>
         </div>
         <div class="flex items-center gap-1.5">
-          <Ruler class="h-3.5 w-3.5 text-green-500" />
+          <Ruler class="h-3.5 w-3.5 text-success" />
           <span>测量 <strong>{{ pendingMeasurementCount }}</strong></span>
         </div>
       </div>
       <div v-if="isExternalSjFormFocused"
-        class="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800"
+        class="mt-2 rounded-lg border border-brand bg-brand-subtle px-3 py-2 text-xs leading-5 text-brand"
         data-testid="external-sj-existing-annotations-only">
         外部流程 SJ 入口仅支持查看和处理当前单据已有批注，不能新增批注或测量证据。
       </div>
@@ -1872,7 +1872,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
         <div v-if="!hasUnsavedPendingData && !confirmError && !hasUnsavedChanges" class="mt-1 text-xs text-muted-foreground">
           当前批注/测量已保存，新增或修改后可再次确认
         </div>
-        <div v-if="confirmError" class="mt-1 text-xs text-red-600">{{ confirmError }}</div>
+        <div v-if="confirmError" class="mt-1 text-xs text-danger">{{ confirmError }}</div>
       </div>
     </div>
 
@@ -1915,9 +1915,9 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
       data-testid="reviewer-annotation-card-list">
       <div class="flex items-center justify-between px-4 py-3">
         <div class="flex items-center gap-2">
-          <FileText class="h-4 w-4 text-orange-500" />
+          <FileText class="h-4 w-4 text-warning" />
           <span class="text-sm font-semibold text-slate-900">批注列表</span>
-          <span class="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+          <span class="rounded-full bg-warning-subtle px-2 py-0.5 text-[10px] font-semibold text-warning">
             {{ totalAnnotationItemCount }}
           </span>
         </div>
@@ -1928,7 +1928,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
           <!-- 批注卡片 -->
           <div class="cursor-pointer rounded-lg border p-3 transition-colors"
             :class="expandedAnnotationId === item.id
-              ? 'border-orange-300 bg-orange-50/50 shadow-sm'
+              ? 'border-warning bg-warning-subtle/50 shadow-sm'
               : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'"
             @click="toggleAnnotationDetail(item)">
             <!-- 头部：标题 + 类型标签 + 时间 -->
@@ -1947,7 +1947,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
                 </div>
                 <p v-if="item.description" class="mt-0.5 truncate text-xs text-slate-500">{{ item.description }}</p>
                 <div v-if="item.refnos.length > 0" class="mt-1">
-                  <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] text-blue-600">{{ item.refnos[0] }}</span>
+                  <span class="rounded bg-brand-subtle px-1.5 py-0.5 font-mono text-[10px] text-brand">{{ item.refnos[0] }}</span>
                 </div>
                 <div v-if="item.reviewState?.updatedByName" class="mt-1 text-[11px] text-slate-400">
                   {{ item.reviewState.updatedByName }}
@@ -1968,7 +1968,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
             <div class="mt-2 flex items-center justify-between">
               <div class="flex items-center gap-2 text-[11px] text-slate-400">
                 <div class="truncate">{{ getAnnotationReviewBadge(item).detail }}</div>
-                <div v-if="item.commentCount > 0" class="flex items-center gap-1 text-orange-500">
+                <div v-if="item.commentCount > 0" class="flex items-center gap-1 text-warning">
                   <MessageSquare class="h-3 w-3" />
                   <span class="font-medium">{{ item.commentCount }} 条意见</span>
                 </div>
@@ -1976,7 +1976,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
               </div>
               <div class="flex items-center gap-0.5">
                 <button type="button"
-                  class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-500"
+                  class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand"
                   title="在场景中定位此批注"
                   @click.stop="flyToAnnotationItem(item)">
                   <ArrowRight class="h-3.5 w-3.5" />
@@ -2060,7 +2060,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
           @click="activeReviewTab = 'records'">
           审核记录
           <span v-if="confirmedRecordListCount > 0"
-            class="ml-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+            class="ml-1 rounded-full bg-success-subtle px-1.5 py-0.5 text-[10px] font-semibold text-success">
             {{ confirmedRecordListCount }}
           </span>
         </button>
@@ -2072,7 +2072,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
           @click="activeReviewTab = 'history'">
           历史流转
           <span v-if="workflowHistoryCount > 0"
-            class="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+            class="ml-1 rounded-full bg-brand-subtle px-1.5 py-0.5 text-[10px] font-semibold text-brand">
             {{ workflowHistoryCount }}
           </span>
         </button>
@@ -2125,7 +2125,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
                 :key="measurement.id"
                 class="rounded-lg border border-slate-200 bg-white px-3 py-2">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  <span class="rounded-full bg-success-subtle px-2 py-0.5 text-[11px] font-medium text-success">
                     {{ formatMeasurementKindLabel(measurement.kind) }}
                   </span>
                   <span class="text-[11px] text-slate-400">{{ measurement.id }}</span>
@@ -2181,7 +2181,7 @@ function flyToAnnotationItem(item: AnnotationWorkspaceItem) {
       <div v-show="activeReviewTab === 'history'" class="p-4"
         data-testid="review-workbench-workflow-history-zone">
         <div v-if="workflowLoading" class="py-4 text-center text-sm text-muted-foreground">正在加载工作流...</div>
-        <div v-else-if="workflowError" class="py-4 text-center text-sm text-red-600">{{ workflowError }}</div>
+        <div v-else-if="workflowError" class="py-4 text-center text-sm text-danger">{{ workflowError }}</div>
         <div v-else-if="!workflow || workflow.history.length === 0" class="py-4 text-center text-sm text-muted-foreground">暂无历史记录</div>
         <div v-else class="flex max-h-72 flex-col gap-2 overflow-y-auto">
           <div v-for="(step, idx) in workflow.history"

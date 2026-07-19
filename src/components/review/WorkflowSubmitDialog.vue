@@ -52,16 +52,16 @@ function handleClose() {
     panel-class="max-w-[30rem]"
     body-class="space-y-5 px-6 py-5"
     @update:open="(open) => emit('update:visible', open)">
-    <div class="rounded-lg border border-green-200 bg-green-50 p-4" data-testid="workflow-submit-flow">
+    <div class="rounded-lg border border-success bg-success-subtle p-4" data-testid="workflow-submit-flow">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
           <div class="text-xs text-slate-500">当前环节</div>
           <div class="mt-1 text-sm font-semibold text-slate-900">{{ currentNodeLabel }}</div>
         </div>
-        <ArrowRight class="h-5 w-5 shrink-0 text-green-600" />
+        <ArrowRight class="h-5 w-5 shrink-0 text-success" />
         <div class="min-w-0 flex-1 text-right">
           <div class="text-xs text-slate-500">下一环节</div>
-          <div class="mt-1 text-sm font-semibold text-green-700">{{ targetNodeLabel }}</div>
+          <div class="mt-1 text-sm font-semibold text-success">{{ targetNodeLabel }}</div>
         </div>
       </div>
     </div>
@@ -73,7 +73,7 @@ function handleClose() {
       <textarea id="workflow-submit-comment"
         v-model="comment"
         data-testid="workflow-submit-comment"
-        class="min-h-[112px] w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        class="min-h-[112px] w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
         rows="4"
         placeholder="请输入需要提醒后续审核人员注意事项..." />
       <p class="text-xs text-slate-400">提示：确认提交后，任务将流转至下一环节，当前无法撤回。</p>

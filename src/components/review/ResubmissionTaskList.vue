@@ -144,10 +144,10 @@ function handleResumeEditing(task: ReviewTask) {
 
 function getRejectedTaskCardClass(task: ReviewTask): string {
   const base = task.priority === 'urgent'
-    ? 'border-red-300 bg-red-50/70'
-    : 'border-rose-200 bg-rose-50/60';
+    ? 'border-danger bg-danger-subtle/70'
+    : 'border-danger bg-danger-subtle/60';
   if (props.selectedTaskId && props.selectedTaskId === task.id) {
-    return `${base} ring-2 ring-orange-200 shadow-md`;
+    return `${base} ring-2 ring-warning shadow-md`;
   }
   return base;
 }
@@ -191,7 +191,7 @@ onMounted(() => {
         <div class="flex items-center gap-2">
           <h3 class="text-lg font-semibold">退回任务处理</h3>
           <span v-if="filteredTasks.length > 0"
-            class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+            class="rounded-full bg-danger-subtle px-2.5 py-0.5 text-xs font-semibold text-danger">
             {{ filteredTasks.length }} 个待处理
           </span>
         </div>
@@ -207,17 +207,17 @@ onMounted(() => {
 
     <!-- 统计卡片 -->
     <div class="grid grid-cols-3 gap-3">
-      <div class="p-3 rounded-lg bg-orange-50 border border-orange-200">
-        <div class="text-2xl font-bold text-orange-600">{{ taskStats.total }}</div>
-        <div class="text-xs text-orange-600">退回待处理</div>
+      <div class="p-3 rounded-lg bg-warning-subtle border border-warning">
+        <div class="text-2xl font-bold text-warning">{{ taskStats.total }}</div>
+        <div class="text-xs text-warning">退回待处理</div>
       </div>
-      <div class="p-3 rounded-lg bg-red-50 border border-red-200">
-        <div class="text-2xl font-bold text-red-600">{{ taskStats.urgent }}</div>
-        <div class="text-xs text-red-600">紧急</div>
+      <div class="p-3 rounded-lg bg-danger-subtle border border-danger">
+        <div class="text-2xl font-bold text-danger">{{ taskStats.urgent }}</div>
+        <div class="text-xs text-danger">紧急</div>
       </div>
-      <div class="p-3 rounded-lg bg-orange-50 border border-orange-200">
-        <div class="text-2xl font-bold text-orange-600">{{ taskStats.high }}</div>
-        <div class="text-xs text-orange-600">高优先级</div>
+      <div class="p-3 rounded-lg bg-warning-subtle border border-warning">
+        <div class="text-2xl font-bold text-warning">{{ taskStats.high }}</div>
+        <div class="text-xs text-warning">高优先级</div>
       </div>
     </div>
 
@@ -228,9 +228,9 @@ onMounted(() => {
         <input v-model="searchTerm"
           type="text"
           placeholder="搜索退回任务名称、描述或模型..."
-          class="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          class="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-warning" />
       </div>
-      <select v-model="priorityFilter" class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+      <select v-model="priorityFilter" class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-warning">
         <option value="all">全部优先级</option>
         <option value="urgent">紧急</option>
         <option value="high">高</option>
@@ -260,12 +260,12 @@ onMounted(() => {
           <div class="flex items-start justify-between">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-2">
-                <XCircle class="h-5 w-5 text-rose-500" />
+                <XCircle class="h-5 w-5 text-danger" />
                 <h4 class="font-medium text-base">{{ task.title }}</h4>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-danger-subtle text-danger">
                   已退回
                 </span>
-                <span v-if="getResubmissionSubmissionCount(task.workflowHistory || []) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                <span v-if="getResubmissionSubmissionCount(task.workflowHistory || []) > 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-subtle text-warning">
                   第{{ getResubmissionSubmissionCount(task.workflowHistory || []) }}次提交
                 </span>
                 <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', getPriorityDisplayName(task.priority).color]">
@@ -273,7 +273,7 @@ onMounted(() => {
                 </span>
               </div>
               <p class="text-sm text-gray-600 mb-3 line-clamp-2">{{ task.description || '暂无描述' }}</p>
-              <p class="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p class="mb-3 rounded-lg bg-warning-subtle px-3 py-2 text-xs text-warning">
                 {{ getTaskActionHint(task) }}
               </p>
               <div class="flex items-center gap-4 text-xs text-gray-500">
@@ -292,7 +292,7 @@ onMounted(() => {
                   <span>创建于: {{ formatDate(task.createdAt) }}</span>
                 </div>
                 <div v-if="getResubmissionLatestReturnTime(task.workflowHistory || [])" class="flex items-center gap-1">
-                  <span class="text-red-600">退回于: {{ formatDateTime(getResubmissionLatestReturnTime(task.workflowHistory || [])!) }}</span>
+                  <span class="text-danger">退回于: {{ formatDateTime(getResubmissionLatestReturnTime(task.workflowHistory || [])!) }}</span>
                 </div>
               </div>
             </div>
@@ -301,7 +301,7 @@ onMounted(() => {
                 @click.stop="handleViewTask(task)">
                 流转历史
               </button>
-              <button class="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+              <button class="inline-flex items-center gap-1 rounded-lg bg-warning px-3 py-1.5 text-sm font-medium text-white hover:bg-warning"
                 @click.stop="handleResumeEditing(task)">
                 {{ props.ctaLabel }}
               </button>

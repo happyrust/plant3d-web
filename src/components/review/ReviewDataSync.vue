@@ -147,6 +147,6 @@ async function importFromFile(event: Event) {
       <span v-if="currentTaskFormId"> · Form ID {{ currentTaskFormId }}</span>
       <span v-else> · 未绑定正式 formId，将仅按任务 ID 尝试重新挂载上下文</span>
     </div>
-    <div v-if="syncError" class="mt-2 text-xs text-red-600">{{ syncError }}</div>
+    <div v-if="syncError" class="mt-2 text-xs text-danger">{{ syncError }}</div>
   </div>
 </template>
