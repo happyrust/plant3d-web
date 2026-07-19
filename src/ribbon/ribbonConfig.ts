@@ -260,6 +260,7 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
           { kind: 'button', id: 'task.modelGen', label: '模型生成', icon: 'cube', commandId: 'task.createModelGeneration' },
           { kind: 'button', id: 'task.incrementalUpdate', label: '增量更新', icon: 'activity', commandId: 'panel.incrementalUpdate' },
           { kind: 'button', id: 'task.modelVersionCompare', label: '版本对比', icon: 'compare', commandId: 'panel.modelVersionCompare' },
+          { kind: 'button', id: 'task.versionTimeline', label: '版本时间线', icon: 'activity', commandId: 'panel.versionTimeline' },
           { kind: 'button', id: 'task.modelExport', label: '导出模型', icon: 'download', commandId: 'task.createModelExport' },
         ],
       },

@@ -8,6 +8,7 @@ import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 
 import { pdmsSearch, type PdmsSearchItem } from '@/api/genModelSearchApi';
 import ModelGenerationProgressModal from '@/components/model-tree/ModelGenerationProgressModal.vue';
+import ModelTreeAttrDiffPanel from '@/components/model-tree/ModelTreeAttrDiffPanel.vue';
 import ModelTreeRow from '@/components/model-tree/ModelTreeRow.vue';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useModelGeneration } from '@/composables/useModelGeneration';
@@ -18,6 +19,12 @@ import { useRoomInfoPanel } from '@/composables/useRoomInfoPanel';
 import { useRoomTree } from '@/composables/useRoomTree';
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useToolStore } from '@/composables/useToolStore';
+import {
+  useTreeVersionDiff,
+  type DiffFlatRow,
+  type TreeDiffFilter,
+  type TreeDiffModel,
+} from '@/composables/useTreeVersionDiff';
 import { cn } from '@/lib/utils';
 
 const props = defineProps<{
@@ -25,29 +32,6 @@ const props = defineProps<{
 }>();
 
 const activeTree = ref<'pdms' | 'room'>('pdms');
-
-type IncrementalCompareModel = {
-  refno: string;
-  category?: string;
-  status?: string;
-  beforeState?: string;
-  afterState?: string;
-  sourceChangeCount?: number;
-  sourceNouns?: string;
-};
-
-type IncrementalCompareContext = {
-  project?: string;
-  dbnum?: number;
-  fromSesno?: number;
-  toSesno?: number;
-  mode?: string;
-  refnos: string[];
-  models: IncrementalCompareModel[];
-};
-
-const incrementalCompareContext = ref<IncrementalCompareContext | null>(null);
-const incrementalCompareSelectedRefno = ref<string | null>(null);
 
 const pdmsViewerRef = shallowRef<DtxCompatViewer | null>(props.viewer);
 const roomViewerRef = shallowRef<DtxCompatViewer | null>(null);
@@ -67,6 +51,15 @@ watch(
 const pdmsTree = usePdmsOwnerTree(pdmsViewerRef);
 // 房间树仅在 tab=room 时启用，避免其副作用影响 PDMS 模型树（显隐/选中回放等）
 const roomTree = useRoomTree(roomViewerRef, computed(() => activeTree.value === 'room'));
+
+// 版本差异模式（树内差异标注）：由 plant3d:incremental-version-compare 事件驱动
+const treeDiff = useTreeVersionDiff({
+  nodesById: pdmsTree.nodesById,
+  rootIds: pdmsTree.rootIds,
+  expandedIds: pdmsTree.expandedIds,
+  flatRows: pdmsTree.flatRows,
+  expandPathToNode: pdmsTree.expandPathToNode,
+});
 
 // Register the global tree instance for console commands
 setModelTreeInstance(pdmsTree);
@@ -92,21 +85,35 @@ const searchLoading = computed(() => (isRoomTree.value ? roomTree.searchLoading.
 const searchError = computed(() => (isRoomTree.value ? roomTree.searchError.value : pdmsTree.searchError.value));
 const searchItems = computed(() => (isRoomTree.value ? roomTree.searchItems.value : pdmsTree.searchItems.value));
 
-const incrementalCompareModels = computed(() => {
-  const ctx = incrementalCompareContext.value;
-  if (!ctx) return [];
-  if (ctx.models.length > 0) return ctx.models;
-  return ctx.refnos.map((refno) => ({ refno }));
-});
+// ------- 版本差异模式：模板用扁平状态（嵌套 ref 在模板中不会自动解包） -------
+const diffActive = computed(() => treeDiff.isActive.value && !isRoomTree.value);
+const diffFilter = treeDiff.filter;
+const diffCounts = treeDiff.counts;
+const diffVersionLabel = treeDiff.versionPairLabel;
+const diffResolving = treeDiff.resolving;
+const diffResolveDone = treeDiff.resolveDone;
+const diffResolveTotal = treeDiff.resolveTotal;
+const diffUnplacedCount = treeDiff.unplacedCount;
+const diffSelectedModel = treeDiff.selectedModel;
+const diffSelectedIsGhost = treeDiff.selectedIsGhost;
+const diffContext = treeDiff.context;
+const diffDbLabel = computed(() => (diffContext.value?.dbnum ? `DB ${diffContext.value.dbnum}` : ''));
 
-const incrementalCompareTitle = computed(() => {
-  const ctx = incrementalCompareContext.value;
-  if (!ctx) return '';
-  const db = ctx.dbnum ? `DB ${ctx.dbnum}` : 'DB';
-  const from = ctx.fromSesno ?? '-';
-  const to = ctx.toSesno ?? '-';
-  return `${db} · ${from} / ${to}`;
-});
+const DIFF_FILTER_CHIPS: { key: TreeDiffFilter; label: string; activeCls: string }[] = [
+  { key: 'all', label: '全部', activeCls: 'border-blue-300 bg-blue-100 text-blue-800' },
+  { key: 'added', label: '新增', activeCls: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
+  { key: 'modified', label: '修改', activeCls: 'border-amber-300 bg-amber-100 text-amber-800' },
+  { key: 'deleted', label: '删除', activeCls: 'border-rose-300 bg-rose-100 text-rose-800' },
+];
+
+function exitDiffMode() {
+  treeDiff.clear();
+}
+
+/** 虚拟列表实际渲染的行：差异模式下为“变更节点 + 祖先 + 幽灵节点”过滤视图 */
+const displayRows = computed<DiffFlatRow[]>(() => (
+  !isRoomTree.value && treeDiff.isActive.value ? treeDiff.rows.value : flatRows.value
+));
 
 function setFilter(text: string) {
   if (isRoomTree.value) {
@@ -255,10 +262,26 @@ function selectByRowIndex(index: number, ev: MouseEvent) {
   if (isRoomTree.value) {
     roomTree.selectByRowIndex(index, ev);
     handleSelectionChanged(roomTree.selectedIds.value);
-  } else {
-    pdmsTree.selectByRowIndex(index, ev);
-    handleSelectionChanged(pdmsTree.selectedIds.value);
+    return;
   }
+
+  if (treeDiff.isActive.value) {
+    const row = displayRows.value[index];
+    if (!row) return;
+    // 变更节点/幽灵节点：更新属性差异面板选中
+    if (row.diffStatus || row.ghost) treeDiff.select(row.id);
+    // 幽灵节点仅展示：不进入树选中与 3D 联动
+    if (row.ghost) return;
+    // 差异视图行索引与源树 flatRows 索引不一致，按 id 映射回源索引
+    const realIndex = pdmsTree.flatRows.value.findIndex((r) => r.id === row.id);
+    if (realIndex < 0) return;
+    pdmsTree.selectByRowIndex(realIndex, ev);
+    handleSelectionChanged(pdmsTree.selectedIds.value);
+    return;
+  }
+
+  pdmsTree.selectByRowIndex(index, ev);
+  handleSelectionChanged(pdmsTree.selectedIds.value);
 }
 
 function isRefnoLike(id: string): boolean {
@@ -336,7 +359,12 @@ function isSelected(id: string) {
 }
 
 function rowAt(index: number) {
-  return flatRows.value[index];
+  return displayRows.value[index];
+}
+
+function isRowSelected(row: DiffFlatRow): boolean {
+  if (row.ghost) return treeDiff.selectedRefno.value === row.id;
+  return isSelected(row.id);
 }
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -630,7 +658,7 @@ watch(
 );
 
 const rowVirtualizer = useVirtualizer({
-  count: flatRows.value.length,
+  count: displayRows.value.length,
   getScrollElement: () => containerRef.value,
   estimateSize: () => 32,
   overscan: 10
@@ -696,7 +724,7 @@ watch(
       await nextTick();
       if (seq !== selectionSyncSeq) return;
 
-      const idx = flatRows.value.findIndex((r) => r.id === targetId);
+      const idx = displayRows.value.findIndex((r) => r.id === targetId);
       if (idx < 0) return;
 
       const v = rowVirtualizer.value as unknown as { scrollToIndex?: (index: number, opts?: unknown) => void };
@@ -717,9 +745,9 @@ watch(
 );
 
 watch(
-  () => flatRows.value.length,
+  () => displayRows.value.length,
   async (count) => {
-    // console.log('[ModelTreePanel] flatRows.length changed:', count);
+    // console.log('[ModelTreePanel] displayRows.length changed:', count);
     rowVirtualizer.value.setOptions({
       ...rowVirtualizer.value.options,
       count,
@@ -742,19 +770,19 @@ const totalSize = computed(() => rowVirtualizer.value.getTotalSize());
 
 function getPdmsTreeE2ESnapshot(rawRefno?: string) {
   const targetId = normalizeRefnoKeyLike(rawRefno || '');
-  const targetIndex = targetId ? flatRows.value.findIndex((row) => row.id === targetId) : -1;
+  const targetIndex = targetId ? displayRows.value.findIndex((row) => row.id === targetId) : -1;
   const node = targetId ? pdmsTree.nodesById.value[targetId] : null;
   const parent = node?.parentId ? pdmsTree.nodesById.value[node.parentId] : null;
   const rows = targetIndex >= 0
-    ? flatRows.value.slice(Math.max(0, targetIndex - 6), targetIndex + 7)
-    : flatRows.value.slice(0, 80);
+    ? displayRows.value.slice(Math.max(0, targetIndex - 6), targetIndex + 7)
+    : displayRows.value.slice(0, 80);
 
   return {
     activeTree: activeTree.value,
     rootIds: [...pdmsTree.rootIds.value],
     expandedIds: [...pdmsTree.expandedIds.value],
     selectedIds: [...pdmsTree.selectedIds.value],
-    flatRowCount: flatRows.value.length,
+    flatRowCount: displayRows.value.length,
     targetId,
     targetIndex,
     targetNode: node
@@ -801,7 +829,7 @@ async function focusPdmsTreeRefnoForE2E(rawRefno: string) {
     if (containerRef.value) rowVirtualizer.value.measure();
     await nextTick();
 
-    const targetIndex = flatRows.value.findIndex((row) => row.id === targetId);
+    const targetIndex = displayRows.value.findIndex((row) => row.id === targetId);
     if (targetIndex >= 0) {
       const v = rowVirtualizer.value as unknown as { scrollToIndex?: (index: number, opts?: unknown) => void };
       if (typeof v.scrollToIndex === 'function') {
@@ -841,6 +869,12 @@ function clampContextMenuPosition(x: number, y: number, width: number, height: n
 function openContextMenu(nodeId: string, ev: MouseEvent) {
   ev.preventDefault();
   ev.stopPropagation();
+  // 幽灵节点（已删除、不在当前树中）仅展示，不提供右键操作
+  if (!isRoomTree.value
+    && treeDiff.isActive.value
+    && !pdmsTree.nodesById.value[normalizeRefnoKeyLike(nodeId)]) {
+    return;
+  }
   contextNodeId.value = nodeId;
 
   // 先用预估尺寸定位，再在 DOM 渲染后按真实尺寸二次夹紧。
@@ -1070,9 +1104,10 @@ function applyIncrementalCompareContext(rawDetail: unknown) {
   const models = Array.isArray(detail?.models)
     ? detail.models
       .map((model: unknown) => {
-        const item = model as IncrementalCompareModel;
+        const item = model as TreeDiffModel;
         const refno = normalizeCompareRefno(item?.refno);
         if (!refno) return null;
+        const ownerRefno = normalizeCompareRefno(item?.ownerRefno);
         return {
           refno,
           category: item.category,
@@ -1081,9 +1116,10 @@ function applyIncrementalCompareContext(rawDetail: unknown) {
           afterState: item.afterState,
           sourceChangeCount: item.sourceChangeCount,
           sourceNouns: item.sourceNouns,
+          ownerRefno: ownerRefno || undefined,
         };
       })
-      .filter((item): item is IncrementalCompareModel => !!item)
+      .filter((item): item is TreeDiffModel => !!item)
     : [];
   const mergedRefnos = Array.from(new Set([
     ...refnos,
@@ -1092,7 +1128,7 @@ function applyIncrementalCompareContext(rawDetail: unknown) {
   if (mergedRefnos.length === 0) return;
 
   activeTree.value = 'pdms';
-  incrementalCompareContext.value = {
+  treeDiff.apply({
     project: typeof detail.project === 'string' ? detail.project : undefined,
     dbnum: Number.isFinite(Number(detail.dbnum)) ? Number(detail.dbnum) : undefined,
     fromSesno: Number.isFinite(Number(detail.fromSesno)) ? Number(detail.fromSesno) : undefined,
@@ -1100,10 +1136,10 @@ function applyIncrementalCompareContext(rawDetail: unknown) {
     mode: typeof detail.mode === 'string' ? detail.mode : undefined,
     refnos: mergedRefnos,
     models: models.length > 0 ? models : mergedRefnos.map((refno) => ({ refno })),
-  };
-  incrementalCompareSelectedRefno.value = mergedRefnos[0] ?? null;
-  if (incrementalCompareSelectedRefno.value) {
-    selection.setSelectedRefno(incrementalCompareSelectedRefno.value);
+  });
+  const first = mergedRefnos[0] ?? null;
+  if (first) {
+    selection.setSelectedRefno(first);
   }
 }
 
@@ -1111,7 +1147,7 @@ async function focusIncrementalCompareModel(refno: string) {
   const target = normalizeCompareRefno(refno);
   if (!target) return;
   activeTree.value = 'pdms';
-  incrementalCompareSelectedRefno.value = target;
+  treeDiff.select(target);
   selection.setSelectedRefno(target);
   ensurePanelAndActivate('viewer');
 
@@ -1129,29 +1165,6 @@ async function focusIncrementalCompareModel(refno: string) {
       flyTo: true,
     },
   }));
-}
-
-function compareStatusLabel(status?: string): string {
-  if (status === 'added') return '新增';
-  if (status === 'modified') return '修改';
-  if (status === 'deleted') return '删除';
-  if (status === 'mixed') return '混合';
-  return '变化';
-}
-
-function compareStatusClass(status?: string): string {
-  if (status === 'added') return 'text-emerald-700 bg-emerald-50';
-  if (status === 'modified') return 'text-amber-700 bg-amber-50';
-  if (status === 'deleted') return 'text-rose-700 bg-rose-50';
-  if (status === 'mixed') return 'text-blue-700 bg-blue-50';
-  return 'text-slate-700 bg-slate-100';
-}
-
-function versionStateLabel(state?: string): string {
-  if (state === 'missing') return '不存在';
-  if (state === 'changed') return '变化';
-  if (state === 'present') return '存在';
-  return '-';
 }
 
 function delay(ms: number): Promise<void> {
@@ -1248,7 +1261,7 @@ async function focusAndCenterInTree(id: string) {
   await nextTick();
   if (seq !== focusAndCenterSeq) return;
 
-  const idx = flatRows.value.findIndex((r) => r.id === targetId);
+  const idx = displayRows.value.findIndex((r) => r.id === targetId);
   if (idx < 0) return;
 
   const v = rowVirtualizer.value as unknown as { scrollToIndex?: (index: number, opts?: unknown) => void };
@@ -1763,46 +1776,44 @@ function onSearchEnter(value: string) {
       </div>
     </div>
 
-    <div v-if="incrementalCompareModels.length > 0 && !isRoomTree"
-      class="mb-2 rounded-md border border-blue-200 bg-blue-50/70 p-2 text-sm">
+    <!-- 版本差异模式工具条：版本对胶囊 + 差异筛选 chips -->
+    <div v-if="diffActive"
+      class="border-b border-border bg-blue-50/60 px-3 py-2"
+      data-testid="model-tree-diff-bar">
       <div class="flex items-center justify-between gap-2">
-        <div class="flex min-w-0 items-center gap-2">
-          <GitCompare class="h-4 w-4 shrink-0 text-blue-700" />
-          <div class="min-w-0">
-            <div class="truncate font-medium text-blue-900">增量对比模型</div>
-            <div class="truncate text-xs text-blue-700">
-              {{ incrementalCompareTitle }} · {{ incrementalCompareModels.length }} 个模型
-            </div>
-          </div>
+        <div class="flex min-w-0 items-center gap-1.5">
+          <GitCompare class="h-3.5 w-3.5 shrink-0 text-blue-700" />
+          <span class="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800"
+            data-testid="model-tree-diff-version-pill">
+            {{ diffVersionLabel }} 差异模式
+          </span>
+          <span v-if="diffDbLabel" class="truncate text-[11px] text-blue-700/80">{{ diffDbLabel }}</span>
         </div>
-        <button v-if="incrementalCompareSelectedRefno"
-          type="button"
-          class="shrink-0 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
-          @click="focusIncrementalCompareModel(incrementalCompareSelectedRefno)">
-          加载选中
+        <button type="button"
+          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-blue-700 hover:bg-blue-100"
+          title="退出差异模式"
+          data-testid="model-tree-diff-exit"
+          @click="exitDiffMode">
+          <X class="h-3.5 w-3.5" />
         </button>
       </div>
-
-      <div class="mt-2 max-h-48 overflow-auto rounded border border-blue-100 bg-white">
-        <button v-for="item in incrementalCompareModels"
-          :key="item.refno"
+      <div class="mt-1.5 flex flex-wrap items-center gap-1">
+        <button v-for="chip in DIFF_FILTER_CHIPS"
+          :key="chip.key"
           type="button"
-          class="flex w-full items-center gap-2 border-b border-blue-50 px-2 py-1.5 text-left hover:bg-blue-50"
-          :class="incrementalCompareSelectedRefno === item.refno ? 'bg-blue-50' : ''"
-          @click="focusIncrementalCompareModel(item.refno)">
-          <span class="min-w-0 flex-1">
-            <span class="block truncate font-mono text-xs text-slate-900">{{ item.refno }}</span>
-            <span class="block truncate text-[11px] text-slate-500">
-              {{ item.category || '-' }} · {{ item.sourceNouns || '-' }}
-            </span>
-          </span>
-          <span class="shrink-0 rounded px-1.5 py-0.5 text-[11px]" :class="compareStatusClass(item.status)">
-            {{ compareStatusLabel(item.status) }}
-          </span>
-          <span class="shrink-0 text-[11px] text-slate-500">
-            {{ versionStateLabel(item.beforeState) }} → {{ versionStateLabel(item.afterState) }}
-          </span>
+          class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors"
+          :class="diffFilter === chip.key ? chip.activeCls : 'border-border bg-background text-muted-foreground hover:bg-muted'"
+          :data-testid="`model-tree-diff-chip-${chip.key}`"
+          @click="treeDiff.setFilter(chip.key)">
+          {{ chip.label }}
+          <span class="font-mono">{{ diffCounts[chip.key] }}</span>
         </button>
+      </div>
+      <div v-if="diffResolving" class="mt-1 text-[10px] text-blue-700/80" data-testid="model-tree-diff-resolving">
+        正在定位变更节点 {{ diffResolveDone }}/{{ diffResolveTotal }}…
+      </div>
+      <div v-else-if="diffUnplacedCount > 0" class="mt-1 text-[10px] text-amber-700" data-testid="model-tree-diff-unplaced">
+        {{ diffUnplacedCount }} 个变更未能定位到树（已计入统计）
       </div>
     </div>
 
@@ -1818,9 +1829,13 @@ function onSearchEnter(value: string) {
             :row="rowAt(vr.index)!"
             :index="vr.index"
             :expanded="isExpanded(rowAt(vr.index)!.id)"
-            :selected="isSelected(rowAt(vr.index)!.id)"
+            :selected="isRowSelected(rowAt(vr.index)!)"
             :check-state="getCheckState(rowAt(vr.index)!.id)"
             :loading="isNodeLoading(rowAt(vr.index)!.id)"
+            :diff-status="rowAt(vr.index)!.diffStatus"
+            :diff-count="rowAt(vr.index)!.diffCount"
+            :ghost="rowAt(vr.index)!.ghost"
+            :ghost-unplaced="rowAt(vr.index)!.ghostUnplaced"
             @toggle-expand="toggleExpand"
             @toggle-visible="setVisible"
             @select="selectByRowIndex"
@@ -1828,6 +1843,16 @@ function onSearchEnter(value: string) {
         </div>
       </div>
     </div>
+
+    <!-- 版本差异模式：选中变更节点的属性级 before/after 差异 -->
+    <ModelTreeAttrDiffPanel v-if="diffActive && diffSelectedModel"
+      class="max-h-[45%] shrink-0"
+      :model="diffSelectedModel"
+      :dbnum="diffContext?.dbnum"
+      :from-sesno="diffContext?.fromSesno"
+      :to-sesno="diffContext?.toSesno"
+      :can-locate="!diffSelectedIsGhost"
+      @locate="focusIncrementalCompareModel" />
     
     <!-- 右键菜单 - 使用 Teleport 渲染到 body -->
     <Teleport to="body">

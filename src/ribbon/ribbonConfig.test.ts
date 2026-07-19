@@ -118,4 +118,30 @@ describe('RIBBON_TABS', () => {
     expect(commandIds.some((commandId) => commandId.startsWith('dimension.'))).toBe(false);
   });
 
+  it('任务页签提供版本时间线入口，且与版本对比同组', async () => {
+    vi.resetModules();
+    window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
+
+    const { RIBBON_TABS } = await import('./ribbonConfig');
+    const taskTab = RIBBON_TABS.find((tab) => tab.id === 'task');
+
+    expect(taskTab).toBeDefined();
+
+    const versionGroup = taskTab?.groups.find((group) => group.items.some((item) => (
+      item.kind === 'button' && item.id === 'task.modelVersionCompare'
+    )));
+
+    expect(versionGroup).toBeDefined();
+
+    const timelineButton = versionGroup?.items.find((item) => (
+      item.kind === 'button' && item.id === 'task.versionTimeline'
+    ));
+
+    expect(timelineButton).toBeDefined();
+    expect(timelineButton?.kind).toBe('button');
+    if (timelineButton?.kind === 'button') {
+      expect(timelineButton.label).toBe('版本时间线');
+      expect(timelineButton.commandId).toBe('panel.versionTimeline');
+    }
+  });
 });

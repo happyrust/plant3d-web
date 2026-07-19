@@ -985,6 +985,10 @@ async function loadModelRefnos(refnos: string[], forcedMode?: VersionMode) {
         afterState: row.afterState,
         sourceChangeCount: row.sourceChangeCount,
         sourceNouns: row.sourceNouns,
+        // 删除节点的原父节点：树内差异模式用于幽灵节点回插定位
+        ownerRefno: row.sourceChanges.find((change) => change.refno === row.refno)?.owner_refno
+          ?? row.sourceChanges[0]?.owner_refno
+          ?? undefined,
       }));
     const compareDetail = {
       project: record.project,

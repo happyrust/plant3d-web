@@ -845,6 +845,71 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     }
   }
 
+  /**
+   * 仅“加载 + 展开”到目标节点的路径，不做选中/飞行/滚动等副作用。
+   * 供版本差异模式批量定位变更节点使用；任何失败都返回 false（不抛错）。
+   */
+  async function expandPathToNode(refno: string): Promise<boolean> {
+    const rootId = rootIds.value[0];
+    if (!rootId) return false;
+
+    const key = normalizeRefnoKey(refno);
+    if (!isPdmsRefnoKey(key)) return false;
+
+    // 已在树中：只需确保祖先链展开
+    if (nodesById.value[key]) {
+      const nextExpanded = new Set(expandedIds.value);
+      let cur: string | null = nodesById.value[key]?.parentId ?? null;
+      const seen = new Set<string>();
+      while (cur && !seen.has(cur)) {
+        seen.add(cur);
+        nextExpanded.add(cur);
+        cur = nodesById.value[cur]?.parentId ?? null;
+      }
+      expandedIds.value = nextExpanded;
+      return true;
+    }
+
+    try {
+      let resp = await e3dGetAncestors(key);
+      if (!resp.success && shouldRetryWithWrappedId(resp.error_message)) {
+        resp = await e3dGetAncestors(wrapSurrealThingId(key));
+      }
+      if (!resp.success) return false;
+
+      const ancestors = (resp.refnos || []).map((r) => normalizeRefnoKey(String(r))).filter(Boolean);
+      if (ancestors.length === 0) return false;
+
+      const ancestorSet = new Set(ancestors);
+      ancestorSet.add(key);
+
+      const nextExpanded = new Set(expandedIds.value);
+      nextExpanded.add(rootId);
+
+      // 与 focusNodeById 相同的“从根向下逐层查找”策略（不依赖祖先链返回顺序）
+      let curParent = rootId;
+      const maxSteps = ancestors.length + 2;
+      for (let step = 0; step < maxSteps; step++) {
+        await ensureChildrenLoaded(curParent);
+        nextExpanded.add(curParent);
+
+        const parent = nodesById.value[curParent];
+        if (!parent) break;
+        if (parent.childrenIds.includes(key)) break;
+
+        const nextStep = parent.childrenIds.find((childId) => ancestorSet.has(childId));
+        if (!nextStep) break;
+        curParent = nextStep;
+      }
+
+      await ensureChildrenLoaded(curParent);
+      expandedIds.value = nextExpanded;
+      return !!nodesById.value[key];
+    } catch {
+      return false;
+    }
+  }
+
   async function focusNodeById(
     refno: string,
     options?: {
@@ -1030,6 +1095,7 @@ export function usePdmsOwnerTree(viewerRef: { value: DtxCompatViewer | null }) {
     searchLoading,
     searchError,
     focusNodeById,
+    expandPathToNode,
 
     getCheckState,
     setVisible,
