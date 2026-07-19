@@ -21,7 +21,7 @@
         <div v-if="loading" class="space-y-3">
           <div v-for="i in 3" :key="i" class="h-16 rounded-xl bg-gray-100 animate-pulse" />
         </div>
-        <div v-else-if="error" class="text-sm text-red-500">{{ error }}</div>
+        <div v-else-if="error" class="text-sm text-danger">{{ error }}</div>
         <div v-else-if="pendingReviews.length === 0" class="text-sm text-gray-400">当前没有待我评审任务</div>
         <div v-else class="space-y-3">
           <article v-for="task in pendingReviews"
@@ -32,7 +32,7 @@
                 <h4 class="font-semibold text-gray-900">{{ task.title }}</h4>
                 <p class="text-sm text-gray-500 mt-1">{{ task.modelName || '未命名模型' }} · 发起人 {{ task.requesterName }}</p>
               </div>
-              <span class="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+              <span class="px-2 py-1 rounded-full text-xs font-medium bg-warning-subtle text-warning">
                 {{ task.status }}
               </span>
             </div>
@@ -49,7 +49,7 @@
         <div v-if="loading" class="space-y-3">
           <div v-for="i in 3" :key="i" class="h-16 rounded-xl bg-gray-100 animate-pulse" />
         </div>
-        <div v-else-if="error" class="text-sm text-red-500">{{ error }}</div>
+        <div v-else-if="error" class="text-sm text-danger">{{ error }}</div>
         <div v-else-if="initiatedTasks.length === 0" class="text-sm text-gray-400">当前没有我发起的任务</div>
         <div v-else class="space-y-3">
           <article v-for="task in initiatedTasks"
@@ -60,7 +60,7 @@
                 <h4 class="font-semibold text-gray-900">{{ task.title }}</h4>
                 <p class="text-sm text-gray-500 mt-1">{{ task.modelName || '未命名模型' }} · 当前节点 {{ task.currentNode || 'sj' }}</p>
               </div>
-              <span class="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+              <span class="px-2 py-1 rounded-full text-xs font-medium bg-brand-subtle text-brand">
                 {{ task.status }}
               </span>
             </div>

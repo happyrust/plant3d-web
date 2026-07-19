@@ -22,7 +22,7 @@
             class="bg-white border border-gray-200 rounded-2xl p-4 text-left hover:shadow-md transition-shadow"
             @click="$emit('navigate', 'sites')">
             <div class="flex items-center gap-4">
-              <div class="p-2 bg-indigo-50 rounded-lg text-indigo-600"><ServerIcon class="w-6 h-6" /></div>
+              <div class="p-2 bg-brand-subtle rounded-lg text-brand"><ServerIcon class="w-6 h-6" /></div>
               <div>
                 <div class="font-medium text-gray-900">站点管理</div>
                 <div class="text-xs text-gray-500 mt-1">进入主站点控制台查看注册站点</div>
@@ -34,7 +34,7 @@
             class="bg-white border border-gray-200 rounded-2xl p-4 text-left hover:shadow-md transition-shadow"
             @click="$emit('navigate', 'projects')">
             <div class="flex items-center gap-4">
-              <div class="p-2 bg-blue-50 rounded-lg text-blue-600"><UploadCloudIcon class="w-6 h-6" /></div>
+              <div class="p-2 bg-brand-subtle rounded-lg text-brand"><UploadCloudIcon class="w-6 h-6" /></div>
               <div>
                 <div class="font-medium text-gray-900">上传/打开模型</div>
                 <div class="text-xs text-gray-500 mt-1">进入项目列表选择模型</div>
@@ -45,7 +45,7 @@
           <button class="bg-white border border-gray-200 rounded-2xl p-4 text-left hover:shadow-md transition-shadow"
             @click="$emit('navigate', 'reviews')">
             <div class="flex items-center gap-4">
-              <div class="p-2 bg-green-50 rounded-lg text-green-600"><SendIcon class="w-6 h-6" /></div>
+              <div class="p-2 bg-success-subtle rounded-lg text-success"><SendIcon class="w-6 h-6" /></div>
               <div>
                 <div class="font-medium text-gray-900">发起编校审</div>
                 <div class="text-xs text-gray-500 mt-1">进入校审中心查看任务</div>
@@ -56,7 +56,7 @@
           <button class="bg-white border border-gray-200 rounded-2xl p-4 text-left hover:shadow-md transition-shadow"
             @click="$emit('navigate', 'reviews')">
             <div class="flex items-center gap-4">
-              <div class="p-2 bg-yellow-50 rounded-lg text-yellow-600"><FileCheckIcon class="w-6 h-6" /></div>
+              <div class="p-2 bg-warning-subtle rounded-lg text-warning"><FileCheckIcon class="w-6 h-6" /></div>
               <div>
                 <div class="font-medium text-gray-900">待办校审</div>
                 <div class="text-xs text-gray-500 mt-1">聚焦当前用户审核待办</div>
@@ -66,7 +66,7 @@
 
           <div class="bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-4 text-left opacity-70">
             <div class="flex items-center gap-4">
-              <div class="p-2 bg-red-50 rounded-lg text-red-500"><ZapIcon class="w-6 h-6" /></div>
+              <div class="p-2 bg-danger-subtle rounded-lg text-danger"><ZapIcon class="w-6 h-6" /></div>
               <div>
                 <div class="font-medium text-gray-700">碰撞检查</div>
                 <div class="text-xs text-gray-500 mt-1">请选择项目后进入</div>
@@ -98,7 +98,7 @@
           </template>
         </div>
 
-        <p v-if="statsError" class="text-sm text-red-500 mt-3">{{ statsError }}</p>
+        <p v-if="statsError" class="text-sm text-danger mt-3">{{ statsError }}</p>
       </section>
 
       <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -110,12 +110,12 @@
 
           <div class="flex border-b border-gray-200 px-6 pt-2">
             <button class="px-4 py-3 text-sm font-medium border-b-2 transition-colors"
-              :class="activeTaskTab === 'my_tasks' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'"
+              :class="activeTaskTab === 'my_tasks' ? 'text-brand border-brand' : 'text-gray-500 border-transparent hover:text-gray-700'"
               @click="activeTaskTab = 'my_tasks'">
               我发起的任务
             </button>
             <button class="px-4 py-3 text-sm font-medium border-b-2 transition-colors"
-              :class="activeTaskTab === 'pending_reviews' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'"
+              :class="activeTaskTab === 'pending_reviews' ? 'text-brand border-brand' : 'text-gray-500 border-transparent hover:text-gray-700'"
               @click="activeTaskTab = 'pending_reviews'">
               待我评审
             </button>
@@ -125,7 +125,7 @@
             <template v-if="tasksLoading">
               <div v-for="i in 3" :key="i" class="h-16 rounded-xl bg-gray-100 animate-pulse" />
             </template>
-            <p v-else-if="tasksError" class="text-sm text-red-500">{{ tasksError }}</p>
+            <p v-else-if="tasksError" class="text-sm text-danger">{{ tasksError }}</p>
             <p v-else-if="currentTasks.length === 0" class="text-sm text-gray-400">当前分类暂无任务</p>
             <template v-else>
               <article v-for="task in currentTasks"
@@ -167,11 +167,11 @@
                 </div>
               </div>
             </template>
-            <p v-else-if="activitiesError" class="text-sm text-red-500">{{ activitiesError }}</p>
+            <p v-else-if="activitiesError" class="text-sm text-danger">{{ activitiesError }}</p>
             <p v-else-if="activities.length === 0" class="text-sm text-gray-400">近期暂无动态</p>
             <article v-for="activity in activities" :key="activity.id" class="flex gap-3">
               <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold"
-                :class="activity.userType === 'system_bot' ? 'bg-indigo-500' : 'bg-gray-400'">
+                :class="activity.userType === 'system_bot' ? 'bg-brand' : 'bg-gray-400'">
                 {{ activity.userName.charAt(0).toUpperCase() }}
               </div>
               <div>

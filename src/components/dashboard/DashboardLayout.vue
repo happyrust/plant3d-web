@@ -1,8 +1,8 @@
 <template>
-  <div class="flex h-screen w-full overflow-hidden bg-[#F3F4F6] text-gray-900">
+  <div class="flex h-screen w-full overflow-hidden bg-[#F1F5F9] text-gray-900">
     <aside class="hidden h-full w-[280px] shrink-0 border-r border-gray-200 bg-white lg:flex lg:flex-col">
       <div class="flex h-20 items-center gap-3 px-6">
-        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500 text-sm font-bold text-white">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand text-sm font-bold text-white">
           P
         </div>
         <div>
@@ -16,7 +16,7 @@
           :key="item.id"
           class="mb-1 flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm transition-colors"
           :class="activeMenu === item.id
-            ? 'bg-[#EFF6FF] font-semibold text-blue-500'
+            ? 'bg-[#EFF6FF] font-semibold text-brand'
             : 'font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
           @click="activeMenu = item.id">
           <component :is="item.icon" class="h-5 w-5" />
@@ -30,7 +30,7 @@
         <h1 class="min-w-0 truncate text-2xl font-bold text-gray-800">{{ activePage.title }}</h1>
 
         <div class="flex items-center">
-          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white"
+          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white"
             :aria-label="currentUserName">
             {{ userInitial }}
           </div>
@@ -50,7 +50,7 @@
         <button v-for="item in navItems"
           :key="`${item.id}-mobile`"
           class="flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs transition-colors"
-          :class="activeMenu === item.id ? 'bg-[#EFF6FF] font-semibold text-blue-500' : 'text-gray-500'"
+          :class="activeMenu === item.id ? 'bg-[#EFF6FF] font-semibold text-brand' : 'text-gray-500'"
           @click="activeMenu = item.id">
           <component :is="item.icon" class="h-4 w-4" />
           <span>{{ item.shortLabel }}</span>

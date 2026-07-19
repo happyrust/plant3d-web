@@ -41,10 +41,10 @@ const recentTasks = computed(() => {
 });
 
 const quickActions = [
-  { id: 'open', label: '上传/打开模型', icon: Upload, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' },
-  { id: 'initiate', label: '发起编校审', icon: Plus, bgColor: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-  { id: 'review', label: '待办校审', icon: CheckSquare, bgColor: 'bg-amber-50', iconColor: 'text-amber-600' },
-  { id: 'collision', label: '碰撞检查', icon: AlertTriangle, bgColor: 'bg-red-50', iconColor: 'text-red-600' },
+  { id: 'open', label: '上传/打开模型', icon: Upload, bgColor: 'bg-brand-subtle', iconColor: 'text-brand' },
+  { id: 'initiate', label: '发起编校审', icon: Plus, bgColor: 'bg-success-subtle', iconColor: 'text-success' },
+  { id: 'review', label: '待办校审', icon: CheckSquare, bgColor: 'bg-warning-subtle', iconColor: 'text-warning' },
+  { id: 'collision', label: '碰撞检查', icon: AlertTriangle, bgColor: 'bg-danger-subtle', iconColor: 'text-danger' },
 ];
 
 function handleQuickAction(actionId: string) {
@@ -66,10 +66,10 @@ function formatDate(timestamp: number): string {
 
 function getStatusBadge(status: string): { label: string; cls: string } {
   switch (status) {
-    case 'approved': return { label: '已通过', cls: 'bg-emerald-100 text-emerald-700' };
-    case 'rejected': return { label: '已驳回', cls: 'bg-red-100 text-red-700' };
-    case 'submitted': return { label: '待审核', cls: 'bg-amber-100 text-amber-700' };
-    case 'in_review': return { label: '审核中', cls: 'bg-sky-100 text-sky-700' };
+    case 'approved': return { label: '已通过', cls: 'bg-success-subtle text-success' };
+    case 'rejected': return { label: '已驳回', cls: 'bg-danger-subtle text-danger' };
+    case 'submitted': return { label: '待审核', cls: 'bg-warning-subtle text-warning' };
+    case 'in_review': return { label: '审核中', cls: 'bg-brand-subtle text-brand' };
     case 'draft': return { label: '草稿', cls: 'bg-slate-100 text-slate-600' };
     default: return { label: status, cls: 'bg-slate-100 text-slate-600' };
   }
@@ -94,12 +94,12 @@ onMounted(() => {
     <!-- 左侧导航 -->
     <div class="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
       <div class="flex items-center gap-3 px-6 py-5">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">P</div>
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-white">P</div>
         <span class="text-sm font-semibold text-slate-900">Plant3D Web</span>
       </div>
       <nav class="flex flex-col gap-1 px-4">
         <button type="button"
-          class="flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-600">
+          class="flex items-center gap-3 rounded-lg bg-brand-subtle px-4 py-2.5 text-sm font-semibold text-brand">
           <LayoutDashboard class="h-5 w-5" />
           首页 (Dashboard)
         </button>
@@ -130,7 +130,7 @@ onMounted(() => {
             <RefreshCw :class="['h-5 w-5', isLoading && 'animate-spin']" />
           </button>
           <div v-if="currentUser" class="flex items-center gap-2">
-            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">
               {{ currentUser.name.charAt(0) }}
             </div>
           </div>
@@ -169,11 +169,11 @@ onMounted(() => {
                   </div>
                   <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4">
                     <div class="text-sm text-slate-500">审核中任务</div>
-                    <div class="text-2xl font-bold text-amber-600">{{ stats.inReview }}</div>
+                    <div class="text-2xl font-bold text-warning">{{ stats.inReview }}</div>
                   </div>
                   <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4">
                     <div class="text-sm text-slate-500">审核通过率</div>
-                    <div class="text-2xl font-bold text-emerald-600">{{ stats.approvalRate }}%</div>
+                    <div class="text-2xl font-bold text-success">{{ stats.approvalRate }}%</div>
                   </div>
                 </div>
               </section>
@@ -185,11 +185,11 @@ onMounted(() => {
                   <div class="flex flex-col items-center gap-2">
                     <div class="relative flex h-20 w-20 items-center justify-center">
                       <svg class="h-20 w-20 -rotate-90" viewBox="0 0 36 36">
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E5E7EB" stroke-width="3" />
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#10B981" stroke-width="3"
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E2E8F0" stroke-width="3" />
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#059669" stroke-width="3"
                           stroke-dasharray="88 100" stroke-linecap="round" />
                       </svg>
-                      <span class="absolute text-lg font-bold text-emerald-600">88%</span>
+                      <span class="absolute text-lg font-bold text-success">88%</span>
                     </div>
                     <span class="text-xs text-slate-500">设计完成率</span>
                   </div>
@@ -197,11 +197,11 @@ onMounted(() => {
                   <div class="flex flex-col items-center gap-2">
                     <div class="relative flex h-20 w-20 items-center justify-center">
                       <svg class="h-20 w-20 -rotate-90" viewBox="0 0 36 36">
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E5E7EB" stroke-width="3" />
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3B82F6" stroke-width="3"
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E2E8F0" stroke-width="3" />
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#2563EB" stroke-width="3"
                           stroke-dasharray="92 100" stroke-linecap="round" />
                       </svg>
-                      <span class="absolute text-lg font-bold text-blue-600">92%</span>
+                      <span class="absolute text-lg font-bold text-brand">92%</span>
                     </div>
                     <span class="text-xs text-slate-500">渲染准确率</span>
                   </div>
@@ -215,7 +215,7 @@ onMounted(() => {
                 <h2 class="mb-4 text-lg font-semibold text-slate-900">任务概览</h2>
                 <div class="rounded-xl border border-slate-200 bg-white p-6">
                   <div class="mb-4 flex items-center gap-6 border-b border-slate-200 pb-3 text-sm">
-                    <span class="font-semibold text-blue-600">我发起的</span>
+                    <span class="font-semibold text-brand">我发起的</span>
                     <span class="text-slate-400">我审核的</span>
                   </div>
                   <div v-if="recentTasks.length === 0" class="py-4 text-center text-sm text-slate-400">
@@ -245,7 +245,7 @@ onMounted(() => {
                 <div class="rounded-xl border border-slate-200 bg-white p-5">
                   <div class="flex flex-col gap-4">
                     <div class="flex gap-3">
-                      <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-600">
+                      <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-xs font-semibold text-brand">
                         张
                       </div>
                       <div class="min-w-0 flex-1">
@@ -259,7 +259,7 @@ onMounted(() => {
                       </div>
                     </div>
                     <div class="flex gap-3">
-                      <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-600">
+                      <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success-subtle text-xs font-semibold text-success">
                         张
                       </div>
                       <div class="min-w-0 flex-1">
