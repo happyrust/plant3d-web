@@ -24,7 +24,30 @@ export default {
         'destructive-foreground': 'hsl(var(--destructive-foreground))',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))'
+        ring: 'hsl(var(--ring))',
+        brand: {
+          DEFAULT: 'hsl(var(--brand))',
+          foreground: 'hsl(var(--brand-foreground))',
+          subtle: 'hsl(var(--brand-subtle))'
+        },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--success-foreground))',
+          subtle: 'hsl(var(--success-subtle))'
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))',
+          subtle: 'hsl(var(--warning-subtle))'
+        },
+        danger: {
+          DEFAULT: 'hsl(var(--danger))',
+          foreground: 'hsl(var(--danger-foreground))',
+          subtle: 'hsl(var(--danger-subtle))'
+        }
+      },
+      fontFamily: {
+        mono: ['"Fira Code"', '"JetBrains Mono"', 'Consolas', 'monospace']
       },
       borderRadius: {
         lg: 'var(--radius)',

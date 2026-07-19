@@ -31,6 +31,23 @@
   --input: 214.3 31.8% 91.4%;
   --ring: 222.2 84% 4.9%;
 
+  /* pencil-new design system — semantic accents.
+     Blue (--brand) is reserved for accents / links / selection / compare-A;
+     near-black ink (--primary above) carries primary actions. Slate neutrals
+     already match the shadcn defaults above. */
+  --brand: 221 83% 53%;
+  --brand-foreground: 0 0% 100%;
+  --brand-subtle: 214 100% 97%;
+  --success: 161 94% 30%;
+  --success-foreground: 0 0% 100%;
+  --success-subtle: 152 76% 96%;
+  --warning: 27 90% 37%;
+  --warning-foreground: 0 0% 100%;
+  --warning-subtle: 48 100% 96%;
+  --danger: 0 74% 42%;
+  --danger-foreground: 0 0% 100%;
+  --danger-subtle: 0 86% 97%;
+
   --radius: 0.5rem;
 }
 
@@ -62,6 +79,19 @@
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
   --ring: 212.7 26.8% 83.9%;
+
+  --brand: 217 91% 60%;
+  --brand-foreground: 222 47% 11%;
+  --brand-subtle: 222 47% 17%;
+  --success: 160 84% 39%;
+  --success-foreground: 222 47% 11%;
+  --success-subtle: 161 60% 14%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 222 47% 11%;
+  --warning-subtle: 28 60% 15%;
+  --danger: 0 84% 60%;
+  --danger-foreground: 222 47% 11%;
+  --danger-subtle: 0 60% 16%;
 }
 
 /* ========================================================================== */
