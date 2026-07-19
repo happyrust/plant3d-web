@@ -158,7 +158,7 @@ function handleStartTask() {
           <Input v-if="form.parseMode !== 'all'"
             v-model="form.targets"
             :placeholder="form.parseMode === 'dbnum' ? '输入 DBNum，逗号分隔' : '输入 RefNo，逗号分隔'" />
-          <p class="text-[11px] text-emerald-700">将创建 {{ estimatedSubtasks }} 个子任务（预估）</p>
+          <p class="text-[11px] text-success">将创建 {{ estimatedSubtasks }} 个子任务（预估）</p>
         </section>
 
         <section class="space-y-2 rounded-md border border-border bg-card p-3">
