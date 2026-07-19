@@ -100,10 +100,10 @@ const diffContext = treeDiff.context;
 const diffDbLabel = computed(() => (diffContext.value?.dbnum ? `DB ${diffContext.value.dbnum}` : ''));
 
 const DIFF_FILTER_CHIPS: { key: TreeDiffFilter; label: string; activeCls: string }[] = [
-  { key: 'all', label: '全部', activeCls: 'border-blue-300 bg-blue-100 text-blue-800' },
-  { key: 'added', label: '新增', activeCls: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
-  { key: 'modified', label: '修改', activeCls: 'border-amber-300 bg-amber-100 text-amber-800' },
-  { key: 'deleted', label: '删除', activeCls: 'border-rose-300 bg-rose-100 text-rose-800' },
+  { key: 'all', label: '全部', activeCls: 'border-brand bg-brand-subtle text-brand' },
+  { key: 'added', label: '新增', activeCls: 'border-success bg-success-subtle text-success' },
+  { key: 'modified', label: '修改', activeCls: 'border-warning bg-warning-subtle text-warning' },
+  { key: 'deleted', label: '删除', activeCls: 'border-danger bg-danger-subtle text-danger' },
 ];
 
 function exitDiffMode() {
@@ -1778,19 +1778,19 @@ function onSearchEnter(value: string) {
 
     <!-- 版本差异模式工具条：版本对胶囊 + 差异筛选 chips -->
     <div v-if="diffActive"
-      class="border-b border-border bg-blue-50/60 px-3 py-2"
+      class="border-b border-border bg-brand-subtle px-3 py-2"
       data-testid="model-tree-diff-bar">
       <div class="flex items-center justify-between gap-2">
         <div class="flex min-w-0 items-center gap-1.5">
-          <GitCompare class="h-3.5 w-3.5 shrink-0 text-blue-700" />
-          <span class="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800"
+          <GitCompare class="h-3.5 w-3.5 shrink-0 text-brand" />
+          <span class="inline-flex shrink-0 items-center rounded-full bg-brand text-brand-foreground px-2 py-0.5 text-[11px] font-medium"
             data-testid="model-tree-diff-version-pill">
             {{ diffVersionLabel }} 差异模式
           </span>
-          <span v-if="diffDbLabel" class="truncate text-[11px] text-blue-700/80">{{ diffDbLabel }}</span>
+          <span v-if="diffDbLabel" class="truncate font-mono text-[11px] text-brand">{{ diffDbLabel }}</span>
         </div>
         <button type="button"
-          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-blue-700 hover:bg-blue-100"
+          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-brand hover:bg-muted"
           title="退出差异模式"
           data-testid="model-tree-diff-exit"
           @click="exitDiffMode">
@@ -1809,10 +1809,10 @@ function onSearchEnter(value: string) {
           <span class="font-mono">{{ diffCounts[chip.key] }}</span>
         </button>
       </div>
-      <div v-if="diffResolving" class="mt-1 text-[10px] text-blue-700/80" data-testid="model-tree-diff-resolving">
+      <div v-if="diffResolving" class="mt-1 text-[10px] text-brand" data-testid="model-tree-diff-resolving">
         正在定位变更节点 {{ diffResolveDone }}/{{ diffResolveTotal }}…
       </div>
-      <div v-else-if="diffUnplacedCount > 0" class="mt-1 text-[10px] text-amber-700" data-testid="model-tree-diff-unplaced">
+      <div v-else-if="diffUnplacedCount > 0" class="mt-1 text-[10px] text-warning" data-testid="model-tree-diff-unplaced">
         {{ diffUnplacedCount }} 个变更未能定位到树（已计入统计）
       </div>
     </div>
@@ -1890,7 +1890,7 @@ function onSearchEnter(value: string) {
         <button v-if="!isRoomTree && contextNodeId && isRefnoLike(contextNodeId)" type="button"
           data-testid="model-tree-regenerate-model"
           :data-refno="contextNodeId"
-          class="w-full rounded px-2 py-1 text-left text-sm text-amber-700 hover:bg-muted"
+          class="w-full rounded px-2 py-1 text-left text-sm text-warning hover:bg-muted"
           @click="regenerateNode">
           重新生成模型
         </button>

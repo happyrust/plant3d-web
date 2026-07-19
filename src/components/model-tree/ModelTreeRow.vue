@@ -61,9 +61,9 @@ const nameLooksLikeRefno = computed(() => {
 
 const diffBadge = computed(() => {
   if (!props.diffStatus) return null;
-  if (props.diffStatus === 'added') return { label: '增', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
-  if (props.diffStatus === 'deleted') return { label: '删', cls: 'bg-rose-100 text-rose-700 border-rose-200' };
-  return { label: '改', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+  if (props.diffStatus === 'added') return { label: '增', cls: 'bg-success-subtle text-success border-transparent' };
+  if (props.diffStatus === 'deleted') return { label: '删', cls: 'bg-danger-subtle text-danger border-transparent' };
+  return { label: '改', cls: 'bg-warning-subtle text-warning border-transparent' };
 });
 
 const ghostTitle = computed(() => {
