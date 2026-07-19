@@ -434,7 +434,7 @@ watch(
             :data-testid="`annotation-row-${item.type}-${item.id}`"
             class="w-full border text-left transition"
             :class="[isDockDensity ? 'rounded-xl p-2' : 'rounded-[20px] p-3', selectedAnnotation?.id === item.id && selectedAnnotation?.type === item.type
-              ? 'border-orange-200 bg-orange-50/80 shadow-sm'
+              ? 'border-brand bg-brand-subtle shadow-sm'
               : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50']"
             @click="emit('select-annotation', item)"
             @dblclick="emit('open-annotation', item)">

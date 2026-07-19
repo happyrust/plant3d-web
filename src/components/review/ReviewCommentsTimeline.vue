@@ -619,7 +619,7 @@ function canEditComment(comment: AnnotationComment): boolean {
     <div class="flex items-center justify-between border-b border-[#E5E7EB]"
       :class="isDockDensity ? 'px-2.5 py-1.5' : 'px-4 py-3'">
       <div class="flex min-w-0 items-center gap-2">
-        <svg class="h-4 w-4 text-[#FF6B00]" viewBox="0 0 24 24" fill="currentColor">
+        <svg class="h-4 w-4 text-brand" viewBox="0 0 24 24" fill="currentColor">
           <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
         </svg>
         <span class="truncate text-sm font-semibold text-[#111827]">{{ displayLabel }}</span>
@@ -723,9 +723,9 @@ function canEditComment(comment: AnnotationComment): boolean {
                 </button>
               </template>
               <button type="button"
-                class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md text-[12px] font-semibold text-white"
+                class="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md text-[12px] font-semibold text-primary-foreground"
                 :class="[isDockDensity ? 'px-2 py-1' : 'px-3 py-1.5', selectedReviewAction && canSubmitReviewAction && !actionSubmitting
-                  ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
+                  ? 'bg-primary hover:bg-primary/90'
                   : 'cursor-not-allowed bg-[#D1D5DB]']"
                 :disabled="!selectedReviewAction || !canSubmitReviewAction || actionSubmitting"
                 @click="submitSelectedReviewAction">
@@ -751,9 +751,9 @@ function canEditComment(comment: AnnotationComment): boolean {
                   :placeholder="props.composerPlaceholder"
                   @keyup.enter.ctrl="submitComment" />
                 <button type="button"
-                  class="inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-primary-foreground"
                   :class="newCommentContent.trim()
-                    ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
+                    ? 'bg-primary hover:bg-primary/90'
                     : 'cursor-not-allowed bg-[#D1D5DB]'"
                   :disabled="!newCommentContent.trim()"
                   @click="submitComment">
@@ -783,7 +783,7 @@ function canEditComment(comment: AnnotationComment): boolean {
         </div>
       </div>
 
-      <div v-if="commentError" class="py-2 text-xs text-[#DC2626]"
+      <div v-if="commentError" class="py-2 text-xs text-danger"
         :class="isDockDensity ? 'px-3' : 'px-4'">
         {{ commentError }}
       </div>
@@ -837,11 +837,11 @@ function canEditComment(comment: AnnotationComment): boolean {
               <!-- Content (editing) -->
               <div v-if="editingCommentId === item.comment.id" class="flex flex-col gap-1.5">
                 <textarea v-model="editingCommentContent"
-                  class="min-h-[3rem] w-full rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-[13px] text-[#374151] focus:border-[#FF6B00] focus:outline-none"
+                  class="min-h-[3rem] w-full rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-[13px] text-[#374151] focus:border-brand focus:outline-none"
                   @keyup.enter.ctrl="saveEdit" />
                 <div class="flex gap-1">
                   <button type="button"
-                    class="rounded bg-[#FF6B00] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#EA580C]"
+                    class="rounded bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                     @click="saveEdit">
                     保存
                   </button>
@@ -861,18 +861,18 @@ function canEditComment(comment: AnnotationComment): boolean {
               <!-- Actions -->
               <div class="flex items-center gap-3">
                 <button type="button"
-                  class="text-[11px] text-[#9CA3AF] hover:text-[#FF6B00]"
+                  class="text-[11px] text-[#9CA3AF] hover:text-brand"
                   @click="setReplyTo(item.comment)">
                   回复
                 </button>
                 <template v-if="canEditComment(item.comment)">
                   <button type="button"
-                    class="text-[11px] text-[#9CA3AF] hover:text-[#3B82F6]"
+                    class="text-[11px] text-[#9CA3AF] hover:text-brand"
                     @click="startEdit(item.comment)">
                     编辑
                   </button>
                   <button type="button"
-                    class="text-[11px] text-[#9CA3AF] hover:text-[#EF4444]"
+                    class="text-[11px] text-[#9CA3AF] hover:text-danger"
                     @click="deleteComment(item.comment.id)">
                     删除
                   </button>
@@ -938,9 +938,9 @@ function canEditComment(comment: AnnotationComment): boolean {
 
       <div class="mt-2 flex items-center justify-end">
         <button type="button"
-          class="inline-flex items-center gap-1.5 rounded-md font-semibold text-white"
+          class="inline-flex items-center gap-1.5 rounded-md font-semibold text-primary-foreground"
           :class="[isDockDensity ? 'px-3 py-1.5 text-xs' : 'px-4 py-1.5 text-[13px]', newCommentContent.trim()
-            ? 'bg-[#FF6B00] hover:bg-[#EA580C]'
+            ? 'bg-primary hover:bg-primary/90'
             : 'cursor-not-allowed bg-[#D1D5DB]']"
           :disabled="!newCommentContent.trim()"
           @click="submitComment">

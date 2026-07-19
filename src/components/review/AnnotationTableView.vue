@@ -515,11 +515,11 @@ async function copyRowInline(item: AnnotationWorkspaceItem) {
 
 function statusTextClass(item: AnnotationWorkspaceItem): string {
   switch (item.statusKey) {
-    case 'pending':  return 'text-orange-700';
-    case 'fixed':    return 'text-emerald-700';
-    case 'rejected': return 'text-rose-700';
-    case 'approved': return 'text-emerald-800';
-    case 'wont_fix': return 'text-amber-700';
+    case 'pending':  return 'text-warning';
+    case 'fixed':    return 'text-success';
+    case 'rejected': return 'text-danger';
+    case 'approved': return 'text-success';
+    case 'wont_fix': return 'text-warning';
     default:         return 'text-slate-700';
   }
 }
@@ -613,9 +613,9 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
     <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[11px]">
       <span class="font-semibold text-slate-950">共 {{ summaryCounts.total }} 条</span>
       <span class="h-1 w-1 rounded-full bg-slate-300" />
-      <span class="font-medium text-orange-700">待处理 {{ summaryCounts.pending }}</span>
+      <span class="font-medium text-warning">待处理 {{ summaryCounts.pending }}</span>
       <span class="h-1 w-1 rounded-full bg-slate-300" />
-      <span class="font-medium text-emerald-700">已处理 {{ summaryCounts.fixed }}</span>
+      <span class="font-medium text-success">已处理 {{ summaryCounts.fixed }}</span>
       <span v-if="totalCount !== summaryCounts.total" class="ml-2 italic text-slate-400"
         data-testid="annotation-table-filter-hint">
         · 筛选后 {{ totalCount }} 条
@@ -646,32 +646,32 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
       <!-- Head（Compact 不显示表头）-->
       <div v-if="!isCompact" role="rowgroup" class="flex h-9 items-center border-b border-slate-200 bg-slate-50 px-4 text-[11px] font-semibold text-slate-950">
         <button type="button"
-          class="w-10 text-center flex items-center justify-center gap-1 hover:text-orange-600"
+          class="w-10 text-center flex items-center justify-center gap-1 hover:text-brand"
           data-testid="annotation-table-sort-index"
           @click="onHeaderClick('index')">
           <span>序号</span>
-          <ArrowUp v-if="sortIconState('index') === 'asc'" class="h-3 w-3 text-orange-500" />
-          <ArrowDown v-else-if="sortIconState('index') === 'desc'" class="h-3 w-3 text-orange-500" />
+          <ArrowUp v-if="sortIconState('index') === 'asc'" class="h-3 w-3 text-brand" />
+          <ArrowDown v-else-if="sortIconState('index') === 'desc'" class="h-3 w-3 text-brand" />
           <ArrowUpDown v-else class="h-3 w-3 text-slate-300" />
         </button>
         <button type="button"
-          class="w-24 text-left flex items-center gap-1 hover:text-orange-600"
+          class="w-24 text-left flex items-center gap-1 hover:text-brand"
           data-testid="annotation-table-sort-severity"
           @click="onHeaderClick('severity')">
           <span>错误标记</span>
-          <ArrowUp v-if="sortIconState('severity') === 'asc'" class="h-3 w-3 text-orange-500" />
-          <ArrowDown v-else-if="sortIconState('severity') === 'desc'" class="h-3 w-3 text-orange-500" />
+          <ArrowUp v-if="sortIconState('severity') === 'asc'" class="h-3 w-3 text-brand" />
+          <ArrowDown v-else-if="sortIconState('severity') === 'desc'" class="h-3 w-3 text-brand" />
           <ArrowUpDown v-else class="h-3 w-3 text-slate-300" />
         </button>
         <div class="flex-1">校核发现问题</div>
         <button type="button"
-          class="text-left flex items-center gap-1 hover:text-orange-600"
+          class="text-left flex items-center gap-1 hover:text-brand"
           :class="isWide ? 'w-56' : 'w-40'"
           data-testid="annotation-table-sort-status"
           @click="onHeaderClick('status')">
           <span>处理情况</span>
-          <ArrowUp v-if="sortIconState('status') === 'asc'" class="h-3 w-3 text-orange-500" />
-          <ArrowDown v-else-if="sortIconState('status') === 'desc'" class="h-3 w-3 text-orange-500" />
+          <ArrowUp v-if="sortIconState('status') === 'asc'" class="h-3 w-3 text-brand" />
+          <ArrowDown v-else-if="sortIconState('status') === 'desc'" class="h-3 w-3 text-brand" />
           <ArrowUpDown v-else class="h-3 w-3 text-slate-300" />
         </button>
         <div class="w-24 text-center">操作</div>
@@ -704,7 +704,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
           <div class="w-24">
             <select v-if="canEditInline(item)"
               :value="item.severity ?? ''"
-              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none transition focus:ring-1 focus:ring-blue-300 disabled:cursor-wait disabled:opacity-60"
+              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none transition focus:ring-1 focus:ring-brand disabled:cursor-wait disabled:opacity-60"
               :class="severityPillClass(item)"
               :disabled="isSeveritySaving(item)"
               :aria-label="`修改错误标记：${item.title}`"
@@ -741,7 +741,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               <input v-if="isTitleEditing(item)"
                 v-model="editingTitleValue"
                 type="text"
-                class="w-full rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-slate-950 shadow-sm outline-none focus:ring-1 focus:ring-blue-300"
+                class="w-full rounded-md border border-brand bg-white px-2 py-1 text-xs font-semibold text-slate-950 shadow-sm outline-none focus:ring-1 focus:ring-brand"
                 :data-testid="`annotation-table-title-input-${item.id}`"
                 :disabled="isTitleSaving(item)"
                 @click.stop
@@ -752,7 +752,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
                 @blur="commitTitleEdit($event, item)" />
               <button v-else-if="canEditInline(item)"
                 type="button"
-                class="max-w-full text-left font-semibold text-slate-950 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                class="max-w-full text-left font-semibold text-slate-950 hover:text-brand disabled:cursor-wait disabled:opacity-60"
                 :disabled="isTitleSaving(item)"
                 :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
                 :data-testid="`annotation-table-title-${item.id}`"
@@ -764,7 +764,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               </button>
               <!-- eslint-disable-next-line vue/no-v-html -->
               <span v-else class="font-semibold text-slate-950 line-clamp-2" v-html="highlightTitle(item)" />
-              <span v-if="isTitleSaving(item)" class="ml-2 text-[11px] font-medium text-blue-500">保存中</span>
+              <span v-if="isTitleSaving(item)" class="ml-2 text-[11px] font-medium text-brand">保存中</span>
               <template v-if="isWide && item.description">
                 <span class="text-slate-500"> · </span>
                 <!-- eslint-disable-next-line vue/no-v-html -->
@@ -833,7 +833,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
             <span class="text-[11px] font-mono text-slate-400">#{{ (currentPage - 1) * pageSize + localIdx + 1 }}</span>
             <select v-if="canEditInline(item)"
               :value="item.severity ?? ''"
-              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none focus:ring-1 focus:ring-blue-300 disabled:cursor-wait disabled:opacity-60"
+              class="max-w-[92px] rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none outline-none focus:ring-1 focus:ring-brand disabled:cursor-wait disabled:opacity-60"
               :class="severityPillClass(item)"
               :disabled="isSeveritySaving(item)"
               :aria-label="`修改错误标记：${item.title}`"
@@ -892,7 +892,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               <input v-if="isTitleEditing(item)"
                 v-model="editingTitleValue"
                 type="text"
-                class="w-full rounded-md border border-blue-200 bg-white px-2 py-1 text-sm font-semibold text-slate-950 outline-none focus:ring-1 focus:ring-blue-300"
+                class="w-full rounded-md border border-brand bg-white px-2 py-1 text-sm font-semibold text-slate-950 outline-none focus:ring-1 focus:ring-brand"
                 :data-testid="`annotation-table-title-input-${item.id}`"
                 :disabled="isTitleSaving(item)"
                 @click.stop
@@ -903,7 +903,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
                 @blur="commitTitleEdit($event, item)" />
               <button v-else-if="canEditInline(item)"
                 type="button"
-                class="max-w-full text-left text-sm font-semibold text-slate-950 line-clamp-1 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                class="max-w-full text-left text-sm font-semibold text-slate-950 line-clamp-1 hover:text-brand disabled:cursor-wait disabled:opacity-60"
                 :disabled="isTitleSaving(item)"
                 :title="isTitleSaving(item) ? '标题保存中' : '双击编辑标题'"
                 :data-testid="`annotation-table-title-${item.id}`"
@@ -915,7 +915,7 @@ const severityOptions: { value: import('./annotationTableSorting').AnnotationTab
               </button>
               <!-- eslint-disable-next-line vue/no-v-html -->
               <h3 v-else class="text-sm font-semibold text-slate-950 line-clamp-1" v-html="highlightTitle(item)" />
-              <span v-if="isTitleSaving(item)" class="text-[11px] font-medium text-blue-500">保存中</span>
+              <span v-if="isTitleSaving(item)" class="text-[11px] font-medium text-brand">保存中</span>
               <!-- eslint-disable-next-line vue/no-v-html -->
               <p v-if="item.description" class="mt-0.5 text-xs leading-snug text-slate-600 line-clamp-2" v-html="highlightDescription(item)" />
             </div>
