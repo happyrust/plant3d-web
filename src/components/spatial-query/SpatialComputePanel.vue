@@ -22,7 +22,7 @@
         <button type="button"
           class="flex-1 rounded-lg py-2 text-center text-xs font-medium transition-all"
           :class="panelMode === 'compute'
-            ? 'bg-white text-[#EA580C] shadow-sm font-semibold'
+            ? 'bg-white text-brand shadow-sm font-semibold'
             : 'text-muted-foreground hover:text-foreground'"
           @click="setPanelMode('compute')">
           计算
@@ -33,9 +33,9 @@
     <div v-if="panelMode === 'compute'" class="flex-1 overflow-y-auto px-5 py-4">
       <div class="flex flex-col gap-4">
         <!-- Banner -->
-        <div class="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2">
-          <div class="text-xs font-bold text-orange-800">两种输入方式</div>
-          <div class="text-[11px] leading-relaxed text-orange-700">读取当前选中构件，或输入编号后计算。</div>
+        <div class="rounded-xl border border-brand/25 bg-brand-subtle px-3 py-2">
+          <div class="text-xs font-bold text-brand">两种输入方式</div>
+          <div class="text-[11px] leading-relaxed text-brand">读取当前选中构件，或输入编号后计算。</div>
         </div>
 
         <!-- Scenario Accordion -->
@@ -46,7 +46,7 @@
               <div class="text-[11px] font-medium text-muted-foreground">折叠后仅显示当前场景，减少 Dock 纵向占用</div>
             </div>
             <div class="flex items-center gap-1.5">
-              <span v-if="!scenarioExpanded" class="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700">已折叠</span>
+              <span v-if="!scenarioExpanded" class="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold text-brand">已折叠</span>
               <button type="button"
                 class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-white"
                 @click="toggleScenarioExpanded">
@@ -63,7 +63,7 @@
               type="button"
               class="rounded-lg border p-2.5 text-left transition-colors"
               :class="activeScenario === scenario.key
-                ? 'border-orange-300 bg-orange-50'
+                ? 'border-brand bg-brand-subtle'
                 : 'border-gray-200 bg-white hover:border-gray-300'"
               @click="setActiveScenario(scenario.key); scenarioExpanded = false">
               <div class="text-xs font-semibold text-foreground">{{ scenario.title }}</div>
@@ -75,7 +75,7 @@
           <div v-else class="mt-2 rounded-[10px] border border-gray-200 bg-white p-2.5">
             <div class="flex items-center justify-between">
               <div class="text-xs font-bold text-foreground">{{ currentScenarioMeta.title }}</div>
-              <span class="rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[11px] font-semibold text-orange-700">当前场景</span>
+              <span class="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold text-brand">当前场景</span>
             </div>
             <div class="mt-1 text-[11px] font-medium text-muted-foreground">{{ currentScenarioMeta.description }}</div>
             <div class="mt-1 text-[11px] text-gray-400">其余 {{ scenarioList.length - 1 }} 个场景已折叠，点击"展开"查看。</div>
@@ -89,7 +89,7 @@
               <div class="text-[15px] font-bold text-foreground">{{ currentScenarioMeta.title }}</div>
               <div class="mt-1 text-xs leading-relaxed text-muted-foreground">{{ currentScenarioMeta.description }}</div>
             </div>
-            <span class="shrink-0 rounded-full bg-orange-50 px-2.5 py-1.5 font-mono text-[11px] font-semibold text-orange-700">
+            <span class="shrink-0 rounded-full bg-brand-subtle px-2.5 py-1.5 font-mono text-[11px] font-semibold text-brand">
               默认样例：{{ currentScenarioMeta.exampleRefno }}
             </span>
           </div>
@@ -101,8 +101,8 @@
               <input v-model="computeState.suppoRefno"
                 type="text"
                 :placeholder="`${currentScenarioMeta.exampleRefno}`"
-                class="h-10 w-full rounded-[10px] border bg-orange-50 px-3 font-mono text-[13px] font-medium text-foreground outline-none transition-colors focus:border-orange-400"
-                :class="computeState.suppoRefno ? 'border-orange-300' : 'border-gray-200'" />
+                class="h-10 w-full rounded-[10px] border bg-brand-subtle px-3 font-mono text-[13px] font-medium text-foreground outline-none transition-colors focus:border-brand"
+                :class="computeState.suppoRefno ? 'border-brand' : 'border-gray-200'" />
               <span class="mt-0.5 block text-[11px] font-medium text-gray-400">{{ currentScenarioMeta.sourceHelp }}</span>
             </label>
 
@@ -111,7 +111,7 @@
               <input v-model="computeState.tolerance"
                 type="number"
                 placeholder="可空"
-                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] font-medium text-foreground outline-none focus:border-orange-400" />
+                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] font-medium text-foreground outline-none focus:border-brand" />
             </label>
 
             <div v-if="hasField('suppoType') || hasField('searchRadius')" class="grid grid-cols-2 gap-2.5">
@@ -120,14 +120,14 @@
                 <input v-model="computeState.suppoType"
                   type="text"
                   placeholder="S1 / S2，可空"
-                  class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px] text-foreground outline-none focus:border-orange-400" />
+                  class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px] text-foreground outline-none focus:border-brand" />
               </label>
               <label v-if="hasField('searchRadius')" class="block">
                 <span class="mb-1 block text-xs font-semibold text-muted-foreground">search_radius (mm)</span>
                 <input v-model="computeState.searchRadius"
                   type="number"
                   placeholder="可空"
-                  class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-orange-400" />
+                  class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-brand" />
               </label>
             </div>
 
@@ -136,7 +136,7 @@
               <input v-model="computeState.targetNouns"
                 type="text"
                 :placeholder="activeScenario === 'branNearestClearance' ? 'wall,column' : 'WALL,COLUMN,FIXING'"
-                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px] text-foreground outline-none focus:border-orange-400" />
+                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 text-[13px] text-foreground outline-none focus:border-brand" />
             </label>
 
             <label v-if="hasField('neighborWindow')" class="block">
@@ -144,7 +144,7 @@
               <input v-model="computeState.neighborWindow"
                 type="number"
                 placeholder="可空"
-                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-orange-400" />
+                class="h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 font-mono text-[13px] text-foreground outline-none focus:border-brand" />
             </label>
           </div>
 
@@ -157,7 +157,7 @@
             </button>
             <button type="button"
               :disabled="computeState.loading || isComputeBusy"
-              class="flex-1 rounded-[10px] bg-[#EA580C] py-2.5 text-center text-[13px] font-bold text-white transition-colors hover:bg-[#C2410C] disabled:cursor-not-allowed disabled:opacity-50"
+              class="flex-1 rounded-[10px] bg-primary py-2.5 text-center text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               @click="runComputeScenario()">
               <Loader2 v-if="computeState.loading" class="mr-1 inline h-3.5 w-3.5 animate-spin" />
               {{ computeState.loading ? '计算中...' : '执行计算并定位' }}
@@ -168,10 +168,10 @@
           <div v-if="computeState.resultRows.length > 0 || computeState.error || computeState.responseText" class="mt-3">
             <div class="flex items-center justify-between pb-2">
               <div class="text-[13px] font-bold text-foreground">查询结果表</div>
-              <div class="text-xs font-bold text-[#EA580C]">可点击行自动选中并跳转</div>
+              <div class="text-xs font-bold text-brand">可点击行自动选中并跳转</div>
             </div>
 
-            <div v-if="computeState.error" class="rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            <div v-if="computeState.error" class="rounded-[10px] border border-danger/25 bg-danger-subtle px-3 py-2 text-sm text-danger">
               {{ computeState.error }}
             </div>
 
@@ -187,11 +187,11 @@
               <!-- Rows -->
               <div v-for="(row, idx) in computeState.resultRows" :key="idx"
                 class="flex items-center border-t text-xs"
-                :class="idx === 0 ? 'border-orange-200 bg-orange-50' : 'border-gray-200'">
+                :class="idx === 0 ? 'border-brand/25 bg-brand-subtle' : 'border-gray-200'">
                 <div class="w-[130px] truncate px-3 py-2.5 font-mono text-xs font-medium text-foreground">{{ row.refno }}</div>
                 <div class="w-[70px] px-2 py-2.5 font-medium text-gray-700">{{ row.noun }}</div>
                 <div class="w-[56px] px-2 py-2.5"
-                  :class="idx === 0 ? 'font-semibold text-[#C2410C]' : 'text-muted-foreground'">
+                  :class="idx === 0 ? 'font-semibold text-brand' : 'text-muted-foreground'">
                   {{ formatDistanceMm(row.distanceMm) }}
                 </div>
                 <div v-if="activeScenario === 'branNearestClearance'" class="min-w-0 flex-1 truncate px-2 py-2.5 text-[11px] text-muted-foreground">
@@ -201,7 +201,7 @@
                   <button type="button"
                     class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors"
                     :class="idx === 0
-                      ? 'bg-[#EA580C] text-white hover:bg-[#C2410C]'
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                       : 'border border-gray-200 text-gray-700 hover:bg-gray-50'"
                     @click="$emit('select-refno', row.refno)">
                     选中并跳转
