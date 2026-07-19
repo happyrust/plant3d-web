@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Misc Token Harness</title>
+    <style>
+      body { margin: 0; background: #eef1f5; font-family: 'Noto Sans SC', system-ui, sans-serif; }
+      .stage { display: flex; gap: 32px; padding: 32px; align-items: flex-start; flex-wrap: wrap; }
+      .cap { font: 600 13px system-ui; color: #475569; margin: 0 0 10px 2px; }
+      .room-host { width: 380px; height: 760px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; position: relative; }
+      .drawer-host { width: 440px; height: 620px; position: relative; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; overflow: hidden; }
+      .btn-host { width: 760px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div>
+        <div class="cap">RoomInfoPanel · 数据态 + 错误/警告条</div>
+        <div class="room-host" id="room-info"></div>
+      </div>
+      <div>
+        <div class="cap">ObjectMeasureDrawer · 第一步完成/忙碌</div>
+        <div class="drawer-host" id="measure-a"></div>
+      </div>
+      <div>
+        <div class="cap">ObjectMeasureDrawer · 初始态</div>
+        <div class="drawer-host" id="measure-b"></div>
+      </div>
+      <div>
+        <div class="cap">Button 变体一排</div>
+        <div class="btn-host" id="buttons"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/harness/misc.ts"></script>
+  </body>
+</html>
