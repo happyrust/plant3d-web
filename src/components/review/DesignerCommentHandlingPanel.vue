@@ -283,6 +283,7 @@ const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayl
   xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
   xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
   xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
+  ...(reviewStore.getBoundDimensionConfirmPayload?.() ?? {}),
 }));
 const confirmedSnapshotPayload = computed(() => (
   buildReviewConfirmSnapshotPayloadFromRecords(currentTaskConfirmedRecords.value)
@@ -491,6 +492,8 @@ async function confirmCurrentData() {
         rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations],
         obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations],
         measurements: [...currentDraftConfirmPayload.value.measurements],
+        dimensionDocument: currentDraftConfirmPayload.value.dimensionDocument,
+        dimensionDocumentVersion: currentDraftConfirmPayload.value.dimensionDocumentVersion,
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,
@@ -591,7 +594,7 @@ onMounted(() => {
               <div class="min-w-0 space-y-3">
                 <div class="flex flex-wrap items-center gap-2">
                   <h2 class="text-xl font-semibold text-slate-950">{{ currentTask.title }}</h2>
-                  <span class="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">已退回</span>
+                  <span class="rounded-full bg-danger-subtle px-2.5 py-1 text-xs font-semibold text-danger">已退回</span>
                   <span v-if="currentTaskStatus" class="rounded-full px-2.5 py-1 text-xs font-semibold"
                     :class="currentTaskStatus.color">
                     {{ currentTaskStatus.label }}
@@ -637,7 +640,7 @@ onMounted(() => {
                 </button>
               </div>
             </div>
-            <div class="mt-4 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div class="mt-4 rounded-2xl border border-danger/30 bg-danger-subtle px-4 py-3 text-sm text-danger">
               <div class="flex items-start gap-2">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
@@ -687,9 +690,9 @@ onMounted(() => {
                   <button v-for="item in section.items"
                     :key="`${item.type}:${item.id}`"
                     type="button"
-                    class="block w-full rounded-2xl border px-4 py-4 text-left transition hover:border-orange-200 hover:bg-orange-50/40"
+                    class="block w-full rounded-2xl border px-4 py-4 text-left transition hover:border-brand hover:bg-brand-subtle/40"
                     :class="selectedAnnotation?.id === item.id && selectedAnnotation?.type === item.type
-                      ? 'border-orange-300 bg-orange-50/70 shadow-sm'
+                      ? 'border-brand bg-brand-subtle shadow-sm'
                       : 'border-slate-200 bg-white'"
                     @click="selectAnnotation(item)">
                     <div class="flex items-start justify-between gap-3">
@@ -859,7 +862,7 @@ onMounted(() => {
               {{ canConfirmCurrentData ? '确认后会以当前批注和测量快照生成处理留痕。' : '当前没有新的处理数据需要确认。' }}
             </div>
             <button type="button"
-              class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-700"
+              class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary-foreground px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-foreground/90 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
               :disabled="!canConfirmCurrentData || confirmSaving"
               @click="confirmCurrentData">
               <Send class="h-4 w-4" />

@@ -1003,7 +1003,9 @@ const reviewerMeasurementActions = computed(() => [
 ]);
 
 const hasPendingData = computed(() => {
-  return pendingAnnotationCount.value > 0 || pendingMeasurementCount.value > 0;
+  return pendingAnnotationCount.value > 0
+    || pendingMeasurementCount.value > 0
+    || reviewStore.dimensionDocumentDirty?.value === true;
 });
 const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayload({
   annotations: [...toolStore.annotations.value],
@@ -1015,6 +1017,7 @@ const currentDraftConfirmPayload = computed(() => buildReviewConfirmSnapshotPayl
   xeokitAngleMeasurements: [...toolStore.xeokitAngleMeasurements.value],
   xeokitElevationPointMeasurements: [...(toolStore.xeokitElevationPointMeasurements?.value ?? [])],
   xeokitElevationDeltaMeasurements: [...(toolStore.xeokitElevationDeltaMeasurements?.value ?? [])],
+  ...(reviewStore.getBoundDimensionConfirmPayload?.() ?? {}),
 }));
 const pendingMeasurementCount = computed(() => currentDraftConfirmPayload.value.measurements.length);
 const confirmedSnapshotPayload = computed(() => (
@@ -1052,6 +1055,8 @@ async function confirmCurrentData() {
         rectAnnotations: [...currentDraftConfirmPayload.value.rectAnnotations],
         obbAnnotations: [...currentDraftConfirmPayload.value.obbAnnotations],
         measurements: [...currentDraftConfirmPayload.value.measurements],
+        dimensionDocument: currentDraftConfirmPayload.value.dimensionDocument,
+        dimensionDocumentVersion: currentDraftConfirmPayload.value.dimensionDocumentVersion,
         note: confirmNote.value.trim(),
       },
       addConfirmedRecord: reviewStore.addConfirmedRecord,

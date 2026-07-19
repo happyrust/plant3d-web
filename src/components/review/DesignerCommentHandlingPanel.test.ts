@@ -479,7 +479,7 @@ describe('DesignerCommentHandlingPanel', () => {
     const returnedRow = document.querySelector('[data-testid="annotation-row-text-annot-open"]') as HTMLElement;
     expect(document.querySelector('[data-testid="designer-comment-annotation-list"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="designer-comment-annotation-detail"]')).toBeNull();
-    expect(returnedRow.className).toContain('border-orange-200');
+    expect(returnedRow.className).toContain('border-brand');
 
     mounted.unmount();
   });
