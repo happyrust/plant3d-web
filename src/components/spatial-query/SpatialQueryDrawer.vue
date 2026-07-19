@@ -32,7 +32,7 @@
         <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
           <div class="rounded-md bg-white px-2 py-1">
             <div class="text-gray-400">半径</div>
-            <div class="font-mono font-semibold text-[#C84D00]">{{ radiusMetersText }} m</div>
+            <div class="font-mono font-semibold text-brand">{{ radiusMetersText }} m</div>
           </div>
           <div class="rounded-md bg-white px-2 py-1">
             <div class="text-gray-400">结果</div>
@@ -72,19 +72,19 @@
             <div class="mt-2 grid grid-cols-3 gap-1.5">
               <button type="button"
                 class="rounded-md border px-2 py-1.5 text-xs transition-colors"
-                :class="draft.rangeCenterSource === 'selected' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                :class="draft.rangeCenterSource === 'selected' ? 'border-brand bg-brand-subtle text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
                 @click="draft.rangeCenterSource = 'selected'">
                 当前选中
               </button>
               <button type="button"
                 class="rounded-md border px-2 py-1.5 text-xs transition-colors"
-                :class="draft.rangeCenterSource === 'pick' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                :class="draft.rangeCenterSource === 'pick' ? 'border-brand bg-brand-subtle text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
                 @click="startPick">
                 拾取中心
               </button>
               <button type="button"
                 class="rounded-md border px-2 py-1.5 text-xs transition-colors"
-                :class="draft.rangeCenterSource === 'coordinates' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                :class="draft.rangeCenterSource === 'coordinates' ? 'border-brand bg-brand-subtle text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
                 @click="draft.rangeCenterSource = 'coordinates'">
                 手输坐标
               </button>
@@ -97,7 +97,7 @@
                 使用当前选中
               </button>
               <div class="flex min-w-0 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-500">
-                <MapPinned class="h-3.5 w-3.5 text-[#FF6B00]" />
+                <MapPinned class="h-3.5 w-3.5 text-brand" />
                 <span>{{ centerSummary }}</span>
               </div>
             </div>
@@ -111,13 +111,13 @@
               <div class="flex rounded-md bg-white p-0.5 text-[11px]">
                 <button type="button"
                   class="rounded px-2 py-0.5 font-medium transition-colors"
-                  :class="draft.distanceCenterSource === 'refno' ? 'bg-[#FFF1E8] text-[#C84D00]' : 'text-gray-500 hover:text-gray-700'"
+                  :class="draft.distanceCenterSource === 'refno' ? 'bg-brand-subtle text-brand' : 'text-gray-500 hover:text-gray-700'"
                   @click="draft.distanceCenterSource = 'refno'">
                   通过 Refno
                 </button>
                 <button type="button"
                   class="rounded px-2 py-0.5 font-medium transition-colors"
-                  :class="draft.distanceCenterSource === 'coordinates' ? 'bg-[#FFF1E8] text-[#C84D00]' : 'text-gray-500 hover:text-gray-700'"
+                  :class="draft.distanceCenterSource === 'coordinates' ? 'bg-brand-subtle text-brand' : 'text-gray-500 hover:text-gray-700'"
                   @click="draft.distanceCenterSource = 'coordinates'">
                   通过坐标
                 </button>
@@ -127,7 +127,7 @@
               <label class="block text-xs text-gray-500">拾取起始物项</label>
               <div class="flex gap-1.5">
                 <button type="button"
-                  class="inline-flex items-center gap-1 rounded-md border border-[#FF6B00] bg-[#FF6B00] px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#E35F00]"
+                  class="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   data-testid="pick-from-selection"
                   @click="pickRefnoFromSelection">
                   <MousePointerClick class="h-3.5 w-3.5" />
@@ -135,7 +135,7 @@
                 </button>
                 <div class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs">
                   <span class="h-2 w-2 shrink-0 rounded-full"
-                    :class="draft.refno.trim() ? 'bg-emerald-500' : 'bg-gray-300'"
+                    :class="draft.refno.trim() ? 'bg-success' : 'bg-gray-300'"
                     aria-hidden="true" />
                   <span v-if="draft.refno.trim()" class="truncate font-mono text-gray-900">{{ draft.refno.trim() }}</span>
                   <span v-else class="text-gray-400">尚未选中物项</span>
@@ -146,7 +146,7 @@
                 <input v-model="draft.refno"
                   type="text"
                   placeholder="例如：24381_100818"
-                  class="h-7 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-[11px] text-gray-900 outline-none focus:border-[#FF6B00]" />
+                  class="h-7 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-[11px] text-gray-900 outline-none focus:border-brand" />
               </div>
             </div>
           </section>
@@ -159,19 +159,19 @@
               <span class="mb-1 block">X</span>
               <input v-model.number="draft.center.x"
                 type="number"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">Y</span>
               <input v-model.number="draft.center.y"
                 type="number"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">Z</span>
               <input v-model.number="draft.center.z"
                 type="number"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
           </div>
         </section>
@@ -184,13 +184,13 @@
                 type="number"
                 :min="DISTANCE_RADIUS_MIN_M"
                 :step="DISTANCE_RADIUS_STEP_M"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]"
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-brand"
                 @input="onRadiusMetersNumberInput" />
             </label>
             <div class="shrink-0 text-right">
               <div class="text-[11px] text-gray-400">当前值</div>
-              <div class="font-mono text-lg font-semibold text-[#C84D00]">
-                {{ radiusMetersText }} <span class="text-xs text-[#C84D00]/70">m</span>
+              <div class="font-mono text-lg font-semibold text-brand">
+                {{ radiusMetersText }} <span class="text-xs text-brand/70">m</span>
               </div>
             </div>
           </div>
@@ -200,14 +200,14 @@
             :max="DISTANCE_RADIUS_MAX_M"
             :step="DISTANCE_RADIUS_STEP_M"
             data-testid="radius-slider"
-            class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-[#FF6B00]"
+            class="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-brand"
             @input="onRadiusSliderInput" />
           <div class="mt-2 grid grid-cols-4 gap-1.5">
             <button v-for="preset in DISTANCE_RADIUS_PRESETS"
               :key="preset"
               type="button"
               class="rounded-full border px-2 py-1 text-[11px] transition-colors"
-              :class="radiusMetersValue === preset ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+              :class="radiusMetersValue === preset ? 'border-brand bg-brand-subtle text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
               data-testid="radius-preset"
               @click="setRadiusMeters(preset)">
               {{ preset }} m
@@ -230,13 +230,13 @@
               <div class="mt-2 grid grid-cols-2 gap-1.5">
                 <button type="button"
                   class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
-                  :class="draft.shape === 'sphere' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                  :class="draft.shape === 'sphere' ? 'border-brand bg-brand-subtle text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
                   @click="draft.shape = 'sphere'">
                   球形
                 </button>
                 <button type="button"
                   class="rounded-md border px-2.5 py-1.5 text-xs transition-colors"
-                  :class="draft.shape === 'cube' ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                  :class="draft.shape === 'cube' ? 'border-brand bg-brand-subtle text-brand' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
                   @click="draft.shape = 'cube'">
                   立方体
                 </button>
@@ -247,21 +247,21 @@
               <input v-model.number="draft.limit"
                 type="number"
                 min="1"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
             <label class="text-xs text-gray-500">
               <span class="mb-1 block">Noun 类型（逗号分隔）</span>
               <input v-model="draft.nounText"
                 type="text"
                 placeholder="例如：PIPE,EQUI,BRAN"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 font-mono text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
             <div class="text-xs text-gray-500">
               <div class="mb-1 flex items-center justify-between">
                 <span>专业过滤</span>
                 <div class="flex items-center gap-2 text-[11px]">
                   <button type="button"
-                    class="text-gray-500 transition-colors hover:text-[#C84D00] disabled:cursor-not-allowed disabled:opacity-50"
+                    class="text-gray-500 transition-colors hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
                     :disabled="allSpecSelected"
                     data-testid="spec-select-all"
                     @click="selectAllSpecs">
@@ -269,7 +269,7 @@
                   </button>
                   <span class="text-gray-300">·</span>
                   <button type="button"
-                    class="text-gray-500 transition-colors hover:text-[#C84D00] disabled:cursor-not-allowed disabled:opacity-50"
+                    class="text-gray-500 transition-colors hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
                     :disabled="draft.specValues.length === 0"
                     data-testid="spec-clear"
                     @click="clearSpecs">
@@ -283,7 +283,7 @@
                   type="button"
                   class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors"
                   :class="selectedSpecValues.has(spec.value)
-                    ? 'border-[#FF6B00] bg-[#FFF1E8] text-[#C84D00]'
+                    ? 'border-brand bg-brand-subtle text-brand'
                     : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
                   :title="spec.fullLabel"
                   data-testid="spec-chip"
@@ -304,7 +304,7 @@
               <input v-model="draft.keyword"
                 type="text"
                 placeholder="支持 Refno 或名称关键字"
-                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 outline-none focus:border-[#FF6B00]" />
+                class="h-8 w-full rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 outline-none focus:border-brand" />
             </label>
             <div class="flex flex-wrap gap-1.5">
               <label class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-600">
@@ -325,14 +325,14 @@
 
         <button type="button"
           :disabled="!canSubmit || isQueryBusy"
-          class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#FF6B00] px-3 text-sm font-medium text-white transition-colors hover:bg-[#E35F00] disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           @click="runQuery">
           <Loader2 v-if="isQueryBusy" class="h-4 w-4 animate-spin" />
           <Search v-else class="h-4 w-4" />
           <span>{{ isQueryBusy ? statusLabel : '执行空间查询' }}</span>
         </button>
 
-        <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-600">
+        <div v-if="error" class="rounded-lg border border-danger/30 bg-danger-subtle px-2.5 py-1.5 text-xs text-danger">
           {{ error }}
         </div>
 
@@ -406,7 +406,7 @@
                 复制已返回 Refno
               </button>
             </div>
-            <div v-if="copyStatus" class="mt-1.5 text-[11px] text-emerald-600">
+            <div v-if="copyStatus" class="mt-1.5 text-[11px] text-success">
               {{ copyStatus }}
             </div>
           </div>
@@ -418,7 +418,7 @@
           <div v-if="resultsExpanded && resultSet?.warnings.length" class="space-y-1.5 border-b border-gray-100 px-3 py-2">
             <div v-for="warning in resultSet.warnings"
               :key="warning"
-              class="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+              class="rounded-md border border-warning/30 bg-warning-subtle px-2 py-1 text-xs text-warning">
               {{ warning }}
             </div>
           </div>
@@ -440,7 +440,7 @@
                 刷新
               </button>
             </div>
-            <div v-if="roomListError" class="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+            <div v-if="roomListError" class="mb-2 rounded-md border border-warning/30 bg-warning-subtle px-2 py-1 text-xs text-warning">
               {{ roomListError }}
             </div>
             <div v-if="roomListRows.length > 0" class="max-h-40 space-y-1.5 overflow-y-auto">
@@ -455,7 +455,7 @@
                     <div class="mt-0.5 flex flex-wrap gap-1">
                       <span class="rounded-full bg-white px-2 py-0.5 font-mono text-[11px] text-gray-500">{{ room.roomRefno }}</span>
                       <span class="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">{{ room.roomType }}</span>
-                      <span class="rounded-full bg-[#FFF1E8] px-2 py-0.5 text-[11px] text-[#C84D00]">{{ room.count }} 项</span>
+                      <span class="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] text-brand">{{ room.count }} 项</span>
                     </div>
                     <div v-if="room.desc" class="mt-1 truncate text-[11px] text-gray-500">{{ room.desc }}</div>
                   </button>
@@ -536,7 +536,7 @@
                   :key="item.refno"
                   type="button"
                   class="w-full rounded-lg border px-2.5 py-1.5 text-left transition-colors"
-                  :class="activeResultRefno === item.refno ? 'border-[#FF6B00] bg-[#FFF1E8]' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'"
+                  :class="activeResultRefno === item.refno ? 'border-brand bg-brand-subtle' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'"
                   @click="focusItem(item)">
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
@@ -544,10 +544,10 @@
                       <div class="mt-0.5 truncate font-mono text-[11px] text-gray-500">{{ item.refno }}</div>
                       <div class="mt-1 flex flex-wrap gap-1">
                         <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">{{ item.noun || 'UNKNOWN' }}</span>
-                        <span class="rounded-full px-2 py-0.5 text-[11px]" :class="item.loaded ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'">
+                        <span class="rounded-full px-2 py-0.5 text-[11px]" :class="item.loaded ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'">
                           {{ item.loaded ? '已加载' : '未加载' }}
                         </span>
-                        <span v-if="item.distance !== null" class="rounded-full bg-[#FFF1E8] px-2 py-0.5 text-[11px] text-[#C84D00]">
+                        <span v-if="item.distance !== null" class="rounded-full bg-brand-subtle px-2 py-0.5 text-[11px] text-brand">
                           {{ formatDistance(item.distance) }}
                         </span>
                       </div>
@@ -1086,6 +1086,6 @@ function setMode(mode: SpatialQueryMode) {
 
 <style scoped>
 .font-ui {
-  font-family: 'Fira Sans', system-ui, sans-serif;
+  font-family: 'Noto Sans SC', system-ui, sans-serif;
 }
 </style>
