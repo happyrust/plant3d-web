@@ -3,6 +3,11 @@ import {
   createEmptyReviewSnapshot,
 } from '../domain/reviewSnapshot';
 
+import {
+  DimensionSnapshotValidationError,
+  validateDimensionDocumentSnapshot,
+} from '@/dimension/adapters/reviewSnapshotAdapter';
+
 export type BuildSnapshotFromImportPayloadOptions = {
   taskId?: string;
   formId?: string;
@@ -18,6 +23,8 @@ type ImportPayloadLike = {
   obbAnnotations?: unknown[];
   cloudAnnotations?: unknown[];
   rectAnnotations?: unknown[];
+  dimensionDocument?: unknown;
+  dimensionDocumentVersion?: unknown;
   xeokitDistanceMeasurements?: unknown[];
   xeokitAngleMeasurements?: unknown[];
   xeokitElevationPointMeasurements?: unknown[];
@@ -99,6 +106,24 @@ export function buildSnapshotFromImportPayload(
   });
 
   if (!payload || typeof payload !== 'object') return snapshot;
+
+  if (payload.dimensionDocument !== undefined) {
+    snapshot.dimensionDocument = validateDimensionDocumentSnapshot(
+      payload.dimensionDocument,
+    );
+  }
+  if (payload.dimensionDocumentVersion !== undefined) {
+    if (
+      typeof payload.dimensionDocumentVersion !== 'number'
+      || !Number.isSafeInteger(payload.dimensionDocumentVersion)
+      || payload.dimensionDocumentVersion < 0
+    ) {
+      throw new DimensionSnapshotValidationError(
+        'dimensionDocumentVersion must be a non-negative safe integer',
+      );
+    }
+    snapshot.dimensionDocumentVersion = payload.dimensionDocumentVersion;
+  }
 
   pushAnnotations(snapshot, payload.annotations, 'text', options);
   pushAnnotations(snapshot, payload.cloudAnnotations, 'cloud', options);

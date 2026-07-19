@@ -98,4 +98,24 @@ describe('RIBBON_TABS', () => {
         && item.commandId === 'annotation.settings'
     )))).toBe(true);
   });
+
+  it('不导出任何尺寸面板或尺寸命令入口', async () => {
+    vi.resetModules();
+    window.history.replaceState({}, '', '/?output_project=AvevaMarineSample');
+
+    const { RIBBON_TABS } = await import('./ribbonConfig');
+    const commandIds = RIBBON_TABS.flatMap((tab) => tab.groups.flatMap((group) => (
+      group.items.flatMap((item) => (
+        item.kind === 'button'
+          ? [item.commandId]
+          : item.items.map((subItem) => subItem.commandId)
+      ))
+    )));
+
+    expect(RIBBON_TABS.flatMap((tab) => tab.groups.map((group) => group.id)))
+      .not.toContain('view.panel.dimension');
+    expect(commandIds).not.toContain('panel.dimension');
+    expect(commandIds.some((commandId) => commandId.startsWith('dimension.'))).toBe(false);
+  });
+
 });

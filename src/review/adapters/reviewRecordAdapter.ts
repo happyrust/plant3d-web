@@ -27,7 +27,13 @@ import {
 } from '../domain/reviewSnapshot';
 
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
+import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 import type { AnnotationComment, WorkflowNode } from '@/types/auth';
+
+import {
+  DimensionSnapshotValidationError,
+  validateDimensionDocumentSnapshot,
+} from '@/dimension/adapters/reviewSnapshotAdapter';
 
 export const REVIEW_RECORD_SNAPSHOT_VERSION = 1;
 
@@ -52,8 +58,13 @@ export type BuildSnapshotFromTaskRecordsOptions = {
   now?: () => number;
 }
 
+export type TaskRecordSnapshotInput = ConfirmedRecord & Readonly<{
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
+}>;
+
 export function buildSnapshotFromTaskRecords(
-  records: readonly ConfirmedRecord[],
+  records: readonly TaskRecordSnapshotInput[],
   options: BuildSnapshotFromTaskRecordsOptions = {},
 ): ReviewSnapshot {
   const snapshot = createEmptyReviewSnapshot({
@@ -66,6 +77,7 @@ export function buildSnapshotFromTaskRecords(
     createdAt: (options.now ?? Date.now)(),
   });
 
+  copyLatestDimensionDocument(snapshot, records);
   if (!records.length) return snapshot;
 
   const inlineKeys: string[] = [];
@@ -126,6 +138,40 @@ export function buildSnapshotFromTaskRecords(
   }
 
   return snapshot;
+}
+
+function copyLatestDimensionDocument(
+  snapshot: ReviewSnapshot,
+  records: readonly TaskRecordSnapshotInput[],
+): void {
+  let latest: {
+    document: SnapshotDimensionDocument;
+    version?: number;
+    confirmedAt: number;
+  } | undefined;
+  for (const record of records) {
+    if (record.dimensionDocument === undefined) continue;
+    const document = validateDimensionDocumentSnapshot(record.dimensionDocument);
+    const version = record.dimensionDocumentVersion;
+    if (version !== undefined && (!Number.isSafeInteger(version) || version < 0)) {
+      throw new DimensionSnapshotValidationError(
+        'dimensionDocumentVersion must be a non-negative safe integer',
+      );
+    }
+    if (
+      !latest
+      || (version ?? -1) > (latest.version ?? -1)
+      || (
+        (version ?? -1) === (latest.version ?? -1)
+        && record.confirmedAt >= latest.confirmedAt
+      )
+    ) {
+      latest = { document, version, confirmedAt: record.confirmedAt };
+    }
+  }
+  if (!latest) return;
+  snapshot.dimensionDocument = latest.document;
+  snapshot.dimensionDocumentVersion = latest.version;
 }
 
 type AppendAnnotationGroupOptions = {

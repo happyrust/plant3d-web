@@ -13,6 +13,7 @@ import {
   type User,
   UserRole,
 } from '@/types/auth';
+import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 import { getBackendApiBaseUrl } from '@/utils/apiBase';
 
 // ============ 基础配置 ============
@@ -293,6 +294,9 @@ export type ConfirmedRecordData = {
   rectAnnotations: ReviewSnapshotAnnotationPayload[];
   obbAnnotations?: ReviewSnapshotAnnotationPayload[];
   measurements: ReviewSnapshotMeasurementPayload[];
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentBaseVersion?: number;
+  dimensionDocumentVersion?: number;
   note: string;
 };
 
@@ -363,6 +367,8 @@ export type WorkflowRecordData = {
   rectAnnotations: ReviewSnapshotAnnotationPayload[];
   obbAnnotations: ReviewSnapshotAnnotationPayload[];
   measurements: ReviewSnapshotMeasurementPayload[];
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
   note: string;
   confirmedAt: string;
 };
@@ -529,6 +535,10 @@ type RawWorkflowRecordData = {
   obb_annotations?: unknown[];
   obbAnnotations?: unknown[];
   measurements?: unknown[];
+  dimension_document?: unknown;
+  dimensionDocument?: unknown;
+  dimension_document_version?: unknown;
+  dimensionDocumentVersion?: unknown;
   note?: string;
   confirmed_at?: string;
   confirmedAt?: string;
@@ -837,6 +847,14 @@ function normalizeWorkflowSyncResponse(raw: RawWorkflowSyncResponse): WorkflowSy
               ? record.obb_annotations
               : [],
           measurements: Array.isArray(record.measurements) ? record.measurements : [],
+          dimensionDocument: (
+            record.dimensionDocument
+            ?? record.dimension_document
+          ) as SnapshotDimensionDocument | undefined,
+          dimensionDocumentVersion: (
+            record.dimensionDocumentVersion
+            ?? record.dimension_document_version
+          ) as number | undefined,
           note: String(record.note || ''),
           confirmedAt: String(record.confirmedAt || record.confirmed_at || ''),
         }))

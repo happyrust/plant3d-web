@@ -1,5 +1,7 @@
 # SolveSpace 3D 尺寸标注：数据流与交互链路说明
 
+> 已由 `docs/adr/0038-delete-the-old-dimension-system-in-a-build-green-milestone.md` 取代；本文仅保留为旧实现背景。
+
 日期：2026-02-06
 
 本文档目的：

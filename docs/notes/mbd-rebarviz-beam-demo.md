@@ -1,5 +1,7 @@
 # MBD RebarViz 梁标注对标 Demo
 
+> 已由 `docs/adr/0038-delete-the-old-dimension-system-in-a-build-green-milestone.md` 取代；相关旧 Demo 已随尺寸子系统删除。
+
 用于在 DTX Viewer 中复现 RebarViz 梁尺寸标注节奏，并通过我们自己的 3D 标注渲染器做样式对比。
 
 ## 访问方式

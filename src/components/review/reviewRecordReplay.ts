@@ -460,13 +460,12 @@ export function buildReviewRecordReplayPayload(
   const cloudAnnotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.cloudAnnotations ?? []));
   const rectAnnotations = dedupeReplayItems(normalizedRecords.flatMap((record) => record.rectAnnotations ?? []));
   return JSON.stringify({
-    version: 5,
+    version: 6,
     measurements: replayMeasurements.measurements,
     annotations,
     obbAnnotations,
     cloudAnnotations,
     rectAnnotations,
-    dimensions: [],
     xeokitDistanceMeasurements: replayMeasurements.xeokitDistanceMeasurements,
     xeokitAngleMeasurements: replayMeasurements.xeokitAngleMeasurements,
     xeokitElevationPointMeasurements: replayMeasurements.xeokitElevationPointMeasurements,

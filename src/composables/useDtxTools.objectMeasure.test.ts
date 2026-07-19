@@ -246,7 +246,7 @@ describe('useDtxTools object measure tree flow', () => {
     expect(tools.statusText.value).toBe('请先显示这两个构件后再测量');
   });
 
-  it('管-管快速标注在无管段数据时应退回 mesh 最近点并生成尺寸', async () => {
+  it('管-管净距测量在无管段数据时应退回 mesh 最近点但不创建尺寸', async () => {
     const store = useToolStore();
     const layer = createLayerWithBoxes(3);
     const hits = [
@@ -279,9 +279,9 @@ describe('useDtxTools object measure tree flow', () => {
     tools.onCanvasPointerUp(canvas, event);
     await flushAsyncToolWork();
 
-    expect(store.dimensions.value).toHaveLength(1);
-    expect(store.dimensions.value[0]?.kind).toBe('linear_distance');
-    expect(store.dimensions.value[0]?.origin.worldPos[0]).toBeCloseTo(0.5, 6);
-    expect(store.dimensions.value[0]?.target.worldPos[0]).toBeCloseTo(2.5, 6);
+    expect(store).not.toHaveProperty('dimensions');
+    expect(tools.statusText.value).toContain('尺寸标注正在重构，净距计算结果暂不创建尺寸');
+    expect(tools.statusText.value).toContain('24381_1001 ↔ 24381_1002');
+    expect(tools.statusText.value).toContain('净距 2.00m');
   });
 });

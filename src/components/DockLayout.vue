@@ -541,13 +541,6 @@ function createDefaultLayout(dockApi: DockApi) {
   });
 
   dockApi.addPanel({
-    id: 'dimension',
-    component: 'DimensionPanel',
-    title: '尺寸标注',
-    position: { referencePanel: measurementPanel, direction: 'within' },
-  });
-
-  dockApi.addPanel({
     id: 'annotation',
     component: 'AnnotationPanel',
     title: '批注',
@@ -698,18 +691,6 @@ function ensurePanel(panelId: string) {
       position: viewerPanel ? { referencePanel: viewerPanel, direction: 'right' } : undefined,
     });
   }
-  if (normalizedPanelId === 'dimension') {
-    return addPanelSafely(dockApi, {
-      id: 'dimension',
-      component: 'DimensionPanel',
-      title: '尺寸标注',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
   if (normalizedPanelId === 'annotation') {
     return addPanelSafely(dockApi, {
       id: 'annotation',
@@ -763,18 +744,6 @@ function ensurePanel(panelId: string) {
       id: 'ptset',
       component: 'PtsetPanel',
       title: '点集',
-      position: measurementPanel
-        ? { referencePanel: measurementPanel, direction: 'within' }
-        : viewerPanel
-          ? { referencePanel: viewerPanel, direction: 'right' }
-          : undefined,
-    });
-  }
-  if (normalizedPanelId === 'dimensionStyle') {
-    return addPanelSafely(dockApi, {
-      id: 'dimensionStyle',
-      component: 'DimensionStylePanel',
-      title: '尺寸样式',
       position: measurementPanel
         ? { referencePanel: measurementPanel, direction: 'within' }
         : viewerPanel
@@ -1192,9 +1161,6 @@ function handleRibbonCommand(commandId: string) {
     case 'panel.measurement':
       togglePanel('measurement');
       return;
-    case 'panel.dimension':
-      togglePanel('dimension');
-      return;
     case 'panel.annotation':
       togglePanel('annotation');
       return;
@@ -1225,9 +1191,6 @@ function handleRibbonCommand(commandId: string) {
       return;
     case 'panel.materialConfig':
       togglePanel('materialConfig');
-      return;
-    case 'dimension.settings':
-      togglePanel('dimensionStyle');
       return;
     case 'annotation.settings':
       togglePanel('annotationStyle');

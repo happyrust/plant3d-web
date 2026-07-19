@@ -4,7 +4,9 @@ import {
   REVIEW_RECORD_SNAPSHOT_VERSION,
   buildSnapshotFromTaskRecords,
 } from './reviewRecordAdapter';
+import { buildReplayPayloadFromSnapshot } from './toolStoreAdapter';
 
+import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 import type { ConfirmedRecord } from '@/composables/useReviewStore';
 import type {
   AnnotationRecord,
@@ -150,7 +152,14 @@ function makeAngle(id: string): AngleMeasurementRecord {
   };
 }
 
-function makeRecord(partial: Partial<ConfirmedRecord> & { id: string }): ConfirmedRecord {
+type TaskRecordWithDimension = ConfirmedRecord & {
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
+};
+
+function makeRecord(
+  partial: Partial<TaskRecordWithDimension> & { id: string },
+): TaskRecordWithDimension {
   return {
     type: 'batch',
     annotations: [],
@@ -305,5 +314,44 @@ describe('buildSnapshotFromTaskRecords', () => {
       id: 't-shot',
       screenshot: sampleScreenshot,
     });
+  });
+
+  it('copies the newest dimension document without projecting it into tool JSON', () => {
+    const older: SnapshotDimensionDocument = {
+      schemaVersion: 1,
+      documentId: 'dimension-document',
+      records: [],
+    };
+    const latest: SnapshotDimensionDocument = {
+      schemaVersion: 1,
+      documentId: 'dimension-document',
+      records: [],
+    };
+    const snapshot = buildSnapshotFromTaskRecords([
+      makeRecord({
+        id: 'record-latest',
+        confirmedAt: 20,
+        dimensionDocument: latest,
+        dimensionDocumentVersion: 2,
+      }),
+      makeRecord({
+        id: 'record-legacy',
+        confirmedAt: 30,
+      }),
+      makeRecord({
+        id: 'record-older',
+        confirmedAt: 10,
+        dimensionDocument: older,
+        dimensionDocumentVersion: 1,
+      }),
+    ]);
+
+    expect(snapshot.dimensionDocument).toEqual(latest);
+    expect(snapshot.dimensionDocumentVersion).toBe(2);
+    const legacyPayload = JSON.parse(
+      buildReplayPayloadFromSnapshot(snapshot),
+    ) as Record<string, unknown>;
+    expect(legacyPayload).not.toHaveProperty('dimensions');
+    expect(legacyPayload).not.toHaveProperty('dimensionDocument');
   });
 });

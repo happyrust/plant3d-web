@@ -157,13 +157,12 @@ describe('restoreEmbedFormSnapshot', () => {
     expect(importTools).toHaveBeenCalledTimes(1);
     expect(syncTools).toHaveBeenCalledTimes(1);
     expect(JSON.parse(importTools.mock.calls[0][0] as string)).toEqual({
-      version: 5,
+      version: 6,
       measurements: [],
       annotations: [],
       obbAnnotations: [],
       cloudAnnotations: [],
       rectAnnotations: [],
-      dimensions: [],
       xeokitDistanceMeasurements: [],
       xeokitAngleMeasurements: [],
       xeokitElevationPointMeasurements: [],
@@ -256,13 +255,12 @@ describe('restoreEmbedFormSnapshot', () => {
       ],
     }));
     expect(JSON.parse(importTools.mock.calls[1][0] as string)).toEqual({
-      version: 5,
+      version: 6,
       measurements: [],
       annotations: [],
       obbAnnotations: [],
       cloudAnnotations: [],
       rectAnnotations: [],
-      dimensions: [],
       xeokitDistanceMeasurements: [],
       xeokitAngleMeasurements: [],
       xeokitElevationPointMeasurements: [],
@@ -296,13 +294,12 @@ describe('restoreEmbedFormSnapshot', () => {
     });
 
     expect(importTools).toHaveBeenCalledWith(JSON.stringify({
-      version: 5,
+      version: 6,
       measurements: [],
       annotations: [],
       obbAnnotations: [],
       cloudAnnotations: [],
       rectAnnotations: [],
-      dimensions: [],
       xeokitDistanceMeasurements: [],
       xeokitAngleMeasurements: [],
       xeokitElevationPointMeasurements: [],

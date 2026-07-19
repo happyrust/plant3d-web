@@ -17,6 +17,7 @@
  *      还原与 `buildReviewRecordReplayPayload` 字节一致的输出。
  */
 
+import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 import type { AnnotationComment, ReviewAttachment, WorkflowNode } from '@/types/auth';
 
 export type SnapshotSource =
@@ -85,6 +86,8 @@ export type ReviewSnapshot = {
   annotations: SnapshotAnnotation[];
   comments: SnapshotComment[];
   measurements: SnapshotMeasurement[];
+  dimensionDocument?: SnapshotDimensionDocument;
+  dimensionDocumentVersion?: number;
   attachments: ReviewAttachment[];
   models: string[];
   meta: ReviewSnapshotMeta;
@@ -138,6 +141,7 @@ export function isSnapshotEmpty(snapshot: ReviewSnapshot): boolean {
     snapshot.annotations.length === 0
     && snapshot.comments.length === 0
     && snapshot.measurements.length === 0
+    && snapshot.dimensionDocument === undefined
     && snapshot.attachments.length === 0
     && snapshot.models.length === 0
   );

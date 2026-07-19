@@ -1,5 +1,7 @@
 # LinearDimension3D SolveSpace Alignment Report
 
+> Superseded by `docs/adr/0038-delete-the-old-dimension-system-in-a-build-green-milestone.md`; retained as a report on the removed implementation.
+
 ## Executive Summary
 Brought `LinearDimension3D` implementation into closer parity with SolveSpace's `Constraint::DoLineWithArrows()` by fixing extension line overshoot calculation and arrow plane normal computation.
 

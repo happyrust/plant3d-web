@@ -1,0 +1,30 @@
+{
+  "id": "radial-500mm",
+  "kind": "radial",
+  "anchors": {
+    "center": [0, 0, 0],
+    "rim": [0.5, 0, 0]
+  },
+  "normal": {
+    "kind": "design-axis",
+    "axis": "z"
+  },
+  "placement": {
+    "leaderDirection": [0.7071067811865476, 0.7071067811865476, 0],
+    "labelDistanceM": 0.25
+  },
+  "variants": [
+    {
+      "id": "radial-500mm-radius",
+      "display": "radius",
+      "expectedValueM": 0.5,
+      "expectedPrefix": "R"
+    },
+    {
+      "id": "radial-500mm-diameter",
+      "display": "diameter",
+      "expectedValueM": 1,
+      "expectedPrefix": "⌀"
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # BRAN Fixture: SolveSpace Comparison Verification Guide
 
+> Superseded by `docs/adr/0038-delete-the-old-dimension-system-in-a-build-green-milestone.md`; this guide documents the removed renderer only.
+
 ## Overview
 
 This document provides a systematic manual verification process for comparing BRAN dimension annotations against SolveSpace reference behavior. Use this guide to visually verify that our `LinearDimension3D` implementation matches the golden standard.

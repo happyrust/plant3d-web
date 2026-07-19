@@ -1,5 +1,9 @@
 # SolveSpace 尺寸标注统一（方案B）Implementation Plan
 
+> **状态：已被取代。** 新尺寸标注重建以
+> [`2026-07-19-dimension-annotation-system-migration-design.md`](./2026-07-19-dimension-annotation-system-migration-design.md)
+> 为当前设计入口；本文件仅保留为旧实现与迁移背景。
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** 将全站“尺寸标注”绘制统一为已移植的 SolveSpace 风格三维标注（`LinearDimension3D` / `AngleDimension3D`），并清理残留的旧实现/样式，保证交互与单位缩放一致。

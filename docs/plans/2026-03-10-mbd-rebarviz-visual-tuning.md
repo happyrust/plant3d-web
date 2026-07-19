@@ -1,5 +1,7 @@
 # MBD RebarViz Visual Tuning Implementation Plan
 
+> Superseded by `docs/adr/0038-delete-the-old-dimension-system-in-a-build-green-milestone.md`; retained as legacy implementation context.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Increase the default visual weight of RebarViz-style MBD dimensions by setting `arrowSizePx=22` and `lineWidthPx=3.0`, and make the BRAN fixture an easy verification path for this tuning.

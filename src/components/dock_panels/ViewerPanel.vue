@@ -30,7 +30,6 @@ import {
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
-  Plane,
   Scene,
   Vector2,
   Vector3,
@@ -63,7 +62,6 @@ import {
   getDbnoInstancesMeta,
 } from '@/composables/useDbnoInstancesJsonLoader';
 import { useDbnoInstancesParquetLoader } from '@/composables/useDbnoInstancesParquetLoader';
-import { DimensionAnnotationManager } from '@/composables/useDimensionAnnotation';
 import { useDisplayThemeStore, type DisplayTheme } from '@/composables/useDisplayThemeStore';
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useDtxTools } from '@/composables/useDtxTools';
@@ -78,7 +76,7 @@ import { usePtsetVisualizationThree } from '@/composables/usePtsetVisualizationT
 import { useSelectionStore } from '@/composables/useSelectionStore';
 import { useSpatialCompute } from '@/composables/useSpatialCompute';
 import { initializeSpatialQueryFromUrl, useSpatialQuery } from '@/composables/useSpatialQuery';
-import { useToolStore, type DimensionKind } from '@/composables/useToolStore';
+import { useToolStore } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useViewerContext } from '@/composables/useViewerContext';
 import { useXeokitMeasurementTools } from '@/composables/useXeokitMeasurementTools';
@@ -86,8 +84,7 @@ import { onCommand } from '@/ribbon/commandBus';
 import { emitToast } from '@/ribbon/toastBus';
 import { buildBackendUrl } from '@/utils/apiBase';
 import { parseGlbGeometry } from '@/utils/parseGlbGeometry';
-import { AngleDimension3D, LinearDimension3D, SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
-import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
+import { SlopeAnnotation3D, WeldAnnotation3D } from '@/utils/three/annotation';
 import { DTXLayer, DTXSelectionController, DTXViewCullController } from '@/utils/three/dtx';
 import { DynamicPivotController } from '@/utils/three/dtx/DynamicPivotController';
 import { loadModelDisplayConfig } from '@/utils/three/dtx/materialConfig';
@@ -133,8 +130,6 @@ watch(
 );
 
 const isDev = import.meta.env.DEV;
-
-const dimensionAnnoMgrRef = shallowRef<DimensionAnnotationManager | null>(null);
 
 function normalizeRefnoKeyLike(raw: string): string | null {
   const s = String(raw ?? '').trim();
@@ -1252,24 +1247,6 @@ let demoMode: 'none' | 'primitives' = 'none';
 let demoPrimitiveCount = 1000;
 let cadGridEnabled = true;
 
-// ── 标注右键菜单状态 ──
-const dimContextMenu = ref<{
-    visible: boolean;
-    x: number;
-    y: number;
-    dimId: string;
-    kind: DimensionKind | null;
-    isReference: boolean;
-    supplementary: boolean;
-}>({
-  visible: false,
-  x: 0,
-  y: 0,
-  dimId: '',
-  kind: null,
-  isReference: false,
-  supplementary: false,
-});
 let rafId: number | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let offRibbonCommand: (() => void) | null = null;
@@ -1709,7 +1686,6 @@ watch(
 
     const hasMarks =
             (store.measurements.value?.length ?? 0) > 0 ||
-            (store.dimensions.value?.length ?? 0) > 0 ||
             (store.annotations.value?.length ?? 0) > 0 ||
             (store.cloudAnnotations.value?.length ?? 0) > 0 ||
             (store.rectAnnotations.value?.length ?? 0) > 0 ||
@@ -1753,8 +1729,6 @@ function applyBackground(mode: BackgroundMode): void {
 function onBackgroundChange(mode: BackgroundMode): void {
   backgroundStore.setMode(mode);
   applyBackground(mode);
-  const preset = backgroundStore.getPreset(mode);
-  dimensionAnnoMgrRef.value?.setBackgroundColor(preset.bottomColor);
 }
 
 const displayThemePresets: { mode: DisplayTheme; label: string; colorHint: string }[] = [
@@ -2062,20 +2036,6 @@ function exitXeokitMeasureMode(): void {
   requestRender();
 }
 
-function setDimensionMode(next: 'dimension_linear' | 'dimension_angle'): void {
-  if (store.toolMode.value === next) {
-    store.setToolMode('none');
-  } else {
-    store.setToolMode(next);
-    try {
-      ensurePanelAndActivate('dimension');
-    } catch {
-      // ignore
-    }
-  }
-  requestRender();
-}
-
 function toggleLeftMeasureMenu(): void {
   leftToolbarOpenMeasureMenu.value = !leftToolbarOpenMeasureMenu.value;
 }
@@ -2202,26 +2162,9 @@ function handleRibbonCommand(commandId: string) {
       }
       requestRender();
       return;
-    case 'dimension.linear':
-      setDimensionMode('dimension_linear');
-      return;
-    case 'dimension.angle':
-      setDimensionMode('dimension_angle');
-      return;
-    case 'dimension.clear':
-      store.clearDimensions();
-      requestRender();
-      return;
     case 'annotation.create':
       store.setToolMode('annotation');
       requestRender();
-      return;
-    case 'panel.dimension':
-      try {
-        ensurePanelAndActivate('dimension');
-      } catch {
-        // ignore
-      }
       return;
     case 'panel.pipeDistance.open':
       pipeDistDrawerOpen.value = true;
@@ -2503,39 +2446,6 @@ function detachToolsInput() {
   offToolsInput = null;
 }
 
-function intersectPlaneFromMouseEvent(e: MouseEvent, plane: Plane): Vector3 | null {
-  const canvas = mainCanvas.value;
-  const dtxViewer = dtxViewerRef.value;
-  if (!canvas || !dtxViewer) return null;
-
-  const rect = canvas.getBoundingClientRect();
-  const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-  const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-  const ndc = new Vector3(x, y, 0.5);
-  ndc.unproject(dtxViewer.camera);
-  const dir = ndc.sub(dtxViewer.camera.position).normalize();
-  const rayOrigin = dtxViewer.camera.position.clone();
-
-  const denom = plane.normal.dot(dir);
-  if (Math.abs(denom) < 1e-8) return null;
-  const t = -(rayOrigin.dot(plane.normal) + plane.constant) / denom;
-  if (!Number.isFinite(t)) return null;
-  return dir.multiplyScalar(t).add(rayOrigin);
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
-function computeDimensionOffsetDirectionByCamera(
-  start: Vector3,
-  end: Vector3,
-  camera: any,
-): Vector3 | null {
-  // 保持原语义：退化时返回 null，由调用方自行决定 fallback（锁定方向/XY 垂线等）。
-  return computeDimensionOffsetDir(start, end, camera as any);
-}
-
 /**
  * 处理容器尺寸变化：同步渲染方案
  * 在 setSize 后立即渲染一帧，消除黑屏闪烁
@@ -2741,56 +2651,6 @@ function handleOpenSpatialQueryEvent(event: Event): void {
     useSelection: detail?.useSelection,
     autoSubmit: detail?.autoSubmit,
   });
-}
-
-// ── 标注右键菜单动作 ──
-function closeDimContextMenu(): void {
-  dimContextMenu.value.visible = false;
-}
-
-function dimCtxToggleReference(): void {
-  const { dimId, isReference } = dimContextMenu.value;
-  if (!dimId) return;
-  try { store.updateDimension(dimId, { isReference: !isReference } as any); } catch { /* ignore */ }
-  closeDimContextMenu();
-  requestRender();
-}
-
-function dimCtxToggleSupplementary(): void {
-  const { dimId, supplementary } = dimContextMenu.value;
-  if (!dimId) return;
-  try {
-    store.updateDimension(dimId, { supplementary: !supplementary } as any);
-  } catch { /* ignore */ }
-  closeDimContextMenu();
-  requestRender();
-}
-
-function dimCtxSnapToGrid(): void {
-  const { dimId } = dimContextMenu.value;
-  if (!dimId) return;
-  const rec = (store.dimensions.value || []).find((d: any) => d?.id === dimId) as any;
-  if (!rec) { closeDimContextMenu(); return; }
-  const low = rec.labelOffsetWorld as [number, number, number] | null | undefined;
-  if (low) {
-    const gridStep = 0.05;
-    const snapped: [number, number, number] = [
-      Math.round(low[0] / gridStep) * gridStep,
-      Math.round(low[1] / gridStep) * gridStep,
-      Math.round(low[2] / gridStep) * gridStep,
-    ];
-    try { store.updateDimension(dimId, { labelOffsetWorld: snapped } as any); } catch { /* ignore */ }
-  }
-  closeDimContextMenu();
-  requestRender();
-}
-
-function dimCtxResetLayout(): void {
-  const { dimId } = dimContextMenu.value;
-  if (!dimId) return;
-  try { store.updateDimension(dimId, { labelOffsetWorld: null, labelT: 0.5 } as any); } catch { /* ignore */ }
-  closeDimContextMenu();
-  requestRender();
 }
 
 onMounted(async () => {
@@ -3106,7 +2966,6 @@ onMounted(async () => {
     dtxLayerRef,
     selectionRef: selectionControllerRef,
     overlayContainerRef: overlayContainer,
-    annotationSystemRef,
     store,
     compatViewerRef,
     requestRender,
@@ -3145,10 +3004,6 @@ onMounted(async () => {
     requestRender,
     getGlobalModelMatrix: () =>
       dtxLayerRef.value?.getGlobalModelMatrix() ?? null,
-    interaction: {
-      // 尺寸标注需支持 SolveSpace 风格拖拽调整
-      enableDrag: true,
-    },
   });
   annotationSystemRef.value = annotationSystem;
   const branClearanceVis = useBranClearanceAnnotationThree(annotationSystem, {
@@ -3186,19 +3041,10 @@ onMounted(async () => {
     // 启用标注交互（点击选中、悬停高亮）
     annotationSystem.enableInteraction(mainCanvas.value);
 
-    // 尺寸标注拖拽：写回 store.dimensions（offset/arcRadius）
-    let prevControlsEnabled: boolean | null = null;
-    let lastDimLabelClickId: string | null = null;
-    let lastDimLabelClickTime = 0;
-    const linearDragState = new Map<
-            string,
-            { flip: 1 | -1; lastAlt: boolean }
-        >();
     offAnnotationInteraction?.();
     offAnnotationInteraction = annotationSystem.onInteraction((ev) => {
       const id = typeof ev?.id === 'string' ? ev.id : null;
       if (!id) return;
-      if (id === 'dim_preview') return;
 
       if (id.startsWith('meas_')) {
         const measurementId = id.slice('meas_'.length);
@@ -3218,296 +3064,6 @@ onMounted(async () => {
         return;
       }
 
-      if (!id.startsWith('dim_')) return;
-
-      const dtxViewer2 = dtxViewerRef.value;
-      if (!dtxViewer2) return;
-
-      const dimId = id.slice('dim_'.length);
-      const rec = (store.dimensions.value || []).find((d: any) => d?.id === dimId) as any;
-      if (!rec) return;
-
-      // 同步选中状态 -> store.activeDimensionId（便于 Delete 快捷键等）
-      if (ev.type === 'select') {
-        store.activeDimensionId.value = dimId;
-      } else if (ev.type === 'deselect') {
-        if (store.activeDimensionId.value === dimId) {
-          store.activeDimensionId.value = null;
-        }
-      }
-
-      // 右键菜单：显示尺寸标注的操作菜单
-      if (ev.type === 'contextmenu') {
-        const sp = (ev as any).screenPos as { x: number; y: number } | undefined;
-        dimContextMenu.value = {
-          visible: true,
-          x: sp?.x ?? 0,
-          y: sp?.y ?? 0,
-          dimId,
-          kind: rec.kind as DimensionKind,
-          isReference: !!rec.isReference,
-          supplementary: !!(rec as any).supplementary,
-        };
-        return;
-      }
-
-      // 双击文字：打开尺寸面板编辑 textOverride
-      if (ev.type === 'click') {
-        const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
-        if (role === 'label') {
-          const now = Date.now();
-          const isDouble =
-                        lastDimLabelClickId === dimId && now - lastDimLabelClickTime < 350;
-          lastDimLabelClickId = dimId;
-          lastDimLabelClickTime = now;
-          if (isDouble) {
-            try {
-              store.pendingDimensionEditId.value = dimId;
-              store.activeDimensionId.value = dimId;
-              ensurePanelAndActivate('dimension');
-            } catch {
-              // ignore
-            }
-          }
-        }
-      }
-
-      if (ev.type === 'drag-start') {
-        prevControlsEnabled = dtxViewer2.controls.enabled;
-        dtxViewer2.controls.enabled = false;
-
-        // Alt：按一次切换“翻面锁定”（不会因松开 Alt 自动复原）
-        try {
-          const role = (ev.hitObject as any)?.userData?.dragRole as
-                        | string
-                        | undefined;
-          if (role === 'offset' && rec.kind === 'linear_distance') {
-            const me = ev.originalEvent;
-            const alt = !!me?.altKey;
-            linearDragState.set(dimId, {
-              flip: alt ? -1 : 1,
-              lastAlt: alt,
-            });
-          } else {
-            linearDragState.delete(dimId);
-          }
-        } catch {
-          // ignore
-        }
-        return;
-      }
-
-      if (ev.type === 'drag-end') {
-        if (prevControlsEnabled !== null) {
-          dtxViewer2.controls.enabled = prevControlsEnabled;
-        } else {
-          dtxViewer2.controls.enabled = true;
-        }
-        prevControlsEnabled = null;
-        linearDragState.delete(dimId);
-        try {
-          if (ev.annotation instanceof LinearDimension3D) {
-            ev.annotation.setLabelSnapActive(false);
-            ev.annotation.setLabelSnapMarkersState(false, null, null);
-            ev.annotation.setLabelSnapGuideTarget(null);
-            ev.annotation.setLabelSnapGuideVisible(false);
-          } else if (ev.annotation instanceof AngleDimension3D) {
-            ev.annotation.setLabelSnapActive(false);
-            ev.annotation.setLabelSnapMarkersState(false, null, null);
-            ev.annotation.setLabelSnapGuideTarget(null);
-            ev.annotation.setLabelSnapGuideVisible(false);
-          }
-        } catch {
-          // ignore
-        }
-        requestRender();
-        return;
-      }
-
-      if (ev.type !== 'drag') return;
-      const me = ev.originalEvent;
-      if (!me) return;
-      const role = (ev.hitObject as any)?.userData?.dragRole as string | undefined;
-
-      const maybeSnapLabelT = (
-        t0: number,
-      ): { t: number; snapped: boolean; index: number | null; nearIndex: number | null } => {
-        const t = clamp(t0, 0, 1);
-        if (!(me.shiftKey || me.altKey)) return { t, snapped: false, index: null, nearIndex: null };
-        const pts = [0, 0.25, 0.5, 0.75, 1];
-        const eps = 0.05;
-        let best = t;
-        let bestDist = Infinity;
-        let bestIndex = 2;
-        for (let i = 0; i < pts.length; i++) {
-          const p = pts[i]!;
-          const d = Math.abs(t - p);
-          if (d < bestDist) {
-            bestDist = d;
-            best = p;
-            bestIndex = i;
-          }
-        }
-        return bestDist <= eps
-          ? { t: best, snapped: true, index: bestIndex, nearIndex: bestIndex }
-          : { t, snapped: false, index: null, nearIndex: bestIndex };
-      };
-
-      // Linear distance: offset 沿 offsetDir 调整（可为负，允许翻面）
-      if (rec.kind === 'linear_distance' && ev.annotation instanceof LinearDimension3D) {
-        const p = ev.annotation.getParams();
-        const start = p.start.clone();
-        const end = p.end.clone();
-        const seg = end.clone().sub(start);
-        if (seg.lengthSq() < 1e-9) return;
-        seg.normalize();
-
-        const lockDir = me.ctrlKey || me.metaKey;
-        const st = linearDragState.get(dimId);
-        if (st) {
-          const alt = !!me.altKey;
-          if (alt && !st.lastAlt) {
-            st.flip = st.flip === 1 ? -1 : 1;
-          }
-          st.lastAlt = alt;
-        }
-
-        // Shift：按相机重算 offsetDir（更接近“屏幕方向”拖拽）
-        const cameraDir =
-                    me.shiftKey && !lockDir && role !== 'label'
-                      ? computeDimensionOffsetDirectionByCamera(
-                        start,
-                        end,
-                              dtxViewer2.camera as any,
-                      )
-                      : null;
-        const offsetDir =
-                    (cameraDir
-                      ? cameraDir.clone()
-                      : // Ctrl/Cmd：锁定（优先使用记录里的方向）
-                      (lockDir && rec.direction
-                        ? new Vector3(rec.direction[0], rec.direction[1], rec.direction[2])
-                        : (p.direction ? p.direction.clone() : null))) ||
-                    new Vector3(-seg.y, seg.x, 0);
-        if (offsetDir.lengthSq() < 1e-9) offsetDir.set(1, 0, 0);
-        offsetDir.normalize();
-
-        const mid = start.clone().add(end).multiplyScalar(0.5);
-        const planeNormal = seg.clone().cross(offsetDir);
-        if (planeNormal.lengthSq() < 1e-9) return;
-        planeNormal.normalize();
-        const plane = new Plane().setFromNormalAndCoplanarPoint(planeNormal, mid);
-        const hit = intersectPlaneFromMouseEvent(me, plane);
-        if (!hit) return;
-
-        if (role === 'label') {
-          // SolveSpace 风格：label 自由拖拽（ray-plane intersection）
-          // 按住 Shift 时 snap to grid（默认步长 0.05 世界单位）
-          const defaultLabelPos = ev.annotation.getDefaultLabelWorldPos();
-          let labelOffset = hit.clone().sub(defaultLabelPos);
-
-          // Snap to Grid（Shift 键激活）
-          if (me.shiftKey) {
-            const gridStep = 0.05; // 世界坐标网格步长
-            labelOffset.x = Math.round(labelOffset.x / gridStep) * gridStep;
-            labelOffset.y = Math.round(labelOffset.y / gridStep) * gridStep;
-            labelOffset.z = Math.round(labelOffset.z / gridStep) * gridStep;
-          }
-
-          try {
-            ev.annotation.setParams({
-              labelOffsetWorld: labelOffset,
-            });
-          } catch {
-            // ignore
-          }
-          try {
-            store.updateDimension(dimId, {
-              labelOffsetWorld: [labelOffset.x, labelOffset.y, labelOffset.z],
-              direction: rec.direction,
-            });
-          } catch {
-            // ignore
-          }
-          requestRender();
-          return;
-        }
-
-        let nextOffset = hit.clone().sub(mid).dot(offsetDir);
-        if (st) nextOffset *= st.flip;
-        try {
-          store.updateDimension(dimId, {
-            offset: nextOffset,
-            direction:
-                            me.shiftKey && !lockDir
-                              ? [offsetDir.x, offsetDir.y, offsetDir.z]
-                              : (rec.direction ?? [offsetDir.x, offsetDir.y, offsetDir.z]),
-          });
-        } catch {
-          // ignore
-        }
-        requestRender();
-        return;
-      }
-
-      // Angle: offset 用作 arcRadius（正值）
-      if (rec.kind === 'angle' && ev.annotation instanceof AngleDimension3D) {
-        const p = ev.annotation.getParams();
-        const vertex = p.vertex.clone();
-        const u = p.point1.clone().sub(vertex);
-        const v = p.point2.clone().sub(vertex);
-        let normal = u.clone().cross(v);
-        if (normal.lengthSq() < 1e-9) {
-          normal = new Vector3();
-          dtxViewer2.camera.getWorldDirection(normal).normalize();
-        } else {
-          normal.normalize();
-        }
-        const plane = new Plane().setFromNormalAndCoplanarPoint(normal, vertex);
-        const hit = intersectPlaneFromMouseEvent(me, plane);
-        if (!hit) return;
-
-        const rVec = hit.clone().sub(vertex);
-        if (role === 'label') {
-          // SolveSpace 风格：label 自由拖拽
-          const defaultLabelPos = ev.annotation.getDefaultLabelWorldPos();
-          let labelOffset = hit.clone().sub(defaultLabelPos);
-
-          // Snap to Grid（Shift 键激活）
-          if (me.shiftKey) {
-            const gridStep = 0.05;
-            labelOffset.x = Math.round(labelOffset.x / gridStep) * gridStep;
-            labelOffset.y = Math.round(labelOffset.y / gridStep) * gridStep;
-            labelOffset.z = Math.round(labelOffset.z / gridStep) * gridStep;
-          }
-
-          try {
-            ev.annotation.setParams({
-              labelOffsetWorld: labelOffset,
-            });
-          } catch {
-            // ignore
-          }
-          try {
-            store.updateDimension(dimId, {
-              labelOffsetWorld: [labelOffset.x, labelOffset.y, labelOffset.z],
-            });
-          } catch {
-            // ignore
-          }
-          requestRender();
-          return;
-        }
-
-        const r = rVec.length();
-        const nextRadius = Math.max(0.2, Math.min(10, r));
-        try {
-          store.updateDimension(dimId, { offset: nextRadius });
-        } catch {
-          // ignore
-        }
-        requestRender();
-      }
     });
   }
 
@@ -3559,38 +3115,6 @@ onMounted(async () => {
     );
   } catch (e) {
     console.warn('[ViewerPanel] 测量标注管理器初始化失败', e);
-  }
-
-  // 尺寸标注（与测量分离）：同步到三维标注系统（3D 文字 + 3D 线）
-  try {
-    const mgr = new DimensionAnnotationManager(annotationSystem);
-    mgr.setUnit(unitSettings.displayUnit.value as any);
-    mgr.setPrecision(unitSettings.precision.value);
-    const bgPreset = backgroundStore.getPreset(backgroundStore.mode.value);
-    mgr.setBackgroundColor(bgPreset.bottomColor);
-    mgr.sync(store.dimensions.value as any);
-    dimensionAnnoMgrRef.value = mgr;
-
-    watch(
-      () => store.dimensions.value,
-      (dims) => {
-        mgr.sync(dims as any);
-        requestRender();
-      },
-      { deep: true },
-    );
-
-    watch(
-      () => [unitSettings.displayUnit.value, unitSettings.precision.value] as const,
-      ([unit, precision]) => {
-        mgr.setUnit(unit as any);
-        mgr.setPrecision(precision);
-        mgr.sync(store.dimensions.value as any);
-        requestRender();
-      },
-    );
-  } catch (e) {
-    console.warn('[ViewerPanel] 尺寸标注管理器初始化失败', e);
   }
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -4493,15 +4017,6 @@ onMounted(async () => {
         return;
       }
 
-      const did = store.activeDimensionId.value;
-      if (did) {
-        try {
-          toolsRef.value?.removeDimension(did);
-        } catch {
-          // ignore
-        }
-        requestRender();
-      }
     }
   };
   window.addEventListener('keydown', onKeydown);
@@ -5179,41 +4694,6 @@ onUnmounted(() => {
         <div class="mt-2 text-muted-foreground">{{ initError }}</div>
       </div>
     </div>
-
-    <!-- 标注右键菜单（SolveSpace 风格） -->
-    <div v-if="dimContextMenu.visible"
-      class="pointer-events-auto fixed z-[960] min-w-[180px] rounded-lg border border-border bg-background py-1 text-sm shadow-lg"
-      :style="{ left: dimContextMenu.x + 'px', top: dimContextMenu.y + 'px' }"
-      @pointerdown.stop
-      @contextmenu.prevent.stop>
-      <button class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
-        @click="dimCtxToggleReference">
-        {{ dimContextMenu.isReference ? '取消参考尺寸' : '设为参考尺寸' }}
-      </button>
-      <button v-if="dimContextMenu.kind === 'angle'"
-        class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
-        @click="dimCtxToggleSupplementary">
-        {{ dimContextMenu.supplementary ? '显示原始角度' : '显示补角' }}
-      </button>
-      <button class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
-        @click="dimCtxSnapToGrid">
-        Snap to Grid
-      </button>
-      <div class="my-1 border-t border-border" />
-      <button class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
-        @click="dimCtxResetLayout">
-        重置文字位置
-      </button>
-      <button class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-muted-foreground hover:bg-muted"
-        @click="closeDimContextMenu">
-        取消
-      </button>
-    </div>
-    <!-- 点击空白处关闭右键菜单 -->
-    <div v-if="dimContextMenu.visible"
-      class="pointer-events-auto fixed inset-0 z-[959]"
-      @click="closeDimContextMenu"
-      @contextmenu.prevent="closeDimContextMenu" />
 
     <ObjectMeasureDrawer v-if="store.toolMode.value === 'measure_object_to_object' && toolsRef"
       :title="'构件最近点测量'"

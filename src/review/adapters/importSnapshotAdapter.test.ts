@@ -59,17 +59,37 @@ describe('buildSnapshotFromImportPayload', () => {
     const snapshot = buildSnapshotFromImportPayload(payload);
 
     expect(buildReplayPayloadFromImportSnapshot(snapshot)).toBe(JSON.stringify({
-      version: 5,
+      version: 6,
       measurements: [{ id: 'legacy-m', kind: 'legacy' }],
       annotations: [{ id: 'text-1', title: 'text' }],
       obbAnnotations: [{ id: 'obb-1', title: 'obb' }],
       cloudAnnotations: [{ id: 'cloud-1', title: 'cloud' }],
       rectAnnotations: [{ id: 'rect-1', title: 'rect' }],
-      dimensions: [],
       xeokitDistanceMeasurements: [{ id: 'dist-1', visible: true }],
       xeokitAngleMeasurements: [{ id: 'angle-1', visible: true }],
       xeokitElevationPointMeasurements: [],
       xeokitElevationDeltaMeasurements: [],
     }));
+  });
+
+  it('copies a dimension document without restoring the removed legacy dimensions field', () => {
+    const dimensionDocument = {
+      schemaVersion: 1 as const,
+      documentId: 'imported-dimension-document',
+      records: [],
+    };
+    const snapshot = buildSnapshotFromImportPayload({
+      version: 6,
+      dimensionDocument,
+      dimensionDocumentVersion: 3,
+    });
+
+    expect(snapshot.dimensionDocument).toEqual(dimensionDocument);
+    expect(snapshot.dimensionDocumentVersion).toBe(3);
+    const replay = JSON.parse(
+      buildReplayPayloadFromImportSnapshot(snapshot),
+    ) as Record<string, unknown>;
+    expect(replay).not.toHaveProperty('dimensions');
+    expect(replay).not.toHaveProperty('dimensionDocument');
   });
 });

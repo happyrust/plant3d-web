@@ -102,13 +102,12 @@ export function buildReplayPayloadFromImportSnapshot(snapshot: ReviewSnapshot): 
   }
 
   return JSON.stringify({
-    version: 5,
+    version: 6,
     measurements,
     annotations,
     obbAnnotations,
     cloudAnnotations,
     rectAnnotations,
-    dimensions: [],
     xeokitDistanceMeasurements,
     xeokitAngleMeasurements,
     xeokitElevationPointMeasurements,

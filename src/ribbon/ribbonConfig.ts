@@ -69,13 +69,6 @@ const ALL_RIBBON_TABS: RibbonTabConfig[] = [
         ],
       },
       {
-        id: 'view.panel.dimension',
-        label: '尺寸标注',
-        items: [
-          { kind: 'button', id: 'panel.dimension', label: '尺寸标注', icon: 'ruler', commandId: 'panel.dimension' },
-        ],
-      },
-      {
         id: 'view.panel.annotation',
         label: '批注',
         items: [

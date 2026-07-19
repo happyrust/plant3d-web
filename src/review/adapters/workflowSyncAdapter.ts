@@ -34,6 +34,11 @@ import {
   mergeWorkflowCommentsIntoRecords,
 } from '@/components/review/reviewRecordReplay';
 import {
+  type SnapshotDimensionDocument,
+  DimensionSnapshotValidationError,
+  validateDimensionDocumentSnapshot,
+} from '@/dimension/adapters/reviewSnapshotAdapter';
+import {
   fromBackendRole,
   type AnnotationComment,
   type ReviewAttachment,
@@ -105,7 +110,10 @@ export function buildSnapshotFromWorkflowSync(
       : undefined,
   });
 
+  copyLatestDimensionDocument(snapshot, records);
   if (!data) return snapshot;
+
+  copyLatestDimensionDocument(snapshot, records);
 
   // 直接调用现有 merge，保证 inline payload.comments 顺序与旧路径一致
   const mergedRecords = mergeWorkflowCommentsIntoRecords(records, rawComments);
@@ -170,6 +178,41 @@ export function buildSnapshotFromWorkflowSync(
   snapshot.models.push(...normalizeModelRefnos(data.models));
 
   return snapshot;
+}
+
+function copyLatestDimensionDocument(
+  snapshot: ReviewSnapshot,
+  records: readonly WorkflowRecordData[],
+): void {
+  let latest: {
+    document: SnapshotDimensionDocument;
+    version?: number;
+    confirmedAt: number;
+  } | undefined;
+  for (const record of records) {
+    if (record.dimensionDocument === undefined) continue;
+    const document = validateDimensionDocumentSnapshot(record.dimensionDocument);
+    const version = record.dimensionDocumentVersion;
+    if (version !== undefined && (!Number.isSafeInteger(version) || version < 0)) {
+      throw new DimensionSnapshotValidationError(
+        'dimensionDocumentVersion must be a non-negative safe integer',
+      );
+    }
+    const confirmedAt = parseWorkflowTimestamp(record.confirmedAt);
+    if (
+      !latest
+      || (version ?? -1) > (latest.version ?? -1)
+      || (
+        (version ?? -1) === (latest.version ?? -1)
+        && confirmedAt >= latest.confirmedAt
+      )
+    ) {
+      latest = { document, version, confirmedAt };
+    }
+  }
+  if (!latest) return;
+  snapshot.dimensionDocument = latest.document;
+  snapshot.dimensionDocumentVersion = latest.version;
 }
 
 type AppendAnnotationGroupOptions = {

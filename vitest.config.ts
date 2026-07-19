@@ -11,7 +11,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/utils/three/annotation/**/*.ts'],
+      include: [
+        'src/utils/three/annotation/**/*.ts',
+        'src/dimension/**/*.ts',
+      ],
     },
   },
   resolve: {

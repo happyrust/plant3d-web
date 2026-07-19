@@ -1,0 +1,14 @@
+{
+  "id": "linear-1000mm",
+  "kind": "linear",
+  "anchors": {
+    "a": [0, 0, 0],
+    "b": [1, 0, 0]
+  },
+  "placement": {
+    "offsetM": 0.15,
+    "labelT": 0.5,
+    "side": 1
+  },
+  "expectedValueM": 1
+}

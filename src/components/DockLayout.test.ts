@@ -630,6 +630,17 @@ describe('DockLayout embed bootstrap', () => {
     mounted.unmount();
   });
 
+  it('默认布局不创建尺寸面板', async () => {
+    const mounted = await mountDockLayout();
+
+    expect(dockPanels.has('dimension')).toBe(false);
+    expect(lastDockApi?.addPanel).not.toHaveBeenCalledWith(expect.objectContaining({
+      component: 'DimensionPanel',
+    }));
+
+    mounted.unmount();
+  });
+
   it('非嵌入模式仍优先恢复普通布局缓存', async () => {
     const savedLayout = {
       grid: {},

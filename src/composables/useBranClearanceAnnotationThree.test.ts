@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { shallowRef } from 'vue';
 
 import {
@@ -10,44 +10,6 @@ import {
 
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { BranNearestClearanceAnnotationCandidate } from './useSpatialCompute';
-
-const { constructedDimensions } = vi.hoisted(() => ({
-  constructedDimensions: [] as MockLinearDimension3D[],
-}));
-
-type MockLinearDimension3D = {
-  materials: unknown;
-  params: any;
-  materialSet: unknown;
-  backgroundColor: unknown;
-  setMaterialSet: (materialSet: unknown) => void;
-  setBackgroundColor: (color: unknown) => void;
-};
-
-vi.mock('@/utils/three/annotation', () => {
-  class LinearDimension3D {
-    readonly materials: unknown;
-    readonly params: any;
-    materialSet: unknown = null;
-    backgroundColor: unknown = null;
-
-    constructor(materials: unknown, params: any) {
-      this.materials = materials;
-      this.params = params;
-      constructedDimensions.push(this);
-    }
-
-    setMaterialSet(materialSet: unknown): void {
-      this.materialSet = materialSet;
-    }
-
-    setBackgroundColor(color: unknown): void {
-      this.backgroundColor = color;
-    }
-  }
-
-  return { LinearDimension3D };
-});
 
 function candidate(
   targetGroup: string,
@@ -94,11 +56,7 @@ function createAnnotationSystemMock() {
 }
 
 describe('useBranClearanceAnnotationThree', () => {
-  beforeEach(() => {
-    constructedDimensions.length = 0;
-  });
-
-  it('renders LinearDimension3D annotations from backend points and labels', () => {
+  it('reports candidates as skipped while the dimension renderer is absent', () => {
     const { system, addAnnotation } = createAnnotationSystemMock();
     const requestRender = vi.fn();
     const adapter = useBranClearanceAnnotationThree(system, { requestRender });
@@ -107,53 +65,51 @@ describe('useBranClearanceAnnotationThree', () => {
       candidate('wall', '24381/target-1', 0, {
         start_point: { x: 1, y: 2, z: 3 },
         end_point: { x: 4, y: 5, z: 6 },
-        label_mm: 1200.4,
+        label_mm: 1200,
       }),
     ]);
 
-    expect(result.skipped).toEqual([]);
-    expect(result.drawnIds).toEqual(['bran_clearance_wall_24381_target_1_0']);
-    expect(addAnnotation).toHaveBeenCalledWith(
-      'bran_clearance_wall_24381_target_1_0',
-      constructedDimensions[0],
-    );
-    expect(constructedDimensions[0]?.params.start.toArray()).toEqual([1, 2, 3]);
-    expect(constructedDimensions[0]?.params.end.toArray()).toEqual([4, 5, 6]);
-    expect(constructedDimensions[0]?.params.text).toBe('1200mm');
-    expect(constructedDimensions[0]?.params.unit).toBe('mm');
+    expect(result.drawnIds).toEqual([]);
+    expect(result.skipped).toEqual([
+      {
+        id: 'bran_clearance_wall_24381_target_1_0',
+        reason: 'Dimension renderer unavailable during ADR-0038 rebuild',
+      },
+    ]);
+    expect(addAnnotation).not.toHaveBeenCalled();
     expect(requestRender).toHaveBeenCalled();
   });
 
   it('clears stale BRAN namespace annotations without touching unrelated annotations', () => {
-    const { system, removeAnnotation } = createAnnotationSystemMock();
+    const { system, addAnnotation, removeAnnotation } = createAnnotationSystemMock();
     system.annotations.value.set('manual_dimension_1', {});
     system.annotations.value.set('bran_clearance_wall_old_0', {});
     const adapter = useBranClearanceAnnotationThree(system, { requestRender: vi.fn() });
 
-    adapter.renderAnnotations([
+    const result = adapter.renderAnnotations([
       candidate('column', '24381_2', 0, {
         start_point: { x: 0, y: 0, z: 0 },
         end_point: { x: 1, y: 0, z: 0 },
         label_mm: 1,
       }),
     ]);
-    adapter.renderAnnotations([
-      candidate('wall', '24381_3', 0, {
-        start_point: { x: 0, y: 0, z: 0 },
-        end_point: { x: 2, y: 0, z: 0 },
-        label_mm: 2,
-      }),
-    ]);
 
+    expect(result).toEqual({
+      drawnIds: [],
+      skipped: [{
+        id: 'bran_clearance_column_24381_2_0',
+        reason: 'Dimension renderer unavailable during ADR-0038 rebuild',
+      }],
+    });
+    expect(addAnnotation).not.toHaveBeenCalled();
     expect(removeAnnotation).toHaveBeenCalledWith('bran_clearance_wall_old_0');
-    expect(removeAnnotation).toHaveBeenCalledWith('bran_clearance_column_24381_2_0');
     expect(removeAnnotation).not.toHaveBeenCalledWith('manual_dimension_1');
     expect(system.annotations.value.has('manual_dimension_1')).toBe(true);
-    expect(system.annotations.value.has('bran_clearance_wall_24381_3_0')).toBe(true);
+    expect(system.annotations.value.has('bran_clearance_column_24381_2_0')).toBe(false);
   });
 
-  it('skips incomplete candidates safely and renders zero-distance candidates', () => {
-    const { system } = createAnnotationSystemMock();
+  it('reports every candidate as skipped regardless of geometry completeness', () => {
+    const { system, addAnnotation } = createAnnotationSystemMock();
     const adapter = useBranClearanceAnnotationThree(system, { requestRender: vi.fn() });
 
     const result = adapter.renderAnnotations([
@@ -169,16 +125,18 @@ describe('useBranClearanceAnnotationThree', () => {
       }),
     ]);
 
-    expect(result.drawnIds).toEqual(['bran_clearance_column_zero_1']);
+    expect(result.drawnIds).toEqual([]);
     expect(result.skipped).toEqual([
       {
         id: 'bran_clearance_wall_missing_start_0',
-        reason: 'Missing annotation start_point or end_point',
+        reason: 'Dimension renderer unavailable during ADR-0038 rebuild',
+      },
+      {
+        id: 'bran_clearance_column_zero_1',
+        reason: 'Dimension renderer unavailable during ADR-0038 rebuild',
       },
     ]);
-    expect(constructedDimensions).toHaveLength(1);
-    expect(constructedDimensions[0]?.params.text).toBe('0mm');
-    expect(constructedDimensions[0]?.params.direction.toArray()).toEqual([0, 1, 0]);
+    expect(addAnnotation).not.toHaveBeenCalled();
   });
 
   it('generates stable sanitized collision-free IDs and matching distance labels', () => {

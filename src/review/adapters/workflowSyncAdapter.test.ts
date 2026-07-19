@@ -11,6 +11,7 @@ import type {
   WorkflowRecordData,
   WorkflowSyncData,
 } from '@/api/reviewApi';
+import type { SnapshotDimensionDocument } from '@/dimension/adapters/reviewSnapshotAdapter';
 
 import { buildWorkflowSnapshotReplayPayload } from '@/components/review/reviewRecordReplay';
 import { UserRole } from '@/types/auth';
@@ -276,5 +277,47 @@ describe('buildSnapshotFromWorkflowSync', () => {
       id: 't-shot',
       screenshot: sampleScreenshot,
     });
+  });
+
+  it('copies the latest workflow dimension document without changing replay JSON', () => {
+    const older: SnapshotDimensionDocument = {
+      schemaVersion: 1,
+      documentId: 'workflow-dimensions',
+      records: [],
+    };
+    const latest: SnapshotDimensionDocument = {
+      schemaVersion: 1,
+      documentId: 'workflow-dimensions',
+      records: [],
+    };
+    const records: WorkflowRecordData[] = [
+      makeRecord({
+        id: 'record-older',
+        confirmedAt: '2026-04-19 00:00:00',
+        dimensionDocument: older,
+        dimensionDocumentVersion: 1,
+      }),
+      makeRecord({
+        id: 'record-latest',
+        confirmedAt: '2026-04-19 00:02:00',
+        dimensionDocument: latest,
+        dimensionDocumentVersion: 2,
+      }),
+    ];
+
+    const snapshot = buildSnapshotFromWorkflowSync({
+      models: [],
+      records,
+      annotationComments: [],
+      attachments: [],
+    });
+
+    expect(snapshot.dimensionDocument).toEqual(latest);
+    expect(snapshot.dimensionDocumentVersion).toBe(2);
+    const legacyPayload = JSON.parse(
+      buildReplayPayloadFromSnapshot(snapshot),
+    ) as Record<string, unknown>;
+    expect(legacyPayload).not.toHaveProperty('dimensions');
+    expect(legacyPayload).not.toHaveProperty('dimensionDocument');
   });
 });

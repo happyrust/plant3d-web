@@ -151,7 +151,7 @@ export class LeaderAnnotation extends AnnotationBase {
    * - hovered  → 固定黄色（`materials.ssHovered`）
    * - normal   → 构造时传入的基础配色（`this.materialSet`）
    *
-   * 与 LinearDimension3D/AngleDimension3D/SlopeAnnotation3D/WeldAnnotation3D 的做法一致，
+   * 与其它 SolveSpace 风格标注的做法一致，
    * 避免之前用 `_highlighted` 二值量导致 hovered 与 selected 颜色无区分。
    */
   private applyMaterials(): void {

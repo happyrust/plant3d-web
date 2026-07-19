@@ -1,0 +1,24 @@
+{
+  "case": "create-linear",
+  "steps": [
+    {
+      "type": "lock-candidate",
+      "candidateId": "P1"
+    },
+    {
+      "type": "lock-candidate",
+      "candidateId": "P2"
+    },
+    {
+      "type": "preview-placement",
+      "screen": {
+        "x": 500,
+        "y": 300
+      }
+    },
+    {
+      "type": "commit"
+    }
+  ],
+  "expectedCommand": "create"
+}

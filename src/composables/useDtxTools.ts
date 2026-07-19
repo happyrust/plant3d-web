@@ -15,13 +15,11 @@ import {
   Vector3,
 } from 'three';
 
-import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { DTXLayer, DTXSelectionController } from '@/utils/three/dtx';
 import type { DtxCompatViewer } from '@/viewer/dtx/DtxCompatViewer';
 import type { DtxViewer } from '@/viewer/dtx/DtxViewer';
 
 import { queryPipeWallDistanceCandidates, type PipeWallDistanceCandidate } from '@/api/genModelSpatialApi';
-import type { PipeSegmentDto } from '@/types/pipeGeometry';
 import { setAnnotationProcessingEntryTarget } from '@/components/review/annotationProcessingEntry';
 import { isExternalSjFormFocusedMode, readPersistedEmbedModeParams } from '@/components/review/embedRoleLanding';
 import { isCanonicalReturnedTask } from '@/components/review/reviewTaskFilters';
@@ -35,14 +33,12 @@ import {
 import { ensurePanelAndActivate } from '@/composables/useDockApi';
 import { useReviewStore } from '@/composables/useReviewStore';
 import { useSelectionStore } from '@/composables/useSelectionStore';
-import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3, type LinearDistanceDimensionRecord, type AngleDimensionRecord as AngleDimensionRecord2 } from '@/composables/useToolStore';
+import { useToolStore, type AngleMeasurementRecord, type AnnotationRecord, type CloudAnnotationRecord, type DistanceMeasurementRecord, type MeasurementPoint, type Obb, type ObbAnnotationRecord, type RectAnnotationRecord, type Vec3 } from '@/composables/useToolStore';
 import { useUnitSettingsStore } from '@/composables/useUnitSettingsStore';
 import { useUserStore } from '@/composables/useUserStore';
+import { emitToast } from '@/ribbon/toastBus';
 import { UserRole } from '@/types/auth';
-import { AngleDimension3D, LinearDimension3D } from '@/utils/three/annotation';
-import { computeDimensionOffsetDir } from '@/utils/three/annotation/utils/computeDimensionOffsetDir';
 import { worldPerPixelAt } from '@/utils/three/annotation/utils/solvespaceLike';
-import { computePipeSegmentToPipeSegmentClearance } from '@/utils/three/geometry/clearance';
 import { formatLengthMeters } from '@/utils/unitFormat';
 
 type DragRect = {
@@ -216,16 +212,6 @@ function escapeAnnotationLabelText(value: string): string {
     .replaceAll('\'', '&#39;');
 }
 
-function formatAngleDegrees(deg: number, precision: number): string {
-  const p = Math.max(0, Math.min(6, Math.floor(Number(precision) || 0)));
-  return `${deg.toFixed(p)}°`;
-}
-
-function computeDimensionOffsetDirectionByCamera(start: Vector3, end: Vector3, camera: any): Vector3 | null {
-  // 保持原语义：优先按相机“屏幕直觉”计算；退化时返回 null 交由调用方 fallback。
-  return computeDimensionOffsetDir(start, end, camera as any);
-}
-
 function vec3ToTuple(v: Vector3): Vec3 {
   return [v.x, v.y, v.z];
 }
@@ -267,6 +253,7 @@ const PIPE_STRUCTURE_FRONTEND_TOP_CANDIDATES = 5;
 const PIPE_STRUCTURE_SOURCE_SAMPLE_LIMIT = 128;
 const PIPE_STRUCTURE_DEFAULT_NOUNS = ['WALL', 'COLUMN'];
 const OBJECT_TO_OBJECT_VERTEX_SAMPLE_LIMIT = 64;
+const DIMENSION_REBUILD_NOTICE = '尺寸标注正在重构，净距计算结果暂不创建尺寸';
 
 type PipeMeasureResult = {
   sourcePoint: Vector3
@@ -300,23 +287,7 @@ type ObjectMeasureCandidate = {
   hitPoint?: Vec3 | null
 }
 
-type PipeSegmentGeometry = {
-  segmentRefno: string
-  start: Vector3
-  end: Vector3
-  radius: number
-}
-
-type PipeToPipeMeasureCandidate = ObjectMeasureCandidate & {
-  segment?: PipeSegmentGeometry
-}
-
-type WorldPipeSegment = {
-  refno: string
-  start: Vector3
-  end: Vector3
-  radius: number
-}
+type PipeToPipeMeasureCandidate = ObjectMeasureCandidate
 
 export type ApproxNearestBetweenObjectsInput = {
   sourceObjectId: string
@@ -459,14 +430,6 @@ function collectApproxNearestSeedPoints(
 
 function buildObjectMeasurePairKey(sourceRefno: string, targetRefno: string): string {
   return [normalizeRefnoKey(sourceRefno), normalizeRefnoKey(targetRefno)].sort().join('::');
-}
-
-function distancePointToSegmentSquared(point: Vector3, start: Vector3, end: Vector3): number {
-  const axis = end.clone().sub(start);
-  const lenSq = axis.lengthSq();
-  if (lenSq < 1e-12) return point.distanceToSquared(start);
-  const t = clamp(point.clone().sub(start).dot(axis) / lenSq, 0, 1);
-  return point.distanceToSquared(start.clone().addScaledVector(axis, t));
 }
 
 function resolveLoadedVisibleObjectCandidateByRefno(
@@ -1712,7 +1675,6 @@ export function useDtxTools(options: {
   dtxLayerRef: Ref<DTXLayer | null>
   selectionRef: Ref<DTXSelectionController | null>
   overlayContainerRef: Ref<HTMLElement | null>
-  annotationSystemRef?: Ref<UseAnnotationThreeReturn | null>
   store: ReturnType<typeof useToolStore>
   compatViewerRef: Ref<DtxCompatViewer | null>
   requestRender?: (() => void) | null
@@ -1752,39 +1714,6 @@ export function useDtxTools(options: {
   const pipeMeasureBusy = ref(false);
   const pipeMeasureStatus = ref<string>('');
   const pipeToPipeSourceCandidate = ref<PipeToPipeMeasureCandidate | null>(null);
-
-  // dimensions (独立于测量)
-  const dimensionPoints = ref<MeasurementPoint[]>([]);
-
-  const DIMENSION_PREVIEW_ID = 'dim_preview';
-
-  function clearDimensionPreview(): void {
-    const sys = options.annotationSystemRef?.value ?? null;
-    if (!sys) return;
-    try {
-      sys.removeAnnotation(DIMENSION_PREVIEW_ID);
-    } catch {
-      // ignore
-    }
-  }
-
-  function ensureLinearPreview(sys: UseAnnotationThreeReturn): LinearDimension3D {
-    const existing = sys.getAnnotation(DIMENSION_PREVIEW_ID);
-    if (existing instanceof LinearDimension3D) return existing;
-    if (existing) sys.removeAnnotation(DIMENSION_PREVIEW_ID);
-
-    const dim = new LinearDimension3D(sys.materials, {
-      start: new Vector3(),
-      end: new Vector3(1, 0, 0),
-      offset: 0.5,
-      labelT: 0.5,
-      text: '',
-    });
-    dim.userData.pickable = false;
-    dim.userData.draggable = false;
-    sys.addAnnotation(DIMENSION_PREVIEW_ID, dim);
-    return dim;
-  }
 
   function activateAnnotation(kind: AnnotationOverlayKind, id: string) {
     store.activeAnnotationId.value = kind === 'text' ? id : null;
@@ -2249,103 +2178,6 @@ export function useDtxTools(options: {
     }
   }
 
-  function ensureAnglePreview(sys: UseAnnotationThreeReturn): AngleDimension3D {
-    const existing = sys.getAnnotation(DIMENSION_PREVIEW_ID);
-    if (existing instanceof AngleDimension3D) return existing;
-    if (existing) sys.removeAnnotation(DIMENSION_PREVIEW_ID);
-
-    const dim = new AngleDimension3D(sys.materials, {
-      vertex: new Vector3(),
-      point1: new Vector3(1, 0, 0),
-      point2: new Vector3(0, 1, 0),
-      arcRadius: 0.8,
-      labelT: 0.5,
-      text: '',
-      decimals: 1,
-    });
-    dim.userData.pickable = false;
-    dim.userData.draggable = false;
-    sys.addAnnotation(DIMENSION_PREVIEW_ID, dim);
-    return dim;
-  }
-
-  function updateDimensionPreview(canvas: HTMLCanvasElement, e: PointerEvent): void {
-    const sys = options.annotationSystemRef?.value ?? null;
-    if (!sys) return;
-
-    const mode = store.toolMode.value;
-    if (mode !== 'dimension_linear' && mode !== 'dimension_angle') {
-      clearDimensionPreview();
-      return;
-    }
-
-    const hit = pickSurfacePoint(canvas, e);
-    if (!hit) {
-      clearDimensionPreview();
-      return;
-    }
-
-    if (mode === 'dimension_linear') {
-      if (dimensionPoints.value.length !== 1) {
-        clearDimensionPreview();
-        return;
-      }
-      const p0 = dimensionPoints.value[0]!;
-      const start = new Vector3(...p0.worldPos);
-      const end = hit.worldPos.clone();
-      const dist = start.distanceTo(end);
-      if (dist < 1e-9) {
-        clearDimensionPreview();
-        return;
-      }
-
-      const viewer = dtxViewerRef.value;
-      const dir = viewer ? computeDimensionOffsetDirectionByCamera(start, end, viewer.camera as any) : null;
-      const offset = Math.max(0.2, Math.min(2, dist * 0.15));
-      const text = formatLengthMeters(dist, unitSettings.displayUnit.value, unitSettings.precision.value);
-
-      const dim = ensureLinearPreview(sys);
-      dim.setParams({
-        start,
-        end,
-        offset,
-        labelT: 0.5,
-        direction: dir ?? undefined,
-        text,
-      });
-      dim.visible = true;
-      return;
-    }
-
-    // angle
-    if (dimensionPoints.value.length !== 2) {
-      clearDimensionPreview();
-      return;
-    }
-    const p0 = dimensionPoints.value[0]!;
-    const p1 = dimensionPoints.value[1]!;
-    const origin = new Vector3(...p0.worldPos);
-    const corner = new Vector3(...p1.worldPos);
-    const target = hit.worldPos.clone();
-
-    const arm1 = origin.distanceTo(corner);
-    const arm2 = target.distanceTo(corner);
-    const arcRadius = clamp(Math.min(arm1, arm2) * 0.3, 0.3, 1.2);
-
-    const dim = ensureAnglePreview(sys);
-    dim.setParams({
-      vertex: corner,
-      point1: origin,
-      point2: target,
-      arcRadius,
-      labelT: 0.5,
-      decimals: Math.max(0, Math.min(6, Math.floor(Number(unitSettings.precision.value) || 0))),
-    });
-    const deg = dim.getAngleDegrees();
-    dim.setParams({ text: formatAngleDegrees(deg, unitSettings.precision.value) });
-    dim.visible = true;
-  }
-
   function applyPickHighlights(): void {
     const viewer = compatViewerRef.value;
     if (!viewer) return;
@@ -2400,12 +2232,12 @@ export function useDtxTools(options: {
   }
 
   function pipeToPipeCandidateLabel(candidate: PipeToPipeMeasureCandidate): string {
-    return candidate.segment?.segmentRefno ?? candidate.refno;
+    return candidate.refno;
   }
 
   function applyPipeToPipeSourceCandidate(candidate: PipeToPipeMeasureCandidate): void {
     pipeToPipeSourceCandidate.value = candidate;
-    setPipeMeasureStatus(`管-管快速标注：已选第一根管道 ${pipeToPipeCandidateLabel(candidate)}，请选择第二根管道`);
+    setPipeMeasureStatus(`管-管净距测量：已选第一根管道 ${pipeToPipeCandidateLabel(candidate)}，请选择第二根管道`);
   }
 
   function clearObjectMeasureCandidates(options?: { clearStatus?: boolean; clearLastPairKey?: boolean }): void {
@@ -2550,64 +2382,8 @@ export function useDtxTools(options: {
     void commitObjectToObjectMeasurement(sourceCandidate, targetCandidate);
   }
 
-  function resolvePipeOwnerBranchRefno(sourceRefno: string): string {
-    const sourceNoun = (findNounByRefnoAcrossAllDbnos(sourceRefno) || '').toUpperCase();
-    if (sourceNoun === 'BRAN' || sourceNoun === 'HANG') {
-      return sourceRefno;
-    }
-    return findOwnerRefnoByTubi(sourceRefno) || sourceRefno;
-  }
-
-  async function queryPipeBranchSegments(_branchRefno: string): Promise<{ segments?: PipeSegmentDto[] } | null> {
-    return null;
-  }
-
-  function toWorldPipeSegment(
-    segment: PipeSegmentDto,
-    globalMatrix: any,
-  ): WorldPipeSegment | null {
-    const refno = normalizeRefnoKey(segment.refno || '');
-    const arrive = asVec3(segment.arrive ?? null);
-    const leave = asVec3(segment.leave ?? null);
-    const outsideDiameter = Number(segment.outside_diameter);
-    if (!refno || !arrive || !leave || !Number.isFinite(outsideDiameter) || outsideDiameter <= 0) {
-      return null;
-    }
-
-    const startTuple = vec3ByMatrix(arrive, globalMatrix);
-    const endTuple = vec3ByMatrix(leave, globalMatrix);
-    const start = new Vector3(startTuple[0], startTuple[1], startTuple[2]);
-    const end = new Vector3(endTuple[0], endTuple[1], endTuple[2]);
-    if (start.distanceToSquared(end) < 1e-9) return null;
-
-    return {
-      refno,
-      start,
-      end,
-      radius: Math.max(0, outsideDiameter / 2),
-    };
-  }
-
-  function choosePipeSegmentForHit(
-    segments: WorldPipeSegment[],
-    sourceRefno: string,
-    hitPoint: Vector3,
-  ): WorldPipeSegment | null {
-    const normalizedSource = normalizeRefnoKey(sourceRefno);
-    const direct = segments.filter((segment) => segment.refno === normalizedSource);
-    const pool = direct.length > 0 ? direct : segments;
-    let best: { segment: WorldPipeSegment; distanceSq: number } | null = null;
-
-    for (const segment of pool) {
-      const distanceSq = distancePointToSegmentSquared(hitPoint, segment.start, segment.end);
-      if (!best || distanceSq < best.distanceSq) {
-        best = { segment, distanceSq };
-      }
-    }
-
-    return best?.segment ?? null;
-  }
-
+  // MBD 管段数据接口已移除：不再解析命中对象所属管段几何（segment 恒为空），
+  // 管对管距离计算统一走 AABB/采样点的通用最近距离路径。
   async function resolvePipeSegmentMeasureCandidate(hit: {
     entityId: string
     worldPos: Vector3
@@ -2617,34 +2393,14 @@ export function useDtxTools(options: {
     if (!layer) return null;
 
     const sourceRefno = normalizeRefnoKey(hit.entityId || parseRefnoFromDtxObjectId(hit.objectId) || '');
-    const dbnum = parseDbnumFromRefno(sourceRefno);
     if (!sourceRefno || !hit.objectId) return null;
 
-    const candidate: PipeToPipeMeasureCandidate = {
+    return {
       refno: sourceRefno,
       objectId: hit.objectId,
       entityId: hit.entityId || sourceRefno,
       hitPoint: vec3ToTuple(hit.worldPos),
     };
-
-    if (!dbnum) return candidate;
-
-    const branchRefno = resolvePipeOwnerBranchRefno(sourceRefno);
-    const mbdData = await queryPipeBranchSegments(branchRefno);
-    const globalMatrix = layer.getGlobalModelMatrix();
-    const segments = (mbdData?.segments || [])
-      .map((segment) => toWorldPipeSegment(segment, globalMatrix))
-      .filter((segment): segment is WorldPipeSegment => !!segment);
-    const segment = choosePipeSegmentForHit(segments, sourceRefno, hit.worldPos);
-    if (!segment) return candidate;
-
-    candidate.segment = {
-      segmentRefno: segment.refno,
-      start: segment.start.clone(),
-      end: segment.end.clone(),
-      radius: segment.radius,
-    };
-    return candidate;
   }
 
   function collectPipeReferencePointsWorld(params: {
@@ -2653,9 +2409,8 @@ export function useDtxTools(options: {
     dbnum: number
     layer: DTXLayer
     globalMatrix: any
-    mbdData: { segments?: PipeSegmentDto[] } | null
   }): Vector3[] {
-    const { sourceRefno, sourceObjectId, dbnum, layer, globalMatrix, mbdData } = params;
+    const { sourceRefno, sourceObjectId, dbnum, layer, globalMatrix } = params;
     const refnoTransform = getDtxRefnoTransform(dbnum, sourceRefno);
     let refnoPosition: Vec3 | null = null;
     if (Array.isArray(refnoTransform) && refnoTransform.length === 16) {
@@ -2674,15 +2429,9 @@ export function useDtxTools(options: {
       aabbCenter = [center.x, center.y, center.z];
     }
 
-    const mbdSegments = (mbdData?.segments || []).map((segment) => ({
-      refno: segment.refno,
-      arrive: segment.arrive ? vec3ByMatrix(segment.arrive, globalMatrix) : null,
-      leave: segment.leave ? vec3ByMatrix(segment.leave, globalMatrix) : null,
-    }));
-
     const seeds = collectOrderedPipeReferencePointSeeds({
       sourceRefno,
-      segments: mbdSegments,
+      segments: [],
       refnoPosition,
       aabbCenter,
     });
@@ -2804,92 +2553,55 @@ export function useDtxTools(options: {
     return fromSeed(best.seed, best.targetObjectId, best.targetRefno);
   }
 
-  function commitPipeToPipeDimension(
+  function completePipeToPipeClearance(
     source: PipeToPipeMeasureCandidate,
     target: PipeToPipeMeasureCandidate,
   ): boolean {
     if (
       source.objectId === target.objectId ||
-      source.refno === target.refno ||
-      (!!source.segment && !!target.segment && source.segment.segmentRefno === target.segment.segmentRefno)
+      source.refno === target.refno
     ) {
-      setPipeMeasureStatus('管-管快速标注：请选择另一根管道');
+      setPipeMeasureStatus('管-管净距测量：请选择另一根管道');
       return false;
     }
 
-    let start: Vector3 | null = null;
-    let end: Vector3 | null = null;
-    if (source.segment && target.segment) {
-      const clearance = computePipeSegmentToPipeSegmentClearance({
-        pipe1Start: source.segment.start,
-        pipe1End: source.segment.end,
-        pipe1Radius: source.segment.radius,
-        pipe2Start: target.segment.start,
-        pipe2End: target.segment.end,
-        pipe2Radius: target.segment.radius,
-      });
-      if (!clearance) {
-        setPipeMeasureStatus('管-管快速标注：最近点计算失败');
-        return false;
-      }
-      start = clearance.pipeSurfacePoint;
-      end = clearance.otherSurfacePoint;
-    } else {
-      const layer = dtxLayerRef.value;
-      const approx = layer
-        ? computeApproxNearestBetweenObjects(layer, {
-          sourceObjectId: source.objectId,
-          targetObjectId: target.objectId,
-          sourceHitPoint: source.hitPoint ?? null,
-          targetHitPoint: target.hitPoint ?? null,
-        })
-        : null;
-      if (!approx) {
-        setPipeMeasureStatus('管-管快速标注：最近点计算失败');
-        return false;
-      }
-      start = new Vector3(...approx.sourcePoint);
-      end = new Vector3(...approx.targetPoint);
-    }
-
-    const viewer = dtxViewerRef.value;
-    const direction = viewer?.camera
-      ? computeDimensionOffsetDirectionByCamera(start, end, viewer.camera as any)
+    const layer = dtxLayerRef.value;
+    const approx = layer
+      ? computeApproxNearestBetweenObjects(layer, {
+        sourceObjectId: source.objectId,
+        targetObjectId: target.objectId,
+        sourceHitPoint: source.hitPoint ?? null,
+        targetHitPoint: target.hitPoint ?? null,
+      })
       : null;
+    if (!approx) {
+      setPipeMeasureStatus('管-管净距测量：最近点计算失败');
+      return false;
+    }
+    const start = new Vector3(...approx.sourcePoint);
+    const end = new Vector3(...approx.targetPoint);
+
     const distance = start.distanceTo(end);
     const sourceLabel = pipeToPipeCandidateLabel(source);
     const targetLabel = pipeToPipeCandidateLabel(target);
-    const offset = Math.max(0.2, Math.min(2, distance * 0.15));
-    const rec: LinearDistanceDimensionRecord = {
-      id: nowId('dim-pipe-pipe'),
-      kind: 'linear_distance',
-      origin: { entityId: sourceLabel, worldPos: vec3ToTuple(start) },
-      target: { entityId: targetLabel, worldPos: vec3ToTuple(end) },
-      offset,
-      direction: direction ? vec3ToTuple(direction) : null,
-      labelT: 0.5,
-      visible: true,
-      createdAt: Date.now(),
-    };
-
-    store.addDimension(rec);
     clearPipeToPipeCandidate();
     setPipeMeasureStatus(
-      `已生成管-管标注：${sourceLabel} ↔ ${targetLabel}，距离 ${formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value)}`,
+      `${DIMENSION_REBUILD_NOTICE}（${sourceLabel} ↔ ${targetLabel}，净距 ${formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value)}）`,
     );
+    emitToast({ message: DIMENSION_REBUILD_NOTICE, level: 'warning' });
     requestRender?.();
     return true;
   }
 
   async function runPipeToPipeMeasurement(canvas: HTMLCanvasElement, e: PointerEvent): Promise<void> {
     if (pipeMeasureBusy.value) {
-      setPipeMeasureStatus('正在计算上一条标注，请稍候…');
+      setPipeMeasureStatus('正在计算上一条净距，请稍候…');
       return;
     }
 
     const hit = pickSurfacePoint(canvas, e);
     if (!hit) {
-      setPipeMeasureStatus('管-管快速标注：未拾取到有效管道对象');
+      setPipeMeasureStatus('管-管净距测量：未拾取到有效管道对象');
       return;
     }
 
@@ -2897,12 +2609,12 @@ export function useDtxTools(options: {
     try {
       setPipeMeasureStatus(
         pipeToPipeSourceCandidate.value
-          ? '管-管快速标注：正在解析第二根管道…'
-          : '管-管快速标注：正在解析第一根管道…',
+          ? '管-管净距测量：正在解析第二根管道…'
+          : '管-管净距测量：正在解析第一根管道…',
       );
       const candidate = await resolvePipeSegmentMeasureCandidate(hit);
       if (!candidate) {
-        setPipeMeasureStatus('管-管快速标注：未找到可用管道对象');
+        setPipeMeasureStatus('管-管净距测量：未找到可用管道对象');
         return;
       }
 
@@ -2912,9 +2624,9 @@ export function useDtxTools(options: {
         return;
       }
 
-      commitPipeToPipeDimension(source, candidate);
+      completePipeToPipeClearance(source, candidate);
     } catch (error) {
-      setPipeMeasureStatus(`管-管快速标注计算失败：${error instanceof Error ? error.message : String(error)}`);
+      setPipeMeasureStatus(`管-管净距测量计算失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       pipeMeasureBusy.value = false;
     }
@@ -2922,7 +2634,7 @@ export function useDtxTools(options: {
 
   async function runPipeToStructureMeasurement(canvas: HTMLCanvasElement, e: PointerEvent): Promise<void> {
     if (pipeMeasureBusy.value) {
-      setPipeMeasureStatus('正在计算上一条标注，请稍候…');
+      setPipeMeasureStatus('正在计算上一条净距，请稍候…');
       return;
     }
 
@@ -2980,15 +2692,12 @@ export function useDtxTools(options: {
 
       setPipeMeasureStatus('正在收集参考点…');
       const globalMatrix = layer.getGlobalModelMatrix();
-      const branchRefno = resolvePipeOwnerBranchRefno(sourceRefno);
-      const mbdData = await queryPipeBranchSegments(branchRefno);
       const referencePoints = collectPipeReferencePointsWorld({
         sourceRefno,
         sourceObjectId,
         dbnum,
         layer,
         globalMatrix,
-        mbdData,
       });
       if (referencePoints.length === 0) {
         setPipeMeasureStatus('参考点收集失败');
@@ -3016,27 +2725,11 @@ export function useDtxTools(options: {
         return;
       }
 
-      const viewer = dtxViewerRef.value;
-      const direction = viewer
-        ? computeDimensionOffsetDirectionByCamera(best.sourcePoint, best.targetPoint, viewer.camera as any)
-        : null;
       const distance = best.sourcePoint.distanceTo(best.targetPoint);
-      const offset = Math.max(0.2, Math.min(2, distance * 0.15));
-      const rec: LinearDistanceDimensionRecord = {
-        id: nowId('dim-pipe-structure'),
-        kind: 'linear_distance',
-        origin: { entityId: sourceRefno, worldPos: vec3ToTuple(best.sourcePoint) },
-        target: { entityId: best.targetRefno, worldPos: vec3ToTuple(best.targetPoint) },
-        offset,
-        direction: direction ? vec3ToTuple(direction) : null,
-        labelT: 0.5,
-        visible: true,
-        createdAt: Date.now(),
-      };
-      store.addDimension(rec);
       setPipeMeasureStatus(
-        `已生成标注：${best.targetRefno}，距离 ${formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value)}`,
+        `${DIMENSION_REBUILD_NOTICE}（${sourceRefno} ↔ ${best.targetRefno}，净距 ${formatLengthMeters(distance, unitSettings.displayUnit.value, unitSettings.precision.value)}）`,
       );
+      emitToast({ message: DIMENSION_REBUILD_NOTICE, level: 'warning' });
     } catch (error) {
       setPipeMeasureStatus(`计算失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -3077,28 +2770,20 @@ export function useDtxTools(options: {
     }
     if (mode === 'measure_pipe_to_structure') {
       if (pipeMeasureBusy.value) {
-        return pipeMeasureStatus.value || '管-墙/柱快速标注：正在计算…';
+        return pipeMeasureStatus.value || '管-墙/柱净距测量：正在计算…';
       }
-      return pipeMeasureStatus.value || '管-墙/柱快速标注：点击管道，自动生成最近距离尺寸';
+      return pipeMeasureStatus.value || '管-墙/柱净距测量：点击管道，计算最近距离（尺寸创建暂不可用）';
     }
     if (mode === 'measure_pipe_to_pipe') {
       if (pipeMeasureBusy.value) {
-        return pipeMeasureStatus.value || '管-管快速标注：正在计算…';
+        return pipeMeasureStatus.value || '管-管净距测量：正在计算…';
       }
       if (pipeMeasureStatus.value) {
         return pipeMeasureStatus.value;
       }
       return pipeToPipeSourceCandidate.value
-        ? `管-管快速标注：已选第一根管道 ${pipeToPipeCandidateLabel(pipeToPipeSourceCandidate.value)}，请选择第二根管道`
-        : '管-管快速标注：请选择第一根管道';
-    }
-    if (mode === 'dimension_linear') {
-      return dimensionPoints.value.length === 0 ? '尺寸标注（距离）：请选择起点' : '尺寸标注（距离）：请选择终点';
-    }
-    if (mode === 'dimension_angle') {
-      if (dimensionPoints.value.length === 0) return '尺寸标注（角度）：请选择起点';
-      if (dimensionPoints.value.length === 1) return '尺寸标注（角度）：请选择拐点';
-      return '尺寸标注（角度）：请选择终点';
+        ? `管-管净距测量：已选第一根管道 ${pipeToPipeCandidateLabel(pipeToPipeSourceCandidate.value)}，请选择第二根管道`
+        : '管-管净距测量：请选择第一根管道';
     }
     if (mode === 'pick_query_center') {
       return '请点击模型拾取查询中心点';
@@ -3177,10 +2862,8 @@ export function useDtxTools(options: {
     pointToObjectStart.value = null;
     clearObjectMeasureCandidates({ clearStatus: true, clearLastPairKey: true });
     clearPipeToPipeCandidate({ clearStatus: true });
-    dimensionPoints.value = [];
     pipeMeasureBusy.value = false;
     pipeMeasureStatus.value = '';
-    clearDimensionPreview();
   }
 
   function clearPendingCloudAnchor() {
@@ -3886,22 +3569,6 @@ export function useDtxTools(options: {
     viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
   }
 
-  function flyToDimension(id: string) {
-    const viewer = compatViewerRef.value;
-    if (!viewer) return;
-    const rec = store.dimensions.value.find((d) => d.id === id) as any;
-    if (!rec) return;
-    const pts: Vec3[] = [];
-    if (rec.kind === 'linear_distance') {
-      pts.push(rec.origin.worldPos, rec.target.worldPos);
-    } else {
-      pts.push(rec.origin.worldPos, rec.corner.worldPos, rec.target.worldPos);
-    }
-    const aabb = aabbFromPoints(pts);
-    if (!aabb) return;
-    viewer.cameraFlight.flyTo({ aabb, fit: true, duration: 0.8 });
-  }
-
   function flyToAnnotation(id: string) {
     const viewer = compatViewerRef.value;
     if (!viewer) return;
@@ -3945,10 +3612,6 @@ export function useDtxTools(options: {
 
   function removeMeasurement(id: string) {
     store.removeMeasurement(id);
-  }
-
-  function removeDimension(id: string) {
-    store.removeDimension(id);
   }
 
   function removeAnnotation(id: string) {
@@ -3998,7 +3661,6 @@ export function useDtxTools(options: {
     clearGroup(toolsGroup);
     clearOverlayEls();
     hideMarquee();
-    clearDimensionPreview();
     try {
       rectPreviewLine.value?.geometry.dispose()
       ; (rectPreviewLine.value?.material as any)?.dispose?.();
@@ -4019,7 +3681,6 @@ export function useDtxTools(options: {
     clearGroup(toolsGroup);
     clearOverlayEls();
     hideMarquee();
-    clearDimensionPreview();
 
     if (marqueeDiv.value) {
       try { marqueeDiv.value.remove(); } catch { /* ignore */ }
@@ -4352,16 +4013,6 @@ export function useDtxTools(options: {
       return;
     }
 
-    if (mode === 'dimension_linear' || mode === 'dimension_angle') {
-      // 仅在“已选中部分点”的情况下才做 preview，避免每帧 pick 带来额外开销
-      if (
-        (mode === 'dimension_linear' && dimensionPoints.value.length >= 1) ||
-        (mode === 'dimension_angle' && dimensionPoints.value.length >= 2)
-      ) {
-        updateDimensionPreview(canvas, e);
-        requestRender?.();
-      }
-    }
   }
 
   function onCanvasPointerUp(canvas: HTMLCanvasElement, e: PointerEvent) {
@@ -4545,62 +4196,6 @@ export function useDtxTools(options: {
       return;
     }
 
-    if (mode === 'dimension_linear') {
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      dimensionPoints.value = [...dimensionPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }];
-      if (dimensionPoints.value.length >= 2) {
-        const [p0, p1] = dimensionPoints.value as [MeasurementPoint, MeasurementPoint];
-        const a = new Vector3(...p0.worldPos);
-        const b = new Vector3(...p1.worldPos);
-        const dist = a.distanceTo(b);
-        const viewer = dtxViewerRef.value;
-        const dir = viewer ? computeDimensionOffsetDirectionByCamera(a, b, viewer.camera as any) : null;
-        const offset = Math.max(0.2, Math.min(2, dist * 0.15));
-
-        const rec: LinearDistanceDimensionRecord = {
-          id: nowId('dim'),
-          kind: 'linear_distance',
-          origin: p0,
-          target: p1,
-          offset,
-          direction: dir ? vec3ToTuple(dir) : null,
-          labelT: 0.5,
-          visible: true,
-          createdAt: Date.now(),
-        };
-        store.addDimension(rec);
-        dimensionPoints.value = [];
-        clearDimensionPreview();
-      }
-      return;
-    }
-
-    if (mode === 'dimension_angle') {
-      const hit = pickSurfacePoint(canvas, e);
-      if (!hit) return;
-      dimensionPoints.value = [...dimensionPoints.value, { entityId: hit.entityId, worldPos: vec3ToTuple(hit.worldPos) }];
-      if (dimensionPoints.value.length >= 3) {
-        const [p0, p1, p2] = dimensionPoints.value as [MeasurementPoint, MeasurementPoint, MeasurementPoint];
-        const rec: AngleDimensionRecord2 = {
-          id: nowId('dimang'),
-          kind: 'angle',
-          origin: p0,
-          corner: p1,
-          target: p2,
-          offset: 0.8,
-          direction: null,
-          labelT: 0.5,
-          visible: true,
-          createdAt: Date.now(),
-        };
-        store.addDimension(rec as any);
-        dimensionPoints.value = [];
-        clearDimensionPreview();
-      }
-      return;
-    }
-
     if (mode === 'measure_point_to_object') {
       const hit = pickSurfacePoint(canvas, e);
       if (!hit) return;
@@ -4690,7 +4285,6 @@ export function useDtxTools(options: {
     const viewer = dtxViewerRef.value;
     if (viewer) viewer.controls.enabled = true;
     hideMarquee();
-    clearDimensionPreview();
     rectDrag.value = { active: false, pointerId: null, startCanvas: null, plane: null, basisU: null, basisV: null, startWorld: null, startEntityId: null };
     try {
       rectPreviewLine.value?.geometry.dispose()
@@ -4714,7 +4308,6 @@ export function useDtxTools(options: {
     resetProgress();
     clearPendingCloudAnchor();
     hideMarquee();
-    clearDimensionPreview();
   }
 
   watch(
@@ -4865,14 +4458,12 @@ export function useDtxTools(options: {
 
     // actions used by panels
     flyToMeasurement,
-    flyToDimension,
     flyToAnnotation,
     flyToCloudAnnotation,
     flyToRectAnnotation,
     flyToObbAnnotation,
 
     removeMeasurement,
-    removeDimension,
     removeAnnotation,
     removeCloudAnnotation,
     removeRectAnnotation,

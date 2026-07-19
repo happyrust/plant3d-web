@@ -120,7 +120,7 @@ export class SlopeAnnotation extends AnnotationBase {
 
   /**
    * 按 SolveSpace 状态机分流材质：selected > hovered > normal。
-   * 与 LinearDimension3D/SlopeAnnotation3D 等 3D 系列保持一致。
+   * 与其它 SolveSpace 风格标注保持一致。
    */
   private applyMaterials(): void {
     const state = this.interactionState;

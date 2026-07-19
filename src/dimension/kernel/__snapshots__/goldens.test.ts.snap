@@ -1,0 +1,2831 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`canonical dimension structural goldens > 'angular-right-angle-major' 1`] = `
+{
+  "derived": {
+    "formattedLabel": "270.00°",
+    "valueRad": 4.712389,
+  },
+  "dimensionId": "angular-right-angle-major",
+  "hitRegions": [
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        235,
+        200,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        200,
+        165,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        229.927992,
+        202.077331,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        229.927992,
+        202.077331,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        229.712313,
+        204.144691,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        229.712313,
+        204.144691,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        229.353999,
+        206.192153,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        229.353999,
+        206.192153,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        228.854769,
+        208.20989,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        228.854769,
+        208.20989,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        228.217021,
+        210.188214,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        228.217021,
+        210.188214,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        227.443816,
+        212.11763,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        227.443816,
+        212.11763,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        226.538866,
+        213.988875,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        226.538866,
+        213.988875,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        225.506514,
+        215.792965,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        225.506514,
+        215.792965,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        224.351717,
+        217.52124,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        224.351717,
+        217.52124,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        223.080019,
+        219.165404,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        223.080019,
+        219.165404,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        221.697524,
+        220.717564,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        221.697524,
+        220.717564,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        220.210869,
+        222.170268,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        220.210869,
+        222.170268,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        218.627191,
+        223.516542,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        218.627191,
+        223.516542,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        216.954092,
+        224.749924,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        216.954092,
+        224.749924,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        215.199605,
+        225.864493,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        215.199605,
+        225.864493,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        213.372151,
+        226.854899,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        213.372151,
+        226.854899,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        211.480503,
+        227.716386,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        211.480503,
+        227.716386,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        209.533743,
+        228.444819,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        209.533743,
+        228.444819,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        207.541215,
+        229.036702,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        207.541215,
+        229.036702,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        205.512486,
+        229.489193,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        205.512486,
+        229.489193,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        203.457293,
+        229.80012,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        203.457293,
+        229.80012,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        201.385504,
+        229.967989,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        201.385504,
+        229.967989,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        199.307063,
+        229.991996,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        199.307063,
+        229.991996,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        197.231949,
+        229.872025,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        197.231949,
+        229.872025,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        195.170123,
+        229.608652,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        195.170123,
+        229.608652,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        193.131484,
+        229.203142,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        193.131484,
+        229.203142,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        191.125816,
+        228.65744,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        191.125816,
+        228.65744,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        190.261797,
+        228.356706,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        171.264751,
+        208.588203,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.796858,
+        206.868516,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.796858,
+        206.868516,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.391348,
+        204.829877,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.391348,
+        204.829877,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.127975,
+        202.768051,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.127975,
+        202.768051,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.008004,
+        200.692937,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.008004,
+        200.692937,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.032011,
+        198.614496,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.032011,
+        198.614496,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.19988,
+        196.542707,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.19988,
+        196.542707,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.510807,
+        194.487514,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.510807,
+        194.487514,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        170.963298,
+        192.458785,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        170.963298,
+        192.458785,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        171.555181,
+        190.466257,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        171.555181,
+        190.466257,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        172.283614,
+        188.519497,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        172.283614,
+        188.519497,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        173.145101,
+        186.627849,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        173.145101,
+        186.627849,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        174.135507,
+        184.800395,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        174.135507,
+        184.800395,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        175.250076,
+        183.045908,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        175.250076,
+        183.045908,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        176.483458,
+        181.372809,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        176.483458,
+        181.372809,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        177.829732,
+        179.789131,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        177.829732,
+        179.789131,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        179.282436,
+        178.302476,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        179.282436,
+        178.302476,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        180.834596,
+        176.919981,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        180.834596,
+        176.919981,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        182.47876,
+        175.648283,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        182.47876,
+        175.648283,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        184.207035,
+        174.493486,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        184.207035,
+        174.493486,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        186.011125,
+        173.461134,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        186.011125,
+        173.461134,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        187.88237,
+        172.556184,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        187.88237,
+        172.556184,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        189.811786,
+        171.782979,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        189.811786,
+        171.782979,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        191.79011,
+        171.145231,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        191.79011,
+        171.145231,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        193.807847,
+        170.646001,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        193.807847,
+        170.646001,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        195.855309,
+        170.287687,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        195.855309,
+        170.287687,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        197.922669,
+        170.072008,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        197.922669,
+        170.072008,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        200,
+        170,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        225.775394,
+        212.999789,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        234.223306,
+        213.000211,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        186.999789,
+        165.776694,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        187.000211,
+        174.224606,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 171.311797,
+        "y": 212.588203,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 25.25,
+    "width": 22.95,
+    "x": 167.311797,
+    "y": 208.588203,
+  },
+  "labelPinned": false,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 171.311797,
+        "y": 212.588203,
+      },
+      "capHeightPx": 11.5,
+      "kind": "glyph-run",
+      "origin": [
+        171.311797,
+        226.388203,
+      ],
+      "styleRole": "normal",
+      "text": "270.00°",
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        229.927992,
+        202.077331,
+      ],
+    },
+    {
+      "from": [
+        229.927992,
+        202.077331,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        229.712313,
+        204.144691,
+      ],
+    },
+    {
+      "from": [
+        229.712313,
+        204.144691,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        229.353999,
+        206.192153,
+      ],
+    },
+    {
+      "from": [
+        229.353999,
+        206.192153,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        228.854769,
+        208.20989,
+      ],
+    },
+    {
+      "from": [
+        228.854769,
+        208.20989,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        228.217021,
+        210.188214,
+      ],
+    },
+    {
+      "from": [
+        228.217021,
+        210.188214,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        227.443816,
+        212.11763,
+      ],
+    },
+    {
+      "from": [
+        227.443816,
+        212.11763,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        226.538866,
+        213.988875,
+      ],
+    },
+    {
+      "from": [
+        226.538866,
+        213.988875,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        225.506514,
+        215.792965,
+      ],
+    },
+    {
+      "from": [
+        225.506514,
+        215.792965,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        224.351717,
+        217.52124,
+      ],
+    },
+    {
+      "from": [
+        224.351717,
+        217.52124,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        223.080019,
+        219.165404,
+      ],
+    },
+    {
+      "from": [
+        223.080019,
+        219.165404,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        221.697524,
+        220.717564,
+      ],
+    },
+    {
+      "from": [
+        221.697524,
+        220.717564,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        220.210869,
+        222.170268,
+      ],
+    },
+    {
+      "from": [
+        220.210869,
+        222.170268,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        218.627191,
+        223.516542,
+      ],
+    },
+    {
+      "from": [
+        218.627191,
+        223.516542,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        216.954092,
+        224.749924,
+      ],
+    },
+    {
+      "from": [
+        216.954092,
+        224.749924,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        215.199605,
+        225.864493,
+      ],
+    },
+    {
+      "from": [
+        215.199605,
+        225.864493,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        213.372151,
+        226.854899,
+      ],
+    },
+    {
+      "from": [
+        213.372151,
+        226.854899,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        211.480503,
+        227.716386,
+      ],
+    },
+    {
+      "from": [
+        211.480503,
+        227.716386,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        209.533743,
+        228.444819,
+      ],
+    },
+    {
+      "from": [
+        209.533743,
+        228.444819,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        207.541215,
+        229.036702,
+      ],
+    },
+    {
+      "from": [
+        207.541215,
+        229.036702,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        205.512486,
+        229.489193,
+      ],
+    },
+    {
+      "from": [
+        205.512486,
+        229.489193,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        203.457293,
+        229.80012,
+      ],
+    },
+    {
+      "from": [
+        203.457293,
+        229.80012,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        201.385504,
+        229.967989,
+      ],
+    },
+    {
+      "from": [
+        201.385504,
+        229.967989,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        199.307063,
+        229.991996,
+      ],
+    },
+    {
+      "from": [
+        199.307063,
+        229.991996,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        197.231949,
+        229.872025,
+      ],
+    },
+    {
+      "from": [
+        197.231949,
+        229.872025,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        195.170123,
+        229.608652,
+      ],
+    },
+    {
+      "from": [
+        195.170123,
+        229.608652,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        193.131484,
+        229.203142,
+      ],
+    },
+    {
+      "from": [
+        193.131484,
+        229.203142,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        191.125816,
+        228.65744,
+      ],
+    },
+    {
+      "from": [
+        191.125816,
+        228.65744,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        190.261797,
+        228.356706,
+      ],
+    },
+    {
+      "from": [
+        171.264751,
+        208.588203,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.796858,
+        206.868516,
+      ],
+    },
+    {
+      "from": [
+        170.796858,
+        206.868516,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.391348,
+        204.829877,
+      ],
+    },
+    {
+      "from": [
+        170.391348,
+        204.829877,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.127975,
+        202.768051,
+      ],
+    },
+    {
+      "from": [
+        170.127975,
+        202.768051,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.008004,
+        200.692937,
+      ],
+    },
+    {
+      "from": [
+        170.008004,
+        200.692937,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.032011,
+        198.614496,
+      ],
+    },
+    {
+      "from": [
+        170.032011,
+        198.614496,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.19988,
+        196.542707,
+      ],
+    },
+    {
+      "from": [
+        170.19988,
+        196.542707,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.510807,
+        194.487514,
+      ],
+    },
+    {
+      "from": [
+        170.510807,
+        194.487514,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        170.963298,
+        192.458785,
+      ],
+    },
+    {
+      "from": [
+        170.963298,
+        192.458785,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        171.555181,
+        190.466257,
+      ],
+    },
+    {
+      "from": [
+        171.555181,
+        190.466257,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        172.283614,
+        188.519497,
+      ],
+    },
+    {
+      "from": [
+        172.283614,
+        188.519497,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        173.145101,
+        186.627849,
+      ],
+    },
+    {
+      "from": [
+        173.145101,
+        186.627849,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        174.135507,
+        184.800395,
+      ],
+    },
+    {
+      "from": [
+        174.135507,
+        184.800395,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        175.250076,
+        183.045908,
+      ],
+    },
+    {
+      "from": [
+        175.250076,
+        183.045908,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        176.483458,
+        181.372809,
+      ],
+    },
+    {
+      "from": [
+        176.483458,
+        181.372809,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        177.829732,
+        179.789131,
+      ],
+    },
+    {
+      "from": [
+        177.829732,
+        179.789131,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        179.282436,
+        178.302476,
+      ],
+    },
+    {
+      "from": [
+        179.282436,
+        178.302476,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        180.834596,
+        176.919981,
+      ],
+    },
+    {
+      "from": [
+        180.834596,
+        176.919981,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        182.47876,
+        175.648283,
+      ],
+    },
+    {
+      "from": [
+        182.47876,
+        175.648283,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        184.207035,
+        174.493486,
+      ],
+    },
+    {
+      "from": [
+        184.207035,
+        174.493486,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        186.011125,
+        173.461134,
+      ],
+    },
+    {
+      "from": [
+        186.011125,
+        173.461134,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        187.88237,
+        172.556184,
+      ],
+    },
+    {
+      "from": [
+        187.88237,
+        172.556184,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        189.811786,
+        171.782979,
+      ],
+    },
+    {
+      "from": [
+        189.811786,
+        171.782979,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        191.79011,
+        171.145231,
+      ],
+    },
+    {
+      "from": [
+        191.79011,
+        171.145231,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        193.807847,
+        170.646001,
+      ],
+    },
+    {
+      "from": [
+        193.807847,
+        170.646001,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        195.855309,
+        170.287687,
+      ],
+    },
+    {
+      "from": [
+        195.855309,
+        170.287687,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        197.922669,
+        170.072008,
+      ],
+    },
+    {
+      "from": [
+        197.922669,
+        170.072008,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        200,
+        170,
+      ],
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        225.775394,
+        212.999789,
+      ],
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        234.223306,
+        213.000211,
+      ],
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        186.999789,
+        165.776694,
+      ],
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        187.000211,
+        174.224606,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        235,
+        200,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        200,
+        165,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`canonical dimension structural goldens > 'angular-right-angle-minor' 1`] = `
+{
+  "derived": {
+    "formattedLabel": "90.00°",
+    "valueRad": 1.570796,
+  },
+  "dimensionId": "angular-right-angle-minor",
+  "hitRegions": [
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        235,
+        200,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        200,
+        165,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        229.930063,
+        197.952728,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        229.930063,
+        197.952728,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        229.720578,
+        195.915001,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        229.720578,
+        195.915001,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        229.372523,
+        193.89632,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        229.372523,
+        193.89632,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        228.887519,
+        191.906097,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        228.887519,
+        191.906097,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        228.730635,
+        191.411797,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        210.888203,
+        172.064141,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        210.046388,
+        171.732172,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        210.046388,
+        171.732172,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        208.093903,
+        171.112481,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        208.093903,
+        171.112481,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        206.10368,
+        170.627477,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        206.10368,
+        170.627477,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        204.084999,
+        170.279422,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        204.084999,
+        170.279422,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        202.047272,
+        170.069937,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        202.047272,
+        170.069937,
+      ],
+      "kind": "segment",
+      "part": "arc",
+      "to": [
+        200,
+        170,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        234.223306,
+        186.999789,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        225.775394,
+        187.000211,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        212.999789,
+        174.224606,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        213.000211,
+        165.776694,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 17.25,
+        "width": 12.65,
+        "x": 214.888203,
+        "y": 170.161797,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 25.25,
+    "width": 20.65,
+    "x": 210.888203,
+    "y": 166.161797,
+  },
+  "labelPinned": false,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 17.25,
+        "width": 12.65,
+        "x": 214.888203,
+        "y": 170.161797,
+      },
+      "capHeightPx": 11.5,
+      "kind": "glyph-run",
+      "origin": [
+        214.888203,
+        183.961797,
+      ],
+      "styleRole": "normal",
+      "text": "90.00°",
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        229.930063,
+        197.952728,
+      ],
+    },
+    {
+      "from": [
+        229.930063,
+        197.952728,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        229.720578,
+        195.915001,
+      ],
+    },
+    {
+      "from": [
+        229.720578,
+        195.915001,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        229.372523,
+        193.89632,
+      ],
+    },
+    {
+      "from": [
+        229.372523,
+        193.89632,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        228.887519,
+        191.906097,
+      ],
+    },
+    {
+      "from": [
+        228.887519,
+        191.906097,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        228.730635,
+        191.411797,
+      ],
+    },
+    {
+      "from": [
+        210.888203,
+        172.064141,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        210.046388,
+        171.732172,
+      ],
+    },
+    {
+      "from": [
+        210.046388,
+        171.732172,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        208.093903,
+        171.112481,
+      ],
+    },
+    {
+      "from": [
+        208.093903,
+        171.112481,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        206.10368,
+        170.627477,
+      ],
+    },
+    {
+      "from": [
+        206.10368,
+        170.627477,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        204.084999,
+        170.279422,
+      ],
+    },
+    {
+      "from": [
+        204.084999,
+        170.279422,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        202.047272,
+        170.069937,
+      ],
+    },
+    {
+      "from": [
+        202.047272,
+        170.069937,
+      ],
+      "kind": "line",
+      "part": "arc",
+      "styleRole": "normal",
+      "to": [
+        200,
+        170,
+      ],
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        234.223306,
+        186.999789,
+      ],
+    },
+    {
+      "from": [
+        230,
+        200,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        225.775394,
+        187.000211,
+      ],
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        212.999789,
+        174.224606,
+      ],
+    },
+    {
+      "from": [
+        200,
+        170,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        213.000211,
+        165.776694,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        235,
+        200,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        200,
+        165,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`canonical dimension structural goldens > 'linear' 1`] = `
+{
+  "derived": {
+    "formattedLabel": "1000.00",
+    "valueM": 1,
+  },
+  "dimensionId": "linear-1000mm",
+  "hitRegions": [
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        200,
+        175,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        300,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        300,
+        175,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        185,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        238.525,
+        185,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        261.475,
+        185,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        300,
+        185,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        185,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        213,
+        189.223956,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        185,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        213,
+        180.776044,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        300,
+        185,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        287,
+        180.776044,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        300,
+        185,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        287,
+        189.223956,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 242.525,
+        "y": 176.375,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 25.25,
+    "width": 22.95,
+    "x": 238.525,
+    "y": 172.375,
+  },
+  "labelPinned": false,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 242.525,
+        "y": 176.375,
+      },
+      "capHeightPx": 11.5,
+      "kind": "glyph-run",
+      "origin": [
+        242.525,
+        190.175,
+      ],
+      "styleRole": "normal",
+      "text": "1000.00",
+    },
+    {
+      "from": [
+        200,
+        185,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        213,
+        189.223956,
+      ],
+    },
+    {
+      "from": [
+        200,
+        185,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        213,
+        180.776044,
+      ],
+    },
+    {
+      "from": [
+        300,
+        185,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        287,
+        180.776044,
+      ],
+    },
+    {
+      "from": [
+        300,
+        185,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        287,
+        189.223956,
+      ],
+    },
+    {
+      "from": [
+        200,
+        185,
+      ],
+      "kind": "line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": [
+        238.525,
+        185,
+      ],
+    },
+    {
+      "from": [
+        261.475,
+        185,
+      ],
+      "kind": "line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": [
+        300,
+        185,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        200,
+        175,
+      ],
+    },
+    {
+      "from": [
+        300,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        300,
+        175,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`canonical dimension structural goldens > 'projected' 1`] = `
+{
+  "derived": {
+    "formattedLabel": "1000.00",
+    "valueM": 1,
+  },
+  "dimensionId": "projected-x-absolute-1000mm",
+  "hitRegions": [
+    {
+      "from": [
+        300,
+        200,
+      ],
+      "kind": "segment",
+      "part": "projection",
+      "to": [
+        200,
+        200,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        140,
+      ],
+      "kind": "segment",
+      "part": "projection",
+      "to": [
+        200,
+        200,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        300,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        300,
+        230,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "segment",
+      "part": "extension",
+      "to": [
+        200,
+        230,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        300,
+        220,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        261.475,
+        220,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        238.525,
+        220,
+      ],
+      "kind": "segment",
+      "part": "dimension",
+      "to": [
+        200,
+        220,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        300,
+        220,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        287,
+        215.776044,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        300,
+        220,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        287,
+        224.223956,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        220,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        213,
+        224.223956,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "from": [
+        200,
+        220,
+      ],
+      "kind": "segment",
+      "part": "arrow",
+      "to": [
+        213,
+        215.776044,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 242.525,
+        "y": 211.375,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 25.25,
+    "width": 22.95,
+    "x": 238.525,
+    "y": 207.375,
+  },
+  "labelPinned": false,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 242.525,
+        "y": 211.375,
+      },
+      "capHeightPx": 11.5,
+      "kind": "glyph-run",
+      "origin": [
+        242.525,
+        225.175,
+      ],
+      "styleRole": "normal",
+      "text": "1000.00",
+    },
+    {
+      "from": [
+        300,
+        220,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        287,
+        215.776044,
+      ],
+    },
+    {
+      "from": [
+        300,
+        220,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        287,
+        224.223956,
+      ],
+    },
+    {
+      "from": [
+        200,
+        220,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        213,
+        224.223956,
+      ],
+    },
+    {
+      "from": [
+        200,
+        220,
+      ],
+      "kind": "line",
+      "part": "arrow",
+      "styleRole": "normal",
+      "to": [
+        213,
+        215.776044,
+      ],
+    },
+    {
+      "from": [
+        300,
+        220,
+      ],
+      "kind": "line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": [
+        261.475,
+        220,
+      ],
+    },
+    {
+      "from": [
+        238.525,
+        220,
+      ],
+      "kind": "line",
+      "part": "dimension",
+      "styleRole": "normal",
+      "to": [
+        200,
+        220,
+      ],
+    },
+    {
+      "from": [
+        300,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        300,
+        230,
+      ],
+    },
+    {
+      "from": [
+        200,
+        200,
+      ],
+      "kind": "line",
+      "part": "extension",
+      "styleRole": "normal",
+      "to": [
+        200,
+        230,
+      ],
+    },
+    {
+      "from": [
+        300,
+        200,
+      ],
+      "kind": "line",
+      "part": "projection",
+      "styleRole": "normal",
+      "to": [
+        200,
+        200,
+      ],
+    },
+    {
+      "from": [
+        200,
+        140,
+      ],
+      "kind": "line",
+      "part": "projection",
+      "styleRole": "normal",
+      "to": [
+        200,
+        200,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`canonical dimension structural goldens > 'radial-500mm-diameter' 1`] = `
+{
+  "derived": {
+    "formattedLabel": "⌀1000.00",
+    "valueM": 1,
+  },
+  "dimensionId": "radial-500mm-diameter",
+  "hitRegions": [
+    {
+      "from": [
+        235.355339,
+        164.644661,
+      ],
+      "kind": "segment",
+      "part": "leader",
+      "to": [
+        240.408009,
+        159.591991,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 17.25,
+        "width": 17.25,
+        "x": 244.408009,
+        "y": 138.341991,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 25.25,
+    "width": 25.25,
+    "x": 240.408009,
+    "y": 134.341991,
+  },
+  "labelPinned": false,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 17.25,
+        "width": 17.25,
+        "x": 244.408009,
+        "y": 138.341991,
+      },
+      "capHeightPx": 11.5,
+      "kind": "glyph-run",
+      "origin": [
+        244.408009,
+        152.141991,
+      ],
+      "styleRole": "normal",
+      "text": "⌀1000.00",
+    },
+    {
+      "from": [
+        235.355339,
+        164.644661,
+      ],
+      "kind": "line",
+      "part": "leader",
+      "styleRole": "normal",
+      "to": [
+        240.408009,
+        159.591991,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`canonical dimension structural goldens > 'radial-500mm-radius' 1`] = `
+{
+  "derived": {
+    "formattedLabel": "R500.00",
+    "valueM": 0.5,
+  },
+  "dimensionId": "radial-500mm-radius",
+  "hitRegions": [
+    {
+      "from": [
+        235.355339,
+        164.644661,
+      ],
+      "kind": "segment",
+      "part": "leader",
+      "to": [
+        241.558009,
+        158.441991,
+      ],
+      "widthPx": 1,
+    },
+    {
+      "kind": "rect",
+      "part": "label",
+      "rect": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 245.558009,
+        "y": 138.341991,
+      },
+    },
+  ],
+  "labelBounds": {
+    "height": 25.25,
+    "width": 22.95,
+    "x": 241.558009,
+    "y": 134.341991,
+  },
+  "labelPinned": false,
+  "primitives": [
+    {
+      "bounds": {
+        "height": 17.25,
+        "width": 14.95,
+        "x": 245.558009,
+        "y": 138.341991,
+      },
+      "capHeightPx": 11.5,
+      "kind": "glyph-run",
+      "origin": [
+        245.558009,
+        152.141991,
+      ],
+      "styleRole": "normal",
+      "text": "R500.00",
+    },
+    {
+      "from": [
+        235.355339,
+        164.644661,
+      ],
+      "kind": "line",
+      "part": "leader",
+      "styleRole": "normal",
+      "to": [
+        241.558009,
+        158.441991,
+      ],
+    },
+  ],
+}
+`;

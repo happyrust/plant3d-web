@@ -1,5 +1,7 @@
 # MBD RebarViz Visual Tuning Design
 
+> Superseded by `docs/adr/0038-delete-the-old-dimension-system-in-a-build-green-milestone.md`; retained as legacy implementation context.
+
 **Date:** 2026-03-10
 
 **Goal:** Make the RebarViz-style MBD arrows look clearly larger and the dimension lines clearly thicker in the default viewer path, while keeping all `LinearDimension3D` geometry logic unchanged.

@@ -1,9 +1,5 @@
-import { Vector3 } from 'three';
-
 import type { UseAnnotationThreeReturn } from './useAnnotationThree';
 import type { BranNearestClearanceAnnotationCandidate } from './useSpatialCompute';
-
-import { LinearDimension3D } from '@/utils/three/annotation';
 
 export const BRAN_CLEARANCE_ANNOTATION_PREFIX = 'bran_clearance_';
 
@@ -28,15 +24,6 @@ function sanitizeIdPart(value: unknown, fallback: string): string {
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
   return sanitized || fallback;
-}
-
-function toFiniteVector3(point: unknown): Vector3 | null {
-  const p = point as { x?: unknown; y?: unknown; z?: unknown } | null | undefined;
-  const x = Number(p?.x);
-  const y = Number(p?.y);
-  const z = Number(p?.z);
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
-  return new Vector3(x, y, z);
 }
 
 export function formatBranClearanceDistanceLabel(labelMm: unknown): string {
@@ -85,48 +72,13 @@ export function useBranClearanceAnnotationThree(
     candidates: BranNearestClearanceAnnotationCandidate[],
   ): BranClearanceRenderResult {
     clearAnnotations();
-
-    const drawnIds: string[] = [];
-    const skipped: BranClearanceRenderWarning[] = [];
-
-    for (const item of candidates) {
-      const annotation = item.candidate.annotation;
-      const start = toFiniteVector3(annotation?.start_point);
-      const end = toFiniteVector3(annotation?.end_point);
-      const id = makeBranClearanceAnnotationId(
-        item.targetGroup,
-        item.candidate.refno,
-        item.index,
-      );
-      if (!annotation || !start || !end) {
-        skipped.push({ id, reason: 'Missing annotation start_point or end_point' });
-        continue;
-      }
-
-      const label = formatBranClearanceDistanceLabel(annotation.label_mm);
-      const direction = start.distanceToSquared(end) <= 1e-12
-        ? new Vector3(0, 1, 0)
-        : undefined;
-      const dim = new LinearDimension3D(annotationSystem.materials, {
-        start,
-        end,
-        text: label,
-        decimals: 0,
-        unit: 'mm',
-        offset: 0.5,
-        direction,
-      });
-      dim.setMaterialSet(annotationSystem.materials.yellow);
-      dim.setBackgroundColor(0x111827);
-
-      annotationSystem.addAnnotation(id, dim);
-      currentIds.add(id);
-      drawnIds.push(id);
-    }
-
+    const skipped = candidates.map((item) => ({
+      id: makeBranClearanceAnnotationId(item.targetGroup, item.candidate.refno, item.index),
+      reason: 'Dimension renderer unavailable during ADR-0038 rebuild',
+    }));
     lastWarnings = skipped;
     requestRender?.();
-    return { drawnIds, skipped };
+    return { drawnIds: [], skipped };
   }
 
   function getDebugSnapshot() {

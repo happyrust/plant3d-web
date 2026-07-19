@@ -31,6 +31,8 @@ describe('createEmptyReviewSnapshot', () => {
     expect(snapshot.measurements).toEqual([]);
     expect(snapshot.attachments).toEqual([]);
     expect(snapshot.models).toEqual([]);
+    expect(snapshot.dimensionDocument).toBeUndefined();
+    expect(snapshot.dimensionDocumentVersion).toBeUndefined();
     expect(snapshot.meta.sourceVersion).toBe(REVIEW_SNAPSHOT_DEFAULT_VERSION);
     expect(snapshot.meta.createdAt).toBe(1_700_000_000);
     expect(snapshot.meta.inlineCommentIndex).toBeUndefined();
@@ -71,7 +73,7 @@ describe('isSnapshotEmpty', () => {
     expect(isSnapshotEmpty(snapshot)).toBe(true);
   });
 
-  it('returns false when annotations / comments / measurements / models / attachments populated', () => {
+  it('returns false when review content or a dimension document is populated', () => {
     const baseline = createEmptyReviewSnapshot({ source: 'task_records' });
 
     expect(
@@ -123,6 +125,18 @@ describe('isSnapshotEmpty', () => {
             uploadedAt: 1,
           },
         ],
+      }),
+    ).toBe(false);
+
+    expect(
+      isSnapshotEmpty({
+        ...baseline,
+        dimensionDocument: {
+          schemaVersion: 1,
+          documentId: 'dimension-document-1',
+          records: [],
+        },
+        dimensionDocumentVersion: 0,
       }),
     ).toBe(false);
   });

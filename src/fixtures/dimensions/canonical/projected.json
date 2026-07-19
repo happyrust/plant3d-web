@@ -1,0 +1,19 @@
+{
+  "id": "projected-x-absolute-1000mm",
+  "kind": "projected",
+  "anchors": {
+    "a": [1, 0, 0],
+    "b": [0, 0.6, 0]
+  },
+  "axis": {
+    "kind": "design-axis",
+    "axis": "x"
+  },
+  "placement": {
+    "offsetM": 0.2,
+    "labelT": 0.5,
+    "side": 1
+  },
+  "expectedSignedProjectionM": -1,
+  "expectedValueM": 1
+}

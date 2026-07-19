@@ -314,7 +314,7 @@ describe('reviewApi base url defaults', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await reviewRecordCreate({
+    const legacyResponse = await reviewRecordCreate({
       taskId: 'task-1',
       formId: 'FORM-LINEAGE-1',
       type: 'batch',
@@ -325,6 +325,8 @@ describe('reviewApi base url defaults', () => {
       note: 'ok',
     });
 
+    expect(legacyResponse.record?.dimensionDocument).toBeUndefined();
+    expect(legacyResponse.record?.dimensionDocumentVersion).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/api\/review\/records$/),
       expect.objectContaining({
@@ -341,6 +343,65 @@ describe('reviewApi base url defaults', () => {
         }),
       })
     );
+  });
+
+  it('serializes optional dimension document fields on confirmed record requests', async () => {
+    const dimensionDocument = {
+      schemaVersion: 1 as const,
+      documentId: 'dimension-document-api',
+      records: [],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        record: {
+          id: 'record-dimension',
+          taskId: 'task-dimension',
+          type: 'batch',
+          annotations: [],
+          cloudAnnotations: [],
+          rectAnnotations: [],
+          measurements: [],
+          note: '',
+          dimensionDocument,
+          dimensionDocumentVersion: 5,
+          confirmedAt: 1700000000000,
+        },
+      }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await reviewRecordCreate({
+      taskId: 'task-dimension',
+      type: 'batch',
+      annotations: [],
+      cloudAnnotations: [],
+      rectAnnotations: [],
+      measurements: [],
+      note: '',
+      dimensionDocument,
+      dimensionDocumentBaseVersion: 4,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/review\/records$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          taskId: 'task-dimension',
+          type: 'batch',
+          annotations: [],
+          cloudAnnotations: [],
+          rectAnnotations: [],
+          measurements: [],
+          note: '',
+          dimensionDocument,
+          dimensionDocumentBaseVersion: 4,
+        }),
+      }),
+    );
+    expect(response.record?.dimensionDocument).toEqual(dimensionDocument);
+    expect(response.record?.dimensionDocumentVersion).toBe(5);
   });
 
   it('uses attachment description as visible name when workflow/sync only returns description fields', async () => {
@@ -385,6 +446,52 @@ describe('reviewApi base url defaults', () => {
         url: expect.stringContaining('/files/review_attachments/att-desc-1.png'),
       }),
     ]);
+  });
+
+  it('normalizes optional workflow dimension fields from snake_case', async () => {
+    const dimensionDocument = {
+      schemaVersion: 1 as const,
+      documentId: 'workflow-dimension-api',
+      records: [],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        code: 200,
+        message: 'success',
+        data: {
+          records: [{
+            id: 'workflow-record-dimension',
+            task_id: 'task-dimension',
+            type: 'batch',
+            annotations: [],
+            cloud_annotations: [],
+            rect_annotations: [],
+            obb_annotations: [],
+            measurements: [],
+            note: '',
+            confirmed_at: '2026-07-19T12:00:00Z',
+            dimension_document: dimensionDocument,
+            dimension_document_version: 7,
+          }],
+          annotation_comments: [],
+          attachments: [],
+        },
+      }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await reviewWorkflowSyncQuery({
+      formId: 'FORM-DIMENSION',
+      token: 'token-dimension',
+      actor: {
+        id: 'SJ',
+        name: 'SJ',
+        roles: 'sj',
+      },
+    });
+
+    expect(result.data?.records[0]?.dimensionDocument).toEqual(dimensionDocument);
+    expect(result.data?.records[0]?.dimensionDocumentVersion).toBe(7);
   });
 
   it('normalizes annotation check payloads from snake_case to camelCase', async () => {
