@@ -196,7 +196,7 @@ function formatBore(pbore: number): string {
                   <Badge variant="outline" class="text-[10px]">{{ item.noun || '-' }}</Badge>
                 </div>
                 <span class="rounded px-1.5 py-0.5 text-[10px]"
-                  :class="item.success ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'">
+                  :class="item.success ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'">
                   {{ item.success ? `${item.ptCount} 点` : '无 ptset' }}
                 </span>
               </div>
@@ -210,7 +210,7 @@ function formatBore(pbore: number): string {
       </div>
 
       <div v-if="response && !response.success && hasBranchInspector"
-        class="flex-shrink-0 border-b border-border bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700">
+        class="flex-shrink-0 border-b border-border bg-warning/10 px-3 py-2 text-[11px] text-warning">
         {{ response.error_message || '当前构件自身无 ptset，可从上方子元件列表选择绘制。' }}
       </div>
 
@@ -240,7 +240,7 @@ function formatBore(pbore: number): string {
 
             <button type="button"
               class="inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
-              :class="showCrosses ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground'"
+              :class="showCrosses ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'"
               :disabled="!isVisible"
               title="显示/隐藏标记点"
               @click="emit('toggleCrosses', !showCrosses)">
@@ -249,7 +249,7 @@ function formatBore(pbore: number): string {
 
             <button type="button"
               class="inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
-              :class="showLabels ? 'bg-blue-500/10 text-blue-600' : 'bg-muted text-muted-foreground'"
+              :class="showLabels ? 'bg-brand/10 text-brand' : 'bg-muted text-muted-foreground'"
               :disabled="!isVisible"
               title="显示/隐藏坐标标签"
               @click="emit('toggleLabels', !showLabels)">
@@ -258,7 +258,7 @@ function formatBore(pbore: number): string {
 
             <button type="button"
               class="inline-flex h-7 w-7 items-center justify-center rounded transition-colors"
-              :class="showArrows ? 'bg-orange-500/10 text-orange-600' : 'bg-muted text-muted-foreground'"
+              :class="showArrows ? 'bg-warning/10 text-warning' : 'bg-muted text-muted-foreground'"
               :disabled="!isVisible"
               title="显示/隐藏方向箭头"
               @click="emit('toggleArrows', !showArrows)">
@@ -287,7 +287,7 @@ function formatBore(pbore: number): string {
               :key="point.number"
               class="px-3 py-2 hover:bg-accent/50">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-green-600">#{{ point.number }}</span>
+                <span class="text-xs font-medium text-success">#{{ point.number }}</span>
                 <Badge v-if="point.pbore > 0" variant="secondary" class="text-[10px]">
                   {{ formatBore(point.pbore) }}
                 </Badge>

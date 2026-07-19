@@ -78,11 +78,11 @@ function refreshCurrent() {
       <div class="mt-2 flex gap-1.5">
         <input v-model="inputRefno"
           type="text"
-          class="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-[#FF6B00]"
+          class="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-brand"
           placeholder="构件或房间 Refno，例如 24381_145018"
           @keydown.enter="loadInput" />
         <button type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md bg-[#FF6B00] px-2.5 text-xs font-medium text-white hover:bg-[#E35F00] disabled:opacity-50"
+          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           :disabled="roomInfo.loading.value || !inputRefno.trim()"
           @click="loadInput">
           <Search class="h-3.5 w-3.5" />
@@ -92,7 +92,7 @@ function refreshCurrent() {
     </div>
 
     <div class="min-h-0 flex-1 overflow-auto p-3">
-      <div v-if="roomInfo.error.value" class="rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-600">
+      <div v-if="roomInfo.error.value" class="rounded-md border border-danger/25 bg-danger-subtle px-2.5 py-2 text-xs text-danger">
         {{ roomInfo.error.value }}
       </div>
 
@@ -104,7 +104,7 @@ function refreshCurrent() {
       <div v-if="roomInfo.current.value" class="space-y-3">
         <section class="rounded-md border border-border bg-card">
           <div class="flex items-center gap-2 border-b border-border px-3 py-2">
-            <Home class="h-4 w-4 text-[#FF6B00]" />
+            <Home class="h-4 w-4 text-brand" />
             <div class="min-w-0">
               <div class="truncate text-sm font-semibold text-foreground">{{ roomInfo.displayName.value }}</div>
               <div class="mt-0.5 font-mono text-[11px] text-muted-foreground">{{ roomInfo.current.value.roomRefno }}</div>
@@ -151,7 +151,7 @@ function refreshCurrent() {
           </button>
         </div>
 
-        <div v-if="roomInfo.modelError.value" class="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-700">
+        <div v-if="roomInfo.modelError.value" class="rounded-md border border-warning/25 bg-warning-subtle px-2.5 py-2 text-xs text-warning">
           {{ roomInfo.modelError.value }}
         </div>
 

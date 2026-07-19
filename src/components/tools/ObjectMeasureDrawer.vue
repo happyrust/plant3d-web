@@ -46,11 +46,11 @@ function getStepState(value: string | null | undefined, previousReady = true): S
         <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">选择方式</div>
         <div class="mt-2 flex flex-wrap gap-2">
           <div class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600">
-            <MousePointerClick class="h-3.5 w-3.5 text-[#FF6B00]" />
+            <MousePointerClick class="h-3.5 w-3.5 text-brand" />
             <span>点击模型</span>
           </div>
           <div class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600">
-            <GitCompare class="h-3.5 w-3.5 text-[#FF6B00]" />
+            <GitCompare class="h-3.5 w-3.5 text-brand" />
             <span>模型树双选</span>
           </div>
         </div>
@@ -60,9 +60,9 @@ function getStepState(value: string | null | undefined, previousReady = true): S
         <div class="rounded-xl border px-3 py-3 transition-colors"
           :class="
             getStepState(sourceRefno) === 'done'
-              ? 'border-[#FFD8BF] bg-[#FFF7F2]'
+              ? 'border-brand/40 bg-brand-subtle'
               : getStepState(sourceRefno) === 'active'
-                ? 'border-[#FFE7D6] bg-[#FFFDFC]'
+                ? 'border-brand/20 bg-brand-subtle/50'
                 : 'border-gray-100 bg-gray-50/60'
           ">
           <div class="flex items-center justify-between gap-3">
@@ -73,7 +73,7 @@ function getStepState(value: string | null | undefined, previousReady = true): S
               </div>
             </div>
             <div class="flex h-7 w-7 items-center justify-center rounded-full"
-              :class="getStepState(sourceRefno) === 'done' ? 'bg-[#FF6B00] text-white' : 'bg-white text-gray-400 border border-gray-200'">
+              :class="getStepState(sourceRefno) === 'done' ? 'bg-brand text-brand-foreground' : 'bg-white text-gray-400 border border-gray-200'">
               <Check v-if="getStepState(sourceRefno) === 'done'" class="h-4 w-4" />
               <span v-else class="text-xs font-semibold">1</span>
             </div>
@@ -83,9 +83,9 @@ function getStepState(value: string | null | undefined, previousReady = true): S
         <div class="rounded-xl border px-3 py-3 transition-colors"
           :class="
             getStepState(targetRefno, !!sourceRefno) === 'done'
-              ? 'border-[#FFD8BF] bg-[#FFF7F2]'
+              ? 'border-brand/40 bg-brand-subtle'
               : getStepState(targetRefno, !!sourceRefno) === 'active'
-                ? 'border-[#FFE7D6] bg-[#FFFDFC]'
+                ? 'border-brand/20 bg-brand-subtle/50'
                 : 'border-gray-100 bg-gray-50/60'
           ">
           <div class="flex items-center justify-between gap-3">
@@ -96,7 +96,7 @@ function getStepState(value: string | null | undefined, previousReady = true): S
               </div>
             </div>
             <div class="flex h-7 w-7 items-center justify-center rounded-full"
-              :class="getStepState(targetRefno, !!sourceRefno) === 'done' ? 'bg-[#FF6B00] text-white' : 'bg-white text-gray-400 border border-gray-200'">
+              :class="getStepState(targetRefno, !!sourceRefno) === 'done' ? 'bg-brand text-brand-foreground' : 'bg-white text-gray-400 border border-gray-200'">
               <Check v-if="getStepState(targetRefno, !!sourceRefno) === 'done'" class="h-4 w-4" />
               <span v-else class="text-xs font-semibold">2</span>
             </div>
@@ -105,7 +105,7 @@ function getStepState(value: string | null | undefined, previousReady = true): S
       </section>
 
       <section class="rounded-xl border px-3 py-2.5 text-sm"
-        :class="busy ? 'border-[#FFD8BF] bg-[#FFF7F2] text-[#C84D00]' : 'border-gray-100 bg-gray-50/60 text-gray-600'">
+        :class="busy ? 'border-brand/40 bg-brand-subtle text-brand' : 'border-gray-100 bg-gray-50/60 text-gray-600'">
         {{ statusText }}
       </section>
 
@@ -118,7 +118,7 @@ function getStepState(value: string | null | undefined, previousReady = true): S
           <span>重置选择</span>
         </button>
         <button type="button"
-          class="inline-flex h-10 items-center justify-center rounded-xl bg-[#FF6B00] px-3 text-sm font-medium text-white transition-colors hover:bg-[#E35F00]"
+          class="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           @click="$emit('close')">
           结束测量
         </button>

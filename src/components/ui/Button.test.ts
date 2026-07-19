@@ -15,7 +15,7 @@ describe('Button', () => {
     const button = host.querySelector('button');
 
     expect(button?.textContent).toContain('Create Task');
-    expect(button?.className).toContain('bg-[#FF6B00]');
+    expect(button?.className).toContain('bg-primary');
     expect(button?.className).toContain('h-10');
     expect(button?.getAttribute('type')).toBe('button');
     expect(button?.hasAttribute('disabled')).toBe(false);
@@ -38,9 +38,9 @@ describe('Button', () => {
     const danger = dangerHost.querySelector('button');
 
     expect(secondary?.className).toContain('border');
-    expect(secondary?.className).toContain('bg-white');
-    expect(danger?.className).toContain('bg-[#EF4444]');
-    expect(danger?.className).toContain('text-white');
+    expect(secondary?.className).toContain('bg-background');
+    expect(danger?.className).toContain('bg-danger');
+    expect(danger?.className).toContain('text-danger-foreground');
   });
 
   it('supports sm and lg sizes', () => {

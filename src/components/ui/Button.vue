@@ -46,9 +46,9 @@ const forwardedAttrs = computed(() => {
 const resolvedAriaLabel = computed(() => loadingAriaLabel.value ?? attrs['aria-label']);
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-[#FF6B00] text-white shadow-sm hover:opacity-90 focus-visible:ring-[#FF6B00]/30',
-  secondary: 'border border-[#D1D5DB] bg-white text-[#1F2937] shadow-sm hover:bg-[#F9FAFB] hover:opacity-90 focus-visible:ring-[#D1D5DB]/60',
-  danger: 'bg-[#EF4444] text-white shadow-sm hover:opacity-90 focus-visible:ring-[#EF4444]/30',
+  primary: 'bg-primary text-primary-foreground shadow-sm hover:opacity-90 focus-visible:ring-primary/30',
+  secondary: 'border border-input bg-background text-foreground shadow-sm hover:bg-muted hover:opacity-90 focus-visible:ring-input/60',
+  danger: 'bg-danger text-danger-foreground shadow-sm hover:opacity-90 focus-visible:ring-danger/30',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
