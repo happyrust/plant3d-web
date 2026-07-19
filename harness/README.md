@@ -92,12 +92,13 @@ export async function routes(page) {
   }));
 }
 
-export async function run({ page, shot }) {
+export async function run({ page, shot, outDir }) {
   await page.waitForSelector('[data-testid="foo-row"]', { timeout: 15000 });
-  await shot('01-list');                                  // -> <out>/01-list.png
+  await shot('01-list');                                  // -> <out>/01-list.png（默认截第一个 .panel-host）
   await page.locator('[data-testid="foo-expand"]').click();
   await page.waitForTimeout(500);
-  await shot('02-expanded');                              // 交互后的第二张
+  await shot('02-expanded', '#host-b');                   // 指定选择器：多宿主页面按元素截
+  await shot('03-region', null, { clip: { x: 0, y: 0, width: 800, height: 400 } }); // 整页裁剪区
 }
 ```
 

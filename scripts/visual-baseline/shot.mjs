@@ -121,16 +121,24 @@ try {
   console.log('goto', url);
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
 
-  const shot = async (shotName) => {
-    const target = (await page.locator('.panel-host').count()) > 0 ? page.locator('.panel-host').first() : page;
+  // shot(name)                       -> first `.panel-host` (or full page)
+  // shot(name, selector)             -> specific element
+  // shot(name, null, { clip })       -> page screenshot with options (e.g. clip region)
+  const shot = async (shotName, selector = '.panel-host', options = {}) => {
     const file = path.join(outDir, `${shotName}.png`);
-    await target.screenshot({ path: file });
+    if (selector) {
+      const loc = page.locator(selector);
+      const target = (await loc.count()) > 0 ? loc.first() : page;
+      await target.screenshot({ path: file, ...options });
+    } else {
+      await page.screenshot({ path: file, ...options });
+    }
     console.log('shot', path.relative(ROOT, file));
     return file;
   };
 
   if (typeof scenario.run === 'function') {
-    await scenario.run({ page, shot, base: origin });
+    await scenario.run({ page, shot, base: origin, outDir });
   } else {
     await page.waitForTimeout(800);
     await shot(name);

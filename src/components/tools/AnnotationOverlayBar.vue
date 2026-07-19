@@ -683,7 +683,7 @@ onUnmounted(() => {
         <!-- 保存批注 -->
         <button type="button"
           data-testid="annotation-overlay-save"
-          class="inline-flex items-center gap-1 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex items-center gap-1 rounded-md bg-success px-3 py-1.5 text-xs font-semibold text-success-foreground transition-colors hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!hasAnyAnnotations"
           title="保存批注"
           aria-label="保存批注"

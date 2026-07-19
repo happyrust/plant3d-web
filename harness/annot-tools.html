@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Annotation Tools Harness</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      body { margin: 0; background: #eef1f5; font-family: 'Noto Sans SC', system-ui, sans-serif; }
+      /* 顶部留白给 fixed 的 AnnotationOverlayBar（right-4 top-4），避免盖住面板 */
+      .stage { display: flex; gap: 40px; padding: 96px 40px 40px; align-items: flex-start; flex-wrap: wrap; }
+      .panel-host { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; box-shadow: 0 8px 30px rgba(15,23,42,.10); }
+      .cap { font: 600 13px 'Noto Sans SC'; color: #475569; margin: 0 0 10px 2px; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div>
+        <div class="cap">AnnotationPanel · 测试数据</div>
+        <div id="host-panel" class="panel-host" style="width: 400px; height: 860px;"><div id="app-panel"></div></div>
+      </div>
+      <div>
+        <div class="cap">AnnotationStylePanel · 默认样式</div>
+        <div id="host-style" class="panel-host" style="width: 400px; height: 860px; padding: 8px;"><div id="app-style"></div></div>
+      </div>
+      <div>
+        <div class="cap">AnnotationCard · 选中 / 未选中 / 带截图</div>
+        <div id="host-cards" class="panel-host" style="width: 320px; padding: 12px;"><div id="app-cards"></div></div>
+      </div>
+    </div>
+    <!-- AnnotationOverlayBar 挂载点（组件自身 fixed 定位到视口右上角） -->
+    <div id="app-overlay"></div>
+    <script type="module" src="/src/harness/annotTools.ts"></script>
+  </body>
+</html>

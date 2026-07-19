@@ -752,7 +752,7 @@ function formatCommentTime(timestamp: number): string {
         <!-- 显示关联构件 refno -->
         <div v-if="pendingAnnotationRefno" class="mt-2 flex items-center gap-1 text-xs">
           <span class="text-muted-foreground">关联构件：</span>
-          <span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-blue-600 dark:bg-blue-950 dark:text-blue-400">{{ pendingAnnotationRefno }}</span>
+          <span class="rounded bg-brand-subtle px-1.5 py-0.5 font-mono text-brand">{{ pendingAnnotationRefno }}</span>
         </div>
         <div v-else class="mt-2 text-xs text-muted-foreground/60">未关联构件</div>
 
@@ -898,13 +898,13 @@ function formatCommentTime(timestamp: number): string {
               <div class="truncate text-sm">
                 <span class="font-semibold">{{ a.glyph }}</span>
                 <span class="ml-2">{{ a.title }}</span>
-                <span v-if="a.refno" class="ml-1 inline-block rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950 dark:text-blue-400" :title="'RefNo: ' + a.refno">{{ a.refno }}</span>
+                <span v-if="a.refno" class="ml-1 inline-block rounded bg-brand-subtle px-1 py-0.5 font-mono text-[10px] text-brand" :title="'RefNo: ' + a.refno">{{ a.refno }}</span>
                 <span v-if="a.severity" class="ml-1 inline-block rounded border px-1 py-0.5 text-[10px]"
                   :class="getAnnotationSeverityDisplay(a.severity).color"
                   :title="getAnnotationSeverityDisplay(a.severity).label">
                   {{ getAnnotationSeverityDisplay(a.severity).symbol }} {{ getAnnotationSeverityDisplay(a.severity).label }}
                 </span>
-                <span v-if="a.collapsed" class="ml-1 inline-block rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                <span v-if="a.collapsed" class="ml-1 inline-block rounded bg-warning-subtle px-1 py-0.5 text-[10px] text-warning">
                   已最小化
                 </span>
               </div>
@@ -985,7 +985,7 @@ function formatCommentTime(timestamp: number): string {
 
           <!-- 代表截图：有则显示，hover 显示「重拍」角标；无且可拍则显示虚线「添加截图」入口 -->
           <div v-if="a.thumbnailUrl"
-            class="group relative mt-2 overflow-hidden rounded border border-[#E5E7EB]"
+            class="group relative mt-2 overflow-hidden rounded border border-border"
             style="height: 120px;">
             <img :src="a.thumbnailUrl" alt="批注截图" class="h-full w-full object-cover" />
             <div v-if="capturingAnnotationId === a.id"
@@ -997,7 +997,7 @@ function formatCommentTime(timestamp: number): string {
               </div>
             </div>
             <button v-if="canCaptureAnnotation" type="button"
-              class="absolute right-1 top-1 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] text-[#111827] opacity-0 shadow-sm transition-opacity hover:bg-white group-hover:opacity-100"
+              class="absolute right-1 top-1 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-900 opacity-0 shadow-sm transition-opacity hover:bg-white group-hover:opacity-100"
               :disabled="capturingAnnotationId === a.id"
               title="重新截图"
               @click.stop="captureCloudAnnotationShot(a.id)">
@@ -1006,7 +1006,7 @@ function formatCommentTime(timestamp: number): string {
             </button>
           </div>
           <button v-else-if="canCaptureAnnotation" type="button"
-            class="mt-2 flex h-[80px] w-full flex-col items-center justify-center gap-2 rounded border border-dashed border-[#D1D5DB] text-xs text-[#6B7280] hover:border-[#FDBA74] hover:bg-[#FFF7ED] hover:text-[#EA580C]"
+            class="mt-2 flex h-[80px] w-full flex-col items-center justify-center gap-2 rounded border border-dashed border-slate-300 text-xs text-muted-foreground hover:border-brand/40 hover:bg-brand-subtle hover:text-brand"
             :disabled="capturingAnnotationId === a.id"
             @click.stop="captureCloudAnnotationShot(a.id)">
             <span class="inline-flex items-center gap-2">
@@ -1014,7 +1014,7 @@ function formatCommentTime(timestamp: number): string {
               <span>{{ capturingAnnotationId === a.id ? '正在截图…' : '添加截图 · 记录当前视角' }}</span>
             </span>
             <span v-if="capturingAnnotationId === a.id" class="w-40 overflow-hidden rounded-full bg-slate-200">
-              <span class="block h-1.5 rounded-full bg-[#FF6B00] transition-all"
+              <span class="block h-1.5 rounded-full bg-brand transition-all"
                 :style="{ width: `${Math.max(uploadProgress, 8)}%` }" />
             </span>
           </button>
@@ -1183,24 +1183,24 @@ function formatCommentTime(timestamp: number): string {
           </span>
         </div>
         <!-- 视图切换按钮 -->
-        <div class="flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-[#F3F4F6] p-1">
+        <div class="flex items-center gap-1 rounded-lg border border-border bg-muted p-1">
           <button type="button"
             class="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
-            :class="commentsViewMode === 'timeline' ? 'bg-[#FF6B00] text-white shadow-sm' : 'text-[#6B7280] hover:bg-white'"
+            :class="commentsViewMode === 'timeline' ? 'bg-brand text-brand-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'"
             title="时间线视图"
             @click="commentsViewMode = 'timeline'">
             <MessageSquareMore class="h-3.5 w-3.5" />
           </button>
           <button type="button"
             class="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
-            :class="commentsViewMode === 'columns' ? 'bg-[#FF6B00] text-white shadow-sm' : 'text-[#6B7280] hover:bg-white'"
+            :class="commentsViewMode === 'columns' ? 'bg-brand text-brand-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'"
             title="三栏视图"
             @click="commentsViewMode = 'columns'">
             <LayoutGrid class="h-3.5 w-3.5" />
           </button>
           <button type="button"
             class="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
-            :class="commentsViewMode === 'list' ? 'bg-[#FF6B00] text-white shadow-sm' : 'text-[#6B7280] hover:bg-white'"
+            :class="commentsViewMode === 'list' ? 'bg-brand text-brand-foreground shadow-sm' : 'text-muted-foreground hover:bg-background'"
             title="列表视图"
             @click="commentsViewMode = 'list'">
             <List class="h-3.5 w-3.5" />
@@ -1243,7 +1243,7 @@ function formatCommentTime(timestamp: number): string {
               <div v-for="comment in comments" :key="comment.id"
                 class="rounded bg-white/80 p-2 text-sm dark:bg-black/20">
                 <!-- 回复引用 -->
-                <div v-if="comment.replyToId" class="mb-1 border-l-2 border-gray-300 pl-2 text-xs text-muted-foreground">
+                <div v-if="comment.replyToId" class="mb-1 border-l-2 border-slate-300 pl-2 text-xs text-muted-foreground">
                   <template v-if="getReplyToComment(comment.replyToId)">
                     回复 {{ getReplyToComment(comment.replyToId)?.authorName }}:
                     "{{ getReplyToComment(comment.replyToId)?.content.slice(0, 30) }}{{ (getReplyToComment(comment.replyToId)?.content.length || 0) > 30 ? '...' : '' }}"
@@ -1281,7 +1281,7 @@ function formatCommentTime(timestamp: number): string {
 
                     <div class="flex gap-1">
                       <button type="button"
-                        class="h-6 rounded px-1.5 text-xs text-blue-600 hover:bg-blue-50"
+                        class="h-6 rounded px-1.5 text-xs text-brand hover:bg-brand-subtle"
                         @click="setReplyTo(comment)">
                         回复
                       </button>
@@ -1292,7 +1292,7 @@ function formatCommentTime(timestamp: number): string {
                           编辑
                         </button>
                         <button type="button"
-                          class="h-6 rounded px-1.5 text-xs text-destructive hover:bg-red-50"
+                          class="h-6 rounded px-1.5 text-xs text-destructive hover:bg-danger-subtle"
                           @click="deleteComment(comment.id)">
                           删除
                         </button>

@@ -103,7 +103,7 @@ function previewHaloStyle(kind: keyof AnnotationStyleConfig): Record<string, str
 
     <div class="space-y-2 rounded-md border border-border p-3"
       data-testid="annotation-style-cloud-draw-mode">
-      <div class="text-xs font-medium uppercase tracking-wide text-gray-500">云线轮廓绘制</div>
+      <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">云线轮廓绘制</div>
       <p class="text-xs leading-5 text-muted-foreground">
         屏幕二维：轮廓锚定在拾取点投影上，尺寸为拖框像素大小，随旋转/缩放按屏幕比例重建。
         三维包围盒：沿选中构件合并 AABB 的 12 条边绘制波浪线，参与深度测试。
@@ -135,20 +135,20 @@ function previewHaloStyle(kind: keyof AnnotationStyleConfig): Record<string, str
     </div>
 
     <div class="space-y-2 rounded-md border border-border p-3">
-      <div class="text-xs font-medium uppercase tracking-wide text-gray-500">快速预设</div>
+      <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">快速预设</div>
       <div class="grid gap-3 md:grid-cols-3">
         <button v-for="preset in presetOptions"
           :key="preset.id"
           type="button"
           :data-testid="`annotation-style-preset-${preset.id}`"
-          class="rounded-lg border border-border bg-gray-50 p-3 text-left transition hover:border-gray-400 hover:bg-white"
+          class="rounded-lg border border-border bg-slate-50 p-3 text-left transition hover:border-slate-400 hover:bg-white"
           @click="applyPreset(preset.id)">
           <div class="flex items-start justify-between gap-3">
             <div>
               <div class="text-sm font-semibold text-foreground">{{ preset.label }}</div>
               <div class="mt-1 text-xs leading-5 text-muted-foreground">{{ preset.description }}</div>
             </div>
-            <div class="rounded-full border border-border bg-white px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500">
+            <div class="rounded-full border border-border bg-white px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
               预设
             </div>
           </div>
@@ -177,7 +177,7 @@ function previewHaloStyle(kind: keyof AnnotationStyleConfig): Record<string, str
     <fieldset v-for="kind in styleKinds"
       :key="kind"
       class="space-y-2 rounded-md border border-border p-3">
-      <legend class="px-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+      <legend class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {{ kindLabels[kind] }}
       </legend>
 
@@ -243,7 +243,7 @@ function previewHaloStyle(kind: keyof AnnotationStyleConfig): Record<string, str
     <div class="flex gap-2 border-t pt-2">
       <button type="button"
         :disabled="!isModified"
-        class="flex-1 rounded border bg-gray-50 px-3 py-1.5 text-sm hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+        class="flex-1 rounded border bg-slate-50 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
         @click="resetToDefaults()">
         恢复默认
       </button>
