@@ -291,7 +291,7 @@ function isResultHidden(id: string): boolean {
             <label class="flex cursor-pointer items-center gap-2">
               <span class="flex h-4 w-4 items-center justify-center rounded"
                 :class="store.showAnnotations.value
-                  ? 'bg-[#FF6B00]'
+                  ? 'bg-brand'
                   : 'border border-gray-300 bg-white'">
                 <Check v-if="store.showAnnotations.value" class="h-3 w-3 text-white" />
               </span>
@@ -304,16 +304,16 @@ function isResultHidden(id: string): boolean {
           <div class="space-y-2 border-b border-border/60 px-4 py-3">
             <div class="grid grid-cols-2 gap-2">
               <button type="button"
-                class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-[#FF6B00] px-2 py-2 text-xs font-medium text-[#FF6B00] transition-colors hover:bg-[#FF6B00]/10"
-                :class="isPicking ? 'bg-[#FF6B00]/10' : ''"
+                class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-brand px-2 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand/10"
+                :class="isPicking ? 'bg-brand/10' : ''"
                 :title="isPicking ? '逐根点击 (Enter 确认 / ESC 取消)' : '逐根点击 BRAN'"
                 @click="startPickBran">
                 <MousePointerClick class="h-3.5 w-3.5" />
                 <span>{{ isPicking ? '点击中...' : '点击选' }}</span>
               </button>
               <button type="button"
-                class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-[#FF6B00] px-2 py-2 text-xs font-medium text-[#FF6B00] transition-colors hover:bg-[#FF6B00]/10"
-                :class="isBoxPicking ? 'bg-[#FF6B00]/10' : ''"
+                class="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-brand px-2 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand/10"
+                :class="isBoxPicking ? 'bg-brand/10' : ''"
                 :title="isBoxPicking ? '在 3D 视图里拖框选择多根 BRAN' : '拖框选择多根 BRAN'"
                 @click="startBoxPickBran">
                 <BoxSelect class="h-3.5 w-3.5" />
@@ -386,7 +386,7 @@ function isResultHidden(id: string): boolean {
             <!-- 重新检测 -->
             <button type="button"
               :disabled="store.isDetecting.value || store.selectedBranRefnos.value.length < 2"
-              class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-[#FF6B00] px-4 text-sm font-medium text-white shadow transition-colors hover:bg-[#FF6B00]/90 disabled:pointer-events-none disabled:opacity-50"
+              class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
               @click="handleDetect">
               <RefreshCw class="h-4 w-4" :class="store.isDetecting.value ? 'animate-spin' : ''" />
               <span>{{ store.isDetecting.value ? '检测中...' : '重新检测' }}</span>
@@ -429,7 +429,7 @@ function isResultHidden(id: string): boolean {
               <span class="text-[11px] text-muted-foreground">mm</span>
               <button v-if="store.resultMinDistance.value !== null || hiddenCount > 0"
                 type="button"
-                class="ml-auto text-[11px] text-[#FF6B00] hover:underline"
+                class="ml-auto text-[11px] text-brand hover:underline"
                 @click="store.resetResultFilters()">
                 重置筛选
               </button>
@@ -447,7 +447,7 @@ function isResultHidden(id: string): boolean {
             <!-- result list (scrollable) -->
             <div v-else-if="store.visibleResults.value.length === 0"
               class="py-4 text-center text-xs text-muted-foreground">
-              所有结果均被筛选 / 隐藏，<button type="button" class="text-[#FF6B00] hover:underline" @click="store.resetResultFilters()">点此重置</button>
+              所有结果均被筛选 / 隐藏，<button type="button" class="text-brand hover:underline" @click="store.resetResultFilters()">点此重置</button>
             </div>
             <div v-else
               class="max-h-[200px] overflow-auto rounded-md border border-border">
@@ -456,11 +456,11 @@ function isResultHidden(id: string): boolean {
                 :key="result.id"
                 class="group flex cursor-pointer items-center gap-3 border-b border-border/40 px-3 py-2.5 transition-colors last:border-b-0"
                 :class="store.activeResultIndex.value === idx
-                  ? 'bg-[#FFF0E6] border-l-2 border-l-[#FF6B00]'
+                  ? 'bg-brand-subtle border-l-2 border-l-brand'
                   : 'hover:bg-muted'"
                 @click="onResultClick(idx, result)">
                 <span class="font-mono text-sm font-semibold"
-                  :class="store.activeResultIndex.value === idx ? 'text-[#FF6B00]' : 'text-foreground'">
+                  :class="store.activeResultIndex.value === idx ? 'text-brand' : 'text-foreground'">
                   {{ result.distance }}
                 </span>
                 <span class="text-xs text-muted-foreground">mm</span>
