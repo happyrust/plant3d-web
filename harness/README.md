@@ -107,6 +107,19 @@ export async function run({ page, shot, outDir }) {
 - mock 数据要覆盖你想回归的视觉状态（正常 / 降级 / 隔离等），一个状态一张图；
 - 没有 `.shots.mjs` 时 runner 也能跑：纯渲染 + 单张截图，适合纯静态面板。
 
+### 踩坑经验（#44 运行时证据实测）
+
+- **VueQueryPlugin 依赖**：链路里用了 `@tanstack/vue-query` 的组件
+  （如 `SpatialQueryDrawer`、`PipeDistanceDrawer`）裸 `createApp(...).mount()`
+  会白屏（`No 'queryClient' found in Vue context`，且可能被吞成静默空渲染）。
+  入口一律 `createApp(...).use(VueQueryPlugin).mount(...)`；对模块级单例 store
+  的 seeding 若会触发 `useQuery`，放进带插件的组件 `setup` 里做（幂等一次）。
+- **Playwright 路由是逆序匹配**：`page.route()` 后注册的先命中。场景里若同时有
+  精确 endpoint mock 和 `/api/` catch-all，**catch-all 必须最先注册**，否则会把
+  所有精确 mock 全吞掉。另外别用 `'**/api/**'` glob 做 catch-all——它连
+  `/src/api/*.ts` 模块请求都会拦（MIME 报错），用
+  `(url) => url.pathname.startsWith('/api/')` 谓词。
+
 ### 3. 出图
 
 ```bash
